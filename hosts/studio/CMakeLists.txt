@@ -838,6 +838,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*rock.rfmaterial written: yes.*\"emission_color\": {[ \n]*\"node\": \"60c0000000000001\",[ \n]*\"output\": \"out\".*\"code\":\"studio_summary\"[^\n]*\"entity\":\"60c0000000000005\",[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"status\":\"emission_color connected\".*\"exit\":\"clean_stop\"")
+    # A connection dragged on the canvas (D977): the stone's texture port
+    # held and let go on the triplanar projection's texture input, which
+    # the session takes; then the tint's out let go on its blend input, a
+    # number, which the graph's reader refuses.
+    add_test(NAME studio_graph_wires_by_drag
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial wait=1 "drag=@texture output of Stone 60c00000,@texture input"
+                     "until=studio_said,status=\"texture connected\"" "drag=@out output of Tint 60c00000,@blend input"
+                     "until=studio_said,status=\"the material graph does not read"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_graph_wires_by_drag PROPERTIES
+                         ENVIRONMENT "STUDIO_SHOW_WRITTEN=1"
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"status\":\"texture connected\".*\"status\":\"the material graph does not read: a call's input is of its function's input's type\".*\"exit\":\"clean_stop\"")
     # A style class made, named, and deleted in Studio (D638): in Stalls'
     # sheet New makes a class and chooses it, its name typed as tip, and
     # Delete deletes it; Undo brings it back, so the sheet is written with
@@ -1856,7 +1872,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # gate's post, aimed at, pressed in the middle of the played client's
         # window and let go a hundred pixels to its right, is chosen, and its
         # pose moved across the level plane in one transaction, one history
-        # entry.
+        # entry; shown moving while it is held, its steps folded into that
+        # entry (D976).
         add_test(NAME studio_drags_plaza
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -1869,7 +1886,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "dragged from 646,280 to 746,280.*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,")
+                             "dragged from 646,280 to 746,280.*\"code\":\"studio_dragged\"[^\n]*\"stepsShown\":[1-9].*\"code\":\"studio_summary\"[^\n]*\"entity\":\"6c632219-53a9-4af4-8781-bb2a8f4fa53b\",[^\n]*\"applied\":1,[^\n]*\"undoable\":1,[^\n]*\"picked\":1,\"dragged\":1,")
         # The post's X handle dragged (D466): the post chosen and marked, a
         # press on its mark's X axis right of it, off the post itself, let go
         # further right and lower, moves the post along X alone, as far as

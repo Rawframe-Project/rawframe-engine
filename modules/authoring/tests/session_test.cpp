@@ -44,6 +44,18 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
                                             std::string{kRequest} + "}",
                                         id);
     RAWFRAME_EXPECT(kWet.has_value() && !kWet->dryRun);
+    // A drag's step amends its author's latest change (D976), told so by a
+    // truth; nothing else amends.
+    const auto kAmends = readSessionRecord(
+        R"({"kind":"authoring.apply","scene":"level.scene","amends":true,"request":)" + std::string{kRequest} + "}",
+        id);
+    RAWFRAME_EXPECT(kAmends.has_value() && kAmends->amends && kApply.has_value() && !kApply->amends);
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.apply","scene":"level.scene","amends":1,"request":)" +
+                                           std::string{kRequest} + "}",
+                                       id)
+                         .has_value());
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.mark","scene":"b.scene","at":null,"amends":true})", id).has_value());
 
     const auto kRead = readSessionRecord(
         R"({"kind":"authoring.read","scene":"a.scene","queries":{"formatVersion":1,"kind":"authoring.query","queries":[{"operation":"scene.list_entities"}]}})",

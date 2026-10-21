@@ -271,58 +271,18 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     const Value* kReleased = kAnswer != nullptr ? kAnswer->find("released") : nullptr;
     const std::int64_t kRelease = kReleased != nullptr ? kReleased->integer().value_or(0) : 0;
     Value moved;
-    if (pressed_.has_value() && kRelease == pressed_->count && pressed_->handle.has_value()) {
-        moved = movedAlong(*kAnswer);
-        pressed_.reset();
-    } else if (pressed_.has_value() && kRelease == pressed_->count) {
-        const auto kOrigin = pointOf(kAnswer->find("releaseOrigin"));
-        const auto kToward = pointOf(kAnswer->find("releaseToward"));
-        constexpr std::int64_t kShift = 1;
-        constexpr std::int64_t kControl = 2;
-        const bool kHeight = (pressed_->modifiers & kShift) != 0;
-        const bool kTurn = !kHeight && (pressed_->modifiers & kControl) != 0;
-        const std::array<double, 3>& kAt = pressed_->point;
-        // The plane: level, or upright facing the eye along the press.
-        std::array<double, 3> normal{0, 1, 0};
-        if (kHeight) {
-            const double kAcross = std::hypot(pressed_->toward[0], pressed_->toward[2]);
-            normal = kAcross > 1e-9
-                         ? std::array<double, 3>{pressed_->toward[0] / kAcross, 0, pressed_->toward[2] / kAcross}
-                         : std::array<double, 3>{0, 0, 0};
-        }
-        const auto kDot = [](const std::array<double, 3>& a, const std::array<double, 3>& b) {
-            return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-        };
-        const double kFacing = kToward.has_value() ? kDot(*kToward, normal) : 0;
-        if (kOrigin.has_value() && kToward.has_value() && std::abs(kFacing) > 1e-9) {
-            const double kAlong = (kDot(kAt, normal) - kDot(*kOrigin, normal)) / kFacing;
-            if (kAlong > 0 && kAlong <= 1) {
-                const std::array<double, 3> kMet{(*kOrigin)[0] + kAlong * (*kToward)[0],
-                                                 (*kOrigin)[1] + kAlong * (*kToward)[1],
-                                                 (*kOrigin)[2] + kAlong * (*kToward)[2]};
-                const auto kPoint = [](const std::array<double, 3>& point) {
-                    Value numbers = Value::array();
-                    for (const double kEach : point) {
-                        numbers.push(Value::real(kEach));
-                    }
-                    return numbers;
-                };
-                moved = Value::object();
-                moved.add("scene", Value::string(pressed_->scene));
-                moved.add("source", Value::string(pressed_->source));
-                moved.add("how", Value::string(kHeight ? "height" : (kTurn ? "turn" : "move")));
-                moved.add("by",
-                          kPoint(kHeight ? std::array<double, 3>{0, kMet[1] - kAt[1], 0}
-                                         : std::array<double, 3>{kMet[0] - kAt[0], 0, kMet[2] - kAt[2]}));
-                if (kTurn) {
-                    moved.add("from", kPoint(kAt));
-                    moved.add("to", kPoint(kMet));
-                }
-            }
-        }
+    // While it is held, where it would move to were it let go where the
+    // pointer is, so a drag is shown as it goes (D976).
+    Value dragging;
+    if (pressed_.has_value() && kRelease != pressed_->count && kAnswer != nullptr) {
+        dragging = movedTo(pointOf(kAnswer->find("pointOrigin")), pointOf(kAnswer->find("pointToward")));
+    }
+    if (pressed_.has_value() && kRelease == pressed_->count) {
+        moved = movedTo(pointOf(kAnswer->find("releaseOrigin")), pointOf(kAnswer->find("releaseToward")));
         pressed_.reset();
     }
     made.add("moved", std::move(moved));
+    made.add("dragging", std::move(dragging));
     // The press let go: the ways its ray went where it went down and where
     // it came up, the corners of a box a tool may choose by (D974).
     Value box;
@@ -452,15 +412,62 @@ Preview::grabbed(std::int64_t count, const Value& clicked, const authoring::Auth
                    .mark = *mark_};
 }
 
-/// A handle let go (D466, D467): the move, height, or turn it made, or
-/// null.
-Value Preview::movedAlong(const Value& clicked) const {
-    const auto kOrigin = pointOf(clicked.find("releaseOrigin"));
-    const auto kToward = pointOf(clicked.find("releaseToward"));
-    if (!kOrigin.has_value() || !kToward.has_value()) {
+/// Where the press held would move what it met were it let go along a
+/// ray (D457, D463, D466, D467): a handle along its line or about its
+/// ring; else across the level plane through what it met, up the upright
+/// one facing the eye with Shift, or about it with Control. Null where the
+/// ray meets no plane.
+Value Preview::movedTo(const std::optional<Point>& origin, const std::optional<Point>& toward) const {
+    if (!pressed_.has_value() || !origin.has_value() || !toward.has_value()) {
         return Value{};
     }
-    return movedRecord(pressed_->scene, pressed_->source, pressed_->mark, *pressed_->handle, *kOrigin, *kToward);
+    if (pressed_->handle.has_value()) {
+        return movedRecord(pressed_->scene, pressed_->source, pressed_->mark, *pressed_->handle, *origin, *toward);
+    }
+    Value moved;
+    constexpr std::int64_t kShift = 1;
+    constexpr std::int64_t kControl = 2;
+    const bool kHeight = (pressed_->modifiers & kShift) != 0;
+    const bool kTurn = !kHeight && (pressed_->modifiers & kControl) != 0;
+    const std::array<double, 3>& kAt = pressed_->point;
+    // The plane: level, or upright facing the eye along the press.
+    std::array<double, 3> normal{0, 1, 0};
+    if (kHeight) {
+        const double kAcross = std::hypot(pressed_->toward[0], pressed_->toward[2]);
+        normal = kAcross > 1e-9 ? std::array<double, 3>{pressed_->toward[0] / kAcross, 0, pressed_->toward[2] / kAcross}
+                                : std::array<double, 3>{0, 0, 0};
+    }
+    const auto kDot = [](const std::array<double, 3>& a, const std::array<double, 3>& b) {
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    };
+    const double kFacing = kDot(*toward, normal);
+    if (std::abs(kFacing) > 1e-9) {
+        const double kAlong = (kDot(kAt, normal) - kDot(*origin, normal)) / kFacing;
+        if (kAlong > 0 && kAlong <= 1) {
+            const std::array<double, 3> kMet{(*origin)[0] + kAlong * (*toward)[0],
+                                             (*origin)[1] + kAlong * (*toward)[1],
+                                             (*origin)[2] + kAlong * (*toward)[2]};
+            const auto kPoint = [](const std::array<double, 3>& point) {
+                Value numbers = Value::array();
+                for (const double kEach : point) {
+                    numbers.push(Value::real(kEach));
+                }
+                return numbers;
+            };
+            moved = Value::object();
+            moved.add("scene", Value::string(pressed_->scene));
+            moved.add("source", Value::string(pressed_->source));
+            moved.add("how", Value::string(kHeight ? "height" : (kTurn ? "turn" : "move")));
+            moved.add("by",
+                      kPoint(kHeight ? std::array<double, 3>{0, kMet[1] - kAt[1], 0}
+                                     : std::array<double, 3>{kMet[0] - kAt[0], 0, kMet[2] - kAt[2]}));
+            if (kTurn) {
+                moved.add("from", kPoint(kAt));
+                moved.add("to", kPoint(kMet));
+            }
+        }
+    }
+    return moved;
 }
 
 /// Has the scene's preview mark a point, or none (D464): where the

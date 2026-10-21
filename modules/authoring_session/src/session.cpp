@@ -738,8 +738,13 @@ private:
         Value results = Value::array();
         std::size_t skipped = 0;
         if (request.batch == authoring::Batch::Atomic) {
-            const auto kOutcome =
-                authoring::executeAtomic(target, target.generation(), request.operations, *catalog_, &kSources);
+            const auto kOutcome = authoring::executeAtomic(target,
+                                                           target.generation(),
+                                                           request.operations,
+                                                           *catalog_,
+                                                           &kSources,
+                                                           record.amends ? authoring::Coalescing::AmendLast
+                                                                         : authoring::Coalescing::None);
             failed_ = !kOutcome.has_value();
             results.push(slotValue(kOutcome));
         } else {

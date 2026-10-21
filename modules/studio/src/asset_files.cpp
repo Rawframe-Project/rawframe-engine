@@ -9,9 +9,6 @@ namespace rawframe::studio {
 
 namespace {
 
-/// How far a card's press moves before it is a drag rather than a click.
-constexpr float kDragAfter = 6;
-
 /// `path` with `from` at its start put as `to`, where it is `from` or under
 /// it; none where it is not, and empty where `to` is, the file gone.
 std::optional<std::string> movedPath(const std::string& path, const std::string& from, const std::string& to) {

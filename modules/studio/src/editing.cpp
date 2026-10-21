@@ -98,6 +98,12 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     // blockout's footprint, which a drag then moves (D852), and a mark on a
     // clip's timeline, moved in time by a drag (D890).
     held_.planPressed = false;
+    // An output's port held, to be let go on an input it wires (D977).
+    held_.wiring.reset();
+    if (const auto kOutput = std::ranges::find(held_.canvasOutputs, node, &EditorsHeld::CanvasPort::line);
+        pointerPress_ && kOutput != held_.canvasOutputs.end() && kOutput->entity < entities_.size()) {
+        held_.wiring = std::pair{entities_[kOutput->entity], kOutput->name};
+    }
     if (const std::optional<std::size_t> kStands = canvasEntityOf(node);
         kStands.has_value() && *kStands < entityRows_.size()) {
         node = entityRows_[*kStands];
@@ -1391,8 +1397,10 @@ void ShellParticipant::commit(Value operation, const std::string& done, const st
 
 void ShellParticipant::commitAll(std::vector<Value> operations,
                                  const std::string& done,
-                                 const std::optional<std::string>& choose) {
-    const Outcome kOutcome = outcomeOf(ask(applyRecord(next(), scene_, std::move(operations))));
+                                 const std::optional<std::string>& choose,
+                                 bool amends) {
+    const Outcome kOutcome = outcomeOf(ask(amends ? amendRecord(next(), scene_, std::move(operations))
+                                                  : applyRecord(next(), scene_, std::move(operations))));
     told(kOutcome);
     if (kOutcome.done) {
         ++applied_;

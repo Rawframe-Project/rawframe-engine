@@ -173,6 +173,10 @@ bool ShellParticipant::pressPrefabBar(ui::Node node) {
 
 namespace {
 
+/// The narrowest viewport, in the tree's pixels, its pills, split, axes,
+/// and flight hint are shown over (D978).
+constexpr float kNarrowViewport = 480;
+
 /// A pill's menu by its name, and the commands it lists (D916).
 constexpr std::string_view kProjectionPill = "Projection";
 constexpr std::string_view kDrawPill = "Draw mode";
@@ -224,13 +228,19 @@ void ShellParticipant::showViewBar() {
     if (!tree_->contains(viewport_)) {
         return;
     }
-    const auto kOverlay = [this](ui::Placement placement, ui::Direction direction) -> std::optional<ui::Node> {
+    held_.viewBarWide = tree_->placedRectOf(viewport_).width >= kNarrowViewport;
+    const auto kOverlay = [this](ui::Placement placement,
+                                 ui::Direction direction,
+                                 ui::Dimension width = {},
+                                 float right = 8) -> std::optional<ui::Node> {
         auto made = box(centerColumn_,
-                        ui::Layout{.direction = direction,
+                        ui::Layout{.width = width,
+                                   .direction = direction,
                                    .alignItems = ui::Align::Center,
                                    .gap = 6,
-                                   .padding = {8, 8, 8, 8},
-                                   .placement = placement},
+                                   .padding = {8, right, 8, 8},
+                                   .placement = placement,
+                                   .wrap = !width.automatic},
                         0);
         if (!made.has_value()) {
             return std::nullopt;
@@ -295,10 +305,18 @@ void ShellParticipant::showViewBar() {
         static_cast<void>(tree_->detach(held_.modePalette));
         static_cast<void>(tree_->attach(centerColumn_, held_.modePalette));
     }
-    // The pills along the top, as the design's.
+    // A viewport too narrow for them leaves its overlays out, the View
+    // menu doing what they do (D978); shown again once it is wide enough.
+    if (!held_.viewBarWide) {
+        return;
+    }
+    // The pills along the top, as the design's: across the viewport less
+    // the split's corner, onto a second line where it is narrow (B10).
     if (auto bar =
             kOverlay({.absolute = true, .x = ui::pixels(0), .y = ui::pixels(look::kTabHeight + held_.prefabTall)},
-                     ui::Direction::Row);
+                     ui::Direction::Row,
+                     ui::share(1),
+                     120);
         bar.has_value()) {
         held_.viewBar = *bar;
         kPill(*bar, kProjectionPill, std::nullopt, held_.flat ? "Top" : "Perspective");
@@ -542,6 +560,11 @@ void ShellParticipant::showEmptyScene() {
 }
 
 void ShellParticipant::forwardInput() {
+    // The viewport's overlays follow its width across the narrowest it
+    // shows them at (D978).
+    if (tree_->contains(viewport_) && (tree_->placedRectOf(viewport_).width >= kNarrowViewport) != held_.viewBarWide) {
+        showViewBar();
+    }
     if (inViewport_.forwarding == nullptr) {
         return;
     }

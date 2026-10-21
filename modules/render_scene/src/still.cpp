@@ -26,7 +26,7 @@ bool movesWithTime(const SceneFrame& frame) noexcept {
 
 bool Stillness::still(const SceneFrame& frame) {
     bool same = false;
-    if (last_.has_value() && !movesWithTime(frame)) {
+    if (last_.has_value() && (timeHeld_ || !movesWithTime(frame))) {
         // What changes with time alone is taken as the frame's, so the rest
         // is what decides.
         last_->time = frame.time;
@@ -35,6 +35,12 @@ bool Stillness::still(const SceneFrame& frame) {
         last_->metering.elapsed = frame.metering.elapsed;
         last_->metering.snap = frame.metering.snap;
         last_->particles.clock = frame.particles.clock;
+        // An edited World's emitters and skinned poses are time's too: they
+        // play on the client while the documents stand (D979).
+        if (timeHeld_) {
+            last_->particles = frame.particles;
+            last_->palette = frame.palette;
+        }
         same = *last_ == frame;
     }
     if (same) {

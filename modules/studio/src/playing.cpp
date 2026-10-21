@@ -451,6 +451,12 @@ void ShellParticipant::pollPicks(double seconds) {
     }
     if (kMoved.has_value() && !kBoxChose && !lockedOf(kMoved->source).has_value()) {
         moveDragged(*kMoved);
+    } else if (const std::optional<Moved> kDragging = movedIn(kReply, scene_, "dragging");
+               kDragging.has_value() && seconds >= nextLiveStep_ && !lockedOf(kDragging->source).has_value()) {
+        // A drag shown as it goes, ten steps a second, as the edit view
+        // follows the scene (D912, D976).
+        nextLiveStep_ = seconds + 0.1;
+        moveDragged(*kDragging, true);
     }
     // The view moved in the played game, shown in the view's fields
     // (D469).
@@ -645,16 +651,27 @@ void ShellParticipant::scaleDragged(const Moved& moved, std::map<std::string, do
     commitAll(std::move(operations), "sized by dragging", moved.source);
 }
 
-void ShellParticipant::moveDragged(const Moved& moved) {
-    // A press let go where it went down is a click, not a drag.
-    if (std::abs(moved.x) < 0.01 && std::abs(moved.y) < 0.01 && std::abs(moved.z) < 0.01) {
+void ShellParticipant::moveDragged(const Moved& moved, bool live) {
+    // A drag shown as it goes moved it from where it began (D976).
+    const bool kGoing = liveDrag_.has_value() && liveDrag_->source == moved.source;
+    const bool kAmends = kGoing && liveDrag_->steps > 0;
+    // A press let go where it went down is a click, not a drag, unless the
+    // drag went out and came back.
+    if (std::abs(moved.x) < 0.01 && std::abs(moved.y) < 0.01 && std::abs(moved.z) < 0.01 && (live || !kAmends)) {
+        if (!live) {
+            liveDrag_.reset();
+        }
         return;
     }
     std::string why;
     const std::optional<Catalog::Component> kPose = componentNamed(catalog_, "rawframe.physics3d.pose", why);
-    std::optional<std::map<std::string, double, std::less<>>> held = poseOf(moved.source);
+    std::optional<std::map<std::string, double, std::less<>>> held =
+        kGoing ? std::optional{liveDrag_->pose} : poseOf(moved.source);
     if (!kPose.has_value() || !held.has_value()) {
         return;
+    }
+    if (live && !kGoing) {
+        liveDrag_ = LiveDrag{.source = moved.source, .pose = *held};
     }
     std::map<std::string, double, std::less<>>& pose = *held;
     std::vector<std::pair<std::string, double>> changed;
@@ -666,10 +683,11 @@ void ShellParticipant::moveDragged(const Moved& moved) {
     };
     // The toolbar's tool says what a drag does (D922): Select only
     // chooses, Rotate turns whatever was grabbed, Scale sizes the body.
-    if (held_.tool == 0) {
+    if (held_.tool == 0 || (live && held_.tool == 3)) {
         return;
     }
     if (held_.tool == 3) {
+        liveDrag_.reset();
         scaleDragged(moved, pose);
         return;
     }
@@ -680,7 +698,6 @@ void ShellParticipant::moveDragged(const Moved& moved) {
     } else if (kHow == Moved::How::Height) {
         changed = {{"y", kPlaced(pose["y"], moved.y)}};
         done = "raised by dragging";
-        ++raised_;
     } else {
         // The angle about +Y from where it was pressed to where it was
         // let go, seen from the entity's place; composed before its turn.
@@ -699,7 +716,6 @@ void ShellParticipant::moveDragged(const Moved& moved) {
                    {"qz", kCos * kWas[2] - kSin * kWas[0]},
                    {"qw", kCos * kWas[3] - kSin * kWas[1]}};
         done = "turned by dragging";
-        ++turned_;
     }
     std::vector<Value> operations;
     for (const auto& [kPart, kValue] : changed) {
@@ -715,13 +731,28 @@ void ShellParticipant::moveDragged(const Moved& moved) {
         operation.add("value", std::move(value));
         operations.push_back(std::move(operation));
     }
+    if (live) {
+        // Quietly, the panels shown again once it is let go.
+        if (outcomeOf(ask(kAmends ? amendRecord(next(), scene_, std::move(operations))
+                                  : applyRecord(next(), scene_, std::move(operations))))
+                .done) {
+            ++liveDrag_->steps;
+            ++liveSteps_;
+        }
+        return;
+    }
+    liveDrag_.reset();
     ++dragged_;
+    raised_ += done == "raised by dragging" ? 1 : 0;
+    turned_ += done == "turned by dragging" ? 1 : 0;
     snapped_ += snap_.move > 0 || snap_.turn > 0 ? 1 : 0;
-    commitAll(std::move(operations), done, moved.source);
+    commitAll(std::move(operations), done, moved.source, kAmends);
     emitter_.log(diagnostics::Severity::Info,
                  kDragged,
                  "a drag in the played game was committed",
-                 {diagnostics::field("entity", std::string_view{moved.source}), diagnostics::field("how", done)});
+                 {diagnostics::field("entity", std::string_view{moved.source}),
+                  diagnostics::field("how", done),
+                  diagnostics::field("stepsShown", liveSteps_)});
 }
 
 void ShellParticipant::attachPreview() {

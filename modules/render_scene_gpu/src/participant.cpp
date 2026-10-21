@@ -175,12 +175,24 @@ public:
             renderer_->prepare(kInRegions ? nullptr : scene_->queued(), meshes_, textures_, viewPointers_);
         }
         const std::span<const render_scene::TextureFrame> kTextures = scene_->textureFrames();
+        // An editor's edited World stands while time alone moves it (D979).
+        const bool kTimeHeld = preview_ != nullptr && preview_->edited();
+        textureStillness_.resize(views_.size());
         for (std::size_t at = 0; at < views_.size(); ++at) {
-            views_[at]->prepare(at < kTextures.size() ? kTextures[at].frame : nullptr, meshes_, textures_);
+            const render_scene::SceneFrame* kFrame = at < kTextures.size() ? kTextures[at].frame : nullptr;
+            views_[at]->prepare(kFrame, meshes_, textures_);
             if (views_[at]->missed()) {
                 scene_->missed(views_[at]->id());
             }
-            frames_->ready(*views_[at]);
+            // A render texture's picture that has stood is not drawn again,
+            // as the scene's is not, nor one given nothing new (D952, D979).
+            textureStillness_[at].holdTime(kTimeHeld);
+            if (!views_[at]->missed() && (kFrame == nullptr || textureStillness_[at].still(*kFrame))) {
+                views_[at]->stands();
+                frames_->unchanged(*views_[at]);
+            } else {
+                frames_->ready(*views_[at]);
+            }
         }
         const std::span<const render_scene::RegionFrame> kRegions = scene_->regionFrames();
         for (std::size_t at = 0; at < regions_.size() && at < kRegions.size(); ++at) {
@@ -216,15 +228,15 @@ public:
         }
         prepareEyes();
         // A picture that has stood (D952) is not drawn again, where the
-        // scene is drawn alone: no capture, render texture, shown split
-        // (a preview keeps its regions' views made while it shows one), or
-        // eye.
+        // scene is drawn alone: no capture, shown split (a preview keeps
+        // its regions' views made while it shows one), or eye; its render
+        // textures' views judged each as it is (D979).
         const render_scene::SceneFrame* kQueued = scene_->queued();
+        stillness_.holdTime(kTimeHeld);
         const bool kSplit = std::ranges::any_of(scene_->regionFrames(), [](const render_scene::RegionFrame& each) {
             return each.width != 0 && each.height != 0;
         });
-        if (!capturing_.has_value() && views_.empty() && !kSplit && eyes_.empty() && kQueued != nullptr &&
-            stillness_.still(*kQueued)) {
+        if (!capturing_.has_value() && !kSplit && eyes_.empty() && kQueued != nullptr && stillness_.still(*kQueued)) {
             frames_->unchanged(*renderer_);
             frames_->unchanged(renderer_->composed());
             return;
@@ -372,6 +384,7 @@ public:
             frames_->leave(*view);
         }
         views_.clear();
+        textureStillness_.clear();
         viewPointers_.clear();
         emitter_.log(diagnostics::Severity::Info,
                      kDrawingSummary,
@@ -425,6 +438,8 @@ private:
     std::vector<std::unique_ptr<TextureView>> eyes_;
     /// Whether the scene's picture has stood (D952).
     render_scene::Stillness stillness_;
+    /// And each render texture's view's (D979).
+    std::vector<render_scene::Stillness> textureStillness_;
     /// The frame a tool asked to capture, and whether the renderer was
     /// asked to read it.
     std::optional<render_scene::SceneFrame> capturing_;

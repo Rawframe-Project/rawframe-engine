@@ -255,6 +255,16 @@ public:
     [[nodiscard]] std::size_t views() const noexcept {
         return views_;
     }
+    /// Whether it shows an editor's edited World (D912, D979), whose
+    /// picture stands while only time moves it: an emitter's particles, a
+    /// post process, a program material's time. Its host's to say before
+    /// the renderer starts.
+    void showEdited(bool edited) noexcept {
+        edited_ = edited;
+    }
+    [[nodiscard]] bool edited() const noexcept {
+        return edited_;
+    }
     [[nodiscard]] const std::vector<Perspective>& others() const noexcept {
         return others_;
     }
@@ -418,6 +428,7 @@ private:
     std::uint8_t overlays_ = 0;
     std::vector<Perspective> others_;
     std::size_t views_ = 1;
+    bool edited_ = false;
     std::vector<FrameFigure> figures_;
     std::vector<FrameStep> steps_;
     std::uint64_t described_ = 0;

@@ -257,7 +257,8 @@ result::Status Play::launch() {
                          "render.stream",
                          "render.frame_rate",
                          "preview.views",
-                         "preview.flight"});
+                         "preview.flight",
+                         "preview.edited"});
         const std::string kWidth = std::to_string((*settings_.viewport)[0]);
         const std::string kHeight = std::to_string((*settings_.viewport)[1]);
         viewported = "window.visible = false\nwindow.width = " + kWidth + "\nwindow.height = " + kHeight +
@@ -266,7 +267,9 @@ result::Status Play::launch() {
                      // Split three ways at most, in the viewport only (D797).
                      "\npreview.views = 3\n" +
                      // Edited, its camera flown as an editor's (D913).
-                     (settings_.edited ? "preview.flight = true\n" : "") +
+                     // and its picture still while time alone moves it
+                     // (D979).
+                     (settings_.edited ? "preview.flight = true\npreview.edited = true\n" : "") +
                      // At most sixty pictures a second, a display's: each one
                      // is read back and written whole to the stream, which a
                      // device that keeps up did at its host's 120 (D947).

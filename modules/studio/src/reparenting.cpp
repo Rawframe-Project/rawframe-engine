@@ -8,9 +8,6 @@ namespace rawframe::studio {
 
 namespace {
 
-/// How far a press moves before it is a drag rather than a click.
-constexpr float kDragAfter = 6;
-
 /// The game's attachment, the one parenting there is (D785): the 3D one
 /// where a game has it, else the 2D one.
 constexpr std::string_view kAttachments[] = {"rawframe.physics3d.attach", "rawframe.physics2d.attach"};

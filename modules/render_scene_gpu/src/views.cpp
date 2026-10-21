@@ -253,6 +253,10 @@ void TextureView::ended(bool submitted) noexcept {
     state.drawing = false;
 }
 
+void TextureView::stands() noexcept {
+    state_->shown = true;
+}
+
 bool TextureView::missed() const noexcept {
     return state_->missed;
 }

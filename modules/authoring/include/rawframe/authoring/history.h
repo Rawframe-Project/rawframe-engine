@@ -143,6 +143,28 @@ public:
         clean_ = applied_;
     }
 
+    /// The newest entry, which a change may amend (D976), where it is
+    /// `author`'s change, applied, with nothing to redo after it and not
+    /// taken back; none otherwise.
+    [[nodiscard]] const Entry* amendable(std::uint32_t author) const noexcept {
+        if (entries_.empty() || applied_ != entries_.size() || authorship_.back().author != author ||
+            authorship_.back().kind != EntryKind::Change || authorship_.back().takenBack) {
+            return nullptr;
+        }
+        return &entries_.back();
+    }
+    /// The newest entry, amendable, as `entry` amends it: the document
+    /// dirty, and the oldest entries evicted past the limits, as an append
+    /// evicts them.
+    void amend(Entry entry) {
+        if (clean_.has_value() && *clean_ == applied_) {
+            clean_.reset();
+        }
+        bytes_ = bytes_ - entries_.back().bytes + entry.bytes;
+        entries_.back() = std::move(entry);
+        evict();
+    }
+
     /// A committed transaction's entry, the redo side dropped: by
     /// `author`, and for an undo or a redo, taking back the entry at
     /// `takesBack`.
@@ -167,7 +189,12 @@ public:
         entries_.push_back(std::move(entry));
         authorship_.push_back(made);
         ++applied_;
-        // Oldest first; a clean place evicted is definitely dirty.
+        evict();
+    }
+
+private:
+    /// Oldest first; a clean place evicted is definitely dirty.
+    void evict() {
         while (!entries_.empty() && (entries_.size() > limits_.maximumEntries || bytes_ > limits_.maximumBytes)) {
             bytes_ -= entries_.front().bytes;
             entries_.pop_front();
@@ -179,7 +206,6 @@ public:
         }
     }
 
-private:
     HistoryLimits limits_;
     std::deque<Entry> entries_;
     std::deque<Authorship> authorship_;

@@ -919,6 +919,41 @@ void ShellParticipant::connectGraphInput(const FieldRow& row, const std::pair<st
     commit(std::move(operation), row.field + " connected", entity_);
 }
 
+void ShellParticipant::dropWire() {
+    const std::optional<std::pair<std::string, std::string>> kFrom = std::exchange(held_.wiring, std::nullopt);
+    const std::optional<std::array<float, 2>> kPointer = releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
+    if (!kFrom.has_value() || !kPointer.has_value() || !chosen(Listed::Graph) ||
+        std::hypot((*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]) < kDragAfter) {
+        return;
+    }
+    for (const EditorsHeld::CanvasPort& kInput : held_.canvasInputs) {
+        if (!tree_->contains(kInput.line) || kInput.entity >= entities_.size()) {
+            continue;
+        }
+        const ui::Rect kAt = tree_->placedRectOf(kInput.line);
+        if ((*kPointer)[0] < kAt.x || (*kPointer)[1] < kAt.y || (*kPointer)[0] >= kAt.x + kAt.width ||
+            (*kPointer)[1] >= kAt.y + kAt.height) {
+            continue;
+        }
+        const std::string& kNode = entities_[kInput.entity];
+        if (kNode == kFrom->first) {
+            ++refused_;
+            say("a node's output is not wired to its own input");
+            return;
+        }
+        Value connection = Value::object();
+        connection.add("node", Value::string(kFrom->first));
+        connection.add("output", Value::string(kFrom->second));
+        Value operation = Value::object();
+        operation.add("operation", Value::string("materials.set_node_input"));
+        operation.add("node", Value::string(kNode));
+        operation.add("input", Value::string(kInput.name));
+        operation.add("value", std::move(connection));
+        commit(std::move(operation), kInput.name + " connected", kNode);
+        return;
+    }
+}
+
 void ShellParticipant::setGraphMember(const FieldRow& row, const std::string& text) {
     // A wired input left saying what it is wired from is left wired.
     if (!row.kind.empty() && text == row.kind) {

@@ -207,6 +207,39 @@ result::Result<Committed> AuthoredScene::commit() {
     ++generation_;
     const std::size_t kDeltas = open.journal.size();
     selection_ = heldOf(scene_, selection_);
+    if (const Entry* kLast = open.coalescing == Coalescing::AmendLast ? history_.amendable(author_) : nullptr;
+        kLast != nullptr && !kLast->reversed) {
+        // Each slot set again keeps the entry's first `before`; a slot back
+        // as it was is no change (D976).
+        Entry folded = *kLast;
+        for (const Delta& kDelta : open.journal) {
+            const auto kSame = std::ranges::find_if(folded.journal, [&kDelta](const Delta& each) {
+                return sameSlot(each, kDelta);
+            });
+            if (kSame != folded.journal.end()) {
+                kSame->after = kDelta.after;
+            } else {
+                folded.journal.push_back(kDelta);
+            }
+        }
+        std::erase_if(folded.journal, [](const Delta& each) {
+            return sameSlot(each, each) && each.before == each.after;
+        });
+        std::size_t journalBytes = 0;
+        for (const Delta& kEach : folded.journal) {
+            journalBytes += bytesOf(kEach);
+        }
+        // Within a transaction's journal limits, as one entry; past them,
+        // an entry of its own, so amending never grows one without bound.
+        if (folded.journal.size() <= history_.limits().maximumJournalDeltas &&
+            journalBytes <= history_.limits().maximumJournalBytes) {
+            folded.selectedAfter = selection_;
+            folded.viewAfter = view_;
+            folded.bytes = journalBytes + selectionBytes(folded.selectedBefore, selection_) + 2 * sizeof(SceneView);
+            history_.amend(std::move(folded));
+            return Committed{.generation = generation_, .deltas = kDeltas};
+        }
+    }
     history_.append(
         Entry{.journal = std::move(open.journal),
               .bytes = open.journalBytes + selectionBytes(open.selectedBefore, selection_) + 2 * sizeof(SceneView),

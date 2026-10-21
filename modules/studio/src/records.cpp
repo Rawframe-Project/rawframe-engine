@@ -201,6 +201,12 @@ Value applyRecord(std::int64_t id, std::string_view scene, std::vector<Value> gi
     return record;
 }
 
+Value amendRecord(std::int64_t id, std::string_view scene, std::vector<Value> given) {
+    Value record = applyRecord(id, scene, std::move(given));
+    record.add("amends", Value::boolean(true));
+    return record;
+}
+
 Value togetherRecord(std::int64_t id, std::vector<std::pair<std::string, std::vector<Value>>> parts) {
     Value documents = Value::array();
     for (auto& [scene, operations] : parts) {
@@ -652,10 +658,10 @@ std::optional<Value> viewedIn(std::string_view reply) {
     return *viewed;
 }
 
-std::optional<Moved> movedIn(std::string_view reply, std::string_view scene) {
+std::optional<Moved> movedIn(std::string_view reply, std::string_view scene, std::string_view key) {
     const auto kParsed = document::parse(reply);
     const Value* answer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
-    const Value* moved = answer != nullptr ? answer->find("moved") : nullptr;
+    const Value* moved = answer != nullptr ? answer->find(key) : nullptr;
     const Value* where = moved != nullptr ? moved->find("scene") : nullptr;
     const Value* source = moved != nullptr ? moved->find("source") : nullptr;
     const Value* by = moved != nullptr ? moved->find("by") : nullptr;

@@ -138,7 +138,9 @@ private:
     [[nodiscard]] double fieldOfView() const noexcept;
     [[nodiscard]] std::optional<Pressed>
     grabbed(std::int64_t count, const document::Value& clicked, const authoring::AuthoredScene* previewed) const;
-    [[nodiscard]] document::Value movedAlong(const document::Value& clicked) const;
+    /// Where the press held would move what it met were it let go along
+    /// a ray (D466, D467, D976): null where the ray meets no plane.
+    [[nodiscard]] document::Value movedTo(const std::optional<Point>& origin, const std::optional<Point>& toward) const;
     /// The preview's answers to what was sent it without waiting (D969):
     /// its newest press, and whether the last input it answered was taken.
     void hear();

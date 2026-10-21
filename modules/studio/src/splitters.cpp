@@ -42,6 +42,10 @@ void ShellParticipant::followSplitter() {
     if (kReleased && browser_.held.has_value()) {
         dropAsset();
     }
+    // And a graph's output onto an input wires them (D977).
+    if (kReleased && held_.wiring.has_value()) {
+        dropWire();
+    }
     const std::optional<std::array<float, 2>> kPointer =
         kReleased && releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
     if (!resizing_.has_value() || !kPointer.has_value()) {

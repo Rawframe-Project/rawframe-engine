@@ -244,6 +244,17 @@ struct EditorsHeld {
     /// nodes' or keys' boxes (D819, D827).
     std::vector<std::pair<ui::Node, std::size_t>> canvasParts;
     std::vector<std::pair<ui::Node, std::size_t>> canvasBoxes;
+    /// A graph's ports on the canvas (D977): each output's and input's line,
+    /// its node's row, and its name; and the output a press holds, wired to
+    /// the input it is let go on.
+    struct CanvasPort {
+        ui::Node line{};
+        std::size_t entity = 0;
+        std::string name;
+    };
+    std::vector<CanvasPort> canvasOutputs;
+    std::vector<CanvasPort> canvasInputs;
+    std::optional<std::pair<std::string, std::string>> wiring;
     /// A UI document's preview: each node's box and its row, and the frame
     /// laid over the chosen one (D832).
     std::vector<std::pair<ui::Node, std::size_t>> previewBoxes;
@@ -346,6 +357,9 @@ struct EditorsHeld {
     ui::Node axisGizmo{};
     std::array<ui::Node, 3> axisEnds{};
     ui::Node flyHint{};
+    /// Whether the viewport was wide enough for its overlays when they
+    /// were last shown (D978).
+    bool viewBarWide = false;
     /// The viewport's note while it has no picture, and its words (D922),
     /// and whether the edited game stopped of itself.
     ui::Node viewportNote{};

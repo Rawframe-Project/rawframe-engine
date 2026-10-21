@@ -262,6 +262,9 @@ public:
     /// Whether the frame it was given before this one went undrawn: no
     /// submitted frame drew it.
     [[nodiscard]] bool missed() const noexcept;
+    /// The frame prepared draws what the view shows already, so it is not
+    /// missed when the frame is not drawn (D979).
+    void stands() noexcept;
 
     [[nodiscard]] result::Status declare(render::Frame& frame) override;
     [[nodiscard]] result::Status record(render::Frame& frame) override;

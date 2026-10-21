@@ -316,6 +316,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         leftOutable = parsed->find("point") != nullptr ? 1 : 0;
     } else if (record.verb == SessionVerb::Mark) {
         leftOutable = parsed->find("handles") != nullptr ? 1 : 0;
+    } else if (record.verb == SessionVerb::Apply) {
+        leftOutable = parsed->find("amends") != nullptr ? 1 : 0;
     }
     // A change's author, where the verb makes one (D879), and the author
     // whose presence or claim it is, where it is one (D880).
@@ -345,6 +347,12 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     if (dry != nullptr && (record.verb != SessionVerb::Apply || !dry->truth().has_value())) {
         return malformed("only apply runs dry, told so by dryRun, true or false");
+    }
+    if (const Value* kAmends = parsed->find("amends"); kAmends != nullptr) {
+        if (record.verb != SessionVerb::Apply || !kAmends->truth().has_value()) {
+            return malformed("only apply amends, told so by amends, true or false");
+        }
+        record.amends = *kAmends->truth();
     }
     if (expects != nullptr) {
         record.expects = *expects->text();

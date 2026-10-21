@@ -560,12 +560,14 @@ enum class Mode : std::uint8_t {
                                    const scene::SceneSource* sources = nullptr);
 
 /// SPEC-0040's AtomicBatch: every operation in order in one transaction;
-/// any failure keeps nothing.
+/// any failure keeps nothing. Its entry folds into the author's latest as
+/// `coalescing` says (D976).
 [[nodiscard]] result::Result<Committed> executeAtomic(AuthoredScene& scene,
                                                       std::uint64_t generation,
                                                       std::span<const Operation> operations,
                                                       const ComponentCatalog& catalog,
-                                                      const scene::SceneSource* sources = nullptr);
+                                                      const scene::SceneSource* sources = nullptr,
+                                                      Coalescing coalescing = Coalescing::None);
 
 /// One document's part of a multi-document transaction: its scene, the
 /// generation it was computed against, and its operations in order.

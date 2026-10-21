@@ -29,6 +29,13 @@ public:
     /// where the frame resolves one, and three seconds' worth at sixty
     /// where its exposure adapts to what it sees.
     [[nodiscard]] bool still(const SceneFrame& frame);
+    /// Whether what moves with time alone is left out of every frame, as an
+    /// editor's edited World is shown as its documents say (D979): its
+    /// emitters' particles and its skinned poses too, which play on the
+    /// client while the documents stand.
+    void holdTime(bool held) noexcept {
+        timeHeld_ = held;
+    }
 
     /// How many frames the last one's picture has stood.
     [[nodiscard]] std::uint64_t stood() const noexcept {
@@ -38,6 +45,7 @@ public:
 private:
     std::optional<SceneFrame> last_;
     std::uint64_t stood_ = 0;
+    bool timeHeld_ = false;
 };
 
 } // namespace rawframe::render_scene

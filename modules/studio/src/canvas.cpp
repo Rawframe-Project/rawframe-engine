@@ -132,6 +132,8 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
     clear(held_.cameraRows);
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
+    held_.canvasOutputs.clear();
+    held_.canvasInputs.clear();
     if (nodes.kind() != Value::Kind::Object || nodes.names().empty()) {
         return;
     }
@@ -400,14 +402,21 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
                               kWired ? -2 : -1);
             // Read as the node's input, not as the Inspector's field of
             // that name.
-            if (!line.has_value() || !tree_->setName(*line, kInputs->names()[input] + " input").has_value()) {
+            if (!line.has_value() || !tree_->setName(*line, kInputs->names()[input] + " input").has_value() ||
+                !tree_->setRole(*line, ui::Role::Button).has_value()) {
                 return;
             }
+            held_.canvasInputs.push_back({.line = *line, .entity = kEntity, .name = kInputs->names()[input]});
         }
         for (const std::string& kOutput : kOutputsOf(kNodeValue)) {
-            if (!kLine(kOutput, {}, 2).has_value()) {
+            auto line = kLine(kOutput, {}, 2);
+            if (!line.has_value() ||
+                !tree_->setName(*line, kOutput + " output of " + graphNodeLabel(kNodeValue) + " " + kId.substr(0, 8))
+                     .has_value() ||
+                !tree_->setRole(*line, ui::Role::Button).has_value()) {
                 return;
             }
+            held_.canvasOutputs.push_back({.line = *line, .entity = kEntity, .name = kOutput});
         }
     }
     emitter_.log(diagnostics::Severity::Info,

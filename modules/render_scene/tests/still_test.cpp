@@ -65,6 +65,28 @@ RAWFRAME_TEST(AFrameThatMovesWithTimeIsNeverStill) {
     RAWFRAME_EXPECT(!movesWithTime(unused));
 }
 
+RAWFRAME_TEST(AnEditedWorldStandsWhileTimeAloneMovesIt) {
+    // D979: an editor's edited World, its emitters, post processes, and
+    // program materials moving with time alone, stands; a change of its
+    // own still draws.
+    SceneFrame frame = aFrame(1);
+    frame.particles.emitters.emplace_back();
+    frame.postProcesses.emplace_back();
+    frame.programs[0] = std::make_shared<const material::ProgramMaterial>();
+    Stillness stillness;
+    stillness.holdTime(true);
+    RAWFRAME_EXPECT(!stillness.still(frame));
+    for (int at = 2; at < 5; ++at) {
+        SceneFrame later = frame;
+        later.time = {static_cast<double>(at), at - (1.0 / 60.0)};
+        later.particles.clock = static_cast<float>(at);
+        RAWFRAME_EXPECT(stillness.still(later));
+    }
+    SceneFrame moved = frame;
+    moved.eye = {1, 2, 5};
+    RAWFRAME_EXPECT(!stillness.still(moved));
+}
+
 RAWFRAME_TEST(AResolvingOrAdaptingFrameWaitsUntilItSettles) {
     const auto kStoodAfter = [](SceneFrame frame) {
         Stillness stillness;

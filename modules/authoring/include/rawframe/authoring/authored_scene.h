@@ -57,6 +57,11 @@ enum class Coalescing : std::uint8_t {
     /// Each slot's changes fold into one: its first `before`, its last
     /// `after`.
     FoldSlots,
+    /// The transaction folds into its author's latest entry where that is
+    /// the history's newest, a change of theirs nothing has taken back:
+    /// each slot its first `before` and its last `after`, so a drag shown
+    /// as it goes is one step (D976). Otherwise an entry of its own.
+    AmendLast,
 };
 
 /// Where an author looks at a scene from (ADR-0065's view state, declared

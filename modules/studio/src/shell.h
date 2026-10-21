@@ -128,6 +128,9 @@ inline constexpr std::uint32_t kPanel = look::kPanelFill;
 /// A row is clear until chosen (D915); a button is raised (button()).
 inline constexpr std::uint32_t kRow = 0x00000000U;
 inline constexpr std::uint32_t kChosen = look::kSelected;
+/// How far a press moves, in the tree's pixels, before it is a drag
+/// rather than a click: a row, a card, or a graph's port.
+inline constexpr float kDragAfter = 6;
 /// A menu's card: raised over the window, edged, with a shadow (D923); the
 /// menus' and the context menu's (D973).
 inline constexpr ui::Look kMenuLook{.fill = 0x1E2026FFU,
@@ -635,6 +638,9 @@ private:
     void removeAsked(bool sure);
     void refreshFiles(const std::string& from, const std::string& to);
     void dropAsset();
+    /// A graph's output held on the canvas and let go on another node's
+    /// input, wired to it as the Inspector's connection is (D733, D977).
+    void dropWire();
     /// An asset dragged from Assets and let go at `at` placed where it
     /// landed (D975): onto a field that takes an asset, that asset; onto
     /// the Hierarchy or the viewport, a scene's instance. Whether it landed
@@ -919,11 +925,16 @@ private:
     void commit(Value operation, const std::string& done, const std::optional<std::string>& choose);
     /// The same with several operations, one transaction, one history
     /// entry (ADR-0065).
-    void commitAll(std::vector<Value> operations, const std::string& done, const std::optional<std::string>& choose);
+    void commitAll(std::vector<Value> operations,
+                   const std::string& done,
+                   const std::optional<std::string>& choose,
+                   bool amends = false);
 
     /// Moves the chosen scene's entity a drag carried (D457): its 3D
     /// pose's x and z, in one transaction.
-    void moveDragged(const Moved& moved);
+    /// Live, a step of a drag still held, shown as it goes and folded into
+    /// one change with the rest and its release (D976).
+    void moveDragged(const Moved& moved, bool live = false);
 
     /// The pose of an entity of the chosen scene, its 3D pose's fields by
     /// name, each at nought where the scene leaves it at its default; none
@@ -1363,6 +1374,16 @@ private:
     bool recook_ = false;
     double nextAttach_ = 0;
     double nextPick_ = 0;
+    /// A drag shown as it goes (D976): what it moves, its pose when it
+    /// began, the steps applied, and when the next may be.
+    struct LiveDrag {
+        std::string source;
+        std::map<std::string, double, std::less<>> pose;
+        std::uint64_t steps = 0;
+    };
+    std::optional<LiveDrag> liveDrag_;
+    double nextLiveStep_ = 0;
+    std::uint64_t liveSteps_ = 0;
     std::uint64_t picked_ = 0;
     /// The outlines last asked of the preview, written, and how many times
     /// it drew new ones (D907).

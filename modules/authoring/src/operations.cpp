@@ -666,14 +666,15 @@ result::Result<Committed> executeAtomic(AuthoredScene& scene,
                                         std::uint64_t generation,
                                         std::span<const Operation> operations,
                                         const ComponentCatalog& catalog,
-                                        const scene::SceneSource* sources) {
+                                        const scene::SceneSource* sources,
+                                        Coalescing coalescing) {
     if (operations.size() > kMaximumBatchOperations) {
         return result::fail(result::ErrorClass::ResourceExhausted,
                             kAuthoringDomain,
                             code(AuthoringError::LimitExceeded),
                             "a batch has more operations than its limit");
     }
-    RAWFRAME_TRY_ASSIGN(Transaction transaction, scene.begin(generation));
+    RAWFRAME_TRY_ASSIGN(Transaction transaction, scene.begin(generation, coalescing));
     for (std::size_t at = 0; at < operations.size(); ++at) {
         auto staged = stage(transaction, operations[at], catalog, sources);
         if (!staged.has_value()) {

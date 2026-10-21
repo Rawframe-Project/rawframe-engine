@@ -215,7 +215,9 @@ struct Moved {
 
 /// What `authoring.pick`'s answer says was dragged in `scene`; none for no
 /// drag, or one of another scene's entity.
-[[nodiscard]] std::optional<Moved> movedIn(std::string_view reply, std::string_view scene);
+/// Under `key`, `dragging`, where a drag still held would move it (D976).
+[[nodiscard]] std::optional<Moved>
+movedIn(std::string_view reply, std::string_view scene, std::string_view key = "moved");
 
 /// The view `authoring.pick`'s answer says the played game moved the
 /// scene's to by its wheel or a drag with the right button (D469); none
@@ -295,6 +297,8 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 [[nodiscard]] Value applyRecord(std::int64_t id, std::string_view scene, Value operation);
 /// The same with several operations, applied together or not at all.
 [[nodiscard]] Value applyRecord(std::int64_t id, std::string_view scene, std::vector<Value> operations);
+/// And one whose change folds into the author's latest (D976).
+[[nodiscard]] Value amendRecord(std::int64_t id, std::string_view scene, std::vector<Value> operations);
 /// `authoring.apply_together` (D497): each scene's operations, atomic, all
 /// kept or none.
 [[nodiscard]] Value togetherRecord(std::int64_t id, std::vector<std::pair<std::string, std::vector<Value>>> parts);

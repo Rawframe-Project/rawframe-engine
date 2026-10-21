@@ -201,6 +201,55 @@ RAWFRAME_TEST(ACoalescingTransactionKeepsFirstBeforeAndLastAfter) {
                     kScene->redoable() == 1);
 }
 
+RAWFRAME_TEST(AnAmendingTransactionFoldsIntoItsAuthorsLatestEntry) {
+    // D976: a drag shown as it goes is one step, its first before and its
+    // last after, however many commits it took.
+    const auto kScene = opened();
+    const auto kAmend = [&](std::string_view from, std::string_view to) {
+        auto transaction = kScene->begin(kScene->generation(), Coalescing::AmendLast);
+        RAWFRAME_EXPECT(transaction.has_value() && transaction->stage(moveX(from, to)).has_value());
+        RAWFRAME_EXPECT(transaction->commit().has_value());
+    };
+    commitMove(*kScene, "1", "2");
+    kAmend("2", "3");
+    kAmend("3", "4");
+    RAWFRAME_EXPECT(xOf(*kScene) == "4" && kScene->undoable() == 1 && kScene->journalAt(0).size() == 1);
+    RAWFRAME_EXPECT(kScene->undo(kScene->generation()).has_value() && xOf(*kScene) == "1");
+    // Nothing of its author's to amend, after an undo, or past another
+    // author's later change: an entry of its own.
+    kAmend("1", "5");
+    RAWFRAME_EXPECT(kScene->undoable() == 1 && kScene->redoable() == 0);
+    kScene->setAuthor(1);
+    commitMove(*kScene, "5", "6");
+    kScene->setAuthor(0);
+    kAmend("6", "7");
+    RAWFRAME_EXPECT(kScene->undoable() == 3 && xOf(*kScene) == "7");
+}
+
+RAWFRAME_TEST(AmendingNeverGrowsAnEntryPastAJournalsLimits) {
+    // D976: an amended entry stays within a transaction's journal limits;
+    // a change that would take it past them is an entry of its own, and
+    // the history's own limits hold as they do for an append.
+    const auto kScene = opened({.maximumJournalDeltas = 1});
+    const auto kAmend = [&](const Delta& delta) {
+        auto transaction = kScene->begin(kScene->generation(), Coalescing::AmendLast);
+        RAWFRAME_EXPECT(transaction.has_value() && transaction->stage(delta).has_value());
+        RAWFRAME_EXPECT(transaction->commit().has_value());
+    };
+    commitMove(*kScene, "1", "2");
+    kAmend(moveX("2", "3"));
+    RAWFRAME_EXPECT(kScene->undoable() == 1);
+    Delta setY{.kind = DeltaKind::SetField, .entity = kSpawn, .component = "game.position", .field = "y"};
+    setY.after.field = number("5");
+    kAmend(setY);
+    RAWFRAME_EXPECT(kScene->undoable() == 2 && kScene->journalAt(0).size() == 1 && kScene->journalAt(1).size() == 1);
+    const auto kBounded = opened({.maximumEntries = 1});
+    commitMove(*kBounded, "1", "2");
+    auto again = kBounded->begin(kBounded->generation(), Coalescing::AmendLast);
+    RAWFRAME_EXPECT(again.has_value() && again->stage(moveX("2", "3")).has_value() && again->commit().has_value());
+    RAWFRAME_EXPECT(kBounded->undoable() == 1 && xOf(*kBounded) == "3");
+}
+
 RAWFRAME_TEST(TheSelectionIsKeptBesideTheDocumentAndPutBackByUndo) {
     std::unique_ptr<AuthoredScene> scene = opened();
     // Choosing changes neither the generation nor whether it is dirty.
