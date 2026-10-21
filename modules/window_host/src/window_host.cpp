@@ -1,5 +1,6 @@
 #include "rawframe/window_host/window_host.h"
 
+#include "icon.h"
 #include "rawframe/base/platform.h"
 #include "rawframe/input_kest/sources.h"
 
@@ -442,6 +443,18 @@ result::Status WindowHost::start(window::Windows& windows) {
         // A game's own name over its window, as an export gives it (D519).
         if (const auto kTitle = kConfiguration->text("window.title")) {
             made.title = std::string{*kTitle};
+        }
+        // And its own icon, as an export gives it too (D951), over the
+        // program's.
+        if (const auto kIcon = kConfiguration->path("window.icon")) {
+            RAWFRAME_TRY_ASSIGN(std::vector<IconSide> sides, readIcon(*kIcon, request_.files));
+            iconPixels_.clear();
+            iconPixels_.reserve(sides.size());
+            settings_.icon.clear();
+            for (IconSide& each : sides) {
+                const std::vector<std::uint8_t>& kPixels = iconPixels_.emplace_back(std::move(each.pixels));
+                settings_.icon.push_back(window::IconImage{.width = each.side, .height = each.side, .pixels = kPixels});
+            }
         }
         if (kConfiguration->text("window.x").has_value() || kConfiguration->text("window.y").has_value()) {
             place = window::Position{.x = static_cast<float>(kX), .y = static_cast<float>(kY)};

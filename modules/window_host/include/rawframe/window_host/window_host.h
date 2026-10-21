@@ -62,7 +62,8 @@ struct WindowHostSettings {
     /// outlives the WindowHost.
     world_tooling::Injection* injection = nullptr;
     /// The window's icon, its images' pixels outliving the WindowHost
-    /// (D920); none for the platform's own.
+    /// (D920); none for the platform's own. A configuration's
+    /// `window.icon` is shown instead (D951).
     std::vector<window::IconImage> icon;
 };
 
@@ -184,6 +185,8 @@ private:
     bool showWhenAsked_ = false;
     window::Mode shownMode_ = window::Mode::Windowed;
     std::vector<std::pair<window::RequestId, std::uint64_t>> dialogsShown_;
+    /// The pixels of the icon `window.icon` names (D951).
+    std::vector<std::vector<std::uint8_t>> iconPixels_;
     /// Either, as the Host's frames tell its participants.
     std::atomic<bool> suspended_{false};
     std::vector<composition::LentCapability> lent_;

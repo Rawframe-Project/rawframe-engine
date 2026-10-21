@@ -190,7 +190,9 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
         exported.port + "\n" +
         (exported.headset ? "# Shown on a headset where the system's OpenXR runtime has one, played\n"
                             "# flat where it has none (D658).\nxr.headset = true\n"
-                          : std::string{});
+                          : std::string{}) +
+        (!exported.icon.empty() ? "# The game's own icon on its window (D951).\nwindow.icon = icon.ktx2\n"
+                                : std::string{});
     const std::string kPlay =
         "# Run " + exported.launcher + kSuffix +
         " to play: it starts the server, then the client.\n"
@@ -206,7 +208,9 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
                    "\nplay.follow_channel = " + exported.channel + "\nplay.follow_origin = " + *exported.follow +
                    "\nplay.follow_log = follow.log\n"
              : std::string{});
-    if (!writeInto(exported, "server.conf", kServer, written) ||
+    const std::string_view kIcon{reinterpret_cast<const char*>(exported.icon.data()), exported.icon.size()};
+    if ((!exported.icon.empty() && !writeInto(exported, "icon.ktx2", kIcon, written)) ||
+        !writeInto(exported, "server.conf", kServer, written) ||
         !writeInto(exported, "client.conf", kClient, written) || !writeInto(exported, "play.conf", kPlay, written)) {
         return false;
     }

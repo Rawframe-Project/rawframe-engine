@@ -9,7 +9,8 @@
 # Prints the keys the folder holds (the studio's key set, never its
 # secret), the fonts the client read from the folder's library, the
 # players admitted, the frames shown, whether the window carried the title
-# the export was given (D519), how each side stopped, and whether
+# the export was given (D519) and the game's own icon (its `icon.png`, a
+# crate, D951) at the sides it was made in, how each side stopped, and whether
 # the launcher ended with the client's code. The game is exported from a
 # folder named as Studio names a new game, with capitals and underscores,
 # which its subject cannot carry (D944): the launcher takes the folder's
@@ -26,6 +27,7 @@ rm -rf "$out" "$out.keys" "$out.game"
 # The game under a folder name of an author's.
 mkdir -p "$out.game"
 cp -R "$7" "$out.game/Stalls_Market"
+cp games/plaza/crate.png "$out.game/Stalls_Market/icon.png"
 # The studio's key, made apart from the folder.
 kid="$("$3" key studio "$out.keys" | cut -d' ' -f2)"
 # A port nothing holds right now.
@@ -44,6 +46,9 @@ done
 sleep 3
 titled=no
 xwininfo -root -tree 2>/dev/null | grep -q '"Stalls, a market"' && titled=yes
+window="$(xwininfo -root -tree 2>/dev/null | grep '"Stalls, a market"' | awk '{print $1}' | head -1)"
+icons="$([ -n "$window" ] && xprop -id "$window" _NET_WM_ICON 2>/dev/null | grep -o 'Icon ([0-9]* x [0-9]*)' |
+    grep -o '[0-9]* x' | tr -d ' x' | tr '\n' ' ')"
 kill -TERM "$play" 2>/dev/null
 status=0
 wait "$play" || status=$?
@@ -74,6 +79,6 @@ if [ ! -f "$out/client.log" ]; then
 fi
 echo "export: keys $(ls "$out/library/keys" | tr '\n' ' ')fonts read $(field client.log fontsRead)," \
     "admitted $(field client.log admitted), frames shown $(field client.log framesShown)," \
-    "titled: $titled," \
+    "titled: $titled, icons: ${icons:-none}," \
     "client stopped $(stopped client.log exit), server stopped $(stopped server.log exit)," \
     "the launcher's code the client's: $same, controls readable: $readable"

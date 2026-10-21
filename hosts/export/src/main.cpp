@@ -19,6 +19,7 @@
 //                     [--android-keystore <file> --android-key-alias <alias>]]]
 //                   [--target ios --address <host> [--ios-client <application>]]
 //                   [--follow <origin> [--channel <channel>]] [--title <title>]
+//                   [--icon <image>]
 //
 // With `--key`, the Build is signed by that secret (`rawframe-build key`
 // writes it beside `<publisher>.keys`, which the folder's library pins);
@@ -27,7 +28,9 @@
 // is signed.
 //
 // The client's window carries `--title`, the game's directory name unless
-// given (D519).
+// given (D519), and the icon `--icon` names, a square image of 16 pixels a
+// side or more (PNG, JPEG, BMP, or TGA), else the game's own `icon.png`
+// where it has one (D951); a native folder only.
 //
 // The game is `<directory name>.game` unless named. The tools (rawframe-cook,
 // rawframe-build, rawframe-server, rawframe-client, rawframe-play) are found
@@ -107,6 +110,8 @@
 #include "rawframe/process/child.h"
 #include "rawframe/process/self.h"
 #include "rawframe/release/release.h"
+#include "rawframe/texture/texture.h"
+#include "rawframe/texture_import/import.h"
 
 #include <algorithm>
 #include <array>
@@ -115,6 +120,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -453,6 +459,38 @@ bool packageLike(std::string_view name) {
     return !partStart;
 }
 
+/// The icon at `path` as the client reads it (D951): its texture, every
+/// level down to one texel, exact; or why not.
+std::expected<std::vector<std::byte>, std::string> iconOf(const fs::path& path) {
+    std::ifstream file{path, std::ios::binary};
+    std::vector<std::byte> bytes;
+    if (file) {
+        const std::string kText{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+        for (const char kByte : kText) {
+            bytes.push_back(static_cast<std::byte>(kByte));
+        }
+    }
+    if (bytes.empty()) {
+        return std::unexpected<std::string>{"not readable"};
+    }
+    const auto kImage = rawframe::texture_import::decodeImage(bytes, {.maximumSide = 4096});
+    if (!kImage.has_value()) {
+        return std::unexpected<std::string>{"not an image this export reads (PNG, JPEG, BMP, or TGA)"};
+    }
+    if (kImage->width != kImage->height || kImage->width < 16) {
+        return std::unexpected<std::string>{"not square, or less than 16 pixels a side"};
+    }
+    const auto kCooked = rawframe::texture_import::cookTexture(*kImage, {.srgb = true, .exact = true, .levels = true});
+    if (!kCooked.has_value()) {
+        return std::unexpected<std::string>{"not made a texture: " + std::string{kCooked.error().description()}};
+    }
+    auto encoded = rawframe::texture::encode(*kCooked);
+    if (!encoded.has_value()) {
+        return std::unexpected<std::string>{"not made a texture: " + std::string{encoded.error().description()}};
+    }
+    return std::move(*encoded);
+}
+
 /// Whether `title` fits one configuration value: a line, not blank, of
 /// at most the value bound, with no space at either end to be trimmed off.
 bool titleLike(std::string_view title) {
@@ -470,6 +508,7 @@ int usage() {
                "                        [--android-keystore <file> --android-key-alias <alias>]]\n"
                "                       [--target ios --address <host> [--ios-client <application>]]\n"
                "                       [--follow <origin> [--channel <channel>]] [--title <title>]\n"
+               "                       [--icon <image>]\n"
                "                       [--headset true]\n",
                stderr);
     return 2;
@@ -509,6 +548,7 @@ int main(int argc, char** argv) {
     std::string channel = "stable";
     std::string title = kGame.filename().string();
     std::optional<bool> headset;
+    std::optional<fs::path> icon;
     fs::path toolDirectory = kSelf.parent_path();
     std::map<std::string, fs::path, std::less<>> tools;
     for (int at = 3; at + 1 < argc; at += 2) {
@@ -552,6 +592,8 @@ int main(int argc, char** argv) {
             channel = kValue;
         } else if (kOption == "--title") {
             title = kValue;
+        } else if (kOption == "--icon") {
+            icon = fs::absolute(kValue);
         } else if (kOption == "--headset" && (kValue == "true" || kValue == "false")) {
             headset = kValue == "true";
         } else if (kOption == "--cook" || kOption == "--build" || kOption == "--server" || kOption == "--client" ||
@@ -622,6 +664,23 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "rawframe-export: %s is not at %s\n", kWhat.c_str(), kPath.string().c_str());
             return 1;
         }
+    }
+    // The game's own icon on its window (D951), checked before anything is
+    // made, as what the target needs is.
+    if (!icon.has_value() && target == Target::Native && fs::is_regular_file(kGame / "icon.png", error)) {
+        icon = kGame / "icon.png";
+    }
+    std::vector<std::byte> iconTexture;
+    if (icon.has_value()) {
+        const auto kIcon = iconOf(*icon);
+        if (target != Target::Native || !kIcon.has_value()) {
+            std::fprintf(stderr,
+                         "rawframe-export: the icon %s is %s\n",
+                         icon->string().c_str(),
+                         target != Target::Native ? "a native folder's" : kIcon.error().c_str());
+            return 1;
+        }
+        iconTexture = *kIcon;
     }
     // A folder this export makes is taken away again if it fails, so a
     // failed export leaves nothing half made behind (D948).
@@ -745,7 +804,8 @@ int main(int argc, char** argv) {
                              .suffix = kSuffix,
                              .launcher = launcherOf(kName),
                              .runtime = runtimeFor(kSelf),
-                             .headset = headset.value_or(false)};
+                             .headset = headset.value_or(false),
+                             .icon = std::move(iconTexture)};
     std::vector<std::string> written = std::move(installed);
     const bool kWritten =
         kAndroid

@@ -47,6 +47,9 @@ struct Exported {
     /// Whether a native client is shown on a headset where one answers
     /// (D658).
     bool headset = false;
+    /// The game's own window icon, a texture, written as `icon.ktx2`;
+    /// empty for the client's own (D951).
+    std::vector<std::byte> icon;
 };
 
 /// Keeps the Composition record at `record` in `library`, under its digest,

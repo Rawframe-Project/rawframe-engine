@@ -3,7 +3,7 @@
 # no runtime closure contains it.
 rawframe_host(NAME export_tool OUTPUT rawframe-export
     SOURCES src/main.cpp src/folders.cpp
-    DEPS process release content document input network_quic composition result base
+    DEPS process release content document input network_quic texture_import texture composition result base
 )
 
 if(RAWFRAME_BUILD_TESTS)
@@ -62,7 +62,8 @@ if(RAWFRAME_BUILD_TESTS)
     # the real client in a window (D396): the key set pinned and the secret
     # left out, its font read from the folder's library, the player
     # admitted, frames shown, its window titled as the export was told
-    # (D519), the server stopping cleanly, and the launcher
+    # (D519) and carrying the game's own icon at its three sides (D951),
+    # the server stopping cleanly, and the launcher
     # ending with the client's code (a clean stop, or under load a
     # controlled overload of the software rasterizer's window).
     if(TARGET rawframe_host_client AND RAWFRAME_XVFB)
@@ -77,7 +78,7 @@ if(RAWFRAME_BUILD_TESTS)
                              LABELS window
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]*, titled: yes, client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes, controls readable: yes")
+                             "export: keys studio.keys fonts read 1, admitted 1, frames shown [1-9][0-9]*, titled: yes, icons: 64 32 16 , client stopped (clean_stop|controlled_overload), server stopped clean_stop, the launcher's code the client's: yes, controls readable: yes")
         if(RAWFRAME_SANITIZE MATCHES "address")
             # A client drawn long under load leaves a thread's allocations in
             # a library unloaded before LeakSanitizer reports, so no

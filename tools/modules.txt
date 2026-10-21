@@ -42,7 +42,7 @@ window: composition result base
 render: texture window composition diagnostics result base
 xr: render view input_kest input composition diagnostics execution result base
 input_window: input window result base
-window_host: host world_tooling view input_kest input_window input window ui composition execution result base
+window_host: host world_tooling view input_kest input_window input window ui texture composition execution result base
 schema: result base
 world: schema execution diagnostics result base
 kest: execution result base
@@ -93,7 +93,7 @@ cook_tool: cook host process localization animation material graph mesh_import m
 build_tool: build install release signature content document result base
 install_tool: http install release content result base
 play_tool: process composition result base
-export_tool: process release content document input network_quic composition result base
+export_tool: process release content document input network_quic texture_import texture composition result base
 scene_tool: world_kest scene kest result base
 studio_tool: studio window_host render render_canvas_gpu host window composition result base
 author: authoring_session authoring host process world_kest kest content scene schema document execution result base
