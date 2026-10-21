@@ -186,6 +186,19 @@ function(rawframe_module)
     endforeach()
 endfunction()
 
+# Gives a Windows program UTF-8 as its code page (D956): its arguments, its
+# environment, and every narrow path it opens are UTF-8, as they are on every
+# other system and as process::Child already reads them, so a game kept under
+# a folder named in Turkish or Japanese is found. Windows 10 1903 and later;
+# an older Windows keeps the system's code page.
+#
+#   rawframe_windows_program(rawframe_host_cook_tool)
+function(rawframe_windows_program target)
+    if(WIN32)
+        target_sources(${target} PRIVATE ${PROJECT_SOURCE_DIR}/cmake/windows/utf8.manifest)
+    endif()
+endfunction()
+
 # Declares a host: a process entry under hosts/<name>, checked against
 # tools/modules.txt like a module. Nothing may depend on a host. LIBRARY makes
 # it a shared library a platform loads and starts (Android's activity, D551)
@@ -207,6 +220,7 @@ function(rawframe_host)
         add_library(${target} SHARED ${arg_SOURCES})
     else()
         add_executable(${target} ${arg_SOURCES})
+        rawframe_windows_program(${target})
     endif()
     set_target_properties(${target} PROPERTIES OUTPUT_NAME ${arg_OUTPUT})
     target_link_libraries(${target} PRIVATE rawframe_policy)
@@ -225,6 +239,7 @@ function(rawframe_module_tests)
     endif()
     set(target rawframe_${arg_NAME}_tests)
     add_executable(${target} ${arg_SOURCES})
+    rawframe_windows_program(${target})
     target_link_libraries(${target} PRIVATE rawframe::${arg_NAME} rawframe::test)
     add_test(NAME ${arg_NAME} COMMAND ${target})
     # A thread build's suppressions are every test's (tools/thread.tsan,

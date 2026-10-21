@@ -12,6 +12,7 @@ if(TARGET rawframe_process_tests)
     # The program the tests start, under the engine's language policy (on
     # Windows, clang-cl's default is older than C++17).
     add_executable(rawframe_process_child tests/child.cpp)
+    rawframe_windows_program(rawframe_process_child)
     target_link_libraries(rawframe_process_child PRIVATE rawframe_policy)
     rawframe_test_program(rawframe_child rawframe_process_child)
     target_compile_definitions(rawframe_process_tests PRIVATE

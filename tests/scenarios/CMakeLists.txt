@@ -3,6 +3,7 @@
 # so the files run beside each other rather than one after another.
 foreach(scenario compensation game_subassets game_tilemaps install kest_bots replication replication_commands)
     add_executable(rawframe_scenario_${scenario}_tests ${scenario}_test.cpp)
+    rawframe_windows_program(rawframe_scenario_${scenario}_tests)
     target_link_libraries(rawframe_scenario_${scenario}_tests PRIVATE
         rawframe_policy rawframe::world_kest rawframe::physics2d rawframe::world_replication rawframe::network_loopback
         rawframe::build rawframe::install rawframe::cook rawframe::game_content rawframe::test)

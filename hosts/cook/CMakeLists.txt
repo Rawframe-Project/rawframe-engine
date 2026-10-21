@@ -17,4 +17,10 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/map_subassets.sh
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/map_subassets)
+    # A game under a folder no single ANSI code page names (D956).
+    add_test(NAME cook_unicode_path
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unicode_path.sh
+                     $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/unicode_path)
+    set_tests_properties(cook_unicode_path PROPERTIES PASS_REGULAR_EXPRESSION "cooked under a named folder")
 endif()
