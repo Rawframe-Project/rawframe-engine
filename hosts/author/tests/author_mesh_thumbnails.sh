@@ -5,7 +5,9 @@
 # until it is while other records are answered; the mound's then answered
 # from what that run drew, without another. Each answer names the drawn picture beside the cook and
 # the level that fits; each mesh covers some of its picture and not all of
-# it. Says "skip: no device" where the tool found no adapter, unless
+# it. Then the brass changed and the game cooked again into the same
+# directory: its picture drawn again, not refused as one the tool could not
+# draw (D972). Says "skip: no device" where the tool found no adapter, unless
 # RAWFRAME_REQUIRE_GPU is set, as the check sets it where lavapipe is.
 #
 # usage: author_mesh_thumbnails.sh <rawframe-author> <rawframe-cook> <rawframe-thumbnail> <repository> <work directory>
@@ -20,7 +22,9 @@ trap 'echo "author_mesh_thumbnails: failed at line $LINENO"; grep -v "authoring.
       cat "$work/content/thumbnails/thumbnails.log" 2>/dev/null' ERR
 rm -rf "$work"
 mkdir -p "$work"
-game="$repository/games/plaza/plaza.game"
+# A copy, as the brass is changed.
+cp -R "$repository/games/plaza" "$work/game"
+game="$work/game/plaza.game"
 reply() { grep "\"id\":$1," "$work/replies"; }
 
 {
@@ -57,6 +61,20 @@ reply() { grep "\"id\":$1," "$work/replies"; }
         sleep 0.1
     done
     echo '{"kind":"authoring.thumbnail","id":5,"asset":"gate.scene","size":64}'
+    # The brass changed, cooked again where it was, and its picture asked
+    # until it is drawn again.
+    echo '{"kind":"authoring.apply","id":7,"scene":"brass.rfmaterial","request":{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operations":[{"operation":"materials.set_node_input","node":"5c1e8a2f7b3d9046","input":"base_metalness","value":0.1}]}}'
+    echo '{"kind":"authoring.cook","id":8,"output":"'"$work/content"'","cache":null}'
+    for _ in $(seq 2400); do
+        grep -q '"id":8,"answer"\|"id":8,"error"' "$work/replies" 2>/dev/null && break
+        sleep 0.1
+    done
+    for each in $(seq 100 1900); do
+        echo '{"kind":"authoring.thumbnail","id":"again'"$each"'","asset":"brass.rfmaterial","size":64}'
+        grep -q '"id":"again[0-9]*","\(answer\|error\)":{\("kind":"authoring.thumbnail"\|"code":"[a-z_]*","class":"unsupported"\)' \
+            "$work/replies" && break
+        sleep 0.1
+    done
     echo '{"kind":"authoring.end","id":6}'
 } | "$author" session "$game" --cook "$cook" --thumbnail "$thumbnail" >"$work/replies" || true
 reply 2 | grep -q '"answer":{"kind":"authoring.cooked"'
@@ -71,6 +89,11 @@ grep -q '"id":"betweencrate.gltf100","answer"' "$work/replies"
 grep -q '"answer":{"kind":"authoring.thumbnail","asset":"crate.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":2,"width":64,"height":64}' "$work/replies"
 grep -q '"answer":{"kind":"authoring.thumbnail","asset":"mound.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":3,"width":32,"height":32}' "$work/replies"
 reply 5 | grep -q '"code":"unsupported_operation"'
+# The brass changed and cooked again into the same directory, then drawn
+# again (D972).
+reply 7 | grep -q '"answer":{"kind":"authoring.outcome"'
+reply 8 | grep -q '"answer":{"kind":"authoring.cooked"'
+grep -q '"id":"again[0-9]*","answer":{"kind":"authoring.thumbnail","asset":"brass.rfmaterial"' "$work/replies"
 # The paving, a material sampling its picture, on the engine's ball (D900).
 grep -q '"answer":{"kind":"authoring.thumbnail","asset":"paving.rfmaterial","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":2,"width":64,"height":64}' "$work/replies"
 # One run drew them all, the plaza's three meshes and seven materials (its

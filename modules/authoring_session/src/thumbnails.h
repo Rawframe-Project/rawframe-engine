@@ -15,17 +15,20 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace rawframe::authoring_session {
 
 /// The meshes' and materials' pictures a session has had drawn: the
-/// thumbnail tool (rawframe-thumbnail), the cook it last began drawing,
-/// which is not drawn again whether or not it could be, and the run drawing
-/// it, if it runs.
+/// thumbnail tool (rawframe-thumbnail), the cook it last began drawing, by
+/// its manifest, which is not drawn again whether or not it could be, and
+/// the run drawing it, if it runs. By its manifest, not its directory: a
+/// cook again into the same directory is another cook, its edited
+/// material's picture never drawn while the directory was the mark (D972).
 struct MeshPictures {
     std::filesystem::path tool;
-    std::optional<std::filesystem::path> drawn;
+    std::optional<std::string> drawn;
     std::optional<process::Child> drawing;
     std::chrono::steady_clock::time_point began;
 };

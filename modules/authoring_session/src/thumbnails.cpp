@@ -180,10 +180,10 @@ result::Result<Value> thumbnailOf(const std::filesystem::path& game,
             (meshes.drawing->exited().has_value() || std::chrono::steady_clock::now() - meshes.began > kDrawing)) {
             meshes.drawing.reset();
         }
-        if (!meshes.drawing.has_value() && meshes.drawn != *cooked && !std::filesystem::exists(object, error)) {
+        if (!meshes.drawing.has_value() && meshes.drawn != *kText && !std::filesystem::exists(object, error)) {
             meshes.drawing = drawCook(meshes.tool, game, *cooked, *kEntries);
             meshes.began = std::chrono::steady_clock::now();
-            meshes.drawn = *cooked;
+            meshes.drawn = *kText;
         }
         if (meshes.drawing.has_value() && !std::filesystem::exists(object, error)) {
             return refused(authoring::AuthoringError::UnsupportedOperation,
