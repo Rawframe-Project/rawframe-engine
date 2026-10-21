@@ -29,6 +29,7 @@
 #include "rawframe/view/closing.h"
 #include "rawframe/view/dialogs.h"
 #include "rawframe/view/dropping.h"
+#include "rawframe/view/players.h"
 #include "rawframe/view/pointing.h"
 #include "rawframe/view/showing.h"
 #include "rawframe/view/typing.h"
@@ -1066,6 +1067,12 @@ private:
     const ui::DrawList* drawn_ = nullptr;
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
+    /// Device pixels a logical one, as the window's platform scales it
+    /// (D963): Studio is laid out in logical pixels, where pointers are.
+    float scale_ = 1;
+    const view::PlayerViews* views_ = nullptr;
+    /// The tree laid out in logical pixels, the frame's size over the scale.
+    result::Status layOutNow(double seconds);
     std::filesystem::path description_;
     std::filesystem::path sceneRoot_;
     /// Why the game does not read, while it does not; and where.

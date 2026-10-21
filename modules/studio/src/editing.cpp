@@ -63,7 +63,7 @@ bool ShellParticipant::beforePress() {
     // components, which the next press may be on.
     if (pressedSinceLayout_) {
         const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
-        static_cast<void>(tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_), kSeconds));
+        static_cast<void>(layOutNow(kSeconds));
     }
     pressedSinceLayout_ = true;
     // Move to waits for this press alone (D498).

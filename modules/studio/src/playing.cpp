@@ -19,6 +19,12 @@ namespace {
 /// The picture a game streams into a viewport of `at`: its size, made
 /// smaller where its pixels would pass the UI's share of a frame's uploads
 /// and so never show (D927); drawn stretched over the viewport.
+/// A rectangle of the layout in the window's device pixels (D963): the
+/// viewport's picture is drawn at those, as sharp as the screen.
+ui::Rect devicePixels(ui::Rect at, float scale) {
+    return ui::Rect{.x = at.x * scale, .y = at.y * scale, .width = at.width * scale, .height = at.height * scale};
+}
+
 std::array<std::uint32_t, 2> streamedSize(const ui::Rect& at) {
     const double kWidth = at.width >= 64 ? std::floor(at.width) : 640.0;
     const double kHeight = at.height >= 64 ? std::floor(at.height) : 360.0;
@@ -153,14 +159,16 @@ void ShellParticipant::startPlaying(bool edited) {
     play_->viewport.reset();
     play_->device = device_;
     if (inViewport_.inViewport && !device_.has_value()) {
-        play_->viewport = streamedSize(tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{});
+        play_->viewport = streamedSize(
+            devicePixels(tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{}, scale_));
     }
     // With the players chosen, each a client (D804); edited, one, in the
     // viewport (D912).
     play_->players = edited ? 1 : players_;
     play_->edited = edited;
     if (edited && !play_->viewport.has_value()) {
-        play_->viewport = streamedSize(tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{});
+        play_->viewport = streamedSize(
+            devicePixels(tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{}, scale_));
     }
     auto started = Play::start(*play_);
     if (!started.has_value()) {

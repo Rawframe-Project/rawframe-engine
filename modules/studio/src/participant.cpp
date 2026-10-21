@@ -18,6 +18,7 @@ namespace {
 
 constexpr std::string_view kProvided[] = {ui::kUiFrames.name};
 constexpr std::string_view kMaybe[] = {view::kUiPointing.name,
+                                       view::kPlayerViews.name,
                                        view::kUiTyping.name,
                                        ui::kAccessSeat.name,
                                        world_tooling::kForwarding.name,
@@ -266,6 +267,10 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     }
     if (context.has(view::kUiPointing.name)) {
         RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
+    }
+    // The window's logical size, which the scale is read from (D963).
+    if (context.has(view::kPlayerViews.name)) {
+        RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
     }
     // What lands on the viewport, for the game played there (D790).
     if (context.has(world_tooling::kForwarding.name)) {
@@ -576,8 +581,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     // changed what a column holds; the wheel is turned over it laid out,
     // so a click and a turn read in one frame scroll what the click
     // brought, not only what was shown before it (D479).
-    if (!wheels_.empty() &&
-        !tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_), kSeconds).has_value()) {
+    if (!wheels_.empty() && !layOutNow(kSeconds).has_value()) {
         return;
     }
     for (const auto& [kX, kY, kDeltaX, kDeltaY] : wheels_) {
@@ -585,12 +589,12 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
         static_cast<void>(tree_->wheel(root_, kX, kY, kDeltaX, kDeltaY, kSeconds));
     }
     wheels_.clear();
-    if (!tree_->layOut(root_, static_cast<float>(width_), static_cast<float>(height_), kSeconds).has_value()) {
+    if (!layOutNow(kSeconds).has_value()) {
         return;
     }
     pressedSinceLayout_ = false;
     list_ = {};
-    if (tree_->draw(root_, 1.0F, list_).has_value()) {
+    if (tree_->draw(root_, scale_, list_).has_value()) {
         if (edit_ != nullptr) {
             static_cast<void>(edit_->decorate(root_, list_));
         }
@@ -781,6 +785,17 @@ composition::CapabilityObject ShellParticipant::provide(std::string_view capabil
         return composition::provideAs<ui::UiFrames>(*this);
     }
     return {};
+}
+
+result::Status ShellParticipant::layOutNow(double seconds) {
+    // As the platform scales the window: a 4K screen at 150% is laid out at
+    // two thirds of its pixels and drawn at one and a half each, so words
+    // are as large as the system's and a press is where it is drawn
+    // (D963). The window's logical width as the host last told it.
+    if (views_ != nullptr && views_->window().width > 0) {
+        scale_ = std::clamp(static_cast<float>(width_) / views_->window().width, 0.5F, 4.0F);
+    }
+    return tree_->layOut(root_, static_cast<float>(width_) / scale_, static_cast<float>(height_) / scale_, seconds);
 }
 
 const ui::DrawList* ShellParticipant::drawn() const noexcept {
