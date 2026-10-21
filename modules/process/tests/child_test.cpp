@@ -1,5 +1,5 @@
 // Child processes (D395): a child's exit code, its output and error in one
-// file, its arguments passed as they are (spaces and quotes too), a stop
+// file, its arguments passed as they are (spaces, quotes, and UTF-8 too), a stop
 // request it answers as a Host does, a kill, a kill when its owner goes,
 // and a program that cannot be started.
 
@@ -84,15 +84,16 @@ RAWFRAME_TEST(AChildEndsWithItsCodeAndSaysWhatItWasGiven) {
         // Once known, the answer stays.
         RAWFRAME_EXPECT(ended->exited() == 7);
     }
-    // Its arguments as they were given, its output and error in one file.
+    // Its arguments as they were given, its output and error in one file;
+    // one in Turkish and Japanese, as UTF-8 both ways on Windows too (D956).
     const std::filesystem::path kSaid = scratch("said.txt");
     auto said = Child::start({.program = RAWFRAME_PROCESS_CHILD,
-                              .arguments = {"say", "two words", "a \"quote\"", "back\\slash\\", ""},
+                              .arguments = {"say", "two words", "a \"quote\"", "back\\slash\\", "", "Sıraç 日本"},
                               .output = kSaid});
     RAWFRAME_EXPECT(startedAll(said));
     if (said.has_value()) {
         RAWFRAME_EXPECT(waitFor(*said) == 0);
-        RAWFRAME_EXPECT(test::readFile(kSaid.string()) == "two words|a \"quote\"|back\\slash\\||said\n");
+        RAWFRAME_EXPECT(test::readFile(kSaid.string()) == "two words|a \"quote\"|back\\slash\\||Sıraç 日本|said\n");
     }
 }
 
