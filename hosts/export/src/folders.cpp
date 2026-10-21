@@ -246,6 +246,10 @@ bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::s
     play.add("composition", document::Value::string(exported.record));
     play.add("configuration",
              document::Value::string("host.iteration_rate = 120\nbots.player = true\naudio.play = sink\n"
+                                     // Drawn on the browser's WebGPU, as a native
+                                     // player is on its device (D958).
+                                     "render.device = any\nscene.render_scale_least_percent = 50\n"
+                                     "render.read_every = 0\n"
                                      "kest.game_resource = " +
                                      exported.gameResource + "\ncontent.composition = " + exported.record +
                                      "\ncontent.library = library\nkest.plan_only = true\n"));

@@ -112,11 +112,11 @@ const readme = await readFile(join(exported, 'README.txt'), 'utf8');
 if (quarry) {
     await appendFile(join(exported, 'server', 'server.conf'), '\nworld.degraded_ms = 600000\nworld.overload_ms = 0\n');
 }
-// Here a software adapter draws, which a player's machine is not asked to
-// allow; a 3D game's shadow map is small, and its view drawn at half scale
-// (D373, D379), for the software rasterizer.
+// The export draws on whatever adapter the browser gives, a software one
+// here (D958); a 3D game's shadow map is small, and its view drawn at half
+// scale (D373, D379), for the software rasterizer.
+const drawsAsExported = /^render\.device = any$/m.test(setup.configuration);
 setup.configuration += [
-    'render.device = any',
     ...(scened ? ['scene.shadow_side = 256', 'scene.shadow_filter = hardware', 'scene.render_scale_percent = 50'] : []),
     '',
 ].join('\n');
@@ -413,6 +413,7 @@ try {
         framesShown: drawing !== null && Number(drawing[1]) > 0,
         lit: shown > 1000,
         noGpuErrors: gpuErrors.length === 0,
+        drawsAsExported,
         hostable: readme.includes('--config server/server.conf') && readme.includes(`UDP port ${port}`),
     };
     if (!stalls && !quarry && !lighting) {

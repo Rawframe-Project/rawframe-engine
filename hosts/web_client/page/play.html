@@ -7,6 +7,7 @@
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   canvas { display: block; width: 100%; height: 100%; }
+  #unplayable { max-width: 36em; margin: 20vh auto; padding: 0 16px; color: #ddd; font: 16px/1.5 system-ui, sans-serif; }
 </style>
 </head>
 <body>
@@ -21,7 +22,8 @@
 // player has touched it; its UI is read by screen readers through Maul UI's
 // page side (D612). The page answers `rawframeStop()`,
 // `rawframeGpuErrors()`, and `rawframeSound()` for whoever drives it, and
-// says `page: play <code>` and `page: ended <code>` on its console.
+// says `page: play <code>` and `page: ended <code>` on its console, or
+// `page: unplayable` where the browser gives no WebGPU adapter.
 import { WebClient } from './page/client.mjs';
 import { PageTransport } from './page/transport.mjs';
 import { PageSound } from './page/sound.mjs';
@@ -29,6 +31,20 @@ import { maulWindowImports } from './maul-window.mjs';
 import { maulRhiImports } from './maul-rhi.mjs';
 import { maulUiImports } from './maul-ui.mjs';
 
+// A browser that gives no WebGPU adapter draws nothing: the player is told
+// why, and the game is not played behind a black page (D958).
+const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
+if (adapter === null) {
+    const told = document.createElement('p');
+    told.id = 'unplayable';
+    told.textContent = navigator.gpu
+        ? 'This game cannot be drawn here: the browser gives it no graphics device. Turn on hardware ' +
+              'acceleration in its settings, or play in a current Chrome or Edge on a machine with a graphics card.'
+        : 'This game cannot be drawn here: the browser has no WebGPU. Play it in a current Chrome or Edge.';
+    document.body.append(told);
+    console.log('page: unplayable: no WebGPU adapter');
+    throw new Error('no WebGPU adapter');
+}
 const setup = await (await fetch('play.json', { cache: 'no-store' })).json();
 const pinned = await fetch('fingerprint', { cache: 'no-store' });
 const transport = new PageTransport({ certificateHashes: pinned.ok ? [(await pinned.text()).trim()] : [] });
