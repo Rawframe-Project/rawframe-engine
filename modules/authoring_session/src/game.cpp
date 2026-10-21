@@ -1,6 +1,7 @@
 #include "rawframe/authoring_session/game.h"
 
 #include "rawframe/authoring/request.h"
+#include "rawframe/base/files.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/kest/program.h"
@@ -9,8 +10,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <fstream>
-#include <iterator>
 
 namespace rawframe::authoring_session {
 
@@ -55,11 +54,7 @@ std::optional<authoring::FieldKind> kindOf(rawframe::kest::FieldKind kind) {
 } // namespace
 
 std::optional<std::string> readFile(const std::filesystem::path& path) {
-    std::ifstream file{path, std::ios::binary};
-    if (!file) {
-        return std::nullopt;
-    }
-    return std::string{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    return base::readWholeFile(path);
 }
 
 std::string digestOf(std::string_view text) {

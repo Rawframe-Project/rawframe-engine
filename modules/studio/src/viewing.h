@@ -54,6 +54,10 @@ struct PlayedViewport {
     std::optional<std::filesystem::file_time_type> pictureWritten;
     std::uint64_t pictureSequence = 0;
     std::uint64_t picturesShown = 0;
+    /// The time its pictures took to read, in all and at the most, in
+    /// microseconds (D964): what holds a moving view back.
+    std::uint64_t readMicroseconds = 0;
+    std::uint64_t slowestReadMicroseconds = 0;
     world_tooling::Forwarding* forwarding = nullptr;
     std::uint64_t inputsForwarded = 0;
     std::uint64_t inputsTaken = 0;

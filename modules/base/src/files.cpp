@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <fstream>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -42,6 +43,34 @@ bool writeOpened(const std::filesystem::path& path, std::span<const std::byte> b
 #endif
 
 } // namespace
+
+std::optional<std::string> readWholeFile(const std::filesystem::path& path) {
+    std::ifstream file{path, std::ios::binary};
+    if (!file) {
+        return std::nullopt;
+    }
+    constexpr std::size_t kBlock = std::size_t{1} << 20U;
+    std::string text;
+    std::error_code error;
+    if (const auto kSize = std::filesystem::file_size(path, error); !error) {
+        text.reserve(static_cast<std::size_t>(kSize) + kBlock);
+    }
+    // Until a read comes short: what the file holds then, if it grew or
+    // shrank since its size was asked.
+    for (;;) {
+        const std::size_t kHad = text.size();
+        text.resize(kHad + kBlock);
+        file.read(text.data() + kHad, static_cast<std::streamsize>(kBlock));
+        text.resize(kHad + static_cast<std::size_t>(file.gcount()));
+        if (!file) {
+            break;
+        }
+    }
+    if (file.bad()) {
+        return std::nullopt;
+    }
+    return text;
+}
 
 bool writeWholeFile(const std::filesystem::path& path, std::span<const std::byte> bytes) noexcept {
 #if defined(__unix__) || defined(__APPLE__)

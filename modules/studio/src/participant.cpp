@@ -730,7 +730,9 @@ void ShellParticipant::stop() noexcept {
          diagnostics::field("views", static_cast<std::uint64_t>(shown_.views)),
          diagnostics::field("splitsShown", shown_.splitsShown),
          diagnostics::field("overlays", static_cast<std::uint64_t>(shown_.overlays.size())),
-         diagnostics::field("overlaysShown", shown_.overlaysShown)});
+         diagnostics::field("overlaysShown", shown_.overlaysShown),
+         diagnostics::field("readMs", inViewport_.readMicroseconds / 1000),
+         diagnostics::field("slowestReadMs", inViewport_.slowestReadMicroseconds / 1000)});
     // How the game was played: its players (D804).
     emitter_.log(diagnostics::Severity::Info,
                  kPlayedRecord,

@@ -2,19 +2,26 @@
 
 // Files written so a crash leaves either the old file or the new one, whole
 // (D626): written and flushed past the system's cache, then moved over the
-// old one, and the move flushed in its directory. Where there are files
-// (RAWFRAME_FILE_SYSTEM) only.
+// old one, and the move flushed in its directory; and files read whole, in
+// blocks (D964). Where there are files (RAWFRAME_FILE_SYSTEM) only.
 
 #include "rawframe/base/platform.h"
 
 #include <cstddef>
+#include <optional>
 #include <span>
+#include <string>
 
 #if RAWFRAME_FILE_SYSTEM
 
 #include <filesystem>
 
 namespace rawframe::base {
+
+/// The whole of the file at `path`, as its bytes; none where it cannot be
+/// opened or read. Read in large blocks: a stream's iterator, a character
+/// at a time, took a tenth of a second for four megabytes on Windows (D964).
+[[nodiscard]] std::optional<std::string> readWholeFile(const std::filesystem::path& path);
 
 /// `bytes` written as the whole of the file at `path`, made or emptied
 /// first, and flushed to the disk; whether all of it was. A link at `path`
