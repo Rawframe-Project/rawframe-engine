@@ -167,6 +167,10 @@ public:
     [[nodiscard]] result::Status seat(Tree& tree, Node root);
     /// The UI's side, before its tree goes: no longer read.
     void leave() noexcept;
+    /// The UI's side: each of the tree's pixels is `factor` of the
+    /// window's logical ones, as an editor's own interface scale makes it
+    /// (D966); the program's scale is told the platform times it.
+    [[nodiscard]] result::Status setTreeScale(float factor);
 
     /// The program's side: the window is read with `settings` from the time
     /// a tree is seated, or now when one is; what the seated tree's access
@@ -192,7 +196,9 @@ private:
 
     Tree* tree_ = nullptr;
     Node root_;
+    /// As the program gave them, its scale not yet times the tree's.
     std::optional<AccessSettings> settings_;
+    float treeScale_ = 1;
     std::unique_ptr<Access> access_;
 };
 

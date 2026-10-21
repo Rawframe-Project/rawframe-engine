@@ -565,7 +565,9 @@ result::Status AccessSeat::make() {
     if (tree_ == nullptr || !settings_.has_value()) {
         return {};
     }
-    RAWFRAME_TRY_ASSIGN(access_, Access::create(*tree_, root_, *settings_));
+    AccessSettings settings = *settings_;
+    settings.scale *= treeScale_;
+    RAWFRAME_TRY_ASSIGN(access_, Access::create(*tree_, root_, settings));
     return {};
 }
 
@@ -577,7 +579,16 @@ result::Status AccessSeat::setScale(float scale) {
     if (settings_.has_value()) {
         settings_->scale = scale;
     }
-    return access_ != nullptr ? access_->setScale(scale) : result::Status{};
+    return access_ != nullptr ? access_->setScale(scale * treeScale_) : result::Status{};
+}
+
+result::Status AccessSeat::setTreeScale(float factor) {
+    if (!(factor > 0) || !std::isfinite(factor)) {
+        return refuse(UiError::Invalid, "a tree's scale is above nought");
+    }
+    treeScale_ = factor;
+    return access_ != nullptr && settings_.has_value() ? access_->setScale(settings_->scale * treeScale_)
+                                                       : result::Status{};
 }
 
 void AccessSeat::setPlace(std::array<std::int32_t, 2> place) noexcept {

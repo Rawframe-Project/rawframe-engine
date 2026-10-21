@@ -25,6 +25,17 @@ RAWFRAME_TEST(PreferencesAreHeldInsideTheWindow) {
     RAWFRAME_EXPECT(kRead->hierarchyWidth == 200 && kRead->inspectorWidth == 800 && kRead->dockHeight == 120);
 }
 
+RAWFRAME_TEST(AnInterfaceScaleIsKeptAmongTheChoices) {
+    // As chosen (D966), and one not offered the screen's.
+    const Preferences kLarger{.interfaceScale = 175};
+    const auto kRead = preferencesOf(writtenPreferences(kLarger));
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->interfaceScale == 175);
+    const auto kOdd = preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"interfaceScale":333})");
+    RAWFRAME_EXPECT(kOdd.has_value() && kOdd->interfaceScale == 0);
+    RAWFRAME_EXPECT(!preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"interfaceScale":"big"})")
+                         .has_value());
+}
+
 RAWFRAME_TEST(ADocumentThatIsNotPreferencesIsNone) {
     RAWFRAME_EXPECT(!preferencesOf("").has_value());
     RAWFRAME_EXPECT(!preferencesOf("[]").has_value());

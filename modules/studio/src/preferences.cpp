@@ -37,6 +37,9 @@ Preferences held(Preferences preferences) {
     if (preferences.dockHeight != 0) {
         preferences.dockHeight = std::clamp(preferences.dockHeight, kLowestDock, kTallestDock);
     }
+    if (std::ranges::find(kInterfaceScales, preferences.interfaceScale) == kInterfaceScales.end()) {
+        preferences.interfaceScale = 0;
+    }
     return preferences;
 }
 
@@ -192,6 +195,13 @@ std::optional<Preferences> preferencesOf(std::string_view document) {
             }
         }
     }
+    if (const Value* scale = kParsed->find("interfaceScale"); scale != nullptr) {
+        const std::optional<std::int64_t> kPercent = scale->integer();
+        if (!kPercent.has_value()) {
+            return std::nullopt;
+        }
+        preferences.interfaceScale = static_cast<int>(std::clamp<std::int64_t>(*kPercent, -1, 1000));
+    }
     if (const Value* editor = kParsed->find("editor"); editor != nullptr) {
         if (editor->kind() != Value::Kind::String) {
             return std::nullopt;
@@ -229,6 +239,9 @@ std::string writtenPreferences(const Preferences& preferences) {
     }
     if (!preferences.editor.empty()) {
         written.add("editor", Value::string(preferences.editor));
+    }
+    if (preferences.interfaceScale != 0) {
+        written.add("interfaceScale", Value::integer(preferences.interfaceScale));
     }
     if (!preferences.layouts.empty()) {
         Value layouts = Value::array();

@@ -3,7 +3,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
+#include <string>
+#include <vector>
 
 namespace rawframe::studio {
 
@@ -57,6 +60,7 @@ void ShellParticipant::openPreferences() {
     shortcutFields_.clear();
     editorField_.reset();
     held_.preferencePages.clear();
+    held_.interfaceScales.clear();
     if (auto head = box(*card,
                         ui::Layout{.height = ui::pixels(46),
                                    .alignItems = ui::Align::Center,
@@ -148,6 +152,26 @@ void ShellParticipant::openPreferences() {
         }
     };
     if (held_.preferencePage == 0) {
+        // As an editor's own scaling over the desktop's (D966): the
+        // screen's by default, or larger or smaller words and panels.
+        kHeading("Interface scale",
+                 "How large Studio draws its words and panels. System follows the screen's own scale, now " +
+                     std::to_string(std::lround(systemScale_ * 100)) + "%.");
+        if (auto choices = box(kContent, ui::Layout{.gap = 4, .shrink = 0, .padding = {0, 0, 0, 8}}, 0);
+            choices.has_value()) {
+            std::vector<int> scales{0};
+            scales.insert(scales.end(), kInterfaceScales.begin(), kInterfaceScales.end());
+            for (const int kScale : scales) {
+                const bool kChosenNow = preferences_.interfaceScale == kScale;
+                const std::string kLabel = kScale == 0 ? std::string{"System"} : std::to_string(kScale) + "%";
+                if (auto button = textButton(
+                        *choices, std::nullopt, kLabel, kChosenNow ? ButtonKind::Primary : ButtonKind::Normal);
+                    button.has_value()) {
+                    static_cast<void>(tree_->setName(*button, "Interface scale " + kLabel));
+                    held_.interfaceScales.emplace_back(*button, kScale);
+                }
+            }
+        }
         kHeading("Editor", "The program a script or a file opens in, {file}, {line}, and {column} where it goes.");
         if (auto line = fieldRow("editor", editor_, kContent, !preferences_.editor.empty(), "Command");
             line.has_value()) {
@@ -286,6 +310,11 @@ bool ShellParticipant::pressPreferences(ui::Node node) {
         openPreferences();
         return true;
     }
+    if (const auto kScale = std::ranges::find(held_.interfaceScales, node, &std::pair<ui::Node, int>::first);
+        kScale != held_.interfaceScales.end()) {
+        setInterfaceScale(kScale->second);
+        return true;
+    }
     if (editorField_.has_value() && node == editorField_->value) {
         beginEdit(*editorField_);
         return true;
@@ -341,6 +370,15 @@ void ShellParticipant::setEditor(const std::string& text) {
     editor_ = text.empty() ? configuredEditor_ : text;
     keepPreferences();
     say("files open with " + editor_);
+    closePreferences();
+    openPreferences();
+}
+
+void ShellParticipant::setInterfaceScale(int percent) {
+    preferences_.interfaceScale = percent;
+    keepPreferences();
+    say(percent == 0 ? "Studio follows the screen's scale" : "Studio drawn at " + std::to_string(percent) + "%");
+    // Laid out at the new scale as the frame ends, before it is drawn.
     closePreferences();
     openPreferences();
 }

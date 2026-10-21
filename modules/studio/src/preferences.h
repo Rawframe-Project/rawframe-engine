@@ -6,6 +6,7 @@
 // own, never the game's, which an author may write by hand as well. A file
 // that does not read leaves Studio as it starts.
 
+#include <array>
 #include <map>
 #include <optional>
 #include <string>
@@ -28,6 +29,10 @@ struct Layout {
     friend bool operator==(const Layout&, const Layout&) = default;
 };
 
+/// The interface scales an author may choose in place of the screen's, in
+/// percent (D966), as an editor's own scaling does over the desktop's.
+inline constexpr std::array<int, 7> kInterfaceScales = {100, 125, 150, 175, 200, 250, 300};
+
 /// The most layouts an author saves beside the six Studio ships.
 inline constexpr std::size_t kMostSavedLayouts = 16;
 
@@ -47,6 +52,9 @@ struct Preferences {
     std::string editor;
     /// The layouts the author saved (D911), at most kMostSavedLayouts.
     std::vector<Layout> layouts;
+    /// How large Studio draws, in percent: one of kInterfaceScales, or
+    /// nought to follow the screen's scale (D966).
+    int interfaceScale = 0;
 
     friend bool operator==(const Preferences&, const Preferences&) = default;
 };
@@ -56,7 +64,8 @@ inline constexpr std::size_t kRecentGames = 8;
 /// `preferences` with `description` the latest game opened.
 [[nodiscard]] Preferences opened(Preferences preferences, const std::string& description);
 
-/// The sizes kept, each held inside what the window can show.
+/// The sizes kept, each held inside what the window can show, and an
+/// interface scale not among kInterfaceScales the screen's.
 [[nodiscard]] Preferences held(Preferences preferences);
 
 /// The document's preferences, or none when it is not one: its kind,

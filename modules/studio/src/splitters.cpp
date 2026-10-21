@@ -42,9 +42,8 @@ void ShellParticipant::followSplitter() {
     if (kReleased && browser_.held.has_value()) {
         dropAsset();
     }
-    const std::optional<std::array<float, 2>> kPointer = kReleased && releasedAt_.has_value() ? releasedAt_
-                                                         : pointing_ != nullptr               ? pointing_->pointer()
-                                                                                : std::optional<std::array<float, 2>>{};
+    const std::optional<std::array<float, 2>> kPointer =
+        kReleased && releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
     if (!resizing_.has_value() || !kPointer.has_value()) {
         if (kReleased) {
             releaseSplitter();

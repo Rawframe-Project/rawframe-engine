@@ -674,6 +674,8 @@ private:
     /// The editor's command from the text typed; the setting's or the
     /// default for none.
     void setEditor(const std::string& text);
+    /// Studio drawn at `percent`, or at the screen's scale for nought (D966).
+    void setInterfaceScale(int percent);
 
     /// A press on the start screen: a template chosen, a game opened, or a
     /// field begun.
@@ -1070,9 +1072,22 @@ private:
     /// Device pixels a logical one, as the window's platform scales it
     /// (D963): Studio is laid out in logical pixels, where pointers are.
     float scale_ = 1;
+    /// Device pixels a pointer's logical one, as the platform scales the
+    /// window; scale_ too unless the author chose another (D966).
+    float systemScale_ = 1;
+    /// The window's logical pixels a pixel of the tree, as assistive
+    /// technology was last told it (D966).
+    float seatScale_ = 1;
     const view::PlayerViews* views_ = nullptr;
     /// The tree laid out in logical pixels, the frame's size over the scale.
     result::Status layOutNow(double seconds);
+    /// Where the pointer is in the tree's pixels, which the platform's are
+    /// not at an interface scale of the author's (D966).
+    [[nodiscard]] std::optional<std::array<float, 2>> pointerLaidOut() const;
+    /// The tree's pixels a pointer's logical one.
+    [[nodiscard]] float laidOutPerPointer() const noexcept {
+        return systemScale_ / scale_;
+    }
     std::filesystem::path description_;
     std::filesystem::path sceneRoot_;
     /// Why the game does not read, while it does not; and where.

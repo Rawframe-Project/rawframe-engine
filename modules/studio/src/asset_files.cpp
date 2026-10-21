@@ -243,7 +243,7 @@ void ShellParticipant::dropAsset() {
     if (!kHeld.has_value() || pointing_ == nullptr) {
         return;
     }
-    const std::optional<std::array<float, 2>> kPointer = releasedAt_.has_value() ? releasedAt_ : pointing_->pointer();
+    const std::optional<std::array<float, 2>> kPointer = releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
     if (!kPointer.has_value() ||
         std::hypot((*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]) < kDragAfter) {
         return;

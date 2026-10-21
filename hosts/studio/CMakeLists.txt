@@ -103,6 +103,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"studio_layout\"[^\n]*\"resized\":0,\"hierarchyWidth\":420,\"inspectorWidth\":300,\"dockHeight\":300}.*\"exit\":\"clean_stop\"")
+    # Studio drawn at an interface scale of the author's (D966): at 125% on
+    # a screen at 100%, each press by name lands on what is drawn, the
+    # screen reader's boxes scaled as the tree; then the screen's scale
+    # chosen in Preferences, and kept.
+    add_test(NAME studio_interface_scale
+             COMMAND ${CMAKE_COMMAND} -E env STUDIO_PREFERENCES=${CMAKE_CURRENT_SOURCE_DIR}/tests/scaled.preferences
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene @ground "@name:first" "until=studio_said,status=\"renamed first\""
+                     @Window @Preferences "until=studio_said,status=\"preferences"
+                     "@Interface scale System" "until=studio_said,status=\"Studio follows the screen's scale" @Close wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_interface_scale PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"formatVersion\": 1,[^}]*\"recent\"[^}]*}\n.*\"Studio follows the screen's scale.*\"exit\":\"clean_stop\"")
     # Several entities chosen (D787): the west wall, then the east wall
     # with Control held, their shared friction set together as one step;
     # then the rows from the east wall to the steep slope with Shift held,

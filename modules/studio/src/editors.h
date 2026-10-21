@@ -366,6 +366,9 @@ struct EditorsHeld {
     static constexpr std::size_t kExtensionsPage = 3;
     static constexpr std::size_t kAboutPage = 4;
     ui::Node preferencesX{};
+    /// The General page's interface scales, each its percent, nought for
+    /// the screen's (D966).
+    std::vector<std::pair<ui::Node, int>> interfaceScales;
     /// Whether the right dock shows the Scene settings tab (D921).
     bool sceneSettingsShown = false;
     /// The Hierarchy's plus, which opens the New menu (D917).

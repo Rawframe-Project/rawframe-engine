@@ -483,19 +483,19 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
     // clicked takes what is typed next, however slowly frames come.
     if (pointing_ != nullptr) {
         pointing_->onPress([this](float x, float y) {
-            pressAt(x, y);
+            pressAt(x * laidOutPerPointer(), y * laidOutPerPointer());
         });
     }
     if (pointing_ != nullptr) {
         pointing_->onWheel([this](float x, float y, float deltaX, float deltaY) {
-            wheels_.push_back({x, y, deltaX, deltaY});
+            wheels_.push_back({x * laidOutPerPointer(), y * laidOutPerPointer(), deltaX, deltaY});
         });
         // A splitter held is let go with the press (D779).
         // Where it was let go is read as it is told: a loaded Studio's next
         // frame may come after the pointer has gone on to the next press.
         pointing_->onRelease([this] {
             released_ = true;
-            releasedAt_ = pointing_->pointer();
+            releasedAt_ = pointerLaidOut();
         });
     }
     if (typing_ != nullptr) {
@@ -795,9 +795,27 @@ result::Status ShellParticipant::layOutNow(double seconds) {
     // are as large as the system's and a press is where it is drawn
     // (D963). The window's logical width as the host last told it.
     if (views_ != nullptr && views_->window().width > 0) {
-        scale_ = std::clamp(static_cast<float>(width_) / views_->window().width, 0.5F, 4.0F);
+        systemScale_ = std::clamp(static_cast<float>(width_) / views_->window().width, 0.5F, 4.0F);
+    }
+    // Or as the author chose (D966): a pointer is the platform's, so it is
+    // carried into the tree's pixels as it comes.
+    scale_ = preferences_.interfaceScale > 0 ? static_cast<float>(preferences_.interfaceScale) / 100 : systemScale_;
+    // A screen reader's boxes are where it is drawn, and a test's presses
+    // by name land there.
+    if (seat_ != nullptr && 1 / laidOutPerPointer() != seatScale_ &&
+        seat_->setTreeScale(1 / laidOutPerPointer()).has_value()) {
+        seatScale_ = 1 / laidOutPerPointer();
     }
     return tree_->layOut(root_, static_cast<float>(width_) / scale_, static_cast<float>(height_) / scale_, seconds);
+}
+
+std::optional<std::array<float, 2>> ShellParticipant::pointerLaidOut() const {
+    const std::optional<std::array<float, 2>> kPointer =
+        pointing_ != nullptr ? pointing_->pointer() : std::optional<std::array<float, 2>>{};
+    if (!kPointer.has_value()) {
+        return std::nullopt;
+    }
+    return std::array<float, 2>{(*kPointer)[0] * laidOutPerPointer(), (*kPointer)[1] * laidOutPerPointer()};
 }
 
 const ui::DrawList* ShellParticipant::drawn() const noexcept {

@@ -576,8 +576,11 @@ void ShellParticipant::forwardInput() {
     const float kLeft = std::max(kAt.x, kCenter.x);
     const float kBottom = std::min(kAt.y + kAt.height, kCenter.y + kCenter.height);
     const float kRight = std::min(kAt.x + kAt.width, kCenter.x + kCenter.width);
-    inViewport_.forwarding->forwardOver(
-        std::array<float, 4>{kLeft, kTop, std::max(0.0F, kRight - kLeft), std::max(0.0F, kBottom - kTop)});
+    // In the pointer's pixels, which the tree's are not at an interface
+    // scale of the author's (D966).
+    const float kPer = laidOutPerPointer();
+    inViewport_.forwarding->forwardOver(std::array<float, 4>{
+        kLeft / kPer, kTop / kPer, std::max(0.0F, kRight - kLeft) / kPer, std::max(0.0F, kBottom - kTop) / kPer});
     // Studio's own controls over it keep their presses, and while it is
     // edited the keys are Studio's but while a press there flies (D916).
     std::vector<std::array<float, 4>> holes;
@@ -588,7 +591,7 @@ void ShellParticipant::forwardInput() {
     for (const ui::Node kOver : over) {
         if (tree_->contains(kOver)) {
             const ui::Rect kHole = tree_->placedRectOf(kOver);
-            holes.push_back({kHole.x, kHole.y, kHole.width, kHole.height});
+            holes.push_back({kHole.x / kPer, kHole.y / kPer, kHole.width / kPer, kHole.height / kPer});
         }
     }
     inViewport_.forwarding->exceptOver(std::move(holes));
@@ -597,8 +600,8 @@ void ShellParticipant::forwardInput() {
     // At the picture's pixels, fewer than the viewport's where it would
     // pass the UI's uploads (D927) or the viewport grew since it started.
     if (kAt.width > 0 && kAt.height > 0) {
-        const float kAcross = static_cast<float>(inViewport_.picture->levels[0].width) / kAt.width;
-        const float kDown = static_cast<float>(inViewport_.picture->levels[0].height) / kAt.height;
+        const float kAcross = static_cast<float>(inViewport_.picture->levels[0].width) * kPer / kAt.width;
+        const float kDown = static_cast<float>(inViewport_.picture->levels[0].height) * kPer / kAt.height;
         for (world_tooling::WindowInput& event : events) {
             event.x *= kAcross;
             event.y *= kDown;
