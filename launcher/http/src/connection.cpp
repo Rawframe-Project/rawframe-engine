@@ -244,6 +244,88 @@ bool loadSystemAuthorities(SSL_CTX* context) {
 #endif
 }
 
+#if defined(_WIN32)
+/// Whether Windows trusts `leaf` for `host` as a TLS server, over the
+/// chain the server sent (`sent`). Windows builds the chain itself and
+/// fetches a root of its trust list it has not stored yet, which a copy of
+/// its store taken beforehand lacks: a fresh machine holds a few dozen of
+/// its hundreds of roots (D961).
+bool windowsTrusts(X509* leaf, STACK_OF(X509) * sent, const char* host) {
+    const auto kEncoded = [](X509* certificate) {
+        std::string bytes;
+        const int kLength = i2d_X509(certificate, nullptr);
+        if (kLength > 0) {
+            bytes.resize(static_cast<std::size_t>(kLength));
+            auto* at = reinterpret_cast<unsigned char*>(bytes.data());
+            i2d_X509(certificate, &at);
+        }
+        return bytes;
+    };
+    HCERTSTORE given = ::CertOpenStore(CERT_STORE_PROV_MEMORY, 0, 0, 0, nullptr);
+    if (given == nullptr) {
+        return false;
+    }
+    for (int i = 0; sent != nullptr && i < sk_X509_num(sent); ++i) {
+        const std::string kBytes = kEncoded(sk_X509_value(sent, i));
+        ::CertAddEncodedCertificateToStore(given,
+                                           X509_ASN_ENCODING,
+                                           reinterpret_cast<const BYTE*>(kBytes.data()),
+                                           static_cast<DWORD>(kBytes.size()),
+                                           CERT_STORE_ADD_ALWAYS,
+                                           nullptr);
+    }
+    const std::string kLeaf = kEncoded(leaf);
+    PCCERT_CONTEXT certificate = ::CertCreateCertificateContext(
+        X509_ASN_ENCODING, reinterpret_cast<const BYTE*>(kLeaf.data()), static_cast<DWORD>(kLeaf.size()));
+    bool trusted = false;
+    if (certificate != nullptr) {
+        LPSTR serverUse[] = {const_cast<LPSTR>(szOID_PKIX_KP_SERVER_AUTH)};
+        CERT_CHAIN_PARA asked{};
+        asked.cbSize = sizeof(asked);
+        asked.RequestedUsage.dwType = USAGE_MATCH_TYPE_AND;
+        asked.RequestedUsage.Usage.cUsageIdentifier = 1;
+        asked.RequestedUsage.Usage.rgpszUsageIdentifier = serverUse;
+        PCCERT_CHAIN_CONTEXT chain = nullptr;
+        if (::CertGetCertificateChain(nullptr, certificate, nullptr, given, &asked, 0, nullptr, &chain) != FALSE) {
+            std::wstring name(host, host + std::char_traits<char>::length(host));
+            SSL_EXTRA_CERT_CHAIN_POLICY_PARA server{};
+            server.cbSize = sizeof(server);
+            server.dwAuthType = AUTHTYPE_SERVER;
+            server.pwszServerName = name.data();
+            CERT_CHAIN_POLICY_PARA policy{};
+            policy.cbSize = sizeof(policy);
+            policy.pvExtraPolicyPara = &server;
+            CERT_CHAIN_POLICY_STATUS status{};
+            status.cbSize = sizeof(status);
+            trusted = ::CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_SSL, chain, &policy, &status) != FALSE &&
+                      status.dwError == 0;
+            ::CertFreeCertificateChain(chain);
+        }
+        ::CertFreeCertificateContext(certificate);
+    }
+    ::CertCloseStore(given, 0);
+    return trusted;
+}
+
+/// OpenSSL's verification over the copy of the system's roots, then, where
+/// it fails only for want of a root and the host is a name, Windows' own.
+int verifyWithWindows(X509_STORE_CTX* store, void* /*unused*/) {
+    if (X509_verify_cert(store) == 1) {
+        return 1;
+    }
+    const int kWhy = X509_STORE_CTX_get_error(store);
+    const char* const kHost = X509_VERIFY_PARAM_get0_host(X509_STORE_CTX_get0_param(store), 0);
+    if ((kWhy != X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY && kWhy != X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT &&
+         kWhy != X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN) ||
+        kHost == nullptr ||
+        !windowsTrusts(X509_STORE_CTX_get0_cert(store), X509_STORE_CTX_get0_untrusted(store), kHost)) {
+        return 0;
+    }
+    X509_STORE_CTX_set_error(store, X509_V_OK);
+    return 1;
+}
+#endif
+
 bool literalAddress(const std::string& host) noexcept {
     std::array<unsigned char, 16> address{};
     return ::inet_pton(AF_INET, host.c_str(), address.data()) == 1 ||
@@ -278,6 +360,13 @@ result::Result<std::unique_ptr<Tls>> Tls::create(const std::filesystem::path& au
         authorities.empty() ? loadSystemAuthorities(state->context)
                             : SSL_CTX_load_verify_locations(state->context, authorities.string().c_str(), nullptr) == 1;
     ERR_clear_error();
+#if defined(_WIN32)
+    // The system's roots as Windows keeps them, fetched as it needs them;
+    // a file of authorities given is trusted alone (D961).
+    if (authorities.empty()) {
+        SSL_CTX_set_cert_verify_callback(state->context, verifyWithWindows, nullptr);
+    }
+#endif
     if (!kLoaded) {
         return std::unexpected<result::Error>{
             failed(HttpError::NoAuthorities, "no trusted authorities could be read")
