@@ -685,7 +685,7 @@ void ShellParticipant::showScene(std::size_t at) {
     findField_.reset();
     held_.timelineScale = 0;
     // The Curves tab follows the open document: none but a clip's (D927).
-    if (dockShown_ == Dock::Curves && !chosen(Listed::Data)) {
+    if (paneShown(Dock::Curves) && !chosen(Listed::Data)) {
         showCurves();
     }
     // The played game's World in place of the document's (D808).

@@ -74,6 +74,12 @@ bool ShellParticipant::dockedRight(Dock pane) const {
     return std::ranges::contains(docking_.right, dockOwner(pane));
 }
 
+bool ShellParticipant::paneShown(Dock pane) const {
+    // In the bottom dock, or the right one where it is docked there, so a
+    // pane docked on the right follows what it shows as it does below.
+    return dockShown_ == pane || docking_.shown == pane;
+}
+
 ShellParticipant::Dock ShellParticipant::readRightPanes() {
     docking_.right.clear();
     docking_.shown.reset();

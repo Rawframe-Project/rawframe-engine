@@ -912,6 +912,22 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "found Stone 60c00000 at [0-9]+,[0-9]+.*\"exit\":\"clean_stop\"")
+    # A pane docked on the right follows what it shows (D985): the Console,
+    # kept there by the preferences and shown, takes the lines said after:
+    # an entity made, then undone, its first line found in the Console
+    # alone, the status line saying the second.
+    add_test(NAME studio_right_pane_follows
+             COMMAND ${CMAKE_COMMAND} -E env STUDIO_PREFERENCES=${CMAKE_CURRENT_SOURCE_DIR}/tests/console_right.preferences
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene @Console @Entity "@New  Ctrl+Shift+N"
+                     "until=studio_said,status=\"entity created" @Undo "until=studio_said,status=\"undone" wait=1
+                     "@entity created"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_right_pane_follows PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found entity created at [0-9]+,[0-9]+")
     # A style class made, named, and deleted in Studio (D638): in Stalls'
     # sheet New makes a class and chooses it, its name typed as tip, and
     # Delete deletes it; Undo brings it back, so the sheet is written with

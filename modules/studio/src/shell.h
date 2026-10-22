@@ -382,14 +382,15 @@ private:
     /// The bottom dock showing `pane`, or the right one when the author
     /// docked it there (D980).
     void showDock(Dock pane);
-    /// A pane's tab and column, whether it moves and is docked on the
-    /// right; it docked there or back, as a held tab is let go; the right
+    /// A pane's tab and column, whether it moves, is docked on the right,
+    /// and shows in either dock (D985); it docked there or back, as a held tab is let go; the right
     /// dock showing a column; the tabs in their strips and lit; and the
     /// panes the preferences dock on the right, with the first left (D980).
     [[nodiscard]] ui::Node tabNode(Dock pane) const;
     [[nodiscard]] ui::Node paneNode(Dock pane) const;
     [[nodiscard]] static bool movable(Dock pane);
     [[nodiscard]] bool dockedRight(Dock pane) const;
+    [[nodiscard]] bool paneShown(Dock pane) const;
     void dockPane(Dock pane, bool right);
     void dropTab();
     void showInRight(ui::Node shown);
@@ -841,9 +842,8 @@ private:
     /// key, its source text, and each translation's beside it, a missing
     /// one marked (D927).
     void showStringTables();
-    /// A graph's nodes laid out in the center by how far wires run into
-    /// them, wires drawn (D819); `prefix` what each node id is among the
-    /// rows' entities. A node pressed is its row pressed.
+    /// A graph's nodes laid out by the wires into them or where `drawn` puts them (D819, D982), `prefix`
+    /// what each node id is among the rows' entities; a node pressed is its row pressed, its card dragged.
     void showCanvas(const Value& nodes, const std::string& prefix, const Value* drawn = nullptr);
     void followCard(bool released);
     /// A clip's lanes (D827), a UI document laid out (D832): parts as rows.

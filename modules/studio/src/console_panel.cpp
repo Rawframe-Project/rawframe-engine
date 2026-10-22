@@ -35,7 +35,7 @@ void ShellParticipant::addConsoleLine(ConsoleLine line) {
     if (console_.size() > kMostKept) {
         console_.pop_front();
     }
-    if (dockShown_ == Dock::Console) {
+    if (paneShown(Dock::Console)) {
         showConsole();
     }
 }
@@ -63,7 +63,7 @@ void ShellParticipant::readLogs(double seconds) {
     if (!playing_.has_value() && !stopping_.has_value()) {
         tails_.clear();
     }
-    if (added > 0 && dockShown_ == Dock::Console) {
+    if (added > 0 && paneShown(Dock::Console)) {
         showConsole();
     }
 }

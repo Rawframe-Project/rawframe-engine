@@ -33,7 +33,7 @@ result::Status ShellParticipant::makeProfiler() {
 }
 
 void ShellParticipant::readProfiler(double seconds) {
-    if (!playing_.has_value() || previewedName().empty() || dockShown_ != Dock::Profiler ||
+    if (!playing_.has_value() || previewedName().empty() || !paneShown(Dock::Profiler) ||
         seconds < held_.profilerNextRead) {
         return;
     }

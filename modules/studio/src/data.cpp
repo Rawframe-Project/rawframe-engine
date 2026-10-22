@@ -218,10 +218,10 @@ void ShellParticipant::showData() {
         showDataEntry(first);
     }
     // The bottom dock's views of it, where shown (D927).
-    if (dockShown_ == Dock::Curves) {
+    if (paneShown(Dock::Curves)) {
         showCurves();
     }
-    if (dockShown_ == Dock::Mixer && scene_ == held_.mixerDocument) {
+    if (paneShown(Dock::Mixer) && scene_ == held_.mixerDocument) {
         showMixer();
     }
 }

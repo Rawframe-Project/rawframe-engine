@@ -79,7 +79,7 @@ bool ShellParticipant::pressCapture(ui::Node node) {
 
 void ShellParticipant::readFrame(double seconds, std::string_view capture) {
     const bool kAsked = !capture.empty();
-    if (!kAsked && (dockShown_ != Dock::Frame || seconds < held_.frameNextRead)) {
+    if (!kAsked && (!paneShown(Dock::Frame) || seconds < held_.frameNextRead)) {
         return;
     }
     held_.frameNextRead = seconds + 1;

@@ -64,8 +64,7 @@ bool ShellParticipant::pressNetwork(ui::Node node) {
 }
 
 void ShellParticipant::readNetwork(double seconds) {
-    if (!playing_.has_value() || previewedName().empty() || dockShown_ != Dock::Network ||
-        seconds < network_.nextRead) {
+    if (!playing_.has_value() || previewedName().empty() || !paneShown(Dock::Network) || seconds < network_.nextRead) {
         return;
     }
     network_.nextRead = seconds + 1;

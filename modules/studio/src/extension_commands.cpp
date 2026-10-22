@@ -116,7 +116,7 @@ void ShellParticipant::showSections(const std::optional<Value>& read) {
         }
     }
     // The panels follow what is chosen.
-    if (dockShown_ == Dock::Panels) {
+    if (paneShown(Dock::Panels)) {
         showExtensionPanels();
     }
 }
