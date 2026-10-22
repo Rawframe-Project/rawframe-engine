@@ -46,6 +46,11 @@ void ShellParticipant::followSplitter() {
     if (kReleased && held_.wiring.has_value()) {
         dropWire();
     }
+    // And a graph's card dragged follows the pointer, placed where it is
+    // let go (D982).
+    if (held_.cardHeld.has_value()) {
+        followCard(kReleased);
+    }
     // And a bottom pane's tab onto the other dock docks it there (D980).
     if (kReleased && docking_.held.has_value()) {
         dropTab();

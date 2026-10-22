@@ -709,7 +709,7 @@ void ShellParticipant::showGraph() {
         places_.push_back(std::nullopt);
     }
     if (nodes != nullptr) {
-        showCanvas(*nodes, "");
+        showCanvas(*nodes, "", sheet_->find("presentation"));
     }
     // The material as its last cook drew it, on a sphere, in the canvas's
     // corner as the design's preview (D923).

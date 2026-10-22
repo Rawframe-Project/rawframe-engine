@@ -844,7 +844,8 @@ private:
     /// A graph's nodes laid out in the center by how far wires run into
     /// them, wires drawn (D819); `prefix` what each node id is among the
     /// rows' entities. A node pressed is its row pressed.
-    void showCanvas(const Value& nodes, const std::string& prefix);
+    void showCanvas(const Value& nodes, const std::string& prefix, const Value* drawn = nullptr);
+    void followCard(bool released);
     /// A clip's lanes (D827), a UI document laid out (D832): parts as rows.
     void showTimeline(const Value& clip);
     /// The clip's transport and ruler pressed, and its playhead moved on

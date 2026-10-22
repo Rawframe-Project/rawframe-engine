@@ -237,6 +237,34 @@ RAWFRAME_TEST(AMaterialGraphsNodesChangeAndUndoExactly) {
     }
 }
 
+RAWFRAME_TEST(ANodeIsPlacedInThePresentationAndGoesWithIt) {
+    // D982: where a node is drawn, kept after the graph in whole pixels,
+    // refused for a node the graph has not, and removed with its node.
+    auto opened = AuthoredMaterial::open(kDocument, kTinted);
+    RAWFRAME_EXPECT(opened.has_value());
+    if (!opened.has_value()) {
+        return;
+    }
+    AuthoredMaterial& material = **opened;
+    constexpr std::uint64_t kUv = 0x2f00000000000043;
+    const std::array<Operation, 2> kMade = {CreateMaterialNode{.node = kUv, .type = "rawframe/uv@1"},
+                                            PlaceMaterialNode{.node = kUv, .x = 120.4, .y = -36.6}};
+    RAWFRAME_EXPECT(material.change(0, kMade).has_value() && material.summaryAt(0) == "create node rawframe/uv@1");
+    const std::string kPlaced = material.text();
+    RAWFRAME_EXPECT(
+        kPlaced.find("\"presentation\": {\n    \"2f00000000000043\": {\n      \"x\": 120,\n      \"y\": -37") !=
+            std::string::npos &&
+        kPlaced.find("\"graph\"") < kPlaced.find("\"presentation\""));
+    const std::array<Operation, 1> kMoved = {PlaceMaterialNode{.node = kUv, .x = 2e9, .y = 0}};
+    RAWFRAME_EXPECT(material.change(1, kMoved).has_value() && material.summaryAt(1) == "place node 2f000000" &&
+                    material.text().find("\"x\": 1000000") != std::string::npos);
+    const std::array<Operation, 1> kNowhere = {PlaceMaterialNode{.node = 0x2f000000000000ff, .x = 0, .y = 0}};
+    RAWFRAME_EXPECT(refusedWith(material.change(2, kNowhere), AuthoringError::TargetNotFound));
+    const std::array<Operation, 1> kGone = {RemoveMaterialNode{.node = kUv}};
+    RAWFRAME_EXPECT(material.change(2, kGone).has_value() && material.text() == kTinted &&
+                    material.summaryAt(2) == "remove node rawframe/uv@1");
+}
+
 RAWFRAME_TEST(ANodesInputsAndParamsStayWhenTheirLastIsUnset) {
     auto opened = AuthoredMaterial::open(kDocument, kTinted);
     RAWFRAME_EXPECT(opened.has_value());

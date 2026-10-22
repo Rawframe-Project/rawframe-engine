@@ -324,6 +324,14 @@ struct CreateMaterialNode {
 struct RemoveMaterialNode {
     std::uint64_t node = 0;
 };
+/// Where a material graph's node is drawn (D982): its place on an editor's
+/// canvas, kept in the document's presentation (SPEC-0028), which never
+/// means anything to the material.
+struct PlaceMaterialNode {
+    std::uint64_t node = 0;
+    double x = 0;
+    double y = 0;
+};
 /// One input of a material graph's interface (D729): `input` declared as
 /// `value` holds it (`{"default": ..., "type": ...}`), or no longer
 /// declared.
@@ -420,6 +428,7 @@ using Operation = std::variant<CreateEntity,
                                SetMaterialNodeParam,
                                CreateMaterialNode,
                                RemoveMaterialNode,
+                               PlaceMaterialNode,
                                SetMaterialInterfaceInput,
                                SetMaterialSwitch,
                                SetDataValue,
@@ -432,7 +441,7 @@ using Operation = std::variant<CreateEntity,
 /// UI document (D641), or a material instance (D721), which follow the
 /// scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
-    return operation.index() < std::variant_size_v<Operation> - 20;
+    return operation.index() < std::variant_size_v<Operation> - 21;
 }
 
 /// SPEC-0040's read operations (queries.h answers them): every entity the

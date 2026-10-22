@@ -247,6 +247,16 @@ struct EditorsHeld {
     /// nodes' or keys' boxes (D819, D827).
     std::vector<std::pair<ui::Node, std::size_t>> canvasParts;
     std::vector<std::pair<ui::Node, std::size_t>> canvasBoxes;
+    /// A graph's node cards (D982): each one's row, its layout where it is
+    /// drawn, and the one a press holds, following the pointer and placed
+    /// where it is let go.
+    struct CanvasCard {
+        ui::Node card{};
+        std::size_t entity = 0;
+        ui::Layout layout;
+    };
+    std::vector<CanvasCard> canvasCards;
+    std::optional<CanvasCard> cardHeld;
     /// A graph's ports on the canvas (D977): each output's and input's line,
     /// its node's row, and its name; and the output a press holds, wired to
     /// the input it is let go on.

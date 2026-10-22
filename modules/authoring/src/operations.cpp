@@ -82,12 +82,14 @@ constexpr std::array<InputDeclaration, 3> kNodeParamInputs = {
 constexpr std::array<InputDeclaration, 2> kCreateNodeInputs = {
     {{"node", InputType::GraphNode}, {"type", InputType::Text}}};
 constexpr std::array<InputDeclaration, 1> kGraphNodeInputs = {{{"node", InputType::GraphNode}}};
+constexpr std::array<InputDeclaration, 3> kPlaceNodeInputs = {
+    {{"node", InputType::GraphNode}, {"x", InputType::Number}, {"y", InputType::Number}}};
 constexpr std::array<InputDeclaration, 2> kSwitchInputs = {
     {{"switch", InputType::Text}, {"value", InputType::DocumentValue}}};
 constexpr std::array<InputDeclaration, 2> kRenameClassInputs = {
     {{"style", InputType::Style}, {"name", InputType::Text}}};
 
-constexpr std::array<OperationDeclaration, 46> kDeclarations = {{
+constexpr std::array<OperationDeclaration, 47> kDeclarations = {{
     {.name = "scene.create_entity", .targets = "rawframe.scene entity", .inputs = kCreateInputs},
     {.name = "scene.destroy_entity", .targets = "rawframe.scene entity", .inputs = kEntityInputs},
     {.name = "scene.rename_entity", .targets = "rawframe.scene entity", .inputs = kRenameInputs},
@@ -117,6 +119,7 @@ constexpr std::array<OperationDeclaration, 46> kDeclarations = {{
     {.name = "materials.set_node_param", .targets = "rawframe.material node", .inputs = kNodeParamInputs},
     {.name = "materials.create_node", .targets = "rawframe.material node", .inputs = kCreateNodeInputs},
     {.name = "materials.remove_node", .targets = "rawframe.material node", .inputs = kGraphNodeInputs},
+    {.name = "materials.place_node", .targets = "rawframe.material node", .inputs = kPlaceNodeInputs},
     {.name = "materials.set_interface_input", .targets = "rawframe.material interface", .inputs = kOverrideInputs},
     {.name = "materials.set_interface_switch", .targets = "rawframe.material interface", .inputs = kSwitchInputs},
     {.name = "data.set", .targets = "data value", .inputs = kDataInputs},

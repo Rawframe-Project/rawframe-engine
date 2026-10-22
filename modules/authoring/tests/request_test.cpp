@@ -144,6 +144,15 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
                     !std::get<SetMaterialSwitch>(kRead->operations[37]).value.has_value());
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "materials.remove_node", "node": "2f0000"})")),
                                 AuthoringError::ValidationFailed));
+    // A node's place on the canvas (D982): two finite numbers.
+    const auto kPlaced = readRequest(
+        request(R"({"operation": "materials.place_node", "node": "2f00000000000043", "x": 12, "y": -3.5})"));
+    RAWFRAME_EXPECT(kPlaced.has_value() &&
+                    std::get<PlaceMaterialNode>(kPlaced->operations[0]).node == 0x2f00000000000043 &&
+                    std::get<PlaceMaterialNode>(kPlaced->operations[0]).y == -3.5);
+    RAWFRAME_EXPECT(refusedWith(
+        readRequest(request(R"({"operation": "materials.place_node", "node": "2f00000000000043", "x": "12", "y": 0})")),
+        AuthoringError::ValidationFailed));
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "ui.create_node", "node": "game.coin",
         "parent": 3})")),
                                 AuthoringError::ValidationFailed));

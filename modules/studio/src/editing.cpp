@@ -106,8 +106,15 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         pointerPress_ && kOutput != held_.canvasOutputs.end() && kOutput->entity < entities_.size()) {
         held_.wiring = std::pair{entities_[kOutput->entity], kOutput->name};
     }
+    held_.cardHeld.reset();
     if (const std::optional<std::size_t> kStands = canvasEntityOf(node);
         kStands.has_value() && *kStands < entityRows_.size()) {
+        // A graph's card held, to be dragged where the author puts it
+        // (D982); an output's port held wires instead.
+        const auto kCard = std::ranges::find(held_.canvasCards, *kStands, &EditorsHeld::CanvasCard::entity);
+        if (pointerPress_ && chosen(Listed::Graph) && !held_.wiring.has_value() && kCard != held_.canvasCards.end()) {
+            held_.cardHeld = *kCard;
+        }
         node = entityRows_[*kStands];
         held_.planPressed = chosen(Listed::Blockout) || held_.timelineScale > 0;
     }

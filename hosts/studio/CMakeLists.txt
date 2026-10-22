@@ -885,6 +885,33 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"rightPanels\": \\[[ \n]*\"Console\"[ \n]*\\].*\"code\":\"studio_docked\"[^\n]*\"panel\":\"Profiler\",\"side\":\"bottom\",\"right\":0.*\"code\":\"studio_docked\"[^\n]*\"panel\":\"Console\",\"side\":\"right\",\"right\":1.*\"exit\":\"clean_stop\"")
+    # A graph's node placed where the author drags it (D982): the rock's
+    # triplanar projection dragged down by its header, kept in the
+    # document's presentation; its normal, at its default, has its line.
+    add_test(NAME studio_graph_places_nodes
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial wait=1 "@normal input"
+                     "drag=@triplanar_projection 60c0000000000003,0,140" "until=studio_said,status=\"node placed"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_graph_places_nodes PROPERTIES
+                         ENVIRONMENT "STUDIO_SHOW_WRITTEN=1"
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found normal input at [0-9]+,[0-9]+.*rock.rfmaterial written: yes.*\"presentation\": {[ \n]*\"60c0000000000003\": {[ \n]*\"x\": [0-9]+,[ \n]*\"y\": [0-9]+.*\"status\":\"node placed\"")
+    # A graph whose presentation, edited by hand, holds a word and a place
+    # far past any float (D982): drawn, the far node at the canvas's edge,
+    # the other where it is laid out, and Studio stops cleanly.
+    add_test(NAME studio_graph_far_drawn
+             COMMAND ${CMAKE_COMMAND} -E env "STUDIO_EXTRA_FILES=${CMAKE_CURRENT_SOURCE_DIR}/tests/far_drawn.rfmaterial=rock.rfmaterial"
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/gale/gale.game rock.rfmaterial @rock.rfmaterial "@Stone 60c00000" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_graph_far_drawn PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "found Stone 60c00000 at [0-9]+,[0-9]+.*\"exit\":\"clean_stop\"")
     # A style class made, named, and deleted in Studio (D638): in Stalls'
     # sheet New makes a class and chooses it, its name typed as tip, and
     # Delete deletes it; Undo brings it back, so the sheet is written with

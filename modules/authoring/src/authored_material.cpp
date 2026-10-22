@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <variant>
@@ -184,6 +186,21 @@ result::Result<std::vector<JsonDelta>> deltasOf(const Value& staged, bool graph,
         record.add("inputs", Value::object());
         return std::vector{setting(staged, {step("graph"), step(hexOf(create->node))}, std::move(record))};
     }
+    if (const auto* place = std::get_if<PlaceMaterialNode>(&operation)) {
+        if (!kHas(place->node)) {
+            return kUnknown();
+        }
+        // Its drawing, keyed by it (SPEC-0028): whole pixels, within a
+        // canvas a million each way.
+        static constexpr double kFarthest = 1e6;
+        const auto kPixel = [](double at) {
+            return Value::integer(static_cast<std::int64_t>(std::llround(std::clamp(at, -kFarthest, kFarthest))));
+        };
+        Value drawn = Value::object();
+        drawn.add("x", kPixel(place->x));
+        drawn.add("y", kPixel(place->y));
+        return std::vector{setting(staged, {step("presentation"), step(hexOf(place->node))}, std::move(drawn))};
+    }
     if (const auto* remove = std::get_if<RemoveMaterialNode>(&operation)) {
         if (!kHas(remove->node)) {
             return kUnknown();
@@ -191,7 +208,11 @@ result::Result<std::vector<JsonDelta>> deltasOf(const Value& staged, bool graph,
         // Its drawing goes with it, keyed by it (SPEC-0028).
         std::vector made{setting(staged, {step("graph"), step(hexOf(remove->node))}, std::nullopt)};
         if (slotAt(staged, JsonPath{step("presentation"), step(hexOf(remove->node))}).has_value()) {
-            made.push_back(setting(staged, {step("presentation"), step(hexOf(remove->node))}, std::nullopt));
+            // The section with its last, as a graph never drawn has none.
+            const std::optional<Value> kDrawn = slotAt(staged, JsonPath{step("presentation")});
+            made.push_back(kDrawn.has_value() && kDrawn->names().size() == 1
+                               ? setting(staged, {step("presentation")}, std::nullopt)
+                               : setting(staged, {step("presentation"), step(hexOf(remove->node))}, std::nullopt));
         }
         return made;
     }
@@ -253,6 +274,8 @@ std::string AuthoredMaterial::summaryAt(std::size_t entry) const {
                kFirst.path[2].member;
     } else if (kFirst.path.size() == 2 && kFirst.path[0].member == "overrides") {
         made = (kSet ? "set " : "unset ") + kFirst.path[1].member;
+    } else if (kFirst.path.size() == 2 && kFirst.path[0].member == "presentation") {
+        made = "place node " + kFirst.path[1].member.substr(0, 8);
     } else if (kFirst.path.size() == 2) {
         const Value* kType = kSet ? kFirst.after->find("type") : kFirst.before->find("type");
         made = (kSet ? "create node " : "remove node ") +
@@ -261,9 +284,9 @@ std::string AuthoredMaterial::summaryAt(std::size_t entry) const {
         made = (kSet ? "set " : "unset ") + kFirst.path[1].member.substr(0, 8) + "." + kFirst.path[3].member;
     }
     // A node's drawing removed with it is the node's removal, not another.
-    const std::size_t kMore =
-        journal.size() - 1 - static_cast<std::size_t>(std::ranges::count_if(journal, [](const JsonDelta& delta) {
-            return delta.path.front().member == "presentation";
+    const auto kMore =
+        static_cast<std::size_t>(std::count_if(journal.begin() + 1, journal.end(), [](const JsonDelta& delta) {
+            return delta.path.front().member != "presentation";
         }));
     if (kMore > 0) {
         made += " and " + std::to_string(kMore) + " more";

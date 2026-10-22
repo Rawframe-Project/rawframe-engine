@@ -336,6 +336,17 @@ result::Result<Operation> operationOf(const Value& value) {
             }
             return Operation{CreateMaterialNode{.node = *kNode, .type = *type}};
         }
+        if (kIndex == kIndexOf<PlaceMaterialNode>) {
+            // Any finite JSON number, a place on the canvas (D982).
+            const Value* kX = value.find("x");
+            const Value* kY = value.find("y");
+            const std::optional<double> kAtX = kX != nullptr ? kX->real() : std::nullopt;
+            const std::optional<double> kAtY = kY != nullptr ? kY->real() : std::nullopt;
+            if (!kAtX.has_value() || !kAtY.has_value() || !std::isfinite(*kAtX) || !std::isfinite(*kAtY)) {
+                return kBad();
+            }
+            return Operation{PlaceMaterialNode{.node = *kNode, .x = *kAtX, .y = *kAtY}};
+        }
         return Operation{RemoveMaterialNode{.node = *kNode}};
     }
     if (kIndex == kIndexOf<SetMaterialOverride>) {

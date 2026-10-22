@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <optional>
 
 namespace rawframe::studio {
 
@@ -126,12 +127,13 @@ std::uint32_t graphNodeDot(const Value& node) {
         .dot;
 }
 
-void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix) {
+void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix, const Value* drawn) {
     clear(viewRows_);
     viewFields_.clear();
     clear(held_.cameraRows);
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
+    held_.canvasCards.clear();
     held_.canvasOutputs.clear();
     held_.canvasInputs.clear();
     if (nodes.kind() != Value::Kind::Object || nodes.names().empty()) {
@@ -168,8 +170,8 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
     // Each node's outputs, as its type's signature lists them, where the
     // material module lists its type (D923).
     const Value* kTypes = nodeTypes_.has_value() ? nodeTypes_->find("types") : nullptr;
-    const auto kOutputsOf = [kTypes](const Value& node) {
-        std::vector<std::string> outputs;
+    const auto kSignatureOf = [kTypes](const Value& node, std::string_view part) {
+        std::vector<std::string> named;
         const Value* kType = node.find("type");
         for (const Value& kSignature : kTypes != nullptr ? kTypes->items() : std::span<const Value>{}) {
             const Value* kNamed = kSignature.find("type");
@@ -177,23 +179,36 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
                 *kNamed->text() != *kType->text()) {
                 continue;
             }
-            const Value* kOutputs = kSignature.find("outputs");
-            for (const Value& kOutput : kOutputs != nullptr ? kOutputs->items() : std::span<const Value>{}) {
-                if (kOutput.text() != nullptr) {
-                    outputs.push_back(*kOutput.text());
+            const Value* kParts = kSignature.find(part);
+            for (const Value& kPart : kParts != nullptr ? kParts->items() : std::span<const Value>{}) {
+                if (kPart.text() != nullptr) {
+                    named.push_back(*kPart.text());
                 }
             }
         }
-        return outputs;
+        return named;
+    };
+    const auto kOutputsOf = [&kSignatureOf](const Value& node) {
+        return kSignatureOf(node, "outputs");
+    };
+    // Its inputs, every one its type has, each a line whether set or at
+    // its default (D982), then any the document holds its type has not.
+    const auto kInputNamesOf = [&kSignatureOf](const Value& node) {
+        std::vector<std::string> named = kSignatureOf(node, "inputs");
+        const Value* kInputs = inputsOf(node);
+        for (std::size_t each = 0; kInputs != nullptr && each < kInputs->names().size(); ++each) {
+            if (!std::ranges::contains(named, kInputs->names()[each])) {
+                named.push_back(kInputs->names()[each]);
+            }
+        }
+        return named;
     };
     const auto kParamsOf = [](const Value& node) -> std::size_t {
         const Value* kParams = node.kind() == Value::Kind::Object ? node.find("params") : nullptr;
         return kParams != nullptr && kParams->kind() == Value::Kind::Object ? kParams->names().size() : 0;
     };
     const auto kHeightOf = [&](const Value& node) {
-        const Value* kInputs = inputsOf(node);
-        const std::size_t kRows =
-            kParamsOf(node) + (kInputs != nullptr ? kInputs->items().size() : 0) + kOutputsOf(node).size();
+        const std::size_t kRows = kParamsOf(node) + kInputNamesOf(node).size() + kOutputsOf(node).size();
         return kHeader + kInputRow * static_cast<float>(kRows) + kBottom;
     };
     std::map<std::string, std::pair<float, float>, std::less<>> placed;
@@ -209,6 +224,32 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
         filled[kColumn] += kHeight + kRowGap;
         wide = std::max(wide, kX + kNodeWidth + kMargin);
         tall = std::max(tall, filled[kColumn] + kMargin);
+    }
+    // Where the author placed a node instead, as the document's
+    // presentation keeps it (D982), and the sheet as large as they reach.
+    // A hand-edited document may hold anything there: only an object's
+    // finite numbers, within the million pixels the session keeps.
+    static constexpr double kFarthest = 1e6;
+    const auto kPixel = [](const Value* given) -> std::optional<float> {
+        const std::optional<double> kNumber = given != nullptr ? given->real() : std::nullopt;
+        if (!kNumber.has_value() || !std::isfinite(*kNumber)) {
+            return std::nullopt;
+        }
+        return static_cast<float>(std::clamp(*kNumber, 0.0, kFarthest));
+    };
+    const bool kDrawn = drawn != nullptr && drawn->kind() == Value::Kind::Object;
+    for (std::size_t each = 0; kDrawn && each < drawn->items().size() && each < drawn->names().size(); ++each) {
+        const auto kPlaced = placed.find(drawn->names()[each]);
+        const Value& kDrawing = drawn->items()[each];
+        const std::optional<float> kX = kPixel(kDrawing.kind() == Value::Kind::Object ? kDrawing.find("x") : nullptr);
+        const std::optional<float> kY = kPixel(kDrawing.kind() == Value::Kind::Object ? kDrawing.find("y") : nullptr);
+        if (kPlaced == placed.end() || !kX.has_value() || !kY.has_value()) {
+            continue;
+        }
+        kPlaced->second = {*kX, *kY};
+        const Value& kNode = *nodes.find(drawn->names()[each]);
+        wide = std::max(wide, kPlaced->second.first + kNodeWidth + kMargin);
+        tall = std::max(tall, kPlaced->second.second + kHeightOf(kNode) + kMargin);
     }
     // A pane scrolling both ways, over a sheet as large as the graph laid
     // out, the nodes and wires placed on it.
@@ -239,6 +280,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
     for (std::size_t each = 0; each < nodes.names().size(); ++each) {
         const auto [kToX, kToY] = placed[nodes.names()[each]];
         const Value* kInputs = inputsOf(nodes.items()[each]);
+        const std::vector<std::string> kLines = kInputNamesOf(nodes.items()[each]);
         const float kInputsAt = kToY + kHeader + kInputRow * static_cast<float>(kParamsOf(nodes.items()[each]));
         for (std::size_t input = 0; kInputs != nullptr && input < kInputs->items().size(); ++input) {
             const std::string* kFrom = sourceOf(kInputs->items()[input]);
@@ -254,17 +296,15 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
                                        ? std::ranges::find(kOutputs, *kOutput->text())
                                        : kOutputs.end();
             const float kOutputRow = kOutputAt != kOutputs.end() ? static_cast<float>(kOutputAt - kOutputs.begin()) : 0;
-            const Value* kSourceInputs = inputsOf(kSourceNode);
+            const std::size_t kSourceInputs = kInputNamesOf(kSourceNode).size();
             const float kX1 = kSource->second.first + kNodeWidth;
             const float kY1 =
                 kOutputs.empty()
                     ? kSource->second.second + kHeader / 2
                     : kSource->second.second + kHeader +
-                          kInputRow *
-                              (static_cast<float>(kParamsOf(kSourceNode) +
-                                                  (kSourceInputs != nullptr ? kSourceInputs->items().size() : 0)) +
-                               kOutputRow + 0.5F);
-            const float kY2 = kInputsAt + kInputRow * (static_cast<float>(input) + 0.5F);
+                          kInputRow * (static_cast<float>(kParamsOf(kSourceNode) + kSourceInputs) + kOutputRow + 0.5F);
+            const auto kLineAt = std::ranges::find(kLines, kInputs->names()[input]);
+            const float kY2 = kInputsAt + kInputRow * (static_cast<float>(kLineAt - kLines.begin()) + 0.5F);
             const float kMiddle = std::max(kX1 + kColumnGap / 2, kToX - kColumnGap / 2);
             for (const auto& [kX, kY, kWidth, kHeight] :
                  {std::array<float, 4>{kX1, kY1 - kWire / 2, kMiddle - kX1 + kWire, kWire},
@@ -303,6 +343,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
             *node, ui::Look{.fill = kNodeFill, .borderColor = kChosenNode ? look::kAccent : look::kEdge, .radius = 6}));
         held_.canvasBoxes.emplace_back(*node, kEntity);
         held_.canvasParts.emplace_back(*node, kEntity);
+        held_.canvasCards.push_back(EditorsHeld::CanvasCard{.card = *node, .entity = kEntity, .layout = placing});
         auto header = box(*node,
                           ui::Layout{.height = ui::pixels(kHeader),
                                      .alignItems = ui::Align::Center,
@@ -395,18 +436,18 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix)
                 return;
             }
         }
-        for (std::size_t input = 0; kInputs != nullptr && input < kInputs->items().size(); ++input) {
-            const bool kWired = sourceOf(kInputs->items()[input]) != nullptr;
-            auto line = kLine(kInputs->names()[input],
-                              kWired ? std::string{} : constantText(kInputs->items()[input]),
-                              kWired ? -2 : -1);
+        for (const std::string& kInput : kInputNamesOf(kNodeValue)) {
+            const Value* kHeld = kInputs != nullptr ? kInputs->find(kInput) : nullptr;
+            const bool kWired = kHeld != nullptr && sourceOf(*kHeld) != nullptr;
+            auto line =
+                kLine(kInput, kWired || kHeld == nullptr ? std::string{} : constantText(*kHeld), kWired ? -2 : -1);
             // Read as the node's input, not as the Inspector's field of
             // that name.
-            if (!line.has_value() || !tree_->setName(*line, kInputs->names()[input] + " input").has_value() ||
+            if (!line.has_value() || !tree_->setName(*line, kInput + " input").has_value() ||
                 !tree_->setRole(*line, ui::Role::Button).has_value()) {
                 return;
             }
-            held_.canvasInputs.push_back({.line = *line, .entity = kEntity, .name = kInputs->names()[input]});
+            held_.canvasInputs.push_back({.line = *line, .entity = kEntity, .name = kInput});
         }
         for (const std::string& kOutput : kOutputsOf(kNodeValue)) {
             auto line = kLine(kOutput, {}, 2);
@@ -436,6 +477,43 @@ std::optional<std::size_t> ShellParticipant::canvasEntityOf(ui::Node node) const
         }
     }
     return std::nullopt;
+}
+
+void ShellParticipant::followCard(bool released) {
+    // A card held moves with the pointer once it is dragged (D982), its
+    // wires drawn again where it is placed.
+    const std::optional<std::array<float, 2>> kPointer =
+        released && releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
+    if (!kPointer.has_value() || !tree_->contains(held_.cardHeld->card)) {
+        if (released) {
+            held_.cardHeld.reset();
+        }
+        return;
+    }
+    const float kRight = (*kPointer)[0] - pressedAt_[0];
+    const float kDown = (*kPointer)[1] - pressedAt_[1];
+    const bool kCardDragged = std::hypot(kRight, kDown) >= kDragAfter;
+    const std::array<float, 2> kTo = {std::max(0.0F, held_.cardHeld->layout.placement.x.offset + kRight),
+                                      std::max(0.0F, held_.cardHeld->layout.placement.y.offset + kDown)};
+    if (kCardDragged) {
+        ui::Layout moved = held_.cardHeld->layout;
+        moved.placement.x = ui::pixels(kTo[0]);
+        moved.placement.y = ui::pixels(kTo[1]);
+        static_cast<void>(tree_->setLayout(held_.cardHeld->card, moved));
+    }
+    if (!released) {
+        return;
+    }
+    const EditorsHeld::CanvasCard kCard = *std::exchange(held_.cardHeld, std::nullopt);
+    if (!kCardDragged || kCard.entity >= entities_.size() || !chosen(Listed::Graph)) {
+        return;
+    }
+    Value operation = Value::object();
+    operation.add("operation", Value::string("materials.place_node"));
+    operation.add("node", Value::string(entities_[kCard.entity]));
+    operation.add("x", Value::real(kTo[0]));
+    operation.add("y", Value::real(kTo[1]));
+    commit(std::move(operation), "node placed", entities_[kCard.entity]);
 }
 
 void ShellParticipant::markCanvas() {
