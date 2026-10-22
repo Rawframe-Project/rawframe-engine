@@ -69,7 +69,8 @@ void line(std::string_view what, const std::filesystem::path& library, const raw
                 static_cast<int>(what.size()),
                 what.data(),
                 rawframe::content::ContentDigest{.bytes = id}.text().c_str(),
-                (library / rawframe::content::compositionPathOf(id)).string().c_str());
+                // In the platform's own separators, as the library's was given.
+                (library / rawframe::content::compositionPathOf(id)).make_preferred().string().c_str());
 }
 
 /// The origin `text` names: a directory or a URL.
