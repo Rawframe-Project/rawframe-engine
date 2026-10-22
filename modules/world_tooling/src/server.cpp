@@ -211,7 +211,10 @@ struct ToolingServer::State {
     }
 
     /// The living entities in slot order, a page after `after`.
-    Value entities(const world::World& world, const Value& record, std::string& refusal) const {
+    Value entities(const world::World& world,
+                   const Value& record,
+                   const world_runtime::Picking* picking,
+                   std::string& refusal) const {
         std::optional<world::EntityHandle> after;
         if (const Value* kAfter = record.find("after"); kAfter != nullptr) {
             after = kAfter->kind() == Value::Kind::String ? entityNamed(*kAfter->text()) : std::nullopt;
@@ -269,6 +272,14 @@ struct ToolingServer::State {
             Value each = Value::object();
             each.add("entity", Value::string(entityName(rows[at].entity)));
             each.add("components", std::move(names));
+            // Where it was authored, so a reader names it as its scene does
+            // (D996).
+            if (const auto kAuthored = picking != nullptr ? picking->authoredAt(rows[at].entity) : std::nullopt;
+                kAuthored.has_value()) {
+                each.add("scene", Value::string(kAuthored->first));
+                each.add("source",
+                         Value::string(std::string{schema::formatStableIdText(kAuthored->second).data(), 36}));
+            }
             listed.push(std::move(each));
         }
         Value made = Value::object();
@@ -407,7 +418,7 @@ struct ToolingServer::State {
             }
             if (*kind == "tooling.entities") {
                 std::string refusal;
-                Value made = entities(*world, *parsed, refusal);
+                Value made = entities(*world, *parsed, settings.picking, refusal);
                 send(connection,
                      client,
                      refusal.empty() ? replyLine(id, "answer", std::move(made))

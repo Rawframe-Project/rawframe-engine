@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <map>
 #include <span>
 
 namespace rawframe::studio {
@@ -126,6 +127,7 @@ void ShellParticipant::switchLive() {
 
 void ShellParticipant::showLive() {
     live_.rows.clear();
+    live_.rowsNamed = 0;
     Value asked = Value::object();
     asked.add("kind", Value::string("authoring.live_entities"));
     asked.add("id", Value::integer(next()));
@@ -139,6 +141,26 @@ void ShellParticipant::showLive() {
         say("live: " + answeredOf(kReply).message);
         return;
     }
+    // Each named as the scene it was authored in names it (D996), each
+    // scene read once.
+    std::map<std::string, std::string, std::less<>> authored;
+    std::vector<std::string> scenesRead;
+    const auto kReadNames = [&](const std::string& scene) {
+        if (scene.empty() || std::ranges::contains(scenesRead, scene)) {
+            return;
+        }
+        scenesRead.push_back(scene);
+        const std::optional<Value> kScene = read(scene, "scene.list_entities");
+        const Value* kEntities = kScene.has_value() ? kScene->find("entities") : nullptr;
+        for (const Value& kOne : kEntities != nullptr ? kEntities->items() : std::span<const Value>{}) {
+            const Value* kId = kOne.find("id");
+            const Value* kName = kOne.find("name");
+            if (kId != nullptr && kId->text() != nullptr && kName != nullptr && kName->text() != nullptr &&
+                !kName->text()->empty()) {
+                authored.emplace(*kId->text(), *kName->text());
+            }
+        }
+    };
     for (const Value& kEach : kListed->items()) {
         const Value* kEntity = kEach.find("entity");
         const Value* kComponents = kEach.find("components");
@@ -154,10 +176,20 @@ void ShellParticipant::showLive() {
             }
         }
         std::string line;
-        for (std::size_t each = 0; each < names.size() && each < 2; ++each) {
+        const Value* kSource = kEach.find("source");
+        if (const Value* kFrom = kEach.find("scene"); kFrom != nullptr && kFrom->text() != nullptr) {
+            kReadNames(*kFrom->text());
+        }
+        const auto kNamed =
+            kSource != nullptr && kSource->text() != nullptr ? authored.find(*kSource->text()) : authored.end();
+        if (kNamed != authored.end()) {
+            line = kNamed->second;
+            ++live_.rowsNamed;
+        }
+        for (std::size_t each = 0; kNamed == authored.end() && each < names.size() && each < 2; ++each) {
             line += (each == 0 ? "" : " \u00B7 ") + prettyField(shortName(names[each]));
         }
-        if (names.size() > 2) {
+        if (kNamed == authored.end() && names.size() > 2) {
             line += " +" + std::to_string(names.size() - 2);
         }
         line += "  " + *kEntity->text();

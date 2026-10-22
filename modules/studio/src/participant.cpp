@@ -769,7 +769,8 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("liveListed", live_.listed),
                   diagnostics::field("liveReads", live_.reads),
                   diagnostics::field("liveComponents", live_.components),
-                  diagnostics::field("liveNamed", live_.named)});
+                  diagnostics::field("liveNamed", live_.named),
+                  diagnostics::field("liveRowsNamed", live_.rowsNamed)});
     // And what the asset browser showed (D799).
     emitter_.log(diagnostics::Severity::Info,
                  kBrowsed,

@@ -813,6 +813,11 @@ public:
         return made;
     }
 
+    std::optional<std::pair<std::string, base::Bits128>>
+    authoredAt(world::EntityHandle entity) const noexcept override {
+        return scenes_.sourceOf(entity);
+    }
+
 private:
     /// What replicates, from the description; and the game's identity: the
     /// description and its program, hashed together.

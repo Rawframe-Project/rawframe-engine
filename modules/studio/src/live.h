@@ -30,6 +30,8 @@ struct LiveShown {
     std::uint64_t components = 0;
     /// Its values shown by name, not as numbers, when last read (D995).
     std::uint64_t named = 0;
+    /// The rows last listed named as the open scene names them (D996).
+    std::uint64_t rowsNamed = 0;
 };
 
 } // namespace rawframe::studio

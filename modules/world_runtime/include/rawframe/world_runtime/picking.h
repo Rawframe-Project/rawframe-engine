@@ -14,6 +14,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace rawframe::world_runtime {
 
@@ -39,6 +40,11 @@ public:
     /// to meet.
     [[nodiscard]] virtual std::optional<Picked> pick(const std::array<double, 3>& origin,
                                                      const std::array<double, 3>& toward) const noexcept = 0;
+    /// Where `entity` was authored, as a pick tells it, with no ray: the
+    /// scene's path and the entity's id in it, none for an entity made
+    /// while the World runs (D996).
+    [[nodiscard]] virtual std::optional<std::pair<std::string, base::Bits128>>
+    authoredAt(world::EntityHandle entity) const noexcept = 0;
 };
 
 inline constexpr composition::Capability<Picking> kPicking{"rawframe.world_runtime.picking"};
