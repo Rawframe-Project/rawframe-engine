@@ -67,7 +67,7 @@ void WindowHost::followAsides(window::Windows& windows) {
     }
 }
 
-bool WindowHost::aside(const window::Event& event) {
+bool WindowHost::aside(const window::Windows& windows, const window::Event& event) {
     if (!event.window.valid() || event.window == window_) {
         return false;
     }
@@ -80,6 +80,13 @@ bool WindowHost::aside(const window::Event& event) {
     using Kind = view::WindowAsides::Happened::Kind;
     view::WindowAsides::Happened happened{
         .key = kOpen->first, .x = event.pointer.position.x, .y = event.pointer.position.y};
+    // Where it is over the editor's own window, from where each window is.
+    const auto kApart = windows.state(event.window);
+    const auto kMain = windows.state(window_);
+    if (kApart.has_value() && kMain.has_value()) {
+        happened.mainX = happened.x + kApart->position.x - kMain->position.x;
+        happened.mainY = happened.y + kApart->position.y - kMain->position.y;
+    }
     switch (event.kind) {
     case window::EventKind::CursorMoved:
         happened.kind = Kind::Moved;

@@ -565,7 +565,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         if (!event.has_value()) {
             break;
         }
-        if (aside(*event)) {
+        if (aside(windows, *event)) {
             continue;
         }
         // What lands on an editor's viewport is the game's it shows.

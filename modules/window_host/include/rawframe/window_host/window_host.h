@@ -192,7 +192,7 @@ private:
     void followAsides(window::Windows& windows);
     /// Whether `event` was an aside's and taken as one: its pointer's and
     /// its closing; its keys are the window's typing.
-    bool aside(const window::Event& event);
+    bool aside(const window::Windows& windows, const window::Event& event);
     /// Lent where the window waits hidden until asked (D942).
     view::WindowShowing showing_;
     bool showWhenAsked_ = false;

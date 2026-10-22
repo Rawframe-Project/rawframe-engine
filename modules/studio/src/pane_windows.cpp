@@ -6,6 +6,7 @@
 #include "shell.h"
 
 #include <algorithm>
+#include <array>
 #include <string>
 
 namespace rawframe::studio {
@@ -90,12 +91,23 @@ void ShellParticipant::followAsides(double seconds) {
             // Pressed where it lands in the pane, as in the window; a
             // secondary press chooses the row it met and opens the context
             // menu there, in the pane's window (D990).
+            // A primary press holds what it met as one in Studio's window
+            // does, an asset's card to be let go over the scene there,
+            // where it is in that window (D992).
+            if (released_) {
+                followSplitter();
+            }
             kTorn->pointer = {kX, kY};
             docking_.pressedApart = kTorn->key;
+            pressedAt_ = {kHappened.mainX * laidOutPerPointer(), kHappened.mainY * laidOutPerPointer()};
+            heldEntity_.reset();
+            browser_.held.reset();
             const bool kMoving = beforePress();
             const auto kHit = tree_->hit(kTorn->root, kX, kY);
             if (kHit.has_value() && kHit->node.has_value() && (!kHappened.secondary || choosable(*kHit->node))) {
+                pointerPress_ = !kHappened.secondary;
                 pressOn(*kHit->node, kMoving);
+                pointerPress_ = false;
             }
             if (kHappened.secondary) {
                 showContext(kX, kY);
@@ -123,6 +135,11 @@ void ShellParticipant::followAsides(double seconds) {
             break;
         }
         case Kind::Released:
+            // Let go where it is over Studio's window, if it is (D992).
+            released_ = true;
+            releasedAt_ =
+                std::array<float, 2>{kHappened.mainX * laidOutPerPointer(), kHappened.mainY * laidOutPerPointer()};
+            break;
         case Kind::Left:
             break;
         }

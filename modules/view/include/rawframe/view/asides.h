@@ -47,6 +47,11 @@ public:
         std::uint64_t window = 0;
         float x = 0;
         float y = 0;
+        /// The same point from the top left of the window the editor shows
+        /// itself in, by the two windows' places on the desktop (D992): a
+        /// press there let go over that window is let go there.
+        float mainX = 0;
+        float mainY = 0;
         float deltaX = 0;
         float deltaY = 0;
         /// Pressed: with the secondary button.

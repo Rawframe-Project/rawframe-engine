@@ -970,6 +970,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"studio_docked\"[^\n]*\"side\":\"apart\".*\"code\":\"studio_context\"[^\n]*\"part\":\"assets\"")
+    # An asset's card in a pane apart dragged onto Studio's viewport is
+    # placed there (D992): hall.scene, from the Assets apart, let go over
+    # the level's view, makes an instance of it.
+    add_test(NAME studio_pane_apart_drags
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene context=@Assets "@Open panel in a window"
+                     "until=studio_said,status=\"Assets opened in a window" wait=2 "drag=277,123,820,300"
+                     "until=studio_said,status=\"instance of hall.scene" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_pane_apart_drags PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "level.scene written: yes.*\"code\":\"studio_asset_placed\"[^\n]*\"asset\":\"hall.scene\",\"onto\":\"scene\"")
     # A style class made, named, and deleted in Studio (D638): in Stalls'
     # sheet New makes a class and chooses it, its name typed as tip, and
     # Delete deletes it; Undo brings it back, so the sheet is written with
