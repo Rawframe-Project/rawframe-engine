@@ -598,7 +598,9 @@ void ShellParticipant::outlineChosen() {
     emitter_.log(diagnostics::Severity::Info,
                  kOutlined,
                  "the preview outlines what each author has chosen",
-                 {diagnostics::field("authors", outlines.items().size()), diagnostics::field("shown", outlinesShown_)});
+                 {diagnostics::field("authors", outlines.items().size()),
+                  diagnostics::field("entities", selected_.size()),
+                  diagnostics::field("shown", outlinesShown_)});
 }
 
 void ShellParticipant::scaleDragged(const Moved& moved, std::map<std::string, double, std::less<>>& pose) {

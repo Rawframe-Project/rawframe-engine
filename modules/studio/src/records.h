@@ -43,6 +43,9 @@ struct Outcome {
     std::int64_t redoable = 0;
     /// The scene's view after it, when the answer says (null for none).
     std::optional<Value> view;
+    /// What is chosen after it, when the answer says: what an undo or a
+    /// redo put back (D417, D997).
+    std::optional<std::vector<std::string>> selection;
 };
 
 /// Of an apply's reply, or of the first scene's in an apply together's.

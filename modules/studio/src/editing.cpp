@@ -1419,58 +1419,6 @@ void ShellParticipant::commitAll(std::vector<Value> operations,
     refresh(choose);
 }
 
-void ShellParticipant::refresh(const std::optional<std::string>& entity) {
-    const std::array<float, 2> kEntities = tree_->scrollOf(entitiesColumn_);
-    const std::array<float, 2> kComponents = tree_->scrollOf(componentsColumn_);
-    const std::vector<std::string> kChosenBefore = selected_;
-    showScene(sceneAt_);
-    if (entity.has_value()) {
-        if (const auto kAt = std::ranges::find(entities_, *entity); kAt != entities_.end()) {
-            showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
-            // Several chosen stay chosen while they are all still there.
-            if (kChosenBefore.size() > 1 && std::ranges::all_of(kChosenBefore, [&](const std::string& each) {
-                    return std::ranges::contains(entities_, each);
-                })) {
-                selected_ = kChosenBefore;
-                showSelection(static_cast<std::size_t>(kAt - entities_.begin()));
-            }
-        }
-    }
-    static_cast<void>(tree_->scrollTo(entitiesColumn_, kEntities[0], kEntities[1]));
-    static_cast<void>(tree_->scrollTo(componentsColumn_, kComponents[0], kComponents[1]));
-    showHistoryList();
-}
-
-void ShellParticipant::stepTo(std::size_t entry) {
-    const auto kTarget = static_cast<std::int64_t>(entry) + 1;
-    // Each step is one record, as Undo and Redo are; a step the session
-    // refuses leaves the counts as they were and ends the walk.
-    while (undoable_ != kTarget) {
-        const std::int64_t kBefore = undoable_;
-        step(undoable_ > kTarget ? "authoring.undo" : "authoring.redo");
-        if (undoable_ == kBefore) {
-            break;
-        }
-    }
-}
-
-void ShellParticipant::step(std::string_view kind) {
-    if (scene_.empty()) {
-        return;
-    }
-    const Outcome kOutcome = outcomeOf(ask(stepRecord(next(), kind, scene_)));
-    told(kOutcome);
-    const bool kUndo = kind == "authoring.undo";
-    if (kOutcome.done) {
-        ++(kUndo ? undone_ : redone_);
-        say(kUndo ? "undone" : "redone");
-        recookPlayed();
-    } else {
-        say(kOutcome.message);
-    }
-    refresh(entity_.empty() ? std::nullopt : std::optional{entity_});
-}
-
 void ShellParticipant::told(const Outcome& outcome) {
     undoable_ = outcome.undoable;
     redoable_ = outcome.redoable;

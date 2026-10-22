@@ -255,4 +255,75 @@ void ShellParticipant::commitChosen(Value operation, const std::string& done) {
     commitAll(std::move(operations), done + " on " + std::to_string(selected_.size()), entity_);
 }
 
+void ShellParticipant::refresh(const std::optional<std::string>& entity) {
+    const std::array<float, 2> kEntities = tree_->scrollOf(entitiesColumn_);
+    const std::array<float, 2> kComponents = tree_->scrollOf(componentsColumn_);
+    const std::vector<std::string> kChosenBefore = selected_;
+    const bool kShownBefore = !entity_.empty();
+    showScene(sceneAt_);
+    if (entity.has_value()) {
+        if (const auto kAt = std::ranges::find(entities_, *entity); kAt != entities_.end()) {
+            showEntity(static_cast<std::size_t>(kAt - entities_.begin()));
+            // Several chosen stay chosen while they are all still there.
+            if (kChosenBefore.size() > 1 && std::ranges::all_of(kChosenBefore, [&](const std::string& each) {
+                    return std::ranges::contains(entities_, each);
+                })) {
+                selected_ = kChosenBefore;
+                showSelection(static_cast<std::size_t>(kAt - entities_.begin()));
+            }
+        }
+    }
+    // What an undo, or another's edit, took away is chosen no longer: its
+    // outline and its mark go with it (D997).
+    std::erase_if(selected_, [this](const std::string& each) {
+        return !std::ranges::contains(entities_, each);
+    });
+    if (entity_.empty() && (kShownBefore || !kChosenBefore.empty())) {
+        selected_.clear();
+        static_cast<void>(ask(selectRecord(next(), scene_, selected_)));
+        markChosen();
+    }
+    static_cast<void>(tree_->scrollTo(entitiesColumn_, kEntities[0], kEntities[1]));
+    static_cast<void>(tree_->scrollTo(componentsColumn_, kComponents[0], kComponents[1]));
+    showHistoryList();
+}
+
+void ShellParticipant::stepTo(std::size_t entry) {
+    const auto kTarget = static_cast<std::int64_t>(entry) + 1;
+    // Each step is one record, as Undo and Redo are; a step the session
+    // refuses leaves the counts as they were and ends the walk.
+    while (undoable_ != kTarget) {
+        const std::int64_t kBefore = undoable_;
+        step(undoable_ > kTarget ? "authoring.undo" : "authoring.redo");
+        if (undoable_ == kBefore) {
+            break;
+        }
+    }
+}
+
+void ShellParticipant::step(std::string_view kind) {
+    if (scene_.empty()) {
+        return;
+    }
+    const Outcome kOutcome = outcomeOf(ask(stepRecord(next(), kind, scene_)));
+    told(kOutcome);
+    const bool kUndo = kind == "authoring.undo";
+    if (kOutcome.done) {
+        ++(kUndo ? undone_ : redone_);
+        say(kUndo ? "undone" : "redone");
+        recookPlayed();
+    } else {
+        say(kOutcome.message);
+    }
+    // A scene's entities chosen as the step left them, as an editor's undo
+    // puts back what was chosen with what was done (D417, D997); another
+    // document chooses none of its own.
+    if (kOutcome.done && kOutcome.selection.has_value() && chosen(Listed::Scene)) {
+        selected_ = *kOutcome.selection;
+        refresh(selected_.empty() ? std::nullopt : std::optional{selected_.front()});
+        return;
+    }
+    refresh(entity_.empty() ? std::nullopt : std::optional{entity_});
+}
+
 } // namespace rawframe::studio

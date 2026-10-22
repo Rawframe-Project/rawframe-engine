@@ -390,7 +390,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # Studio's operations, as describe offers them: in runners' level a new
     # entity is made and chosen, renamed crate, given runners.tile by its
     # name typed, the tile removed, and the entity deleted; Undo brings it
-    # back, so the level is written with a crate in it.
+    # back, chosen again as it was (D997), so the level is written with a
+    # crate in it.
     add_test(NAME studio_operates
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                      ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
@@ -400,7 +401,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     set_tests_properties(studio_operates PROPERTIES
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
-                         "typed crate at [0-9]+,[0-9]+.*typed runners.tile at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":10,\"entity\":\"\",\"components\":0,\"applied\":5,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":4,\"redoable\":1,[^\n]*\"status\":\"undone\".*\"exit\":\"clean_stop\"")
+                         "typed crate at [0-9]+,[0-9]+.*typed runners.tile at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":10,\"entity\":\"[0-9a-f-]+\",\"components\":0,\"applied\":5,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":4,\"redoable\":1,[^\n]*\"status\":\"undone\".*\"exit\":\"clean_stop\"")
     # A reference set by the name of the entity it names (D447): a new
     # entity in runners' level is given attach, whose parent is typed:
     # west, which two entities' names start, is refused, and ground set;
@@ -2111,6 +2112,24 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"studio_outlined\"[^\n]*\"authors\":1,.*\"code\":\"scene_placed_summary\"[^\n]*\"outlinesShown\":[1-9][0-9]*}")
+        # What an undo took away is chosen no longer (D997): an entity made
+        # in the played gate.scene, chosen and outlined, then undone, leaves
+        # nothing outlined or marked.
+        add_test(NAME studio_undoes_chosen
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         games/plaza/plaza.game ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf
+                         ${PROJECT_BINARY_DIR}/hosts/client/plaza_drawn.conf @gate.scene @Play until=studio_previewing
+                         @Entity "@New  Ctrl+Shift+N" "until=studio_said,status=\"entity created"
+                         "until=studio_outlined,entities=1" @Undo "until=studio_said,status=\"undone"
+                         "until=studio_outlined,entities=0" wait=1 @Stop until=studio_game_ended
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_undoes_chosen PROPERTIES
+                             FIXTURES_REQUIRED plaza_content
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"status\":\"undone\".*\"code\":\"studio_outlined\"[^\n]*\"entities\":0,")
         # The handle under the pointer drawn lit (D468): the post chosen and
         # marked, the pointer moved onto its X handle with no press, and the
         # played client draws the mark with a part lit.

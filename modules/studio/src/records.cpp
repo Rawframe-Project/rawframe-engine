@@ -115,6 +115,15 @@ Outcome outcomeOf(std::string_view reply) {
     if (const Value* view = answer != nullptr ? answer->find("view") : nullptr; view != nullptr) {
         outcome.view = *view;
     }
+    if (const Value* chosen = answer != nullptr ? answer->find("selection") : nullptr;
+        chosen != nullptr && chosen->kind() == Value::Kind::Array) {
+        outcome.selection.emplace();
+        for (const Value& kEach : chosen->items()) {
+            if (kEach.text() != nullptr) {
+                outcome.selection->push_back(*kEach.text());
+            }
+        }
+    }
     return outcome;
 }
 
