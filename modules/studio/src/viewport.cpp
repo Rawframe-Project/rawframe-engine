@@ -572,9 +572,15 @@ void ShellParticipant::forwardInput() {
     // the game's; else the window host acts on all of it. A menu, popup,
     // or dialog open over it takes what lands on it (D797: the View
     // menu's lower rows lie over the viewport).
+    // Nor while Studio holds what a press took elsewhere, so it is let go
+    // over the viewport for Studio: an asset dropped there, an entity, a
+    // tab, a card, a wire, or an edge (D984).
+    const bool kStudioHolds = browser_.held.has_value() || heldEntity_.has_value() || docking_.held.has_value() ||
+                              held_.cardHeld.has_value() || held_.wiring.has_value() || resizing_.has_value();
     const bool kPlaysHere = playing_.has_value() && play_.has_value() && play_->viewport.has_value() &&
                             inViewport_.picture != nullptr && tree_->contains(viewport_) && !scene_.empty() &&
-                            !popup_.has_value() && !dialog_.has_value() && !held_.exportDialog.has_value();
+                            !popup_.has_value() && !dialog_.has_value() && !held_.exportDialog.has_value() &&
+                            !kStudioHolds;
     if (!kPlaysHere) {
         inViewport_.forwarding->forwardOver(std::nullopt);
         static_cast<void>(inViewport_.forwarding->take());

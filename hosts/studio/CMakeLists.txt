@@ -1186,7 +1186,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"cooked .*saw studio_previewing.*\"code\":\"studio_said\"[^\n]*\"status\":\"cooked [1-9][0-9]* sources, 0 reused\".*\"code\":\"scene_summary\"[^\n]*\"gameMeshes\":[1-9][0-9]*,[^\n]*\"texturesReady\":[1-9][0-9]*,")
         # A mesh dropped in the edit view (D981): the plaza's mound imported
-        # into the starter, dropped, and cooked; the edit view's client,
+        # into the starter, dropped on the viewport, whose presses are the
+        # game's but for what Studio holds (D984), and cooked; the client,
         # which reads the game's meshes once, started again and drawing it.
         add_test(NAME studio_draws_dropped_meshes
                  COMMAND ${CMAKE_COMMAND} -E env STUDIO_COOK=$<TARGET_FILE:rawframe_host_cook_tool> STUDIO_EDIT_VIEW=true
@@ -1195,7 +1196,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
                          templates/starter-3d/starter.game /dev/null /dev/null @level.scene until=studio_previewing
                          "@new scene or import:${PROJECT_SOURCE_DIR}/games/plaza/mound.gltf" "until=studio_said,status=\"imported "
-                         @Meshes "until=studio_said,status=\"Meshes in" drag=@mound.gltf,@cube
+                         @Meshes "until=studio_said,status=\"Meshes in" "drag=@mound.gltf,355,-330"
                          "until=studio_asset_placed,onto=\"mesh" @Cook "until=studio_said,status=\"cooked " wait=8
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
         set_tests_properties(studio_draws_dropped_meshes PROPERTIES
