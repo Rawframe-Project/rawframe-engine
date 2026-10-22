@@ -500,6 +500,18 @@ void ShellParticipant::askDialog(view::FileDialogs::Kind kind, std::string title
 }
 
 void ShellParticipant::takeDialogs() {
+    // A paste's text, typed into the field it was asked for while that
+    // field still holds the keyboard, as typing is (D999).
+    while (std::optional<view::Clipboard::Read> read =
+               held_.clipboard != nullptr ? held_.clipboard->take() : std::nullopt) {
+        if (read->ticket != held_.pasteTicket || read->unsupported || edit_ == nullptr ||
+            edit_->node() != held_.pasteInto) {
+            continue;
+        }
+        std::erase(read->text, '\r');
+        take(view::Typing{.kind = view::Typing::Kind::Text, .text = std::move(read->text)});
+        held_.pasteTicket = 0;
+    }
     if (dialogs_ == nullptr) {
         return;
     }

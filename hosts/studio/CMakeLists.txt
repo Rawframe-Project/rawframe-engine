@@ -495,6 +495,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at [0-9]+,[0-9]+.*level.scene written: yes.*\"texture\": 11839623990059228360.*\"name\": \"ground copy\",[ \n]*\"components\": {[ \n]*\"rawframe.physics2d.body\": {[ \n]*\"height\": 0.5,[ \n]*\"shape\": 1,[ \n]*\"width\": 40[ \n]*},[ \n]*\"rawframe.physics2d.pose\": {},[ \n]*\"rawframe.physics2d.velocity\": {},[ \n]*\"runners.tile\": {[ \n]*\"color\": 4294967295,[^}]*\"texture\": 11839623990059228360,.*\"code\":\"studio_summary\"[^\n]*\"components\":4,[^\n]*\"applied\":1,\"refused\":0,[^\n]*\"undoable\":1,[^\n]*\"status\":\"ground copy made\"")
+    # The clipboard (D999): ground's name copied from its field by
+    # Ctrl+C and pasted after itself by Ctrl+V names it groundground; then
+    # ground, chosen, is copied by Ctrl+C and pasted by Ctrl+V as a new
+    # entity in the same scene.
+    add_test(NAME studio_clipboard
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene @ground keys=F2 keys=Control_L+a,Control_L+c,End,Control_L+v,Return
+                     "until=studio_said,status=\"renamed groundground" keys=Control_L+c,Control_L+v
+                     "until=studio_said,status=\"1 entity pasted"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_clipboard PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "saw studio_said,status=\"renamed groundground.*saw studio_said,status=\"1 entity pasted.*\"code\":\"studio_summary\"[^\n]*\"entities\":10,[^\n]*\"components\":4,\"applied\":2,")
     # An entity moved to another scene (D498): ground, chosen in the level,
     # Move to pressed and the hall's row clicked, is made in the hall with
     # its id and components and deleted from the level, both written, in

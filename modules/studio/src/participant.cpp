@@ -24,6 +24,7 @@ constexpr std::string_view kMaybe[] = {view::kUiPointing.name,
                                        world_tooling::kForwarding.name,
                                        view::kFilesDropped.name,
                                        view::kFileDialogs.name,
+                                       view::kClipboard.name,
                                        view::kWindowClosing.name,
                                        view::kWindowShowing.name,
                                        view::kWindowAsides.name,
@@ -298,6 +299,10 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     // The device Studio draws with, to know when there is none (D927).
     if (context.has(render::kDevice.name)) {
         RAWFRAME_TRY_ASSIGN(deviceHolder_, context.capability(render::kDevice));
+    }
+    // The platform's clipboard, for fields' text (D999).
+    if (context.has(view::kClipboard.name)) {
+        RAWFRAME_TRY_ASSIGN(held_.clipboard, context.capability(view::kClipboard));
     }
     if (context.has(view::kFileDialogs.name)) {
         RAWFRAME_TRY_ASSIGN(dialogs_, context.capability(view::kFileDialogs));

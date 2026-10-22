@@ -1,6 +1,7 @@
 #include "platform.h"
 
 #include <maul-window/accessibility.h>
+#include <maul-window/clipboard.h>
 #include <maul-window/dialog.h>
 #include <maul-window/gamepad.h>
 #include <maul-window/input.h>
@@ -318,6 +319,35 @@ result::Result<RequestId> Windows::requestIcon(WindowId window, std::span<const 
     const mwinResult kStatus = mwinRequestIcon(
         platform_->context, toMaul(window), made.data(), static_cast<std::uint32_t>(made.size()), &request);
     return requested(kStatus, request, "an icon request");
+}
+
+result::Result<RequestId> Windows::requestClipboardWrite(WindowId window, std::string_view text) {
+    mwinRequestId request{};
+    const mwinResult kStatus =
+        mwinRequestClipboardWrite(platform_->context, toMaul(window), text.data(), text.size(), &request);
+    return requested(kStatus, request, "a clipboard write");
+}
+
+result::Result<RequestId> Windows::requestClipboardRead(WindowId window) {
+    mwinRequestId request{};
+    const mwinResult kStatus = mwinRequestClipboardRead(platform_->context, toMaul(window), &request);
+    return requested(kStatus, request, "a clipboard read");
+}
+
+result::Result<std::string> Windows::clipboardText(RequestId request) const {
+    const mwinRequestId kRequest{.index1 = request.index, .generation = request.generation};
+    std::size_t length = 0;
+    mwinResult status = mwinGetClipboardText(platform_->context, kRequest, nullptr, 0, &length);
+    if (status != mwin_success && status != mwin_errorCapacity) {
+        return failure(status, "the clipboard's text");
+    }
+    std::string text(length, '\0');
+    status = mwinGetClipboardText(platform_->context, kRequest, text.data(), text.size(), &length);
+    if (status != mwin_success) {
+        return failure(status, "the clipboard's text");
+    }
+    text.resize(length);
+    return text;
 }
 
 result::Result<std::vector<std::string>> Windows::dialogFiles(RequestId request) const {

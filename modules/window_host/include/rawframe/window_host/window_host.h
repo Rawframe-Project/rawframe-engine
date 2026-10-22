@@ -25,6 +25,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/ui/access.h"
 #include "rawframe/view/asides.h"
+#include "rawframe/view/clipboard.h"
 #include "rawframe/view/closing.h"
 #include "rawframe/view/dialogs.h"
 #include "rawframe/view/dropping.h"
@@ -193,6 +194,13 @@ private:
     /// Whether `event` was an aside's and taken as one: its pointer's and
     /// its closing; its keys are the window's typing.
     bool aside(const window::Windows& windows, const window::Event& event);
+    /// An editor's clipboard (D999): what it writes put there, and each
+    /// read's request kept with its ticket until it completes.
+    view::Clipboard clipboard_;
+    std::vector<std::pair<window::RequestId, std::uint64_t>> clipboardReads_;
+    void followClipboard(window::Windows& windows);
+    /// Whether `event` completed a clipboard read, answered to the editor.
+    bool clipboardRead(const window::Windows& windows, const window::Event& event);
     /// Lent where the window waits hidden until asked (D942).
     view::WindowShowing showing_;
     bool showWhenAsked_ = false;

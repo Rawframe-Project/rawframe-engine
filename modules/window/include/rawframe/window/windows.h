@@ -197,6 +197,13 @@ public:
     [[nodiscard]] result::Result<RequestId> requestIcon(WindowId window, std::span<const IconImage> images);
     /// The absolute paths a file dialog completed Done with.
     [[nodiscard]] result::Result<std::vector<std::string>> dialogFiles(RequestId request) const;
+    /// Puts UTF-8 `text` on the clipboard, and asks for the clipboard's
+    /// text, which `clipboardText` reads once the read completes Done
+    /// (D999): later on the web, where the browser may ask the user first,
+    /// and only for a focused window on Wayland.
+    [[nodiscard]] result::Result<RequestId> requestClipboardWrite(WindowId window, std::string_view text);
+    [[nodiscard]] result::Result<RequestId> requestClipboardRead(WindowId window);
+    [[nodiscard]] result::Result<std::string> clipboardText(RequestId request) const;
 
     /// Runs a gamepad's motors, the heavy low-frequency one and the light
     /// high-frequency one, each from nought to one, for `milliseconds` or

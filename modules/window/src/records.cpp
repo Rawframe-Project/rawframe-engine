@@ -94,6 +94,8 @@ constexpr auto kRequests = std::to_array<std::pair<RequestKind, mwinRequestKind>
     {RequestKind::TextInput, mwin_requestTextInput},
     {RequestKind::FileDialog, mwin_requestFileDialog},
     {RequestKind::AccessibilityRoot, mwin_requestAccessibilityRoot},
+    {RequestKind::ClipboardWrite, mwin_requestClipboardWrite},
+    {RequestKind::ClipboardRead, mwin_requestClipboardRead},
 });
 
 Mode modeOf(mwinWindowMode mode) noexcept {

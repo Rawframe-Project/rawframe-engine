@@ -82,6 +82,8 @@ void ShellParticipant::showContext(float x, float y) {
             kCommand(kPart);
         }
         kCommand("Rename");
+        kCommand("Copy");
+        kCommand("Paste");
         kCommand("Duplicate");
         kCommand("Delete");
         kCommand("Move to");

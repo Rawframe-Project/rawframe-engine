@@ -92,7 +92,11 @@ enum class RequestKind : std::uint8_t {
     TextInput,
     AccessibilityRoot,
     /// A file dialog (D918), its paths read with `Windows::dialogFiles`.
-    FileDialog
+    FileDialog,
+    /// The clipboard's text written, and read, its text then read with
+    /// `Windows::clipboardText` (D999).
+    ClipboardWrite,
+    ClipboardRead
 };
 
 /// How a request ended.

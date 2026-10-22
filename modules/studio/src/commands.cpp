@@ -160,6 +160,12 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     if (catalog_.offers("scene.rename_entity") || tree_->contains(browser_.rename)) {
         commands_.push_back(Command{.name = "Rename", .menu = "Edit", .keys = kKeys("Rename", {"F2"})});
     }
+    // The chosen entities copied, and pasted as new ones into the scene
+    // open, this one or another (D999).
+    if (catalog_.offers("scene.create_entity")) {
+        commands_.push_back(Command{.name = "Copy", .menu = "Edit", .keys = kKeys("Copy", {"Ctrl+C"})});
+        commands_.push_back(Command{.name = "Paste", .menu = "Edit", .keys = kKeys("Paste", {"Ctrl+V"})});
+    }
     kOffer("New", "Entity", {"Ctrl+Shift+N"}, newNode_);
     // The parts the game can be given (D917), in the Entity menu and under
     // the Hierarchy's plus.
@@ -366,6 +372,10 @@ bool ShellParticipant::runCommand(std::string_view name) {
             bookmark(static_cast<std::uint8_t>(kCommand->name.back() - '0'), kGoes);
             return true;
         }
+    }
+    if (kCommand->name == "Copy" || kCommand->name == "Paste") {
+        copyOrPaste(kCommand->name == "Paste");
+        return true;
     }
     if (kCommand->name == "Rename") {
         if (const auto kName = std::ranges::find(fields_, FieldRow::Role::Name, &FieldRow::role);

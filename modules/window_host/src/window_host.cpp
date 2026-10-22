@@ -386,6 +386,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kHeadsetAway.name, composition::provideAs(away_)});
     lent_.push_back(composition::LentCapability{view::kFilesDropped.name, composition::provideAs(dropped_)});
     lent_.push_back(composition::LentCapability{view::kFileDialogs.name, composition::provideAs(dialogs_)});
+    lent_.push_back(composition::LentCapability{view::kClipboard.name, composition::provideAs(clipboard_)});
     lent_.push_back(composition::LentCapability{view::kWindowClosing.name, composition::provideAs(closing_)});
     lent_.push_back(composition::LentCapability{view::kWindowShowing.name, composition::provideAs(showing_)});
     lent_.push_back(composition::LentCapability{view::kWindowAsides.name, composition::provideAs(asides_)});
@@ -547,6 +548,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         }
     }
     followAsides(windows);
+    followClipboard(windows);
     if (settings_.injection != nullptr) {
         for (const world_tooling::WindowInput& kEach : settings_.injection->take()) {
             if (std::optional<window::Event> made = windowEventOf(kEach, window_); made.has_value()) {
@@ -610,6 +612,9 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             continue;
         }
         bridge_->take(*event);
+        if (clipboardRead(windows, *event)) {
+            continue;
+        }
         // A file dialog's choice, for the editor that asked (D918).
         if (event->kind == window::EventKind::RequestCompleted &&
             event->completion.kind == window::RequestKind::FileDialog) {

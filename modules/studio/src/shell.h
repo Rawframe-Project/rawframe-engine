@@ -594,10 +594,10 @@ private:
     /// (D438), chosen once made.
     void create();
 
-    /// Copies the chosen entity: a new entity named after it, with each of
-    /// its components and the values the scene gives them, in one
-    /// transaction (D458).
+    /// Copies the chosen entity as a new one named after it, its components
+    /// and values with it, in one transaction (D458); or keeps and pastes them (D999).
     void duplicate();
+    void copyOrPaste(bool paste);
     /// The operations that make `entity`, named `called`, with each of the
     /// components `components` reads and the values the scene gives them.
     [[nodiscard]] static std::vector<Value>

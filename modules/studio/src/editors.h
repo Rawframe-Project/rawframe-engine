@@ -10,6 +10,7 @@
 #include "rawframe/document/json.h"
 #include "rawframe/process/child.h"
 #include "rawframe/ui/tree.h"
+#include "rawframe/view/clipboard.h"
 
 #include <array>
 #include <cstddef>
@@ -122,6 +123,13 @@ struct ButtonParts {
 struct EditorsHeld {
     /// The most rows a data document or the settings list.
     static constexpr std::size_t kMostRows = 512;
+    /// The platform's clipboard (D999), none where the host lends none; the
+    /// field a paste was asked for, by its ticket; and the entities last
+    /// copied, each its name and its components as the scene read them.
+    view::Clipboard* clipboard = nullptr;
+    std::uint64_t pasteTicket = 0;
+    ui::Node pasteInto{};
+    std::vector<std::pair<std::string, document::Value>> copied;
     /// Whether the edit view's grid was put on once (D914), after which
     /// it is the author's to toggle.
     bool gridShown = false;
