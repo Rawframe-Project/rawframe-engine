@@ -19,6 +19,25 @@ std::string_view sourceName(ConsoleLine::Source source) {
     return kSources[static_cast<std::size_t>(source)];
 }
 
+/// What was said, with a zero-width space after each `.`, `_`, `/`, `\`
+/// or `:` that a letter follows, so a long name such as
+/// `rawframe.world_runtime.world` wraps at its parts where the Console is
+/// narrow; Unicode's line breaking finds no place within it, and Maul UI
+/// has no `overflow-wrap` to break it anywhere.
+std::string breakable(std::string_view said) {
+    std::string made;
+    made.reserve(said.size());
+    for (std::size_t at = 0; at < said.size(); ++at) {
+        made += said[at];
+        const char kNext = at + 1 < said.size() ? said[at + 1] : ' ';
+        if ((said[at] == '.' || said[at] == '_' || said[at] == '/' || said[at] == '\\' || said[at] == ':') &&
+            std::isalpha(static_cast<unsigned char>(kNext)) != 0) {
+            made += "\xE2\x80\x8B"; // U+200B
+        }
+    }
+    return made;
+}
+
 } // namespace
 
 void ShellParticipant::addConsoleLine(ConsoleLine line) {
@@ -267,7 +286,7 @@ void ShellParticipant::showConsole() {
         };
         kCell(68, sinceFirst(kLine.wall, consoleEpoch_), look::kFaintInk, true);
         kCell(52, sourceName(kLine.source), look::kFaintInk, true);
-        kCell(0, kLine.text, kFailed ? look::kInk : kWarned ? look::kSoftInk : look::kRowInk, false);
+        kCell(0, breakable(kLine.text), kFailed ? look::kInk : kWarned ? look::kSoftInk : look::kRowInk, false);
         const std::string kWhere = kLine.at.has_value() ? std::filesystem::path{kLine.at->file}.filename().string() +
                                                               ":" + std::to_string(kLine.at->line)
                                                         : kLine.domain;
