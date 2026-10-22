@@ -1500,7 +1500,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"status\":\"live: [1-9][0-9]* entities on the server.*\"code\":\"studio_played\"[^\n]*\"live\":false,\"liveListed\":1,\"liveReads\":([2-9]|[1-9][0-9]+),\"liveComponents\":[1-9]")
+                             "\"status\":\"live: [1-9][0-9]* entities on the server.*\"code\":\"studio_played\"[^\n]*\"live\":false,\"liveListed\":1,\"liveReads\":([2-9]|[1-9][0-9]+),\"liveComponents\":[1-9][0-9]*,\"liveNamed\":[1-9]")
         # A game whose Kest makes its world, no scene open, previewed by its
         # description (D928): its World listed live as it plays, and its
         # server's ticks in the Profiler.

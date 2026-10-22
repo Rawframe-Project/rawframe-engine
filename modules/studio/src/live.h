@@ -28,6 +28,8 @@ struct LiveShown {
     std::uint64_t listed = 0;
     std::uint64_t reads = 0;
     std::uint64_t components = 0;
+    /// Its values shown by name, not as numbers, when last read (D995).
+    std::uint64_t named = 0;
 };
 
 } // namespace rawframe::studio

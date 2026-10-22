@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <span>
 
 namespace rawframe::studio {
 
@@ -73,6 +74,28 @@ std::string liveValue(std::string_view field, const Value& value) {
         }
     }
     return made;
+}
+
+/// A field's value as the edited Inspector shows it, where the catalog
+/// types it (D995): a labelled number or a case by its name, a color by
+/// its hex, an asset held by identity by the asset; else as `liveValue`.
+std::string
+shownLive(const Catalog::Component* type, std::string_view field, const Value& value, std::span<const Asset> assets) {
+    std::string text = liveValue(field, value);
+    const auto kField = type != nullptr ? std::ranges::find(type->fields, field, &Catalog::Field::name)
+                                        : std::vector<Catalog::Field>::const_iterator{};
+    if (type == nullptr || kField == type->fields.end()) {
+        return text;
+    }
+    if (kField->color || !kField->labels.empty()) {
+        return shownAs(*kField, text);
+    }
+    if (!kField->asset.empty()) {
+        if (const Asset* held = assetHeld(assets, text); held != nullptr) {
+            return assetShown(*held);
+        }
+    }
+    return text;
 }
 
 } // namespace
@@ -226,6 +249,7 @@ void ShellParticipant::readLive(double seconds) {
                 *quiet, "The World as the game plays it, read twice a second", look::kFaintInk, look::kLabelSize));
         }
     }
+    std::uint64_t byName = 0;
     for (const Value& kComponent : kComponents->items()) {
         const Value* kName = kComponent.find("name");
         if (kName == nullptr || kName->kind() != Value::Kind::String) {
@@ -250,6 +274,11 @@ void ShellParticipant::readLive(double seconds) {
             static_cast<void>(monoWords(*quiet, *kName->text(), look::kFaintInk, look::kSmallSize));
         }
         const Value* kFields = kComponent.find("fields");
+        // Its type as the catalog tells it, so a value reads as the edited
+        // Inspector shows it (D995).
+        const auto kType = std::ranges::find_if(catalog_.components, [&](const Catalog::Component& each) {
+            return each.name == *kName->text() || each.id == *kName->text();
+        });
         for (std::size_t each = 0; kFields != nullptr && each < kFields->names().size(); ++each) {
             auto line =
                 box(componentsColumn_,
@@ -270,15 +299,19 @@ void ShellParticipant::readLive(double seconds) {
                 value.has_value()) {
                 static_cast<void>(
                     tree_->setLook(*value, ui::Look{.fill = look::kWellFill, .borderColor = look::kLine, .radius = 4}));
-                static_cast<void>(monoWords(*value,
-                                            liveValue(kFields->names()[each], kFields->items()[each]).substr(0, 96),
-                                            look::kSoftInk,
-                                            look::kSmallSize));
+                const std::string kRead = liveValue(kFields->names()[each], kFields->items()[each]);
+                const std::string kAsShown = shownLive(kType != catalog_.components.end() ? &*kType : nullptr,
+                                                       kFields->names()[each],
+                                                       kFields->items()[each],
+                                                       assets_);
+                byName += kAsShown != kRead ? 1 : 0;
+                static_cast<void>(monoWords(*value, kAsShown.substr(0, 96), look::kSoftInk, look::kSmallSize));
             }
         }
     }
     ++live_.reads;
     live_.components = kComponents->items().size();
+    live_.named = byName;
 }
 
 } // namespace rawframe::studio
