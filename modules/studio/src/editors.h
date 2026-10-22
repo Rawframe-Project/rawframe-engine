@@ -339,10 +339,16 @@ struct EditorsHeld {
     std::deque<std::pair<std::string, std::vector<std::string>>> gitWaiting;
     std::filesystem::path gitOutput;
     std::string branch;
+    /// What git said, its first line, when it would not read the
+    /// repository the game's folder is in (one it does not own, say).
+    std::string gitRefused;
     std::string gamePrefix;
     std::string changes;
     std::string diff;
     std::string diffOf;
+    /// The commit message typed, kept until a commit of it is made, so a
+    /// refused commit does not lose it.
+    std::string commitMessage;
     std::uint64_t commits = 0;
     /// Studio's own directory, made afresh for the output of the tools it
     /// runs, taken away as it stops (D871, D872).

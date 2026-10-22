@@ -23,6 +23,37 @@ std::string firstLine(std::string_view text) {
     return kTrimmed.substr(0, kTrimmed.find('\n'));
 }
 
+/// Why git failed: its last `fatal:` or `error:` line, past the warnings
+/// it says first (a line end it will change, say), or else its first line.
+std::string whyFailed(std::string_view output) {
+    std::string why;
+    for (std::size_t at = 0; at < output.size();) {
+        const std::size_t kEnd = std::min(output.find('\n', at), output.size());
+        const std::string kLine = trimmed(output.substr(at, kEnd - at));
+        if (kLine.starts_with("fatal:") || kLine.starts_with("error:")) {
+            why = kLine;
+        }
+        at = kEnd + 1;
+    }
+    return why.empty() ? firstLine(output) : why;
+}
+
+/// Whether `directory` or a directory above it holds `.git`, as git looks
+/// for a repository, read without running git.
+bool inRepository(std::filesystem::path directory) {
+    std::error_code error;
+    directory = std::filesystem::absolute(directory, error);
+    for (; !error && !directory.empty(); directory = directory.parent_path()) {
+        if (std::filesystem::exists(directory / ".git", error)) {
+            return true;
+        }
+        if (directory == directory.parent_path()) {
+            break;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 std::optional<std::filesystem::path> ShellParticipant::ownDirectory() {
@@ -119,14 +150,20 @@ void ShellParticipant::pollGit() {
         if (kFor == "branch") {
             held_.branch.clear();
             held_.changes.clear();
+            held_.gitRefused = whyFailed(kOutput);
         } else {
-            say("git " + kFor + " failed: " + firstLine(kOutput));
+            say("git " + kFor + " failed: " + whyFailed(kOutput));
         }
         showChanges();
         return;
     }
     if (kFor == "branch") {
+        // A repository whose HEAD names no branch is on a commit.
         held_.branch = trimmed(kOutput);
+        if (held_.branch.empty()) {
+            held_.branch = "a detached HEAD";
+        }
+        held_.gitRefused.clear();
         static_cast<void>(words(held_.branchNode, "branch " + held_.branch, kQuiet, 13));
     } else if (kFor == "prefix") {
         held_.gamePrefix = trimmed(kOutput);
@@ -136,6 +173,7 @@ void ShellParticipant::pollGit() {
         held_.diff = kOutput;
     } else if (kFor == "commit") {
         ++held_.commits;
+        held_.commitMessage.clear();
         say("committed the game's changes");
         emitter_.log(diagnostics::Severity::Info,
                      kCommitted,
@@ -156,7 +194,9 @@ void ShellParticipant::readChanges() {
         showChanges();
         return;
     }
-    runGit("branch", {"rev-parse", "--abbrev-ref", "HEAD"});
+    // The branch's name even before its first commit, which `rev-parse
+    // --abbrev-ref HEAD` refuses.
+    runGit("branch", {"branch", "--show-current"});
     runGit("prefix", {"rev-parse", "--show-prefix"});
     runGit("status", {"status", "--porcelain=v1", "--untracked-files=all", "--", "."});
 }
@@ -174,21 +214,35 @@ void ShellParticipant::showChanges() {
         return *made;
     };
     if (!held_.gitTrusted) {
+        // A game in no repository has nothing to trust: git is asked
+        // nothing, and the author is not asked to trust what is not there.
+        if (!inRepository(description_.parent_path())) {
+            kAdd("not under version control: the game's folder is in no git repository", kQuiet);
+            emitter_.log(diagnostics::Severity::Info,
+                         kChangesShown,
+                         "the game's changes as version control sees them",
+                         {diagnostics::field("branch", std::string{}),
+                          diagnostics::field("changed", std::size_t{0}),
+                          diagnostics::field("commits", held_.commits),
+                          diagnostics::field("repository", false)});
+            return;
+        }
         kAdd("git runs the commands the game's repository names, its filters and hooks: trust it only if you "
              "trust where the game came from",
              kQuiet);
-        auto trust = box(held_.changesColumn, ui::Layout{.height = ui::pixels(26), .shrink = 0}, 0);
-        auto pressed = trust.has_value() ? box(*trust, ui::Layout{.padding = {10, 4, 10, 4}}, kRow)
+        auto trust = box(held_.changesColumn, ui::Layout{.shrink = 0, .padding = {8, 8, 4, 4}}, 0);
+        auto pressed = trust.has_value() ? textButton(*trust, std::nullopt, "Trust this repository")
                                          : std::unexpected<result::Error>{trust.error().clone()};
         if (pressed.has_value()) {
             held_.changesRows.push_back(*trust);
-            static_cast<void>(pressWords(*pressed, "Trust this repository", kText, 13));
             held_.trustPress = *pressed;
         }
         return;
     }
     if (held_.branch.empty()) {
-        kAdd("not under version control: git finds no repository for the game", kQuiet);
+        kAdd(held_.gitRefused.empty() ? "not under version control: git finds no repository for the game"
+                                      : "git does not read the game's repository: " + held_.gitRefused,
+             kQuiet);
         return;
     }
     // The game's documents changed, each pressed for its diff, and a commit
@@ -207,7 +261,7 @@ void ShellParticipant::showChanges() {
         held_.changedPresses.emplace_back(*pressed, kFile.path);
     }
     if (!kChanged.empty()) {
-        if (auto message = fieldRow("commit message", "", held_.changesColumn); message.has_value()) {
+        if (auto message = fieldRow("commit message", held_.commitMessage, held_.changesColumn); message.has_value()) {
             held_.changesRows.push_back(message->first);
             commitField_ = FieldRow{.value = message->second, .role = FieldRow::Role::CommitMessage};
         }
@@ -229,7 +283,8 @@ void ShellParticipant::showChanges() {
                  "the game's changes as version control sees them",
                  {diagnostics::field("branch", held_.branch),
                   diagnostics::field("changed", kChanged.size()),
-                  diagnostics::field("commits", held_.commits)});
+                  diagnostics::field("commits", held_.commits),
+                  diagnostics::field("repository", true)});
 }
 
 bool ShellParticipant::pressChanges(ui::Node node) {
@@ -259,6 +314,7 @@ void ShellParticipant::commitChanges(const std::string& message) {
         return;
     }
     held_.diffOf.clear();
+    held_.commitMessage = message;
     runGit("add", {"add", "--all", "--", "."});
     runGit("commit", {"commit", "--quiet", "-m", message, "--", "."});
     readChanges();

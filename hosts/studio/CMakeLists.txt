@@ -1886,7 +1886,33 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(studio_changes PROPERTIES
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "level.scene written: yes\ncommit: a new entity\ncommit: the game as it was\n.*\"code\":\"studio_changes\"[^\n]*\"changed\":1,\"commits\":0}.*\"code\":\"studio_committed\"[^\n]*\"commits\":1}.*\"code\":\"studio_changes\"[^\n]*\"changed\":0,\"commits\":1}.*\"exit\":\"clean_stop\"")
+                             "level.scene written: yes\ncommit: a new entity\ncommit: the game as it was\n.*\"code\":\"studio_changes\"[^\n]*\"changed\":1,\"commits\":0,\"repository\":true}.*\"code\":\"studio_committed\"[^\n]*\"commits\":1}.*\"code\":\"studio_changes\"[^\n]*\"changed\":0,\"commits\":1,\"repository\":true}.*\"exit\":\"clean_stop\"")
+        # A refused commit (D1002): a hook warns, then refuses; Studio
+        # says the refusal, not the warning before it.
+        add_test(NAME studio_commit_refused
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_GIT=1
+                         "STUDIO_EXTRA_FILES=hosts/studio/tests/refusing_commit.sh=.git/hooks/commit-msg"
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game level.scene @level.scene @Entity "@New  Ctrl+Shift+N" "until=studio_said,status=\"entity created"
+                         @Changes "@Trust this repository" "until=studio_changes" "@commit message:refuse it"
+                         "until=studio_said,status=\"git commit failed"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_commit_refused PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"status\":\"git commit failed: error: the trial's hook refuses this commit\"")
+        # A game in no repository (D1002): the Changes tab says so, its
+        # author not asked to trust a repository that is not there.
+        add_test(NAME studio_changes_unkept
+                 COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         games/runners/runners.game level.scene @Changes "until=studio_changes"
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_changes_unkept PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"code\":\"studio_changes\"[^\n]*\"branch\":\"\",\"changed\":0,\"commits\":0,\"repository\":false}.*\"exit\":\"clean_stop\"")
         # Exported (D872): Runners exported for the desktop from the File
         # menu's dialog, its title typed, by `rawframe-export` with the
         # tools beside it, its folder holding the export's receipt; then a
