@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rawframe::studio {
@@ -83,6 +84,10 @@ struct Docking {
     /// The pane apart the last press was in, by its key, nought for
     /// Studio's own window: a menu or choices it opens show there (D990).
     std::uint64_t pressedApart = 0;
+    /// Where the last release was in the pane apart it was let go inside,
+    /// by its key, if it was: it is let go there, never over Studio's
+    /// window behind it (D992).
+    std::optional<std::pair<std::uint64_t, std::array<float, 2>>> releasedApart;
 };
 
 /// The pane apart the last press was in, if it is still apart.

@@ -259,10 +259,18 @@ void ShellParticipant::dropAsset() {
         }
         return;
     }
-    if (placeDropped(*kHeld, *kPointer)) {
+    // Let go inside a pane apart, onto what is there: a folder in the
+    // Assets apart (D992).
+    const auto kApart = docking_.releasedApart.has_value()
+                            ? std::ranges::find(docking_.torn, docking_.releasedApart->first, &TornPane::key)
+                            : docking_.torn.end();
+    if (kApart == docking_.torn.end() && placeDropped(*kHeld, *kPointer)) {
         return;
     }
-    const auto kHit = tree_->hit(root_, (*kPointer)[0], (*kPointer)[1]);
+    const auto kHit =
+        kApart != docking_.torn.end()
+            ? tree_->hit(kApart->root, docking_.releasedApart->second[0], docking_.releasedApart->second[1])
+            : tree_->hit(root_, (*kPointer)[0], (*kPointer)[1]);
     if (!kHit.has_value() || !kHit->node.has_value()) {
         return;
     }

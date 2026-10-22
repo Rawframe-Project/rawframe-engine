@@ -135,8 +135,14 @@ void ShellParticipant::followAsides(double seconds) {
             break;
         }
         case Kind::Released:
-            // Let go where it is over Studio's window, if it is (D992).
+            // Let go inside the pane apart, there; else where it is over
+            // Studio's window (D992).
             released_ = true;
+            docking_.releasedApart.reset();
+            if (kX >= 0 && kY >= 0 && kX < static_cast<float>(kTorn->width) / scale_ &&
+                kY < static_cast<float>(kTorn->height) / scale_) {
+                docking_.releasedApart.emplace(kTorn->key, std::array<float, 2>{kX, kY});
+            }
             releasedAt_ =
                 std::array<float, 2>{kHappened.mainX * laidOutPerPointer(), kHappened.mainY * laidOutPerPointer()};
             break;

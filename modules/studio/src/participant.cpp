@@ -501,6 +501,7 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
         pointing_->onRelease([this] {
             released_ = true;
             releasedAt_ = pointerLaidOut();
+            docking_.releasedApart.reset();
         });
     }
     if (typing_ != nullptr) {
