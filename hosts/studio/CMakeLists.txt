@@ -554,6 +554,17 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*controls.kest written: no.*editor opened --goto [^ ]*/game/controls.kest:[0-9]+:1.*\"code\":\"studio_summary\"[^\n]*\"scenes\":14,[^\n]*\"opened\":1,[^\n]*\"status\":\"the game reads\".*\"exit\":\"clean_stop\"")
+    # A game whose description is not there (D1000): Studio says which
+    # file is missing, not that it may be too large.
+    add_test(NAME studio_names_missing
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/missing.game level.scene wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_names_missing PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"status\":\"a game file does not exist: [^\"]*/game/missing.game\"")
     # A search of the entity column (D473): in runners' level, slope finds
     # the three slopes, and the field, under them now, then takes a wall
     # holding runners.tile by its last part, which finds the two walls.

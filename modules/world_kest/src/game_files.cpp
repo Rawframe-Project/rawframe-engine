@@ -97,8 +97,13 @@ template <typename Reader> result::Result<std::vector<kest::SourceFile>> kestFil
 result::Result<std::string> readText(const std::filesystem::path& path) {
     std::error_code error;
     const std::uintmax_t kSize = std::filesystem::file_size(path, error);
-    if (error || kSize > kLargestFile) {
-        return unreadable("a game file cannot be read, or is larger than 1 MiB", path.string());
+    if (error) {
+        return unreadable(std::filesystem::exists(path, error) ? "a game file cannot be read"
+                                                               : "a game file does not exist",
+                          path.string());
+    }
+    if (kSize > kLargestFile) {
+        return unreadable("a game file is larger than 1 MiB", path.string());
     }
     std::ifstream file{path, std::ios::binary};
     std::string text{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};

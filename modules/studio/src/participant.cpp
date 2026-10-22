@@ -394,6 +394,15 @@ bool ShellParticipant::openGame() {
     ++records_;
     if (welcome.find("\"authoring.welcome\"") == std::string::npos) {
         broken_ = answeredOf(welcome).message;
+        // The file it names, where it names one: which of a game's files
+        // is missing or too large.
+        const auto kRefused = document::parse(welcome);
+        const Value* kError = kRefused.has_value() ? kRefused->find("error") : nullptr;
+        const Value* kDetails = kError != nullptr ? kError->find("details") : nullptr;
+        const Value* kPath = kDetails != nullptr ? kDetails->find("path") : nullptr;
+        if (kPath != nullptr && kPath->text() != nullptr && !kPath->text()->empty()) {
+            *broken_ += ": " + *kPath->text();
+        }
         diagnostic_ = diagnosticOf(welcome);
         return false;
     }
