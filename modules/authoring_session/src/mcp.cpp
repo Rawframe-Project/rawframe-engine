@@ -628,6 +628,29 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene"}),
                                annotationsOf(true, false)));
     }
+    // What a ray meets in the played game's World (D989), where something
+    // dropped there rests.
+    {
+        Value properties = Value::object();
+        properties.add("scene", property("string", false, "The scene previewed while the game plays."));
+        for (const auto& [kName, kSays] :
+             {std::pair{"origin", "Where the ray starts: a point of the World, three numbers, metres."},
+              std::pair{"toward", "How far and which way it goes from there: three numbers, metres."}}) {
+            Value axis = Value::object();
+            axis.add("type", text("number"));
+            Value way = Value::object();
+            way.add("type", text("array"));
+            way.add("items", std::move(axis));
+            way.add("description", text(kSays));
+            properties.add(kName, std::move(way));
+        }
+        tools.push_back(toolOf("game_cast",
+                               "What the ray from origin to origin + toward first meets in the played game's World, "
+                               "asked of its server: the point, and the authored entity's scene and id, or nulls when "
+                               "it meets nothing. Where a thing placed there rests.",
+                               schemaOf(std::move(properties), {"scene", "origin", "toward"}),
+                               annotationsOf(true, false)));
+    }
     // What the played game's World's last ticks took (D838).
     {
         Value properties = Value::object();
@@ -746,6 +769,16 @@ void McpBridge::State::addSessionTools() {
                                "size asked; cook first. A mesh's or a material's is drawn beside the session at the "
                                "first asking: while it is, the call fails with class unavailable, to be made again.",
                                schemaOf(std::move(properties), {"asset", "size"}),
+                               annotationsOf(true, false)));
+    }
+    // A mesh's box from the session's last cook (D989).
+    {
+        Value properties = Value::object();
+        properties.add("asset", property("string", false, "The mesh's path under the game's directory."));
+        tools.push_back(toolOf("asset_mesh_bounds",
+                               "A mesh's box in its own space, its least and most corner, from the session's last "
+                               "cook; cook first. Its least y is how far below its origin it reaches.",
+                               schemaOf(std::move(properties), {"asset"}),
                                annotationsOf(true, false)));
     }
     // A source's import settings, read and set (D800).
@@ -952,6 +985,14 @@ McpBridge::State::callSession(const Value& id, std::string_view name, const Valu
     } else if (name == "game_traffic") {
         made = record("authoring.traffic", recordId);
         copy("scene", "scene");
+    } else if (name == "game_cast") {
+        made = record("authoring.cast", recordId);
+        copy("scene", "scene");
+        copy("origin", "origin");
+        copy("toward", "toward");
+    } else if (name == "asset_mesh_bounds") {
+        made = record("authoring.mesh_bounds", recordId);
+        copy("asset", "asset");
     } else if (name == "extensions_list") {
         made = record("authoring.extensions", recordId);
     } else if (name == "extension_run") {

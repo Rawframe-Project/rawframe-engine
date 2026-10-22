@@ -62,6 +62,8 @@ call() {
         grep -q '"id":12,"result"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done
+    # A mesh's box from that cook (D989).
+    call 18 asset_mesh_bounds '{"asset":"crate.gltf"}'
     printf '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"game_cook","arguments":{"output":"%s"}}}\n' "$work/other"
     echo '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":13,"reason":"changed my mind"}}'
     for _ in $(seq 2400); do
@@ -78,6 +80,8 @@ reply 2 | grep -q '"name":"game_describe"'
 reply 2 | grep -q '"name":"extension_run"'
 reply 2 | grep -q '"name":"game_profile"'
 reply 2 | grep -q '"name":"preview_frame"'
+reply 2 | grep -q '"name":"game_cast"'
+reply 2 | grep -q '"name":"asset_mesh_bounds"'
 for id in 3 4 5 8 9; do
     reply $id | grep -q '"isError":false'
 done
@@ -106,5 +110,6 @@ steps=$(grep -c '"method":"notifications/progress","params":{"progressToken":"co
 reply 12 | grep -q 'authoring.cooked\\",\\"cooked\\":'"$steps"
 reply 12 | grep -q '"isError":false'
 reply 13 | grep -q 'requested'
+reply 18 | grep -q 'least\\":\[-0.5,-0.5,-0.5\],\\"most\\":\[0.5,0.5,0.5\]'
 [[ -s "$work/content/content.manifest" ]]
 echo "an agent authored and cooked the plaza over MCP, $steps sources"
