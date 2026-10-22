@@ -33,6 +33,9 @@ struct Layout {
 /// percent (D966), as an editor's own scaling does over the desktop's.
 inline constexpr std::array<int, 7> kInterfaceScales = {100, 125, 150, 175, 200, 250, 300};
 
+/// The most panels docked on the right (D980): every bottom one but one.
+inline constexpr std::size_t kMostRightPanels = 12;
+
 /// The most layouts an author saves beside the six Studio ships.
 inline constexpr std::size_t kMostSavedLayouts = 16;
 
@@ -55,6 +58,9 @@ struct Preferences {
     /// How large Studio draws, in percent: one of kInterfaceScales, or
     /// nought to follow the screen's scale (D966).
     int interfaceScale = 0;
+    /// The bottom dock's panels the author docked on the right, beside the
+    /// Inspector, by their tabs' names (D980), at most kMostRightPanels.
+    std::vector<std::string> rightPanels;
 
     friend bool operator==(const Preferences&, const Preferences&) = default;
 };

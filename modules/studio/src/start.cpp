@@ -628,7 +628,11 @@ void ShellParticipant::rebuild() {
                                  held_.environmentColumn,
                                  held_.profilerColumn,
                                  held_.frameColumn,
-                                 held_.changesColumn}) {
+                                 held_.changesColumn,
+                                 held_.mixerColumn,
+                                 held_.curvesColumn,
+                                 held_.panelsColumn,
+                                 componentsColumn_}) {
         if (tree_->contains(kPane)) {
             static_cast<void>(tree_->remove(kPane));
         }

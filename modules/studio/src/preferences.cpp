@@ -202,6 +202,19 @@ std::optional<Preferences> preferencesOf(std::string_view document) {
         }
         preferences.interfaceScale = static_cast<int>(std::clamp<std::int64_t>(*kPercent, -1, 1000));
     }
+    if (const Value* right = kParsed->find("rightPanels"); right != nullptr) {
+        if (right->kind() != Value::Kind::Array || right->items().size() > kMostRightPanels) {
+            return std::nullopt;
+        }
+        for (const Value& kName : right->items()) {
+            if (kName.kind() != Value::Kind::String || kName.text()->empty() || kName.text()->size() > 32) {
+                return std::nullopt;
+            }
+            if (!std::ranges::contains(preferences.rightPanels, *kName.text())) {
+                preferences.rightPanels.push_back(*kName.text());
+            }
+        }
+    }
     if (const Value* editor = kParsed->find("editor"); editor != nullptr) {
         if (editor->kind() != Value::Kind::String) {
             return std::nullopt;
@@ -242,6 +255,13 @@ std::string writtenPreferences(const Preferences& preferences) {
     }
     if (preferences.interfaceScale != 0) {
         written.add("interfaceScale", Value::integer(preferences.interfaceScale));
+    }
+    if (!preferences.rightPanels.empty()) {
+        Value right = Value::array();
+        for (const std::string& kName : preferences.rightPanels) {
+            right.push(Value::string(kName));
+        }
+        written.add("rightPanels", std::move(right));
     }
     if (!preferences.layouts.empty()) {
         Value layouts = Value::array();

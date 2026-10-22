@@ -46,6 +46,10 @@ void ShellParticipant::followSplitter() {
     if (kReleased && held_.wiring.has_value()) {
         dropWire();
     }
+    // And a bottom pane's tab onto the other dock docks it there (D980).
+    if (kReleased && docking_.held.has_value()) {
+        dropTab();
+    }
     const std::optional<std::array<float, 2>> kPointer =
         kReleased && releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
     if (!resizing_.has_value() || !kPointer.has_value()) {

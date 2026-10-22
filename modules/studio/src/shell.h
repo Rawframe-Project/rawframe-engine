@@ -9,6 +9,7 @@
 
 #include "browser.h"
 #include "console.h"
+#include "docking.h"
 #include "editors.h"
 #include "live.h"
 #include "network_panel.h"
@@ -73,6 +74,8 @@ inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
 inline constexpr diagnostics::EventIdentity kContextMenu{"studio", "studio_context"};
 /// A layout chosen or saved (D911): its name and the bottom dock's tab.
 inline constexpr diagnostics::EventIdentity kLayoutChosen{"studio", "studio_layout_chosen"};
+/// A bottom panel docked on the right or back under the scene (D980).
+inline constexpr diagnostics::EventIdentity kDocked{"studio", "studio_docked"};
 /// The toolbar's layout chooser, by the words on it and the menu it opens.
 inline constexpr std::string_view kLayoutChooser = "Layouts";
 inline constexpr diagnostics::EventIdentity kStartScreen{"studio", "studio_start"};
@@ -375,22 +378,24 @@ private:
     /// Inspector on the right the body's height; the status bar.
     result::Status build();
 
-    /// The bottom dock's panes, one shown at a time.
-    enum class Dock : std::uint8_t {
-        Assets,
-        History,
-        Console,
-        Network,
-        Environment,
-        Profiler,
-        Frame,
-        Mixer,
-        Changes,
-        Curves,
-        Panels
-    };
-    /// The bottom dock showing `pane`.
+    using Dock = studio::Dock;
+    /// The bottom dock showing `pane`, or the right one when the author
+    /// docked it there (D980).
     void showDock(Dock pane);
+    /// A pane's tab and column, whether it moves and is docked on the
+    /// right; it docked there or back, as a held tab is let go; the right
+    /// dock showing a column; the tabs in their strips and lit; and the
+    /// panes the preferences dock on the right, with the first left (D980).
+    [[nodiscard]] ui::Node tabNode(Dock pane) const;
+    [[nodiscard]] ui::Node paneNode(Dock pane) const;
+    [[nodiscard]] static bool movable(Dock pane);
+    [[nodiscard]] bool dockedRight(Dock pane) const;
+    void dockPane(Dock pane, bool right);
+    void dropTab();
+    void showInRight(ui::Node shown);
+    void arrangeTabs();
+    void lightTabs();
+    [[nodiscard]] Dock readRightPanes();
     /// The six layouts Studio ships and the author's own (SPEC-0051 Part
     /// 3, D911), and one put in place: the docks' sizes kept as the
     /// preferences, the bottom dock's tab shown; and the docks as they are
@@ -1156,6 +1161,8 @@ private:
     ui::Node historyTab_{};
     ui::Node historyColumn_{};
     Dock dockShown_ = Dock::Assets;
+    /// The panes docked on the right (D980).
+    Docking docking_;
     /// The splitters by edge, the one held with where the pointer was and
     /// the size then, and the sizes preferred, kept in `preferencesFile_`
     /// when Studio has one (`studio.preferences`, D779).

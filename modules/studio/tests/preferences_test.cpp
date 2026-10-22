@@ -5,6 +5,9 @@
 #include "../src/preferences.h"
 #include "rawframe/test/test.h"
 
+#include <string>
+#include <vector>
+
 using namespace rawframe::studio;
 
 RAWFRAME_TEST(PreferencesReadBackAsWritten) {
@@ -103,4 +106,18 @@ RAWFRAME_TEST(SavedLayoutsAreKeptAsWritten) {
                          .has_value());
     RAWFRAME_EXPECT(
         !preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"layouts":[3]})").has_value());
+}
+
+RAWFRAME_TEST(PanelsDockedOnTheRightAreKeptAsWritten) {
+    // D980: by their tabs' names, once each.
+    const Preferences kKept{.rightPanels = {"Console", "Profiler"}};
+    const auto kRead = preferencesOf(writtenPreferences(kKept));
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->rightPanels == kKept.rightPanels);
+    const auto kTwice =
+        preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"rightPanels":["Mixer","Mixer"]})");
+    RAWFRAME_EXPECT(kTwice.has_value() && kTwice->rightPanels == std::vector<std::string>{"Mixer"});
+    RAWFRAME_EXPECT(
+        !preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"rightPanels":[3]})").has_value());
+    RAWFRAME_EXPECT(
+        !preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"rightPanels":[""]})").has_value());
 }

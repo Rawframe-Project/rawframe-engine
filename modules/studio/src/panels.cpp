@@ -345,16 +345,16 @@ result::Status ShellParticipant::build() {
     constexpr auto kBottom = [](std::string_view name) consteval {
         return placed(name, SurfaceKind::Panel, "Bottom");
     };
-    RAWFRAME_TRY_ASSIGN(const ui::Node kDockTabs, tabStrip(bottomDock_));
-    RAWFRAME_TRY_ASSIGN(assetsTab_, tab(kDockTabs, kBottom("Assets"), true));
-    RAWFRAME_TRY_ASSIGN(consoleTab_, tab(kDockTabs, kBottom("Console")));
-    RAWFRAME_TRY_ASSIGN(historyTab_, tab(kDockTabs, kBottom("History")));
-    RAWFRAME_TRY_ASSIGN(networkTab_, tab(kDockTabs, kBottom("Network")));
-    RAWFRAME_TRY_ASSIGN(profilerTab_, tab(kDockTabs, kBottom("Profiler")));
-    RAWFRAME_TRY_ASSIGN(held_.mixerTab, tab(kDockTabs, kBottom("Mixer")));
-    RAWFRAME_TRY_ASSIGN(held_.changesTab, tab(kDockTabs, kBottom("Changes")));
-    RAWFRAME_TRY_ASSIGN(held_.curvesTab, tab(kDockTabs, kBottom("Curves")));
-    RAWFRAME_TRY_ASSIGN(held_.panelsTab, tab(kDockTabs, kBottom("Extension panels")));
+    RAWFRAME_TRY_ASSIGN(docking_.dockTabs, tabStrip(bottomDock_));
+    RAWFRAME_TRY_ASSIGN(assetsTab_, tab(docking_.dockTabs, kBottom("Assets")));
+    RAWFRAME_TRY_ASSIGN(consoleTab_, tab(docking_.dockTabs, kBottom("Console")));
+    RAWFRAME_TRY_ASSIGN(historyTab_, tab(docking_.dockTabs, kBottom("History")));
+    RAWFRAME_TRY_ASSIGN(networkTab_, tab(docking_.dockTabs, kBottom("Network")));
+    RAWFRAME_TRY_ASSIGN(profilerTab_, tab(docking_.dockTabs, kBottom("Profiler")));
+    RAWFRAME_TRY_ASSIGN(held_.mixerTab, tab(docking_.dockTabs, kBottom("Mixer")));
+    RAWFRAME_TRY_ASSIGN(held_.changesTab, tab(docking_.dockTabs, kBottom("Changes")));
+    RAWFRAME_TRY_ASSIGN(held_.curvesTab, tab(docking_.dockTabs, kBottom("Curves")));
+    RAWFRAME_TRY_ASSIGN(held_.panelsTab, tab(docking_.dockTabs, kBottom("Extension panels")));
     RAWFRAME_TRY(makeAssets());
     RAWFRAME_TRY_ASSIGN(historyColumn_, pane("History"));
     RAWFRAME_TRY(makeConsole());
@@ -366,9 +366,11 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(makeChanges());
     RAWFRAME_TRY_ASSIGN(held_.curvesColumn, pane("Curves"));
     RAWFRAME_TRY(makeExtensionPanels());
-    RAWFRAME_TRY(tree_->attach(bottomDock_, scenesColumn_));
-    dockShown_ = Dock::Assets;
-    showDock(Dock::Assets);
+    // The panes the author docked on the right are not under the scene
+    // (D980); the first still there shows.
+    dockShown_ = readRightPanes();
+    RAWFRAME_TRY(tree_->attach(bottomDock_, paneNode(dockShown_)));
+    showDock(dockShown_);
     // The right dock, full height: its tabs, then the Inspector.
     RAWFRAME_TRY(splitter(kBody, Edge::Inspector));
     RAWFRAME_TRY_ASSIGN(held_.rightDock,
@@ -380,69 +382,21 @@ result::Status ShellParticipant::build() {
                                        .border = {1, 0, 0, 0}},
                             look::kPanelFill));
     RAWFRAME_TRY(tree_->setLook(held_.rightDock, ui::Look{.fill = look::kPanelFill, .borderColor = look::kLine}));
-    RAWFRAME_TRY_ASSIGN(const ui::Node kRightTabs, tabStrip(held_.rightDock));
-    RAWFRAME_TRY_ASSIGN(held_.inspectorTab, tab(kRightTabs, "Inspector", true));
-    RAWFRAME_TRY_ASSIGN(held_.sceneSettingsTab, tab(kRightTabs, "Scene settings"));
+    RAWFRAME_TRY_ASSIGN(docking_.rightTabs, tabStrip(held_.rightDock));
+    RAWFRAME_TRY_ASSIGN(held_.inspectorTab, tab(docking_.rightTabs, "Inspector", true));
+    RAWFRAME_TRY_ASSIGN(held_.sceneSettingsTab, tab(docking_.rightTabs, "Scene settings"));
     // The Environment panel is the Scene settings tab, as the design's
     // (D921).
     environmentTab_ = held_.sceneSettingsTab;
     held_.sceneSettingsShown = false;
     RAWFRAME_TRY_ASSIGN(componentsColumn_,
                         dockColumn(held_.rightDock, placed("Inspector", SurfaceKind::Panel, "Right")));
+    arrangeTabs();
+    lightTabs();
     RAWFRAME_TRY(showMenus(kStart, held_.searchAt));
     RAWFRAME_TRY(showScenes());
     showModes();
     return {};
-}
-
-void ShellParticipant::showDock(Dock pane) {
-    // The Environment is the right dock's Scene settings (D921).
-    if (pane == Dock::Environment) {
-        showRight(true);
-        return;
-    }
-    const auto kPaneOf = [this](Dock dock) {
-        return dock == Dock::Assets        ? scenesColumn_
-               : dock == Dock::History     ? historyColumn_
-               : dock == Dock::Console     ? consoleColumn_
-               : dock == Dock::Network     ? networkColumn_
-               : dock == Dock::Environment ? held_.environmentColumn
-               : dock == Dock::Profiler    ? held_.profilerColumn
-               : dock == Dock::Frame       ? held_.frameColumn
-               : dock == Dock::Mixer       ? held_.mixerColumn
-               : dock == Dock::Changes     ? held_.changesColumn
-               : dock == Dock::Curves      ? held_.curvesColumn
-                                           : held_.panelsColumn;
-    };
-    if (pane != dockShown_) {
-        static_cast<void>(tree_->detach(kPaneOf(dockShown_)));
-        static_cast<void>(tree_->attach(bottomDock_, kPaneOf(pane)));
-        dockShown_ = pane;
-    }
-    setTab(assetsTab_, pane == Dock::Assets);
-    setTab(historyTab_, pane == Dock::History);
-    setTab(consoleTab_, pane == Dock::Console);
-    setTab(networkTab_, pane == Dock::Network);
-    setTab(environmentTab_, pane == Dock::Environment);
-    // The Frame view is the Profiler's (D928).
-    setTab(profilerTab_, pane == Dock::Profiler || pane == Dock::Frame);
-    setTab(held_.mixerTab, pane == Dock::Mixer);
-    setTab(held_.changesTab, pane == Dock::Changes);
-    setTab(held_.curvesTab, pane == Dock::Curves);
-    setTab(held_.panelsTab, pane == Dock::Panels);
-    if (pane == Dock::Console) {
-        showConsole();
-    } else if (pane == Dock::Environment) {
-        showEnvironment();
-    } else if (pane == Dock::Mixer) {
-        showMixer();
-    } else if (pane == Dock::Curves) {
-        showCurves();
-    } else if (pane == Dock::Changes) {
-        readChanges();
-    } else if (pane == Dock::Panels) {
-        showExtensionPanels();
-    }
 }
 
 void ShellParticipant::showTabs(std::optional<std::size_t> opened) {
@@ -974,23 +928,6 @@ std::optional<Value> ShellParticipant::entitiesShown() {
                       diagnostics::field("having", kSearch.having)});
     }
     return found;
-}
-
-void ShellParticipant::showRight(bool sceneSettings) {
-    // The right dock's two tabs: the Inspector, or the scene's settings,
-    // the Environment panel (D921).
-    if (sceneSettings != held_.sceneSettingsShown && tree_->contains(held_.rightDock)) {
-        const ui::Node kOut = sceneSettings ? componentsColumn_ : held_.environmentColumn;
-        const ui::Node kIn = sceneSettings ? held_.environmentColumn : componentsColumn_;
-        static_cast<void>(tree_->detach(kOut));
-        static_cast<void>(tree_->attach(held_.rightDock, kIn));
-        held_.sceneSettingsShown = sceneSettings;
-    }
-    setTab(held_.inspectorTab, !sceneSettings);
-    setTab(held_.sceneSettingsTab, sceneSettings);
-    if (sceneSettings) {
-        showEnvironment();
-    }
 }
 
 void ShellParticipant::showEntity(std::size_t at) {
