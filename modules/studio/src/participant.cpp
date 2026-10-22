@@ -401,7 +401,8 @@ bool ShellParticipant::openGame() {
         const Value* kDetails = kError != nullptr ? kError->find("details") : nullptr;
         const Value* kPath = kDetails != nullptr ? kDetails->find("path") : nullptr;
         if (kPath != nullptr && kPath->text() != nullptr && !kPath->text()->empty()) {
-            *broken_ += ": " + *kPath->text();
+            // In the platform's own separators, as its file manager shows it.
+            *broken_ += ": " + std::filesystem::path{*kPath->text()}.make_preferred().string();
         }
         diagnostic_ = diagnosticOf(welcome);
         return false;
