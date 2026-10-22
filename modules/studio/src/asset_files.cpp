@@ -363,12 +363,26 @@ void ShellParticipant::placeMesh(const Asset& mesh) {
             break;
         }
     }
-    const auto kPose = std::ranges::find(catalog_.components, "rawframe.physics3d.pose", &Catalog::Component::name);
-    if (holder == nullptr || kPose == catalog_.components.end()) {
+    const auto kNamed = [this](std::string_view name) -> const Catalog::Component* {
+        const auto kFound = std::ranges::find(catalog_.components, name, &Catalog::Component::name);
+        return kFound != catalog_.components.end() ? &*kFound : nullptr;
+    };
+    const Catalog::Component* kPose = kNamed("rawframe.physics3d.pose");
+    // Else, as Plaza places its crates and its mound, a static body made of
+    // the mesh's triangles, which a game that draws its bodies draws
+    // (D987).
+    const Catalog::Component* kBody = kNamed("rawframe.physics3d.body");
+    const Catalog::Component* kVelocity = kNamed("rawframe.physics3d.velocity");
+    if (holder == nullptr && kBody != nullptr && kVelocity != nullptr) {
+        holder = kNamed("rawframe.physics3d.mesh");
+        held = "mesh";
+    }
+    if (holder == nullptr || kPose == nullptr) {
         ++refused_;
         say("the game keeps no mesh in its scenes: give a component a field of `asset mesh`");
         return;
     }
+    const bool kAsBody = holder->name == "rawframe.physics3d.mesh";
     const std::string kIdentity = mintedIdentity();
     const auto kOperation = [&kIdentity](std::string_view kind) {
         Value made = Value::object();
@@ -388,10 +402,20 @@ void ShellParticipant::placeMesh(const Asset& mesh) {
     Value created = kOperation("scene.create_entity");
     created.add("name", Value::string(named));
     operations.push_back(std::move(created));
-    for (const Catalog::Component* kAdded : std::array<const Catalog::Component*, 2>{&*kPose, holder}) {
+    for (const Catalog::Component* kAdded : std::array<const Catalog::Component*, 4>{
+             kAsBody ? kBody : nullptr, kPose, kAsBody ? kVelocity : nullptr, holder}) {
+        if (kAdded == nullptr) {
+            continue;
+        }
         Value added = kOperation("scene.add_component");
         added.add("component", Value::string(kAdded->id));
         operations.push_back(std::move(added));
+    }
+    if (kAsBody) {
+        // Static, of shape mesh (Body3D's MESH).
+        Value shape = Value::object();
+        shape.add("unsigned", Value::string("4"));
+        operations.push_back(kSet(*kBody, "shape", std::move(shape)));
     }
     // Where the view looks, its origin on the ground.
     std::array<double, 3> at = viewTarget(view_.has_value() ? &*view_ : nullptr);

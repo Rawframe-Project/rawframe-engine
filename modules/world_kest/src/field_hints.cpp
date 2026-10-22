@@ -36,7 +36,7 @@ constexpr std::array<std::pair<std::int64_t, std::string_view>, 4> kShapes2d{
 constexpr std::array<std::pair<std::int64_t, std::string_view>, 5> kShapes3d{
     {{0, "sphere"}, {1, "box"}, {2, "capsule"}, {3, "cylinder"}, {4, "mesh"}}};
 
-const std::array<EngineHint, 64> kEngineHints{{
+const std::array<EngineHint, 65> kEngineHints{{
     {.type = "rawframe.canvas.Sprite", .field = "color", .color = true},
     {.type = "rawframe.canvas.Sprite", .field = "texture", .asset = "texture"},
     {.type = "rawframe.canvas.Sprite", .field = "material", .asset = "material"},
@@ -64,6 +64,8 @@ const std::array<EngineHint, 64> kEngineHints{{
     {.type = "rawframe.physics3d.Body3D", .field = "motion", .labels = kMotions},
     {.type = "rawframe.physics3d.Body3D", .field = "shape", .labels = kShapes3d},
     {.type = "rawframe.physics3d.Body3D", .field = "friction", .least = 0.0, .most = 1.0},
+    // The game's mesh a body of shape mesh is made of (D987).
+    {.type = "rawframe.physics3d.Mesh3D", .field = "mesh", .asset = "mesh"},
     // An emitter's, a trail's, and a beam's (D831): what each field is
     // measured in, as model.kest says it, and its colors and material.
     {.type = "rawframe.model.ParticleEmitter", .field = "material", .asset = "material"},

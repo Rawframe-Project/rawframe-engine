@@ -163,6 +163,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "level.scene written: yes.*\"name\": \"mound\".*\"starter.prop\": {[^}]*\"mesh\": [1-9].*\"code\":\"studio_said\"[^\n]*\"status\":\"imported mesh mound.gltf.*\"code\":\"studio_said\"[^\n]*\"status\":\"mound placed")
+    # A mesh dropped in a game with no prop of its own (D987): Plaza's crate
+    # dragged onto the Hierarchy made a static body of the crate's
+    # triangles, as Plaza's own crates are.
+    add_test(NAME studio_places_mesh_bodies
+             COMMAND ${CMAKE_COMMAND} -E env STUDIO_SHOW_WRITTEN=1
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/plaza/plaza.game gate.scene @gate.scene @Meshes "until=studio_said,status=\"Meshes in"
+                     "drag=@crate.gltf,@gate" "until=studio_asset_placed,onto=\"mesh" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_places_mesh_bodies PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "gate.scene written: yes.*\"name\": \"crate\",[ \n]*\"components\": {[ \n]*\"rawframe.physics3d.body\": {[ \n]*\"shape\": 4[ \n]*},[ \n]*\"rawframe.physics3d.mesh\": {[ \n]*\"mesh\": 9167811660911281845[ \n]*},[ \n]*\"rawframe.physics3d.pose\".*\"status\":\"crate placed")
     # Several entities chosen (D787): the west wall, then the east wall
     # with Control held, their shared friction set together as one step;
     # then the rows from the east wall to the steep slope with Shift held,
