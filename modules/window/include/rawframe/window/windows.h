@@ -42,6 +42,10 @@ struct WindowSettings {
     Mode mode = Mode::Windowed;
     bool visible = true;
     bool resizable = true;
+    /// The window it belongs to, or none: an owned window stays above its
+    /// owner and is destroyed with it, as an editor's panels apart are
+    /// (D994).
+    WindowId owner{};
 };
 
 /// What the program has been told about a window so far: the values of the

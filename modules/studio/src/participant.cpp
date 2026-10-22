@@ -470,6 +470,8 @@ void ShellParticipant::listDocuments() {
 
 result::Status ShellParticipant::start(composition::ParticipantContext& context) noexcept {
     emitter_ = context.emitter();
+    // As the panels kept apart open, said (D994).
+    reopenAsides();
     // The window where assistive technology reads it, when its program
     // asked for it (D575); a machine whose platform cannot be reached is
     // shown unread.
@@ -632,6 +634,10 @@ void ShellParticipant::stop() noexcept {
     // sizes kept: a loaded Studio could end before the frame that read
     // the release (D830).
     releaseSplitter();
+    // The panes apart's places and sizes as they end (D994).
+    if (!docking_.torn.empty()) {
+        keepPreferences();
+    }
     // Git and an export ended, and the directory their output went to
     // taken away (D871, D872).
     held_.git.reset();

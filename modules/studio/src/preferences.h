@@ -36,6 +36,22 @@ inline constexpr std::array<int, 7> kInterfaceScales = {100, 125, 150, 175, 200,
 /// The most panels docked on the right (D980): every bottom one but one.
 inline constexpr std::size_t kMostRightPanels = 12;
 
+/// The most panels kept apart, each in a window of its own (D994).
+inline constexpr std::size_t kMostApartPanels = 8;
+
+/// A panel the author showed apart, in a window of its own (D994): its
+/// tab's name, the window's logical size, and its place on the desktop as
+/// the platform last told it, none where it told none (Wayland places a
+/// program's windows itself).
+struct ApartPanel {
+    std::string name;
+    float width = 720;
+    float height = 480;
+    std::optional<std::array<float, 2>> place;
+
+    friend bool operator==(const ApartPanel&, const ApartPanel&) = default;
+};
+
 /// The most layouts an author saves beside the six Studio ships.
 inline constexpr std::size_t kMostSavedLayouts = 16;
 
@@ -61,6 +77,9 @@ struct Preferences {
     /// The bottom dock's panels the author docked on the right, beside the
     /// Inspector, by their tabs' names (D980), at most kMostRightPanels.
     std::vector<std::string> rightPanels;
+    /// The panels shown apart as Studio last ended, opened so again (D994),
+    /// at most kMostApartPanels.
+    std::vector<ApartPanel> apartPanels;
 
     friend bool operator==(const Preferences&, const Preferences&) = default;
 };

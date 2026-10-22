@@ -10,8 +10,10 @@
 
 #include "rawframe/composition/participant.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -28,6 +30,9 @@ public:
         /// Its size in logical pixels.
         float width = 0;
         float height = 0;
+        /// Where on the desktop, its top left in logical pixels; none for
+        /// where the platform puts it (D994).
+        std::optional<std::array<float, 2>> place;
     };
     /// What happened in an aside, its pointer at `x`, `y` in its logical
     /// pixels.
@@ -39,6 +44,9 @@ public:
             Released,
             Wheeled,
             Left,
+            /// The window moved or changed size: `x`, `y` its place on the
+            /// desktop, `width`, `height` its logical size (D994).
+            Placed,
             Closed
         };
         std::uint64_t key = 0;
@@ -54,6 +62,9 @@ public:
         float mainY = 0;
         float deltaX = 0;
         float deltaY = 0;
+        /// Placed: its logical size.
+        float width = 0;
+        float height = 0;
         /// Pressed: with the secondary button.
         bool secondary = false;
     };
@@ -62,9 +73,16 @@ public:
     static constexpr std::size_t kMostOpen = 8;
     static constexpr std::size_t kMostHeld = 256;
 
-    /// The editor's side: a window opened for `key`, titled and sized so.
-    void open(std::uint64_t key, std::string title, float width, float height) {
-        asked_.push_back(Asked{.key = key, .title = std::move(title), .width = width, .height = height});
+    /// The editor's side: a window opened for `key`, titled and sized so,
+    /// and placed there on the desktop where the platform lets a program
+    /// place its windows.
+    void open(std::uint64_t key,
+              std::string title,
+              float width,
+              float height,
+              std::optional<std::array<float, 2>> place = std::nullopt) {
+        asked_.push_back(
+            Asked{.key = key, .title = std::move(title), .width = width, .height = height, .place = place});
     }
     /// The editor's side: `key`'s window closed, as its close button does.
     void close(std::uint64_t key) {

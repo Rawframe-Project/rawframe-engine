@@ -47,15 +47,20 @@ void WindowHost::followAsides(window::Windows& windows) {
         }
         // Past the most open, or where the platform makes no other window
         // (the web, a phone), it closes as it opens.
+        // Owned by the editor's window, kept above it as its panels are.
         const window::WindowSettings kMade{.title = std::move(asked.title),
                                            .size = {.width = std::clamp(asked.width, kLeast, kMost),
-                                                    .height = std::clamp(asked.height, kLeast, kMost)}};
+                                                    .height = std::clamp(asked.height, kLeast, kMost)},
+                                           .owner = window_};
         const auto kWindow = asideWindows_.size() < view::WindowAsides::kMostOpen
                                  ? windows.create(kMade).value_or(window::WindowId{})
                                  : window::WindowId{};
         if (!kWindow.valid()) {
             asides_.happened({.key = asked.key, .kind = view::WindowAsides::Happened::Kind::Closed});
             continue;
+        }
+        if (asked.place.has_value()) {
+            static_cast<void>(windows.requestPosition(kWindow, {.x = (*asked.place)[0], .y = (*asked.place)[1]}));
         }
         surfaces_.watch(kWindow);
         if (!settings_.icon.empty()) {
@@ -105,6 +110,18 @@ bool WindowHost::aside(const window::Windows& windows, const window::Event& even
         break;
     case window::EventKind::CursorLeft:
         happened.kind = Kind::Left;
+        break;
+    case window::EventKind::Moved:
+    case window::EventKind::Resized:
+        if (!kApart.has_value()) {
+            return true;
+        }
+        // The record's own value, the other as last told.
+        happened.kind = Kind::Placed;
+        happened.x = event.kind == window::EventKind::Moved ? event.position.x : kApart->position.x;
+        happened.y = event.kind == window::EventKind::Moved ? event.position.y : kApart->position.y;
+        happened.width = event.kind == window::EventKind::Resized ? event.size.width : kApart->size.width;
+        happened.height = event.kind == window::EventKind::Resized ? event.size.height : kApart->size.height;
         break;
     case window::EventKind::CloseRequested:
         happened.kind = Kind::Closed;

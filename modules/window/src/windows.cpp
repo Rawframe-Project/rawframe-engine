@@ -158,6 +158,9 @@ result::Result<WindowId> Windows::create(const WindowSettings& settings) {
     def.mode = toMaul(settings.mode);
     def.visible = settings.visible;
     def.style = static_cast<mwinWindowStyle>(mwin_styleDecorated | (settings.resizable ? mwin_styleResizable : 0));
+    if (settings.owner.valid()) {
+        def.owner = toMaul(settings.owner);
+    }
     mwinWindowId window{};
     const mwinResult status = mwinCreateWindow(platform_->context, &def, &window, nullptr);
     if (status != mwin_success) {

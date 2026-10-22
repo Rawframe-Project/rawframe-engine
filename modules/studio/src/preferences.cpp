@@ -19,6 +19,9 @@ constexpr float kNarrowest = 200;
 constexpr float kWidest = 800;
 constexpr float kLowestDock = 120;
 constexpr float kTallestDock = 1200;
+/// A window apart: as small as a few rows, as large as a screen.
+constexpr float kLeastApart = 160;
+constexpr float kMostApart = 4096;
 
 } // namespace
 
@@ -39,6 +42,10 @@ Preferences held(Preferences preferences) {
     }
     if (std::ranges::find(kInterfaceScales, preferences.interfaceScale) == kInterfaceScales.end()) {
         preferences.interfaceScale = 0;
+    }
+    for (ApartPanel& apart : preferences.apartPanels) {
+        apart.width = std::clamp(apart.width, kLeastApart, kMostApart);
+        apart.height = std::clamp(apart.height, kLeastApart, kMostApart);
     }
     return preferences;
 }
@@ -215,6 +222,45 @@ std::optional<Preferences> preferencesOf(std::string_view document) {
             }
         }
     }
+    if (const Value* apart = kParsed->find("apartPanels"); apart != nullptr) {
+        if (apart->kind() != Value::Kind::Array || apart->items().size() > kMostApartPanels) {
+            return std::nullopt;
+        }
+        for (const Value& each : apart->items()) {
+            const Value* kName = each.kind() == Value::Kind::Object ? each.find("name") : nullptr;
+            if (kName == nullptr || kName->kind() != Value::Kind::String || kName->text()->empty() ||
+                kName->text()->size() > 32) {
+                return std::nullopt;
+            }
+            // Each number given finite; a place both of its numbers or none.
+            ApartPanel made{.name = *kName->text()};
+            std::array<std::optional<float>, 4> numbers{};
+            constexpr std::array<const char*, 4> kNumbers = {"width", "height", "left", "top"};
+            for (std::size_t at = 0; at < kNumbers.size(); ++at) {
+                const Value* kGiven = each.find(kNumbers[at]);
+                if (kGiven == nullptr) {
+                    continue;
+                }
+                const std::optional<double> kNumber =
+                    kGiven->kind() == Value::Kind::Number ? kGiven->real() : std::nullopt;
+                if (!kNumber.has_value() || !std::isfinite(*kNumber) || std::abs(*kNumber) > 1.0e6) {
+                    return std::nullopt;
+                }
+                numbers[at] = static_cast<float>(*kNumber);
+            }
+            if (numbers[2].has_value() != numbers[3].has_value()) {
+                return std::nullopt;
+            }
+            made.width = numbers[0].value_or(made.width);
+            made.height = numbers[1].value_or(made.height);
+            if (numbers[2].has_value()) {
+                made.place = std::array<float, 2>{*numbers[2], *numbers[3]};
+            }
+            if (!std::ranges::contains(preferences.apartPanels, made.name, &ApartPanel::name)) {
+                preferences.apartPanels.push_back(std::move(made));
+            }
+        }
+    }
     if (const Value* editor = kParsed->find("editor"); editor != nullptr) {
         if (editor->kind() != Value::Kind::String) {
             return std::nullopt;
@@ -262,6 +308,21 @@ std::string writtenPreferences(const Preferences& preferences) {
             right.push(Value::string(kName));
         }
         written.add("rightPanels", std::move(right));
+    }
+    if (!preferences.apartPanels.empty()) {
+        Value apart = Value::array();
+        for (const ApartPanel& kApart : preferences.apartPanels) {
+            Value panel = Value::object();
+            panel.add("name", Value::string(kApart.name));
+            panel.add("width", kSize(kApart.width));
+            panel.add("height", kSize(kApart.height));
+            if (kApart.place.has_value()) {
+                panel.add("left", kSize((*kApart.place)[0]));
+                panel.add("top", kSize((*kApart.place)[1]));
+            }
+            apart.push(std::move(panel));
+        }
+        written.add("apartPanels", std::move(apart));
     }
     if (!preferences.layouts.empty()) {
         Value layouts = Value::array();

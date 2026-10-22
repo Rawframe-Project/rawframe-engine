@@ -108,6 +108,27 @@ RAWFRAME_TEST(SavedLayoutsAreKeptAsWritten) {
         !preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"layouts":[3]})").has_value());
 }
 
+RAWFRAME_TEST(PanelsApartAreKeptWithTheirWindows) {
+    // D994: by their tabs' names, each window's size and, where told, place.
+    const Preferences kKept{
+        .apartPanels = {ApartPanel{.name = "Assets", .width = 640, .height = 900, .place = {{-1200, 40}}},
+                        ApartPanel{.name = "Console", .width = 720, .height = 480}}};
+    const auto kRead = preferencesOf(writtenPreferences(kKept));
+    RAWFRAME_EXPECT(kRead.has_value() && kRead->apartPanels == kKept.apartPanels);
+    // A size held to what a window can be; a place both numbers or none.
+    const auto kHeld = preferencesOf(
+        R"({"kind":"rawframe.studio.preferences","formatVersion":1,"apartPanels":[{"name":"Mixer","width":20,"height":90000}]})");
+    RAWFRAME_EXPECT(kHeld.has_value() && kHeld->apartPanels.size() == 1 && kHeld->apartPanels[0].width == 160 &&
+                    kHeld->apartPanels[0].height == 4096 && !kHeld->apartPanels[0].place.has_value());
+    RAWFRAME_EXPECT(
+        !preferencesOf(
+             R"({"kind":"rawframe.studio.preferences","formatVersion":1,"apartPanels":[{"name":"Mixer","left":3}]})")
+             .has_value());
+    RAWFRAME_EXPECT(
+        !preferencesOf(R"({"kind":"rawframe.studio.preferences","formatVersion":1,"apartPanels":[{"width":3}]})")
+             .has_value());
+}
+
 RAWFRAME_TEST(PanelsDockedOnTheRightAreKeptAsWritten) {
     // D980: by their tabs' names, once each.
     const Preferences kKept{.rightPanels = {"Console", "Profiler"}};

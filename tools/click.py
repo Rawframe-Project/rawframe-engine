@@ -35,7 +35,8 @@
 # comes between, clicks and the wheel among it, is read in one frame
 # (D479); `tree` prints every control the accessibility bus shows, a line
 # each, and `shot=` and a path keeps the screen there as xwd keeps it
-# (D925). An argument `quick=` and X key names presses them a few
+# (D925); `where=` and a window's title prints where it is and how large
+# (D994). An argument `quick=` and X key names presses them a few
 # milliseconds apart with the program running, as a quick player does,
 # so they reach it within one world tick (D506). An argument
 # `move=` and a point moves the pointer there with no press, a second
@@ -268,6 +269,10 @@ def main():
         if argument.startswith("shot="):
             points.append((None, None, ("shot", argument[len("shot="):])))
             continue
+        if argument.startswith("where="):
+            # Where a window is and how large, by its title (D994).
+            points.append((None, None, ("where", argument[len("where="):])))
+            continue
         if argument.startswith("close="):
             # A window closed by its title, as its close button does (D988).
             points.append((None, None, ("close", argument[len("close="):])))
@@ -441,6 +446,15 @@ def main():
             with open(text[1], "wb") as shot:
                 subprocess.run(["xwd", "-root", "-silent"], stdout=shot, check=False)
             print(f"screen kept in {text[1]}")
+            continue
+        if isinstance(text, tuple) and text[0] == "where":
+            told = subprocess.run(["xwininfo", "-name", text[1]], capture_output=True, text=True, check=False).stdout
+            numbers = [re.search(name + r":\s+(-?[0-9]+)", told) for name in ("Absolute upper-left X", "Absolute upper-left Y", "Width", "Height")]
+            if all(numbers):
+                left, top, wide, high = (found.group(1) for found in numbers)
+                print(f"the window titled {text[1]} at {left},{top} sized {wide}x{high}")
+            else:
+                print(f"no window titled {text[1]}")
             continue
         if isinstance(text, tuple) and text[0] == "close":
             listed = subprocess.run(["xwininfo", "-root", "-tree"], capture_output=True, text=True, check=False)

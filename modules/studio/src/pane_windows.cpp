@@ -1,7 +1,8 @@
 // A pane shown apart (D988): the author tears a dock's pane out into a
 // window of its own, as a large editor's panels are, its tab's context
 // menu's "Open panel in a window" or its tab dragged out of the window. It
-// shows there until that window is closed, then goes back to its dock.
+// shows there until that window is closed, then goes back to its dock. Its
+// window's place and size are kept, and it opens so again (D994).
 
 #include "shell.h"
 
@@ -10,14 +11,6 @@
 #include <string>
 
 namespace rawframe::studio {
-
-namespace {
-
-/// The size a window apart opens at, in logical pixels.
-constexpr float kApartWidth = 720;
-constexpr float kApartHeight = 480;
-
-} // namespace
 
 void ShellParticipant::tearOut(Dock pane) {
     pane = dockOwner(pane);
@@ -55,7 +48,15 @@ void ShellParticipant::tearOut(Dock pane) {
     arrangeTabs();
     lightTabs();
     const std::string kName{tabOf(pane)};
-    docking_.windows->open(kKey, kName + " - Rawframe Studio", kApartWidth, kApartHeight);
+    auto kept = std::ranges::find(preferences_.apartPanels, kName, &ApartPanel::name);
+    if (kept == preferences_.apartPanels.end()) {
+        if (preferences_.apartPanels.size() >= kMostApartPanels) {
+            preferences_.apartPanels.erase(preferences_.apartPanels.begin());
+        }
+        kept = preferences_.apartPanels.insert(preferences_.apartPanels.end(), ApartPanel{.name = kName});
+        keepPreferences();
+    }
+    docking_.windows->open(kKey, kName + " - Rawframe Studio", kept->width, kept->height, kept->place);
     // What it shows is read in from now, as a dock's shown pane is.
     showDock(pane);
     emitter_.log(diagnostics::Severity::Info,
@@ -122,9 +123,23 @@ void ShellParticipant::followAsides(double seconds) {
             static_cast<void>(tree_->wheel(
                 kTorn->root, kTorn->pointer[0], kTorn->pointer[1], kHappened.deltaX, kHappened.deltaY, seconds));
             break;
+        case Kind::Placed: {
+            // Kept as Studio ends.
+            const auto kKept = std::ranges::find(preferences_.apartPanels, tabOf(kTorn->pane), &ApartPanel::name);
+            if (kKept != preferences_.apartPanels.end() && kHappened.width > 0 && kHappened.height > 0) {
+                kKept->width = kHappened.width;
+                kKept->height = kHappened.height;
+                kKept->place = std::array<float, 2>{kHappened.x, kHappened.y};
+            }
+            break;
+        }
         case Kind::Closed: {
-            // Back to its dock, shown there.
+            // Back to its dock, shown there, and no longer opened apart.
             const Dock kPane = kTorn->pane;
+            std::erase_if(preferences_.apartPanels, [&](const ApartPanel& kApart) {
+                return kApart.name == tabOf(kPane);
+            });
+            keepPreferences();
             static_cast<void>(tree_->detach(paneNode(kPane)));
             static_cast<void>(tree_->remove(kTorn->root));
             docking_.windows->close(kTorn->key);
@@ -179,6 +194,15 @@ void ShellParticipant::closeAsides() {
     }
     docking_.torn.clear();
     docking_.asides.clear();
+}
+
+void ShellParticipant::reopenAsides() {
+    // The panels shown apart as Studio last ended open so again (D994).
+    for (const ApartPanel& kApart : std::vector<ApartPanel>{preferences_.apartPanels}) {
+        if (const std::optional<Dock> kPane = dockOf(kApart.name); kPane.has_value()) {
+            tearOut(*kPane);
+        }
+    }
 }
 
 std::span<const ui::UiFrames::Aside> ShellParticipant::asides() const noexcept {

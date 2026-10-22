@@ -644,6 +644,7 @@ void ShellParticipant::rebuild() {
         static_cast<void>(tree_->remove(held_.shelf));
     }
     static_cast<void>(build());
+    reopenAsides();
     if (seat_ != nullptr) {
         static_cast<void>(seat_->seat(*tree_, root_));
     }

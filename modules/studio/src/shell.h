@@ -389,10 +389,11 @@ private:
     void lightTabs();
     [[nodiscard]] Dock readRightPanes();
     /// A pane shown apart in a window of its own; what those windows did followed, each
-    /// laid out and drawn; all closed, as the tree is made again (D988).
+    /// laid out and drawn; all closed, as the tree is made again (D988); those kept opened again (D994).
     void tearOut(Dock pane);
     void followAsides(double seconds);
     void closeAsides();
+    void reopenAsides();
     /// The six layouts Studio ships and the author's own (SPEC-0051 Part
     /// 3, D911), and one put in place: the docks' sizes kept as the
     /// preferences, the bottom dock's tab shown; and the docks as they are

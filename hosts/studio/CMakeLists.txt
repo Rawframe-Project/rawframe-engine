@@ -956,6 +956,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "closed the window titled Console - Rawframe Studio.*\"code\":\"surface_made\".*\"code\":\"studio_docked\"[^\n]*\"side\":\"apart\".*\"code\":\"surface_made\".*Console back in its dock.*\"exit\":\"clean_stop\"")
+    # A pane shown apart as Studio last ended opens so again (D994): the
+    # Console kept apart at 300,200, 640 by 400, opens there with no press,
+    # and closed goes back to its dock.
+    add_test(NAME studio_pane_apart_kept
+             COMMAND ${CMAKE_COMMAND} -E env STUDIO_PREFERENCES=${CMAKE_CURRENT_SOURCE_DIR}/tests/console_apart.preferences
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene
+                     "until=studio_said,status=\"Console opened in a window" wait=2 "where=Console - Rawframe Studio"
+                     "close=Console - Rawframe Studio" "until=studio_said,status=\"Console back in its dock" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_pane_apart_kept PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "the window titled Console - Rawframe Studio at 300,200 sized 640x400.*Console back in its dock.*\"exit\":\"clean_stop\"")
     # A secondary press in a pane apart opens its context menu there
     # (D990): the Assets opened apart, pressed over its files, offers what
     # the Assets' context menu does.
