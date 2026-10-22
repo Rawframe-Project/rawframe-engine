@@ -402,6 +402,19 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "typed crate at [0-9]+,[0-9]+.*typed runners.tile at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*clicked at [0-9]+,[0-9]+.*level.scene written: yes.*\"code\":\"studio_summary\"[^\n]*\"scene\":\"level.scene\",\"entities\":10,\"entity\":\"[0-9a-f-]+\",\"components\":0,\"applied\":5,\"refused\":0,\"undone\":1,\"redone\":0,\"undoable\":4,\"redoable\":1,[^\n]*\"status\":\"undone\".*\"exit\":\"clean_stop\"")
+    # F2 renames what is chosen, as a large editor's does (D998): runners'
+    # ground chosen in the Hierarchy, F2 pressed and a name typed with
+    # Return gives it that name.
+    add_test(NAME studio_renames_by_key
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene @ground keys=F2 keys=Control_L+a,f,l,o,o,r,Return
+                     "until=studio_said,status=\"renamed floor"
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_renames_by_key PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "saw studio_said,status=\"renamed floor.*level.scene written: yes")
     # A reference set by the name of the entity it names (D447): a new
     # entity in runners' level is given attach, whose parent is typed:
     # west, which two entities' names start, is refused, and ground set;

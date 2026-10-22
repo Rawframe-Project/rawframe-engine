@@ -81,6 +81,7 @@ void ShellParticipant::showContext(float x, float y) {
         for (const std::string& kPart : partCommands()) {
             kCommand(kPart);
         }
+        kCommand("Rename");
         kCommand("Duplicate");
         kCommand("Delete");
         kCommand("Move to");

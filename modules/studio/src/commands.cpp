@@ -155,6 +155,11 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     kOffer("Redo", "Edit", {"Ctrl+Y", "Ctrl+Shift+Z"}, redoNode_);
     kOffer("Duplicate", "Edit", {"Ctrl+D"}, duplicateNode_);
     kOffer("Delete", "Edit", {"Delete"}, deleteNode_);
+    // The chosen entity's name, or a file's chosen in Assets, as a large
+    // editor's F2 renames (D998).
+    if (catalog_.offers("scene.rename_entity") || tree_->contains(browser_.rename)) {
+        commands_.push_back(Command{.name = "Rename", .menu = "Edit", .keys = kKeys("Rename", {"F2"})});
+    }
     kOffer("New", "Entity", {"Ctrl+Shift+N"}, newNode_);
     // The parts the game can be given (D917), in the Entity menu and under
     // the Hierarchy's plus.
@@ -361,6 +366,15 @@ bool ShellParticipant::runCommand(std::string_view name) {
             bookmark(static_cast<std::uint8_t>(kCommand->name.back() - '0'), kGoes);
             return true;
         }
+    }
+    if (kCommand->name == "Rename") {
+        if (const auto kName = std::ranges::find(fields_, FieldRow::Role::Name, &FieldRow::role);
+            kName != fields_.end() && !entity_.empty()) {
+            beginEdit(*kName);
+        } else {
+            beginRename();
+        }
+        return true;
     }
     if (kCommand->name == "Live World") {
         switchLive();
