@@ -102,7 +102,21 @@ RAWFRAME_TEST(AResolvingOrAdaptingFrameWaitsUntilItSettles) {
     resolving.temporal.enabled = true;
     SceneFrame adapting = aFrame(1);
     adapting.metering.enabled = true;
+    adapting.metering.elapsed = 1.0F / 60.0F;
+    // A device drawing four frames a second steps the exposure a quarter
+    // of a second each (D979).
+    SceneFrame slow = adapting;
+    slow.metering.elapsed = 0.25F;
     RAWFRAME_EXPECT(kStoodAfter(aFrame(1)) == 1);
     RAWFRAME_EXPECT(kStoodAfter(resolving) == 8);
-    RAWFRAME_EXPECT(kStoodAfter(adapting) == 180);
+    RAWFRAME_EXPECT(kStoodAfter(adapting) >= 179 && kStoodAfter(adapting) <= 181);
+    RAWFRAME_EXPECT(kStoodAfter(slow) == 12);
+    // An exposure that takes no step, and an edited World's, are not waited
+    // for (D979).
+    SceneFrame stepless = adapting;
+    stepless.metering.elapsed = 0;
+    RAWFRAME_EXPECT(kStoodAfter(stepless) == 1);
+    Stillness held;
+    held.holdTime(true);
+    RAWFRAME_EXPECT(!held.still(adapting) && held.still(adapting));
 }

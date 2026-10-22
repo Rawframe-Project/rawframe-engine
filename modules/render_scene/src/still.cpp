@@ -8,8 +8,10 @@ namespace {
 
 /// A temporal resolve's frames: its jitter's sequence (temporalJitter).
 constexpr std::uint64_t kTemporalFrames = 8;
-/// An adapting exposure's: three seconds at sixty frames a second.
-constexpr std::uint64_t kMeteringFrames = 180;
+/// An adapting exposure's: three seconds of its adaptation, however many
+/// frames a device takes to give them (D979): sixty a second at most a
+/// quarter of a second each, as the metering steps.
+constexpr double kMeteringSeconds = 3;
 
 } // namespace
 
@@ -45,14 +47,18 @@ bool Stillness::still(const SceneFrame& frame) {
     }
     if (same) {
         ++stood_;
+        stoodSeconds_ += frame.metering.elapsed;
     } else {
         stood_ = 0;
+        stoodSeconds_ = 0;
         last_ = frame;
     }
-    const std::uint64_t kNeeded = frame.metering.enabled   ? kMeteringFrames
-                                  : frame.temporal.enabled ? kTemporalFrames
-                                                           : 1;
-    return stood_ >= kNeeded;
+    // An edited World's exposure is time's too, and one that takes no step
+    // (a render texture's view) adapts to nothing it waits for.
+    if (frame.metering.enabled && !timeHeld_ && frame.metering.elapsed > 0 && stoodSeconds_ < kMeteringSeconds) {
+        return false;
+    }
+    return stood_ >= (frame.temporal.enabled ? kTemporalFrames : 1);
 }
 
 } // namespace rawframe::render_scene

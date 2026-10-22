@@ -26,13 +26,15 @@ public:
     /// with time alone (the World's time, the temporal jitter and its
     /// history, the metering's step, the particles' clock); it has stood
     /// one frame before counting, as many as a temporal resolve gathers
-    /// where the frame resolves one, and three seconds' worth at sixty
-    /// where its exposure adapts to what it sees.
+    /// where the frame resolves one, and three seconds of adaptation where
+    /// its exposure adapts to what it sees, by the metering's own steps, so
+    /// a device slow to draw stands as soon (D979).
     [[nodiscard]] bool still(const SceneFrame& frame);
     /// Whether what moves with time alone is left out of every frame, as an
     /// editor's edited World is shown as its documents say (D979): its
-    /// emitters' particles and its skinned poses too, which play on the
-    /// client while the documents stand.
+    /// emitters' particles, its skinned poses, which play on the client
+    /// while the documents stand, and its exposure's adapting, which is not
+    /// waited for.
     void holdTime(bool held) noexcept {
         timeHeld_ = held;
     }
@@ -45,6 +47,8 @@ public:
 private:
     std::optional<SceneFrame> last_;
     std::uint64_t stood_ = 0;
+    /// The seconds of adaptation it has stood for (D979).
+    double stoodSeconds_ = 0;
     bool timeHeld_ = false;
 };
 
