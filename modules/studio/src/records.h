@@ -451,6 +451,9 @@ editorCommand(std::string_view command, const std::string& file, std::int64_t li
 /// launcher (D453a).
 [[nodiscard]] bool batchSafe(std::string_view word);
 
+/// Where a scene view looks (`target`), on the half meter across the
+/// ground: where a part made or a mesh dropped stands (D981).
+[[nodiscard]] std::array<double, 3> viewTarget(const Value* view);
 /// A new identity, a random version 4 UUID in its text form: a new entity's
 /// is the client's to choose (D438), and an identity is data, not
 /// simulation, so nothing needs it repeated.

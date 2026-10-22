@@ -154,6 +154,9 @@ void ShellParticipant::startPlaying(bool edited) {
     if (held_.joined != nullptr && !bringCooked()) {
         return;
     }
+    if (edited) {
+        held_.meshesPreviewed = static_cast<std::size_t>(std::ranges::count(assets_, "mesh", &Asset::kind));
+    }
     // In the viewport at its size, where one is shown (D789), unless it is
     // tried as a device, in a window of the device's size (D809).
     play_->viewport.reset();
@@ -343,6 +346,12 @@ void ShellParticipant::hearCookLine(const std::string& line) {
     listSources();
     browser_.pictures.clear();
     static_cast<void>(showScenes());
+    // A mesh imported or removed since the edit view started is drawn
+    // once it starts again (D981).
+    if (kHeard.kind == Heard::Kind::Cooked && playing_.has_value() && playing_->edited() &&
+        static_cast<std::size_t>(std::ranges::count(assets_, "mesh", &Asset::kind)) != held_.meshesPreviewed) {
+        stopPlaying();
+    }
     if (std::exchange(recook_, false)) {
         cookOrStop();
     }

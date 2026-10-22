@@ -1,9 +1,14 @@
 #include "shell.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace rawframe::studio {
 
@@ -316,6 +321,17 @@ bool ShellParticipant::placeDropped(const std::string& held, const std::array<fl
     // Onto the Hierarchy or the viewport, a scene is placed in the scene
     // shown as an instance of it (D975), as the instance well does.
     if (!scene_.empty() && (kInside(entitiesColumn_) || kInside(centerColumn_))) {
+        // A mesh, an entity of the game's component that holds one (D981).
+        if (const auto kMesh = std::ranges::find_if(assets_,
+                                                    [&held](const Asset& each) {
+                                                        return each.name == held && each.kind == "mesh";
+                                                    });
+            kMesh != assets_.end() && !held.ends_with(".scene")) {
+            const Asset kDropped = *kMesh;
+            placeMesh(kDropped);
+            kPlaced("mesh");
+            return true;
+        }
         if (!held.ends_with(".scene")) {
             ++refused_;
             say(leafOf(held) + " is placed through a field that takes it");
@@ -331,6 +347,67 @@ bool ShellParticipant::placeDropped(const std::string& held, const std::array<fl
         return true;
     }
     return false;
+}
+
+void ShellParticipant::placeMesh(const Asset& mesh) {
+    // The game's own component kept in scenes with a field holding a mesh,
+    // as the starter's prop; the engine's (a body's triangles) are not
+    // drawn alone.
+    const Catalog::Component* holder = nullptr;
+    std::string held;
+    for (const Catalog::Component& kComponent : catalog_.components) {
+        const auto kHolding = std::ranges::find(kComponent.fields, std::string_view{"mesh"}, &Catalog::Field::asset);
+        if (!kComponent.presented && !kComponent.name.starts_with("rawframe.") && kHolding != kComponent.fields.end()) {
+            holder = &kComponent;
+            held = kHolding->name;
+            break;
+        }
+    }
+    const auto kPose = std::ranges::find(catalog_.components, "rawframe.physics3d.pose", &Catalog::Component::name);
+    if (holder == nullptr || kPose == catalog_.components.end()) {
+        ++refused_;
+        say("the game keeps no mesh in its scenes: give a component a field of `asset mesh`");
+        return;
+    }
+    const std::string kIdentity = mintedIdentity();
+    const auto kOperation = [&kIdentity](std::string_view kind) {
+        Value made = Value::object();
+        made.add("operation", Value::string(std::string{kind}));
+        made.add("entity", Value::string(kIdentity));
+        return made;
+    };
+    const auto kSet = [&kOperation](const Catalog::Component& component, std::string_view name, Value typed) {
+        Value set = kOperation("scene.set_field");
+        set.add("component", Value::string(component.id));
+        set.add("field", Value::string(std::string{name}));
+        set.add("value", std::move(typed));
+        return set;
+    };
+    std::string named = std::filesystem::path{mesh.name}.stem().string();
+    std::vector<Value> operations;
+    Value created = kOperation("scene.create_entity");
+    created.add("name", Value::string(named));
+    operations.push_back(std::move(created));
+    for (const Catalog::Component* kAdded : std::array<const Catalog::Component*, 2>{&*kPose, holder}) {
+        Value added = kOperation("scene.add_component");
+        added.add("component", Value::string(kAdded->id));
+        operations.push_back(std::move(added));
+    }
+    // Where the view looks, its origin on the ground.
+    std::array<double, 3> at = viewTarget(view_.has_value() ? &*view_ : nullptr);
+    at[1] = 0;
+    constexpr std::array<std::string_view, 3> kAxes = {"x", "y", "z"};
+    for (std::size_t each = 0; each < 3; ++each) {
+        if (at[each] != 0) {
+            Value real = Value::object();
+            real.add("real", Value::real(at[each]));
+            operations.push_back(kSet(*kPose, kAxes[each], std::move(real)));
+        }
+    }
+    Value identity = Value::object();
+    identity.add("unsigned", Value::string(std::to_string(mesh.id)));
+    operations.push_back(kSet(*holder, held, std::move(identity)));
+    commitAll(std::move(operations), named + " placed", kIdentity);
 }
 
 void ShellParticipant::logFiles(std::string_view verb, std::string_view from, std::string_view to, std::size_t named) {

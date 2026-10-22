@@ -1089,16 +1089,7 @@ void ShellParticipant::createPart(std::string_view command) {
     created.add("name", Value::string(std::string{kPart->name}));
     operations.push_back(std::move(created));
     // Where the view looks, standing on the ground.
-    std::array<double, 3> at{0, 0, 0};
-    if (const Value* kTarget = view_.has_value() ? view_->find("target") : nullptr;
-        kTarget != nullptr && kTarget->items().size() == 3) {
-        for (std::size_t each = 0; each < 3; ++each) {
-            const Value& kItem = kTarget->items()[each];
-            at[each] = kItem.real().value_or(static_cast<double>(kItem.integer().value_or(0)));
-        }
-    }
-    at[0] = std::round(at[0] * 2) / 2;
-    at[2] = std::round(at[2] * 2) / 2;
+    std::array<double, 3> at = viewTarget(view_.has_value() ? &*view_ : nullptr);
     at[1] = kPart->shape.has_value()     ? kPart->half[1]
             : kPart->name == "lamp"      ? 2.5
             : kPart->name == "particles" ? 0.5

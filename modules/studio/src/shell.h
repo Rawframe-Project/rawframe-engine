@@ -615,6 +615,8 @@ private:
 
     /// Places in the chosen scene an instance of the scene `text` names.
     void place(const std::string& text);
+    /// A mesh dropped in the scene: an entity drawing it (D981).
+    void placeMesh(const Asset& mesh);
 
     /// Makes a new scene at the path `text` gives, `.scene` added if it
     /// has none, and chooses it; or, for a file's absolute path, imports

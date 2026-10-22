@@ -211,6 +211,9 @@ struct EditorsHeld {
     /// Whether a scene just opened is still to settle on a 2D game's 2D
     /// view (D933).
     bool flatPending = false;
+    /// The game's meshes when the edit view started: its client reads
+    /// them once, so a cook that changes them starts it again (D981).
+    std::size_t meshesPreviewed = 0;
     /// Its timeline (D931): the playhead's time, whether it plays and when
     /// it last moved, the key chosen, the snap, the length and how many
     /// pixels a second is; the keys' marks, the playhead's nodes and

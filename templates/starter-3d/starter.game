@@ -32,7 +32,12 @@ component 0d65e7c8-09d4-4b4e-85f9-82b28ea86d74 starter.skylight rawframe.model.S
 # Particles kept in the scene (D934): what an editor's New particles makes,
 # each client drawing them as the scene sets them.
 component 0e66fd10-9f14-45d9-bd0d-4f8804bbcf0f starter.particles rawframe.model.ParticleEmitter
-replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity starter.paint starter.lamp starter.daylight starter.skylight starter.particles
+# A mesh kept in the scene (D981): what an editor makes where a mesh is
+# dropped, drawn at its pose in its own materials or the one it names.
+component b6d96690-113c-4eb3-a61b-a89889bcc901 starter.prop Prop
+field starter.prop mesh asset mesh
+field starter.prop material asset material
+replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity starter.paint starter.lamp starter.daylight starter.skylight starter.particles starter.prop
 
 # Each player is given a box, moved by its stick, which a client makes from
 # its player's actions (starter.actions) with sample.kest.
@@ -56,3 +61,6 @@ present starter.paint_part dressPart read rawframe.physics3d.body write starter.
 component 85c058b7-5b63-4469-94db-4e69227a2a70 starter.bulb rawframe.model.Model
 presentation starter.bulb on starter.lamp
 present starter.light_bulb bulb read starter.lamp write starter.bulb
+component ebc6ac9c-fc01-431f-9e75-9368e6dc9a26 starter.prop_look rawframe.model.Model
+presentation starter.prop_look on starter.prop
+present starter.dress_prop dressProp read starter.prop write starter.prop_look

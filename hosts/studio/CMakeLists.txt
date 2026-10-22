@@ -148,6 +148,21 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "level.scene written: yes.*\"code\":\"studio_said\"[^\n]*\"status\":\"instance of platform.scene placed.*\"code\":\"studio_said\"[^\n]*\"status\":\"texture set to hud.png")
+    # A mesh dropped in the scene (D981): the plaza's mound imported into
+    # the starter, then its card dragged onto the Hierarchy, made an entity
+    # standing where the view looks with the starter's prop holding it.
+    add_test(NAME studio_places_meshes
+             COMMAND ${CMAKE_COMMAND} -E env STUDIO_SHOW_WRITTEN=1
+                     ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     templates/starter-3d/starter.game level.scene @level.scene
+                     "@new scene or import:${PROJECT_SOURCE_DIR}/games/plaza/mound.gltf" "until=studio_said,status=\"imported "
+                     @Meshes "until=studio_said,status=\"Meshes in" drag=@mound.gltf,@cube "until=studio_asset_placed,onto=\"mesh" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_places_meshes PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "level.scene written: yes.*\"name\": \"mound\".*\"starter.prop\": {[^}]*\"mesh\": [1-9].*\"code\":\"studio_said\"[^\n]*\"status\":\"imported mesh mound.gltf.*\"code\":\"studio_said\"[^\n]*\"status\":\"mound placed")
     # Several entities chosen (D787): the west wall, then the east wall
     # with Control held, their shared friction set together as one step;
     # then the rows from the east wall to the steep slope with Shift held,
@@ -1143,6 +1158,23 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "saw studio_said,status=\"cooked .*saw studio_previewing.*\"code\":\"studio_said\"[^\n]*\"status\":\"cooked [1-9][0-9]* sources, 0 reused\".*\"code\":\"scene_summary\"[^\n]*\"gameMeshes\":[1-9][0-9]*,[^\n]*\"texturesReady\":[1-9][0-9]*,")
+        # A mesh dropped in the edit view (D981): the plaza's mound imported
+        # into the starter, dropped, and cooked; the edit view's client,
+        # which reads the game's meshes once, started again and drawing it.
+        add_test(NAME studio_draws_dropped_meshes
+                 COMMAND ${CMAKE_COMMAND} -E env STUDIO_COOK=$<TARGET_FILE:rawframe_host_cook_tool> STUDIO_EDIT_VIEW=true
+                         ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/plays.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                         $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_client>
+                         templates/starter-3d/starter.game /dev/null /dev/null @level.scene until=studio_previewing
+                         "@new scene or import:${PROJECT_SOURCE_DIR}/games/plaza/mound.gltf" "until=studio_said,status=\"imported "
+                         @Meshes "until=studio_said,status=\"Meshes in" drag=@mound.gltf,@cube
+                         "until=studio_asset_placed,onto=\"mesh" @Cook "until=studio_said,status=\"cooked " wait=8
+                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+        set_tests_properties(studio_draws_dropped_meshes PROPERTIES
+                             SKIP_REGULAR_EXPRESSION "skip: no device"
+                             PASS_REGULAR_EXPRESSION
+                             "\"status\":\"mound placed\".*\"status\":\"cooked [1-9] sources, [1-9] reused\".*\"status\":\"previewing level.scene\".*\"code\":\"scene_summary\"[^\n]*\"gameMeshes\":1,")
         # Studio joined to a host plays what it cooked there (D905): Cook on
         # the host, then Play bringing that cook into Studio's play
         # directory, the client's settings naming no content.

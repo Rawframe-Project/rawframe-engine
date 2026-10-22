@@ -39,6 +39,13 @@ struct Paint {
     material: u64
 }
 
+// A mesh the scene keeps (D981): the game's mesh drawn at the entity's
+// pose, in its own materials, or in `material` where it names one.
+struct Prop {
+    mesh: u64
+    material: u64
+}
+
 // A part's color where it has no paint.
 const PART_COLOR: u32 = 0xb8bcc4ff
 
@@ -126,6 +133,15 @@ fn bulb(count: i32, lamps: [model.PointLight], looks: [model.Model]) {
     let i = 0
     while i < count {
         looks[i] = model.Model(model.SPHERE, 0.12, 0.12, 0.12, lamps[i].color, u64(0), 0.0)
+        i = i + 1
+    }
+}
+
+// Each prop its mesh as it is.
+fn dressProp(count: i32, props: [Prop], looks: [model.Model]) {
+    let i = 0
+    while i < count {
+        looks[i] = model.Model(props[i].mesh, 1.0, 1.0, 1.0, 0xffffffff, props[i].material, 0.0)
         i = i + 1
     }
 }

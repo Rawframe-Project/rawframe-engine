@@ -1061,6 +1061,20 @@ bool batchSafe(std::string_view word) {
     });
 }
 
+std::array<double, 3> viewTarget(const Value* view) {
+    std::array<double, 3> at{0, 0, 0};
+    if (const Value* kTarget = view != nullptr ? view->find("target") : nullptr;
+        kTarget != nullptr && kTarget->items().size() == 3) {
+        for (std::size_t each = 0; each < 3; ++each) {
+            const Value& kItem = kTarget->items()[each];
+            at[each] = kItem.real().value_or(static_cast<double>(kItem.integer().value_or(0)));
+        }
+    }
+    at[0] = std::round(at[0] * 2) / 2;
+    at[2] = std::round(at[2] * 2) / 2;
+    return at;
+}
+
 std::string mintedIdentity() {
     std::random_device device;
     std::array<std::uint8_t, 16> bytes{};
