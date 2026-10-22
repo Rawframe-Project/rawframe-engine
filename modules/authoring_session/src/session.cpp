@@ -244,6 +244,8 @@ private:
             return setImportSettings(game_, record.asset, record.settings, importers_);
         case authoring::SessionVerb::Thumbnail:
             return thumbnailOf(game_, record.asset, cooking_.lastCooked(), record.size, meshPictures_);
+        case authoring::SessionVerb::MeshBounds:
+            return meshBoundsOf(game_, record.asset, cooking_.lastCooked());
         case authoring::SessionVerb::AssetReferences:
             return assetReferencesOf(game_, record.asset, cooking_.lastCooked(), scenesNaming(record.asset));
         case authoring::SessionVerb::CookedFile:
@@ -272,6 +274,8 @@ private:
             return historyOf(record);
         case authoring::SessionVerb::Pick:
             return preview_.picked(record, previewedScene());
+        case authoring::SessionVerb::Cast:
+            return preview_.cast(record);
         case authoring::SessionVerb::Mark:
             return preview_.marked(record);
         case authoring::SessionVerb::PreviewInput:

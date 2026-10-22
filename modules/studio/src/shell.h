@@ -213,18 +213,14 @@ private:
     /// Words in Studio's strong weight, and in its fixed-width face.
     result::Status strongWords(ui::Node node, std::string_view text, std::uint32_t color, float size = look::kBodySize);
     result::Status monoWords(ui::Node node, std::string_view text, std::uint32_t color, float size = look::kLabelSize);
-
     /// Words on `node`, in Studio's font.
     result::Status words(ui::Node node, std::string_view text, std::uint32_t color, float size = 15);
     /// Words that wrap to their node's width, for a sentence or two.
     result::Status wrappedWords(ui::Node node, std::string_view text, std::uint32_t color, float size = 15);
-
     /// A column under `parent` headed `heading`, its row's width or `width`.
     result::Result<ui::Node> column(ui::Node parent, std::string_view heading, float width = 0);
-
     /// The played game's newest picture, when it plays in the viewport (D789).
     void followPicture();
-
     /// The viewport, under the view's fields, showing that picture.
     void showViewport();
     /// Over a prefab source's view, the way back and how far an edit
@@ -616,8 +612,11 @@ private:
 
     /// Places in the chosen scene an instance of the scene `text` names.
     void place(const std::string& text);
-    /// A mesh dropped in the scene: an entity drawing it (D981).
-    void placeMesh(const Asset& mesh);
+    /// A mesh dropped in the scene, over the viewport at `at`: an entity drawing it (D981, D989).
+    void placeMesh(const Asset& mesh, std::optional<std::array<float, 2>> at = std::nullopt);
+    /// Where a drop at `at` over the viewport rests, and a mesh's lowest point by the last cook (D989).
+    [[nodiscard]] std::array<double, 3> restingAt(std::optional<std::array<float, 2>> at);
+    [[nodiscard]] std::optional<double> lowestOf(const std::string& asset);
 
     /// Makes a new scene at the path `text` gives, `.scene` added if it
     /// has none, and chooses it; or, for a file's absolute path, imports

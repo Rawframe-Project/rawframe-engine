@@ -52,4 +52,13 @@ struct MeshPictures {
                                                           std::uint32_t size,
                                                           MeshPictures& meshes);
 
+/// `mesh_bounds` (D989): the mesh source at `asset`'s box, its least and
+/// most corner in its own space, as the last cook into `cooked` made it;
+/// refused for a source that is not a mesh (`unsupported_operation`), and
+/// a game this session has not cooked or a cook that holds no such source
+/// (`target_not_found`).
+[[nodiscard]] result::Result<document::Value> meshBoundsOf(const std::filesystem::path& game,
+                                                           std::string_view asset,
+                                                           const std::optional<std::filesystem::path>& cooked);
+
 } // namespace rawframe::authoring_session

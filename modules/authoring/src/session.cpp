@@ -38,7 +38,7 @@ struct VerbName {
     SessionVerb verb;
 };
 
-constexpr std::array<VerbName, 52> kVerbs = {
+constexpr std::array<VerbName, 54> kVerbs = {
     VerbName{.kind = "authoring.hello", .verb = SessionVerb::Hello},
     VerbName{.kind = "authoring.describe", .verb = SessionVerb::Describe},
     VerbName{.kind = "authoring.apply", .verb = SessionVerb::Apply},
@@ -52,6 +52,7 @@ constexpr std::array<VerbName, 52> kVerbs = {
     VerbName{.kind = "authoring.history", .verb = SessionVerb::History},
     VerbName{.kind = "authoring.assets", .verb = SessionVerb::Assets},
     VerbName{.kind = "authoring.pick", .verb = SessionVerb::Pick},
+    VerbName{.kind = "authoring.cast", .verb = SessionVerb::Cast},
     VerbName{.kind = "authoring.mark", .verb = SessionVerb::Mark},
     VerbName{.kind = "authoring.preview_input", .verb = SessionVerb::PreviewInput},
     VerbName{.kind = "authoring.hide_layers", .verb = SessionVerb::HideLayers},
@@ -65,6 +66,7 @@ constexpr std::array<VerbName, 52> kVerbs = {
     VerbName{.kind = "authoring.import_settings", .verb = SessionVerb::ImportSettings},
     VerbName{.kind = "authoring.set_import_settings", .verb = SessionVerb::SetImportSettings},
     VerbName{.kind = "authoring.thumbnail", .verb = SessionVerb::Thumbnail},
+    VerbName{.kind = "authoring.mesh_bounds", .verb = SessionVerb::MeshBounds},
     VerbName{.kind = "authoring.asset_references", .verb = SessionVerb::AssetReferences},
     VerbName{.kind = "authoring.move_file", .verb = SessionVerb::MoveFile},
     VerbName{.kind = "authoring.remove_file", .verb = SessionVerb::RemoveFile},
@@ -136,6 +138,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Step:
         return Members{.required = 2, .optional = 0};
     case SessionVerb::CookedFile:
+    case SessionVerb::Cast:
         return Members{.required = 3, .optional = 0};
     case SessionVerb::Run:
         return Members{.required = 1, .optional = 0};
@@ -161,6 +164,7 @@ Members membersOf(SessionVerb verb) {
     case SessionVerb::Cancel:
     case SessionVerb::ImportSettings:
     case SessionVerb::AssetReferences:
+    case SessionVerb::MeshBounds:
     case SessionVerb::RemoveFile:
     case SessionVerb::MakeFolder:
         return Members{.required = 1, .optional = 0};
@@ -406,6 +410,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     }
     case SessionVerb::ImportSettings:
     case SessionVerb::AssetReferences:
+    case SessionVerb::MeshBounds:
     case SessionVerb::SetImportSettings: {
         // A source by its path under the game's directory, which the
         // session finds among those it lists (D800).
@@ -493,6 +498,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::CreateScene:
     case SessionVerb::History:
     case SessionVerb::Pick:
+    case SessionVerb::Cast:
     case SessionVerb::Mark:
     case SessionVerb::PreviewInput:
     case SessionVerb::HideLayers:
@@ -774,6 +780,15 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             return malformed("events is an array of input events");
         }
         record.events = *kEvents;
+    } else if (record.verb == SessionVerb::Cast) {
+        // A ray of finite numbers; how far is the server's to bound.
+        const auto kOrigin = pointIn(parsed->find("origin"));
+        const auto kToward = pointIn(parsed->find("toward"));
+        if (!kOrigin.has_value() || !kToward.has_value()) {
+            return malformed("cast is an origin and a toward of three finite numbers each");
+        }
+        record.origin = *kOrigin;
+        record.toward = *kToward;
     } else if (record.verb == SessionVerb::Mark) {
         // A point of three finite numbers, or null for none; its handles
         // by name, each name's place its bits (D974).

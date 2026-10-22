@@ -120,6 +120,9 @@ enum class SessionVerb : std::uint8_t {
     /// What the author last clicked in a scene's preview, if anything new
     /// (D456).
     Pick,
+    /// What a ray in the scene's previewed World meets, asked of its server
+    /// as a pick is (D989): where something dropped there rests.
+    Cast,
     /// A point the scene's preview marks, where the author chose
     /// something, or none (D464).
     Mark,
@@ -152,6 +155,9 @@ enum class SessionVerb : std::uint8_t {
     SetImportSettings,
     /// A source's thumbnail from the session's last cook (D801).
     Thumbnail,
+    /// A mesh source's box, its least and most corner in its own space, as
+    /// the session's last cook made it (D989).
+    MeshBounds,
     /// What a source uses and what uses it, by the last cook (D803).
     AssetReferences,
     /// A file or folder of the game's moved with its sidecar and the
@@ -273,6 +279,10 @@ struct SessionRecord {
     /// Mark's: the point, or none (D464); an extension's mode's point,
     /// where it runs (D877).
     std::optional<std::array<double, 3>> mark;
+    /// Cast's ray: its origin, and how far and which way it goes from there
+    /// (D989).
+    std::array<double, 3> origin{};
+    std::array<double, 3> toward{};
     /// Apply's `amends`: its change folds into the author's latest, as a
     /// drag's steps shown as it goes do (D976).
     bool amends = false;

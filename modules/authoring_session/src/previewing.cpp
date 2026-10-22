@@ -597,6 +597,45 @@ result::Result<Value> Preview::ran(const authoring::SessionRecord& record) {
     return made;
 }
 
+result::Result<Value> Preview::cast(const authoring::SessionRecord& record) {
+    if (server_ == nullptr || record.scene != scene_) {
+        return std::unexpected{failure(authoring::AuthoringError::ValidationFailed,
+                                       result::ErrorClass::FailedPrecondition,
+                                       "a cast needs the scene previewed, with its game's server")
+                                   .withContext("scene", record.scene)};
+    }
+    Value pick = Value::object();
+    pick.add("kind", Value::string("tooling.pick"));
+    pick.add("id", Value::integer(0));
+    for (const auto& [kName, kWay] : {std::pair{"origin", record.origin}, std::pair{"toward", record.toward}}) {
+        Value numbers = Value::array();
+        for (const double kAxis : kWay) {
+            numbers.push(Value::real(kAxis));
+        }
+        pick.add(kName, std::move(numbers));
+    }
+    const auto kReply = server_->ask(rawframe::document::writeCompact(pick));
+    const auto kParsed = rawframe::document::parse(kReply.value_or(std::string{}));
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    if (kAnswer == nullptr || kAnswer->kind() != Value::Kind::Object) {
+        const Value* kError = kParsed.has_value() ? kParsed->find("error") : nullptr;
+        const Value* kMessage = kError != nullptr ? kError->find("message") : nullptr;
+        return std::unexpected{failure(authoring::AuthoringError::CapabilityDenied,
+                                       result::ErrorClass::FailedPrecondition,
+                                       kMessage != nullptr && kMessage->text() != nullptr
+                                           ? *kMessage->text()
+                                           : "the game's server did not answer")};
+    }
+    // What it met, if anything: nothing met is every member null.
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.cast"));
+    for (const char* kMember : {"point", "scene", "source"}) {
+        const Value* kRead = kAnswer->find(kMember);
+        made.add(kMember, kRead != nullptr ? *kRead : Value{});
+    }
+    return made;
+}
+
 result::Result<Value> Preview::trafficOf(const authoring::SessionRecord& record) {
     return serverSays(record, "tooling.traffic", "authoring.traffic", "traffic");
 }

@@ -1,3 +1,4 @@
+#include "rawframe/view/view.h"
 #include "shell.h"
 
 #include <algorithm>
@@ -5,6 +6,8 @@
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <numbers>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -328,7 +331,7 @@ bool ShellParticipant::placeDropped(const std::string& held, const std::array<fl
                                                     });
             kMesh != assets_.end() && !held.ends_with(".scene")) {
             const Asset kDropped = *kMesh;
-            placeMesh(kDropped);
+            placeMesh(kDropped, kInside(viewport_) ? std::optional{at} : std::nullopt);
             kPlaced("mesh");
             return true;
         }
@@ -349,7 +352,7 @@ bool ShellParticipant::placeDropped(const std::string& held, const std::array<fl
     return false;
 }
 
-void ShellParticipant::placeMesh(const Asset& mesh) {
+void ShellParticipant::placeMesh(const Asset& mesh, std::optional<std::array<float, 2>> at) {
     // The game's own component kept in scenes with a field holding a mesh,
     // as the starter's prop; the engine's (a body's triangles) are not
     // drawn alone.
@@ -417,14 +420,19 @@ void ShellParticipant::placeMesh(const Asset& mesh) {
         shape.add("unsigned", Value::string("4"));
         operations.push_back(kSet(*kBody, "shape", std::move(shape)));
     }
-    // Where the view looks, its origin on the ground.
-    std::array<double, 3> at = viewTarget(view_.has_value() ? &*view_ : nullptr);
-    at[1] = 0;
+    // Resting on what the pointer's ray meets in the edit view, else where
+    // the view looks, on the ground; its lowest point there, where the
+    // last cook says where that is (D989).
+    std::array<double, 3> placed = restingAt(at);
+    if (const std::optional<double> kLowest = lowestOf(mesh.name); kLowest.has_value()) {
+        placed[1] -= *kLowest;
+    }
     constexpr std::array<std::string_view, 3> kAxes = {"x", "y", "z"};
     for (std::size_t each = 0; each < 3; ++each) {
-        if (at[each] != 0) {
+        placed[each] = std::round(placed[each] * 1000) / 1000;
+        if (placed[each] != 0) {
             Value real = Value::object();
-            real.add("real", Value::real(at[each]));
+            real.add("real", Value::real(placed[each]));
             operations.push_back(kSet(*kPose, kAxes[each], std::move(real)));
         }
     }
@@ -432,6 +440,86 @@ void ShellParticipant::placeMesh(const Asset& mesh) {
     identity.add("unsigned", Value::string(std::to_string(mesh.id)));
     operations.push_back(kSet(*holder, held, std::move(identity)));
     commitAll(std::move(operations), named + " placed", kIdentity);
+}
+
+std::array<double, 3> ShellParticipant::restingAt(std::optional<std::array<float, 2>> at) {
+    const std::array<double, 3> kTargeted = viewTarget(view_.has_value() ? &*view_ : nullptr);
+    std::array<double, 3> ground = kTargeted;
+    ground[1] = 0;
+    // What a ray meets in the edit view's World, asked of its server.
+    const auto kCast = [this](const std::array<double, 3>& from,
+                              const std::array<double, 3>& way) -> std::optional<std::array<double, 3>> {
+        if (!previewing_) {
+            return std::nullopt;
+        }
+        Value record = Value::object();
+        record.add("kind", Value::string("authoring.cast"));
+        record.add("id", Value::integer(next()));
+        record.add("scene", Value::string(scene_));
+        Value origin = Value::array();
+        Value toward = Value::array();
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            origin.push(Value::real(from[axis]));
+            toward.push(Value::real(way[axis]));
+        }
+        record.add("origin", std::move(origin));
+        record.add("toward", std::move(toward));
+        return pickedPointIn(ask(record));
+    };
+    // With no point, or none met there, what stands under where the view
+    // looks, from a little above it.
+    const auto kUnder = [&] {
+        return kCast({kTargeted[0], kTargeted[1] + 50, kTargeted[2]}, {0, -1050, 0}).value_or(ground);
+    };
+    // The ray through the drop's point of the viewport's one view, from the
+    // view the edit view shows.
+    const auto kPointOf = [this](std::string_view name) -> std::optional<std::array<double, 3>> {
+        const Value* kPoint = view_.has_value() ? view_->find(name) : nullptr;
+        if (kPoint == nullptr || kPoint->items().size() != 3) {
+            return std::nullopt;
+        }
+        return std::array<double, 3>{kPoint->items()[0].real().value_or(0),
+                                     kPoint->items()[1].real().value_or(0),
+                                     kPoint->items()[2].real().value_or(0)};
+    };
+    const Value* kDegrees = view_.has_value() ? view_->find("fieldOfView") : nullptr;
+    const auto kEye = kPointOf("eye");
+    const auto kTarget = kPointOf("target");
+    if (!at.has_value() || !previewing_ || shown_.views > 1 || !kEye.has_value() || !kTarget.has_value() ||
+        kDegrees == nullptr || !kDegrees->real().has_value() || !tree_->contains(viewport_)) {
+        return kUnder();
+    }
+    const auto kLook = view::lookingAt(*kEye, *kTarget, static_cast<float>(*kDegrees->real() * std::numbers::pi / 180));
+    const ui::Rect kArea = tree_->placedRectOf(viewport_);
+    const auto kRay = kLook.has_value() ? view::pointToRay(*kLook,
+                                                           view::ViewSize{.width = kArea.width, .height = kArea.height},
+                                                           (*at)[0] - kArea.x,
+                                                           (*at)[1] - kArea.y)
+                                        : std::unexpected{view::Failure::SeesNothing};
+    if (!kRay.has_value()) {
+        return kUnder();
+    }
+    // A kilometre at most, the edit view's reach.
+    constexpr double kReach = 1000;
+    const auto kMet = kCast(kRay->origin,
+                            {static_cast<double>(kRay->direction[0]) * kReach,
+                             static_cast<double>(kRay->direction[1]) * kReach,
+                             static_cast<double>(kRay->direction[2]) * kReach});
+    return kMet.has_value() ? *kMet : kUnder();
+}
+
+std::optional<double> ShellParticipant::lowestOf(const std::string& asset) {
+    Value record = Value::object();
+    record.add("kind", Value::string("authoring.mesh_bounds"));
+    record.add("id", Value::integer(next()));
+    record.add("asset", Value::string(asset));
+    const auto kParsed = document::parse(ask(record));
+    const Value* kAnswer = kParsed.has_value() ? kParsed->find("answer") : nullptr;
+    const Value* kLeast = kAnswer != nullptr ? kAnswer->find("least") : nullptr;
+    if (kLeast == nullptr || kLeast->items().size() != 3) {
+        return std::nullopt;
+    }
+    return kLeast->items()[1].real();
 }
 
 void ShellParticipant::logFiles(std::string_view verb, std::string_view from, std::string_view to, std::size_t named) {

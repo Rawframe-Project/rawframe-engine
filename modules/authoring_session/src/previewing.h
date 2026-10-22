@@ -86,6 +86,10 @@ public:
                                         const std::optional<authoring::SceneView>& view);
     [[nodiscard]] result::Result<document::Value> picked(const authoring::SessionRecord& record,
                                                          authoring::AuthoredScene* previewed);
+    /// `cast` (D989): what the ray of `record` meets in the previewed
+    /// game's World, as its server's `tooling.pick` answers, an authored
+    /// entity by its scene and id; refused as `ran`.
+    [[nodiscard]] result::Result<document::Value> cast(const authoring::SessionRecord& record);
     /// `run` and `step` (D806): the previewed game's World paused, let
     /// run, or stepped on its server, which grants run; what it says of
     /// itself after. Refused where `record.scene` is not previewed with

@@ -194,8 +194,9 @@ namespace {
 
 /// The records that act on a played game's preview alone (D906), which a
 /// host joined cannot reach: the game plays on this machine.
-constexpr std::array<std::string_view, 15> kPreviewed = {"authoring.preview",
+constexpr std::array<std::string_view, 16> kPreviewed = {"authoring.preview",
                                                          "authoring.pick",
+                                                         "authoring.cast",
                                                          "authoring.mark",
                                                          "authoring.preview_input",
                                                          "authoring.hide_layers",

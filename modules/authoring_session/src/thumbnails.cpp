@@ -232,4 +232,66 @@ result::Result<Value> thumbnailOf(const std::filesystem::path& game,
     return made;
 }
 
+result::Result<Value> meshBoundsOf(const std::filesystem::path& game,
+                                   std::string_view asset,
+                                   const std::optional<std::filesystem::path>& cooked) {
+    const std::vector<SourceListed> kSources = sourcesBeside(game);
+    const auto kSource = std::ranges::find(kSources, asset, &SourceListed::path);
+    if (kSource == kSources.end()) {
+        return refused(authoring::AuthoringError::TargetNotFound,
+                       result::ErrorClass::NotFound,
+                       "no source with a sidecar is at that path under the game's directory");
+    }
+    if (kSource->importer != "rawframe.mesh") {
+        return refused(
+            authoring::AuthoringError::UnsupportedOperation, result::ErrorClass::Unsupported, "only a mesh has a box");
+    }
+    const auto kNone = [] {
+        return refused(authoring::AuthoringError::TargetNotFound,
+                       result::ErrorClass::NotFound,
+                       "the last cook holds no such mesh; cook again");
+    };
+    const auto kText = cooked.has_value() ? readFile(*cooked / "content.manifest") : std::nullopt;
+    const auto kSidecarText =
+        readFile(game.parent_path() / (std::string{asset} + std::string{content::kSidecarSuffix}));
+    if (!kText.has_value() || !kSidecarText.has_value()) {
+        return kNone();
+    }
+    const auto kSidecar = content::readSidecar(*kSidecarText);
+    const auto kEntries = content::readManifest(*kText);
+    if (!kSidecar.has_value() || !kEntries.has_value()) {
+        return kNone();
+    }
+    const auto kEntry = std::ranges::find(*kEntries, kSidecar->id, &content::ManifestEntry::id);
+    if (kEntry == kEntries->end() || kEntry->type != content::ResourceTypeId{mesh::kMeshType}) {
+        return kNone();
+    }
+    const auto kObject = readFile(objectOf(*cooked, *kEntry));
+    if (!kObject.has_value()) {
+        return kNone();
+    }
+    const auto kMesh = mesh::decode(std::as_bytes(std::span{kObject->data(), kObject->size()}));
+    if (!kMesh.has_value() || kMesh->positions.empty()) {
+        return kNone();
+    }
+    std::array<float, 3> least = kMesh->positions.front();
+    std::array<float, 3> most = least;
+    for (const mesh::Vector3& kAt : kMesh->positions) {
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            least[axis] = std::min(least[axis], kAt[axis]);
+            most[axis] = std::max(most[axis], kAt[axis]);
+        }
+    }
+    Value made = Value::object();
+    made.add("kind", Value::string("authoring.mesh_bounds"));
+    for (const auto& [kName, kCorner] : {std::pair{"least", least}, std::pair{"most", most}}) {
+        Value corner = Value::array();
+        for (const float kAxis : kCorner) {
+            corner.push(Value::real(kAxis));
+        }
+        made.add(kName, std::move(corner));
+    }
+    return made;
+}
+
 } // namespace rawframe::authoring_session

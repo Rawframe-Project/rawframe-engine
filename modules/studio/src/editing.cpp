@@ -1095,12 +1095,13 @@ void ShellParticipant::createPart(std::string_view command) {
     Value created = kOperation("scene.create_entity");
     created.add("name", Value::string(std::string{kPart->name}));
     operations.push_back(std::move(created));
-    // Where the view looks, standing on the ground.
-    std::array<double, 3> at = viewTarget(view_.has_value() ? &*view_ : nullptr);
-    at[1] = kPart->shape.has_value()     ? kPart->half[1]
-            : kPart->name == "lamp"      ? 2.5
-            : kPart->name == "particles" ? 0.5
-                                         : 0.0;
+    // Where the view looks, standing on what is there (D989).
+    std::array<double, 3> at = restingAt(std::nullopt);
+    at[1] += kPart->shape.has_value()     ? kPart->half[1]
+             : kPart->name == "lamp"      ? 2.5
+             : kPart->name == "particles" ? 0.5
+                                          : 0.0;
+    at[1] = std::round(at[1] * 1000) / 1000;
     if (kPart->name != "empty") {
         if (const Catalog::Component* kPose = kComponent("rawframe.physics3d.pose"); kPose != nullptr) {
             kAdd(*kPose);

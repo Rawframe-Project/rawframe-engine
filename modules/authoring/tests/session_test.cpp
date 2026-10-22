@@ -86,6 +86,20 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
              .has_value());
     const auto kPick = readSessionRecord(R"({"kind":"authoring.pick","id":10,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kPick.has_value() && kPick->verb == SessionVerb::Pick && kPick->scene == "b.scene");
+    // A cast is a ray of three numbers each way, and its scene (D989); a
+    // mesh's bounds name the mesh.
+    const auto kCast = readSessionRecord(
+        R"({"kind":"authoring.cast","id":15,"scene":"b.scene","origin":[0,50,1],"toward":[0,-1050,0]})", id);
+    RAWFRAME_EXPECT(kCast.has_value() && kCast->verb == SessionVerb::Cast && kCast->scene == "b.scene" &&
+                    kCast->origin[1] == 50 && kCast->toward[1] == -1050);
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.cast","scene":"b.scene","origin":[0,50],"toward":[0,-1,0]})", id)
+             .has_value());
+    RAWFRAME_EXPECT(
+        !readSessionRecord(R"({"kind":"authoring.cast","scene":"b.scene","origin":[0,50,0]})", id).has_value());
+    const auto kBounds = readSessionRecord(R"({"kind":"authoring.mesh_bounds","id":16,"asset":"crate.gltf"})", id);
+    RAWFRAME_EXPECT(kBounds.has_value() && kBounds->verb == SessionVerb::MeshBounds && kBounds->asset == "crate.gltf");
+    RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.mesh_bounds","id":16})", id).has_value());
     const auto kServed = readSessionRecord(
         R"({"kind":"authoring.preview","id":11,"scene":"b.scene","preview":{"endpoint":"127.0.0.1:2","pinFile":"c",)"
         R"("tokenFile":"t","server":{"endpoint":"127.0.0.1:3","pinFile":"s"}}})",
