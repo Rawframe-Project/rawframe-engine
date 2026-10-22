@@ -275,6 +275,8 @@ struct UiRenderer::State {
     bool declared = false;
     /// Whether the frame declared draws on the target's panel (D597).
     bool onPanel = false;
+    /// The window whose aside it draws in, if any (D988).
+    std::optional<std::uint64_t> aimed;
     std::vector<float> blocks;
     std::vector<float> clips;
     std::vector<float> imageBlocks;
@@ -463,6 +465,10 @@ struct UiRenderer::State {
         if (list == nullptr || list->commands.empty()) {
             return {};
         }
+        // Aimed at an aside the frame has not: nothing this frame.
+        if (aimed.has_value() && !std::ranges::contains(open.asides, *aimed, &render::Frame::Aside::window)) {
+            return {};
+        }
         if (!ready) {
             device->pump();
             // An answer is taken once: one that came is kept as nought, as
@@ -519,11 +525,16 @@ struct UiRenderer::State {
         if (glyphBlocks.empty()) {
             glyphBlocks.assign(kGlyphFloats, 0);
         }
-        // On the target's panel where it shows the UI apart (D597), else
-        // over the picture.
-        const bool kOnPanel = open.panel != 0;
+        // In its window's aside where it is aimed at one (D988), on the
+        // target's panel where it shows the UI apart (D597), else over the
+        // picture.
+        const auto kAside = aimed.has_value() ? std::ranges::find(open.asides, *aimed, &render::Frame::Aside::window)
+                                              : open.asides.end();
+        const bool kOnPanel = !aimed.has_value() && open.panel != 0;
         view =
-            kOnPanel
+            kAside != open.asides.end()
+                ? std::array<float, 4>{static_cast<float>(kAside->width), static_cast<float>(kAside->height), 0, 0}
+            : kOnPanel
                 ? std::array<float, 4>{static_cast<float>(open.panelWidth), static_cast<float>(open.panelHeight), 0, 0}
                 : std::array<float, 4>{static_cast<float>(open.width), static_cast<float>(open.height), 0, 0};
         mrhiBufferDef viewDef = mrhiDefaultBufferDef();
@@ -577,9 +588,16 @@ struct UiRenderer::State {
             reads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
         }
         mrhiPassDef drawDef = mrhiDefaultPassDef();
-        drawDef.colorTargets[0].resource = resourceOf(kOnPanel ? open.panel : open.picture);
+        const bool kAsideDrawn = kAside != open.asides.end();
+        drawDef.colorTargets[0].resource = resourceOf(kAsideDrawn ? kAside->picture
+                                                      : kOnPanel  ? open.panel
+                                                                  : open.picture);
         drawDef.colorTargets[0].load =
-            (kOnPanel ? open.clearsPanel() : open.clearsPicture()) ? mrhi_loadClear : mrhi_loadKeep;
+            (kAsideDrawn ? open.clearsAside(static_cast<std::size_t>(kAside - open.asides.begin()))
+             : kOnPanel  ? open.clearsPanel()
+                         : open.clearsPicture())
+                ? mrhi_loadClear
+                : mrhi_loadKeep;
         drawDef.colorTargets[0].store = mrhi_storeKeep;
         drawDef.colorTargets[0].clear =
             mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = kOnPanel ? 0.0F : 1.0F};
@@ -742,6 +760,10 @@ result::Result<std::unique_ptr<UiRenderer>> UiRenderer::create(render::Device& d
 void UiRenderer::prepare(const ui::DrawList* list, ImageSource images) noexcept {
     state_->list = list;
     state_->images = std::move(images);
+}
+
+void UiRenderer::aim(std::optional<std::uint64_t> window) noexcept {
+    state_->aimed = window;
 }
 
 result::Status UiRenderer::declare(render::Frame& frame) {

@@ -49,7 +49,15 @@ void ShellParticipant::showContext(float x, float y) {
     const bool kInHierarchy = tree_->contains(entitiesColumn_) && inside(tree_->placedRectOf(entitiesColumn_), x, y);
     const bool kInAssets = tree_->contains(scenesColumn_) && inside(tree_->placedRectOf(scenesColumn_), x, y);
     const bool kInCenter = tree_->contains(centerColumn_) && inside(tree_->placedRectOf(centerColumn_), x, y);
-    if (kInAssets) {
+    // A dock's tab: its pane shown apart, in a window of its own (D988).
+    const auto kTab = std::ranges::find_if(kMovablePanes, [&](Dock pane) {
+        return tree_->contains(tabNode(pane)) && inside(tree_->placedRectOf(tabNode(pane)), x, y);
+    });
+    docking_.contextPane.reset();
+    if (kTab != kMovablePanes.end()) {
+        docking_.contextPane = *kTab;
+        kCommand(kOpenApart);
+    } else if (kInAssets) {
         // Its files, as the Assets' own buttons do them (D929).
         kButton("Import files", browser_.import);
         kButton("New folder", browser_.newFolder);
@@ -75,10 +83,11 @@ void ShellParticipant::showContext(float x, float y) {
     if (rows.empty()) {
         return;
     }
-    const std::string_view kPart = kInAssets               ? "assets"
-                                   : chosen(Listed::Graph) ? "graph"
-                                   : kInHierarchy          ? "hierarchy"
-                                                           : "center";
+    const std::string_view kPart = kTab != kMovablePanes.end() ? "tab"
+                                   : kInAssets                 ? "assets"
+                                   : chosen(Listed::Graph)     ? "graph"
+                                   : kInHierarchy              ? "hierarchy"
+                                                               : "center";
     emitter_.log(
         diagnostics::Severity::Info,
         kContextMenu,

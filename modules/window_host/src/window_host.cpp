@@ -388,6 +388,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
     lent_.push_back(composition::LentCapability{view::kFileDialogs.name, composition::provideAs(dialogs_)});
     lent_.push_back(composition::LentCapability{view::kWindowClosing.name, composition::provideAs(closing_)});
     lent_.push_back(composition::LentCapability{view::kWindowShowing.name, composition::provideAs(showing_)});
+    lent_.push_back(composition::LentCapability{view::kWindowAsides.name, composition::provideAs(asides_)});
     lent_.insert(lent_.end(), settings_.lent.begin(), settings_.lent.end());
     request_.lent = lent_;
     request_.suspended = &suspended_;
@@ -545,6 +546,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             dialogs_.answered(view::FileDialogs::Answer{.ticket = asked.ticket, .unsupported = true});
         }
     }
+    followAsides(windows);
     if (settings_.injection != nullptr) {
         for (const world_tooling::WindowInput& kEach : settings_.injection->take()) {
             if (std::optional<window::Event> made = windowEventOf(kEach, window_); made.has_value()) {
@@ -562,6 +564,9 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         }
         if (!event.has_value()) {
             break;
+        }
+        if (aside(*event)) {
+            continue;
         }
         // What lands on an editor's viewport is the game's it shows.
         if (forwarded(*event)) {
@@ -757,6 +762,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         if (!host_->iterate()) {
             return end();
         }
+        ++iterations_;
         suspended_.store(platformSuspended_ || away_.away(), std::memory_order_release);
         if (awaitingRead_ && (feed_.waiting() == 0 || ++iterationsAwaited_ >= kMostIterationsAwaited)) {
             awaitingRead_ = false;

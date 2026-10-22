@@ -51,6 +51,9 @@ public:
 
     /// The program's side: `window` is watched from now on.
     void watch(WindowId window);
+    /// The program's side: `window` no longer watched, so the device side
+    /// releases its surface before the program destroys it (D988).
+    void unwatch(WindowId window);
 
     /// The program's side, once a frame before its Host runs: each watched
     /// window's state read in, and a new surface generation's handles held

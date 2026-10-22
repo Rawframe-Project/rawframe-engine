@@ -24,6 +24,7 @@
 #include "rawframe/input_window/bridge.h"
 #include "rawframe/result/result.h"
 #include "rawframe/ui/access.h"
+#include "rawframe/view/asides.h"
 #include "rawframe/view/closing.h"
 #include "rawframe/view/dialogs.h"
 #include "rawframe/view/dropping.h"
@@ -180,6 +181,18 @@ private:
     /// each request's ticket until it completes.
     view::FileDialogs dialogs_;
     view::WindowClosing closing_;
+    /// An editor's windows beside this one (D988): each key and window
+    /// open, and each closed, its surface let go, until an iteration has
+    /// run since and it is destroyed.
+    view::WindowAsides asides_;
+    std::vector<std::pair<std::uint64_t, window::WindowId>> asideWindows_;
+    std::vector<std::pair<window::WindowId, std::uint64_t>> asidesClosed_;
+    std::uint64_t iterations_ = 0;
+    /// What an editor asked of its asides acted on.
+    void followAsides(window::Windows& windows);
+    /// Whether `event` was an aside's and taken as one: its pointer's and
+    /// its closing; its keys are the window's typing.
+    bool aside(const window::Event& event);
     /// Lent where the window waits hidden until asked (D942).
     view::WindowShowing showing_;
     bool showWhenAsked_ = false;

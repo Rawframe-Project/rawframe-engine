@@ -268,6 +268,10 @@ def main():
         if argument.startswith("shot="):
             points.append((None, None, ("shot", argument[len("shot="):])))
             continue
+        if argument.startswith("close="):
+            # A window closed by its title, as its close button does (D988).
+            points.append((None, None, ("close", argument[len("close="):])))
+            continue
         if argument in ("freeze", "thaw", "tree"):
             points.append((None, None, (argument,)))
             continue
@@ -437,6 +441,29 @@ def main():
             with open(text[1], "wb") as shot:
                 subprocess.run(["xwd", "-root", "-silent"], stdout=shot, check=False)
             print(f"screen kept in {text[1]}")
+            continue
+        if isinstance(text, tuple) and text[0] == "close":
+            listed = subprocess.run(["xwininfo", "-root", "-tree"], capture_output=True, text=True, check=False)
+            found = re.search(r"(0x[0-9a-f]+) \"" + re.escape(text[1]) + "\"", listed.stdout)
+            if not found:
+                print(f"no window titled {text[1]}")
+                continue
+            # WM_PROTOCOLS's WM_DELETE_WINDOW, as a window manager sends it.
+            x.XInternAtom.restype = ctypes.c_ulong
+            x.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+            x.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.c_void_p]
+            window = int(found.group(1), 16)
+            event = (ctypes.c_long * 24)()
+            fields = ctypes.cast(event, ctypes.POINTER(ctypes.c_long))
+            ctypes.cast(event, ctypes.POINTER(ctypes.c_int))[0] = 33  # ClientMessage
+            fields[4] = window
+            fields[5] = x.XInternAtom(display, b"WM_PROTOCOLS", 0)
+            ctypes.cast(ctypes.byref(event, 6 * ctypes.sizeof(ctypes.c_long)), ctypes.POINTER(ctypes.c_int))[0] = 32
+            fields[7] = x.XInternAtom(display, b"WM_DELETE_WINDOW", 0)
+            x.XSendEvent(display, window, 0, 0, event)
+            x.XFlush(display)
+            print(f"closed the window titled {text[1]}")
+            time.sleep(1)
             continue
         if isinstance(text, tuple) and text[0] == "tree":
             import atspi

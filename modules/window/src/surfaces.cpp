@@ -1,5 +1,6 @@
 #include "rawframe/window/surfaces.h"
 
+#include <cstddef>
 #include <utility>
 
 namespace rawframe::window {
@@ -22,6 +23,17 @@ void Surfaces::watch(WindowId window) {
     states_.push_back(SurfaceState{.window = window});
     pending_.emplace_back();
     read_.push_back(0);
+}
+
+void Surfaces::unwatch(WindowId window) {
+    for (std::size_t at = 0; at < states_.size(); ++at) {
+        if (states_[at].window == window) {
+            states_.erase(states_.begin() + static_cast<std::ptrdiff_t>(at));
+            pending_.erase(pending_.begin() + static_cast<std::ptrdiff_t>(at));
+            read_.erase(read_.begin() + static_cast<std::ptrdiff_t>(at));
+            return;
+        }
+    }
 }
 
 void Surfaces::update(const Windows& windows) {

@@ -155,20 +155,15 @@ inline constexpr std::uint32_t kWarning = look::kWarn;
 class ShellParticipant final : public composition::Participant, public ui::UiFrames {
 public:
     result::Status load(composition::ParticipantContext& context);
-
     result::Status start(composition::ParticipantContext& context) noexcept override;
-
     void runHostPhase(composition::HostPhase, const composition::HostFrame&) noexcept override;
-
     void stop() noexcept override;
-
     composition::CapabilityObject provide(std::string_view capability) noexcept override;
-
     const ui::DrawList* drawn() const noexcept override;
-
     void resize(std::uint32_t width, std::uint32_t height, bool panel) noexcept override;
-
     std::shared_ptr<const texture::Texture> image(std::uint64_t) const override;
+    std::span<const Aside> asides() const noexcept override;
+    void resizeAside(std::uint64_t window, std::uint32_t width, std::uint32_t height) noexcept override;
 
 private:
     /// A box of `color` as `layout` places it under `parent`, if any.
@@ -397,6 +392,11 @@ private:
     void arrangeTabs();
     void lightTabs();
     [[nodiscard]] Dock readRightPanes();
+    /// A pane shown apart in a window of its own; what those windows did followed, each
+    /// laid out and drawn; all closed, as the tree is made again (D988).
+    void tearOut(Dock pane);
+    void followAsides(double seconds);
+    void closeAsides();
     /// The six layouts Studio ships and the author's own (SPEC-0051 Part
     /// 3, D911), and one put in place: the docks' sizes kept as the
     /// preferences, the bottom dock's tab shown; and the docks as they are

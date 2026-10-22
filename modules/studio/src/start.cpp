@@ -613,6 +613,8 @@ void ShellParticipant::makeGame(const std::string& name) {
 
 void ShellParticipant::rebuild() {
     endEdit();
+    // The panes shown apart go back with the tree they were in (D988).
+    closeAsides();
     // The dialogs went with the tree they were in.
     dialog_.reset();
     held_.exportDialog.reset();

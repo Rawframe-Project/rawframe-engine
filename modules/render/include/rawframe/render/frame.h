@@ -75,6 +75,22 @@ struct Frame {
         return !std::exchange(panelDrawn, true);
     }
     bool panelDrawn = false;
+    /// Each of the target's asides (`FrameTarget::asides`, in their order,
+    /// D988): its window, a texture of the frame of its size (RGBA8 sRGB,
+    /// as the picture) which is shown on its surface, black where nothing
+    /// is drawn; and whether a pass drew in it, which the first to draw
+    /// asks as the picture's (`clearsAside`).
+    struct Aside {
+        std::uint64_t window = 0;
+        std::uint64_t picture = 0;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        bool drawn = false;
+    };
+    std::vector<Aside> asides;
+    [[nodiscard]] bool clearsAside(std::size_t at) noexcept {
+        return at < asides.size() && !std::exchange(asides[at].drawn, true);
+    }
     /// The frame's timestamps (D894): a query set named as `requestKey`
     /// names ids, 0 where the frame does not time its passes; and the
     /// passes timed, by name, in their order. `time`, asked as a graphics
@@ -134,6 +150,17 @@ struct FrameTarget {
     /// Whether its passes are timed on the GPU, where the device writes
     /// timestamps (D894): an editor's preview asks.
     bool timed = false;
+    /// Windows beside the one shown, where an editor shows a panel apart
+    /// (D988): each one's prepared surface, its size in pixels, and which
+    /// window it is (`window::WindowId`'s value). The UI draws each one's
+    /// own in its texture (`Frame::asides`), which is shown there.
+    struct Aside {
+        std::uint64_t surface = 0;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        std::uint64_t window = 0;
+    };
+    std::vector<Aside> asides;
 };
 
 struct FramerStatistics {
@@ -236,6 +263,10 @@ public:
     /// The size of the planned frame's panel, where it shows the UI apart
     /// (`Frame::panel`): the UI is laid out at it. None for none.
     [[nodiscard]] virtual std::optional<std::pair<std::uint32_t, std::uint32_t>> plannedPanel() const noexcept = 0;
+    /// The planned frame's asides (`FrameTarget::asides`, D988): the
+    /// windows beside the one shown, each one's UI laid out at its size.
+    /// None where none is planned.
+    [[nodiscard]] virtual std::span<const FrameTarget::Aside> plannedAsides() const noexcept = 0;
     /// Joins every frame from the next ready on, recorded in `order`'s
     /// order: the scene is 0, the canvas 1, and the scene's post processes
     /// over the composed picture 2 (D351).

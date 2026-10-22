@@ -26,6 +26,7 @@ constexpr std::string_view kMaybe[] = {view::kUiPointing.name,
                                        view::kFileDialogs.name,
                                        view::kWindowClosing.name,
                                        view::kWindowShowing.name,
+                                       view::kWindowAsides.name,
                                        render::kDevice.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
@@ -289,6 +290,10 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     }
     if (context.has(view::kWindowShowing.name)) {
         RAWFRAME_TRY_ASSIGN(showing_, context.capability(view::kWindowShowing));
+    }
+    // Windows beside its own, for a pane shown apart (D988).
+    if (context.has(view::kWindowAsides.name)) {
+        RAWFRAME_TRY_ASSIGN(docking_.windows, context.capability(view::kWindowAsides));
     }
     // The device Studio draws with, to know when there is none (D927).
     if (context.has(render::kDevice.name)) {
@@ -577,6 +582,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     showNothingChosen();
     showViewportNote();
     followSplitter();
+    followAsides(kSeconds);
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,
     // so a click and a turn read in one frame scroll what the click

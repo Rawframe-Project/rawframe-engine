@@ -942,6 +942,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "found entity created at [0-9]+,[0-9]+")
+    # A pane shown apart (D988): the Console's tab's context menu opens it
+    # in a window of its own, which gets a surface of its own on the
+    # device; closed as its close button does, it goes back to its dock.
+    add_test(NAME studio_pane_apart
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene context=@Console "@Open panel in a window"
+                     "until=studio_said,status=\"Console opened in a window" wait=2
+                     "close=Console - Rawframe Studio" "until=studio_said,status=\"Console back in its dock" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_pane_apart PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "closed the window titled Console - Rawframe Studio.*\"code\":\"surface_made\".*\"code\":\"studio_docked\"[^\n]*\"side\":\"apart\".*\"code\":\"surface_made\".*Console back in its dock.*\"exit\":\"clean_stop\"")
     # A style class made, named, and deleted in Studio (D638): in Stalls'
     # sheet New makes a class and chooses it, its name typed as tip, and
     # Delete deletes it; Undo brings it back, so the sheet is written with

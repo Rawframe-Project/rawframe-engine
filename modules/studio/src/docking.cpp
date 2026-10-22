@@ -77,7 +77,9 @@ bool ShellParticipant::dockedRight(Dock pane) const {
 bool ShellParticipant::paneShown(Dock pane) const {
     // In the bottom dock, or the right one where it is docked there, so a
     // pane docked on the right follows what it shows as it does below.
-    return dockShown_ == pane || docking_.shown == pane;
+    // Or apart, in a window of its own (D988).
+    return dockShown_ == pane || docking_.shown == pane ||
+           std::ranges::contains(docking_.torn, dockOwner(pane), &TornPane::pane);
 }
 
 ShellParticipant::Dock ShellParticipant::readRightPanes() {
@@ -104,7 +106,9 @@ void ShellParticipant::showDock(Dock pane) {
         showRight(true);
         return;
     }
-    if (dockedRight(pane)) {
+    if (std::ranges::contains(docking_.torn, dockOwner(pane), &TornPane::pane)) {
+        // Shown apart, where it stays (D988).
+    } else if (dockedRight(pane)) {
         // Docked on the right, beside the Inspector (D980).
         if (tree_->contains(held_.rightDock)) {
             showInRight(paneNode(pane));
@@ -163,8 +167,12 @@ void ShellParticipant::arrangeTabs() {
     for (const Dock kPane : kMovablePanes) {
         static_cast<void>(tree_->detach(tabNode(kPane)));
     }
+    // A pane shown apart has its window's own title (D988).
     for (const Dock kPane : kMovablePanes) {
-        static_cast<void>(tree_->attach(dockedRight(kPane) ? docking_.rightTabs : docking_.dockTabs, tabNode(kPane)));
+        if (!std::ranges::contains(docking_.torn, kPane, &TornPane::pane)) {
+            static_cast<void>(
+                tree_->attach(dockedRight(kPane) ? docking_.rightTabs : docking_.dockTabs, tabNode(kPane)));
+        }
     }
 }
 
@@ -244,6 +252,10 @@ void ShellParticipant::dropTab() {
         dockPane(*kHeld, true);
     } else if (kOver(bottomDock_)) {
         dockPane(*kHeld, false);
+    } else if ((*kPointer)[0] < 0 || (*kPointer)[1] < 0 || (*kPointer)[0] >= static_cast<float>(width_) / scale_ ||
+               (*kPointer)[1] >= static_cast<float>(height_) / scale_) {
+        // Let go outside the window: shown apart in one of its own (D988).
+        tearOut(*kHeld);
     }
 }
 

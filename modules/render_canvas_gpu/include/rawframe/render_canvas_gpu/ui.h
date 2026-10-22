@@ -66,6 +66,10 @@ public:
     /// `images`, uploaded once and held; nothing for none. It is read until
     /// the frame is made.
     void prepare(const ui::DrawList* list, ImageSource images = {}) noexcept;
+    /// Draws in the frame's aside of `window` (`render::Frame::asides`,
+    /// D988), and nothing where the frame has none of it, rather than over
+    /// the picture; none draws over the picture again.
+    void aim(std::optional<std::uint64_t> window) noexcept;
 
     [[nodiscard]] result::Status declare(render::Frame& frame) override;
     [[nodiscard]] result::Status record(render::Frame& frame) override;

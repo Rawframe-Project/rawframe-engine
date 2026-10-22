@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
+#include <utility>
 
 namespace rawframe::studio {
 
@@ -222,6 +224,11 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
         commands_.push_back(Command{.name = kName, .menu = "Window", .keys = kKeys(kName, {})});
     }
     commands_.push_back(Command{.name = std::string{kSaveLayout}, .menu = "Window", .keys = kKeys(kSaveLayout, {})});
+    // The pane under the scene, or the one whose tab's context menu was
+    // opened, shown apart (D988), where the host opens windows.
+    if (docking_.windows != nullptr) {
+        commands_.push_back(Command{.name = std::string{kOpenApart}, .menu = "Window", .keys = kKeys(kOpenApart, {})});
+    }
     // The File menu as an editor's (D923): a game made, opened, and
     // closed, what is saved, files brought in and the game sent out, and
     // Studio quit.
@@ -416,6 +423,10 @@ bool ShellParticipant::runCommand(std::string_view name) {
     }
     if (kCommand->name == kSaveLayout) {
         saveLayout();
+        return true;
+    }
+    if (kCommand->name == kOpenApart) {
+        tearOut(std::exchange(docking_.contextPane, std::nullopt).value_or(dockShown_));
         return true;
     }
     if (kCommand->menu == "Window" && kCommand->name.ends_with(kLayoutSuffix)) {

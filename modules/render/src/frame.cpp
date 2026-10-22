@@ -127,7 +127,7 @@ struct Framer::State {
             ++statistics.framesBusy;
             return false;
         }
-        if ((target.surface.has_value() || !target.images.empty()) && display == nullptr) {
+        if ((target.surface.has_value() || !target.images.empty() || !target.asides.empty()) && display == nullptr) {
             RAWFRAME_TRY_ASSIGN(display, Display::create(*device));
         }
         const mrhiFrameDef kFrameDef = mrhiDefaultFrameDef();
@@ -196,10 +196,54 @@ struct Framer::State {
                 Frame::Cover{.picture = open.panel,
                              .viewport = {0, 0, static_cast<float>(kSize->width), static_cast<float>(kSize->height)}};
         }
+        // Each aside (D988): a texture of its size, shown on its surface.
+        std::vector<mrhiResourceId> asides;
+        for (const FrameTarget::Aside& kAside : target.asides) {
+            if (kAside.width == 0 || kAside.height == 0 || kAside.width > kMaximumSide ||
+                kAside.height > kMaximumSide) {
+                static_cast<void>(mrhiDropFrame(native));
+                return refuse(
+                    result::ErrorClass::OutOfRange, RenderError::OverLimit, "an aside's sides are from 1 to 8192");
+            }
+            mrhiTextureDef asideDef = pictureDef;
+            asideDef.viewFormats[0] = mrhi_formatRgba8Unorm;
+            asideDef.width = kAside.width;
+            asideDef.height = kAside.height;
+            mrhiResourceId declared{};
+            if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &asideDef, &declared);
+                kDeclared != mrhi_success) {
+                static_cast<void>(mrhiDropFrame(native));
+                return failed("an aside could not be declared", kDeclared);
+            }
+            asides.push_back(declared);
+            open.asides.push_back(Frame::Aside{.window = kAside.window,
+                                               .picture = requestKey(declared.index1, declared.generation),
+                                               .width = kAside.width,
+                                               .height = kAside.height});
+        }
         for (std::size_t at = 0; at < recorders.size(); ++at) {
             if (auto declared = recorders[at]->declare(open); !declared.has_value()) {
                 return drop(recorders.first(at + 1), std::move(declared).error());
             }
+        }
+        // An aside nothing drew in is black, as the picture is.
+        asidesClearing.clear();
+        for (std::size_t at = 0; at < asides.size(); ++at) {
+            if (open.asides[at].drawn) {
+                continue;
+            }
+            mrhiPassDef def = mrhiDefaultPassDef();
+            def.colorTargets[0].resource = asides[at];
+            def.colorTargets[0].load = mrhi_loadClear;
+            def.colorTargets[0].store = mrhi_storeKeep;
+            def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+            def.colorTargetCount = 1;
+            def.neverCull = true;
+            mrhiPassId cleared{};
+            if (const mrhiResult kAdded = mrhiAddPass(native, &def, &cleared); kAdded != mrhi_success) {
+                return drop(recorders, failed("an aside's clearing pass could not be added", kAdded).error());
+            }
+            asidesClearing.push_back(cleared);
         }
         // A frame nothing drew in is black.
         if (!open.drawn) {
@@ -241,6 +285,17 @@ struct Framer::State {
                 return drop(recorders, std::move(added).error());
             }
             displaying = *added;
+        }
+        // Each aside shown on its window's surface (D988).
+        std::vector<std::uint64_t> showingAsides;
+        for (std::size_t at = 0; at < target.asides.size(); ++at) {
+            auto added = display->add(target.asides[at].surface, open.asides[at].picture);
+            if (!added.has_value()) {
+                return drop(recorders, std::move(added).error());
+            }
+            if (added->has_value()) {
+                showingAsides.push_back(**added);
+            }
         }
         std::vector<std::uint64_t> placing;
         for (std::size_t at = 0; at < target.images.size(); ++at) {
@@ -326,6 +381,11 @@ struct Framer::State {
                                           mrhiEndPass(native, *panelClearing) != mrhi_success)) {
             return drop(recorders, failed("the panel could not be cleared", mrhi_errorState).error());
         }
+        for (const mrhiPassId kCleared : asidesClearing) {
+            if (mrhiBeginPass(native, kCleared) != mrhi_success || mrhiEndPass(native, kCleared) != mrhi_success) {
+                return drop(recorders, failed("an aside could not be cleared", mrhi_errorState).error());
+            }
+        }
         for (FrameRecorder* recorder : recorders) {
             if (auto recorded = recorder->record(open); !recorded.has_value()) {
                 return drop(recorders, std::move(recorded).error());
@@ -337,6 +397,11 @@ struct Framer::State {
             }
         }
         for (const std::uint64_t kPass : placing) {
+            if (auto recorded = display->record(kPass); !recorded.has_value()) {
+                return drop(recorders, std::move(recorded).error());
+            }
+        }
+        for (const std::uint64_t kPass : showingAsides) {
             if (auto recorded = display->record(kPass); !recorded.has_value()) {
                 return drop(recorders, std::move(recorded).error());
             }
@@ -393,6 +458,7 @@ struct Framer::State {
 
     std::optional<mrhiPassId> clearing;
     std::optional<mrhiPassId> panelClearing;
+    std::vector<mrhiPassId> asidesClearing;
 };
 
 Framer::Framer(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {

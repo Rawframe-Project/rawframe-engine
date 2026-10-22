@@ -9,8 +9,11 @@
 #include "rawframe/render/registrar.h"
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -205,6 +208,19 @@ public:
                 ++framesHidden_;
                 return;
             }
+            // Each window beside it that shows something, where an editor
+            // shows a panel apart (D988): drawn with the picture.
+            for (std::size_t at = 1; at < windows_->states().size(); ++at) {
+                const window::WindowId kWindow = windows_->states()[at].window;
+                const auto kAside = devices_->prepare(kWindow);
+                if (kAside.has_value() && kAside->second.drawable) {
+                    target_.asides.push_back(
+                        FrameTarget::Aside{.surface = kAside->first,
+                                           .width = kAside->second.size.width,
+                                           .height = kAside->second.size.height,
+                                           .window = (std::uint64_t{kWindow.index} << 32U) | kWindow.generation});
+                }
+            }
         }
         // The headset's frame, waited for as its runtime paces it: the
         // picture is placed into its images, drawn at their size where no
@@ -313,6 +329,10 @@ public:
         return made_ || !planned_.has_value() ? std::nullopt : plannedPanel_;
     }
 
+    std::span<const FrameTarget::Aside> plannedAsides() const noexcept override {
+        return made_ || !planned_.has_value() ? std::span<const FrameTarget::Aside>{} : target_.asides;
+    }
+
     void join(FrameRecorder& recorder, std::uint32_t order) override {
         leave(recorder);
         joined_.insert(std::ranges::upper_bound(joined_, order, {}, &Joined::order),
@@ -358,7 +378,7 @@ public:
         if (madeAt_.has_value() &&
             (now_ - *madeAt_ < kLongestUnchanged || kReadForStream || kWindowsKeepTheirPictures) &&
             (!target_.readBack || kReadForStream) && target_.images.empty() && target_.width == lastWidth_ &&
-            target_.height == lastHeight_ && std::ranges::all_of(joined_, [&](const Joined& joined) {
+            target_.height == lastHeight_ && sameAsides() && std::ranges::all_of(joined_, [&](const Joined& joined) {
                 return unchanged_.contains(joined.recorder);
             })) {
             ++framesUnchanged_;
@@ -381,6 +401,10 @@ public:
             runningAt_.reset();
             lastWidth_ = target_.width;
             lastHeight_ = target_.height;
+            lastAsides_.clear();
+            for (const FrameTarget::Aside& kAside : target_.asides) {
+                lastAsides_.push_back({kAside.window, kAside.width, kAside.height});
+            }
             if (target_.readBack) {
                 readWidth_ = target_.width;
                 readHeight_ = target_.height;
@@ -550,6 +574,14 @@ private:
     /// The last frame read back, kept for the capture.
     std::optional<std::vector<std::byte>> last_;
     std::uint32_t lastWidth_ = 0;
+    /// The last frame made's asides, each window and its size (D988): one
+    /// opened, closed, or resized since is drawn.
+    std::vector<std::array<std::uint64_t, 3>> lastAsides_;
+    [[nodiscard]] bool sameAsides() const {
+        return std::ranges::equal(lastAsides_, target_.asides, [](const auto& last, const FrameTarget::Aside& now) {
+            return last[0] == now.window && last[1] == now.width && last[2] == now.height;
+        });
+    }
     std::uint32_t lastHeight_ = 0;
     std::uint32_t readWidth_ = 0;
     std::uint32_t readHeight_ = 0;

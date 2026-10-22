@@ -7,8 +7,10 @@
 #include "rawframe/ui/frames.h"
 #include "rawframe/view/preview.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <span>
@@ -225,11 +227,12 @@ public:
         const bool kLeftOut = preview_ != nullptr && preview_->looking().has_value() &&
                               (preview_->overlays() & static_cast<std::uint8_t>(view::Overlay::Ui)) == 0;
         const ui::DrawList* drawn = kLeftOut ? nullptr : ui_->drawn();
-        renderer_->prepare(drawn != nullptr && !drawn->commands.empty() ? drawn : nullptr,
-                           [ui = ui_](std::uint64_t id) {
-                               return ui->image(id);
-                           });
-        if (same(drawn)) {
+        const auto kImages = [ui = ui_](std::uint64_t id) {
+            return ui->image(id);
+        };
+        renderer_->prepare(drawn != nullptr && !drawn->commands.empty() ? drawn : nullptr, kImages);
+        prepareAsides(kImages);
+        if (same(seen_, drawn)) {
             frames_->unchanged(*renderer_);
         } else {
             frames_->ready(*renderer_);
@@ -246,6 +249,10 @@ public:
             frames_->leave(*renderer_);
             renderer_.reset();
         }
+        for (auto& [kWindow, aside] : asides_) {
+            frames_->leave(*aside.renderer);
+        }
+        asides_.clear();
         emitter_.log(diagnostics::Severity::Info,
                      kUiDrawingSummary,
                      "what the device drew of the local players' UI",
@@ -263,10 +270,61 @@ public:
     }
 
 private:
+    /// What a renderer's last list drew: the list, whether it drew none,
+    /// its atlas's revision, and the images it held.
+    struct Seen {
+        std::optional<ui::DrawList> last;
+        bool drewNone = false;
+        std::uint64_t revision = 0;
+        std::vector<std::shared_ptr<const texture::Texture>> images;
+    };
+    /// A window beside the one shown, its renderer and what it last drew
+    /// (D988).
+    struct Aside {
+        std::unique_ptr<UiRenderer> renderer;
+        Seen seen;
+    };
+
+    /// Each window beside the shown one, where an editor shows a panel
+    /// apart (D988): laid out to its size and drawn by its own renderer,
+    /// joined as it first shows and left as it closes.
+    void prepareAsides(const ImageSource& images) {
+        const std::span<const render::FrameTarget::Aside> kPlanned = frames_->plannedAsides();
+        std::erase_if(asides_, [&](auto& each) {
+            if (std::ranges::contains(kPlanned, each.first, &render::FrameTarget::Aside::window)) {
+                return false;
+            }
+            frames_->leave(*each.second.renderer);
+            return true;
+        });
+        for (const render::FrameTarget::Aside& kShown : kPlanned) {
+            ui_->resizeAside(kShown.window, kShown.width, kShown.height);
+            const std::span<const ui::UiFrames::Aside> kListed = ui_->asides();
+            const auto kFound = std::ranges::find(kListed, kShown.window, &ui::UiFrames::Aside::window);
+            const ui::DrawList* drawn = kFound != kListed.end() ? kFound->drawn : nullptr;
+            auto at = asides_.find(kShown.window);
+            if (at == asides_.end()) {
+                auto made = UiRenderer::create(*frames_->device());
+                if (!made.has_value()) {
+                    continue;
+                }
+                (*made)->aim(kShown.window);
+                frames_->join(**made, kUiOrder);
+                at = asides_.emplace(kShown.window, Aside{.renderer = std::move(*made)}).first;
+            }
+            at->second.renderer->prepare(drawn != nullptr && !drawn->commands.empty() ? drawn : nullptr, images);
+            if (same(at->second.seen, drawn)) {
+                frames_->unchanged(*at->second.renderer);
+            } else {
+                frames_->ready(*at->second.renderer);
+            }
+        }
+    }
+
     /// Whether `drawn` draws what the last list prepared did (D494): the
     /// same commands, glyphs from the same atlas revision, and the same
     /// images held for its keys. Kept as the last, whichever.
-    bool same(const ui::DrawList* drawn) {
+    bool same(Seen& seen, const ui::DrawList* drawn) {
         std::vector<std::shared_ptr<const texture::Texture>> images;
         if (drawn != nullptr) {
             for (const ui::Image& each : drawn->images) {
@@ -276,17 +334,17 @@ private:
         const std::uint64_t kRevision = drawn != nullptr && drawn->atlas != nullptr ? drawn->atlas->revision : 0;
         // No UI drawn after none is the same frame too, as an editor's
         // view leaving the UI out draws one (D952).
-        const bool kSame = drawn == nullptr ? drewNone_
-                                            : last_.has_value() && *drawn == *last_ && kRevision == lastRevision_ &&
-                                                  images == lastImages_;
-        drewNone_ = drawn == nullptr;
+        const bool kSame = drawn == nullptr ? seen.drewNone
+                                            : seen.last.has_value() && *drawn == *seen.last &&
+                                                  kRevision == seen.revision && images == seen.images;
+        seen.drewNone = drawn == nullptr;
         if (drawn == nullptr) {
-            last_.reset();
+            seen.last.reset();
         } else if (!kSame) {
-            last_ = *drawn;
+            seen.last = *drawn;
         }
-        lastRevision_ = kRevision;
-        lastImages_ = std::move(images);
+        seen.revision = kRevision;
+        seen.images = std::move(images);
         return kSame;
     }
 
@@ -294,11 +352,8 @@ private:
     ui::UiFrames* ui_ = nullptr;
     view::PreviewCamera* preview_ = nullptr;
     std::unique_ptr<UiRenderer> renderer_;
-    std::optional<ui::DrawList> last_;
-    /// Whether the last frame drew no UI.
-    bool drewNone_ = false;
-    std::uint64_t lastRevision_ = 0;
-    std::vector<std::shared_ptr<const texture::Texture>> lastImages_;
+    Seen seen_;
+    std::map<std::uint64_t, Aside> asides_;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
 };

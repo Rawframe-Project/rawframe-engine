@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 
 namespace rawframe::ui {
 
@@ -33,6 +34,20 @@ public:
     /// The image the list names `id`, decoded and held, for the list drawn;
     /// none while it is not ready, and for one the UI does not declare.
     [[nodiscard]] virtual std::shared_ptr<const texture::Texture> image(std::uint64_t id) const = 0;
+    /// The windows beside the one shown where an editor shows a panel apart
+    /// (D988): each one (`window::WindowId`'s value) and what the UI drew
+    /// for it in this iteration. A UI with none has none.
+    struct Aside {
+        std::uint64_t window = 0;
+        const DrawList* drawn = nullptr;
+    };
+    [[nodiscard]] virtual std::span<const Aside> asides() const noexcept {
+        return {};
+    }
+    /// An aside's size in device pixels from the next iteration on, as
+    /// `resize` is the window's.
+    virtual void resizeAside(std::uint64_t /*window*/, std::uint32_t /*width*/, std::uint32_t /*height*/) noexcept {
+    }
 };
 
 inline constexpr composition::Capability<UiFrames> kUiFrames{"rawframe.ui.frames"};
