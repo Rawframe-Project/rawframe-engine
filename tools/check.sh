@@ -5,9 +5,9 @@
 #   tools/check.sh push   repository rules, format, gcc's debug tree and the
 #                         address sanitizer's, then clang's development tree
 #                         alone, each running the tests the change can reach
-#                         (tools/affected.py): the pre-push hook's gate; the
-#                         runner's full check after the push runs the rest
-#                         (D898)
+#                         (tools/affected.py) but Studio's window tests: the
+#                         pre-push hook's gate; the runner's full check after
+#                         the push runs the rest (D898, D986)
 #   tools/check.sh        the above plus GCC and Clang in every configuration,
 #                         the address and thread sanitizers, the web build
 #                         (wasm32 without threads, tests under Node), the web
@@ -16,7 +16,10 @@
 #                         is installed,
 #                         and the tick budget (tools/bench.sh check) and the
 #                         web client's download and start budget
-#                         (tools/web_budget.sh check) once all pass
+#                         (tools/web_budget.sh check) once all pass; and
+#                         last, alone, the tests a push leaves it that no
+#                         tree above plays: Studio's gestures and the tests
+#                         labeled `alone` or `headset` (D986)
 #
 # Build trees live under out/ and are reused, so a second run only rebuilds
 # what changed.
@@ -124,11 +127,16 @@ build_and_test() {
     local leave=()
     if [ "$preset" = clang-development ] && [ "$tier" = push ]; then
         # Before a push it plays, alone, the reached tests that neither of
-        # the other two trees played: those labeled `alone`, `headset`,
-        # `gesture`, or `heavy` (D898, D902), and Studio's window tests,
-        # which the full check after the push plays under the address
-        # sanitizer: a Studio change's push took an hour there (D903).
-        leave=(-L 'alone|headset|gesture|heavy|studio')
+        # the other two trees played: those labeled `alone`, `headset`, or
+        # `heavy` (D898, D902). Studio's window tests, its gestures with
+        # them, are the full check's after the push (owner, D986): each
+        # plays a Studio, a server, and a client on the processor, and they
+        # were twenty of a push's twenty-five minutes.
+        leave=(-L 'alone|headset|heavy' -LE studio)
+    elif [ "$preset" = clang-development ] && [ "$tier" = played ]; then
+        # The full check's last step: what only a push played before
+        # (D986), on a machine its trees no longer load.
+        leave=(-L 'alone|headset|gesture|heavy')
     elif [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
         leave=(-LE 'window|headset')
         [ "$tier" != fast ] && leave=(-LE 'window|headset|alone')
@@ -158,15 +166,15 @@ build_and_test() {
     # of tests.
     local run=$jobs
     if [ "$tier" != fast ] && [[ "${leave[1]:-}" != window* ]] && [[ "$preset" != wasm-* ]] &&
-        ! { [ "$tier" = push ] && [ "$preset" = clang-development ]; }; then
+        ! { [[ "$tier" = push || "$tier" = played ]] && [ "$preset" = clang-development ]; }; then
         run=$((jobs * 2))
     fi
-    # Before a push clang's development tree plays the Studio tests, each a
-    # Studio, a server, and a client drawing on the CPU: a quarter of the
-    # processors at once, not one each. At one each, twenty-four started
-    # together on a machine other work loaded to 350, and the first nine to
-    # start all ran out of time together (D909).
-    if [ "$tier" = push ] && [ "$preset" = clang-development ]; then
+    # Where clang's development tree plays Studio's or a played game's
+    # tests, each a Studio, a server, and a client drawing on the CPU: a
+    # quarter of the processors at once, not one each. At one each,
+    # twenty-four started together on a machine other work loaded to 350,
+    # and the first nine to start all ran out of time together (D909).
+    if [[ "$tier" = push || "$tier" = played ]] && [ "$preset" = clang-development ]; then
         run=$((jobs / 4 > 2 ? jobs / 4 : 2))
     fi
     # A test that sets no limit of its own has none under ctest: twenty
@@ -369,6 +377,12 @@ else
     if [ "$failures" -eq 0 ]; then
         web_plays
     fi
+    # Then clang's development tree's tests a push no longer plays (D986):
+    # those labeled `alone`, `headset`, and Studio's gestures, alone.
+    step "played alone"
+    ( tier=played; jobs=$(nproc); build_and_test clang-development ) >out/clang-development.played.log 2>&1
+    cat out/clang-development.played.log
+    grep -q '^FAILED' out/clang-development.played.log && failures=$((failures + 1))
     # Measured last, alone, so the builds do not share the machine with it.
     if [ "$failures" -eq 0 ]; then
         step "tick budget"
