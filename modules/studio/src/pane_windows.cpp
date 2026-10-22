@@ -88,12 +88,17 @@ void ShellParticipant::followAsides(double seconds) {
             break;
         case Kind::Pressed: {
             // Pressed where it lands in the pane, as in the window; a
-            // secondary press chooses a row and opens no menu.
+            // secondary press chooses the row it met and opens the context
+            // menu there, in the pane's window (D990).
             kTorn->pointer = {kX, kY};
+            docking_.pressedApart = kTorn->key;
             const bool kMoving = beforePress();
             const auto kHit = tree_->hit(kTorn->root, kX, kY);
             if (kHit.has_value() && kHit->node.has_value() && (!kHappened.secondary || choosable(*kHit->node))) {
                 pressOn(*kHit->node, kMoving);
+            }
+            if (kHappened.secondary) {
+                showContext(kX, kY);
             }
             break;
         }

@@ -538,6 +538,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
                 continue;
             }
             if (kRequest.kind == ui::AccessRequest::Kind::Press || edit_ == nullptr || edit_->node() != kRequest.node) {
+                docking_.pressedApart = 0;
                 const bool kMoving = beforePress();
                 pressOn(kRequest.node, kMoving);
             }

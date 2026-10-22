@@ -956,6 +956,20 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "closed the window titled Console - Rawframe Studio.*\"code\":\"surface_made\".*\"code\":\"studio_docked\"[^\n]*\"side\":\"apart\".*\"code\":\"surface_made\".*Console back in its dock.*\"exit\":\"clean_stop\"")
+    # A secondary press in a pane apart opens its context menu there
+    # (D990): the Assets opened apart, pressed over its files, offers what
+    # the Assets' context menu does.
+    add_test(NAME studio_pane_apart_menu
+             COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/clicked.sh $<TARGET_FILE:rawframe_host_studio_tool>
+                     games/runners/runners.game level.scene @level.scene context=@Assets "@Open panel in a window"
+                     "until=studio_said,status=\"Assets opened in a window" wait=2 context=400,300
+                     "until=studio_context" wait=1
+             WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    set_tests_properties(studio_pane_apart_menu PROPERTIES
+                         SKIP_REGULAR_EXPRESSION "skip: no device"
+                         PASS_REGULAR_EXPRESSION
+                         "\"code\":\"studio_docked\"[^\n]*\"side\":\"apart\".*\"code\":\"studio_context\"[^\n]*\"part\":\"assets\"")
     # A style class made, named, and deleted in Studio (D638): in Stalls'
     # sheet New makes a class and chooses it, its name typed as tip, and
     # Delete deletes it; Undo brings it back, so the sheet is written with

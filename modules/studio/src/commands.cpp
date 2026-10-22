@@ -871,7 +871,9 @@ void ShellParticipant::closePopup() {
 
 void ShellParticipant::showChoices(const FieldRow& edited, const std::vector<std::string>& choices) {
     closePopup();
-    auto popup = box(root_,
+    // Under the field, in the pane apart it is in if it is (D990).
+    const TornPane* kApart = pressedApart(docking_);
+    auto popup = box(kApart != nullptr ? kApart->root : root_,
                      ui::Layout{.width = ui::pixels(200),
                                 .direction = ui::Direction::Column,
                                 .gap = 2,

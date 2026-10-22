@@ -46,12 +46,19 @@ void ShellParticipant::showContext(float x, float y) {
             rows.push_back(ContextRow{.name = std::string{name}, .button = button});
         }
     };
-    const bool kInHierarchy = tree_->contains(entitiesColumn_) && inside(tree_->placedRectOf(entitiesColumn_), x, y);
-    const bool kInAssets = tree_->contains(scenesColumn_) && inside(tree_->placedRectOf(scenesColumn_), x, y);
-    const bool kInCenter = tree_->contains(centerColumn_) && inside(tree_->placedRectOf(centerColumn_), x, y);
+    // What the press met, in the window it was in: a pane apart holds only
+    // its own (D990).
+    const TornPane* kApart = pressedApart(docking_);
+    const auto kMet = [&](ui::Node node) {
+        return tree_->contains(node) && tree_->placeOf(kApart != nullptr ? kApart->root : root_, node).has_value() &&
+               inside(tree_->placedRectOf(node), x, y);
+    };
+    const bool kInHierarchy = kMet(entitiesColumn_);
+    const bool kInAssets = kMet(scenesColumn_);
+    const bool kInCenter = kMet(centerColumn_);
     // A dock's tab: its pane shown apart, in a window of its own (D988).
     const auto kTab = std::ranges::find_if(kMovablePanes, [&](Dock pane) {
-        return tree_->contains(tabNode(pane)) && inside(tree_->placedRectOf(tabNode(pane)), x, y);
+        return kMet(tabNode(pane));
     });
     docking_.contextPane.reset();
     if (kTab != kMovablePanes.end()) {
@@ -93,13 +100,14 @@ void ShellParticipant::showContext(float x, float y) {
         kContextMenu,
         "a context menu opened",
         {diagnostics::field("part", kPart), diagnostics::field("rows", static_cast<std::uint64_t>(rows.size()))});
-    // Inside the window, turned back from its right and bottom edges.
-    const float kWide = static_cast<float>(width_) / scale_;
-    const float kTall = static_cast<float>(height_) / scale_;
+    // Inside the window, turned back from its right and bottom edges: the
+    // pane apart's where the press was there (D990).
+    const float kWide = static_cast<float>(kApart != nullptr ? kApart->width : width_) / scale_;
+    const float kTall = static_cast<float>(kApart != nullptr ? kApart->height : height_) / scale_;
     const float kHigh = static_cast<float>(rows.size()) * kContextRow + 10;
     const float kLeft = x + kContextWidth > kWide ? std::max(0.0F, x - kContextWidth) : x;
     const float kTop = y + kHigh > kTall ? std::max(0.0F, y - kHigh) : y;
-    auto popup = box(root_,
+    auto popup = box(kApart != nullptr ? kApart->root : root_,
                      ui::Layout{.width = ui::pixels(kContextWidth),
                                 .direction = ui::Direction::Column,
                                 .gap = 1,

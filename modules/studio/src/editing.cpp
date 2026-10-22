@@ -34,6 +34,7 @@ void ShellParticipant::pressAt(float x, float y) {
         followSplitter();
     }
     pressedAt_ = {x, y};
+    docking_.pressedApart = 0;
     const bool kMoving = beforePress();
     const auto kHit = tree_->hit(root_, x, y);
     heldEntity_.reset();

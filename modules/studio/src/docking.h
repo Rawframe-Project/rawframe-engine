@@ -80,6 +80,19 @@ struct Docking {
     std::vector<ui::UiFrames::Aside> asides;
     std::optional<Dock> contextPane;
     std::uint64_t nextKey = 1;
+    /// The pane apart the last press was in, by its key, nought for
+    /// Studio's own window: a menu or choices it opens show there (D990).
+    std::uint64_t pressedApart = 0;
 };
+
+/// The pane apart the last press was in, if it is still apart.
+inline const TornPane* pressedApart(const Docking& docking) {
+    for (const TornPane& kEach : docking.torn) {
+        if (kEach.key == docking.pressedApart) {
+            return &kEach;
+        }
+    }
+    return nullptr;
+}
 
 } // namespace rawframe::studio
