@@ -82,11 +82,13 @@ result::Status ShellParticipant::makeConsole() {
                                        .gap = 8,
                                        .shrink = 0,
                                        .padding = {10, 10, 7, 7},
-                                       .border = {0, 0, 0, 1}},
+                                       .border = {0, 0, 0, 1},
+                                       .wrap = true},
                             0));
     RAWFRAME_TRY(tree_->setLook(kBar, ui::Look{.borderColor = look::kLine}));
+    // Its chips wrap too where the Console is narrow.
     RAWFRAME_TRY_ASSIGN(consoleChips_,
-                        box(kBar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
+                        box(kBar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 1, .wrap = true}, 0));
     RAWFRAME_TRY_ASSIGN(const auto kSearch, searchWell(kBar, "Filter the Console", "Filter", "", 170, Icon::Search));
     consoleSearchValue_ = kSearch.second;
     RAWFRAME_TRY_ASSIGN(consoleClear_, textButton(kBar, std::nullopt, "Clear", ButtonKind::Quiet));
@@ -248,6 +250,8 @@ void ShellParticipant::showConsole() {
                 }
             }
         }
+        // What was said wraps in the room left, never over where it was
+        // said, as the Console docked narrow on the right (D980) is.
         const auto kCell = [&](float width, std::string_view text, std::uint32_t ink, bool mono) {
             auto cell = box(*line,
                             ui::Layout{.width = width > 0 ? ui::pixels(width) : ui::pixels(0),
@@ -256,7 +260,7 @@ void ShellParticipant::showConsole() {
                             0);
             if (cell.has_value()) {
                 static_cast<void>(mono ? monoWords(*cell, text, ink, look::kSmallSize)
-                                       : words(*cell, text, ink, look::kBodySize));
+                                       : wrappedWords(*cell, text, ink, look::kBodySize));
                 static_cast<void>(
                     tree_->setInteraction(*cell, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
             }
