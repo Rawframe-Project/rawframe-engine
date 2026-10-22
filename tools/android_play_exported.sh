@@ -102,6 +102,14 @@ for pattern in "${wanted[@]}"; do
         # a dump that never came from a node that was not there.
         echo "nothing matching $pattern; the last dump said: $dumped"
         echo "its nodes: $(tr '\n' ';' <<<"$nodes")"
+        # And what was in front where the dump held none of the client's
+        # (2026-10-22, the third time): the packages it held and the window
+        # with the focus, an ANR's dialog or another activity.
+        echo "the dump's packages: $("${adb[@]}" shell uiautomator dump /sdcard/rawframe-play.xml >/dev/null 2>&1
+            "${adb[@]}" shell cat /sdcard/rawframe-play.xml 2>/dev/null | grep -o 'package="[^"]*"' | sort | uniq -c |
+                tr '\n' ';')"
+        echo "the focus: $("${adb[@]}" shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | tr -d '\r' |
+            tr '\n' ';')"
     else
         read -r left top right bottom label <<<"$bounds"
         "${adb[@]}" shell input tap $(((left + right) / 2)) $(((top + bottom) / 2))
