@@ -73,10 +73,18 @@ maudResult maudCreateProbeSet(maudSpatializer* spatializer, const maudProbeSetDe
     {
         *setOut = (maudProbeSetId){0, 0};
     }
-    if (spatializer == nullptr || def == nullptr || setOut == nullptr ||
-        def->cookie != PROBE_SET_DEF_COOKIE || !maudProbeSetDefValid(def))
+    if (spatializer == nullptr)
     {
         return maud_errorInvalid;
+    }
+    if (maudSpatializerBusy(spatializer))
+    {
+        return maud_errorState;
+    }
+    if (def == nullptr || setOut == nullptr || def->cookie != PROBE_SET_DEF_COOKIE ||
+        !maudProbeSetDefValid(def))
+    {
+        return maudSpatializerInvalid(spatializer);
     }
     maudSpatializer* s = spatializer;
     if (s->probeSets == nullptr)
@@ -84,7 +92,10 @@ maudResult maudCreateProbeSet(maudSpatializer* spatializer, const maudProbeSetDe
         return maud_errorCapacity;
     }
     maudProbeQueries queries = maudSpatializerQueries(s);
-    return maudAddProbeSet(s->probeSets, &queries, def, setOut);
+    maudSpatializerRunHost(s, true);
+    maudResult result = maudAddProbeSet(s->probeSets, &queries, def, setOut);
+    maudSpatializerRunHost(s, false);
+    return result;
 }
 
 maudResult maudDestroyProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
@@ -93,7 +104,17 @@ maudResult maudDestroyProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
     {
         return maud_errorInvalid;
     }
+    if (maudSpatializerBusy(spatializer))
+    {
+        return maud_errorState;
+    }
+    maudSpatializerRunHost(spatializer, true);
     maudResult result = maudRemoveProbeSet(spatializer->probeSets, set);
+    maudSpatializerRunHost(spatializer, false);
+    if (result == maud_errorInvalid)
+    {
+        return maudSpatializerInvalid(spatializer);
+    }
     if (result == maud_success && set.index1 == spatializer->pathSet.index1 &&
         set.generation == spatializer->pathSet.generation)
     {
@@ -113,10 +134,18 @@ maudResult maudSetPathing(maudSpatializer* spatializer, maudProbeSetId set)
     {
         return maud_errorInvalid;
     }
+    if (maudSpatializerBusy(spatializer))
+    {
+        return maud_errorState;
+    }
     if (set.index1 != 0 || set.generation != 0)
     {
         const maudProbeGraph* graph = nullptr;
         maudResult result = maudFindProbeSet(spatializer->probeSets, set, &graph);
+        if (result == maud_errorInvalid)
+        {
+            return maudSpatializerInvalid(spatializer);
+        }
         if (result != maud_success)
         {
             return result;
@@ -130,6 +159,11 @@ maudResult maudGetProbeSet(const maudSpatializer* spatializer, maudProbeSetId se
                            maudProbeSetInfo* infoOut, uint32_t first, uint32_t count,
                            maudVector3* points)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (infoOut != nullptr)
+    {
+        memset(infoOut, 0, sizeof(*infoOut));
+    }
     if (spatializer == nullptr || infoOut == nullptr)
     {
         return maud_errorInvalid;
@@ -164,29 +198,15 @@ static uint32_t FieldFloats(const maudSpatializer* s)
     return channels * MAUD_DIRECT_BANDS * s->trace.fieldBins;
 }
 
-maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
+// Bakes a set's estimates, and its fields with reflections, from each
+// probe; false when the allocator fails.
+static bool Bake(maudSpatializer* s, const maudProbeGraph* graph, maudProbeBake* bake)
 {
-    if (spatializer == nullptr)
-    {
-        return maud_errorInvalid;
-    }
-    maudSpatializer* s = spatializer;
-    const maudProbeGraph* graph = nullptr;
-    maudProbeBake* bake = nullptr;
-    maudResult result = maudFindProbeBake(s->probeSets, set, &graph, &bake);
-    if (result != maud_success)
-    {
-        return result;
-    }
-    if (s->trace.rays == 0 || s->closestHit == nullptr)
-    {
-        return maud_errorState;
-    }
     maudReleaseProbeBake(&s->allocator, bake);
     uint32_t fieldFloats = FieldFloats(s);
     if (!maudCreateProbeBake(&s->allocator, graph->count, fieldFloats, bake))
     {
-        return maud_errorCapacity;
+        return false;
     }
     for (uint32_t p = 0; p < graph->count; ++p)
     {
@@ -207,7 +227,39 @@ maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
                    (size_t)fieldFloats * sizeof(float));
         }
     }
-    return maud_success;
+    return true;
+}
+
+maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
+{
+    if (spatializer == nullptr)
+    {
+        return maud_errorInvalid;
+    }
+    if (maudSpatializerBusy(spatializer))
+    {
+        return maud_errorState;
+    }
+    maudSpatializer* s = spatializer;
+    const maudProbeGraph* graph = nullptr;
+    maudProbeBake* bake = nullptr;
+    maudResult result = maudFindProbeBake(s->probeSets, set, &graph, &bake);
+    if (result == maud_errorInvalid)
+    {
+        return maudSpatializerInvalid(s);
+    }
+    if (result != maud_success)
+    {
+        return result;
+    }
+    if (s->trace.rays == 0 || s->closestHit == nullptr)
+    {
+        return maud_errorState;
+    }
+    maudSpatializerRunHost(s, true);
+    bool baked = Bake(s, graph, bake);
+    maudSpatializerRunHost(s, false);
+    return baked ? maud_success : maud_errorCapacity;
 }
 
 maudResult maudUseBakedReverb(maudSpatializer* spatializer, maudProbeSetId set)
@@ -216,11 +268,19 @@ maudResult maudUseBakedReverb(maudSpatializer* spatializer, maudProbeSetId set)
     {
         return maud_errorInvalid;
     }
+    if (maudSpatializerBusy(spatializer))
+    {
+        return maud_errorState;
+    }
     if (set.index1 != 0 || set.generation != 0)
     {
         const maudProbeGraph* graph = nullptr;
         maudProbeBake* bake = nullptr;
         maudResult result = maudFindProbeBake(spatializer->probeSets, set, &graph, &bake);
+        if (result == maud_errorInvalid)
+        {
+            return maudSpatializerInvalid(spatializer);
+        }
         if (result != maud_success)
         {
             return result;
@@ -260,11 +320,15 @@ bool maudBakedReverb(maudSpatializer* s, maudVector3 position)
 maudResult maudSaveProbeSet(const maudSpatializer* spatializer, maudProbeSetId set, void* bytes,
                             size_t capacity, size_t* sizeOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (sizeOut != nullptr)
+    {
+        *sizeOut = 0;
+    }
     if (spatializer == nullptr || sizeOut == nullptr)
     {
         return maud_errorInvalid;
     }
-    *sizeOut = 0;
     const maudSpatializer* s = spatializer;
     const maudProbeGraph* graph = nullptr;
     maudProbeBake* bake = nullptr;
@@ -298,9 +362,17 @@ maudResult maudLoadProbeSet(maudSpatializer* spatializer, const void* bytes, siz
     {
         *setOut = (maudProbeSetId){0, 0};
     }
-    if (spatializer == nullptr || bytes == nullptr || setOut == nullptr)
+    if (spatializer == nullptr)
     {
         return maud_errorInvalid;
+    }
+    if (maudSpatializerBusy(spatializer))
+    {
+        return maud_errorState;
+    }
+    if (bytes == nullptr || setOut == nullptr)
+    {
+        return maudSpatializerInvalid(spatializer);
     }
     maudSpatializer* s = spatializer;
     if (s->probeSets == nullptr)
@@ -312,16 +384,18 @@ maudResult maudLoadProbeSet(maudSpatializer* spatializer, const void* bytes, siz
                              s->reflections != nullptr ? s->trace.fieldBins : 0};
     maudProbeGraph graph;
     maudProbeBake bake;
+    // A malformed file is refused as invalid but is not misuse.
+    maudSpatializerRunHost(s, true);
     maudResult result = maudReadBakeFile(bytes, size, &limits, &s->allocator, &graph, &bake);
-    if (result != maud_success)
+    if (result == maud_success)
     {
-        return result;
+        result = maudAdoptProbeSet(s->probeSets, &graph, &bake, setOut);
+        if (result != maud_success)
+        {
+            maudReleaseProbeGraph(&s->allocator, &graph);
+            maudReleaseProbeBake(&s->allocator, &bake);
+        }
     }
-    result = maudAdoptProbeSet(s->probeSets, &graph, &bake, setOut);
-    if (result != maud_success)
-    {
-        maudReleaseProbeGraph(&s->allocator, &graph);
-        maudReleaseProbeBake(&s->allocator, &bake);
-    }
+    maudSpatializerRunHost(s, false);
     return result;
 }

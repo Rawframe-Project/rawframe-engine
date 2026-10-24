@@ -9,9 +9,10 @@
 
 #include "maul-audio/voice.h"
 
-#define VOICE_DETECTOR_DEF_COOKIE 0x6D766164u
-#define MIN_RATE                  8000u
-#define MAX_RATE                  384000u
+#include <string.h>
+
+#define MIN_RATE 8000u
+#define MAX_RATE 384000u
 // The longest hangover a def may ask for.
 #define MAX_HANGOVER_MS 10000u
 
@@ -23,21 +24,9 @@ struct maudVoiceDetector
     maudVadCore core;
 };
 
-maudVoiceDetectorDef maudDefaultVoiceDetectorDef(void)
-{
-    return (maudVoiceDetectorDef){
-        .cookie = VOICE_DETECTOR_DEF_COOKIE,
-        .sampleRate = 48000,
-        .layout = maud_layoutMono,
-        .aggressiveness = 1,
-        .hangoverMilliseconds = 200,
-        .allocator = {0},
-    };
-}
-
 static bool DefValid(const maudVoiceDetectorDef* def)
 {
-    return def->cookie == VOICE_DETECTOR_DEF_COOKIE && def->sampleRate >= MIN_RATE &&
+    return def->cookie == MAUD_VOICE_DETECTOR_DEF_COOKIE && def->sampleRate >= MIN_RATE &&
            def->sampleRate <= MAX_RATE && maudGetLayoutChannelCount(def->layout) != 0 &&
            def->aggressiveness <= 3 && def->hangoverMilliseconds <= MAX_HANGOVER_MS &&
            maudIsAllocatorValid(&def->allocator);
@@ -48,6 +37,11 @@ maudResult maudCreateVoiceDetector(const maudVoiceDetectorDef* def, maudVoiceDet
     if (detectorOut != nullptr)
     {
         *detectorOut = nullptr;
+    }
+    if (def != nullptr && def->cookie == MAUD_VOICE_DETECTOR_DEF_COOKIE &&
+        def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
     }
     if (def == nullptr || detectorOut == nullptr || !DefValid(def))
     {
@@ -82,19 +76,31 @@ void maudDestroyVoiceDetector(maudVoiceDetector* detector)
 maudResult maudDetectVoice(maudVoiceDetector* detector, const float* frames, uint32_t frameCount,
                            maudVoiceState* stateOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (stateOut != nullptr)
+    {
+        memset(stateOut, 0, sizeof(*stateOut));
+    }
     if (detector == nullptr || (frames == nullptr && frameCount != 0))
     {
         return maud_errorInvalid;
     }
     maudVadCore* core = &detector->core;
-    for (uint32_t i = 0; i < frameCount; ++i)
+    for (uint32_t i = 0; i < frameCount;)
     {
-        float sum = 0.0f;
-        for (uint32_t c = 0; c < detector->channels; ++c)
+        float mono[MAUD_VAD_CHUNK];
+        uint32_t n = frameCount - i < MAUD_VAD_CHUNK ? frameCount - i : MAUD_VAD_CHUNK;
+        for (uint32_t k = 0; k < n; ++k)
         {
-            sum += frames[(size_t)i * detector->channels + c];
+            float sum = 0.0f;
+            for (uint32_t c = 0; c < detector->channels; ++c)
+            {
+                sum += frames[(size_t)(i + k) * detector->channels + c];
+            }
+            mono[k] = sum * detector->scale;
         }
-        maudVadSample(core, sum * detector->scale);
+        bool done = false;
+        i += maudVadSamples(core, mono, n, &done);
     }
     if (stateOut != nullptr)
     {

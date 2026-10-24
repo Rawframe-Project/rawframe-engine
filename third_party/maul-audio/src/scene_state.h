@@ -12,6 +12,7 @@
 
 #include "maul-audio/scene.h"
 
+#include <stdatomic.h>
 #include <stdint.h>
 
 // Triangles and a hierarchy over them.
@@ -58,6 +59,8 @@ struct maudAcousticScene
     uint32_t placedCount;
     maudTriangle* boxes;
     maudBvhNode* top;
+    // Calls refused as misuse.
+    _Atomic uint64_t misuse;
 };
 
 // Copies count meshes' triangles, numbered across them, and builds

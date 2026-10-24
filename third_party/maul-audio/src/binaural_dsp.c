@@ -5,6 +5,55 @@
 
 #include "binaural_dsp.h"
 
+#include "flush.h"
+
+// A block of outputs held while every tap passes over it, so that each
+// tap does not load and store the outputs again; each output still adds
+// its taps in order, from its start value.
+#define BLOCK 32
+
+static void FirBlock(const float* restrict x, const float* restrict h, uint32_t taps,
+                     float* restrict out)
+{
+    float acc[BLOCK];
+    for (uint32_t j = 0; j < BLOCK; ++j)
+    {
+        acc[j] = out[j];
+    }
+    for (uint32_t k = 0; k < taps; ++k)
+    {
+        float coefficient = h[k];
+        const float* in = x - k;
+        for (uint32_t j = 0; j < BLOCK; ++j)
+        {
+            acc[j] += coefficient * in[j];
+        }
+    }
+    for (uint32_t j = 0; j < BLOCK; ++j)
+    {
+        out[j] = acc[j];
+    }
+}
+
+void maudFirAdd(const float* restrict x, const float* restrict h, uint32_t taps,
+                float* restrict out, uint32_t frames)
+{
+    uint32_t blocked = frames - frames % BLOCK;
+    for (uint32_t n = 0; n < blocked; n += BLOCK)
+    {
+        FirBlock(x + n, h, taps, out + n);
+    }
+    for (uint32_t k = 0; k < taps; ++k)
+    {
+        float coefficient = h[k];
+        const float* in = x - k;
+        for (uint32_t n = blocked; n < frames; ++n)
+        {
+            out[n] += coefficient * in[n];
+        }
+    }
+}
+
 void maudFir(const float* restrict x, const float* restrict h, uint32_t taps, float* restrict out,
              uint32_t frames)
 {
@@ -12,15 +61,7 @@ void maudFir(const float* restrict x, const float* restrict h, uint32_t taps, fl
     {
         out[n] = 0.0f;
     }
-    for (uint32_t k = 0; k < taps; ++k)
-    {
-        float coefficient = h[k];
-        const float* in = x - k;
-        for (uint32_t n = 0; n < frames; ++n)
-        {
-            out[n] += coefficient * in[n];
-        }
-    }
+    maudFirAdd(x, h, taps, out, frames);
 }
 
 // The cubic Lagrange weights of the points at offsets -1, 0, 1 and 2
@@ -31,20 +72,6 @@ static void Weights(float f, float* c)
     c[1] = (f + 1.0f) * (f - 1.0f) * (f - 2.0f) / 2.0f;
     c[2] = -(f + 1.0f) * f * (f - 2.0f) / 2.0f;
     c[3] = (f + 1.0f) * f * (f - 1.0f) / 6.0f;
-}
-
-void maudFirAdd(const float* restrict x, const float* restrict h, uint32_t taps,
-                float* restrict out, uint32_t frames)
-{
-    for (uint32_t k = 0; k < taps; ++k)
-    {
-        float coefficient = h[k];
-        const float* in = x - k;
-        for (uint32_t n = 0; n < frames; ++n)
-        {
-            out[n] += coefficient * in[n];
-        }
-    }
 }
 
 void maudReadDelayed(const float* restrict x, float start, float step, float* restrict out,
@@ -98,7 +125,7 @@ void maudShelve(float* samples, uint32_t frames, const float start[3], const flo
             y1 = y;
         }
         state[0] = x1;
-        state[1] = y1;
+        state[1] = maudFlush(y1);
         return;
     }
     for (uint32_t n = 0; n < frames; ++n)
@@ -113,5 +140,5 @@ void maudShelve(float* samples, uint32_t frames, const float start[3], const flo
         y1 = y;
     }
     state[0] = x1;
-    state[1] = y1;
+    state[1] = maudFlush(y1);
 }

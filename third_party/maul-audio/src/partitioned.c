@@ -145,6 +145,21 @@ static void Block(maudPartitioned* p)
     memmove(p->input, p->input + b, (size_t)b * sizeof(float));
 }
 
+void maudPushPartitionedBlock(maudPartitioned* p, const float* in)
+{
+    uint32_t b = p->block;
+    memcpy(p->input + b, in, (size_t)b * sizeof(float));
+    p->newest = (p->newest + 1) % p->partitions;
+    maudForwardRealFft(&p->fft, p->input, p->ring + (size_t)p->newest * Bins(b));
+    memmove(p->input, p->input + b, (size_t)b * sizeof(float));
+}
+
+void maudRenderPartitionedChannel(maudPartitioned* p, const float* response, uint32_t channel,
+                                  float* samples)
+{
+    Render(p, response, channel, samples);
+}
+
 void maudRunPartitioned(maudPartitioned* p, const float* in, float* const* out, uint32_t frames)
 {
     uint32_t b = p->block;

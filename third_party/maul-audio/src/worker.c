@@ -11,13 +11,6 @@
 #include <string.h>
 #include <windows.h>
 
-static DWORD WINAPI RunWorker(void* user)
-{
-    maudWorker* worker = user;
-    worker->run(worker->user);
-    return 0;
-}
-
 // Names the thread through SetThreadDescription, which kernel32 has
 // from Windows 10 version 1607; earlier systems keep it unnamed.
 static void Name(HANDLE thread, const char* name)
@@ -38,12 +31,23 @@ static void Name(HANDLE thread, const char* name)
     (void)describe(thread, wide);
 }
 
+static DWORD WINAPI RunWorker(void* user)
+{
+    maudWorker* worker = user;
+    Name(GetCurrentThread(), worker->name);
+    worker->run(worker->user);
+    return 0;
+}
+
 bool maudStartWorker(maudWorker* worker, void (*run)(void* user), void* user, const char* name)
 {
     worker->run = run;
     worker->user = user;
+    worker->name = name;
     worker->thread = CreateThread(nullptr, 0, RunWorker, worker, 0, nullptr);
     worker->running = worker->thread != nullptr;
+    // Named here too, so that it carries its name once this returns
+    // whether or not it has started yet.
     if (worker->running)
     {
         Name(worker->thread, name);
@@ -72,6 +76,7 @@ static void* RunWorker(void* user)
     maudWorker* worker = user;
     struct sched_param param = {.sched_priority = sched_get_priority_min(SCHED_FIFO)};
     (void)pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+    (void)pthread_setname_np(pthread_self(), worker->name);
     worker->run(worker->user);
     return nullptr;
 }
@@ -80,7 +85,10 @@ bool maudStartWorker(maudWorker* worker, void (*run)(void* user), void* user, co
 {
     worker->run = run;
     worker->user = user;
+    worker->name = name;
     worker->running = pthread_create(&worker->thread, nullptr, RunWorker, worker) == 0;
+    // Named here too, so that it carries its name once this returns
+    // whether or not it has started yet.
     if (worker->running)
     {
         (void)pthread_setname_np(worker->thread, name);

@@ -12,6 +12,7 @@
 // for energy.
 
 #include "allocator.h"
+#include "ramp.h"
 #include "spherical_harmonics.h"
 
 #include "maul-audio/speakers.h"
@@ -19,11 +20,10 @@
 #include <math.h>
 #include <string.h>
 
-#define PANNER_DEF_COOKIE 0x6D617370u
-#define MAX_CHANNELS      12
-#define MAX_POINTS        (MAX_CHANNELS + 2)
-#define MAX_TRIANGLES     64
-#define PI_F              3.14159265f
+#define MAX_CHANNELS  12
+#define MAX_POINTS    (MAX_CHANNELS + 2)
+#define MAX_TRIANGLES 64
+#define PI_F          3.14159265f
 // How far below zero a face's least gain may round and the face still
 // hold a direction.
 #define HELD 1e-5f
@@ -54,15 +54,6 @@ struct maudSpeakerPanner
     uint32_t neighbourCount[2];
     uint32_t neighbours[2][MAX_CHANNELS];
 };
-
-maudSpeakerPannerDef maudDefaultSpeakerPannerDef(void)
-{
-    return (maudSpeakerPannerDef){
-        .cookie = PANNER_DEF_COOKIE,
-        .layout = maud_layoutStereo,
-        .allocator = {nullptr, nullptr, nullptr},
-    };
-}
 
 static void Point(float azimuthDegrees, float elevationDegrees, float* p)
 {
@@ -220,7 +211,12 @@ maudResult maudCreateSpeakerPanner(const maudSpeakerPannerDef* def, maudSpeakerP
     {
         *pannerOut = nullptr;
     }
-    if (def == nullptr || pannerOut == nullptr || def->cookie != PANNER_DEF_COOKIE ||
+    if (def != nullptr && def->cookie == MAUD_SPEAKER_PANNER_DEF_COOKIE &&
+        def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
+    }
+    if (def == nullptr || pannerOut == nullptr || def->cookie != MAUD_SPEAKER_PANNER_DEF_COOKIE ||
         maudGetLayoutChannelCount(def->layout) == 0 || !maudIsAllocatorValid(&def->allocator))
     {
         return maud_errorInvalid;
@@ -381,6 +377,15 @@ static bool Finite(maudVector3 v)
 maudResult maudGetSpeakerGains(const maudSpeakerPanner* panner, maudVector3 direction,
                                float* gainsOut)
 {
+    // With a panner, its layout's gains read zero on failure; without
+    // one their count is not known, and they are left as they were.
+    if (panner != nullptr && gainsOut != nullptr)
+    {
+        for (uint32_t c = 0; c < panner->channels; ++c)
+        {
+            gainsOut[c] = 0.0f;
+        }
+    }
     if (panner == nullptr || gainsOut == nullptr || !Finite(direction))
     {
         return maud_errorInvalid;
@@ -410,6 +415,16 @@ static bool OutValid(const maudSpeakerPanner* panner, float* const* out)
     return true;
 }
 
+// One speaker's share of the source, its gain ramped across the block.
+static inline void AddRamped(float* out, const float* in, float a, float step, uint32_t frames,
+                             bool isSigned)
+{
+    for (uint32_t n = 0; n < frames; ++n)
+    {
+        out[n] += (a + step * maudFramePlace(n, isSigned)) * in[n];
+    }
+}
+
 maudResult maudPanToSpeakers(const maudSpeakerPanner* panner, const maudPanSource* from,
                              const maudPanSource* to, const float* in, float* const* out,
                              uint32_t frames)
@@ -432,9 +447,13 @@ maudResult maudPanToSpeakers(const maudSpeakerPanner* panner, const maudPanSourc
             continue;
         }
         float step = frames > 0 ? (b - a) / (float)frames : 0.0f;
-        for (uint32_t n = 0; n < frames; ++n)
+        if (maudRampSigned(frames))
         {
-            out[c][n] += (a + step * (float)(n + 1)) * in[n];
+            AddRamped(out[c], in, a, step, frames, true);
+        }
+        else
+        {
+            AddRamped(out[c], in, a, step, frames, false);
         }
     }
     return maud_success;

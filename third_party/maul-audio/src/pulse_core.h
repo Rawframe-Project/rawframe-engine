@@ -18,6 +18,9 @@
 #define MAUD_PULSE_DEADLINE_NS 2000000000ll
 // How long after a lost or refused connection the next one is tried.
 #define MAUD_PULSE_RETRY_NS 500000000ll
+// How long the devices of a lost connection are kept for a new server
+// to list again.
+#define MAUD_PULSE_AWAY_NS 10000000000ll
 // How many loop iterations one pump takes at most.
 #define MAUD_PULSE_PUMP_ITERATIONS 64
 // The rate of a native stream with no device yet.
@@ -34,6 +37,9 @@ typedef struct maudPulseNode
     uint32_t index;
     maudDirection direction;
     bool used;
+    // Kept from a lost connection, its index gone: a new server's node
+    // with its name takes it over, else it is removed.
+    bool away;
 } maudPulseNode;
 
 // The connection to the server and what its first queries owe.
@@ -47,6 +53,9 @@ typedef struct maudPulseServer
     // that reported it, and a new one is tried from nextAttempt on.
     bool lost;
     int64_t nextAttempt;
+    // When the devices of a lost connection go if no new server has
+    // listed them by then; zero with none away.
+    int64_t awayUntil;
     char defaultNames[2][MAUD_PULSE_NAME_BYTES];
 } maudPulseServer;
 
@@ -63,6 +72,9 @@ typedef struct maudPulseStream
     maudWorker worker;
     // Asks the thread to return; set by the control thread.
     atomic_bool quit;
+    // Set by the thread as it returns on its own: the server ended the
+    // stream or the connection, and the drain rebuilds it.
+    atomic_bool lost;
     bool threadRunning;
     bool used;
 } maudPulseStream;

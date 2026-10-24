@@ -37,6 +37,41 @@ static bool ToUtf8(const wchar_t* wide, char* out, int capacity)
     return WideCharToMultiByte(CP_UTF8, 0, wide, -1, out, capacity, nullptr, nullptr) > 0;
 }
 
+// Converts wide to UTF-8 in out, cut after the last whole character that
+// fits with the terminating NUL; false when not even that converts.
+static bool ToUtf8Cut(const wchar_t* wide, char* out, int capacity)
+{
+    if (ToUtf8(wide, out, capacity))
+    {
+        return true;
+    }
+    // Each character takes at least one byte, so no more than
+    // capacity - 1 of them fit; drop one at a time, a surrogate pair
+    // whole.
+    size_t length = wcslen(wide);
+    int count = length < (size_t)(capacity - 1) ? (int)length : capacity - 1;
+    while (count > 0)
+    {
+        if (IS_HIGH_SURROGATE(wide[count - 1]))
+        {
+            count--;
+            continue;
+        }
+        int bytes =
+            WideCharToMultiByte(CP_UTF8, 0, wide, count, out, capacity - 1, nullptr, nullptr);
+        if (bytes > 0)
+        {
+            out[bytes] = '\0';
+            return true;
+        }
+        count -=
+            count >= 2 && IS_LOW_SURROGATE(wide[count - 1]) && IS_HIGH_SURROGATE(wide[count - 2])
+                ? 2
+                : 1;
+    }
+    return false;
+}
+
 // The endpoint ID of a device in UTF-8; false when it has none or it
 // does not fit.
 static bool IdOf(IMMDevice* device, char* out)
@@ -132,7 +167,7 @@ static bool Describe(const maudContext* context, IMMDevice* device, maudDirectio
     PropVariantInit(&name);
     bool named = SUCCEEDED(IPropertyStore_GetValue(store, &s_friendlyName, &name)) &&
                  name.vt == VT_LPWSTR &&
-                 ToUtf8(name.pwszVal, endpoint->name, MAUD_WASAPI_NAME_BYTES);
+                 ToUtf8Cut(name.pwszVal, endpoint->name, MAUD_WASAPI_NAME_BYTES);
     PropVariantClear(&name);
     if (!named)
     {
@@ -437,6 +472,7 @@ static const maudBackend s_wasapi = {
     .pump = Pump,
     .openStream = OpenStream,
     .exclusive = true,
+    .loopback = true,
     .attachStream = AttachStream,
     .detachStream = DetachStream,
     .setStreamActive = SetStreamActive,

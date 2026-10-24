@@ -40,7 +40,7 @@ extern "C"
         maud_backendAaudio = 7,
         maud_backendWeb = 8,
         // A backend built from a directory outside the library, as a
-        // console's is (MAUL_AUDIO_PRIVATE_BACKEND; docs/private-backends.md).
+        // console's is (MAUL_AUDIO_PRIVATE_BACKEND; docs/user/private-backends.md).
         // Built, it comes first in the native order; unbuilt, asking for it
         // is unsupported.
         maud_backendPrivate = 9,
@@ -78,12 +78,13 @@ extern "C"
         uint32_t offlineSampleRate;
         // On Android, the application's JavaVM* and a jobject naming an
         // android.content.Context, with the java/maul/audio classes
-        // compiled into the application: the context then lists every
+        // compiled into the application (and java/proguard-rules.pro among
+        // its rules when it shrinks its code): the context then lists every
         // device, follows their changes and asks for the microphone once
         // where the Context is an Activity. NULL both, the default: only
         // the default output and input. The context keeps a reference of
-        // its own to the Context. One without the other is invalid.
-        // Unused elsewhere.
+        // its own to the Context. One without the other is invalid. Unused
+        // elsewhere.
         void* androidJavaVm;
         void* androidContext;
         // On iOS, whether the Ring/Silent switch silences the context's
@@ -135,7 +136,7 @@ extern "C"
     /// @param def         The def, from maudDefaultContextDef.
     /// @param contextOut  Receives the context; set to NULL on failure.
     /// @return `maud_success`; `maud_errorVersion` for a def stamped with
-    ///         another major or minor version than the library's, checked
+    ///         another binary interface than the library's, checked
     ///         before anything else of it; `maud_errorInvalid` for a NULL
     ///         argument, a def without its cookie, an allocator with one function, a limit
     ///         of 0 or an offline rate out of range; `maud_errorUnsupported`
@@ -151,8 +152,9 @@ extern "C"
     ///
     /// @param context  The context. NULL does nothing.
     /// @return `maud_success`, or `maud_errorState` when called on a thread
-    ///         that is rendering one of its streams; the context is then
-    ///         left as it was and the call counts as misuse.
+    ///         that is rendering one of its streams or running its allocator;
+    ///         the context is then left as it was and the call counts as
+    ///         misuse.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     /// No stream of the context may be rendering on another thread.
@@ -168,8 +170,9 @@ extern "C"
     ///
     /// @param context  The context.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL context;
-    ///         `maud_errorState` when called on a thread that is rendering
-    ///         one of the context's streams, which counts as misuse.
+    ///         `maud_errorState` when called on a thread that is rendering one
+    ///         of the context's streams or running its allocator, which counts
+    ///         as misuse.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudResumeContext(maudContext* context);
@@ -187,8 +190,9 @@ extern "C"
     /// @param context    The context.
     /// @param suspended  Whether the host is suspended.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL context;
-    ///         `maud_errorState` when called on a thread that is rendering
-    ///         one of the context's streams, which counts as misuse.
+    ///         `maud_errorState` when called on a thread that is rendering one
+    ///         of the context's streams or running its allocator, which counts
+    ///         as misuse.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudSetContextSuspended(maudContext* context,
@@ -204,8 +208,10 @@ extern "C"
     MAUD_API maudBackendKind maudGetContextBackend(const maudContext* context);
 
     /// Returns how many calls the context refused as misuse: invalid
-    /// arguments against it, and control calls made on a thread that was
-    /// rendering one of its streams. Stale ids are not misuse.
+    /// arguments against it, and calls refused because they came from
+    /// host code the context was running (control calls on a thread
+    /// rendering one of its streams or running its allocator, a stream
+    /// rendered again from its own callback). Stale ids are not misuse.
     ///
     /// @param context  The context.
     /// @return The count since the context was created.

@@ -25,6 +25,12 @@ void maudStampOutputClock(maudStreamCore* core, int64_t latency);
 // Real-time safe.
 void maudStampInputClock(maudStreamCore* core, int64_t latency);
 
+// Stamps a stream with a host time its caller worked out, against the
+// one reading of the clock it took: the frame at the position before
+// this callback's frames is heard (output) or was captured (input) at
+// host, latency nanoseconds from that reading. Real-time safe.
+void maudStampClockAt(maudStreamCore* core, int64_t host, int64_t latency);
+
 // Clears a new stream's stamp: no host time yet.
 void maudResetClock(maudStreamCore* core);
 

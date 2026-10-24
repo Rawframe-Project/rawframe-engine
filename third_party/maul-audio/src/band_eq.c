@@ -11,6 +11,8 @@
 
 #include "band_eq.h"
 
+#include "flush.h"
+
 #include <math.h>
 
 #define PI_D        3.14159265358979323846
@@ -199,43 +201,68 @@ void maudDesignBandEq(const maudBandEqSetup* setup, const double gains[MAUD_BAND
     }
 }
 
-// All three filters per sample: their recursions are independent across
-// samples, so the processor overlaps one filter's work on a sample with
-// the next filter's on the sample before.
+// One band's coefficients and state, and its step on one sample.
+typedef struct Band
+{
+    float a1, a2, a3, m0, m1, m2, ic1, ic2;
+} Band;
+
+static inline float Step(Band* b, float v0)
+{
+    float v3 = v0 - b->ic2;
+    float v1 = b->a1 * b->ic1 + b->a2 * v3;
+    float v2 = b->ic2 + b->a2 * b->ic1 + b->a3 * v3;
+    b->ic1 = 2.0f * v1 - b->ic1;
+    b->ic2 = 2.0f * v2 - b->ic2;
+    return b->m0 * v0 + b->m1 * v1 + b->m2 * v2;
+}
+
+// The bands the wavefront below is written for.
+enum
+{
+    WAVEFRONT_BANDS = 3
+};
+static_assert(MAUD_BANDS == WAVEFRONT_BANDS, "the wavefront below runs three bands");
+
+// The bands in series over a run, as a wavefront: at step t band i takes
+// sample t - i, so the three bands' steps in one iteration do not wait on
+// each other (in series, each sample's bands did); each band's
+// arithmetic and order are as they were.
 static void RunSteady(maudBandEqState* state, const maudBandEqFilters* f, const float* in,
                       float* out, uint32_t frames)
 {
-    float a1[MAUD_BANDS];
-    float a2[MAUD_BANDS];
-    float a3[MAUD_BANDS];
-    float ic1[MAUD_BANDS];
-    float ic2[MAUD_BANDS];
+    Band k[MAUD_BANDS];
     for (int i = 0; i < MAUD_BANDS; ++i)
     {
-        a1[i] = 1.0f / (1.0f + f->g[i] * (f->g[i] + f->k[i]));
-        a2[i] = f->g[i] * a1[i];
-        a3[i] = f->g[i] * a2[i];
-        ic1[i] = state->ic1[i];
-        ic2[i] = state->ic2[i];
+        float a1 = 1.0f / (1.0f + f->g[i] * (f->g[i] + f->k[i]));
+        float a2 = f->g[i] * a1;
+        k[i] = (Band){a1,       a2,       f->g[i] * a2,  f->m0[i],
+                      f->m1[i], f->m2[i], state->ic1[i], state->ic2[i]};
     }
-    for (uint32_t n = 0; n < frames; ++n)
+    // The first two bands' last outputs, the next band's input.
+    float b0 = 0.0f;
+    float b1 = 0.0f;
+    for (uint32_t t = 0; t < frames + 2; ++t)
     {
-        float v0 = in[n];
-        for (int i = 0; i < MAUD_BANDS; ++i)
+        if (t >= 2)
         {
-            float v3 = v0 - ic2[i];
-            float v1 = a1[i] * ic1[i] + a2[i] * v3;
-            float v2 = ic2[i] + a2[i] * ic1[i] + a3[i] * v3;
-            ic1[i] = 2.0f * v1 - ic1[i];
-            ic2[i] = 2.0f * v2 - ic2[i];
-            v0 = f->m0[i] * v0 + f->m1[i] * v1 + f->m2[i] * v2;
+            out[t - 2] = Step(&k[2], b1);
         }
-        out[n] = v0;
+        if (t >= 1 && t <= frames)
+        {
+            b1 = Step(&k[1], b0);
+        }
+        if (t < frames)
+        {
+            b0 = Step(&k[0], in[t]);
+        }
     }
     for (int i = 0; i < MAUD_BANDS; ++i)
     {
-        state->ic1[i] = ic1[i];
-        state->ic2[i] = ic2[i];
+        // Once a run: a state stuck subnormal stays so for the rest of
+        // one block at most.
+        state->ic1[i] = maudFlush(k[i].ic1);
+        state->ic2[i] = maudFlush(k[i].ic2);
     }
 }
 

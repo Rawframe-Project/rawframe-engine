@@ -69,6 +69,15 @@ void maudSetPartitionedResponse(maudPartitioned* p, const float* response);
 // Convolves frames of input, adding each channel's output into out.
 void maudRunPartitioned(maudPartitioned* p, const float* in, float* const* out, uint32_t frames);
 
+// For a convolver whose blocks a caller schedules itself (staged.h):
+// takes a whole block of input into the ring, then renders channel's
+// block under response (zeros for NULL) into samples' second half, b
+// floats from samples + b, samples holding 2b. Neither touches the
+// output that maudRunPartitioned adds.
+void maudPushPartitionedBlock(maudPartitioned* p, const float* in);
+void maudRenderPartitionedChannel(maudPartitioned* p, const float* response, uint32_t channel,
+                                  float* samples);
+
 // Silences the convolver's history (the response stays).
 void maudResetPartitioned(maudPartitioned* p);
 

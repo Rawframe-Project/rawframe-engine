@@ -22,8 +22,12 @@ void maudPulseSetStreamActive(maudContext* context, maudStreamSlot* slot, bool a
 // Rebuilds the stream at its new rate, running again if it ran.
 void maudPulseRetargetStream(maudContext* context, maudStreamSlot* slot);
 
-// Starts every running stream whose thread is not running: after a
-// connection or a thread failed to start.
+// Rebuilds the started streams the server ended, or that have no
+// connection or no thread, once their retry is due.
 void maudPulseResumeStreams(maudContext* context);
+
+// While the server is away: every started stream not suspended yet is
+// suspended for the platform until a rebuild on a new server works.
+void maudPulseSuspendStreams(maudContext* context);
 
 #endif // MAUL_AUDIO_SRC_PULSE_STREAM_H

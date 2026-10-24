@@ -38,6 +38,15 @@ extern "C"
         // Streams only: capture and playback in one callback, on a device
         // of each direction.
         maud_directionDuplex = 2,
+        // Streams only: capture of what an output device plays, its
+        // blocks delivered as an input stream's. On the web it captures
+        // what the user picks in the browser's display capture (a tab, a
+        // window or the screen, with its audio where the browser gives
+        // it), whatever the stream's device, and is created in a user
+        // gesture's handler, where the browser allows asking. On WASAPI
+        // (Windows 10 1703 and later) its blocks pause while the device
+        // plays nothing: Windows delivers no packets then.
+        maud_directionLoopback = 3,
     };
 
     // What a default device is the default for.
@@ -100,7 +109,7 @@ extern "C"
         // The layout and rates are maud_layoutNone and 0 where the platform
         // cannot tell them without opening the device, as on ALSA, whose
         // devices are not opened to be listed; a stream that opens one
-        // learns its rate.
+        // learns its rate. maud_notifyDeviceFormatChanged reports a change.
         maudChannelLayout nativeLayout;
         uint32_t nativeSampleRate;
         // The rates the device can run at without conversion.
@@ -129,7 +138,7 @@ extern "C"
     ///                    capacity is 0.
     /// @param capacity    The room in idsOut.
     /// @param countOut    Receives the number of devices, which may exceed
-    ///                    capacity.
+    ///                    capacity; 0 on failure.
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer
     ///         where one is required or an unknown direction.
     /// @par Thread safety
@@ -142,7 +151,7 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param device   The device.
-    /// @param infoOut  Receives the information.
+    /// @param infoOut  Receives the information; all zero on failure.
     /// @return `maud_success`; `maud_errorStale` for an id that names no
     ///         device; `maud_errorInvalid` for a NULL pointer.
     /// @par Thread safety
@@ -157,7 +166,8 @@ extern "C"
     /// @param device     The device.
     /// @param bytesOut   Receives the name. May be NULL when capacity is 0.
     /// @param capacity   The room in bytesOut.
-    /// @param lengthOut  Receives the name's length in bytes.
+    /// @param lengthOut  Receives the name's length in bytes: the length
+    ///                   needed when it does not fit, 0 on other failures.
     /// @return `maud_success`; `maud_errorCapacity` when the name does not
     ///         fit, with nothing copied and lengthOut set; `maud_errorStale`;
     ///         `maud_errorInvalid` for a NULL pointer where one is required.
@@ -176,7 +186,8 @@ extern "C"
     /// @param device     The device.
     /// @param bytesOut   Receives the key. May be NULL when capacity is 0.
     /// @param capacity   The room in bytesOut.
-    /// @param lengthOut  Receives the key's length in bytes.
+    /// @param lengthOut  Receives the key's length in bytes: the length
+    ///                   needed when it does not fit, 0 on other failures.
     /// @return `maud_success`; `maud_errorCapacity` when the key does not
     ///         fit, with nothing copied and lengthOut set; `maud_errorStale`;
     ///         `maud_errorInvalid` for a NULL pointer where one is required.
@@ -192,7 +203,7 @@ extern "C"
     /// @param direction    Output or input.
     /// @param role         The role.
     /// @param deviceOut    Receives the device; the null id when there is
-    ///                     none.
+    ///                     none and on failure.
     /// @return `maud_success`; `maud_empty` when the direction has no
     ///         device; `maud_errorInvalid` for a NULL pointer or an unknown
     ///         direction or role.

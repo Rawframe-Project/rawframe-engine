@@ -27,6 +27,9 @@ extern "C"
     typedef struct maudBinauralDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The set the effect renders through, at the rate the effect runs
         // at. It must outlive the effect.
         const maudHrtf* hrtf;
@@ -56,20 +59,42 @@ extern "C"
         float gain;
     } maudBinauralParams;
 
+// The cookie of a binaural def, which its default sets and
+// maudCreateBinaural checks.
+#define MAUD_BINAURAL_DEF_COOKIE 0x6D616262u
+
     /// Returns the default binaural def: no set, at most 1,024 frames per
     /// call, the near field on for a head of 8.75 cm.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudBinauralDef maudDefaultBinauralDef(void);
+    static inline maudBinauralDef maudDefaultBinauralDef(void)
+    {
+#ifdef __cplusplus
+        maudBinauralDef def = {};
+#else
+    maudBinauralDef def = {0};
+#endif
+        def.cookie = MAUD_BINAURAL_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.maxFrames = 1024;
+        def.nearField = true;
+        def.headRadius = 0.0875f;
+        return def;
+    }
 
     /// Creates a binaural effect, its memory taken once from the def's
     /// allocator.
     ///
     /// @param def      The def, from maudDefaultBinauralDef, with a set.
     /// @param effectOut  Receives the effect; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer or a
     ///         def without its cookie, without a set or out of range;
     ///         `maud_errorCapacity` when the allocator fails.
     /// @par Thread safety

@@ -21,6 +21,35 @@
 #define KEEP_PERIODS 2u
 #define HIGH_PERIODS 4u
 
+// The frames of the ring from frame at on that run before it wraps, of
+// frames wanted.
+static uint32_t BeforeWrap(const maudDuplex* duplex, uint32_t at, uint32_t frames)
+{
+    uint32_t left = duplex->capacity - (at & (duplex->capacity - 1));
+    return frames < left ? frames : left;
+}
+
+// Copies frames of a block into the ring from frame at on, in two runs
+// at most, the second after the ring wraps.
+static void ToRing(maudDuplex* duplex, uint32_t at, const float* block, uint32_t frames)
+{
+    uint32_t first = BeforeWrap(duplex, at, frames);
+    size_t frameBytes = duplex->channels * sizeof(float);
+    memcpy(duplex->ring + (size_t)(at & (duplex->capacity - 1)) * duplex->channels, block,
+           first * frameBytes);
+    memcpy(duplex->ring, block + (size_t)first * duplex->channels, (frames - first) * frameBytes);
+}
+
+// Copies frames of the ring from frame at on into a block, the same way.
+static void FromRing(const maudDuplex* duplex, uint32_t at, float* block, uint32_t frames)
+{
+    uint32_t first = BeforeWrap(duplex, at, frames);
+    size_t frameBytes = duplex->channels * sizeof(float);
+    memcpy(block, duplex->ring + (size_t)(at & (duplex->capacity - 1)) * duplex->channels,
+           first * frameBytes);
+    memcpy(block + (size_t)first * duplex->channels, duplex->ring, (frames - first) * frameBytes);
+}
+
 // Runs on the input half's thread: queues what it captured, dropping
 // what does not fit.
 static void Capture(const maudStreamBlock* block, void* user)
@@ -30,12 +59,7 @@ static void Capture(const maudStreamBlock* block, void* user)
     uint32_t read = atomic_load_explicit(&duplex->read, memory_order_acquire);
     uint32_t room = duplex->capacity - (written - read);
     uint32_t frames = block->frameCount < room ? block->frameCount : room;
-    for (uint32_t i = 0; i < frames; ++i)
-    {
-        uint32_t at = (written + i) & (duplex->capacity - 1);
-        memcpy(duplex->ring + (size_t)at * duplex->channels,
-               block->input + (size_t)i * duplex->channels, duplex->channels * sizeof(float));
-    }
+    ToRing(duplex, written, block->input, frames);
     atomic_store_explicit(&duplex->written, written + frames, memory_order_release);
     atomic_store_explicit(&duplex->primed, true, memory_order_release);
     if (frames < block->frameCount)
@@ -61,12 +85,7 @@ static void Play(const maudStreamBlock* block, void* user)
         slipped += dropped;
     }
     uint32_t frames = block->frameCount < waiting ? block->frameCount : waiting;
-    for (uint32_t i = 0; i < frames; ++i)
-    {
-        uint32_t at = (read + i) & (duplex->capacity - 1);
-        memcpy(duplex->block + (size_t)i * duplex->channels,
-               duplex->ring + (size_t)at * duplex->channels, duplex->channels * sizeof(float));
-    }
+    FromRing(duplex, read, duplex->block, frames);
     memset(duplex->block + (size_t)frames * duplex->channels, 0,
            (size_t)(block->frameCount - frames) * duplex->channels * sizeof(float));
     atomic_store_explicit(&duplex->read, read + frames, memory_order_release);

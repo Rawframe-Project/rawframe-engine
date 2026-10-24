@@ -110,7 +110,22 @@ struct maudSpatializer
     // The rendering side's latched buffer.
     uint32_t front;
     _Atomic uint32_t shared;
+    // Calls refused as misuse, and whether host code the spatializer
+    // called (its hooks, its allocator) is running.
+    _Atomic uint64_t misuse;
+    _Atomic bool host;
 };
+
+// Counts one misuse and returns maud_errorInvalid, for invalid arguments.
+maudResult maudSpatializerInvalid(maudSpatializer* s);
+
+// Whether a call that changes the spatializer must be refused because
+// host code the spatializer is running made it; a refusal counts one
+// misuse.
+bool maudSpatializerBusy(maudSpatializer* s);
+
+// Marks host code as running from the spatializer, or as returned.
+void maudSpatializerRunHost(maudSpatializer* s, bool running);
 
 // The host's queries and tasks, and the probe limits, for probe work.
 maudProbeQueries maudSpatializerQueries(const maudSpatializer* s);

@@ -47,24 +47,62 @@ float maudLevelDbfs(double meanSquare)
     return level > MAUD_FLOOR_DBFS ? level : MAUD_FLOOR_DBFS;
 }
 
-// The exponential integral E1(x) for x > 0: its series below 1, its
-// continued fraction above (as Numerical Recipes' expint, n = 1).
+// The series' coefficients, (-1)^(k + 1) / (k k!) for k = 1 to 29.
+static const double s_series[29] = {
+    1,
+    -0.25,
+    0.055555555555555552,
+    -0.010416666666666666,
+    0.0016666666666666668,
+    -0.00023148148148148149,
+    2.834467120181406e-05,
+    -3.1001984126984127e-06,
+    3.0619243582206544e-07,
+    -2.7557319223985891e-08,
+    2.27746439867652e-09,
+    -1.7397297489890083e-10,
+    1.2353110643708935e-11,
+    -8.1933897126640886e-13,
+    5.0981091545465446e-14,
+    -2.9871733327421158e-15,
+    1.6537983849091297e-16,
+    -8.6773372047701253e-18,
+    4.326650129802279e-19,
+    -2.0551588116560825e-20,
+    9.3204481254244102e-22,
+    -4.0439960874775335e-23,
+    1.6818131176655147e-24,
+    -6.7155732129004933e-26,
+    2.5787801137537893e-27,
+    -9.5369087047107595e-29,
+    3.4013666162205723e-30,
+    -1.1713890132392279e-31,
+    3.8999872022233505e-33,
+};
+
+// The series' degree for x below a limit: the fewest terms whose next
+// is under 1e-17 of E1 at the limit.
+static int Degree(double x)
+{
+    return x < 1e-4 ? 3 : x < 0.01 ? 6 : x < 0.1 ? 9 : x < 1.0 ? 18 : 29;
+}
+
+// The exponential integral E1(x) for x > 0. Below 3, its series
+// -gamma - ln x + sum of (-1)^(k + 1) x^k / (k k!), by Horner's rule at
+// the degree its range needs: no division and no test per term. From 3,
+// its continued fraction (as Numerical Recipes' expint, n = 1), which
+// converges there in a few steps. Within 2e-13 of its value throughout.
 double maudExpIntegral(double x)
 {
-    if (x < 1.0)
+    if (x < 3.0)
     {
-        double sum = 0.0;
-        double term = 1.0;
-        for (int k = 1; k < 40; ++k)
+        int n = Degree(x);
+        double sum = s_series[n - 1];
+        for (int k = n - 1; k >= 1; --k)
         {
-            term *= -x / k;
-            sum -= term / k;
-            if (fabs(term) < 1e-12 * fabs(sum))
-            {
-                break;
-            }
+            sum = sum * x + s_series[k - 1];
         }
-        return -0.57721566490153286 - log(x) + sum;
+        return -0.57721566490153286 - log(x) + sum * x;
     }
     double b = x + 1.0;
     double c = 1e300;

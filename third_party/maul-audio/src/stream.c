@@ -19,6 +19,7 @@
 #include "maul-audio/objects.h"
 
 #include <stdckdint.h>
+#include <string.h>
 
 #define STREAM_DEF_COOKIE 0x6D617364u
 #define MIN_RATE          8000u
@@ -47,7 +48,7 @@ maudStreamDef maudDefaultStreamDef(void)
 static bool DefValid(const maudStreamDef* def)
 {
     if (def->cookie != STREAM_DEF_COOKIE || def->callback == nullptr ||
-        def->direction > maud_directionDuplex || def->mode > maud_modePull ||
+        def->direction > maud_directionLoopback || def->mode > maud_modePull ||
         def->ratePolicy > maud_ratePlatformConverted || def->role > maud_roleCommunications ||
         maudGetLayoutChannelCount(def->layout) == 0)
     {
@@ -55,14 +56,16 @@ static bool DefValid(const maudStreamDef* def)
     }
     const maudVoiceProcessing parts =
         maud_voiceEchoCancellation | maud_voiceNoiseSuppression | maud_voiceGainControl;
+    bool loopback = def->direction == maud_directionLoopback;
     if ((def->voice & ~parts) != 0 ||
-        (def->voice != maud_voiceNone && def->direction == maud_directionOutput))
+        (def->voice != maud_voiceNone && (def->direction == maud_directionOutput || loopback)))
     {
         return false;
     }
     if (def->share > maud_shareExclusive ||
         (def->share == maud_shareExclusive && def->device.index1 == 0) ||
-        (def->contentSpatialized && def->direction == maud_directionInput))
+        (def->contentSpatialized && (def->direction == maud_directionInput || loopback)) ||
+        (def->loopbackExcludesSelf && !loopback))
     {
         return false;
     }
@@ -89,9 +92,8 @@ maudResult maudCreateStream(maudContext* context, const maudStreamDef* def, maud
     {
         return maud_errorInvalid;
     }
-    if (maudIsRenderingThread(context))
+    if (maudRefuseControl(context))
     {
-        maudCountMisuse(context);
         return maud_errorState;
     }
     if (def == nullptr || streamOut == nullptr || !DefValid(def))
@@ -99,7 +101,9 @@ maudResult maudCreateStream(maudContext* context, const maudStreamDef* def, maud
         maudCountMisuse(context);
         return maud_errorInvalid;
     }
-    if (def->direction == maud_directionDuplex && def->share == maud_shareExclusive)
+    // No platform captures loopback for one stream alone.
+    if ((def->direction == maud_directionDuplex || def->direction == maud_directionLoopback) &&
+        def->share == maud_shareExclusive)
     {
         return maud_errorUnsupported;
     }
@@ -135,9 +139,8 @@ static maudResult FindForControl(maudContext* context, maudStreamId stream,
     {
         return maud_errorInvalid;
     }
-    if (maudIsRenderingThread(context))
+    if (maudRefuseControl(context))
     {
-        maudCountMisuse(context);
         return maud_errorState;
     }
     *slotOut = maudFindStream(context, stream);
@@ -201,6 +204,11 @@ static bool SharesClock(const maudContext* context, const maudDuplex* duplex)
 maudResult maudGetStreamStatus(const maudContext* context, maudStreamId stream,
                                maudStreamStatus* statusOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (statusOut != nullptr)
+    {
+        memset(statusOut, 0, sizeof(*statusOut));
+    }
     if (context == nullptr || statusOut == nullptr)
     {
         return maud_errorInvalid;
@@ -237,6 +245,11 @@ maudResult maudGetStreamStatus(const maudContext* context, maudStreamId stream,
 maudResult maudGetStreamFormat(const maudContext* context, maudStreamId stream,
                                maudStreamFormat* formatOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (formatOut != nullptr)
+    {
+        memset(formatOut, 0, sizeof(*formatOut));
+    }
     if (context == nullptr || formatOut == nullptr)
     {
         return maud_errorInvalid;
@@ -253,6 +266,11 @@ maudResult maudGetStreamFormat(const maudContext* context, maudStreamId stream,
 maudResult maudGetStreamPosition(const maudContext* context, maudStreamId stream,
                                  uint64_t* framesOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (framesOut != nullptr)
+    {
+        *framesOut = 0;
+    }
     if (context == nullptr || framesOut == nullptr)
     {
         return maud_errorInvalid;
@@ -269,6 +287,11 @@ maudResult maudGetStreamPosition(const maudContext* context, maudStreamId stream
 maudResult maudGetStreamClock(const maudContext* context, maudStreamId stream,
                               maudStreamClock* clockOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (clockOut != nullptr)
+    {
+        memset(clockOut, 0, sizeof(*clockOut));
+    }
     if (context == nullptr || clockOut == nullptr)
     {
         return maud_errorInvalid;
@@ -301,6 +324,11 @@ static maudResult BeginRender(maudContext* context, maudStreamId stream, maudDir
     {
         return maud_errorInvalid;
     }
+    if (maudIsAllocatingThread(context))
+    {
+        maudCountMisuse(context);
+        return maud_errorState;
+    }
     maudStreamSlot* slot = maudFindStream(context, stream);
     if (slot == nullptr)
     {
@@ -312,9 +340,12 @@ static maudResult BeginRender(maudContext* context, maudStreamId stream, maudDir
         slot = slot->duplex->input;
     }
     maudStreamCore* core = &slot->core;
+    // A loopback stream is fed as an input stream is: what its device
+    // played.
+    maudDirection fed =
+        core->def.direction == maud_directionLoopback ? maud_directionInput : core->def.direction;
     size_t samples;
-    if (core->def.direction != direction || core->def.objectCount != objects ||
-        (frameCount != 0 && !haveFrames) ||
+    if (fed != direction || core->def.objectCount != objects || (frameCount != 0 && !haveFrames) ||
         ckd_mul(&samples, (size_t)frameCount, (size_t)core->period.channelCount) ||
         ckd_mul(&samples, samples, sizeof(float)))
     {
@@ -329,10 +360,16 @@ static maudResult BeginRender(maudContext* context, maudStreamId stream, maudDir
     {
         return maud_errorState;
     }
+    uintptr_t self = maudCurrentThread();
     uintptr_t idle = 0;
-    if (!atomic_compare_exchange_strong_explicit(&core->renderingThread, &idle, maudCurrentThread(),
+    if (!atomic_compare_exchange_strong_explicit(&core->renderingThread, &idle, self,
                                                  memory_order_acq_rel, memory_order_acquire))
     {
+        // Rendering it again from its own callback is calling back in.
+        if (idle == self)
+        {
+            maudCountMisuse(context);
+        }
         return maud_errorState;
     }
     core->period.sampleRate = atomic_load_explicit(&core->blockRate, memory_order_acquire);

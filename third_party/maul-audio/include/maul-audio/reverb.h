@@ -30,6 +30,9 @@ extern "C"
     typedef struct maudReverbDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The rate it runs at, 44,100 to 384,000 Hz.
         float sampleRate;
         // The longest input delay it will be asked for, 0 to 4 s.
@@ -64,18 +67,38 @@ extern "C"
         float tailLevel[MAUD_DIRECT_BANDS];
     } maudReverbParams;
 
+// The cookie of a reverb def, which its default sets and
+// maudCreateReverb checks.
+#define MAUD_REVERB_DEF_COOKIE 0x6D617276u
+
     /// Returns the default reverb def: 48 kHz, no input delay.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudReverbDef maudDefaultReverbDef(void);
+    static inline maudReverbDef maudDefaultReverbDef(void)
+    {
+#ifdef __cplusplus
+        maudReverbDef def = {};
+#else
+    maudReverbDef def = {0};
+#endif
+        def.cookie = MAUD_REVERB_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.sampleRate = 48000.0f;
+        return def;
+    }
 
     /// Creates a reverb, silent.
     ///
     /// @param def        The def, from maudDefaultReverbDef.
     /// @param reverbOut  Receives the reverb; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a
     ///         def without its cookie, a rate or longest delay out of
     ///         range;
     ///         `maud_errorCapacity` when the allocator fails.

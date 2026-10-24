@@ -19,6 +19,7 @@
 #include "allocator.h"
 #include "echo_filter.h"
 #include "echo_suppressor.h"
+#include "flush.h"
 #include "real_fft.h"
 
 #include "maul-audio/voice.h"
@@ -26,13 +27,12 @@
 #include <math.h>
 #include <string.h>
 
-#define ECHO_DEF_COOKIE 0x6D616563u
-#define MIN_RATE        8000u
-#define MAX_RATE        384000u
-#define MIN_TAIL        0.05f
-#define MAX_TAIL        1.0f
-#define MIN_FLOOR_DB    (-40.0f)
-#define MAX_FLOOR_DB    (-6.0f)
+#define MIN_RATE     8000u
+#define MAX_RATE     384000u
+#define MIN_TAIL     0.05f
+#define MAX_TAIL     1.0f
+#define MIN_FLOOR_DB (-40.0f)
+#define MAX_FLOOR_DB (-6.0f)
 // The block's shortest length, in seconds.
 #define MIN_BLOCK 0.008
 // At 16 kHz: the notch's radius and the pre-emphasis.
@@ -71,20 +71,9 @@ struct maudEchoCanceller
     uint64_t frames;
 };
 
-maudEchoCancellerDef maudDefaultEchoCancellerDef(void)
-{
-    return (maudEchoCancellerDef){
-        .cookie = ECHO_DEF_COOKIE,
-        .sampleRate = 48000,
-        .tailSeconds = 0.2f,
-        .floorDb = -15.0f,
-        .allocator = {nullptr, nullptr, nullptr},
-    };
-}
-
 static bool DefValid(const maudEchoCancellerDef* def)
 {
-    return def->cookie == ECHO_DEF_COOKIE && def->sampleRate >= MIN_RATE &&
+    return def->cookie == MAUD_ECHO_CANCELLER_DEF_COOKIE && def->sampleRate >= MIN_RATE &&
            def->sampleRate <= MAX_RATE && def->tailSeconds >= MIN_TAIL &&
            def->tailSeconds <= MAX_TAIL && def->floorDb >= MIN_FLOOR_DB &&
            def->floorDb <= MAX_FLOOR_DB && maudIsAllocatorValid(&def->allocator);
@@ -106,7 +95,8 @@ typedef struct Layout
     size_t fft;
     size_t filter;
     size_t suppressor;
-    size_t floats;
+    // The five blocks apart, so that a sanitizer sees a block overrun.
+    size_t blocks[5];
     size_t total;
     maudLayout layout;
 } Layout;
@@ -120,7 +110,10 @@ static Layout LayoutOf(uint32_t block, uint32_t partitions, double rate)
     l.filter =
         maudLayoutAdd(&layout, maudEchoFilterBytes(block, partitions, rate), 1, alignof(double));
     l.suppressor = maudLayoutAdd(&layout, maudEchoSuppressorBytes(block, rate), 1, alignof(double));
-    l.floats = maudLayoutAdd(&layout, 5 * (size_t)block, sizeof(float), alignof(float));
+    for (int i = 0; i < 5; ++i)
+    {
+        l.blocks[i] = maudLayoutAdd(&layout, block, sizeof(float), alignof(float));
+    }
     l.total = layout.overflow ? 0 : layout.size;
     l.layout = layout;
     return l;
@@ -132,6 +125,11 @@ maudResult maudCreateEchoCanceller(const maudEchoCancellerDef* def,
     if (cancellerOut != nullptr)
     {
         *cancellerOut = nullptr;
+    }
+    if (def != nullptr && def->cookie == MAUD_ECHO_CANCELLER_DEF_COOKIE &&
+        def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
     }
     if (def == nullptr || cancellerOut == nullptr || !DefValid(def))
     {
@@ -164,13 +162,12 @@ maudResult maudCreateEchoCanceller(const maudEchoCancellerDef* def,
     maudInitEchoFilter(&c->filter, block, partitions, rate, &c->fft, memory + l.filter);
     maudInitEchoSuppressor(&c->suppressor, block, rate, (double)def->floorDb, &c->fft,
                            memory + l.suppressor);
-    float* f = (float*)(memory + l.floats);
     float** blocks[5] = {&c->capture, &c->render, &c->linear, &c->echo, &c->output};
     for (int i = 0; i < 5; ++i)
     {
-        *blocks[i] = f + (size_t)i * block;
+        *blocks[i] = (float*)(memory + l.blocks[i]);
+        memset(*blocks[i], 0, (size_t)block * sizeof(float));
     }
-    memset(f, 0, 5 * (size_t)block * sizeof(float));
     *cancellerOut = c;
     return maud_success;
 }
@@ -193,7 +190,9 @@ static void Front(maudEchoCanceller* c)
     {
         double in = (double)c->capture[i];
         double out = c->notch0 + in;
-        c->notch0 = c->notch1 + 2.0 * (-in + r * out);
+        // notch0 flushed, the output is zero or no smaller than the
+        // floor, and notch1, a share of it, stays normal.
+        c->notch0 = maudFlushDouble(c->notch1 + 2.0 * (-in + r * out));
         c->notch1 = in - c->notchDen * out;
         float notched = (float)(r * out);
         float render = c->render[i];
@@ -212,9 +211,9 @@ static void Block(maudEchoCanceller* c)
     maudRunEchoFilter(&c->filter, c->render, c->capture, c->linear, c->echo);
     for (uint32_t i = 0; i < c->block; ++i)
     {
-        c->linear[i] += c->preemph * c->lastOutput;
+        c->linear[i] = maudFlush(c->linear[i] + c->preemph * c->lastOutput);
         c->lastOutput = c->linear[i];
-        c->echo[i] += c->preemph * c->lastEcho;
+        c->echo[i] = maudFlush(c->echo[i] + c->preemph * c->lastEcho);
         c->lastEcho = c->echo[i];
     }
     maudRunEchoSuppressor(&c->suppressor, c->linear, c->echo, c->filter.bandLeak,
@@ -224,6 +223,11 @@ static void Block(maudEchoCanceller* c)
 maudResult maudCancelEcho(maudEchoCanceller* canceller, float* capture, const float* render,
                           uint32_t frameCount, maudEchoState* stateOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (stateOut != nullptr)
+    {
+        memset(stateOut, 0, sizeof(*stateOut));
+    }
     if (canceller == nullptr || (frameCount > 0 && (capture == nullptr || render == nullptr)))
     {
         return maud_errorInvalid;

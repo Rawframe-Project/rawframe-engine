@@ -24,7 +24,8 @@ extern "C"
     /// @param channelCount    The number of channels, at least 1.
     /// @param frameCount      The number of samples in each channel.
     /// @param interleavedOut  Room for `channelCount * frameCount` samples.
-    ///                        May be NULL when `frameCount` is 0.
+    ///                        May be NULL when `frameCount` is 0. Left as
+    ///                        it was on failure.
     /// @return `maud_success`, or `maud_errorInvalid` for a channel count of
     ///         0, a NULL array where samples are due, or a total that does
     ///         not fit in memory.
@@ -44,6 +45,7 @@ extern "C"
     /// @param frameCount    The number of frames.
     /// @param planarOut     One array with room for `frameCount` samples per
     ///                      channel. May be NULL when `frameCount` is 0.
+    ///                      Left as they were on failure.
     /// @return `maud_success`, or `maud_errorInvalid` for a channel count of
     ///         0, a NULL array where samples are due, or a total that does
     ///         not fit in memory.

@@ -152,8 +152,10 @@ static void Move(maudContext* context, maudStreamSlot* slot, maudDeviceId device
                                       .stream = id,
                                   });
     // A backend whose streams are bound to one endpoint reopens them on
-    // every move; the others only when the rate changed.
-    if (TakeDeviceRate(context, slot) || context->backend->reopensOnMove)
+    // every move, as every backend does a loopback stream, bound to one
+    // output's sound; the others only when the rate changed.
+    if (TakeDeviceRate(context, slot) || context->backend->reopensOnMove ||
+        core->def.direction == maud_directionLoopback)
     {
         Retarget(context, slot);
     }
@@ -171,7 +173,7 @@ void maudBindNewStream(maudContext* context, maudStreamSlot* slot)
     maudDeviceId device = def->device;
     if (device.index1 == 0)
     {
-        device = context->devices.defaults[def->direction][def->role];
+        device = context->devices.defaults[maudDeviceDirection(def->direction)][def->role];
     }
     core->binding = (maudStreamBinding){
         .requested = def->device,
@@ -193,7 +195,7 @@ void maudFollowDefault(maudContext* context, maudDirection direction, maudDevice
         maudStreamSlot* slot = &context->streams.slots[i];
         const maudStreamCore* core = &slot->core;
         if (!slot->live || core->binding.requested.index1 != 0 ||
-            core->def.direction != direction || core->def.role != role ||
+            maudDeviceDirection(core->def.direction) != direction || core->def.role != role ||
             SameDevice(core->binding.current, target))
         {
             continue;
