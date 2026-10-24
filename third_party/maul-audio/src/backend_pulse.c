@@ -33,7 +33,7 @@ static maudPulseNode* FindNode(maudPulse* pulse, maudDirection direction, uint32
     for (uint32_t i = 0; i < pulse->nodeCapacity; ++i)
     {
         maudPulseNode* node = &pulse->nodes[i];
-        if (node->used && node->direction == direction && node->index == index)
+        if (node->used && !node->away && node->direction == direction && node->index == index)
         {
             return node;
         }
@@ -131,18 +131,39 @@ static void ApplyNode(maudPulse* pulse, const Node* reported)
     maudDeviceSlot* slot = node != nullptr ? maudFindDevice(pulse->context, node->device) : nullptr;
     if (slot != nullptr)
     {
-        slot->info.nativeLayout = info.nativeLayout;
-        slot->info.nativeSampleRate = info.nativeSampleRate;
-        slot->info.minSampleRate = info.minSampleRate;
-        slot->info.maxSampleRate = info.maxSampleRate;
+        // The server converts a stream to its sink's rate: the stream
+        // keeps its own.
+        (void)maudSetDeviceFormat(pulse->context, slot, &info);
         maudSetDeviceForm(pulse->context, slot, info.form);
         return;
+    }
+    if (name == nullptr)
+    {
+        return;
+    }
+    // A device kept from a lost connection, listed again by name.
+    for (uint32_t i = 0; i < pulse->nodeCapacity; ++i)
+    {
+        maudPulseNode* away = &pulse->nodes[i];
+        slot = away->used && away->away && away->direction == direction
+                   ? maudFindDevice(pulse->context, away->device)
+                   : nullptr;
+        if (slot != nullptr && strlen(name) == slot->key.length &&
+            memcmp(name, slot->key.bytes, slot->key.length) == 0)
+        {
+            away->index = index;
+            away->away = false;
+            (void)maudSetDeviceFormat(pulse->context, slot, &info);
+            maudSetDeviceForm(pulse->context, slot, info.form);
+            ResolveDefaults(pulse);
+            return;
+        }
     }
     for (uint32_t i = 0; i < pulse->nodeCapacity && node == nullptr; ++i)
     {
         node = pulse->nodes[i].used ? nullptr : &pulse->nodes[i];
     }
-    if (node == nullptr || name == nullptr)
+    if (node == nullptr)
     {
         return;
     }
@@ -401,19 +422,34 @@ static void DropContext(maudPulse* pulse)
     memset(server->defaultNames, 0, sizeof(server->defaultNames));
 }
 
-// The server went away: every device with it. Runs after the loop
+// The server went away. Its devices are kept, away, for a new server
+// to list again (a restart keeps their names). Runs after the loop
 // iteration that reported it.
 static void LoseConnection(maudPulse* pulse)
 {
     for (uint32_t i = 0; i < pulse->nodeCapacity; ++i)
     {
-        if (pulse->nodes[i].used)
+        pulse->nodes[i].away = pulse->nodes[i].used;
+    }
+    DropContext(pulse);
+    int64_t now = maudPulseNow();
+    pulse->server.nextAttempt = now + MAUD_PULSE_RETRY_NS;
+    pulse->server.awayUntil =
+        pulse->server.awayUntil != 0 ? pulse->server.awayUntil : now + MAUD_PULSE_AWAY_NS;
+}
+
+// Removes the devices still away: the new server listed everything
+// without them, or none came back in time.
+static void DropAway(maudPulse* pulse)
+{
+    for (uint32_t i = 0; i < pulse->nodeCapacity; ++i)
+    {
+        if (pulse->nodes[i].away)
         {
             RemoveNode(pulse, &pulse->nodes[i]);
         }
     }
-    DropContext(pulse);
-    pulse->server.nextAttempt = maudPulseNow() + MAUD_PULSE_RETRY_NS;
+    pulse->server.awayUntil = 0;
 }
 
 // Runs the loop on the calling thread until the first listing is
@@ -533,9 +569,20 @@ static void Pump(maudContext* context)
     {
         LoseConnection(pulse);
     }
-    if (server->ready && server->pending == 0)
+    bool listed = server->ready && server->pending == 0;
+    if (server->awayUntil != 0 && (listed || maudPulseNow() >= server->awayUntil))
+    {
+        DropAway(pulse);
+    }
+    // Until a server has listed its devices, a started stream waits for
+    // the platform, one started meanwhile too.
+    if (listed)
     {
         maudPulseResumeStreams(context);
+    }
+    else
+    {
+        maudPulseSuspendStreams(context);
     }
 }
 
@@ -572,6 +619,7 @@ static const maudBackend s_pulse = {
     .setStreamActive = maudPulseSetStreamActive,
     .retargetStream = maudPulseRetargetStream,
     .rendersOnCaller = false,
+    .loopback = true,
 };
 
 const maudBackend* maudGetPulseBackend(void)

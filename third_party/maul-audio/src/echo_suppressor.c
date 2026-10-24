@@ -19,6 +19,7 @@
 #include "echo_suppressor.h"
 
 #include "allocator.h"
+#include "flush.h"
 #include "voice_dsp.h"
 
 #include <math.h>
@@ -198,7 +199,7 @@ static void Measure(maudEchoSuppressor* s, const float* bandLeak, uint32_t bandB
         double e2 = (double)e[0] * (double)e[0] + (double)e[1] * (double)e[1];
         double y2 = (double)y[0] * (double)y[0] + (double)y[1] * (double)y[1];
         double leak = (double)bandLeak[k / bandBins];
-        s->residual[k] = fmax(leak * y2, s->residualDecay * s->residual[k]);
+        s->residual[k] = maudFlushDouble(fmax(leak * y2, s->residualDecay * s->residual[k]));
         if (!s->started)
         {
             s->noise[k] = e2;
@@ -256,7 +257,8 @@ static float Gain(maudEchoSuppressor* s, uint32_t k, double echoFloor)
     double p = 1.0 / (1.0 + q / (1.0 - q) * (1.0 + xi) * exp(-fmin(v, 700.0)));
     double gain = fmin(xi / (1.0 + xi) * exp(0.5 * maudExpIntegral(fmax(v, 1e-10))), 1.0);
     double e2 = s->power[k];
-    s->lastSpeech[k] = s->speechKeep * s->lastSpeech[k] + (1.0 - s->speechKeep) * gain * gain * e2;
+    s->lastSpeech[k] = maudFlushDouble(s->speechKeep * s->lastSpeech[k] +
+                                       (1.0 - s->speechKeep) * gain * gain * e2);
     double noise = s->noise[k];
     double echo = s->residual[k];
     double floor = sqrt((s->noiseFloor * noise + echoFloor * echo) / (noise + echo + 1e-20));
@@ -264,7 +266,9 @@ static float Gain(maudEchoSuppressor* s, uint32_t k, double echoFloor)
     double g = exp(p * log(fmax(gain, 1e-30)) + (1.0 - p) * log(fmax(floor, 1e-30)));
     g = fmin(fmax(g, floor), 1.0);
     double expected = (1.0 - p) * fmax(e2 - echo, 0.0) + p * noise;
-    s->noise[k] = s->noiseKeep * noise + (1.0 - s->noiseKeep) * expected;
+    // Floored rather than flushed: while echo alone plays it decays
+    // geometrically, and the SNRs add only 1e-20 to it.
+    s->noise[k] = fmax(s->noiseKeep * noise + (1.0 - s->noiseKeep) * expected, MAUD_TINY);
     return (float)g;
 }
 

@@ -217,7 +217,10 @@ static HRESULT Drain(maudWasapiStream* entry)
 }
 
 // Runs in the MTA under MMCSS: fills a render buffer before starting,
-// then serves each period until the stop event or a failure.
+// then serves each period until the stop event or a failure. A loopback
+// client gets its events from Windows 10 1703 on, the oldest Windows in
+// support; while its endpoint plays nothing it gets none, and its stream
+// pauses.
 static void Serve(maudWasapiStream* entry)
 {
     bool objects = entry->objects.stream != nullptr;
@@ -338,7 +341,8 @@ static WAVEFORMATEXTENSIBLE FormatOf(const maudStreamCore* core)
 }
 
 // Initializes the client in shared, event-driven mode, converting
-// channels always and the rate only for a platform-converted stream.
+// channels always and the rate only for a platform-converted stream; a
+// loopback stream's client captures its render endpoint.
 static maudResult Initialize(maudWasapiStream* entry)
 {
     const maudStreamCore* core = entry->core;
@@ -347,6 +351,10 @@ static maudResult Initialize(maudWasapiStream* entry)
     if (core->format.ratePolicy == maud_ratePlatformConverted)
     {
         flags |= AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+    }
+    if (core->def.direction == maud_directionLoopback)
+    {
+        flags |= AUDCLNT_STREAMFLAGS_LOOPBACK;
     }
     REFERENCE_TIME duration = (REFERENCE_TIME)core->format.periodFrames * BUFFER_PERIODS *
                               10000000 / core->format.sampleRate;

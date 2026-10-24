@@ -19,6 +19,7 @@ option(MAUL_AUDIO_BUILD_BENCH "Build the benchmarks" ${PROJECT_IS_TOP_LEVEL})
 option(MAUL_AUDIO_BUILD_SAMPLES "Build the samples" ${PROJECT_IS_TOP_LEVEL})
 option(MAUL_AUDIO_BUILD_SHARED "Build a shared library instead of a static one" OFF)
 option(MAUL_AUDIO_INSTALL "Generate install rules" ${PROJECT_IS_TOP_LEVEL})
+option(MAUL_AUDIO_TEST_PACKAGE "Test the installed package by building samples/minimal against it" OFF)
 option(MAUL_AUDIO_WERROR "Treat compiler warnings as errors" OFF)
 option(MAUL_AUDIO_SANITIZE "Instrument with AddressSanitizer and UBSan" OFF)
 option(MAUL_AUDIO_TSAN "Instrument with ThreadSanitizer" OFF)
@@ -61,7 +62,7 @@ endif()
 option(MAUL_AUDIO_IOS "Build the iOS backend" ${MAUL_AUDIO_IOS_DEFAULT})
 # A backend kept outside the library, as a console's is: a directory
 # whose backend.cmake adds its sources to maul-audio
-# (docs/private-backends.md).
+# (docs/user/private-backends.md).
 set(MAUL_AUDIO_PRIVATE_BACKEND "" CACHE PATH
     "A directory outside the library holding a private backend's backend.cmake")
 # Backends belong to the Device part.
@@ -163,6 +164,7 @@ set(MAUL_AUDIO_SPATIAL_SOURCES
     src/speaker_decoder.c
     src/speaker_panner.c
     src/spherical_harmonics.c
+    src/staged.c
     src/transmission.c
     src/watertight.c)
 add_library(maul-audio ${MAUL_LIBRARY_KIND} ${MAUL_AUDIO_BASE_SOURCES})
@@ -239,7 +241,8 @@ endif()
 # Web Audio, in Emscripten builds: the backend's JavaScript is in its
 # source, through EM_JS.
 if(MAUL_AUDIO_DEVICE AND EMSCRIPTEN)
-    target_sources(maul-audio PRIVATE src/backend_web.c src/web_capture.c src/web_devices.c)
+    target_sources(maul-audio PRIVATE src/backend_web.c src/web_capture.c src/web_clock.c
+                                       src/web_devices.c)
 endif()
 
 # Likewise ALSA's headers only.
@@ -316,9 +319,14 @@ if(MAUL_AUDIO_BUILD_TESTS)
         maul_add_test(ambisonics)
         maul_add_test(direct_effect)
         maul_add_test(spatializer)
+        maul_add_test(spatializer_refusals)
         maul_add_test(occlusion)
         maul_add_test(scene)
+        maul_add_test(scene_refusals)
         maul_add_test(reverb)
+        maul_add_test(spatial_silence)
+        maul_audio_test_data(spatial_silence)
+        maul_add_test(effect_refusals)
         maul_add_test(transmission)
         # The two sides on two threads; Emscripten builds have none.
         if(NOT EMSCRIPTEN)
@@ -331,6 +339,7 @@ if(MAUL_AUDIO_BUILD_TESTS)
         maul_add_test(band_eq WHITEBOX)
         maul_add_test(octave_eq WHITEBOX)
         maul_add_test(partitioned WHITEBOX)
+        maul_add_test(staged WHITEBOX)
         maul_add_test(path_refine WHITEBOX)
         maul_add_test(path_search WHITEBOX)
         maul_add_test(bake_file WHITEBOX)
@@ -344,6 +353,7 @@ if(MAUL_AUDIO_BUILD_TESTS)
         maul_add_test(spatializer_probes)
         maul_add_test(spatializer_pathing)
         maul_add_test(spatializer_bake)
+        maul_add_test(spatializer_call_back_in)
         maul_audio_test_data(spatializer_bake)
         maul_add_test(near_field WHITEBOX)
         maul_add_test(bvh WHITEBOX)
@@ -360,7 +370,7 @@ if(MAUL_AUDIO_BUILD_TESTS)
                 target_link_options(test_golden PRIVATE -sNODERAWFS=1)
             endif()
         endif()
-        foreach(area binaural binaural_decoder hrtf)
+        foreach(area binaural binaural_decoder hrtf render_refusals)
             maul_add_test(${area} WHITEBOX)
             maul_audio_test_data(${area})
         endforeach()
@@ -383,6 +393,12 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
         maul_add_test(worker WHITEBOX)
     endif()
     maul_add_test(stream)
+    maul_add_test(loopback)
+    # Outputs on failure across the parts: the device layer's calls, and
+    # the spatial part's where it is built.
+    if(MAUL_AUDIO_SPATIAL)
+        maul_add_test(outputs)
+    endif()
     maul_add_test(objects)
     maul_add_test(device)
     maul_add_test(utf8 WHITEBOX)
@@ -392,23 +408,30 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
     maul_add_test(gain_control)
     maul_add_test(noise_suppressor)
     maul_add_test(echo_canceller)
-    # The guide's snippets (docs/guide.md), as written there: both parts'.
+    maul_add_test(voice_silence)
+    maul_add_test(voice_refusals)
+    maul_add_test(device_refusals)
+    # The C snippets of docs/user/, as written there: both parts'.
     if(MAUL_AUDIO_SPATIAL)
+        maul_add_test(refusals)
+        maul_add_test(versions)
+        maul_audio_test_data(refusals)
         maul_add_test(guide)
         maul_audio_test_data(guide)
-        # Its stream plays on the test daemon, which other tests plug,
-        # unplug and restart.
-        set_tests_properties(guide PROPERTIES RESOURCE_LOCK pipewire-daemon)
         # Node's own file system, so the web reads the HRTF set too.
         if(EMSCRIPTEN)
             target_link_options(test_guide PRIVATE -sNODERAWFS=1)
         endif()
-        # Its stream may open ALSA's default PCM on a machine without
-        # sound, where libasound leaks.
-        if(MAUL_AUDIO_SANITIZE AND MAUL_AUDIO_ALSA)
-            set_tests_properties(guide PROPERTIES ENVIRONMENT
-                "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/test/lsan-alsa.supp")
-        endif()
+    endif()
+    # The snippets that open the native backend. Its stream plays on the
+    # test daemon, which other tests plug, unplug and restart.
+    maul_add_test(guide_device)
+    set_tests_properties(guide_device PROPERTIES SKIP_RETURN_CODE 77 RESOURCE_LOCK pipewire-daemon)
+    # Its stream may open ALSA's default PCM on a machine without sound,
+    # where libasound leaks.
+    if(MAUL_AUDIO_SANITIZE AND MAUL_AUDIO_ALSA)
+        set_tests_properties(guide_device PROPERTIES ENVIRONMENT
+            "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/test/lsan-alsa.supp")
     endif()
     # A host stalled inside a step, under a native stream that latches the
     # spatializer's results: both parts', a device's, and not the web's,
@@ -424,6 +447,7 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
         endif()
     endif()
     maul_add_test(lifecycle)
+    maul_add_test(call_back_in)
     if(NOT MAUL_AUDIO_BUILD_SHARED)
         maul_add_test(sample_convert WHITEBOX)
         maul_add_test(xrun WHITEBOX)
@@ -491,6 +515,34 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
             set_tests_properties(pulse PROPERTIES ENVIRONMENT
                 "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/test/tsan-pulse.supp")
         endif()
+    endif()
+    # The loaders of the Linux sound libraries, against files by their
+    # names that are no libraries and stubs under their sonames.
+    if((MAUL_AUDIO_ALSA OR MAUL_AUDIO_PIPEWIRE OR MAUL_AUDIO_PULSE) AND NOT MAUL_AUDIO_BUILD_SHARED)
+        maul_add_test(loaders WHITEBOX)
+        target_compile_definitions(test_loaders PRIVATE _GNU_SOURCE)
+        target_link_libraries(test_loaders PRIVATE ${CMAKE_DL_LIBS})
+        set(MAUL_AUDIO_NOT_LIBRARIES ${CMAKE_CURRENT_BINARY_DIR}/not-libraries)
+        foreach(entry "ALSA;asound;libasound.so.2;ASOUND" "PIPEWIRE;pipewire;libpipewire-0.3.so.0;PW"
+                "PULSE;pulse;libpulse.so.0;PA")
+            list(GET entry 0 part)
+            list(GET entry 1 stem)
+            list(GET entry 2 soname)
+            list(GET entry 3 headers)
+            if(MAUL_AUDIO_${part})
+                file(WRITE ${MAUL_AUDIO_NOT_LIBRARIES}/${soname} "not a library\n")
+                add_library(maud_stub_${stem} SHARED test/loader_stub.c)
+                set_target_properties(maud_stub_${stem} PROPERTIES NO_SONAME ON)
+                target_link_options(maud_stub_${stem} PRIVATE -Wl,-soname,${soname})
+                target_include_directories(test_loaders SYSTEM PRIVATE
+                    ${MAUL_AUDIO_${headers}_INCLUDE_DIRS})
+                target_compile_definitions(test_loaders PRIVATE MAUD_TEST_${part}=1
+                    MAUD_STUB_${part}="$<TARGET_FILE:maud_stub_${stem}>")
+                add_dependencies(test_loaders maud_stub_${stem})
+            endif()
+        endforeach()
+        set_tests_properties(loaders PROPERTIES ENVIRONMENT
+            "LD_LIBRARY_PATH=${MAUL_AUDIO_NOT_LIBRARIES}")
     endif()
     if(MAUL_AUDIO_WASAPI AND NOT MAUL_AUDIO_BUILD_SHARED)
         maul_add_test(wasapi WHITEBOX)
@@ -560,6 +612,7 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
                     ${PROJECT_BINARY_DIR}/test_android_java.apk
                     $<TARGET_FILE:test_android_java> ${package} ${ANDROID_ABI}
             DEPENDS test_android_java ${MAUL_AUDIO_JAVA_SOURCES}
+                    ${PROJECT_SOURCE_DIR}/java/proguard-rules.pro
                     ${PROJECT_SOURCE_DIR}/test/android/AndroidManifest.xml
                     ${PROJECT_SOURCE_DIR}/tools/build_android_app.sh
             VERBATIM)
@@ -591,6 +644,12 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
             target_sources(test_wasapi_format PRIVATE src/wasapi_format.c)
         endif()
     endif()
+    # The web backend's transport and capture on a simulated Web Audio,
+    # under Node.
+    if(EMSCRIPTEN)
+        maul_add_test(web_transport)
+        maul_add_test(web_capture)
+    endif()
     # The web backend's page, run in a browser by test/web/run_page.js,
     # not by CTest; its name keeps it out of the test_*.js runs.
     if(EMSCRIPTEN)
@@ -599,6 +658,37 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
         set_target_properties(page_web PROPERTIES SUFFIX ".html")
         maul_apply_flags(page_web)
         target_link_options(page_web PRIVATE "--shell-file=${PROJECT_SOURCE_DIR}/test/web/shell.html")
+        add_executable(page_display test/web/page_display.c)
+        target_link_libraries(page_display PRIVATE maul-audio)
+        set_target_properties(page_display PROPERTIES SUFFIX ".html")
+        maul_apply_flags(page_display)
+        target_link_options(page_display PRIVATE "--shell-file=${PROJECT_SOURCE_DIR}/test/web/shell.html")
+        add_executable(page_sink test/web/page_sink.c)
+        target_link_libraries(page_sink PRIVATE maul-audio)
+        set_target_properties(page_sink PROPERTIES SUFFIX ".html")
+        maul_apply_flags(page_sink)
+        target_link_options(page_sink PRIVATE "--shell-file=${PROJECT_SOURCE_DIR}/test/web/shell.html")
+        add_executable(page_ended test/web/page_ended.c)
+        target_link_libraries(page_ended PRIVATE maul-audio)
+        set_target_properties(page_ended PROPERTIES SUFFIX ".html")
+        maul_apply_flags(page_ended)
+        target_link_options(page_ended PRIVATE "--shell-file=${PROJECT_SOURCE_DIR}/test/web/shell.html")
+        add_executable(page_default test/web/page_default.c)
+        target_link_libraries(page_default PRIVATE maul-audio)
+        set_target_properties(page_default PROPERTIES SUFFIX ".html")
+        maul_apply_flags(page_default)
+        target_link_options(page_default PRIVATE "--shell-file=${PROJECT_SOURCE_DIR}/test/web/shell.html")
+        add_executable(page_clock test/web/page_clock.c)
+        target_link_libraries(page_clock PRIVATE maul-audio)
+        set_target_properties(page_clock PROPERTIES SUFFIX ".html")
+        maul_apply_flags(page_clock)
+        target_link_options(page_clock PRIVATE "--shell-file=${PROJECT_SOURCE_DIR}/test/web/shell.html")
+        add_executable(page_loopback test/web/page_loopback.c)
+        target_link_libraries(page_loopback PRIVATE maul-audio)
+        set_target_properties(page_loopback PROPERTIES SUFFIX ".html")
+        maul_apply_flags(page_loopback)
+        target_link_options(page_loopback PRIVATE
+                            "--shell-file=${PROJECT_SOURCE_DIR}/test/web/shell.html")
     endif()
     # The audio-thread trap exists only where invariants are checked. In
     # WebAssembly a trap ends the module, with no signal to catch.
@@ -607,19 +697,155 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
     endif()
 endif()
 
+# The browser pages, in headless Chrome through puppeteer (MAUD_PUPPETEER
+# names its module; test/web/package.json pins it): each on a cross-origin
+# isolated page and on a plain one. Three are quarantined, run every night
+# instead of in the pull request check, and leave quarantine after 14
+# nightly runs in a row pass: page_clock (#3) and page_loopback (#4),
+# which measure timing and capture in a real browser, and page_web_plain
+# (#5), whose xrun counts follow how busy the main thread is.
+if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE AND EMSCRIPTEN)
+    find_program(MAUL_AUDIO_NODE node REQUIRED)
+    function(maul_audio_page name page)
+        add_test(NAME ${name} COMMAND ${MAUL_AUDIO_NODE} ${PROJECT_SOURCE_DIR}/test/web/run_page.js
+                 ${PROJECT_BINARY_DIR} ${page}.html ${ARGN})
+        # A page measures timing and xruns in a real browser, so it runs
+        # alone, never beside the other suites.
+        set_tests_properties(${name} PROPERTIES LABELS "integration;${page}" SKIP_RETURN_CODE 77
+                             TIMEOUT 120 RUN_SERIAL TRUE)
+    endfunction()
+    maul_audio_page(page_web_isolated page_web 1)
+    maul_audio_page(page_web_plain page_web 0)
+    set_property(TEST page_web_plain APPEND PROPERTY LABELS quarantine)
+    maul_audio_page(page_web_denied page_web 0 deny)
+    foreach(isolated 1 0)
+        if(isolated)
+            set(kind isolated)
+        else()
+            set(kind plain)
+        endif()
+        foreach(page page_ended page_default page_sink page_display)
+            maul_audio_page(${page}_${kind} ${page} ${isolated})
+        endforeach()
+        maul_audio_page(page_loopback_${kind} page_loopback ${isolated} loopback)
+        maul_audio_page(page_clock_${kind} page_clock ${isolated})
+        set_property(TEST page_loopback_${kind} page_clock_${kind} APPEND PROPERTY LABELS quarantine)
+    endforeach()
+endif()
+
+# The suites that drive a real platform: a sound server, the platform's
+# own audio service, a simulator, an emulator or a browser. They are kept
+# out of the changed-files check (tools/check.sh) and may read the clock.
+if(MAUL_AUDIO_BUILD_TESTS)
+    foreach(name pipewire pipewire_restart pulse alsa stall guide_device coreaudio wasapi wasapi_sta
+                 ios ios_capture aaudio android_java)
+        if(TEST ${name})
+            set_property(TEST ${name} APPEND PROPERTY LABELS integration)
+        endif()
+    endforeach()
+endif()
+
+# On Linux no test reaches the session's own sound server. The suites that
+# need a server run with the runtime directory where the sound-server
+# fixture starts a private PipeWire daemon (tools/pipewire_daemon.sh);
+# every other test runs with an empty one of its own, so no client touches
+# the daemon's directory while it starts. Where the daemon's programs are installed
+# the fixture starts it and those suites must reach it; where they are
+# not, the environment is absent and those suites skip. The browser pages
+# of a web build on a Linux host need it too: Chrome plays into its null
+# sink, a device that is always there, so a page never meets a runner's
+# missing or changing output.
+if(MAUL_AUDIO_BUILD_TESTS AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux"
+   AND (EMSCRIPTEN OR (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)))
+    set(maul_audio_server_dir ${PROJECT_BINARY_DIR}/sound-server)
+    get_property(maul_audio_tests DIRECTORY PROPERTY TESTS)
+    set(maul_audio_server_tests "")
+    foreach(name pipewire pipewire_restart pulse alsa stall guide_device)
+        if(TEST ${name})
+            list(APPEND maul_audio_server_tests ${name})
+        endif()
+    endforeach()
+    set(maul_audio_pages ${maul_audio_tests})
+    list(FILTER maul_audio_pages INCLUDE REGEX "^page_")
+    foreach(name ${maul_audio_tests})
+        if(name IN_LIST maul_audio_server_tests OR name IN_LIST maul_audio_pages)
+            set(runtime ${maul_audio_server_dir}/run)
+        else()
+            set(runtime ${maul_audio_server_dir}/none)
+        endif()
+        set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT XDG_RUNTIME_DIR=${runtime}
+                     PULSE_SERVER=unix:${runtime}/pulse/native)
+    endforeach()
+    set(maul_audio_server_found TRUE)
+    foreach(program pipewire pipewire-pulse wireplumber pw-cli pactl dbus-daemon)
+        string(MAKE_C_IDENTIFIER ${program} variable)
+        find_program(MAUL_AUDIO_HAVE_${variable} ${program})
+        if(NOT MAUL_AUDIO_HAVE_${variable})
+            set(maul_audio_server_found FALSE)
+        endif()
+    endforeach()
+    file(MAKE_DIRECTORY ${maul_audio_server_dir}/run ${maul_audio_server_dir}/none)
+    if(maul_audio_pages AND NOT maul_audio_server_found)
+        set_property(TEST ${maul_audio_pages} APPEND PROPERTY ENVIRONMENT MAUD_NO_SOUND_SERVER=1)
+    endif()
+    if(maul_audio_server_found AND (maul_audio_server_tests OR maul_audio_pages))
+        set(daemon ${PROJECT_SOURCE_DIR}/tools/pipewire_daemon.sh)
+        add_test(NAME sound_server_start COMMAND ${daemon} start ${maul_audio_server_dir})
+        add_test(NAME sound_server_stop COMMAND ${daemon} stop ${maul_audio_server_dir})
+        set_tests_properties(sound_server_start PROPERTIES FIXTURES_SETUP sound-server
+                             LABELS integration RESOURCE_LOCK pipewire-daemon)
+        set_tests_properties(sound_server_stop PROPERTIES FIXTURES_CLEANUP sound-server
+                             LABELS integration RESOURCE_LOCK pipewire-daemon)
+        set_tests_properties(${maul_audio_server_tests} ${maul_audio_pages} PROPERTIES
+                             FIXTURES_REQUIRED sound-server)
+        # ALSA's default device reaches the server through ALSA's
+        # PulseAudio plugin; without the plugin there is no ALSA server. CI
+        # (GitHub sets CI) runs in an image that has it, so there the suite
+        # requires it and fails if the plugin goes missing.
+        set(require_alsa "")
+        file(GLOB maul_audio_alsa_pulse /usr/share/alsa/alsa.conf.d/*pulse*.conf)
+        if(maul_audio_alsa_pulse OR "$ENV{CI}" STREQUAL "true")
+            set(require_alsa MAUD_REQUIRE_ALSA=1)
+        endif()
+        # The suites that stop, start or signal the daemon run its script,
+        # compiled in (test/test_daemon.h), never a command from the
+        # environment.
+        foreach(name ${maul_audio_server_tests})
+            set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
+                         MAUD_REQUIRE_PIPEWIRE=1 MAUD_REQUIRE_PULSE=1 ${require_alsa})
+            target_compile_definitions(test_${name} PRIVATE MAUD_TEST_DAEMON="${daemon}"
+                                       MAUD_TEST_SERVER_DIR="${maul_audio_server_dir}")
+        endforeach()
+    endif()
+endif()
+
+# The installed package, consumed by samples/minimal through CMake and
+# pkg-config (cmake/PackageTest.cmake).
+if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_TEST_PACKAGE AND MAUL_AUDIO_INSTALL)
+    add_test(NAME package
+             COMMAND ${CMAKE_COMMAND} -DBINARY_DIR=${PROJECT_BINARY_DIR} -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+                     -DGENERATOR=${CMAKE_GENERATOR} -DC_COMPILER=${CMAKE_C_COMPILER} -DCONFIG=$<CONFIG>
+                     -DSHARED=${MAUL_AUDIO_BUILD_SHARED} -P ${PROJECT_SOURCE_DIR}/cmake/PackageTest.cmake)
+    set_tests_properties(package PROPERTIES LABELS package)
+endif()
+
 # Every public header compiles alone, whichever parts are built.
 if(MAUL_AUDIO_BUILD_TESTS)
     maul_add_header_tests()
 endif()
 
 # The fuzz targets: test/fuzz_<area>.c, run as fuzz_<area> <corpus dir>,
-# over the bytes programs load and hand the library; the shipped HRTF
-# file in data/hrtf/, behind a 0x01 byte, is fuzz_hrtf's seed; the shipped
-# bake in data/bake/, behind a 0x03 byte (fields of order 1), fuzz_bake's.
+# over the bytes programs load and hand the library. Their corpora are in
+# test/corpus/fuzz_<area>/; the shipped HRTF file in data/hrtf/, behind a
+# 0x01 byte, seeds fuzz_hrtf too, and the shipped bakes in data/bake/,
+# behind a 0x03 byte (fields of order 1), fuzz_bake.
 if(MAUL_AUDIO_FUZZ AND MAUL_AUDIO_SPATIAL)
     # The library is instrumented too: its coverage guides libFuzzer, and
-    # the sanitizers watch its code, not only the targets'.
-    target_compile_options(maul-audio PRIVATE -fsanitize=fuzzer-no-link,address,undefined)
+    # the sanitizers watch its code, not only the targets'. Undefined
+    # behavior stops the run, as a crash does: by default UBSan only
+    # prints and libFuzzer goes on, leaving no input behind.
+    target_compile_options(maul-audio PRIVATE -fsanitize=fuzzer-no-link,address,undefined
+                           -fno-sanitize-recover=all)
     target_link_options(maul-audio PUBLIC -fsanitize=address,undefined)
     foreach(area hrtf bake)
         add_executable(fuzz_${area} test/fuzz_${area}.c)
@@ -627,7 +853,8 @@ if(MAUL_AUDIO_FUZZ AND MAUL_AUDIO_SPATIAL)
         # The targets reach the library's own functions.
         target_include_directories(fuzz_${area} PRIVATE ${PROJECT_SOURCE_DIR}/src)
         maul_apply_flags(fuzz_${area})
-        target_compile_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined)
+        target_compile_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined
+                               -fno-sanitize-recover=all)
         target_link_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined)
     endforeach()
 endif()

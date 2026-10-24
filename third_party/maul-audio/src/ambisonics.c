@@ -10,6 +10,7 @@
 #include "maul-audio/ambisonics.h"
 
 #include "ambisonic_rotation.h"
+#include "ramp.h"
 #include "spherical_harmonics.h"
 
 #include <math.h>
@@ -59,6 +60,16 @@ static bool SourceValid(const maudPanSource* source)
     return source != nullptr && Finite(source->direction) && isfinite(source->gain);
 }
 
+// One channel's share of the source, its gain ramped across the block.
+static inline void AddRamped(float* out, const float* in, float a, float step, uint32_t frames,
+                             bool isSigned)
+{
+    for (uint32_t n = 0; n < frames; ++n)
+    {
+        out[n] += (a + step * maudFramePlace(n, isSigned)) * in[n];
+    }
+}
+
 maudResult maudEncodeAmbisonic(uint32_t order, const maudPanSource* from, const maudPanSource* to,
                                const float* in, float* const* bed, uint32_t frames)
 {
@@ -81,10 +92,13 @@ maudResult maudEncodeAmbisonic(uint32_t order, const maudPanSource* from, const 
     {
         float a = start[c] * from->gain;
         float step = frames > 0 ? (end[c] * to->gain - a) / (float)frames : 0.0f;
-        float* out = bed[c];
-        for (uint32_t n = 0; n < frames; ++n)
+        if (maudRampSigned(frames))
         {
-            out[n] += (a + step * (float)(n + 1)) * in[n];
+            AddRamped(bed[c], in, a, step, frames, true);
+        }
+        else
+        {
+            AddRamped(bed[c], in, a, step, frames, false);
         }
     }
     return maud_success;

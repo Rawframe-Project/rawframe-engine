@@ -124,20 +124,67 @@ static void Decide(maudVadCore* core)
     core->frames++;
 }
 
-bool maudVadSample(maudVadCore* core, float sample)
+// The band filters side by side, padded to a whole number of vectors
+// (the padding's coefficients zero, so its lanes stay zero), each band's
+// arithmetic that of maudFilter.
+#define LANES 8
+
+uint32_t maudVadSamples(maudVadCore* core, const float* samples, uint32_t count, bool* done)
 {
-    float passed = maudFilter(&core->highPass[1], maudFilter(&core->highPass[0], sample));
+    uint32_t left = core->frameSamples - core->filled;
+    uint32_t n = count < left ? count : left;
+    float b0[LANES] = {0};
+    float b1[LANES] = {0};
+    float b2[LANES] = {0};
+    float a1[LANES] = {0};
+    float a2[LANES] = {0};
+    float z1[LANES] = {0};
+    float z2[LANES] = {0};
+    double energy[LANES] = {0};
     for (uint32_t b = 0; b < MAUD_VAD_BANDS; ++b)
     {
-        float band = maudFilter(&core->bands[b], passed);
-        core->energy[b] += (double)band * (double)band;
+        const maudBiquad* f = &core->bands[b];
+        b0[b] = f->b0;
+        b1[b] = f->b1;
+        b2[b] = f->b2;
+        a1[b] = f->a1;
+        a2[b] = f->a2;
+        z1[b] = f->z1;
+        z2[b] = f->z2;
+        energy[b] = core->energy[b];
     }
-    core->energy[MAUD_VAD_BANDS] += (double)passed * (double)passed;
-    if (++core->filled < core->frameSamples)
+    double whole = core->energy[MAUD_VAD_BANDS];
+    for (uint32_t i = 0; i < n; ++i)
     {
-        return false;
+        float passed = maudFilter(&core->highPass[1], maudFilter(&core->highPass[0], samples[i]));
+        for (uint32_t b = 0; b < LANES; ++b)
+        {
+            float out = b0[b] * passed + z1[b];
+            z1[b] = b1[b] * passed - a1[b] * out + z2[b];
+            z2[b] = b2[b] * passed - a2[b] * out;
+            energy[b] += (double)out * (double)out;
+        }
+        whole += (double)passed * (double)passed;
     }
-    core->filled = 0;
-    Decide(core);
-    return true;
+    for (uint32_t b = 0; b < MAUD_VAD_BANDS; ++b)
+    {
+        core->bands[b].z1 = z1[b];
+        core->bands[b].z2 = z2[b];
+        core->energy[b] = energy[b];
+    }
+    core->energy[MAUD_VAD_BANDS] = whole;
+    core->filled += n;
+    *done = core->filled == core->frameSamples;
+    if (*done)
+    {
+        core->filled = 0;
+        maudFlushBiquad(&core->highPass[0]);
+        maudFlushBiquad(&core->highPass[1]);
+        for (uint32_t b = 0; b < MAUD_VAD_BANDS; ++b)
+        {
+            maudFlushBiquad(&core->bands[b]);
+        }
+        Decide(core);
+    }
+    return n;
 }

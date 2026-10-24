@@ -158,6 +158,13 @@ typedef struct maudDeviceTable
     maudDeviceId defaults[2][2];
 } maudDeviceTable;
 
+// The direction of the device a stream of the direction runs on: a
+// loopback stream's is an output.
+static inline maudDirection maudDeviceDirection(maudDirection direction)
+{
+    return direction == maud_directionLoopback ? maud_directionOutput : direction;
+}
+
 typedef struct maudNotificationQueue
 {
     maudNotification* records;
@@ -184,6 +191,8 @@ struct maudContext
     // The audio focus last reported (focus.h).
     maudFocus focus;
     _Atomic(uint64_t) misuse;
+    // The thread running the host's allocator for the context, or 0.
+    _Atomic(uintptr_t) hostThread;
 };
 
 #endif // MAUL_AUDIO_SRC_CONTEXT_CORE_H

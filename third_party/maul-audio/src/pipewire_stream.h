@@ -24,6 +24,10 @@ void maudPipewireSetStreamActive(maudContext* context, maudStreamSlot* slot, boo
 // streams themselves stay.
 void maudPipewireDropStreams(maudContext* context);
 
+// While the daemon is away: every started stream not suspended yet is
+// suspended for the platform until a rebuild on a new core is taken.
+void maudPipewireSuspendStreams(maudContext* context);
+
 // Gives a new pw_stream to every stream without one that follows a
 // default or still has its device: after a reconnection, or when an
 // earlier attempt failed. Pinned streams whose device is gone stay

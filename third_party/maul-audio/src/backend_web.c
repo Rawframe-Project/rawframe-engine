@@ -8,13 +8,13 @@
 // fill target. On a cross-origin isolated page the frames go through a
 // SharedArrayBuffer ring, elsewhere as posted chunks. The target starts
 // at the browser's baseLatency plus 256 frames and grows by 128 for
-// each quantum the worklet plays short. The browser's autoplay policy
+// each quantum the worklet plays short. The clock places each rendered
+// frame through the context's output timestamp. The browser's autoplay policy
 // holds a context until a user gesture; the drain reads the
 // AudioContext's state and suspends or resumes the streams.
 
 #include "allocator.h"
 #include "backend.h"
-#include "clock.h"
 #include "context.h"
 #include "device.h"
 #include "follow.h"
@@ -37,7 +37,7 @@ EM_JS(int, maudWebOpen, (void), {
         return 0;
     }
     const web = globalThis.maudWeb || (globalThis.maudWeb = {contexts: [null], nodes: [null]});
-    web.contexts.push({context: new AudioContext(), worklet: null});
+    web.contexts.push({context: new AudioContext(), worklet: null, routeEpoch: 0});
     return web.contexts.length - 1;
 });
 
@@ -73,7 +73,8 @@ EM_JS(void, maudWebClose, (int handle), {
 // The processor plays interleaved frames from a SharedArrayBuffer ring
 // (its write index, read index and short count in the first 12 bytes)
 // or from posted chunks, counts the quanta it plays short, and posts
-// after each quantum. Told to drop, it discards what it holds, counted
+// after each quantum (posted: what it played, its short count and the
+// frame its quantum ended at). Told to drop, it discards what it holds, counted
 // as played so the main thread refills. The
 // source is plain string literals: EM_JS passes its body through the C
 // preprocessor, which would split arrow functions and template
@@ -101,8 +102,11 @@ EM_JS(void, maudWebAddProcessor, (int handle), {
         "      self.played += dropped;",
         "      self.chunks = [];",
         "      self.offset = 0;",
-        "      self.port.postMessage(self.index ? 0 : [self.played, self.short]);",
+        "      self.port.postMessage(self.report(currentFrame));",
         "    };",
+        "  }",
+        "  report(frame) {",
+        "    return [this.index ? Atomics.load(this.index, 1) : this.played, this.short, frame];",
         "  }",
         "  readRing(out, frames) {",
         "    const read = Atomics.load(this.index, 1);",
@@ -133,7 +137,7 @@ EM_JS(void, maudWebAddProcessor, (int handle), {
         "      this.short += 1;",
         "      if (this.index) { Atomics.store(this.index, 2, this.short); }",
         "    }",
-        "    this.port.postMessage(this.index ? 0 : [this.played, this.short]);",
+        "    this.port.postMessage(this.report(currentFrame + frames));",
         "    return true;",
         "  }",
         "}",
@@ -153,7 +157,8 @@ EM_JS(int, maudWebOpenNode, (int handle, void* context, int slot, int channels, 
     const entry = web.contexts[handle];
     const rate = entry.context.sampleRate;
     const base = Math.ceil(entry.context.baseLatency * rate / quantum) * quantum;
-    const record = {node: null, closed: false, posted: 0, shortSeen: 0, ring: null, index: null, data: null};
+    const record = {node: null, closed: false, posted: 0, shortSeen: 0, ring: null, index: null, data: null,
+                    capacity: capacity};
     record.target = Math.min(base + 2 * quantum, capacity);
     if (typeof SharedArrayBuffer !== "undefined" && globalThis.crossOriginIsolated) {
         record.ring = new SharedArrayBuffer(12 + capacity * channels * 4);
@@ -177,21 +182,49 @@ EM_JS(int, maudWebOpenNode, (int handle, void* context, int slot, int channels, 
         record.data.set(HEAPF32.subarray(from + first * channels, from + frames * channels), 0);
         Atomics.store(record.index, 0, (at + frames) | 0);
     }
-    function fill(played, short) {
+    // A report says what the worklet had taken (the ring's read index,
+    // or the frames played) by the context frame after its quantum.
+    function fill(taken, short, frame) {
         if (short > record.shortSeen) {
             record.target = Math.min(record.target + (short - record.shortSeen) * quantum, capacity);
             _maudWebXrun(context, slot, short - record.shortSeen);
             record.shortSeen = short;
         }
-        const buffered = record.ring ? (Atomics.load(record.index, 0) - Atomics.load(record.index, 1)) | 0
-                                     : record.posted - played;
+        const written = record.ring ? Atomics.load(record.index, 0) : record.posted;
+        const buffered = record.ring ? (written - Atomics.load(record.index, 1)) | 0 : written - taken;
         const frames = Math.floor((record.target - buffered) / quantum) * quantum;
         if (frames > 0) {
-            // What plays before these frames: the buffer ahead of them and
-            // the context's own latency to the speaker.
-            const latency = buffered / rate + entry.context.baseLatency + (entry.context.outputLatency || 0);
-            write(_maudWebRender(context, slot, frames, latency), frames);
+            const told = latency(frame, (written - taken) | 0, buffered);
+            write(_maudWebRender(context, slot, frames, told[0], told[1], entry.routeEpoch), frames);
         }
+    }
+    // How long from now until the next frame written is heard, and 1 when
+    // a timestamp says it (the C side filters those, web_clock.h). It plays
+    // at the context frame of the report plus what was queued ahead of it
+    // then; the context's output timestamp says when a context frame is
+    // heard, on the page's clock. Reports come in a batch after the
+    // device pulls a burst of quanta, so the context's current time,
+    // which moves by those bursts, would place the frame only as near as
+    // a burst. Before the first timestamp, without the method, in the
+    // context's first quarter second (its first stamps run early), or with
+    // a timestamp 100 ms old or placing the frame in the past (a starved
+    // device's): the frames queued and the context's own
+    // latencies, the ring's as read now, a posted report's less the frames
+    // rendered since it.
+    function latency(frame, ahead, buffered) {
+        const stamp = entry.context.getOutputTimestamp ? entry.context.getOutputTimestamp() : null;
+        const now = performance.now() / 1000;
+        const heard = stamp && stamp.contextTime >= 0.25 && stamp.performanceTime && frame !== undefined
+                          ? stamp.performanceTime / 1000 + (frame + ahead) / rate - stamp.contextTime
+                          : -1;
+        if (heard < now || now - stamp.performanceTime / 1000 > 0.1) {
+            const behind = frame === undefined || record.ring
+                               ? 0
+                               : Math.max(0, Math.round(entry.context.currentTime * rate) - frame);
+            const queued = record.ring ? buffered : Math.max(0, ahead - behind);
+            return [queued / rate + entry.context.baseLatency + (entry.context.outputLatency || 0), 0];
+        }
+        return [heard - now, 1];
     }
     entry.worklet.then(function () {
         if (record.closed) {
@@ -206,11 +239,7 @@ EM_JS(int, maudWebOpenNode, (int handle, void* context, int slot, int channels, 
             if (record.closed) {
                 return;
             }
-            if (record.ring) {
-                fill(0, Atomics.load(record.index, 2));
-            } else {
-                fill(event.data[0], event.data[1]);
-            }
+            fill(event.data[0], event.data[1], event.data[2]);
         };
         fill(0, 0);
         record.node.connect(entry.context.destination);
@@ -242,9 +271,10 @@ EM_JS(void, maudWebCloseNode, (int node), {
 // capacity, on the main thread and returns them; the JavaScript side
 // calls it to top the stream up, with the seconds until they are heard.
 EMSCRIPTEN_KEEPALIVE float* maudWebRender(maudContext* context, int slotIndex, int frames,
-                                          double latency);
+                                          double latency, int stamped, int epoch);
 
-float* maudWebRender(maudContext* context, int slotIndex, int frames, double latency)
+float* maudWebRender(maudContext* context, int slotIndex, int frames, double latency, int stamped,
+                     int epoch)
 {
     maudWeb* web = context->native;
     maudStreamCore* core = &context->streams.slots[slotIndex].core;
@@ -252,14 +282,18 @@ float* maudWebRender(maudContext* context, int slotIndex, int frames, double lat
     bool running = atomic_load_explicit(&core->state, memory_order_acquire) == maud_streamRunning;
     atomic_store_explicit(&core->renderingThread, maudCurrentThread(), memory_order_release);
     core->period.sampleRate = atomic_load_explicit(&core->blockRate, memory_order_acquire);
+    maudWebStream* stream = &web->streams[slotIndex];
     if (running)
     {
         maudPullPeriod(&core->period, chunk, (uint32_t)frames);
-        maudStampOutputClock(core, (int64_t)(latency * 1e9));
+        maudWebStampClock(&stream->clock, &stream->epoch, core, (int64_t)(latency * 1e9),
+                          stamped != 0, epoch, true);
         atomic_fetch_add_explicit(&core->position, (uint64_t)frames, memory_order_release);
     }
     else
     {
+        // Silence takes the frames' place: frame 0 is heard later.
+        maudWebResetClock(&stream->clock);
         memset(chunk, 0, (size_t)frames * core->period.channelCount * sizeof(float));
     }
     atomic_store_explicit(&core->renderingThread, 0, memory_order_release);
@@ -353,6 +387,11 @@ static void Pump(maudContext* context)
     maudHoldStreams(context, maudWebHeld(web->handle) != 0);
     maudResult result = maudWebSyncDevices(context);
     (void)result;
+    (void)maudWebDefaultMoved(context, maud_directionOutput);
+    if (maudWebDefaultMoved(context, maud_directionInput))
+    {
+        maudWebFollowDefaultInput(context);
+    }
 }
 
 static void ResumeContext(maudContext* context)
@@ -398,11 +437,12 @@ static maudResult AttachStream(maudContext* context, maudStreamSlot* slot)
     uint32_t channels = slot->core.period.channelCount;
     entry->chunkBytes = (size_t)MAUD_WEB_CAPACITY * channels * sizeof(float);
     entry->chunk = maudContextAllocate(context, entry->chunkBytes, alignof(float));
+    maudWebResetClock(&entry->clock);
     if (entry->chunk == nullptr)
     {
         return maud_errorCapacity;
     }
-    if (slot->core.def.direction == maud_directionInput)
+    if (slot->core.def.direction != maud_directionOutput)
     {
         entry->node = maudWebOpenCapture(context, slot, web->handle, entry->chunk);
         return maud_success;
@@ -416,7 +456,7 @@ static maudResult AttachStream(maudContext* context, maudStreamSlot* slot)
 static void DetachStream(maudContext* context, maudStreamSlot* slot)
 {
     maudWebStream* entry = EntryOf(context, slot);
-    if (slot->core.def.direction == maud_directionInput)
+    if (slot->core.def.direction != maud_directionOutput)
     {
         maudWebCloseCapture(entry->node);
     }
@@ -469,6 +509,7 @@ static const maudBackend s_web = {
     .resumeContext = ResumeContext,
     .suspendContext = SuspendContext,
     .rendersOnCaller = false,
+    .loopback = true,
 };
 
 const maudBackend* maudGetWebBackend(void)

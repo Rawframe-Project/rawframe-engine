@@ -128,6 +128,11 @@ void maudSetDefaultDevice(maudContext* context, maudDeviceRole role, maudDeviceI
 maudResult maudGetDevices(const maudContext* context, maudDirection direction, maudDeviceId* idsOut,
                           uint32_t capacity, uint32_t* countOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (countOut != nullptr)
+    {
+        *countOut = 0;
+    }
     if (context == nullptr || countOut == nullptr || (idsOut == nullptr && capacity != 0) ||
         direction > maud_directionInput)
     {
@@ -153,6 +158,11 @@ maudResult maudGetDevices(const maudContext* context, maudDirection direction, m
 maudResult maudGetDeviceInfo(const maudContext* context, maudDeviceId device,
                              maudDeviceInfo* infoOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (infoOut != nullptr)
+    {
+        memset(infoOut, 0, sizeof(*infoOut));
+    }
     if (context == nullptr || infoOut == nullptr)
     {
         return maud_errorInvalid;
@@ -197,18 +207,33 @@ static maudResult CopyText(const maudContext* context, maudDeviceId device, bool
 maudResult maudGetDeviceName(const maudContext* context, maudDeviceId device, char* bytesOut,
                              size_t capacity, size_t* lengthOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (lengthOut != nullptr)
+    {
+        *lengthOut = 0;
+    }
     return CopyText(context, device, false, bytesOut, capacity, lengthOut);
 }
 
 maudResult maudGetDeviceKey(const maudContext* context, maudDeviceId device, char* bytesOut,
                             size_t capacity, size_t* lengthOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (lengthOut != nullptr)
+    {
+        *lengthOut = 0;
+    }
     return CopyText(context, device, true, bytesOut, capacity, lengthOut);
 }
 
 maudResult maudGetDefaultDevice(const maudContext* context, maudDirection direction,
                                 maudDeviceRole role, maudDeviceId* deviceOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (deviceOut != nullptr)
+    {
+        memset(deviceOut, 0, sizeof(*deviceOut));
+    }
     if (context == nullptr || deviceOut == nullptr || direction > maud_directionInput ||
         role > maud_roleCommunications)
     {
@@ -272,17 +297,35 @@ void maudSetDeviceSpatializer(maudContext* context, maudDeviceSlot* slot,
                                   });
 }
 
-// Takes a scanned device's info; true when its native rate changed.
-static bool Update(maudContext* context, maudDeviceSlot* slot, const maudDeviceInfo* info)
+bool maudSetDeviceFormat(maudContext* context, maudDeviceSlot* slot, const maudDeviceInfo* info)
 {
-    maudSetDeviceForm(context, slot, info->form);
-    maudSetDeviceSpatializer(context, slot, info);
+    if (slot->info.nativeLayout == info->nativeLayout &&
+        slot->info.nativeSampleRate == info->nativeSampleRate &&
+        slot->info.minSampleRate == info->minSampleRate &&
+        slot->info.maxSampleRate == info->maxSampleRate)
+    {
+        return false;
+    }
     bool rateChanged = slot->info.nativeSampleRate != info->nativeSampleRate;
     slot->info.nativeLayout = info->nativeLayout;
     slot->info.nativeSampleRate = info->nativeSampleRate;
     slot->info.minSampleRate = info->minSampleRate;
     slot->info.maxSampleRate = info->maxSampleRate;
+    maudPostNotification(context, &(maudNotification){
+                                      .kind = maud_notifyDeviceFormatChanged,
+                                      .direction = slot->info.direction,
+                                      .device = IdOf(context, slot),
+                                      .sampleRate = info->nativeSampleRate,
+                                  });
     return rateChanged;
+}
+
+// Takes a scanned device's info; true when its native rate changed.
+static bool Update(maudContext* context, maudDeviceSlot* slot, const maudDeviceInfo* info)
+{
+    maudSetDeviceForm(context, slot, info->form);
+    maudSetDeviceSpatializer(context, slot, info);
+    return maudSetDeviceFormat(context, slot, info);
 }
 
 maudResult maudSyncDevices(maudContext* context, const maudDeviceSpec* specs, uint32_t count,

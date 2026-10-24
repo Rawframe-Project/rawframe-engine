@@ -9,6 +9,7 @@
 
 #include "context.h"
 #include "device.h"
+#include "follow.h"
 
 #define OFFLINE_DEVICE_DEF_COOKIE 0x6D616F64u
 #define OFFLINE_MIN_RATE          8000u
@@ -40,9 +41,8 @@ static maudResult CheckOffline(maudContext* context)
     {
         return maud_errorUnsupported;
     }
-    if (maudIsRenderingThread(context))
+    if (maudRefuseControl(context))
     {
-        maudCountMisuse(context);
         return maud_errorState;
     }
     return maud_success;
@@ -146,6 +146,35 @@ maudResult maudSetOfflineDeviceForm(maudContext* context, maudDeviceId device, m
         return maud_errorStale;
     }
     maudSetDeviceForm(context, slot, form);
+    return maud_success;
+}
+
+maudResult maudSetOfflineDeviceFormat(maudContext* context, maudDeviceId device,
+                                      maudChannelLayout layout, uint32_t sampleRate)
+{
+    maudResult result = CheckOffline(context);
+    if (result != maud_success)
+    {
+        return result;
+    }
+    if (maudGetLayoutChannelCount(layout) == 0 || sampleRate < OFFLINE_MIN_RATE ||
+        sampleRate > OFFLINE_MAX_RATE)
+    {
+        maudCountMisuse(context);
+        return maud_errorInvalid;
+    }
+    maudDeviceSlot* slot = maudFindDevice(context, device);
+    if (slot == nullptr)
+    {
+        return maud_errorStale;
+    }
+    maudDeviceInfo info = slot->info;
+    info.nativeLayout = layout;
+    info.nativeSampleRate = sampleRate;
+    if (maudSetDeviceFormat(context, slot, &info))
+    {
+        maudRefreshNativeRates(context);
+    }
     return maud_success;
 }
 

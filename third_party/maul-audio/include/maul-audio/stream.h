@@ -34,7 +34,7 @@ extern "C"
         // library renders ahead there, from the browser's event loop, and
         // plays from a queue on the audio thread, a SharedArrayBuffer ring
         // on a cross-origin isolated page and posted chunks elsewhere
-        // (docs/guide.md, "In a browser", gives the latency of each).
+        // (docs/internals/web.md gives the latency of each).
         maud_modeCallback = 0,
         // The host's own thread, through the library; the only mode of the
         // offline backend, and refused where the platform owns the audio
@@ -89,9 +89,13 @@ extern "C"
         uint32_t objectsAvailable;
     } maudStreamBlock;
 
-    // The host's real-time callback. It must not allocate, lock, wait or
-    // make any control call on the stream's context; control calls made
-    // from it are refused with maud_errorState.
+    // The host's real-time callback. It must not allocate, lock or wait.
+    // Of the stream's context it may call only maudGetStreamFormat,
+    // maudGetStreamPosition, maudGetStreamClock, maudGetContextMisuse and
+    // maudGetHostNanoseconds, and render or feed another offline stream
+    // (maudRenderStream, maudFeedStream, maudRenderObjects). Any other
+    // call that changes the context is refused with maud_errorState and
+    // counted as misuse, rendering its own stream again included.
     typedef void (*maudStreamCallback)(const maudStreamBlock* block, void* user);
 
     // Parts of the platform's voice processing, as flags: asked for by an
@@ -154,7 +158,9 @@ extern "C"
         // the offline backend.
         uint32_t periodFrames;
         // The device, or the null id to follow the default device of the
-        // stream's direction and role. For a duplex stream, the output.
+        // stream's direction and role. For a duplex stream, the output;
+        // for a loopback stream, the output whose sound it captures (the
+        // null id follows the role's default output).
         maudDeviceId device;
         // A duplex stream's input device, or the null id to follow the
         // default input of its role. Unused by other streams.
@@ -179,6 +185,13 @@ extern "C"
         // spatializer processes it again; the status says what the
         // platform did with the mark. Input streams take false.
         bool contentSpatialized;
+        // A loopback stream's request to leave the host process's own
+        // output out of what it captures, so that an echo canceller's
+        // reference holds only the other sounds the device plays. Refused
+        // with maud_errorUnsupported by every backend for now: PipeWire,
+        // PulseAudio and the web have no way, and WASAPI's process
+        // loopback is not yet offered. Other streams take false.
+        bool loopbackExcludesSelf;
         // An output stream's positioned objects, up to
         // MAUD_MAX_STREAM_OBJECTS: an object stream (maul-audio/objects.h),
         // whose layout is its bed's. Shared only; refused with
@@ -206,7 +219,10 @@ extern "C"
     {
         // It is not suspended.
         maud_suspendNone = 0,
-        // Its device disappeared, and it was opened on that device.
+        // Its device disappeared, and it was opened on that device. On
+        // the web, also when the browser refuses to play on it (the
+        // device left since it was listed, or the page may not choose
+        // outputs).
         maud_suspendDeviceLost = 1,
         // It follows the default device, and its direction has no device.
         maud_suspendNoDevice = 2,
@@ -218,6 +234,13 @@ extern "C"
         maud_suspendPolicy = 3,
         // The platform has not granted access to its device: on the web,
         // until the user allows the microphone. A refusal leaves it here.
+        // When the browser ends a capture's track (its microphone went,
+        // or its permission was withdrawn), the capture is opened again,
+        // on the default if its device went, and waits here meanwhile; a
+        // capture on the default is opened again the same way when the
+        // system's default microphone moves, as an open track stays on
+        // its device. A loopback stream whose sharing the user stopped stays here: only
+        // a new stream made in a gesture's handler can ask again.
         maud_suspendPermission = 4,
         // The host suspended the context (maudSetContextSuspended): its
         // application is in the background, hidden, or asleep.
@@ -301,10 +324,12 @@ extern "C"
     /// @return `maud_success`; `maud_errorInvalid` for a NULL argument, a def
     ///         without its cookie or callback, or a value out of range;
     ///         `maud_errorUnsupported` for what the backend cannot do (the
-    ///         offline backend has only pull mode and no converter);
-    ///         `maud_errorCapacity` past the stream or period limit or when
-    ///         the allocator fails; `maud_errorState` on a thread rendering
-    ///         one of the context's streams.
+    ///         offline backend has only pull mode and no converter; ALSA,
+    ///         Core Audio, iOS and AAudio have no loopback, and no platform
+    ///         an exclusive one);
+    ///         `maud_errorCapacity` past the stream or period limit or when the
+    ///         allocator fails; `maud_errorState` on a thread rendering one of
+    ///         the context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudCreateStream(maudContext* context,
@@ -319,8 +344,8 @@ extern "C"
     /// @return `maud_success`; `maud_errorStale` for an id that names no
     ///         stream; `maud_errorInvalid` for a NULL context;
     ///         `maud_errorState` on a thread rendering one of the context's
-    ///         streams, or, on the offline backend, while another thread
-    ///         renders the stream.
+    ///         streams or running its allocator, or, on the offline backend,
+    ///         while another thread renders the stream.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudDestroyStream(maudContext* context, maudStreamId stream);
@@ -330,8 +355,8 @@ extern "C"
     /// @param context  The context.
     /// @param stream   The stream.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
-    ///         NULL context; `maud_errorState` on a thread rendering one of
-    ///         the context's streams.
+    ///         NULL context; `maud_errorState` on a thread rendering one of the
+    ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudStartStream(maudContext* context, maudStreamId stream);
@@ -341,8 +366,8 @@ extern "C"
     /// @param context  The context.
     /// @param stream   The stream.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
-    ///         NULL context; `maud_errorState` on a thread rendering one of
-    ///         the context's streams.
+    ///         NULL context; `maud_errorState` on a thread rendering one of the
+    ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudStopStream(maudContext* context, maudStreamId stream);
@@ -351,7 +376,7 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param stream     The stream.
-    /// @param formatOut  Receives the format.
+    /// @param formatOut  Receives the format; all zero on failure.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL pointer.
     /// @par Thread safety
@@ -364,7 +389,7 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param stream     The stream.
-    /// @param statusOut  Receives the status.
+    /// @param statusOut  Receives the status; all zero on failure.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL pointer.
     /// @par Thread safety
@@ -377,7 +402,7 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param stream     The stream.
-    /// @param framesOut  Receives the frame count.
+    /// @param framesOut  Receives the frame count; 0 on failure.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL pointer.
     /// @par Thread safety
@@ -410,7 +435,7 @@ extern "C"
     ///
     /// @param context   The context.
     /// @param stream    The stream.
-    /// @param clockOut  Receives the clock.
+    /// @param clockOut  Receives the clock; all zero on failure.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL pointer.
     /// @par Thread safety
@@ -438,7 +463,9 @@ extern "C"
     /// @param stream      A started, running output stream of an offline
     ///                    context.
     /// @param framesOut   Room for frameCount interleaved frames. May be NULL
-    ///                    when frameCount is 0.
+    ///                    when frameCount is 0. Left as it was on failure:
+    ///                    a call back in from the stream's own callback
+    ///                    fails while the outer call fills these frames.
     /// @param frameCount  The number of frames.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL pointer where frames are due, an input stream or a total
@@ -453,11 +480,12 @@ extern "C"
 
     /// Feeds the next frames to an offline input stream from a caller
     /// buffer, calling the stream's callback once per completed period, on
-    /// the calling thread. The stream's clock advances by frameCount.
+    /// the calling thread. The stream's clock advances by frameCount. A
+    /// loopback stream is fed the same way, with what its device played.
     ///
     /// @param context     The context.
-    /// @param stream      A started, running input stream of an offline
-    ///                    context.
+    /// @param stream      A started, running input or loopback stream of
+    ///                    an offline context.
     /// @param frames      frameCount interleaved frames. May be NULL when
     ///                    frameCount is 0.
     /// @param frameCount  The number of frames.

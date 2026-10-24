@@ -40,6 +40,9 @@ extern "C"
         maud_notifyOverflow = 8,
         // device, of direction, now leads to form: its route changed,
         // as when headphones are plugged into the jack its port serves.
+        // On the web, the Default device of a direction reports it when
+        // the browser's default for that direction moves to another
+        // device; the Default itself stays the default.
         maud_notifyRouteChanged = 9,
         // The context's audio focus is now focus (maudRequestFocus).
         maud_notifyFocusChanged = 10,
@@ -47,6 +50,12 @@ extern "C"
         // changed (maudDeviceInfo's spatializer, headTracking and
         // spatialObjects).
         maud_notifySpatializerChanged = 11,
+        // device, of direction, now runs natively at another format
+        // (maudDeviceInfo's nativeLayout or its rates), as when a user
+        // picks another in the system's settings or the platform tells
+        // its channels only after listing it; sampleRate is its native
+        // rate. Streams that follow its rate report their own change.
+        maud_notifyDeviceFormatChanged = 12,
     };
 
     // One change. Fields a kind does not name are zero.
@@ -72,10 +81,12 @@ extern "C"
     /// keeps the device table current.
     ///
     /// @param context          The context.
-    /// @param notificationOut  Receives the record.
+    /// @param notificationOut  Receives the record; all zero when the
+    ///                         queue is empty and on failure.
     /// @return `maud_success`; `maud_empty` when the queue is drained;
     ///         `maud_errorInvalid` for a NULL pointer; `maud_errorState` on a
-    ///         thread rendering one of the context's streams.
+    ///         thread rendering one of the context's streams or running its
+    ///         allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudNextNotification(maudContext* context,

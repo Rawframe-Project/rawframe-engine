@@ -19,15 +19,15 @@
 
 #include "allocator.h"
 #include "band_eq.h"
+#include "flush.h"
 #include "octave_eq.h"
 
 #include <math.h>
 #include <string.h>
 
-#define REVERB_DEF_COOKIE 0x6D617276u
-#define LINES             16
-#define FILTERS           MAUD_OCTAVE_FILTERS
-#define RAMP_FRAMES       8u
+#define LINES       16
+#define FILTERS     MAUD_OCTAVE_FILTERS
+#define RAMP_FRAMES 8u
 // The send enters line i negated where bit i is set: with one sign on
 // every line the lines stay correlated, W sums them coherently and the
 // directional channels carry a sixth of its energy rather than the
@@ -114,17 +114,6 @@ struct maudReverb
     uint64_t tailLeft;
 };
 
-maudReverbDef maudDefaultReverbDef(void)
-{
-    return (maudReverbDef){
-        .cookie = REVERB_DEF_COOKIE,
-        .sampleRate = 48000.0f,
-        .maxDelay = 0.0f,
-        .tail = false,
-        .allocator = {nullptr, nullptr, nullptr},
-    };
-}
-
 static bool Prime(uint32_t n)
 {
     if (n < 2)
@@ -180,7 +169,11 @@ maudResult maudCreateReverb(const maudReverbDef* def, maudReverb** reverbOut)
     {
         *reverbOut = nullptr;
     }
-    if (def == nullptr || reverbOut == nullptr || def->cookie != REVERB_DEF_COOKIE ||
+    if (def != nullptr && def->cookie == MAUD_REVERB_DEF_COOKIE && def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
+    }
+    if (def == nullptr || reverbOut == nullptr || def->cookie != MAUD_REVERB_DEF_COOKIE ||
         !(def->sampleRate >= MIN_RATE) || !(def->sampleRate <= MAX_RATE) ||
         !(def->maxDelay >= 0.0f) || !(def->maxDelay <= MAX_DELAY) ||
         !maudIsAllocatorValid(&def->allocator))
@@ -411,6 +404,25 @@ static void Run(Network* r, const Bank* k, const float* in, float* const* bed, u
     }
 }
 
+// After a block: the samples each line took in it and the filters'
+// states flushed, off each sample's recursion. A line is longer than
+// any run, so nothing written is read back before its flush.
+static void Flush(Network* n, uint32_t count)
+{
+    for (int i = 0; i < LINES; ++i)
+    {
+        uint32_t length = n->lengths[i];
+        uint32_t written = count < length ? count : length;
+        uint32_t end = n->positions[i];
+        uint32_t first = end >= written ? end - written : 0;
+        maudFlushAll(n->lines[i] + first, end - first);
+        uint32_t wrapped = written - (end - first);
+        maudFlushAll(n->lines[i] + length - wrapped, wrapped);
+    }
+    maudFlushAll(&n->s1[0][0], FILTERS * LINES);
+    maudFlushAll(&n->s2[0][0], FILTERS * LINES);
+}
+
 static void Blend(const Bank* from, const Bank* to, float t, Bank* out)
 {
     const float* a = &from->b0[0][0];
@@ -589,6 +601,7 @@ static void Render(Network* n, const float* x, float* const* bed, uint32_t done,
         Blend(&n->current, &n->target, (float)(done + start + m) / (float)frames, &at);
         Run(n, &at, x + start, segment, m);
     }
+    Flush(n, count);
 }
 
 // A network's filters and levels after a call: those it moved to.

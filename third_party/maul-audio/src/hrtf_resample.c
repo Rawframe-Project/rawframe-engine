@@ -11,6 +11,7 @@
 #include "hrtf_resample.h"
 
 #include <math.h>
+#include <stddef.h>
 
 // The sinc's reach on each side, in input samples, and how early the
 // output starts. Measured on the KU100 set: a reach of 32 keeps the
@@ -50,22 +51,66 @@ static double Kernel(double x, double cutoff)
     return window * cutoff * (phase == 0.0 ? 1.0 : sin(phase) / phase);
 }
 
-void maudResampleResponse(const float* in, uint32_t inTaps, uint32_t from, float* out,
-                          uint32_t outTaps, uint32_t to)
+// The input taps output tap n reads, start to end inclusive (none when
+// end < start), and the time t it falls at, in input samples.
+static void Reach(uint32_t n, uint32_t inTaps, uint32_t from, uint32_t to, double* tOut,
+                  double* startOut, double* endOut)
 {
     double step = (double)from / (double)to;
     double cutoff = to < from ? (double)to / (double)from : 1.0;
     double span = HALF_WIDTH / cutoff;
-    double lead = (double)Lead(from, to);
+    double t = ((double)n - (double)Lead(from, to)) * step;
+    double first = ceil(t - span);
+    double last = floor(t + span);
+    *tOut = t;
+    *startOut = first < 0.0 ? 0.0 : first;
+    *endOut = last < (double)inTaps - 1.0 ? last : (double)inTaps - 1.0;
+}
+
+uint32_t maudResampleWidth(uint32_t from, uint32_t to)
+{
+    double cutoff = to < from ? (double)to / (double)from : 1.0;
+    return (uint32_t)(2.0 * HALF_WIDTH / cutoff) + 2u;
+}
+
+void maudResampleWeights(uint32_t inTaps, uint32_t from, uint32_t outTaps, uint32_t to,
+                         double* weights)
+{
+    double cutoff = to < from ? (double)to / (double)from : 1.0;
+    uint32_t width = maudResampleWidth(from, to);
     for (uint32_t n = 0; n < outTaps; ++n)
     {
-        double t = ((double)n - lead) * step;
-        double first = ceil(t - span);
-        double last = floor(t + span);
-        double sum = 0.0;
-        for (double k = first < 0.0 ? 0.0 : first; k <= last && k < (double)inTaps; k += 1.0)
+        double t = 0.0;
+        double start = 0.0;
+        double end = 0.0;
+        Reach(n, inTaps, from, to, &t, &start, &end);
+        double* row = weights + (size_t)n * width;
+        uint32_t count = end >= start ? (uint32_t)(end - start) + 1u : 0u;
+        for (uint32_t j = 0; j < count; ++j)
         {
-            sum += (double)in[(uint32_t)k] * Kernel(t - k, cutoff);
+            row[j] = Kernel(t - (start + (double)j), cutoff);
+        }
+    }
+}
+
+void maudResampleResponse(const float* in, uint32_t inTaps, uint32_t from, float* out,
+                          uint32_t outTaps, uint32_t to, const double* weights)
+{
+    double step = (double)from / (double)to;
+    uint32_t width = maudResampleWidth(from, to);
+    for (uint32_t n = 0; n < outTaps; ++n)
+    {
+        double t = 0.0;
+        double start = 0.0;
+        double end = 0.0;
+        Reach(n, inTaps, from, to, &t, &start, &end);
+        const double* row = weights + (size_t)n * width;
+        const float* taps = in + (size_t)start;
+        uint32_t count = end >= start ? (uint32_t)(end - start) + 1u : 0u;
+        double sum = 0.0;
+        for (uint32_t j = 0; j < count; ++j)
+        {
+            sum += (double)taps[j] * row[j];
         }
         out[n] = (float)(sum * step);
     }

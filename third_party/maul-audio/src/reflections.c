@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Reflections (reflections.h). The convolver's blocks are 128 samples
-// and the response is advanced by one block: the block's latency is
+// Reflections (reflections.h). The convolver runs in two stages
+// (staged.h), its head in blocks of 128 samples and its tail in larger
+// ones, and the response is advanced by one head block: the latency is
 // taken back, and only what arrives in its first block (walls within a
 // few decimetres) is lost. The bed is rendered and turned 128 frames at a
 // time, the orientation interpolated across the call.
@@ -10,8 +11,8 @@
 #include "reflections.h"
 
 #include "allocator.h"
-#include "partitioned.h"
 #include "reflection_response.h"
+#include "staged.h"
 
 #include "maul-audio/ambisonics.h"
 #include "maul-audio/direct.h"
@@ -32,10 +33,10 @@ struct maudReflections
     uint32_t channels;
     double rate;
     // The response's samples, the bins that cover them and the block
-    // dropped before them, and the partitions they make.
+    // dropped before them, and the convolver's stages for them.
     uint32_t frames;
     uint32_t bins;
-    uint32_t partitions;
+    maudStagedPlan plan;
     uint32_t batches;
     size_t fieldFloats;
     size_t responseFloats;
@@ -50,7 +51,7 @@ struct maudReflections
     _Atomic uint32_t shared;
     uint32_t front;
     uint32_t retiring;
-    maudPartitioned convolver;
+    maudStaged convolver;
     void* convolverMemory;
     float* chunk;
     maudQuaternion last;
@@ -70,9 +71,9 @@ static void Release(maudReflections* r)
     const size_t sizes[7] = {(size_t)r->batches * r->fieldFloats * sizeof(float),
                              Bytes(r->channels, (size_t)r->frames + BLOCK),
                              maudResponseScratch(r->rate) * sizeof(double),
-                             (4 * (size_t)BLOCK + 2) * sizeof(float),
+                             maudStagedScratchFloats(&r->plan) * sizeof(float),
                              4 * r->responseFloats * sizeof(float),
-                             maudPartitionedBytes(BLOCK, r->partitions, r->channels),
+                             maudStagedBytes(&r->plan, r->channels),
                              Bytes(r->channels, CHUNK)};
     for (int i = 0; i < 7; ++i)
     {
@@ -101,7 +102,7 @@ maudReflections* maudCreateReflections(const maudAllocator* allocator, uint32_t 
         .rate = (double)rate,
         .frames = frames,
         .bins = (frames + BLOCK + hop - 1) / hop,
-        .partitions = (frames + BLOCK - 1) / BLOCK,
+        .plan = maudPlanStaged(BLOCK, frames),
         .batches = batches,
         .back = 0,
         .front = 2,
@@ -109,7 +110,7 @@ maudReflections* maudCreateReflections(const maudAllocator* allocator, uint32_t 
     };
     atomic_init(&r->shared, 1u);
     r->fieldFloats = (size_t)r->channels * MAUD_DIRECT_BANDS * r->bins;
-    r->responseFloats = maudResponseFloats(BLOCK, r->partitions, r->channels);
+    r->responseFloats = maudStagedResponseFloats(&r->plan, r->channels);
     r->field =
         maudAllocate(allocator, (size_t)batches * r->fieldFloats * sizeof(float), alignof(double));
     r->samples =
@@ -117,10 +118,10 @@ maudReflections* maudCreateReflections(const maudAllocator* allocator, uint32_t 
     r->scratch =
         maudAllocate(allocator, maudResponseScratch(r->rate) * sizeof(double), alignof(double));
     r->cutScratch =
-        maudAllocate(allocator, (4 * (size_t)BLOCK + 2) * sizeof(float), alignof(double));
+        maudAllocate(allocator, maudStagedScratchFloats(&r->plan) * sizeof(float), alignof(double));
     r->responses = maudAllocate(allocator, 4 * r->responseFloats * sizeof(float), alignof(double));
-    r->convolverMemory = maudAllocate(
-        allocator, maudPartitionedBytes(BLOCK, r->partitions, r->channels), alignof(double));
+    r->convolverMemory =
+        maudAllocate(allocator, maudStagedBytes(&r->plan, r->channels), alignof(double));
     r->chunk = maudAllocate(allocator, Bytes(r->channels, CHUNK), alignof(double));
     if (r->field == nullptr || r->samples == nullptr || r->scratch == nullptr ||
         r->cutScratch == nullptr || r->responses == nullptr || r->convolverMemory == nullptr ||
@@ -130,7 +131,7 @@ maudReflections* maudCreateReflections(const maudAllocator* allocator, uint32_t 
         return nullptr;
     }
     memset(r->responses, 0, 4 * r->responseFloats * sizeof(float));
-    maudInitPartitioned(&r->convolver, BLOCK, r->partitions, r->channels, r->convolverMemory);
+    maudInitStaged(&r->convolver, &r->plan, r->channels, r->convolverMemory);
     return r;
 }
 
@@ -173,7 +174,7 @@ void maudPublishReflections(maudReflections* reflections, const maudReverbTrace*
     }
     maudReconstructResponse(histograms[0].field, r->order, r->bins, r->rate, channels,
                             r->frames + BLOCK, r->scratch);
-    maudPartitionResponse(&r->convolver, advanced, r->frames, response, r->cutScratch);
+    maudCutStagedResponse(&r->convolver, advanced, r->frames, response, r->cutScratch);
     uint32_t old = atomic_exchange_explicit(&r->shared, r->back | FRESH, memory_order_acq_rel);
     r->back = old & (FRESH - 1);
 }
@@ -195,7 +196,7 @@ static maudQuaternion Toward(maudQuaternion a, maudQuaternion b, float t)
 // replaced goes back only at the next exchange, after its crossfade.
 static void Take(maudReflections* r)
 {
-    if (r->convolver.next != r->convolver.response ||
+    if (maudStagedSwitching(&r->convolver) ||
         (atomic_load_explicit(&r->shared, memory_order_relaxed) & FRESH) == 0)
     {
         return;
@@ -203,7 +204,7 @@ static void Take(maudReflections* r)
     uint32_t old = atomic_exchange_explicit(&r->shared, r->retiring, memory_order_acq_rel);
     r->retiring = r->front;
     r->front = old & (FRESH - 1);
-    maudSetPartitionedResponse(&r->convolver, r->responses + (size_t)r->front * r->responseFloats);
+    maudSetStagedResponse(&r->convolver, r->responses + (size_t)r->front * r->responseFloats);
 }
 
 void maudConvolveReflections(maudReflections* reflections, const maudQuaternion* orientation,
@@ -225,7 +226,7 @@ void maudConvolveReflections(maudReflections* reflections, const maudQuaternion*
         Take(r);
         uint32_t n = frames - done < CHUNK ? frames - done : CHUNK;
         memset(r->chunk, 0, Bytes(r->channels, CHUNK));
-        maudRunPartitioned(&r->convolver, send + done, chunk, n);
+        maudRunStaged(&r->convolver, send + done, chunk, n);
         maudQuaternion from = Toward(r->last, *orientation, (float)done / (float)frames);
         maudQuaternion to = Toward(r->last, *orientation, (float)(done + n) / (float)frames);
         if (maudRotateAmbisonic(r->order, &from, &to, chunk, n) == maud_success)

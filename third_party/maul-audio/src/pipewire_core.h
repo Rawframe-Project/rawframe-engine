@@ -15,6 +15,9 @@
 #define MAUD_PIPEWIRE_DEADLINE_NS 2000000000ll
 // How long after a failed connection the next one is tried.
 #define MAUD_PIPEWIRE_RETRY_NS 500000000ll
+// How long the devices of a lost connection are kept for a new core to
+// list again.
+#define MAUD_PIPEWIRE_AWAY_NS 10000000000ll
 // How many loop iterations one pump takes at most.
 #define MAUD_PIPEWIRE_PUMP_ITERATIONS 64
 // The graph rate until the settings metadata gives it.
@@ -41,6 +44,10 @@ typedef struct maudPipewireNode
     uint32_t cardId;
     int32_t profileDevice;
     bool used;
+    // Kept from a lost connection with its device and nothing else: a
+    // new core's node with its name takes the device over, else it is
+    // removed.
+    bool away;
 } maudPipewireNode;
 
 // How many routes a card keeps: one per profile device and direction.
@@ -83,6 +90,12 @@ typedef struct maudPipewireConnection
     // that reported it, and a new one is tried from nextAttempt on.
     bool lost;
     int64_t nextAttempt;
+    // When the devices of a lost connection go if no new core has listed
+    // them by then; zero with none away. A new core's listing is two
+    // round trips (its globals, then the nodes' info); listing counts
+    // those still unanswered.
+    int64_t awayUntil;
+    int listing;
 } maudPipewireConnection;
 
 // The default metadata and the node names it gives per direction.
@@ -114,6 +127,12 @@ typedef struct maudPipewireStream
     struct spa_hook listener;
     enum pw_stream_state state;
     bool used;
+    // Set on the main loop when the graph ends a stream it had taken (its
+    // node destroyed, or failed): the drain builds the stream again.
+    bool ended;
+    // When the drain rebuilt the stream, until the graph takes it (paused
+    // or streaming); zero for a stream the host opened or one taken.
+    int64_t rebuiltAt;
     // The graph's ticks at the last cycle and the frames it moved, to see
     // a skipped cycle; forgotten when the control thread sets
     // forgetTicks, as when the stream is activated.

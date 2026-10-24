@@ -7,7 +7,9 @@
 // X[k] = (Z[k] + conj Z[m - k]) / 2 - i e^(-2 pi i k / n) (Z[k] -
 // conj Z[m - k]) / 2, m = n / 2. Inverse: the split undone, the complex
 // inverse by decimation in frequency (natural in, bit-reversed out), the
-// samples stored from the bit-reversed positions.
+// samples stored from the bit-reversed positions. Each stage reads its
+// twiddles in order from a table of its own, so that a group's
+// butterflies run as one vector loop.
 
 #include "real_fft.h"
 
@@ -28,7 +30,7 @@ typedef struct Places
 static Places PlacesOf(uint32_t m)
 {
     Places p = {0};
-    p.twiddles = maudLayoutAdd(&p.layout, (size_t)(m / 2) * 2, sizeof(float), alignof(float));
+    p.twiddles = maudLayoutAdd(&p.layout, (size_t)(m - 1) * 2, sizeof(float), alignof(float));
     p.split = maudLayoutAdd(&p.layout, (size_t)m * 2, sizeof(float), alignof(float));
     p.reverse = maudLayoutAdd(&p.layout, m, sizeof(uint32_t), alignof(uint32_t));
     return p;
@@ -49,11 +51,18 @@ void maudInitRealFft(maudRealFft* fft, uint32_t size, void* memory)
     fft->twiddles = (float*)(block + p.twiddles);
     fft->split = (float*)(block + p.split);
     fft->reverse = (uint32_t*)(block + p.reverse);
-    for (uint32_t k = 0; k < m / 2; ++k)
+    // Each stage's twiddles in the order its butterflies use them.
+    float* w = fft->twiddles;
+    for (uint32_t half = 1; half < m; half *= 2)
     {
-        double a = -2.0 * PI_D * (double)k / (double)m;
-        fft->twiddles[2 * k] = (float)cos(a);
-        fft->twiddles[2 * k + 1] = (float)sin(a);
+        uint32_t stride = m / (2 * half);
+        for (uint32_t j = 0; j < half; ++j)
+        {
+            double a = -2.0 * PI_D * (double)(j * stride) / (double)m;
+            w[2 * j] = (float)cos(a);
+            w[2 * j + 1] = (float)sin(a);
+        }
+        w += 2 * half;
     }
     for (uint32_t k = 0; k < m; ++k)
     {
@@ -77,54 +86,67 @@ void maudInitRealFft(maudRealFft* fft, uint32_t size, void* memory)
     }
 }
 
-// Decimation in time over m complex values in bit-reversed order:
-// natural order out. Twiddles conjugated when inverse.
-static void Time(const maudRealFft* fft, float* z, uint32_t m)
+// One stage's butterflies of a group, decimation in time.
+static void TimeGroup(float* restrict a, float* restrict b, const float* restrict w, uint32_t half)
 {
-    for (uint32_t half = 1; half < m; half *= 2)
+    for (uint32_t j = 0; j < half; ++j)
     {
-        uint32_t stride = m / (2 * half);
-        for (uint32_t start = 0; start < m; start += 2 * half)
-        {
-            for (uint32_t j = 0; j < half; ++j)
-            {
-                float wr = fft->twiddles[2 * j * stride];
-                float wi = fft->twiddles[2 * j * stride + 1];
-                float* a = z + 2 * (start + j);
-                float* b = a + 2 * half;
-                float tr = wr * b[0] - wi * b[1];
-                float ti = wr * b[1] + wi * b[0];
-                b[0] = a[0] - tr;
-                b[1] = a[1] - ti;
-                a[0] += tr;
-                a[1] += ti;
-            }
-        }
+        float wr = w[2 * j];
+        float wi = w[2 * j + 1];
+        float tr = wr * b[2 * j] - wi * b[2 * j + 1];
+        float ti = wr * b[2 * j + 1] + wi * b[2 * j];
+        b[2 * j] = a[2 * j] - tr;
+        b[2 * j + 1] = a[2 * j + 1] - ti;
+        a[2 * j] += tr;
+        a[2 * j + 1] += ti;
     }
 }
 
-// Decimation in frequency, inverse (conjugate twiddles), over m complex
-// values in natural order: bit-reversed order out.
-static void Frequency(const maudRealFft* fft, float* z, uint32_t m)
+// Decimation in time over m complex values in bit-reversed order:
+// natural order out.
+static void Time(const maudRealFft* fft, float* z, uint32_t m)
 {
-    for (uint32_t half = m / 2; half >= 1; half /= 2)
+    const float* w = fft->twiddles;
+    for (uint32_t half = 1; half < m; half *= 2)
     {
-        uint32_t stride = m / (2 * half);
         for (uint32_t start = 0; start < m; start += 2 * half)
         {
-            for (uint32_t j = 0; j < half; ++j)
-            {
-                float wr = fft->twiddles[2 * j * stride];
-                float wi = -fft->twiddles[2 * j * stride + 1];
-                float* a = z + 2 * (start + j);
-                float* b = a + 2 * half;
-                float dr = a[0] - b[0];
-                float di = a[1] - b[1];
-                a[0] += b[0];
-                a[1] += b[1];
-                b[0] = wr * dr - wi * di;
-                b[1] = wr * di + wi * dr;
-            }
+            TimeGroup(z + 2 * start, z + 2 * (start + half), w, half);
+        }
+        w += 2 * half;
+    }
+}
+
+// One stage's butterflies of a group, decimation in frequency, the
+// twiddles conjugated.
+static void FrequencyGroup(float* restrict a, float* restrict b, const float* restrict w,
+                           uint32_t half)
+{
+    for (uint32_t j = 0; j < half; ++j)
+    {
+        float wr = w[2 * j];
+        float wi = -w[2 * j + 1];
+        float dr = a[2 * j] - b[2 * j];
+        float di = a[2 * j + 1] - b[2 * j + 1];
+        a[2 * j] += b[2 * j];
+        a[2 * j + 1] += b[2 * j + 1];
+        b[2 * j] = wr * dr - wi * di;
+        b[2 * j + 1] = wr * di + wi * dr;
+    }
+}
+
+// Decimation in frequency, inverse, over m complex values in natural
+// order: bit-reversed order out.
+static void Frequency(const maudRealFft* fft, float* z, uint32_t m)
+{
+    // The last stage's table first: the stages run from the largest.
+    const float* w = fft->twiddles + 2 * (size_t)(m - 1);
+    for (uint32_t half = m / 2; half >= 1; half /= 2)
+    {
+        w -= 2 * half;
+        for (uint32_t start = 0; start < m; start += 2 * half)
+        {
+            FrequencyGroup(z + 2 * start, z + 2 * (start + half), w, half);
         }
     }
 }

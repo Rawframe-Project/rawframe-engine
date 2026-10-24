@@ -8,6 +8,7 @@
 
 #include "context_core.h"
 #include "device.h"
+#include "web_clock.h"
 
 #include <stddef.h>
 
@@ -25,6 +26,10 @@ typedef struct maudWebStream
     int node;
     float* chunk;
     size_t chunkBytes;
+    // The earliest frame-0 time the browser's timestamps gave, and the
+    // context's route epoch it was taken in.
+    maudWebClock clock;
+    int epoch;
 } maudWebStream;
 
 // Bytes of a listed device's id and label.

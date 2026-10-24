@@ -24,11 +24,15 @@ typedef struct maudWorker
 #endif
     void (*run)(void* user);
     void* user;
+    // The thread's name, a string that outlives it; the thread names
+    // itself before it runs, so its first block already carries it.
+    const char* name;
     bool running;
 } maudWorker;
 
-// Starts run(user) on a new thread named name (at most 15 bytes, ASCII);
-// the name is set before this returns. False when no thread could start.
+// Starts run(user) on a new thread named name (at most 15 bytes, ASCII,
+// a string that outlives the thread), named before this returns and
+// before it runs anything. False when no thread could start.
 bool maudStartWorker(maudWorker* worker, void (*run)(void* user), void* user, const char* name);
 
 // Waits for the worker's run to return. Nothing when it is not running.

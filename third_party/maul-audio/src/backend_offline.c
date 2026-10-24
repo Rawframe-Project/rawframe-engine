@@ -84,6 +84,7 @@ static const maudBackend s_offline = {
     .setStreamActive = nullptr,
     .retargetStream = nullptr,
     .rendersOnCaller = true,
+    .loopback = true,
     .hasNoVoice = true,
 };
 

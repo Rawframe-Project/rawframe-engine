@@ -10,9 +10,11 @@
 
 #include "clock.h"
 #include "context.h"
+#include "follow.h"
 #include "period.h"
 #include "pipewire_core.h"
 #include "pipewire_parse.h"
+#include "retry.h"
 #include "thread.h"
 #include "xrun.h"
 
@@ -31,10 +33,11 @@ static maudPipewireStream* EntryOf(maudContext* context, const maudStreamSlot* s
 static void OnStateChanged(void* data, enum pw_stream_state old, enum pw_stream_state state,
                            const char* error)
 {
-    (void)old;
     (void)error;
     maudPipewireStream* entry = data;
     entry->state = state;
+    entry->ended = entry->ended || state == PW_STREAM_STATE_ERROR ||
+                   (state == PW_STREAM_STATE_UNCONNECTED && old != PW_STREAM_STATE_UNCONNECTED);
 }
 
 // The latency of this cycle's buffer, from the graph's report: the
@@ -159,7 +162,9 @@ static const struct pw_stream_events s_streamEvents = {
 };
 
 // The stream's properties: what it is, its period as a latency hint,
-// and, for a stream opened on a device, that device and no other.
+// and, for a stream opened on a device, that device and no other. A
+// loopback stream captures the monitor of the sink it is on now, and
+// the library moves it.
 static struct pw_properties* StreamProperties(const maudContext* context,
                                               const maudStreamCore* core)
 {
@@ -174,7 +179,13 @@ static struct pw_properties* StreamProperties(const maudContext* context,
     }
     api->propertiesSetf(props, PW_KEY_NODE_LATENCY, "%u/%u", core->format.periodFrames,
                         core->format.sampleRate);
-    const maudDeviceSlot* device = maudFindDevice(context, core->binding.requested);
+    bool loopback = core->def.direction == maud_directionLoopback;
+    const maudDeviceSlot* device =
+        maudFindDevice(context, loopback ? core->binding.current : core->binding.requested);
+    if (loopback)
+    {
+        api->propertiesSetf(props, PW_KEY_STREAM_CAPTURE_SINK, "true");
+    }
     if (device != nullptr)
     {
         api->propertiesSetf(props, PW_KEY_TARGET_OBJECT, "%.*s", (int)device->key.length,
@@ -311,6 +322,19 @@ void maudPipewireRetargetStream(maudContext* context, maudStreamSlot* slot)
     (void)result;
 }
 
+void maudPipewireSuspendStreams(maudContext* context)
+{
+    int64_t now = maudNowNanoseconds();
+    for (uint32_t i = 0; i < context->streams.capacity; ++i)
+    {
+        maudStreamSlot* slot = &context->streams.slots[i];
+        if (maudWantsReopen(slot) && slot->core.binding.suspension == maud_suspendNone)
+        {
+            maudReportReopen(context, slot, false, now);
+        }
+    }
+}
+
 void maudPipewireDropStreams(maudContext* context)
 {
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
@@ -322,19 +346,50 @@ void maudPipewireDropStreams(maudContext* context)
     }
 }
 
+// A rebuild the graph has not taken by the deadline failed, as one it
+// ended did (a stream with no device to negotiate with has no deadline): the stream is detached,
+// waits longer before each new try (retry.h), and is suspended for the platform until one is taken.
 void maudPipewireReconnectStreams(maudContext* context)
 {
+    int64_t now = maudNowNanoseconds();
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
     {
         maudStreamSlot* slot = &context->streams.slots[i];
+        maudPipewireStream* entry = EntryOf(context, slot);
         const maudStreamBinding* binding = &slot->core.binding;
-        bool wanted = binding->requested.index1 == 0 || binding->suspension == maud_suspendNone;
-        if (slot->live && wanted && !EntryOf(context, slot)->used)
+        if (!slot->live)
         {
-            // A failure leaves the entry unused, so the next drain tries
-            // again.
-            maudResult result = ConnectStream(context, slot, false);
-            (void)result;
+            continue;
+        }
+        bool taken =
+            entry->state == PW_STREAM_STATE_PAUSED || entry->state == PW_STREAM_STATE_STREAMING;
+        bool rebuilt = entry->rebuiltAt != 0;
+        if (rebuilt && taken && !entry->ended)
+        {
+            entry->rebuiltAt = 0;
+            maudReportReopen(context, slot, true, now);
+        }
+        else if (entry->ended || (rebuilt && binding->current.index1 != 0 &&
+                                  now - entry->rebuiltAt > MAUD_PIPEWIRE_DEADLINE_NS))
+        {
+            maudPipewireDetachStream(context, slot);
+            if (rebuilt)
+            {
+                maudReportReopen(context, slot, false, now);
+            }
+        }
+        bool wanted = binding->requested.index1 == 0 || binding->suspension == maud_suspendNone ||
+                      binding->suspension == maud_suspendPlatform;
+        if (wanted && !entry->used && maudRetryDue(binding, now))
+        {
+            if (ConnectStream(context, slot, false) != maud_success)
+            {
+                maudReportReopen(context, slot, false, now);
+            }
+            else if (entry->used)
+            {
+                entry->rebuiltAt = now;
+            }
         }
     }
 }

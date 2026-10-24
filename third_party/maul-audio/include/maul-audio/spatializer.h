@@ -121,11 +121,22 @@ extern "C"
                                     void* taskContext, void* userContext);
     typedef void maudFinishTaskFn(void* userTask, void* userContext);
 
+    // The ray hooks, the task hooks and the spatializer's allocator run
+    // while the spatializer works. Of the spatializer they may call only
+    // its rendering side (maudLatchResults, maudGetDirectResult,
+    // maudGetReverbResult, maudRenderReflections), which is built to run
+    // during a step, and maudGetSpatializerMisuse. Any other call that
+    // changes it is refused with maud_errorState and counted as misuse,
+    // from whichever thread the host runs them on.
+
     // How to create a spatializer. Build it with
     // maudDefaultSpatializerDef.
     typedef struct maudSpatializerDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The most sources at once, 1 to 65,536.
         uint32_t sourceCapacity;
         // The most occlusion points a volumetric source may have, 1 to
@@ -284,16 +295,44 @@ extern "C"
         float tailLevel[MAUD_DIRECT_BANDS];
     } maudReverbResult;
 
+// The cookie of a spatializer def, which its default sets and
+// maudCreateSpatializer checks.
+#define MAUD_SPATIALIZER_DEF_COOKIE 0x6D617370u
+
     /// Returns the default spatializer def: 256 sources, up to 64
     /// occlusion points each, transmission paths of up to 4 surfaces, 64
     /// materials, reverberation estimates of 2048 rays through air at
     /// 20 degrees and 50 % humidity, no geometric reflections (when
     /// asked for: 1 s at 48 kHz), no ray queries, no task hooks.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudSpatializerDef maudDefaultSpatializerDef(void);
+    static inline maudSpatializerDef maudDefaultSpatializerDef(void)
+    {
+#ifdef __cplusplus
+        maudSpatializerDef def = {};
+#else
+    maudSpatializerDef def = {0};
+#endif
+        def.cookie = MAUD_SPATIALIZER_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.sourceCapacity = 256;
+        def.maxOcclusionSamples = 64;
+        def.maxSurfaces = 4;
+        def.materialCapacity = 64;
+        def.reverbRays = 2048;
+        def.reflectionDuration = 1.0f;
+        def.reflectionRate = 48000.0f;
+        def.maxProbes = 4096;
+        def.maxProbePairs = 1048576;
+        def.maxPaths = 32;
+        (void)maudGetAirAbsorption(20.0f, 50.0f, def.airAbsorption);
+        return def;
+    }
 
     /// Returns the default source def: omnidirectional, occlusion by one
     /// ray (for volumetric occlusion a sphere of 1 m with 32 points),
@@ -308,7 +347,9 @@ extern "C"
     ///
     /// @param def             The def, from maudDefaultSpatializerDef.
     /// @param spatializerOut  Receives the spatializer; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a
     ///         def without its cookie, a capacity or ray count out of
     ///         range, an air absorption below 0 or not finite, a
     ///         reflection order, duration or rate out of range (or
@@ -321,7 +362,9 @@ extern "C"
                                                              maudSpatializer** spatializerOut);
 
     /// Destroys a spatializer and its sources. NULL is ignored. Neither
-    /// side may be in use.
+    /// side may be in use. Called from host code the spatializer is
+    /// running (its hooks or allocator), it does nothing and counts as
+    /// misuse.
     ///
     /// @param spatializer  The spatializer.
     /// @par Thread safety
@@ -329,18 +372,30 @@ extern "C"
     /// time.
     MAUD_API void maudDestroySpatializer(maudSpatializer* spatializer);
 
+    /// Returns how many calls the spatializer refused as misuse: invalid
+    /// arguments to the functions that change it (a bake file not well
+    /// formed is not misuse), and calls refused because host code the
+    /// spatializer was running made them. Stale ids are not misuse.
+    ///
+    /// @param spatializer  The spatializer.
+    /// @return The count since the spatializer was created.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MAUD_API uint64_t maudGetSpatializerMisuse(const maudSpatializer* spatializer);
+
     /// Creates a source, at the world's origin facing -z until its pose
     /// is set. It appears in results from the next step on.
     ///
     /// @param spatializer  The spatializer.
     /// @param def          The def, from maudDefaultSourceDef.
     /// @param sourceOut    Receives the source; 0 on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a
-    ///         def without its cookie, an invalid directivity pattern, an
-    ///         unknown occlusion method, or a volumetric radius or point
-    ///         count out of range;
-    ///         `maud_errorCapacity` when the spatializer has its capacity
-    ///         of sources.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a def
+    ///         without its cookie, an invalid directivity pattern, an unknown
+    ///         occlusion method, or a volumetric radius or point count out of
+    ///         range; `maud_errorCapacity` when the spatializer has its
+    ///         capacity of sources; `maud_errorState` when host code the
+    ///         spatializer is running (its hooks or allocator) makes the call,
+    ///         which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -353,9 +408,10 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param source       The source.
-    /// @return `maud_success`, `maud_errorInvalid` for a NULL spatializer
-    ///         or a 0 or unknown id, or `maud_errorStale` for a destroyed
-    ///         source's id.
+    /// @return `maud_success`, `maud_errorInvalid` for a NULL spatializer or a
+    ///         0 or unknown id, or `maud_errorStale` for a destroyed source's
+    ///         id; `maud_errorState` when host code the spatializer is running
+    ///         (its hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -367,10 +423,11 @@ extern "C"
     /// @param spatializer  The spatializer.
     /// @param source       The source.
     /// @param pose         The pose.
-    /// @return `maud_success`, `maud_errorInvalid` for a NULL pointer, a 0
-    ///         or unknown id, a value that is not finite or a zero
-    ///         orientation, or `maud_errorStale` for a destroyed source's
-    ///         id.
+    /// @return `maud_success`, `maud_errorInvalid` for a NULL pointer, a 0 or
+    ///         unknown id, a value that is not finite or a zero orientation, or
+    ///         `maud_errorStale` for a destroyed source's id; `maud_errorState`
+    ///         when host code the spatializer is running (its hooks or
+    ///         allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -387,7 +444,9 @@ extern "C"
     /// @param spatializer  The spatializer.
     /// @param listener     The listener's pose.
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer, a
-    ///         value that is not finite or a zero orientation.
+    ///         value that is not finite or a zero orientation;
+    ///         `maud_errorState` when host code the spatializer is running (its
+    ///         hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -402,7 +461,9 @@ extern "C"
     /// @param count        Up to the def's materialCapacity.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
     ///         value outside 0 to 1; `maud_errorCapacity` for more than the
-    ///         capacity. Nothing changes on failure.
+    ///         capacity; `maud_errorState` when host code the spatializer is
+    ///         running (its hooks or allocator) makes the call, which counts as
+    ///         misuse. Nothing changes on failure.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -424,9 +485,11 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param listener     The listener's pose.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a
-    ///         value that is not finite or a zero orientation;
-    ///         `maud_errorState` when the def asked for no estimates.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a value
+    ///         that is not finite or a zero orientation; `maud_errorState` when
+    ///         the def asked for no estimates; `maud_errorState` when host code
+    ///         the spatializer is running (its hooks or allocator) makes the
+    ///         call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -448,7 +511,7 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param source       The source.
-    /// @param resultOut    Receives the result.
+    /// @param resultOut    Receives the result; all zero on failure.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a 0
     ///         or unknown id, or no latched step; `maud_errorStale` when
     ///         the latched step does not hold the source (made after it,
@@ -461,10 +524,15 @@ extern "C"
                                                            maudDirectResult* resultOut);
 
     /// Renders geometric reflections: convolves the host's mono send with
-    /// the newest response published, crossfading over 128 frames to a
-    /// new one, and adds the result into a bed of the def's order (ACN,
-    /// SN3D) in the listener's frame. The response is advanced by the
-    /// convolution's 128-frame block, so the output does not lag.
+    /// the newest response published and adds the result into a bed of
+    /// the def's order (ACN, SN3D) in the listener's frame. The response is
+    /// advanced by the convolution's 128-frame block, so the output does
+    /// not lag. A long response is convolved in two stages, 128-frame
+    /// blocks for its start and longer ones (2,048 frames for a second at
+    /// 48 kHz) for the rest; a new response takes over at the next of
+    /// those longer blocks and is heard whole within three of them (128 ms
+    /// for a second at 48 kHz), its start crossfaded over 128 frames and
+    /// the rest over a block.
     ///
     /// @param spatializer  The spatializer.
     /// @param orientation  The listener's orientation at the call's end;
@@ -487,7 +555,7 @@ extern "C"
     /// Reads the reverberation estimate the latched step published.
     ///
     /// @param spatializer  The spatializer.
-    /// @param resultOut    Receives the result.
+    /// @param resultOut    Receives the result; all zero on failure.
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer or
     ///         no latched step.
     /// @par Thread safety
@@ -513,13 +581,14 @@ extern "C"
     /// @param spatializer  The spatializer.
     /// @param def          The def, from maudDefaultProbeSetDef.
     /// @param setOut       Receives the set; 0 on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a
-    ///         def without its cookie, a value out of range or not
-    ///         finite, or neither points nor a box (one with height);
-    ///         `maud_errorState` to generate without a closest-hit query;
-    ///         `maud_errorCapacity` when the spatializer has its capacity
-    ///         of sets, past maxProbes or maxProbePairs, past 4,194,304
-    ///         columns, or when memory runs out.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a def
+    ///         without its cookie, a value out of range or not finite, or
+    ///         neither points nor a box (one with height); `maud_errorState` to
+    ///         generate without a closest-hit query; `maud_errorCapacity` when
+    ///         the spatializer has its capacity of sets, past maxProbes or
+    ///         maxProbePairs, past 4,194,304 columns, or when memory runs out;
+    ///         `maud_errorState` when host code the spatializer is running (its
+    ///         hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -531,9 +600,10 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param set          The set.
-    /// @return `maud_success`, `maud_errorInvalid` for a NULL spatializer
-    ///         or a 0 or unknown id, or `maud_errorStale` for a destroyed
-    ///         set's id.
+    /// @return `maud_success`, `maud_errorInvalid` for a NULL spatializer or a
+    ///         0 or unknown id, or `maud_errorStale` for a destroyed set's id;
+    ///         `maud_errorState` when host code the spatializer is running (its
+    ///         hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -545,7 +615,7 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param set          The set.
-    /// @param infoOut      Receives the counts.
+    /// @param infoOut      Receives the counts; all zero on failure.
     /// @param first        The first probe to copy.
     /// @param count        The probes to copy.
     /// @param points       Receives them, or NULL.
@@ -565,9 +635,10 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param set          The set, or 0.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer
-    ///         or an unknown id; `maud_errorStale` for a destroyed set's
-    ///         id.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer or an
+    ///         unknown id; `maud_errorStale` for a destroyed set's id;
+    ///         `maud_errorState` when host code the spatializer is running (its
+    ///         hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -584,11 +655,13 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param set          The set.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer
-    ///         or a 0 or unknown id; `maud_errorStale` for a destroyed
-    ///         set's id; `maud_errorState` without reverberation rays or
-    ///         a closest-hit query; `maud_errorCapacity` when memory runs
-    ///         out (an earlier bake is then gone).
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer or a
+    ///         0 or unknown id; `maud_errorStale` for a destroyed set's id;
+    ///         `maud_errorState` without reverberation rays or a closest-hit
+    ///         query; `maud_errorCapacity` when memory runs out (an earlier
+    ///         bake is then gone); `maud_errorState` when host code the
+    ///         spatializer is running (its hooks or allocator) makes the call,
+    ///         which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -604,16 +677,18 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param set          The set, or 0.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer
-    ///         or an unknown id; `maud_errorStale` for a destroyed set's
-    ///         id; `maud_errorState` for a set without a bake.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer or an
+    ///         unknown id; `maud_errorStale` for a destroyed set's id;
+    ///         `maud_errorState` for a set without a bake; `maud_errorState`
+    ///         when host code the spatializer is running (its hooks or
+    ///         allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
     MAUD_NODISCARD MAUD_API maudResult maudUseBakedReverb(maudSpatializer* spatializer,
                                                           maudProbeSetId set);
 
-    /// Saves a probe set as a `.maudbake` file (docs/bake-format.md):
+    /// Saves a probe set as a `.maudbake` file (docs/internals/file-formats.md):
     /// its probes, links and bake. A set saves to the same bytes on every
     /// platform.
     ///
@@ -621,7 +696,8 @@ extern "C"
     /// @param set          The set.
     /// @param bytes        Receives the file, or NULL to ask its size.
     /// @param capacity     The bytes bytes holds.
-    /// @param sizeOut      Receives the file's size.
+    /// @param sizeOut      Receives the file's size, also when capacity is
+    ///                     short of it; 0 on other failures.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer
     ///         or size, or a 0 or unknown id; `maud_errorStale` for a
     ///         destroyed set's id; `maud_errorCapacity` when capacity is
@@ -644,12 +720,13 @@ extern "C"
     /// @param bytes        The file.
     /// @param size         Its size in bytes.
     /// @param setOut       Receives the set; 0 on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or
-    ///         a file not well formed; `maud_errorUnsupported` for
-    ///         another version or fields that do not match;
-    ///         `maud_errorCapacity` past maxProbes or maxProbePairs, with
-    ///         the spatializer's sets all taken or none asked for, or when
-    ///         memory runs out.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a file
+    ///         not well formed; `maud_errorUnsupported` for another version or
+    ///         fields that do not match; `maud_errorCapacity` past maxProbes or
+    ///         maxProbePairs, with the spatializer's sets all taken or none
+    ///         asked for, or when memory runs out; `maud_errorState` when host
+    ///         code the spatializer is running (its hooks or allocator) makes
+    ///         the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.

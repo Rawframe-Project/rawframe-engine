@@ -56,6 +56,13 @@ void maudSetDeviceForm(maudContext* context, maudDeviceSlot* slot, maudDeviceFor
 void maudSetDeviceSpatializer(maudContext* context, maudDeviceSlot* slot,
                               const maudDeviceInfo* info);
 
+// Sets a live device's native format from info's nativeLayout,
+// nativeSampleRate, minSampleRate and maxSampleRate; a change posts
+// maud_notifyDeviceFormatChanged. True when its native rate changed,
+// which a backend whose streams follow it passes on with
+// maudRefreshNativeRates.
+bool maudSetDeviceFormat(maudContext* context, maudDeviceSlot* slot, const maudDeviceInfo* info);
+
 // Makes a live device the default of its direction for role.
 void maudSetDefaultDevice(maudContext* context, maudDeviceRole role, maudDeviceId device);
 

@@ -15,23 +15,8 @@
 
 #include <math.h>
 
-#define SCENE_DEF_COOKIE 0x6D617363u
-#define MAX_TRIANGLES    16777216u
-#define MAX_INSTANCES    65536u
-
-maudAcousticSceneDef maudDefaultAcousticSceneDef(void)
-{
-    return (maudAcousticSceneDef){
-        .cookie = SCENE_DEF_COOKIE,
-        .meshes = nullptr,
-        .meshCount = 0,
-        .instanceMeshes = nullptr,
-        .instanceMeshCount = 0,
-        .instanceCapacity = 0,
-        .maxTriangles = MAX_TRIANGLES,
-        .allocator = {nullptr, nullptr, nullptr},
-    };
-}
+#define MAX_TRIANGLES 16777216u
+#define MAX_INSTANCES 65536u
 
 static bool MeshValid(const maudMesh* mesh)
 {
@@ -82,7 +67,7 @@ static bool MeshesValid(const maudMesh* meshes, uint32_t count, uint64_t* sum)
 static maudResult Check(const maudAcousticSceneDef* def)
 {
     uint64_t sum = 0;
-    if (def->cookie != SCENE_DEF_COOKIE || !maudIsAllocatorValid(&def->allocator) ||
+    if (def->cookie != MAUD_ACOUSTIC_SCENE_DEF_COOKIE || !maudIsAllocatorValid(&def->allocator) ||
         def->instanceCapacity > MAX_INSTANCES || def->maxTriangles == 0 ||
         def->maxTriangles > MAX_TRIANGLES || !MeshesValid(def->meshes, def->meshCount, &sum) ||
         !MeshesValid(def->instanceMeshes, def->instanceMeshCount, &sum))
@@ -205,6 +190,11 @@ maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def, maudAcoustic
     {
         *sceneOut = nullptr;
     }
+    if (def != nullptr && def->cookie == MAUD_ACOUSTIC_SCENE_DEF_COOKIE &&
+        def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
+    }
     if (def == nullptr || sceneOut == nullptr)
     {
         return maud_errorInvalid;
@@ -221,6 +211,7 @@ maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def, maudAcoustic
         return maud_errorCapacity;
     }
     *scene = (maudAcousticScene){.allocator = def->allocator};
+    atomic_init(&scene->misuse, 0);
     if (!Build(scene, def))
     {
         Release(scene);
@@ -236,6 +227,11 @@ void maudDestroyAcousticScene(maudAcousticScene* scene)
     {
         Release(scene);
     }
+}
+
+uint64_t maudGetAcousticSceneMisuse(const maudAcousticScene* scene)
+{
+    return atomic_load_explicit(&scene->misuse, memory_order_relaxed);
 }
 
 static void Unpack(const maudRay* ray, float* origin, float* direction)

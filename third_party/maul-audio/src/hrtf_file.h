@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The .maudhrtf file (docs/hrtf-format.md), read in place: every count,
+// The .maudhrtf file (docs/internals/file-formats.md), read in place: every count,
 // size, ring, text and the checksum checked, nothing allocated.
 
 #ifndef MAUL_AUDIO_SRC_HRTF_FILE_H

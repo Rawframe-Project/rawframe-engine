@@ -67,10 +67,10 @@ extern "C"
     ///         `maud_errorPlatform` when the platform refuses;
     ///         `maud_errorUnsupported` where the backend has no audio focus
     ///         (the desktop platforms, the web, the offline backend, and
-    ///         Android without the Java half); `maud_errorInvalid` for a
-    ///         NULL context, an unknown request or role; `maud_errorState`
-    ///         when called on a thread that is rendering one of the
-    ///         context's streams, which counts as misuse.
+    ///         Android without the Java half); `maud_errorInvalid` for a NULL
+    ///         context, an unknown request or role; `maud_errorState` when
+    ///         called on a thread that is rendering one of the context's
+    ///         streams or running its allocator, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudRequestFocus(maudContext* context,
@@ -81,7 +81,7 @@ extern "C"
     /// drain of its notifications.
     ///
     /// @param context   The context.
-    /// @param focusOut  Receives the state.
+    /// @param focusOut  Receives the state; all zero on failure.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.

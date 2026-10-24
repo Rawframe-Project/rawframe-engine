@@ -22,7 +22,18 @@ uint32_t maudResampledTaps(uint32_t taps, uint32_t from, uint32_t to);
 // form rings before it, which a start at its first sample would cut off
 // (11 dB of error at 96 kHz, measured). The lead is the same for every
 // response, so interaural delays stay as they were.
+// The kernel's weights are the same for every response of a set, so they
+// are computed once (maudResampleWeights) into outTaps rows of
+// maudResampleWidth doubles each.
 void maudResampleResponse(const float* in, uint32_t inTaps, uint32_t from, float* out,
-                          uint32_t outTaps, uint32_t to);
+                          uint32_t outTaps, uint32_t to, const double* weights);
+
+// The doubles in one row of a resampling's weights.
+uint32_t maudResampleWidth(uint32_t from, uint32_t to);
+
+// Fills the weights of resampling responses of inTaps at from into
+// outTaps at to: outTaps rows of maudResampleWidth(from, to) doubles.
+void maudResampleWeights(uint32_t inTaps, uint32_t from, uint32_t outTaps, uint32_t to,
+                         double* weights);
 
 #endif // MAUL_AUDIO_SRC_HRTF_RESAMPLE_H

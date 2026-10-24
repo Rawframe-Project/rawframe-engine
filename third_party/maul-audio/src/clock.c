@@ -66,6 +66,11 @@ void maudStampInputClock(maudStreamCore* core, int64_t latency)
     Stamp(core, maudNowNanoseconds() - latency, latency);
 }
 
+void maudStampClockAt(maudStreamCore* core, int64_t host, int64_t latency)
+{
+    Stamp(core, host, latency);
+}
+
 void maudReadClock(const maudStreamCore* core, uint64_t* position, int64_t* host, int64_t* latency)
 {
     uint32_t before = 0;

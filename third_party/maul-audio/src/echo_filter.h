@@ -56,6 +56,8 @@ typedef struct maudEchoFilter
     double* slowPower;
     double* errorRecent;
     double* echoRecent;
+    // Per bin, this block: the step's rate, then the power it is over.
+    double* rates;
     // Per band: the regression's sums this block (covariance, then
     // variance), its smoothed sums, and the leakage.
     double* bandNow;
@@ -77,8 +79,11 @@ typedef struct maudEchoFilter
     // Until it has adapted, the start rate's sum.
     double started;
     bool adapted;
-    // The partition the gradient constraint takes next.
+    // The partition the gradient constraint takes next, and the blocks
+    // since the background last took a step (no more than the
+    // partitions: by then each has been constrained since).
     uint32_t constrain;
+    uint32_t still;
     // The per-block smoothing constants, scaled to the block's length.
     double recent;
     double window1;

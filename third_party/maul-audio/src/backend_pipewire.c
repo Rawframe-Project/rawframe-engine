@@ -91,8 +91,9 @@ static void OnNodeParam(void* data, int seq, uint32_t id, uint32_t index, uint32
         spa_pod_find_prop(param, nullptr, SPA_FORMAT_AUDIO_channels);
     if (channels != nullptr)
     {
-        slot->info.nativeLayout =
-            maudLayoutWithChannels(maudPipewireChoiceDefault(&channels->value));
+        maudDeviceInfo info = slot->info;
+        info.nativeLayout = maudLayoutWithChannels(maudPipewireChoiceDefault(&channels->value));
+        (void)maudSetDeviceFormat(node->owner->context, slot, &info);
     }
 }
 
@@ -126,7 +127,28 @@ static void AddDeviceOf(maudPipewireNode* node, const struct spa_dict* props)
         .key = key,
         .keyLength = strlen(key),
     };
-    if (maudAddDevice(pipewire->context, &spec, &node->device) != maud_success)
+    maudDeviceSlot* kept = nullptr;
+    for (uint32_t i = 0; i < pipewire->nodeCapacity && kept == nullptr; ++i)
+    {
+        maudPipewireNode* away = &pipewire->nodes[i];
+        kept = away->away && away->direction == node->direction
+                   ? maudFindDevice(pipewire->context, away->device)
+                   : nullptr;
+        if (kept != nullptr && (strlen(key) != kept->key.length ||
+                                memcmp(key, kept->key.bytes, kept->key.length) != 0))
+        {
+            kept = nullptr;
+        }
+        else if (kept != nullptr)
+        {
+            // A device kept from a lost connection, listed again by name.
+            node->device = away->device;
+            *away = (maudPipewireNode){0};
+            (void)maudSetDeviceFormat(pipewire->context, kept, &spec.info);
+            maudSetDeviceForm(pipewire->context, kept, spec.info.form);
+        }
+    }
+    if (kept == nullptr && maudAddDevice(pipewire->context, &spec, &node->device) != maud_success)
     {
         node->device = (maudDeviceId){0, 0};
         return;
@@ -256,9 +278,11 @@ static void UpdateGraphRate(maudPipewire* pipewire)
                                    : nullptr;
         if (slot != nullptr)
         {
-            slot->info.nativeSampleRate = rate;
-            slot->info.minSampleRate = rate;
-            slot->info.maxSampleRate = rate;
+            maudDeviceInfo info = slot->info;
+            info.nativeSampleRate = rate;
+            info.minSampleRate = rate;
+            info.maxSampleRate = rate;
+            (void)maudSetDeviceFormat(pipewire->context, slot, &info);
         }
     }
     maudRefreshNativeRates(pipewire->context);
@@ -381,9 +405,9 @@ static const struct pw_registry_events s_registryEvents = {
     .global_remove = OnGlobalRemove,
 };
 
-// The daemon went away: every device with it.
 // Destroys what belongs to the core, which goes with it: the metadata,
-// the registry and the core itself. The nodes are removed before.
+// the registry and the core itself. The nodes' proxies are destroyed
+// before.
 static void DropCore(maudPipewire* pipewire)
 {
     maudPipewireConnection* connection = &pipewire->connection;
@@ -413,21 +437,59 @@ static void DropCore(maudPipewire* pipewire)
     }
 }
 
-// The daemon went away: every stream's pw_stream and every device with
-// it. Runs after the loop iteration that reported it.
+// The daemon went away, with every stream's pw_stream. Its devices are
+// kept, away, for a new core to list again (a restart keeps their
+// names). Runs after the loop iteration that reported it.
 static void LoseConnection(maudPipewire* pipewire)
 {
+    maudPipewireConnection* connection = &pipewire->connection;
     maudPipewireDropStreams(pipewire->context);
     for (uint32_t i = 0; i < pipewire->nodeCapacity; ++i)
     {
-        if (pipewire->nodes[i].used)
+        maudPipewireNode* node = &pipewire->nodes[i];
+        if (!node->used)
+        {
+            continue;
+        }
+        maudDeviceId device = node->device;
+        maudDirection direction = node->direction;
+        bool kept = maudFindDevice(pipewire->context, device) != nullptr;
+        if (node->proxy != nullptr)
+        {
+            spa_hook_remove(&node->listener);
+            pipewire->api.proxyDestroy(node->proxy);
+        }
+        *node = (maudPipewireNode){
+            .device = device, .direction = direction, .used = kept, .away = kept};
+    }
+    maudPipewireDropCards(pipewire);
+    DropCore(pipewire);
+    int64_t now = maudPipewireNow();
+    connection->nextAttempt = now + MAUD_PIPEWIRE_RETRY_NS;
+    connection->awayUntil =
+        connection->awayUntil != 0 ? connection->awayUntil : now + MAUD_PIPEWIRE_AWAY_NS;
+    connection->listing = 0;
+}
+
+// Removes the devices still away: the new core listed everything
+// without them, or none came back in time.
+static void DropAway(maudPipewire* pipewire)
+{
+    for (uint32_t i = 0; i < pipewire->nodeCapacity; ++i)
+    {
+        if (pipewire->nodes[i].away)
         {
             RemoveNode(pipewire, &pipewire->nodes[i]);
         }
     }
-    maudPipewireDropCards(pipewire);
-    DropCore(pipewire);
-    pipewire->connection.nextAttempt = maudPipewireNow() + MAUD_PIPEWIRE_RETRY_NS;
+    pipewire->connection.awayUntil = 0;
+}
+
+// Asks for the next round trip of a new core's listing.
+static void AskListing(maudPipewireConnection* connection)
+{
+    connection->synced = false;
+    connection->pendingSync = pw_core_sync(connection->core, PW_ID_CORE, 0);
 }
 
 static void OnCoreDone(void* data, uint32_t id, int seq)
@@ -629,6 +691,32 @@ static void Reconnect(maudPipewire* pipewire)
         return;
     }
     connection->lost = false;
+    if (connection->awayUntil != 0)
+    {
+        connection->listing = 2;
+        AskListing(connection);
+    }
+}
+
+// Asks for a new core's next listing round trip once the last is
+// answered, and removes the devices still away once the listing is
+// complete or the time to keep them is over.
+static void FollowListing(maudPipewire* pipewire)
+{
+    maudPipewireConnection* connection = &pipewire->connection;
+    if (!connection->lost && connection->listing > 0 && connection->synced)
+    {
+        connection->listing--;
+        if (connection->listing > 0)
+        {
+            AskListing(connection);
+        }
+    }
+    bool listed = !connection->lost && connection->core != nullptr && connection->listing == 0;
+    if (connection->awayUntil != 0 && (listed || maudPipewireNow() >= connection->awayUntil))
+    {
+        DropAway(pipewire);
+    }
 }
 
 static void Pump(maudContext* context)
@@ -652,9 +740,16 @@ static void Pump(maudContext* context)
     {
         LoseConnection(pipewire);
     }
+    FollowListing(pipewire);
+    // Without a core, a started stream waits for the platform, one
+    // started meanwhile too.
     if (!connection->lost)
     {
         maudPipewireReconnectStreams(context);
+    }
+    else
+    {
+        maudPipewireSuspendStreams(context);
     }
 }
 
@@ -704,6 +799,7 @@ static const maudBackend s_pipewire = {
     .retargetStream = maudPipewireRetargetStream,
     .sharesClock = SharesClock,
     .rendersOnCaller = false,
+    .loopback = true,
 };
 
 const maudBackend* maudGetPipewireBackend(void)

@@ -11,6 +11,8 @@
 #include "context.h"
 #include "invariant.h"
 
+#include <string.h>
+
 static maudNotification* At(maudNotificationQueue* queue, uint32_t index)
 {
     return &queue->records[(queue->head + index) % queue->capacity];
@@ -43,13 +45,17 @@ void maudPostNotification(maudContext* context, const maudNotification* record)
 
 maudResult maudNextNotification(maudContext* context, maudNotification* notificationOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (notificationOut != nullptr)
+    {
+        memset(notificationOut, 0, sizeof(*notificationOut));
+    }
     if (context == nullptr || notificationOut == nullptr)
     {
         return maud_errorInvalid;
     }
-    if (maudIsRenderingThread(context))
+    if (maudRefuseControl(context))
     {
-        maudCountMisuse(context);
         return maud_errorState;
     }
     if (context->backend->pump != nullptr)

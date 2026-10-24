@@ -82,6 +82,13 @@ static bool TransformValid(const maudInstanceTransform* t)
            isfinite(length) && length > 0.0f && t->scale >= MIN_SCALE && t->scale <= MAX_SCALE;
 }
 
+// Counts one misuse and returns maud_errorInvalid, for invalid arguments.
+static maudResult Invalid(maudAcousticScene* scene)
+{
+    atomic_fetch_add_explicit(&scene->misuse, 1, memory_order_relaxed);
+    return maud_errorInvalid;
+}
+
 maudResult maudCreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
                                    const maudInstanceTransform* transform,
                                    maudSceneInstanceId* instanceOut)
@@ -90,10 +97,14 @@ maudResult maudCreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
     {
         *instanceOut = (maudSceneInstanceId){0, 0};
     }
-    if (scene == nullptr || transform == nullptr || instanceOut == nullptr ||
-        mesh >= scene->meshCount || !TransformValid(transform))
+    if (scene == nullptr)
     {
         return maud_errorInvalid;
+    }
+    if (transform == nullptr || instanceOut == nullptr || mesh >= scene->meshCount ||
+        !TransformValid(transform))
+    {
+        return Invalid(scene);
     }
     if (scene->freeCount == 0)
     {
@@ -110,9 +121,13 @@ maudResult maudCreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
 
 static maudResult Find(maudAcousticScene* scene, maudSceneInstanceId id, maudSceneInstance** out)
 {
-    if (scene == nullptr || id.index1 == 0 || id.index1 > scene->capacity || id.generation == 0)
+    if (scene == nullptr)
     {
         return maud_errorInvalid;
+    }
+    if (id.index1 == 0 || id.index1 > scene->capacity || id.generation == 0)
+    {
+        return Invalid(scene);
     }
     maudSceneInstance* slot = &scene->instances[id.index1 - 1];
     if (!slot->live || slot->generation != id.generation)
@@ -134,7 +149,7 @@ maudResult maudMoveSceneInstance(maudAcousticScene* scene, maudSceneInstanceId i
     }
     if (transform == nullptr || !TransformValid(transform))
     {
-        return maud_errorInvalid;
+        return Invalid(scene);
     }
     slot->transform = *transform;
     return maud_success;

@@ -16,15 +16,37 @@ extern "C"
 {
 #endif
 
-// The library version. CMake reads it from here.
+// The library version. CMake reads it from here, and release-please
+// writes it at each release.
+// x-release-please-start-major
 #define MAUD_VERSION_MAJOR 0
-#define MAUD_VERSION_MINOR 3
+// x-release-please-end
+// x-release-please-start-minor
+#define MAUD_VERSION_MINOR 0
+// x-release-please-end
+// x-release-please-start-patch
 #define MAUD_VERSION_PATCH 1
+// x-release-please-end
 
-// The ABI a program is built for: major and minor, as the ABI holds within
-// a minor release. The context def carries it (maudDefaultContextDef), and
-// maudCreateContext refuses a def built for another.
-#define MAUD_ABI_VERSION ((MAUD_VERSION_MAJOR << 16) | MAUD_VERSION_MINOR)
+// The binary interface a program is built for. Each root def (one whose
+// creation takes no other library object) carries it, stamped by the def's
+// default from the headers the program was built with, and its creation
+// refuses another with maud_errorVersion. The number names the releases
+// that share an interface: from 1.0 on one major and minor version; before
+// 1.0, when any release may break it, the minor and the patch too. The
+// top bit is always set, so a zeroed or small hand-written value never
+// matches.
+#define MAUD_ABI_VERSION                                                                           \
+    (UINT32_C(0x80000000) | ((uint32_t)MAUD_VERSION_MAJOR << 16) |                                 \
+     (MAUD_VERSION_MAJOR == 0                                                                      \
+          ? (((uint32_t)MAUD_VERSION_MINOR << 8) | (uint32_t)MAUD_VERSION_PATCH)                   \
+          : (uint32_t)MAUD_VERSION_MINOR))
+#if MAUD_VERSION_MAJOR > 0x7FFF || MAUD_VERSION_MINOR > 0xFFFF
+#error "MAUD_VERSION_MAJOR or MAUD_VERSION_MINOR does not fit MAUD_ABI_VERSION"
+#endif
+#if MAUD_VERSION_MAJOR == 0 && (MAUD_VERSION_MINOR > 0xFF || MAUD_VERSION_PATCH > 0xFF)
+#error "before 1.0, MAUD_VERSION_MINOR and MAUD_VERSION_PATCH must fit 8 bits each"
+#endif
 
 // MAUD_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_audio_EXPORTS is defined while building
@@ -81,14 +103,18 @@ extern "C"
         maud_errorPlatform = -5,
         // The call is not allowed in the object's current state.
         maud_errorState = -6,
-        // A def was built from headers of another major or minor version
-        // than the library's.
+        // A root def was built from headers of another binary interface
+        // than the library's (MAUD_ABI_VERSION).
         maud_errorVersion = -7,
     };
 
     // The allocator an owner object takes in its def and keeps for its
     // lifetime. Alignment is a power of two. A zeroed allocator means the C
-    // library's allocation functions.
+    // library's allocation functions. It calls no function of the object
+    // it serves: the context and the spatializer refuse such a call with
+    // maud_errorState and count it as misuse, and every other object calls
+    // its allocator only while it is made or destroyed, when no handle to
+    // it is valid.
     typedef struct maudAllocator
     {
         void* (*alloc)(size_t size, size_t alignment, void* context);

@@ -60,6 +60,9 @@ extern "C"
     typedef struct maudAcousticSceneDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The static meshes, copied at creation.
         const maudMesh* meshes;
         uint32_t meshCount;
@@ -75,24 +78,44 @@ extern "C"
         maudAllocator allocator;
     } maudAcousticSceneDef;
 
+// The cookie of an acoustic scene def, which its default sets and
+// maudCreateAcousticScene checks.
+#define MAUD_ACOUSTIC_SCENE_DEF_COOKIE 0x6D617363u
+
     /// Returns the default acoustic scene def: no meshes, no instances,
     /// 16,777,216 triangles at most.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudAcousticSceneDef maudDefaultAcousticSceneDef(void);
+    static inline maudAcousticSceneDef maudDefaultAcousticSceneDef(void)
+    {
+#ifdef __cplusplus
+        maudAcousticSceneDef def = {};
+#else
+    maudAcousticSceneDef def = {0};
+#endif
+        def.cookie = MAUD_ACOUSTIC_SCENE_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.maxTriangles = 16777216;
+        return def;
+    }
 
     /// Creates an acoustic scene: copies the meshes and builds a bounding
     /// volume hierarchy over their triangles, the same on every platform.
     ///
     /// @param def       The def, from maudDefaultAcousticSceneDef.
     /// @param sceneOut  Receives the scene; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a
     ///         def without its cookie, a mesh with a NULL array it needs, a
     ///         vertex index past its vertices or a vertex that is not
-    ///         finite; `maud_errorCapacity` for more than 16,777,216
-    ///         triangles in all or when the allocator fails.
+    ///         finite; `maud_errorCapacity` for more triangles in all
+    ///         than the def's maxTriangles or when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MAUD_NODISCARD MAUD_API maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def,
@@ -105,6 +128,16 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MAUD_API void maudDestroyAcousticScene(maudAcousticScene* scene);
+
+    /// Returns how many calls the scene refused as misuse: invalid
+    /// arguments to the functions that change its instances. Stale ids
+    /// are not misuse.
+    ///
+    /// @param scene  The scene.
+    /// @return The count since the scene was created.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MAUD_API uint64_t maudGetAcousticSceneMisuse(const maudAcousticScene* scene);
 
     /// Answers any-hit queries against a scene (a maudAnyHitFn): a ray
     /// hits when a triangle lies within [minDistance, maxDistance] along

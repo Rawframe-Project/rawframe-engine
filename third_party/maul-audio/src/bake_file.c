@@ -16,7 +16,7 @@
 #include <math.h>
 #include <string.h>
 
-// Written; version 1 (without tails) is still read.
+// The one version written and read.
 #define VERSION      2u
 #define LAYER_REVERB 1u
 #define LAYER_FIELDS 2u
@@ -105,11 +105,10 @@ static void Measure(const Header* h, Layout* l)
     at += reverb ? (uint64_t)h->probes * 12 : 0;
     l->levels = at;
     at += reverb ? (uint64_t)h->probes * 12 : 0;
-    bool tails = reverb && h->version >= 2;
     l->tailTimes = at;
-    at += tails ? (uint64_t)h->probes * 12 : 0;
+    at += reverb ? (uint64_t)h->probes * 12 : 0;
     l->tailLevels = at;
-    at += tails ? (uint64_t)h->probes * 12 : 0;
+    at += reverb ? (uint64_t)h->probes * 12 : 0;
     l->fields = at;
     at += (uint64_t)h->probes * FieldFloats(h) * 4;
     l->end = at;
@@ -239,7 +238,7 @@ static bool HeaderValid(const uint8_t* data, size_t size, Header* h, Layout* l, 
         return false;
     }
     uint32_t version = U32(data + 8);
-    if (version < 1 || version > VERSION)
+    if (version != VERSION)
     {
         *why = maud_errorUnsupported;
         return false;
@@ -303,8 +302,7 @@ static bool ValuesValid(const uint8_t* data, const Header* h, const Layout* l)
             return false;
         }
     }
-    uint64_t tails = h->version >= 2 ? values : 0;
-    for (uint64_t i = 0; i < tails; ++i)
+    for (uint64_t i = 0; i < values; ++i)
     {
         float t = F32(data + l->tailTimes + 4 * i);
         float v = F32(data + l->tailLevels + 4 * i);
@@ -351,9 +349,8 @@ static void Fill(const uint8_t* data, const Header* h, const Layout* l, maudProb
     {
         bake->times[i] = F32(data + l->times + 4 * i);
         bake->levels[i] = F32(data + l->levels + 4 * i);
-        bool tail = h->version >= 2;
-        bake->tailTimes[i] = tail ? F32(data + l->tailTimes + 4 * i) : 0.0f;
-        bake->tailLevels[i] = tail ? F32(data + l->tailLevels + 4 * i) : MIN_LEVEL;
+        bake->tailTimes[i] = F32(data + l->tailTimes + 4 * i);
+        bake->tailLevels[i] = F32(data + l->tailLevels + 4 * i);
     }
     for (uint64_t i = 0; i < (uint64_t)h->probes * FieldFloats(h); ++i)
     {

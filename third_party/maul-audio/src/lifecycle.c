@@ -16,9 +16,8 @@ maudResult maudSetContextSuspended(maudContext* context, bool suspended)
     {
         return maud_errorInvalid;
     }
-    if (maudIsRenderingThread(context))
+    if (maudRefuseControl(context))
     {
-        maudCountMisuse(context);
         return maud_errorState;
     }
     if (context->hostSuspended == suspended)

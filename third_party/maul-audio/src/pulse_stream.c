@@ -11,8 +11,10 @@
 
 #include "clock.h"
 #include "context.h"
+#include "follow.h"
 #include "period.h"
 #include "pulse_core.h"
+#include "retry.h"
 #include "thread.h"
 #include "xrun.h"
 
@@ -82,13 +84,18 @@ static void Render(maudPulseStream* entry, float* out, const float* in, uint32_t
     {
         latency = 0;
     }
+    int64_t nanoseconds = (int64_t)latency * 1000;
     if (output)
     {
-        maudStampOutputClock(core, (int64_t)latency * 1000);
+        maudStampOutputClock(core, nanoseconds);
     }
     else
     {
-        maudStampInputClock(core, (int64_t)latency * 1000);
+        // A captured block's first frame came at least the block's length
+        // ago, which PipeWire's PulseAudio server, interpolating its
+        // timing, can report below and even negative.
+        int64_t own = (int64_t)frames * 1000000000 / (int64_t)core->period.sampleRate;
+        maudStampInputClock(core, nanoseconds > own ? nanoseconds : own);
     }
     atomic_fetch_add_explicit(&core->position, frames, memory_order_release);
 }
@@ -220,7 +227,9 @@ static void DescribeFormat(const maudStreamCore* core, pa_sample_spec* spec, pa_
 
 // Creates the pa_stream and connects it corked: to the device it was
 // opened on and no other, or to the server's default, which the server
-// moves it with. A period of latency at the server, two queued.
+// moves it with. A loopback stream records the monitor of the sink it
+// is on now, which the server names after the sink, and the library
+// moves it. A period of latency at the server, two queued.
 static bool ConnectStream(maudContext* context, maudPulseStream* entry, int64_t deadline)
 {
     const maudPulseApi* api = entry->api;
@@ -247,13 +256,22 @@ static bool ConnectStream(maudContext* context, maudPulseStream* entry, int64_t 
         .fragsize = period,
     };
     char name[MAUD_PULSE_NAME_BYTES] = {0};
-    const maudDeviceSlot* device = maudFindDevice(context, core->binding.requested);
+    static const char monitor[] = ".monitor";
+    bool loopback = core->def.direction == maud_directionLoopback;
+    const maudDeviceSlot* device =
+        maudFindDevice(context, loopback ? core->binding.current : core->binding.requested);
+    size_t suffix = loopback ? sizeof(monitor) - 1 : 0;
+    if (loopback && (device == nullptr || device->key.length + suffix >= sizeof(name)))
+    {
+        return false;
+    }
     // Timing updates keep pa_stream_get_latency current for the clock.
     pa_stream_flags_t flags = PA_STREAM_START_CORKED | PA_STREAM_ADJUST_LATENCY |
                               PA_STREAM_AUTO_TIMING_UPDATE | PA_STREAM_INTERPOLATE_TIMING;
-    if (device != nullptr && device->key.length < sizeof(name))
+    if (device != nullptr && device->key.length + suffix < sizeof(name))
     {
         memcpy(name, device->key.bytes, device->key.length);
+        memcpy(name + device->key.length, monitor, suffix);
         flags |= PA_STREAM_DONT_MOVE;
     }
     const char* target = name[0] != '\0' ? name : nullptr;
@@ -302,14 +320,17 @@ static void Cork(maudPulseStream* entry, bool cork)
     }
 }
 
-// The stream's thread: the loop until asked to return.
+// The stream's thread: the loop until asked to return, or until the
+// server ends the stream or the connection, which it marks as lost.
 static void RunStream(void* user)
 {
     maudPulseStream* entry = user;
     while (!atomic_load(&entry->quit))
     {
-        if (entry->api->mainloopIterate(entry->loop, 1, nullptr) < 0)
+        if (entry->api->mainloopIterate(entry->loop, 1, nullptr) < 0 ||
+            ContextProgress(entry) < 0 || StreamProgress(entry) < 0)
         {
+            atomic_store(&entry->lost, true);
             break;
         }
     }
@@ -319,6 +340,7 @@ static void StartThread(maudPulseStream* entry)
 {
     Cork(entry, false);
     atomic_store(&entry->quit, false);
+    atomic_store(&entry->lost, false);
     // Set before the thread starts, which reads it.
     entry->threadRunning = true;
     if (!maudStartWorker(&entry->worker, RunStream, entry, "maud-pulse"))
@@ -374,9 +396,24 @@ void maudPulseSetStreamActive(maudContext* context, maudStreamSlot* slot, bool a
         StopThread(entry);
         return;
     }
+    // A thread that returned on a lost connection is joined, and the
+    // stream rebuilt below.
+    if (entry->threadRunning && atomic_load(&entry->lost))
+    {
+        StopThread(entry);
+    }
     if (entry->threadRunning)
     {
         return;
+    }
+    // A stopped stream's loop has not run: take in what the server said
+    // meanwhile, a lost connection among it, so its health is current.
+    for (int i = 0; entry->used && i < FLUSH_ITERATIONS; ++i)
+    {
+        if (entry->api->mainloopIterate(entry->loop, 0, nullptr) <= 0)
+        {
+            break;
+        }
     }
     if (!Healthy(entry))
     {
@@ -404,16 +441,50 @@ void maudPulseRetargetStream(maudContext* context, maudStreamSlot* slot)
     }
 }
 
-void maudPulseResumeStreams(maudContext* context)
+// Rebuilds the started streams the server ended, or that have no
+// connection or no thread, once their retry is due (retry.h): a rebuild
+// waits up to the connection's deadline, so one that fails waits longer
+// before the next, and the stream is suspended with maud_suspendPlatform
+// until one works.
+void maudPulseSuspendStreams(maudContext* context)
 {
+    int64_t now = maudNowNanoseconds();
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
     {
         maudStreamSlot* slot = &context->streams.slots[i];
-        if (slot->live &&
-            atomic_load_explicit(&slot->core.state, memory_order_acquire) == maud_streamRunning &&
-            !EntryOf(context, slot)->threadRunning)
+        if (maudWantsReopen(slot) && slot->core.binding.suspension == maud_suspendNone)
         {
-            maudPulseSetStreamActive(context, slot, true);
+            maudReportReopen(context, slot, false, now);
         }
+    }
+}
+
+void maudPulseResumeStreams(maudContext* context)
+{
+    int64_t now = maudNowNanoseconds();
+    for (uint32_t i = 0; i < context->streams.capacity; ++i)
+    {
+        maudStreamSlot* slot = &context->streams.slots[i];
+        maudPulseStream* entry = EntryOf(context, slot);
+        bool lost = entry->threadRunning && atomic_load(&entry->lost);
+        bool running =
+            atomic_load_explicit(&slot->core.state, memory_order_acquire) == maud_streamRunning;
+        bool needed = lost || !entry->used || (running && !entry->threadRunning) ||
+                      slot->core.binding.suspension == maud_suspendPlatform;
+        if (!needed || !maudWantsReopen(slot) || !maudRetryDue(&slot->core.binding, now))
+        {
+            continue;
+        }
+        if (lost)
+        {
+            StopThread(entry);
+        }
+        Disconnect(entry);
+        bool opened = Connect(context, slot) == maud_success && entry->used;
+        if (opened && running)
+        {
+            StartThread(entry);
+        }
+        maudReportReopen(context, slot, opened, now);
     }
 }

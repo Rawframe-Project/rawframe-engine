@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The .maudbake file (docs/bake-format.md): a probe set's graph and
+// The .maudbake file (docs/internals/file-formats.md): a probe set's graph and
 // bake written in a fixed layout, and read back from hostile bytes,
 // every part checked before anything is allocated.
 

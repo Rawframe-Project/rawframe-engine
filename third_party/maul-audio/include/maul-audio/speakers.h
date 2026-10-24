@@ -28,17 +28,38 @@ extern "C"
     typedef struct maudSpeakerPannerDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The layout panned into.
         maudChannelLayout layout;
         maudAllocator allocator;
     } maudSpeakerPannerDef;
 
+// The cookie of a speaker panner def, which its default sets and
+// maudCreateSpeakerPanner checks.
+#define MAUD_SPEAKER_PANNER_DEF_COOKIE 0x6D706E72u
+
     /// Returns the default speaker panner def: stereo.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudSpeakerPannerDef maudDefaultSpeakerPannerDef(void);
+    static inline maudSpeakerPannerDef maudDefaultSpeakerPannerDef(void)
+    {
+#ifdef __cplusplus
+        maudSpeakerPannerDef def = {};
+#else
+    maudSpeakerPannerDef def = {0};
+#endif
+        def.cookie = MAUD_SPEAKER_PANNER_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.layout = maud_layoutStereo;
+        return def;
+    }
 
     /// Creates a speaker panner. Mono passes a source through; stereo pans
     /// by how far to the side a source is (one behind counts as in front);
@@ -49,7 +70,9 @@ extern "C"
     ///
     /// @param def         The def, from maudDefaultSpeakerPannerDef.
     /// @param pannerOut   Receives the panner; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a
     ///         def without its cookie or a layout the library does not
     ///         have; `maud_errorCapacity` when the allocator fails.
     /// @par Thread safety
@@ -68,7 +91,9 @@ extern "C"
     ///
     /// @param panner     The panner.
     /// @param direction  The direction, in the listener's frame.
-    /// @param gainsOut   Receives the layout's channel count of gains.
+    /// @param gainsOut   Receives the layout's channel count of gains; zero
+    ///                   on failure, left as they were when panner is NULL
+    ///                   (their count is the panner's).
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer or
     ///         a direction that is not finite.
     /// @par Thread safety

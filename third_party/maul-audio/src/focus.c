@@ -12,6 +12,8 @@
 
 #include "maul-audio/focus.h"
 
+#include <string.h>
+
 void maudReportFocus(maudContext* context, maudFocus focus)
 {
     if (context->focus == focus)
@@ -29,9 +31,8 @@ maudResult maudRequestFocus(maudContext* context, maudFocusRequest request, maud
     {
         return maud_errorInvalid;
     }
-    if (maudIsRenderingThread(context))
+    if (maudRefuseControl(context))
     {
-        maudCountMisuse(context);
         return maud_errorState;
     }
     if (context->backend->requestFocus == nullptr)
@@ -43,6 +44,11 @@ maudResult maudRequestFocus(maudContext* context, maudFocusRequest request, maud
 
 maudResult maudGetContextFocus(const maudContext* context, maudFocus* focusOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (focusOut != nullptr)
+    {
+        memset(focusOut, 0, sizeof(*focusOut));
+    }
     if (context == nullptr || focusOut == nullptr)
     {
         return maud_errorInvalid;

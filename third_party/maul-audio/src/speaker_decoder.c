@@ -18,10 +18,9 @@
 #include <math.h>
 #include <string.h>
 
-#define SPEAKER_DECODER_DEF_COOKIE 0x6D617364u
-#define MAX_CHANNELS               12
-#define VIRTUAL_SPEAKERS           240
-#define PI_D                       3.14159265358979323846
+#define MAX_CHANNELS     12
+#define VIRTUAL_SPEAKERS 240
+#define PI_D             3.14159265358979323846
 
 struct maudSpeakerDecoder
 {
@@ -30,16 +29,6 @@ struct maudSpeakerDecoder
     uint32_t speakers;
     float matrix[MAX_CHANNELS][MAUD_MAX_AMBISONIC_CHANNELS];
 };
-
-maudSpeakerDecoderDef maudDefaultSpeakerDecoderDef(void)
-{
-    return (maudSpeakerDecoderDef){
-        .cookie = SPEAKER_DECODER_DEF_COOKIE,
-        .layout = maud_layoutStereo,
-        .order = 3,
-        .allocator = {nullptr, nullptr, nullptr},
-    };
-}
 
 // The i-th of count near-uniform points, in the field's axes: a
 // Fibonacci lattice of count / 2 points and their mirror images left to
@@ -140,7 +129,7 @@ static double MeanEnergy(double m[][16], uint32_t speakers, uint32_t order)
 
 static bool DefValid(const maudSpeakerDecoderDef* def)
 {
-    return def->cookie == SPEAKER_DECODER_DEF_COOKIE && def->order >= 1 &&
+    return def->cookie == MAUD_SPEAKER_DECODER_DEF_COOKIE && def->order >= 1 &&
            def->order <= MAUD_MAX_AMBISONIC_ORDER && maudGetLayoutChannelCount(def->layout) != 0 &&
            maudIsAllocatorValid(&def->allocator);
 }
@@ -151,6 +140,11 @@ maudResult maudCreateSpeakerDecoder(const maudSpeakerDecoderDef* def,
     if (decoderOut != nullptr)
     {
         *decoderOut = nullptr;
+    }
+    if (def != nullptr && def->cookie == MAUD_SPEAKER_DECODER_DEF_COOKIE &&
+        def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
     }
     if (def == nullptr || decoderOut == nullptr || !DefValid(def))
     {

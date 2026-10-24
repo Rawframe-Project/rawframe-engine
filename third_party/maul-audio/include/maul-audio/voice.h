@@ -23,6 +23,9 @@ extern "C"
     typedef struct maudVoiceDetectorDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The frames' rate, from 8,000 to 384,000.
         uint32_t sampleRate;
         // The frames' layout; the detector listens to the channels' mean.
@@ -53,19 +56,42 @@ extern "C"
 
     typedef struct maudVoiceDetector maudVoiceDetector;
 
+// The cookie of a voice detector def, which its default sets and
+// maudCreateVoiceDetector checks.
+#define MAUD_VOICE_DETECTOR_DEF_COOKIE 0x6D766164u
+
     /// Returns the default voice detector def: 48,000, mono,
     /// aggressiveness 1, a 200 ms hangover, the default allocator.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudVoiceDetectorDef maudDefaultVoiceDetectorDef(void);
+    static inline maudVoiceDetectorDef maudDefaultVoiceDetectorDef(void)
+    {
+#ifdef __cplusplus
+        maudVoiceDetectorDef def = {};
+#else
+    maudVoiceDetectorDef def = {0};
+#endif
+        def.cookie = MAUD_VOICE_DETECTOR_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.sampleRate = 48000;
+        def.layout = maud_layoutMono;
+        def.aggressiveness = 1;
+        def.hangoverMilliseconds = 200;
+        return def;
+    }
 
     /// Creates a voice activity detector.
     ///
     /// @param def          The def, from maudDefaultVoiceDetectorDef.
     /// @param detectorOut  Receives the detector; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer or a
     ///         def out of range; `maud_errorCapacity` when the allocator
     ///         fails.
     /// @par Thread safety
@@ -88,7 +114,8 @@ extern "C"
     /// @param frames      frameCount frames in the def's layout; may be NULL
     ///                    when frameCount is 0.
     /// @param frameCount  How many.
-    /// @param stateOut    Receives the state after them; may be NULL.
+    /// @param stateOut    Receives the state after them, all zero on
+    ///                    failure; may be NULL.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL detector, or
     ///         NULL frames with a frameCount.
     /// @par Thread safety
@@ -105,6 +132,9 @@ extern "C"
     typedef struct maudGainControlDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The frames' rate, from 8,000 to 384,000, and their layout; one
         // gain applies to all channels.
         uint32_t sampleRate;
@@ -143,20 +173,48 @@ extern "C"
 
     typedef struct maudGainControl maudGainControl;
 
+// The cookie of a gain control def, which its default sets and
+// maudCreateGainControl checks.
+#define MAUD_GAIN_CONTROL_DEF_COOKIE 0x6D616763u
+
     /// Returns the default gain control def: 48,000, mono, a target of
     /// -25 dBFS, gains from -10 to 50 dB starting at 15, 6 dB per second,
     /// noise kept under -50 dBFS, aggressiveness 1, the default allocator.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudGainControlDef maudDefaultGainControlDef(void);
+    static inline maudGainControlDef maudDefaultGainControlDef(void)
+    {
+#ifdef __cplusplus
+        maudGainControlDef def = {};
+#else
+    maudGainControlDef def = {0};
+#endif
+        def.cookie = MAUD_GAIN_CONTROL_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.sampleRate = 48000;
+        def.layout = maud_layoutMono;
+        def.targetDbfs = -25.0f;
+        def.minGainDb = -10.0f;
+        def.maxGainDb = 50.0f;
+        def.initialGainDb = 15.0f;
+        def.maxChangeDbPerSecond = 6.0f;
+        def.maxNoiseDbfs = -50.0f;
+        def.aggressiveness = 1;
+        return def;
+    }
 
     /// Creates an automatic gain control.
     ///
     /// @param def      The def, from maudDefaultGainControlDef.
     /// @param gainOut  Receives the gain control; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer or a
     ///         def out of range; `maud_errorCapacity` when the allocator
     ///         fails.
     /// @par Thread safety
@@ -180,7 +238,8 @@ extern "C"
     /// @param frames      frameCount frames in the def's layout; may be NULL
     ///                    when frameCount is 0.
     /// @param frameCount  How many.
-    /// @param stateOut    Receives the state after them; may be NULL.
+    /// @param stateOut    Receives the state after them, all zero on
+    ///                    failure; may be NULL.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL gain control,
     ///         or NULL frames with a frameCount.
     /// @par Thread safety
@@ -199,6 +258,9 @@ extern "C"
     typedef struct maudNoiseSuppressorDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The frames' rate, from 8,000 to 384,000 and a multiple of 100,
         // and their layout.
         uint32_t sampleRate;
@@ -224,19 +286,42 @@ extern "C"
 
     typedef struct maudNoiseSuppressor maudNoiseSuppressor;
 
+// The cookie of a noise suppressor def, which its default sets and
+// maudCreateNoiseSuppressor checks.
+#define MAUD_NOISE_SUPPRESSOR_DEF_COOKIE 0x6D616E73u
+
     /// Returns the default noise suppressor def: 48,000, mono, a floor of
     /// -30 dB, a high-pass at 100 Hz, the default allocator.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudNoiseSuppressorDef maudDefaultNoiseSuppressorDef(void);
+    static inline maudNoiseSuppressorDef maudDefaultNoiseSuppressorDef(void)
+    {
+#ifdef __cplusplus
+        maudNoiseSuppressorDef def = {};
+#else
+    maudNoiseSuppressorDef def = {0};
+#endif
+        def.cookie = MAUD_NOISE_SUPPRESSOR_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.sampleRate = 48000;
+        def.layout = maud_layoutMono;
+        def.floorDb = -30.0f;
+        def.highPassHz = 100.0f;
+        return def;
+    }
 
     /// Creates a noise suppressor.
     ///
     /// @param def            The def, from maudDefaultNoiseSuppressorDef.
     /// @param suppressorOut  Receives the noise suppressor; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer or a
     ///         def out of range; `maud_errorCapacity` when the allocator
     ///         fails.
     /// @par Thread safety
@@ -260,7 +345,8 @@ extern "C"
     /// @param frames      frameCount frames in the def's layout; may be
     ///                    NULL when frameCount is 0.
     /// @param frameCount  How many.
-    /// @param stateOut    Receives the state after them; may be NULL.
+    /// @param stateOut    Receives the state after them, all zero on
+    ///                    failure; may be NULL.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL noise
     ///         suppressor, or NULL frames with a frameCount.
     /// @par Thread safety
@@ -284,6 +370,9 @@ extern "C"
     typedef struct maudEchoCancellerDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The frames' rate, from 8,000 to 384,000.
         uint32_t sampleRate;
         // The longest echo path it learns, in seconds, from 0.05 to 1.
@@ -310,19 +399,41 @@ extern "C"
 
     typedef struct maudEchoCanceller maudEchoCanceller;
 
+// The cookie of an echo canceller def, which its default sets and
+// maudCreateEchoCanceller checks.
+#define MAUD_ECHO_CANCELLER_DEF_COOKIE 0x6D616563u
+
     /// Returns the default echo canceller def: 48,000, a path of 0.2 s,
     /// a noise floor of -15 dB, the default allocator.
     ///
-    /// @return The def, with a valid cookie.
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudEchoCancellerDef maudDefaultEchoCancellerDef(void);
+    static inline maudEchoCancellerDef maudDefaultEchoCancellerDef(void)
+    {
+#ifdef __cplusplus
+        maudEchoCancellerDef def = {};
+#else
+    maudEchoCancellerDef def = {0};
+#endif
+        def.cookie = MAUD_ECHO_CANCELLER_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.sampleRate = 48000;
+        def.tailSeconds = 0.2f;
+        def.floorDb = -15.0f;
+        return def;
+    }
 
     /// Creates an echo canceller.
     ///
     /// @param def            The def, from maudDefaultEchoCancellerDef.
     /// @param cancellerOut   Receives the echo canceller; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer or a
     ///         def out of range; `maud_errorCapacity` when the allocator
     ///         fails.
     /// @par Thread safety
@@ -351,7 +462,8 @@ extern "C"
     ///                    with the capture; may be NULL when frameCount is
     ///                    0.
     /// @param frameCount  How many.
-    /// @param stateOut    Receives the state after them; may be NULL.
+    /// @param stateOut    Receives the state after them, all zero on
+    ///                    failure; may be NULL.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL echo
     ///         canceller, or NULL frames with a frameCount.
     /// @par Thread safety

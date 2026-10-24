@@ -13,18 +13,18 @@
 #include "air_absorption.h"
 #include "allocator.h"
 #include "band_eq.h"
+#include "ramp.h"
 
 #include "maul-audio/direct.h"
 
 #include <math.h>
 #include <string.h>
 
-#define DIRECT_DEF_COOKIE 0x6D616465u
-#define MIN_RATE          32000.0f
-#define MAX_RATE          384000.0f
-#define FLOOR_DB          (-24.0)
-#define REFIT_DB          0.05
-#define SILENT            1e-6f
+#define MIN_RATE 32000.0f
+#define MAX_RATE 384000.0f
+#define FLOOR_DB (-24.0)
+#define REFIT_DB 0.05
+#define SILENT   1e-6f
 
 struct maudDirectEffect
 {
@@ -39,17 +39,6 @@ struct maudDirectEffect
     float overall;
     bool started;
 };
-
-maudDirectEffectDef maudDefaultDirectEffectDef(void)
-{
-    maudDirectEffectDef def = {
-        .cookie = DIRECT_DEF_COOKIE,
-        .sampleRate = 48000.0f,
-        .allocator = {nullptr, nullptr, nullptr},
-    };
-    maudAirAbsorptionOf(20.0, 50.0, def.airAbsorption);
-    return def;
-}
 
 maudDirectParams maudDefaultDirectParams(void)
 {
@@ -96,7 +85,7 @@ maudResult maudGetDirectivity(const maudDirectivityPattern* pattern, maudVector3
 
 static bool DefValid(const maudDirectEffectDef* def)
 {
-    if (def->cookie != DIRECT_DEF_COOKIE || !(def->sampleRate >= MIN_RATE) ||
+    if (def->cookie != MAUD_DIRECT_EFFECT_DEF_COOKIE || !(def->sampleRate >= MIN_RATE) ||
         !(def->sampleRate <= MAX_RATE) || !maudIsAllocatorValid(&def->allocator))
     {
         return false;
@@ -128,6 +117,11 @@ maudResult maudCreateDirectEffect(const maudDirectEffectDef* def, maudDirectEffe
     if (effectOut != nullptr)
     {
         *effectOut = nullptr;
+    }
+    if (def != nullptr && def->cookie == MAUD_DIRECT_EFFECT_DEF_COOKIE &&
+        def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
     }
     if (def == nullptr || effectOut == nullptr || !DefValid(def))
     {
@@ -235,6 +229,15 @@ static bool Refit(maudDirectEffect* effect, const double* targets, maudBandEqFil
     return true;
 }
 
+// The output under the overall gain, ramped across the block.
+static inline void ScaleRamped(float* out, float start, float step, uint32_t frames, bool isSigned)
+{
+    for (uint32_t n = 0; n < frames; ++n)
+    {
+        out[n] *= start + step * maudFramePlace(n, isSigned);
+    }
+}
+
 maudResult maudProcessDirect(maudDirectEffect* effect, const maudDirectParams* params,
                              const float* in, float* out, uint32_t frames)
 {
@@ -278,9 +281,13 @@ maudResult maudProcessDirect(maudDirectEffect* effect, const maudDirectParams* p
     }
     float start = effect->overall;
     float step = (overall - start) / (float)frames;
-    for (uint32_t n = 0; n < frames; ++n)
+    if (maudRampSigned(frames))
     {
-        out[n] *= start + step * (float)(n + 1);
+        ScaleRamped(out, start, step, frames, true);
+    }
+    else
+    {
+        ScaleRamped(out, start, step, frames, false);
     }
     effect->overall = overall;
     return maud_success;

@@ -18,6 +18,7 @@
 // keeps its place. The output lags the input by 10 ms.
 
 #include "allocator.h"
+#include "flush.h"
 #include "real_fft.h"
 #include "voice_dsp.h"
 
@@ -26,14 +27,13 @@
 #include <math.h>
 #include <string.h>
 
-#define NOISE_DEF_COOKIE 0x6D616E73u
-#define MIN_RATE         8000u
-#define MAX_RATE         384000u
-#define MIN_FLOOR_DB     (-40.0f)
-#define MAX_FLOOR_DB     (-6.0f)
-#define MIN_HIGH_PASS    20.0f
-#define MAX_HIGH_PASS    400.0f
-#define PI               3.14159265358979323846
+#define MIN_RATE      8000u
+#define MAX_RATE      384000u
+#define MIN_FLOOR_DB  (-40.0f)
+#define MAX_FLOOR_DB  (-6.0f)
+#define MIN_HIGH_PASS 20.0f
+#define MAX_HIGH_PASS 400.0f
+#define PI            3.14159265358979323846
 // OM-LSA's decision-directed weight and a priori SNR floor (Cohen
 // 2002); the noise estimate's a priori SNR under speech (15 dB), its
 // smoothing per 10 ms and its stagnation guard (Gerkmann and Hendriks
@@ -73,7 +73,9 @@ struct maudNoiseSuppressor
     uint32_t bins;
     // How far into the hop the stream is.
     uint32_t position;
+    // The gain's floor and its logarithm.
     double floor;
+    double logFloor;
     bool highPass;
     Biquad filter;
     uint64_t frames;
@@ -102,18 +104,6 @@ struct maudNoiseSuppressor
     float noiseDbfs;
     size_t bytes;
 };
-
-maudNoiseSuppressorDef maudDefaultNoiseSuppressorDef(void)
-{
-    return (maudNoiseSuppressorDef){
-        .cookie = NOISE_DEF_COOKIE,
-        .sampleRate = 48000,
-        .layout = maud_layoutMono,
-        .floorDb = -30.0f,
-        .highPassHz = 100.0f,
-        .allocator = {nullptr, nullptr, nullptr},
-    };
-}
 
 static uint32_t PowerOfTwo(uint32_t atLeast)
 {
@@ -181,7 +171,7 @@ static Biquad HighPass(double hz, double rate)
 
 static bool DefValid(const maudNoiseSuppressorDef* def)
 {
-    return def->cookie == NOISE_DEF_COOKIE && def->sampleRate >= MIN_RATE &&
+    return def->cookie == MAUD_NOISE_SUPPRESSOR_DEF_COOKIE && def->sampleRate >= MIN_RATE &&
            def->sampleRate <= MAX_RATE && def->sampleRate % 100 == 0 &&
            def->floorDb >= MIN_FLOOR_DB && def->floorDb <= MAX_FLOOR_DB &&
            (def->highPassHz == 0.0f ||
@@ -213,6 +203,11 @@ maudResult maudCreateNoiseSuppressor(const maudNoiseSuppressorDef* def,
     {
         *suppressorOut = nullptr;
     }
+    if (def != nullptr && def->cookie == MAUD_NOISE_SUPPRESSOR_DEF_COOKIE &&
+        def->version != MAUD_ABI_VERSION)
+    {
+        return maud_errorVersion;
+    }
     if (def == nullptr || suppressorOut == nullptr || !DefValid(def))
     {
         return maud_errorInvalid;
@@ -238,6 +233,7 @@ maudResult maudCreateNoiseSuppressor(const maudNoiseSuppressorDef* def,
                                .highPass = def->highPassHz > 0.0f,
                                .bytes = l.layout.size,
                                .noiseDbfs = -120.0f};
+    s->logFloor = log(s->floor);
     if (s->highPass)
     {
         s->filter = HighPass((double)def->highPassHz, (double)def->sampleRate);
@@ -286,10 +282,13 @@ static float BinGain(maudNoiseSuppressor* s, uint32_t k, double p)
                 (1.0 - ALPHA_XI) * fmax(gamma - 1.0, 0.0);
     xi = fmax(xi, XI_MIN);
     double v = gamma * xi / (1.0 + xi);
-    double gainH1 = fmin(xi / (1.0 + xi) * exp(0.5 * maudExpIntegral(fmax(v, 1e-10))), 1.0);
+    // The gain in logarithms: gain^p floor^(1 - p) is then one
+    // exponential where it was two powers.
+    double logGain = fmin(log(xi / (1.0 + xi)) + 0.5 * maudExpIntegral(fmax(v, 1e-10)), 0.0);
+    double gainH1 = exp(logGain);
     s->lastGain[k] = gainH1;
     s->lastGamma[k] = gamma;
-    double g = pow(gainH1, p) * pow(s->floor, 1.0 - p);
+    double g = exp(p * logGain + (1.0 - p) * s->logFloor);
     return (float)fmin(fmax(g, s->floor), 1.0);
 }
 
@@ -310,7 +309,7 @@ static void Gains(maudNoiseSuppressor* s)
         s->gain[k] = BinGain(s, k, p);
         speech += p;
         double expected = (1.0 - p) * s->power[k] + p * s->noise[k];
-        s->noise[k] = ALPHA_NOISE * s->noise[k] + (1.0 - ALPHA_NOISE) * expected;
+        s->noise[k] = fmax(ALPHA_NOISE * s->noise[k] + (1.0 - ALPHA_NOISE) * expected, MAUD_TINY);
     }
     s->speech = (float)(speech / s->bins);
 }
@@ -400,7 +399,8 @@ static void Process(maudNoiseSuppressor* s)
 static float Filter(const Biquad* f, BiquadState* z, float in)
 {
     double x = (double)in;
-    double y = f->b0 * x + f->b1 * z->x1 + f->b2 * z->x2 - f->a1 * z->y1 - f->a2 * z->y2;
+    double y =
+        maudFlushDouble(f->b0 * x + f->b1 * z->x1 + f->b2 * z->x2 - f->a1 * z->y1 - f->a2 * z->y2);
     z->x2 = z->x1;
     z->x1 = x;
     z->y2 = z->y1;
@@ -411,6 +411,11 @@ static float Filter(const Biquad* f, BiquadState* z, float in)
 maudResult maudSuppressNoise(maudNoiseSuppressor* suppressor, float* frames, uint32_t frameCount,
                              maudNoiseState* stateOut)
 {
+    // Cleared first: a failure leaves zero (conventions section 8).
+    if (stateOut != nullptr)
+    {
+        memset(stateOut, 0, sizeof(*stateOut));
+    }
     if (suppressor == nullptr || (frames == nullptr && frameCount > 0))
     {
         return maud_errorInvalid;

@@ -30,6 +30,9 @@ extern "C"
     typedef struct maudDirectEffectDef
     {
         uint32_t cookie;
+        // MAUD_ABI_VERSION of the headers the program was built with; the
+        // cookie and this stay the first two fields in every version.
+        uint32_t version;
         // The rate the effect runs at, 32,000 to 384,000 Hz.
         float sampleRate;
         // Air absorption per band: the amplitude falls as
@@ -66,14 +69,6 @@ extern "C"
         float power[MAUD_DIRECT_BANDS];
     } maudDirectivityPattern;
 
-    /// Returns the default direct effect def: 48 kHz, air absorption of
-    /// ISO 9613 part 1 at 20 degrees C, 50 % humidity and 101.325 kPa.
-    ///
-    /// @return The def, with a valid cookie.
-    /// @par Thread safety
-    /// Safe from any thread.
-    MAUD_API maudDirectEffectDef maudDefaultDirectEffectDef(void);
-
     /// Returns the default direct params: gain 1, no distance, a clear
     /// path, full transmission and directivity.
     ///
@@ -88,7 +83,8 @@ extern "C"
     ///
     /// @param temperatureCelsius  -20 to 50.
     /// @param humidityPercent     Relative humidity, 10 to 100.
-    /// @param absorptionOut       Receives three exponents.
+    /// @param absorptionOut       Receives three exponents; left as they
+    ///                            were on failure.
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer or
     ///         a value out of range.
     /// @par Thread safety
@@ -97,6 +93,33 @@ extern "C"
                                                             float humidityPercent,
                                                             float* absorptionOut);
 
+// The cookie of a direct effect def, which its default sets and
+// maudCreateDirectEffect checks.
+#define MAUD_DIRECT_EFFECT_DEF_COOKIE 0x6D616465u
+
+    /// Returns the default direct effect def: 48 kHz, air absorption of
+    /// ISO 9613 part 1 at 20 degrees C, 50 % humidity and 101.325 kPa.
+    ///
+    /// The default is built in the program from the headers it includes,
+    /// so the version it stamps is the program's.
+    ///
+    /// @return The def, with a valid cookie and version.
+    /// @par Thread safety
+    /// Safe from any thread.
+    static inline maudDirectEffectDef maudDefaultDirectEffectDef(void)
+    {
+#ifdef __cplusplus
+        maudDirectEffectDef def = {};
+#else
+    maudDirectEffectDef def = {0};
+#endif
+        def.cookie = MAUD_DIRECT_EFFECT_DEF_COOKIE;
+        def.version = MAUD_ABI_VERSION;
+        def.sampleRate = 48000.0f;
+        (void)maudGetAirAbsorption(20.0f, 50.0f, def.airAbsorption);
+        return def;
+    }
+
     /// Computes a pattern's directivity towards the listener.
     ///
     /// @param pattern         The pattern.
@@ -104,7 +127,8 @@ extern "C"
     ///                        listener in the source's own frame, whose
     ///                        forward axis is -z; a zero vector counts as
     ///                        straight ahead.
-    /// @param directivityOut  Receives three gains.
+    /// @param directivityOut  Receives three gains; left as they were on
+    ///                        failure.
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer, a
     ///         weight outside 0 to 1, a power below 0 or a value that is
     ///         not finite.
@@ -118,7 +142,9 @@ extern "C"
     ///
     /// @param def        The def, from maudDefaultDirectEffectDef.
     /// @param effectOut  Receives the effect; NULL on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a
+    /// @return `maud_success`; `maud_errorVersion` for a def stamped with
+    ///         another binary interface than the library's, checked
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a
     ///         def without its cookie, a rate out of range or air
     ///         absorption below 0 or not finite; `maud_errorCapacity` when
     ///         the allocator fails.

@@ -16,8 +16,9 @@
 typedef struct maudRealFft
 {
     uint32_t size;
-    // The complex FFT's twiddles e^(-2 pi i k / (n / 2)), k < n / 4, and
-    // the split's e^(-2 pi i k / n), k < n / 2, interleaved.
+    // The complex FFT's twiddles, each stage's in turn: for groups of 2h,
+    // h = 1, 2, ..., n / 4, e^(-2 pi i j / 2h), j < h (n / 2 - 1 in all);
+    // and the split's e^(-2 pi i k / n), k < n / 2; interleaved.
     float* twiddles;
     float* split;
     // The bit reversal of n / 2 indices.

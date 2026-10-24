@@ -1,7 +1,8 @@
 # maul_add_test(<name> [WHITEBOX] [THREADS] [POSIX] [MANUAL])
 #
 # Builds test/test_<name>.c into test_<name> and registers it with
-# CTest as <name>.
+# CTest as <name>, labeled <name>, so a check can run the suites a change
+# reaches with ctest -L.
 #   WHITEBOX  includes src/ and reaches internal symbols, which a shared
 #             build hides, so the suite is skipped in shared builds.
 #   THREADS   links the platform thread library.
@@ -29,6 +30,7 @@ function(maul_add_test name)
     maul_apply_flags(${target})
     if(NOT ARG_MANUAL)
         add_test(NAME ${name} COMMAND ${target})
+        set_tests_properties(${name} PROPERTIES LABELS ${name})
     endif()
 endfunction()
 
@@ -36,7 +38,7 @@ endfunction()
 #
 # Compiles every public header on its own as C17, C23 and C++17, with
 # pedantic warnings as errors, so the headers stay in the common subset
-# the family requires (family record 0008). ROOT and NAME default to the project's
+# the family requires. ROOT and NAME default to the project's
 # source directory and name; cmake/HeaderCheck passes them to check a
 # library's headers alone. MSVC's cl has no C23 mode (its /std:clatest is
 # a draft mode), so the C23 check is skipped there. In C++17 the

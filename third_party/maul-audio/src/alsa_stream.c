@@ -137,9 +137,7 @@ static snd_pcm_sframes_t ReadIn(maudAlsaStream* entry, snd_pcm_sframes_t avail)
     return 0;
 }
 
-// Moves what the PCM can take or has, recovering from an xrun
-// (maudAlsaRecover). False when the PCM failed past recovery.
-static bool Transfer(maudAlsaStream* entry)
+bool maudAlsaTransfer(maudAlsaStream* entry)
 {
     const maudAlsaApi* api = entry->api;
     bool output = entry->core->def.direction == maud_directionOutput;
@@ -196,10 +194,16 @@ static void RunStream(void* user)
         {
             return;
         }
+        // The PCM's own reading of the wake, which a plugin needs to clear
+        // it. A plugin whose server ended the stream (PulseAudio's, its
+        // stream destroyed) wakes the poll and reports no event while the
+        // PCM is in an error state, so the transfer runs on every wake: it
+        // reads the state and recovers the PCM, which reconnects such a
+        // stream, where skipping it spun the thread on a silent stream.
         unsigned short events = 0;
         api->pollDescriptorsRevents(entry->pcm, entry->fds + 1, entry->fdCount - 1, &events);
         // A PCM failed past recovery stays silent until the stream stops.
-        if ((events & (POLLIN | POLLOUT | POLLERR | POLLHUP | POLLNVAL)) != 0 && !Transfer(entry))
+        if (!maudAlsaTransfer(entry))
         {
             return;
         }

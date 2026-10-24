@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The voice activity detector's analysis, one mono sample at a time,
-// shared by the detector and the gain control.
+// The voice activity detector's analysis of mono samples, shared by the
+// detector and the gain control.
 
 #ifndef MAUL_AUDIO_SRC_VAD_CORE_H
 #define MAUL_AUDIO_SRC_VAD_CORE_H
@@ -58,8 +58,12 @@ typedef struct maudVadCore
 void maudInitVadCore(maudVadCore* core, uint32_t sampleRate, uint8_t aggressiveness,
                      uint32_t hangoverFrames);
 
-// Analyzes one sample; true when it completed a 10 ms frame, whose
-// results the core then holds. Real-time safe.
-bool maudVadSample(maudVadCore* core, float sample);
+// The samples a caller gathers at most for one call of maudVadSamples.
+#define MAUD_VAD_CHUNK 128u
+
+// Analyzes up to count mono samples, stopping at the end of a 10 ms
+// frame; returns how many it took, and whether they completed a frame,
+// whose results the core then holds, in *done. Real-time safe.
+uint32_t maudVadSamples(maudVadCore* core, const float* samples, uint32_t count, bool* done);
 
 #endif // MAUL_AUDIO_SRC_VAD_CORE_H

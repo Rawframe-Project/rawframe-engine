@@ -24,7 +24,7 @@ static maudResult FindStartingDevice(const maudContext* context, const maudStrea
     maudDeviceId id = def->device;
     if (id.index1 == 0)
     {
-        id = context->devices.defaults[def->direction][def->role];
+        id = context->devices.defaults[maudDeviceDirection(def->direction)][def->role];
         if (id.index1 == 0)
         {
             *deviceOut = nullptr;
@@ -36,7 +36,7 @@ static maudResult FindStartingDevice(const maudContext* context, const maudStrea
     {
         return maud_errorStale;
     }
-    if (slot->info.direction != def->direction)
+    if (slot->info.direction != maudDeviceDirection(def->direction))
     {
         return maud_errorInvalid;
     }
@@ -51,7 +51,9 @@ static maudResult OpenCore(maudContext* context, const maudStreamDef* def,
 {
     if ((def->share == maud_shareExclusive &&
          (!context->backend->exclusive || def->ratePolicy == maud_ratePlatformConverted)) ||
-        (def->objectCount > 0 && !context->backend->rendersObjects))
+        (def->objectCount > 0 && !context->backend->rendersObjects) ||
+        (def->direction == maud_directionLoopback && !context->backend->loopback) ||
+        (def->loopbackExcludesSelf && !context->backend->loopbackExcludesSelf))
     {
         return maud_errorUnsupported;
     }
