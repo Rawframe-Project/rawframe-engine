@@ -41,7 +41,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.history","id":5,"scene":"quarry.game"}'
     echo '{"kind":"authoring.undo","id":6,"scene":"quarry.game"}'
 } | "$author" session "$game" "$work/root" >"$work/replies"
-reply 2 | grep -q '"answer":{"lines":\["# Quarry (D735), the small block game'
+reply 2 | grep -q '"answer":{"lines":\["# Quarry, the small block game'
 reply 2 | grep -q '"program quarry.kest"'
 reply 3 | grep -q '"written":true,.*"undoable":1,"redoable":0'
 reply 4 | grep -q '"program quarry.kest","aspect 16 9"'
