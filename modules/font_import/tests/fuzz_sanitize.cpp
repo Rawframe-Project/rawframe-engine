@@ -1,5 +1,4 @@
-// Coverage-guided fuzzing of the cook's font sanitizer (ADR-0078 section 2,
-// D385): a font from anyone meets OTS through the limits, and what it
+// Coverage-guided fuzzing of the cook's font sanitizer: a font from anyone meets OTS through the limits, and what it
 // rebuilds it takes again.
 
 #include "rawframe/font_import/sanitize.h"

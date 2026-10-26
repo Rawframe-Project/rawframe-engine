@@ -1,5 +1,5 @@
-# SPEC-0020's release records and channel pointers, and the update check a
-# launcher makes over them (D424). Launcher and release tooling; never part
+# The release records and channel pointers, and the update check a
+# launcher makes over them. Launcher and release tooling; never part
 # of a client or a server.
 rawframe_module(NAME release
     SOURCES src/release.cpp

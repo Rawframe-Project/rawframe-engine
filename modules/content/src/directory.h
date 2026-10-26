@@ -1,9 +1,9 @@
 #pragma once
 
-// A source over a directory (SPEC-0008): files read beneath one root, no link
+// A source over a directory: files read beneath one root, no link
 // followed and no other filesystem entered on the way, and a file that
 // changes while it is read refused. POSIX and Windows keep those promises
-// each in their own way (D237).
+// each in their own way.
 
 #include "source.h"
 

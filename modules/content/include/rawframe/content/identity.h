@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0008's identities: a resource, what kind of resource it is, how its
+// The identities: a resource, what kind of resource it is, how its
 // bytes are encoded, and which exact bytes. None is interchangeable with
 // another, or with a path.
 

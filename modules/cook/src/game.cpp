@@ -28,7 +28,7 @@ std::unexpected<result::Error> refuse(std::string_view why, std::string_view nam
 }
 
 /// A document that does not read as its owner reads it: `why`, and the
-/// reader's own reason, so an author learns which field to mend (D689).
+/// reader's own reason, so an author learns which field to mend.
 std::unexpected<result::Error> unreadable(std::string_view why, std::string_view name, const result::Error& reason) {
     return refuse(std::string{why} + ": " + std::string{reason.description()}, name);
 }
@@ -97,7 +97,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
     }
 
     // Each mesh: the resource its sidecar names, cooked by rawframe.mesh,
-    // or by rawframe.blockout from a blockout's text (D848).
+    // or by rawframe.blockout from a blockout's text.
     for (const world_kest::GameMesh& mesh : kDescription.meshes) {
         auto sidecarBytes = reads.file(mesh.path + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
@@ -110,7 +110,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
                 mesh.path);
         }
         game.meshes.push_back(world_kest::CookedGameMesh{.path = mesh.path, .mesh = kSidecar.id.value});
-        // Its material and texture subassets (D314), under its path.
+        // Its material and texture subassets, under its path.
         for (const auto& [kKey, kId] : kSidecar.subassets) {
             if (kKey.starts_with("material/")) {
                 game.materials.push_back(world_kest::CookedGameMaterial{
@@ -121,8 +121,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
             }
         }
     }
-    // Each font: the resource its sidecar names, cooked by rawframe.font
-    // (D386).
+    // Each font: the resource its sidecar names, cooked by rawframe.font.
     for (const world_kest::GameFont& font : kDescription.fonts) {
         auto sidecarBytes = reads.file(font.path + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
@@ -148,7 +147,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
         game.textures.push_back(world_kest::CookedGameTexture{.path = texture.path, .texture = kSidecar.id.value});
     }
     // Each tilemap: the resource its sidecar names, cooked by
-    // rawframe.tilemap (D858).
+    // rawframe.tilemap.
     for (const world_kest::GameTilemap& tilemap : kDescription.tilemaps) {
         auto sidecarBytes = reads.file(tilemap.path + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
@@ -161,7 +160,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
         game.tilemaps.push_back(world_kest::CookedGameTilemap{.path = tilemap.path, .tilemap = kSidecar.id.value});
     }
     // Each scatter: the resource its sidecar names, its placements cooked by
-    // rawframe.scatter (D864).
+    // rawframe.scatter.
     for (const std::string& scatter : kDescription.scatters) {
         auto sidecarBytes = reads.file(scatter + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
@@ -174,7 +173,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
         game.scatters.push_back(world_kest::CookedGameScatter{.path = scatter, .placed = kSidecar.id.value});
     }
     // Each sequence: the resource its sidecar names, cooked by
-    // rawframe.sequence (D869).
+    // rawframe.sequence.
     for (const world_kest::GameSequence& sequence : kDescription.sequences) {
         auto sidecarBytes = reads.file(sequence.path + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
@@ -189,7 +188,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
 
     // Each material: the resource its sidecar names, cooked by
     // rawframe.material, or by rawframe.postprocess or
-    // rawframe.canvasmaterial for one of those domains (D348, D355).
+    // rawframe.canvasmaterial for one of those domains.
     for (const world_kest::GameMaterial& material : kDescription.materials) {
         auto sidecarBytes = reads.file(material.path + std::string{content::kSidecarSuffix});
         if (!sidecarBytes.has_value()) {
@@ -224,7 +223,7 @@ result::Result<Artifact> cookGame(std::span<const std::byte> source, std::string
     }
 
     // Each text document: the resource its sidecar names, cooked by
-    // rawframe.text. Together they must make a catalog (D147), so an
+    // rawframe.text. Together they must make a catalog, so an
     // orphaned key or a translation reading an argument its source does not
     // fails here rather than on a client.
     std::vector<localization::TableDocument> tables;

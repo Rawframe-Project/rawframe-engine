@@ -1,4 +1,4 @@
-# Texture import (ADR-0058, D253): PNG, JPEG, BMP, and TGA sources decoded
+# Texture import: PNG, JPEG, BMP, and TGA sources decoded
 # by Wuffs, halved into levels, and block-compressed by bc7enc into the
 # runtime's texture. Import tooling only; no client or server closure may
 # depend on it. Wuffs is memory-safe by construction, so the decoder may

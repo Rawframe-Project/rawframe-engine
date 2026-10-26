@@ -1,9 +1,9 @@
 #pragma once
 
-// The cooked texture (ADR-0058's texture family, D253): an image's levels
+// The cooked texture: an image's levels
 // in a form the GPU takes as it is, written by import tooling and read by
-// the runtime, which decodes no source format. Rows run top first
-// (ADR-0046); color is sRGB or linear as ADR-0047 has it, stated by the
+// the runtime, which decodes no source format. Rows run top first;
+// color is sRGB or linear, stated by the
 // format, never guessed.
 
 #include "rawframe/base/bits128.h"
@@ -23,10 +23,10 @@ inline constexpr base::Bits128 kTextureType = base::parseBits128Hex("0fcaee71b10
 inline constexpr std::string_view kTextureRepresentation = "rawframe.texture";
 
 /// How a level's texels are stored. The block-compressed BC7 is the desktop
-/// form ADR-0058 names; RGBA8 is kept uncompressed, for what must stay
+/// form; RGBA8 is kept uncompressed, for what must stay
 /// exact (pixel art, interface images); RGBA16F holds light past one, in
-/// linear Rec. 709, for environments (D320); R8 holds one linear channel,
-/// a glyph atlas's coverage (D398).
+/// linear Rec. 709, for environments; R8 holds one linear channel,
+/// a glyph atlas's coverage.
 enum class Format : std::uint8_t {
     Rgba8,
     Rgba8Srgb,
@@ -58,8 +58,8 @@ struct Level {
 
 /// Level nought is the image; each next one halves both sides, rounding
 /// down and never below one, and the last may be any of them. A cube
-/// (D320) has six square faces, +X, -X, +Y, -Y, +Z, -Z, as Vulkan's layers
-/// are; anything else has one. A volume (D344) has `depth` slices of its
+/// has six square faces, +X, -X, +Y, -Y, +Z, -Z, as Vulkan's layers
+/// are; anything else has one. A volume has `depth` slices of its
 /// one level, front first, each a face's texels: one face, one level, and
 /// an uncompressed format; anything else has a depth of one.
 struct Texture {

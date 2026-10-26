@@ -1,4 +1,4 @@
-// The blockout importer (D848): a blockout document cooked into a mesh the
+// The blockout importer: a blockout document cooked into a mesh the
 // runtime reads, its solids' faces in it; one that does not read, or whose
 // sidecar gives it settings, refused.
 

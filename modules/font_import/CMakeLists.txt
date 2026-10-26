@@ -1,4 +1,4 @@
-# Font import (ADR-0049, ADR-0078, D385): TrueType and OpenType fonts and
+# Font import: TrueType and OpenType fonts and
 # collections rebuilt by the OpenType Sanitizer, so a font's raw bytes never
 # reach the runtime's FreeType and HarfBuzz. Import tooling only; no client
 # or server closure may depend on it.

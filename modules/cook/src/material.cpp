@@ -39,11 +39,11 @@ result::Result<std::string> normalize(const document::Value* settings) {
     return std::string{};
 }
 
-/// SPEC-0026's `variants_per_material`: the quality axis's three, the one
-/// axis generation 1 has (D319).
+/// The `variants_per_material`: the quality axis's three, the one
+/// axis generation 1 has.
 constexpr std::int64_t kVariantsPerMaterial = 3;
 
-/// SPEC-0026's variant report (D319): the variants, the axes that make
+/// The variant report: the variants, the axes that make
 /// them and the quality axis's cardinality, the variants the quality axis
 /// adds, and the headroom under the ceiling. A variant is a distinct
 /// material: generation 1 draws every one with the one program.
@@ -107,9 +107,9 @@ std::vector<std::byte> bytesOf(const std::filesystem::path& path) {
 }
 
 /// A graph the blob cannot fold, written as Slang and linked into the
-/// scene's containers by the shader toolchain (D484): a program material,
-/// one variant at the high quality; for an instance's switched variant
-/// (D719), with the instance's `values` in place of the defaults, an axis
+/// scene's containers by the shader toolchain: a program material,
+/// one variant at the high quality; for an instance's switched variant,
+/// with the instance's `values` in place of the defaults, an axis
 /// of its own.
 result::Result<Artifact> cookProgram(const graph::Document& document,
                                      const ShaderTools& tools,
@@ -153,7 +153,7 @@ result::Result<Artifact> cookProgram(const graph::Document& document,
                                    .parameters = kGenerated.parameters,
                                    .textures = kGenerated.textures,
                                    .textureInputs = kGenerated.textureInputs};
-    // The scene's containers and the shadow's (D488), a backend each.
+    // The scene's containers and the shadow's, a backend each.
     constexpr std::array<std::string_view, material::kProgramContainers> kSuffixes = {
         ".mrsc", ".metal.mrsc", ".d3d12.mrsc"};
     for (std::size_t at = 0; at < kSuffixes.size(); ++at) {
@@ -181,10 +181,10 @@ result::Result<Artifact> cookProgram(const graph::Document& document,
                                {"variantsHeadroom", kVariantsPerMaterial - 1}}};
 }
 
-/// An instance of another surface material (D709): its base read from its
+/// An instance of another surface material: its base read from its
 /// source, its overrides made into the base's parameters, its base's
 /// identity from the base's sidecar. Its base may be no instance itself.
-/// One that overrides a static switch draws a variant of its own (D719):
+/// One that overrides a static switch draws a variant of its own:
 /// a program material, the toolchain's to build.
 result::Result<Artifact> cookInstance(std::string_view text, const std::optional<ShaderTools>& tools, Reads& reads) {
     RAWFRAME_TRY_ASSIGN(const material::InstanceDocument kInstance, material::readInstance(text));
@@ -238,7 +238,7 @@ cookMaterial(std::span<const std::byte> source, const std::optional<ShaderTools>
                         .subassets = {},
                         .report = reportOf(*compiled)};
     }
-    // What the blob cannot fold, a program says (D484).
+    // What the blob cannot fold, a program says.
     if (compiled.error().domain() != material::kMaterialDomain ||
         compiled.error().code() != material::code(material::MaterialError::Unsupported)) {
         return std::unexpected<result::Error>{std::move(compiled).error()};
@@ -251,7 +251,7 @@ cookMaterial(std::span<const std::byte> source, const std::optional<ShaderTools>
     return cookProgram(kDocument, *tools);
 }
 
-/// A post process folds to one form (D348): one variant.
+/// A post process folds to one form: one variant.
 result::Result<Artifact> cookPostProcess(std::span<const std::byte> source, std::string_view, Reads&) {
     const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
     RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, material::readPostProcess(kText));
@@ -263,7 +263,7 @@ result::Result<Artifact> cookPostProcess(std::span<const std::byte> source, std:
                     .report = {{"variants", 1}, {"axes", 0}, {"variantsHeadroom", kVariantsPerMaterial - 1}}};
 }
 
-/// A canvas material folds to one form (D355): one variant.
+/// A canvas material folds to one form: one variant.
 result::Result<Artifact> cookCanvas(std::span<const std::byte> source, std::string_view, Reads&) {
     const std::string_view kText{reinterpret_cast<const char*>(source.data()), source.size()};
     RAWFRAME_TRY_ASSIGN(const graph::Document kDocument, material::readCanvas(kText));

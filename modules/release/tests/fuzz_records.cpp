@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of SPEC-0020's records as a launcher reads them
-// from any mirror (D424): a ReleaseRecord or a ChannelPointer read from
+// Coverage-guided fuzzing of the records as a launcher reads them
+// from any mirror: a ReleaseRecord or a ChannelPointer read from
 // hostile bytes is exact, so what reads writes back to the same bytes.
 
 #include "rawframe/release/release.h"

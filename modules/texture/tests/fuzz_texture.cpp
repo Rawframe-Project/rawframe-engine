@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of a cooked texture read from content (D253), which
+// Coverage-guided fuzzing of a cooked texture read from content, which
 // a mod's Build can hold. The reader is exact: a texture it accepts encodes to
 // the very same bytes.
 

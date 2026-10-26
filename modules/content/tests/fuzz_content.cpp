@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the records content reads from a Build (D242):
+// Coverage-guided fuzzing of the records content reads from a Build:
 // a manifest, a sidecar, and a composition record. The composition reader
 // is exact; a manifest may list its entries in any order, so what it reads
 // must write to bytes that read and write to themselves.

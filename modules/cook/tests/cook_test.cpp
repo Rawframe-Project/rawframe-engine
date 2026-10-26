@@ -1,4 +1,4 @@
-// Cooking against ADR-0024: sidecar identity, content-addressed artifacts a
+// Cooking: sidecar identity, content-addressed artifacts a
 // content store reads back verified, a cache keyed on every input (the tool
 // included) that is verified before it is trusted, double cooks that catch
 // a nondeterministic importer, and nothing published unless nothing failed.
@@ -161,7 +161,7 @@ result::Result<Artifact> gather(std::span<const std::byte> source, std::string_v
                     .bytes = std::move(bytes)};
 }
 
-/// The tools `test.gather` says it runs besides the cook (D484).
+/// The tools `test.gather` says it runs besides the cook.
 CookReport cookGathered(const Project& project, base::Sha256Digest tools = {}) {
     const std::array<Importer, 2> kImporters = {
         audioImporter(),
@@ -195,7 +195,7 @@ RAWFRAME_TEST(WhatAnImporterReadsIsAnInputToo) {
                     kReceipt.find("\"suffix\": \".part\"") != std::string::npos);
     RAWFRAME_EXPECT(cookGathered(kProject).reused == 3);
     // The tools the importer runs changed: the bundle again; the same
-    // tools again, nothing (D484).
+    // tools again, nothing.
     base::Sha256Digest tools{};
     tools[0] = std::byte{1};
     const CookReport kTooled = cookGathered(kProject, tools);
@@ -398,7 +398,7 @@ RAWFRAME_TEST(AuthoringToolingGivesUnmappedSubassetsTheirIdentities) {
 }
 
 RAWFRAME_TEST(OneSourceIsMappedAloneWhereNamed) {
-    // An import maps what it brought (D536): the source named is mapped,
+    // An import maps what it brought: the source named is mapped,
     // and another, broken here, is not even read.
     const Project kProject;
     writeText(kProject.sources / "props/parts.txt", "left=one\nright=two");
@@ -584,8 +584,8 @@ RAWFRAME_TEST(AGameCooksWithEverythingItNames) {
     writeText(kGame / "hud.tr.translations", kTurkish);
     RAWFRAME_EXPECT(kCook().failures.empty());
 
-    // A UI document that does not read is refused (D619), its reader's
-    // reason told after the cook's (D689).
+    // A UI document that does not read is refused, its reader's
+    // reason told after the cook's.
     const std::string kUi = readText(kGame / "runners.ui");
     writeText(kGame / "runners.ui", kUi.substr(0, kUi.find("\"nodes\"")) + "\"nodes\": 3\n}\n");
     const auto kUnread = kCook();

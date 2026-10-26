@@ -24,7 +24,7 @@ enum class MeshError : std::uint32_t {
     /// A source that requires an extension the importer does not support.
     UnsupportedExtension = 4,
     /// A source material an importer cannot make a Rawframe material of
-    /// without changing its look, or whose subasset has no stable key (D314).
+    /// without changing its look, or whose subasset has no stable key.
     UnsupportedMaterial = 5,
 };
 

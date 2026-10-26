@@ -1,4 +1,4 @@
-// Fonts cooked through the sanitizer (ADR-0078, D385): a font cooks into the
+// Fonts cooked through the sanitizer: a font cooks into the
 // rebuilt font a tree reads, and a file that is not one, or a web font, fails
 // with the sanitizer's refusal; a font takes no settings.
 

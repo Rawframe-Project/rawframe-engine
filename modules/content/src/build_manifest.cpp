@@ -13,7 +13,7 @@ namespace rawframe::content {
 
 namespace {
 
-/// SPEC-0021's hard ceilings.
+/// The hard ceilings.
 constexpr std::size_t kMaximumBuildResources = 262'144;
 constexpr std::size_t kMaximumChunks = 65'536;
 constexpr std::uint64_t kMaximumChunkSize = std::uint64_t{4} * 1024 * 1024;

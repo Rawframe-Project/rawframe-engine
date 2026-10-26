@@ -69,7 +69,7 @@ bool radiance(std::span<const std::byte> source) noexcept {
 }
 
 /// `color=srgb|linear;exact=0|1;levels=0|1`, an environment's, or
-/// `grading`: a grading table (D344), which takes no other setting.
+/// `grading`: a grading table, which takes no other setting.
 result::Result<std::string> normalize(const Value* settings) {
     texture_import::CookSettings chosen;
     if (settings != nullptr) {
@@ -136,7 +136,7 @@ result::Result<Artifact> cookTexture(std::span<const std::byte> source, std::str
 
 } // namespace
 
-/// A picture's settings an editor offers (D800); an environment's and a
+/// A picture's settings an editor offers; an environment's and a
 /// grading's are kept as the sidecar has them.
 constexpr std::array<std::string_view, 2> kColors = {"srgb", "linear"};
 constexpr std::array<SettingField, 3> kFields = {

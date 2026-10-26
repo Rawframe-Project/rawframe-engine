@@ -1,6 +1,6 @@
 #pragma once
 
-// Decoded assets (ADR-0025, SPEC-0027): requests for a resource that
+// Decoded assets: requests for a resource that
 // coalesce into one load, readiness answered per requester, decoded forms
 // held while anyone is interested and evicted in a deterministic order when
 // a budget needs the room, generation-checked handles that fail typed once
@@ -37,7 +37,7 @@ enum class Residency : std::uint8_t {
     Retiring
 };
 
-/// SPEC-0027's closed priority classes.
+/// The closed priority classes.
 enum class Priority : std::uint8_t {
     Immediate,
     High,
@@ -106,7 +106,7 @@ enum class ReloadOutcome : std::uint8_t {
     Failed
 };
 
-/// SPEC-0027's reload record: `reload_published` or the reload failure.
+/// The reload record: `reload_published` or the reload failure.
 struct ReloadEvent {
     ReloadOutcome outcome = ReloadOutcome::Published;
     content::ResourceId id;
@@ -116,7 +116,7 @@ struct ReloadEvent {
     std::optional<result::Error> failure;
 };
 
-/// A resource still wanted when its set closed (SPEC-0027 survivor record).
+/// A resource still wanted when its set closed.
 struct Survivor {
     content::ResourceId id;
     content::ContentDigest revision;
@@ -169,7 +169,7 @@ public:
     /// At a schedule point on the owner's thread: takes finished reads to
     /// decoding and finished decodes to residency, fails requests past their
     /// deadlines, and evicts in order while over budget. When the store has
-    /// published a new catalog, replaces what changed in SPEC-0027's four
+    /// published a new catalog, replaces what changed in the four
     /// phases: candidates built beside the live forms, which stay
     /// authoritative; every candidate settled; one publication moving every
     /// requester to its new revision; old forms retiring, their handles
