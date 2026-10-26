@@ -11,6 +11,7 @@
 #include "rawframe/process/child.h"
 #include "rawframe/ui/tree.h"
 #include "rawframe/view/clipboard.h"
+#include "version_control.h"
 
 #include <array>
 #include <cstddef>
@@ -319,25 +320,19 @@ struct EditorsHeld {
     /// The capture shown, as its file holds it (D843).
     document::Value capture;
     /// The Changes tab (D871): its tab and pane, its rows, each changed
-    /// file's press with its path, and git as Studio runs it: the one
-    /// running, what it is run for, those waiting their turn with their
-    /// purposes, and the file its output goes to; then what git last said:
-    /// the branch, the game's directory from the repository's top, the
-    /// changes, the diff shown and of what, and the commits made.
+    /// file's press with its path, and git as Studio runs it, trusted or
+    /// not; then what git last said: the branch, the game's directory from
+    /// the repository's top, the changes, the diff shown and of what, and
+    /// the commits made.
     ui::Node changesTab{};
     ui::Node changesColumn{};
     /// The status bar's branch.
     ui::Node branchNode{};
-    /// Whether the author trusts the game's repository, so git runs in it,
-    /// and the press that says so.
-    bool gitTrusted = false;
+    /// The press that says the author trusts the game's repository.
     ui::Node trustPress{};
     std::vector<ui::Node> changesRows;
     std::vector<std::pair<ui::Node, std::string>> changedPresses;
-    std::optional<process::Child> git;
-    std::string gitFor;
-    std::deque<std::pair<std::string, std::vector<std::string>>> gitWaiting;
-    std::filesystem::path gitOutput;
+    VersionControl git;
     std::string branch;
     /// What git said, its first line, when it would not read the
     /// repository the game's folder is in (one it does not own, say).

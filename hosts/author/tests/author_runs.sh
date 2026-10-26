@@ -105,7 +105,12 @@ import json, sys
 answer = json.load(sys.stdin)["answer"]
 assert answer["tickUs"] == 16666, answer
 assert len(answer["ticksUs"]) > 0, answer
-assert len(answer["systems"]) > 0 and all(s["totalUs"] >= 0 for s in answer["systems"]), answer
+systems = {s["system"]: s for s in answer["systems"]}
+# The game runs its own Kest systems among the engine ones, each timed: its age system
+# ran every tick, so it took time, and no one run took more than all.
+assert "runners.age" in systems and "rawframe.replication.publish" in systems, answer
+assert systems["runners.age"]["totalUs"] > 0, answer
+assert all(s["mostUs"] <= s["totalUs"] for s in systems.values()), answer
 ' <"$work/profile"
 
 # Let run, the World ticks on, and a step is refused while it does.
