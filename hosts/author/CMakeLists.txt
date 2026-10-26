@@ -233,6 +233,15 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/author_tooling)
     set_tests_properties(author_tooling PROPERTIES PASS_REGULAR_EXPRESSION "inspected runners through the tooling endpoint")
+    # The same endpoint pausing, stepping, profiling and reading the
+    # traffic of a server one bot plays on: what Studio's Game menu,
+    # Profiler and Network panel ask for.
+    add_test(NAME author_runs
+             COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_runs.sh $<TARGET_FILE:rawframe_host_author>
+                     $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> ${PROJECT_SOURCE_DIR}
+                     ${CMAKE_CURRENT_BINARY_DIR}/author_runs)
+    set_tests_properties(author_runs PROPERTIES
+                         PASS_REGULAR_EXPRESSION "paused, stepped, profiled and read runners' traffic through the tooling endpoint")
     # A ray cast into a running World names what it meets and where an
     # author wrote it (D456): the plaza's gate post, by its id in the gate
     # scene.

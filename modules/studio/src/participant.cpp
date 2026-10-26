@@ -655,7 +655,7 @@ void ShellParticipant::stop() noexcept {
     }
     // Git and an export ended, and the directory their output went to
     // taken away (D871, D872).
-    held_.git.reset();
+    held_.git.stop();
     held_.exporting.reset();
     if (!held_.own.empty()) {
         std::error_code error;

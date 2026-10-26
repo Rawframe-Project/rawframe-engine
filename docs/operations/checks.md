@@ -18,7 +18,7 @@ What verifies a change, locally and in CI, and the time each may take.
 |---|---|---|
 | `changed` | The repository rules (`tools/check_repo.py`), the organization's documentation check, `clang-format-20` on the changed C++ files, `clang-development` built, and the tests the change reaches but the integration ones. | under 2 minutes |
 | `pr` | Every rule on every file; `clang-development` and `clang-sanitize` built side by side, each running the tests the change reaches; then the integration tests the change reaches, in `clang-development`, a few at a time. | under 10 minutes |
-| `full` | Every test in `clang-development`, `clang-sanitize`, `gcc-debug` and `clang-thread`, the web build with its tests under Node, the web page against the dedicated server over WebTransport, every engine shader compiled by a browser's WebGPU, a real browser playing the sample games, and every integration test. | under 20 minutes |
+| `full` | Every test in `clang-development`, `clang-sanitize`, `gcc-debug` and `clang-thread`, the web build with its tests under Node, the web page against the dedicated server over WebTransport, every engine shader compiled by a browser's WebGPU, a real browser playing Runners and the plaza, and every integration test. | under 20 minutes |
 | `nightly` | Also `clang-shipping` and `wasm-shipping`, the tick budget and the web download budget measured in them. | extended |
 
 Run `changed` before every push; `git config core.hooksPath tools/hooks` makes the pre-push hook run it. Run the other tiers through the workspace's heavy-job wrapper. `JOBS` (default 8) bounds the jobs of the whole check, shared between the trees that build at once. When their cache misses, configuring a tree builds the vendored OpenSSL and MsQuic, natively or for the web, each with half of `JOBS`: the two may build at once, and trees waiting on the same build use no processor.
@@ -51,7 +51,7 @@ The runner's workspace and build trees are shared between pull request runs and 
 
 Each module's tests are one executable registered under the module's name; scenarios across modules are in `tests/scenarios`, and each host program's tests beside it. The harness (`tests/harness`) registers named test functions with one failure macro, `RAWFRAME_EXPECT`, which reports and continues, and runs the fatal path in a child process.
 
-Tests that drive windows, browsers, headsets or played games carry one of the labels `window`, `headset`, `alone`, `gesture`, `studio` or `heavy`, which the check treats as integration tests: they stay out of the `changed` tier and run a few at a time. A failing test is never run again: it fails the check.
+Tests that drive windows, browsers, headsets or played games, or that hold a real-time bound, carry the label `integration`: they stay out of the `changed` tier, run in `clang-development` only, a few at a time, and are kept to one scenario for each path a player or an author takes that a module's own tests cannot reach. Studio has five: started, its command palette, a shared session joined, a game played in its viewport, and an export. A failing test is never run again: it fails the check.
 
 Where lavapipe is installed, a device test that finds no adapter fails instead of skipping, and the loader sees lavapipe alone, so every run draws on the same rasterizer.
 

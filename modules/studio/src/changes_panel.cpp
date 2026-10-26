@@ -79,74 +79,45 @@ result::Status ShellParticipant::makeChanges() {
 }
 
 void ShellParticipant::runGit(std::string purpose, std::vector<std::string> arguments) {
-    held_.gitWaiting.emplace_back(std::move(purpose), std::move(arguments));
+    held_.git.ask(std::move(purpose), std::move(arguments));
     startGit();
 }
 
 void ShellParticipant::startGit() {
-    if (held_.git.has_value() || held_.gitWaiting.empty()) {
+    if (held_.git.running() || !held_.git.waiting()) {
         return;
     }
     // Version control's engine is git, an external tool (SPEC-0051): run as
     // its own program in the game's directory, its output read once it ends.
-    const char* const kPath = std::getenv("PATH");
-    const auto kProgram = programOnPath("git", kPath != nullptr ? kPath : "");
-    if (!kProgram.has_value()) {
-        held_.gitWaiting.clear();
-        held_.branch.clear();
-        say("no git is on the path");
-        showChanges();
-        return;
-    }
-    // A batch file's arguments are parsed again by cmd.exe, so a commit's
-    // message would run as a command (D453a): only git's own program.
-    if (isBatch(*kProgram)) {
-        held_.gitWaiting.clear();
-        say("git on the path is a batch file; put git's own program on the path");
-        return;
-    }
-    auto [purpose, arguments] = std::move(held_.gitWaiting.front());
-    held_.gitWaiting.pop_front();
-    // Of the programs a repository's settings name, its file monitor,
-    // external diff, and text conversions are never needed to read: they
-    // stay off even in a repository the author trusts.
-    std::vector<std::string> words = {
-        "-c", "core.fsmonitor=false", "-c", "diff.external=", "-C", description_.parent_path().string()};
-    words.insert(words.end(), arguments.begin(), arguments.end());
     const std::optional<std::filesystem::path> kOwn = ownDirectory();
     if (!kOwn.has_value()) {
-        held_.gitWaiting.clear();
+        held_.git.drop();
         say("Studio has no directory of its own for git's output");
         return;
     }
-    held_.gitOutput = *kOwn / "git.out";
-    auto started = process::Child::start({.program = *kProgram, .arguments = words, .output = held_.gitOutput});
-    if (!started.has_value()) {
-        held_.gitWaiting.clear();
-        say("git did not start: " + std::string{started.error().description()});
+    const char* const kPath = std::getenv("PATH");
+    const auto kRefused = held_.git.start(kPath != nullptr ? kPath : "", description_.parent_path(), *kOwn / "git.out");
+    if (!kRefused.has_value()) {
         return;
     }
-    held_.git = std::move(*started);
-    held_.gitFor = std::move(purpose);
+    say(kRefused->why);
+    if (kRefused->kind == VersionControl::Refusal::Kind::NoGit) {
+        held_.branch.clear();
+        showChanges();
+    }
 }
 
 void ShellParticipant::pollGit() {
-    if (!held_.git.has_value()) {
+    const std::optional<VersionControl::Ended> kEnded = held_.git.poll();
+    if (!kEnded.has_value()) {
         return;
     }
-    const std::optional<int> kCode = held_.git->exited();
-    if (!kCode.has_value()) {
-        return;
-    }
-    held_.git.reset();
-    const std::string kOutput = authoring_session::readFile(held_.gitOutput).value_or("");
-    std::error_code error;
-    std::filesystem::remove(held_.gitOutput, error);
-    const std::string kFor = std::exchange(held_.gitFor, {});
-    if (*kCode != 0) {
+    const std::string& kOutput = kEnded->output;
+    const std::string& kFor = kEnded->purpose;
+    if (kEnded->code != 0) {
         // What is waiting stood on what failed; a directory git finds no
         // repository in is not under version control.
-        held_.gitWaiting.clear();
+        held_.git.drop();
         if (kFor == "branch") {
             held_.branch.clear();
             held_.changes.clear();
@@ -180,17 +151,16 @@ void ShellParticipant::pollGit() {
                      "the game's changes committed",
                      {diagnostics::field("branch", held_.branch), diagnostics::field("commits", held_.commits)});
     }
-    if (held_.gitWaiting.empty()) {
+    if (!held_.git.waiting()) {
         showChanges();
     }
     startGit();
 }
 
 void ShellParticipant::readChanges() {
-    // A repository's own settings may name commands git runs as it reads
-    // and commits (filters, hooks): git runs only in one the author has
-    // said they trust, as an editor asks before it trusts a workspace.
-    if (!held_.gitTrusted) {
+    // Git runs only in a repository the author has said they trust
+    // (version_control.h); until then the tab asks.
+    if (!held_.git.trusted()) {
         showChanges();
         return;
     }
@@ -213,7 +183,7 @@ void ShellParticipant::showChanges() {
         held_.changesRows.push_back(*made);
         return *made;
     };
-    if (!held_.gitTrusted) {
+    if (!held_.git.trusted()) {
         // A game in no repository has nothing to trust: git is asked
         // nothing, and the author is not asked to trust what is not there.
         if (!inRepository(description_.parent_path())) {
@@ -288,8 +258,8 @@ void ShellParticipant::showChanges() {
 }
 
 bool ShellParticipant::pressChanges(ui::Node node) {
-    if (!held_.gitTrusted && node == held_.trustPress) {
-        held_.gitTrusted = true;
+    if (!held_.git.trusted() && node == held_.trustPress) {
+        held_.git.trust();
         say("the game's repository trusted");
         readChanges();
         return true;
@@ -304,7 +274,7 @@ bool ShellParticipant::pressChanges(ui::Node node) {
     }
     held_.diffOf = kPress->second;
     held_.diff.clear();
-    runGit("diff", {"diff", "--no-ext-diff", "--no-textconv", "HEAD", "--", kPress->second});
+    runGit("diff", {"diff", "HEAD", "--", kPress->second});
     return true;
 }
 

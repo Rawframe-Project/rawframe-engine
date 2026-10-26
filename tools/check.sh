@@ -45,7 +45,7 @@ failures=0
 # end-to-end scenarios that may read the clock, kept out of the changed tier
 # and run a few at a time, since each plays a server, a client and a GPU on
 # the processor.
-integration='window|headset|alone|gesture|studio|heavy'
+integration='^integration$'
 
 step() { printf '\n== %s (%ss so far)\n' "$*" "$(($(date +%s) - start))"; }
 fail() {
@@ -231,12 +231,12 @@ web_steps() {
     fi
 }
 
-# A real browser plays each sample game from a canvas against a dedicated
-# server, after the trees, never beside them: a page drawing a few frames a
-# second misses its own expectations.
+# A real browser plays a 2D game and a 3D one from a canvas against a
+# dedicated server, after the trees, never beside them: a page drawing a few
+# frames a second misses its own expectations.
 web_plays() {
     local game status
-    for game in runners plaza tycoon gale quarry lighting; do
+    for game in runners plaza; do
         step "web play $game"
         status=0
         RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \

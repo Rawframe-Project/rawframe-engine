@@ -1,9 +1,0 @@
-tilemap 1
-tileset 00000000000000b2 2 1
-cell 1
-solid 0
-grid 4 3
-tiles
-. . . .
-. . . .
-0 0 0 0
