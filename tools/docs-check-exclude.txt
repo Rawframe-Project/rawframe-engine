@@ -2,8 +2,6 @@
 # areas whose source comments still cite records of the old documentation.
 # Each comment cleanup removes its area's line; the list ends with third_party.
 third_party
-cmake
-CMakeLists.txt
 hosts/android_client
 hosts/animation_tool
 hosts/arena
@@ -83,6 +81,4 @@ modules/world_runtime
 modules/world_tooling
 modules/world_ui
 modules/xr
-tests/harness
-tests/scenarios
 tools

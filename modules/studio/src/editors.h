@@ -317,7 +317,7 @@ struct EditorsHeld {
     std::uint64_t frameCaptures = 0;
     /// The capture shown, as its file holds it.
     document::Value capture;
-    /// The Changes tab (D871): its tab and pane, its rows, each changed
+    /// The Changes tab: its tab and pane, its rows, each changed
     /// file's press with its path, and git as Studio runs it, trusted or
     /// not; then what git last said: the branch, the game's directory from
     /// the repository's top, the changes, the diff shown and of what, and

@@ -654,7 +654,7 @@ void ShellParticipant::stop() noexcept {
         keepPreferences();
     }
     // Git and an export ended, and the directory their output went to
-    // taken away (D871, D872).
+    // taken away.
     held_.git.stop();
     held_.exporting.reset();
     if (!held_.own.empty()) {
