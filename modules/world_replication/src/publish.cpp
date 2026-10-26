@@ -1,13 +1,13 @@
 // Publishing: committed state out to every connection once a state period,
-// within its interest and its byte budget, the connection's own player first
-// (D26, D28, D31, D48, D222), with the server's checksum of its predicted
-// scope kept every tick (D204).
+// within its interest and its byte budget, the connection's own player first,
+// with the server's checksum of its predicted
+// scope kept every tick.
 // Each connection looks only at the interest cells around its player and at
-// what it already holds, so its work follows its interest, not the World
-// (D209), and at what changed since it was last published to and what it
-// was not yet known to hold, not at every value it holds (D744). A
+// what it already holds, so its work follows its interest, not the World,
+// and at what changed since it was last published to and what it
+// was not yet known to hold, not at every value it holds. A
 // component the game keeps to its holder goes to that player's connection
-// alone (D673).
+// alone.
 
 #include "rawframe/world_replication/checksum.h"
 #include "server_state.h"
@@ -449,7 +449,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         unitsFor(peer, kViewer);
     }
     // Without interest, what a connection holds changes only as entities
-    // come and go (D745): it retires those gone and declares those that
+    // come and go: it retires those gone and declares those that
     // appeared since its last turn, unless those are no longer kept or the
     // bound on mappings left some undeclared. Otherwise every entity is
     // looked at.
@@ -545,7 +545,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
             kConsider(kIndex);
         }
     }
-    // Every entity of a district in interest, wherever it stands (D870).
+    // Every entity of a district in interest, wherever it stands.
     if (!unitAt.empty()) {
         const std::span<const StreamedUnit> kUnits = settings.units->units();
         for (std::size_t unit = 0; unit < kUnits.size(); ++unit) {
@@ -580,7 +580,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     std::uint64_t flushed = 0;
     // Whether the client's player is mapped and acknowledged; how many of its
     // values the client does not hold; and how many of those are in the
-    // datagram being made. It is known whole when all of them are (D274).
+    // datagram being made. It is known whole when all of them are.
     bool playerMapped = false;
     std::size_t playerPending = 0;
     std::size_t playerWritten = 0;
@@ -637,7 +637,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         return naming[value.component] != 0 ? std::span<const std::byte>{named}.subspan(namedAt, value.length)
                                             : std::span<const std::byte>{encoded}.subspan(value.offset, value.length);
     };
-    // Only what may need sending is looked at (D744): what changed since
+    // Only what may need sending is looked at: what changed since
     // the connection was last looked at, and what it was not then known to
     // hold, its player always. Every mapping, in order, when those changes
     // are no longer kept, or when there are more of them than mappings, as
@@ -681,7 +681,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         held.replicas.resize(settings.table.components.size());
         for (std::size_t kIndex = valuesAt[entity.slot]; kIndex != valuesAt[entity.slot + 1]; ++kIndex) {
             const PresentValue& value = present[kIndex];
-            // Another's own values are never this connection's (D673).
+            // Another's own values are never this connection's.
             if (!kPlayer && ownOnly[value.component] != 0) {
                 continue;
             }
@@ -730,7 +730,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     // Longest waiting first; ties in entity order, so a run repeats. Taken
     // in that order from a heap, and only while the budget has room for the
     // smallest record: the rest are deferred unsorted, as a large first
-    // sending defers thousands a turn (D746).
+    // sending defers thousands a turn.
     const auto kAfter = [](const Candidate& left, const Candidate& right) {
         return left.priority != right.priority ? left.priority < right.priority : left.present > right.present;
     };
@@ -785,7 +785,7 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     // Nothing changed, yet the client still needs to hear which of its
     // input the server consumed: without it an idle player's predictions
     // are never confirmed, fill their window, and the first move after
-    // waits for a state (D249). Only while the client holds every value of
+    // waits for a state. Only while the client holds every value of
     // its player, so what its mirror holds is the server's state.
     if (flushed == 0 && settings.input && peer.heardInput && playerMapped && playerPending == 0) {
         kFlush(true);

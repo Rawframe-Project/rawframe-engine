@@ -2,7 +2,7 @@
 // client can meet, timeouts, protocol violations closing the peer, and
 // datagrams kept to their lanes, and strikes against malformed ones; event
 // lanes carrying records in order, and every lane stream a peer may not
-// open closing it (D265).
+// open closing it.
 
 #include "rawframe/network/errors.h"
 #include "rawframe/network/session.h"
@@ -299,7 +299,7 @@ RAWFRAME_TEST(DatagramsBeforeAdmissionAreDropped) {
 }
 
 RAWFRAME_TEST(StrikesWithinTenSecondsCloseThePeer) {
-    // SPEC-0013's malformed and security strikes (D223): seven unreadable
+    // The malformed and security strikes: seven unreadable
     // datagrams are dropped, and the eighth within ten seconds ends the
     // connection; strikes further apart than that never add up.
     const auto kAdmitted = [](World& world) {
@@ -520,7 +520,7 @@ RAWFRAME_TEST(LaneStreamsAPeerMayNotOpenCloseIt) {
 }
 
 RAWFRAME_TEST(LanesThePeerDoesNotTakeEndTheConnection) {
-    // SPEC-0013's queued guaranteed events (D276): records the peer has not
+    // The queued guaranteed events: records the peer has not
     // received, at most 1,024 and 128 KiB, none older than two seconds.
     // Past any of them the connection ends as exhausted; nothing is dropped.
     const std::vector<network::EventLaneDeclaration> kLarge = {

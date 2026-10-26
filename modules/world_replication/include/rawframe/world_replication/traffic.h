@@ -1,8 +1,8 @@
 #pragma once
 
-// What a replication server has sent and taken so far (D807), for a tool
+// What a replication server has sent and taken so far, for a tool
 // to watch while a game plays: its totals and the connections it holds,
-// each counted alone too (D840), read on the Host thread between
+// each counted alone too, read on the Host thread between
 // iterations.
 
 #include "rawframe/composition/participant.h"
@@ -24,7 +24,7 @@ public:
     [[nodiscard]] virtual ServerReplicationStatistics totals() const noexcept = 0;
     /// Connections open now, connecting, admitted, or draining.
     [[nodiscard]] virtual std::size_t connections() const noexcept = 0;
-    /// Each admitted connection's replication so far (D840).
+    /// Each admitted connection's replication so far.
     [[nodiscard]] virtual std::vector<ConnectionTraffic> perConnection() const = 0;
 };
 

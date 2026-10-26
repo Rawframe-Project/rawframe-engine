@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of what a peer sends before and around admission
-// (D242): a datagram record, frames read one after another from a stream,
+// Coverage-guided fuzzing of what a peer sends before and around admission:
+// a datagram record, frames read one after another from a stream,
 // and the admission and close payloads. Each accepted payload must also
 // write back to bytes that read to the same payload, so a reader and its
 // writer cannot drift apart.

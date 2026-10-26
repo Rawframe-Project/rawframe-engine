@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0041's pinned checksum over a player's whole predicted scope (D203):
+// The pinned checksum over a player's whole predicted scope:
 // what a client hashes at a confirmed tick and a server at the same tick, so
 // a value a state never carried, because it had not changed, is compared
 // too. The algorithm's identity is in its domain tags; changing it is a new

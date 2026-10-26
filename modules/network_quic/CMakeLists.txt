@@ -1,4 +1,4 @@
-# The QUIC provider (SPEC-0010, ADR-0015): the provider contract over MsQuic
+# The QUIC provider: the provider contract over MsQuic
 # with TLS 1.3 from OpenSSL. Both are linked privately, so no header above
 # this module can include them.
 rawframe_module(NAME network_quic
@@ -7,7 +7,7 @@ rawframe_module(NAME network_quic
     DEPS network composition execution diagnostics result base
 )
 target_link_libraries(rawframe_network_quic PRIVATE msquic::msquic)
-# MsQuic's heap, counted where the linker routes its allocations (D234): a
+# MsQuic's heap, counted where the linker routes its allocations: a
 # program that links this module links through the counters. The counters
 # are asked for up front, so their object is taken from this archive even
 # when nothing else of it names them, before MsQuic's archive needs them.
@@ -24,8 +24,8 @@ if(TARGET rawframe_network_quic_tests)
     # them where they are.
     target_include_directories(rawframe_network_quic_tests PRIVATE src)
     # A browser's side, played by aioquic (python3-aioquic), under the
-    # Python this machine names (python3 is not a name on Windows, D237);
-    # an Android device has none (D561).
+    # Python this machine names (python3 is not a name on Windows);
+    # an Android device has none.
     if(NOT ANDROID)
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         # Forward slashes, which a C string reads as they are.

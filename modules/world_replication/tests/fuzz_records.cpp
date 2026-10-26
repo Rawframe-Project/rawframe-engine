@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of replication's records (D242): what a client
+// Coverage-guided fuzzing of replication's records: what a client
 // sends a server (input windows, state acknowledgements, checksums, the
 // perception it claims) and what a server sends a client (mappings, pace,
 // state). Every decoder here is exact, so a payload any of them accepts

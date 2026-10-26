@@ -1,4 +1,4 @@
-// A browser's HTTP/3 as the server reads it (D172): Huffman strings against
+// A browser's HTTP/3 as the server reads it: Huffman strings against
 // RFC 7541's examples, field sections an independent QPACK encoder wrote,
 // the session's opening, streams, datagrams, and ending, the refusals, and
 // hostile bytes on every kind of stream.

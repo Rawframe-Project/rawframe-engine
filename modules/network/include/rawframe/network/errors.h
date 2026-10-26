@@ -10,7 +10,7 @@ namespace rawframe::network {
 /// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kNetworkDomain{base::parseBits128Hex("58a3e358f82b5907969667a658f9a13f").value};
 
-/// Codes within kNetworkDomain (SPEC-0010 failure distinctions).
+/// Codes within kNetworkDomain.
 enum class NetworkError : std::uint32_t {
     /// The input ends inside a value. On a stream, more bytes may complete it.
     Truncated = 1,

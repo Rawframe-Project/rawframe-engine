@@ -1,12 +1,11 @@
 #pragma once
 
-// Logical connections and admission (SPEC-0010 provider lifecycle and
-// application admission) over any Provider. A client connects, opens the one
+// Logical connections and admission over any Provider. A client connects, opens the one
 // control stream, and says hello; the server checks exact compatibility and
 // its own admission rule and answers once. Nothing reaches the owner as
 // gameplay before a connection is admitted, and a peer that breaks the
 // protocol is closed, not trusted. Once admitted, guaranteed events travel
-// on declared event lanes (D265), each a one-way stream of its own.
+// on declared event lanes, each a one-way stream of its own.
 
 #include "rawframe/execution/time.h"
 #include "rawframe/network/admission.h"
@@ -23,8 +22,8 @@
 
 namespace rawframe::network {
 
-/// SPEC-0013's malformed and security strikes: the eighth within ten
-/// seconds ends an admitted connection as a protocol violation (D223).
+/// The malformed and security strikes: the eighth within ten
+/// seconds ends an admitted connection as a protocol violation.
 inline constexpr std::size_t kMaximumStrikes = 8;
 inline constexpr execution::MonotonicDuration kStrikeWindow = execution::MonotonicDuration::fromSeconds(10);
 
@@ -42,18 +41,18 @@ struct SessionProfile {
     execution::MonotonicDuration admissionTimeout;
 };
 
-/// SPEC-0013's hard ceilings on guaranteed events: lanes, and one record.
+/// The hard ceilings on guaranteed events: lanes, and one record.
 inline constexpr std::size_t kMaximumEventLanes = 16;
 inline constexpr std::size_t kMaximumEventRecord = std::size_t{64} * 1024;
-/// SPEC-0013's queued guaranteed events per connection: records sent that
-/// the peer has not yet received, their bytes, and how long one may wait
-/// (D276). Past any of them the lane cannot keep its promise, and the
+/// The queued guaranteed events per connection: records sent that
+/// the peer has not yet received, their bytes, and how long one may wait.
+/// Past any of them the lane cannot keep its promise, and the
 /// connection ends as exhausted: no promised event is dropped.
 inline constexpr std::size_t kMaximumQueuedEventRecords = 1024;
 inline constexpr std::size_t kMaximumQueuedEventBytes = std::size_t{128} * 1024;
 inline constexpr execution::MonotonicDuration kMaximumEventAge = execution::MonotonicDuration::fromSeconds(2);
 
-/// An event lane (SPEC-0010 guaranteed events): reliable and ordered within
+/// An event lane: reliable and ordered within
 /// itself, independent of every other lane. Both sides declare the same
 /// lanes, which exact compatibility guarantees; admission authorizes them
 /// under the connection's epoch, and a stream for any other is a protocol
@@ -136,7 +135,7 @@ struct ServerSettings {
     std::vector<EventLaneDeclaration> lanes;
     /// Seeds epochs and nonces, for tests and runs that must repeat. Without
     /// a seed they come from the secure source, which is what a peer on a
-    /// real network must meet (D27).
+    /// real network must meet.
     std::optional<std::uint64_t> seed;
 };
 
@@ -187,7 +186,7 @@ public:
     void close(ConnectionId connection) noexcept;
     /// As `close`, but what was sent last is given its chance to arrive: the
     /// connection is held, as a rejected one is, until the peer closes or
-    /// the admission timeout passes (D267).
+    /// the admission timeout passes.
     void closeAfterSending(ConnectionId connection) noexcept;
     /// A strike against an admitted peer whose payload the owner found
     /// malformed. The strike that makes kMaximumStrikes within

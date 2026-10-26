@@ -61,10 +61,6 @@ modules/material
 modules/mesh
 modules/mesh_import
 modules/navigation
-modules/network
-modules/network_loopback
-modules/network_quic
-modules/network_web
 modules/particles
 modules/particles_gpu
 modules/physics
@@ -93,7 +89,6 @@ modules/world_animation
 modules/world_audio
 modules/world_kest
 modules/world_localization
-modules/world_replication
 modules/world_runtime
 modules/world_tooling
 modules/world_ui

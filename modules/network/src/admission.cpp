@@ -70,8 +70,7 @@ result::Status finished(const Reader& reader) {
 
 } // namespace
 
-// Chosen again when a state's player flag came to mean its whole state
-// (D274).
+// Chosen again when a state's player flag came to mean its whole state.
 Fingerprint protocolFingerprint() noexcept {
     constexpr std::array<unsigned char, 32> kBytes = {0x35, 0x92, 0xe9, 0x61, 0xbd, 0x75, 0x54, 0xef, 0x07, 0x4f, 0xd8,
                                                       0xd1, 0x4e, 0x35, 0x86, 0x6b, 0x58, 0xcf, 0x72, 0x48, 0x8e, 0xe9,

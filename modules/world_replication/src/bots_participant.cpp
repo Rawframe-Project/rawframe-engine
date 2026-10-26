@@ -1,4 +1,4 @@
-// The bots participant (D202, D362, D363): headless clients that each
+// The bots participant: headless clients that each
 // connect a World of their own to a server, and the process's own local
 // players, played from its devices, shown and presented.
 
@@ -34,13 +34,13 @@ namespace {
 
 /// How far past the newest server tick a bot has heard of its newest
 /// sample's tick may be: a server slowed in the bot's own process plays its
-/// ticks late, and commands sampled further ahead wait past their age
-/// (D522, D532). Three ticks: D532's cap counted from the first tick heard,
+/// ticks late, and commands sampled further ahead wait past their age.
+/// Three ticks: the cap counted from the first tick heard,
 /// two past the admission's origin wherever measured, so its four samples
 /// were three ticks; counted from the origin, a first state heard late no
-/// longer holds a bot back by as much (D546).
+/// longer holds a bot back by as much.
 constexpr std::uint64_t kLeadOverHeard = 3;
-/// How far past the server's tick a late bot samples (D678): SPEC-0013's
+/// How far past the server's tick a late bot samples: the
 /// input age, 100 ms at 60 ticks a second, past which a command waiting for
 /// its tick is dropped as stale.
 constexpr std::uint64_t kLateLead = 6;
@@ -132,8 +132,8 @@ struct Bot {
     std::unique_ptr<InputSource> source;
     std::vector<std::byte> input;
     bool connecting = false;
-    /// Asked again after a refusal as unavailable (D379) or an end without
-    /// the server's word (D541, D757): how often since it was last
+    /// Asked again after a refusal as unavailable or an end without
+    /// the server's word: how often since it was last
     /// admitted, and not before when.
     std::uint64_t retries = 0;
     std::optional<execution::MonotonicInstant> retryAt;
@@ -142,13 +142,13 @@ struct Bot {
     /// A client ticks at the server's rate: input goes out once per tick due
     /// since admission, not once per Host iteration, and never more than one
     /// input window past the newest server tick it has heard of, so it does
-    /// not run ahead of a server slowed with it in one process (D522).
+    /// not run ahead of a server slowed with it in one process.
     std::optional<execution::MonotonicInstant> admittedAt;
     /// When the newest server tick it has heard of was read: this Host
-    /// iteration's ingress, before the frame between it and egress (D678).
+    /// iteration's ingress, before the frame between it and egress.
     execution::MonotonicInstant heardAt;
     /// Admitted on the connection it has now: one that ends without the
-    /// server's word after it was lost, and is asked again (D757).
+    /// server's word after it was lost, and is asked again.
     bool admitted = false;
     std::uint64_t submitted = 0;
     /// Rollback alarms already reported.
@@ -207,7 +207,7 @@ public:
         return localPlayers_;
     }
 
-    /// The first `count` clients the process's local players (D362).
+    /// The first `count` clients the process's local players.
     void showLocally(std::size_t count) noexcept {
         localPlayers_ = count;
     }
@@ -244,7 +244,7 @@ public:
         }
         // A game that predicts is played predicting unless told otherwise.
         const bool kPredicting = !plan_->predictedComponents().empty() && kPredict != "false";
-        // A checksum record every second at 60 Hz by default (D204); the
+        // A checksum record every second at 60 Hz by default; the
         // divergence drill exists in development builds only.
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kChecksumInterval,
                             configuration.unsignedInteger("bots.checksum_interval", 60));
@@ -321,7 +321,7 @@ public:
                 }
             }
             // The process's local players play from the lent devices, each
-            // from those paired to it (D363).
+            // from those paired to it.
             if (player && index < localPlayers_) {
                 player_ = true;
                 if (sources == nullptr) {
@@ -366,18 +366,18 @@ public:
         for (Bot& bot : bots_) {
             if (phase == composition::HostPhase::Ingress) {
                 // A server refuses as unavailable while it is not active or
-                // not healthy (D212) and admits again once it is: a bot
+                // not healthy and admits again once it is: a bot
                 // refused so asks again a while later, a bounded number of
-                // times (D379). So does one whose attempt ended unanswered,
+                // times. So does one whose attempt ended unanswered,
                 // past the admission's time: a Host held up longer than
                 // that, compiling its first frame's pipelines say, never
-                // asked again and was never admitted (D541).
+                // asked again and was never admitted.
                 if (const auto kRefusal = bot.client->rejection()) {
                     bot.refusal = kRefusal;
                 }
                 // Ended without the server's word: unanswered, or, once
                 // admitted, lost; a program its platform suspended past the
-                // connection's idle time comes back to one (D757). Asked
+                // connection's idle time comes back to one. Asked
                 // again, its World is mirrored from nothing in a new epoch.
                 const bool kWordless = bot.client->ended() && !bot.client->rejection().has_value() &&
                                        !bot.client->termination().has_value() && !bot.client->serverStopping();
@@ -420,7 +420,7 @@ public:
                     bot.client->pump();
                     bot.heardAt = clock_->now();
                     // Pathology, not rollback itself: a local diagnostic,
-                    // once for each second past the alarm (SPEC-0041).
+                    // once for each second past the alarm.
                     const std::uint64_t kAlarms = bot.client->predictionStatistics().rollbackAlarms;
                     if (kAlarms > bot.alarms) {
                         bot.alarms = kAlarms;
@@ -441,8 +441,7 @@ public:
                 const auto kElapsed = static_cast<std::uint64_t>((frame.now - *bot.admittedAt).nanoseconds);
                 const std::uint64_t kHeard = bot.client->serverTick();
                 // The server's tick now, as near as the client can say: the
-                // newest heard and the ticks played since it was read
-                // (D678).
+                // newest heard and the ticks played since it was read.
                 const auto kSinceHeard =
                     static_cast<std::uint64_t>(std::max<std::int64_t>((clock_->now() - bot.heardAt).nanoseconds, 0));
                 const std::uint64_t kServerNow =
@@ -460,12 +459,12 @@ public:
                 // A frame covering many ticks samples each, as many as one
                 // input window carries, and sends them in one window: a
                 // player drawn at a few frames a second keeps its input at
-                // the server's pace (D522). A bot further behind catches up
+                // the server's pace. A bot further behind catches up
                 // over the frames after.
                 bool sampled = false;
                 // Late: a frame longer than a command may wait (a loaded
                 // headset's), between its ingress and its egress, left its
-                // next command for a tick the server has played (D678); the
+                // next command for a tick the server has played; the
                 // server's pacing cannot bring it back, a window a frame.
                 // Those ticks are left out, as the server would drop them,
                 // and the frame samples from the server's next tick up to
@@ -484,8 +483,7 @@ public:
                     steer(bot, bot.submitted);
                     static_cast<void>(bot.client->sampleInput(bot.input));
                     sampled = true;
-                    // What the sample asked for with that input, after it
-                    // (D425).
+                    // What the sample asked for with that input, after it.
                     if (bot.source != nullptr) {
                         commands_.clear();
                         bot.source->takeCommands(commands_);
@@ -620,7 +618,7 @@ public:
                       diagnostics::field("retried", retried_),
                       // Input windows sent, one a frame however many ticks it
                       // samples, and samples left unlabelled to bring an early
-                      // client back (D317, D522).
+                      // client back.
                       diagnostics::field("inputWindowsSent", windowsSent),
                       diagnostics::field("samplesHeldBack", heldBack)});
     }
@@ -673,7 +671,7 @@ private:
     std::uint32_t checksumInterval_ = 60;
     std::uint32_t rollbackAlarm_ = 30;
     /// Refusals as unavailable each bot asks again after, how long after,
-    /// and the askings again of all (D379).
+    /// and the askings again of all.
     std::uint64_t retries_ = 10;
     execution::MonotonicDuration retryAfter_ = execution::MonotonicDuration::fromSeconds(1);
     std::uint64_t retried_ = 0;
@@ -701,9 +699,9 @@ result::Result<composition::ParticipantOwner> makeBots(composition::ParticipantC
         return missing("bots.player is true or false");
     }
     const bool kPlaying = kPlayer == "true";
-    // Split-screen (D362): how many of the first clients are local players,
+    // Split-screen: how many of the first clients are local players,
     // shown and presented; one unless told. With the process's player, they
-    // are all played from its devices (D363), and the bots come after them;
+    // are all played from its devices, and the bots come after them;
     // without, they are the first bots.
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kLocal, context.configuration().unsignedInteger("bots.local_players", 1));
     const std::uint64_t kClients = kCount + (kPlaying ? kLocal : 0);

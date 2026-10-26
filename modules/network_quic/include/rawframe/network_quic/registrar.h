@@ -17,13 +17,13 @@ namespace rawframe::network_quic {
 ///   network.quic.fingerprint_file   where to write the identity's
 ///                                   fingerprint, for clients to pin:
 ///                                   whole, on the first iteration, once
-///                                   whatever listens is listening (D395)
+///                                   whatever listens is listening
 ///   network.quic.pin                the server fingerprint a client accepts
 ///   network.quic.pin_file           the same, read from a file
 ///   network.quic.idle_timeout_ms    (10000)
 ///   network.quic.keep_alive_ms      (2000)
 ///   network.quic.webtransport       true: a server also accepts browsers
-///                                   over WebTransport (D172); a
+///                                   over WebTransport; a
 ///                                   self-signed identity then lives
 ///                                   13 days, as browsers require (false)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;

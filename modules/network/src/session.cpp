@@ -43,8 +43,7 @@ struct LaneStream {
     /// Incoming: its preface read. Outgoing: written.
     bool prefaced = false;
     std::vector<std::byte> buffer;
-    /// Outgoing: every byte written to it, and its records not yet received
-    /// (D276).
+    /// Outgoing: every byte written to it, and its records not yet received.
     std::uint64_t written = 0;
     std::deque<QueuedRecord> queued;
 };
@@ -66,7 +65,7 @@ struct Connection {
     std::array<execution::MonotonicInstant, kMaximumStrikes> strikes{};
     std::uint64_t struck = 0;
     /// Its event lanes could not keep their promise: it ends at the next
-    /// pump (D276).
+    /// pump.
     bool exhausted = false;
 };
 
@@ -129,7 +128,7 @@ public:
     /// Rejected and terminated connections, held open until the peer,
     /// having read why, closes, or until their deadline: a transport may
     /// drop what is still queued when this side closes, and a rejection
-    /// must arrive (SPEC-0010). To the owner they have already ended.
+    /// must arrive. To the owner they have already ended.
     std::map<std::uint64_t, execution::MonotonicInstant> rejected_;
     std::vector<Event> events_;
     std::vector<std::byte> scratch_;
@@ -584,7 +583,7 @@ public:
         return {records, bytes};
     }
 
-    /// Whether an event record has waited past SPEC-0013's age for its peer.
+    /// Whether an event record has waited past the age for its peer.
     bool overdue(ConnectionId connection, Connection& state, execution::MonotonicInstant now) {
         static_cast<void>(settle(connection, state));
         return std::ranges::any_of(state.outgoing, [now](const LaneStream& lane) {
@@ -764,7 +763,7 @@ result::Status Sessions::sendEvent(ConnectionId connection,
     RAWFRAME_TRY(recordWriter.varint(messageType));
     RAWFRAME_TRY(recordWriter.bytes(body));
     RAWFRAME_TRY(writeFrame(writer, kEventRecordFrame, record));
-    // SPEC-0013's queued events: one more than the peer can hold unread
+    // The queued events: one more than the peer can hold unread
     // ends the connection rather than wait or drop it.
     const auto [kRecords, kBytes] = core_->settle(connection, state);
     if (kRecords + 1 > kMaximumQueuedEventRecords || kBytes + writer.written().size() > kMaximumQueuedEventBytes) {

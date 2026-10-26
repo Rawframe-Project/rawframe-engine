@@ -159,8 +159,8 @@ RAWFRAME_TEST(EveryBoundIsKept) {
     RAWFRAME_EXPECT(kRefused.size() == 1 && kRefused[0].kind == EventKind::Closed &&
                     kRefused[0].reason == network::CloseReason::Refused);
 
-    // A listener refuses a connector speaking another application protocol
-    // (D408), and a profile names one.
+    // A listener refuses a connector speaking another application protocol,
+    // and a profile names one.
     network::ProviderProfile tooling = kProfile;
     tooling.application = network::kToolingApplication;
     auto toolingListener = *network.provider(tooling);

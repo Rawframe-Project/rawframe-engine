@@ -1,6 +1,6 @@
 #pragma once
 
-// Client prediction (SPEC-0041, ADR-0054): a client runs the game's
+// Client prediction: a client runs the game's
 // predicted systems over its own player from its own input, ahead of the
 // server, and compares what it predicted with the server's state for the same
 // input tick, bit for bit. Equal, the prediction is confirmed; unequal, the
@@ -26,8 +26,7 @@ struct NeighborValue {
     std::span<const std::byte> value;
 };
 
-/// A presentation effect a predicted system emitted in one step (SPEC-0041's
-/// effect declaration, D219): its kind, by its place among the game's effect
+/// A presentation effect a predicted system emitted in one step: its kind, by its place among the game's effect
 /// kinds; the stable identity of the system that emitted it; and its place
 /// among that system's emissions in the step.
 struct StepEffect {
@@ -36,7 +35,7 @@ struct StepEffect {
     std::uint32_t ordinal = 0;
 };
 
-/// SPEC-0041's effect identity: a step's effect at the input tick it was
+/// The effect identity: a step's effect at the input tick it was
 /// predicted for. An exact resimulation emits the same identities.
 struct PredictedEffect {
     std::uint64_t tick = 0;
@@ -83,7 +82,7 @@ public:
     [[nodiscard]] virtual result::Status set(schema::ComponentTypeId component, std::span<const std::byte> value) = 0;
     /// Tick `tick`: `input` into the input component, then every predicted
     /// system in schedule order, as the server runs that tick, numbered as
-    /// it numbers it (D685), so a system reading the tick reads the same.
+    /// it numbers it, so a system reading the tick reads the same.
     [[nodiscard]] virtual result::Status step(std::span<const std::byte> input, world::TickIndex tick) = 0;
     /// The server's tick rate, told on admission before any step: what a
     /// tick's length is, for systems that integrate over time.
@@ -114,15 +113,15 @@ struct PredictionSettings {
     std::uint32_t holdLast = 4;
     /// Components of the other entities the client mirrors that the
     /// predictor is given, as last heard, when prediction starts and before
-    /// every resimulation (D39): what the player's own entity may meet.
+    /// every resimulation: what the player's own entity may meet.
     /// Replicated components; none gives the predictor nothing else.
     std::vector<schema::ComponentTypeId> neighborhood;
-    /// SPEC-0041's checksum_interval: a checksum record of the whole
-    /// predicted scope every so many confirmed ticks (D204); nought sends
+    /// The checksum_interval: a checksum record of the whole
+    /// predicted scope every so many confirmed ticks; nought sends
     /// none.
     std::uint32_t checksumInterval = 60;
-    /// SPEC-0041's rollback_rate_alarm: rollbacks in one second of input
-    /// ticks past which the second is counted as pathological (D207).
+    /// The rollback_rate_alarm: rollbacks in one second of input
+    /// ticks past which the second is counted as pathological.
     /// Rollback itself is normal; this marks a client rolling back far more
     /// than predicting.
     std::uint32_t rollbackAlarm = 30;
@@ -131,21 +130,20 @@ struct PredictionSettings {
     /// being predicted.
     EffectSink* effects = nullptr;
     std::vector<EffectClass> effectClasses;
-    /// SPEC-0041's effect_ledger_max: effect identities remembered, the
-    /// oldest forgotten past it (D219). At least the prediction window's.
+    /// The effect_ledger_max: effect identities remembered, the
+    /// oldest forgotten past it. At least the prediction window's.
     std::size_t effectLedger = 1024;
-    /// SPEC-0041's divergence drill, for development builds only: one bit of
+    /// The divergence drill, for development builds only: one bit of
     /// every state hashed is flipped, so the server must find each record
     /// diverged.
     bool divergenceDrill = false;
-    /// SPEC-0041's development capture (D275): the latest checksum records
+    /// The development capture: the latest checksum records
     /// are kept with what they hashed, to be set beside the server's side
     /// of a divergence. Never in a shipping build.
     bool captureChecksums = false;
 };
 
-/// A checksum record as the client made it, kept for a development capture
-/// (D275).
+/// A checksum record as the client made it, kept for a development capture.
 struct ChecksumCapture {
     std::uint64_t tick = 0;
     std::uint64_t checksum = 0;
@@ -173,7 +171,7 @@ struct PredictionStatistics {
     std::uint64_t rollbackAlarms = 0;
     /// Effects delivered, emitted again by a resimulation and so not,
     /// cancelled, and held for confirmation then dropped unconfirmed or
-    /// forgotten past the ledger's bound (D219).
+    /// forgotten past the ledger's bound.
     std::uint64_t effectsDelivered = 0;
     std::uint64_t effectsSuppressed = 0;
     std::uint64_t effectsCancelled = 0;
