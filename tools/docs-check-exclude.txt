@@ -38,7 +38,6 @@ modules/authoring
 modules/authoring_session
 modules/kest
 modules/kest_library
-modules/render_scene
 modules/studio
 modules/world_kest
 templates
