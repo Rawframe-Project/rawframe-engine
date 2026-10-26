@@ -118,11 +118,14 @@ format() {
 build_and_test() {
     local preset=$1 select=$2 labels=$3 run_jobs=$4
     step "$preset"
-    if ! cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; then
+    # Configure builds the vendored dependencies when their cache misses,
+    # with JOBS jobs: this tree's share, so trees configured at once stay
+    # within the check's jobs together.
+    if ! JOBS="$run_jobs" cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; then
         # A tree whose cache no longer fits its preset (a compiler moved) is
         # made again from nothing, once.
         rm -rf "out/$preset"
-        if ! cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; then
+        if ! JOBS="$run_jobs" cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; then
             tail -20 "out/$preset.configure.log"
             fail "$preset configure"
             return
