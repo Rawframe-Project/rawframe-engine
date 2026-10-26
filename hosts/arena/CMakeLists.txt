@@ -4,8 +4,8 @@ rawframe_host(NAME arena OUTPUT rawframe-arena
     SOURCES src/main.cpp
     DEPS host game_content input_kest world_audio world_localization network_loopback render_canvas world_ui render_scene physics2d physics3d world_animation world_replication world_kest world_runtime composition diagnostics result base
 )
-# Where Maul RHI is built, the arena can draw a client's canvas (D279) and
-# scene (D284) offscreen on the one device; elsewhere it counts draws
+# Where Maul RHI is built, the arena can draw a client's canvas and
+# scene offscreen on the one device; elsewhere it counts draws
 # without one.
 set(RAWFRAME_ARENA_DRAWS OFF)
 if(TARGET rawframe_render_canvas_gpu)
@@ -13,7 +13,7 @@ if(TARGET rawframe_render_canvas_gpu)
     target_link_libraries(rawframe_host_arena PRIVATE rawframe::render rawframe::render_canvas_gpu rawframe::render_scene_gpu)
 endif()
 # Where OpenXR is built, the arena's client can show its picture on a
-# headset (D593).
+# headset.
 set(RAWFRAME_ARENA_HEADSET OFF)
 if(TARGET rawframe_xr)
     set(RAWFRAME_ARENA_HEADSET ON)
@@ -62,24 +62,24 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(crates_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":27,\"bodiesRemoved\":0,\"bodiesRefused\":0")
-    # Eight bots sail Gale (D681): a ship for each, floated and pushed by the
+    # Eight bots sail Gale: a ship for each, floated and pushed by the
     # sea every tick, and each bot's helm made by the game's sample; their
-    # guns fire balls, made and gone again (D683); a ship foundered and
-    # launched again is put back in the row, a teleport (D685).
+    # guns fire balls, made and gone again; a ship foundered and
+    # launched again is put back in the row, a teleport.
     add_test(NAME gale_bots
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/gale.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(gale_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8,[^\n]*\"sourceFailures\":0,.*\"bodiesMade\":(9|[1-9][0-9]+),\"bodiesRemoved\":[1-9][0-9]*,\"bodiesRefused\":0,\"teleports\":[0-9]+,\"velocitiesSet\":0,\"impulses\":[1-9][0-9][0-9][0-9]+,")
-    # Eight bots dig and build on Quarry (D735): its land, some seven
+    # Eight bots dig and build on Quarry: its land, some seven
     # thousand blocks, made from the World's seed and sent whole to every
-    # bot, past the 4,096 entities a connection holds by default (D742).
+    # bot, past the 4,096 entities a connection holds by default.
     add_test(NAME quarry_bots
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/quarry.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(quarry_bots PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8,[^\n]*\"sourceFailures\":0,\"mirroredEntities\":[4-9][0-9][0-9][0-9][0-9],.*\"code\":\"tick_summary\"[^\n]*\"entities\":[5-9][0-9][0-9][0-9]}")
-    # Quarry keeps its land between runs (D738): bots change it, the arena
+    # Quarry keeps its land between runs: bots change it, the arena
     # saves it, and a server of another seed loads it and keeps it as it
     # was.
     add_test(NAME quarry_saved
@@ -87,7 +87,7 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server>
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(quarry_saved PROPERTIES PROCESSORS 2 PASS_REGULAR_EXPRESSION "land kept across runs")
-    # Quarry modded (D740): quarry-canyon gives the land its ground through
+    # Quarry modded: quarry-canyon gives the land its ground through
     # quarry's ground service, composed with the game and played by a
     # server from the same seed as the plain composition.
     add_test(NAME quarry_with_mod
@@ -96,14 +96,14 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_build_tool> ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/quarry_with_mod)
     set_tests_properties(quarry_with_mod PROPERTIES PASS_REGULAR_EXPRESSION "mod shaped the land: [0-9]+ to [0-9]+ entities")
     # Stalls' sources cooked into the build tree: its customers' figure,
-    # which every run plays from them (D512), and its font and text, read
-    # by the drawn run (D389).
+    # which every run plays from them, and its font and text, read
+    # by the drawn run.
     set(TYCOON_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/tycoon_content)
-    # Eight bots play Stalls (D388): each joins as an owner and builds stalls,
+    # Eight bots play Stalls: each joins as an owner and builds stalls,
     # each a static body of the lot beside its ground; customers come and
-    # are served (D392), their bodies moved by velocity, never put, along the
-    # ways the server's navmesh gives, baked again as stalls go up (D400),
-    # steered round each other (D411).
+    # are served, their bodies moved by velocity, never put, along the
+    # ways the server's navmesh gives, baked again as stalls go up,
+    # steered round each other.
     configure_file(tests/tycoon.conf.in ${CMAKE_CURRENT_BINARY_DIR}/tycoon.conf @ONLY)
     add_test(NAME tycoon_bots
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/tycoon.conf
@@ -119,7 +119,7 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "failed 0")
     # The prediction runs count ticks confirmed in wall time, so each holds
     # six of ctest's processors: a machine running every preset at once
-    # starved them into too few confirmations (D83).
+    # starved them into too few confirmations.
     # One bot predicts its ball: hundreds of ticks confirmed, the few
     # rollbacks those of admission.
     add_test(NAME crates_prediction
@@ -208,15 +208,15 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "${rawframe_runners_coverage}\"text_catalog\".*\"tables\":1,\"translations\":1,\"keys\":5,\"stale\":0,\"locale\":\"tr-TR\",\"default\":\"en\"")
     # Eight bots play runners and the first one's World is heard: its shots
     # and the others' within range sound, its own jumps sound as predicted
-    # effects (D220), it winces when hit through its client's own emitter
-    # (D272), and the recording is not silent.
+    # effects, it winces when hit through its client's own emitter,
+    # and the recording is not silent.
     set(RECORD ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.wav)
     configure_file(tests/runners_heard.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.conf @ONLY)
     add_test(NAME runners_heard
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/runners_heard.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     # What it hears is counted in wall time, as the prediction runs' ticks
-    # are, so it holds six processors as they do (D83): starved under a full
+    # are, so it holds six processors as they do: starved under a full
     # check, its first bot heard three shots and was never hit.
     set_tests_properties(runners_heard PROPERTIES
                          FIXTURES_REQUIRED runners_content
@@ -224,11 +224,11 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION
                          "\"written\":true,\"frames\":[0-9]+,\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9][0-9]*,\"emitterCues\":\"[1-9][0-9]* [1-9][0-9]* 0\",\"effects\":[1-9][^\n]*\"continuous\":[1-9]")
     # Four bots play runners and the first one's canvas is drawn offscreen
-    # on the one device (D279): frames are drawn with their sprites, the
-    # runners' trails and their shots' sparks (D357), each local player's
-    # HUD over its view (D376) with its target image (D378) and shadow
-    # (D381) and its score in words in the game's font (D386), drawn
-    # (D398) from distance fields at its size (D667), and a frame read back
+    # on the one device: frames are drawn with their sprites, the
+    # runners' trails and their shots' sparks, each local player's
+    # HUD over its view with its target image and shadow
+    # and its score in words in the game's font, drawn
+    # from distance fields at its size, and a frame read back
     # shows them. Only where Maul RHI is
     # built; a machine without an adapter skips unless the check requires
     # one.
@@ -245,7 +245,7 @@ if(RAWFRAME_BUILD_TESTS)
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":0,\"boxes\":[1-9][0-9]+,\"images\":[1-9][0-9]+,[^\n]*\"shadows\":[1-9][0-9]+,\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0,\"fieldRuns\":[1-9][0-9]*,.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,\"mostNodes\":20,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"draws\":[1-9][0-9]+,[^\n]*\"emittersDrawn\":[1-9][0-9]*,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]*,\"ribbonsDrawn\":[1-9][0-9]*,\"playerFrames\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,\"coveredPixels\":[1-9][0-9]*,[^\n]*\"captured\":true")
     endif()
-    # A picture too large to read back is drawn without (D534): frames are
+    # A picture too large to read back is drawn without: frames are
     # made past the first asked to be read back.
     if(RAWFRAME_ARENA_DRAWS)
         configure_file(tests/runners_large.conf.in ${CMAKE_CURRENT_BINARY_DIR}/runners_large.conf @ONLY)
@@ -260,7 +260,7 @@ if(RAWFRAME_BUILD_TESTS)
                              "\"code\":\"frame_summary\"[^\n]*\"width\":3840,\"height\":2160,\"frames\":([4-9]|[1-9][0-9]+),[^\n]*\"readBacks\":0,[^\n]*\"readBacksTooLarge\":([2-9]|[1-9][0-9]+)"
                              FAIL_REGULAR_EXPRESSION "\"code\":\"frame_failed\"")
     endif()
-    # Runners' 16:9 view drawn into a 4:3 picture is letterboxed (D369): the
+    # Runners' 16:9 view drawn into a 4:3 picture is letterboxed: the
     # captured picture's bars are the game's slate and its view is not.
     if(RAWFRAME_ARENA_DRAWS)
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/runners_boxed.tga)
@@ -290,7 +290,7 @@ if(RAWFRAME_BUILD_TESTS)
     # squeezed beside the check's heaviest tests, its World fell behind
     # and the host stopped overloaded.
     # Gale's rock recooked rougher as it plays: its scene reads the game's
-    # materials again (D734).
+    # materials again.
     add_test(NAME gale_recooked
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/gale_recooked.sh $<TARGET_FILE:rawframe_host_arena>
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
@@ -307,10 +307,10 @@ if(RAWFRAME_BUILD_TESTS)
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"peak\":(0\\.[1-9]|[1-9])[^,]*,\"cues\":[1-9]")
     # Four bots predict their runners: a thousand ticks confirmed, fewer
-    # rollbacks than that, their own jumps heard as predicted effects
-    # (D219), and no checksum diverged (D274). Alone it rolls back only on
+    # rollbacks than that, their own jumps heard as predicted effects,
+    # and no checksum diverged. Alone it rolls back only on
     # admission; a loaded machine, whose inputs reach the server late, more
-    # than a hundred times, as plaza's does (D511, D574).
+    # than a hundred times, as plaza's does.
     add_test(NAME runners_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -328,7 +328,7 @@ if(RAWFRAME_BUILD_TESTS)
     if(NOT RAWFRAME_SHIPPING)
         # Every record sent is found diverged, none is taken for verified,
         # and the players stay; both sides' captures of a diverged record
-        # differ in the drill's one bit (D275).
+        # differ in the drill's one bit.
         add_test(NAME runners_divergence_drill
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_divergence_drill.sh $<TARGET_FILE:rawframe_host_arena>
                          ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/runners_divergence_drill)
@@ -347,7 +347,7 @@ if(RAWFRAME_BUILD_TESTS)
     configure_file(tests/plaza.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza.conf @ONLY)
     # A dedicated server of the plaza reading this content, for every test
     # that runs one: the client's, Studio's, the author tool's, and the
-    # debug adapter's, on every machine, Xvfb or not (D501).
+    # debug adapter's, on every machine, Xvfb or not.
     configure_file(tests/plaza_server.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_server.conf @ONLY)
     configure_file(tests/plaza_prediction.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_prediction.conf @ONLY)
     # Sixteen bots play the sample 3D game: fourteen bodies of the plaza, its
@@ -357,7 +357,7 @@ if(RAWFRAME_BUILD_TESTS)
     # bone by kinematic targets, never teleported. Eight strollers walk by
     # root motion through their blend space, their heads turned by a stage
     # the server runs; a client's presented World plays those nine and
-    # each walker's figure, twenty-five (D513).
+    # each walker's figure, twenty-five.
     add_test(NAME plaza_bots
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
@@ -365,13 +365,13 @@ if(RAWFRAME_BUILD_TESTS)
                          FIXTURES_REQUIRED plaza_content
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":33,\"bodiesRemoved\":0,\"bodiesRefused\":0,\"teleports\":0,.*\"targets\":[1-9][0-9]*,\"characterMoves\":[1-9][0-9]*,\"jointsMade\":1,\"jointsRemoved\":0,\"jointsRefused\":0.*\"instancesMade\":25,\"instancesRemoved\":0,\"animatorsRefused\":0,.*\"rootMotions\":[1-9][0-9]*,\"stagesRun\":[1-9][0-9]*")
     # Two bots play the sample 3D game while the first one's mirrored World
-    # is seen in 3D (D283): its client dresses every body it mirrors by its
+    # is seen in 3D: its client dresses every body it mirrors by its
     # shape, the mound as the game's own mesh (the strollers' figure the
-    # third, D508, the walkers' too, lowered, D514), and sees them through its
+    # third, the walkers' too, lowered), and sees them through its
     # walker's camera; every model is drawn or culled, none malformed or of
-    # a mesh unknown; the strollers' lanterns light the frames (D290);
+    # a mesh unknown; the strollers' lanterns light the frames;
     # the monitor's lens is seen into its render texture on demand, its
-    # picture kept between (D361); and no record
+    # picture kept between; and no record
     # loses fields past the 32 a record carries.
     configure_file(tests/plaza_seen.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen.conf @ONLY)
     add_test(NAME plaza_seen
@@ -381,7 +381,7 @@ if(RAWFRAME_BUILD_TESTS)
                          FIXTURES_REQUIRED plaza_content
                          FAIL_REGULAR_EXPRESSION "\"truncated\""
                          PASS_REGULAR_EXPRESSION "\"frames\":[1-9][0-9]+,\"framesViewed\":[1-9][0-9]+,\"viewWidth\":1280,\"viewHeight\":720,\"modelsDrawn\":[1-9][0-9]+,\"culled\":[1-9][0-9]*,\"hidden\":[0-9]+,\"malformed\":0,\"unknownMeshes\":0,\"overLimit\":0,\"mostDraws\":[1-9][0-9]*,\"gameMeshes\":3,\"gameMaterials\":7,\"unknownMaterials\":0,\"materialTextures\":2,\"texturesReady\":2,\"pictures\":2,\"picturesReady\":2,\"lightsLit\":[1-9][0-9]*,\"lightsCulled\":[0-9]+,\"lightsOverLimit\":0,\"clusterOverflow\":0.*\"code\":\"scene_views_summary\"[^\n]*\"drawn\":[1-9][0-9]*,\"kept\":[1-9][0-9]+,\"missed\":[0-9]+,\"leftOut\":0,\"refused\":0")
-    # At the low quality (D318), the paving samples no texture: the planks
+    # At the low quality, the paving samples no texture: the planks
     # are the one texture read.
     configure_file(tests/plaza_seen_low.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_seen_low.conf @ONLY)
     add_test(NAME plaza_seen_low
@@ -391,13 +391,13 @@ if(RAWFRAME_BUILD_TESTS)
                          FIXTURES_REQUIRED plaza_content
                          PASS_REGULAR_EXPRESSION "\"gameMaterials\":7,\"unknownMaterials\":0,\"materialTextures\":1,\"texturesReady\":1,\"pictures\":2,")
     if(RAWFRAME_ARENA_DRAWS)
-        # The plaza drawn on the one device offscreen (D284): frames drawn,
+        # The plaza drawn on the one device offscreen: frames drawn,
         # its models in instanced calls, its meshes uploaded once each, its
-        # ambient occlusion found (D327), the monitor's lens drawn into its
-        # render texture (D361), and a picture read back lit in many shades;
-        # the bots wander, so the last may be a camera against the ramp
-        # (D433a); and the strollers' figures skinned as their animators
-        # pose them (D508).
+        # ambient occlusion found, the monitor's lens drawn into its
+        # render texture, and a picture read back lit in many shades;
+        # the bots wander, so the last may be a camera against the ramp;
+        # and the strollers' figures skinned as their animators
+        # pose them.
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.tga)
         configure_file(tests/plaza_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_drawn.conf @ONLY)
         add_test(NAME plaza_drawn
@@ -419,13 +419,13 @@ if(RAWFRAME_BUILD_TESTS)
         if(RAWFRAME_ARENA_HEADSET)
             # Drawn flat where no runtime answers: any frame shows it, however
             # few a loaded machine draws (nine in a check rebuilding every
-            # tree, D617).
+            # tree).
             add_test(NAME plaza_headset_absent
                      COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
                              $<TARGET_FILE:rawframe_host_arena> ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset_absent.conf
                      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-            # A runtime named by the environment is ignored and said to be
-            # (D654); the one the configuration names does not exist.
+            # A runtime named by the environment is ignored and said to be;
+            # the one the configuration names does not exist.
             set_tests_properties(plaza_headset_absent PROPERTIES
                                  FIXTURES_REQUIRED plaza_content
                                  ENVIRONMENT "XR_RUNTIME_JSON=${CMAKE_CURRENT_BINARY_DIR}/elsewhere.json"
@@ -433,9 +433,9 @@ if(RAWFRAME_BUILD_TESTS)
                                  PASS_REGULAR_EXPRESSION
                                  "\"code\":\"xr_overrides_ignored\"[^\n]*\"variables\":\"XR_RUNTIME_JSON\".*\"code\":\"xr_unavailable\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,.*\"code\":\"frame_summary\"[^\n]*\"width\":320,\"height\":180,[^\n]*\"headsetFrames\":0")
         endif()
-        # A view too large for its device drawn at a falling render scale
-        # (D533): the scale changes to one lower than the whole, and the run
-        # stops once it has (D564).
+        # A view too large for its device drawn at a falling render scale:
+        # the scale changes to one lower than the whole, and the run
+        # stops once it has.
         configure_file(tests/plaza_scaled.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_scaled.conf @ONLY)
         add_test(NAME plaza_scaled
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh
@@ -448,9 +448,9 @@ if(RAWFRAME_BUILD_TESTS)
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"render_scale_changed\"[^\n]*\"from\":100,\"to\":([2-9][05]),"
                              FAIL_REGULAR_EXPRESSION "\"code\":\"frame_failed\"")
-        # Two bots play Stalls while the first one's view is drawn (D389): the
+        # Two bots play Stalls while the first one's view is drawn: the
         # lot, the stalls, and its cursor as models seen from above, its
-        # coins' words given in the game's font and drawn (D398), and a picture
+        # coins' words given in the game's font and drawn, and a picture
         # read back.
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/tycoon_drawn.tga)
         configure_file(tests/tycoon_drawn.conf.in ${CMAKE_CURRENT_BINARY_DIR}/tycoon_drawn.conf @ONLY)
@@ -463,18 +463,17 @@ if(RAWFRAME_BUILD_TESTS)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,.*\"code\":\"ui_drawing_summary\"[^\n]*\"glyphRuns\":[1-9][0-9]+,\"glyphs\":[1-9][0-9]+,\"glyphRunsWaiting\":0.*\"code\":\"ui_summary\"[^\n]*\"leftOut\":0,[^\n]*\"fontsRead\":1,\"texts\":[1-9][0-9]*,\"textsUnknown\":0,\"glyphRuns\":[1-9][0-9]*,\"glyphsLeftOut\":0,.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9]+,\"captured\":true")
-        # Both bots' scenes drawn split-screen (D362): each local player's
+        # Both bots' scenes drawn split-screen: each local player's
         # view drawn into its half, and the picture read back in many
         # shades. The second's frames are not required: under a loaded full
-        # check its bot may not see its World in the run (D365); the views'
+        # check its bot may not see its World in the run; the views'
         # placement is the GPU tests'.
         set(CAPTURE ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.tga)
         configure_file(tests/plaza_split.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_split.conf @ONLY)
-        # The Lighting Test (D749), the constitution's lighting fixture:
+        # The Lighting Test, the constitution's lighting fixture:
         # cooked, drawn offscreen, and its last frame read for each lamp's
         # light: the red, green, and blue points, the spot, and the glow;
-        # its view occluding, blooming, reflecting, and shading contacts
-        # (D756).
+        # its view occluding, blooming, reflecting, and shading contacts.
         set(LIGHTING_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/lighting_content)
         add_test(NAME lighting_cooked
                  COMMAND rawframe_host_cook_tool ${PROJECT_SOURCE_DIR}/games/lighting ${LIGHTING_CONTENT}
@@ -519,10 +518,10 @@ if(RAWFRAME_BUILD_TESTS)
                          RUN_SERIAL TRUE
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9]?[0-9],"
                          FAIL_REGULAR_EXPRESSION "\"checksumsDiverged\":[1-9]")
-    # The ledges level cooked into the build tree (D859): sixteen bots play
+    # The ledges level cooked into the build tree: sixteen bots play
     # on its tiles, one static body of the level's solid runs, among twelve
-    # crates its scatter strews (D864) and a lift riding a closed spline
-    # (D868), and one bot predicts its ball among the same tiles, read by
+    # crates its scatter strews and a lift riding a closed spline,
+    # and one bot predicts its ball among the same tiles, read by
     # its client: mispredicting where it meets the crates the server moves,
     # as plaza's walkers do, and never diverging.
     set(LEDGES_CONTENT ${CMAKE_CURRENT_BINARY_DIR}/ledges_content)

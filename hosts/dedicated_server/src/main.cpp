@@ -1,4 +1,4 @@
-// The dedicated server process entry (ADR-0017): one Host whose composition
+// The dedicated server process entry: one Host whose composition
 // is the server closure. It owns no engine semantics.
 //
 //   rawframe-server [--config <file>]
@@ -22,7 +22,7 @@ namespace {
 
 // The server closure: QUIC, the World, a Kest game, 2D and 3D physics, the
 // simulation's animation, replication, the World's saves, and the tooling
-// endpoint a configuration may select (D408).
+// endpoint a configuration may select.
 constexpr std::array<rawframe::composition::RegistrarEntry, 10> kRegistrars = {
     rawframe::composition::RegistrarEntry{
         "game_content", &rawframe::game_content::registerParticipants, rawframe::game_content::kScopes},

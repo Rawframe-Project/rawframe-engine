@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quarry modded (D740): quarry and quarry-canyon cooked, packed, installed
+# Quarry modded: quarry and quarry-canyon cooked, packed, installed
 # into one library, and composed twice, plain and with the mod; a dedicated
 # server plays each from the same seed with no player, so nothing changes
 # the land but its making. With the canyon providing quarry's ground

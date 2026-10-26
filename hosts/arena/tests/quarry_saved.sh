@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quarry keeps its land between runs (D738, ADR-0057): four bots dig and
+# Quarry keeps its land between runs: four bots dig and
 # build on a land drawn from one seed for five seconds, and the arena saves
 # it as it stops; a dedicated server with another seed loads that save and
 # makes no land of its own, so the land it keeps when it stops is the very
@@ -30,8 +30,7 @@ bots.endpoint = arena
 save.directory = $work/saves
 save.namespace = 71756172727900000000000000000001
 world.overload_ms = 0
-# Saves kept as it stops are synced to a disk a loaded machine shares
-# (D810).
+# Saves kept as it stops are synced to a disk a loaded machine shares.
 host.shutdown_budget_ms = 30000
 CONF
 cat >"$work/server.conf" <<CONF
@@ -43,13 +42,12 @@ kest.game = $here/games/quarry/quarry.game
 save.directory = $work/saves
 save.namespace = 71756172727900000000000000000001
 world.overload_ms = 0
-# Saves kept as it stops are synced to a disk a loaded machine shares
-# (D810).
+# Saves kept as it stops are synced to a disk a loaded machine shares.
 host.shutdown_budget_ms = 30000
 CONF
 
 # A record a run's log must hold, or which it lacked and the log's end:
-# a run starved on a loaded machine says where it stopped (D775).
+# a run starved on a loaded machine says where it stopped.
 need() {
     grep -q "\"code\":\"$1\"" "$2" && return
     echo "never saw $1 in $(basename "$2")"

@@ -1,5 +1,5 @@
 # Two bots play the sample 3D game while the first one's scene is drawn on
-# a headset (D593): a runtime's headset makes the one device, and each
+# a headset: a runtime's headset makes the one device, and each
 # frame's picture is placed into its views' images and submitted. Run
 # under tools/xr_run.sh, a headless Monado of the test's own; run with no
 # runtime, the game is played flat, drawn offscreen. A software rasterizer
@@ -21,7 +21,6 @@ scene.shadow_side = 256
 render.read_every = 8
 xr.headset = true
 @RAWFRAME_TEST_XR_RUNTIME@
-# What is checked is what is drawn, not how fast a loaded machine ticks
-# (D212, D516).
+# What is checked is what is drawn, not how fast a loaded machine ticks.
 world.degraded_ms = 600000
 world.overload_ms = 0

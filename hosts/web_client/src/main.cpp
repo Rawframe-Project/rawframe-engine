@@ -1,4 +1,4 @@
-// The web client entry (ADR-0084, D169): a WebAssembly reactor whose
+// The web client entry: a WebAssembly reactor whose
 // exports a page's JavaScript calls. The page hands over the files it
 // fetched and the configuration, starts one Host, drives it from its own
 // event loop one frame at a time, and stops it. Nothing here blocks, sleeps,
@@ -16,11 +16,11 @@
 //   rawframe_client_destroy(client)
 //   rawframe_allocate(size) -> memory the page writes into; rawframe_release
 //
-// Or the page lets a canvas run the client (D250): `play` instead of
+// Or the page lets a canvas run the client: `play` instead of
 // `start` makes a window of a canvas and plays the player from its input,
 // and the window system's frames, not the page's, drive the Host; with
-// `render.device`, the game (its scene and its canvas, D286) is drawn in
-// the page's canvas through the browser's WebGPU (D282):
+// `render.device`, the game (its scene and its canvas) is drawn in
+// the page's canvas through the browser's WebGPU:
 //
 //   rawframe_client_play(client, configuration, length) -> 0 or an exit code
 //   rawframe_client_ended(client) -> -1 while it plays, then its exit code
@@ -72,8 +72,7 @@ using namespace rawframe;
 // A client playing a game from its content or held sources: the World, a
 // Kest game, 2D and 3D physics, the simulation's animation, replication
 // over the page's WebTransport with the game's input sources, its sound,
-// which the page takes and plays (D259), and its words, which its UI shows
-// (D398).
+// which the page takes and plays, and its words, which its UI shows.
 constexpr std::array<composition::RegistrarEntry, 17> kRegistrars = {
     composition::RegistrarEntry{"game_content", &game_content::registerParticipants, game_content::kScopes},
     composition::RegistrarEntry{"input_kest", &input_kest::registerParticipants, input_kest::kScopes},
@@ -101,7 +100,7 @@ constexpr std::array<composition::RegistrarEntry, 17> kRegistrars = {
 // is not replayed in one frame.
 constexpr int kMostIterationsPerFrame = 4;
 
-/// The page's sound (D259): the frames the world audio player renders each
+/// The page's sound: the frames the world audio player renders each
 /// frame, held until the page takes them for the browser's own audio
 /// thread. Half a second of room: a page that stops taking loses sound, not
 /// memory.

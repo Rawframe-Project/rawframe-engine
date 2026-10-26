@@ -2,7 +2,7 @@
 # An author brings plaza's crate with a sidecar that maps none of its
 # subassets: the cook refuses it by the keys to map, `--map` gives each a
 # new identity and writes the sidecar, the cook then passes, and a second
-# map finds nothing to give (D316).
+# map finds nothing to give.
 #
 # usage: map_subassets.sh <rawframe-cook> <repository> <work directory>
 set -euo pipefail

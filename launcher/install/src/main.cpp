@@ -1,4 +1,4 @@
-// The install tool (SPEC-0038): a launcher's installing and updating as a
+// The install tool: a launcher's installing and updating as a
 // process, over rawframe.install. It updates a library to a Composition from
 // an origin, rolls it back, heals it, collects what it no longer needs, and
 // says what is installed. Never part of a client or a server.
@@ -10,14 +10,14 @@
 //   rawframe-install collect <library>
 //   rawframe-install status <library>
 //
-// `follow` checks a subject's channel on the origin (SPEC-0020, D424): its
+// `follow` checks a subject's channel on the origin: its
 // pointer and the Release it names, each verified against the key set the
 // library pins for the subject's publisher, the pointer past the one the
 // library last followed, then updates to the Release's Composition. The
-// pointer it last followed is `current`, and nothing changes (D434).
+// pointer it last followed is `current`, and nothing changes.
 //
 // An origin is a mirror laid out as a library: a directory, or an http or
-// https URL (D414), whose certificate is verified against the system's
+// https URL, whose certificate is verified against the system's
 // authorities, or those of `--authorities <PEM file>` given last. `update`
 // and `heal` print
 // what they fetched; `status` prints the active Composition and those

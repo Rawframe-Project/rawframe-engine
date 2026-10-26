@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The web client against its download and start budget (ADR-0084, D175):
+# The web client against its download and start budget:
 # the shipping client module stripped, then compressed as a server would
 # send it (gzip -9 and brotli -q 11), and what tools/web_load.mjs measures
 # of it under V8: compiling, instantiating, and starting a game, and a
@@ -17,7 +17,7 @@
 #                               out/web-budget, so a later measurement of the
 #                               same module reads its size rather than
 #                               spending brotli's slowest setting again: the
-#                               full check squeezes beside its trees (D618)
+#                               full check squeezes beside its trees
 #
 # Needs out/wasm-shipping built; the full check builds it first.
 set -euo pipefail
@@ -44,7 +44,7 @@ fi
 stripped=$(stat -c %s "$work/client.wasm")
 gzipped=$(gzip -9 -c "$work/client.wasm" | wc -c)
 # Brotli's slowest setting, on one processor, while the module is loaded
-# and timed beside it (D526); none when the same module was squeezed ahead.
+# and timed beside it; none when the same module was squeezed ahead.
 if [ -f "$ahead/client.wasm.br" ] && cmp -s "$work/client.wasm" "$ahead/client.wasm"; then
     cp "$ahead/client.wasm.br" "$work/client.wasm.br"
     squeezing=""

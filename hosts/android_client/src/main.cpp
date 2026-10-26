@@ -1,4 +1,4 @@
-// The Android client (ADR-0084's first mobile target, D551): the client as
+// The Android client: the client as
 // the shared library a Maul Window activity starts. On Android the platform
 // starts a program, not a `main`: the activity asks the window module for
 // one when it is created, and the window module asks this library
@@ -7,10 +7,10 @@
 //
 // Its files are the app's own: the configuration is `client.conf` in the
 // app's files directory (`/data/data/<package>/files`), whose relative paths
-// are under it (D188), and the run's NDJSON diagnostics go to `client.log`
+// are under it, and the run's NDJSON diagnostics go to `client.log`
 // beside it, since an app has no standard output anyone reads. The
 // player's settings are kept there too, in `settings.json`, unless the
-// configuration keeps them elsewhere (D626). Nothing is read from the
+// configuration keeps them elsewhere. Nothing is read from the
 // package's assets yet.
 
 #include "rawframe/base/fatal.h"
@@ -105,7 +105,7 @@ std::optional<std::string> readText(const std::string& path) {
 }
 
 /// `text` keeping the player's settings at `path` unless it keeps them
-/// somewhere itself (D626).
+/// somewhere itself.
 std::string keptAt(std::string text, const std::string& path) {
     const auto kParsed = composition::Configuration::parse(text);
     if (kParsed.has_value() && !kParsed->text("ui.kept").has_value()) {
@@ -132,7 +132,7 @@ struct AndroidClient {
     /// the log where there is one.
     window::Program* prepare() {
         // An activity made after a run ended, the player having gone back
-        // and come again in the same process, plays anew (D577): Maul
+        // and come again in the same process, plays anew: Maul
         // Window asks only when no program runs, and frees the last run's
         // hold on its player when that run stops.
         player.reset();
@@ -147,8 +147,8 @@ struct AndroidClient {
             return nullptr;
         }
         log = std::fopen((*kFiles + "/client.log").c_str(), "wb");
-        // Standard error is the log, so a crash's record lands in it
-        // (D617); Android's own crash report still follows it.
+        // Standard error is the log, so a crash's record lands in it;
+        // Android's own crash report still follows it.
         if (log != nullptr) {
             static_cast<void>(::dup2(::fileno(log), STDERR_FILENO));
         }

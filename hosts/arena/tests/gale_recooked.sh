@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Gale's materials followed while its sources are recooked (D734): the rock,
+# Gale's materials followed while its sources are recooked: the rock,
 # cooked first as it ships, is recooked rougher once the client has read
 # the materials' textures; the running client publishes the changed
 # manifest and its scene reads the game's materials again, the program
 # materials whose revisions stayed kept. The shore is recooked to sample
 # a texture the game declares and nothing sampled before, which the scene
-# then reads (D758). A machine without the shader
-# toolchain, which Gale's sea needs (D484), skips, unless
-# RAWFRAME_REQUIRE_SHADER_TOOLCHAIN is set (D701).
+# then reads. A machine without the shader
+# toolchain, which Gale's sea needs, skips, unless
+# RAWFRAME_REQUIRE_SHADER_TOOLCHAIN is set.
 #
 # usage: gale_recooked.sh <rawframe-arena> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -22,7 +22,7 @@ mkdir -p "$work/sources"
 trap 'echo "gale_recooked: failed at line $LINENO"; grep -o "\"code\":\"stopped\".*" "$work/log.ndjson" 2>/dev/null | cut -c1-600' ERR
 cp -r "$repository/games/gale/." "$work/sources/"
 # A texture the game declares and no material samples at first: the
-# recooked shore samples it, and the scene reads it then (D758).
+# recooked shore samples it, and the scene reads it then.
 cp "$work/sources/stone.png" "$work/sources/sand.png"
 sed 's/bdade485c2e3a616d47796f633ec9154/5a2d7e1b9c4f40aa8e6b31d0c7f29e54/' "$work/sources/stone.png.rfmeta" \
     >"$work/sources/sand.png.rfmeta"
@@ -50,8 +50,7 @@ network.loopback.latency_ms = 10
 replication.endpoint = arena
 bots.count = 2
 bots.endpoint = arena
-# What is checked is what is drawn, not how fast a loaded machine ticks
-# (D516, D569).
+# What is checked is what is drawn, not how fast a loaded machine ticks.
 world.degraded_ms = 600000
 world.overload_ms = 0
 CONF

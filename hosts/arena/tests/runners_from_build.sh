@@ -41,8 +41,8 @@ replication.endpoint = arena
 bots.count = 4
 bots.endpoint = arena
 audio.record = $work/heard.wav
-# What is checked is what is heard, not how fast a loaded machine ticks
-# (D516, D569): a sanitized build far behind stopped as overloaded before
+# What is checked is what is heard, not how fast a loaded machine ticks:
+# a sanitized build far behind stopped as overloaded before
 # its recording was summed up.
 world.degraded_ms = 600000
 world.overload_ms = 0
@@ -56,7 +56,7 @@ sed 's/"version":"0.1.0"/"version":"0.2.0"/' "$work/runners.composition" >"$work
 status=0
 run "$work/other.composition" || status=$?
 if [ "$status" -ne 65 ]; then
-    echo "a Composition naming another version exited $status, not 65 (SPEC-0012's data category)" >&2
+    echo "a Composition naming another version exited $status, not 65" >&2
     exit 1
 fi
 grep -q '"code":"not_started".*"exitCode":65' "$work/log.ndjson"
@@ -65,10 +65,10 @@ run "$work/runners.composition"
 grep -q '"code":"composition_opened"' "$work/log.ndjson"
 grep -o '"code":"recording_summary".*' "$work/log.ndjson"
 # The player's client drew the level's tiles and the runners over them: two
-# draws, every texture one the game declares (D254), both read from the
-# Build and decoded (D255).
+# draws, every texture one the game declares, both read from the
+# Build and decoded.
 grep -q '"code":"canvas_summary".*"spritesDrawn":[1-9][0-9]*,.*"unknownTextures":0,"unknownMaterials":0,"overLimit":0,"mostDraws":2,' \
     "$work/log.ndjson"
 grep -q '"code":"canvas_summary".*"texturesReady":3,"texturesFailed":0,' "$work/log.ndjson"
-# Its runners ran through their sheets' frames (D258).
+# Its runners ran through their sheets' frames.
 grep -q '"code":"canvas_summary".*"spritesAnimated":[1-9]' "$work/log.ndjson"

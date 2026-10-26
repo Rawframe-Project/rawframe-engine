@@ -1,9 +1,9 @@
 #pragma once
 
-// What an export writes into its folder (D396): the configurations and
+// What an export writes into its folder: the configurations and
 // programs of a native folder, a web site, and a phone's package, the
 // library's active Composition, and the iOS application made from the
-// client's bundle (D587). main.cpp runs the tools that make the Build.
+// client's bundle. main.cpp runs the tools that make the Build.
 
 #include <array>
 #include <filesystem>
@@ -38,17 +38,16 @@ struct Exported {
     std::string title;
     /// The programs' suffix on this system (`.exe` on Windows).
     std::string suffix;
-    /// The launcher's name, before the suffix (D944).
+    /// The launcher's name, before the suffix.
     std::string launcher;
     /// The C++ runtime's libraries a Windows folder carries beside its
-    /// programs, so a machine without Visual C++'s redistributable plays
-    /// (D944); none elsewhere.
+    /// programs, so a machine without Visual C++'s redistributable plays;
+    /// none elsewhere.
     std::vector<fs::path> runtime;
-    /// Whether a native client is shown on a headset where one answers
-    /// (D658).
+    /// Whether a native client is shown on a headset where one answers.
     bool headset = false;
     /// The game's own window icon, a texture, written as `icon.ktx2`;
-    /// empty for the client's own (D951).
+    /// empty for the client's own.
     std::vector<std::byte> icon;
 };
 
@@ -70,14 +69,14 @@ struct WebFiles {
     fs::path client;
     fs::path window;
     fs::path device;
-    /// Maul UI's page side, its ARIA adapter's (D612).
+    /// Maul UI's page side, its ARIA adapter's.
     fs::path ui;
     /// The page's own files: `play.html` and its modules.
     fs::path page;
     fs::path server;
 };
 
-/// The site under `web/` and its server under `server/` (D397).
+/// The site under `web/` and its server under `server/`.
 bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::string>& written);
 
 /// A phone's platform, as an export packs a game for it.
@@ -91,8 +90,8 @@ struct Mobile {
 };
 
 /// What a phone's package carries under `<directory>/game/`, and the server
-/// it plays on under `server/`, pinned to an identity made here (D555,
-/// D587).
+/// it plays on under `server/`, pinned to an identity made here.
+///
 bool writeMobile(const Exported& exported,
                  const Mobile& mobile,
                  const std::string& address,
@@ -105,7 +104,7 @@ bool bundleIdentifierLike(std::string_view identifier);
 
 /// The iOS client's bundle copied to `application` under the output with
 /// the game's `ios/game/` in it as `game/`, its Info.plist naming it
-/// `identifier` and `title` in place of the client's own (D587).
+/// `identifier` and `title` in place of the client's own.
 bool writeApplication(const Exported& exported,
                       const fs::path& client,
                       const std::string& application,

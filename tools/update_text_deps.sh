@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vendors the text stack Maul UI's text component builds on (D383): FreeType
+# Vendors the text stack Maul UI's text component builds on: FreeType
 # and HarfBuzz at the releases its cmake/TextDependencies.cmake pins, checked
 # by the same SHA-256, with only what that file compiles. Maul UI's build
 # then finds them through FETCHCONTENT_SOURCE_DIR_* (third_party/maul_ui.cmake)

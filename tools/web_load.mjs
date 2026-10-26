@@ -1,4 +1,4 @@
-// How long a web client takes to become a running game (D175), as a page
+// How long a web client takes to become a running game, as a page
 // would see it under V8: compiling the module, instantiating it, and
 // starting the arena sample from files handed over, to its first
 // iteration. Then play: two clients on one relay standing in for

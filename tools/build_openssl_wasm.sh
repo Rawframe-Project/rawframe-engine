@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the vendored OpenSSL's libcrypto for the web build (wasm32-wasi
-# without threads) into one prefix, for Ed25519 verification (SPEC-0019).
+# without threads) into one prefix, for Ed25519 verification.
 # Configure runs this once per machine and pinned revision
 # (third_party/openssl_wasm.cmake), as tools/build_quic.sh does natively.
 # No threads, sockets, assembly, or modules: libcrypto alone. WASI's

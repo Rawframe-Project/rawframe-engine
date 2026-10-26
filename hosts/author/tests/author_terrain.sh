@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# A terrain shaped in a session (D855), headless: a flat field written as
+# A terrain shaped in a session, headless: a flat field written as
 # a file, raised a meter at its middle by a brush's stroke and painted, the
 # strokes written as the terrain module makes them and undone back to the
 # file's very bytes; a tool no brush has and a layer the terrain does not
 # name refused with the file untouched; then imported from outside into a
 # copy of Ledges, small enough to cook in time on a loaded machine, as a
-# mesh with the terrain importer and cooked (D854).
+# mesh with the terrain importer and cooked.
 #
 # usage: author_terrain.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -14,7 +14,7 @@ author=$1
 cook=$2
 repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

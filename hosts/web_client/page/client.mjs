@@ -1,15 +1,14 @@
-// A page's hold on one web client (D169, D173): the WebAssembly module
+// A page's hold on one web client: the WebAssembly module
 // instantiated with the browser's WASI and the page's transport, handed the
 // files the page fetched, started, driven one animation frame at a time,
 // and stopped. The same module runs in a browser and, for tests, in Node.
 //
-// Or it plays (D250): the window's side on the page, Maul Window's
+// Or it plays: the window's side on the page, Maul Window's
 // maul-window.mjs, makes a window of a canvas, and the window's frames
 // drive the client until it ends. Its sound is the page's to take and play
-// (sound.mjs, D259). With Maul RHI's side too, maul-rhi.mjs, it draws in
-// the canvas through the browser's WebGPU (D282). With Maul UI's,
-// maul-ui.mjs, its UI is read by screen readers through the page's elements
-// (D612).
+// (sound.mjs). With Maul RHI's side too, maul-rhi.mjs, it draws in
+// the canvas through the browser's WebGPU. With Maul UI's,
+// maul-ui.mjs, its UI is read by screen readers through the page's elements.
 import { browserWasi } from './wasi.mjs';
 
 /** The window's imports where the page gives none: there is no page. */
@@ -110,7 +109,7 @@ export class WebClient {
 
     /**
      * Takes up to `frames` frames of the client's sound, oldest first, as
-     * interleaved stereo samples copied out of its memory (D259).
+     * interleaved stereo samples copied out of its memory.
      */
     takeSound(frames) {
         const taken = this.exports.rawframe_client_sound_take(this.handle, frames);

@@ -1,9 +1,9 @@
 #pragma once
 
-// A blocking HTTP/1.1 client for the launcher (D414): GET only, over TCP or
+// A blocking HTTP/1.1 client for the launcher: GET only, over TCP or
 // TLS, one connection kept for as long as the server keeps it. A secure
 // connection verifies the server's certificate for the host against the
-// trusted authorities, always: there is no way to trust any (SPEC-0020).
+// trusted authorities, always: there is no way to trust any.
 // Nothing a client fetches is trusted for having been fetched; what it
 // carries is verified by its digest by whoever asked for it.
 

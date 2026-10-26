@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs an iOS simulator tree's test programs in a booted simulator (D584):
+# Runs an iOS simulator tree's test programs in a booted simulator:
 #
 #   tools/ios_tests.sh <build tree> [<pattern>]
 #

@@ -1,6 +1,6 @@
 # Four bots play the sample platformer for three seconds while the first
 # two's canvases are drawn split-screen on the one device into an offscreen
-# picture, as two local players would see them (D279, D285, D364), one
+# picture, as two local players would see them, one
 # over the other: one frame in eight is read back, so a loaded machine
 # that draws fifty frames still reads some (it drew no sixtieth), and its
 # sprites cover pixels; the last is written to a TGA image in the build tree. Its textures are read from the game's content
@@ -23,6 +23,6 @@ render.read_every = 8
 render.capture = @CAPTURE@
 # What is checked is what is drawn, not how fast a loaded machine ticks:
 # the World may fall behind without the server refusing the bots, as a
-# World a second behind refuses players (D212, D516).
+# World a second behind refuses players.
 world.degraded_ms = 600000
 world.overload_ms = 0

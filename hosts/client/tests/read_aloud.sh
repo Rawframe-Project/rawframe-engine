@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# A client's UI as a screen reader reads it (D571): a private D-Bus daemon
+# A client's UI as a screen reader reads it: a private D-Bus daemon
 # plays the accessibility bus (AT_SPI_BUS_ADDRESS), the client plays a game
 # against its server, and once it is admitted and says assistive technology
 # reads its UI, its AT-SPI tree is walked from the application's root with
 # busctl, one line a node: "a11y: <depth> <role> <name>". Given `press`,
 # the first push button found is pressed as a screen reader presses it,
-# through AT-SPI's Action interface (D572), and the client plays on a
+# through AT-SPI's Action interface, and the client plays on a
 # while. Given `type <text>`, the text is inserted into the first entry
-# found as a screen reader types (D613), through AT-SPI's EditableText
+# found as a screen reader types, through AT-SPI's EditableText
 # interface, and the entry's text is read back. Given `slide <value>`, the
-# first slider found is set to the value as a screen reader sets one
-# (D621), through AT-SPI's Value interface, and its value is read back.
-# Given `toggle`, the first toggle button found is pressed (D622), and
+# first slider found is set to the value as a screen reader sets one,
+# through AT-SPI's Value interface, and its value is read back.
+# Given `toggle`, the first toggle button found is pressed, and
 # whether it reads as checked after is told. Then it is asked to stop.
 #
 # usage: read_aloud.sh <rawframe-server> <rawframe-client> <configuration> <game>

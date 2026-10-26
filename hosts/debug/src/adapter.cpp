@@ -130,7 +130,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
     } else if (kCommand == "attach") {
         // The game's tooling endpoint, the certificate to trust, and the
         // token: as its settings name them, or as Studio's Play recorded
-        // them for the game named (D462).
+        // them for the game named.
         authoring_session::AttachRecord record{.endpoint = textOf(arguments, "endpoint"),
                                                .pinFile = textOf(arguments, "pinFile"),
                                                .tokenFile = textOf(arguments, "tokenFile")};
@@ -142,7 +142,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
                 record = *kRecorded;
             }
             // Where its scripts are, so a line's file is named as the
-            // build names it, and a frame's opened where it is (D630).
+            // build names it, and a frame's opened where it is.
             std::error_code absolute;
             gameDirectory_ = std::filesystem::absolute(kGame, absolute).lexically_normal().parent_path();
         } else if (record.endpoint.empty() || record.pinFile.empty() || record.tokenFile.empty()) {
@@ -208,7 +208,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
         body.add("breakpoints", std::move(verified));
         out.push_back(response(request, reached, std::move(body), reached ? std::string{} : why));
     } else if (kCommand == "setBreakpoints") {
-        // A source's lines, in place of those it had (D630); every
+        // A source's lines, in place of those it had; every
         // breakpoint written again, and each of this source's verified
         // where code comes from its line.
         const Value* kSource = arguments.find("source");
@@ -276,7 +276,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
             Value frame = Value::object();
             frame.add("id", Value::integer(static_cast<std::int64_t>(frames_.size())));
             frame.add("name", Value::string(textOf(each, "function")));
-            // Where it stands, its file opened where the game's is (D630).
+            // Where it stands, its file opened where the game's is.
             const std::string kBuilt = textOf(each, "file");
             const Value* kLine = each.find("line");
             if (!kBuilt.empty()) {
@@ -296,8 +296,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
         body.add("stackFrames", std::move(stack));
         out.push_back(response(request, kStatus.has_value(), std::move(body), why));
     } else if (kCommand == "scopes") {
-        // One scope a frame, its locals, each said as Kest's proof allows
-        // (D631).
+        // One scope a frame, its locals, each said as Kest's proof allows.
         const Value* kFrame = arguments.find("frameId");
         const std::int64_t kId = kFrame != nullptr ? kFrame->integer().value_or(0) : 0;
         Value scope = Value::object();
@@ -351,7 +350,7 @@ std::vector<Value> Adapter::handle(const Value& request) {
         done_ = true;
         out.push_back(response(request, true));
     } else if (kCommand == "next" || kCommand == "stepIn" || kCommand == "stepOut") {
-        // A line on, the game stopping there (D632).
+        // A line on, the game stopping there.
         Value step = Value::object();
         step.add("kind", Value::string("debug.step"));
         step.add("how", Value::string(kCommand == "next" ? "over" : kCommand == "stepIn" ? "into" : "out"));

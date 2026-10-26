@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Patrol's guards authored from nothing (D271): the discovery gives the
+# Patrol's guards authored from nothing: the discovery gives the
 # guard's `at` field as a case with its enum's cases, a guard set to one by
 # name reads back by it, the first case is the default and no field, a name
 # the enum lacks is refused, and the game starts on the scene made.

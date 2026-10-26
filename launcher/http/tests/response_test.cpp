@@ -1,4 +1,4 @@
-// Responses read from servers no one vouches for (D414).
+// Responses read from servers no one vouches for.
 
 #include "rawframe/http/errors.h"
 #include "rawframe/http/response.h"

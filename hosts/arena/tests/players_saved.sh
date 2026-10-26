@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runners' players keep their scores between visits (ADR-0057's per-player
+# Runners' players keep their scores between visits (the per-player
 # scope): two bots play as the sessions runner-0 and runner-1, and each is
 # kept when the arena stops; the next arena gives each their save as they
 # join. A reader of the test's own finds each player's slot by the identity
@@ -11,7 +11,7 @@ set -euo pipefail
 
 arena="$1"
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
@@ -32,11 +32,10 @@ bots.session = runner
 save.directory = $work/saves
 save.namespace = 72756e6e657273000000000000000001
 # What is checked is what the run did, not how fast a loaded machine
-# ticks (D516, D569): stopped as overloaded, the script ends before it.
+# ticks: stopped as overloaded, the script ends before it.
 world.degraded_ms = 600000
 world.overload_ms = 0
-# Saves kept as it stops are synced to a disk a loaded machine shares
-# (D810).
+# Saves kept as it stops are synced to a disk a loaded machine shares.
 host.shutdown_budget_ms = 30000
 CONF
 

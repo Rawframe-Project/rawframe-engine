@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A connection lost without the server's word is asked for again (D757): a
+# A connection lost without the server's word is asked for again: a
 # bot is admitted, then its server is frozen past the connection's idle time
 # (a second here), as a phone's suspended client comes back to one gone;
 # the bot says it lost its connection, the server is let go on, and the bot

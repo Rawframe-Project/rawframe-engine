@@ -1,5 +1,5 @@
 // The engine's web transport (modules/network_web/.../web.h) over the
-// browser's WebTransport (D173). A page cannot listen; it connects, each
+// browser's WebTransport. A page cannot listen; it connects, each
 // connection one WebTransport session, and numbers streams as QUIC does
 // from the connecting side: its own two-way streams 0, 4, 8, one-way 2, 6,
 // 10; the server's two-way 1, 5, 9, one-way 3, 7, 11. Every event waits,

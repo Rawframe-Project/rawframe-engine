@@ -1,4 +1,4 @@
-# The scene tool (ADR-0048, D94): authoring help for scene documents.
+# The scene tool: authoring help for scene documents.
 # Tooling only; no client or server closure contains it.
 rawframe_host(NAME scene_tool OUTPUT rawframe-scene
     SOURCES src/main.cpp

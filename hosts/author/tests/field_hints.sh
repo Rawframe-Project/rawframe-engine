@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# What authors are told of a game's fields (D783): the starter template's
+# What authors are told of a game's fields: the starter template's
 # `field` lines and the engine's own hints in `rawframe-author describe`, a
 # line that does not read refused at its line, and one naming a field its
 # component does not have, or a color on a real number, refused by name.
-# And an emitter of Plaza's hinted as model.kest measures it (D831).
+# And an emitter of Plaza's hinted as model.kest measures it.
 # Run from the repository root.
 #
 #   field_hints.sh <rawframe-author>
@@ -28,7 +28,7 @@ assert fields[("starter.look", "mesh")]["asset"] == "mesh"
 print("hinted: side 4 to 100 m, a box's look a color, its mesh an asset")
 PY
 # An emitter's fields as model.kest measures them, its colors colors, and
-# its material an asset (D831): Plaza's fountain.
+# its material an asset: Plaza's fountain.
 "$author" describe games/plaza/plaza.game >"$work/described"
 python3 - "$work/described" <<'PY'
 import json, sys
@@ -39,11 +39,11 @@ assert fountain("colorStart").get("color") is True and fountain("colorEnd").get(
 assert fountain("spread")["unit"] == "rad" and fountain("spread")["least"] == 0 and fountain("spread")["most"] > 3.14
 assert fountain("lifetime")["unit"] == "s" and fountain("variation")["most"] == 1
 assert fountain("material")["asset"] == "material" and "unit" not in fountain("seed")
-# Each component says the Kest type the game declares it of (D834).
+# Each component says the Kest type the game declares it of.
 assert fields and next(c for c in described["components"] if c["name"] == "plaza.sky")["type"] == "rawframe.model.Sky"
 print("an emitter hinted: its colors, its spread 0 to pi rad, its material an asset; the sky a Sky")
 PY
-# The game names its layers on the engine's layer field (D788).
+# The game names its layers on the engine's layer field.
 cp -R "$work/hinted" "$work/layered"
 printf "%s\n" "field rawframe.world.layer layer labels 1 ground 2 props" >>"$work/layered/hinted.game"
 "$author" describe "$work/layered/hinted.game" >"$work/described"

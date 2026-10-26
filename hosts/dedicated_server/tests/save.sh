@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runners keeps its hall between runs (ADR-0057): a server plays the level
+# Runners keeps its hall between runs: a server plays the level
 # for a while and saves when it stops; a second server loads that save and
 # plays on. The save is read here by a reader of its own, which checks the
 # digest, that the hall carries the identity its scene names it by, and that
@@ -10,7 +10,7 @@ set -euo pipefail
 
 server="$1"
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

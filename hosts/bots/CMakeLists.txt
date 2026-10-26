@@ -12,7 +12,7 @@ if(RAWFRAME_BUILD_TESTS)
                      $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> 8 1 480
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_over_quic PROPERTIES PASS_REGULAR_EXPRESSION "\"bots\":8,\"admitted\":8")
-    # Bots over a slow, lossy link (D805): the conditions on QUIC between
+    # Bots over a slow, lossy link: the conditions on QUIC between
     # processes, the link said by the transport, every bot admitted and
     # its world mirrored all the same.
     add_test(NAME bots_over_slow_link
@@ -33,7 +33,7 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_same_session PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,.*\"bots\":1,\"admitted\":0,\"unavailable\":1|\"bots\":1,\"admitted\":0,\"unavailable\":1,.*\"bots\":1,\"admitted\":1,")
-    # A server's self-signed identity renewed while bots play (D419): those
+    # A server's self-signed identity renewed while bots play: those
     # pinned before play on, those pinned to the new fingerprint are
     # admitted, and those still pinned to the old one are not.
     add_test(NAME bots_renewed
@@ -42,8 +42,8 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(bots_renewed PROPERTIES PASS_REGULAR_EXPRESSION
                          "renewed: before \"bots\":2,\"admitted\":2, after \"bots\":2,\"admitted\":2, stale \"bots\":2,\"admitted\":0, renewals [1-9]")
-    # A connection lost without the server's word is asked for again
-    # (D757): the server frozen past the connection's idle time, the bot
+    # A connection lost without the server's word is asked for again:
+    # the server frozen past the connection's idle time, the bot
     # says so and is admitted again once it runs on. A shell freezes a
     # process with SIGSTOP, which Windows has not.
     if(NOT WIN32)
@@ -56,7 +56,7 @@ if(RAWFRAME_BUILD_TESTS)
     endif()
     # A server asked to stop drains: it refuses new bots as unavailable and
     # stops once the bots it serves have left. Asked with SIGTERM on POSIX
-    # and Ctrl+Break on Windows, which Python sends and a shell cannot (D237).
+    # and Ctrl+Break on Windows, which Python sends and a shell cannot.
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME bots_drain
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/drain.py
@@ -66,7 +66,7 @@ if(RAWFRAME_BUILD_TESTS)
     # Bots agreeing with the server on runners' Composition are admitted,
     # and bots naming another Composition of the same Build are not.
     # A bots process whose frames are long inside them, about three a
-    # second (D678, a development build's `host.drawing_ms`): its commands
+    # second (a development build's `host.drawing_ms`): its commands
     # are labelled past the server's tick, so the server consumes them where
     # before it consumed none and played every tick neutral. Read on the
     # bot's side, its predictions confirmed by the server's state (one

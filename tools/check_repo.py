@@ -3,34 +3,32 @@
 
 1. Module boundaries: a module's or host's sources include only its own
    headers and the headers of modules on its line in tools/modules.txt.
-2. File size (STD-0001): handwritten source fails at 1,500 lines and is
+2. File size: handwritten source fails at 1,500 lines and is
    reported from 1,000. Tables a tool writes under a `generated` directory
    are not handwritten and are not measured.
 3. Owner rules: no em dash in any text file, added or not, and no AI attribution
    trailer in any commit message.
 4. No `.value()` call in engine source: on a Result it throws on failure, and
-   exceptions are disabled (SPEC-0004, SPEC-0050). Test for `has_value()` and
+   exceptions are disabled. Test for `has_value()` and
    dereference, or use RAWFRAME_TRY_ASSIGN.
-5. SPEC-0048 values live only in rawframe/execution/bounds.h: no other
+5. The execution layer's bounds live only in rawframe/execution/bounds.h: no other
    execution source spells one of its capacities or builds a duration from a
    literal count of seconds or milliseconds.
-6. The dedicated server's closure (ADR-0017, SPEC-0012, ADR-0038, ADR-0050,
-   ADR-0065): nothing the `dedicated_server` line reaches, however far down,
+6. The dedicated server's closure: nothing the `dedicated_server` line reaches, however far down,
    is a presentation, client, test-transport, or toolchain module: no audio,
-   no localization (D147), no authoring transactions (D149), no client
+   no localization, no authoring transactions, no client
    input, no loopback or browser transport, and no import, cook, or build
-   tooling (D182).
-7. A fragment shader reads every input it declares (D418): crossed to HLSL
+   tooling.
+7. A fragment shader reads every input it declares: crossed to HLSL
    for Direct3D 12, an input never read is left out and the rest no longer
    line up with the vertex stage's outputs, which Direct3D 12 links by place.
-8. The launcher family (ADR-0060, ADR-0074, D414) lives under launcher/,
+8. The launcher family lives under launcher/,
    outside every engine closure: no module or host depends on a launcher
    unit, and only launcher sources include OpenSSL's TLS (openssl/ssl.h).
-9. No runtime's closure reaches authoring tooling (ADR-0032 section 5,
-   D435): the command layer, the session, and Studio are a tool's, never a
+9. No runtime's closure reaches authoring tooling: the command layer, the session, and Studio are a tool's, never a
    game's, a client's, or a server's.
-10. Studio's surface table (SPEC-0051's conformance, D873) holds Part 1's
-   kinds and no other, keeps Part 1's budgets (fourteen panels, eight
+10. Studio's surface table holds its ten
+   kinds and no other, keeps its budgets (fourteen panels, eight
    viewport modes, ten toolbar commands), and gives every surface a
    headless path, "none needed" where the contract says so.
 
@@ -51,12 +49,12 @@ ATTRIBUTION = re.compile(r"co-authored-by:|generated with|claude-session:", re.I
 VALUE_CALL = re.compile(r"\.value\(\s*\)")
 BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
 BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
-# Vendored providers stay behind their module (ADR-0005, ADR-0038): no public
+# Vendored providers stay behind their module: no public
 # header includes one.
 PROVIDER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](miniaudio\.h|opus\.h|opus/|msquic\.h|openssl/|maul2d/|maul3d/|kest/|zstd\.h|zstd_errors\.h|cgltf\.h|maul-rhi/|maul-window/|maul-nav/|maul-audio/)', re.MULTILINE)
 # Maul RHI is declared by the rendering cluster alone, Maul Window by the
-# window module alone (ADR-0045), Maul UI by the UI module, Maul Nav by the
-# navigation module (D399), and Maul Audio by the audio module (D401):
+# window module alone, Maul UI by the UI module, Maul Nav by the
+# navigation module, and Maul Audio by the audio module:
 # anywhere else, including one is refused.
 CLUSTERS = {"maul-rhi/": {"render", "render_canvas", "render_canvas_gpu", "render_scene", "render_scene_gpu", "particles_gpu"}, "maul-window/": {"window"}, "maul-ui/": {"ui"}, "maul-nav/": {"navigation"}, "maul-audio/": {"audio"}}
 CLUSTER_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"](maul-rhi/|maul-window/|maul-ui/|maul-nav/|maul-audio/)', re.MULTILINE)
@@ -68,7 +66,7 @@ NOT_IN_SERVER = {
     "render", "render_canvas_gpu", "render_scene", "render_scene_gpu", "particles", "particles_gpu", "view", "ui", "world_ui",
     "xr",
 }
-# Source formats are decoded in import tooling only (ADR-0058): no process
+# Source formats are decoded in import tooling only: no process
 # that plays reaches an importer or the cook.
 RUNTIMES = ("dedicated_server", "client", "web_client", "bots", "arena")
 IMPORT_TOOLING = {"cook", "audio_import", "mesh_import", "animation_import", "texture_import", "font_import"}
@@ -204,7 +202,7 @@ def check_bounds_literals(files, findings):
             continue
         for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if BOUNDS_LITERAL.search(line.split("//")[0]):
-                findings.append(f"{relative}:{number}: a SPEC-0048 value spelled outside bounds.h")
+                findings.append(f"{relative}:{number}: an execution bound spelled outside bounds.h")
 
 
 def check_sizes(files, findings, notes):
@@ -214,9 +212,9 @@ def check_sizes(files, findings, notes):
         lines = path.read_text(errors="replace").count("\n")
         relative = path.relative_to(ROOT)
         if lines >= FAIL_LINES:
-            findings.append(f"{relative}: {lines} lines, the limit is {FAIL_LINES} (STD-0001)")
+            findings.append(f"{relative}: {lines} lines, the limit is {FAIL_LINES}")
         elif lines >= REPORT_LINES:
-            notes.append(f"{relative}: {lines} lines, stop adding unrelated behavior (STD-0001)")
+            notes.append(f"{relative}: {lines} lines, stop adding unrelated behavior")
 
 
 def check_launcher(files, allowed, findings):
@@ -236,7 +234,7 @@ def check_launcher(files, allowed, findings):
                 findings.append(f"{relative}: includes OpenSSL's TLS, which only the launcher may")
 
 
-# Slang is the one first-party GPU language (ADR-0026, D475): a shader's
+# Slang is the one first-party GPU language: a shader's
 # source is Slang, and every target language is compiled from it.
 OTHER_GPU_SOURCES = {".vert", ".frag", ".comp", ".geom", ".tesc", ".tese", ".glsl", ".hlsl", ".wgsl", ".metal"}
 
@@ -245,7 +243,7 @@ def check_gpu_language(files, findings):
     for path in files:
         relative = path.relative_to(ROOT)
         if relative.parts[0] in ("modules", "hosts") and path.suffix in OTHER_GPU_SOURCES:
-            findings.append(f"{relative}: a GPU source not in Slang, the one first-party GPU language (ADR-0026)")
+            findings.append(f"{relative}: a GPU source not in Slang, the one first-party GPU language")
 
 
 SURFACES = Path("modules/studio/src/surfaces.h")
@@ -258,7 +256,7 @@ def check_surfaces(findings):
     text = (ROOT / SURFACES).read_text(errors="replace")
     kinds = re.search(r"enum class SurfaceKind[^{]*\{([^}]*)\}", text)
     if kinds is None or [kind.strip() for kind in kinds.group(1).split(",") if kind.strip()] != SURFACE_KINDS:
-        findings.append(f"{SURFACES}: SurfaceKind is not SPEC-0051 Part 1's ten kinds")
+        findings.append(f"{SURFACES}: SurfaceKind is not the ten kinds")
     surfaces = SURFACE.findall(text)
     if not surfaces:
         findings.append(f"{SURFACES}: no surfaces read")
@@ -267,14 +265,14 @@ def check_surfaces(findings):
         findings.append(f"{SURFACES}: '{name}' is in the table twice")
     for name, kind, place, headless, _ in surfaces:
         if not headless.strip():
-            findings.append(f"{SURFACES}: '{name}' stands on no headless path (SPEC-0051's first principle)")
+            findings.append(f"{SURFACES}: '{name}' stands on no headless path")
         if not place.strip():
             findings.append(f"{SURFACES}: '{name}' has no place")
     for kind, place, most in (("Panel", None, 14), ("ViewportMode", None, 8), ("Command", "Toolbar", 10)):
         count = sum(1 for _, each, where, _, _ in surfaces if each == kind and (place is None or where == place))
         if count > most:
             findings.append(f"{SURFACES}: {count} of kind {kind}{' in the ' + place if place else ''}, the budget "
-                            f"is {most} (SPEC-0051 Part 1)")
+                            f"is {most}")
 
 
 def check_owner_rules(files, findings):

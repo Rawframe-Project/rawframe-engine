@@ -1,4 +1,4 @@
-# The build tool (ADR-0024, SPEC-0021): packaging's process entry over
+# The build tool: packaging's process entry over
 # rawframe.build. No runtime closure contains it.
 rawframe_host(NAME build_tool OUTPUT rawframe-build
     SOURCES src/main.cpp

@@ -1,4 +1,4 @@
-# A running client's UI as UI Automation clients read it (Windows, D579):
+# A running client's UI as UI Automation clients read it (Windows):
 # the main window of the process named is found, and its tree is read
 # through UI Automation until a button the pattern names is in it, or any
 # button where none is given, a minute at most (the first asking makes the

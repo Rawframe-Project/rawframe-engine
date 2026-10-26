@@ -1,4 +1,4 @@
-// What a web client's window side answers where no page gives one (D250):
+// What a web client's window side answers where no page gives one:
 // there is no page, as a browser's worker or Node has none. The client
 // then runs the page's way (`start`), and only `play` needs a page, which
 // Maul Window's maul-window.mjs gives it.

@@ -1,4 +1,4 @@
-// The WASI a web client needs, in a browser (D173): no files, no
+// The WASI a web client needs, in a browser: no files, no
 // arguments, no environment; the clock, randomness, and standard output
 // and error as lines handed to `log`. Everything else answers that it is
 // not there.

@@ -2,7 +2,7 @@
 // measuring a networked Kest game without a second machine or a real
 // transport. Not a product: a Tool-role host for scenarios and budgets.
 // Where Maul RHI is built, it can also draw a client's canvas offscreen on
-// the one device (D279).
+// the one device.
 //
 //   rawframe-arena [--config <file>]
 
@@ -42,7 +42,7 @@ constexpr std::size_t kDrawing = 3;
 #else
 constexpr std::size_t kDrawing = 0;
 #endif
-// A headset, where OpenXR is built (D593).
+// A headset, where OpenXR is built.
 #if RAWFRAME_ARENA_HEADSET
 constexpr std::size_t kHeadset = 1;
 #else

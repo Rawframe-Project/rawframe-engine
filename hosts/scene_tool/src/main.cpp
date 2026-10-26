@@ -1,4 +1,4 @@
-// The scene tool (ADR-0048, D94): authoring help for scene documents, run
+// The scene tool: authoring help for scene documents, run
 // by an author; never part of a client or a server.
 //
 //   rawframe-scene from-spawns <game description> <scene>

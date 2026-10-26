@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# A session cooks its game as a long-running operation (SPEC-0040, D502):
+# A session cooks its game as a long-running operation:
 # the plaza cooked while a record is answered, its progress told source by
 # source and its reply when it ends; a second cook while one runs refused
 # by the session's limit; a cook asked to stop answering cancelled, which
 # is no error; a cook the tool refuses (into the game's own directory)
 # answering its error; and a cook running when the input ends stopped and
 # answering before the session does. Its sources listed, each as the
-# cook left it (D799).
+# cook left it.
 #
 # usage: author_cooks.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -15,13 +15,13 @@ author=$1
 cook=$2
 repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
 work="$(native "$4")"
 # A check that fails says which, and what the session answered, so a run
-# on a machine of another system can be read (D813).
+# on a machine of another system can be read.
 trap 'echo "author_cooks: failed at line $LINENO"; grep -v "\"kind\":\"authoring.progress\"" "$work/replies" 2>/dev/null | cut -c1-600
       grep "\"id\":11," "$work/replies" 2>/dev/null | grep -o "\"path\":\"[^\"]*\"\|\"cook\":\"[a-z]*\"" | paste - - | head -40' ERR
 rm -rf "$work"
@@ -40,8 +40,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.cook","id":3,"output":"'"$work/other"'","cache":null}'
     echo '{"kind":"authoring.cancel","id":4,"operation":"none"}'
     # Each wait ends as the reply comes; four minutes only bounds a cook
-    # on a sanitized tree under load, which took more than thirty seconds
-    # (D507).
+    # on a sanitized tree under load, which took more than thirty seconds.
     for _ in $(seq 2400); do
         grep -q '"id":2,"answer"\|"id":2,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1
@@ -60,19 +59,19 @@ reply 3 | grep -q '"code":"limit_exceeded"'
 reply 4 | grep -q '"found":false'
 reply 5 | grep -q '"authoring.ended"'
 # Each source listed with its folder, importer, and identity, unknown to the
-# cook until it cooked, then cooked (D799).
+# cook until it cooked, then cooked.
 reply 10 | grep -q '{"path":"blade/rig.rfanim","folder":"blade","importer":"rawframe.animation","id":"[0-9a-f]\{32\}","cook":"unknown"}'
 reply 10 | grep -q '{"path":"gate.scene","folder":"","importer":"rawframe.scene","id":"[0-9a-f]\{32\}","cook":"unknown"}'
 [[ $(reply 11 | grep -o '"cook":"cooked"' | wc -l) -eq $steps ]]
 reply 11 | grep -q '{"path":"gate.scene","folder":"","importer":"rawframe.scene","id":"[0-9a-f]\{32\}","cook":"cooked"}'
 # A texture's thumbnail once the game has cooked, the first level no wider
-# than 64 pixels, in the cooked object named; a scene has none (D801).
+# than 64 pixels, in the cooked object named; a scene has none.
 reply 12 | grep -q '"code":"target_not_found"'
 reply 13 | grep -q '"answer":{"kind":"authoring.thumbnail","asset":"paving.png","object":"[^"]*/content/objects/[0-9a-f]\{64\}","level":[1-9][0-9]*,"width":64,"height":64}'
 reply 14 | grep -q '"code":"unsupported_operation"'
 # The paving read by the game's description, which declares it; the crate's
 # glTF reading its picture, which has no sidecar of its own, and read by the
-# description (D803).
+# description.
 reply 15 | grep -q '"answer":{"kind":"authoring.asset_references","asset":"paving.png","uses":\[\],"usedBy":\[[^]]*"plaza.game"'
 reply 16 | grep -q '"uses":\["crate.png"\],"usedBy":\["plaza.game"\]}'
 [[ -s "$work/content/content.manifest" && -s "$work/content/cook.receipt" && -s "$work/content/cook.log" ]]

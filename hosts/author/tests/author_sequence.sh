@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A sequence edited in a session (D869), headless: a key moved and a key
+# A sequence edited in a session, headless: a key moved and a key
 # added line by line and written; a key out of time order and one on a
 # track the sequence does not name refused by the sequence's reader with
 # the file untouched; and the changes undone back to the file's very bytes.
@@ -10,7 +10,7 @@ set -euo pipefail
 author=$1
 repository=$2
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

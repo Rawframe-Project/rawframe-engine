@@ -7,10 +7,10 @@
 #   tools/build_quic.sh <prefix> <c compiler> <c++ compiler> [<android ndk> <api level>]
 #   tools/build_quic.sh <prefix> <c compiler> <c++ compiler> ios-simulator <deployment target>
 #
-# Given an NDK and an API level, it builds both for 64-bit ARM Android
-# (D549): OpenSSL by its android-arm64 target, MsQuic through the NDK's CMake
-# toolchain. Given ios-simulator, both for the iOS simulator on 64-bit ARM
-# (D584), with Xcode's clang, as C needs no C++ library.
+# Given an NDK and an API level, it builds both for 64-bit ARM Android:
+# OpenSSL by its android-arm64 target, MsQuic through the NDK's CMake
+# toolchain. Given ios-simulator, both for the iOS simulator on 64-bit ARM,
+# with Xcode's clang, as C needs no C++ library.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,7 +32,7 @@ root="$PWD/third_party"
 # processor.
 jobs=$(("${JOBS:-8}" / 2))
 [ "$jobs" -ge 1 ] || jobs=1
-# OpenSSL's name for this machine (D236), or Android's.
+# OpenSSL's name for this machine, or Android's.
 case "$(if [ -n "$android_ndk" ]; then echo Android; elif [ -n "$ios" ]; then echo iOS; else echo "$(uname -s)-$(uname -m)"; fi)" in
     Android) openssl_target=android-arm64 ;;
     iOS) openssl_target=iossimulator-arm64-xcrun ;;
@@ -44,7 +44,7 @@ case "$(if [ -n "$android_ndk" ]; then echo Android; elif [ -n "$ios" ]; then ec
     *) echo "build_quic: no OpenSSL target for $(uname -s)-$(uname -m)" >&2; exit 1 ;;
 esac
 # Windows builds both with MSVC from Git's bash, inside a developer
-# environment (D237): OpenSSL through its own perl and nmake, since Git's perl
+# environment: OpenSSL through its own perl and nmake, since Git's perl
 # is not the Windows perl OpenSSL's Configure asks for, and both with the
 # dynamic C runtime the engine uses.
 windows=0

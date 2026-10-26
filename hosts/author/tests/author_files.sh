@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# A game's files moved, removed, and its folders made through a session
-# (D929), in a copy of the plaza: a folder made and listed though empty, a
+# A game's files moved, removed, and its folders made through a session,
+# in a copy of the plaza: a folder made and listed though empty, a
 # texture moved into it with its sidecar, its identity kept and the game's
 # line renamed, then the folder renamed with it inside, and the game cooked
 # from where it is now; an empty folder removed, and a texture removed
@@ -16,7 +16,7 @@ author=$1
 cook=$2
 repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
@@ -61,7 +61,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.remove_file","id":20,"path":"elsewhere"}'
     echo '{"kind":"authoring.cook","id":17,"output":"'"$work/content"'","cache":null}'
     # Each wait ends as the reply comes; four minutes only bounds a cook
-    # on a sanitized tree under load (D507).
+    # on a sanitized tree under load.
     for _ in $(seq 2400); do
         grep -q '"id":17,"answer"\|"id":17,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1

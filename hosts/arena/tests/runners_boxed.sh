@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the arena on runners_boxed.conf (D369) and looks at the picture it
+# Runs the arena on runners_boxed.conf and looks at the picture it
 # captured, 640 by 480: the 16:9 view is the middle 360 rows, the 60 above
 # and below it bars of runners' slate (24 28 40, within a step of rounding),
 # and the view is not: it is cleared black and drawn over.

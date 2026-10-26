@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A game's description, its settings, authored in a session (D817), over a
+# A game's description, its settings, authored in a session, over a
 # copy of Quarry's: its lines read, an aspect put in after its program line
 # and written, the lines no change named (its comments among them) kept as
 # they stand; undone back to its very bytes and redone; a line its reader
@@ -41,7 +41,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.history","id":5,"scene":"quarry.game"}'
     echo '{"kind":"authoring.undo","id":6,"scene":"quarry.game"}'
 } | "$author" session "$game" "$work/root" >"$work/replies"
-reply 2 | grep -q '"answer":{"lines":\["# Quarry (D735), the small block game'
+reply 2 | grep -q '"answer":{"lines":\["# Quarry'
 reply 2 | grep -q '"program quarry.kest"'
 reply 3 | grep -q '"written":true,.*"undoable":1,"redoable":0'
 reply 4 | grep -q '"program quarry.kest","aspect 16 9"'

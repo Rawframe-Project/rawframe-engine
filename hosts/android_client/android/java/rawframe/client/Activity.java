@@ -13,7 +13,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- * The Android client's activity (D553): Maul Window's, once the files the
+ * The Android client's activity: Maul Window's, once the files the
  * package carries under {@code assets/game} (the client's configuration and
  * the game it names) are in the app's files directory, where the client
  * reads them. They are copied when the package installed is not the one
@@ -30,7 +30,7 @@ public class Activity extends maul.window.Activity {
         super.onCreate(savedInstanceState);
         // NativeActivity sets the window's soft input mode itself, over the
         // manifest's, to one that lets the system raise the on-screen
-        // keyboard for the focused input view at start (D560): hidden until
+        // keyboard for the focused input view at start: hidden until
         // the program asks for text input, which Maul Window shows it for,
         // the window still resized around it.
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN

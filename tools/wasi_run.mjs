@@ -4,7 +4,7 @@
 // and, for a program that uses the web transport, a relay standing in for
 // the page's WebTransport (tools/web_transport_relay.mjs). A program that
 // holds the device gets Maul RHI's page side from the maul-rhi.mjs its
-// build wrote (RAWFRAME_MAUL_RHI_GLUE, D282): Node has no WebGPU, so it
+// build wrote (RAWFRAME_MAUL_RHI_GLUE): Node has no WebGPU, so it
 // finds no adapter, and a GPU is never required of it here; drawing on the
 // web is checked in a browser (browser_play.mjs).
 import { noWindowPage } from './no_window_page.mjs';

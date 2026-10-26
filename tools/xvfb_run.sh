@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs a command under an X server of its own (D428). Xvfb picks a display
+# Runs a command under an X server of its own. Xvfb picks a display
 # number no server holds and says which (-displayfd), so tests started at
 # the same moment never share one: xvfb-run -a chooses by lock files and
 # could give two of them the same display, one test's clicks and keys then
@@ -35,7 +35,7 @@ if [ -z "$number" ]; then
     exit 1
 fi
 # Nor the machine's session bus: a client on it would join the desktop's
-# accessibility bus (D571); a test that reads a UI aloud starts a bus of
+# accessibility bus; a test that reads a UI aloud starts a bus of
 # its own.
 unset DBUS_SESSION_BUS_ADDRESS AT_SPI_BUS_ADDRESS
 DISPLAY=":$number" "$@"

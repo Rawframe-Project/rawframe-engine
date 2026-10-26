@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# An authoring session over a copy of runners' level (D407): records a
+# An authoring session over a copy of runners' level: records a
 # line on standard input, replies a line on standard output. A crate made
 # and undone back to the level's very bytes, redone, a stale undo refused,
 # the file changed under the session and opened again with no history, and
 # records out of form, out of order, or naming a scene outside the root
 # refused, each answered by its own id; and a selection kept beside the
-# level, put back by undo (D417), as is where the level is looked at from
-# (D432); and two scenes changed in one transaction, all or nothing, each
-# its own history (D497); and a crate made in a dry run first, answered as
-# it would be kept and nothing kept (D650).
+# level, put back by undo, as is where the level is looked at from;
+# and two scenes changed in one transaction, all or nothing, each
+# its own history; and a crate made in a dry run first, answered as
+# it would be kept and nothing kept.
 #
 # usage: author_session.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -157,7 +157,7 @@ reply 4 | grep -q '"view":{"eye":\[0,20,0.5\]'
 reply 6 | grep -q '"view":{"eye":\[0,20,0.5\]'
 reply 5 | grep -q '"view":{"eye":\[3,1,3\],"target":\[0,1,0\],"fieldOfView":70}'
 reply 7 | grep -q '"view":{"eye":\[0,20,0.5\]'
-# Framing what is chosen (D792): both walls, 80 meters apart, framed
+# Framing what is chosen: both walls, 80 meters apart, framed
 # from straight ahead of where the view looked, their middle its target
 # and far enough to hold them; nothing chosen frames every posed entity
 # of the scene, as an editor's F does with nothing chosen.
@@ -174,7 +174,7 @@ reply 4 | grep -q '"kind":"authoring.view",.*"view":{"eye":\[0,10,57.98[0-9]*\],
 reply 6 | grep -q '"kind":"authoring.view",.*"previewing":false,"framed":6'
 cmp "$work/root/level.scene" "$work/original.scene"
 
-# Bookmarks (D796): kept in the scene's editor state beside it, not the
+# Bookmarks: kept in the scene's editor state beside it, not the
 # scene; listed in slot order; a slot cleared by null; a slot past nine
 # or an eye at its target refused.
 cp "$work/original.scene" "$work/root/level.scene"
@@ -198,8 +198,7 @@ grep -q '"slot": 1' "$work/root/level.scene.editor"
 cmp "$work/root/level.scene" "$work/original.scene"
 rm -f "$work/root/level.scene.editor"
 
-# A preview that cannot be reached is refused, and the session goes on
-# (D433).
+# A preview that cannot be reached is refused, and the session goes on.
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.preview","id":2,"scene":"level.scene","preview":{"endpoint":"127.0.0.1:9","pinFile":"'"$work"'/none","tokenFile":"'"$work"'/none"}}'
@@ -210,10 +209,10 @@ rm -f "$work/root/level.scene.editor"
 } | "$author" session "$game" "$work/root" >"$work/replies" || true
 reply 2 | grep -q '"code":"capability_denied".*"said":"the pin and token files must read"'
 reply 3 | grep -q '"answer":{"kind":"authoring.preview","reopened":false,"previewing":false}'
-# A view mode with no preview to take it is not shown (D794).
+# A view mode with no preview to take it is not shown.
 reply 4 | grep -q '"answer":{"kind":"authoring.view_mode","mode":"unlit","shown":false}'
-# A drawn frame needs a preview to have drawn it, and a capture is a
-# .rfframe file (D842).
+# A drawn frame needs a preview to have drawn it, and a capture is a.
+# rfframe file.
 reply 5 | grep -q '"code":"validation_failed".*a drawn frame needs the scene previewed'
 reply 6 | grep -q 'its capture a path ending .rfframe'
 # Nor is one off this machine, or a file that is not a small regular one.
@@ -232,7 +231,7 @@ done
 reply 2 | grep -q '"code":"capability_denied".*"endpoint":"192.0.2.1:9"'
 reply 3 | grep -q '"code":"capability_denied".*"endpoint":"127.0.0.1.example:9"'
 reply 4 | grep -q '"said":"the pin and token files must read"'
-# A new scene (D449): empty, with a sidecar of its own identity; one where
+# A new scene: empty, with a sidecar of its own identity; one where
 # a scene is, outside the root, or in a directory not there is refused. Given
 # an entity, it is found by that identity in a later session on the game,
 # and the level places an instance of it.
@@ -264,7 +263,7 @@ place='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operation
 } | "$author" session "$work/runners/runners.game" "$work/runners" >"$work/replies" || true
 reply 2 | grep -q '"written":true'
 grep -q "\"scene\": \"$resource\"" "$work/runners/level.scene"
-# A scene's history (D454): each entry summed up, oldest first, the undone
+# A scene's history: each entry summed up, oldest first, the undone
 # one after the applied, on a level of its own.
 mkdir -p "$work/history"
 cp "$work/original.scene" "$work/history/level.scene"
@@ -279,7 +278,7 @@ rename='{"formatVersion":1,"kind":"authoring.request","batch":"atomic","operatio
 } | "$author" session "$game" "$work/history" >"$work/replies" || true
 reply 2 | grep -q '"answer":{"kind":"authoring.history","reopened":false,"entries":\[\]}'
 reply 6 | grep -q '"entries":\[{"summary":"rename to floor","deltas":1,"applied":true,"kind":"change"},{"summary":"create entity crate[^"]*","deltas":[0-9]*,"applied":false,"kind":"change"}\]'
-# The assets runners declares (D455), each by kind, identity, and name.
+# The assets runners declares, each by kind, identity, and name.
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.assets","id":2}'
@@ -287,7 +286,7 @@ reply 6 | grep -q '"entries":\[{"summary":"rename to floor","deltas":1,"applied"
 reply 2 | grep -q '"answer":{"kind":"authoring.assets","assets":\[{"kind":"texture","id":"[0-9a-f]\{16\}","name":"runner.png"}'
 reply 2 | grep -q '{"kind":"texture","id":"c067c4be8ce86d12","name":"hud.png"}'
 reply 2 | grep -q '{"kind":"sound","id":"[0-9a-f]\{16\}","name":"jump.sound"}'
-# Two scenes in one transaction (D497): a crate made in the level and in
+# Two scenes in one transaction: a crate made in the level and in
 # the hall together, each its own history, so undoing the level's leaves
 # the hall's; then a request whose second part fails keeps nothing in
 # either, and neither file is written.

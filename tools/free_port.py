@@ -4,11 +4,11 @@
 # ports outgoing connections are given (from 32768 on Linux, 49152 on
 # Windows and macOS), which a client starting meanwhile may take before the
 # server binds it. These come from 30000 to 32767 instead, above the window
-# exported games take theirs from (20000 to 29999, D402), at random, and
+# exported games take theirs from (20000 to 29999), at random, and
 # checked free. Each is also claimed for ten minutes in a directory the
 # machine's tests share, a file made only if none is there, so tests running
 # at once never hand out the same one: at random alone, two of a full
-# check's servers took one port twice in a night (D491).
+# check's servers took one port twice in a night.
 
 import os
 import random

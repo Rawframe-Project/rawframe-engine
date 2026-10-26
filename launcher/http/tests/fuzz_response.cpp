@@ -1,4 +1,4 @@
-// The response reader over any bytes (D414): never a crash or a read out of
+// The response reader over any bytes: never a crash or a read out of
 // bounds, and whatever it takes it takes in order.
 
 #include "rawframe/http/response.h"

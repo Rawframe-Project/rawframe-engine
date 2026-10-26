@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# An agent changes and cooks a game over the Model Context Protocol (D773):
+# An agent changes and cooks a game over the Model Context Protocol:
 # a copy of the plaza greeted, its tools listed from the session's own
 # discovery, an entity made, given a body named as the catalog names it,
 # and a field set, each written to the scene; a value of the wrong kind and
 # an input the operation lacks refused as failed calls; a batch kept as one
 # undo step and taken back; an entity chosen; two scenes changed as one,
-# and neither where one part fails (D889); a tool and a method that do not
+# and neither where one part fails; a tool and a method that do not
 # exist refused as protocol errors; then the game cooked as a long-running
 # call telling its progress, and a second cook cancelled by the agent
 # answering cancelled.
@@ -17,7 +17,7 @@ author=$1
 cook=$2
 repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
@@ -57,12 +57,12 @@ call() {
     echo '{"jsonrpc":"2.0","id":11,"method":"resources/list"}'
     printf '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"game_cook","arguments":{"output":"%s"},"_meta":{"progressToken":"cooking"}}}\n' "$work/content"
     # Each wait ends as the reply comes; four minutes only bounds a cook
-    # on a sanitized tree under load (D507).
+    # on a sanitized tree under load.
     for _ in $(seq 2400); do
         grep -q '"id":12,"result"' "$work/replies" 2>/dev/null && break
         sleep 0.1
     done
-    # A mesh's box from that cook (D989).
+    # A mesh's box from that cook.
     call 18 asset_mesh_bounds '{"asset":"crate.gltf"}'
     printf '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"game_cook","arguments":{"output":"%s"}}}\n' "$work/other"
     echo '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":13,"reason":"changed my mind"}}'
@@ -86,7 +86,7 @@ for id in 3 4 5 8 9; do
     reply $id | grep -q '"isError":false'
 done
 reply 6 | grep -q '"isError":true'
-# What is chosen, and two scenes changed as one, or neither (D889).
+# What is chosen, and two scenes changed as one, or neither.
 reply 14 | grep -q "$crate"
 for id in 14 15 16; do
     reply $id | grep -q '"isError":false'

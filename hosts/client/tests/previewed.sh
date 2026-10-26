@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A client previewing a game for an authoring session (D432, D433): a
+# A client previewing a game for an authoring session: a
 # dedicated server plays it, and a client whose player joins it from a real
 # window also serves a tooling endpoint with the view grant. Once its
 # player is admitted, a rawframe-author session on the game attaches that

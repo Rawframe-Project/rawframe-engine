@@ -208,7 +208,7 @@ bool loadSystemAuthorities(SSL_CTX* context) {
     return added > 0;
 #elif defined(__ANDROID__)
     // The store Android 14 updates outside the system image, then the
-    // system image's own (D562). Its file names hash each subject the way
+    // system image's own. Its file names hash each subject the way
     // OpenSSL did before 1.0, which a lookup by directory no longer reads,
     // so each file is added as it is.
     X509_STORE* trusted = SSL_CTX_get_cert_store(context);
@@ -249,7 +249,7 @@ bool loadSystemAuthorities(SSL_CTX* context) {
 /// chain the server sent (`sent`). Windows builds the chain itself and
 /// fetches a root of its trust list it has not stored yet, which a copy of
 /// its store taken beforehand lacks: a fresh machine holds a few dozen of
-/// its hundreds of roots (D961).
+/// its hundreds of roots.
 bool windowsTrusts(X509* leaf, STACK_OF(X509) * sent, const char* host) {
     const auto kEncoded = [](X509* certificate) {
         std::string bytes;
@@ -362,7 +362,7 @@ result::Result<std::unique_ptr<Tls>> Tls::create(const std::filesystem::path& au
     ERR_clear_error();
 #if defined(_WIN32)
     // The system's roots as Windows keeps them, fetched as it needs them;
-    // a file of authorities given is trusted alone (D961).
+    // a file of authorities given is trusted alone.
     if (authorities.empty()) {
         SSL_CTX_set_cert_verify_callback(state->context, verifyWithWindows, nullptr);
     }

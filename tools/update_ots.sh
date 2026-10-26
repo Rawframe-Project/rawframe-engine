@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Vendors the OpenType Sanitizer (D385), the cook's font sanitizer under
-# ADR-0078: its release archive, checked by SHA-256, with its library's
+# Vendors the OpenType Sanitizer, the cook's font sanitizer: its release
+# archive, checked by SHA-256, with its library's
 # sources and headers and its license. Graphite's tables are left out (their
 # sanitizers need lz4, and a font's Graphite tables are dropped like any table
 # OTS does not sanitize), and so are its tools, tests, and build files.

@@ -1,10 +1,10 @@
 # Two bots play the sample 3D game while the first one's scene is drawn
 # offscreen into a picture as large as a 1080p screen, its render scale
-# allowed down to a quarter (D533): a software rasterizer cannot draw it in
+# allowed down to a quarter: a software rasterizer cannot draw it in
 # a sixtieth of a second, the frames see each still running past it, and
 # the scale falls. Twenty seconds: under the full check's load the
 # rasterizer compiled its pipelines for most of ten, and drew eight frames,
-# fewer than a judgement takes (D535).
+# fewer than a judgement takes.
 host.maximum_iterations = 2400
 host.iteration_rate = 120
 world.tick_rate = 60
@@ -18,12 +18,11 @@ render.device = any
 render.offscreen = true
 # 1080p: frames of about 65 ms on the rasterizer, three times what shrinks
 # the scale, where 1440p's 220 ms made the address-sanitized tree's run
-# its longest test, 84 s under the full check's load (D545).
+# its longest test, 84 s under the full check's load.
 render.width = 1920
 render.height = 1080
 render.read_every = 0
 scene.render_scale_least_percent = 25
-# What is checked is what is drawn, not how fast a loaded machine ticks
-# (D212, D516).
+# What is checked is what is drawn, not how fast a loaded machine ticks.
 world.degraded_ms = 600000
 world.overload_ms = 0

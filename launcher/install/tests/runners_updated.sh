@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# A player's library updated from a publisher's mirror (SPEC-0038), as a
+# A player's library updated from a publisher's mirror, as a
 # launcher would, and played from the library alone, which plays the
-# Composition it has active (D434): runners' cooked content is packed
+# Composition it has active: runners' cooked content is packed
 # twice, as 0.1.0 and 0.2.0, each signed and added to the mirror with its
 # Composition. The player's library, the publisher's key set pinned, is
 # updated to 0.1.0 and plays from it; updated to 0.2.0, whose resources are the same, it fetches
 # no blob; rolled back, it plays 0.1.0 again with the mirror gone; a blob
 # that rots is healed from the mirror; and collect removes nothing either
 # kept Composition needs. Then the same mirror, served over HTTPS by a web
-# server whose certificate a test authority signed (D414), updates a second
+# server whose certificate a test authority signed, updates a second
 # library to the same blobs, once that authority is trusted and not before.
-# Last, the publisher releases each on the stable channel (SPEC-0020, D424),
+# Last, the publisher releases each on the stable channel,
 # and a third library follows it: through a release, past a replayed
 # pointer and one signed by a key it does not pin, both refused, to a
 # rollback, after which it plays.
@@ -56,7 +56,7 @@ host.iteration_rate = 120
 world.tick_rate = 60
 # What is played only shows the Composition opened; a machine loaded by
 # other work makes a debug tree's World fall behind for longer than its
-# overload limit, which is no update's fault (D893).
+# overload limit, which is no update's fault.
 world.overload_ms = 0
 kest.game_resource = $game
 content.library = $player
@@ -66,7 +66,7 @@ bots.count = 2
 bots.endpoint = arena
 CONF
     (cd "$work/elsewhere" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson" 2>"$work/errors.txt")
-    # The library alone names the Composition: the one active (D434).
+    # The library alone names the Composition: the one active.
     grep -q "\"code\":\"composition_opened\".*\"composition\":\"sha256:$(basename "$(active)")\"" "$work/log.ndjson"
 }
 
@@ -94,11 +94,11 @@ grep -q 'fetched 1 blobs, [0-9]* bytes, healed 1' "$work/healed.txt"
 grep -q 'collected 0 blobs' "$work/collected.txt"
 play
 
-# Over HTTPS (D414): a test authority signs a certificate for localhost and
+# Over HTTPS: a test authority signs a certificate for localhost and
 # 127.0.0.1, and a web server serves the mirror with it. Both are valid from
 # a fixed day long past, not from the second they are signed: a machine's
 # clock may be set back a few seconds while the test runs (one setting it
-# from an HTTPS Date header did, D554), and a certificate signed in the
+# from an HTTPS Date header did), and a certificate signed in the
 # second before is then not yet valid. `openssl ca` dates them, which every
 # OpenSSL and LibreSSL the tests run with can.
 keys=$work/authority
@@ -177,7 +177,7 @@ diff -r "$player/sha256" "$fetched/sha256"
 player=$fetched
 play
 
-# Channels (SPEC-0020, D424): the publisher releases 0.1.0 on stable, and a
+# Channels: the publisher releases 0.1.0 on stable, and a
 # third library follows it over HTTPS; then 0.2.0, which it follows with
 # nothing to fetch.
 over=("https://localhost:$port" --authorities "$keys/authority.pem")
@@ -194,7 +194,7 @@ cp "$mirror/channels/rawframe/runners/stable" "$mirror/channels/rawframe/runners
 "$install" follow "$followed" rawframe/runners stable "${over[@]}" | tee "$work/follow-2.txt"
 grep -q "to 0.2.0, .*sequence 2" "$work/follow-2.txt"
 grep -q 'fetched 0 blobs' "$work/follow-2.txt"
-# The same pointer again is current, and changes nothing (D434).
+# The same pointer again is current, and changes nothing.
 "$install" follow "$followed" rawframe/runners stable "${over[@]}" | tee "$work/follow-current.txt"
 grep -q "^current rawframe/runners stable, release .*, sequence 2$" "$work/follow-current.txt"
 # The first pointer served again is a replay, and changes nothing.

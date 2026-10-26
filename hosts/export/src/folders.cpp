@@ -162,7 +162,7 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
             return false;
         }
     }
-    // The library alone: its active Composition (D434).
+    // The library alone: its active Composition.
     const std::string kContent = "kest.game_resource = " + exported.gameResource + "\ncontent.library = library\n";
     const std::string kServer = "# The game's dedicated server, on this machine's loopback, with an identity\n"
                                 "# made as it starts.\n"
@@ -178,21 +178,20 @@ bool writeNative(const Exported& exported, const std::array<fs::path, 4>& progra
         "host.iteration_rate = 120\nbots.player = true\nrender.device = any\n"
         "audio.play = device\n"
         "# Its view drawn at fewer pixels, down to half each way, while the device\n"
-        "# cannot keep up (D533).\n"
+        "# cannot keep up.\n"
         "scene.render_scale_least_percent = 50\n"
-        "# No picture read back: that is for tests (D534).\n"
+        "# No picture read back: that is for tests.\n"
         "render.read_every = 0\n"
-        "# The player's settings kept beside it between runs (D626).\n"
+        "# The player's settings kept beside it between runs.\n"
         "ui.kept = settings.json\nwindow.title = " +
         exported.title + "\n" + kContent +
         "kest.plan_only = true\nnetwork.quic.pin_file = fingerprint\n"
         "bots.endpoint = 127.0.0.1:" +
         exported.port + "\n" +
         (exported.headset ? "# Shown on a headset where the system's OpenXR runtime has one, played\n"
-                            "# flat where it has none (D658).\nxr.headset = true\n"
+                            "# flat where it has none.\nxr.headset = true\n"
                           : std::string{}) +
-        (!exported.icon.empty() ? "# The game's own icon on its window (D951).\nwindow.icon = icon.ktx2\n"
-                                : std::string{});
+        (!exported.icon.empty() ? "# The game's own icon on its window.\nwindow.icon = icon.ktx2\n" : std::string{});
     const std::string kPlay =
         "# Run " + exported.launcher + kSuffix +
         " to play: it starts the server, then the client.\n"
@@ -247,7 +246,7 @@ bool writeWeb(const Exported& exported, const WebFiles& from, std::vector<std::s
     play.add("configuration",
              document::Value::string("host.iteration_rate = 120\nbots.player = true\naudio.play = sink\n"
                                      // Drawn on the browser's WebGPU, as a native
-                                     // player is on its device (D958).
+                                     // player is on its device.
                                      "render.device = any\nscene.render_scale_least_percent = 50\n"
                                      "render.read_every = 0\n"
                                      "kest.game_resource = " +

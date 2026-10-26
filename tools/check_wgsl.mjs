@@ -1,5 +1,5 @@
-// Compiles every engine shader's WGSL (the entries WebGPU runs, D286),
-// as each container holds it, compiled from Slang (D475), in headless
+// Compiles every engine shader's WGSL (the entries WebGPU runs),
+// as each container holds it, compiled from Slang, in headless
 // Chrome's WebGPU, as the browser test's page would, and fails on any
 // error or warning: the native tests never run them, a browser run may not
 // reach every one, and WebGPU refuses what Vulkan takes (a sample in

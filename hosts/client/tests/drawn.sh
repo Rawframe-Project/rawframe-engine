@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A dedicated server playing a game (runners unless named), and a client
-# whose player joins it from a real window drawn on the one device (D280),
+# whose player joins it from a real window drawn on the one device,
 # while the screen is watched: prints every log and how many pixels the screen lit at most. A
 # machine with no adapter the configuration allows skips, unless
 # RAWFRAME_REQUIRE_GPU is set, as the check sets it where lavapipe is.
@@ -13,7 +13,7 @@
 #                 [game] [server settings] [bots] [iterations]
 #
 # [bots], none unless given, play beside the client's own player in its
-# process: flat players beside one on a headset (D606). [iterations] are
+# process: flat players beside one on a headset. [iterations] are
 # the client's Host's, 480 unless given.
 set -uo pipefail
 

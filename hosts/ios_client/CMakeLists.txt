@@ -1,4 +1,4 @@
-# The iOS client (D586): the client as an application UIKit runs, in the
+# The iOS client: the client as an application UIKit runs, in the
 # simulator. Only on iOS, where the window system and the device layer are
 # built.
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS" OR NOT TARGET rawframe_input_window OR NOT TARGET rawframe_render_canvas_gpu)

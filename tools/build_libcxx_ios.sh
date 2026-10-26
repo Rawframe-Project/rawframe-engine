@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds LLVM 20.1.8's libc++ and libc++abi for the iOS simulator on 64-bit
-# ARM, static, into one prefix (D583): the library the engine's C++ is
+# ARM, static, into one prefix: the library the engine's C++ is
 # compiled and linked against there (cmake/ios-simulator.cmake). Xcode's own
 # libc++ has no std::from_chars of a double before iOS 26, and Homebrew's
 # LLVM links the SDK's library, so LLVM's is built from its released source,

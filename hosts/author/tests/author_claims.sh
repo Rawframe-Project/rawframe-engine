@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Presence and claims in one session (ADR-0085, D880), headless: Ada says
+# Presence and claims in one session, headless: Ada says
 # what she has chosen and where she looks, and claims the ground; Ben's
 # rename of it is refused naming her, his rename of a wall is kept, and his
 # claim on the whole level is refused; the session's own change to the

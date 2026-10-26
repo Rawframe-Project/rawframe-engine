@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A source's import settings through a session (D800): the plaza's paving
+# A source's import settings through a session: the plaza's paving
 # read with the settings the texture importer offers; a setting at its
 # fallback cleared from the sidecar and another written, the sidecar's
 # identity kept; a value the importer refuses, a setting it does not offer,

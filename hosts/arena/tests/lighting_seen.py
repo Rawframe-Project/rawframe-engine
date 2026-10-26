@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# The Lighting Test drawn (D749): runs the arena on a configuration that
+# The Lighting Test drawn: runs the arena on a configuration that
 # draws the fixture offscreen and writes its last frame, prints what it
 # logged, and reads the frame for each light the fixture lights with. The
 # bots turn the view at random, by how fast the machine runs, within the

@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
 # Builds the engine's shader containers offline, as a cook would: no
-# shipped build compiles a shader (ADR-0029). Each container's source is
-# NAME.slang, Slang being the one first-party GPU language (ADR-0026,
-# D475): slangc compiles every entry into one SPIR-V module and into WGSL,
+# shipped build compiles a shader. Each container's source is
+# NAME.slang, Slang being the one first-party GPU language:
+# slangc compiles every entry into one SPIR-V module and into WGSL,
 # from the one source; the pinned compiler's version is checked, and
 # RAWFRAME_SLANGC names it where it is not on the path. spirv-val checks
 # the module for Vulkan 1.3, and Maul RHI's container writer
 # (third_party/maul-rhi/tools/mrhi_container.py) writes the containers a
-# build's driver reads (D416), each with the SPIR-V and each entry in WGSL,
+# build's driver reads, each with the SPIR-V and each entry in WGSL,
 # which the writer asks of every container: NAME.mrsc, for Vulkan and
 # WebGPU; NAME.metal.mrsc, with each entry in Metal's language too, crossed
-# from the SPIR-V by Maul RHI's mrhi_msl.py through SPIRV-Cross (D406); and
+# from the SPIR-V by Maul RHI's mrhi_msl.py through SPIRV-Cross; and
 # NAME.d3d12.mrsc, with each entry's DXIL, crossed to HLSL and compiled by
-# DXC through its mrhi_dxil.py (D415). They land in the module's
+# DXC through its mrhi_dxil.py. They land in the module's
 # src/generated, and the build embeds the one its driver reads
 # (rawframe_shader_containers in cmake/rawframe.cmake). The check runs none
 # of these tools; the containers are committed, and this is run again
-# whenever a source changes (D278). spirv-cross and dxc must be on the path.
+# whenever a source changes. spirv-cross and dxc must be on the path.
 #
 # With `--material`, the three containers of each container linked with a
 # material, the scene's and the shadow's, are built linked with the
 # material module given in place of the engine's own, and written to the
-# directory given, as the cook builds them for a game's material (D484,
-# D488).
+# directory given, as the cook builds them for a game's material.
 #
-# A toolchain laid out as Studio's package lays one (D945) has the programs
+#
+# A toolchain laid out as Studio's package lays one has the programs
 # in a `bin` beside `tools`: they are taken first, its Slang compiler before
 # the one RAWFRAME_SLANGC names, as the cook takes them.
 #
@@ -46,26 +46,25 @@ WRITER = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_container.
 METAL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_msl.py")
 DXIL = os.path.join(ROOT, "third_party", "maul-rhi", "tools", "mrhi_dxil.py")
 # The Slang compiler every container is built with: its exact release, as
-# the language is defined by the pinned compiler until it is ratified
-# (ADR-0026).
+# the language is defined by the pinned compiler until it is ratified.
 SLANGC = os.environ.get("RAWFRAME_SLANGC", "slangc")
 for packaged in (os.path.join(BIN, "slangc"), os.path.join(BIN, "slangc.exe")):
     if os.path.isfile(packaged):
         SLANGC = packaged
 SLANG_VERSION = "2026.19"
-# The containers whose vertex position must be invariant (D475).
+# The containers whose vertex position must be invariant.
 INVARIANT = ("scene",)
-# Containers whose shading reads its surface through a material
-# (D481, D482): the scene declares its material extern and is linked with
+# Containers whose shading reads its surface through a material:
+# the scene declares its material extern and is linked with
 # the module that exports it, the blob's for the containers the engine
 # ships, beside the module of what a material is, and the scene's also with
-# its lighting model (D727).
+# its lighting model.
 LINKED = {"scene": ("blob_material", "material", "lighting"), "shadow": ("blob_material", "material")}
 # Each linked container's vertex entry and the fragment entries drawn with
 # it, whose inputs D3D12 asks be exactly its outputs: a material may leave
-# an input unread, which Slang drops from the entry (D418, D501).
+# an input unread, which Slang drops from the entry.
 DRAWN_WITH = {"scene": ("vs", ("fs", "fsDecaled", "cut", "normal", "cutNormal")), "shadow": ("vsCut", ("cut",))}
-# Materials written for a module's tests (D485): its module and its name,
+# Materials written for a module's tests: its module and its name,
 # built from tests/materials/NAME.slang with each linked container, as
 # `--material` builds a game's, into tests/generated/NAME.CONTAINER.
 TEST_MATERIALS = (("render_scene_gpu", "checker"), ("render_scene_gpu", "faded"), ("render_scene_gpu", "faded_graph"),
@@ -135,7 +134,7 @@ def checkDrawnWith(dxil, name):
     # first of its vertex shader's outputs, element for element, where
     # Vulkan, Metal, and WebGPU draw it; those it leaves off the end it
     # need not read.
-    # The values the rasterizer makes (the face drawn, D705) are no vertex
+    # The values the rasterizer makes (the face drawn) are no vertex
     # shader's to give, and are left out of the comparison.
     vertex, fragments = DRAWN_WITH[name]
     outputs = signature(os.path.join(dxil, f"{vertex}.dxil"), "Output")
@@ -148,7 +147,7 @@ def checkDrawnWith(dxil, name):
 
 def invariantPosition(spirv, wgsl):
     # Slang 2026.19 cannot say a vertex position is invariant, which the
-    # scene's depth prepass and lit pass need to meet exactly (D475): the
+    # scene's depth prepass and lit pass need to meet exactly: the
     # SPIR-V's position is decorated Invariant, and the WGSL's vertex
     # output marked @invariant, after Slang compiles them.
     listed = subprocess.run(["spirv-dis", "--raw-id", spirv], capture_output=True, text=True)
@@ -176,7 +175,7 @@ def invariantPosition(spirv, wgsl):
 def withoutSource(spirv):
     # Slang names its own source language (11) in OpSource, which SPIR-V
     # parsers older than Slang's language refuse: the Android emulator's
-    # host side refused it and fell over (D552). Which language a module
+    # host side refused it and fell over. Which language a module
     # came from is debug information no driver needs, so OpSource,
     # OpSourceContinued, and OpSourceExtension are dropped, word for word
     # and nothing else moved.
@@ -219,7 +218,7 @@ def build(work, shaders, name, material=None):
         # and the link runs beside the modules, where alone Slang finds
         # the ones they import.
         # A material given in place of the first linked module, the
-        # engine's own (D484): a game's, generated or written by hand.
+        # engine's own: a game's, generated or written by hand.
         sources = [os.path.join(shaders, f"{module}.slang") for module in (name, *LINKED[name])]
         if material is not None:
             sources[1] = material
@@ -264,7 +263,7 @@ def main():
     checkSlang()
     # `--material <source> <directory>`: each linked container built with
     # that material, written to the directory, as the cook asks for a
-    # material the blob cannot fold (D484, D488).
+    # material the blob cannot fold.
     if len(sys.argv) == 4 and sys.argv[1] == "--material":
         shaders = os.path.join(ROOT, "modules", "render_scene_gpu", "shaders")
         with tempfile.TemporaryDirectory() as work:

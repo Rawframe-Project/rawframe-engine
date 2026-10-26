@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Writes Reach's knock (D660): a block of wood struck, a fifth of a second,
+# Writes Reach's knock: a block of wood struck, a fifth of a second,
 # made here from nothing but decaying sines and a burst of noise, so the
 # game carries no one else's recording. Two of the block's modes ring and
 # fade fast, struck by a click of noise a few milliseconds long. Mono,

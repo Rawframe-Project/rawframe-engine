@@ -1,5 +1,5 @@
 # Sourced by Studio's tests: a private accessibility bus for the Studio
-# they start, so tools/click.py finds its controls by name (D774), where
+# they start, so tools/click.py finds its controls by name, where
 # dbus-daemon exists. Sets AT_SPI_BUS_ADDRESS for what follows and `bus`
 # to the daemon's pid, which the caller's trap ends.
 bus=""

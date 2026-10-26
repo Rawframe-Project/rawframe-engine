@@ -1,5 +1,5 @@
-# The install tool (SPEC-0038): a launcher's installing and updating as a
-# process over rawframe.install, from a mirror on disk or over HTTP (D414).
+# The install tool: a launcher's installing and updating as a
+# process over rawframe.install, from a mirror on disk or over HTTP.
 # A launcher program: no engine closure contains it.
 rawframe_host(NAME install_tool OUTPUT rawframe-install
     SOURCES src/http_origin.cpp src/main.cpp

@@ -1,12 +1,12 @@
-// A desktop client (D249): one window, and a Host playing a Kest game on a
+// A desktop client: one window, and a Host playing a Kest game on a
 // server over QUIC as the process's own player, whose input comes from the
 // window. Where Maul RHI is built, its canvas is drawn on the one device and
-// shown in the window (D280); elsewhere it is heard, not yet seen.
+// shown in the window; elsewhere it is heard, not yet seen.
 //
 //   rawframe-client [--config <file>]
 //
-// The window system owns the loop (SPEC-0025, D248), so the Host is driven
-// from its frames (`window_host`, D250): each frame hands the window's raw
+// The window system owns the loop, so the Host is driven
+// from its frames (`window_host`): each frame hands the window's raw
 // input to the player's devices, runs every Host iteration due, then waits
 // for the next one. The configuration plays the player with
 // `bots.player = true`; closing the window ends the run the way a stop
@@ -59,7 +59,7 @@ constexpr std::size_t kDrawing = 3;
 #else
 constexpr std::size_t kDrawing = 0;
 #endif
-// A headset, where OpenXR is built (D593).
+// A headset, where OpenXR is built.
 #if RAWFRAME_CLIENT_HEADSET
 constexpr std::size_t kHeadset = 1;
 #else
@@ -93,7 +93,7 @@ constexpr std::array<composition::RegistrarEntry, 13 + kDrawing + kHeadset> kReg
 #endif
 };
 
-/// A tooling client's look onto the preview's camera (D432): the client's
+/// A tooling client's look onto the preview's camera: the client's
 /// own tooling endpoint hands it what an author looks from, and the scene
 /// renderer looks through the camera.
 class Previewer final : public world_tooling::Previewer {
@@ -109,7 +109,7 @@ public:
             return false;
         }
         camera.look(kView);
-        // Orbited about what it was told to look at (D913).
+        // Orbited about what it was told to look at.
         camera.aim(
             std::hypot(look->target[0] - look->eye[0], look->target[1] - look->eye[1], look->target[2] - look->eye[2]));
         return true;
@@ -176,18 +176,17 @@ public:
     }
 
     /// What an editor's viewport showing this preview handed it, acted on
-    /// as the window's (D790).
+    /// as the window's.
     bool input(const std::vector<world_tooling::WindowInput>& events) override {
         injection.inject(events);
         return true;
     }
-    /// The layers an editor hides, left out of what the scene draws
-    /// (D791).
+    /// The layers an editor hides, left out of what the scene draws.
     bool hide(const std::vector<std::uint32_t>& layers) override {
         camera.hide(layers);
         return true;
     }
-    /// The looks beside the preview's own (D797).
+    /// The looks beside the preview's own.
     bool split(const std::vector<world_tooling::Look>& others) override {
         std::vector<view::Perspective> made;
         for (const world_tooling::Look& kOther : others) {
@@ -201,7 +200,7 @@ public:
         camera.split(std::move(made));
         return true;
     }
-    /// What is drawn over the scene, by the overlays' names (D798).
+    /// What is drawn over the scene, by the overlays' names.
     bool overlay(const std::vector<std::string>& overlays) override {
         std::uint8_t bits = 0;
         for (const std::string& kName : overlays) {
@@ -214,7 +213,7 @@ public:
         camera.overlay(bits);
         return true;
     }
-    /// How the scene is drawn, by the view mode's name (D794).
+    /// How the scene is drawn, by the view mode's name.
     bool viewMode(std::string_view mode) override {
         const std::optional<view::ViewMode> kMode = view::viewModeNamed(mode);
         if (kMode.has_value()) {
@@ -222,11 +221,11 @@ public:
         }
         return kMode.has_value();
     }
-    /// What the frame the scene last drew from the preview holds (D842).
+    /// What the frame the scene last drew from the preview holds.
     std::optional<world_tooling::DrawnFrame> drawn(bool steps) const override {
-        // Asked, the frames' passes are timed from now on (D894).
+        // Asked, the frames' passes are timed from now on.
         camera.askTimes();
-        // A frame with no scene in it (a 2D game's, D901) has its passes'
+        // A frame with no scene in it (a 2D game's) has its passes'
         // times and no figures.
         if (camera.descriptions() == 0 && camera.passTimings().empty()) {
             return std::nullopt;
@@ -286,6 +285,6 @@ int main(int argc, char** argv) {
                            .drive = &play,
                            // Its participants' stop budgets came to the
                            // default's whole 5 s before a preview's tooling
-                           // endpoint joined them (D432).
+                           // endpoint joined them.
                            .defaultShutdownBudgetMs = 5500});
 }

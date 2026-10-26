@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPEC-0041's divergence drill (D204) and its two-sided capture (D275): four
+# the divergence drill and its two-sided capture: four
 # bots predict their runners and flip one bit of every state they hash, so
 # the server finds every checksum record diverged, logs each, and plays on;
 # both sides capture what they hashed, and set side by side, each diverged
@@ -29,7 +29,7 @@ bots.checksum_interval = 30
 bots.divergence_drill = true
 bots.divergence_capture = true
 # What is checked is what the run did, not how fast a loaded machine
-# ticks (D516, D569): stopped as overloaded, the script ends before it.
+# ticks: stopped as overloaded, the script ends before it.
 world.degraded_ms = 600000
 world.overload_ms = 0
 CONF

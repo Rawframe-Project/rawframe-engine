@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Writes Gale's broadside (D686): a cannon's report, eight tenths of a
+# Writes Gale's broadside: a cannon's report, eight tenths of a
 # second, made here from nothing but noise and decaying sines, so the game
 # carries no one else's recording. A crack of bright noise opens it, a low
 # thump and a rumble of darkened noise follow and fade. Mono, 24,000 frames

@@ -1,11 +1,11 @@
-"""A dedicated server drains (SPEC-0012): asked to stop while bots play, it
+"""A dedicated server drains: asked to stop while bots play, it
 tells them it is stopping, closes admission, refuses a second bots process
-as unavailable each time its bots ask again (D379), keeps serving the
+as unavailable each time its bots ask again, keeps serving the
 first until those bots leave, and only then stops, well within its drain
 time. Run from the repository root.
 
 A stop is asked the way each system asks: SIGTERM on POSIX, Ctrl+Break to
-the process's own group on Windows (D237), which is why this is Python and
+the process's own group on Windows, which is why this is Python and
 not a shell script, whose kill cannot send the second.
 
 usage: drain.py <rawframe-server> <rawframe-bots>

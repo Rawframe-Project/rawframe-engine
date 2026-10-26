@@ -1,9 +1,9 @@
-# ThreadSanitizer suppressions for every test of a thread build (D428), set
+# ThreadSanitizer suppressions for every test of a thread build, set
 # by the root CMakeLists.txt. Each is a library built without
 # ThreadSanitizer, which cannot see how it orders its own threads, and is
 # that library's to check, not the engine's.
 #
-# The render cluster's (D278): Mesa's software Vulkan driver runs its
+# The render cluster's: Mesa's software Vulkan driver runs its
 # rasterizer on threads of its own and compiles shaders with LLVM; Maul
 # RHI's own suite suppresses the same.
 called_from_lib:libvulkan_lvp.so
@@ -11,7 +11,7 @@ called_from_lib:libLLVM
 # The window's system libraries: libxcb (the X connection) and libdbus (the
 # desktop's settings) take and release their own locks inside themselves,
 # where ThreadSanitizer sees only half, and it reports inversions, a double
-# lock, and a race within one thread's calls (D396).
+# lock, and a race within one thread's calls.
 called_from_lib:libxcb.so
 called_from_lib:libdbus-1.so
 # One of libdbus's own unlocks reaches ThreadSanitizer from a tail call,

@@ -1,4 +1,4 @@
-// The launcher's client against a server in this process (D414): plain
+// The launcher's client against a server in this process: plain
 // HTTP, so the exchange is the client's own; TLS is the scenario's, with
 // certificates made for it (launcher/install/tests).
 

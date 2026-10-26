@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs an Android tree's test programs on a device or emulator (D561):
+# Runs an Android tree's test programs on a device or emulator:
 #
 #   tools/android_tests.sh <build tree> [<pattern>]
 #

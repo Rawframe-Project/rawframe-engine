@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Replaces third_party/cldr with the CLDR data localization compiles ahead of
-# time (ADR-0050), from the cldr-json repository at one exact commit: the
+# time, from the cldr-json repository at one exact commit: the
 # supplemental files for plural and ordinal rules, likely subtags, parent
 # locales, aliases, numbering systems, and coverage, the number data of every
 # locale of modern coverage, and the license. Files are upstream's bytes,

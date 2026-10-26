@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Two authors in one session (ADR-0085, D879), headless: each record names
+# Two authors in one session, headless: each record names
 # its author; Ada's undo takes back her own crate past Ben's later one, as
 # an entry of its own, and her redo puts it back; Ben's undo takes back
 # his; the history names who made each entry and what it is; an undo a
