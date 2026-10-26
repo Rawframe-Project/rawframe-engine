@@ -1,7 +1,5 @@
-// Editing a node's text (D426) over Maul UI's editing primitives (its record
-// mui-0006): positions, carets, movement, deletions, and an input method's
-// composition, in the node's border box. Selection and input are
-// ui::TextEdit's.
+// Editing a node's text over Maul UI's editing primitives: positions, carets, movement, deletions, and an input
+// method's composition, in the node's border box. Selection and input are ui::TextEdit's.
 
 #include "rawframe/ui/tree.h"
 #include "tree_state.h"

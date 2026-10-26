@@ -1,15 +1,15 @@
-// The UI as World data (D376): node components laid out in their player's
+// The UI as World data: node components laid out in their player's
 // view, nested by their components' parents on the same entity or on the
 // player, siblings in order; a node changes, goes, and is left out as its
 // component does; nothing unchanged is laid out again; a new World starts
 // afresh; values the tree cannot take, a gradient of no kind among them,
 // are left out and counted; and a node shows its label's words in the
-// game's font once it is read, sized by them (D386); a press lands on the
-// node that takes it, with its code, or passes through (D421); a text
+// game's font once it is read, sized by them; a press lands on the
+// node that takes it, with its code, or passes through; a text
 // field's keyboard, typing, and placeholder are fields_test.cpp's;
-// navigation moves focus without a pointer (D430); a styled node looks as
-// its class says in each state it is in (D431); and a node that scrolls
-// moves its children under a wheel turned over it (D444).
+// navigation moves focus without a pointer; a styled node looks as
+// its class says in each state it is in; and a node that scrolls
+// moves its children under a wheel turned over it.
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -194,7 +194,7 @@ RAWFRAME_TEST(ANodeShowsItsLabelsWordsInTheGamesFont) {
             kHudId,
             ui::NodeFields{.text = 0xA1, .textValue = 5, .font = 0xF1, .textSize = 10, .textColor = 0xFFFFFFFF});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().glyphs.size() == 5);
-    // And with its second value, its label's second argument (D647).
+    // And with its second value, its label's second argument.
     rig.put(rig.player,
             kHudId,
             ui::NodeFields{
@@ -212,7 +212,7 @@ RAWFRAME_TEST(ANodeShowsItsLabelsWordsInTheGamesFont) {
 
 RAWFRAME_TEST(EachLocalPlayersWordsAreInTheirOwnLocale) {
     // Two local players, each in their own view of their own World, the
-    // second asking for words twice as long (ADR-0050's per-player locale).
+    // second asking for words twice as long.
     Rig rig;
     std::vector<std::size_t> askedBy;
     rig.ui = *WorldUi::create({.nodes = {kHudId, kMeterId, kRowId},
@@ -289,7 +289,7 @@ RAWFRAME_TEST(NavigationMovesFocusAndActivatesWhatItHolds) {
     // then a field (215, 55).
     rig.put(rig.player, kHudId, panel());
     RAWFRAME_EXPECT(rig.frame() && rig.ui->reachable() == 0);
-    // Navigation reaches each as it is made (D476).
+    // Navigation reaches each as it is made.
     rig.put(
         rig.player, kMeterId, ui::NodeFields{.widthOffset = 100, .heightOffset = 20, .fill = 0x40C040FF, .press = 1});
     RAWFRAME_EXPECT(rig.frame() && rig.ui->reachable() == 1);
@@ -457,7 +457,7 @@ RAWFRAME_TEST(ANodeThatScrollsMovesItsChildrenUnderTheWheel) {
 }
 
 RAWFRAME_TEST(AViewIsLaidOutInsideWhatThePlatformLeavesClear) {
-    // A phone's notch and home indicator (D589): a view on the window's
+    // A phone's notch and home indicator: a view on the window's
     // edges is drawn in by what covers them; an edge between two players'
     // views stays; with no window told, nothing changes.
     const view::ViewInsets kSafe{.top = 59, .right = 0, .bottom = 34, .left = 0};

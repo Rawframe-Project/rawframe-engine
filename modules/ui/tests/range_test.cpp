@@ -1,9 +1,9 @@
-// Ranges (D621): a node made a range holds its value within its limits
+// Ranges: a node made a range holds its value within its limits
 // and on a step; a press on its track pages the value toward the point,
 // a drag past the threshold moves it with the pointer, from where its
 // thumb was grabbed, and what the pointer did is taken; a press elsewhere
 // is not; a range refused where its numbers are wrong, and cleared; and a
-// popup placed beside its anchor, flipped where it has no room (D623).
+// popup placed beside its anchor, flipped where it has no room.
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/tree.h"

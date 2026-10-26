@@ -1,4 +1,4 @@
-// The player's settings kept between runs (D626): a kept slider and check
+// The player's settings kept between runs: a kept slider and check
 // box start as kept, the player's changes to them are noted and counted,
 // a node not kept is never noted, and every local player's starts as the
 // first's; the `ui.kept` document reads back what is written and is

@@ -1,4 +1,4 @@
-// Editing a node's text (D426), in Ahem, whose glyphs are boxes an em wide:
+// Editing a node's text, in Ahem, whose glyphs are boxes an em wide:
 // typed text and editing keys on the caret and the selection, by cluster,
 // word, and line; a single line keeping no line breaks; the text's room
 // kept whole code points at a time; points finding positions in the

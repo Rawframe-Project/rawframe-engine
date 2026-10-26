@@ -99,7 +99,7 @@ muiSize measureText(void* user, muiNodeId node, std::uint64_t, muiMeasureAxis wi
         return muiSize{.width = 0, .height = 0};
     }
     const muiSize kMeasured = muiMeasureText(&state->host, node, muiTextBlock_GetKey(kText->block), width, height);
-    // An editable node emptied keeps a line's height (D970), as a field
+    // An editable node emptied keeps a line's height, as a field
     // does: measured as nothing, it sat in its row's middle, and its caret,
     // drawn down a line from its top, half a line low.
     if (kText->editable && kMeasured.height <= 0) {
@@ -132,7 +132,7 @@ Tree::create(std::uint32_t maximumNodes, std::uint32_t maximumFonts, std::uint32
     }
     muiContextDef def = muiDefaultContextDef();
     def.limits.nodes = maximumNodes;
-    // Every node may carry a role or a name (D571).
+    // Every node may carry a role or a name.
     def.limits.accessNodes = maximumNodes;
     auto state = std::make_unique<State>();
     RAWFRAME_TRY(checked(muiCreateContext(&def, &state->context), "a UI tree could not be made"));
@@ -338,7 +338,7 @@ result::Status Tree::setInteraction(Node node, const Interaction& interaction) {
         .passThrough = interaction.passThrough,
         .layer = static_cast<muiLayerKind>(interaction.layer),
         // Focus is given by its owner's code, never by Maul UI's own
-        // navigation, which the engine does not run (D430, D573).
+        // navigation, which the engine does not run.
         .focusMode = static_cast<muiFocusMode>(interaction.focusable ? mui_focusPointer : mui_focusNone),
         .tabOrder = 0,
         .drags = interaction.drags,
@@ -403,7 +403,7 @@ result::Status Tree::removeFont(Font font) {
         return refuse(UiError::Stale, "a font not in the tree could not be removed");
     }
     RAWFRAME_TRY(checked(muiDestroyFont(state_->text, kFound->second), "a font could not be removed"));
-    // Its glyphs' images go stale with its key in the atlas (D404).
+    // Its glyphs' images go stale with its key in the atlas.
     state_->fonts.erase(kFound);
     return {};
 }
@@ -414,7 +414,7 @@ result::Status Tree::setDefaultFont(Font font) {
         return refuse(UiError::Stale, "a font not in the tree could not be made the default");
     }
     RAWFRAME_TRY(checked(muiSetDefaultFont(state_->text, kFound->second), "a font could not be made the default"));
-    // The atlas keys the null font's images by the default's own key (D404).
+    // The atlas keys the null font's images by the default's own key.
     return {};
 }
 
@@ -484,7 +484,7 @@ std::uint64_t Tree::textFailures() const noexcept {
 namespace {
 
 /// How far the transform at `index` moves what goes through it, when it
-/// only moves it (a scroll container's children are moved so, D441); none
+/// only moves it (a scroll container's children are moved so); none
 /// for any other transform, which the list does not carry.
 std::optional<std::array<float, 2>> shiftOf(const muiDrawList& list, std::uint32_t index) {
     if (index == 0) {

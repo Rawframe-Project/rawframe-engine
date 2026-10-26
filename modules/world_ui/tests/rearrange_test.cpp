@@ -1,4 +1,4 @@
-// The game's UI document taken again as an author edits it (D619): a node
+// The game's UI document taken again as an author edits it: a node
 // moved out of its parent and back, a node given typed words to show, and
 // a document the UI does not take changing nothing.
 

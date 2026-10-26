@@ -34,7 +34,7 @@ std::optional<Layout> layoutOf(const NodeFields& node) noexcept {
         .shrink = node.shrink,
         .alignSelf = static_cast<Align>(node.alignSelf),
         .padding = kSides(node.padding),
-        // A popup's margin is its gap from its anchor (D623).
+        // A popup's margin is its gap from its anchor.
         .margin = kSides(node.popup != 0 ? 0 : node.margin),
         .border = kSides(node.border),
         .placement = {.absolute = node.absolute != 0 || node.popup != 0,

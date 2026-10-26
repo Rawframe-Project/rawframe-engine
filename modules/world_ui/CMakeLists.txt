@@ -1,4 +1,4 @@
-# The UI as World data (ADR-0034, D376): `rawframe.ui.Node` components of
+# The UI as World data: `rawframe.ui.Node` components of
 # each local player's mirrored World laid out in the player's view as a
 # `rawframe.ui` tree and drawn as its command list. Client only: the
 # dedicated server carries the components as plain values and links none of
@@ -8,7 +8,7 @@ rawframe_module(NAME world_ui
     DEPS ui document view game_textures assets game_content content texture graph world_localization localization world_replication world_kest kest world composition schema execution diagnostics result base
 )
 
-# The player's settings are kept in a file where there are files (D626).
+# The player's settings are kept in a file where there are files.
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
     rawframe_module_tests(NAME world_ui SOURCES tests/world_ui_test.cpp tests/fields_test.cpp tests/restyle_test.cpp tests/rearrange_test.cpp)
 else()

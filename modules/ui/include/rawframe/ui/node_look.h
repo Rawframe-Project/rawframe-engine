@@ -1,7 +1,7 @@
 #pragma once
 
-// How a node's fields (D619) lay out and look in a tree: what a game's node
-// is given as its components change (`rawframe.world_ui`, D376), and what a
+// How a node's fields lay out and look in a tree: what a game's node
+// is given as its components change (`rawframe.world_ui`), and what a
 // tool shows of a UI document it previews.
 
 #include "rawframe/ui/document.h"
@@ -17,7 +17,7 @@ namespace rawframe::ui {
 /// `node`'s look; a gradient kind past the set is passed on, for the tree
 /// to refuse.
 [[nodiscard]] Look lookOf(const NodeFields& node) noexcept;
-/// The parts of its look a styled node sets itself (D431): those it gives
+/// The parts of its look a styled node sets itself: those it gives
 /// a value other than nought. An inner shadow it has no field for.
 [[nodiscard]] LookParts ownPartsOf(const NodeFields& node) noexcept;
 /// `node`'s words' look in `font`, 16 pixels where it gives no size.
