@@ -1,12 +1,12 @@
-// The UI's draw list on the device (SPEC-0032, D375) on lavapipe: a tree's
+// The UI's draw list on the device on lavapipe: a tree's
 // rounded box drawn over the cleared picture, its fill inside its border,
 // nothing past its rounded corner, its edges smoothed; a box half clear
 // blends over what is behind it; a clipping parent keeps its child
-// inside it; a child is kept inside every clip above it (D377); and an
-// image is drawn stretched, or in nine slices, over its node's fill (D378);
+// inside it; a child is kept inside every clip above it; and an
+// image is drawn stretched, or in nine slices, over its node's fill;
 // a run of glyphs with no atlas is counted and left out between boxes it
-// does not join (D384), and with one, each glyph's coverage is drawn texel
-// for pixel in its run's color, inside its clip (D398).
+// does not join, and with one, each glyph's coverage is drawn texel
+// for pixel in its run's color, inside its clip.
 // Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "rawframe/render/device.h"
@@ -503,7 +503,7 @@ RAWFRAME_TEST(AGlyphsFieldIsDrawnScaledWithAPixelWideEdge) {
     if (kDevice == nullptr) {
         return;
     }
-    // A field of eight texels square with two of spread (D667): a square
+    // A field of eight texels square with two of spread: a square
     // from texel 2 to texel 6 on both axes, every channel its distance,
     // drawn four times its size from half a pixel past 8, so its left edge
     // falls on the middle of pixel 16.
@@ -554,7 +554,7 @@ RAWFRAME_TEST(AColorGlyphIsDrawnInItsOwnColorsBesideCoverage) {
     if (kDevice == nullptr) {
         return;
     }
-    // One run, half transparent (D669): a color glyph of four texels
+    // One run, half transparent: a color glyph of four texels
     // square, red on its left half and half-transparent blue over red on
     // its right (sRGB 188, 0, 188 premultiplied), and a coverage block.
     ui::ColorAtlas colors{.side = 16, .pixels = std::vector<std::uint8_t>(16 * 16 * 4, 0), .revision = 1};

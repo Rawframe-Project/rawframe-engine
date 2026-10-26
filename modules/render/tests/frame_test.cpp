@@ -1,4 +1,4 @@
-// The frames `render` owns (D285) on lavapipe: a frame nothing drew in is
+// The frames `render` owns on lavapipe: a frame nothing drew in is
 // black; recorders declare in their order, the first to draw into the
 // picture clearing it and the next keeping what it drew; and a recorder's
 // refusal drops the frame, every recorder told, the next frame whole.
@@ -79,7 +79,7 @@ public:
             mrhiClearColor{.red = color_[0], .green = color_[1], .blue = color_[2], .alpha = color_[3]};
         def.colorTargetCount = 1;
         def.neverCull = true;
-        // Timed by its name, where the frame times its passes (D894, D901).
+        // Timed by its name, where the frame times its passes.
         render::timePass(frame, def, name_);
         if (mrhiAddPass(frame.device->native(), &def, &pass_) != mrhi_success) {
             return std::unexpected<result::Error>{result::fail(result::ErrorClass::Unavailable,
@@ -172,7 +172,7 @@ RAWFRAME_TEST(FramesAreMadeOfTheirRecordersInOrder) {
 }
 
 RAWFRAME_TEST(AFrameTimesItsPassesWhereAsked) {
-    // D894: a frame not asked times nothing; asked, on a device that writes
+    // A frame not asked times nothing; asked, on a device that writes
     // timestamps, each pass a recorder names is timed by the GPU once the
     // frame is done, in its order.
     const auto kDevice = opened();

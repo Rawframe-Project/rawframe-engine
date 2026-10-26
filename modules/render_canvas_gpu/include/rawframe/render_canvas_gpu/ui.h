@@ -1,18 +1,18 @@
 #pragma once
 
-// The UI's draw-command list on the device (ADR-0034's one render path,
-// SPEC-0032, D375): a tree's boxes drawn over the frame's picture in their
+// The UI's draw-command list on the device (the one render path): a
+// tree's boxes drawn over the frame's picture in their
 // paint order, each a rounded box by its signed distance, its border
 // inside it, smoothed over a pixel, inside its clip, premultiplied and
 // blended over what is behind it in linear light, inside its clip and
-// every clip that one is inside (D377); and its images in their place in
-// the order, each its texture's part stretched or in nine slices (D378);
-// its shadows, as CSS's box-shadow, blurred by a Gaussian (D381); and its
-// boxes' gradients over their fills, moving through premultiplied Oklab
-// (D382); and its glyph runs, each glyph's coverage read from the tree's
+// every clip that one is inside; and its images in their place in
+// the order, each its texture's part stretched or in nine slices;
+// its shadows, as CSS's box-shadow, blurred by a Gaussian; and its
+// boxes' gradients over their fills, moving through premultiplied Oklab;
+// and its glyph runs, each glyph's coverage read from the tree's
 // glyph atlas, held on the device as a texture made again when the atlas
-// changes (D398). A target that shows the UI apart, a headset's panel,
-// has it drawn there, on clear, instead of over the picture (D597).
+// changes. A target that shows the UI apart, a headset's panel,
+// has it drawn there, on clear, instead of over the picture.
 
 #include "rawframe/render/device.h"
 #include "rawframe/render/frame.h"
@@ -30,25 +30,25 @@ namespace rawframe::render_canvas_gpu {
 using ImageSource = std::function<std::shared_ptr<const texture::Texture>(std::uint64_t id)>;
 
 struct UiStatistics {
-    /// Frames the list was drawn in, those on a headset's panel (D597),
+    /// Frames the list was drawn in, those on a headset's panel,
     /// and its boxes drawn in all.
     std::uint64_t frames = 0;
     std::uint64_t framesOnPanel = 0;
     std::uint64_t boxes = 0;
     /// Images drawn in all, and those left out while their texture was not
-    /// ready or past the textures held (D378).
+    /// ready or past the textures held.
     std::uint64_t images = 0;
     std::uint64_t imagesWaiting = 0;
-    /// Shadows drawn in all (D381).
+    /// Shadows drawn in all.
     std::uint64_t shadows = 0;
     /// Runs of glyphs drawn in all, and their glyphs (spaces among them),
-    /// and runs left out while the atlas was not held (D398).
+    /// and runs left out while the atlas was not held.
     std::uint64_t glyphRuns = 0;
     std::uint64_t glyphs = 0;
     std::uint64_t glyphRunsWaiting = 0;
-    /// Of the runs drawn, those drawn from distance fields (D667).
+    /// Of the runs drawn, those drawn from distance fields.
     std::uint64_t fieldRuns = 0;
-    /// And those with color glyphs (D669).
+    /// And those with color glyphs.
     std::uint64_t colorRuns = 0;
 };
 
@@ -66,8 +66,8 @@ public:
     /// `images`, uploaded once and held; nothing for none. It is read until
     /// the frame is made.
     void prepare(const ui::DrawList* list, ImageSource images = {}) noexcept;
-    /// Draws in the frame's aside of `window` (`render::Frame::asides`,
-    /// D988), and nothing where the frame has none of it, rather than over
+    /// Draws in the frame's aside of `window` (`render::Frame::asides`),
+    /// and nothing where the frame has none of it, rather than over
     /// the picture; none draws over the picture again.
     void aim(std::optional<std::uint64_t> window) noexcept;
 

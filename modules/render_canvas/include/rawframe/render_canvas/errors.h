@@ -18,7 +18,7 @@ enum class RenderCanvasError : std::uint32_t {
     /// Its sprite component is not laid out as `rawframe.canvas` lays it
     /// out, or is not the size this module reads.
     BadComponents = 2,
-    /// A canvas material's read was cancelled (D356).
+    /// A canvas material's read was cancelled.
     MaterialUnreadable = 3,
 };
 

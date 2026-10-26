@@ -39,9 +39,6 @@ modules/authoring_session
 modules/kest
 modules/kest_library
 modules/material
-modules/render
-modules/render_canvas
-modules/render_canvas_gpu
 modules/render_scene
 modules/render_scene_gpu
 modules/studio

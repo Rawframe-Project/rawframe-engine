@@ -142,7 +142,7 @@ bool PictureStreamWriter::write(std::uint32_t width, std::uint32_t height, std::
         file_ = std::move(larger);
     }
     // A reader that finds the first flag set, or the sequence moved on
-    // between its looks, knows it read while this wrote (D967).
+    // between its looks, knows it read while this wrote.
     const std::span<std::byte> kBytes = file_->bytes();
     flag(kBytes, kWriting).store(1, std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_release);

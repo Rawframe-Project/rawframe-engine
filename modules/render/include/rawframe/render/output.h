@@ -1,11 +1,11 @@
 #pragma once
 
-// ADR-0047's display output, and each window's HDR capability record
-// (ADR-0052, D365): the closed set of output modes, the ones a window's
+// The display output, and each window's HDR capability record:
+// the closed set of output modes, the ones a window's
 // surface offers, the one used, the reference white SDR content is shown
 // at, the display's facts, and a revision that moves whenever any of them
-// does. A mode asked for that cannot be used resolves to SDR, surfaced
-// (ADR-0047's fallback rule), never silently.
+// does. A mode asked for that cannot be used resolves to SDR, surfaced,
+// never silently.
 
 #include "rawframe/window/windows.h"
 
@@ -18,7 +18,7 @@
 
 namespace rawframe::render {
 
-/// ADR-0047's closed output set: SDR, the sRGB transfer, Rec. 709
+/// The closed output set: SDR, the sRGB transfer, Rec. 709
 /// primaries; the general HDR path, half floats, linear transfer, Rec. 709
 /// primaries, extended range; and HDR10, the PQ transfer, Rec. 2020
 /// primaries, 10-bit class, never the default.
@@ -47,10 +47,10 @@ enum class OutputFallback : std::uint8_t {
 [[nodiscard]] std::string_view nameOf(OutputFallback fallback) noexcept;
 
 /// BT.2408's reference white, nits: what SDR content is shown at in an
-/// HDR mode where the platform tells no SDR white level (ADR-0047).
+/// HDR mode where the platform tells no SDR white level.
 inline constexpr float kReferenceWhiteNits = 203;
 
-/// A window's HDR capability record (ADR-0052). Consumers read it each
+/// A window's HDR capability record. Consumers read it each
 /// frame; a cached one is good only for its revision.
 struct OutputRecord {
     /// By `OutputMode`, whether the window's surface offers it.

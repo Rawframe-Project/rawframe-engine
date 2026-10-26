@@ -86,7 +86,7 @@ struct DeviceTextures::State {
     /// What the frame being declared chose, and the budget it has left.
     std::map<std::uint64_t, Held*> chosen;
     std::map<std::uint64_t, mrhiResourceId> imported;
-    /// Textures lent for the frame being declared, by identity (D361).
+    /// Textures lent for the frame being declared, by identity.
     std::map<std::uint64_t, mrhiResourceId> lent;
     std::vector<std::uint64_t> uploads;
     std::uint64_t budget = 0;
@@ -137,7 +137,7 @@ bool DeviceTextures::choose(std::uint64_t id, const std::shared_ptr<const textur
     }
     auto found = state.held.find(id);
     // A new revision past what is left of the budget, of the size of the
-    // one held and uploaded: that one drawn a frame longer (D970). It was
+    // one held and uploaded: that one drawn a frame longer. It was
     // destroyed first, and nothing was drawn: an editor's viewport,
     // streamed a picture a frame, went black whenever a changed glyph
     // atlas took the frame's uploads first.
@@ -168,7 +168,7 @@ bool DeviceTextures::choose(std::uint64_t id, const std::shared_ptr<const textur
             def.kind = mrhi_textureCube;
             def.depthOrLayers = 6;
         }
-        // A volume's slices its depth (D344).
+        // A volume's slices its depth.
         if (image->depth > 1) {
             def.kind = mrhi_texture3d;
             def.depthOrLayers = image->depth;
@@ -271,11 +271,11 @@ result::Status DeviceTextures::write(std::uint64_t pass) {
             const std::size_t kFaceBytes = level.bytes.size() / texture.source->faces;
             const mrhiTexelLayout kLayout{.offset = 0, .bytesPerRow = kRowBytes, .rowsPerImage = kRows};
             // A compressed level's copy covers whole blocks; a volume's, its
-            // slices (D344).
+            // slices.
             const mrhiExtent3d kExtent{.width = kBlocks ? ((level.width + 3) / 4) * 4 : level.width,
                                        .height = kBlocks ? kRows * 4 : level.height,
                                        .depthOrLayers = texture.source->depth};
-            // A cube's faces a layer each (D320).
+            // A cube's faces a layer each.
             for (std::uint32_t face = 0; face < texture.source->faces; ++face) {
                 const mrhiTextureCopy kPlace{.resource = resourceOf(resource(kId)), .mip = mip, .z = face};
                 if (const mrhiResult kWritten = mrhiWriteTexture(state_->native,

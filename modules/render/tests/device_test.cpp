@@ -1,4 +1,4 @@
-// The one device (D277): opened on the first adapter that answers, a
+// The one device: opened on the first adapter that answers, a
 // software rasterizer allowed, and shown to work by clearing a target and
 // reading it back. A machine with no adapter skips, unless
 // RAWFRAME_REQUIRE_GPU is set, as the check sets it where lavapipe is, and

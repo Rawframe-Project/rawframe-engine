@@ -55,7 +55,7 @@ struct Framer::State {
     std::optional<std::vector<std::byte>> pixels;
     /// The passes' timestamps, made the first time a frame is timed, the
     /// nanoseconds a tick of them takes, the last frame's readback of
-    /// them and the passes it timed, and the last times read (D894).
+    /// them and the passes it timed, and the last times read.
     std::optional<mrhiQuerySetId> timestamps;
     double period = 1;
     std::optional<mrhiRequestId> timesRead;
@@ -136,7 +136,7 @@ struct Framer::State {
         }
         mrhiTextureDef pictureDef = mrhiDefaultTextureDef();
         pictureDef.format = mrhi_formatRgba8UnormSrgb;
-        // Shown, the picture's bytes are read through its linear twin (D280).
+        // Shown, the picture's bytes are read through its linear twin.
         pictureDef.viewFormats[0] = target.surface.has_value() ? mrhi_formatRgba8Unorm : mrhi_formatNone;
         pictureDef.width = target.width;
         pictureDef.height = target.height;
@@ -150,7 +150,7 @@ struct Framer::State {
                    .height = target.height,
                    .picture = requestKey(picture.index1, picture.generation)};
         open.covers.assign(target.images.size(), std::nullopt);
-        // Timed where asked and the device writes timestamps (D894).
+        // Timed where asked and the device writes timestamps.
         if (target.timed && device->adapter().has_value() && device->adapter()->timestamps) {
             if (!timestamps.has_value()) {
                 mrhiQuerySetDef def = mrhiDefaultQuerySetDef();
@@ -166,7 +166,7 @@ struct Framer::State {
                 open.timestamps = requestKey(timestamps->index1, timestamps->generation);
             }
         }
-        // The panel (D597): a texture of its image's size, covering it
+        // The panel: a texture of its image's size, covering it
         // whole.
         std::optional<mrhiResourceId> panel;
         if (target.panel.has_value()) {
@@ -196,7 +196,7 @@ struct Framer::State {
                 Frame::Cover{.picture = open.panel,
                              .viewport = {0, 0, static_cast<float>(kSize->width), static_cast<float>(kSize->height)}};
         }
-        // Each aside (D988): a texture of its size, shown on its surface.
+        // Each aside: a texture of its size, shown on its surface.
         std::vector<mrhiResourceId> asides;
         for (const FrameTarget::Aside& kAside : target.asides) {
             if (kAside.width == 0 || kAside.height == 0 || kAside.width > kMaximumSide ||
@@ -286,7 +286,7 @@ struct Framer::State {
             }
             displaying = *added;
         }
-        // Each aside shown on its window's surface (D988).
+        // Each aside shown on its window's surface.
         std::vector<std::uint64_t> showingAsides;
         for (std::size_t at = 0; at < target.asides.size(); ++at) {
             auto added = display->add(target.asides[at].surface, open.asides[at].picture);

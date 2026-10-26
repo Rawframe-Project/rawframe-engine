@@ -1,6 +1,6 @@
 #pragma once
 
-// Textures held on the device (SPEC-0024, D307): each made once from the
+// Textures held on the device: each made once from the
 // decoded texture a drawer names, and made again when a reload gives it a
 // new one; its levels uploaded within the budget the drawer gives the
 // frame, and a texture that would pass it left for a later frame. The canvas's sprites
@@ -18,7 +18,7 @@
 
 namespace rawframe::render {
 
-/// SPEC-0024's limit point on what a drawer holds on the device: the
+/// The limit point on what a drawer holds on the device: the
 /// textures held at once; one chosen past them is not drawn.
 struct TextureLimits {
     std::size_t maximumTextures = 256;
@@ -44,7 +44,7 @@ public:
     ~DeviceTextures();
 
     /// Starts choosing what the frame being declared draws from, within
-    /// `budget` bytes of uploads (the drawer's share of SPEC-0024's
+    /// `budget` bytes of uploads (the drawer's share of
     /// `upload_bytes_per_frame`). A texture larger than every budget is
     /// never drawn.
     void begin(std::uint64_t budget) noexcept;
@@ -56,7 +56,7 @@ public:
     /// Brings every chosen texture into the open frame.
     [[nodiscard]] result::Status import();
     /// Lends the drawer a texture another recorder made in the open frame,
-    /// `resource` (a render texture, D361), by the identity the drawer names
+    /// `resource` (a render texture), by the identity the drawer names
     /// it by: chosen and sampled as any held texture is, never uploaded,
     /// until the next `begin`.
     void lend(std::uint64_t id, std::uint64_t resource);
@@ -71,9 +71,9 @@ public:
     /// levels are block-compressed; 0 and false for one not chosen.
     [[nodiscard]] std::uint64_t resource(std::uint64_t id) const noexcept;
     [[nodiscard]] bool compressed(std::uint64_t id) const noexcept;
-    /// Whether the chosen texture `id` is a cube, bound as one (D320).
+    /// Whether the chosen texture `id` is a cube, bound as one.
     [[nodiscard]] bool cube(std::uint64_t id) const noexcept;
-    /// Whether the chosen texture `id` is a volume, bound as one (D344).
+    /// Whether the chosen texture `id` is a volume, bound as one.
     [[nodiscard]] bool volume(std::uint64_t id) const noexcept;
 
     /// Writes the levels of those uploading, in the open pass `pass`.

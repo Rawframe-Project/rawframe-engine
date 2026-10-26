@@ -54,21 +54,20 @@ bool wellFormed(const SpriteInstance& instance) noexcept {
 struct Canvas::State {
     CanvasSettings settings;
     /// The game's canvas materials by place, none first, and their places
-    /// by identity (D356).
+    /// by identity.
     std::vector<material::CanvasMaterial> materials;
     std::map<std::uint64_t, std::uint32_t> materialPlaces;
     std::vector<world::ColumnQuery> sprites;
     /// The particle emitters', trails', and beams' queries, what the frame
-    /// extracted, and the view's accounting of them from frame to frame
-    /// (D357).
+    /// extracted, and the view's accounting of them from frame to frame.
     std::vector<world::ColumnQuery> emitterQueries;
     std::vector<world::ColumnQuery> trailQueries;
     std::vector<world::ColumnQuery> beamQueries;
-    /// The tilemap components' queries and the maps by identity (D858).
+    /// The tilemap components' queries and the maps by identity.
     std::vector<world::ColumnQuery> tilemapQueries;
     std::map<std::uint64_t, tilemap::Tilemap> maps;
     /// The tiles one extraction left out past the sprite limit, counted
-    /// into the next frame's over the limit (D858).
+    /// into the next frame's over the limit.
     std::size_t tilesOverLimit = 0;
     std::vector<CanvasLine> lines;
     std::vector<EmitterInstance> emitters;
@@ -197,7 +196,7 @@ struct Canvas::State {
             frame.animated += kSprite.frame != 0 ? 1 : 0;
         }
         // The lines over every sprite, white quads in their colors, as one
-        // draw where the draws leave room for it (D891).
+        // draw where the draws leave room for it.
         frame.lines = 0;
         if (kSees && !lines.empty() &&
             (frame.draws.size() < settings.limits.maximumDraws ||
@@ -236,7 +235,7 @@ struct Canvas::State {
             }
         }
         // The particles over every sprite, in the canvas's plane: what
-        // reaches the view's rectangle is seen (D357).
+        // reaches the view's rectangle is seen.
         const float kHalfHeight = kSees ? camera.height / 2 : 0.0F;
         const float kHalfWidth = kHalfHeight * (kSees ? camera.aspect : 0.0F);
         frame.extent = {kHalfWidth, kHalfHeight};
@@ -277,7 +276,7 @@ result::Result<std::unique_ptr<Canvas>> Canvas::create(const schema::SchemaRegis
         RAWFRAME_TRY_ASSIGN(world::ColumnQuery query, world::ColumnQuery::resolve(kSprites, registry));
         state->sprites.push_back(std::move(query));
     }
-    // The particle triad's components, each of its type's size (D357).
+    // The particle triad's components, each of its type's size.
     for (const auto& [kIds, kSize, kQueries] :
          {std::tuple{&settings.emitters, sizeof(particles::ParticleEmitter), &state->emitterQueries},
           std::tuple{&settings.trails, sizeof(particles::Trail), &state->trailQueries},
@@ -338,7 +337,7 @@ void Canvas::extract(world::World& world) {
             for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
                 SpriteInstance instance{.entity = chunk.entities[row],
                                         .component = static_cast<std::uint32_t>(component)};
-                // Left out where an editor's preview hides its layer (D793).
+                // Left out where an editor's preview hides its layer.
                 if (!state.hiddenLayers.empty() && state.layer.has_value()) {
                     if (const auto* layer =
                             static_cast<const world::Layer*>(world.getErased(instance.entity, *state.layer));
@@ -363,7 +362,7 @@ void Canvas::extract(world::World& world) {
     }
     // A tilemap's tiles, each a sprite of its sheet's cell, from its
     // top-left on the pose, unturned, after the sprites' components in
-    // order (D858). A map is up to thousands of sprites, so the tiles of
+    // order. A map is up to thousands of sprites, so the tiles of
     // every map together stop at the frame's sprite limit: past it, the
     // rest are counted as over it without being made.
     std::size_t tiles = 0;
@@ -426,7 +425,7 @@ void Canvas::extract(world::World& world) {
         });
     }
     // Where a pose puts each of the triad, in the canvas's plane; an
-    // emitter emitting along its pose's up (D357).
+    // emitter emitting along its pose's up.
     const auto kPoseOf = [&world, &state](world::EntityHandle entity) -> const physics2d::Pose2D* {
         return state.pose ? static_cast<const physics2d::Pose2D*>(world.getErased(entity, *state.pose)) : nullptr;
     };
@@ -572,7 +571,7 @@ result::Result<GameCanvas> loadGameCanvas(const world_kest::GameFiles& game, con
                       RenderCanvasError::BadComponents,
                       "the program lays out rawframe.canvas's Camera otherwise than this engine reads it");
     }
-    // The particle triad as its own module reads it (D357).
+    // The particle triad as its own module reads it.
     for (const auto& [kDeclared, kType, kSize, kFields] :
          {std::tuple{!loaded.emitters.empty(),
                      particles::kEmitterType,
