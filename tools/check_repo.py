@@ -279,7 +279,7 @@ def check_surfaces(findings):
 
 def check_owner_rules(files, findings):
     for path in files:
-        # Vendored code is upstream's own text (third_party/README.md).
+        # Vendored code is upstream's own text (docs/operations/dependencies.md).
         if path.relative_to(ROOT).parts[0] == "third_party":
             continue
         try:

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(rawframe VERSION 0.1.0 LANGUAGES C CXX)
+project(rawframe VERSION 0.0.1 LANGUAGES C CXX) # x-release-please-version
 
 # Strict C++23: no GNU extensions, and no C++20 module scanning (Rawframe uses
 # headers, and scanning needs a clang-scan-deps that not every toolchain ships).

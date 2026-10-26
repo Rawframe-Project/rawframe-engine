@@ -43,4 +43,4 @@ find third_party/openssl/doc third_party/openssl/fuzz -type f ! -name build.info
 find third_party/openssl -type d -empty -delete
 
 echo "third_party/msquic is now $msquic_revision and third_party/openssl is $openssl_revision;"
-echo "update the table in third_party/README.md"
+echo "update the table in docs/operations/dependencies.md"

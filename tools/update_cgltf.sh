@@ -26,4 +26,4 @@ mkdir -p "$target"
 git -C "$checkout" archive "$revision" LICENSE cgltf.h | tar -x -m -C "$target"
 cp "$keep"/* "$target/" 2>/dev/null || true
 rm -rf "$keep"
-echo "$target is now $revision; update the table in third_party/README.md"
+echo "$target is now $revision; update the table in docs/operations/dependencies.md"

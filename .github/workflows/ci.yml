@@ -1,0 +1,116 @@
+# Continuous integration: the pull request check, the full check on main
+# and the nightly check, each a tier of tools/check.sh. The builds and tests
+# run on the self-hosted runner, the one machine with every toolchain the
+# engine checks against (the pinned shader compilers, lavapipe, the web
+# toolchain and a browser), in build trees it keeps from run to run.
+# docs/operations/checks.md explains each job.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "37 0 * * *"
+  workflow_dispatch:
+
+# A new push to a pull request cancels its running CI; runs on main get a
+# group of their own, so they are never cancelled.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Whether anything beyond documentation changed; the check skips when not.
+  changes:
+    uses: Rawframe-Project/.github/.github/workflows/changes.yml@56543e92d01e59abdb4299c4824a0c1facdc08ce # v0.0.25
+    permissions:
+      pull-requests: read
+
+  # The organization's documentation check, from the pinned commit of
+  # .github. The paths in tools/docs-check-exclude.txt are left out: vendored
+  # code, and the areas whose comments still cite old records.
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: exclude
+        run: echo "paths=$(grep -v '^#' tools/docs-check-exclude.txt | tr '\n' ' ')" >>"$GITHUB_OUTPUT"
+      - uses: Rawframe-Project/.github/.github/actions/docs-check@56543e92d01e59abdb4299c4824a0c1facdc08ce # v0.0.25
+        with:
+          exclude: ${{ steps.exclude.outputs.paths }}
+
+  zizmor:
+    uses: Rawframe-Project/.github/.github/workflows/zizmor.yml@56543e92d01e59abdb4299c4824a0c1facdc08ce # v0.0.25
+    permissions:
+      contents: read
+
+  # The check tier for the event: pr on a pull request, full on main, and
+  # nightly at night or by hand. The self-hosted runner runs code from this
+  # repository's own branches only, never a fork's.
+  check:
+    needs: changes
+    if: >-
+      needs.changes.outputs.code == 'true' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, linux, x64, rawframe]
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      # The build trees under out/ stay from run to run; the whole history
+      # lets tools/affected.py find what a change reaches against main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+          fetch-depth: 0
+      - name: Check
+        env:
+          EVENT: ${{ github.event_name }}
+          # The runner shares its machine with other work.
+          JOBS: 16
+        run: |
+          case "$EVENT" in
+          pull_request) tier=pr ;;
+          push) tier=full ;;
+          *) tier=nightly ;;
+          esac
+          tools/check.sh "$tier"
+
+  # The one check the ruleset requires: it passes when every job above
+  # passed, or was skipped for a documentation-only change. A pull request
+  # from a fork that changes code fails it, since its code is never run
+  # here: the engine takes no outside code.
+  required:
+    if: always()
+    needs: [changes, docs, zizmor, check]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Every job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          CODE: ${{ needs.changes.outputs.code }}
+          CHECKED: ${{ needs.check.result }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success | skipped) ;; *) exit 1 ;; esac
+          done
+          if [ "$CODE" = true ] && [ "$CHECKED" != success ]; then
+            echo "::error::the code was not checked: a fork's code never runs on the self-hosted runner"
+            exit 1
+          fi

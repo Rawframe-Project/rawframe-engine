@@ -1,4 +1,4 @@
-# Test fonts
+Test fonts
 
 - `Ahem.ttf`: Ahem 1.50, from the Web Platform Tests
   (`https://github.com/web-platform-tests/wpt/blob/master/fonts/Ahem.ttf`),
@@ -15,7 +15,7 @@
   COLR version 0 layers over one CPAL palette (an em box of entry 0, red;
   its right half of entry 1, blue at half alpha; a small box of the text's
   color) and a B with no color, 1000 units per em, ascent 800, for color
-  glyphs (D669). Maul UI's MaulColor.ttf names a palette entry past its
+  glyphs. Maul UI's MaulColor.ttf names a palette entry past its
   palettes on purpose, which the cook's sanitizer refuses; this one it
   takes whole. SHA-256
   `b4de765c1e0c442bbf360321aed4e74f2d32ff1725fe70ed084f6a5ebe5d527c`.

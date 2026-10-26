@@ -6,7 +6,8 @@
 # server World's ticks with sixteen bots, all in WebAssembly.
 #
 #   tools/web_budget.sh         measure, and add a dated, commit-stamped row
-#                               to bench/web.tsv
+#                               to out/bench/web.tsv, the machine's own
+#                               history, never committed
 #   tools/web_budget.sh check   measure and record nothing; fail on a brotli
 #                               module past 4 MiB, or past 110% of this
 #                               machine's recorded one (the median of its last
@@ -24,7 +25,7 @@ cd "$(dirname "$0")/.."
 
 mode="${1:-record}"
 module=out/wasm-shipping/hosts/web_client/rawframe-web-client.wasm
-results=bench/web.tsv
+results=out/bench/web.tsv
 machine="$(hostname)"
 commit="$(git rev-parse --short=12 HEAD)"
 git diff --quiet HEAD || commit="$commit+"
@@ -61,7 +62,7 @@ print(*("%.3f" % f[k] for k in ("compile", "instantiate", "start", "tickP50", "t
 printf 'web: %s bytes stripped, %s gzip, %s brotli; compile %s ms, instantiate %s ms, start %s ms; server tick p50 %s ms, p99 %s ms\n' \
     "$stripped" "$gzipped" "$brotlied" "$compile" "$instantiate" "$start" "$p50" "$p99"
 
-mkdir -p bench
+mkdir -p out/bench
 [ -f "$results" ] || printf 'date\tcommit\tmachine\tstripped\tgzip\tbrotli\tcompile_ms\tinstantiate_ms\tstart_ms\ttick_p50_ms\ttick_p99_ms\n' >"$results"
 if [ "$mode" = check ]; then
     verdict="$(python3 -c '

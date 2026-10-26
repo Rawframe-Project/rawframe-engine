@@ -5,7 +5,8 @@
 # canonical workload: 10,000 entities, 2,048 of them walking.
 #
 #   tools/bench.sh          measure, and add a dated, commit-stamped row for
-#                           each game to bench/results.tsv
+#                           each game to out/bench/results.tsv, the
+#                           machine's own history, never committed
 #   tools/bench.sh check    measure and record nothing; fail on a tick past
 #                           SPEC-0013's ceilings (p50 5 ms, p95 8.33 ms, p99
 #                           12.5 ms), on Kest time per tick past its p95 of
@@ -27,7 +28,7 @@ cd "$(dirname "$0")/.."
 
 mode="${1:-record}"
 build=out/clang-shipping
-results=bench/results.tsv
+results=out/bench/results.tsv
 machine="$(hostname)"
 commit="$(git rev-parse --short=12 HEAD)"
 # A measurement of a tree that is not the commit says so.
@@ -38,7 +39,7 @@ trap 'rm -rf "$work"' EXIT
 # The plaza's mound is a cooked mesh.
 "$build/hosts/cook/rawframe-cook" games/plaza "$work/plaza" "$work/cache" >/dev/null
 
-mkdir -p bench
+mkdir -p out/bench
 [ -f "$results" ] || printf 'date\tcommit\tmachine\tgame\tbots\tticks\tp50_ms\tp95_ms\tp99_ms\tkest_p95_ms\n' >"$results"
 
 failures=0

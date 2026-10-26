@@ -27,4 +27,4 @@ if [[ -s "$keep" ]]; then
     cp "$keep" "$target/CMakeLists.txt"
 fi
 rm "$keep"
-echo "$target is now $revision; update the table in third_party/README.md"
+echo "$target is now $revision; update the table in docs/operations/dependencies.md"

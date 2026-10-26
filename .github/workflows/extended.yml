@@ -1,36 +1,39 @@
-name: portability
+# The extended nightly run: every platform cell the self-hosted runner does
+# not cover (macOS, Linux on arm64, Android in its emulator, Windows) and a
+# long fuzzing pass. It may take up to two hours and is not a required
+# check. A dispatch can run one job alone.
+name: extended
 
-# Builds and tests the engine on macOS (D236), Windows (D237), and ARM64
-# Linux (D241), targets the owner's machine cannot run, and builds it for
-# Android (D549). On GitHub's own runners, which cost a public repository
-# nothing, nightly and on request only: no push or pull request triggers it,
-# so no fork's code ever runs here or on the owner's machine.
 on:
   schedule:
-    - cron: '17 1 * * *'
+    - cron: "52 0 * * *"
   workflow_dispatch:
-    # One platform's job alone, to see a failure again within its own run
-    # time rather than the slowest job's (D813); empty runs them all.
     inputs:
       only:
-        description: 'macos, linux-arm64, android, fuzz, or windows; empty for all'
+        description: "macos, linux-arm64, android, fuzz, or windows; empty for all"
         required: false
-        default: ''
+        default: ""
 
-permissions:
-  contents: read
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   macos:
     if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'macos')
     runs-on: macos-15
     timeout-minutes: 90
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Tools
         run: |
           brew install llvm@20 ninja ccache
-          # The browser's side of the WebTransport test.
           python3 -m pip install --break-system-packages aioquic
       - name: Clang 20 by the names the presets use
         run: |
@@ -38,30 +41,20 @@ jobs:
           ln -s "$(brew --prefix llvm@20)/bin/clang" "$RUNNER_TEMP/bin/clang-20"
           ln -s "$(brew --prefix llvm@20)/bin/clang++" "$RUNNER_TEMP/bin/clang++-20"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          # Its headers are LLVM 20's libc++, so programs link that libc++,
-          # not the older one macOS carries.
           libcxx="$(brew --prefix llvm@20)/lib/c++"
           echo "LDFLAGS=-L$libcxx -Wl,-rpath,$libcxx" >> "$GITHUB_ENV"
       - name: Configure
         run: cmake --preset clang-development
       - name: Build
-        # Past the first failure, so one run shows every file that does not
-        # build here.
         run: cmake --build out/clang-development -- -k 0
-      # The runner's Apple GPU draws every GPU test: a test that finds no
-      # adapter fails rather than skips (D767).
       - name: Test
         env:
           RAWFRAME_REQUIRE_GPU: 1
         run: ctest --test-dir out/clang-development --output-on-failure --timeout 1200 -j3
-      # Stalls exported, played, and read and pressed as a screen reader
-      # does (D579): its client's UI through the AX API while it plays, the
-      # purse a button named by its coins and pressed, and the collect
-      # command that gives sent by the client and taken by the server.
+      # Stalls exported and played, its purse read through the AX API as a
+      # screen reader reads it, and pressed there.
       - name: Read Stalls through the AX API
         run: |
-          # Not -e, which a shell step has: a reader that fails still shows
-          # what the client and the server said.
           set +e -uo pipefail
           tree=out/clang-development
           "$tree/hosts/export/rawframe-export" games/tycoon "$RUNNER_TEMP/read" \
@@ -84,14 +77,16 @@ jobs:
           [ "$read" = 0 ] && grep -q '"commandsSent":1,' "$RUNNER_TEMP/read/client.log" &&
             grep -q '"commandsTaken":1,' "$RUNNER_TEMP/read/server.log"
 
-  # The dedicated server's next target after x86-64 Linux (ADR-0006): ARM
-  # servers are the cheaper ones to host on (D241).
   linux-arm64:
     if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'linux-arm64')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Tools
         run: |
           sudo apt-get update
@@ -106,17 +101,16 @@ jobs:
       - name: Test
         run: ctest --test-dir out/clang-development --output-on-failure --timeout 1200 -j4
 
-  # Android, the first mobile target (ADR-0084, D549): the engine, its
-  # programs, and its tests built for 64-bit ARM against NDK r29, whose libc++
-  # parses floating-point numbers (r28's does not), and the client's
-  # application made (D551), the tests run on an emulator (D561), and a game
-  # exported and played there (D590).
   android:
     if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'android')
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Tools
         run: |
           sudo apt-get update
@@ -130,11 +124,11 @@ jobs:
       - name: Build
         run: cmake --build out/android-development -- -k 0
       - name: Application
-        # The client's application, made with the runner's SDK (D551).
-        run: tools/android_apk.sh "$RUNNER_TEMP/rawframe-client.apk"
+        run: >-
+          tools/android_apk.sh "$RUNNER_TEMP/rawframe-client.apk"
           out/android-development/hosts/android_client/librawframe_client.so dev.rawframe.client "Rawframe client"
-      # And a release one under a publisher's key (D581): signed by that key,
-      # not debuggable, the keystore's password from the environment.
+      # A release package signed with a key of its own, which must verify
+      # under that key and not be debuggable.
       - name: Release application
         env:
           RAWFRAME_ANDROID_KEYSTORE_PASSWORD: release-check
@@ -148,9 +142,6 @@ jobs:
           build="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
           "$build/apksigner" verify --print-certs "$RUNNER_TEMP/rawframe-release.apk" | grep "DN: CN=Release check"
           ! "$build/aapt2" dump badging "$RUNNER_TEMP/rawframe-release.apk" | grep -q debuggable
-      # The engine's test programs on an emulator (D561, D581): Android 15
-      # on x86_64 with KVM, which runs the arm64 programs through its
-      # translation, as the loop's own emulator does.
       - name: Boot the emulator
         timeout-minutes: 20
         env:
@@ -177,12 +168,6 @@ jobs:
       - name: Test on the emulator
         timeout-minutes: 60
         run: ADB="$ANDROID_HOME/platform-tools/adb -s emulator-5554" tools/android_tests.sh out/android-development
-      # Stalls exported on the emulator and played from the package made of
-      # it, a touch on its purse the UI's press and the server's command
-      # (D590), and one on its top view switch kept in the player's settings
-      # in the app's files (D628). The emulator draws by software (SwiftShader): at the phone's
-      # 1080 by 2340 a frame took two and a half seconds, and the purse was
-      # not drawn in nine minutes, so the screen is a quarter of that.
       - name: Play exported Stalls on the emulator
         timeout-minutes: 30
         run: |
@@ -190,21 +175,26 @@ jobs:
           $adb shell wm size 540x1170
           ADB="$adb" tools/android_play_exported.sh out/android-development games/tycoon "coins,Top view" '"tycoon.top": 1'
 
-  # A longer search than the check's fixed runs (D242): five minutes a fuzz
-  # target from an empty corpus, each finding printed so it can be replayed.
+  # Every fuzz target for five minutes, in three shards. Each shard's corpus
+  # carries over from night to night in an Actions cache entry, minimized
+  # with libFuzzer's merge before it is saved. A finding prints only the
+  # target and the sanitizers' report (tools/fuzz_target.sh); its input,
+  # the seed and the corpus stay on the runner and are never uploaded, and
+  # a shard that found something saves no corpus.
   fuzz:
     if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'fuzz')
     runs-on: ubuntu-24.04
-    # The targets in three shards, each running every third: five minutes
-    # a target, the tools, and the build (26 targets in one job passed its
-    # limit and were cancelled, D380).
     strategy:
       fail-fast: false
       matrix:
         shard: [0, 1, 2]
     timeout-minutes: 150
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Tools
         run: |
           sudo apt-get update
@@ -216,47 +206,73 @@ jobs:
         run: cmake --preset clang-sanitize
       - name: Build
         run: cmake --build out/clang-sanitize
+      - name: Restore the corpus
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: out/corpus
+          key: fuzz-corpus-${{ matrix.shard }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.shard }}-
       - name: Fuzz
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
-          status=0
-          mkdir -p findings
-          # Each target as the check runs it (its longest input and its
-          # seeds), searching for five minutes from a fresh seed instead of
-          # a fixed number of inputs. An input that takes past twenty seconds
-          # is a finding too: work that grows past its input's size (D764).
+          # This shard's targets, each with the arguments its test gives it
+          # but the fixed seed and run count of the check.
           ctest --test-dir out/clang-sanitize --show-only=json-v1 -R '_fuzz_' | python3 -c '
           import json, sys
           shard = int(sys.argv[1])
           for at, test in enumerate(json.load(sys.stdin)["tests"]):
               if at % 3 == shard:
                   print("\t".join(a for a in test["command"] if not a.startswith(("-runs=", "-seed="))))
-          ' ${{ matrix.shard }} > fuzz.commands
+          ' "$SHARD" >fuzz.commands
+          rm -rf out/fuzz-reports
+          status=0
           while IFS=$'\t' read -r -a command; do
             name="$(basename "${command[0]}")"
-            mkdir -p "corpus/$name"
-            echo "== $name"
-            (cd findings && "${command[@]}" -max_total_time=300 -timeout=20 "../corpus/$name") </dev/null || status=1
-          done < fuzz.commands
-          for finding in findings/*; do
-            [ -f "$finding" ] && { echo "== $finding"; base64 -w0 "$finding"; echo; }
-          done
+            mkdir -p "out/corpus/$name"
+            tools/fuzz_target.sh "${command[@]}" -max_total_time=300 -timeout=20 "out/corpus/$name" </dev/null ||
+              status=1
+          done <fuzz.commands
+          cat out/fuzz-reports/*.txt 2>/dev/null || true
           exit "$status"
+      # Each corpus is merged into a fresh directory and swapped in only when
+      # the merge finished.
+      - name: Minimize the corpus
+        run: |
+          while IFS=$'\t' read -r -a command; do
+            name="$(basename "${command[0]}")"
+            rm -rf "out/merged/$name" && mkdir -p "out/merged/$name"
+            if "${command[0]}" -merge=1 "out/merged/$name" "out/corpus/$name" >"out/fuzz-logs/$name.merge.log" 2>&1; then
+              rm -rf "out/corpus/$name" && mv "out/merged/$name" "out/corpus/$name"
+            else
+              echo "::error::$name: the merge failed"
+              exit 1
+            fi
+          done <fuzz.commands
+          du -sh out/corpus
+      - name: Save the corpus
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: out/corpus
+          key: fuzz-corpus-${{ matrix.shard }}-${{ github.run_id }}
 
   windows:
     if: github.repository == 'Rawframe-Project/rawframe-engine' && (inputs.only == '' || inputs.only == null || inputs.only == 'windows')
     runs-on: windows-2025
     timeout-minutes: 120
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Tools
         shell: pwsh
         run: |
           choco install llvm --version=20.1.8 --allow-downgrade -y --no-progress
           "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
-          # The browser's side of the WebTransport test.
           python -m pip install aioquic
       - name: python3 by that name, as the test scripts call it
-        shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/python3"
           printf '#!/bin/sh\nexec python "$@"\n' > "$RUNNER_TEMP/python3/python3"
@@ -269,25 +285,20 @@ jobs:
           cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
             if ($_ -match '^([^=]+)=(.*)$') { "$($matches[1])=$($matches[2])" >> $env:GITHUB_ENV }
           }
-      # MsQuic and OpenSSL take eight minutes here; they are kept once
-      # configure has built them, whatever the later steps do.
       - name: Restore MsQuic and OpenSSL
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/AppData/Local/rawframe
           key: windows-quic-${{ hashFiles('tools/build_quic.sh', 'third_party/quic.cmake') }}
       - name: Configure
         shell: pwsh
-        # Git's bash runs tools/build_quic.sh, never WSL's; OpenSSL's
-        # Configure wants the Windows perl; the tests' Python is the one
-        # aioquic was installed into.
         env:
           RAWFRAME_PERL: C:/Strawberry/perl/bin/perl.exe
         run: >-
           cmake --preset windows-development "-DRAWFRAME_BASH=C:/Program Files/Git/bin/bash.exe"
           "-DPython3_EXECUTABLE=$((Get-Command python).Source)"
       - name: Keep MsQuic and OpenSSL
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/AppData/Local/rawframe
           key: windows-quic-${{ hashFiles('tools/build_quic.sh', 'third_party/quic.cmake') }}
@@ -295,34 +306,25 @@ jobs:
       - name: Build
         shell: pwsh
         run: cmake --build out/windows-development -- -k 0
-      # WARP, which ships with Windows, draws every GPU test on Direct3D 12:
-      # a test that finds no adapter fails rather than skips (D767).
       - name: Test
         shell: pwsh
         env:
           RAWFRAME_REQUIRE_GPU: 1
         run: ctest --test-dir out/windows-development --output-on-failure --timeout 1200 -j3
-      # The frames the arena's drawn tests wrote, and the Lighting Test's
-      # content as Windows cooked it, to look at where one reads differently
-      # on WARP than on lavapipe (D765).
       - name: Keep the drawn frames
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: drawn-windows
           path: |
             out/windows-development/hosts/arena/*.tga
             out/windows-development/hosts/arena/lighting_content/
           retention-days: 14
-      # What the scene's tests drew on Direct3D 12: a material's face and
-      # parameters (D705, D708), and each light and what the frame does with
-      # it, printed to compare with lavapipe's (D765), and run after a failed
-      # test too. The tests themselves are required in the step above (D767).
+      # The scene's pixel tests on Direct3D 12, reported but not judged:
+      # the runner's software adapter differs from a GPU's.
       - name: The scene on Direct3D 12
         if: success() || failure()
-        shell: bash
         continue-on-error: true
-        # The harness takes one filter, so each test is run on its own.
         run: |
           for test in AMaterialKnowsTheFaceItIsDrawnOn AMaterialReadsItsParametersFromItsBlob \
               AnEmptySceneIsTheSky TheSkysPictureIsSeenTheWayEachPointLooks TheLitModelReflectsTheSunAndTheSky \
@@ -335,18 +337,11 @@ jobs:
               AFramesLightIsReadBackInPhysicalUnits; do
             out/windows-development/modules/render_scene_gpu/rawframe_render_scene_gpu_tests.exe "$test"
           done
-      # The sample games to play on Windows (D515): each exported as the
-      # export tool makes a folder, whose launcher (named for the game,
-      # D944) starts its server and then its client in a window, with the
-      # DLLs its programs import from the build beside them (MsQuic's and
-      # OpenSSL's, say) and the C++ runtime's, kept two weeks.
       - name: Export the sample games
-        shell: bash
         run: |
           set -euo pipefail
           tree=out/windows-development
           for game in plaza tycoon runners reach; do
-            # Reach is shown on a headset where the machine has one (D658).
             headset=false
             [ "$game" = reach ] && headset=true
             "$tree/hosts/export/rawframe-export.exe" "games/$game" "played/$game" \
@@ -366,18 +361,13 @@ jobs:
             done
             ls "played/$game"
           done
-      # A copy of each exported game played for five seconds, as a player
-      # would start it: its client admitted and showing frames on this
-      # machine, which has no GPU but Direct3D 12's software one (D517).
       - name: Play the exported games
-        shell: bash
         run: |
           set -uo pipefail
           failed=0
           for game in plaza tycoon runners reach; do
             cp -r "played/$game" "$RUNNER_TEMP/$game"
             printf 'host.maximum_iterations = 600\n' >>"$RUNNER_TEMP/$game/client.conf"
-            # The plaza starts on the whole screen (D523).
             [ "$game" = plaza ] && printf 'window.fullscreen = true\n' >>"$RUNNER_TEMP/$game/client.conf"
             (cd "$RUNNER_TEMP/$game" && timeout 180 "./$game.exe"; echo "$game: launcher exit $?")
             for log in server client; do
@@ -386,24 +376,17 @@ jobs:
             done
             grep -q '"framesShown":[1-9]' "$RUNNER_TEMP/$game/client.log" || { echo "$game showed no frame"; failed=1; }
             if [ "$game" = plaza ]; then
-              # On the whole screen its view is the screen's, not the
-              # window's 720 logical pixels high.
               grep -o '"viewWidth":[0-9]*,"viewHeight":[0-9]*' "$RUNNER_TEMP/$game/client.log" | tail -1
               grep '"code":"scene_summary"' "$RUNNER_TEMP/$game/client.log" | grep -q '"viewHeight":720,' &&
                 { echo "plaza was not on the whole screen"; failed=1; }
             fi
           done
           exit "$failed"
-      # Studio packaged for an author with no build (D768), opened on each
-      # game for a few seconds on WARP, and kept two weeks.
       - name: Package Studio
-        shell: bash
         run: |
           set -euo pipefail
           tools/package_studio.sh out/windows-development studio runners plaza tycoon
           for game in runners plaza tycoon; do
-            # The package names no game (D921): each opened as the start
-            # screen opens it, with preferences of its own.
             (cd studio && printf 'studio.game = games/%s/%s.game\nstudio.preferences = opened.preferences\nhost.maximum_iterations = 600\n' "$game" "$game" >opened.conf &&
               timeout 120 ./rawframe-studio.exe --config opened.conf >opened.log 2>&1) || true
             grep -q '"code":"studio_shown"' studio/opened.log || { cat studio/opened.log; echo "studio did not open $game"; exit 1; }
@@ -411,20 +394,13 @@ jobs:
             rm -rf studio/opened.conf studio/opened.log studio/opened.preferences studio/pictures
           done
       - name: Keep Studio
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: studio-windows
           path: studio/
           retention-days: 14
-      # Stalls read and pressed as a screen reader does (D579): its client's
-      # UI through UI Automation while it plays, the purse a button named by
-      # its coins and invoked, and the collect command that gives sent by
-      # the client and taken by the server.
       - name: Read Stalls through UI Automation
-        shell: bash
         run: |
-          # Not -e, which a shell step has: a reader that fails still shows
-          # what the client and the server said.
           set +e -uo pipefail
           cp -r played/tycoon "$RUNNER_TEMP/read"
           printf 'host.maximum_iterations = 7200\n' >>"$RUNNER_TEMP/read/client.conf"
@@ -442,7 +418,7 @@ jobs:
           [ "$read" = 0 ] && grep -q '"commandsSent":1,' "$RUNNER_TEMP/read/client.log" &&
             grep -q '"commandsTaken":1,' "$RUNNER_TEMP/read/server.log"
       - name: Keep the sample games
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rawframe-games-windows
           path: played/
