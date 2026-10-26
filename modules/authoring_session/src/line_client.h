@@ -1,7 +1,7 @@
 #pragma once
 
 // One QUIC connection carrying records a line each, on one stream the
-// client opens (D408, D881): the client side shared by a link to a
+// client opens: the client side shared by a link to a
 // running Runtime's tooling endpoint and one to a shared session's host.
 
 #include "rawframe/document/json.h"
@@ -34,12 +34,12 @@ public:
     /// endpoint said unasked meanwhile, is kept for `heard`.
     [[nodiscard]] std::optional<std::string> ask(std::string_view record);
     /// The same, waiting at most `within` for the reply: a last record to an
-    /// endpoint that may have gone (D947).
+    /// endpoint that may have gone.
     [[nodiscard]] std::optional<std::string> ask(std::string_view record, std::chrono::milliseconds within);
 
     /// Sends one record answered later, its reply and what is said of it
     /// meanwhile (a cook's progress) kept for `heard` under the record's own
-    /// id (D885). Whether it was sent.
+    /// id. Whether it was sent.
     [[nodiscard]] bool send(std::string_view record);
     /// The number a record sent with `send` went out under, by the id it
     /// was given; none for one not waiting for its reply.
@@ -54,7 +54,7 @@ public:
     }
     /// Whether the last question waited out its bound unanswered: an
     /// endpoint stopped by its system, which a last record need not wait
-    /// for again (D968).
+    /// for again.
     [[nodiscard]] bool silent() const noexcept {
         return silent_;
     }

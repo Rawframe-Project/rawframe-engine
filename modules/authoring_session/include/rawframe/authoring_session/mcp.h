@@ -1,14 +1,14 @@
 #pragma once
 
-// An authoring session offered to AI agents over the Model Context Protocol
-// (D773): JSON-RPC messages, a line each, as MCP's standard input and output
+// An authoring session offered to AI agents over the Model Context Protocol:
+// JSON-RPC messages, a line each, as MCP's standard input and output
 // transport carries them. Every operation `authoring.describe` lists is a
 // tool, named for it, and so are the session's own verbs an agent needs
 // (the game's catalog and assets, undo and redo, history, a new scene, a
 // batch of operations, cooking, importing). The bridge only translates:
 // each call becomes one of the session's records and its reply the call's
 // result, so an agent gains no operation a client of the records lacks and
-// loses none (ADR-0032; D770, a game is made without Studio). The tools
+// loses none (a game is made without Studio). The tools
 // are read from the session's own discovery, never listed a second time.
 
 #include <memory>
@@ -24,7 +24,7 @@ class McpBridge {
 public:
     /// Greets `session` and reads its discovery; the session must not have
     /// been greeted, and outlives the bridge. It is one held here, or a
-    /// shared session's host joined (D883).
+    /// shared session's host joined.
     explicit McpBridge(Answering& session);
     McpBridge(const McpBridge&) = delete;
     McpBridge& operator=(const McpBridge&) = delete;

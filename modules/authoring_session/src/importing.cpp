@@ -265,13 +265,13 @@ result::Result<Imported> importAsset(const std::filesystem::path& game,
                                        "the game's description could not be added to")};
     }
     // A mesh's materials mapped to identities of their own by the cook
-    // tool, as an author's `rawframe-cook --map` would (D316): the mesh
+    // tool, as an author's `rawframe-cook --map` would: the mesh
     // alone, not every source of the game again, which took past the wait
-    // on a loaded sanitized tree (D536). Five minutes only bounds a tool
+    // on a loaded sanitized tree. Five minutes only bounds a tool
     // that never ends: the mesh alone took past thirty seconds under the
     // thread sanitizer on a loaded runner, and a mesh left unmapped does
-    // not cook. A blockout or a terrain names its materials itself (D849,
-    // D855).
+    // not cook. A blockout or a terrain names its materials itself.
+    //
     if (importer == "rawframe.mesh" && !cook.empty()) {
         auto mapping = process::Child::start({.program = cook, .arguments = {"--map", kDirectory.string(), made.path}});
         if (mapping.has_value()) {

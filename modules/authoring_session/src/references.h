@@ -1,8 +1,8 @@
 #pragma once
 
 // References between a game's UI document and its style sheet kept whole
-// in a session (D642): a node's `style` names a class the sheet has, and a
-// node made is of a component the game declares a node (D672). Both
+// in a session: a node's `style` names a class the sheet has, and a
+// node made is of a component the game declares a node. Both
 // are read as they stand on disk, which is as the session last wrote them.
 // Only names a change brings are refused: a game whose document already
 // names a class its sheet lacks can still be changed elsewhere.

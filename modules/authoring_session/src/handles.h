@@ -1,6 +1,6 @@
 #pragma once
 
-// The handles of a preview's mark (D466, D467, D468): the three axes drawn
+// The handles of a preview's mark: the three axes drawn
 // where the author chose something, each grabbed by a press whose ray
 // passes near it and dragged along its line, and the ring about it, grabbed
 // where the ray meets the level plane near it and dragged around; the one
@@ -35,12 +35,12 @@ grabbedAxis(const Point& mark, const Point& origin, const Point& toward, double 
 
 /// Where a ray from `origin`, as far and which way as `toward`, meets the
 /// level plane through `mark`, ahead within its reach; none where it does
-/// not (D467).
+/// not.
 [[nodiscard]] std::optional<Point> levelPoint(const Point& mark, const Point& origin, const Point& toward) noexcept;
 
 /// Whether a press's ray grabs the mark's ring (`view::kMarkRingRadius`
 /// about it on the level plane), its turn's handle: it meets the plane
-/// within a fortieth of the view's height of the ring (D467).
+/// within a fortieth of the view's height of the ring.
 [[nodiscard]] bool
 grabbedRing(const Point& mark, const Point& origin, const Point& toward, double fieldOfView) noexcept;
 
@@ -50,7 +50,7 @@ grabbedRing(const Point& mark, const Point& origin, const Point& toward, double 
 [[nodiscard]] std::optional<double>
 alongAxis(const Point& mark, std::size_t axis, const Point& origin, const Point& toward) noexcept;
 
-/// Which of a mark's handles it shows and a press grabs (D974), a bit
+/// Which of a mark's handles it shows and a press grabs, a bit
 /// each: its axes, its ring, as the tool in use moves or turns.
 inline constexpr std::uint8_t kAxesHandles = 1;
 inline constexpr std::uint8_t kRingHandle = 2;
@@ -62,7 +62,7 @@ inline constexpr std::uint8_t kAllHandles = kAxesHandles | kRingHandle;
 
 /// The part of the mark at `mark` a ray grabs, as a press there would: 1
 /// to 3 an axis (X, Y, Z), 4 the ring, the axes first, of the `handles`
-/// shown; 0 for none (D468).
+/// shown; 0 for none.
 [[nodiscard]] std::uint8_t partUnder(const Point& mark,
                                      const Point& origin,
                                      const Point& toward,

@@ -51,8 +51,8 @@ Value withMember(const Value& object,
                         ((value->kind() == Value::Kind::Object && value->names().empty()) ||
                          (value->kind() == Value::Kind::Array && value->items().empty()));
     // A holder whose kind gives no order holds members of its own names, in
-    // name order (an instance's overrides, D721).
-    // One that keeps its members as they stand takes a new one last (D811).
+    // name order (an instance's overrides).
+    // One that keeps its members as they stand takes a new one last.
     std::vector<std::string> named;
     const bool kAsHeld = order.size() == 1 && order.front() == kMembersAsHeld;
     if (order.empty() || kAsHeld) {
@@ -106,7 +106,7 @@ result::Result<Value> setIn(const Value& object,
     Value items = Value::array();
     if (path.size() == 1 && kStep.place.has_value()) {
         // An item named by its place is only ever replaced: one put in or
-        // taken away would move every place after it (D827).
+        // taken away would move every place after it.
         if (!kFound.has_value()) {
             return refuse(
                 result::ErrorClass::NotFound, AuthoringError::TargetNotFound, "the array has no item at that place");
@@ -276,7 +276,7 @@ result::Result<Committed> JsonDocument::step(std::uint64_t generation, bool undo
     const bool kSteps = history_.steps(*kTarget, undo);
     // The history's own step applies what the entry did backward or again;
     // an entry another author's change came after is taken back, as an
-    // entry of its own, where nothing since stands in its way (D879).
+    // entry of its own, where nothing since stands in its way.
     const bool kForward = kSteps ? undo == entry.reversed : entry.reversed;
     Value root = root_;
     for (std::size_t at = 0; at < entry.journal.size(); ++at) {

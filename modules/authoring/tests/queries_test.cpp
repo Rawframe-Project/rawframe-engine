@@ -1,7 +1,7 @@
-// Read operations (SPEC-0040): every entity a scene holds, its own and its
+// Read operations: every entity a scene holds, its own and its
 // instances', and one entity whole, typed through the catalog; what the
 // catalog does not know answered and marked, never dropped; a typed search
-// by name and component (D473); and an answer's
+// by name and component; and an answer's
 // values in the form a request sets them with, so an agent's next request
 // is built from the answer alone.
 
@@ -108,7 +108,7 @@ RAWFRAME_TEST(EveryEntityIsListedOwnThenBrought) {
 
 RAWFRAME_TEST(AnAttachedEntityIsListedWithItsParent) {
     // A hand follows a body by its 3D attachment; a lamp's 2D attachment
-    // has no parent set; the body follows nothing (D785).
+    // has no parent set; the body follows nothing.
     const base::Bits128 kBody{2, 1};
     const base::Bits128 kHand{2, 2};
     const base::Bits128 kLamp{2, 3};
@@ -136,7 +136,7 @@ RAWFRAME_TEST(AnAttachedEntityIsListedWithItsParent) {
 }
 
 RAWFRAME_TEST(AnEntityIsListedWithTheLayerItIsOn) {
-    // A tree on layer 3, a rock on none (D788).
+    // A tree on layer 3, a rock on none.
     const scene::Scene kWood{.schema = {},
                              .entities = {{.id = base::Bits128{3, 1},
                                            .name = "tree",

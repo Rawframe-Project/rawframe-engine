@@ -39,8 +39,6 @@ modules/animation_import
 modules/assets
 modules/audio
 modules/audio_import
-modules/authoring
-modules/authoring_session
 modules/blockout
 modules/build
 modules/composition

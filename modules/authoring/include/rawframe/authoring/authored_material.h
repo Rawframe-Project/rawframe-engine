@@ -1,8 +1,8 @@
 #pragma once
 
-// A game's material instance open for authoring (D721): a surface
-// material instance document (rawframe/material/instance.h, D709), a
-// JsonDocument (D640) whose slots are its overrides, each by its base's
+// A game's material instance open for authoring: a surface
+// material instance document (rawframe/material/instance.h), a
+// JsonDocument whose slots are its overrides, each by its base's
 // interface input or static switch. Its operation is
 // `materials.set_override`, in operations.h; what each override may be is
 // its base's to say, which the cook checks it against.
@@ -40,7 +40,7 @@ public:
     [[nodiscard]] base::Bits128 identity() const noexcept {
         return identity_;
     }
-    /// Whether it is a material's graph (D728), not an instance of one.
+    /// Whether it is a material's graph, not an instance of one.
     [[nodiscard]] bool graph() const noexcept {
         return graph_;
     }
@@ -57,7 +57,7 @@ public:
         return document_.text();
     }
 
-    /// SPEC-0040's AtomicBatch over the instance: each change in order
+    /// The AtomicBatch over the instance: each change in order
     /// against `generation`, one entry in the history together, none where
     /// every slot already holds its value. Any refused keeps nothing,
     /// naming its `index`: (`TargetStale`) another generation,
@@ -67,7 +67,7 @@ public:
     /// (`LimitExceeded`) more than a batch's operations.
     [[nodiscard]] result::Result<Committed> change(std::uint64_t generation, std::span<const Operation> operations);
 
-    /// Who changes, undoes, or redoes next (D879).
+    /// Who changes, undoes, or redoes next.
     void setAuthor(std::uint32_t author) noexcept {
         document_.setAuthor(author);
     }
@@ -95,15 +95,15 @@ public:
     [[nodiscard]] std::size_t redoable() const noexcept {
         return document_.redoable();
     }
-    /// Who made the history's entry at `entry`, and what it is (D879).
+    /// Who made the history's entry at `entry`, and what it is.
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return document_.authorshipAt(entry);
     }
     [[nodiscard]] const std::vector<JsonDelta>& journalAt(std::size_t entry) const noexcept {
         return document_.journalAt(entry);
     }
-    /// What the history's entry at `entry` does, in a line an author reads
-    /// (D454): `set tint` or `unset tint`, and how many more there are.
+    /// What the history's entry at `entry` does, in a line an author reads:
+    /// `set tint` or `unset tint`, and how many more there are.
     [[nodiscard]] std::string summaryAt(std::size_t entry) const;
 
 private:
@@ -117,10 +117,10 @@ private:
 };
 
 /// A material's query answered: an instance's `materials.read_instance`
-/// (`{"instance": ...}`), a graph's `materials.read_graph` (`{"graph":
-/// ...}`, D728) and `materials.list_node_types` (`{"types": [...]}`, each
+/// (`{"instance": ...}`), a graph's `materials.read_graph` (`{"graph":.
+/// ..}`) and `materials.list_node_types` (`{"types": [...]}`, each
 /// `{"type", "params", "inputs", "outputs"}` as the material module's
-/// signature says, D731, D732, D733); refuses (`ValidationFailed`) any other.
+/// signature says); refuses (`ValidationFailed`) any other.
 [[nodiscard]] result::Result<document::Value> answer(const AuthoredMaterial& material, const Query& query);
 
 } // namespace rawframe::authoring

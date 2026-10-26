@@ -10,7 +10,7 @@ namespace rawframe::authoring {
 /// The domain of every Error authoring creates.
 inline constexpr result::ErrorDomain kAuthoringDomain{base::parseBits128Hex("e5d9aa6df1e60e02b9181b9482ac90a5").value};
 
-/// Codes within kAuthoringDomain: SPEC-0040's closed error classes, and the
+/// Codes within kAuthoringDomain: the closed error classes, and the
 /// delta grammar's own.
 enum class AuthoringError : std::uint32_t {
     ValidationFailed = 1,

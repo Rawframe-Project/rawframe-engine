@@ -1,4 +1,4 @@
-// Operations on the entities a scene's instances bring (D154): each
+// Operations on the entities a scene's instances bring: each
 // becomes a change to one entry of the instance's patch, whole before and
 // whole after, so one operation is at most one delta per entry.
 
@@ -93,7 +93,7 @@ result::Result<Journal> derivePatch(const scene::Scene& scene,
         if (referenced(scene, entity)) {
             return conflict(operation, "an entity another names is not destroyed");
         }
-        // Its removal is its only entry (D120).
+        // Its removal is its only entry.
         for (const scene::Override& each : instance.overrides) {
             if (each.entity == entity) {
                 journal.push_back(entryDelta(entity, each.component, recordOf(scene, &each), std::nullopt));

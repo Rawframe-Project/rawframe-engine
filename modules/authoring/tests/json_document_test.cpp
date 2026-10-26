@@ -1,4 +1,4 @@
-// An authored JSON document (D640): slots found by members and keyed items
+// An authored JSON document: slots found by members and keyed items
 // at any depth, set and unset with their objects' members in order, items
 // made and removed whole at their places, emptied containers omitted but
 // the root's own, a slot that does not hold what a delta leaves from

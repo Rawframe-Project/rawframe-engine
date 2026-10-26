@@ -210,7 +210,7 @@ result::Result<Committed> AuthoredScene::commit() {
     if (const Entry* kLast = open.coalescing == Coalescing::AmendLast ? history_.amendable(author_) : nullptr;
         kLast != nullptr && !kLast->reversed) {
         // Each slot set again keeps the entry's first `before`; a slot back
-        // as it was is no change (D976).
+        // as it was is no change.
         Entry folded = *kLast;
         for (const Delta& kDelta : open.journal) {
             const auto kSame = std::ranges::find_if(folded.journal, [&kDelta](const Delta& each) {
@@ -340,7 +340,7 @@ result::Result<Committed> AuthoredScene::step(std::uint64_t generation, bool und
         view_ = undo ? entry.viewBefore : entry.viewAfter;
         return Committed{.generation = generation_, .deltas = entry.journal.size()};
     }
-    // Another author's change came after it (ADR-0085): taken back on the
+    // Another author's change came after it: taken back on the
     // scene as it now is, as an entry of its own, unless what came after
     // left a slot other than the entry left it.
     scene::Scene taken = scene_;

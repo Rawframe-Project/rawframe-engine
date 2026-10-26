@@ -1,6 +1,6 @@
 #pragma once
 
-// An authored document that is canonical JSON (D640): its value, its
+// An authored document that is canonical JSON: its value, its
 // generation, and its history (history.h), whatever kind it is. A style
 // sheet (authored_styles.h) and a UI document (authored_ui.h) are each one
 // of these and the operations of their kind. A delta names one slot by a
@@ -33,7 +33,7 @@ namespace rawframe::authoring {
 /// One step of a slot's path: the member `member`, or, with a `key`, the
 /// item of that member's array whose `key` holds the text `id`, or, with a
 /// `place`, the item at that place of it (an array whose items are known
-/// by nothing of their own, D827).
+/// by nothing of their own).
 struct JsonStep {
     std::string member;
     std::string key;
@@ -57,12 +57,12 @@ struct JsonDelta {
 };
 
 /// The one name of an order that keeps an object's members as they stand,
-/// a new one last (a data document's, D811).
+/// a new one last (a data document's).
 inline constexpr std::string_view kMembersAsHeld = "*";
 
 /// An object's members in its document's order, by the path from the root
-/// to it (empty for the root, D729); none for an object whose members are
-/// names of its own, kept in name order (D721).
+/// to it (empty for the root); none for an object whose members are
+/// names of its own, kept in name order.
 using MemberOrder = std::span<const std::string_view> (*)(std::span<const JsonStep> at) noexcept;
 /// Whether the object at `at` stays when a change leaves it empty, as its
 /// kind holds it even then (a material graph node's params and inputs);
@@ -120,13 +120,13 @@ public:
     [[nodiscard]] bool canRedo() const noexcept {
         return history_.canRedo();
     }
-    /// Who keeps, undoes, or redoes next (ADR-0085, D879): nought, the
+    /// Who keeps, undoes, or redoes next: nought, the
     /// session's own, until told.
     void setAuthor(std::uint32_t author) noexcept {
         author_ = author;
     }
     /// Takes back the author's latest change, or puts back what they took
-    /// back last, as a scene does (D879). Refuses (`TargetStale`) another
+    /// back last, as a scene does. Refuses (`TargetStale`) another
     /// generation, (`Conflict`) where a later change by another author
     /// stands in its way, and (`TargetNotFound`) with nothing to do.
     [[nodiscard]] result::Result<Committed> undo(std::uint64_t generation);
@@ -148,12 +148,12 @@ public:
     [[nodiscard]] const std::vector<JsonDelta>& journalAt(std::size_t entry) const noexcept {
         return history_.at(entry).journal;
     }
-    /// Who made the history's entry at `entry`, and what it is (D879).
+    /// Who made the history's entry at `entry`, and what it is.
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return history_.authorshipAt(entry);
     }
     /// The entry the author's undo or redo would take back or put back, if
-    /// any (D886).
+    /// any.
     [[nodiscard]] std::optional<std::size_t> stepTarget(bool undo) const noexcept {
         return history_.targetOf(author_, undo);
     }
@@ -161,8 +161,7 @@ public:
 private:
     struct Entry {
         std::vector<JsonDelta> journal;
-        /// Whether what the entry did is its journal applied backward
-        /// (D879).
+        /// Whether what the entry did is its journal applied backward.
         bool reversed = false;
         std::size_t bytes = 0;
     };

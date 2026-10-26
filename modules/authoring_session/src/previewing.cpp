@@ -74,7 +74,7 @@ result::Status Preview::open(const authoring::SessionRecord& record) {
                                        result::ErrorClass::PermissionDenied,
                                        "the preview's endpoint does not grant view")};
     }
-    // The server the game plays on, for picking (D456): a loopback
+    // The server the game plays on, for picking: a loopback
     // client too, granting inspect.
     if (record.preview->serverEndpoint.has_value()) {
         const std::optional<std::string> kServer = loopbackEndpoint(*record.preview->serverEndpoint);
@@ -110,8 +110,8 @@ void Preview::letGo() {
     preview_.reset();
     server_.reset();
     scene_.clear();
-    // A preview to come counts its wheel and drags afresh (D469), and is
-    // asked afresh (D969).
+    // A preview to come counts its wheel and drags afresh, and is
+    // asked afresh.
     motionRead_ = {};
     clickedHeard_.reset();
     clickedAsked_ = false;
@@ -152,7 +152,7 @@ bool Preview::forward(const std::string& name,
         }
         pathsTold_ = std::move(paths);
     }
-    // Observed, the game keeps its own camera (D923).
+    // Observed, the game keeps its own camera.
     const std::optional<authoring::SceneView> kView = observe_ ? std::nullopt : view;
     if (told_ && kView == previewed_) {
         return true;
@@ -162,7 +162,7 @@ bool Preview::forward(const std::string& name,
     look.add("id", Value::integer(static_cast<std::int64_t>(++looks_)));
     look.add("view", viewValue(kView));
     // The views beside it, from the top, the front, and the side of its
-    // target, as far as its eye is (D797).
+    // target, as far as its eye is.
     if (views_ > 1 && kView.has_value()) {
         Value others = Value::array();
         for (const authoring::SceneView& kOther : othersOf(*kView, views_)) {
@@ -199,7 +199,7 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     }
     Value made = Value::object();
     made.add("kind", Value::string("authoring.picked"));
-    // The newest answer heard, the next asked: never waited for (D969).
+    // The newest answer heard, the next asked: never waited for.
     hear();
     if (!clickedAsked_ && preview_->send(R"({"kind":"tooling.clicked","id":"clicked"})")) {
         clickedAsked_ = true;
@@ -210,8 +210,7 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     const std::int64_t kClicks = kCount != nullptr ? kCount->integer().value_or(0) : 0;
     Value scene;
     Value source;
-    // Where the ray met what it picked, where an extension's mode runs
-    // (D877).
+    // Where the ray met what it picked, where an extension's mode runs.
     Value hit;
     if (kClicks > clicks_ && kAnswer->find("origin") != nullptr && kAnswer->find("toward") != nullptr) {
         pressed_ = grabbed(kClicks, *kAnswer, previewed);
@@ -220,7 +219,7 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
         }
     }
     if (pressed_.has_value() && pressed_->count == kClicks && pressed_->handle.has_value()) {
-        // A handle of the mark, its chosen entity's (D466): the server
+        // A handle of the mark, its chosen entity's: the server
         // is not asked what the ray meets.
         scene = Value::string(pressed_->scene);
         source = Value::string(pressed_->source);
@@ -261,18 +260,18 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     made.add("scene", std::move(scene));
     made.add("source", std::move(source));
     made.add("point", std::move(hit));
-    // The mark's part the pointer has lit, if any (D468, D504).
+    // The mark's part the pointer has lit, if any.
     made.add("lit", partName(lit_).empty() ? Value{} : Value::string(std::string{partName(lit_)}));
     // The press that met an authored entity, let go elsewhere: how far
-    // its point moved across the level plane through it (D457); with
+    // its point moved across the level plane through it; with
     // Shift, up or down the upright plane through it facing the eye,
     // and with Control, the turn about the entity, from where it was
-    // pressed to where it was let go on the level plane (D463).
+    // pressed to where it was let go on the level plane.
     const Value* kReleased = kAnswer != nullptr ? kAnswer->find("released") : nullptr;
     const std::int64_t kRelease = kReleased != nullptr ? kReleased->integer().value_or(0) : 0;
     Value moved;
     // While it is held, where it would move to were it let go where the
-    // pointer is, so a drag is shown as it goes (D976).
+    // pointer is, so a drag is shown as it goes.
     Value dragging;
     if (pressed_.has_value() && kRelease != pressed_->count && kAnswer != nullptr) {
         dragging = movedTo(pointOf(kAnswer->find("pointOrigin")), pointOf(kAnswer->find("pointToward")));
@@ -284,7 +283,7 @@ result::Result<Value> Preview::picked(const authoring::SessionRecord& record, au
     made.add("moved", std::move(moved));
     made.add("dragging", std::move(dragging));
     // The press let go: the ways its ray went where it went down and where
-    // it came up, the corners of a box a tool may choose by (D974).
+    // it came up, the corners of a box a tool may choose by.
     Value box;
     if (const auto kTo = pointOf(kAnswer != nullptr ? kAnswer->find("releaseToward") : nullptr);
         boxFrom_.has_value() && kRelease == boxFrom_->first && kTo.has_value()) {
@@ -329,10 +328,10 @@ void Preview::hear() {
 }
 
 /// The scene's view moved by the preview's wheel and right drags since
-/// they were last read (D469), told the preview as any view is: the
+/// they were last read, told the preview as any view is: the
 /// view, or null where nothing moved.
 Value Preview::viewMovedBy(const Value& clicked, authoring::AuthoredScene* previewed) {
-    // Flown where it is drawn (D913): where it is now is the scene's view,
+    // Flown where it is drawn: where it is now is the scene's view,
     // which it already looks through, so it is not told back.
     if (const Value* kFlown = clicked.find("flown"); kFlown != nullptr && previewed != nullptr) {
         const Value* kCount = kFlown->find("count");
@@ -368,7 +367,7 @@ Value Preview::viewMovedBy(const Value& clicked, authoring::AuthoredScene* previ
 }
 
 /// Has the preview draw lit the handle of its mark the pointer is over,
-/// as a press there would grab it, while no press is held (D468).
+/// as a press there would grab it, while no press is held.
 void Preview::lightUnder(const Value& clicked) {
     if (preview_ == nullptr || !mark_.has_value() || pressed_.has_value()) {
         return;
@@ -388,7 +387,7 @@ double Preview::fieldOfView() const noexcept {
 }
 
 /// The press numbered `count` grabbing a handle of the preview's mark,
-/// if it does (D466): the scene's first chosen entity's, the mark being
+/// if it does: the scene's first chosen entity's, the mark being
 /// where it stands.
 std::optional<Preview::Pressed>
 Preview::grabbed(std::int64_t count, const Value& clicked, const authoring::AuthoredScene* previewed) const {
@@ -413,7 +412,7 @@ Preview::grabbed(std::int64_t count, const Value& clicked, const authoring::Auth
 }
 
 /// Where the press held would move what it met were it let go along a
-/// ray (D457, D463, D466, D467): a handle along its line or about its
+/// ray: a handle along its line or about its
 /// ring; else across the level plane through what it met, up the upright
 /// one facing the eye with Shift, or about it with Control. Null where the
 /// ray meets no plane.
@@ -470,7 +469,7 @@ Value Preview::movedTo(const std::optional<Point>& origin, const std::optional<P
     return moved;
 }
 
-/// Has the scene's preview mark a point, or none (D464): where the
+/// Has the scene's preview mark a point, or none: where the
 /// author chose something. Whether the preview shows it.
 bool Preview::outline(std::string_view scene, const Value& outlines) {
     if (preview_ == nullptr || scene != scene_ || observe_) {
@@ -495,13 +494,13 @@ Value Preview::marked(const authoring::SessionRecord& record) {
         const Value* kMarked = kAnswer != nullptr ? kAnswer->find("marked") : nullptr;
         shown = kMarked != nullptr && kMarked->truth().value_or(false);
     }
-    // Kept for its handles (D466) while the scene is previewed, whether
+    // Kept for its handles while the scene is previewed, whether
     // or not a preview slow to answer said it shows it: the author's
     // choice stands.
     if (preview_ != nullptr && record.scene == scene_) {
         mark_ = record.mark;
         handles_ = record.handles;
-        // Marked afresh, nothing lit (D468).
+        // Marked afresh, nothing lit.
         lit_ = 0;
     }
     Value made = Value::object();
@@ -518,7 +517,7 @@ result::Result<Value> Preview::inputted(const authoring::SessionRecord& record) 
                                        result::ErrorClass::InvalidArgument,
                                        "events are at most 64 input events that read")};
     }
-    // Sent without waiting for the preview's next frame (D969); taken as
+    // Sent without waiting for the preview's next frame; taken as
     // the last it answered was. A preview past kMostInputsWaiting
     // unanswered has stopped taking any.
     hear();

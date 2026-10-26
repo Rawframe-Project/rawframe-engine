@@ -1,9 +1,9 @@
-// A style sheet open for authoring (D636): a part set, changed, and unset,
+// A style sheet open for authoring: a part set, changed, and unset,
 // a variant made and gone with its first and last part, each change one
 // entry that undo and redo walk exactly back to the bytes before, the
 // clean place kept, a batch one entry or nothing, changes the sheet does
 // not read refused with the document as it was, and the sheet read whole;
-// classes made, removed, and renamed (D638); transitions set (D639).
+// classes made, removed, and renamed; transitions set.
 
 #include "rawframe/authoring/authored_styles.h"
 #include "rawframe/authoring/errors.h"

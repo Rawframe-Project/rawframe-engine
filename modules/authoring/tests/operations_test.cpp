@@ -1,6 +1,6 @@
-// Authoring operations (SPEC-0040): components addressed by type id through
+// Authoring operations: components addressed by type id through
 // the catalog, fields by their layout's names, values typed; validation in
-// SPEC-0040's order with DryRun agreeing with execution; atomic and
+// the order with DryRun agreeing with execution; atomic and
 // independent batches; and every failure one of the closed classes.
 
 #include "rawframe/authoring/errors.h"
@@ -217,7 +217,7 @@ RAWFRAME_TEST(BatchesAreAtomicOrIndependentAsDeclared) {
 }
 
 RAWFRAME_TEST(AnAtomicBatchOverDocumentsIsOneTransaction) {
-    // Two scenes, one transaction (D497): the level in one, a door in the
+    // Two scenes, one transaction: the level in one, a door in the
     // other; then a failure in the second part keeps nothing in the first.
     const auto kLevel = empty();
     const auto kHall = empty();
@@ -351,7 +351,7 @@ RAWFRAME_TEST(AnInstancesEntitiesChangeThroughItsPatch) {
                     kPatch()[0].fields[1].value.number == "2");
     RAWFRAME_EXPECT(kRun(RevertField{.entity = kCrate, .component = kPosition, .field = "x"}));
     RAWFRAME_EXPECT(kPatch().size() == 1 && kPatch()[0].fields.size() == 1);
-    // An enum's first case is written out by name (D271).
+    // An enum's first case is written out by name.
     RAWFRAME_EXPECT(kRun(SetField{.entity = kCrate,
                                   .component = kPosition,
                                   .field = "pose",
@@ -497,7 +497,7 @@ RAWFRAME_TEST(AnInstanceIsAddedAndRemovedWhole) {
     RAWFRAME_EXPECT(refusedWith(kRun(RemoveInstance{.entity = kCrate}), AuthoringError::Conflict));
     RAWFRAME_EXPECT(refusedWith(kRun(RemoveInstance{.entity = kSpawn}), AuthoringError::TargetNotFound));
     RAWFRAME_EXPECT(scene::readScene(room.text()).has_value());
-    // Streamed as a district and back (D870): the instance keeps its place,
+    // Streamed as a district and back: the instance keeps its place,
     // its mapping, and its patch, and an undo takes the streaming away.
     const std::string kBefore = room.text();
     RAWFRAME_EXPECT(kRun(StreamInstance{.entity = kCrate, .streaming = scene::Streaming::Atomic}));
@@ -514,7 +514,7 @@ RAWFRAME_TEST(AnInstanceIsAddedAndRemovedWhole) {
 }
 
 RAWFRAME_TEST(ACaseFieldIsSetByItsCasesName) {
-    // D271: an enum's field takes one of its cases by name, the first being
+    // An enum's field takes one of its cases by name, the first being
     // its default and so no field at all; any other name is refused.
     constexpr schema::ComponentTypeId kGuard =
         schema::ComponentTypeId::fromText("5f3a0c2d-9e81-4b74-8a1d-000000000003");

@@ -1,10 +1,10 @@
 #pragma once
 
-// An authoring session (D407, authoring/session.h): a game read once, its
+// An authoring session (authoring/session.h): a game read once, its
 // scenes under a root opened as records name them and kept open with their
 // undo histories, each change written to its file as it commits, each
-// with its selection (D417) and its view (D432), and one preview a running
-// client's tooling endpoint shows (D433). `rawframe-author session` holds
+// with its selection and its view, and one preview a running
+// client's tooling endpoint shows. `rawframe-author session` holds
 // one on standard input and output; any other client may hold one in its
 // own process, speaking exactly the records every client of the session
 // speaks.
@@ -18,7 +18,7 @@
 namespace rawframe::authoring_session {
 
 /// What answers a session's records, a line each: a session held in this
-/// process, or a shared session's host joined (D883, link.h), which a
+/// process, or a shared session's host joined (link.h), which a
 /// client such as the MCP bridge speaks to the same way.
 class Answering {
 public:
@@ -39,9 +39,9 @@ protected:
 class Session final : public Answering {
 public:
     /// The game described at `game`, its scenes under `root`; read at
-    /// `hello`. `cook` is the cook tool `authoring.cook` runs (D502); none
-    /// refuses it. `thumbnail` is the tool that draws a mesh's thumbnail
-    /// (D899); none refuses a mesh's.
+    /// `hello`. `cook` is the cook tool `authoring.cook` runs; none
+    /// refuses it. `thumbnail` is the tool that draws a mesh's thumbnail;
+    /// none refuses a mesh's.
     Session(std::filesystem::path game,
             std::filesystem::path root,
             std::filesystem::path cook = {},
@@ -53,7 +53,7 @@ public:
 
     /// One record, a line without its line feed, answered: the reply line,
     /// its line feed included, or nothing for an operation that answers
-    /// when it ends (`cook`, D502). `ended` is set by `end`, whose reply
+    /// when it ends (`cook`). `ended` is set by `end`, whose reply
     /// follows the last records of an operation it stopped.
     [[nodiscard]] std::string answer(std::string_view line, bool& ended) override;
 

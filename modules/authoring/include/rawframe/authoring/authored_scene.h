@@ -1,6 +1,6 @@
 #pragma once
 
-// A scene being authored (ADR-0065): the document, its generation, and its
+// A scene being authored: the document, its generation, and its
 // own history. Every change is a transaction bound to the generation it
 // was computed against: deltas stage on a copy, and commit either
 // publishes the whole journal as one history entry and a new generation
@@ -21,11 +21,10 @@
 // document: choosing it changes neither the generation nor whether the
 // document is dirty, and no delta carries it. Each history entry keeps the
 // selection from before its transaction and after it, as a non-dirtying
-// payload (ADR-0065, SPEC-0040's `non_dirtying`), and undo and redo put
+// payload (the `non_dirtying`), and undo and redo put
 // them back, less any entity the scene no longer holds. Its view, the
-// camera an author looks at it through (D432), is kept the same way. Where
-// several authors share it, each has a selection and a view of their own
-// (ADR-0085 section 5, D887).
+// camera an author looks at it through, is kept the same way. Where
+// several authors share it, each has a selection and a view of their own.
 //
 // Opening a transaction while one is open joins it: only the outermost
 // token commits, and any token's cancel, or any failure, discards the
@@ -60,12 +59,12 @@ enum class Coalescing : std::uint8_t {
     /// The transaction folds into its author's latest entry where that is
     /// the history's newest, a change of theirs nothing has taken back:
     /// each slot its first `before` and its last `after`, so a drag shown
-    /// as it goes is one step (D976). Otherwise an entry of its own.
+    /// as it goes is one step. Otherwise an entry of its own.
     AmendLast,
 };
 
-/// Where an author looks at a scene from (ADR-0065's view state, declared
-/// here for scenes, D432): the camera a preview shows it through, its eye
+/// Where an author looks at a scene from (the view state, declared
+/// here for scenes): the camera a preview shows it through, its eye
 /// and the point it looks at in the scene's space, in metres, and its
 /// vertical field of view in degrees. No part of the document.
 struct SceneView {
@@ -78,7 +77,7 @@ struct SceneView {
 /// Refuses (`ValidationFailed`) a view with a coordinate that is not
 /// finite or past a million metres, an eye at its target, or a field of
 /// view outside one to 179 degrees: what a scene looks from, or keeps in a
-/// bookmark (D796).
+/// bookmark.
 [[nodiscard]] result::Status checkView(const SceneView& view);
 
 class AuthoredScene;
@@ -121,10 +120,10 @@ private:
     bool outermost_ = false;
 };
 
-/// Commits the outermost transactions of several documents as one (SPEC-0040's
-/// multi-document transaction, D497): every staged scene in form, or none
+/// Commits the outermost transactions of several documents as one (a
+/// multi-document transaction): every staged scene in form, or none
 /// is kept and every one is cancelled; then each document's journal is one
-/// entry in its own history (ADR-0065's per-document histories), so undo in
+/// entry in its own history, so undo in
 /// one takes back only its part. Refuses (`ValidationFailed`, nothing kept)
 /// a document named twice, an inner or closed token, and a scene out of
 /// form, naming its document. Answers each document's commit in order.
@@ -174,7 +173,7 @@ public:
     /// counts once.
     [[nodiscard]] result::Status select(std::span<const base::Bits128> entities);
 
-    /// Where an author looks at the scene from (D432), none until told.
+    /// Where an author looks at the scene from, none until told.
     [[nodiscard]] const std::optional<SceneView>& view() const noexcept {
         return view_;
     }
@@ -189,10 +188,10 @@ public:
     [[nodiscard]] bool canRedo() const noexcept {
         return history_.canRedo();
     }
-    /// Who makes what commits, undoes, or redoes next (ADR-0085, D879):
+    /// Who makes what commits, undoes, or redoes next:
     /// nought, the session's own, until told; the selection and view are
     /// then theirs, as they left them, less any entity the scene no longer
-    /// holds, none for an author new to the scene (D887).
+    /// holds, none for an author new to the scene.
     void setAuthor(std::uint32_t author);
     /// Takes back the author's latest change, or puts back what they took
     /// back last (see history.h). Refuses (`TargetStale`) another
@@ -225,11 +224,11 @@ public:
         return history_.at(entry).journal;
     }
     /// The entry the author's undo or redo would take back or put back, if
-    /// any (D880).
+    /// any.
     [[nodiscard]] std::optional<std::size_t> stepTarget(bool undo) const noexcept {
         return history_.targetOf(author_, undo);
     }
-    /// Who made the history's entry at `entry`, and what it is (D879).
+    /// Who made the history's entry at `entry`, and what it is.
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return history_.authorshipAt(entry);
     }
@@ -241,7 +240,7 @@ private:
     struct Entry {
         Journal journal;
         /// Whether what the entry did is its journal applied backward: an
-        /// undo of another author's later-overtaken change (D879).
+        /// undo of another author's later-overtaken change.
         bool reversed = false;
         std::size_t bytes = 0;
         /// The selection before the transaction, and after it.

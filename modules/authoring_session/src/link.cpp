@@ -38,8 +38,8 @@ ToolingLink::~ToolingLink() {
     if (client_ != nullptr) {
         // Said for the endpoint; whether its reply or the close comes first,
         // the connection is over. A program already stopped never replies,
-        // and its link once waited ten seconds for it (D947); one that left
-        // the last question unanswered is not waited for again (D968).
+        // and its link once waited ten seconds for it; one that left
+        // the last question unanswered is not waited for again.
         if (!client_->silent()) {
             (void)client_->ask(R"({"kind":"tooling.end","id":null})", kEndWithin);
         }
@@ -192,7 +192,7 @@ bool HostLink::closed() const noexcept {
 
 namespace {
 
-/// The records that act on a played game's preview alone (D906), which a
+/// The records that act on a played game's preview alone, which a
 /// host joined cannot reach: the game plays on this machine.
 constexpr std::array<std::string_view, 16> kPreviewed = {"authoring.preview",
                                                          "authoring.pick",
@@ -330,7 +330,7 @@ std::string JoinedSession::answer(std::string_view line, bool& ended) {
     }
     if (kNamed == "authoring.cook") {
         // Answered when it ends, as a session's is: its progress and reply
-        // come through `poll` (D885).
+        // come through `poll`.
         if (link_->send(line)) {
             return {};
         }
@@ -378,7 +378,7 @@ std::string JoinedSession::answer(std::string_view line, bool& ended) {
         if (const document::Value* kAnswered = kSaid->find("answer"); kAnswered != nullptr) {
             looked(*kAnswered, kSceneNamed);
             // The boxes the host made of each author's choice, outlined in
-            // the preview held here (D907), which says whether it drew them.
+            // the preview held here, which says whether it drew them.
             const document::Value* kOutlines = kAnswered->find("outlines");
             if (kNamed == "authoring.outline" && kOutlines != nullptr && preview_ != nullptr) {
                 document::Value answer = document::Value::object();

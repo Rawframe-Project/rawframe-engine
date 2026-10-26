@@ -1,6 +1,6 @@
 // Coverage-guided fuzzing of a request applied to a game's UI document,
-// style sheet, material instance, and material graph (D640, D641, D721,
-// D728), seeded with every operation of each kind.
+// style sheet, material instance, and material graph,
+// seeded with every operation of each kind.
 // Whatever a request holds, a document it changes still reads, its text
 // opens again to the very same bytes, undo gives back the text it had, and
 // redo the text the change made.

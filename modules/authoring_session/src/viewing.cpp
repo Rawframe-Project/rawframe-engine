@@ -319,7 +319,7 @@ authoring::SceneView pannedView(const authoring::SceneView& view, double across,
 
 authoring::SceneView movedBy(const authoring::SceneView& view, const ViewMotion& change) noexcept {
     // A 2D view stays one: the drag pans it, the wheel brings it nearer
-    // the plane or farther (D793).
+    // the plane or farther.
     if (flat(view)) {
         // Not by orbiting, which holds a view short of straight down.
         authoring::SceneView moved = pannedView(view, change.orbit[0], change.orbit[1]);

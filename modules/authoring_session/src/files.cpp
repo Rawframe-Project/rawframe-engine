@@ -77,7 +77,7 @@ bool kept(const std::filesystem::path& game, std::string_view path) {
 /// link: no part of it that is there is one, and where it is now is under
 /// the directory as the file system resolves it. A collaborator's record
 /// names only paths, so a link a game holds never takes a move or a
-/// removal outside it (D929).
+/// removal outside it.
 bool unlinked(const std::filesystem::path& game, std::string_view path) {
     std::error_code error;
     const std::filesystem::path kRoot = std::filesystem::canonical(game.parent_path(), error);

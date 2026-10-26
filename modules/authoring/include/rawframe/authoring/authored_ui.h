@@ -1,11 +1,11 @@
 #pragma once
 
-// A game's UI document open for authoring (D641): a `ui.document`
-// (rawframe/ui/document.h), a JsonDocument (D640) whose slots are a node,
+// A game's UI document open for authoring: a `ui.document`
+// (rawframe/ui/document.h), a JsonDocument whose slots are a node,
 // known by its component's name wherever it stands (`nodes`, or a node's
 // `children`), whole at its place; and one of its fields. Its operations
 // are `ui.set_field`, `ui.create_node`, `ui.remove_node`, and
-// `ui.move_node` (D644), and its query `ui.read_document`, in operations.h.
+// `ui.move_node`, and its query `ui.read_document`, in operations.h.
 
 #include "rawframe/authoring/json_document.h"
 #include "rawframe/authoring/operations.h"
@@ -60,7 +60,7 @@ public:
     /// has no such node.
     [[nodiscard]] std::optional<JsonPath> pathOf(std::string_view node) const;
 
-    /// SPEC-0040's AtomicBatch over the document, as a style sheet's
+    /// The AtomicBatch over the document, as a style sheet's
     /// (AuthoredStyles::change): (`TargetNotFound`) a node or parent the
     /// document does not have, (`Conflict`) a new node's component already
     /// a node's, (`ValidationFailed`) a field a node has not, a place past
@@ -68,7 +68,7 @@ public:
     /// document that does not read after them.
     [[nodiscard]] result::Result<Committed> change(std::uint64_t generation, std::span<const Operation> operations);
 
-    /// Who changes, undoes, or redoes next (D879).
+    /// Who changes, undoes, or redoes next.
     void setAuthor(std::uint32_t author) noexcept {
         document_.setAuthor(author);
     }
@@ -93,7 +93,7 @@ public:
     [[nodiscard]] std::size_t redoable() const noexcept {
         return document_.redoable();
     }
-    /// Who made the history's entry at `entry`, and what it is (D879).
+    /// Who made the history's entry at `entry`, and what it is.
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return document_.authorshipAt(entry);
     }
@@ -101,7 +101,7 @@ public:
         return document_.journalAt(entry);
     }
     /// The entry the author's undo or redo would take back or put back, if
-    /// any (D886).
+    /// any.
     [[nodiscard]] std::optional<std::size_t> stepTarget(bool undo) const noexcept {
         return document_.stepTarget(undo);
     }
@@ -115,7 +115,7 @@ private:
     }
 
     [[nodiscard]] result::Result<Committed> reread(result::Result<Committed> done);
-    /// `move` staged: the node taken out, then put where it goes (D644).
+    /// `move` staged: the node taken out, then put where it goes.
     [[nodiscard]] result::Status stageMove(JsonDocument::Staged& staged, const MoveUiNode& move) const;
 
     base::Bits128 identity_{};

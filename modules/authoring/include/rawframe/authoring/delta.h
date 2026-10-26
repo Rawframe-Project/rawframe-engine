@@ -1,6 +1,6 @@
 #pragma once
 
-// Document deltas (ADR-0065, SPEC-0040): the one staged-change record of
+// Document deltas: the one staged-change record of
 // authoring. A delta names one slot of a scene document (rawframe/scene)
 // and the slot's value before and after, both complete and explicit, so a
 // delta applies forward or backward with nothing but itself, and a journal
@@ -10,7 +10,7 @@
 //                     components with their layout marks)
 //   destroy_node      an entity, from its record to none
 //   reorder           an entity's place among the scene's entities
-//   set_name          an entity's name for people (node metadata, D149)
+//   set_name          an entity's name for people (node metadata)
 //   add_component     a component of an entity, from none to its mark and
 //                     fields
 //   remove_component  the same, from its mark and fields to none
@@ -18,13 +18,13 @@
 //                     default to another
 //   set_reference     an entity-valued field, likewise
 //   set_mark          the layout mark the scene's schema records for a
-//                     component, with no entity (document metadata, D153)
+//                     component, with no entity (document metadata)
 //   set_override      one entry of an instance's patch: what it does to
 //                     one component of one of the instance's entities, or,
-//                     with no component, the entity's removal (D154)
+//                     with no component, the entity's removal
 //   create_instance   an instance, from none to its record (place, source
 //                     scene, mapping, patch, and the marks its patch uses),
-//                     named by the id its first mapping gives (D156)
+//                     named by the id its first mapping gives
 //   destroy_instance  the same, from its record to none
 //
 // Applying a delta forward requires the slot to hold its `before` and
@@ -35,8 +35,8 @@
 // dropped with its last. Whether the whole scene is still in form is the
 // transaction's to check, once, after its journal.
 //
-// SPEC-0040's `reparent` waits for a document hierarchy: children are
-// attachments, components like any other (D120).
+// The `reparent` waits for a document hierarchy: children are
+// attachments, components like any other.
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/result/result.h"
@@ -105,7 +105,7 @@ struct InstanceRecord {
     /// The marks of the components its patch names, each once, in name
     /// order.
     std::vector<scene::SchemaMark> marks;
-    /// How it reaches clients (D870).
+    /// How it reaches clients.
     scene::Streaming streaming = scene::Streaming::Each;
 
     friend bool operator==(const InstanceRecord&, const InstanceRecord&) = default;
@@ -158,20 +158,20 @@ using Journal = std::vector<Delta>;
 [[nodiscard]] result::Status apply(scene::Scene& scene, const Journal& journal, bool forward);
 
 /// A journal applied as `apply` applies it to a scene other authors have
-/// changed since it was made (ADR-0085, D879): an entity or an instance is
+/// changed since it was made: an entity or an instance is
 /// taken from where it now stands, and one made again stands at its place
 /// or the last the scene has, since other entities made or moved around it
 /// change none of its slots. Answers the journal as applied, its places
 /// those it met, so that it steps back exactly.
 [[nodiscard]] result::Result<Journal> applyRebased(scene::Scene& scene, const Journal& journal, bool forward);
 
-/// SPEC-0028's canonical record of a journal, and read back; refused
+/// The canonical record of a journal, and read back; refused
 /// (`DeltaInvalid`) in any other form.
 [[nodiscard]] result::Result<std::string> writeJournal(const Journal& journal);
 [[nodiscard]] result::Result<Journal> readJournal(std::string_view bytes);
 
-/// What a journal does, in a line an author reads in a history (ADR-0066,
-/// D454): its first delta, as `set width of runners.tile`, and how many
+/// What a journal does, in a line an author reads in a history:
+/// its first delta, as `set width of runners.tile`, and how many
 /// more there are; `no change` for an empty one.
 [[nodiscard]] std::string summaryOf(const Journal& journal);
 

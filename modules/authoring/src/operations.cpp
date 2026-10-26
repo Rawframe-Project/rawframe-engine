@@ -424,7 +424,7 @@ result::Result<Journal> derive(const scene::Scene& scene,
     return journal;
 }
 
-/// The stale check, after addressing (SPEC-0040's order): an operation
+/// The stale check, after addressing: an operation
 /// whose targets do not resolve says so first.
 result::Status fresh(const AuthoredScene& scene, std::uint64_t generation, const Operation& operation) {
     if (generation != scene.generation()) {

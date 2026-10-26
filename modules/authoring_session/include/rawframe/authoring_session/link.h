@@ -1,9 +1,9 @@
 #pragma once
 
 // A client of a running Runtime's tooling endpoint (world_tooling/server.h):
-// what `rawframe-author connect` speaks through (D408), and a session's
-// preview (D433); and a collaborator's of a shared session's host
-// (host.h), what `rawframe-author join` speaks through (D881).
+// what `rawframe-author connect` speaks through, and a session's
+// preview; and a collaborator's of a shared session's host
+// (host.h), what `rawframe-author join` speaks through.
 
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring_session/session.h"
@@ -46,9 +46,9 @@ public:
     std::optional<std::string> ask(std::string_view record);
     /// The same, a last record before the link is let go, waiting only a
     /// moment: a program stopped by the system never replies, and the
-    /// ten seconds an ask waits held Studio's end (D947).
+    /// ten seconds an ask waits held Studio's end.
     std::optional<std::string> askLast(std::string_view record);
-    /// Sends one record answered later (D969): its reply kept for `heard`
+    /// Sends one record answered later: its reply kept for `heard`
     /// under the record's own id, so who sends it never waits on the
     /// endpoint's next frame. Whether it was sent.
     bool send(std::string_view record);
@@ -83,7 +83,7 @@ public:
     /// closed or kept silent. What the host says unasked meanwhile is kept
     /// for `heard`.
     std::optional<std::string> ask(std::string_view record);
-    /// Sends one record the host answers when it ends (`cook`, D885),
+    /// Sends one record the host answers when it ends (`cook`),
     /// its progress and reply then heard under its own id; whether it was
     /// sent. `cancel`'s operation is that id too.
     [[nodiscard]] bool send(std::string_view record);
@@ -105,12 +105,12 @@ private:
 };
 
 /// A shared session's host joined, answering records as a session held
-/// here does (D883), so a client of one speaks to the other unchanged: its
+/// here does, so a client of one speaks to the other unchanged: its
 /// hello answered with the host's welcome, what the host says unasked
 /// given by `poll`, and `end` ending the connection. A record the host
 /// answers when it ends (`cook`) is answered as a session answers it,
-/// later, through `poll` (D885). The preview of a game played here, which
-/// the host cannot reach, is held here (D906): `preview` and the records
+/// later, through `poll`. The preview of a game played here, which
+/// the host cannot reach, is held here: `preview` and the records
 /// that only act on it are answered here, the view handed it where this
 /// author looks, as they say it and as the host answers.
 class JoinedSession final : public Answering {

@@ -436,7 +436,7 @@ struct AuthoringHost::State {
             return;
         }
         // A record is its sender's: the author the token names, and none
-        // other (ADR-0085's sender).
+        // other.
         const Value* kAuthor = parsed->find("author");
         if (kAuthor != nullptr && (kAuthor->kind() != Value::Kind::String || *kAuthor->text() != kWho.name)) {
             send(connection,
@@ -449,7 +449,7 @@ struct AuthoringHost::State {
             // A collaborator names its cook's output and cache by plain
             // names, which the host puts under its cooking directory, in
             // the collaborator's own: no record names a path on the host's
-            // machine (D885); and reads it back by the same name (D905).
+            // machine; and reads it back by the same name.
             const std::optional<std::string> kCook = cookedUnder(*parsed, kWho.name);
             if (!kCook.has_value()) {
                 send(connection,
