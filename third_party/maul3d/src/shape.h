@@ -12,47 +12,26 @@ void m3EnableShapeHitEventsInternal(m3World* world, int32_t slot, int32_t on);
 
 void m3EnableShapePreSolveInternal(m3World* world, int32_t slot, int32_t on);
 
-// The compound gate: THE one way to read where a shape sits
-// in the world. Bodies still move; shapes may ride at an offset.
-// Identity short-circuits through the flag so default scenes pay a
-// branch and nothing else.
-static inline m3Transform m3ShapeWorldTransform(const m3World* world, int32_t shape)
-{
-    int32_t body = world->shapes.shapeBody[shape];
-    m3Transform xf = world->bodies.transforms[body];
-    if (world->shapes.shapeHasOffset[shape] != 0)
-    {
-        m3Vec3 r = m3RotateVec3(xf.q, world->shapes.shapeLocalPos[shape]);
-        xf.p.x += (double)r.x;
-        xf.p.y += (double)r.y;
-        xf.p.z += (double)r.z;
-        xf.q = m3MulQuat(xf.q, world->shapes.shapeLocalRot[shape]);
-    }
-    return xf;
-}
-
 void m3SetShapeFrictionInternal(m3World* world, int32_t slot, float value);
 
 void m3SetShapeRestitutionInternal(m3World* world, int32_t slot, float value);
 
 void m3SetShapeRollingInternal(m3World* world, int32_t slot, float value);
 
-void m3SetShapeDensityInternal(m3World* world, int32_t slot, float value, int32_t updateMass);
+void m3SetShapeDensityInternal(m3World* world, int32_t slot, float value);
 
 bool m3SetShapeGeomInternal(m3World* world, int32_t slot, uint8_t type, const m3ShapeGeom* geom);
 
-// The material wall lives in the internal (replay hands it raw
-// bytes): count 1..8, finite entries, nonnegative frictions and
-// resistances, every triangle byte < count.
+// The material wall: count 1..8, finite entries, nonnegative frictions,
+// restitutions and resistances, every triangle byte < count. Set, replay
+// and restore all check paint through it.
+bool m3MeshMaterialsValid(const m3MeshSurfaceMaterial* materials, int32_t materialCount,
+                          const uint8_t* triangleMaterials, int32_t triangleCount);
+
+// Applies paint that passes the wall (replay hands it raw bytes).
 bool m3SetMeshMaterialsInternal(m3World* world, int32_t meshIndex,
                                 const m3MeshSurfaceMaterial* materials, int32_t materialCount,
                                 const uint8_t* triangleMaterials);
-
-// The filter rule, one function for pairs and queries alike.
-static inline int m3FilterPass(uint64_t catA, uint64_t maskA, uint64_t catB, uint64_t maskB)
-{
-    return (catA & maskB) != 0 && (catB & maskA) != 0;
-}
 
 // Content a shape create hands over, built before the create: a hull
 // from QuickHull, or staged mesh, voxel or height field content. All NULL
@@ -82,7 +61,30 @@ void m3RebuildPlaneList(m3World* world);
 
 void m3RecomputeMass(m3World* world, int32_t bodyIndex);
 
-int32_t m3ShapeSlot(const m3World* world, m3ShapeId shapeId);
+// Whether shape slot's body, if dynamic, would keep every mass-bearing
+// shape at M3_MASS_FLOOR and M3_INERTIA_FLOOR or more and its total mass
+// within M3_MASS_LIMIT, with slot given this type, geometry and density
+// (src/shape_mass.c). Create, reshape and density changes ask it first;
+// only a dynamic body's mass reaches the solver.
+bool m3ShapeMassFits(const m3World* world, int32_t slot, uint8_t type, const m3ShapeGeom* geom,
+                     float density);
+
+// The same bounds over body's shapes as they stand, asked when a body
+// turns dynamic.
+bool m3BodyMassFits(const m3World* world, int32_t body);
+
+// Whether one shape of this type, geometry, density and hull content (NULL
+// for a shape with none) bears no mass or weighs at least M3_MASS_FLOOR
+// with every principal moment at least M3_INERTIA_FLOOR; adds its mass to
+// *total. The checks above and restore's ask it.
+bool m3ShapeMassFloors(uint8_t type, const m3ShapeGeom* geom, const m3HullData* hull, float density,
+                       double* total);
+
+// A material scalar a shape setter or replay may write: friction and
+// rolling resistance non-negative, restitution within M3_RATIO_LIMIT
+// (op is the setter's journal op).
+bool m3ShapeScalarValid(int32_t op, float value);
+bool m3SurfaceVelocityValid(m3Vec3 velocity);
 
 void m3SetSurfaceVelocityInternal(m3World* world, int32_t slot, m3Vec3 v);
 void m3SetFilterInternal(m3World* world, int32_t slot, uint64_t categoryBits, uint64_t maskBits,

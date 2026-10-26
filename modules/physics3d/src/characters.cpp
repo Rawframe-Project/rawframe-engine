@@ -39,17 +39,17 @@ void shift(m3Pos3& at, m3Vec3 by) noexcept {
 
 /// Whether a query with `filter` sees a shape: Maul3D's own rule, applied
 /// to the mover's planes, which it gathers from every shape.
-[[nodiscard]] bool sees(m3ShapeId shape, m3QueryFilter filter) noexcept {
+[[nodiscard]] bool sees(const m3World* world, m3ShapeId shape, m3QueryFilter filter) noexcept {
     std::uint64_t category = 0;
     std::uint64_t mask = 0;
     std::int32_t group = 0;
-    m3Shape_GetFilter(shape, &category, &mask, &group);
+    m3Shape_GetFilter(world, shape, &category, &mask, &group);
     return (filter.categoryBits & mask) != 0 && (category & filter.maskBits) != 0;
 }
 
 /// The planes around a capsule at `at` that the filter sees, in Maul3D's
 /// order; at most M3_MOVER_PLANES.
-std::int32_t collide(m3WorldId world,
+std::int32_t collide(const m3World* world,
                      m3Pos3 at,
                      float halfHeight,
                      float radius,
@@ -60,7 +60,7 @@ std::int32_t collide(m3WorldId world,
         m3World_CollideMover(world, at, halfHeight, radius, kCollar, gathered.data(), kGathered);
     std::int32_t kept = 0;
     for (std::int32_t index = 0; index < kCount && kept < M3_MOVER_PLANES; ++index) {
-        if (sees(gathered[static_cast<std::size_t>(index)].shapeId, filter)) {
+        if (sees(world, gathered[static_cast<std::size_t>(index)].shapeId, filter)) {
             planes[static_cast<std::size_t>(kept++)] = gathered[static_cast<std::size_t>(index)];
         }
     }
@@ -70,8 +70,12 @@ std::int32_t collide(m3WorldId world,
 /// The sweep of a thinner capsule from `at` along `translation`: the part
 /// of it that is clear, from 0 to 1. A sweep that starts inside something
 /// is left to the planes, which push out of it.
-[[nodiscard]] float clearPart(
-    m3WorldId world, float halfHeight, float thinner, m3Pos3 at, m3Vec3 translation, m3QueryFilter filter) noexcept {
+[[nodiscard]] float clearPart(const m3World* world,
+                              float halfHeight,
+                              float thinner,
+                              m3Pos3 at,
+                              m3Vec3 translation,
+                              m3QueryFilter filter) noexcept {
     const float kLength = lengthOf(translation);
     if (!(kLength > 0)) {
         return 0;
@@ -86,7 +90,7 @@ std::int32_t collide(m3WorldId world,
 
 } // namespace
 
-CharacterMove moveCharacter(m3WorldId world,
+CharacterMove moveCharacter(const m3World* world,
                             float radius,
                             float halfHeight,
                             m3Pos3 from,

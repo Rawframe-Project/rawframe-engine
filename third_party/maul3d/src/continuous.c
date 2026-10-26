@@ -13,11 +13,9 @@
 #include "continuous.h"
 
 #include "broad_phase.h"
-
 #include "distance.h"
 #include "manifold.h"
-#include "shape.h"
-#include "solver.h"
+#include "shape_state.h"
 #include "world_internal.h"
 
 #include <float.h>
@@ -351,6 +349,7 @@ void m3SolveContinuousPhase(m3World* world, const m3Pos3* com0, const m3Quat* ro
             world->bodies.transforms[i].p.x = sw.base.x + xf.p.x;
             world->bodies.transforms[i].p.y = sw.base.y + xf.p.y;
             world->bodies.transforms[i].p.z = sw.base.z + xf.p.z;
+            world->bodies.transforms[i].p = m3HoldReach(world->bodies.transforms[i].p);
         }
     }
 }

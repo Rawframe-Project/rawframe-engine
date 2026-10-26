@@ -4,13 +4,8 @@
 // Voxel fracture: connectivity after an edit and the fragment events it
 // emits, and the escape direction for a point buried in a chunk.
 
-#include "body.h"
-#include "character.h"
-#include "hull.h"
-#include "journal.h"
-#include "shape.h"
 #include "voxel.h"
-#include "world.h"
+#include "voxel_coverage.h"
 #include "world_internal.h"
 
 #include <string.h>
@@ -138,8 +133,7 @@ void m3VoxelFractureSweep(m3World* world, int32_t shape)
         }
         m3FragmentEvent* ev = &world->events.fragmentEvents[world->events.fragmentEventCount];
         memset(ev, 0, sizeof(*ev));
-        ev->chunkShapeId =
-            (m3ShapeId){shape + 1, world->idWorld, world->shapes.shapePool.generations[shape]};
+        ev->chunkShapeId = (m3ShapeId){shape + 1, world->shapes.shapePool.generations[shape]};
         ev->voxelCount = count;
         if (world->events.fragmentRecipeCount + count <= M3_FRAGMENT_RECIPE_CAP)
         {
@@ -175,7 +169,7 @@ void m3VoxelFractureSweep(m3World* world, int32_t shape)
     if (removedAny)
     {
         // The surface follows the grid, always (the derived law).
-        m3VoxelSurfaceBuild(&world->voxels.voxelSurface[slot], chunk);
+        m3VoxelSurfaceBuild(world, slot);
         m3VoxelCoverageRefreshAround(world, slot);
     }
 }
@@ -191,9 +185,9 @@ bool m3VoxelEscape(const m3World* world, int32_t slot, m3Vec3 localPoint, m3Vec3
 {
     const m3VoxelChunkData* chunk = &world->voxels.voxelData[slot];
     m3real cell = chunk->cellSize;
-    int32_t sx = (int32_t)(localPoint.x / cell);
-    int32_t sy = (int32_t)(localPoint.y / cell);
-    int32_t sz = (int32_t)(localPoint.z / cell);
+    int32_t sx = m3CellFromF(localPoint.x / cell, 2.0e9f);
+    int32_t sy = m3CellFromF(localPoint.y / cell, 2.0e9f);
+    int32_t sz = m3CellFromF(localPoint.z / cell, 2.0e9f);
     if (localPoint.x < 0.0f || localPoint.y < 0.0f || localPoint.z < 0.0f || sx >= M3_VOXEL_DIM ||
         sy >= M3_VOXEL_DIM || sz >= M3_VOXEL_DIM || !m3VoxelGet(chunk, sx, sy, sz))
     {

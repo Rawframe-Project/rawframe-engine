@@ -7,11 +7,11 @@
 // folds in only when it is present or off its default.
 
 #include "body.h"
+#include "fpenv.h"
 #include "joint_solver.h"
-#include "voxel.h"
+#include "misuse.h"
 #include "world.h"
 #include "world_internal.h"
-#include "world_state.h"
 
 #include <stddef.h>
 
@@ -55,6 +55,54 @@ static uint64_t HashWorldHeader(const m3World* world, uint64_t h)
     return h;
 }
 
+// The key an off-default fold carries: its slot and which state it is, so
+// two worlds that differ in which slot holds a value cannot hash equal.
+enum
+{
+    M3_HASH_KEY_BODY_MOTION = 1,
+    M3_HASH_KEY_JOINT_ROWS = 2,
+    M3_HASH_KEY_MESH_PAINT = 3,
+    M3_HASH_KEY_POOL_IDS = 4
+};
+
+static uint64_t HashKey(uint64_t h, int32_t slot, uint8_t field)
+{
+    h = m3Hash64(h, &slot, 4);
+    return m3Hash64(h, &field, 1);
+}
+
+// A pool's identity: which slots live, their generations, the free ring
+// in reuse order and the cursors. It decides where the next create lands
+// and which ids the program holds, so equal hashes mean the same future
+// ids. Keyed by the pool's place in the walk.
+static uint64_t HashPool(uint64_t h, const m3IdPool* pool, int32_t which)
+{
+    h = HashKey(h, which, M3_HASH_KEY_POOL_IDS);
+    h = m3Hash64(h, &pool->maxIndex, 4);
+    h = m3Hash64(h, pool->alive, pool->maxIndex);
+    h = m3Hash64(h, pool->generations, pool->maxIndex * (int32_t)sizeof(uint32_t));
+    h = m3Hash64(h, &pool->freeCount, 4);
+    for (int32_t k = 0; k < pool->freeCount; ++k)
+    {
+        h = m3Hash64(h, &pool->freeQueue[(pool->freeHead + k) % pool->capacity], 4);
+    }
+    return m3Hash64(h, &pool->retiredCount, 4);
+}
+
+static uint64_t HashPools(const m3World* world, uint64_t h)
+{
+    const m3IdPool* pools[] = {
+        &world->bodies.bodyPool,     &world->shapes.shapePool,    &world->hulls.hullPool,
+        &world->meshes.meshPool,     &world->heightFields.hfPool, &world->voxels.voxelPool,
+        &world->joints.jointPool,    &world->characters.charPool, &world->vehicles.vehPool,
+        &world->softBodies.softPool, &world->water.waterPool};
+    for (int32_t p = 0; p < (int32_t)(sizeof(pools) / sizeof(pools[0])); ++p)
+    {
+        h = HashPool(h, pools[p], p);
+    }
+    return h;
+}
+
 static uint64_t HashBodies(const m3World* world, uint64_t h)
 {
     int32_t maxIndex = world->bodies.bodyPool.maxIndex;
@@ -88,6 +136,16 @@ static uint64_t HashBodies(const m3World* world, uint64_t h)
             h = m3Hash64(h, &world->bodies.bodyCanSleep[i], 1);
             h = m3Hash64(h, &world->bodies.bodyHasTarget[i], 1);
             h = m3Hash64(h, &world->bodies.bodyTarget[i], (int32_t)sizeof(m3Transform));
+        }
+        if (world->bodies.gravityScales[i] != 1.0f || world->bodies.linearDamping[i] != 0.0f ||
+            world->bodies.angularDamping[i] != 0.0f)
+        {
+            // Gravity scale and damping fold off their defaults, keyed
+            // by slot and field: the step reads them every substep.
+            h = HashKey(h, i, M3_HASH_KEY_BODY_MOTION);
+            h = m3Hash64(h, &world->bodies.gravityScales[i], (int32_t)sizeof(m3real));
+            h = m3Hash64(h, &world->bodies.linearDamping[i], (int32_t)sizeof(m3real));
+            h = m3Hash64(h, &world->bodies.angularDamping[i], (int32_t)sizeof(m3real));
         }
         h = m3Hash64(h, &world->bodies.angularVelocities[i], (int32_t)sizeof(m3Vec3));
         h = m3Hash64(h, &world->bodies.invMass[i], (int32_t)sizeof(m3real));
@@ -162,6 +220,11 @@ static uint64_t HashShapes(const m3World* world, uint64_t h)
             // for worlds that never touch voxels).
             h = m3Hash64(h, &world->shapes.shapeVoxelIndex[i], 4);
         }
+        if (world->shapes.shapeType[i] == (uint8_t)m3_heightFieldShape)
+        {
+            // The step reads the grid through this index.
+            h = m3Hash64(h, &world->shapes.shapeHfIndex[i], 4);
+        }
     }
     return h;
 }
@@ -190,7 +253,7 @@ static uint64_t HashCharacters(const m3World* world, uint64_t h)
         h = m3Hash64(h, &world->characters.charMass[i], 4);
         h = m3Hash64(h, &world->characters.charPushMax[i], 4);
         h = m3Hash64(h, &world->characters.charGroundBody[i], 4);
-        h = m3Hash64(h, &world->characters.charGroundGen[i], 2);
+        h = m3Hash64(h, &world->characters.charGroundGen[i], 4);
     }
     return h;
 }
@@ -212,7 +275,7 @@ static uint64_t HashSoftLinks(const m3World* world, uint64_t h, int32_t i)
         int32_t k = i * M3_SOFTBODY_MAX_ANCHORS + a;
         h = m3Hash64(h, &world->softBodies.softAnchorParticle[k], 4);
         h = m3Hash64(h, &world->softBodies.softAnchorBody[k], 4);
-        h = m3Hash64(h, &world->softBodies.softAnchorGen[k], 2);
+        h = m3Hash64(h, &world->softBodies.softAnchorGen[k], 4);
         h = m3Hash64(h, &world->softBodies.softAnchorLocal[k], (int32_t)sizeof(m3Vec3));
     }
     // Soft-to-soft anchors fold off-empty (additive rule).
@@ -345,7 +408,7 @@ static uint64_t HashVehicles(const m3World* world, uint64_t h)
             continue; // live slots only
         }
         h = m3Hash64(h, &world->vehicles.vehChassis[i], 4);
-        h = m3Hash64(h, &world->vehicles.vehChassisGen[i], 2);
+        h = m3Hash64(h, &world->vehicles.vehChassisGen[i], 4);
         h = m3Hash64(h, &world->vehicles.vehWheelCount[i], 4);
         h = m3Hash64(h, &world->vehicles.vehMaxSteer[i], 4);
         h = m3Hash64(h, &world->vehicles.vehDriveForce[i], 4);
@@ -416,6 +479,27 @@ static uint64_t HashVoxels(const m3World* world, uint64_t h)
     return h;
 }
 
+// Mesh geometry never changes after creation, but its painted materials
+// do, and contacts read them: a painted mesh folds its paint, keyed by its
+// slot.
+static uint64_t HashMeshMaterials(const m3World* world, uint64_t h)
+{
+    for (int32_t m = 0; m < world->meshes.meshPool.maxIndex; ++m)
+    {
+        const m3MeshData* mesh = &world->meshes.meshData[m];
+        if (world->meshes.meshPool.alive[m] == 0 || mesh->materialCount == 0)
+        {
+            continue;
+        }
+        h = HashKey(h, m, M3_HASH_KEY_MESH_PAINT);
+        h = m3Hash64(h, &mesh->materialCount, 4);
+        h = m3Hash64(h, mesh->materials,
+                     mesh->materialCount * (int32_t)sizeof(m3MeshSurfaceMaterial));
+        h = m3Hash64(h, mesh->triMaterials, mesh->triangleCount);
+    }
+    return h;
+}
+
 static uint64_t HashJoints(const m3World* world, uint64_t h)
 {
     int32_t maxJoint = world->joints.jointPool.maxIndex;
@@ -460,6 +544,20 @@ static uint64_t HashJoints(const m3World* world, uint64_t h)
         h = m3Hash64(h, &world->joints.jointFrameQA[i], (int32_t)sizeof(m3Quat));
         h = m3Hash64(h, &world->joints.jointFrameQB[i], (int32_t)sizeof(m3Quat));
         h = m3Hash64(h, &world->joints.jointFlags[i], 1);
+        const m3Vec3* limits = &world->joints.jointLimits[i];
+        const m3Vec3* motor = &world->joints.jointMotor[i];
+        if (limits->x != 0.0f || limits->y != 0.0f || limits->z != 0.0f || motor->x != 0.0f ||
+            motor->y != 0.0f || motor->z != 0.0f || world->joints.jointCollide[i] != 0)
+        {
+            // The limit and motor values (with the steer target, the
+            // servo's pose offset and budgets) and the connected-pair
+            // flag fold off-default, keyed by slot and field: the step
+            // reads them.
+            h = HashKey(h, i, M3_HASH_KEY_JOINT_ROWS);
+            h = m3Hash64(h, limits, (int32_t)sizeof(m3Vec3));
+            h = m3Hash64(h, motor, (int32_t)sizeof(m3Vec3));
+            h = m3Hash64(h, &world->joints.jointCollide[i], 1);
+        }
         if (world->joints.jointType[i] == (uint8_t)m3_genericJoint)
         {
             // The generic joint's fields fold only for that type.
@@ -521,9 +619,8 @@ static uint64_t HashContacts(const m3World* world, uint64_t h)
     return h;
 }
 
-uint64_t m3World_Hash(m3WorldId worldId)
+static M3_NOINLINE uint64_t WorldHashWorker(const m3World* world)
 {
-    m3World* world = m3WorldFromId(worldId);
     if (world == NULL)
     {
         m3Refuse(world, m3_errorInvalid);
@@ -532,14 +629,24 @@ uint64_t m3World_Hash(m3WorldId worldId)
     // Dead slots contribute only their liveness byte: destroy zeroes
     // state, but the hash must not depend on that coincidence.
     uint64_t h = HashWorldHeader(world, M3_HASH_INIT);
+    h = HashPools(world, h);
     h = HashBodies(world, h);
     h = HashShapes(world, h);
     h = HashCharacters(world, h);
     h = HashSoftBodies(world, h);
     h = HashVehicles(world, h);
     h = HashVoxels(world, h);
+    h = HashMeshMaterials(world, h);
     h = HashJoints(world, h);
     h = HashWater(world, h);
     h = HashContacts(world, h);
     return h;
+}
+
+uint64_t m3World_Hash(const m3World* world)
+{
+    uint64_t env = m3FloatEnvEnter();
+    uint64_t result = WorldHashWorker(world);
+    m3FloatEnvLeave(env);
+    return result;
 }

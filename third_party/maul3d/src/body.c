@@ -8,40 +8,18 @@
 // id carries its own generation, the world slot does not need one.
 
 #include "body.h"
+
+#include "body_state.h"
 #include "broad_phase.h"
+#include "fpenv.h"
 #include "joint.h"
 #include "journal.h"
+#include "misuse.h"
 #include "shape.h"
-#include "solver.h"
 #include "vehicle.h"
-#include "world.h"
 #include "world_internal.h"
 
 #include <string.h>
-
-int32_t m3BodySlot(const m3World* world, m3BodyId bodyId)
-{
-    int32_t index = bodyId.index1 - 1;
-    if (world == NULL || bodyId.world != world->idWorld ||
-        !m3IdPoolValid(&world->bodies.bodyPool, index, bodyId.generation))
-    {
-        return -1;
-    }
-    return index;
-}
-
-m3World* m3ResolveBody(m3BodyId bodyId, int32_t* indexOut)
-{
-    m3World* world = m3WorldFromTag(bodyId.world);
-    int32_t index = world != NULL ? m3BodySlot(world, bodyId) : -1;
-    *indexOut = index;
-    if (index < 0)
-    {
-        m3Refuse(world, m3_errorInvalid);
-        return NULL;
-    }
-    return world;
-}
 
 m3BodyDef m3DefaultBodyDef(void)
 {
@@ -66,19 +44,20 @@ int32_t m3CreateBodyInternal(m3World* world, const m3BodyDef* def)
                 def->rotation.z * def->rotation.z + def->rotation.w * def->rotation.w;
     if ((def->type != m3_staticBody && def->type != m3_kinematicBody &&
          def->type != m3_dynamicBody) ||
-        !m3FinitePos3(def->position) || !m3FiniteQuat(def->rotation) ||
-        !m3FiniteV3(def->linearVelocity) || !m3FiniteV3(def->angularVelocity) ||
-        !m3FiniteF(def->gravityScale) || !m3FiniteF(def->linearDamping) ||
-        !m3FiniteF(def->angularDamping) || def->linearDamping < 0.0f ||
-        def->angularDamping < 0.0f || !(qq > 0.98f) || !(qq < 1.02f) ||
+        !m3BoundedPos3(def->position) || !m3FiniteQuat(def->rotation) ||
+        !m3BodyVelocityValid((uint8_t)def->type, def->linearVelocity) ||
+        !m3BodySpinValid(def->angularVelocity) ||
+        !m3BodyParamValid(m3_bodyParamGravityScale, def->gravityScale) ||
+        !m3FiniteF(def->linearDamping) || !m3FiniteF(def->angularDamping) ||
+        def->linearDamping < 0.0f || def->angularDamping < 0.0f || !(qq > 0.98f) || !(qq < 1.02f) ||
         !m3FiniteF(def->sleepThreshold) || def->sleepThreshold < 0.0f)
     {
-        return -1;
+        return M3_CREATE_INVALID;
     }
     int32_t index = m3IdPoolAlloc(&world->bodies.bodyPool);
     if (index < 0)
     {
-        return -1; // pool exhausted: the caller fails loudly
+        return M3_CREATE_FULL; // pool exhausted: the caller fails loudly
     }
     world->bodies.transforms[index].p = def->position;
     world->bodies.transforms[index].q = m3NormalizeQuat(def->rotation);
@@ -184,33 +163,83 @@ void m3DestroyBodyInternal(m3World* world, int32_t index)
     m3IdPoolFree(&world->bodies.bodyPool, index);
 }
 
-// Runtime control internals: replay and the wrappers share
-// one path each.
-void m3WakeRegionAabb(m3World* world, const double lo[3], const double hi[3])
+bool m3PoseValid(m3Transform pose)
 {
-    // Wake every sleeping dynamic body whose own extent box
-    // overlaps the region (the voxel-edit wake idea without the
-    // tree: position plus max extent is a fair, deterministic
-    // over-approximation). Serial, ascending slots: canonical.
-    int32_t maxBody = world->bodies.bodyPool.maxIndex;
-    for (int32_t b = 0; b < maxBody; ++b)
-    {
-        if (world->bodies.bodyPool.alive[b] == 0 ||
-            world->bodies.types[b] != (uint8_t)m3_dynamicBody || world->bodies.awake[b] != 0)
-        {
-            continue;
-        }
-        double r = (double)world->bodies.maxExtents[b] + (double)M3_AABB_MARGIN;
-        const m3Pos3* pp = &world->bodies.transforms[b].p;
-        if (pp->x - r <= hi[0] && pp->x + r >= lo[0] && pp->y - r <= hi[1] && pp->y + r >= lo[1] &&
-            pp->z - r <= hi[2] && pp->z + r >= lo[2])
-        {
-            world->bodies.awake[b] = 1;
-            world->bodies.sleepTimes[b] = 0.0f;
-        }
-    }
+    m3Quat q = pose.q;
+    m3real qq = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
+    return m3BoundedPos3(pose.p) && m3FiniteQuat(q) && qq > 0.98f && qq < 1.02f;
 }
 
+// A servo target lands in one step at the distance over dt, so it must lie
+// within M3_SERVO_REACH of where the kinematic body is now: over the
+// shortest step that is M3_KINEMATIC_SPEED_LIMIT. Its turn, at most 2 / dt,
+// stays within M3_SPEED_LIMIT.
+bool m3TargetValid(const m3World* world, int32_t index, m3Transform pose)
+{
+    return m3TargetFits(world->bodies.types[index], world->bodies.transforms[index].p, pose);
+}
+
+bool m3TargetFits(uint8_t type, m3Pos3 now, m3Transform pose)
+{
+    if (type != (uint8_t)m3_kinematicBody || !m3PoseValid(pose))
+    {
+        return false;
+    }
+    double dx = pose.p.x - now.x;
+    double dy = pose.p.y - now.y;
+    double dz = pose.p.z - now.z;
+    double limit = (double)M3_SERVO_REACH;
+    return dx * dx + dy * dy + dz * dz <= limit * limit;
+}
+
+// A type change keeps the linear velocity within the new type's limit
+// (turning static zeroes it), keeps static-only scenery (a plane, mesh,
+// height field or voxel chunk) static, as its create required, and holds
+// a body turning dynamic to the mass bounds a dynamic body's shapes meet.
+bool m3TypeChangeValid(const m3World* world, int32_t index, int32_t type)
+{
+    if (type < (int32_t)m3_staticBody || type > (int32_t)m3_dynamicBody ||
+        m3CharacterOwnsBody(world, index))
+    {
+        return false;
+    }
+    if (type == (int32_t)m3_staticBody)
+    {
+        return true;
+    }
+    for (int32_t s = world->bodies.bodyShapeHead[index]; s != -1; s = world->shapes.shapeNext[s])
+    {
+        uint8_t shape = world->shapes.shapeType[s];
+        if (shape == (uint8_t)m3_planeShape || shape == (uint8_t)m3_meshShape ||
+            shape == (uint8_t)m3_heightFieldShape || shape == (uint8_t)m3_voxelShape)
+        {
+            return false;
+        }
+    }
+    if (type == (int32_t)m3_dynamicBody && world->bodies.types[index] != (uint8_t)m3_dynamicBody &&
+        !m3BodyMassFits(world, index))
+    {
+        return false;
+    }
+    return m3BodyVelocityValid((uint8_t)type, world->bodies.linearVelocities[index]);
+}
+
+bool m3SleepThresholdValid(float threshold)
+{
+    return m3FiniteF(threshold) && threshold >= 0.0f;
+}
+
+bool m3BodyParamValid(int32_t param, float value)
+{
+    if (param == m3_bodyParamGravityScale)
+    {
+        return m3WithinF(value, M3_RATIO_LIMIT);
+    }
+    return value >= 0.0f && m3FiniteF(value); // damping
+}
+
+// Runtime control internals: replay and the wrappers share
+// one path each.
 static void BodyRegion(m3World* world, int32_t index, double lo[3], double hi[3])
 {
     // A generous body region: position plus max extent plus margin.
@@ -234,6 +263,7 @@ void m3SetTransformInternal(m3World* world, int32_t index, m3Transform pose)
     m3WakeRegionAabb(world, lo, hi); // the arrival neighborhood
     world->bodies.awake[index] = 1;
     world->bodies.sleepTimes[index] = 0.0f;
+    world->bodies.bodyHasTarget[index] = 0; // a teleport cancels a pending target
 }
 
 void m3SetTargetTransformInternal(m3World* world, int32_t index, m3Transform pose)
@@ -255,6 +285,7 @@ void m3SetTypeInternal(m3World* world, int32_t index, uint8_t type)
     BodyRegion(world, index, lo, hi);
     m3WakeRegionAabb(world, lo, hi);
     world->bodies.types[index] = type;
+    world->bodies.bodyHasTarget[index] = 0; // a type change cancels a pending target
     for (int32_t s = world->bodies.bodyShapeHead[index]; s != -1; s = world->shapes.shapeNext[s])
     {
         if (world->broadphase.proxyIds[s] != M3_TREE_NULL)
@@ -268,23 +299,10 @@ void m3SetTypeInternal(m3World* world, int32_t index, uint8_t type)
     {
         world->bodies.linearVelocities[index] = (m3Vec3){0.0f, 0.0f, 0.0f};
         world->bodies.angularVelocities[index] = (m3Vec3){0.0f, 0.0f, 0.0f};
-        world->bodies.invMass[index] = 0.0f;
-        world->bodies.invInertiaLocal[index] = m3MakeZeroMat3();
     }
-    else
-    {
-        // Kinematic keeps zero inverse mass; dynamic rebuilds it
-        // from the shapes it carries.
-        if (type == (uint8_t)m3_dynamicBody)
-        {
-            m3RecomputeMass(world, index);
-        }
-        else
-        {
-            world->bodies.invMass[index] = 0.0f;
-            world->bodies.invInertiaLocal[index] = m3MakeZeroMat3();
-        }
-    }
+    // Mass, center and extents are a function of the type and the shapes:
+    // a dynamic body rebuilds them, any other has none.
+    m3RecomputeMass(world, index);
     world->bodies.awake[index] = 1;
     world->bodies.sleepTimes[index] = 0.0f;
 }
@@ -318,17 +336,29 @@ void m3SetMotionLocksInternal(m3World* world, int32_t index, uint8_t locks)
     m3Vec3* v = &world->bodies.linearVelocities[index];
     m3Vec3* w = &world->bodies.angularVelocities[index];
     if (locks & 1u)
+    {
         v->x = 0.0f;
+    }
     if (locks & 2u)
+    {
         v->y = 0.0f;
+    }
     if (locks & 4u)
+    {
         v->z = 0.0f;
+    }
     if (locks & 8u)
+    {
         w->x = 0.0f;
+    }
     if (locks & 16u)
+    {
         w->y = 0.0f;
+    }
     if (locks & 32u)
+    {
         w->z = 0.0f;
+    }
 }
 
 void m3SetSleepControlsInternal(m3World* world, int32_t index, float threshold, int canSleep)
@@ -343,190 +373,250 @@ void m3SetSleepControlsInternal(m3World* world, int32_t index, float threshold, 
     }
 }
 
-void m3SetAwakeInternal(m3World* world, int32_t index, int awake)
+static M3_NOINLINE m3Result CreateBodyWorker(m3World* world, const m3BodyDef* def,
+                                             m3BodyId* bodyOut)
 {
-    if (awake)
+    if (bodyOut == NULL)
     {
-        world->bodies.awake[index] = 1;
-        world->bodies.sleepTimes[index] = 0.0f;
+        return m3Refuse(world, m3_errorInvalid);
     }
-    else
+    *bodyOut = m3_nullBodyId;
+    if (m3WorldBusy(world))
     {
-        world->bodies.awake[index] = 0;
-        world->bodies.linearVelocities[index] = (m3Vec3){0.0f, 0.0f, 0.0f};
-        world->bodies.angularVelocities[index] = (m3Vec3){0.0f, 0.0f, 0.0f};
-        // Every freeze, API-forced ones included, records its
-        // cold pairs or the frozen buffer stops being a pure
-        // function of the sleeping state.
-        m3FreezeDiscoverPairs(world, index);
+        return m3Refuse(world, m3_errorState);
     }
-}
-
-m3BodyId m3CreateBody(m3WorldId worldId, const m3BodyDef* def)
-{
-    m3World* world = m3WorldFromId(worldId);
-    if (world == NULL || def == NULL || def->internalValue != M3_BODY_COOKIE ||
-        (def->type != m3_staticBody && def->type != m3_kinematicBody &&
-         def->type != m3_dynamicBody))
+    if (world == NULL || def == NULL || def->internalValue != M3_BODY_COOKIE)
     {
-        m3Refuse(world, m3_errorInvalid);
         // Contract, not invariant: a bad def or stale world returns
-        // the null id (see m3CreateWorld).
-        return m3_nullBodyId;
-    }
-    // Hostile-input wall: nothing non-finite reaches state,
-    // and a rotation that is not close to unit is a corrupted def,
-    // not a request (loud refusal beats silent renormalization).
-    m3real qq = def->rotation.x * def->rotation.x + def->rotation.y * def->rotation.y +
-                def->rotation.z * def->rotation.z + def->rotation.w * def->rotation.w;
-    if (!m3FinitePos3(def->position) || !m3FiniteQuat(def->rotation) ||
-        !m3FiniteV3(def->linearVelocity) || !m3FiniteV3(def->angularVelocity) ||
-        !m3FiniteF(def->gravityScale) || !m3FiniteF(def->linearDamping) ||
-        !m3FiniteF(def->angularDamping) || def->linearDamping < 0.0f ||
-        def->angularDamping < 0.0f || !(qq > 0.98f) || !(qq < 1.02f) ||
-        !m3FiniteF(def->sleepThreshold) || def->sleepThreshold < 0.0f)
-    {
-        m3Refuse(world, m3_errorInvalid);
-        return m3_nullBodyId;
+        // the null id (see m3CreateWorld). The rest of the def is
+        // checked once, inside m3CreateBodyInternal.
+        return m3Refuse(world, m3_errorInvalid);
     }
     int32_t index = m3CreateBodyInternal(world, def);
     if (index < 0)
     {
-        m3Refuse(world, m3_errorCapacity);
-        return m3_nullBodyId;
+        return m3CreateRefusal(world, index);
     }
-    m3BodyId id = {index + 1, world->idWorld, world->bodies.bodyPool.generations[index]};
+    m3BodyId id = {index + 1, world->bodies.bodyPool.generations[index]};
     if (world->recorder.journalActive != 0)
     {
         m3OpCreateBody record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        m3JournalBodyDef(&record.def, def);
         record.expected = id;
         m3JournalRecord(world, m3_opCreateBody, &record, (int32_t)sizeof(record));
     }
-    return id;
+    *bodyOut = id;
+    return m3_success;
 }
 
-void m3DestroyBody(m3BodyId bodyId)
+m3Result m3CreateBody(m3World* world, const m3BodyDef* def, m3BodyId* bodyOut)
 {
-    int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL)
+    uint64_t env = m3FloatEnvEnter();
+    m3Result result = CreateBodyWorker(world, def, bodyOut);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+static M3_NOINLINE m3Result DestroyBodyWorker(m3World* world, m3BodyId body)
+{
+    if (m3WorldBusy(world))
     {
-        return; // stale or foreign id: contract, not invariant
+        return m3Refuse(world, m3_errorState);
+    }
+    int32_t index = m3BodySlot(world, body);
+    if (index < 0)
+    {
+        return m3Refuse(world, m3MissingId(body.index1));
+    }
+    if (m3CharacterOwnsBody(world, index))
+    {
+        return m3Refuse(world, m3_errorInvalid); // destroy the character
     }
     if (world->recorder.journalActive != 0)
     {
-        m3JournalRecord(world, m3_opDestroyBody, &bodyId, (int32_t)sizeof(bodyId));
+        m3JournalRecord(world, m3_opDestroyBody, &body, (int32_t)sizeof(body));
     }
     m3DestroyBodyInternal(world, index);
+    return m3_success;
 }
 
-bool m3Body_IsValid(m3BodyId bodyId)
+m3Result m3DestroyBody(m3World* world, m3BodyId body)
 {
-    m3World* world = m3WorldFromTag(bodyId.world);
-    return world != NULL && m3BodySlot(world, bodyId) >= 0;
+    uint64_t env = m3FloatEnvEnter();
+    m3Result result = DestroyBodyWorker(world, body);
+    m3FloatEnvLeave(env);
+    return result;
 }
 
-m3Pos3 m3Body_GetPosition(m3BodyId bodyId)
+bool m3Body_IsValid(const m3World* world, m3BodyId body)
 {
-    int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL ? world->bodies.transforms[index].p : (m3Pos3){0.0, 0.0, 0.0};
+    return m3BodySlot(world, body) >= 0;
 }
 
-m3Quat m3Body_GetRotation(m3BodyId bodyId)
-{
-    int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL ? world->bodies.transforms[index].q : m3MakeIdentityQuat();
-}
-
-m3Vec3 m3Body_GetLinearVelocity(m3BodyId bodyId)
+static M3_NOINLINE m3Pos3 BodyGetPositionWorker(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL ? world->bodies.linearVelocities[index] : (m3Vec3){0.0f, 0.0f, 0.0f};
+    return m3ResolveBody(world, body, &index) ? world->bodies.transforms[index].p
+                                              : (m3Pos3){0.0, 0.0, 0.0};
 }
 
-m3Vec3 m3Body_GetAngularVelocity(m3BodyId bodyId)
+m3Pos3 m3Body_GetPosition(const m3World* world, m3BodyId body)
 {
-    int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL ? world->bodies.angularVelocities[index] : (m3Vec3){0.0f, 0.0f, 0.0f};
+    uint64_t env = m3FloatEnvEnter();
+    m3Pos3 result = BodyGetPositionWorker(world, body);
+    m3FloatEnvLeave(env);
+    return result;
 }
 
-uint64_t m3Body_GetUserData(m3BodyId bodyId)
+static M3_NOINLINE m3Quat BodyGetRotationWorker(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL ? world->bodies.userData[index] : 0;
+    return m3ResolveBody(world, body, &index) ? world->bodies.transforms[index].q
+                                              : m3MakeIdentityQuat();
 }
 
-m3BodyType m3Body_GetType(m3BodyId bodyId)
+m3Quat m3Body_GetRotation(const m3World* world, m3BodyId body)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3Quat result = BodyGetRotationWorker(world, body);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+static M3_NOINLINE m3Vec3 BodyGetLinearVelocityWorker(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL ? (m3BodyType)world->bodies.types[index] : m3_staticBody;
+    return m3ResolveBody(world, body, &index) ? world->bodies.linearVelocities[index]
+                                              : (m3Vec3){0.0f, 0.0f, 0.0f};
+}
+
+m3Vec3 m3Body_GetLinearVelocity(const m3World* world, m3BodyId body)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3Vec3 result = BodyGetLinearVelocityWorker(world, body);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+static M3_NOINLINE m3Vec3 BodyGetAngularVelocityWorker(const m3World* world, m3BodyId body)
+{
+    int32_t index;
+    return m3ResolveBody(world, body, &index) ? world->bodies.angularVelocities[index]
+                                              : (m3Vec3){0.0f, 0.0f, 0.0f};
+}
+
+m3Vec3 m3Body_GetAngularVelocity(const m3World* world, m3BodyId body)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3Vec3 result = BodyGetAngularVelocityWorker(world, body);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+uint64_t m3Body_GetUserData(const m3World* world, m3BodyId body)
+{
+    int32_t index;
+    return m3ResolveBody(world, body, &index) ? world->bodies.userData[index] : 0;
+}
+
+m3BodyType m3Body_GetType(const m3World* world, m3BodyId body)
+{
+    int32_t index;
+    return m3ResolveBody(world, body, &index) ? (m3BodyType)world->bodies.types[index]
+                                              : m3_staticBody;
 }
 
 // The shared force and impulse wrapper: resolve, refuse hostiles and
 // non-dynamic targets quietly, journal, apply through the one
 // internal path replay uses.
-void m3Body_SetTransform(m3BodyId bodyId, m3Pos3 position, m3Quat rotation)
+static M3_NOINLINE void BodySetTransformWorker(m3World* world, m3BodyId body, m3Pos3 position,
+                                               m3Quat rotation)
 {
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    m3real qq = rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z +
-                rotation.w * rotation.w;
-    if (world == NULL || !m3FinitePos3(position) || !m3FiniteQuat(rotation) || !(qq > 0.98f) ||
-        !(qq < 1.02f))
+    if (!m3ResolveBody(world, body, &index))
+    {
+        return;
+    }
+    m3Transform pose = {position, rotation};
+    if (!m3PoseValid(pose))
     {
         m3Refuse(world, m3_errorInvalid);
         return;
     }
-    m3Transform pose = {position, rotation};
     if (world->recorder.journalActive != 0)
     {
         m3OpBodyPose record;
         memset(&record, 0, sizeof(record));
-        record.id = bodyId;
+        record.id = body;
         record.pose = pose;
         m3JournalRecord(world, m3_opSetTransform, &record, (int32_t)sizeof(record));
     }
     m3SetTransformInternal(world, index, pose);
 }
 
-void m3Body_SetTargetTransform(m3BodyId bodyId, m3Pos3 position, m3Quat rotation)
+void m3Body_SetTransform(m3World* world, m3BodyId body, m3Pos3 position, m3Quat rotation)
 {
-    int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    m3real qq = rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z +
-                rotation.w * rotation.w;
-    if (world == NULL || world->bodies.types[index] != (uint8_t)m3_kinematicBody ||
-        !m3FinitePos3(position) || !m3FiniteQuat(rotation) || !(qq > 0.98f) || !(qq < 1.02f))
+    uint64_t env = m3FloatEnvEnter();
+    BodySetTransformWorker(world, body, position, rotation);
+    m3FloatEnvLeave(env);
+}
+
+static M3_NOINLINE void BodySetTargetTransformWorker(m3World* world, m3BodyId body, m3Pos3 position,
+                                                     m3Quat rotation)
+{
+    if (m3WorldBusy(world))
     {
-        m3Refuse(world, m3_errorInvalid);
-        return; // kinematic bodies only: the servo contract
+        m3Refuse(world, m3_errorState);
+        return;
+    }
+    int32_t index;
+    if (!m3ResolveBody(world, body, &index))
+    {
+        return;
     }
     m3Transform pose = {position, rotation};
+    if (!m3TargetValid(world, index, pose))
+    {
+        m3Refuse(world, m3_errorInvalid);
+        return; // kinematic bodies only, within reach: the servo contract
+    }
     if (world->recorder.journalActive != 0)
     {
         m3OpBodyPose record;
         memset(&record, 0, sizeof(record));
-        record.id = bodyId;
+        record.id = body;
         record.pose = pose;
         m3JournalRecord(world, m3_opSetTargetTransform, &record, (int32_t)sizeof(record));
     }
     m3SetTargetTransformInternal(world, index, pose);
 }
 
-void m3Body_SetType(m3BodyId bodyId, m3BodyType type)
+void m3Body_SetTargetTransform(m3World* world, m3BodyId body, m3Pos3 position, m3Quat rotation)
 {
+    uint64_t env = m3FloatEnvEnter();
+    BodySetTargetTransformWorker(world, body, position, rotation);
+    m3FloatEnvLeave(env);
+}
+
+static M3_NOINLINE void BodySetTypeWorker(m3World* world, m3BodyId body, m3BodyType type)
+{
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL ||
-        (type != m3_staticBody && type != m3_kinematicBody && type != m3_dynamicBody))
+    if (!m3ResolveBody(world, body, &index))
+    {
+        return;
+    }
+    if (!m3TypeChangeValid(world, index, (int32_t)type))
     {
         m3Refuse(world, m3_errorInvalid);
         return;
@@ -535,18 +625,24 @@ void m3Body_SetType(m3BodyId bodyId, m3BodyType type)
     {
         m3OpBodyByte record;
         memset(&record, 0, sizeof(record));
-        record.id = bodyId;
+        record.id = body;
         record.value = (int32_t)type;
         m3JournalRecord(world, m3_opSetType, &record, (int32_t)sizeof(record));
     }
     m3SetTypeInternal(world, index, (uint8_t)type);
 }
 
-static void SetEnabled(m3BodyId bodyId, bool enabled)
+void m3Body_SetType(m3World* world, m3BodyId body, m3BodyType type)
+{
+    uint64_t env = m3FloatEnvEnter();
+    BodySetTypeWorker(world, body, type);
+    m3FloatEnvLeave(env);
+}
+
+static void SetEnabled(m3World* world, m3BodyId bodyId, bool enabled)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL)
+    if (!m3ResolveBody(world, bodyId, &index))
     {
         return;
     }
@@ -561,21 +657,44 @@ static void SetEnabled(m3BodyId bodyId, bool enabled)
     m3SetEnabledInternal(world, index, enabled ? 1 : 0);
 }
 
-void m3Body_Enable(m3BodyId bodyId)
+static M3_NOINLINE void BodyEnableWorker(m3World* world, m3BodyId body)
 {
-    SetEnabled(bodyId, true);
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
+    SetEnabled(world, body, true);
 }
 
-void m3Body_Disable(m3BodyId bodyId)
+void m3Body_Enable(m3World* world, m3BodyId body)
 {
-    SetEnabled(bodyId, false);
+    uint64_t env = m3FloatEnvEnter();
+    BodyEnableWorker(world, body);
+    m3FloatEnvLeave(env);
 }
 
-bool m3Body_IsEnabled(m3BodyId bodyId)
+static M3_NOINLINE void BodyDisableWorker(m3World* world, m3BodyId body)
+{
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
+    SetEnabled(world, body, false);
+}
+
+void m3Body_Disable(m3World* world, m3BodyId body)
+{
+    uint64_t env = m3FloatEnvEnter();
+    BodyDisableWorker(world, body);
+    m3FloatEnvLeave(env);
+}
+
+bool m3Body_IsEnabled(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL && world->bodies.bodyEnabled[index] != 0;
+    return m3ResolveBody(world, body, &index) && world->bodies.bodyEnabled[index] != 0;
 }
 
 uint8_t m3LockBits(m3MotionLocks locks)
@@ -585,11 +704,15 @@ uint8_t m3LockBits(m3MotionLocks locks)
                      (locks.angularY ? 0x10u : 0u) | (locks.angularZ ? 0x20u : 0u));
 }
 
-void m3Body_SetMotionLocks(m3BodyId bodyId, m3MotionLocks locks)
+static M3_NOINLINE void BodySetMotionLocksWorker(m3World* world, m3BodyId body, m3MotionLocks locks)
 {
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL)
+    if (!m3ResolveBody(world, body, &index))
     {
         return;
     }
@@ -598,18 +721,24 @@ void m3Body_SetMotionLocks(m3BodyId bodyId, m3MotionLocks locks)
     {
         m3OpSetMotionLocks record;
         memset(&record, 0, sizeof(record));
-        record.id = bodyId;
+        record.id = body;
         record.locks = bits;
         m3JournalRecord(world, m3_opSetMotionLocks, &record, (int32_t)sizeof(record));
     }
     m3SetMotionLocksInternal(world, index, bits);
 }
 
-m3MotionLocks m3Body_GetMotionLocks(m3BodyId bodyId)
+void m3Body_SetMotionLocks(m3World* world, m3BodyId body, m3MotionLocks locks)
+{
+    uint64_t env = m3FloatEnvEnter();
+    BodySetMotionLocksWorker(world, body, locks);
+    m3FloatEnvLeave(env);
+}
+
+m3MotionLocks m3Body_GetMotionLocks(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    uint8_t bits = world != NULL ? world->bodies.bodyLocks[index] : 0u;
+    uint8_t bits = m3ResolveBody(world, body, &index) ? world->bodies.bodyLocks[index] : 0u;
     m3MotionLocks locks = {(bits & 0x01u) != 0, (bits & 0x02u) != 0, (bits & 0x04u) != 0,
                            (bits & 0x08u) != 0, (bits & 0x10u) != 0, (bits & 0x20u) != 0};
     return locks;
@@ -628,11 +757,15 @@ void m3SetAllowFastRotationInternal(m3World* world, int32_t index, int32_t allow
     }
 }
 
-void m3Body_EnableFastRotation(m3BodyId bodyId, bool flag)
+static M3_NOINLINE void BodyEnableFastRotationWorker(m3World* world, m3BodyId body, bool flag)
 {
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL)
+    if (!m3ResolveBody(world, body, &index))
     {
         return;
     }
@@ -640,18 +773,25 @@ void m3Body_EnableFastRotation(m3BodyId bodyId, bool flag)
     {
         m3OpSetAllowFastRotation record;
         memset(&record, 0, sizeof(record));
-        record.id = bodyId;
+        record.id = body;
         record.allow = flag ? 1u : 0u;
         m3JournalRecord(world, m3_opSetAllowFastRotation, &record, (int32_t)sizeof(record));
     }
     m3SetAllowFastRotationInternal(world, index, flag ? 1 : 0);
 }
 
-bool m3Body_IsFastRotationEnabled(m3BodyId bodyId)
+void m3Body_EnableFastRotation(m3World* world, m3BodyId body, bool flag)
+{
+    uint64_t env = m3FloatEnvEnter();
+    BodyEnableFastRotationWorker(world, body, flag);
+    m3FloatEnvLeave(env);
+}
+
+bool m3Body_IsFastRotationEnabled(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL && (world->bodies.bodyLocks[index] & M3_LOCKS_ALLOW_FAST_ROTATION) != 0;
+    return m3ResolveBody(world, body, &index) &&
+           (world->bodies.bodyLocks[index] & M3_LOCKS_ALLOW_FAST_ROTATION) != 0;
 }
 
 void m3SetBodyNameInternal(m3World* world, int32_t index, const char* name)
@@ -669,11 +809,15 @@ void m3SetBodyNameInternal(m3World* world, int32_t index, const char* name)
     }
 }
 
-void m3Body_SetName(m3BodyId bodyId, const char* name)
+void m3Body_SetName(m3World* world, m3BodyId body, const char* name)
 {
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL)
+    if (!m3ResolveBody(world, body, &index))
     {
         return;
     }
@@ -681,7 +825,7 @@ void m3Body_SetName(m3BodyId bodyId, const char* name)
     {
         m3OpSetBodyName record;
         memset(&record, 0, sizeof(record));
-        record.id = bodyId;
+        record.id = body;
         if (name != NULL)
         {
             for (int32_t i = 0; i < M3_BODY_NAME_CAPACITY - 1 && name[i] != 0; ++i)
@@ -694,11 +838,12 @@ void m3Body_SetName(m3BodyId bodyId, const char* name)
     m3SetBodyNameInternal(world, index, name);
 }
 
-const char* m3Body_GetName(m3BodyId bodyId)
+const char* m3Body_GetName(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL ? world->bodies.bodyNames + (size_t)index * M3_BODY_NAME_CAPACITY : "";
+    return m3ResolveBody(world, body, &index)
+               ? world->bodies.bodyNames + (size_t)index * M3_BODY_NAME_CAPACITY
+               : "";
 }
 
 // Both sleep settings travel in one journal op.
@@ -717,55 +862,94 @@ static void SetSleepControls(m3World* world, m3BodyId bodyId, int32_t index, flo
     m3SetSleepControlsInternal(world, index, threshold, canSleep ? 1 : 0);
 }
 
-void m3Body_EnableSleep(m3BodyId bodyId, bool flag)
+static M3_NOINLINE void BodyEnableSleepWorker(m3World* world, m3BodyId body, bool flag)
 {
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL)
+    if (!m3ResolveBody(world, body, &index))
     {
         return;
     }
-    SetSleepControls(world, bodyId, index, world->bodies.bodySleepThreshold[index], flag);
+    SetSleepControls(world, body, index, world->bodies.bodySleepThreshold[index], flag);
 }
 
-bool m3Body_IsSleepEnabled(m3BodyId bodyId)
+void m3Body_EnableSleep(m3World* world, m3BodyId body, bool flag)
 {
-    int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL && world->bodies.bodyCanSleep[index] != 0;
+    uint64_t env = m3FloatEnvEnter();
+    BodyEnableSleepWorker(world, body, flag);
+    m3FloatEnvLeave(env);
 }
 
-void m3Body_SetSleepThreshold(m3BodyId bodyId, float threshold)
+bool m3Body_IsSleepEnabled(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL || !m3FiniteF(threshold) || threshold < 0.0f)
+    return m3ResolveBody(world, body, &index) && world->bodies.bodyCanSleep[index] != 0;
+}
+
+static M3_NOINLINE void BodySetSleepThresholdWorker(m3World* world, m3BodyId body, float threshold)
+{
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
+    int32_t index;
+    if (!m3ResolveBody(world, body, &index))
+    {
+        return;
+    }
+    if (!m3SleepThresholdValid(threshold))
     {
         m3Refuse(world, m3_errorInvalid);
         return;
     }
-    SetSleepControls(world, bodyId, index, threshold, world->bodies.bodyCanSleep[index] != 0);
+    SetSleepControls(world, body, index, threshold, world->bodies.bodyCanSleep[index] != 0);
 }
 
-float m3Body_GetSleepThreshold(m3BodyId bodyId)
+void m3Body_SetSleepThreshold(m3World* world, m3BodyId body, float threshold)
 {
-    int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL ? world->bodies.bodySleepThreshold[index] : 0.0f;
+    uint64_t env = m3FloatEnvEnter();
+    BodySetSleepThresholdWorker(world, body, threshold);
+    m3FloatEnvLeave(env);
 }
 
-bool m3Body_IsAwake(m3BodyId bodyId)
+static M3_NOINLINE float BodyGetSleepThresholdWorker(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    return world != NULL && world->bodies.awake[index] != 0;
+    return m3ResolveBody(world, body, &index) ? world->bodies.bodySleepThreshold[index] : 0.0f;
 }
 
-void m3Body_SetAwake(m3BodyId bodyId, bool awake)
+float m3Body_GetSleepThreshold(const m3World* world, m3BodyId body)
+{
+    uint64_t env = m3FloatEnvEnter();
+    float result = BodyGetSleepThresholdWorker(world, body);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+bool m3Body_IsAwake(const m3World* world, m3BodyId body)
 {
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL || world->bodies.types[index] != (uint8_t)m3_dynamicBody)
+    return m3ResolveBody(world, body, &index) && world->bodies.awake[index] != 0;
+}
+
+static M3_NOINLINE void BodySetAwakeWorker(m3World* world, m3BodyId body, bool awake)
+{
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
+    int32_t index;
+    if (!m3ResolveBody(world, body, &index))
+    {
+        return;
+    }
+    if (world->bodies.types[index] != (uint8_t)m3_dynamicBody)
     {
         m3Refuse(world, m3_errorInvalid);
         return;
@@ -774,18 +958,29 @@ void m3Body_SetAwake(m3BodyId bodyId, bool awake)
     {
         m3OpBodyByte record;
         memset(&record, 0, sizeof(record));
-        record.id = bodyId;
+        record.id = body;
         record.value = awake ? 1 : 0;
         m3JournalRecord(world, m3_opSetAwake, &record, (int32_t)sizeof(record));
     }
     m3SetAwakeInternal(world, index, awake ? 1 : 0);
 }
 
-void m3Body_SetUserData(m3BodyId bodyId, uint64_t userData)
+void m3Body_SetAwake(m3World* world, m3BodyId body, bool awake)
 {
+    uint64_t env = m3FloatEnvEnter();
+    BodySetAwakeWorker(world, body, awake);
+    m3FloatEnvLeave(env);
+}
+
+void m3Body_SetUserData(m3World* world, m3BodyId body, uint64_t userData)
+{
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     int32_t index;
-    m3World* world = m3ResolveBody(bodyId, &index);
-    if (world == NULL)
+    if (!m3ResolveBody(world, body, &index))
     {
         return;
     }
@@ -794,7 +989,7 @@ void m3Body_SetUserData(m3BodyId bodyId, uint64_t userData)
         m3OpUserData record;
         memset(&record, 0, sizeof(record));
         record.userData = userData;
-        record.id = bodyId;
+        record.id = body;
         m3JournalRecord(world, m3_opSetBodyUserData, &record, (int32_t)sizeof(record));
     }
     world->bodies.userData[index] = userData;

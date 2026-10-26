@@ -4,15 +4,6 @@
 // Mesh and height field content: allocation, release, edge flags and
 // the height field triangle gather.
 
-#include "body.h"
-#include "broad_phase.h"
-#include "hull.h"
-#include "journal.h"
-#include "manifold.h"
-#include "quickhull.h"
-#include "shape.h"
-#include "voxel.h"
-#include "world.h"
 #include "world_internal.h"
 
 #include <string.h>
@@ -96,26 +87,54 @@ void m3BakeMeshEdgeFlags(m3MeshData* mesh, int32_t* scratch)
     }
 }
 
-bool m3HeightFieldDataAlloc(m3HeightFieldData* hf)
+bool m3HeightFieldSamplesValid(int32_t nx, int32_t nz, float cellSize, const void* samples,
+                               float* minOut, float* maxOut)
 {
-    m3Free(hf->heights);
+    if (nx < 2 || nx > M3_HEIGHTFIELD_MAX_DIM || nz < 2 || nz > M3_HEIGHTFIELD_MAX_DIM ||
+        !m3FiniteF(cellSize) || !(cellSize > 0.0f))
+    {
+        return false;
+    }
+    // Read by memcpy: journal and snapshot bytes are packed.
+    const uint8_t* bytes = (const uint8_t*)samples;
+    float lo = 0.0f;
+    float hi = 0.0f;
+    for (int32_t i = 0; i < nx * nz; ++i)
+    {
+        float v;
+        memcpy(&v, bytes + (size_t)i * sizeof(float), sizeof(v));
+        if (!m3FiniteF(v))
+        {
+            return false;
+        }
+        lo = i == 0 ? v : (v < lo ? v : lo);
+        hi = i == 0 ? v : (v > hi ? v : hi);
+    }
+    *minOut = lo;
+    *maxOut = hi;
+    return true;
+}
+
+bool m3HeightFieldDataAlloc(m3Heap* heap, m3HeightFieldData* hf)
+{
+    m3Free(heap, hf->heights);
     hf->heights = NULL;
     if (hf->nx <= 0 || hf->nz <= 0)
     {
         return hf->nx == 0 && hf->nz == 0; // an empty slot is legal
     }
-    hf->heights = (float*)m3AllocZeroed(hf->nx * hf->nz * (int32_t)sizeof(float));
+    hf->heights = (float*)m3AllocZeroed(heap, hf->nx * hf->nz * (int32_t)sizeof(float));
     if (hf->heights == NULL)
     {
-        m3HeightFieldDataFree(hf);
+        m3HeightFieldDataFree(heap, hf);
         return false;
     }
     return true;
 }
 
-void m3HeightFieldDataFree(m3HeightFieldData* hf)
+void m3HeightFieldDataFree(m3Heap* heap, m3HeightFieldData* hf)
 {
-    m3Free(hf->heights);
+    m3Free(heap, hf->heights);
     memset(hf, 0, sizeof(*hf));
 }
 
@@ -154,12 +173,12 @@ int32_t m3HeightFieldGather(const m3HeightFieldData* hf, m3Vec3 lo, m3Vec3 hi, m
     return count;
 }
 
-bool m3MeshDataAlloc(m3MeshData* mesh)
+bool m3MeshDataAlloc(m3Heap* heap, m3MeshData* mesh)
 {
-    m3Free(mesh->vertices);
-    m3Free(mesh->indices);
-    m3Free(mesh->edgeFlags);
-    m3Free(mesh->triMaterials);
+    m3Free(heap, mesh->vertices);
+    m3Free(heap, mesh->indices);
+    m3Free(heap, mesh->edgeFlags);
+    m3Free(heap, mesh->triMaterials);
     mesh->vertices = NULL;
     mesh->indices = NULL;
     mesh->edgeFlags = NULL;
@@ -168,26 +187,27 @@ bool m3MeshDataAlloc(m3MeshData* mesh)
     {
         return mesh->vertexCount == 0 && mesh->triangleCount == 0; // an empty slot is legal
     }
-    mesh->vertices = (m3Vec3*)m3AllocZeroed(mesh->vertexCount * (int32_t)sizeof(m3Vec3));
-    mesh->indices = (uint16_t*)m3AllocZeroed(3 * mesh->triangleCount * (int32_t)sizeof(uint16_t));
-    mesh->edgeFlags = (uint8_t*)m3AllocZeroed(mesh->triangleCount);
+    mesh->vertices = (m3Vec3*)m3AllocZeroed(heap, mesh->vertexCount * (int32_t)sizeof(m3Vec3));
+    mesh->indices =
+        (uint16_t*)m3AllocZeroed(heap, 3 * mesh->triangleCount * (int32_t)sizeof(uint16_t));
+    mesh->edgeFlags = (uint8_t*)m3AllocZeroed(heap, mesh->triangleCount);
     // Material groups ride beside the content: all-zero
     // bytes and count 0 ARE the "shape material everywhere" state.
-    mesh->triMaterials = (uint8_t*)m3AllocZeroed(mesh->triangleCount);
+    mesh->triMaterials = (uint8_t*)m3AllocZeroed(heap, mesh->triangleCount);
     if (mesh->vertices == NULL || mesh->indices == NULL || mesh->edgeFlags == NULL ||
         mesh->triMaterials == NULL)
     {
-        m3MeshDataFree(mesh);
+        m3MeshDataFree(heap, mesh);
         return false;
     }
     return true;
 }
 
-void m3MeshDataFree(m3MeshData* mesh)
+void m3MeshDataFree(m3Heap* heap, m3MeshData* mesh)
 {
-    m3Free(mesh->vertices);
-    m3Free(mesh->indices);
-    m3Free(mesh->edgeFlags);
-    m3Free(mesh->triMaterials);
+    m3Free(heap, mesh->vertices);
+    m3Free(heap, mesh->indices);
+    m3Free(heap, mesh->edgeFlags);
+    m3Free(heap, mesh->triMaterials);
     memset(mesh, 0, sizeof(*mesh));
 }

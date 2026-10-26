@@ -169,7 +169,7 @@ struct Turned {
 
 /// Which entity each live shape is, by shape index: its generation and
 /// its entity.
-using ShapeOwners = std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>>;
+using ShapeOwners = std::map<std::uint32_t, std::pair<std::uint32_t, world::EntityHandle>>;
 
 /// The entity whose body a shape is, or the null entity for a shape
 /// already gone.
@@ -219,11 +219,11 @@ struct Row {
 }
 
 [[nodiscard]] inline bool sameShape(m3ShapeId left, m3ShapeId right) noexcept {
-    return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
+    return left.index1 == right.index1 && left.generation == right.generation;
 }
 
 [[nodiscard]] inline bool sameBody(m3BodyId left, m3BodyId right) noexcept {
-    return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
+    return left.index1 == right.index1 && left.generation == right.generation;
 }
 
 } // namespace rawframe::physics3d

@@ -175,7 +175,7 @@ RAWFRAME_TEST(TheSameWorldAndWritesGiveTheSameBits) {
     RAWFRAME_EXPECT(kFirst.second == kSecond.second);
     // The same bits on every compiler and target the check builds, x86-64
     // and wasm32 alike: a moved digest says why in its commit.
-    RAWFRAME_EXPECT(kFirst.second == 0x9bb6b9451d401c69ULL);
+    RAWFRAME_EXPECT(kFirst.second == 0xec869c55f5be238bULL);
     RAWFRAME_EXPECT(kFirst.first.size() == kSecond.first.size() &&
                     std::memcmp(kFirst.first.data(), kSecond.first.data(), kFirst.first.size() * sizeof(Pose3D)) == 0);
     // They moved: a pile spread by the pushes, not a still picture.

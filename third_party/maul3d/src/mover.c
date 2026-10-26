@@ -4,15 +4,12 @@
 // The mover kit: casting a character capsule, gathering its collision
 // planes and solving a translation against them.
 
-#include "body.h"
 #include "distance.h"
-#include "journal.h"
+#include "fpenv.h"
 #include "manifold.h"
+#include "misuse.h"
 #include "query.h"
-#include "raycast.h"
-#include "shape.h"
-#include "voxel.h"
-#include "world.h"
+#include "shape_state.h"
 #include "world_internal.h"
 
 #include <float.h>
@@ -24,13 +21,13 @@
 // or hashes. Hosts compose them into their own movers; the engine
 // keeps its kinematic controller as the built-in path.
 
-m3RayCastResult m3World_CastMover(m3WorldId worldId, m3Pos3 center, m3real halfHeight,
-                                  m3real radius, m3Vec3 translation)
+static M3_NOINLINE m3RayCastResult WorldCastMoverWorker(const m3World* world, m3Pos3 center,
+                                                        m3real halfHeight, m3real radius,
+                                                        m3Vec3 translation)
 {
     m3RayCastResult miss;
     memset(&miss, 0, sizeof(miss));
     miss.fraction = 1.0f;
-    m3World* world = m3WorldFromId(worldId);
     if (world == NULL || !m3FinitePos3(center) || !m3FiniteF(halfHeight) || halfHeight < 0.0f ||
         !m3FiniteF(radius) || !(radius > 0.0f) || !m3FiniteV3(translation))
     {
@@ -41,9 +38,18 @@ m3RayCastResult m3World_CastMover(m3WorldId worldId, m3Pos3 center, m3real halfH
     return m3CastConvexClosestEx(world, center, points, 2, radius, translation, -1);
 }
 
+m3RayCastResult m3World_CastMover(const m3World* world, m3Pos3 center, m3real halfHeight,
+                                  m3real radius, m3Vec3 translation)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3RayCastResult result = WorldCastMoverWorker(world, center, halfHeight, radius, translation);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
 typedef struct m3MoverCollideCtx
 {
-    m3World* world;
+    const m3World* world;
     m3Pos3 center;
     m3real halfHeight;
     m3real radius;
@@ -104,7 +110,7 @@ static void MoverOfferPlane(m3MoverCollideCtx* ctx, m3MoverPlane plane)
 static bool MoverGatherCallback(int32_t shape, void* userContext)
 {
     m3MoverCollideCtx* ctx = (m3MoverCollideCtx*)userContext;
-    m3World* world = ctx->world;
+    const m3World* world = ctx->world;
     if (world->shapes.shapeSensor[shape] != 0 ||
         world->bodies.bodyEnabled[world->shapes.shapeBody[shape]] == 0)
     {
@@ -146,16 +152,15 @@ static bool MoverGatherCallback(int32_t shape, void* userContext)
         plane.normal = (m3Vec3){0.0f, 1.0f, 0.0f};
     }
     plane.separation = gap;
-    plane.shapeId =
-        (m3ShapeId){shape + 1, world->idWorld, world->shapes.shapePool.generations[shape]};
+    plane.shapeId = (m3ShapeId){shape + 1, world->shapes.shapePool.generations[shape]};
     MoverOfferPlane(ctx, plane);
     return true;
 }
 
-int32_t m3World_CollideMover(m3WorldId worldId, m3Pos3 center, m3real halfHeight, m3real radius,
-                             m3real skin, m3MoverPlane* planes, int32_t capacity)
+static M3_NOINLINE int32_t WorldCollideMoverWorker(const m3World* world, m3Pos3 center,
+                                                   m3real halfHeight, m3real radius, m3real skin,
+                                                   m3MoverPlane* planes, int32_t capacity)
 {
-    m3World* world = m3WorldFromId(worldId);
     if (world == NULL || planes == NULL || capacity <= 0 || !m3FinitePos3(center) ||
         !m3FiniteF(halfHeight) || halfHeight < 0.0f || !m3FiniteF(radius) || !(radius > 0.0f) ||
         !m3FiniteF(skin) || skin < 0.0f)
@@ -199,7 +204,7 @@ int32_t m3World_CollideMover(m3WorldId worldId, m3Pos3 center, m3real halfHeight
         m3MoverPlane plane;
         plane.normal = n;
         plane.separation = gap;
-        plane.shapeId = (m3ShapeId){s + 1, world->idWorld, world->shapes.shapePool.generations[s]};
+        plane.shapeId = (m3ShapeId){s + 1, world->shapes.shapePool.generations[s]};
         MoverOfferPlane(&ctx, plane);
     }
     // Ascending shape order keeps the plane list canonical.
@@ -211,6 +216,16 @@ int32_t m3World_CollideMover(m3WorldId worldId, m3Pos3 center, m3real halfHeight
         MoverPlaneSiftDown(planes, end, 0);
     }
     return ctx.count;
+}
+
+int32_t m3World_CollideMover(const m3World* world, m3Pos3 center, m3real halfHeight, m3real radius,
+                             m3real skin, m3MoverPlane* planes, int32_t capacity)
+{
+    uint64_t env = m3FloatEnvEnter();
+    int32_t result =
+        WorldCollideMoverWorker(world, center, halfHeight, radius, skin, planes, capacity);
+    m3FloatEnvLeave(env);
+    return result;
 }
 
 // The move is the translation d closest to the wish w that keeps every
@@ -319,7 +334,8 @@ static void Consider(m3Vec3 wish, const m3MoverPlane* planes, int32_t count, con
     }
 }
 
-m3MoverMove m3SolveMover(m3Vec3 wish, const m3MoverPlane* planes, int32_t count)
+static M3_NOINLINE m3MoverMove SolveMoverWorker(m3Vec3 wish, const m3MoverPlane* planes,
+                                                int32_t count)
 {
     m3MoverMove move = {wish, 0};
     if (planes == NULL || count <= 0 || !m3FiniteV3(wish))
@@ -357,8 +373,16 @@ m3MoverMove m3SolveMover(m3Vec3 wish, const m3MoverPlane* planes, int32_t count)
     return move;
 }
 
-m3Vec3 m3ClipMoverVelocity(m3Vec3 velocity, const m3MoverPlane* planes, int32_t count,
-                           uint32_t pressed)
+m3MoverMove m3SolveMover(m3Vec3 wish, const m3MoverPlane* planes, int32_t count)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3MoverMove result = SolveMoverWorker(wish, planes, count);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+static M3_NOINLINE m3Vec3 ClipMoverVelocityWorker(m3Vec3 velocity, const m3MoverPlane* planes,
+                                                  int32_t count, uint32_t pressed)
 {
     if (planes == NULL || count <= 0 || pressed == 0)
     {
@@ -376,4 +400,13 @@ m3Vec3 m3ClipMoverVelocity(m3Vec3 velocity, const m3MoverPlane* planes, int32_t 
         }
     }
     return m3SolveMover(velocity, touching, n).translation;
+}
+
+m3Vec3 m3ClipMoverVelocity(m3Vec3 velocity, const m3MoverPlane* planes, int32_t count,
+                           uint32_t pressed)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3Vec3 result = ClipMoverVelocityWorker(velocity, planes, count, pressed);
+    m3FloatEnvLeave(env);
+    return result;
 }

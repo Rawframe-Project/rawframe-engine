@@ -21,9 +21,9 @@
 #include "maul3d/world.h"
 
 // (int32_t) from a float is UB on NaN and outside the int range:
-// x86 shrugs INT_MIN, wasm TRAPS, and the wide fuzz walked a
-// mutated-snapshot NaN into a heightfield gather (shape_data.c). Every
-// grid-cell cast goes through this park-and-clamp. Legitimate
+// x86 gives INT_MIN, wasm TRAPS, and a mutated snapshot can carry a
+// NaN into a heightfield gather (shape_data.c). Every grid-cell cast
+// goes through this park-and-clamp. Legitimate
 // values are bit-identical: no real grid nears two billion cells.
 // nanPark picks which way a poisoned bound falls so lo/hi ranges
 // come out EMPTY, never huge.
@@ -34,8 +34,11 @@ static inline int32_t m3CellFromF(m3real f, m3real nanPark)
     return (int32_t)f;
 }
 
-#define M3_MAX_WORLDS 64
-_Static_assert(M3_MAX_WORLDS <= (1 << M3_WORLD_SLOT_BITS), "a world slot fits the id bits");
+// What a create internal returns instead of a slot: the def failed its
+// checks (the caller's bug, or a damaged tape on replay), or a pool had no
+// room.
+#define M3_CREATE_INVALID (-1)
+#define M3_CREATE_FULL    (-2)
 
 // Bumped on any change that alters simulation behavior (solver math,
 // integration order, constants). It is part of the snapshot config hash,
@@ -148,8 +151,8 @@ typedef struct m3MeshData
 // sizes new ones from the counts already in the struct; Free
 // releases and zeroes. The snapshot read pass and every create
 // and destroy path share these two gates.
-bool m3MeshDataAlloc(m3MeshData* mesh);
-void m3MeshDataFree(m3MeshData* mesh);
+bool m3MeshDataAlloc(m3Heap* heap, m3MeshData* mesh);
+void m3MeshDataFree(m3Heap* heap, m3MeshData* mesh);
 
 // Bakes the edge flags. The scratch holds m3MeshEdgeScratchCount ints.
 int32_t m3MeshEdgeScratchCount(const m3MeshData* mesh);
@@ -174,8 +177,13 @@ typedef struct m3HeightFieldData
 
 // Count-derived ownership: Alloc sizes from the counts already in the
 // struct, Free releases and zeroes.
-bool m3HeightFieldDataAlloc(m3HeightFieldData* hf);
-void m3HeightFieldDataFree(m3HeightFieldData* hf);
+// The grid rules every door holds a height field to (create, replay,
+// restore): 2..M3_HEIGHTFIELD_MAX_DIM samples a side, a finite positive
+// cell size and finite samples, read as packed bytes. Sets the extremes.
+bool m3HeightFieldSamplesValid(int32_t nx, int32_t nz, float cellSize, const void* samples,
+                               float* minOut, float* maxOut);
+bool m3HeightFieldDataAlloc(m3Heap* heap, m3HeightFieldData* hf);
+void m3HeightFieldDataFree(m3Heap* heap, m3HeightFieldData* hf);
 
 // One cell's two triangles, split by diagonal parity: the one rule every
 // consumer shares (contacts, rays, queries, draw, soft particles).
@@ -250,7 +258,9 @@ typedef struct m3MeshBvh
     m3Vec3 quantScale;    // world-to-grid; 0 on a flat axis (always hits)
 } m3MeshBvh;
 
-void m3MeshBvhBuild(m3MeshBvh* bvh, const m3MeshData* mesh);
+// Builds the mesh's BVH. False, with the BVH empty, when an allocation is
+// refused: an empty BVH gathers nothing, so the caller refuses its work.
+bool m3MeshBvhBuild(m3Heap* heap, m3MeshBvh* bvh, const m3MeshData* mesh);
 
 // Gather every triangle in a leaf whose box overlaps [lo, hi], in
 // ascending triangle order (each triangle lives in exactly one leaf,
@@ -259,12 +269,30 @@ void m3MeshBvhBuild(m3MeshBvh* bvh, const m3MeshData* mesh);
 // reject test, so behavior stays bit-identical to the full scan this
 // replaces. `out` must hold M3_MESH_MAX_TRIS entries.
 int32_t m3MeshBvhGather(const m3MeshBvh* bvh, m3Vec3 lo, m3Vec3 hi, uint16_t* out);
-void m3MeshBvhFree(m3MeshBvh* bvh);
+void m3MeshBvhFree(m3Heap* heap, m3MeshBvh* bvh);
 
 // Generalized build: a BVH over caller-supplied bounds (the mesh
 // build wraps this with triangle boxes; the voxel surface feeds
-// merged-box bounds). Count is capped at M3_MESH_MAX_TRIS.
-void m3MeshBvhBuildBounds(m3MeshBvh* bvh, const m3Vec3* los, const m3Vec3* his, int32_t count);
+// merged-box bounds). Count is capped at M3_MESH_MAX_TRIS. False, with
+// the BVH empty, when an allocation is refused.
+bool m3MeshBvhBuildBounds(m3Heap* heap, m3MeshBvh* bvh, const m3Vec3* los, const m3Vec3* his,
+                          int32_t count);
+
+// The bytes of scratch a build over count bounds takes.
+int32_t m3MeshBvhScratchBytes(int32_t count);
+
+// Builds over count bounds (1 to M3_MESH_MAX_TRIS) into storage the
+// caller owns, allocating nothing: bvh->nodes holds 2 * count nodes,
+// bvh->order count entries, and scratch m3MeshBvhScratchBytes(count)
+// bytes.
+void m3MeshBvhBuildIn(m3MeshBvh* bvh, void* scratch, const m3Vec3* los, const m3Vec3* his,
+                      int32_t count);
+
+// The fragment events one step holds, and the island voxels their
+// recipes hold together. Past either, the fracture still happens: a
+// dropped event is counted, an oversized recipe is left out of its event.
+#define M3_FRAGMENT_EVENT_CAP  256
+#define M3_FRAGMENT_RECIPE_CAP 8192
 
 // Voxel chunks: dense 16^3 occupancy + payload, one
 // padding-free snapshot block per slot. STATE ends there; the
@@ -273,6 +301,11 @@ void m3MeshBvhBuildBounds(m3MeshBvh* bvh, const m3Vec3* los, const m3Vec3* his, 
 #define M3_VOXEL_DIM       16
 #define M3_VOXEL_COUNT     (M3_VOXEL_DIM * M3_VOXEL_DIM * M3_VOXEL_DIM)
 #define M3_VOXEL_MAX_BOXES 2048 // the isolated-voxel (checkerboard) worst case
+// One slot's surface tree: 2 * M3_VOXEL_MAX_BOXES nodes, then
+// M3_VOXEL_MAX_BOXES order entries.
+#define M3_VOXEL_TREE_BYTES                                                                        \
+    (2 * M3_VOXEL_MAX_BOXES * (int32_t)sizeof(m3MeshBvhNode) +                                     \
+     M3_VOXEL_MAX_BOXES * (int32_t)sizeof(uint16_t))
 
 typedef struct m3VoxelChunkData
 {
@@ -307,7 +340,17 @@ typedef struct m3VoxelSurface
 bool m3VoxelGet(const m3VoxelChunkData* chunk, int32_t x, int32_t y, int32_t z);
 int32_t m3VoxelPack(m3VoxelChunkData* chunk, const uint8_t* voxels, const uint16_t* payload,
                     m3real cellSize);
-void m3VoxelSurfaceBuild(m3VoxelSurface* surface, const m3VoxelChunkData* chunk);
+// Whether a grid's surface merges into no more boxes than the world's
+// voxel trees hold (voxelBoxLimit). A grid that does not is never
+// landed, so every surface fits its tree.
+bool m3VoxelSurfaceFits(const m3World* world, const m3VoxelChunkData* chunk);
+
+// Takes slot's tree storage when it has none; false when refused.
+bool m3VoxelTreeReserve(m3World* world, int32_t slot);
+
+// Rebuilds slot's surface from its grid, which fits, the tree into the
+// slot's storage: allocates nothing, so it never fails.
+void m3VoxelSurfaceBuild(m3World* world, int32_t slot);
 void m3VoxelBoxBounds(const m3VoxelSurface* surface, m3real cellSize, int32_t box, m3Vec3* lo,
                       m3Vec3* hi);
 void m3VoxelBoxHull(const m3VoxelSurface* surface, m3real cellSize, int32_t box, m3HullData* out);
@@ -493,6 +536,18 @@ typedef struct m3Voxels
     struct m3VoxelSurface* voxelSurface; // derived, not snapshot
     int32_t* voxelShape;                 // owning shape per slot, -1 free
     int32_t* voxelNeighbors;             // derived: 6 welded slots per
+    // Each slot's surface tree, M3_VOXEL_TREE_BYTES sized for
+    // M3_VOXEL_MAX_BOXES boxes and taken when a chunk first lands in the
+    // slot (NULL until then), so an edit, a fracture or a restore
+    // rebuilds it in place and never asks the allocator. One build
+    // scratch and one staging copy of a chunk serve every slot.
+    void** voxelTrees;
+    void* voxelTreeScratch;
+    m3VoxelChunkData* voxelStage;
+    // The most boxes a surface may merge into: M3_VOXEL_MAX_BOXES, which
+    // the storage holds; a whitebox test lowers it to reach the refusal.
+    int32_t voxelBoxLimit;
+    uint64_t voxelEditsRefused; // edits whose surface would pass the limit
 } m3Voxels;
 
 // Broadphase: the fat-AABB tree and each shape's proxy.
@@ -591,8 +646,10 @@ typedef struct m3Joints
     float* jointTargetScalar;   // revolute angle or prismatic translation
     m3Quat* jointTargetQ;       // spherical rotation drive target
     m3Vec3* jointSpringImpulse; // warm payload: x scalar rows, xyz spherical
-    m3Vec3* jointMotor;         // x = motorSpeed, y = maxMotorTorque, z unused
-    m3Vec3* jointLimits;        // x = lower angle, y = upper angle, z unused
+    m3Vec3* jointMotor;         // x = motorSpeed, y = maxMotorEffort, z = steer target;
+                                // the motor joint keeps its pose offset here
+    m3Vec3* jointLimits;        // x = lower, y = upper (the motor joint's budgets),
+                                // z = cone angle or the pulley's rope constant
     int32_t* bodyJointHead;
     int32_t* jointNextA; // next joint in body A's list
     int32_t* jointNextB; // next joint in body B's list
@@ -626,7 +683,7 @@ typedef struct m3Characters
     m3real* charMass;        // kilograms; scales push impulses
     m3real* charPushMax;     // heaviest pushable body / mass ratio
     int32_t* charGroundBody; // body slot under our feet, -1 none
-    uint16_t* charGroundGen; // that body's generation when recorded
+    uint32_t* charGroundGen; // that body's generation when recorded
 } m3Characters;
 
 // Vehicles: pooled raycast vehicles; per-slot config, per-wheel arrays at
@@ -640,7 +697,7 @@ typedef struct m3Vehicles
     int32_t vehicleCapacity;
     m3IdPool vehPool;
     int32_t* vehChassis;     // chassis body slot, -1 free
-    uint16_t* vehChassisGen; // its generation at create
+    uint32_t* vehChassisGen; // its generation at create
     int32_t* vehWheelCount;
     m3real* vehMaxSteer;
     m3real* vehDriveForce;
@@ -747,7 +804,7 @@ typedef struct m3SoftBodies
     int32_t* softAnchorCount;    // per slot
     int32_t* softAnchorParticle; // cap * M3_SOFTBODY_MAX_ANCHORS
     int32_t* softAnchorBody;
-    uint16_t* softAnchorGen;
+    uint32_t* softAnchorGen;
     m3Vec3* softAnchorLocal;
     // Soft-to-soft anchors: lattice A's particle pinned to
     // lattice B's particle, released silently when EITHER side
@@ -755,8 +812,11 @@ typedef struct m3SoftBodies
     int32_t* softSoftCount;     // per slot (owner = LOWER slot)
     int32_t* softSoftParticleA; // cap * M3_SOFTBODY_MAX_ANCHORS
     int32_t* softSoftSlotB;
-    uint16_t* softSoftGenB;
+    uint32_t* softSoftGenB;
     int32_t* softSoftParticleB;
+    // Whitebox tests only: 1 tests every particle against every shape,
+    // with no cull. Neither state nor journaled.
+    uint8_t softCullOff;
 } m3SoftBodies;
 
 // Water volumes: fixed slots of world-anchored boxes.
@@ -842,13 +902,10 @@ typedef struct m3World
     float windGustScale;
     float windPhase;
     uint64_t stepCount;
-    int32_t workerCount;
+    m3Heap heap; // the def's allocator; every allocation of this world goes through it
     m3EnqueueTaskFn* enqueueTask; // host threading hooks (never state)
     m3FinishTaskFn* finishTask;
     void* userTaskContext;
-    uint16_t generation; // this world slot's generation
-    uint16_t slot;       // 0-based slot in the world table
-    uint16_t idWorld;    // the world field of every id this world hands out
     // Persistent bytes this world holds (arrays at create plus
     // count-derived content while it lives) and the step scratch
     // capacity; the scratch PEAK already rides m3Counters.
@@ -861,12 +918,18 @@ typedef struct m3World
     // Observer tail: profile and step statistics. NEVER
     // snapshot blocks, NEVER hash inputs; the walker and the hash
     // enumerate arrays explicitly and skip this region by design.
-    m3Profile profile;       // last completed step
-    int32_t lastIslandCount; // last completed step
-    int32_t lastColorCount;  // last completed step
-    int32_t lastScratchPeak; // bytes, last completed step
-    volatile long long
-        misuseCount; // cumulative refusals; atomic access only (m3Refuse, m3MisuseCount)
+    m3Profile profile;        // last completed step
+    int32_t lastIslandCount;  // last completed step
+    int32_t lastColorCount;   // last completed step
+    int32_t lastScratchPeak;  // bytes, last completed step
+    uint64_t heldPushRetakes; // held pushes taken again in double, cumulative
+    // Cumulative refusals; atomic access only (m3Refuse, m3MisuseCount).
+    // Both counters are 8-byte aligned, which a 64-bit integer in a struct
+    // is not on 32-bit x86, so their atomics are lock-free everywhere.
+    alignas(8) volatile long long misuseCount;
+    // Step and Draw calls in progress, host code included; atomic access
+    // only (m3WorldEnter, m3WorldLeave, m3WorldBusy).
+    alignas(8) volatile long long busyCount;
 
     m3Bodies bodies;
     m3Shapes shapes;
@@ -884,5 +947,21 @@ typedef struct m3World
     m3Events events;
     m3Recorder recorder;
 } m3World;
+
+// Whether the body in slot index is a live character's own. A character
+// owns its body and the capsule on it: they go with the character, and no
+// call may destroy, retype, reshape or add to them on their own.
+static inline bool m3CharacterOwnsBody(const m3World* world, int32_t index)
+{
+    const m3Characters* c = &world->characters;
+    for (int32_t i = 0; i < c->charPool.maxIndex; ++i)
+    {
+        if (c->charPool.alive[i] != 0 && c->charBody[i] == index)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 #endif // MAUL3D_SRC_WORLD_INTERNAL_H

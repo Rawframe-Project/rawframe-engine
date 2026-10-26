@@ -4,20 +4,13 @@
 // Journal replay for characters, vehicles, soft bodies and water
 // volumes.
 
-#include "journal_replay.h"
-
-#include "body.h"
+#include "body_state.h"
 #include "character.h"
-#include "joint.h"
 #include "journal.h"
-#include "query.h"
-#include "quickhull.h"
-#include "shape.h"
+#include "journal_replay.h"
 #include "softbody.h"
-#include "solver.h"
 #include "vehicle.h"
-#include "voxel.h"
-#include "world.h"
+#include "water.h"
 #include "world_internal.h"
 
 #include <stddef.h>
@@ -34,7 +27,7 @@ bool m3ReplayCreateCharacter(m3World* world, const m3ReplayRecord* r)
     }
     memcpy(&record, payload, sizeof(record));
     int32_t slot = m3CreateCharacterInternal(world, &record.def);
-    if (slot < 0 || slot + 1 != record.expected.index1 ||
+    if (slot < 0 || (uint32_t)slot + 1u != record.expected.index1 ||
         world->characters.charPool.generations[slot] != record.expected.generation)
     {
         return false; // id determinism holds for characters too
@@ -52,7 +45,6 @@ bool m3ReplayDestroyCharacter(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&id, payload, sizeof(id));
-    id.world = world->idWorld;
     int32_t slot = m3CharacterSlot(world, id);
     if (slot < 0)
     {
@@ -72,9 +64,8 @@ bool m3ReplayCharacterMove(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&record, payload, sizeof(record));
-    record.id.world = world->idWorld;
     int32_t slot = m3CharacterSlot(world, record.id);
-    if (slot < 0 || !m3FiniteV3(record.translation))
+    if (slot < 0 || !m3CharacterMoveValid(record.translation))
     {
         return false; // hostile bytes fail loudly
     }
@@ -92,9 +83,9 @@ bool m3ReplayCharacterStance(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&record, payload, sizeof(record));
-    record.id.world = world->idWorld;
     int32_t slot = m3CharacterSlot(world, record.id);
-    if (slot < 0 || !m3CharacterStanceInternal(world, slot, record.halfHeight, record.radius))
+    if (slot < 0 ||
+        m3CharacterStanceInternal(world, slot, record.halfHeight, record.radius) != m3_success)
     {
         // A journaled stance was APPLIED at record time; a
         // replay that cannot re-apply it (fuzzed bytes, a
@@ -120,9 +111,8 @@ bool m3ReplayCreateVehicle(m3World* world, const m3ReplayRecord* r)
         m3NormalizeBoolByte(&record.def, wheelBase + offsetof(m3WheelDef, steerable));
         m3NormalizeBoolByte(&record.def, wheelBase + offsetof(m3WheelDef, driven));
     }
-    record.def.chassisId.world = world->idWorld;
     int32_t slot = m3CreateVehicleInternal(world, &record.def);
-    if (slot < 0 || slot + 1 != record.expected.index1 ||
+    if (slot < 0 || (uint32_t)slot + 1u != record.expected.index1 ||
         world->vehicles.vehPool.generations[slot] != record.expected.generation)
     {
         return false; // id determinism holds for vehicles too
@@ -140,7 +130,6 @@ bool m3ReplayDestroyVehicle(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&id, payload, sizeof(id));
-    id.world = world->idWorld;
     int32_t slot = m3VehicleSlot(world, id);
     if (slot < 0)
     {
@@ -160,9 +149,9 @@ bool m3ReplayVehicleTankCommands(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&record, payload, sizeof(record));
-    record.id.world = world->idWorld;
     int32_t slot = m3VehicleSlot(world, record.id);
-    if (slot < 0 || !m3FiniteF(record.left) || !m3FiniteF(record.right) || !m3FiniteF(record.brake))
+    if (slot < 0 ||
+        !m3VehicleTankCommandsValid(world, slot, record.left, record.right, record.brake))
     {
         return false; // hostile bytes fail loudly
     }
@@ -180,7 +169,6 @@ bool m3ReplayVehicleCommands(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&record, payload, sizeof(record));
-    record.id.world = world->idWorld;
     int32_t slot = m3VehicleSlot(world, record.id);
     if (slot < 0 || !m3FiniteF(record.throttle) || !m3FiniteF(record.steer) ||
         !m3FiniteF(record.brake))
@@ -202,7 +190,6 @@ bool m3ReplayVehicleDrivetrain(m3World* world, const m3ReplayRecord* r)
     }
     memcpy(&record, payload, sizeof(record));
     m3NormalizeBoolByte(&record.def, offsetof(m3DrivetrainDef, autoShift));
-    record.id.world = world->idWorld;
     int32_t slot = m3VehicleSlot(world, record.id);
     if (slot < 0 || !m3VehicleDrivetrainInternal(world, slot, &record.def))
     {
@@ -221,7 +208,6 @@ bool m3ReplayVehicleGear(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&record, payload, sizeof(record));
-    record.id.world = world->idWorld;
     int32_t slot = m3VehicleSlot(world, record.id);
     if (slot < 0 || !m3VehicleGearInternal(world, slot, record.gear))
     {
@@ -241,7 +227,7 @@ bool m3ReplayCreateSoftBody(m3World* world, const m3ReplayRecord* r)
     }
     memcpy(&record, payload, sizeof(record));
     int32_t slot = m3CreateSoftBodyInternal(world, &record.def);
-    if (slot < 0 || slot + 1 != record.expected.index1 ||
+    if (slot < 0 || (uint32_t)slot + 1u != record.expected.index1 ||
         world->softBodies.softPool.generations[slot] != record.expected.generation)
     {
         return false; // id determinism holds for soft bodies too
@@ -259,7 +245,6 @@ bool m3ReplayDestroySoftBody(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&id, payload, sizeof(id));
-    id.world = world->idWorld;
     int32_t slot = m3SoftBodySlot(world, id);
     if (slot < 0)
     {
@@ -279,7 +264,6 @@ bool m3ReplaySoftBodyPin(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&record, payload, sizeof(record));
-    record.id.world = world->idWorld;
     int32_t slot = m3SoftBodySlot(world, record.id);
     if (slot < 0 || record.particle < 0 ||
         record.particle >= world->softBodies.softParticleCount[slot])
@@ -300,8 +284,6 @@ bool m3ReplaySoftBodyAnchor(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&record, payload, sizeof(record));
-    record.id.world = world->idWorld;
-    record.body.world = world->idWorld;
     int32_t slot = m3SoftBodySlot(world, record.id);
     int32_t body = m3BodySlot(world, record.body);
     if (slot < 0 || body < 0 || record.particle < 0 ||
@@ -324,8 +306,6 @@ bool m3ReplaySoftBodyAnchorSoft(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&record, payload, sizeof(record));
-    record.idA.world = world->idWorld;
-    record.idB.world = world->idWorld;
     int32_t slotA = m3SoftBodySlot(world, record.idA);
     int32_t slotB = m3SoftBodySlot(world, record.idB);
     if (slotA < 0 || slotB < 0 || slotA == slotB || record.particleA < 0 || record.particleB < 0 ||
@@ -359,9 +339,9 @@ bool m3ReplayCreateSoftBodyTet(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     // Journal records are byte-packed: typed pointers into the
-    // stream are misaligned UB (the replayfile fuzz caught the
-    // heightfield twin of this line). Aligned stack copies,
-    // bounded by the walls just checked.
+    // stream are misaligned UB, here and in the heightfield record's
+    // twin of this line. Aligned stack copies, bounded by the walls
+    // just checked.
     m3Vec3 pts[M3_SOFTBODY_MAX_PARTICLES];
     uint16_t tets[4 * M3_SOFTBODY_MAX_TETS];
     memcpy(pts, (const uint8_t*)payload + sizeof(head), (size_t)head.pointCount * sizeof(m3Vec3));
@@ -369,7 +349,7 @@ bool m3ReplayCreateSoftBodyTet(m3World* world, const m3ReplayRecord* r)
            (size_t)(4 * head.tetCount) * sizeof(uint16_t));
     int32_t slot =
         m3CreateSoftBodyTetInternal(world, &head.def, pts, head.pointCount, tets, head.tetCount);
-    if (slot < 0 || slot + 1 != head.expected.index1 ||
+    if (slot < 0 || (uint32_t)slot + 1u != head.expected.index1 ||
         world->softBodies.softPool.generations[slot] != head.expected.generation)
     {
         return false; // id determinism holds for jelly too
@@ -388,7 +368,7 @@ bool m3ReplayCreateWaterVolume(m3World* world, const m3ReplayRecord* r)
     }
     memcpy(&record, payload, sizeof(record));
     int32_t slot = m3CreateWaterVolumeInternal(world, &record.def);
-    if (slot < 0 || slot + 1 != record.expected.index1 ||
+    if (slot < 0 || (uint32_t)slot + 1u != record.expected.index1 ||
         world->water.waterPool.generations[slot] != record.expected.generation)
     {
         return false; // id determinism holds for water too
@@ -406,7 +386,6 @@ bool m3ReplayDestroyWaterVolume(m3World* world, const m3ReplayRecord* r)
         return false;
     }
     memcpy(&id, payload, sizeof(id));
-    id.world = world->idWorld;
     int32_t index = id.index1 - 1;
     if (!m3IdPoolValid(&world->water.waterPool, index, id.generation))
     {

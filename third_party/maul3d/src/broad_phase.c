@@ -12,11 +12,11 @@
 
 #include "broad_phase.h"
 
-#include "shape.h"
+#include "shape_state.h"
 #include "world_internal.h"
-#include <string.h>
 
 #include <stdlib.h>
+#include <string.h>
 
 // A moved leaf is reinserted this far beyond its fresh bounds, so a
 // slow body stays inside it for many steps. Only the tree shape and
@@ -589,6 +589,9 @@ void m3FreezeDiscoverPairs(m3World* world, int32_t body)
 
 m3Result m3UpdatePairs(m3World* world)
 {
+    // Once a step, not after every move: a full walk per insert would
+    // make large debug scenes quadratic.
+    M3_ASSERT(m3TreeValidate(&world->broadphase.tree));
     if (world->contacts.pairsFullQuery != 0)
     {
         // A restore invalidated the buffer: rebuild it as the pure
@@ -631,8 +634,8 @@ m3Result m3UpdatePairs(m3World* world)
 
     // Fresh bounds, once per shape per step: the refresh,
     // the self query, and every hit re-test read this cache. Pure
-    // memoization: the values are what the old per-call computes
-    // produced, so the pair set cannot move by a bit. A scratch
+    // memoization: the values are what computing each bound per
+    // call gives, so the pair set cannot move by a bit. A scratch
     // stall falls back to the direct computes, same values.
     m3Aabb3d* cache =
         (m3Aabb3d*)m3StackAlloc(&world->scratch, maxShape > 0 ? maxShape * (int32_t)sizeof(m3Aabb3d)
@@ -678,15 +681,13 @@ m3Result m3UpdatePairs(m3World* world)
         if (!m3TreeContains(&world->broadphase.tree, world->broadphase.proxyIds[i], tight.lo,
                             tight.hi))
         {
-            // Reinsert FAT, like creation does. The first draft
-            // reinserted the tight box, which meant every moving
-            // shape escaped its own proxy again the very next step
-            // (a remove, an insert, and a rebalance per shape per
-            // step: forty percent of a profiled step), and, worse,
-            // approaching bodies could not pair until their exact
-            // boxes touched: the speculative contact window the
-            // solver is built around silently vanished for every
-            // shape that had ever moved.
+            // Reinsert FAT, like creation does. A tight box would
+            // make every moving shape escape its own proxy again the
+            // very next step (a remove, an insert, and a rebalance
+            // per shape per step), and, worse, approaching bodies
+            // could not pair until their exact boxes touched: the
+            // speculative contact window the solver is built around
+            // would vanish for every shape that had ever moved.
             m3Aabb3d fat = tight;
             for (int32_t k = 0; k < 3; ++k)
             {

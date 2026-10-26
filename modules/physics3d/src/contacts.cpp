@@ -108,10 +108,10 @@ void reportContacts(world::World& world, const ContactReport& report) {
         }
         report.touching->resize(std::max<std::size_t>(report.touching->size(), 16));
         std::int32_t total = m3Body_GetContactData(
-            entry.body, report.touching->data(), static_cast<std::int32_t>(report.touching->size()));
+            report.physics, entry.body, report.touching->data(), static_cast<std::int32_t>(report.touching->size()));
         if (static_cast<std::size_t>(total) > report.touching->size()) {
             report.touching->resize(static_cast<std::size_t>(total));
-            total = m3Body_GetContactData(entry.body, report.touching->data(), total);
+            total = m3Body_GetContactData(report.physics, entry.body, report.touching->data(), total);
         }
         for (std::int32_t index = 0; index < total; ++index) {
             kContact->touching += (*report.touching)[static_cast<std::size_t>(index)].pointCount > 0 ? 1U : 0U;

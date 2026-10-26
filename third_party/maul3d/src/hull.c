@@ -8,8 +8,10 @@
 // boxes need neither, their mass properties are closed form.
 
 #include "hull.h"
+
 #include "world_internal.h"
 
+#include <float.h>
 #include <string.h>
 
 void m3BuildBoxHull(m3HullData* out, m3Vec3 halfExtents)
@@ -67,13 +69,17 @@ void m3BuildBoxHull(m3HullData* out, m3Vec3 halfExtents)
     out->unitInertiaCom.cy.y = (m / 3.0f) * (hx * hx + hz * hz);
     out->unitInertiaCom.cz.z = (m / 3.0f) * (hx * hx + hy * hy);
 
-    m3HullBuildHalfEdges(out);
+    bool built = m3HullBuildHalfEdges(out);
+    M3_ASSERT(built); // a box is a closed hull of twelve edges
+    (void)built;
 }
 
 // Build the half-edge adjacency and the centroid from the face loops.
 // Generic over any loop-consistent convex hull (QuickHull finishes
 // through this too). Twins are paired at 2k and 2k+1 by construction.
-void m3HullBuildHalfEdges(m3HullData* hull)
+// False, with the edges partly built, when the loops would need more
+// half edges than a hull holds: loops that do not close into a hull.
+bool m3HullBuildHalfEdges(m3HullData* hull)
 {
     // Collect one half edge per (face, loop position), paired with its
     // twin as it is discovered. Directed edge key = origin * 256 + end.
@@ -107,6 +113,10 @@ void m3HullBuildHalfEdges(m3HullData* hull)
             if (slot < 0)
             {
                 // A fresh undirected edge claims the next twin pair.
+                if (count + 2 > M3_HULL_MAX_HALF_EDGES)
+                {
+                    return false;
+                }
                 slot = count;
                 count += 2;
                 dirKey[dirCount] = a * 256 + b;
@@ -137,6 +147,248 @@ void m3HullBuildHalfEdges(m3HullData* hull)
         c = m3Add3(c, hull->vertices[v]);
     }
     hull->center = m3MulSV3(1.0f / (m3real)hull->vertexCount, c);
+    return true;
+}
+
+// Unit-density volume, centroid and inertia about the centroid. Each
+// face fans into tetrahedra with the first hull vertex; a tetrahedron
+// o, a, b, c with det = a . (b x c) has volume det / 6, centroid (a + b +
+// c) / 4 and covariance det / 120 (a a' + b b' + c c' + s s') for s = a +
+// b + c, the covariance of the canonical tetrahedron mapped onto it.
+bool m3HullMassProperties(m3HullData* hull)
+{
+    m3Vec3 o = hull->vertices[0];
+    m3real det6 = 0.0f;
+    m3Vec3 first = {0.0f, 0.0f, 0.0f};
+    m3real c[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}; // xx yy zz xy xz yz
+    for (int32_t f = 0; f < hull->faceCount; ++f)
+    {
+        const uint8_t* loop = &hull->faceIndices[hull->faceVertStart[f]];
+        m3Vec3 a = m3Sub3(hull->vertices[loop[0]], o);
+        for (int32_t k = 1; k + 1 < hull->faceVertCounts[f]; ++k)
+        {
+            m3Vec3 bv = m3Sub3(hull->vertices[loop[k]], o);
+            m3Vec3 cv = m3Sub3(hull->vertices[loop[k + 1]], o);
+            m3real det = m3Dot3(a, m3Cross3(bv, cv));
+            m3Vec3 s = m3Add3(a, m3Add3(bv, cv));
+            det6 += det;
+            first = m3Add3(first, m3MulSV3(det, s));
+            const m3Vec3 terms[4] = {a, bv, cv, s};
+            for (int32_t t = 0; t < 4; ++t)
+            {
+                m3Vec3 u = terms[t];
+                c[0] += det * u.x * u.x;
+                c[1] += det * u.y * u.y;
+                c[2] += det * u.z * u.z;
+                c[3] += det * u.x * u.y;
+                c[4] += det * u.x * u.z;
+                c[5] += det * u.y * u.z;
+            }
+        }
+    }
+    if (!(det6 > 0.0f))
+    {
+        return false;
+    }
+    m3real mass = det6 / 6.0f;
+    m3Vec3 com = m3MulSV3(0.25f / det6, first);
+    for (int32_t k = 0; k < 6; ++k)
+    {
+        c[k] /= 120.0f;
+    }
+    // The inertia is trace(C) E - C about o, then shifted to the centroid.
+    m3real cc = m3Dot3(com, com);
+    m3Mat3 inertia;
+    inertia.cx = (m3Vec3){c[1] + c[2] - mass * (cc - com.x * com.x), -c[3] + mass * com.x * com.y,
+                          -c[4] + mass * com.x * com.z};
+    inertia.cy = (m3Vec3){-c[3] + mass * com.x * com.y, c[0] + c[2] - mass * (cc - com.y * com.y),
+                          -c[5] + mass * com.y * com.z};
+    inertia.cz = (m3Vec3){-c[4] + mass * com.x * com.z, -c[5] + mass * com.y * com.z,
+                          c[0] + c[1] - mass * (cc - com.z * com.z)};
+    hull->unitMass = mass;
+    hull->unitCom = m3Add3(com, o);
+    hull->unitInertiaCom = inertia;
+    return true;
+}
+
+static bool Vec3Same(m3Vec3 a, m3Vec3 b)
+{
+    return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
+// Whether the hull is the box m3BuildBoxHull makes of its own extents.
+static bool IsItsOwnBox(const m3HullData* hull)
+{
+    m3Vec3 half = hull->vertices[6];
+    if (hull->vertexCount != 8 || hull->faceCount != 6 || !(half.x > 0.0f) || !(half.y > 0.0f) ||
+        !(half.z > 0.0f))
+    {
+        return false; // a box has positive extents
+    }
+    m3HullData box;
+    m3BuildBoxHull(&box, half);
+    // Hull data is padding-free, so equal bytes mean an equal hull.
+    // NOLINTNEXTLINE(bugprone-suspicious-memory-comparison)
+    return memcmp(&box, hull, sizeof(m3HullData)) == 0;
+}
+
+// How far a hull's planes may sit from the planes its vertices define.
+// QuickHull works its planes in double about a point the hull does not
+// store, so a restore cannot rebuild them bit for bit, and it merges
+// faces whose vertices lie within its tolerance of one plane: measured,
+// a vertex sits up to 8e-6 of the extent off a plane. Far from the
+// body's origin the floats themselves are coarse: rounding the
+// vertices, the offsets and the check's own dot products moves a
+// distance by up to 2.5 ulps of the largest coordinate. The tolerances
+// take those with a margin and refuse a plane that misplaces its face
+// or leaves a vertex outside the hull.
+#define M3_HULL_NORMAL_TOLERANCE   1.0e-3f // | |n| - 1 |
+#define M3_HULL_PLANE_TOLERANCE    1.0e-4f // distances, times the hull's extent
+#define M3_HULL_ROUNDING_TOLERANCE 16.0f   // distances, in FLT_EPSILON of the largest coordinate
+
+// The distance a vertex may sit off a plane: a share of the hull's
+// extent plus the rounding of its largest coordinate.
+static m3real PlaneSlack(const m3HullData* hull)
+{
+    m3Vec3 lo = hull->vertices[0];
+    m3Vec3 hi = hull->vertices[0];
+    m3real far = 0.0f;
+    for (int32_t v = 0; v < hull->vertexCount; ++v)
+    {
+        m3Vec3 p = hull->vertices[v];
+        lo = (m3Vec3){m3MinF(lo.x, p.x), m3MinF(lo.y, p.y), m3MinF(lo.z, p.z)};
+        hi = (m3Vec3){m3MaxF(hi.x, p.x), m3MaxF(hi.y, p.y), m3MaxF(hi.z, p.z)};
+        far = m3MaxF(far, m3MaxF(m3AbsF(p.x), m3MaxF(m3AbsF(p.y), m3AbsF(p.z))));
+    }
+    m3real extent = m3MaxF(hi.x - lo.x, m3MaxF(hi.y - lo.y, hi.z - lo.z));
+    return M3_HULL_PLANE_TOLERANCE * extent + M3_HULL_ROUNDING_TOLERANCE * FLT_EPSILON * far;
+}
+
+// Each face's plane has a unit normal, holds the face's own vertices and
+// has every vertex of the hull on or below it, within the tolerances.
+static bool PlanesHold(const m3HullData* hull)
+{
+    m3real slack = PlaneSlack(hull);
+    for (int32_t f = 0; f < hull->faceCount; ++f)
+    {
+        m3Vec3 n = hull->faceNormals[f];
+        m3real offset = hull->faceOffsets[f];
+        m3real length = m3Length3(n);
+        if (!(length >= 1.0f - M3_HULL_NORMAL_TOLERANCE &&
+              length <= 1.0f + M3_HULL_NORMAL_TOLERANCE) ||
+            !m3FiniteF(offset))
+        {
+            return false;
+        }
+        for (int32_t v = 0; v < hull->vertexCount; ++v)
+        {
+            if (!(m3Dot3(n, hull->vertices[v]) - offset <= slack))
+            {
+                return false; // a vertex above the plane
+            }
+        }
+        const uint8_t* loop = &hull->faceIndices[hull->faceVertStart[f]];
+        for (int32_t k = 0; k < hull->faceVertCounts[f]; ++k)
+        {
+            if (!(m3Dot3(n, hull->vertices[loop[k]]) - offset >= -slack))
+            {
+                return false; // the face's own vertex off its plane
+            }
+        }
+    }
+    return true;
+}
+
+// The unit mass properties are derived from the vertices and loops: they
+// must be what the builders make of them, bit for bit, and the planes
+// must hold.
+static bool DerivedMatch(const m3HullData* hull)
+{
+    if (!(hull->unitMass > 0.0f) || hull->unitMass > M3_UNIT_MASS_LIMIT)
+    {
+        return false; // a box's closed form and the integrator alike
+    }
+    if (IsItsOwnBox(hull))
+    {
+        return true; // a box's planes and mass are closed form
+    }
+    m3HullData rebuilt = *hull;
+    if (!PlanesHold(hull) || !m3HullMassProperties(&rebuilt))
+    {
+        return false;
+    }
+    return rebuilt.unitMass == hull->unitMass && Vec3Same(rebuilt.unitCom, hull->unitCom) &&
+           Vec3Same(rebuilt.unitInertiaCom.cx, hull->unitInertiaCom.cx) &&
+           Vec3Same(rebuilt.unitInertiaCom.cy, hull->unitInertiaCom.cy) &&
+           Vec3Same(rebuilt.unitInertiaCom.cz, hull->unitInertiaCom.cz);
+}
+
+bool m3HullDataValid(const m3HullData* hull)
+{
+    int32_t vc = hull->vertexCount;
+    int32_t fc = hull->faceCount;
+    int32_t ic = hull->indexCount;
+    if (vc < 4 || vc > M3_HULL_MAX_VERTS || fc < 4 || fc > M3_HULL_MAX_FACES || ic < 3 * fc ||
+        ic > M3_HULL_MAX_FACE_INDICES || hull->edgeCount != ic)
+    {
+        return false;
+    }
+    for (int32_t v = 0; v < vc; ++v)
+    {
+        if (!m3LocalV3(hull->vertices[v]))
+        {
+            return false; // a body-frame offset, like every local position
+        }
+    }
+    // Faces own consecutive runs of the index list, each a loop of at
+    // least three vertices of this hull.
+    int32_t start = 0;
+    for (int32_t f = 0; f < fc; ++f)
+    {
+        if (hull->faceVertCounts[f] < 3 || hull->faceVertStart[f] != start)
+        {
+            return false;
+        }
+        start += hull->faceVertCounts[f];
+    }
+    if (start != ic)
+    {
+        return false;
+    }
+    for (int32_t i = 0; i < ic; ++i)
+    {
+        if (hull->faceIndices[i] >= vc)
+        {
+            return false;
+        }
+    }
+    if (!DerivedMatch(hull))
+    {
+        return false;
+    }
+    // The adjacency and the center are derived from the loops: they must
+    // be what the builder makes of them. The rebuilt edges start as 0xFF,
+    // an origin no hull has, so a slot the builder leaves unwritten (loops
+    // that repeat a directed edge) cannot match whatever the input holds.
+    m3HullData rebuilt = *hull;
+    memset(rebuilt.edges, 0xFF, sizeof(rebuilt.edges));
+    if (!m3HullBuildHalfEdges(&rebuilt) || rebuilt.edgeCount != ic)
+    {
+        return false;
+    }
+    for (int32_t e = 0; e < ic; ++e)
+    {
+        if (rebuilt.edges[e].origin >= vc)
+        {
+            return false;
+        }
+    }
+    if (memcmp(rebuilt.edges, hull->edges, (size_t)ic * sizeof(m3HullHalfEdge)) != 0)
+    {
+        return false;
+    }
+    return rebuilt.center.x == hull->center.x && rebuilt.center.y == hull->center.y &&
+           rebuilt.center.z == hull->center.z;
 }
 
 int32_t m3InternHull(m3World* world, const m3HullData* data)

@@ -1,35 +1,51 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The M3J1 container codec: pure memory, no IO, no world
+// The replay container codec: pure memory, no IO, no world
 // access. Corrupt input refuses loudly and touches nothing.
 
 #include "maul3d/replay.h"
 
-#include "core.h"
+#include "state_prefix.h"
 
 #include <string.h>
 
-#define M3_REPLAY_MAGIC        0x314A334Du // "M3J1" little-endian
-#define M3_REPLAY_VERSION      1u
-#define M3_REPLAY_HEADER_BYTES 32
-
-bool m3DescribeJournal(const void* journal, int32_t bytes, m3JournalInfo* out)
+// The container's header: the state prefix, the recorder's final hash,
+// then the sizes and counts of what follows.
+typedef struct m3ReplayHeader
 {
-    if (journal == NULL || bytes < 0 || out == NULL)
+    m3StatePrefix prefix;
+    uint64_t finalHash;
+    int32_t snapshotBytes;
+    int32_t journalBytes;
+    int32_t stepCount;
+    int32_t opCount;
+} m3ReplayHeader;
+
+_Static_assert(sizeof(m3ReplayHeader) == M3_REPLAY_HEADER_BYTES,
+               "the replay header must be padding-free");
+
+m3Result m3DescribeJournal(const void* journal, int32_t bytes, m3JournalInfo* infoOut)
+{
+    if (journal == NULL || bytes < 0 || infoOut == NULL)
     {
-        m3Refuse(NULL, m3_errorInvalid);
-        return false;
+        return m3_errorInvalid;
+    }
+    m3Result header = m3CheckStatePrefix(journal, bytes, M3_JOURNAL_MAGIC, M3_JOURNAL_VERSION,
+                                         M3_JOURNAL_HEADER_BYTES);
+    if (header != m3_success)
+    {
+        return header;
     }
     const uint8_t* p = (const uint8_t*)journal;
-    int32_t cursor = 0;
+    int32_t cursor = M3_JOURNAL_HEADER_BYTES;
     int32_t ops = 0;
     int32_t steps = 0;
     while (cursor < bytes)
     {
         if (bytes - cursor < 8)
         {
-            return false; // truncated record header
+            return m3_errorInvalid; // truncated record header
         }
         int32_t op;
         int32_t payload;
@@ -37,7 +53,7 @@ bool m3DescribeJournal(const void* journal, int32_t bytes, m3JournalInfo* out)
         memcpy(&payload, p + cursor + 4, 4);
         if (op <= 0 || payload < 0 || payload > bytes - cursor - 8)
         {
-            return false; // corrupt framing
+            return m3_errorInvalid; // corrupt framing
         }
         ops += 1;
         if (op == 1)
@@ -46,101 +62,114 @@ bool m3DescribeJournal(const void* journal, int32_t bytes, m3JournalInfo* out)
         }
         cursor += 8 + payload;
     }
-    out->opCount = ops;
-    out->stepCount = steps;
-    return true;
+    infoOut->opCount = ops;
+    infoOut->stepCount = steps;
+    return m3_success;
 }
 
 int32_t m3GetEncodedReplaySize(int32_t snapshotBytes, int32_t journalBytes)
 {
-    if (snapshotBytes <= 0 || journalBytes < 0)
+    if (snapshotBytes < M3_SNAPSHOT_HEADER_BYTES || journalBytes < M3_JOURNAL_HEADER_BYTES ||
+        snapshotBytes > INT32_MAX - M3_REPLAY_HEADER_BYTES - journalBytes)
     {
-        m3Refuse(NULL, m3_errorInvalid);
         return 0;
     }
     return M3_REPLAY_HEADER_BYTES + snapshotBytes + journalBytes;
 }
 
-int32_t m3EncodeReplay(const void* snapshot, int32_t snapshotBytes, const void* journal,
-                       int32_t journalBytes, uint64_t finalHash, void* out, int32_t capacity)
+m3Result m3EncodeReplay(const void* snapshot, int32_t snapshotBytes, const void* journal,
+                        int32_t journalBytes, uint64_t finalHash, void* out, int32_t capacity,
+                        int32_t* bytesOut)
 {
+    if (bytesOut == NULL)
+    {
+        return m3_errorInvalid;
+    }
+    *bytesOut = 0;
     int32_t need = m3GetEncodedReplaySize(snapshotBytes, journalBytes);
-    if (need == 0 || snapshot == NULL || (journal == NULL && journalBytes > 0) || out == NULL ||
-        capacity < need)
+    if (need == 0 || snapshot == NULL || journal == NULL || out == NULL)
     {
-        m3Refuse(NULL, m3_errorInvalid);
-        return 0;
+        return m3_errorInvalid;
     }
+    if (capacity < need)
+    {
+        return m3_errorCapacity;
+    }
+    // A container never wraps a malformed stream, nor one another release
+    // wrote.
+    m3Result checked = m3CheckStatePrefix(snapshot, snapshotBytes, M3_SNAPSHOT_MAGIC,
+                                          M3_SNAPSHOT_VERSION, M3_SNAPSHOT_HEADER_BYTES);
     m3JournalInfo info;
-    if (!m3DescribeJournal(journal, journalBytes, &info))
+    if (checked == m3_success)
     {
-        m3Refuse(NULL, m3_errorInvalid);
-        return 0; // a container never wraps a malformed stream
+        checked = m3DescribeJournal(journal, journalBytes, &info);
     }
+    if (checked != m3_success)
+    {
+        return checked;
+    }
+    m3ReplayHeader header;
+    memset(&header, 0, sizeof(header));
+    header.prefix = m3MakeStatePrefix(M3_REPLAY_MAGIC, M3_REPLAY_VERSION, M3_REPLAY_HEADER_BYTES);
+    header.finalHash = finalHash;
+    header.snapshotBytes = snapshotBytes;
+    header.journalBytes = journalBytes;
+    header.stepCount = info.stepCount;
+    header.opCount = info.opCount;
     uint8_t* p = (uint8_t*)out;
-    uint32_t magic = M3_REPLAY_MAGIC;
-    uint32_t version = M3_REPLAY_VERSION;
-    memcpy(p, &magic, 4);
-    memcpy(p + 4, &version, 4);
-    memcpy(p + 8, &snapshotBytes, 4);
-    memcpy(p + 12, &journalBytes, 4);
-    memcpy(p + 16, &info.stepCount, 4);
-    memcpy(p + 20, &info.opCount, 4);
-    memcpy(p + 24, &finalHash, 8);
+    memcpy(p, &header, sizeof(header));
     memcpy(p + M3_REPLAY_HEADER_BYTES, snapshot, (size_t)snapshotBytes);
-    if (journalBytes > 0)
-    {
-        memcpy(p + M3_REPLAY_HEADER_BYTES + snapshotBytes, journal, (size_t)journalBytes);
-    }
-    return need;
+    memcpy(p + M3_REPLAY_HEADER_BYTES + snapshotBytes, journal, (size_t)journalBytes);
+    *bytesOut = need;
+    return m3_success;
 }
 
-bool m3DecodeReplay(const void* data, int32_t bytes, m3ReplayView* out)
+m3Result m3DecodeReplay(const void* data, int32_t bytes, m3ReplayView* viewOut)
 {
-    if (data == NULL || bytes < M3_REPLAY_HEADER_BYTES || out == NULL)
+    if (data == NULL || viewOut == NULL)
     {
-        m3Refuse(NULL, m3_errorInvalid);
-        return false;
+        return m3_errorInvalid;
+    }
+    m3Result checked =
+        m3CheckStatePrefix(data, bytes, M3_REPLAY_MAGIC, M3_REPLAY_VERSION, M3_REPLAY_HEADER_BYTES);
+    if (checked != m3_success)
+    {
+        return checked;
     }
     const uint8_t* p = (const uint8_t*)data;
-    uint32_t magic;
-    uint32_t version;
-    int32_t snapshotBytes;
-    int32_t journalBytes;
-    int32_t stepCount;
-    int32_t opCount;
-    uint64_t finalHash;
-    memcpy(&magic, p, 4);
-    memcpy(&version, p + 4, 4);
-    memcpy(&snapshotBytes, p + 8, 4);
-    memcpy(&journalBytes, p + 12, 4);
-    memcpy(&stepCount, p + 16, 4);
-    memcpy(&opCount, p + 20, 4);
-    memcpy(&finalHash, p + 24, 8);
-    if (magic != M3_REPLAY_MAGIC || version != M3_REPLAY_VERSION || snapshotBytes <= 0 ||
-        journalBytes < 0 ||
-        (int64_t)M3_REPLAY_HEADER_BYTES + snapshotBytes + journalBytes != (int64_t)bytes)
+    m3ReplayHeader header;
+    memcpy(&header, p, sizeof(header));
+    if (header.snapshotBytes < M3_SNAPSHOT_HEADER_BYTES ||
+        header.journalBytes < M3_JOURNAL_HEADER_BYTES ||
+        (int64_t)M3_REPLAY_HEADER_BYTES + header.snapshotBytes + header.journalBytes !=
+            (int64_t)bytes)
     {
-        m3Refuse(NULL, m3_errorInvalid);
-        return false;
+        return m3_errorInvalid;
     }
+    // The embedded headers are checked like any other: another release's
+    // snapshot or tape inside this container is m3_errorVersion.
+    const uint8_t* snapshot = p + M3_REPLAY_HEADER_BYTES;
+    const uint8_t* journal = snapshot + header.snapshotBytes;
+    checked = m3CheckStatePrefix(snapshot, header.snapshotBytes, M3_SNAPSHOT_MAGIC,
+                                 M3_SNAPSHOT_VERSION, M3_SNAPSHOT_HEADER_BYTES);
     m3JournalInfo info;
-    const uint8_t* journal = p + M3_REPLAY_HEADER_BYTES + snapshotBytes;
-    if (!m3DescribeJournal(journal, journalBytes, &info))
+    if (checked == m3_success)
     {
-        m3Refuse(NULL, m3_errorInvalid);
-        return false;
+        checked = m3DescribeJournal(journal, header.journalBytes, &info);
     }
-    if (info.stepCount != stepCount || info.opCount != opCount)
+    if (checked != m3_success)
     {
-        m3Refuse(NULL, m3_errorInvalid);
-        return false; // header lies about its own stream
+        return checked;
     }
-    out->snapshot = p + M3_REPLAY_HEADER_BYTES;
-    out->snapshotBytes = snapshotBytes;
-    out->journal = journal;
-    out->journalBytes = journalBytes;
-    out->finalHash = finalHash;
-    out->info = info;
-    return true;
+    if (info.stepCount != header.stepCount || info.opCount != header.opCount)
+    {
+        return m3_errorInvalid; // header lies about its own stream
+    }
+    viewOut->snapshot = snapshot;
+    viewOut->snapshotBytes = header.snapshotBytes;
+    viewOut->journal = journal;
+    viewOut->journalBytes = header.journalBytes;
+    viewOut->finalHash = header.finalHash;
+    viewOut->info = info;
+    return m3_success;
 }

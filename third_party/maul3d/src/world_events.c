@@ -4,9 +4,9 @@
 // Event access: contact, sensor, hit, move, joint break and fragment
 // events, the hit threshold and the pre-solve hook.
 
-#include "body.h"
+#include "fpenv.h"
 #include "journal.h"
-#include "query.h"
+#include "misuse.h"
 #include "world.h"
 #include "world_internal.h"
 
@@ -18,9 +18,13 @@ void m3SetHitEventThresholdInternal(m3World* world, float value)
     world->hitEventThreshold = value;
 }
 
-void m3World_SetHitEventThreshold(m3WorldId worldId, float value)
+static M3_NOINLINE void WorldSetHitEventThresholdWorker(m3World* world, float value)
 {
-    m3World* world = m3WorldFromId(worldId);
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     if (world == NULL || !m3FiniteF(value) || value < 0.0f)
     {
         m3Refuse(world, m3_errorInvalid);
@@ -33,11 +37,17 @@ void m3World_SetHitEventThreshold(m3WorldId worldId, float value)
     m3SetHitEventThresholdInternal(world, value);
 }
 
-m3ContactEvents m3World_GetContactEvents(m3WorldId worldId)
+void m3World_SetHitEventThreshold(m3World* world, float value)
+{
+    uint64_t env = m3FloatEnvEnter();
+    WorldSetHitEventThresholdWorker(world, value);
+    m3FloatEnvLeave(env);
+}
+
+static M3_NOINLINE m3ContactEvents WorldGetContactEventsWorker(const m3World* world)
 {
     m3ContactEvents events;
     memset(&events, 0, sizeof(events));
-    m3World* world = m3WorldFromId(worldId);
     if (world != NULL)
     {
         events.beginEvents = world->events.beginEvents;
@@ -51,11 +61,18 @@ m3ContactEvents m3World_GetContactEvents(m3WorldId worldId)
     return events;
 }
 
-m3SensorEvents m3World_GetSensorEvents(m3WorldId worldId)
+m3ContactEvents m3World_GetContactEvents(const m3World* world)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3ContactEvents result = WorldGetContactEventsWorker(world);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+static M3_NOINLINE m3SensorEvents WorldGetSensorEventsWorker(const m3World* world)
 {
     m3SensorEvents events;
     memset(&events, 0, sizeof(events));
-    m3World* world = m3WorldFromId(worldId);
     if (world != NULL)
     {
         events.beginEvents = world->events.sensorBeginEvents;
@@ -66,11 +83,18 @@ m3SensorEvents m3World_GetSensorEvents(m3WorldId worldId)
     return events;
 }
 
-m3FragmentEvents m3World_GetFragmentEvents(m3WorldId worldId)
+m3SensorEvents m3World_GetSensorEvents(const m3World* world)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3SensorEvents result = WorldGetSensorEventsWorker(world);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+static M3_NOINLINE m3FragmentEvents WorldGetFragmentEventsWorker(const m3World* world)
 {
     m3FragmentEvents events;
     memset(&events, 0, sizeof(events));
-    m3World* world = m3WorldFromId(worldId);
     if (world != NULL)
     {
         events.fragmentEvents = world->events.fragmentEvents;
@@ -82,11 +106,18 @@ m3FragmentEvents m3World_GetFragmentEvents(m3WorldId worldId)
     return events;
 }
 
-m3BodyEvents m3World_GetBodyEvents(m3WorldId worldId)
+m3FragmentEvents m3World_GetFragmentEvents(const m3World* world)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3FragmentEvents result = WorldGetFragmentEventsWorker(world);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+static M3_NOINLINE m3BodyEvents WorldGetBodyEventsWorker(const m3World* world)
 {
     m3BodyEvents events;
     memset(&events, 0, sizeof(events));
-    m3World* world = m3WorldFromId(worldId);
     if (world != NULL)
     {
         events.moveEvents = world->events.moveEvents;
@@ -95,17 +126,32 @@ m3BodyEvents m3World_GetBodyEvents(m3WorldId worldId)
     return events;
 }
 
-m3JointEvents m3World_GetJointEvents(m3WorldId worldId)
+m3BodyEvents m3World_GetBodyEvents(const m3World* world)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3BodyEvents result = WorldGetBodyEventsWorker(world);
+    m3FloatEnvLeave(env);
+    return result;
+}
+
+static M3_NOINLINE m3JointEvents WorldGetJointEventsWorker(const m3World* world)
 {
     m3JointEvents events;
     memset(&events, 0, sizeof(events));
-    m3World* world = m3WorldFromId(worldId);
     if (world != NULL)
     {
         events.breakEvents = world->joints.jointBreakEvents;
         events.breakCount = world->joints.jointBreakEventCount;
     }
     return events;
+}
+
+m3JointEvents m3World_GetJointEvents(const m3World* world)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3JointEvents result = WorldGetJointEventsWorker(world);
+    m3FloatEnvLeave(env);
+    return result;
 }
 
 void m3AppendJointBreakEvent(m3World* world, m3JointId joint)
@@ -115,9 +161,14 @@ void m3AppendJointBreakEvent(m3World* world, m3JointId joint)
     world->joints.jointBreakEventCount += 1;
 }
 
-void m3World_SetPreSolveCallback(m3WorldId worldId, m3PreSolveFn* fn, void* context)
+static M3_NOINLINE void WorldSetPreSolveCallbackWorker(m3World* world, m3PreSolveFn* fn,
+                                                       void* context)
 {
-    m3World* world = m3WorldFromId(worldId);
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
     if (world == NULL)
     {
         m3Refuse(world, m3_errorInvalid);
@@ -125,6 +176,13 @@ void m3World_SetPreSolveCallback(m3WorldId worldId, m3PreSolveFn* fn, void* cont
     }
     world->preSolveFn = fn;
     world->preSolveContext = context;
+}
+
+void m3World_SetPreSolveCallback(m3World* world, m3PreSolveFn* fn, void* context)
+{
+    uint64_t env = m3FloatEnvEnter();
+    WorldSetPreSolveCallbackWorker(world, fn, context);
+    m3FloatEnvLeave(env);
 }
 
 void m3ResetStepEvents(m3World* world)
@@ -152,8 +210,8 @@ static void EmitPairChange(m3World* world, uint64_t key, bool began)
     {
         return;
     }
-    m3ShapeId idA = {sA + 1, world->idWorld, world->shapes.shapePool.generations[sA]};
-    m3ShapeId idB = {sB + 1, world->idWorld, world->shapes.shapePool.generations[sB]};
+    m3ShapeId idA = {sA + 1, world->shapes.shapePool.generations[sA]};
+    m3ShapeId idB = {sB + 1, world->shapes.shapePool.generations[sB]};
     m3ContactBeginEvent begin = {idA, idB};
     m3ContactEndEvent end = {idA, idB};
     int32_t room = world->contacts.pairCapacity;
@@ -221,7 +279,7 @@ void m3EmitMoveEvents(m3World* world, const int32_t* movers, int32_t moverCount)
     {
         int32_t i = movers[m];
         m3BodyMoveEvent* e = &world->events.moveEvents[world->events.moveEventCount++];
-        e->bodyId = (m3BodyId){i + 1, world->idWorld, world->bodies.bodyPool.generations[i]};
+        e->bodyId = (m3BodyId){i + 1, world->bodies.bodyPool.generations[i]};
         e->transform = world->bodies.transforms[i];
         e->fellAsleep =
             world->bodies.types[i] == (uint8_t)m3_dynamicBody && world->bodies.awake[i] == 0;

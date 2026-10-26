@@ -8,19 +8,68 @@
 // world's planes and shapes, then derive velocities from the position
 // delta. Every loop runs in ascending slot, particle and edge order.
 
-#include "body.h"
-#include "shape.h"
+#include "shape_state.h"
 #include "softbody.h"
-#include "solver.h"
+#include "softbody_cull.h"
+#include "solver_math.h"
 #include "voxel.h"
-#include "world.h"
 #include "world_internal.h"
 
 #include <math.h>
 #include <string.h>
 
+// Closest point on segment ab to p. The parameter is clamped before the
+// division, so the point is a convex combination of a and b, and a
+// zero-length segment gives a.
+static m3Vec3 ClosestOnSegment(m3Vec3 p, m3Vec3 a, m3Vec3 b)
+{
+    m3Vec3 ab = m3Sub3(b, a);
+    m3real t = m3Dot3(m3Sub3(p, a), ab);
+    m3real len2 = m3Dot3(ab, ab);
+    if (t <= 0.0f)
+    {
+        return a;
+    }
+    if (t >= len2)
+    {
+        return b;
+    }
+    return m3Add3(a, m3MulSV3(t / len2, ab));
+}
+
+// The nearest to p of the closest points on edges ab, bc and ca; a tie
+// keeps the earlier edge.
+static m3Vec3 ClosestOnEdges(m3Vec3 p, m3Vec3 a, m3Vec3 b, m3Vec3 c, m3real* len2Out)
+{
+    m3Vec3 ends[3][2] = {{a, b}, {b, c}, {c, a}};
+    m3Vec3 best = a;
+    m3real bestLen2 = 0.0f;
+    for (int32_t e = 0; e < 3; ++e)
+    {
+        m3Vec3 q = ClosestOnSegment(p, ends[e][0], ends[e][1]);
+        m3Vec3 d = m3Sub3(p, q);
+        m3real len2 = m3Dot3(d, d);
+        if (e == 0 || len2 < bestLen2)
+        {
+            best = q;
+            bestLen2 = len2;
+        }
+    }
+    *len2Out = bestLen2;
+    return best;
+}
+
 // Closest point on a triangle to a point (barycentric clamp, the
-// textbook regions walk).
+// textbook regions walk). The walk's sign tests and its interior
+// barycentrics cancel catastrophically on a thin triangle: the region
+// can come out wrong and the interior point land far from the closest
+// one, or outside the triangle. So the interior answer is kept only when
+// its barycentrics are in range and it is no farther than the nearest
+// edge, which is computed without cancellation; otherwise the nearest
+// edge point is the answer. Each edge region divides only by a positive
+// denominator, so a triangle with a repeated corner falls through to the
+// edges instead of dividing zero by zero. Every result is a convex
+// combination of the corners, so it stays in the triangle up to rounding.
 static m3Vec3 ClosestOnTriangle(m3Vec3 p, m3Vec3 a, m3Vec3 b, m3Vec3 c)
 {
     m3Vec3 ab = m3Sub3(b, a);
@@ -40,7 +89,7 @@ static m3Vec3 ClosestOnTriangle(m3Vec3 p, m3Vec3 a, m3Vec3 b, m3Vec3 c)
         return b;
     }
     m3real vc = d1 * d4 - d3 * d2;
-    if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
+    if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f && d1 - d3 > 0.0f)
     {
         m3real v = d1 / (d1 - d3);
         return m3Add3(a, m3MulSV3(v, ab));
@@ -53,21 +102,32 @@ static m3Vec3 ClosestOnTriangle(m3Vec3 p, m3Vec3 a, m3Vec3 b, m3Vec3 c)
         return c;
     }
     m3real vb = d5 * d2 - d1 * d6;
-    if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
+    if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f && d2 - d6 > 0.0f)
     {
         m3real w = d2 / (d2 - d6);
         return m3Add3(a, m3MulSV3(w, ac));
     }
     m3real va = d3 * d6 - d5 * d4;
-    if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
+    if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f && (d4 - d3) + (d5 - d6) > 0.0f)
     {
         m3real w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
         return m3Add3(b, m3MulSV3(w, m3Sub3(c, b)));
     }
+    m3real edgeLen2;
+    m3Vec3 edge = ClosestOnEdges(p, a, b, c, &edgeLen2);
     m3real denom = 1.0f / (va + vb + vc);
     m3real v = vb * denom;
     m3real w = vc * denom;
-    return m3Add3(a, m3Add3(m3MulSV3(v, ab), m3MulSV3(w, ac)));
+    if (v >= 0.0f && w >= 0.0f && v + w <= 1.0f)
+    {
+        m3Vec3 inside = m3Add3(a, m3Add3(m3MulSV3(v, ab), m3MulSV3(w, ac)));
+        m3Vec3 d = m3Sub3(p, inside);
+        if (m3Dot3(d, d) <= edgeLen2)
+        {
+            return inside;
+        }
+    }
+    return edge;
 }
 
 // Apply a projection to particle k: push along n (unit, outward) by
@@ -89,18 +149,14 @@ static void SoftProject(m3World* world, int32_t k, m3Vec3 n, m3real depth, m3rea
         world->bodies.invMass[body] > 0.0f && world->softBodies.softInvMass[k] > 0.0f)
     {
         m3real mp = 1.0f / world->softBodies.softInvMass[k];
-        m3Vec3 J = m3MulSV3(-depth * invH * mp, n);
         m3Vec3 rlc =
             m3RotateVec3(world->bodies.transforms[body].q, world->bodies.localCenters[body]);
         m3Vec3 arm = {
             (m3real)(world->softBodies.softPos[k].x - world->bodies.transforms[body].p.x) - rlc.x,
             (m3real)(world->softBodies.softPos[k].y - world->bodies.transforms[body].p.y) - rlc.y,
             (m3real)(world->softBodies.softPos[k].z - world->bodies.transforms[body].p.z) - rlc.z};
-        world->bodies.linearVelocities[body] =
-            m3Add3(world->bodies.linearVelocities[body], m3MulSV3(world->bodies.invMass[body], J));
-        world->bodies.angularVelocities[body] =
-            m3Add3(world->bodies.angularVelocities[body],
-                   m3MulMV3(m3WorldInvInertia(world, body), m3Cross3(arm, J)));
+        // The step's last velocity write, so it keeps the speed limit.
+        m3PushHeld(world, body, -depth * invH * mp, n, arm);
         world->bodies.awake[body] = 1;
         world->bodies.sleepTimes[body] = 0.0f;
     }
@@ -124,13 +180,11 @@ static void SoftProject(m3World* world, int32_t k, m3Vec3 n, m3real depth, m3rea
     world->softBodies.softPos[k].z -= (double)(tang.z * scale);
 }
 
-// One particle against one shape, in the shape body's local frame.
-static void SoftCollideParticle(m3World* world, int32_t slot, int32_t k, int32_t shape,
-                                uint8_t stype, int32_t body, m3real radius, m3real invH)
+// One particle against one shape, in the shape body's local frame. xf is
+// the shape's world transform, which nothing in the pass moves.
+static void SoftCollideParticle(m3World* world, int32_t k, int32_t shape, uint8_t stype,
+                                int32_t body, const m3Transform* xf, m3real radius, m3real invH)
 {
-    (void)slot;
-    m3Transform xfS = m3ShapeWorldTransform(world, shape);
-    const m3Transform* xf = &xfS;
     m3real mu = world->shapes.shapeFriction[shape];
 
     if (stype == (uint8_t)m3_planeShape)
@@ -343,6 +397,64 @@ static void SoftCollideParticle(m3World* world, int32_t slot, int32_t k, int32_t
     }
 }
 
+// The world's surfaces: every particle projects out of every shape
+// family through the shared local kernels, ascending shape order,
+// friction from the touched shape (the PBD tangential rule). Planes stay
+// world-frame; everything else works in body space.
+static void SoftCollideWorld(m3World* world, int32_t slot, int32_t maxShape, m3real invH)
+{
+    int32_t base = slot * M3_SOFTBODY_MAX_PARTICLES;
+    int32_t count = world->softBodies.softParticleCount[slot];
+    m3real radius = world->softBodies.softRadius[slot];
+    // The box of every particle the loop moves, grown by each
+    // projection, so a shape is culled only when no particle can
+    // reach it from where it is now.
+    double plo[3] = {1.0e300, 1.0e300, 1.0e300};
+    double phi[3] = {-1.0e300, -1.0e300, -1.0e300};
+    for (int32_t i = 0; i < count; ++i)
+    {
+        if (world->softBodies.softInvMass[base + i] != 0.0f)
+        {
+            m3SoftGrowBox(plo, phi, world->softBodies.softPos[base + i]);
+        }
+    }
+    for (int32_t sShape = 0; sShape < maxShape; ++sShape)
+    {
+        if (world->shapes.shapePool.alive[sShape] == 0 || world->shapes.shapeSensor[sShape] != 0)
+        {
+            continue;
+        }
+        uint8_t stype = world->shapes.shapeType[sShape];
+        int32_t body = world->shapes.shapeBody[sShape];
+        if (world->bodies.bodyEnabled[body] == 0)
+        {
+            continue; // disabled bodies are ghosts to lattices too
+        }
+        // Projections move particles and body velocities, never
+        // a body, so the shape's transform holds for the loop.
+        m3Transform xf = m3ShapeWorldTransform(world, sShape);
+        m3Vec3 center;
+        m3real bound = m3SoftShapeBound(world, sShape, stype, &center);
+        if (world->softBodies.softCullOff == 0 &&
+            ((bound >= 0.0f && m3SoftShapeOutOfReach(&xf, center, bound, radius, plo, phi)) ||
+             (stype == (uint8_t)m3_hullShape &&
+              m3SoftHullOutOfReach(world, sShape, &xf, radius, plo, phi))))
+        {
+            continue; // no particle can reach it this pass
+        }
+        for (int32_t i = 0; i < count; ++i)
+        {
+            int32_t k = base + i;
+            if (world->softBodies.softInvMass[k] == 0.0f)
+            {
+                continue;
+            }
+            SoftCollideParticle(world, k, sShape, stype, body, &xf, radius, invH);
+            m3SoftGrowBox(plo, phi, world->softBodies.softPos[k]);
+        }
+    }
+}
+
 // The closed-lattice volume and its gradients: six faces
 // walked in fixed order, outward winding, signed tet sum against a
 // local origin (the first particle: double-safe far from zero).
@@ -430,6 +542,26 @@ static m3real SoftSurfaceVolume6(m3World* world, int32_t slot, m3Vec3* grads, m3
 }
 
 // The soft pass: XPBD small steps over the full shape set.
+// Every particle within M3_REACH_LIMIT once the substep has placed it, an
+// anchored one included.
+static void HoldParticles(m3World* world)
+{
+    for (int32_t slot = 0; slot < world->softBodies.softPool.maxIndex; ++slot)
+    {
+        if (world->softBodies.softPool.alive[slot] == 0)
+        {
+            continue;
+        }
+        int32_t base = slot * M3_SOFTBODY_MAX_PARTICLES;
+        for (int32_t i = 0; i < world->softBodies.softParticleCount[slot]; ++i)
+        {
+            world->softBodies.softPos[base + i] = m3HoldReach(world->softBodies.softPos[base + i]);
+            world->softBodies.softPrev[base + i] =
+                m3HoldReach(world->softBodies.softPrev[base + i]);
+        }
+    }
+}
+
 void m3SoftBodyPass(m3World* world, float dt, int32_t substeps)
 {
     if (world->softBodies.softPool.maxIndex == 0)
@@ -520,18 +652,13 @@ void m3SoftBodyPass(m3World* world, float dt, int32_t substeps)
                 // float overflow, positions went NaN, and a NaN cell
                 // index was undefined behavior. A capped velocity
                 // can never outrun the double range.
-                m3real pv2 = m3Dot3(v, v);
-                m3real pcap = world->maximumLinearSpeed;
-                if (pv2 > pcap * pcap)
-                {
-                    v = m3MulSV3(pcap / sqrtf(pv2), v);
-                }
+                v = m3CapSpeed(v, m3MinF(world->maximumLinearSpeed, M3_SPEED_LIMIT));
                 if (windDrag > 0.0f)
                 {
                     v = m3Add3(v, m3MulSV3(h * windDrag, m3Sub3(windVel, v)));
                 }
                 // Water: a submerged particle trades gravity
-                // for buoyancy under the rho-1000 particle
+                // for buoyancy under the density-1000 particle
                 // convention (density 1000 suspends, denser fluids
                 // lift, thinner ones let it sink) and drags toward
                 // the flow like wind. First live volume wins,
@@ -778,52 +905,19 @@ void m3SoftBodyPass(m3World* world, float dt, int32_t substeps)
                     world->bodies.invMass[body] > 0.0f && world->softBodies.softInvMass[k] > 0.0f)
                 {
                     m3real mp = 1.0f / world->softBodies.softInvMass[k];
-                    m3Vec3 J = m3MulSV3(mp * invH, wish);
                     m3Vec3 rlc = m3RotateVec3(bxf->q, world->bodies.localCenters[body]);
                     m3Vec3 arm = m3Sub3(wl, rlc);
-                    world->bodies.linearVelocities[body] =
-                        m3Add3(world->bodies.linearVelocities[body],
-                               m3MulSV3(world->bodies.invMass[body], J));
-                    world->bodies.angularVelocities[body] =
-                        m3Add3(world->bodies.angularVelocities[body],
-                               m3MulMV3(m3WorldInvInertia(world, body), m3Cross3(arm, J)));
+                    m3PushHeld(world, body, mp * invH, wish, arm);
                     world->bodies.awake[body] = 1;
                     world->bodies.sleepTimes[body] = 0.0f;
                 }
             }
 
-            // The world's surfaces: every particle projects
-            // out of every shape family through the shared local
-            // kernels, ascending shape order, friction from the
-            // touched shape (the PBD tangential rule). Planes stay
-            // world-frame; everything else works in body space.
-            m3real radius = world->softBodies.softRadius[slot];
-            for (int32_t sShape = 0; sShape < maxShape; ++sShape)
-            {
-                if (world->shapes.shapePool.alive[sShape] == 0 ||
-                    world->shapes.shapeSensor[sShape] != 0)
-                {
-                    continue;
-                }
-                uint8_t stype = world->shapes.shapeType[sShape];
-                int32_t body = world->shapes.shapeBody[sShape];
-                if (world->bodies.bodyEnabled[body] == 0)
-                {
-                    continue; // disabled bodies are ghosts to lattices too
-                }
-                for (int32_t i = 0; i < count; ++i)
-                {
-                    int32_t k = base + i;
-                    if (world->softBodies.softInvMass[k] == 0.0f)
-                    {
-                        continue;
-                    }
-                    SoftCollideParticle(world, slot, k, sShape, stype, body, radius, invH);
-                }
-            }
+            SoftCollideWorld(world, slot, maxShape, invH);
         }
 
         m3SoftSoftContacts(world);
         m3SoftSoftAnchors(world);
+        HoldParticles(world);
     }
 }

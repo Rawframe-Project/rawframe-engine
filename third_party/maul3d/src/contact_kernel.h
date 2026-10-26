@@ -7,7 +7,7 @@
 #ifndef MAUL3D_SRC_CONTACT_KERNEL_H
 #define MAUL3D_SRC_CONTACT_KERNEL_H
 
-#include "contact_solver.h"
+#include "contact_constraint.h"
 
 // Lane width is a layout constant, never a semantics knob: every lane
 // runs the scalar rows' exact IEEE sequence, so how constraints are
@@ -76,6 +76,13 @@ void m3PadContactLane(m3ContactBlock* block, int32_t lane);
 
 // The impulses of every lane back into their constraints.
 void m3UnpackContactBlock(const m3ContactBlock* block, m3ContactConstraint* constraints);
+
+// m3Solve3 and m3Solve3AtScale in every lane: k holds the columns cx, cy,
+// cz, each x, y, z, lane-major. The contact suite checks both against the
+// scalar solves, bit for bit.
+void m3SolveLanes3(const float k[9][M3_LANES], const float b[3][M3_LANES], float out[3][M3_LANES]);
+void m3SolveLanes3AtScale(const float k[9][M3_LANES], const float b[3][M3_LANES],
+                          const float scale[M3_LANES], float out[3][M3_LANES]);
 
 // Runs the warm start, solve or relax stage on one block. The block's
 // constraints share no dynamic body, so blocks of one color may run at

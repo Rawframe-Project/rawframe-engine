@@ -5,12 +5,13 @@
 // engine readback. Public functions validate and journal; replay drives
 // the internal setters.
 
-#include "maul3d/vehicle.h"
-
+#include "fpenv.h"
 #include "journal.h"
+#include "misuse.h"
 #include "vehicle.h"
-#include "world.h"
 #include "world_internal.h"
+
+#include "maul3d/vehicle.h"
 
 #include <math.h>
 #include <string.h>
@@ -49,9 +50,10 @@ m3DrivetrainDef m3DefaultDrivetrainDef(void)
     return def;
 }
 
-// Validation lives here because replay hands this function raw
-// journal bytes: every field earns its range or the op fails loud.
-bool m3VehicleDrivetrainInternal(m3World* world, int32_t slot, const m3DrivetrainDef* def)
+// Validation lives here because replay hands the setter raw journal
+// bytes: every field earns its range or the op fails loud. Restore asks
+// it of every stored drivetrain.
+bool m3DrivetrainDefValid(const m3DrivetrainDef* def)
 {
     if (def->curveCount < 2 || def->curveCount > M3_DRIVETRAIN_MAX_CURVE || def->gearCount < 1 ||
         def->gearCount > M3_DRIVETRAIN_MAX_GEARS || def->clutchSteps < 0 || def->clutchSteps > 600)
@@ -61,7 +63,7 @@ bool m3VehicleDrivetrainInternal(m3World* world, int32_t slot, const m3Drivetrai
     for (int32_t c = 0; c < def->curveCount; ++c)
     {
         if (!m3FiniteF(def->curveRpm[c]) || def->curveRpm[c] < 0.0f ||
-            !m3FiniteF(def->curveTorque[c]) || def->curveTorque[c] < 0.0f)
+            !(def->curveTorque[c] >= 0.0f && def->curveTorque[c] <= M3_FORCE_LIMIT))
         {
             return false;
         }
@@ -72,19 +74,32 @@ bool m3VehicleDrivetrainInternal(m3World* world, int32_t slot, const m3Drivetrai
     }
     for (int32_t g = 0; g < def->gearCount; ++g)
     {
-        if (!m3FiniteF(def->gearRatio[g]) || def->gearRatio[g] <= 0.0f)
+        if (!(def->gearRatio[g] > 0.0f && def->gearRatio[g] <= M3_RATIO_LIMIT))
         {
             return false;
         }
     }
-    if (!m3FiniteF(def->reverseRatio) || def->reverseRatio < 0.0f || !m3FiniteF(def->finalDrive) ||
-        def->finalDrive <= 0.0f || !m3FiniteF(def->shiftUpRpm) || !m3FiniteF(def->shiftDownRpm) ||
-        def->shiftDownRpm < 0.0f || def->shiftUpRpm <= def->shiftDownRpm || def->diffMode < 0 ||
-        def->diffMode > 2 || !m3FiniteF(def->diffCouple) || def->diffCouple < 0.0f)
+    // Torques within M3_FORCE_LIMIT and every ratio within M3_RATIO_LIMIT,
+    // so a gear times the final drive stays within its square. The
+    // coupling is a gain in N per m/s: at the speed limit it stays within
+    // the force limit.
+    if (!(def->reverseRatio >= 0.0f && def->reverseRatio <= M3_RATIO_LIMIT) ||
+        !(def->finalDrive > 0.0f && def->finalDrive <= M3_RATIO_LIMIT) ||
+        !m3FiniteF(def->shiftUpRpm) || !m3FiniteF(def->shiftDownRpm) || def->shiftDownRpm < 0.0f ||
+        def->shiftUpRpm <= def->shiftDownRpm || def->diffMode < 0 || def->diffMode > 2 ||
+        !(def->diffCouple >= 0.0f && def->diffCouple <= M3_FORCE_LIMIT / M3_SPEED_LIMIT))
     {
         return false;
     }
+    return true;
+}
 
+bool m3VehicleDrivetrainInternal(m3World* world, int32_t slot, const m3DrivetrainDef* def)
+{
+    if (!m3DrivetrainDefValid(def))
+    {
+        return false;
+    }
     world->vehicles.vehDtActive[slot] = 1;
     world->vehicles.vehDtCurveCount[slot] = def->curveCount;
     for (int32_t c = 0; c < M3_DRIVETRAIN_MAX_CURVE; ++c)
@@ -143,10 +158,15 @@ bool m3VehicleGearInternal(m3World* world, int32_t slot, int32_t gear)
     return true;
 }
 
-void m3Vehicle_SetDrivetrain(m3VehicleId vehicleId, const m3DrivetrainDef* def)
+static M3_NOINLINE void VehicleSetDrivetrainWorker(m3World* world, m3VehicleId vehicle,
+                                                   const m3DrivetrainDef* def)
 {
-    m3World* world = m3WorldFromTag(vehicleId.world);
-    int32_t slot = world != NULL ? m3VehicleSlot(world, vehicleId) : -1;
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
+    int32_t slot = m3VehicleSlot(world, vehicle);
     if (slot < 0 || def == NULL || def->internalValue != M3_DRIVETRAIN_COOKIE)
     {
         m3Refuse(world, m3_errorInvalid);
@@ -161,16 +181,27 @@ void m3Vehicle_SetDrivetrain(m3VehicleId vehicleId, const m3DrivetrainDef* def)
     {
         m3OpVehicleDrivetrain record;
         memset(&record, 0, sizeof(record));
-        record.id = vehicleId;
-        record.def = *def;
+        record.id = vehicle;
+        m3JournalDrivetrainDef(&record.def, def);
         m3JournalRecord(world, m3_opVehicleDrivetrain, &record, (int32_t)sizeof(record));
     }
 }
 
-void m3Vehicle_SelectGear(m3VehicleId vehicleId, int32_t gear)
+void m3Vehicle_SetDrivetrain(m3World* world, m3VehicleId vehicle, const m3DrivetrainDef* def)
 {
-    m3World* world = m3WorldFromTag(vehicleId.world);
-    int32_t slot = world != NULL ? m3VehicleSlot(world, vehicleId) : -1;
+    uint64_t env = m3FloatEnvEnter();
+    VehicleSetDrivetrainWorker(world, vehicle, def);
+    m3FloatEnvLeave(env);
+}
+
+static M3_NOINLINE void VehicleSelectGearWorker(m3World* world, m3VehicleId vehicle, int32_t gear)
+{
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
+    int32_t slot = m3VehicleSlot(world, vehicle);
     if (slot < 0)
     {
         m3Refuse(world, m3_errorInvalid);
@@ -185,30 +216,53 @@ void m3Vehicle_SelectGear(m3VehicleId vehicleId, int32_t gear)
     {
         m3OpVehicleGear record;
         memset(&record, 0, sizeof(record));
-        record.id = vehicleId;
+        record.id = vehicle;
         record.gear = gear;
         m3JournalRecord(world, m3_opVehicleGear, &record, (int32_t)sizeof(record));
     }
 }
 
-int32_t m3Vehicle_GetGear(m3VehicleId vehicleId)
+void m3Vehicle_SelectGear(m3World* world, m3VehicleId vehicle, int32_t gear)
 {
-    m3World* world = m3WorldFromTag(vehicleId.world);
-    int32_t slot = world != NULL ? m3VehicleSlot(world, vehicleId) : -1;
-    if (slot < 0 || world->vehicles.vehDtActive[slot] == 0)
+    uint64_t env = m3FloatEnvEnter();
+    VehicleSelectGearWorker(world, vehicle, gear);
+    m3FloatEnvLeave(env);
+}
+
+int32_t m3Vehicle_GetGear(const m3World* world, m3VehicleId vehicle)
+{
+    int32_t slot = m3VehicleSlot(world, vehicle);
+    if (slot < 0)
     {
+        m3Refuse(world, m3MissingId(vehicle.index1));
         return 0;
+    }
+    if (world->vehicles.vehDtActive[slot] == 0)
+    {
+        return 0; // no drivetrain: neutral and idle
     }
     return (int32_t)world->vehicles.vehDtGear[slot];
 }
 
-m3real m3Vehicle_GetEngineRpm(m3VehicleId vehicleId)
+static M3_NOINLINE m3real VehicleGetEngineRpmWorker(const m3World* world, m3VehicleId vehicle)
 {
-    m3World* world = m3WorldFromTag(vehicleId.world);
-    int32_t slot = world != NULL ? m3VehicleSlot(world, vehicleId) : -1;
-    if (slot < 0 || world->vehicles.vehDtActive[slot] == 0)
+    int32_t slot = m3VehicleSlot(world, vehicle);
+    if (slot < 0)
     {
+        m3Refuse(world, m3MissingId(vehicle.index1));
         return 0.0f;
     }
+    if (world->vehicles.vehDtActive[slot] == 0)
+    {
+        return 0.0f; // no drivetrain: neutral and idle
+    }
     return world->vehicles.vehDtRpm[slot];
+}
+
+m3real m3Vehicle_GetEngineRpm(const m3World* world, m3VehicleId vehicle)
+{
+    uint64_t env = m3FloatEnvEnter();
+    m3real result = VehicleGetEngineRpmWorker(world, vehicle);
+    m3FloatEnvLeave(env);
+    return result;
 }

@@ -8,7 +8,6 @@
 
 #include "allocator.h"
 #include "manifold.h"
-#include "voxel.h"
 #include "world_internal.h"
 
 #include <stddef.h>
@@ -63,7 +62,7 @@ typedef enum m3Check
     m3_check_bodyType,    // uint8 elements below the body type count
     m3_check_shapeType,   // uint8 elements below the shape type count
     m3_check_jointType,   // uint8 elements below the joint type count
-    m3_check_manifold,    // manifold point counts that fit
+    m3_check_manifold,    // manifold point counts that fit, finite floats
     m3_check_pairKey,     // both shape indices of every pair key in range
     m3_check_treeNode,    // tree node links, leaf payloads, finite bounds
     m3_check_voxel,       // voxel chunk: finite cell size, a fill count that fits
@@ -130,10 +129,6 @@ static const m3StateArray s_state[] = {
     M3_STATE_CHECKED(bodies.transforms, m3Transform, body, M3_STATE_SNAPSHOT, transform, one),
     M3_STATE_CHECKED(bodies.linearVelocities, m3Vec3, body, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_CHECKED(bodies.angularVelocities, m3Vec3, body, M3_STATE_SNAPSHOT, finite32, one),
-    M3_STATE_CHECKED(bodies.invMass, m3real, body, M3_STATE_SNAPSHOT, finite32, one),
-    M3_STATE_CHECKED(bodies.invInertiaLocal, m3Mat3, body, M3_STATE_SNAPSHOT, finite32, one),
-    M3_STATE_CHECKED(bodies.inertiaLocal, m3Mat3, body, M3_STATE_SNAPSHOT, finite32, one),
-    M3_STATE_CHECKED(bodies.localCenters, m3Vec3, body, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_CHECKED(bodies.gravityScales, m3real, body, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_CHECKED(bodies.linearDamping, m3real, body, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_CHECKED(bodies.angularDamping, m3real, body, M3_STATE_SNAPSHOT, finite32, one),
@@ -141,8 +136,6 @@ static const m3StateArray s_state[] = {
     M3_STATE_CHECKED(bodies.awake, uint8_t, body, M3_STATE_SNAPSHOT, bool, one),
     M3_STATE_CHECKED(bodies.sleepTimes, float, body, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_CHECKED(bodies.bulletFlags, uint8_t, body, M3_STATE_SNAPSHOT, bool, one),
-    M3_STATE_CHECKED(bodies.minExtents, float, body, M3_STATE_SNAPSHOT, finite32, one),
-    M3_STATE_CHECKED(bodies.maxExtents, float, body, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_ARRAY(bodies.userData, uint64_t, body, M3_STATE_SNAPSHOT),
     M3_STATE_ARRAY(bodies.bodyNames, char, bodyName, M3_STATE_SNAPSHOT),
     M3_STATE_CHECKED(bodies.bodyForce, m3Vec3, body, M3_STATE_SNAPSHOT, finite32, one),
@@ -167,7 +160,7 @@ static const m3StateArray s_state[] = {
     M3_STATE_INLINE_CHECKED(windGustHertz, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_INLINE_CHECKED(windGustScale, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_INLINE_CHECKED(windPhase, M3_STATE_SNAPSHOT, finite32, one),
-    M3_STATE_ARRAY(bodies.bodyPool.generations, uint16_t, body,
+    M3_STATE_ARRAY(bodies.bodyPool.generations, uint32_t, body,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(bodies.bodyPool.alive, uint8_t, body, M3_STATE_SNAPSHOT | M3_STATE_BORROWED,
                      bool, one),
@@ -183,7 +176,7 @@ static const m3StateArray s_state[] = {
     M3_STATE_CHECKED(shapes.shapeRestitution, float, shape, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_ARRAY(shapes.shapeUserData, uint64_t, shape, M3_STATE_SNAPSHOT),
     M3_STATE_CHECKED(shapes.shapeNext, int32_t, shape, M3_STATE_SNAPSHOT, indexOrNone, shape),
-    M3_STATE_ARRAY(shapes.shapePool.generations, uint16_t, shape,
+    M3_STATE_ARRAY(shapes.shapePool.generations, uint32_t, shape,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(shapes.shapePool.alive, uint8_t, shape, M3_STATE_SNAPSHOT | M3_STATE_BORROWED,
                      bool, one),
@@ -200,7 +193,7 @@ static const m3StateArray s_state[] = {
     M3_STATE_INLINE_CHECKED(broadphase.tree.nodeCount, M3_STATE_SNAPSHOT, countEach, treeNode),
     M3_STATE_CHECKED(shapes.shapeHullIndex, int32_t, shape, M3_STATE_SNAPSHOT, indexOrNone, shape),
     M3_STATE_ARRAY(hulls.hullRefCounts, int32_t, shape, M3_STATE_SNAPSHOT),
-    M3_STATE_ARRAY(hulls.hullPool.generations, uint16_t, shape,
+    M3_STATE_ARRAY(hulls.hullPool.generations, uint32_t, shape,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(hulls.hullPool.alive, uint8_t, shape, M3_STATE_SNAPSHOT | M3_STATE_BORROWED,
                      bool, one),
@@ -221,7 +214,7 @@ static const m3StateArray s_state[] = {
     M3_STATE_ARRAY(shapes.shapeGroup, int32_t, shape, M3_STATE_SNAPSHOT),
     M3_STATE_CHECKED(voxels.voxelData, m3VoxelChunkData, voxel, M3_STATE_SNAPSHOT, voxel, one),
     M3_STATE_ARRAY(voxels.voxelRefCounts, int32_t, voxel, M3_STATE_SNAPSHOT),
-    M3_STATE_ARRAY(voxels.voxelPool.generations, uint16_t, voxel,
+    M3_STATE_ARRAY(voxels.voxelPool.generations, uint32_t, voxel,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(voxels.voxelPool.alive, uint8_t, voxel, M3_STATE_SNAPSHOT | M3_STATE_BORROWED,
                      bool, one),
@@ -231,7 +224,7 @@ static const m3StateArray s_state[] = {
     M3_STATE_CHECKED(shapes.shapeVoxelIndex, int32_t, shape, M3_STATE_SNAPSHOT, indexOrNone, voxel),
     M3_STATE_CHECKED(shapes.shapeHfIndex, int32_t, shape, M3_STATE_SNAPSHOT, indexOrNone, shape),
     M3_STATE_ARRAY(heightFields.hfRefCounts, int32_t, shape, M3_STATE_SNAPSHOT),
-    M3_STATE_ARRAY(heightFields.hfPool.generations, uint16_t, shape,
+    M3_STATE_ARRAY(heightFields.hfPool.generations, uint32_t, shape,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(heightFields.hfPool.alive, uint8_t, shape,
                      M3_STATE_SNAPSHOT | M3_STATE_BORROWED, bool, one),
@@ -254,8 +247,8 @@ static const m3StateArray s_state[] = {
     M3_STATE_CHECKED(characters.charPushMax, m3real, character, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_CHECKED(characters.charGroundBody, int32_t, character, M3_STATE_SNAPSHOT, indexOrNone,
                      body),
-    M3_STATE_ARRAY(characters.charGroundGen, uint16_t, character, M3_STATE_SNAPSHOT),
-    M3_STATE_ARRAY(characters.charPool.generations, uint16_t, character,
+    M3_STATE_ARRAY(characters.charGroundGen, uint32_t, character, M3_STATE_SNAPSHOT),
+    M3_STATE_ARRAY(characters.charPool.generations, uint32_t, character,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(characters.charPool.alive, uint8_t, character,
                      M3_STATE_SNAPSHOT | M3_STATE_BORROWED, bool, one),
@@ -263,7 +256,7 @@ static const m3StateArray s_state[] = {
                      M3_STATE_SNAPSHOT | M3_STATE_BORROWED, index, character),
     M3_STATE_POOL_CURSORS(characters.charPool, character),
     M3_STATE_CHECKED(vehicles.vehChassis, int32_t, vehicle, M3_STATE_SNAPSHOT, indexOrNone, body),
-    M3_STATE_ARRAY(vehicles.vehChassisGen, uint16_t, vehicle, M3_STATE_SNAPSHOT),
+    M3_STATE_ARRAY(vehicles.vehChassisGen, uint32_t, vehicle, M3_STATE_SNAPSHOT),
     M3_STATE_CHECKED(vehicles.vehWheelCount, int32_t, vehicle, M3_STATE_SNAPSHOT, countEach,
                      wheelsPerVehicle),
     M3_STATE_CHECKED(vehicles.vehMaxSteer, m3real, vehicle, M3_STATE_SNAPSHOT, finite32, one),
@@ -319,7 +312,7 @@ static const m3StateArray s_state[] = {
     M3_STATE_ARRAY(vehicles.vehDtGear, int8_t, vehicle, M3_STATE_SNAPSHOT),
     M3_STATE_ARRAY(vehicles.vehDtClutch, int32_t, vehicle, M3_STATE_SNAPSHOT),
     M3_STATE_CHECKED(vehicles.vehDtRpm, m3real, vehicle, M3_STATE_SNAPSHOT, finite32, one),
-    M3_STATE_ARRAY(vehicles.vehPool.generations, uint16_t, vehicle,
+    M3_STATE_ARRAY(vehicles.vehPool.generations, uint32_t, vehicle,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(vehicles.vehPool.alive, uint8_t, vehicle,
                      M3_STATE_SNAPSHOT | M3_STATE_BORROWED, bool, one),
@@ -372,7 +365,7 @@ static const m3StateArray s_state[] = {
                      indexOrNone, particlesPerSoft),
     M3_STATE_CHECKED(softBodies.softAnchorBody, int32_t, softAnchor, M3_STATE_SNAPSHOT, indexOrNone,
                      body),
-    M3_STATE_ARRAY(softBodies.softAnchorGen, uint16_t, softAnchor, M3_STATE_SNAPSHOT),
+    M3_STATE_ARRAY(softBodies.softAnchorGen, uint32_t, softAnchor, M3_STATE_SNAPSHOT),
     M3_STATE_CHECKED(softBodies.softAnchorLocal, m3Vec3, softAnchor, M3_STATE_SNAPSHOT, finite32,
                      one),
     M3_STATE_CHECKED(softBodies.softSoftCount, int32_t, soft, M3_STATE_SNAPSHOT, countEach,
@@ -381,10 +374,10 @@ static const m3StateArray s_state[] = {
                      indexOrNone, particlesPerSoft),
     M3_STATE_CHECKED(softBodies.softSoftSlotB, int32_t, softAnchor, M3_STATE_SNAPSHOT, indexOrNone,
                      soft),
-    M3_STATE_ARRAY(softBodies.softSoftGenB, uint16_t, softAnchor, M3_STATE_SNAPSHOT),
+    M3_STATE_ARRAY(softBodies.softSoftGenB, uint32_t, softAnchor, M3_STATE_SNAPSHOT),
     M3_STATE_CHECKED(softBodies.softSoftParticleB, int32_t, softAnchor, M3_STATE_SNAPSHOT,
                      indexOrNone, particlesPerSoft),
-    M3_STATE_ARRAY(softBodies.softPool.generations, uint16_t, soft,
+    M3_STATE_ARRAY(softBodies.softPool.generations, uint32_t, soft,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(softBodies.softPool.alive, uint8_t, soft,
                      M3_STATE_SNAPSHOT | M3_STATE_BORROWED, bool, one),
@@ -392,7 +385,7 @@ static const m3StateArray s_state[] = {
                      M3_STATE_SNAPSHOT | M3_STATE_BORROWED, index, soft),
     M3_STATE_POOL_CURSORS(softBodies.softPool, soft),
     M3_STATE_ARRAY(meshes.meshRefCounts, int32_t, mesh, M3_STATE_SNAPSHOT),
-    M3_STATE_ARRAY(meshes.meshPool.generations, uint16_t, mesh,
+    M3_STATE_ARRAY(meshes.meshPool.generations, uint32_t, mesh,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(meshes.meshPool.alive, uint8_t, mesh, M3_STATE_SNAPSHOT | M3_STATE_BORROWED,
                      bool, one),
@@ -432,7 +425,7 @@ static const m3StateArray s_state[] = {
     M3_STATE_INLINE_CHECKED(water.waterLinDrag, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_INLINE_CHECKED(water.waterAngDrag, M3_STATE_SNAPSHOT, finite32, one),
     M3_STATE_INLINE_CHECKED(water.waterFlow, M3_STATE_SNAPSHOT, finite32, one),
-    M3_STATE_ARRAY(water.waterPool.generations, uint16_t, water,
+    M3_STATE_ARRAY(water.waterPool.generations, uint32_t, water,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(water.waterPool.alive, uint8_t, water, M3_STATE_SNAPSHOT | M3_STATE_BORROWED,
                      bool, one),
@@ -442,7 +435,7 @@ static const m3StateArray s_state[] = {
     M3_STATE_CHECKED(joints.jointNextA, int32_t, joint, M3_STATE_SNAPSHOT, indexOrNone, joint),
     M3_STATE_CHECKED(joints.jointNextB, int32_t, joint, M3_STATE_SNAPSHOT, indexOrNone, joint),
     M3_STATE_CHECKED(joints.bodyJointHead, int32_t, body, M3_STATE_SNAPSHOT, indexOrNone, joint),
-    M3_STATE_ARRAY(joints.jointPool.generations, uint16_t, joint,
+    M3_STATE_ARRAY(joints.jointPool.generations, uint32_t, joint,
                    M3_STATE_SNAPSHOT | M3_STATE_BORROWED),
     M3_STATE_CHECKED(joints.jointPool.alive, uint8_t, joint, M3_STATE_SNAPSHOT | M3_STATE_BORROWED,
                      bool, one),
@@ -454,6 +447,12 @@ static const m3StateArray s_state[] = {
     // Owned but not snapshot state: derived data, per-slot content with
     // its own walk, event buffers and step scratch.
     M3_STATE_ARRAY(bodies.bodyIsland, int32_t, body, 0),
+    M3_STATE_ARRAY(bodies.invMass, m3real, body, 0),
+    M3_STATE_ARRAY(bodies.invInertiaLocal, m3Mat3, body, 0),
+    M3_STATE_ARRAY(bodies.inertiaLocal, m3Mat3, body, 0),
+    M3_STATE_ARRAY(bodies.localCenters, m3Vec3, body, 0),
+    M3_STATE_ARRAY(bodies.minExtents, float, body, 0),
+    M3_STATE_ARRAY(bodies.maxExtents, float, body, 0),
     M3_STATE_ARRAY(shapes.planeShapes, int32_t, shape, 0),
     M3_STATE_ARRAY(broadphase.candidateKeys, uint64_t, pair, 0),
     M3_STATE_ARRAY(broadphase.moved, uint8_t, shape, 0),
@@ -566,7 +565,7 @@ bool m3StateAllocate(m3World* world)
             continue;
         }
         int64_t elements = ExtentCount(world, entry->extent);
-        void* array = m3AllocArray(elements, (int64_t)entry->elementSize);
+        void* array = m3AllocArray(&world->heap, elements, (int64_t)entry->elementSize);
         if (array == NULL)
         {
             return false;
@@ -588,7 +587,7 @@ void m3StateFree(m3World* world)
             continue;
         }
         void** field = FieldPointer(world, entry);
-        m3Free(*field);
+        m3Free(&world->heap, *field);
         *field = NULL;
     }
 }
@@ -619,6 +618,26 @@ int32_t m3StateWalk(m3World* world, uint8_t* out, const uint8_t* in, int directi
         cursor += bytes;
     }
     return cursor;
+}
+
+int32_t m3StateFieldAt(const m3World* world, size_t fieldOffset)
+{
+    int32_t cursor = 0;
+    int32_t count = (int32_t)(sizeof(s_state) / sizeof(s_state[0]));
+    for (int32_t i = 0; i < count; ++i)
+    {
+        const m3StateArray* entry = &s_state[i];
+        if ((entry->flags & M3_STATE_SNAPSHOT) == 0)
+        {
+            continue;
+        }
+        if (entry->offset == fieldOffset)
+        {
+            return cursor;
+        }
+        cursor += (int32_t)(ExtentCount(world, entry->extent) * (int64_t)entry->elementSize);
+    }
+    return -1;
 }
 
 static bool InRange(int64_t value, int64_t lo, int64_t hi)
@@ -702,9 +721,21 @@ static bool CheckStructs(const m3World* world, const m3StateArray* array, const 
         {
         case m3_check_manifold:
         {
+            // Every float finite: the next step carries the impulses
+            // into its warm start.
             m3Manifold m;
             memcpy(&m, at, sizeof(m));
-            ok = InRange(m.pointCount, 0, M3_MANIFOLD_MAX_POINTS);
+            ok = InRange(m.pointCount, 0, M3_MANIFOLD_MAX_POINTS) &&
+                 CheckFinite(at, sizeof(m3Vec3), sizeof(float)) &&
+                 CheckFinite(at + offsetof(m3Manifold, frictionImpulse),
+                             offsetof(m3Manifold, points) - offsetof(m3Manifold, frictionImpulse),
+                             sizeof(float));
+            for (int32_t k = 0; ok && k < M3_MANIFOLD_MAX_POINTS; ++k)
+            {
+                ok = CheckFinite(at + offsetof(m3Manifold, points) +
+                                     (size_t)k * sizeof(m3ManifoldPoint),
+                                 offsetof(m3ManifoldPoint, id), sizeof(float));
+            }
             break;
         }
         case m3_check_pairKey:
@@ -730,7 +761,18 @@ static bool CheckStructs(const m3World* world, const m3StateArray* array, const 
             memcpy(&chunk.cellSize, at + offsetof(m3VoxelChunkData, cellSize), sizeof(m3real));
             memcpy(&chunk.filledCount, at + offsetof(m3VoxelChunkData, filledCount),
                    sizeof(int32_t));
-            ok = m3FiniteF(chunk.cellSize) && InRange(chunk.filledCount, 0, M3_VOXEL_COUNT);
+            // The count is derived from the occupancy bits, and fracture and
+            // mass read it without recounting, so the two must agree.
+            const uint8_t* occupancy = at + offsetof(m3VoxelChunkData, occupancy);
+            int32_t filled = 0;
+            for (int32_t byte = 0; byte < M3_VOXEL_COUNT / 8; ++byte)
+            {
+                for (uint32_t bits = occupancy[byte]; bits != 0; bits &= bits - 1)
+                {
+                    filled += 1;
+                }
+            }
+            ok = m3FiniteF(chunk.cellSize) && chunk.filledCount == filled;
             break;
         }
         case m3_check_transform:
