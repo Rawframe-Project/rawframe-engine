@@ -2,7 +2,7 @@
 // the reader takes the canonical form only, so what it accepts writes back
 // to the very same text, compiling it never fails but by refusal, and what
 // compiles is cooked and read back as it was; writing it as Slang never
-// fails but by refusal either (D483).
+// fails but by refusal either.
 
 #include "rawframe/material/material.h"
 

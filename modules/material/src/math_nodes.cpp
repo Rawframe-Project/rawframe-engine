@@ -14,12 +14,12 @@ namespace {
 
 using enum Rule;
 
-/// SPEC-0026's atomic math core as this family writes it (D691, D694).
+/// The atomic math core as this family writes it.
 /// `fract` is Slang's `frac`, `mix` its `lerp`; `modulo` is floored, as
 /// MaterialX's is, never C's truncated remainder; `remap` takes `in` from
 /// between `in_low` and `in_high` to between `out_low` and `out_high`.
 /// HSV with hue, saturation, and value each from nought to one, as
-/// MaterialX's color nodes take it (D698).
+/// MaterialX's color nodes take it.
 constexpr std::string_view kRgbToHsv = "float3 rawframeRgbToHsv(float3 c)\n"
                                        "{\n"
                                        "    const float4 k = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);\n"
@@ -36,7 +36,7 @@ constexpr std::string_view kHsvToRgb = "float3 rawframeHsvToRgb(float3 c)\n"
                                        "    return c.z * lerp(float3(1.0), saturate(p - 1.0), c.y);\n"
                                        "}\n";
 
-/// The noise kernels' hash (D699): integers only, so every backend gives
+/// The noise kernels' hash: integers only, so every backend gives
 /// the same bits; a cell's value from nought to one.
 constexpr std::string_view kHash = "uint rawframeHash(uint x)\n"
                                    "{\n"

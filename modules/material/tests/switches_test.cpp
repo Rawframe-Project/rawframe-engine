@@ -1,4 +1,4 @@
-// Static switches (D719): declared in the interface, each a static_switch
+// Static switches: declared in the interface, each a static_switch
 // node's choice written alone; an instance overriding one draws a variant
 // of its own; and what a switch and its node refuse.
 

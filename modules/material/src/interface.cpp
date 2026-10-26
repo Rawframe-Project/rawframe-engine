@@ -49,7 +49,7 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const surface_graph::Gra
                                                                              {"color4", Carried::Color4}}};
     const Value& kInterface = surface.document().interface;
     std::vector<InterfaceInput> made;
-    // A function's interface has its outputs after its inputs (D711).
+    // A function's interface has its outputs after its inputs.
     const bool kFunction = surface.document().kind == "function";
     const Value* kInputsFound = kInterface.kind() == Value::Kind::Object ? kInterface.find("inputs") : nullptr;
     const std::size_t kMembers = kInterface.kind() == Value::Kind::Object ? kInterface.names().size() : 0;
@@ -60,7 +60,7 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const surface_graph::Gra
                    : std::ranges::all_of(kInterface.kind() == Value::Kind::Object ? kInterface.names()
                                                                                   : std::vector<std::string>{},
                                          [&kInterface](const std::string& name) {
-                                             // Its inputs, then its static switches (D719).
+                                             // Its inputs, then its static switches.
                                              return (name == "inputs" && kInterface.names()[0] == "inputs") ||
                                                     (name == "switches" && kInterface.names().back() == "switches");
                                          }));
@@ -86,7 +86,7 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const surface_graph::Gra
         const Value* kDefault = kInput.kind() == Value::Kind::Object ? kInput.find("default") : nullptr;
         const Value* kType = kInput.kind() == Value::Kind::Object ? kInput.find("type") : nullptr;
         // A function's input may default to a stream, as a mesh's own
-        // coordinates (D711).
+        // coordinates.
         const Value* kStream = kInput.kind() == Value::Kind::Object ? kInput.find("stream") : nullptr;
         if (kFunction && kNamed && kStream != nullptr && kType != nullptr && kInput.names().size() == 2 &&
             kInput.names()[0] == "stream") {
@@ -108,7 +108,7 @@ result::Result<std::vector<InterfaceInput>> interfaceOf(const surface_graph::Gra
             continue;
         }
         // A function's texture input has no default: a function knows no
-        // game's texture, and each call gives it one (D713).
+        // game's texture, and each call gives it one.
         if (kFunction && kType != nullptr && kType->text() != nullptr && *kType->text() == "texture_2d") {
             if (!kNamed || kInput.names().size() != 1) {
                 return invalid("a function's texture input is named in lower case, its type alone given");

@@ -1,4 +1,4 @@
-// Canvas materials (D355): one canonical text on the graph grammar, the
+// Canvas materials: one canonical text on the graph grammar, the
 // domain's contract held (a color4 color, a color3 emission, the states in
 // their sets, each left out at its default), what folds compiled to its
 // constants and texture terms, cooked and read back, and what generation

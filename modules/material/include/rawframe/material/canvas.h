@@ -1,6 +1,6 @@
 #pragma once
 
-// Canvas materials (ADR-0031, SPEC-0026's `canvas` domain, D355): graph
+// Canvas materials (the `canvas` domain): graph
 // documents of kind `canvas`, one of them a `rawframe/canvas@1` node, the
 // domain's output, whose inputs are what a 2D draw shows: `color` (color4,
 // left out at (1, 1, 1, 1)), times the draw's own color (its vertex
@@ -36,7 +36,7 @@
 //
 // (shown on fewer lines than the canonical form). Its states, each left
 // out at its default: `shading`, `lit` (the default) or `unlit`; and
-// `blend`, SPEC-0026's canvas set, `normal` (the default: over what is
+// `blend`, the canvas set, `normal` (the default: over what is
 // behind by its alpha), `additive` (its color times its alpha added), or
 // `multiply` (what is behind times its color). With no 2D lights yet, a
 // lit material shows as an unlit one does, which is what it is under no
@@ -45,7 +45,7 @@
 // The domain's nodes: `uv` gives the draw's texture coordinates as `uv`
 // (vec2); `sample_texture_2d` samples a game's texture at its `uv`, the
 // draw's coordinates when left out; `multiply`, `add`, and `combine4` as a
-// post process has them (D348). What folds compiles, with no shader made
+// post process has them. What folds compiles, with no shader made
 // for a material: each output a constant plus a constant times one
 // texture's color (its alpha in a color's fourth), channel by channel.
 
@@ -64,7 +64,7 @@
 
 namespace rawframe::material {
 
-/// SPEC-0026's canvas blend set.
+/// The canvas blend set.
 enum class CanvasBlend : std::uint8_t {
     Normal,
     Additive,
@@ -87,8 +87,7 @@ struct CanvasMaterial {
     friend bool operator==(const CanvasMaterial&, const CanvasMaterial&) = default;
 };
 
-/// The cooked canvas material's resource type and representation
-/// (ADR-0024).
+/// The cooked canvas material's resource type and representation.
 inline constexpr base::Bits128 kCanvasMaterialType = base::parseBits128Hex("c4a1d0e83f5b42679e2d7b16a8f03c51").value;
 inline constexpr std::string_view kCanvasMaterialRepresentation = "rawframe.canvasmaterial";
 

@@ -1,10 +1,10 @@
-// SPEC-0026's node library written as Slang (D691 onward): a material
+// The node library written as Slang: a material
 // moving its vertices at the presented World's time, every math node of
 // the atomic core, the channel, stream, logic, color, and noise nodes, in
 // the fragment and the vertex stage, and what each refuses. The library's
-// types listed once each (D731), each with the params and inputs its
-// reader checks a node against (D732) and the outputs a connection from it
-// may name (D733).
+// types listed once each, each with the params and inputs its
+// reader checks a node against and the outputs a connection from it
+// may name.
 
 #include "generated/arithmetic_material.h"
 #include "generated/facing_graph.h"
@@ -76,7 +76,7 @@ graph::Document waved() {
 } // namespace
 
 RAWFRAME_TEST(AMaterialMovesItsVerticesAtThePresentedWorldsTime) {
-    // SPEC-0026's position offset (D691): the vertex stage's code, at a
+    // The position offset: the vertex stage's code, at a
     // vertex placed in the World and the World's time, which the fragment
     // stage reads as well; the blob folds none of it.
     const graph::Document kWaved = waved();
@@ -111,7 +111,7 @@ RAWFRAME_TEST(AMaterialMovesItsVerticesAtThePresentedWorldsTime) {
         wrong.nodes[1] = timeOf(kTimeline);
         RAWFRAME_EXPECT(refusedWith(validateSurface(wrong), MaterialError::Invalid));
     }
-    // Wrapped at a whole period (D702): its whole seconds wrapped before
+    // Wrapped at a whole period: its whole seconds wrapped before
     // the fraction left is added, in both stages; a period is whole
     // seconds, from one to below 2^24.
     const auto kPeriodOf = [&kWaved](Value period) {
@@ -147,7 +147,7 @@ RAWFRAME_TEST(AMaterialMovesItsVerticesAtThePresentedWorldsTime) {
 }
 
 RAWFRAME_TEST(AGraphRisingWithTimeIsWrittenAsTheSlangTheScenesTestsDraw) {
-    // rising.material lifts its model a meter a second (D691); the scene's
+    // rising.material lifts its model a meter a second; the scene's
     // tests draw what it is written as, rising_graph.slang, word for word.
     const std::string_view kDocument{reinterpret_cast<const char*>(kRisingMaterial.data()), kRisingMaterial.size()};
     const auto kRead = readMaterial(kDocument);
@@ -161,9 +161,9 @@ RAWFRAME_TEST(AGraphRisingWithTimeIsWrittenAsTheSlangTheScenesTestsDraw) {
 }
 
 RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
-    // D694: arithmetic.material uses every math node of SPEC-0026's atomic
+    // arithmetic.material uses every math node of the atomic
     // core and both World streams, and the channel nodes and the vertex's
-    // color (D695), in the fragment and the vertex stage; the cook's test
+    // color, in the fragment and the vertex stage; the cook's test
     // builds it through the shader toolchain.
     const std::string_view kDocument{reinterpret_cast<const char*>(kArithmeticMaterial.data()),
                                      kArithmeticMaterial.size()};
@@ -250,8 +250,7 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
             std::printf("not written: %s\n", std::string{kCode}.c_str());
         }
     }
-    // Each helper a color node calls is written once, before the material
-    // (D698).
+    // Each helper a color node calls is written once, before the material.
     for (const std::string_view kHelper : {"float3 rawframeRgbToHsv(float3 c)",
                                            "float3 rawframeHsvToRgb(float3 c)",
                                            "uint rawframeHash(uint x)",
@@ -260,7 +259,7 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
         RAWFRAME_EXPECT(kFirst != std::string::npos && kFirst < kMade->source.find("struct Generated") &&
                         kMade->source.find(kHelper, kFirst + 1) == std::string::npos);
     }
-    // The noise kernels' hash before the kernels that call it (D699).
+    // The noise kernels' hash before the kernels that call it.
     RAWFRAME_EXPECT(kMade->source.find("uint rawframeHash(uint x)") <
                     kMade->source.find("float rawframeValueNoise2(float2 p)"));
     // Types: a length of a float, a dot of a vec3 and a float, a cross of a
@@ -283,7 +282,7 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
     RAWFRAME_EXPECT(kRefused(
         "rawframe/refract@1",
         {{"eta", from(kWorld, "position")}, {"in", from(kWorld, "position")}, {"normal", from(kWorld, "position")}}));
-    // Logic (D697): an and of floats, a compare of vectors or by no known
+    // Logic: an and of floats, a compare of vectors or by no known
     // operator, a select on a float, and a bool in arithmetic.
     RAWFRAME_EXPECT(kRefused("rawframe/and@1", {{"a", from(kTime, "seconds")}, {"b", Value::boolean(true)}}));
     RAWFRAME_EXPECT(kRefused("rawframe/select@1",
@@ -345,7 +344,7 @@ RAWFRAME_TEST(EveryMathNodeOfTheCoreIsWrittenAndTyped) {
 }
 
 RAWFRAME_TEST(AConstantIsWrittenAsItsTypedValue) {
-    // D704: a constant of each type the graph carries, its value inline
+    // A constant of each type the graph carries, its value inline
     // wherever it is read; one whose value is not of its type, or not one of
     // the graph's types, is refused.
     const auto kConstant = [](graph::NodeId id, std::string_view type, Value value) {
@@ -382,7 +381,7 @@ RAWFRAME_TEST(AConstantIsWrittenAsItsTypedValue) {
     const auto kSelected = generateSlang(kChosen);
     RAWFRAME_EXPECT(kSelected.has_value() && kSelected->source.contains("(false) ? (1.0) : (") &&
                     kSelected->source.contains("(float2(0.125, 0.625)).y"));
-    // A vec3 feeds no color, nor an int (D715); a value not of its type;
+    // A vec3 feeds no color, nor an int; a value not of its type;
     // no such type; the type or the value left out.
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("vec3", kThree(0.25, 0.5, 0.75))), MaterialError::Invalid));
     RAWFRAME_EXPECT(refusedWith(validateSurface(kColored("color3", pair(0.25, 0.5))), MaterialError::Invalid));
@@ -398,7 +397,7 @@ RAWFRAME_TEST(AConstantIsWrittenAsItsTypedValue) {
 }
 
 RAWFRAME_TEST(AGraphColoredByItsFaceIsWrittenAsTheSlangTheScenesTestsDraw) {
-    // facing.material is green on its front and red on its back (D705);
+    // facing.material is green on its front and red on its back;
     // the scene's tests draw what it is written as, facing_graph.slang,
     // word for word. A vertex has no face to read.
     const std::string_view kDocument{reinterpret_cast<const char*>(kFacingMaterial.data()), kFacingMaterial.size()};
@@ -423,7 +422,7 @@ RAWFRAME_TEST(AGraphColoredByItsFaceIsWrittenAsTheSlangTheScenesTestsDraw) {
 }
 
 RAWFRAME_TEST(AFourWideValueIsCombinedSeparatedAndSwizzled) {
-    // D706: a vec4 combined from floats, measured, swizzled back to three
+    // A vec4 combined from floats, measured, swizzled back to three
     // and to four with w, and a color4 constant separated into its alpha.
     const auto kFourOf = [](Value w) {
         return nodeOf(
@@ -501,7 +500,7 @@ RAWFRAME_TEST(AFourWideValueIsCombinedSeparatedAndSwizzled) {
 }
 
 RAWFRAME_TEST(AParameterIsReadFromItsMaterialsVectors) {
-    // D708: interface inputs in name order, a vector each after the blob's
+    // Interface inputs in name order, a vector each after the blob's
     // nine, their defaults the generated material's parameters; read in
     // either stage.
     const auto kThree = [](double x, double y, double z) {
@@ -537,7 +536,7 @@ RAWFRAME_TEST(AParameterIsReadFromItsMaterialsVectors) {
     const auto kStronger = semanticHash(kTinted(
         objectOf({{"strength", kInput("float", Value::real(3))}, {"tint", kInput("color3", kThree(1, 0.5, 0.25))}})));
     RAWFRAME_EXPECT(kHash.has_value() && kStronger.has_value() && *kHash != *kStronger);
-    // A bool input beside them, read by none (D715). A parameter naming no
+    // A bool input beside them, read by none. A parameter naming no
     // input; a default not of its type; a name not in lower case; nine
     // inputs; an interface with outputs.
     RAWFRAME_EXPECT(refusedWith(validateSurface(kTinted(objectOf({{"strength", kInput("float", Value::real(2))},
@@ -569,7 +568,7 @@ RAWFRAME_TEST(AParameterIsReadFromItsMaterialsVectors) {
 
 RAWFRAME_TEST(AGraphColoredByItsParameterIsWrittenAsTheSlangTheScenesTestsDraw) {
     // tinted.material's color is its tint parameter's, green unless an
-    // instance says otherwise (D708); the scene's tests draw what it is
+    // instance says otherwise; the scene's tests draw what it is
     // written as, tinted_graph.slang, word for word.
     const std::string_view kDocument{reinterpret_cast<const char*>(kTintedMaterial.data()), kTintedMaterial.size()};
     const auto kRead = readMaterial(kDocument);
@@ -583,7 +582,7 @@ RAWFRAME_TEST(AGraphColoredByItsParameterIsWrittenAsTheSlangTheScenesTestsDraw) 
 }
 
 RAWFRAME_TEST(ATextureInputGivesWhatASampledTextureSamples) {
-    // D710: a texture_2d input defaulting to the game's texture a44e...,
+    // A texture_2d input defaulting to the game's texture a44e...,
     // sampled through a parameter_texture_2d node at its own slot, apart
     // from the same texture fixed, so an instance can change one alone.
     const auto kStone =

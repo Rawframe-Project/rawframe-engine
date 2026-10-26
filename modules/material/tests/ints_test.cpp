@@ -1,4 +1,4 @@
-// The int type and bool inputs (D715): an int constant and input computed
+// The int type and bool inputs: an int constant and input computed
 // with ints alone by the nodes that take them, compared and selected into
 // floats; a bool input choosing; both held in the material's vectors as
 // floats exactly, and overridden by an instance; and what each refuses.

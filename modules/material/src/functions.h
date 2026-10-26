@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0026's standard subgraph layer (D711): first-party functions, each a
+// The standard subgraph layer: first-party functions, each a
 // function document over the atomic core shipped with the engine, its
 // interface's inputs read by parameter nodes, each of its outputs fed by an
 // output node. A node of a function's type calls it, its inputs the
@@ -37,7 +37,7 @@ struct Function {
 /// Whether a node type is one of the engine's functions.
 [[nodiscard]] bool isFunction(std::string_view type);
 
-/// The engine's functions' types, in the library's order (D731).
+/// The engine's functions' types, in the library's order.
 [[nodiscard]] std::vector<std::string_view> types();
 
 /// The engine's function of `type`, read from the library it ships with.
@@ -45,13 +45,13 @@ struct Function {
 
 /// Reads and checks a function document in its canonical form: kind
 /// `function`; an interface of its inputs (each a literal's default, a
-/// stream's, or a texture its calls give, D713) and one to four typed
+/// stream's, or a texture its calls give) and one to four typed
 /// outputs; and nodes of the atomic core but the surface and the quality
 /// switch, never another function's, with one output node each output,
 /// typed as it says. Refuses (`Invalid`) any other.
 [[nodiscard]] result::Result<Function> readFunction(std::string_view text);
 
-/// The texture a call gives one of its function's texture inputs (D713):
+/// The texture a call gives one of its function's texture inputs:
 /// the game's texture by its identity, and the caller's texture input
 /// giving it, if one does, its default that texture.
 struct GivenTexture {
