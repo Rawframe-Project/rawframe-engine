@@ -1,4 +1,4 @@
-// Mixer layouts: SPEC-0036's `audio.mixer` documents read into one bus tree
+// Mixer layouts: the `audio.mixer` documents read into one bus tree
 // with sends, every rule refused at its field, and a mix order in which
 // every bus follows what feeds it.
 

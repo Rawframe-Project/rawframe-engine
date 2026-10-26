@@ -1,4 +1,4 @@
-// Action sets: SPEC-0029's `input.actions` documents read into typed
+// Action sets: the `input.actions` documents read into typed
 // actions, bindings, and contexts, and every rule refused at its field.
 
 #include "rawframe/document/errors.h"
@@ -290,7 +290,7 @@ RAWFRAME_TEST(EveryRuleIsRefusedAtItsField) {
          DocumentError::Invalid,
          "$.contexts[0].actions[1]"},
         {"\"physicalKey\": \"escape\"", "\"control\": \"escape\"", DocumentError::Invalid, "$.reserved[0].control"},
-        // Haptic outputs (D251).
+        // Haptic outputs.
         {"\"device\": \"gamepad\"\n        }\n      ]\n    },\n    {\n      \"hapticId\"",
          "\"device\": \"keyboard\"\n        }\n      ]\n    },\n    {\n      \"hapticId\"",
          DocumentError::Invalid,
@@ -362,7 +362,7 @@ RAWFRAME_TEST(EveryKeyHasItsOwnHidUsage) {
 }
 
 RAWFRAME_TEST(APoseIsMadeOfAPoseControlAlone) {
-    // A pose action (D596) is bound to a controller's grip or aim; neither a
+    // A pose action is bound to a controller's grip or aim; neither a
     // trigger makes a pose, nor a grip anything but one.
     constexpr std::string_view kThrottle = R"("valueType": "axis1d",
       "consume": false,
@@ -433,7 +433,7 @@ RAWFRAME_TEST(APoseIsMadeOfAPoseControlAlone) {
 }
 
 RAWFRAME_TEST(AHapticOutputIsFeltOnAController) {
-    // A headset's controllers feel what a gamepad's grips do (D600).
+    // A headset's controllers feel what a gamepad's grips do.
     const auto kRead =
         readActionSet(with("\"device\": \"gamepad\"\n        }\n      ]\n    },\n    {\n      \"hapticId\"",
                            "\"device\": \"controller\"\n        }\n      ]\n    },\n    {\n      \"hapticId\""));

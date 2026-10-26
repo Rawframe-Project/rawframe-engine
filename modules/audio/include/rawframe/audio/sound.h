@@ -1,6 +1,6 @@
 #pragma once
 
-// A sound declaration (SPEC-0036's `audio.sound` document): what plays when
+// A sound declaration (the `audio.sound` document): what plays when
 // a game asks for a sound, its variants and how one is picked, the ranges a
 // play draws its volume and pitch from, how it loops, where it routes, the
 // voices it shares, and how it fades with distance. Parsed and checked,
@@ -25,7 +25,7 @@ enum class Selection : std::uint8_t {
     RandomNoImmediateRepeat
 };
 
-/// SPEC-0036's distance falloff presets, gain over distance between the
+/// The distance falloff presets, gain over distance between the
 /// minimum distance (full) and the maximum (culled).
 enum class Falloff : std::uint8_t {
     Inverse,
@@ -46,7 +46,7 @@ enum class Virtualization : std::uint8_t {
     Restart
 };
 
-/// How a sound's variants are held (SPEC-0036's loading policy): decoded
+/// How a sound's variants are held: decoded
 /// whole when the sound loads, kept cooked and decoded as they play, or
 /// decoded whole when the sound is first played, which it misses.
 enum class Loading : std::uint8_t {
@@ -63,7 +63,7 @@ enum class Despawn : std::uint8_t {
 };
 
 struct Variant {
-    /// The cooked sound clip it plays, by its resource identity (ADR-0013):
+    /// The cooked sound clip it plays, by its resource identity:
     /// never a path.
     base::Bits128 resource;
     std::uint32_t weight = 1;

@@ -9,7 +9,7 @@ namespace rawframe::view {
 namespace {
 
 // A pixel of drag turns the view a two hundredth of a radian, as the
-// session's orbit does (D469); a detent moves a fifth of the way.
+// session's orbit does; a detent moves a fifth of the way.
 constexpr double kTurnPerPixel = 0.005;
 constexpr double kDollyPerDetent = 0.2;
 constexpr double kFaster = 3;

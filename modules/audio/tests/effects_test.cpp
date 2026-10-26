@@ -1,4 +1,4 @@
-// The effects against what SPEC-0036 says they do, measured through the
+// The effects against what they are meant to do, measured through the
 // mixer: an equalizer's bands at their frequencies and nowhere else, each
 // dynamics processor's static curve with its knee, makeup, and a key from
 // another bus, and a reverb's pre-delay, early taps, and decay time.

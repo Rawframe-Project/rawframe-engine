@@ -1,14 +1,14 @@
 // Bot input made as a player's is: a hand on the controls the sample game
 // binds, its action set, and its Kest sample function, deterministic by
 // seed; games without controls, or whose sample does not fit, refused; the
-// player's effects felt on its gamepads (D251); the player's view read by
-// its sample through `rawframe.view` (D367); and a press the UI takes read
-// by the sample as its node's press code, never by an action (D421); and
-// each local player's own locale chosen by their sample (D548), and a
-// controller's pose read by the sample (D596), and its select the UI's at
-// its pointer on a headset's panel (D598); and whether its player wears
-// a headset (D603); and a tracked hand's joints (D663); and a headset's
-// player and a flat one taking through one action to one input (D674).
+// player's effects felt on its gamepads; the player's view read by
+// its sample through `rawframe.view`; and a press the UI takes read
+// by the sample as its node's press code, never by an action; and
+// each local player's own locale chosen by their sample, and a
+// controller's pose read by the sample, and its select the UI's at
+// its pointer on a headset's panel; and whether its player wears
+// a headset; and a tracked hand's joints; and a headset's
+// player and a flat one taking through one action to one input.
 
 #include "rawframe/input_kest/errors.h"
 #include "rawframe/input_kest/sources.h"
@@ -36,7 +36,7 @@ namespace {
 using Stick = std::array<float, 8>;
 
 /// The sample game `path` names, its directory's files held in memory as a
-/// web client holds them (D166), with `from` replaced by `to` in its
+/// web client holds them, with `from` replaced by `to` in its
 /// description, and `extra` held beside them.
 const world_kest::GameFiles& gameAt(std::string_view path,
                                     std::string_view from = {},
@@ -106,7 +106,7 @@ RAWFRAME_TEST(ABotPlaysThroughTheGamesActionsAndSample) {
         aimed += kAim > 0 ? 1 : 0;
     }
     // Keys and pads make whole steps, and the touch screen's left stick
-    // (D558) the steps between: run is within full left and full right, and
+    // the steps between: run is within full left and full right, and
     // left, still, and right all happened; jump and fire are on or off, and
     // both happened.
     RAWFRAME_EXPECT(!runs.empty() && *runs.begin() >= -1 && *runs.rbegin() <= 1 && runs.contains(-1) &&
@@ -171,7 +171,7 @@ RAWFRAME_TEST(ThePlayerPlaysFromTheLentDevices) {
 }
 
 RAWFRAME_TEST(LocalPlayersPlayFromTheDevicesPairedToThem) {
-    // Two local players (D363), keyboard first: the keyboard's jump reaches
+    // Two local players, keyboard first: the keyboard's jump reaches
     // the first's sample only, the gamepad's the second's only.
     input::Feed feed;
     SourceSettings settings = runners();
@@ -242,7 +242,7 @@ RAWFRAME_TEST(AnEffectFeltByAnUndeclaredHapticIsRefused) {
 
 namespace {
 
-/// A sample that asks the player's view everything (D367) and writes the
+/// A sample that asks the player's view everything and writes the
 /// answers into runners' stick: the canvas view's left (a thousand per
 /// failure), the scene ray's failure, the World point under view point
 /// (320, 180), and that point shown back (a thousand per failure).
@@ -316,7 +316,7 @@ RAWFRAME_TEST(TheSampleReadsThePlayersView) {
 }
 
 RAWFRAME_TEST(ARunnerAimsWhereTheMousePoints) {
-    // Runners' sample (D368): the pointer, less the view's place, picked
+    // Runners' sample: the pointer, less the view's place, picked
     // onto the level's plane; the aim, when pushed, wins.
     input::Feed feed;
     view::PlayerViews views;
@@ -410,7 +410,7 @@ RAWFRAME_TEST(APressTheUiTakesReachesTheSampleAndNoAction) {
 }
 
 RAWFRAME_TEST(AFieldsTextReachesTheSampleAndItsKeysNoAction) {
-    // A sample that reads runners' run and the text a field gave (D426):
+    // A sample that reads runners' run and the text a field gave:
     // its press code, its length, and its first byte.
     const world_kest::GameFiles* game = &gameAt("runners/runners.game",
                                                 "sample sample.kest sample",
@@ -479,7 +479,7 @@ fn sample(into: [controls.Stick]) {
 } // namespace
 
 RAWFRAME_TEST(EachLocalPlayerChoosesTheirOwnLocale) {
-    // ADR-0050's locale as per-player presentation state (D548): the first
+    // The locale as per-player presentation state: the first
     // player's choice leaves the second's as configured, and theirs the
     // first's.
     localization::StringTable table{.sourceLocale = *localization::parseLocale("en"), .entries = {}};
@@ -521,7 +521,7 @@ RAWFRAME_TEST(EachLocalPlayerChoosesTheirOwnLocale) {
 }
 
 RAWFRAME_TEST(TheSampleReadsAControllersPose) {
-    // A pose action (D596) on the right hand's grip: its place and turn,
+    // A pose action on the right hand's grip: its place and turn,
     // whether it is tracked, and whether it is on, each read by the sample
     // into a field of the stick. The runner's jump is still felt, so its
     // haptic stays.
@@ -620,7 +620,7 @@ RAWFRAME_TEST(TheSampleReadsAControllersPose) {
 }
 
 RAWFRAME_TEST(AControllersSelectAtItsPointerIsTheUis) {
-    // The right hand pointing at a panel's button (D598): its select is the
+    // The right hand pointing at a panel's button: its select is the
     // UI's press there, its code read by the sample; pointing past it, the
     // select reaches the game, and the left hand's pointer is its own.
     const world_kest::GameFiles* game = &gameAt("runners/runners.game",
@@ -674,7 +674,7 @@ RAWFRAME_TEST(AControllersSelectAtItsPointerIsTheUis) {
 }
 
 RAWFRAME_TEST(TheSampleKnowsItsPlayerWearsAHeadset) {
-    // ADR-0081's typed XR presence (D603): the first local player sees the
+    // The typed XR presence: the first local player sees the
     // game on the headset while its eyes are told; a bot never does.
     const world_kest::GameFiles* game = &gameAt("runners/runners.game",
                                                 "sample sample.kest sample",
@@ -713,7 +713,7 @@ RAWFRAME_TEST(TheSampleKnowsItsPlayerWearsAHeadset) {
 }
 
 RAWFRAME_TEST(TheSampleReadsATrackedHandsJoints) {
-    // ADR-0081's tracked source (D663): the first local player's sample
+    // The tracked source: the first local player's sample
     // reads the right hand's index tip as the headset tracks it, apart from
     // every action; past the last joint, an untracked hand, and a bot read
     // nothing located.
@@ -777,7 +777,7 @@ RAWFRAME_TEST(TheSampleReadsATrackedHandsJoints) {
 }
 
 RAWFRAME_TEST(AHeadsetAndAFlatPlayerTakeThroughOneAction) {
-    // ADR-0081's cross-play conformance (D674), on Reach's own actions and
+    // The cross-play conformance, on Reach's own actions and
     // sample: a headset's right controller held over the near row's middle
     // block and its select pressed, and a flat player's hand walked there
     // by keys and its mouse's left button pressed, make the same input,
@@ -815,7 +815,7 @@ RAWFRAME_TEST(AHeadsetAndAFlatPlayerTakeThroughOneAction) {
     // The flat player: from the hand's rest above the table's edge (0.2,
     // 0.95, -0.35), a centimeter a tick, one key at a time: down 7, left 20,
     // ahead 40; then the mouse's left button. Its sample builds on the
-    // input it made the tick before (D525), so one input is carried on.
+    // input it made the tick before, so one input is carried on.
     constexpr input::DeviceId kKeyboard{1};
     constexpr input::DeviceId kMouse{2};
     flatFeed.connect(kKeyboard, input::DeviceClass::Keyboard);

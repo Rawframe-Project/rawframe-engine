@@ -1,5 +1,5 @@
 // Where this module opens no device: the web, whose page plays a client's
-// sound from what its frames render (D259). Opening refuses as a machine
+// sound from what its frames render. Opening refuses as a machine
 // without a device does; nothing else can be reached.
 #include "rawframe/audio/errors.h"
 #include "rawframe/audio/output.h"

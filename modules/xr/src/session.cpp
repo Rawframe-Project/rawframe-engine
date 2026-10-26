@@ -36,10 +36,9 @@ struct Profile {
     std::array<std::string_view, 2> menu;
 };
 
-/// The simple controller first, the floor every runtime binds (ADR-0081
-/// section 5), then the common controllers' own profiles, so a runtime
+/// The simple controller first, the floor every runtime binds, then the common controllers' own profiles, so a runtime
 /// binds each to the controller it has rather than emulating the simple
-/// one (D659): a trigger selects, and the menu button, or the right hand's
+/// one: a trigger selects, and the menu button, or the right hand's
 /// B where it has none, is the menu.
 constexpr std::array<Profile, 5> kProfiles = {
     Profile{"/interaction_profiles/khr/simple_controller",
@@ -94,7 +93,7 @@ struct Session::State {
     XrSpace local = XR_NULL_HANDLE;
     std::vector<Chain> chains;
     std::vector<ViewSize> sizes;
-    /// The panel's swapchain, where the session has one (D597), and where
+    /// The panel's swapchain, where the session has one, and where
     /// its quad is.
     std::optional<Chain> panel;
     PanelSettings panelSettings;
@@ -108,7 +107,7 @@ struct Session::State {
     bool acquired = false;
     XrTime displayTime = 0;
     std::vector<XrView> located;
-    /// The hands' actions (D596): their set, the hands' paths, and each
+    /// The hands' actions: their set, the hands' paths, and each
     /// hand's grip and aim spaces.
     XrActionSet actions = XR_NULL_HANDLE;
     XrAction select = XR_NULL_HANDLE;
@@ -117,10 +116,10 @@ struct Session::State {
     XrAction aim = XR_NULL_HANDLE;
     XrAction haptic = XR_NULL_HANDLE;
     std::array<XrPath, 2> hands{};
-    /// The profile each hand's controller is presented as (D680).
+    /// The profile each hand's controller is presented as.
     std::array<std::string, 2> profiles;
     std::array<std::array<XrSpace, 2>, 2> spaces{};
-    /// Each hand's tracker, where the system tracks hands (D663), and the
+    /// Each hand's tracker, where the system tracks hands, and the
     /// extension's functions.
     std::array<XrHandTrackerEXT, 2> trackers{};
     PFN_xrCreateHandTrackerEXT createHandTracker = nullptr;
@@ -330,7 +329,7 @@ struct Session::State {
     }
 
     /// The hands' actions, suggested for the simple controller and the
-    /// common controllers (D659), their spaces made, and the set attached
+    /// common controllers, their spaces made, and the set attached
     /// to the session.
     result::Status makeActions() {
         XrActionSetCreateInfo set{XR_TYPE_ACTION_SET_CREATE_INFO};
@@ -437,7 +436,7 @@ struct Session::State {
         return read;
     }
 
-    /// A tracker for each hand (D663).
+    /// A tracker for each hand.
     result::Status track() {
         const auto kRead = [this](const char* name, auto& into) -> result::Status {
             PFN_xrVoidFunction found = nullptr;
@@ -737,7 +736,7 @@ result::Status Session::end(bool drawn) {
     projection.viewCount = static_cast<std::uint32_t>(views.size());
     projection.views = views.data();
     // The panel over the world, upright before where the head began, its
-    // clear parts showing what is behind (D597).
+    // clear parts showing what is behind.
     XrCompositionLayerQuad quad{XR_TYPE_COMPOSITION_LAYER_QUAD};
     quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
     quad.space = state.local;

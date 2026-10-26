@@ -1,7 +1,7 @@
 #pragma once
 
-// The seam's window side (SPEC-0025, D280): what the device side reads of
-// the program's windows once a frame, at SPEC-0024's `prepare`, and each
+// The seam's window side: what the device side reads of
+// the program's windows once a frame, at the `prepare`, and each
 // surface generation's handle bundle, given once. The program that runs
 // the windows updates it each frame before its Host runs and lends it to
 // the Host's participants as `rawframe.window.surfaces`; nothing calls
@@ -28,7 +28,7 @@ struct SurfaceState {
     PixelSize pixelSize;
     /// Hidden, minimized, or without size: nothing to present to.
     bool occluded = false;
-    /// Its monitor's facts, read each frame (D365).
+    /// Its monitor's facts, read each frame.
     DisplayFacts display;
 };
 
@@ -52,7 +52,7 @@ public:
     /// The program's side: `window` is watched from now on.
     void watch(WindowId window);
     /// The program's side: `window` no longer watched, so the device side
-    /// releases its surface before the program destroys it (D988).
+    /// releases its surface before the program destroys it.
     void unwatch(WindowId window);
 
     /// The program's side, once a frame before its Host runs: each watched

@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the sound decoders (D242): cooked Opus and
+// Coverage-guided fuzzing of the sound decoders: cooked Opus and
 // cooked WAVE from content a mod's Build can hold, where libopus decodes
 // each packet, and WAVE as import reads it. The limits are small so no one
 // input can ask for much.

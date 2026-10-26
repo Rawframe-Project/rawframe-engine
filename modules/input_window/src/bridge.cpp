@@ -162,12 +162,12 @@ void Bridge::take(const window::Event& event) {
 void Bridge::cursorMoved(const window::Event& event) {
     const window::Position kAt = event.pointer.position;
     // Where the cursor is over the window, logical pixels from its top
-    // left, y down (D367).
+    // left, y down.
     feed_->submit({.device = kMouse,
                    .control = *input::controlNamed(input::DeviceClass::Mouse, "pointer"),
                    .x = kAt.x,
                    .y = kAt.y});
-    // Its motion since, up positive (D521): the window system gives the
+    // Its motion since, up positive: the window system gives the
     // device's own only while the pointer is captured, a stream apart.
     if (cursor_.has_value() && (kAt.x != cursor_->x || kAt.y != cursor_->y)) {
         feed_->submit({.device = kMouse,
@@ -212,7 +212,7 @@ void Bridge::gamepadAxis(const window::Event& event) {
 
 void Bridge::feel(window::Windows& windows) {
     // Every device it numbered, a pad gone among them, counted unfelt; a
-    // headset's controllers are felt by their own output (D600).
+    // headset's controllers are felt by their own output.
     numbered_.clear();
     for (std::uint32_t each = kKeyboard.value; each < nextDevice_; ++each) {
         numbered_.push_back(input::DeviceId{each});

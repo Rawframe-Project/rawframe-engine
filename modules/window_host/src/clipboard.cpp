@@ -1,4 +1,4 @@
-// An editor's clipboard (D999): the text it writes put on the platform's
+// An editor's clipboard: the text it writes put on the platform's
 // clipboard through its window, and the text it asks for read there and
 // answered by its ticket once the read completes.
 

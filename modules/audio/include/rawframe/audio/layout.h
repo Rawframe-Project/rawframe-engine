@@ -1,6 +1,6 @@
 #pragma once
 
-// A mixer layout (SPEC-0036's `audio.mixer` document): the one tree of buses
+// A mixer layout (the `audio.mixer` document): the one tree of buses
 // with sends that routes all sound, and the concurrency sets sounds share
 // voices in. Parsed and checked, never executed.
 
@@ -58,7 +58,7 @@ struct EqBand {
     float q = 0.70710678F;
 };
 
-/// SPEC-0036's closed set of dynamics processors.
+/// The closed set of dynamics processors.
 enum class Processor : std::uint8_t {
     Compressor,
     Limiter,
@@ -83,7 +83,7 @@ struct Dynamics {
     std::optional<std::size_t> key;
 };
 
-/// A reverb's parameters (SPEC-0036's bounded set).
+/// A reverb's parameters.
 struct Reverb {
     /// Seconds for the tail to fall by 60 decibels.
     float decay = 1.5F;
@@ -125,8 +125,8 @@ struct Effect {
     Reverb reverb;
 };
 
-/// The parameters of an effect that may be written while it plays
-/// (SPEC-0036's runtime bus-parameter writes). What sizes an effect's
+/// The parameters of an effect that may be written while it plays.
+/// What sizes an effect's
 /// buffers or chooses its kind (a delay's times, a reverb's pre-delay and
 /// density, a filter's shape and slope, a band's shape, a processor, a key)
 /// is fixed when the mixer is made.
@@ -195,7 +195,7 @@ struct Bus {
     std::size_t parent = 0;
 };
 
-/// Who yields when a concurrency set is full (SPEC-0036's closed set).
+/// Who yields when a concurrency set is full.
 enum class Resolution : std::uint8_t {
     StopFarthestThenOldest,
     PreventNew,
@@ -223,7 +223,7 @@ struct Layout {
     [[nodiscard]] std::vector<std::size_t> mixOrder() const;
 };
 
-/// SPEC-0036's named limit points for a layout. The product's to set; these
+/// The named limit points for a layout. The product's to set; these
 /// are generation 1's.
 struct LayoutLimits {
     std::size_t maximumBuses = 64;
@@ -235,7 +235,7 @@ struct LayoutLimits {
     std::size_t maximumNameLength = 64;
 };
 
-/// Reads an `audio.mixer` document of format version 1 in SPEC-0036's
+/// Reads an `audio.mixer` document of format version 1 in its declared
 /// order. Refusals are `rawframe.document` errors naming the field by its
 /// path.
 [[nodiscard]] result::Result<Layout> readLayout(std::string_view text, const LayoutLimits& limits = {});

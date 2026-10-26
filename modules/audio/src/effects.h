@@ -2,7 +2,7 @@
 
 // A bus's effects as the mix thread runs them: made with every buffer they
 // will need on the owner's thread, then run without allocating, locking, or
-// blocking (ADR-0038).
+// blocking.
 
 #include "rawframe/audio/layout.h"
 

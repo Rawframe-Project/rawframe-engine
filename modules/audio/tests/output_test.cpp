@@ -1,4 +1,4 @@
-// Output against ADR-0038: a device opens at its own rate or the one asked
+// Output: a device opens at its own rate or the one asked
 // for, renders only a mixer made at that rate, from its own thread while the
 // owner plays (ThreadSanitizer runs this in the full check), and stops for
 // good when told; a machine without a device gets a typed refusal. The null

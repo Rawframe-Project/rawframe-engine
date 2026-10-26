@@ -1,6 +1,6 @@
 #pragma once
 
-// Declared sounds playing (ADR-0038's asset and instance split): each play
+// Declared sounds playing: each play
 // of a declaration is an instance that picks its variant, draws its volume
 // and pitch, counts in its concurrency set, fades with its distance from
 // the listener, and goes virtual rather than silent when it has no voice.

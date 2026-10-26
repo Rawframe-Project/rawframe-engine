@@ -1,5 +1,5 @@
 // Coverage-guided fuzzing of the input documents a game carries and a
-// player's machine keeps (D243): action sets, and overrides read over the
+// player's machine keeps: action sets, and overrides read over the
 // runners game's set. Overrides are read in their canonical text only, so
 // what reads writes back to the very same text.
 

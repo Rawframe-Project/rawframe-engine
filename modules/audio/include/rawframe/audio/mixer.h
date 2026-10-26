@@ -1,6 +1,6 @@
 #pragma once
 
-// The mixer (ADR-0038): playing sounds summed through the layout's buses,
+// The mixer: playing sounds summed through the layout's buses,
 // their effects, faders, and sends, into interleaved stereo. The owner
 // thread plays, stops, and changes things through a bounded command queue;
 // the mix thread renders without locks, allocation, or blocking, and hands
@@ -73,7 +73,7 @@ struct BusMeter {
     float rmsRight = 0;
 };
 
-/// The mixer's profile values (ADR-0038: never constants in code).
+/// The mixer's profile values (never constants in code).
 struct MixerSettings {
     std::uint32_t rate = 48'000;
     /// The most frames one render step takes; a longer request is rendered
@@ -118,8 +118,7 @@ public:
     /// From hard left (minus one) to hard right (one).
     void setPan(Playback playback, float pan);
     void setBusVolume(std::size_t bus, float decibels);
-    /// The player's volume for the bus of `role` (SPEC-0036's user-volume
-    /// surface, D625), in decibels on top of the bus's own, from -80 to
+    /// The player's volume for the bus of `role`, in decibels on top of the bus's own, from -80 to
     /// +12; nought, as at first, leaves the bus as it is. A role no bus
     /// has, `None`, and a volume not finite change nothing.
     void setRoleVolume(Role role, float decibels);
