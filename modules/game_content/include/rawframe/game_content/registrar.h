@@ -15,7 +15,7 @@ namespace rawframe::game_content {
 ///                          objects it names
 ///   content.reload_every   every this many Host iterations, publish a
 ///                          changed manifest as the next catalog (0: never)
-///   content.composition    a Composition instead (SPEC-0021): its
+///   content.composition    a Composition instead: its
 ///                          CompositionRecord's file
 ///   content.library        where its Builds are, `builds/<root>/`, and its
 ///                          publishers' key sets, `keys/<publisher>.keys`,
@@ -23,7 +23,7 @@ namespace rawframe::game_content {
 ///                          its publisher's set does not list or lists
 ///                          revoked, or not the one named, is refused;
 ///                          without content.composition, the Composition
-///                          its installed pointer names active (D434)
+///                          its installed pointer names active
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 inline constexpr std::uint8_t kScopes = composition::scopeBit(composition::LifetimeScope::Runtime);

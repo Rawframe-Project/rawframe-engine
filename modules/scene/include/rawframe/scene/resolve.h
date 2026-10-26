@@ -1,6 +1,6 @@
 #pragma once
 
-// Instances resolved (ADR-0048, D96): a scene with every instance replaced
+// Instances resolved: a scene with every instance replaced
 // by the entities it brings. Each source scene is resolved first, its own
 // instances included; its entities take the ids the mapping gives them, and
 // references among them follow; then the patch is applied in order. What

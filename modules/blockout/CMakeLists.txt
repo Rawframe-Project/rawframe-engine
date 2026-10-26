@@ -1,4 +1,4 @@
-# Blockout documents (SPEC-0051's blockout row, D846): a level's rough
+# Blockout documents: a level's rough
 # shapes as text, a solid a line, made into one mesh by solid geometry,
 # cuts taken out by a BSP tree. Import tooling: the cook's
 # `rawframe.blockout` importer reads it; no runtime links it.

@@ -6,8 +6,8 @@
 
 namespace rawframe::scene_bake {
 
-/// Contributes the World-scoped participant `rawframe.scene_bake.probes`
-/// (D326), for a Tool-role process only: with `bake.directory` set, once
+/// Contributes the World-scoped participant `rawframe.scene_bake.probes`,
+/// for a Tool-role process only: with `bake.directory` set, once
 /// `bake.after` frames were presented it bakes every reflection probe the
 /// scene extracted, drawing the scene six ways from its box's middle at
 /// `bake.exposure` (EV100, 10 unless set) through

@@ -174,7 +174,7 @@ RAWFRAME_TEST(TheSameWorldAndWritesGiveTheSameBits) {
     const auto kSecond = kPlay(second);
     RAWFRAME_EXPECT(kFirst.second == kSecond.second);
     // The same bits on every compiler and target the check builds, x86-64
-    // and wasm32 alike (D164): a moved digest says why in its commit.
+    // and wasm32 alike: a moved digest says why in its commit.
     RAWFRAME_EXPECT(kFirst.second == 0x9bb6b9451d401c69ULL);
     RAWFRAME_EXPECT(kFirst.first.size() == kSecond.first.size() &&
                     std::memcmp(kFirst.first.data(), kSecond.first.data(), kFirst.first.size() * sizeof(Pose3D)) == 0);
@@ -355,7 +355,7 @@ RAWFRAME_TEST(RaysFindBodiesNowAndThen) {
 RAWFRAME_TEST(SettingsAndDocumentsAreChecked) {
     RAWFRAME_EXPECT(!Physics3D::create({.substeps = 0}).has_value());
     RAWFRAME_EXPECT(!Physics3D::create({.historyTicks = 2048}).has_value());
-    // A history past 64 MiB: every body's pose kept for 1024 ticks (D208).
+    // A history past 64 MiB: every body's pose kept for 1024 ticks.
     RAWFRAME_EXPECT(!Physics3D::create({.historyTicks = 1024}).has_value());
     RAWFRAME_EXPECT(Physics3D::create({.bodyCapacity = 1024, .historyTicks = 1024}).has_value());
     const auto kBad = Physics3D::create({.collision = {.classes = {{0x1, "one"}, {0x1, "again"}}}});
@@ -406,8 +406,7 @@ RAWFRAME_TEST(ACharacterRunsLandsAndStopsAtAWall) {
 RAWFRAME_TEST(ACharacterAmongStaticBoxesMovesByTheSameBitsEverywhere) {
     // Three crates, one on the other two, a character running at them from
     // every side in turn, and another started inside one: what a browser
-    // predicts beside them must be what a native server steps, bit for bit
-    // (D315).
+    // predicts beside them must be what a native server steps, bit for bit.
     Scene scene;
     scene.body(kGround, {});
     constexpr Body3D kStill{.motion = static_cast<std::uint8_t>(Motion::Static),

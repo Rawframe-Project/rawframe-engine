@@ -1,6 +1,6 @@
 #pragma once
 
-// Joints as Maul2D makes them (D114): private to the module, as Maul2D is.
+// Joints as Maul2D makes them: private to the module, as Maul2D is.
 
 #include "rawframe/physics2d/components.h"
 

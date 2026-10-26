@@ -1,4 +1,4 @@
-# A game's textures (ADR-0025, D306): the textures its `texture` lines
+# A game's textures: the textures its `texture` lines
 # declare, read decoded by identity from cooked content and held. The
 # canvas's sprites and the scene's materials read them; neither owns them.
 rawframe_module(NAME game_textures

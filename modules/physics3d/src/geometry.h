@@ -1,6 +1,6 @@
 #pragma once
 
-// The static bodies' shapes as triangles (D400): private to the module.
+// The static bodies' shapes as triangles: private to the module.
 
 #include "bodies.h"
 #include "meshes.h"

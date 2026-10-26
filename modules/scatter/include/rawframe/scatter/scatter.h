@@ -1,6 +1,6 @@
 #pragma once
 
-// A scatter document (SPEC-0051's scatter row, D862): copies of one of a
+// A scatter document: copies of one of a
 // game's prefabs placed over an area, none nearer another than a spacing,
 // as text. Written by hand, by a tool, or through the session's lines;
 // expanded where a game is loaded into the prefab's entities, each placed.
@@ -36,7 +36,7 @@
 
 namespace rawframe::scatter {
 
-/// A cooked scatter's resource type and representation (D863): its prefab
+/// A cooked scatter's resource type and representation: its prefab
 /// and its placements, so what a game reads from its content places the
 /// copies exactly where its sources would.
 inline constexpr base::Bits128 kPlacedType = base::parseBits128Hex("9b831bba4e262e6b8ed95b93187104d6").value;

@@ -1,6 +1,6 @@
 #pragma once
 
-// Avoidance (ADR-0056, D411): agents steering round each other by velocity
+// Avoidance: agents steering round each other by velocity
 // obstacles (ORCA), over Maul Nav's own. It works on the ground plane, a 3D
 // World's (x, z) or a 2D World's (x, y), in meters and seconds, and needs no
 // navmesh: a navmesh says where to go, avoidance how to get by on the way.

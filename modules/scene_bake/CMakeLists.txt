@@ -1,4 +1,4 @@
-# Reflection probes baked (D326): the scene drawn six ways from each
+# Reflection probes baked: the scene drawn six ways from each
 # probe's middle on the one device, its light read back, and written as the
 # Radiance picture the cook makes its environment of. Toolchain only: no
 # process that plays reaches it, and where Maul RHI is not built there is

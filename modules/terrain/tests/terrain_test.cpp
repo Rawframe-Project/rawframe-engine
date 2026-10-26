@@ -1,4 +1,4 @@
-// Terrain documents (D853): heights and painted cells read and written back
+// Terrain documents: heights and painted cells read and written back
 // as read; made into a mesh facing up, a part a layer painted, its normals
 // leaning off a slope; brushes that raise, smooth, and paint where they
 // reach and nowhere else; and what is not a terrain refused by its line.
@@ -105,7 +105,7 @@ RAWFRAME_TEST(BrushesChangeOnlyWhatTheyReach) {
 
 RAWFRAME_TEST(TheGroundIsSampledOnItsMeshesTriangles) {
     // The slope's heights where its samples are, and between them on the
-    // mesh's two triangles a cell, not blended across all four (D862).
+    // mesh's two triangles a cell, not blended across all four.
     const Terrain kGround = read(kSlope);
     const auto kNear = [](std::optional<double> height, double expected) {
         return height.has_value() && std::abs(*height - expected) < 1e-9;

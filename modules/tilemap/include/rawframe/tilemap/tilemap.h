@@ -1,6 +1,6 @@
 #pragma once
 
-// A tilemap document (SPEC-0051's tilemap row, D857): a 2D level's tiles on
+// A tilemap document: a 2D level's tiles on
 // a grid, drawn from one sheet of tiles, some of which bodies collide with,
 // as text. Written by hand, by a tool, by the session's tilemap.paint, or
 // by Studio's Tiles mode; cooked by the `rawframe.tilemap` importer and
@@ -35,7 +35,7 @@
 
 namespace rawframe::tilemap {
 
-/// The resource a tilemap is cooked into (D858): its text, checked, as it
+/// The resource a tilemap is cooked into: its text, checked, as it
 /// was written, which a client reads as `parseTilemap` reads it.
 inline constexpr base::Bits128 kTilemapType = base::parseBits128Hex("9bc264ed9bfe68492b86641942cc74e9").value;
 inline constexpr std::string_view kTilemapRepresentation = "rawframe.tilemap.text";

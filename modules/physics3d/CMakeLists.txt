@@ -1,4 +1,4 @@
-# 3D physics in the World (ADR-0028, SPEC-0037) through Maul3D: the physics
+# 3D physics in the World through Maul3D: the physics
 # components, the step system, and the participant that adds them for a game
 # with 3D physics. Maul3D is linked privately, so no header above this
 # module can include it.

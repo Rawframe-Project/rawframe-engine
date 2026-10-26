@@ -12,7 +12,7 @@ inline constexpr result::ErrorDomain kPhysicsDomain{base::parseBits128Hex("109ae
 
 /// Codes within kPhysicsDomain.
 enum class PhysicsError : std::uint32_t {
-    /// A collision document that is not well formed (SPEC-0037 §15, 2 and 3).
+    /// A collision document that is not well formed.
     InvalidDocument = 1,
 };
 

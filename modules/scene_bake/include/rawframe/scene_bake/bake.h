@@ -1,9 +1,9 @@
 #pragma once
 
-// A reflection probe's picture baked (D326): the scene drawn six ways from
+// A reflection probe's picture baked: the scene drawn six ways from
 // the probe's middle, each way's light read back, and the six resampled
 // into the equirectangular picture of all directions the cook makes an
-// environment of (D321). Toolchain only: no process that plays reaches it.
+// environment of. Toolchain only: no process that plays reaches it.
 
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/render_scene_gpu/renderer.h"

@@ -1,4 +1,4 @@
-# What 2D and 3D physics share (SPEC-0037 §14's integration grammar): the
+# What 2D and 3D physics share: the
 # collision document and the Maul category and mask bits that carry it, and
 # the moment a query is cast back to.
 rawframe_module(NAME physics

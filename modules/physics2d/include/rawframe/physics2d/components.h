@@ -1,6 +1,6 @@
 #pragma once
 
-// The components 2D physics reads and writes (SPEC-0037). An entity with a
+// The components 2D physics reads and writes. An entity with a
 // Body2D, a Pose2D, and a Velocity2D has a body in the physics world; gameplay
 // reads the committed pose and velocity, and changes the body by writing
 // them, which the next step takes as a teleport (the body made again there)
@@ -8,8 +8,8 @@
 // once and clears; or, for a kinematic body, by setting a Target2D, which
 // the next step moves it to. A body
 // whose entity also has a Contact2D is told after each step what it touches
-// and what overlaps it (SPEC-0037's per-body opt-in). Units are meters,
-// seconds, kilograms, and radians (SPEC-0037's 2D meter).
+// and what overlaps it. Units are meters,
+// seconds, kilograms, and radians.
 //
 // Layouts are fixed and plain, so a script declares the same structs (the
 // Kest ones are rawframe.physics2d's) and each field table below says what
@@ -39,7 +39,7 @@ enum class Shape : std::uint8_t {
     Capsule = 2,
     /// Static only: the solid tiles of the tilemap its entity's Tiles2D
     /// names, one box for each row's run of them, the map's top-left on
-    /// the body's pose (D859). `width` and `height` are unused.
+    /// the body's pose. `width` and `height` are unused.
     Tiles = 3,
 };
 
@@ -104,7 +104,7 @@ struct Impulse2D {
     float angular = 0;
 };
 
-/// Where a kinematic body is to be after the next step (SPEC-0037's
+/// Where a kinematic body is to be after the next step (its
 /// kinematic target): the step chooses the velocities that carry it there,
 /// so what it meets on the way is pushed, never jumped over as a teleport
 /// would. Applied once while `set`, which the step clears; a body that is
@@ -163,7 +163,7 @@ struct RayHit2D {
     float fraction = 0;
 };
 
-/// SPEC-0037's character controller: an entity with a Body2D (kinematic,
+/// The character controller: an entity with a Body2D (kinematic,
 /// an upright capsule) and a Character2D is moved by trace and slide rather
 /// than by velocity alone. Gameplay writes the Velocity2D it wants this
 /// tick, gravity and all; the step moves the body as far along it as the
@@ -195,7 +195,7 @@ struct Character2D {
     float groundNormalY = 0;
 };
 
-/// SPEC-0037's joint (section 10) in two dimensions, physics3d's Joint3D
+/// The joint in two dimensions, physics3d's Joint3D
 /// on the reduced axis set: an entity with a Joint2D holds two bodies'
 /// entities together along the linear x and y and the angular axis of its
 /// frame. The frame sits at each body's anchor, its x along `axis` in `a`'s
@@ -263,7 +263,7 @@ struct Attach2D {
 };
 
 /// Which of the physics settings' tilemaps a body of Shape::Tiles is made
-/// of, by the identity the game's `tilemap` line gives it (D859). Changing
+/// of, by the identity the game's `tilemap` line gives it. Changing
 /// it makes the body again.
 struct Tiles2D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
