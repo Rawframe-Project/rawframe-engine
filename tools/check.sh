@@ -183,12 +183,17 @@ build_and_test() {
 }
 
 # Runs build_and_test for each "preset select labels" triple at once, the
-# jobs shared between them, and prints each tree's report in order.
+# jobs shared between them, and prints each tree's report in order. What
+# does not divide evenly goes to the first triples, one job each, so the
+# slowest trees are named first; each tree has at least one job.
 in_parallel() {
-    local share=$((jobs / $# > 1 ? jobs / $# : 1))
-    local pids=() names=() spec
+    local base=$((jobs / $#)) extra=$((jobs % $#))
+    local pids=() names=() spec share
     for spec in "$@"; do
         local name=${spec// /.}
+        share=$((base + (extra > 0 ? 1 : 0)))
+        [ "$share" -ge 1 ] || share=1
+        extra=$((extra > 0 ? extra - 1 : 0))
         # shellcheck disable=SC2086
         (build_and_test $spec "$share") >"out/$name.check.log" 2>&1 &
         pids+=($!)
@@ -275,8 +280,9 @@ pr)
     [ "$failures" -eq 0 ] && build_and_test clang-development reached integration "$jobs"
     ;;
 full | nightly)
-    in_parallel "clang-development all unit" "clang-sanitize all unit" "gcc-debug all unit" \
-        "clang-thread all unit" "wasm-development all every"
+    # Slowest first, as in_parallel hands out the jobs.
+    in_parallel "clang-thread all unit" "clang-sanitize all unit" "gcc-debug all unit" \
+        "clang-development all unit" "wasm-development all every"
     if [ "$failures" -eq 0 ]; then
         web_steps
         web_plays
