@@ -15,7 +15,12 @@ cd "$(dirname "$0")/.."
 prefix="$1"
 compiler="$2"
 root="$PWD"
-jobs="$(nproc)"
+# The machine is shared: the check's JOBS, not one job for each core. The
+# native build and the web one may run at once, configured by different
+# trees, so each takes half; trees waiting on the same build's lock use no
+# processor.
+jobs=$(("${JOBS:-8}" / 2))
+[ "$jobs" -ge 1 ] || jobs=1
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 

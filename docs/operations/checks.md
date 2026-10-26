@@ -21,7 +21,7 @@ What verifies a change, locally and in CI, and the time each may take.
 | `full` | Every test in `clang-development`, `clang-sanitize`, `gcc-debug` and `clang-thread`, the web build with its tests under Node, the web page against the dedicated server over WebTransport, every engine shader compiled by a browser's WebGPU, a real browser playing the sample games, and every integration test. | under 20 minutes |
 | `nightly` | Also `clang-shipping` and `wasm-shipping`, the tick budget and the web download budget measured in them. | extended |
 
-Run `changed` before every push; `git config core.hooksPath tools/hooks` makes the pre-push hook run it. Run the other tiers through the workspace's heavy-job wrapper. `JOBS` (default 8) bounds the jobs of the whole check, shared between the trees that build at once.
+Run `changed` before every push; `git config core.hooksPath tools/hooks` makes the pre-push hook run it. Run the other tiers through the workspace's heavy-job wrapper. `JOBS` (default 8) bounds the jobs of the whole check, shared between the trees that build at once. When their cache misses, configuring a tree builds the vendored OpenSSL and MsQuic, natively or for the web, each with half of `JOBS`: the two may build at once, and trees waiting on the same build use no processor.
 
 A test reached by a change is one whose module or host is changed, or depends on a changed module through `tools/modules.txt`, however indirectly; `tools/affected.py` decides. The cross-module scenarios run whenever any module is reached. A change the module graph cannot place (the root build files, a vendored library, a game, a template, the test harness) reaches every test.
 
