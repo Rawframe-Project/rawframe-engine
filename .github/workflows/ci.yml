@@ -79,15 +79,16 @@ jobs:
       - name: Check
         env:
           EVENT: ${{ github.event_name }}
-          # The runner shares its machine with other work.
-          JOBS: 16
+          # The runner shares its machine with every session working on it,
+          # so it keeps to their limit of eight jobs, at a lower priority.
+          JOBS: 8
         run: |
           case "$EVENT" in
           pull_request) tier=pr ;;
           push) tier=full ;;
           *) tier=nightly ;;
           esac
-          tools/check.sh "$tier"
+          nice -n 10 tools/check.sh "$tier"
 
   # The one check the ruleset requires: it passes when every job above
   # passed, or was skipped for a documentation-only change. A pull request

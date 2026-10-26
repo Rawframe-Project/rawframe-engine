@@ -36,7 +36,7 @@ The documentation check skips the paths in `tools/docs-check-exclude.txt`: vendo
 | `changes` | Whether a pull request changes anything beyond documentation; when it does not, `check` is skipped. |
 | `docs` | The organization's documentation check, from the pinned commit of `.github`, with the same exclusions as the local tier. |
 | `zizmor` | The workflows: injection, persisted credentials, permissions, unpinned actions. |
-| `check` | `tools/check.sh` on the self-hosted runner: `pr` on a pull request, `full` on `main`, `nightly` at night and by hand. The runner is the one machine with every toolchain the engine checks against (the pinned shader compilers, lavapipe, the web toolchain, a browser), and it keeps its build trees from run to run. |
+| `check` | `tools/check.sh` on the self-hosted runner: `pr` on a pull request, `full` on `main`, `nightly` at night and by hand. The runner is the one machine with every toolchain the engine checks against (the pinned shader compilers, lavapipe, the web toolchain, a browser), and it keeps its build trees from run to run. The machine is shared, so the check runs with eight jobs at a lower priority. |
 | `required` | The one check the ruleset requires with the title check: every job passed, or was skipped for a documentation-only change. |
 
 The self-hosted runner runs code from this repository's own branches only. A pull request from a fork never reaches it, and `required` fails for one that changes code: the engine takes no outside code, and `pr-gate.yml` closes such a pull request.
