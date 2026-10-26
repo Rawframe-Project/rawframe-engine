@@ -5,6 +5,7 @@
 
 #include "flight_def.h"
 
+#include "fpenv.h"
 #include "scalar.h"
 
 #include "maul-nav/bake.h"
@@ -128,9 +129,17 @@ mnavFlightDefResult mnavCheckFlightDef(const mnavFlightDef* def, mnavFlightShape
     return (mnavFlightDefResult){mnav_success, mnav_flightSettingNone};
 }
 
-mnavFlightDefResult mnavValidateFlightDef(const mnavFlightDef* def)
+static MNAV_NOINLINE mnavFlightDefResult ValidateFlightDefWork(const mnavFlightDef* def)
 {
     return mnavCheckFlightDef(def, nullptr);
+}
+
+mnavFlightDefResult mnavValidateFlightDef(const mnavFlightDef* def)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavFlightDefResult result = ValidateFlightDefWork(def);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 mnavBakeDef mnavFlightBakeDef(const mnavFlightDef* def)

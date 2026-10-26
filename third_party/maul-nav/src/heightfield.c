@@ -6,6 +6,7 @@
 #include "heightfield.h"
 
 #include "allocator.h"
+#include "invariant.h"
 #include "outline.h"
 #include "raster.h"
 #include "terrain.h"
@@ -187,26 +188,35 @@ static void Sort(mnavFragment* items, int32_t count, int32_t width, uint32_t* co
     memcpy(cursors, columns, (size_t)columnCount * sizeof(uint32_t));
     for (int32_t c = 0; c < columnCount; ++c)
     {
-        while (cursors[c] < columns[c + 1])
+        // In locals: a fragment's area is a char, which may alias the
+        // cursors, so they would be read again after every store.
+        uint32_t at = cursors[c];
+        uint32_t stop = columns[c + 1];
+        while (at < stop)
         {
-            mnavFragment fragment = items[cursors[c]];
+            mnavFragment fragment = items[at];
             int32_t home = fragment.x + fragment.z * width;
             if (home == c)
             {
-                cursors[c] += 1;
+                at += 1;
                 continue;
             }
-            items[cursors[c]] = items[cursors[home]];
-            items[cursors[home]++] = fragment;
+            uint32_t to = cursors[home];
+            cursors[home] = to + 1;
+            items[at] = items[to];
+            items[to] = fragment;
         }
+        cursors[c] = at;
     }
     for (int32_t c = 0; c < columnCount; ++c)
     {
-        for (uint32_t i = columns[c] + 1; i < columns[c + 1]; ++i)
+        uint32_t begin = columns[c];
+        uint32_t stop = columns[c + 1];
+        for (uint32_t i = begin + 1; i < stop; ++i)
         {
             mnavFragment item = items[i];
             uint32_t j = i;
-            while (j > columns[c] && Before(&item, &items[j - 1]))
+            while (j > begin && Before(&item, &items[j - 1]))
             {
                 items[j] = items[j - 1];
                 --j;
@@ -221,6 +231,12 @@ static void Sort(mnavFragment* items, int32_t count, int32_t width, uint32_t* co
 static uint32_t MergeColumn(const mnavFragment* fragments, uint32_t first, uint32_t end,
                             int32_t step, mnavSpan* out)
 {
+    // Most columns hold one fragment: a run of one, whose top is its own.
+    if (end == first + 1)
+    {
+        out[0] = (mnavSpan){fragments[first].bottom, fragments[first].top, fragments[first].area};
+        return 1;
+    }
     uint32_t written = 0;
     uint32_t i = first;
     while (i < end)
@@ -246,6 +262,27 @@ static uint32_t MergeColumn(const mnavFragment* fragments, uint32_t first, uint3
     return written;
 }
 
+// Every column's spans ascend and are apart, each from its bottom up to its
+// top, and the columns cover the spans in order.
+static void CheckHeightfield(const mnavHeightfield* heightfield)
+{
+    int32_t columnCount = heightfield->frame.width * heightfield->frame.width;
+    MNAV_ASSERT(heightfield->columns[0] == 0);
+    MNAV_ASSERT(heightfield->columns[columnCount] == (uint32_t)heightfield->spanCount);
+    MNAV_ASSERT(heightfield->spanCount <= heightfield->spanCapacity);
+    for (int32_t c = 0; c < columnCount; ++c)
+    {
+        uint32_t end = heightfield->columns[c + 1];
+        MNAV_ASSERT(heightfield->columns[c] <= end);
+        for (uint32_t i = heightfield->columns[c]; i < end; ++i)
+        {
+            const mnavSpan* span = &heightfield->spans[i];
+            MNAV_ASSERT(span->bottom < span->top);
+            MNAV_ASSERT(i + 1 == end || span->top < heightfield->spans[i + 1].bottom);
+        }
+    }
+}
+
 static mnavResult Merge(mnavMemory* memory, const mnavFragment* sorted, int32_t count, int32_t step,
                         mnavHeightfield* heightfield)
 {
@@ -257,13 +294,14 @@ static mnavResult Merge(mnavMemory* memory, const mnavFragment* sorted, int32_t 
     }
     int32_t columnCount = heightfield->frame.width * heightfield->frame.width;
     uint32_t* columns = heightfield->columns;
+    mnavSpan* spans = heightfield->spans;
     uint32_t written = 0;
     uint32_t first = columns[0];
     for (int32_t c = 0; c < columnCount; ++c)
     {
         uint32_t end = columns[c + 1];
         columns[c] = written;
-        written += MergeColumn(sorted, first, end, step, heightfield->spans + written);
+        written += MergeColumn(sorted, first, end, step, spans + written);
         first = end;
     }
     columns[columnCount] = written;
@@ -271,6 +309,10 @@ static mnavResult Merge(mnavMemory* memory, const mnavFragment* sorted, int32_t 
     // The span array keeps the fragment count's size: merging only shrinks
     // and the bytes are released with the heightfield.
     heightfield->spanCapacity = count;
+    if (MNAV_INVARIANTS)
+    {
+        CheckHeightfield(heightfield);
+    }
     return mnav_success;
 }
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Terrains (mnav-0003): checking them, and the triangles of the cells that
+// Terrains: checking them, and the triangles of the cells that
 // may reach a tile, made as the bake reads them.
 
 #ifndef MAUL_NAV_SRC_TERRAIN_H

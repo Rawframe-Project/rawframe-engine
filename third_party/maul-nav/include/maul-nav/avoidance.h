@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Avoidance (mnav-0006): local steering among agents by velocity
+// Avoidance: local steering among agents by velocity
 // obstacles (ORCA), apart from the navmesh: nothing here uses a navmesh,
 // and a host may use it without one. It works on the ground plane, a 3D
 // world's (x, z) or a 2D world's (x, y), and for fliers in space, in
@@ -204,7 +204,7 @@ extern "C"
     /// @param avoidanceOut Receives the set, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultAvoidanceDef; `mnav_errorVersion` for one built
-    /// against another major or minor version; `mnav_errorRange` for a limit,
+    /// against another version of the headers; `mnav_errorRange` for a limit,
     /// distance or horizon out of its range; `mnav_errorCapacity` when the
     /// allocator fails.
     /// @par Thread safety

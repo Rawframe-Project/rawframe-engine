@@ -101,9 +101,10 @@ static void WriteHeader(mnavByteWriter* w, const mnavTileInfo* info, const mnavP
     }
     mnavPutU16(w, MNAV_TILE_FORMAT);
     mnavPutU16(w, MNAV_TILE_HEADER_BYTES);
-    mnavPutU16(w, info->generator.major);
-    mnavPutU16(w, info->generator.minor);
-    mnavPutU16(w, info->generator.patch);
+    // The generation, then three reserved words.
+    mnavPutU16(w, info->generator);
+    mnavPutU16(w, 0);
+    mnavPutU16(w, 0);
     mnavPutU16(w, 0);
     mnavPutU64(w, info->fingerprint);
     mnavPutU64(w, hash);
@@ -209,10 +210,10 @@ static mnavTileResult ReadHeader(const uint8_t* bytes, size_t size, mnavTileInfo
         return Refuse(mnav_errorVersion, mnav_tileHeader, -1);
     }
     uint64_t headerBytes = mnavGetU16(&r);
-    info->generator.major = (uint16_t)mnavGetU16(&r);
-    info->generator.minor = (uint16_t)mnavGetU16(&r);
-    info->generator.patch = (uint16_t)mnavGetU16(&r);
+    info->generator = (uint16_t)mnavGetU16(&r);
     uint64_t reserved = mnavGetU16(&r);
+    reserved |= mnavGetU16(&r);
+    reserved |= mnavGetU16(&r);
     info->fingerprint = mnavGetU64(&r);
     uint64_t hash = mnavGetU64(&r);
     counts->payload = (size_t)mnavGetU32(&r);

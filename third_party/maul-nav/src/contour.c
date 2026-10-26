@@ -488,6 +488,31 @@ static mnavResult TraceAll(mnavMemory* memory, const Tracer* tracer, Work* work,
     return mnav_success;
 }
 
+// The contours lie end to end over the vertices, each of at least three,
+// with no two neighbors at one ground place, within the tile without its
+// border, of one of the map's regions, a hole exactly when it winds
+// backward.
+static void CheckContours(const mnavContourSet* set, const mnavRegionMap* regions, int32_t side)
+{
+    int32_t next = 0;
+    for (int32_t c = 0; c < set->count; ++c)
+    {
+        const mnavContour* contour = &set->contours[c];
+        MNAV_ASSERT(contour->first == next && contour->count >= 3);
+        MNAV_ASSERT(IsRegion(contour->region) && contour->region <= regions->count);
+        const mnavContourVertex* v = &set->vertices[contour->first];
+        for (int32_t k = 0; k < contour->count; ++k)
+        {
+            const mnavContourVertex* w = &v[(k + 1) % contour->count];
+            MNAV_ASSERT(v[k].x >= 0 && v[k].x <= side && v[k].z >= 0 && v[k].z <= side);
+            MNAV_ASSERT(v[k].x != w->x || v[k].z != w->z);
+        }
+        MNAV_ASSERT(contour->hole == (SignedArea(v, contour->count) < 0));
+        next += contour->count;
+    }
+    MNAV_ASSERT(next == set->vertexCount);
+}
+
 mnavResult mnavBuildContours(mnavMemory* memory, const mnavCompactField* field,
                              const mnavRegionMap* regions, int32_t border, float edgeError,
                              int32_t edgeLength, mnavContourSet* set)
@@ -510,6 +535,10 @@ mnavResult mnavBuildContours(mnavMemory* memory, const mnavCompactField* field,
     if (result != mnav_success)
     {
         mnavReleaseContours(memory, set);
+    }
+    else if (MNAV_INVARIANTS)
+    {
+        CheckContours(set, regions, field->frame.width - 2 * border);
     }
     return result;
 }

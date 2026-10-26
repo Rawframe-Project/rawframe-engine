@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Hierarchical paths (mnav-0008): an abstract graph over clusters of
+// Hierarchical paths: an abstract graph over clusters of
 // tiles, whose transitions stand at the portals between clusters, for
 // long paths on large navmeshes; a path found on it is refined by the
 // navmesh search confined to the clusters it crosses.
@@ -97,7 +97,7 @@ extern "C"
     /// @param hierarchyOut Receives the hierarchy, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultHierarchyDef; `mnav_errorVersion` for one built
-    /// against another major or minor version; `mnav_errorRange` for a limit or
+    /// against another version of the headers; `mnav_errorRange` for a limit or
     /// cluster side out of its range; `mnav_errorCapacity` when the allocator
     /// fails.
     /// @par Thread safety

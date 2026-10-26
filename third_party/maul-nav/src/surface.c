@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Moving along the surface (mnav-0005): a breadth-first walk toward a
+// Moving along the surface: a breadth-first walk toward a
 // wanted point, stopped by walls.
 
+#include "fpenv.h"
 #include "navmesh.h"
 #include "nearest.h"
 #include "polymesh.h"
@@ -272,9 +273,10 @@ static int32_t Polygons(mnavQuery* query, const mnavNavmesh* navmesh, int32_t la
     return count;
 }
 
-mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
-                                const mnavQueryFilter* filter, mnavPolygonId startPolygon,
-                                mnavPos3 start, mnavPos3 end, mnavMove* moveOut)
+static MNAV_NOINLINE mnavResult MoveAlongSurfaceWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                                     const mnavQueryFilter* filter,
+                                                     mnavPolygonId startPolygon, mnavPos3 start,
+                                                     mnavPos3 end, mnavMove* moveOut)
 {
     if (query == nullptr || navmesh == nullptr || moveOut == nullptr || !isfinite(start.x) ||
         !isfinite(start.y) || !isfinite(start.z) || !isfinite(end.x) || !isfinite(end.z))
@@ -338,4 +340,15 @@ mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
     }
     query->tableClean = true;
     return mnav_success;
+}
+
+mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
+                                const mnavQueryFilter* filter, mnavPolygonId startPolygon,
+                                mnavPos3 start, mnavPos3 end, mnavMove* moveOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result =
+        MoveAlongSurfaceWork(query, navmesh, filter, startPolygon, start, end, moveOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flight def (mnav-0015): its default, its check, and what it comes
+// The flight def: its default, its check, and what it comes
 // to in voxels.
 
 #ifndef MAUL_NAV_SRC_FLIGHT_DEF_H

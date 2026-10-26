@@ -8,6 +8,7 @@
 #include "allocator.h"
 #include "bake_def.h"
 #include "detail.h"
+#include "fpenv.h"
 #include "polymesh.h"
 #include "tile.h"
 
@@ -19,7 +20,8 @@
 #include <stdint.h>
 #include <string.h>
 
-mnavBakeDefResult mnavCreateNavmesh(const mnavBakeDef* def, mnavNavmesh** navmeshOut)
+static MNAV_NOINLINE mnavBakeDefResult CreateNavmeshWork(const mnavBakeDef* def,
+                                                         mnavNavmesh** navmeshOut)
 {
     if (navmeshOut == nullptr)
     {
@@ -50,6 +52,14 @@ mnavBakeDefResult mnavCreateNavmesh(const mnavBakeDef* def, mnavNavmesh** navmes
     navmesh->memory = memory;
     *navmeshOut = navmesh;
     return (mnavBakeDefResult){mnav_success, mnav_settingNone};
+}
+
+mnavBakeDefResult mnavCreateNavmesh(const mnavBakeDef* def, mnavNavmesh** navmeshOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavBakeDefResult result = CreateNavmeshWork(def, navmeshOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 static void ReleaseLinks(mnavMemory* memory, mnavTile* tile)
@@ -224,7 +234,8 @@ static mnavResult Stage(mnavNavmesh* navmesh, int32_t x, int32_t z, mnavTile* ti
     return result;
 }
 
-mnavTileResult mnavStageTile(mnavNavmesh* navmesh, const uint8_t* bytes, size_t size)
+static MNAV_NOINLINE mnavTileResult StageTileWork(mnavNavmesh* navmesh, const uint8_t* bytes,
+                                                  size_t size)
 {
     if (navmesh == nullptr)
     {
@@ -258,6 +269,14 @@ mnavTileResult mnavStageTile(mnavNavmesh* navmesh, const uint8_t* bytes, size_t 
         tile = staged == mnav_success ? nullptr : tile;
     }
     FreeTile(memory, tile);
+    return result;
+}
+
+mnavTileResult mnavStageTile(mnavNavmesh* navmesh, const uint8_t* bytes, size_t size)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavTileResult result = StageTileWork(navmesh, bytes, size);
+    mnavFloatEnvLeave(env);
     return result;
 }
 
@@ -493,7 +512,9 @@ static int32_t TakeSlot(mnavTilePlan* plan)
 
 // Puts a staged change into the planned slots: a replacement keeps its
 // slot with the next generation, unless that would wrap, which retires
-// the slot; a removal empties its slot with the next generation.
+// the slot; a removal empties its slot with the next generation, and
+// retires it when that is the last, since a free slot is taken at the
+// generation after.
 static void PlanChange(mnavTilePlan* plan, int32_t existing, const mnavStaged* staged)
 {
     if (existing >= 0)
@@ -507,6 +528,7 @@ static void PlanChange(mnavTilePlan* plan, int32_t existing, const mnavStaged* s
             slot->tile = staged->tile;
             return;
         }
+        slot->retired = slot->generation == UINT32_MAX;
     }
     if (staged->tile != nullptr)
     {

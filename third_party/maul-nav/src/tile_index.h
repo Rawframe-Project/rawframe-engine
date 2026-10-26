@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The triangles of a bake's meshes that may reach each tile of a grid
-// (mnav-0014).
+// The triangles of a bake's meshes that may reach each tile of a grid.
 
 #ifndef MAUL_NAV_SRC_TILE_INDEX_H
 #define MAUL_NAV_SRC_TILE_INDEX_H

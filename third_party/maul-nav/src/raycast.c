@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Raycasts along the navmesh (mnav-0005).
+// Raycasts along the navmesh.
 
+#include "fpenv.h"
 #include "navmesh.h"
 #include "polymesh.h"
 #include "query.h"
@@ -133,8 +134,10 @@ static void Wall(mnavRay* ray, mnavPos3 a, mnavPos3 b)
     ray->normalZ = -ex / length;
 }
 
-mnavResult mnavRaycast(mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-                       mnavPolygonId startPolygon, mnavPos3 start, mnavPos3 end, mnavRay* rayOut)
+static MNAV_NOINLINE mnavResult RaycastWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                            const mnavQueryFilter* filter,
+                                            mnavPolygonId startPolygon, mnavPos3 start,
+                                            mnavPos3 end, mnavRay* rayOut)
 {
     if (query == nullptr || navmesh == nullptr || rayOut == nullptr || !isfinite(start.x) ||
         !isfinite(start.y) || !isfinite(start.z) || !isfinite(end.x) || !isfinite(end.z))
@@ -206,4 +209,13 @@ mnavResult mnavRaycast(mnavQuery* query, const mnavNavmesh* navmesh, const mnavQ
     }
     rayOut->polygonCount = count;
     return mnav_success;
+}
+
+mnavResult mnavRaycast(mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+                       mnavPolygonId startPolygon, mnavPos3 start, mnavPos3 end, mnavRay* rayOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = RaycastWork(query, navmesh, filter, startPolygon, start, end, rayOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

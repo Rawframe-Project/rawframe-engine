@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Flow fields (mnav-0007): for every cell of a grid, the cost of its
+// Flow fields: for every cell of a grid, the cost of its
 // cheapest way to the nearest of a set of goals and the next cell on it,
 // so that any number of agents sharing the goals find their way at the
 // cost of one search.
@@ -77,7 +77,7 @@ extern "C"
     /// @param fieldOut Receives the field, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultFlowFieldDef; `mnav_errorVersion` for one built
-    /// against another major or minor version; `mnav_errorRange` for a cell
+    /// against another version of the headers; `mnav_errorRange` for a cell
     /// limit out of its range; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
@@ -102,7 +102,7 @@ extern "C"
     } mnavFlowRegion;
 
     /// Begins building the field for a region of a grid and a set of goal
-    /// cells (mnav-0007): one search from all the goals, with the steps of
+    /// cells: one search from all the goals, with the steps of
     /// mnavFindGridPath, to the 8 neighbours, never across a blocked
     /// corner, a step costing its length times the mean of its two cells'
     /// area costs. Cells outside the region are as blocked. A cell's way
@@ -151,7 +151,7 @@ extern "C"
                                                              bool* endedOut);
 
     /// Begins repairing the field after its goals or the areas of some of
-    /// its grid's cells changed (mnav-0007): only the cells whose ways
+    /// its grid's cells changed: only the cells whose ways
     /// change are searched again, and when the work ends the field is the
     /// one mnavBeginFlowField would make with the new goals and areas, bit
     /// for bit. The cells whose ways ran through what changed are reset in

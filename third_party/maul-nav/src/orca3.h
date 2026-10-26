@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// ORCA's linear programs in space (mnav-0006), after RVO2-3D's
+// ORCA's linear programs in space, after RVO2-3D's
 // linearProgram1 to 4 and in binary64: the velocity nearest a wanted one
 // within a speed that keeps to the front of every plane, or that breaks
 // the planes least.

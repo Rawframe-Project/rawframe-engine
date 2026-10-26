@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flight baker (mnav-0015): one call checks the input, builds a
+// The flight baker: one call checks the input, builds a
 // flight tile and encodes it, fingerprinted as navmesh tiles are.
 
 #include "allocator.h"
@@ -12,6 +12,7 @@
 #include "flight.h"
 #include "flight_def.h"
 #include "flight_tile.h"
+#include "fpenv.h"
 #include "raster.h"
 
 #include "maul-nav/bake.h"
@@ -34,7 +35,8 @@ struct mnavFlightBaker
     size_t tileSize;
 };
 
-mnavFlightDefResult mnavCreateFlightBaker(const mnavFlightDef* def, mnavFlightBaker** bakerOut)
+static MNAV_NOINLINE mnavFlightDefResult CreateFlightBakerWork(const mnavFlightDef* def,
+                                                               mnavFlightBaker** bakerOut)
 {
     if (bakerOut == nullptr)
     {
@@ -66,6 +68,14 @@ mnavFlightDefResult mnavCreateFlightBaker(const mnavFlightDef* def, mnavFlightBa
     return (mnavFlightDefResult){mnav_success, mnav_flightSettingNone};
 }
 
+mnavFlightDefResult mnavCreateFlightBaker(const mnavFlightDef* def, mnavFlightBaker** bakerOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavFlightDefResult result = CreateFlightBakerWork(def, bakerOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
 static void DropTile(mnavFlightBaker* baker)
 {
     mnavReleaseFlightTileBytes(&baker->memory, baker->tile, baker->tileSize);
@@ -88,14 +98,11 @@ void mnavDestroyFlightBaker(mnavFlightBaker* baker)
 // place, after a word that keeps flight tiles apart from navmesh tiles.
 static uint64_t HashSettings(const mnavFlightDef* def, int32_t tileX, int32_t tileZ)
 {
-    mnavVersion version = mnavGetVersion();
     uint64_t origin[3] = {mnavDoubleBits(def->origin.x), mnavDoubleBits(def->origin.y),
                           mnavDoubleBits(def->origin.z)};
     const uint32_t words[] = {
         0x464E564Du,
-        version.major,
-        version.minor,
-        version.patch,
+        MNAV_FLIGHT_GENERATOR,
         (uint32_t)origin[0],
         (uint32_t)(origin[0] >> 32),
         (uint32_t)origin[1],
@@ -146,15 +153,16 @@ static mnavResult Bake(mnavFlightBaker* baker, const mnavBakeInput* input, int32
         report->cubes = tile.cubeCount;
         report->nodes = tile.nodeCount;
         report->leaves = tile.leafCount;
-        result = mnavEncodeFlightTile(&baker->memory, &baker->def, mnavGetVersion(),
-                                      report->fingerprint, &tile, &baker->tile, &baker->tileSize);
+        result = mnavEncodeFlightTile(&baker->memory, &baker->def, report->fingerprint, &tile,
+                                      &baker->tile, &baker->tileSize);
     }
     mnavReleaseFlightTile(&baker->memory, &tile);
     return result;
 }
 
-mnavResult mnavBakeFlightTile(mnavFlightBaker* baker, const mnavBakeInput* input, int32_t tileX,
-                              int32_t tileZ, mnavFlightBakeReport* reportOut)
+static MNAV_NOINLINE mnavResult BakeFlightTileWork(mnavFlightBaker* baker,
+                                                   const mnavBakeInput* input, int32_t tileX,
+                                                   int32_t tileZ, mnavFlightBakeReport* reportOut)
 {
     mnavFlightBakeReport report = {0};
     report.mesh = -1;
@@ -173,6 +181,15 @@ mnavResult mnavBakeFlightTile(mnavFlightBaker* baker, const mnavBakeInput* input
     {
         *reportOut = report;
     }
+    return result;
+}
+
+mnavResult mnavBakeFlightTile(mnavFlightBaker* baker, const mnavBakeInput* input, int32_t tileX,
+                              int32_t tileZ, mnavFlightBakeReport* reportOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = BakeFlightTileWork(baker, input, tileX, tileZ, reportOut);
+    mnavFloatEnvLeave(env);
     return result;
 }
 

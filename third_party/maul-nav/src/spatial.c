@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Spatial queries (mnav-0005): heights, the nearest wall within a
+// Spatial queries: heights, the nearest wall within a
 // radius, and random points from a seed. The walls search is Detour's
 // findDistanceToWall: Dijkstra over polygons from the center's, through
 // the edges within the radius; the random point near a center samples the
@@ -10,6 +10,7 @@
 // lies in the circle.
 // Random numbers come from SplitMix64 (Vigna).
 
+#include "fpenv.h"
 #include "navmesh.h"
 #include "nearest.h"
 #include "query.h"
@@ -113,8 +114,8 @@ static double Area(const mnavPos3* corners, int32_t count)
     return area * 0.5;
 }
 
-mnavResult mnavGetHeight(const mnavNavmesh* navmesh, mnavPolygonId polygon, double x, double z,
-                         double* heightOut)
+static MNAV_NOINLINE mnavResult GetHeightWork(const mnavNavmesh* navmesh, mnavPolygonId polygon,
+                                              double x, double z, double* heightOut)
 {
     if (navmesh == nullptr || heightOut == nullptr || !isfinite(x) || !isfinite(z))
     {
@@ -144,6 +145,15 @@ mnavResult mnavGetHeight(const mnavNavmesh* navmesh, mnavPolygonId polygon, doub
     }
     *heightOut = mnavSurfaceHeight(navmesh, slot, (int32_t)polygon.polygon, x, z);
     return mnav_success;
+}
+
+mnavResult mnavGetHeight(const mnavNavmesh* navmesh, mnavPolygonId polygon, double x, double z,
+                         double* heightOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = GetHeightWork(navmesh, polygon, x, z, heightOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 static mnavRandomPoint NoPoint(void)
@@ -212,8 +222,9 @@ static double Walk(const mnavNavmesh* navmesh, const mnavQueryFilter* filter, do
     return sum;
 }
 
-mnavResult mnavFindRandomPoint(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-                               uint64_t seed, mnavRandomPoint* pointOut)
+static MNAV_NOINLINE mnavResult FindRandomPointWork(const mnavNavmesh* navmesh,
+                                                    const mnavQueryFilter* filter, uint64_t seed,
+                                                    mnavRandomPoint* pointOut)
 {
     if (navmesh == nullptr || pointOut == nullptr)
     {
@@ -240,6 +251,15 @@ mnavResult mnavFindRandomPoint(const mnavNavmesh* navmesh, const mnavQueryFilter
     int32_t count = Corners(navmesh, slot, polygon, c);
     *pointOut = PointIn(navmesh, slot, polygon, c, count, &r);
     return mnav_success;
+}
+
+mnavResult mnavFindRandomPoint(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+                               uint64_t seed, mnavRandomPoint* pointOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = FindRandomPointWork(navmesh, filter, seed, pointOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 // A search through the polygons within a radius of a center.
@@ -595,9 +615,10 @@ static bool GoodRing(const mnavQuery* query, const mnavNavmesh* navmesh, mnavPos
            isfinite(center.z) && isfinite(radius) && radius >= 0.0;
 }
 
-mnavResult mnavFindWallDistance(mnavQuery* query, const mnavNavmesh* navmesh,
-                                const mnavQueryFilter* filter, mnavPolygonId polygon,
-                                mnavPos3 center, double radius, mnavWall* wallOut)
+static MNAV_NOINLINE mnavResult FindWallDistanceWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                                     const mnavQueryFilter* filter,
+                                                     mnavPolygonId polygon, mnavPos3 center,
+                                                     double radius, mnavWall* wallOut)
 {
     if (wallOut == nullptr || !GoodRing(query, navmesh, center, radius))
     {
@@ -618,10 +639,22 @@ mnavResult mnavFindWallDistance(mnavQuery* query, const mnavNavmesh* navmesh,
     return mnav_success;
 }
 
-mnavResult mnavFindWalls(mnavQuery* query, const mnavNavmesh* navmesh,
-                         const mnavQueryFilter* filter, mnavPolygonId polygon, mnavPos3 center,
-                         double radius, mnavWallSegment* wallsOut, int32_t capacity,
-                         mnavWallsFound* foundOut)
+mnavResult mnavFindWallDistance(mnavQuery* query, const mnavNavmesh* navmesh,
+                                const mnavQueryFilter* filter, mnavPolygonId polygon,
+                                mnavPos3 center, double radius, mnavWall* wallOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result =
+        FindWallDistanceWork(query, navmesh, filter, polygon, center, radius, wallOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult FindWallsWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                              const mnavQueryFilter* filter, mnavPolygonId polygon,
+                                              mnavPos3 center, double radius,
+                                              mnavWallSegment* wallsOut, int32_t capacity,
+                                              mnavWallsFound* foundOut)
 {
     if (foundOut == nullptr || capacity < 0 || (wallsOut == nullptr && capacity > 0) ||
         !GoodRing(query, navmesh, center, radius))
@@ -640,6 +673,18 @@ mnavResult mnavFindWalls(mnavQuery* query, const mnavNavmesh* navmesh,
     }
     *foundOut = (mnavWallsFound){r.count, r.limited};
     return r.count > capacity ? mnav_errorCapacity : mnav_success;
+}
+
+mnavResult mnavFindWalls(mnavQuery* query, const mnavNavmesh* navmesh,
+                         const mnavQueryFilter* filter, mnavPolygonId polygon, mnavPos3 center,
+                         double radius, mnavWallSegment* wallsOut, int32_t capacity,
+                         mnavWallsFound* foundOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = FindWallsWork(query, navmesh, filter, polygon, center, radius, wallsOut,
+                                      capacity, foundOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 // Clips a convex polygon to the 32-gon of a circle on the ground,
@@ -704,10 +749,9 @@ static int32_t ClipToCircle(const mnavPos3* corners, int32_t count, mnavPos3 cen
     return n;
 }
 
-mnavResult mnavFindRandomPointAround(mnavQuery* query, const mnavNavmesh* navmesh,
-                                     const mnavQueryFilter* filter, mnavPolygonId polygon,
-                                     mnavPos3 center, double radius, uint64_t seed,
-                                     mnavRandomPoint* pointOut)
+static MNAV_NOINLINE mnavResult FindRandomPointAroundWork(
+    mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+    mnavPolygonId polygon, mnavPos3 center, double radius, uint64_t seed, mnavRandomPoint* pointOut)
 {
     if (pointOut == nullptr || !GoodRing(query, navmesh, center, radius))
     {
@@ -756,4 +800,16 @@ mnavResult mnavFindRandomPointAround(mnavQuery* query, const mnavNavmesh* navmes
         ClipToCircle(c, Corners(navmesh, slot, node->polygon, c), center, radius, clipped);
     *pointOut = PointIn(navmesh, slot, node->polygon, clipped, count, &random);
     return mnav_success;
+}
+
+mnavResult mnavFindRandomPointAround(mnavQuery* query, const mnavNavmesh* navmesh,
+                                     const mnavQueryFilter* filter, mnavPolygonId polygon,
+                                     mnavPos3 center, double radius, uint64_t seed,
+                                     mnavRandomPoint* pointOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result =
+        FindRandomPointAroundWork(query, navmesh, filter, polygon, center, radius, seed, pointOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

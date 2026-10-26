@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Query filters (mnav-0005).
+// Query filters.
 
 #include "query_filter.h"
 
@@ -20,11 +20,8 @@
 
 // The filter a NULL one stands for, mnavDefaultQueryFilter's: every
 // walkable area at a cost of 1.
-static const mnavQueryFilter s_default = {MNAV_QUERY_FILTER_COOKIE,
-                                          MNAV_ABI_VERSION,
-                                          {ONES16, ONES16, ONES16, ONES16},
-                                          WALKABLE_AREAS,
-                                          ~(uint64_t)0};
+static const mnavQueryFilter s_default = {
+    MNAV_QUERY_FILTER_COOKIE, {ONES16, ONES16, ONES16, ONES16}, WALKABLE_AREAS, ~(uint64_t)0};
 
 static_assert(sizeof(s_default.costs) == 64 * sizeof(float), "the default lists 64 costs");
 
@@ -38,10 +35,6 @@ mnavResult mnavCheckFilter(const mnavQueryFilter* filter, const mnavQueryFilter*
     if (filter->cookie != MNAV_QUERY_FILTER_COOKIE)
     {
         return mnav_errorInvalid;
-    }
-    if (filter->version != MNAV_ABI_VERSION)
-    {
-        return mnav_errorVersion;
     }
     for (int32_t a = 0; a < MNAV_AREA_TYPES; ++a)
     {

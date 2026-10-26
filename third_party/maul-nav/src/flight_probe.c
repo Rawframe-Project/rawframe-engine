@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flier's raycast and nearest open point (mnav-0015).
+// The flier's raycast and nearest open point.
 
 #include "flight.h"
 #include "flight_frame.h"
 #include "flight_space.h"
 #include "flight_volume.h"
+#include "fpenv.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/flight.h"
@@ -21,8 +22,8 @@
 // See flight_space.c: eight children on each of at most seven levels.
 #define STACK_DEPTH 64
 
-mnavResult mnavFlightRaycast(const mnavFlightVolume* volume, mnavPos3 from, mnavPos3 to,
-                             mnavFlightHit* hitOut)
+static MNAV_NOINLINE mnavResult FlightRaycastWork(const mnavFlightVolume* volume, mnavPos3 from,
+                                                  mnavPos3 to, mnavFlightHit* hitOut)
 {
     if (volume == nullptr || hitOut == nullptr)
     {
@@ -50,8 +51,18 @@ mnavResult mnavFlightRaycast(const mnavFlightVolume* volume, mnavPos3 from, mnav
     return mnav_success;
 }
 
-mnavResult mnavCheckFlightPath(const mnavFlightVolume* volume, const mnavPos3* points,
-                               int32_t pointCount, int32_t* stepOut, mnavFlightHit* hitOut)
+mnavResult mnavFlightRaycast(const mnavFlightVolume* volume, mnavPos3 from, mnavPos3 to,
+                             mnavFlightHit* hitOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = FlightRaycastWork(volume, from, to, hitOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult CheckFlightPathWork(const mnavFlightVolume* volume,
+                                                    const mnavPos3* points, int32_t pointCount,
+                                                    int32_t* stepOut, mnavFlightHit* hitOut)
 {
     if (volume == nullptr || stepOut == nullptr || pointCount < 0 ||
         (pointCount > 0 && points == nullptr))
@@ -98,6 +109,15 @@ mnavResult mnavCheckFlightPath(const mnavFlightVolume* volume, const mnavPos3* p
         return mnav_success;
     }
     return mnav_success;
+}
+
+mnavResult mnavCheckFlightPath(const mnavFlightVolume* volume, const mnavPos3* points,
+                               int32_t pointCount, int32_t* stepOut, mnavFlightHit* hitOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = CheckFlightPathWork(volume, points, pointCount, stepOut, hitOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 // The nearest point search: the point, in voxels, the best distance so
@@ -242,8 +262,9 @@ static void SearchTile(Nearest* n, const mnavFlightEntry* e)
     }
 }
 
-mnavResult mnavFindNearestFlightPoint(const mnavFlightVolume* volume, mnavPos3 point, float radius,
-                                      mnavPos3* nearestOut, bool* foundOut)
+static MNAV_NOINLINE mnavResult FindNearestFlightPointWork(const mnavFlightVolume* volume,
+                                                           mnavPos3 point, float radius,
+                                                           mnavPos3* nearestOut, bool* foundOut)
 {
     if (volume == nullptr || nearestOut == nullptr || foundOut == nullptr)
     {
@@ -275,4 +296,13 @@ mnavResult mnavFindNearestFlightPoint(const mnavFlightVolume* volume, mnavPos3 p
         *nearestOut = mnavFlightToWorld(&frame, n.found);
     }
     return mnav_success;
+}
+
+mnavResult mnavFindNearestFlightPoint(const mnavFlightVolume* volume, mnavPos3 point, float radius,
+                                      mnavPos3* nearestOut, bool* foundOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = FindNearestFlightPointWork(volume, point, radius, nearestOut, foundOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

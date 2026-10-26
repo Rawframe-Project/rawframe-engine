@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Query filters (mnav-0005): checking them and reading them.
+// Query filters: checking them and reading them.
 
 #ifndef MAUL_NAV_SRC_QUERY_FILTER_H
 #define MAUL_NAV_SRC_QUERY_FILTER_H

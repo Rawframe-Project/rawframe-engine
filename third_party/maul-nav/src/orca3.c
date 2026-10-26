@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// ORCA's linear programs in space (mnav-0006): RVO2-3D's linearProgram1
+// ORCA's linear programs in space: RVO2-3D's linearProgram1
 // to 4 and its planes (RVO2-3D src/Agent.cc) in binary64. The only
 // function taken from libm is sqrt, which is exactly rounded.
 

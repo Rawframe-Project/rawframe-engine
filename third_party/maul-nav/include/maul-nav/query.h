@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Queries over a navmesh's committed tiles (mnav-0005). Every query reads
+// Queries over a navmesh's committed tiles. Every query reads
 // and never changes the navmesh, and works in world coordinates: meters,
 // right-handed, +Y up.
 
@@ -24,12 +24,10 @@ extern "C"
 #define MNAV_MAX_AREA_COST 1000000.0f
 
     // Which polygons a query may use and what crossing them costs, by area
-    // type (mnav-0002). Build it with mnavDefaultQueryFilter.
+    // type. Build it with mnavDefaultQueryFilter.
     typedef struct mnavQueryFilter
     {
         uint32_t cookie;
-        // MNAV_ABI_VERSION, set by mnavDefaultQueryFilter.
-        uint32_t version;
         // What a meter costs in each area type, MNAV_MIN_AREA_COST to
         // MNAV_MAX_AREA_COST; 1 by default.
         float costs[MNAV_AREA_TYPES];
@@ -43,11 +41,12 @@ extern "C"
     } mnavQueryFilter;
 
 // The cookie mnavDefaultQueryFilter sets and every query checks.
-#define MNAV_QUERY_FILTER_COOKIE 0x4E415646u
+#define MNAV_QUERY_FILTER_COOKIE 0x5246564Du
 
     /// Returns the filter that uses every walkable area at a cost of 1 and
-    /// every kind of off-mesh link. Built in the program, so that it
-    /// carries the version of the headers the program includes.
+    /// every kind of off-mesh link. It carries only a cookie: every call
+    /// that reads a filter also takes an object whose creation checked the
+    /// version.
     ///
     /// @return The filter.
     /// @par Thread safety
@@ -60,7 +59,6 @@ extern "C"
     mnavQueryFilter filter = {0};
 #endif
         filter.cookie = MNAV_QUERY_FILTER_COOKIE;
-        filter.version = MNAV_ABI_VERSION;
         for (int area = 0; area < MNAV_AREA_TYPES; ++area)
         {
             filter.costs[area] = 1.0f;
@@ -271,7 +269,7 @@ extern "C"
     /// @param queryOut Receives the context, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultQueryDef; `mnav_errorVersion` for one built against
-    /// another major or minor version; `mnav_errorRange` for a limit out of its
+    /// another version of the headers; `mnav_errorRange` for a limit out of its
     /// range; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
@@ -286,14 +284,14 @@ extern "C"
     MNAV_API void mnavDestroyQuery(mnavQuery* query);
 
     /// Searches for the shortest way from a point on one polygon to a point
-    /// on another (mnav-0005): A* over the edges between polygons, its
+    /// on another: A* over the edges between polygons, its
     /// heuristic the straight distance to the end point; ties go to the
     /// node made first. A step costs its length times the cost of the area
     /// it crosses, and the heuristic is scaled by the cheapest included
     /// area's cost; polygons of excluded areas other than the start
     /// polygon are not entered. Attached off-mesh links of included kinds are
     /// crossed at their declared cost, the heuristic scaled down to the
-    /// lowest cost per meter among them (mnav-0005). The corridor found is pulled
+    /// lowest cost per meter among them. The corridor found is pulled
     /// tight into a straight path with the funnel algorithm, stretch by
     /// stretch between links.
     ///
@@ -324,7 +322,7 @@ extern "C"
                                                     mnavPath* pathOut);
 
     /// Searches for the shortest way on the ground from a point on one
-    /// polygon to a point on another (mnav-0005): Polyanya (Cui, Harabor
+    /// polygon to a point on another: Polyanya (Cui, Harabor
     /// and Grastien, 2017), whose nodes are intervals of portals seen from a
     /// root, the start, a corner turned at or an off-mesh link's landing
     /// point. Every included area must have the same cost: a step costs its
@@ -366,7 +364,7 @@ extern "C"
                          const mnavQueryFilter* filter, mnavPolygonId startPolygon, mnavPos3 start,
                          mnavPolygonId endPolygon, mnavPos3 end, mnavPath* pathOut);
 
-    /// Begins a path search to run in slices (mnav-0005): the same search
+    /// Begins a path search to run in slices: the same search
     /// as mnavFindPath, with its own copy of the filter, continued by
     /// mnavContinuePath and ended by mnavFinishPath. Whatever the slices,
     /// the result is the one mnavFindPath gives.
@@ -455,7 +453,7 @@ extern "C"
     } mnavMove;
 
     /// Moves from a point on a polygon toward a wanted point along the
-    /// navmesh, as far as the walls allow (mnav-0005): a breadth-first
+    /// navmesh, as far as the walls allow: a breadth-first
     /// walk over the polygons the filter includes whose shared edges meet
     /// the circle round the move, in edge order. In the polygon holding the
     /// wanted point the move reaches it; otherwise it ends at the point
@@ -483,7 +481,7 @@ extern "C"
         mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
         mnavPolygonId startPolygon, mnavPos3 start, mnavPos3 end, mnavMove* moveOut);
 
-    // A path corridor (mnav-0005): the polygons from the agent's to its
+    // A path corridor: the polygons from the agent's to its
     // target's, in a buffer the caller owns, with the agent's position on
     // the first and the target on the last.
     typedef struct mnavCorridor
@@ -506,7 +504,7 @@ extern "C"
         int32_t linkCount;
     } mnavCorners;
 
-    // A run of a straight path over one area (mnav-0005): from its start
+    // A run of a straight path over one area: from its start
     // on, the path crosses polygons of that area until the next run's
     // start.
     typedef struct mnavAreaRun
@@ -616,7 +614,7 @@ extern "C"
 #define MNAV_MAX_STEER_SPEED    1000.0f
 #define MNAV_MAX_STEER_DISTANCE 1000.0f
 
-    // How mnavSteer steers (mnav-0005). Build it with mnavDefaultSteerDef.
+    // How mnavSteer steers. Build it with mnavDefaultSteerDef.
     typedef struct mnavSteerDef
     {
         uint32_t cookie;
@@ -687,7 +685,7 @@ extern "C"
         return def;
     }
 
-    /// Steers along a corridor's corners (mnav-0005): toward the next
+    /// Steers along a corridor's corners: toward the next
     /// corner, or swinging wide of it, at the def's speed, slowing within
     /// its slowing distance of the target by the distance left along the
     /// corners over it; stopped within the arrival distance of the target
@@ -700,8 +698,8 @@ extern "C"
     /// @param steeringOut Receives the velocity and state.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, corners
     /// with no points or a def not from mnavDefaultSteerDef;
-    /// `mnav_errorVersion` for one built against another major or minor
-    /// version; `mnav_errorRange` for a def value out of its range or a corner
+    /// `mnav_errorVersion` for one built against another version
+    /// of the headers; `mnav_errorRange` for a def value out of its range or a corner
     /// not finite.
     /// @par Thread safety
     /// Safe from any thread.
@@ -808,7 +806,7 @@ extern "C"
     // The longest side a grid may have, in cells.
 #define MNAV_MAX_GRID_SIDE 32768
 
-    // A grid for grid pathfinding (mnav-0005): cells in rows from (0, 0),
+    // A grid for grid pathfinding: cells in rows from (0, 0),
     // each an area; mnav_areaNone, and areas a filter leaves out, block a
     // cell.
     typedef struct mnavGrid
@@ -1094,7 +1092,7 @@ extern "C"
     } mnavRay;
 
     /// Casts a ray along the navmesh on the ground from a point on a polygon
-    /// toward an end point (mnav-0005): polygon to polygon through the
+    /// toward an end point: polygon to polygon through the
     /// first edge it crosses, until it reaches the end point, meets a wall
     /// (an edge into a polygon the filter excludes is a wall too) or a tile
     /// side with no tile loaded, or crosses as many polygons as the

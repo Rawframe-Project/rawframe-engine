@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flight volume's space (mnav-0015): descents of the compact octrees
+// The flight volume's space: descents of the compact octrees
 // to a voxel and over a face's slab, and the conservative voxel walk.
 
 #include "flight_space.h"
@@ -13,39 +13,44 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <string.h>
 
 // The deepest a slab's descent goes: eight children on each of the at most
 // seven node levels of a 512-voxel cube.
 #define STACK_DEPTH 64
 
-static int32_t FloorDiv(int32_t a, int32_t b)
+// a divided by 2 to the shift, rounded down: for a negative a, the
+// complement of the complement's quotient.
+static int32_t FloorShift(int32_t a, int32_t shift)
 {
-    int32_t q = a / b;
-    return (a % b != 0 && a < 0) ? q - 1 : q;
+    return a >= 0 ? a >> shift : -(int32_t)(~(uint32_t)a >> shift) - 1;
 }
 
-// The bits set in a mask.
+// The bits set in a mask of eight bits, counted in parallel.
 static uint32_t Ones(uint32_t mask)
 {
-    uint32_t count = 0;
-    for (; mask != 0; mask &= mask - 1u)
-    {
-        ++count;
-    }
-    return count;
+    mask = mask - (mask >> 1 & 0x55u);
+    mask = (mask & 0x33u) + (mask >> 2 & 0x33u);
+    return (mask + (mask >> 4)) & 0x0Fu;
 }
 
 mnavFlightCursor mnavMakeFlightCursor(const mnavFlightVolume* volume)
 {
     int32_t side = volume->def.tileVoxels;
-    return (mnavFlightCursor){volume, nullptr, 0, 0, false, side, volume->shape.cubeCount * side};
+    int32_t shift = 0;
+    while (1 << shift < side)
+    {
+        ++shift;
+    }
+    return (mnavFlightCursor){
+        .volume = volume, .side = side, .shift = shift, .layers = volume->shape.cubeCount * side};
 }
 
 // The tile holding column (x, z), or NULL.
 static const mnavFlightTile* TileOf(mnavFlightCursor* c, int32_t x, int32_t z)
 {
-    int32_t tileX = FloorDiv(x, c->side);
-    int32_t tileZ = FloorDiv(z, c->side);
+    int32_t tileX = FloorShift(x, c->shift);
+    int32_t tileZ = FloorShift(z, c->shift);
     if (!c->cached || tileX != c->tileX || tileZ != c->tileZ)
     {
         c->tile = mnavFlightTileAt(c->volume, tileX, tileZ);
@@ -62,9 +67,16 @@ static uint32_t Child(const mnavFlightNode* node, int32_t o)
     return node->firstChild + Ones(node->mask & ((1u << o) - 1u));
 }
 
+static bool Inside(const mnavFlightBlock* b, const int32_t at[3])
+{
+    return at[0] >= b->x && at[1] >= b->y && at[2] >= b->z && at[0] < b->x + b->size &&
+           at[1] < b->y + b->size && at[2] < b->z + b->size;
+}
+
 // Descends tile t to voxel (x, y, z) of its own frame: what holds it, and
-// the block holding it.
-static int32_t Hold(const mnavFlightTile* t, int32_t x, int32_t y, int32_t z, mnavFlightBlock* b)
+// the block holding it; a leaf reached is kept in leaf and leafBits.
+static int32_t Hold(const mnavFlightTile* t, int32_t x, int32_t y, int32_t z, mnavFlightBlock* b,
+                    mnavFlightBlock* leaf, uint64_t* leafBits)
 {
     int32_t c = y / t->side;
     *b = (mnavFlightBlock){0, c * t->side, 0, t->side};
@@ -93,16 +105,35 @@ static int32_t Hold(const mnavFlightTile* t, int32_t x, int32_t y, int32_t z, mn
         if (size == 4)
         {
             int32_t bit = (x - b->x) + 4 * (y - b->y) + 16 * (z - b->z);
+            *leaf = *b;
+            *leafBits = t->leaves[child];
             *b = (mnavFlightBlock){x, y, z, 1};
-            return (t->leaves[child] >> bit & 1u) != 0 ? MNAV_SPACE_SOLID : MNAV_SPACE_OPEN;
+            return (*leafBits >> bit & 1u) != 0 ? MNAV_SPACE_SOLID : MNAV_SPACE_OPEN;
         }
         node = &t->nodes[child];
     }
 }
 
+// Whether a voxel of the cursor's leaf is solid.
+static bool LeafSolid(const mnavFlightCursor* c, const int32_t at[3])
+{
+    int32_t bit = (at[0] - c->leaf.x) + 4 * (at[1] - c->leaf.y) + 16 * (at[2] - c->leaf.z);
+    return (c->leafBits >> bit & 1u) != 0;
+}
+
 int32_t mnavFlightHolder(mnavFlightCursor* cursor, int32_t x, int32_t y, int32_t z,
                          mnavFlightBlock* blockOut)
 {
+    const int32_t at[3] = {x, y, z};
+    if (Inside(&cursor->leaf, at))
+    {
+        // The leaf's voxels are its blocks, as a descent finds them.
+        if (blockOut != nullptr)
+        {
+            *blockOut = (mnavFlightBlock){x, y, z, 1};
+        }
+        return LeafSolid(cursor, at) ? MNAV_SPACE_SOLID : MNAV_SPACE_OPEN;
+    }
     if (y < 0 || y >= cursor->layers)
     {
         return MNAV_SPACE_SOLID;
@@ -115,7 +146,14 @@ int32_t mnavFlightHolder(mnavFlightCursor* cursor, int32_t x, int32_t y, int32_t
     int32_t ox = cursor->tileX * cursor->side;
     int32_t oz = cursor->tileZ * cursor->side;
     mnavFlightBlock b;
-    int32_t held = Hold(t, x - ox, y, z - oz, &b);
+    mnavFlightBlock leaf = {0, 0, 0, 0};
+    uint64_t bits = 0;
+    int32_t held = Hold(t, x - ox, y, z - oz, &b, &leaf, &bits);
+    if (leaf.size != 0)
+    {
+        cursor->leaf = (mnavFlightBlock){leaf.x + ox, leaf.y, leaf.z + oz, leaf.size};
+        cursor->leafBits = bits;
+    }
     if (blockOut != nullptr)
     {
         *blockOut = (mnavFlightBlock){b.x + ox, b.y, b.z + oz, b.size};
@@ -207,8 +245,30 @@ typedef struct Frame
     int32_t size;
 } Frame;
 
-// Visits the open blocks of cube c of tile t within the region.
-static void Collect(const mnavFlightTile* t, int32_t c, const Region* r)
+// The octant of a block of half side h at (x, y, z) that holds the whole
+// region, or -1 when the region meets more than one.
+static int32_t Holding(const Region* r, int32_t x, int32_t y, int32_t z, int32_t h)
+{
+    const int32_t mid[3] = {x + h, y + h, z + h};
+    int32_t o = 0;
+    for (int32_t k = 0; k < 3; ++k)
+    {
+        bool above = r->lo[k] >= mid[k];
+        if (above != (r->hi[k] > mid[k]))
+        {
+            return -1;
+        }
+        o |= above ? 1 << k : 0;
+    }
+    return o;
+}
+
+// Descends cube c of tile t, which holds the region, to the deepest
+// mixed node that still holds it whole, visiting the open block that
+// does instead. Above it a search meets one child a node, so starting it
+// there visits the same blocks in the same order. Returns whether a node
+// is left to search, in f.
+static bool Descend(const mnavFlightTile* t, int32_t c, const Region* r, Frame* f)
 {
     int32_t side = t->side;
     if (t->roots[c] != MNAV_FLIGHT_MIXED)
@@ -217,11 +277,50 @@ static void Collect(const mnavFlightTile* t, int32_t c, const Region* r)
         {
             Visit(r, 0, c * side, 0, side);
         }
-        return;
+        return false;
     }
+    *f = (Frame){(uint32_t)t->rootNodes[c], 0, c * side, 0, side};
+    for (;;)
+    {
+        int32_t h = f->size / 2;
+        int32_t o = Holding(r, f->x, f->y, f->z, h);
+        if (o < 0)
+        {
+            return true;
+        }
+        const mnavFlightNode* node = &t->nodes[f->node];
+        int32_t x = f->x + ((o & 1) != 0 ? h : 0);
+        int32_t y = f->y + ((o & 2) != 0 ? h : 0);
+        int32_t z = f->z + ((o & 4) != 0 ? h : 0);
+        if ((node->mask >> (o + 8) & 1u) != 0)
+        {
+            return false;
+        }
+        if ((node->mask >> o & 1u) == 0)
+        {
+            Visit(r, x, y, z, h);
+            return false;
+        }
+        if (h == 4)
+        {
+            VisitLeaf(r, t->leaves[Child(node, o)], x, y, z);
+            return false;
+        }
+        *f = (Frame){Child(node, o), x, y, z, h};
+    }
+}
+
+// Visits the open blocks of cube c of tile t within the region, which the
+// cube holds.
+static void Collect(const mnavFlightTile* t, int32_t c, const Region* r)
+{
     Frame stack[STACK_DEPTH];
     int32_t top = 0;
-    stack[top++] = (Frame){(uint32_t)t->rootNodes[c], 0, c * side, 0, side};
+    if (!Descend(t, c, r, &stack[0]))
+    {
+        return;
+    }
+    top = 1;
     while (top > 0)
     {
         Frame f = stack[--top];
@@ -294,12 +393,6 @@ typedef struct Walk
     mnavFlightBlock open;
 } Walk;
 
-static bool Inside(const mnavFlightBlock* b, const int32_t at[3])
-{
-    return at[0] >= b->x && at[1] >= b->y && at[2] >= b->z && at[0] < b->x + b->size &&
-           at[1] < b->y + b->size && at[2] < b->z + b->size;
-}
-
 // What holds the walk's voxel, keeping the open block that holds it.
 static int32_t Look(mnavFlightCursor* cursor, Walk* w)
 {
@@ -307,7 +400,10 @@ static int32_t Look(mnavFlightCursor* cursor, Walk* w)
     {
         return MNAV_SPACE_OPEN;
     }
-    int32_t held = mnavFlightHolder(cursor, w->at[0], w->at[1], w->at[2], &w->open);
+    // Through a local, so that the walk's address never leaves the walk.
+    mnavFlightBlock open;
+    int32_t held = mnavFlightHolder(cursor, w->at[0], w->at[1], w->at[2], &open);
+    w->open = open;
     w->open.size = held == MNAV_SPACE_OPEN ? w->open.size : 0;
     return held;
 }
@@ -353,26 +449,34 @@ static Walk StartWalk(const double a[3], const double b[3])
     return w;
 }
 
-// Moves the walk on at fraction t across every axis it crosses there;
-// returns what holds the first voxel it touches on the way that is not
-// open, crossing an edge or a corner.
-static int32_t Advance(mnavFlightCursor* cursor, Walk* w, double t)
+static double Min(double a, double b)
 {
-    uint32_t tied = 0;
+    return b < a ? b : a;
+}
+
+// The walk's next step: the fraction of the segment it is taken at, the
+// axes crossed there (each due within 1e-9 of it), and the voxel entered.
+// The fraction equals fmin's but for the sign of a zero, which neither
+// the comparisons nor the crossing of an axis can tell.
+static double Due(const Walk* w, uint32_t* tied, int32_t to[3])
+{
+    double t = Min(w->next[0], Min(w->next[1], w->next[2]));
+    *tied = 0;
     for (int32_t k = 0; k < 3; ++k)
     {
-        tied |= w->next[k] - t < 1e-9 ? 1u << k : 0u;
+        bool crossed = w->next[k] - t < 1e-9;
+        *tied |= crossed ? 1u << k : 0u;
+        to[k] = w->at[k] + (crossed ? w->step[k] : 0);
     }
-    int32_t to[3];
-    for (int32_t k = 0; k < 3; ++k)
-    {
-        to[k] = w->at[k] + ((tied >> k & 1u) != 0 ? w->step[k] : 0);
-    }
-    // Every voxel touched on the way lies in the box between the voxels
-    // left and entered: inside the open block when both are.
-    bool within = Inside(&w->open, to);
-    int32_t held =
-        (tied & (tied - 1u)) != 0 && !within ? Corners(cursor, w, tied) : MNAV_SPACE_OPEN;
+    return t;
+}
+
+// Takes a step out of the open block, across the axes in tied to voxel
+// to; returns what holds the first voxel it touches on the way that is
+// not open, crossing an edge or a corner. Look tells what holds to.
+static int32_t Advance(mnavFlightCursor* cursor, Walk* w, uint32_t tied, const int32_t to[3])
+{
+    int32_t held = (tied & (tied - 1u)) != 0 ? Corners(cursor, w, tied) : MNAV_SPACE_OPEN;
     for (int32_t k = 0; k < 3; ++k)
     {
         bool crossed = (tied >> k & 1u) != 0;
@@ -382,25 +486,174 @@ static int32_t Advance(mnavFlightCursor* cursor, Walk* w, double t)
     return held;
 }
 
+// Whether every voxel a step from at across the axes in tied touches,
+// each reached by a part of the steps, is an open voxel of the cursor's
+// leaf: at and to are in it, and so is every voxel between them.
+static bool LeafClear(const mnavFlightCursor* c, const int32_t at[3], const int32_t step[3],
+                      uint32_t tied, const int32_t to[3])
+{
+    if (!Inside(&c->leaf, at) || !Inside(&c->leaf, to))
+    {
+        return false;
+    }
+    for (uint32_t m = 1; m < 8; ++m)
+    {
+        if ((m & ~tied) != 0)
+        {
+            continue;
+        }
+        int32_t p[3];
+        for (int32_t k = 0; k < 3; ++k)
+        {
+            p[k] = at[k] + ((m >> k & 1u) != 0 ? step[k] : 0);
+        }
+        if (LeafSolid(c, p))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The crossings of axis k the walk makes before time before, from its
+// next one, each added as a step adds it; Skip's check needs the first
+// crossing at or past before, in at.
+static int32_t Crossings(const Walk* w, int32_t k, double before, double* at)
+{
+    int32_t count = 0;
+    double next = w->next[k];
+    while (next < before)
+    {
+        next += w->delta[k];
+        ++count;
+    }
+    *at = next;
+    return count;
+}
+
+// The time of axis k's crossing number n from the walk's next, within
+// far less than SKIP_BACK of the sum the steps add up to it.
+static double CrossingAt(const Walk* w, int32_t k, int32_t n)
+{
+    return w->next[k] + (double)n * w->delta[k];
+}
+
+// The steps' margin: a step crosses every axis due within 1e-9 of it.
+#define SKIP_BACK 1e-7
+#define SKIP_GAP  1e-8
+
+// Moves the walk at once across its open block, to where its steps would
+// have taken it just before time B: every crossing due before B made, as
+// the steps add it, and none after. B lies SKIP_BACK before the first
+// crossing out of the block, before the last crossing the end's voxel
+// needs when the block holds it, and before the segment's end, so no step
+// before B leaves the block or stops the walk. With no crossing due from B
+// to SKIP_GAP after it, every crossing before B is made by a step before
+// it, and every one after by a step after it; else the walk is left as it
+// is. An axis crossed every SKIP_GAP or less is never skipped.
+static void Skip(Walk* w, const int32_t end[3])
+{
+    bool holdsEnd = Inside(&w->open, end);
+    double out = 1.0;
+    double reach = 0.0;
+    for (int32_t k = 0; k < 3; ++k)
+    {
+        if (w->step[k] == 0)
+        {
+            continue;
+        }
+        if (w->delta[k] <= SKIP_GAP)
+        {
+            return;
+        }
+        // The crossings left in the block, the last of them out of it.
+        int32_t lo = k == 0 ? w->open.x : (k == 1 ? w->open.y : w->open.z);
+        int32_t room = w->step[k] > 0 ? lo + w->open.size - w->at[k] : w->at[k] - lo + 1;
+        out = Min(out, CrossingAt(w, k, room - 1));
+        int32_t need = (end[k] - w->at[k]) * w->step[k];
+        if (holdsEnd && need > 0)
+        {
+            double last = CrossingAt(w, k, need - 1);
+            reach = last > reach ? last : reach;
+        }
+    }
+    double before = (holdsEnd ? Min(out, reach) : out) - SKIP_BACK;
+    int32_t counts[3] = {0, 0, 0};
+    double next[3];
+    for (int32_t k = 0; k < 3; ++k)
+    {
+        if (w->step[k] == 0)
+        {
+            next[k] = w->next[k];
+            continue;
+        }
+        counts[k] = Crossings(w, k, before, &next[k]);
+        if (next[k] < before + SKIP_GAP)
+        {
+            return;
+        }
+    }
+    for (int32_t k = 0; k < 3; ++k)
+    {
+        w->at[k] += counts[k] * w->step[k];
+        w->next[k] = next[k];
+    }
+}
+
+// Moves the walk on while every voxel it touches is known open: in its
+// open block, or an open voxel of the cursor's leaf, which becomes the
+// block. Returns false where the walk ends open, at the end's voxel or
+// past the segment's end, and true when its next step needs Advance and
+// Look.
+static bool Within(const mnavFlightCursor* cursor, Walk* w, const int32_t end[3], uint32_t* tied,
+                   int32_t to[3])
+{
+    if (w->open.size >= 4)
+    {
+        Skip(w, end);
+    }
+    while (w->at[0] != end[0] || w->at[1] != end[1] || w->at[2] != end[2])
+    {
+        if (Due(w, tied, to) > 1.0)
+        {
+            return false;
+        }
+        if (!Inside(&w->open, to))
+        {
+            if (!LeafClear(cursor, w->at, w->step, *tied, to))
+            {
+                return true;
+            }
+            w->open = (mnavFlightBlock){to[0], to[1], to[2], 1};
+        }
+        for (int32_t k = 0; k < 3; ++k)
+        {
+            w->next[k] += (*tied >> k & 1u) != 0 ? w->delta[k] : 0.0;
+            w->at[k] = to[k];
+        }
+    }
+    return false;
+}
+
 int32_t mnavFlightWalk(mnavFlightCursor* cursor, const double a[3], const double b[3], double* tOut)
 {
     Walk w = StartWalk(a, b);
     const int32_t end[3] = {(int32_t)floor(b[0]), (int32_t)floor(b[1]), (int32_t)floor(b[2])};
-    double t = 0.0;
+    // The crossings due before the last step out of a block, whose
+    // fraction a refused walk gives.
+    double before[3] = {0.0, 0.0, 0.0};
+    uint32_t tied = 0;
+    int32_t to[3];
     int32_t held = Look(cursor, &w);
-    while (held == MNAV_SPACE_OPEN && (w.at[0] != end[0] || w.at[1] != end[1] || w.at[2] != end[2]))
+    while (held == MNAV_SPACE_OPEN && Within(cursor, &w, end, &tied, to))
     {
-        t = fmin(w.next[0], fmin(w.next[1], w.next[2]));
-        if (t > 1.0)
-        {
-            return MNAV_SPACE_OPEN;
-        }
-        held = Advance(cursor, &w, t);
+        memcpy(before, w.next, sizeof(before));
+        held = Advance(cursor, &w, tied, to);
         held = held == MNAV_SPACE_OPEN ? Look(cursor, &w) : held;
     }
     if (held != MNAV_SPACE_OPEN && tOut != nullptr)
     {
-        *tOut = t;
+        *tOut = fmin(before[0], fmin(before[1], before[2]));
     }
     return held;
 }

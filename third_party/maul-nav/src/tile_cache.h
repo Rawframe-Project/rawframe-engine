@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The tile cache (mnav-0016): per tile, the open-space field before
+// The tile cache: per tile, the open-space field before
 // volumes apply, the volumes that shape it, and the hashes a rebuild
 // continues from, in the cache's own memory.
 

@@ -25,6 +25,7 @@ option(MAUL_NAV_TSAN "Instrument with ThreadSanitizer" OFF)
 option(MAUL_NAV_COVERAGE "Instrument for gcov coverage" OFF)
 option(MAUL_NAV_FUZZ "Build the libFuzzer targets (Clang)" OFF)
 option(MAUL_NAV_DIFFERENTIAL "Build the differential harness against Recast (test only)" OFF)
+option(MAUL_NAV_TEST_PACKAGE "Test the installed package by building samples/minimal against it" OFF)
 
 # Every executable (tests, benchmarks, tools) lands in the top of the
 # build tree, so scripts and CI find them in one place.
@@ -73,6 +74,7 @@ add_library(maul-nav ${MAUL_LIBRARY_KIND}
     src/flight_space.c
     src/flight_tile.c
     src/flight_volume.c
+    src/fpenv.c
     src/hash.c
     src/funnel.c
     src/flow.c
@@ -118,7 +120,7 @@ add_library(maul-nav ${MAUL_LIBRARY_KIND}
     src/triangulate.c)
 maul_configure_library(maul-nav)
 # floor, ceil, fabs and sqrt, the exactly rounded functions the library
-# takes from libm (mnav-0001).
+# takes from libm.
 if(NOT WIN32 AND NOT APPLE)
     target_link_libraries(maul-nav PUBLIC m)
 endif()
@@ -178,9 +180,14 @@ if(MAUL_NAV_BUILD_TESTS)
     endif()
     maul_add_test(edge_links)
     maul_add_test(scenarios)
+    # The 1,000-agent doorway crowd, a large scene: nightly, never in the
+    # pull request check.
+    add_test(NAME doorway COMMAND test_scenarios --doorway)
+    set_tests_properties(doorway PROPERTIES LABELS "scenarios;nightly")
     maul_add_test(terrain)
     maul_add_test(funnel WHITEBOX)
     maul_add_test(lz WHITEBOX)
+    maul_add_test(fpenv WHITEBOX)
     maul_add_test(tile_cache)
     maul_add_test(tile_index)
     maul_add_test(volume WHITEBOX)
@@ -196,6 +203,17 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_test(scalar WHITEBOX)
     maul_add_test(tile WHITEBOX)
     maul_add_header_tests()
+    maul_add_exports_test()
+    # Installs the build into the binary tree and builds and runs
+    # samples/minimal against it, as a consumer of the package would.
+    if(MAUL_NAV_TEST_PACKAGE AND MAUL_NAV_INSTALL)
+        add_test(NAME package
+                 COMMAND ${CMAKE_COMMAND} -DBINARY_DIR=${PROJECT_BINARY_DIR}
+                         -DSOURCE_DIR=${PROJECT_SOURCE_DIR} -DGENERATOR=${CMAKE_GENERATOR}
+                         -DC_COMPILER=${CMAKE_C_COMPILER} -DCONFIG=$<CONFIG>
+                         -P ${PROJECT_SOURCE_DIR}/cmake/PackageTest.cmake)
+        set_tests_properties(package PROPERTIES LABELS package)
+    endif()
 endif()
 
 # The fuzz targets: test/fuzz_<area>.c, run as fuzz_<area> <corpus dir>,
@@ -209,7 +227,9 @@ if(MAUL_NAV_FUZZ)
     target_compile_options(maul-nav PRIVATE -fsanitize=fuzzer-no-link,address,undefined
                                             -fno-sanitize-recover=all)
     target_link_options(maul-nav PUBLIC -fsanitize=address,undefined)
+    set(fuzz_targets "")
     foreach(area tile bake query avoid graph stream flow shortest flight lz)
+        list(APPEND fuzz_targets fuzz_${area})
         add_executable(fuzz_${area} test/fuzz_${area}.c)
         target_link_libraries(fuzz_${area} PRIVATE maul-nav)
         # The targets reach the library's own functions.
@@ -219,6 +239,9 @@ if(MAUL_NAV_FUZZ)
                                                      -fno-sanitize-recover=all)
         target_link_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined)
     endforeach()
+    # The targets, one a line, for tools/fuzz.sh and the night's matrix.
+    list(JOIN fuzz_targets "\n" fuzz_lines)
+    file(WRITE ${PROJECT_BINARY_DIR}/fuzz-targets.txt "${fuzz_lines}\n")
 endif()
 
 if(MAUL_NAV_DIFFERENTIAL)

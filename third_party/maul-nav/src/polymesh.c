@@ -7,6 +7,7 @@
 
 #include "allocator.h"
 #include "contour.h"
+#include "invariant.h"
 #include "triangulate.h"
 
 #include "maul-nav/bake.h"
@@ -601,12 +602,74 @@ static void MarkSides(mnavPolyMesh* mesh)
     }
 }
 
+// Corner k of a polygon is a vertex of the mesh no other corner repeats,
+// where the polygon does not turn backward.
+static void CheckCorner(const mnavPolyMesh* mesh, const mnavPolygon* polygon, int32_t k)
+{
+    int32_t n = polygon->count;
+    MNAV_ASSERT(polygon->vertices[k] < mesh->vertexCount);
+    for (int32_t j = k + 1; j < n; ++j)
+    {
+        MNAV_ASSERT(polygon->vertices[j] != polygon->vertices[k]);
+    }
+    const mnavMeshVertex* v = mesh->vertices;
+    int32_t a = polygon->vertices[(k + n - 1) % n];
+    int32_t b = polygon->vertices[k];
+    int32_t c = polygon->vertices[(k + 1) % n];
+    int64_t turn = (int64_t)(v[b].x - v[a].x) * (v[c].z - v[a].z) -
+                   (int64_t)(v[c].x - v[a].x) * (v[b].z - v[a].z);
+    MNAV_ASSERT(turn <= 0);
+}
+
+// The neighbor across edge k of polygon p, if any, has the same edge the
+// other way and leads back; only an edge without one lies on a side.
+static void CheckNeighbor(const mnavPolyMesh* mesh, int32_t p, int32_t k)
+{
+    const mnavPolygon* polygon = &mesh->polygons[p];
+    MNAV_ASSERT(polygon->sides[k] <= 4);
+    uint16_t q = polygon->neighbors[k];
+    if (q == MNAV_NO_INDEX)
+    {
+        return;
+    }
+    MNAV_ASSERT(q < mesh->polygonCount && polygon->sides[k] == 0);
+    const mnavPolygon* other = &mesh->polygons[q];
+    bool back = false;
+    for (int32_t j = 0; j < other->count; ++j)
+    {
+        back = back ||
+               (other->vertices[j] == EdgeEnd(polygon, k) &&
+                EdgeEnd(other, j) == polygon->vertices[k] && other->neighbors[j] == (uint16_t)p);
+    }
+    MNAV_ASSERT(back);
+}
+
+// Every polygon has three to MNAV_POLYGON_VERTICES corners and edges as
+// CheckCorner and CheckNeighbor require.
+static void CheckPolyMesh(const mnavPolyMesh* mesh)
+{
+    for (int32_t p = 0; p < mesh->polygonCount; ++p)
+    {
+        const mnavPolygon* polygon = &mesh->polygons[p];
+        MNAV_ASSERT(polygon->count >= 3 && polygon->count <= MNAV_POLYGON_VERTICES);
+        for (int32_t k = 0; k < polygon->count; ++k)
+        {
+            CheckCorner(mesh, polygon, k);
+            CheckNeighbor(mesh, p, k);
+        }
+    }
+}
+
 mnavResult mnavLinkPolyMesh(mnavMemory* memory, mnavPolyMesh* mesh)
 {
     mnavResult result = Link(memory, mesh);
     if (result == mnav_success)
     {
         MarkSides(mesh);
+        if (MNAV_INVARIANTS)
+        {
+            CheckPolyMesh(mesh);
+        }
     }
     return result;
 }

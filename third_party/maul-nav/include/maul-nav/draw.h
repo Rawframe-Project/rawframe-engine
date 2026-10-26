@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Debug geometry (mnav-0010): the buffer debug functions append plain
+// Debug geometry: the buffer debug functions append plain
 // vertex and index data to, for any renderer; the library never draws.
 
 #ifndef MAUL_NAV_DRAW_H

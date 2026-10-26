@@ -6,6 +6,7 @@
 #include "input.h"
 
 #include "bake_def.h"
+#include "fpenv.h"
 
 #include "maul-nav/bake.h"
 
@@ -121,7 +122,8 @@ mnavInputResult mnavCheckTriangleMesh(const mnavBakeDef* def, const mnavTriangle
     return CheckTriangles(mesh);
 }
 
-mnavInputResult mnavValidateTriangleMesh(const mnavBakeDef* def, const mnavTriangleMesh* mesh)
+static MNAV_NOINLINE mnavInputResult ValidateTriangleMeshWork(const mnavBakeDef* def,
+                                                              const mnavTriangleMesh* mesh)
 {
     if (def == nullptr || mesh == nullptr)
     {
@@ -133,6 +135,14 @@ mnavInputResult mnavValidateTriangleMesh(const mnavBakeDef* def, const mnavTrian
         return Refuse(checked, mnav_elementNone, -1);
     }
     return mnavCheckTriangleMesh(def, mesh);
+}
+
+mnavInputResult mnavValidateTriangleMesh(const mnavBakeDef* def, const mnavTriangleMesh* mesh)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavInputResult result = ValidateTriangleMeshWork(def, mesh);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 mnavInputResult mnavCheckOutline(const mnavBakeDef* def, const mnavOutline* outline)
@@ -161,7 +171,8 @@ mnavInputResult mnavCheckOutline(const mnavBakeDef* def, const mnavOutline* outl
     return Refuse(mnav_success, mnav_elementNone, -1);
 }
 
-mnavInputResult mnavValidateOutline(const mnavBakeDef* def, const mnavOutline* outline)
+static MNAV_NOINLINE mnavInputResult ValidateOutlineWork(const mnavBakeDef* def,
+                                                         const mnavOutline* outline)
 {
     if (def == nullptr || outline == nullptr)
     {
@@ -173,4 +184,12 @@ mnavInputResult mnavValidateOutline(const mnavBakeDef* def, const mnavOutline* o
         return Refuse(checked, mnav_elementNone, -1);
     }
     return mnavCheckOutline(def, outline);
+}
+
+mnavInputResult mnavValidateOutline(const mnavBakeDef* def, const mnavOutline* outline)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavInputResult result = ValidateOutlineWork(def, outline);
+    mnavFloatEnvLeave(env);
+    return result;
 }

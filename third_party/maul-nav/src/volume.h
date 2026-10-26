@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Bake volumes (mnav-0003): include and exclude volumes carve the
+// Bake volumes: include and exclude volumes carve the
 // open-space field before erosion, area volumes mark it after.
 
 #ifndef MAUL_NAV_SRC_VOLUME_H

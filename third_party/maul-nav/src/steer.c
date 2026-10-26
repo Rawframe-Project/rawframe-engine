@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Steering along a corridor's corners (mnav-0005): a desired velocity on
+// Steering along a corridor's corners: a desired velocity on
 // the ground from the corners alone, after Detour's crowd.
+
+#include "fpenv.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/query.h"
@@ -22,7 +24,7 @@ static bool Finite(mnavPos3 p)
 }
 
 // The length of (x, z), by sqrt, which is exactly rounded everywhere, not
-// hypot, which is not and differs between C libraries (mnav-0001).
+// hypot, which is not and differs between C libraries.
 static double Length(double x, double z)
 {
     return sqrt(x * x + z * z);
@@ -71,7 +73,8 @@ static double Left(const mnavCorners* corners)
     return left;
 }
 
-mnavResult mnavSteer(const mnavCorners* corners, const mnavSteerDef* def, mnavSteering* steeringOut)
+static MNAV_NOINLINE mnavResult SteerWork(const mnavCorners* corners, const mnavSteerDef* def,
+                                          mnavSteering* steeringOut)
 {
     if (corners == nullptr || def == nullptr || steeringOut == nullptr || corners->pointCount < 1 ||
         corners->points == nullptr || (corners->linkCount > 0 && corners->links == nullptr) ||
@@ -126,4 +129,12 @@ mnavResult mnavSteer(const mnavCorners* corners, const mnavSteerDef* def, mnavSt
     *steeringOut =
         (mnavSteering){{direction.x * speed, 0.0, direction.z * speed}, mnav_steerMoving, -1};
     return mnav_success;
+}
+
+mnavResult mnavSteer(const mnavCorners* corners, const mnavSteerDef* def, mnavSteering* steeringOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = SteerWork(corners, def, steeringOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Off-mesh links (mnav-0004): their attachments to polygons, made at each
+// Off-mesh links: their attachments to polygons, made at each
 // commit.
 
 #ifndef MAUL_NAV_SRC_OFFMESH_H

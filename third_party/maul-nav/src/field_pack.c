@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Packing open-space fields (mnav-0016). The planes, in order: the
+// Packing open-space fields. The planes, in order: the
 // columns' span counts (low bytes, then high), the spans' floors and
 // heights likewise, then their areas; 2 bytes a column and 5 a span
 // before coding.

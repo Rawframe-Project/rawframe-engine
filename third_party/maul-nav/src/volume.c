@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Bake volumes (mnav-0003). A span lies in a volume when the volume's ring
+// Bake volumes. A span lies in a volume when the volume's ring
 // holds its cell's center, by the same scan as 2D outlines, and its floor
 // lies within the volume's heights.
 

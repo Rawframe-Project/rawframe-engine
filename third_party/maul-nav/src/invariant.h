@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Internal invariants only (conventions section 8): states that cannot
+// Internal invariants only: states that cannot
 // happen unless the library itself is wrong. Caller input is refused
 // with a status, never checked here. Debug and test builds stop at a
 // broken invariant, where a debugger shows it; release builds (NDEBUG)
@@ -13,8 +13,14 @@
 #if defined(NDEBUG)
 // sizeof keeps the operands used without evaluating them.
 #define MNAV_ASSERT(cond) ((void)sizeof(cond))
+#define MNAV_INVARIANTS   0
 #else
 #define MNAV_ASSERT(cond) ((cond) ? (void)0 : __builtin_trap())
+#define MNAV_INVARIANTS   1
 #endif
+
+// A check of a whole structure, a loop of MNAV_ASSERTs, is called as
+// `if (MNAV_INVARIANTS) { Check...(...); }`, so that release builds drop
+// the loop with the assertions while it still compiles there.
 
 #endif // MAUL_NAV_SRC_INVARIANT_H

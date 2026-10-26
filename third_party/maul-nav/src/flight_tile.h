@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flight tile format (mnav-0015): a tile's octrees as little-endian
+// The flight tile format: a tile's octrees as little-endian
 // integers behind a versioned, fingerprinted header, and the loader that
 // checks every byte of it as hostile.
 
@@ -26,9 +26,8 @@
 // into bytes allocated from memory, which mnavReleaseFlightTileBytes
 // frees. The payload is a class byte per cube, a mask per node and a word
 // per leaf; child and root indices are not stored.
-mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, mnavVersion generator,
-                                uint64_t fingerprint, const mnavFlightTile* tile, uint8_t** bytes,
-                                size_t* size);
+mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, uint64_t fingerprint,
+                                const mnavFlightTile* tile, uint8_t** bytes, size_t* size);
 
 void mnavReleaseFlightTileBytes(mnavMemory* memory, uint8_t* bytes, size_t size);
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The fingerprint of a tile's input (mnav-0003): a 64-bit hash of every
+// The fingerprint of a tile's input: a 64-bit hash of every
 // input triangle that reaches the tile as rasterization picks it, and of
 // the volumes that reach it.
 

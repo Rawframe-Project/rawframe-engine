@@ -20,18 +20,38 @@ extern "C"
 {
 #endif
 
-// The library version. CMake reads it from here.
-#define MNAV_VERSION_MAJOR 1
+// The library version. CMake reads it from here, and release-please
+// moves it between the markers.
+// x-release-please-start-major
+#define MNAV_VERSION_MAJOR 0
+// x-release-please-end
+// x-release-please-start-minor
 #define MNAV_VERSION_MINOR 0
-#define MNAV_VERSION_PATCH 1
+// x-release-please-end
+// x-release-please-start-patch
+#define MNAV_VERSION_PATCH 4
+// x-release-please-end
 
-// The version every def and the query filter carry, stamped by their
-// defaults from the headers a program was built with: the ABI is promised
-// within a minor version only, and every function that takes a def or a
-// filter refuses one stamped for another major or minor with
-// mnav_errorVersion before it reads anything else of it. The cookie and
-// this stay the first two fields of every def in every version.
-#define MNAV_ABI_VERSION (((uint32_t)MNAV_VERSION_MAJOR << 16) | (uint32_t)MNAV_VERSION_MINOR)
+// The binary interface a program is built for: the whole version before
+// 1.0, when any release may break it, and the major and minor version from
+// 1.0 on. The top bit is always set, so a zeroed def never matches. Maul Nav
+// has no single root object, so every def of a creation that takes no other
+// library object carries it, stamped by its default from the headers the
+// program includes, and that creation refuses a def built for another
+// version with mnav_errorVersion, after its cookie and before anything
+// else. The query filter and the link generation def are only ever used
+// with an object such a creation made, and carry only their cookie.
+#define MNAV_ABI_VERSION                                                                           \
+    (UINT32_C(0x80000000) | ((uint32_t)MNAV_VERSION_MAJOR << 16) |                                 \
+     (MNAV_VERSION_MAJOR == 0                                                                      \
+          ? (((uint32_t)MNAV_VERSION_MINOR << 8) | (uint32_t)MNAV_VERSION_PATCH)                   \
+          : (uint32_t)MNAV_VERSION_MINOR))
+#if MNAV_VERSION_MAJOR > 0x7FFF || MNAV_VERSION_MINOR > 0xFFFF
+#error "MNAV_VERSION_MAJOR or MNAV_VERSION_MINOR does not fit MNAV_ABI_VERSION"
+#endif
+#if MNAV_VERSION_MAJOR == 0 && (MNAV_VERSION_MINOR > 0xFF || MNAV_VERSION_PATCH > 0xFF)
+#error "before 1.0, MNAV_VERSION_MINOR and MNAV_VERSION_PATCH must fit 8 bits each"
+#endif
 
 // MNAV_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_nav_EXPORTS is defined while building
@@ -84,14 +104,14 @@ extern "C"
         // represent in the frame it belongs to.
         mnav_errorRange = -4,
         // Data was written in a format version this library does not
-        // read, or a def was built against headers of another major or
-        // minor version (MNAV_ABI_VERSION).
+        // read, or a def was built against headers of another library
+        // version (MNAV_ABI_VERSION).
         mnav_errorVersion = -5,
         // The place asked about has no tile loaded: not a wall, nothing
         // is known there.
         mnav_errorNotLoaded = -6,
         // An id names a tile or polygon that has been replaced or
-        // removed since it was handed out (record 0016).
+        // removed since it was handed out.
         mnav_errorStale = -7,
         // The navmesh's runtime tier does not allow the change.
         mnav_errorTier = -8,
@@ -108,6 +128,7 @@ extern "C"
     // The allocator an owner object takes in its def and keeps for its
     // lifetime. Alignment is a power of two. A zeroed allocator means the C
     // library's functions, which serve alignments up to that of max_align_t.
+    // Its calls run in the host's own floating-point environment.
     typedef struct mnavAllocator
     {
         void* (*alloc)(size_t size, size_t alignment, void* context);

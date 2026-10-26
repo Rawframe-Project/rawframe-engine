@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Appending to debug buffers (mnav-0010), for every module that draws;
+// Appending to debug buffers, for every module that draws;
 // it uses the base alone.
 
 #ifndef MAUL_NAV_SRC_DRAW_H

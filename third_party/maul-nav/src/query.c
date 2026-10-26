@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Query contexts (mnav-0005): their memory, sized by their limits, and the
+// Query contexts: their memory, sized by their limits, and the
 // table that finds a search's nodes.
 
 #include "query.h"
 
 #include "allocator.h"
+#include "fpenv.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/query.h"
@@ -34,7 +35,7 @@ void mnavDestroyQuery(mnavQuery* query)
     mnavRelease(&last, query, 1, sizeof(mnavQuery), alignof(mnavQuery));
 }
 
-mnavResult mnavCreateQuery(const mnavQueryDef* def, mnavQuery** queryOut)
+static MNAV_NOINLINE mnavResult CreateQueryWork(const mnavQueryDef* def, mnavQuery** queryOut)
 {
     if (queryOut == nullptr)
     {
@@ -113,6 +114,14 @@ mnavResult mnavCreateQuery(const mnavQueryDef* def, mnavQuery** queryOut)
     }
     *queryOut = query;
     return mnav_success;
+}
+
+mnavResult mnavCreateQuery(const mnavQueryDef* def, mnavQuery** queryOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = CreateQueryWork(def, queryOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 static uint32_t Hash(int32_t slot, int32_t polygon, int32_t tag, int32_t low)

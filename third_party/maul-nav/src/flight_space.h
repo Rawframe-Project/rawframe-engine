@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flight volume's space as its queries see it (mnav-0015): voxels in
+// The flight volume's space as its queries see it: voxels in
 // the volume's frame, the open blocks of the octrees that hold them, the
 // blocks across a block's faces, and a conservative walk along a segment.
 
@@ -33,7 +33,9 @@ typedef struct mnavFlightBlock
     int32_t size;
 } mnavFlightBlock;
 
-// Reads a volume, keeping the last tile it looked up.
+// Reads a volume, keeping the last tile it looked up and the last leaf a
+// voxel was found in: its block of 4 voxels (side 0 for none) and its
+// bits, bit x + 4y + 16z solid.
 typedef struct mnavFlightCursor
 {
     const mnavFlightVolume* volume;
@@ -41,8 +43,12 @@ typedef struct mnavFlightCursor
     int32_t tileX;
     int32_t tileZ;
     bool cached;
+    // The tile's side in voxels, a power of two, and its exponent.
     int32_t side;
+    int32_t shift;
     int32_t layers;
+    mnavFlightBlock leaf;
+    uint64_t leafBits;
 } mnavFlightCursor;
 
 mnavFlightCursor mnavMakeFlightCursor(const mnavFlightVolume* volume);

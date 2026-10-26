@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The nearest point on the navmesh (mnav-0005).
+// The nearest point on the navmesh.
 
 #include "nearest.h"
 
 #include "detail.h"
+#include "fpenv.h"
 #include "navmesh.h"
 #include "polymesh.h"
 #include "query_filter.h"
@@ -345,9 +346,10 @@ mnavCover mnavCoverOf(const mnavNavmesh* navmesh, mnavPos3 point, mnavPos3 half)
     return c;
 }
 
-mnavResult mnavFindPolygons(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-                            mnavPos3 center, mnavVec3 halfExtents, mnavPolygonId* polygonsOut,
-                            int32_t capacity, mnavFound* foundOut)
+static MNAV_NOINLINE mnavResult FindPolygonsWork(const mnavNavmesh* navmesh,
+                                                 const mnavQueryFilter* filter, mnavPos3 center,
+                                                 mnavVec3 halfExtents, mnavPolygonId* polygonsOut,
+                                                 int32_t capacity, mnavFound* foundOut)
 {
     if (navmesh == nullptr || foundOut == nullptr || capacity < 0 ||
         (polygonsOut == nullptr && capacity > 0) || !GoodBox(center, halfExtents))
@@ -394,8 +396,20 @@ mnavResult mnavFindPolygons(const mnavNavmesh* navmesh, const mnavQueryFilter* f
     return count > capacity ? mnav_errorCapacity : mnav_success;
 }
 
-mnavResult mnavFindNearest(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-                           mnavPos3 point, mnavVec3 halfExtents, mnavNearest* nearestOut)
+mnavResult mnavFindPolygons(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+                            mnavPos3 center, mnavVec3 halfExtents, mnavPolygonId* polygonsOut,
+                            int32_t capacity, mnavFound* foundOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result =
+        FindPolygonsWork(navmesh, filter, center, halfExtents, polygonsOut, capacity, foundOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult FindNearestWork(const mnavNavmesh* navmesh,
+                                                const mnavQueryFilter* filter, mnavPos3 point,
+                                                mnavVec3 halfExtents, mnavNearest* nearestOut)
 {
     if (navmesh == nullptr || nearestOut == nullptr || !GoodBox(point, halfExtents))
     {
@@ -440,4 +454,13 @@ mnavResult mnavFindNearest(const mnavNavmesh* navmesh, const mnavQueryFilter* fi
     }
     nearestOut->incomplete = loaded < (c.x1 - c.x0 + 1) * (c.z1 - c.z0 + 1);
     return mnav_success;
+}
+
+mnavResult mnavFindNearest(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+                           mnavPos3 point, mnavVec3 halfExtents, mnavNearest* nearestOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = FindNearestWork(navmesh, filter, point, halfExtents, nearestOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

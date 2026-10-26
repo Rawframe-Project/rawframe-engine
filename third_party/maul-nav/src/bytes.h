@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Little-endian bytes for the tile formats (mnav-0003, mnav-0015): a
+// Little-endian bytes for the tile formats: a
 // writer into a buffer sized beforehand and a reader that treats its
 // bytes as hostile, reading 0 past their end.
 

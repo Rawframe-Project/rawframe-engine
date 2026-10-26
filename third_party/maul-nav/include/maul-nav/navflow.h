@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Flow fields over the navmesh (mnav-0013): for every polygon, the cost of
+// Flow fields over the navmesh: for every polygon, the cost of
 // its cheapest way to the nearest of a set of goal points and the polygon
 // to go to next, so that any number of agents sharing the goals find their
 // way at the cost of one search.
@@ -114,7 +114,7 @@ extern "C"
     /// @param fieldOut Receives the field, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultNavFlowDef; `mnav_errorVersion` for one built
-    /// against another major or minor version; `mnav_errorRange` for a limit
+    /// against another version of the headers; `mnav_errorRange` for a limit
     /// out of its range; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
@@ -180,8 +180,8 @@ extern "C"
                                                            int32_t polygons, bool* endedOut);
 
     /// Builds the field for a navmesh and a set of goal points by one
-    /// search backward from all of them, as path searches price their ways
-    /// (mnav-0005): a polygon stands at the midpoint of the portal it is
+    /// search backward from all of them, as path searches price their ways:
+    /// a polygon stands at the midpoint of the portal it is
     /// left by toward the goals, and its cost is the next polygon's plus
     /// the walk between them times the next polygon's area cost, with an
     /// off-mesh link's cost where the way crosses one. Ties go to the lower

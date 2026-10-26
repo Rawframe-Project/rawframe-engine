@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// 2D outlines filled into the fragments of one tile (mnav-0002): every cell
+// 2D outlines filled into the fragments of one tile: every cell
 // whose center a walkable outline holds and no obstruction does becomes
 // the fragment of a flat triangle at height 0.
 

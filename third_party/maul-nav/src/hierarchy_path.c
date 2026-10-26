@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Hierarchical paths (mnav-0008): the start and end joined to their
+// Hierarchical paths: the start and end joined to their
 // clusters' transitions, A* over the transitions, and a refinement step
 // by step, each step confined to one cluster.
 
+#include "fpenv.h"
 #include "hierarchy.h"
 #include "navmesh.h"
 #include "query.h"
@@ -331,10 +332,11 @@ static bool Near(const mnavHierarchy* h, const mnavNavmesh* navmesh, mnavPos3 a,
     return dx * dx + dz * dz <= side * side;
 }
 
-mnavResult mnavFindHierarchicalPath(mnavQuery* query, mnavHierarchy* hierarchy,
-                                    const mnavNavmesh* navmesh, mnavPolygonId startPolygon,
-                                    mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end,
-                                    mnavPath* pathOut)
+static MNAV_NOINLINE mnavResult FindHierarchicalPathWork(mnavQuery* query, mnavHierarchy* hierarchy,
+                                                         const mnavNavmesh* navmesh,
+                                                         mnavPolygonId startPolygon, mnavPos3 start,
+                                                         mnavPolygonId endPolygon, mnavPos3 end,
+                                                         mnavPath* pathOut)
 {
     mnavHierarchy* h = hierarchy;
     if (pathOut == nullptr)
@@ -385,4 +387,16 @@ mnavResult mnavFindHierarchicalPath(mnavQuery* query, mnavHierarchy* hierarchy,
                             pathOut);
     }
     return mnavFinishPath(query, navmesh, pathOut);
+}
+
+mnavResult mnavFindHierarchicalPath(mnavQuery* query, mnavHierarchy* hierarchy,
+                                    const mnavNavmesh* navmesh, mnavPolygonId startPolygon,
+                                    mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end,
+                                    mnavPath* pathOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = FindHierarchicalPathWork(query, hierarchy, navmesh, startPolygon, start,
+                                                 endPolygon, end, pathOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

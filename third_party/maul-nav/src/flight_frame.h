@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// World points in voxels of a flight volume's frame (mnav-0015): x and z
+// World points in voxels of a flight volume's frame: x and z
 // from the origin, y from the volume's floor voxel.
 
 #ifndef MAUL_NAV_SRC_FLIGHT_FRAME_H

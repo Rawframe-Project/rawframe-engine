@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The navmesh's insides (mnav-0004), for the modules that query it: tiles in
+// The navmesh's insides, for the modules that query it: tiles in
 // slots, their links across tile sides, and the sorted index of places.
 
 #ifndef MAUL_NAV_SRC_NAVMESH_H
@@ -41,7 +41,7 @@ typedef struct mnavTile
     int32_t* firstLink;
 } mnavTile;
 
-// A staged change of a polygon's area (mnav-0004).
+// A staged change of a polygon's area.
 typedef struct mnavAreaChange
 {
     mnavPolygonId polygon;
@@ -145,7 +145,7 @@ struct mnavNavmesh
     int32_t areaChangeCapacity;
     // For each link kind, the lowest cost per meter of its attached links'
     // spans, INFINITY when it has none: what scales the search's
-    // heuristic (mnav-0005).
+    // heuristic.
     double costPerMeter[MNAV_LINK_KINDS];
     // The commits that changed something, so a search can tell the
     // navmesh it began on from a later one.

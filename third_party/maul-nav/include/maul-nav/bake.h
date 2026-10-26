@@ -3,8 +3,7 @@
 //
 // The bake's settings and its input surface: the def a bake runs with,
 // the agent profile it bakes for, the named limits that bound its work,
-// and the triangle meshes a host hands it, each checked before any work
-// (mnav-0002).
+// and the triangle meshes a host hands it, each checked before any work.
 
 #ifndef MAUL_NAV_BAKE_H
 #define MAUL_NAV_BAKE_H
@@ -94,7 +93,7 @@ extern "C"
         int32_t tileLinks;
         // Tiles in one navmesh.
         int32_t tiles;
-        // Off-mesh links in one navmesh, staged or committed (mnav-0004),
+        // Off-mesh links in one navmesh, staged or committed,
         // counted by crossings: a point link takes 1, an edge link 1 +
         // ceil(width / spacing) up to MNAV_MAX_LINK_CROSSINGS (see
         // mnavLinkDef.width).
@@ -104,7 +103,7 @@ extern "C"
     } mnavBakeLimits;
 
     // How a bake runs. Build it with mnavDefaultBakeDef.
-    // A navmesh's runtime tier (mnav-0004): what may change once loaded.
+    // A navmesh's runtime tier: what may change once loaded.
     // Tiles and off-mesh links load and unload in every tier.
     typedef uint8_t mnavTier;
 
@@ -121,7 +120,7 @@ extern "C"
 
     // A clock the host passes in: now returns ticks in a unit of the
     // host's choosing, never going back, and is called from the thread
-    // that bakes.
+    // that bakes, in the host's own floating-point environment.
     typedef struct mnavClock
     {
         uint64_t (*now)(void* context);
@@ -213,7 +212,7 @@ extern "C"
         mnavBakeSetting setting;
     } mnavBakeDefResult;
 
-    // What a def's meters become in cells (mnav-0002). A quotient within 2^-10 of
+    // What a def's meters become in cells. A quotient within 2^-10 of
     // an integer counts as that integer; heights and the radius then round
     // up and the step height rounds down.
     typedef struct mnavBakeCells
@@ -267,7 +266,7 @@ extern "C"
 // The most samples a terrain may have along either side.
 #define MNAV_MAX_TERRAIN_SIDE 65536
 
-    // A terrain (mnav-0003): heights sampled on a regular grid, the compact
+    // A terrain: heights sampled on a regular grid, the compact
     // form of the largest input. Each cell between four samples is two
     // triangles split along the diagonal from its lowest X and Z corner.
     typedef struct mnavTerrain
@@ -291,7 +290,7 @@ extern "C"
     } mnavTerrain;
 
     // A point of a 2D outline, in meters relative to the bake's origin:
-    // (x, y) is the navmesh point (x, 0, y) (mnav-0002).
+    // (x, y) is the navmesh point (x, 0, y).
     typedef struct mnavVec2
     {
         float x;
@@ -311,7 +310,7 @@ extern "C"
         mnavAreaType area;
     } mnavOutline;
 
-    // What a bake volume does (mnav-0003).
+    // What a bake volume does.
     typedef uint8_t mnavVolumeKind;
 
     enum
@@ -347,7 +346,7 @@ extern "C"
     } mnavBakeVolume;
 
     // The triangles of a bake's meshes that may reach each tile of a def's
-    // grid, so that a bake of one tile reads those alone (mnav-0014). Made
+    // grid, so that a bake of one tile reads those alone. Made
     // by mnavCreateTileIndex.
     typedef struct mnavTileIndex mnavTileIndex;
 
@@ -409,7 +408,7 @@ extern "C"
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, an
     /// invalid def, fewer than 3 points, an area of MNAV_AREA_TYPES or more, or
     /// a point that is not finite (the point); `mnav_errorVersion` for a def
-    /// built against another major or minor version; `mnav_errorRange` for a
+    /// built against another version of the headers; `mnav_errorRange` for a
     /// point past the extent input may have (the point); `mnav_errorLimit` for
     /// more points than the inputTriangles limit.
     /// @par Thread safety
@@ -477,7 +476,7 @@ extern "C"
     /// a value that is not finite or lies outside its range, an agent
     /// radius whose border is wider than a tile, or an agent height or
     /// step height past MNAV_MAX_HEIGHT_CELLS; `mnav_errorVersion` with no
-    /// setting for a def built against another major or minor version.
+    /// setting for a def built against another version of the headers.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavBakeDefResult mnavValidateBakeDef(const mnavBakeDef* def,
@@ -491,7 +490,7 @@ extern "C"
     /// invalid def, a negative count, a NULL array its count needs, a vertex
     /// coordinate that is not finite, a vertex index outside the vertices or an
     /// area type of MNAV_AREA_TYPES or more; `mnav_errorVersion` for a def
-    /// built against another major or minor version; `mnav_errorLimit` for more
+    /// built against another version of the headers; `mnav_errorLimit` for more
     /// triangles than the def's inputTriangles limit; `mnav_errorRange` for a
     /// vertex more than MNAV_MAX_EXTENT_CELLS cells from the origin on the
     /// ground or MNAV_MAX_HEIGHT_CELLS cell heights above or below it. The
@@ -501,8 +500,15 @@ extern "C"
     MNAV_NODISCARD MNAV_API mnavInputResult mnavValidateTriangleMesh(const mnavBakeDef* def,
                                                                      const mnavTriangleMesh* mesh);
 
-// The tile format version this library writes and reads (mnav-0003).
-#define MNAV_TILE_FORMAT 1
+// The tile format version this library writes and reads.
+#define MNAV_TILE_FORMAT 2
+
+// The navmesh bake's generation, written into every tile and hashed into
+// its fingerprint. It rises with any change to the library that gives
+// other tile bytes for the same def and input, and only then, so a tile a
+// host keeps by its fingerprint goes stale exactly when a bake would
+// differ, not at every release.
+#define MNAV_BAKE_GENERATOR 1
 
     // A baker: the def it was made with, its memory, and the last tile it
     // baked. Made by mnavCreateBaker.
@@ -583,7 +589,7 @@ extern "C"
     /// @param bakerOut  Receives the baker, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` with the setting for an
     /// invalid def or a NULL argument; `mnav_errorVersion` for a def built
-    /// against another major or minor version; `mnav_errorLimit` when the baker
+    /// against another version of the headers; `mnav_errorLimit` when the baker
     /// does not fit the def's memory limit; `mnav_errorCapacity` when the
     /// allocator fails.
     /// @par Thread safety
@@ -629,7 +635,7 @@ extern "C"
                                                          const mnavBakeInput* input, int32_t tileX,
                                                          int32_t tileZ, mnavBakeReport* reportOut);
 
-    /// Makes a tile index of meshes for a def's tile grid (mnav-0014):
+    /// Makes a tile index of meshes for a def's tile grid:
     /// checks every mesh as a bake does, then lists for each tile the
     /// triangles whose ground bounds, widened by the tile's border and two
     /// cells, reach it, in input order. A bake given the index through
@@ -649,7 +655,7 @@ extern "C"
     /// @return `mnav_success`; `mnav_errorInvalid` for an invalid def, a NULL
     /// indexOut, a negative count, NULL meshes with a positive count, or a mesh
     /// its check refuses; `mnav_errorVersion` for a def built against another
-    /// major or minor version; `mnav_errorRange` for a mesh past the extent;
+    /// version of the headers; `mnav_errorRange` for a mesh past the extent;
     /// `mnav_errorLimit` past the def's memory limit or past 2^31 - 1 listed
     /// triangles; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
@@ -661,8 +667,8 @@ extern "C"
                                                            mnavTileIndex** indexOut,
                                                            mnavBakeReport* reportOut);
 
-    /// Makes a tile index of 2D outlines for a def's tile grid
-    /// (mnav-0014), as mnavCreateTileIndex does of meshes: checks every
+    /// Makes a tile index of 2D outlines for a def's tile grid,
+    /// as mnavCreateTileIndex does of meshes: checks every
     /// outline as a 2D bake does, then lists for each tile the outlines
     /// whose bounds, widened by the tile's border and two cells, reach it,
     /// in input order. A bake given the index through mnavBake2DInput reads
@@ -723,7 +729,7 @@ extern "C"
                                                     int32_t meshCount, int32_t tileX, int32_t tileZ,
                                                     mnavBakeReport* reportOut);
 
-    /// Bakes tile (tileX, tileZ) of 2D outlines (mnav-0002): checks every
+    /// Bakes tile (tileX, tileZ) of 2D outlines: checks every
     /// outline, fills the cells whose centers a walkable outline holds and
     /// no obstruction does as a flat floor at height 0, with the highest
     /// area among the outlines holding them, then erodes, partitions,
@@ -804,8 +810,8 @@ extern "C"
         mnavTileCacheLimits limits;
     } mnavTileCacheDef;
 
-    // What a baker keeps of baked tiles to rebuild them with obstacles
-    // (mnav-0016): each tile's open-space field as it stands before
+    // What a baker keeps of baked tiles to rebuild them with obstacles:
+    // each tile's open-space field as it stands before
     // volumes apply, compressed, the volumes that reach the tile, and the
     // hash of its triangles. Made by mnavCreateTileCache.
     typedef struct mnavTileCache mnavTileCache;
@@ -840,7 +846,7 @@ extern "C"
     /// @param cacheOut  Receives the cache, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultTileCacheDef; `mnav_errorVersion` for one built
-    /// against another major or minor version; `mnav_errorRange` for a limit
+    /// against another version of the headers; `mnav_errorRange` for a limit
     /// out of its range; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The triangles of a bake's meshes that may reach each tile of a grid
-// (mnav-0014).
+// The triangles of a bake's meshes that may reach each tile of a grid.
 
 #include "tile_index.h"
 
 #include "allocator.h"
 #include "bake_def.h"
+#include "fpenv.h"
 #include "input.h"
 
 #include "maul-nav/bake.h"
@@ -267,9 +267,10 @@ static mnavBakeReport* Begin(mnavBakeReport* reportOut, mnavBakeReport* ignored)
     return report;
 }
 
-mnavResult mnavCreateTileIndex(const mnavBakeDef* def, const mnavTriangleMesh* meshes,
-                               int32_t meshCount, mnavTileIndex** indexOut,
-                               mnavBakeReport* reportOut)
+static MNAV_NOINLINE mnavResult CreateTileIndexWork(const mnavBakeDef* def,
+                                                    const mnavTriangleMesh* meshes,
+                                                    int32_t meshCount, mnavTileIndex** indexOut,
+                                                    mnavBakeReport* reportOut)
 {
     mnavBakeReport ignored;
     mnavBakeReport* report = Begin(reportOut, &ignored);
@@ -302,9 +303,21 @@ mnavResult mnavCreateTileIndex(const mnavBakeDef* def, const mnavTriangleMesh* m
                Make(def, &cells, (Source){meshes, nullptr, meshCount}, indexOut, report);
 }
 
-mnavResult mnavCreateTileIndex2D(const mnavBakeDef* def, const mnavOutline* outlines,
-                                 int32_t outlineCount, mnavTileIndex** indexOut,
-                                 mnavBakeReport* reportOut)
+mnavResult mnavCreateTileIndex(const mnavBakeDef* def, const mnavTriangleMesh* meshes,
+                               int32_t meshCount, mnavTileIndex** indexOut,
+                               mnavBakeReport* reportOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = CreateTileIndexWork(def, meshes, meshCount, indexOut, reportOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult CreateTileIndex2DWork(const mnavBakeDef* def,
+                                                      const mnavOutline* outlines,
+                                                      int32_t outlineCount,
+                                                      mnavTileIndex** indexOut,
+                                                      mnavBakeReport* reportOut)
 {
     mnavBakeReport ignored;
     mnavBakeReport* report = Begin(reportOut, &ignored);
@@ -335,6 +348,16 @@ mnavResult mnavCreateTileIndex2D(const mnavBakeDef* def, const mnavOutline* outl
     }
     return report->result =
                Make(def, &cells, (Source){nullptr, outlines, outlineCount}, indexOut, report);
+}
+
+mnavResult mnavCreateTileIndex2D(const mnavBakeDef* def, const mnavOutline* outlines,
+                                 int32_t outlineCount, mnavTileIndex** indexOut,
+                                 mnavBakeReport* reportOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = CreateTileIndex2DWork(def, outlines, outlineCount, indexOut, reportOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 void mnavDestroyTileIndex(mnavTileIndex* index)
