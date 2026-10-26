@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the signature records a Build carries (D242):
+// Coverage-guided fuzzing of the signature records a Build carries:
 // the detached envelope and the publisher's key set. Both readers take the
 // canonical record only, so what they accept writes back to the very same
 // text.

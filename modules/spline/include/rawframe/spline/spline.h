@@ -1,6 +1,6 @@
 #pragma once
 
-// Splines (SPEC-0051's spline row, D867): a smooth path through points,
+// Splines: a smooth path through points,
 // open or closed. The points are a scene's entities (rawframe.spline's
 // Point, each with a pose), so a spline is edited as any entity is; this
 // is the curve they make. It passes through every point in order, a

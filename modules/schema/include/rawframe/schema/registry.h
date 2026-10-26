@@ -29,7 +29,7 @@ template <Component T> struct ComponentKey {
 
 /// An immutable, validated set of component types. Built once by
 /// RegistryBuilder, then shared by reference: every World binds one explicitly,
-/// and there is no global registry (ADR-0011).
+/// and there is no global registry.
 class SchemaRegistry {
 public:
     [[nodiscard]] std::span<const ComponentDescriptor> components() const noexcept {

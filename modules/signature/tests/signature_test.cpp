@@ -1,6 +1,6 @@
 // Publisher signatures: RFC 8032's first vector verifies and nothing near it
 // does, envelopes and key sets are their canonical records and nothing
-// else, and a verdict is SPEC-0023's: active and retired keys verify,
+// else, and a verdict is the key set's: active and retired keys verify,
 // revoked ones are refused whatever the signature, and unknown ones are
 // refused as unknown.
 
@@ -163,8 +163,8 @@ RAWFRAME_TEST(AVerdictFollowsTheKeysState) {
 }
 
 RAWFRAME_TEST(HostileEnvelopesAndKeySetsReadOnlyAsTheyWrite) {
-    // A Build's signature and a publisher's key set come over the network
-    // (D190): seeded mutations of each, and whatever the reader accepts
+    // A Build's signature and a publisher's key set come over the network:
+    // seeded mutations of each, and whatever the reader accepts
     // writes back to the very same bytes.
     const Signer kSigner{7};
     const std::string kEnvelope =

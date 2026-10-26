@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of a save read from disk (D242). A digest is not
+// Coverage-guided fuzzing of a save read from disk. A digest is not
 // a signature, so the harness gives every input a matching one and the
 // reader's other checks do the work: whatever it reads must apply to a
 // World that captures it to the same bytes, or be refused whole.

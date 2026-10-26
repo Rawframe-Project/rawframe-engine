@@ -1,16 +1,16 @@
 #pragma once
 
-// World checkpoints (SPEC-0011): a complete, canonical, integrity-checked
+// World checkpoints: a complete, canonical, integrity-checked
 // artifact of one committed World state, and the restore that rebuilds it
 // into a candidate World off to the side, which its owner then publishes in
 // one exchange. Capture and restore take and give bytes; where they are kept
 // is their caller's business.
 //
-// The container is SPEC-0011 generation 1: a prologue, a world header, the
+// The container is generation 1: a prologue, a world header, the
 // entity directory, component rows by type in row groups, the World's random
-// streams, the mods it ran with when there are any (D197), a manifest, and a
-// completion footer, with SHA-256 over every chunk and the whole. What
-// differs from the specification, and why, is D29.
+// streams, the mods it ran with when there are any, a manifest, and a
+// completion footer, with SHA-256 over every chunk and the whole. Its
+// records are Rawframe's canonical field records rather than FlatBuffers.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/result/result.h"
@@ -29,8 +29,8 @@ namespace rawframe::world_snapshot {
 
 using Fingerprint = base::Sha256Digest;
 
-/// Every bound a capture or restore keeps, SPEC-0013's snapshot profile by
-/// default (D231). None may be zero.
+/// Every bound a capture or restore keeps, the snapshot profile by
+/// default. None may be zero.
 struct SnapshotLimits {
     std::size_t maximumEntities = 100'000;
     std::size_t maximumRows = 1'000'000;
@@ -48,10 +48,10 @@ struct SnapshotLimits {
 };
 
 /// The rows every chunk of `component` holds but its last: `rowsPerChunk`,
-/// or as many rows as fit in `maximumChunkBytes`, at least one (D231).
+/// or as many rows as fit in `maximumChunkBytes`, at least one.
 [[nodiscard]] std::size_t rowGroup(const SnapshotComponent& component, const SnapshotLimits& limits) noexcept;
 
-/// A mod a World ran with (SPEC-0042): its subject and exact version.
+/// A mod a World ran with: its subject and exact version.
 struct CheckpointMod {
     std::string subject;
     std::string version;
@@ -71,7 +71,7 @@ struct CheckpointIdentity {
     std::vector<CheckpointMod> mods;
 };
 
-/// SPEC-0042's mod-set change between the mods an artifact recorded and the
+/// The mod-set change between the mods an artifact recorded and the
 /// mods loading it, each list in subject order.
 struct ModSetChange {
     struct Changed {
@@ -100,8 +100,8 @@ struct CaptureSettings {
     SnapshotLimits limits;
 };
 
-/// SPEC-0013's pinned additional memory: the most a staged capture holds
-/// apart from its World (D227).
+/// The pinned additional memory: the most a staged capture holds
+/// apart from its World.
 inline constexpr std::size_t kMaximumStagedBytes = std::size_t{128} << 20U;
 
 /// A sealed artifact and its SnapshotDigest, the SHA-256 of everything
@@ -113,7 +113,7 @@ struct SealedCheckpoint {
 
 /// What a capture read from a World at its safe point: everything the
 /// artifact will hold, and nothing of the World, which may run on while it
-/// is sealed elsewhere (D227). Move-only; empty when default-made.
+/// is sealed elsewhere. Move-only; empty when default-made.
 class StagedCheckpoint {
 public:
     struct State;
@@ -158,7 +158,7 @@ capture(const world::World& world, const SnapshotProjection& projection, const C
 
 /// The part of `capture` that reads the World, for its safe point: the same
 /// checks, and the staged artifact past kMaximumStagedBytes refused
-/// (`limit_exceeded`). Only this needs the World held (D227).
+/// (`limit_exceeded`). Only this needs the World held.
 [[nodiscard]] result::Result<StagedCheckpoint>
 stage(const world::World& world, const SnapshotProjection& projection, const CaptureSettings& settings);
 

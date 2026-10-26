@@ -10,7 +10,7 @@
 
 namespace rawframe::execution {
 
-/// Why work was cancelled (SPEC-0005's minimum set). Machine-readable and
+/// Why work was cancelled. Machine-readable and
 /// stable within the internal contract; never an ErrorClass.
 enum class CancelReason : std::uint8_t {
     Requested,
@@ -45,7 +45,7 @@ struct Cancelled {
 
 /// How a cancellable task completed: exactly one of a value, a cancellation, or
 /// an Error. Cancellation is not an Error and carries no error class; neither
-/// channel emits a diagnostic on its own (SPEC-0005 TaskOutcome).
+/// channel emits a diagnostic on its own.
 template <typename T> class TaskOutcome {
     using Stored = std::conditional_t<std::is_void_v<T>, std::monostate, T>;
 
@@ -125,7 +125,7 @@ private:
 };
 
 /// The Error a boundary chooses to report cancellation as. Mapping is always
-/// explicit and names its destination (SPEC-0005).
+/// explicit and names its destination.
 struct CancellationMapping {
     result::ErrorClass errorClass;
     result::ErrorDomain domain;

@@ -14,8 +14,8 @@ constexpr std::size_t kInitialRows = 8;
 
 std::byte* allocateColumn(std::size_t bytes, std::size_t alignment) noexcept {
     void* memory = ::operator new(bytes, std::align_val_t{alignment}, std::nothrow);
-    // World storage is not bounded fallible storage: running out is fatal
-    // (ADR-0009). The World's entity ceiling is what bounds it.
+    // World storage is not bounded fallible storage: running out is fatal.
+    // The World's entity ceiling is what bounds it.
     RAWFRAME_CHECK(memory != nullptr, "out of memory for component storage");
     return static_cast<std::byte*>(memory);
 }

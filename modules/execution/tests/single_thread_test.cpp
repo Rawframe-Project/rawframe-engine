@@ -1,5 +1,5 @@
-// Execution without threads, as the web's main thread runs it (ADR-0084,
-// rawframe/base/threads.h): an executor has no workers, so queued work runs
+// Execution without threads, as the web's main thread runs it
+// (rawframe/base/threads.h): an executor has no workers, so queued work runs
 // only when its host asks, in priority order; every helping wait runs what
 // it waits on; and stopping runs what was accepted on the calling thread.
 // Built for the web only: natively the executors have workers.

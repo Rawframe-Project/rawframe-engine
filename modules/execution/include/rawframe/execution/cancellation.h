@@ -14,7 +14,7 @@
 namespace rawframe::execution {
 
 /// What a scope does when work it owns fails. Isolation is the default: a
-/// failure cancels nothing else (SPEC-0005).
+/// failure cancels nothing else.
 enum class FailurePolicy : std::uint8_t {
     Isolate,
     FailFast

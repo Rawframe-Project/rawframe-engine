@@ -10,7 +10,7 @@ namespace rawframe::world_snapshot {
 /// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kSnapshotDomain{base::parseBits128Hex("64aabcdd2fbd0923cb3bbdb0ec48a1f2").value};
 
-/// Codes within kSnapshotDomain (SPEC-0011 failure distinctions).
+/// Codes within kSnapshotDomain.
 enum class SnapshotError : std::uint32_t {
     /// Bytes that are not a generation-1 checkpoint: a wrong magic, size,
     /// order, reserved value, or a value outside its field.
@@ -28,7 +28,7 @@ enum class SnapshotError : std::uint32_t {
     /// A candidate World that is not empty, or a projection that does not
     /// fit the World's registry.
     InvalidCandidate = 7,
-    /// A checkpoint of the same game with another set of mods (SPEC-0042):
+    /// A checkpoint of the same game with another set of mods:
     /// what was added, removed, or changed is its context.
     ModSetChanged = 8,
 };

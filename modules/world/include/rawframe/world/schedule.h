@@ -20,7 +20,7 @@
 namespace rawframe::world {
 
 /// The World schedule's phases, in order. The set is closed: nothing adds a
-/// phase or a position (SPEC-0005).
+/// phase or a position.
 enum class Phase : std::uint8_t {
     BeginTick,
     ApplyInputs,
@@ -65,7 +65,7 @@ public:
     [[nodiscard]] virtual result::Status run(SystemContext& context) noexcept = 0;
 };
 
-/// One system as declared (SPEC-0005 system declaration). Borrowed only for
+/// One system as declared. Borrowed only for
 /// the duration of `Schedule::compile`, which copies it.
 struct SystemDeclaration {
     std::string_view identity;
@@ -80,7 +80,7 @@ struct SystemDeclaration {
     /// The random streams it draws from, by lower_snake_case name; at most
     /// kMaximumRandomStreamsPerOwner.
     std::span<const std::string_view> randomStreams;
-    /// Runs while the World is edited (D912): an editor's World, built from
+    /// Runs while the World is edited: an editor's World, built from
     /// the documents, ticks only such systems, so it shows what is written
     /// and nothing plays.
     bool editing = false;
@@ -99,7 +99,7 @@ struct TickReport {
     /// Systems that returned an Error; their commands were discarded.
     std::vector<Failure> failures;
     /// How long each system ran, in execution order, where the tick was
-    /// timed (D838): what a profiler shows, never what a system sees.
+    /// timed: what a profiler shows, never what a system sees.
     struct SystemTime {
         std::string_view system;
         std::int64_t nanoseconds = 0;
@@ -125,7 +125,7 @@ public:
 
     /// Runs one tick: every phase in order, then advances `tick`. With a
     /// `clock`, each system's run is timed into the report's `times`.
-    /// `edited`, only the systems declared to run while editing run (D912).
+    /// `edited`, only the systems declared to run while editing run.
     [[nodiscard]] result::Result<TickReport> runTick(World& world,
                                                      TickIndex& tick,
                                                      TickRate rate,

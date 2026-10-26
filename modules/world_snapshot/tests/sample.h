@@ -1,7 +1,7 @@
 #pragma once
 
 // The checkpoint tests' World and the layout of the artifact it captures to,
-// shared by the tests and the fuzz target (D242): a World with holes in its
+// shared by the tests and the fuzz target: a World with holes in its
 // slots, references both ways and to itself, one to an entity that is gone,
 // and random streams drawn from; and every digest of a damaged artifact made
 // to match again.
@@ -143,7 +143,7 @@ inline void digestAt(std::vector<std::byte>& bytes, std::size_t at, std::span<co
 }
 
 /// `damaged` with every digest made to match again, its chunks where they
-/// lie in `layout` (SPEC-0011's generation 1): what a hostile writer hands
+/// lie in `layout`: what a hostile writer hands
 /// over, which only the reader's structure can refuse. A digest is not a
 /// signature.
 inline std::vector<std::byte> resealed(std::vector<std::byte> damaged, std::span<const std::byte> layout) {

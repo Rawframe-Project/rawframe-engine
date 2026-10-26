@@ -1,4 +1,4 @@
-// Graph documents: SPEC-0028's grammar read and written in one form, every
+// Graph documents: the grammar read and written in one form, every
 // rule held against hostile text, and a semantic hash blind to ids, order,
 // and drawings but not to meaning.
 

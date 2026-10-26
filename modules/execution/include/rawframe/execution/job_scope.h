@@ -17,11 +17,11 @@ namespace rawframe::execution {
 /// A group of scoped jobs: work that finishes before the scope does. Jobs may
 /// borrow anything that outlives the scope. `join`, or the destructor, waits
 /// for every job even after one fails or the scope is cancelled, helping run
-/// queued work meanwhile rather than blocking a worker (SPEC-0005 scoped job).
+/// queued work meanwhile rather than blocking a worker.
 ///
 /// Submission cannot fail: when the queue or the owner's quota is full, the
 /// submitting thread, which is committed to waiting anyway, runs the job
-/// itself (SPEC-0048 capacities).
+/// itself.
 class JobScope {
     struct ConstructionTag {};
 

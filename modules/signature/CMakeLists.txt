@@ -1,4 +1,4 @@
-# Publisher signatures (SPEC-0019, SPEC-0021, SPEC-0023): Ed25519
+# Publisher signatures: Ed25519
 # verification through OpenSSL's EVP one-shot interface, the detached
 # signature envelope, and publisher key sets with their fail-closed
 # verdicts. Verification only: signing is packaging tooling's. OpenSSL is

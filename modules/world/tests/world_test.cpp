@@ -41,7 +41,7 @@ RAWFRAME_TEST(DestroyedHandlesGoStaleAndSlotsComeBackNewer) {
 }
 
 RAWFRAME_TEST(AWorldCountsTheBytesItHolds) {
-    // SPEC-0013's World attribution (D216): the tables grow with entities
+    // The World attribution: the tables grow with entities
     // and their values.
     World world{makeRegistry()};
     const std::size_t kEmpty = world.heldBytes();

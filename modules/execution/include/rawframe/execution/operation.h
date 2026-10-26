@@ -141,7 +141,7 @@ private:
 /// Owns async operations: work that may outlive the tick that started it but
 /// never its owner. Every operation belongs to this scope's cancellation
 /// child, and the destructor cancels with `owner_stopping` and joins, so no
-/// operation is ever detached (SPEC-0005 async operation).
+/// operation is ever detached.
 class OperationScope {
     struct ConstructionTag {};
 
@@ -158,7 +158,7 @@ public:
     /// Starts `function(token)`, which returns TaskOutcome<T> or Result<T>. On a
     /// full queue, quota, or in-flight limit this fails with
     /// `resource_exhausted` and nothing is queued: an async operation is never
-    /// run inline, because nobody promised to wait for it (SPEC-0048).
+    /// run inline, because nobody promised to wait for it.
     template <typename Function>
     [[nodiscard]] auto start(Priority priority, Function function) -> result::Result<
         AsyncHandle<typename detail::OperationValueOf<std::invoke_result_t<Function&, CancellationToken>>::Type>>;

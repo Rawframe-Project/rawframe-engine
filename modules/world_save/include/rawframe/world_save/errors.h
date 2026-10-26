@@ -10,7 +10,7 @@ namespace rawframe::world_save {
 /// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kSaveDomain{base::parseBits128Hex("2175e28dc09d97b1671fcef8fb459532").value};
 
-/// Codes within kSaveDomain (ADR-0057's typed outcomes).
+/// Codes within kSaveDomain.
 enum class SaveError : std::uint32_t {
     /// Bytes that are not a generation-1 save: a wrong magic, a length that
     /// runs past the end, entities out of order, or bytes after the digest.

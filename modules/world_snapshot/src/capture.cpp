@@ -101,7 +101,7 @@ void writeField(Output& out,
         world::EntityHandle handle;
         std::memcpy(&handle, kAt, sizeof handle);
         // Null, or an entity that no longer exists, which every door already
-        // treats as the null entity: both are written as nought (D29).
+        // treats as the null entity: both are written as nought.
         const auto kPlace = handle.isNull() ? places.end() : places.find(handle);
         references += kPlace != places.end() ? 1 : 0;
         out.u64(kPlace != places.end() ? kPlace->second : 0);

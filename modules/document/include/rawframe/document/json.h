@@ -1,6 +1,6 @@
 #pragma once
 
-// Authored documents (SPEC-0028's authored-document canonicalization
+// Authored documents (the authored-document canonicalization
 // profile): JSON read strictly, and written the one way every Rawframe
 // authored document is written, so the same meaning is always the same bytes.
 
@@ -102,7 +102,7 @@ struct ReadLimits {
 [[nodiscard]] std::string write(const Value& value);
 
 /// The same value with no whitespace and no final line feed, members and
-/// numbers as `write` has them: SPEC-0028's hash-input form, for digests of
+/// numbers as `write` has them: the hash-input form, for digests of
 /// an authored document's parts.
 [[nodiscard]] std::string writeCompact(const Value& value);
 
@@ -110,7 +110,7 @@ struct ReadLimits {
 /// that `write` would not have produced byte for byte.
 [[nodiscard]] result::Result<Value> parseCanonical(std::string_view text, const ReadLimits& limits = {});
 
-/// A canonical record's bytes (SPEC-0017, for records whose identity is a
+/// A canonical record's bytes (for records whose identity is a
 /// digest of them): RFC 8785 JCS of one object, members sorted by name at
 /// every depth, no whitespace and no final line feed, strings escaped as
 /// `write` escapes them. Stricter than JCS: member names are printable

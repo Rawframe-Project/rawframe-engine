@@ -330,7 +330,7 @@ void Executor::stop() noexcept {
 void Executor::overrun(const char* phase) noexcept {
     // Uncooperative work may still be running on a worker and still reference
     // code and owner state, so nothing is freed or unloaded: one boundary
-    // diagnostic, then the fatal path (SPEC-0005 shutdown).
+    // diagnostic, then the fatal path.
     emitter_.log(diagnostics::Severity::Critical,
                  kShutdownOverrun,
                  "executor shutdown exceeded its budget",

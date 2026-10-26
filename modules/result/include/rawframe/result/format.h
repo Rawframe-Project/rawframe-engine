@@ -17,8 +17,8 @@ struct FormatResult {
 inline constexpr std::size_t kMaximumFormattedFileBytes = 96;
 
 /// Enough room for any Error at every bound, including its full cause chain.
-/// format.cpp proves at compile time that the worst case fits (SPEC-0050's
-/// original 4096 did not; work/decisions.md D10).
+/// format.cpp proves at compile time that the worst case fits (4096 did
+/// not).
 inline constexpr std::size_t kMaximumFormattedBytes = 20480;
 
 /// Renders an Error as developer-facing text into caller-owned bytes. Never

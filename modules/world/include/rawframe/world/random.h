@@ -8,7 +8,7 @@
 
 namespace rawframe::world {
 
-// Deterministic simulation randomness (ADR-0055, SPEC-0041). The algorithms
+// Deterministic simulation randomness. The algorithms
 // below are one versioned identity: changing any of them, the derivation
 // included, is a new identity, never a silent swap. The golden vectors in
 // tests/random_test.cpp pin them.

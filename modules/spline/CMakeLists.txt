@@ -1,4 +1,4 @@
-# Splines (SPEC-0051's spline row, D867): a smooth path through points,
+# Splines: a smooth path through points,
 # measured along its length. The points are a scene's own entities, a
 # spline's fields (rawframe.spline); this is the curve they make, which a
 # game's followers move along and Studio draws.

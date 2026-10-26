@@ -1,6 +1,6 @@
 #pragma once
 
-// Graph documents (ADR-0027, SPEC-0028): the grammar every graph family
+// Graph documents: the grammar every graph family
 // shares, in one canonical form:
 //
 //   {
@@ -52,7 +52,7 @@ using NodeId = std::uint64_t;
 [[nodiscard]] std::string nodeIdText(NodeId id);
 [[nodiscard]] std::optional<NodeId> nodeIdOf(std::string_view text) noexcept;
 
-/// SPEC-0028's `<namespace>/<name>@<major>[.<minor>]`: the namespace
+/// A node type's id, `<namespace>/<name>@<major>[.<minor>]`: the namespace
 /// `rawframe` or a package's `publisher/package`, each part a machine name.
 [[nodiscard]] bool typeIdInForm(std::string_view type) noexcept;
 
@@ -93,7 +93,7 @@ struct Document {
     std::vector<std::pair<NodeId, document::Value>> presentation;
 };
 
-/// SPEC-0028's named limit points the grammar checks; past one is
+/// The named limit points the grammar checks; past one is
 /// `OverLimit`, checked before the work.
 struct Limits {
     std::size_t maximumBytes = std::size_t{1} << 22;
@@ -120,7 +120,7 @@ struct Limits {
                                                     std::span<const std::string_view> sections = {},
                                                     const Limits& limits = {});
 
-/// What a semantic hash covers besides the nodes (SPEC-0028): the family,
+/// What a semantic hash covers besides the nodes: the family,
 /// the interface, each graph output by the node it comes from, and the
 /// family's sections that mean something, in its order.
 struct HashHeader {
@@ -130,7 +130,7 @@ struct HashHeader {
     std::vector<std::pair<std::string, document::Value>> sections;
 };
 
-/// SPEC-0028's semantic hash: a Merkle digest from the outputs down, each
+/// The semantic hash: a Merkle digest from the outputs down, each
 /// node's covering its type, params, and inputs, a connected input by the
 /// digest of the node it comes from rather than that node's id; blind to
 /// ids, node order, nodes no output reaches, and presentation. The nodes

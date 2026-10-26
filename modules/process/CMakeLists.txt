@@ -1,4 +1,4 @@
-# This process and the children it starts (ADR-0084, D395): its own
+# This process and the children it starts: its own
 # executable, and a program run as it is named, its exit code asked without
 # waiting, a stop request, a kill. Tooling and launchers; never part of a
 # dedicated server, and never on the web, which starts no processes.

@@ -12,7 +12,7 @@
 
 namespace rawframe::diagnostics {
 
-/// The three signal kinds SPEC-0004 keeps apart.
+/// The three signal kinds, kept apart.
 enum class Kind : std::uint8_t {
     Log,
     Span,
@@ -42,7 +42,7 @@ enum class SpanPhase : std::uint8_t {
     End
 };
 
-/// SPEC-0005's task outcome vocabulary: cancellation is not failure.
+/// The task outcome vocabulary: cancellation is not failure.
 enum class SpanOutcome : std::uint8_t {
     Completed,
     Cancelled,
@@ -115,7 +115,7 @@ template <std::floating_point T>
 }
 
 /// Monotonic time owns ordering and duration; wall time is an optional
-/// projection that must never order or time anything (ADR-0010).
+/// projection that must never order or time anything.
 struct Timestamp {
     std::uint64_t monotonicNanoseconds = 0;
     std::optional<std::int64_t> wallUnixNanoseconds;

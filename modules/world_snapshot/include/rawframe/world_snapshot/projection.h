@@ -1,7 +1,7 @@
 #pragma once
 
 // What a checkpoint holds of a World: the components that persist and, for
-// each, its fields as the checkpoint writes them (SPEC-0011 projection). A
+// each, its fields as the checkpoint writes them. A
 // value is written field by field, never as its bytes in memory, so padding
 // and layout never reach an artifact, and a field holding an entity is
 // written as the entity's place in the artifact, never as a handle.

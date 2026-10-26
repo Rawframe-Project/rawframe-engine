@@ -43,7 +43,7 @@ void writeWorldHeader(Output& out, const WorldHeader& header) {
     out.u64(header.tick);
     out.u64(header.rateNumerator);
     out.u64(header.rateDenominator);
-    // Persistence namespaces: none until persistent identities exist (D29).
+    // Persistence namespaces: none until persistent identities exist.
     out.u64(0);
     writeFingerprints(out, header.fingerprints);
     // Content catalogs: none until packages exist.

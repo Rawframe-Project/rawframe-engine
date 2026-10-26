@@ -10,7 +10,7 @@
 namespace rawframe::schema {
 
 /// The canonical text of a stable ID: lowercase UUID form, 36 characters with
-/// hyphens after the 8th, 12th, 16th, and 20th digits (SPEC-0006).
+/// hyphens after the 8th, 12th, 16th, and 20th digits.
 inline constexpr std::size_t kStableIdTextLength = 36;
 
 /// Parses canonical UUID text, or returns a zero value with `parsed` false.

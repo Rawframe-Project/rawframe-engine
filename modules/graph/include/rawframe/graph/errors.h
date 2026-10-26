@@ -12,7 +12,7 @@ inline constexpr result::ErrorDomain kGraphDomain{base::parseBits128Hex("911fe78
 
 /// Codes within kGraphDomain.
 enum class GraphError : std::uint32_t {
-    /// Not a graph document, or not in SPEC-0028's grammar: a member out of
+    /// Not a graph document, or not in the grammar: a member out of
     /// place, a node id or type id out of form, an id twice, a connection
     /// to no node or round a cycle, a presentation entry for no node.
     Invalid = 1,

@@ -1,6 +1,6 @@
 #pragma once
 
-// Persistent entity identity (SPEC-0006): a StableId128 an entity carries
+// Persistent entity identity: a StableId128 an entity carries
 // only if it opts in, as ordinary component data, so the hot entity record
 // stays as it is. It means something only within a persistence namespace,
 // which the save or checkpoint that records it names; nothing here looks one

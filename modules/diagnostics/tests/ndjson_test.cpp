@@ -1,4 +1,4 @@
-// The SPEC-0047 conformance corpus for the NDJSON sink: every line is read back
+// The conformance corpus for the NDJSON sink: every line is read back
 // with a strict JSON reader, so a test proves what a consumer would see rather
 // than what the writer meant.
 

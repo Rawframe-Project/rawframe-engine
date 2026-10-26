@@ -1,6 +1,6 @@
 #pragma once
 
-// Curated game saves (ADR-0057), generation 1: a game declares a save
+// Curated game saves, generation 1: a game declares a save
 // document as the components it keeps of its persistent entities
 // (world/persistent.h). Capture reads exactly that projection of a committed
 // World into canonical bytes; reading checks every byte before anything
@@ -9,7 +9,7 @@
 // the bytes are kept is a storage provider's business (store.h).
 //
 // A save written under an older declaration of the same document is
-// migrated as it is read, by field name, with no game code (ADR-0011): a
+// migrated as it is read, by field name, with no game code: a
 // field kept keeps its value, widened if its kind grew; a field added
 // starts at nought; a field or component removed is dropped; a component
 // added is absent. Any other change is refused.

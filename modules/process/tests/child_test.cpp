@@ -1,4 +1,4 @@
-// Child processes (D395): a child's exit code, its output and error in one
+// Child processes: a child's exit code, its output and error in one
 // file, its arguments passed as they are (spaces, quotes, and UTF-8 too), a stop
 // request it answers as a Host does, a kill, a kill when its owner goes,
 // and a program that cannot be started.
@@ -85,7 +85,7 @@ RAWFRAME_TEST(AChildEndsWithItsCodeAndSaysWhatItWasGiven) {
         RAWFRAME_EXPECT(ended->exited() == 7);
     }
     // Its arguments as they were given, its output and error in one file;
-    // one in Turkish and Japanese, as UTF-8 both ways on Windows too (D956).
+    // one in Turkish and Japanese, as UTF-8 both ways on Windows too.
     const std::filesystem::path kSaid = scratch("said.txt");
     auto said = Child::start({.program = RAWFRAME_PROCESS_CHILD,
                               .arguments = {"say", "two words", "a \"quote\"", "back\\slash\\", "", "Sıraç 日本"},
@@ -98,8 +98,8 @@ RAWFRAME_TEST(AChildEndsWithItsCodeAndSaysWhatItWasGiven) {
 }
 
 RAWFRAME_TEST(AChildThatStopsWithThisIsToldWhoThisIs) {
-    // Told this process's identity, and only when it is to stop with it
-    // (D646); one this process was told itself is not passed on.
+    // Told this process's identity, and only when it is to stop with it;
+    // one this process was told itself is not passed on.
 #if defined(_WIN32)
     const std::string kThis = std::to_string(::GetCurrentProcessId());
     const auto kTell = [](const char* value) {

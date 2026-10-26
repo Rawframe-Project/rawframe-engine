@@ -28,17 +28,17 @@ struct WorldSettings {
     /// The generation a new slot starts at. Only tests change it, to reach
     /// slot retirement without four billion reuses. Must be at least 1.
     std::uint32_t firstGeneration = 1;
-    /// The seed every random stream in this World derives from (ADR-0055).
+    /// The seed every random stream in this World derives from.
     RootSeed rootSeed;
 };
 
 /// One authoritative ECS identity domain: entity slots and generations,
-/// archetype storage, and the binding to one frozen registry (SPEC-0006).
+/// archetype storage, and the binding to one frozen registry.
 ///
 /// Structural operations (create, destroy, insert, remove) run directly only
 /// while the structure is unlocked. While a schedule runs systems, the
 /// structure is locked and changes go through command buffers applied at a
-/// barrier (SPEC-0005).
+/// barrier.
 class World {
 public:
     World(std::shared_ptr<const schema::SchemaRegistry> registry, WorldSettings settings = {});
@@ -134,8 +134,7 @@ public:
     }
 
     /// Bytes the World holds for its entities and their values, at the
-    /// capacity each table has grown to: SPEC-0013's World/ECS attribution
-    /// (D216).
+    /// capacity each table has grown to: the World/ECS attribution.
     [[nodiscard]] std::size_t heldBytes() const noexcept;
 
     /// Archetypes in creation order, for queries. Only ever appended to.

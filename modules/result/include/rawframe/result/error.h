@@ -27,7 +27,7 @@ struct ErrorCode {
     friend constexpr bool operator==(const ErrorCode&, const ErrorCode&) noexcept = default;
 };
 
-// The bounds SPEC-0004 requires and SPEC-0050 numbers. Exceeding a length
+// An Error's bounds. Exceeding a length
 // truncates at a UTF-8 code point boundary and says so; exceeding a count drops
 // the excess and counts it. Neither fails.
 inline constexpr std::size_t kMaximumDescriptionBytes = 256;
@@ -36,8 +36,7 @@ inline constexpr std::size_t kMaximumContextFields = 8;
 inline constexpr std::size_t kMaximumContextKeyBytes = 32;
 inline constexpr std::size_t kMaximumContextValueBytes = 128;
 inline constexpr std::size_t kMaximumCauseDepth = 4;
-/// SPEC-0050 bounds everything an Error stores except a frame's description;
-/// this fills that gap (work/decisions.md D10).
+/// The bound on a frame's description, which the bounds above leave open.
 inline constexpr std::size_t kMaximumFrameDescriptionBytes = 128;
 
 /// One typed context field. A key is owner-scoped schema, not prose. Never put a
@@ -61,7 +60,7 @@ struct ErrorDetail;
 /// pointer so that Result<T> stays small. Constructing an Error allocates once,
 /// and each of withFrame, withContext, mappedTo, and clone allocates once more:
 /// failure is the cold path. A hot path whose failure is ordinary returns a
-/// total value type instead of a Result (STD-0004). Allocation failure here is
+/// total value type instead of a Result. Allocation failure here is
 /// process-fatal.
 ///
 /// Every accessor returns storage the Error owns. Accessors on a moved-from

@@ -12,7 +12,7 @@
 #include <vector>
 
 #if defined(_WIN32)
-// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file.
 #include <windows.h>
 #else
 #include <fcntl.h>
@@ -66,8 +66,8 @@ void appendQuoted(std::wstring& line, const std::wstring& argument) {
 }
 
 /// This process's environment as a block CreateProcessW takes, with its
-/// identity for a child that stops with it (D646) and the child's own stop
-/// event (D944) in place of any it was given itself.
+/// identity for a child that stops with it and the child's own stop
+/// event in place of any it was given itself.
 std::wstring environmentFor(const ChildSettings& settings, HANDLE stop) {
     const std::wstring kParent = wide(std::string{kParentVariable} + "=");
     const std::wstring kStop = wide(std::string{kStopVariable} + "=");
@@ -134,7 +134,7 @@ result::Result<Child> Child::start(const ChildSettings& settings) {
     }
     // Its output, its input, and its stop event as handles it inherits, and
     // only those, so a child started at the same time on another thread
-    // holds none of this one's files open (D944).
+    // holds none of this one's files open.
     SECURITY_ATTRIBUTES inherited{
         .nLength = sizeof(SECURITY_ATTRIBUTES), .lpSecurityDescriptor = nullptr, .bInheritHandle = TRUE};
     const std::wstring kOutput = settings.output.empty() ? std::wstring{L"NUL"} : settings.output.wstring();
@@ -295,7 +295,7 @@ result::Result<Child> Child::start(const ChildSettings& settings) {
         failed = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
     }
     // This process's environment, with its identity for a child that stops
-    // with it (D646) in place of any it was given itself.
+    // with it in place of any it was given itself.
     std::vector<std::string> told;
     const std::string kParentPrefix = std::string{kParentVariable} + "=";
     for (char** each = environ; *each != nullptr; ++each) {

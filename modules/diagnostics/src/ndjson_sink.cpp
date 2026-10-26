@@ -322,7 +322,7 @@ struct SurvivingFields {
 SurvivingFields selectFields(std::span<const Field> fields) noexcept {
     SurvivingFields surviving;
     for (const Field& candidate : fields) {
-        // Removed, not masked: the key does not appear either (SPEC-0047).
+        // Removed, not masked: the key does not appear either.
         if (candidate.sensitivity == Sensitivity::Secret) {
             continue;
         }
@@ -578,7 +578,7 @@ NdjsonSink::NdjsonSink(StreamInfo stream, Sensitivity clearance, std::size_t buf
     : stream_(stream), clearance_(clearance), clock_(clock != nullptr ? clock : &steadyClockNanoseconds) {
     RAWFRAME_CHECK(stream.configuration == "debug" || stream.configuration == "development" ||
                        stream.configuration == "shipping",
-                   "a stream names one of the three SPEC-0003 configurations");
+                   "a stream names one of the three build configurations");
     fileStartNanoseconds_ = clock_();
     pending_.reserve(bufferBytes);
     draining_.reserve(bufferBytes);

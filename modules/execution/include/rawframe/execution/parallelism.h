@@ -8,7 +8,7 @@ namespace rawframe::execution {
 
 /// How many CPUs this process may actually use: the affinity mask, reduced by a
 /// cgroup v2 `cpu.max` quota on Linux, or the process affinity mask on Windows.
-/// Never the host-wide count alone (SPEC-0048 CPU worker derivation). At
+/// Never the host-wide count alone. At
 /// least 1.
 [[nodiscard]] std::size_t effectiveParallelism() noexcept;
 

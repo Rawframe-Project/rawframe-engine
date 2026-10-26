@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of a checkpoint read back (D242). The input is a
+// Coverage-guided fuzzing of a checkpoint read back. The input is a
 // run of edits, each an offset and a byte, made in place to the sample's
 // artifact, whose digests are then made to match again: a digest is not a
 // signature. What restores must capture to the very same bytes; anything

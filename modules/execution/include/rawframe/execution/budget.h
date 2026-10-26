@@ -7,7 +7,7 @@
 
 namespace rawframe::execution {
 
-/// SPEC-0048 budget nesting: each child budget is strictly less than its
+/// Budget nesting: each child budget is strictly less than its
 /// parent's and the children together do not exceed it. Composition runs this
 /// over every level of its shutdown plan before constructing anything, and a
 /// failure is `invalid_argument`.

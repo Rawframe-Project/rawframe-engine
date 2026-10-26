@@ -16,7 +16,7 @@ inline constexpr std::size_t kMaximumComponentNameBytes = 128;
 
 /// A component is typed data: no virtual functions, nothing that can fail to
 /// move or destroy, and a committed stable identity and canonical name.
-/// Behaviour belongs to systems (ADR-0011). An empty type is a tag.
+/// Behaviour belongs to systems. An empty type is a tag.
 template <typename T>
 concept Component = std::is_object_v<T> && !std::is_polymorphic_v<T> && std::is_nothrow_move_constructible_v<T> &&
                     std::is_nothrow_destructible_v<T> && requires {

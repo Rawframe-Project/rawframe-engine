@@ -20,14 +20,14 @@
 
 namespace rawframe::execution {
 
-/// SPEC-0005's baseline priorities. Priority never defines gameplay order.
+/// The baseline priorities. Priority never defines gameplay order.
 enum class Priority : std::uint8_t {
     Critical,
     Normal,
     Background
 };
 
-/// A Host has at most one of each (SPEC-0005 executor topology).
+/// A Host has at most one of each.
 enum class ExecutorKind : std::uint8_t {
     Cpu,
     BlockingIo
@@ -40,7 +40,7 @@ struct OwnerId {
 };
 
 /// An owner's accepted admission. There is no default quota: an owner the
-/// executor has not admitted cannot submit (SPEC-0048 quotas).
+/// executor has not admitted cannot submit.
 struct Quota {
     /// Tasks this owner may have waiting at once, independent of priority.
     std::size_t maximumPendingTasks = 0;
@@ -50,7 +50,7 @@ struct Quota {
 
 /// Service progress, for a watchdog: work that waits or runs, and how many
 /// tasks have finished. Work present while the count stands still is a
-/// stall (SPEC-0012 health evidence).
+/// stall.
 struct ExecutorProgress {
     std::size_t waiting = 0;
     std::size_t running = 0;
@@ -71,7 +71,7 @@ struct ExecutorSettings {
 
 /// A fixed pool of workers over one bounded queue. Submission never blocks and
 /// never allocates; a full queue refuses. Workers are the only threads this
-/// module starts, and nothing else in the engine starts threads (ADR-0010).
+/// module starts, and nothing else in the engine starts threads.
 ///
 /// Without threads (RAWFRAME_THREADS 0, the web's main thread) it has no
 /// workers: its host runs queued work with `runOne`, every helping wait runs
@@ -186,7 +186,7 @@ private:
 };
 
 /// Blocking I/O is allowed on this thread: `failed_precondition` on a CPU
-/// worker, where it could stall the pool (SPEC-0005). Every blocking call site
+/// worker, where it could stall the pool. Every blocking call site
 /// in the engine asks first.
 [[nodiscard]] result::Status requireBlockingAllowed();
 
