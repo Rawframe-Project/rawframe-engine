@@ -41,6 +41,8 @@ The documentation check skips the paths in `tools/docs-check-exclude.txt`: vendo
 
 The self-hosted runner runs code from this repository's own branches only. A pull request from a fork never reaches it, and `required` fails for one that changes code: the engine takes no outside code, and `pr-gate.yml` closes such a pull request.
 
+The runner's workspace and build trees are shared between pull request runs and runs on `main`, so a branch of this repository can leave something a later run sees; only those with write access can push one. Nothing that ships comes from that workspace: release archives, their checksums, SBOMs and attestations are built by `release.yml` on a hosted runner from a clean checkout of the tag.
+
 `pr-title.yml` checks that the title is a conventional commit with a scope from `AGENTS.md`. `codeql.yml` runs CodeQL on every pull request and on `main`, reading the sources without a build on a hosted runner. `scorecard.yml` grades the repository's security practices weekly. Dependabot proposes updates of the pinned actions once a week.
 
 `extended.yml` is the extended nightly run, which is not a required check: macOS, Linux on arm64, Android in its emulator, Windows with Direct3D 12 (with the sample games exported, played and read through UI Automation, and Studio packaged), and every fuzz target for five minutes. `ios.yml` builds for the iOS simulator and plays there, on request only.
