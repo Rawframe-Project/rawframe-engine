@@ -33,7 +33,7 @@ result::Status ReflectionPass::declare(const render_scene::SceneFrame& frame,
         return {};
     }
     before_ = before;
-    // The near plane, where the projection keeps it (reversed-Z, D284).
+    // The near plane, where the projection keeps it (reversed-Z).
     block_ = ReflectionBlock{.toPoint = inverseOf(block.viewProjection),
                              .viewProjection = block.viewProjection,
                              .previous = block.previous,

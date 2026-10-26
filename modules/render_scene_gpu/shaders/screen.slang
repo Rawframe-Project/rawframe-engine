@@ -1,5 +1,5 @@
 // One triangle covering the target, the vertex half of every pass that
-// works on a whole picture (D475): its corner, and the picture's
+// works on a whole picture: its corner, and the picture's
 // coordinates there, rows top first. A module the passes import, not a
 // container of its own.
 
@@ -12,7 +12,7 @@ public struct Screen
 }
 
 // What a pass reads of none of its vertex half's outputs has its corner
-// alone, as D3D12 links a fragment entry only to what it reads (D418).
+// alone, as D3D12 links a fragment entry only to what it reads.
 public struct Bare
 {
     public float4 position : SV_Position;

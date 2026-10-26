@@ -1,9 +1,9 @@
-// The scene's motion blur (ADR-0051, D334), in Slang (ADR-0026, D475),
+// The scene's motion blur, in Slang,
 // after McGuire et al. 2012: the longest blur in each tile, then among
 // each tile and its neighbours, then the reconstruction filter. A point's
 // blur is half its motion over the frame's time the shutter is open, in
 // pixels, either way from it. Each entry reads only where its fragment is,
-// so the vertex half passes nothing on (D418).
+// so the vertex half passes nothing on.
 
 import screen;
 

@@ -1,4 +1,4 @@
-// The scene's bloom (ADR-0051, D328), in Slang (ADR-0026, D475): the
+// The scene's bloom, in Slang: the
 // scene's light quartered into the first level of a chain ("first"), each
 // level halved into the next ("down"), and each doubled and added to the
 // level above ("up"), so each level holds its own light and all those

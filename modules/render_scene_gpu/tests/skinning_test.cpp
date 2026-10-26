@@ -1,9 +1,9 @@
-// Skinned models on the device (D508), on lavapipe: a box whose mesh is
+// Skinned models on the device, on lavapipe: a box whose mesh is
 // skinned to one joint, its palette moving that joint a box's width to the
 // right, is drawn there and not where its mesh lies; the same draw without
 // its palette is drawn where its mesh lies; and the skinned model is
 // counted. A posed box whose palette moved it since the frame before is
-// smeared by the motion blur, one posed alike both frames is not (D510).
+// smeared by the motion blur, one posed alike both frames is not.
 // Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "fixture.h"

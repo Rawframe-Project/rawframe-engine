@@ -1,5 +1,5 @@
-// The scene's screen-space reflections (ADR-0051, D331), in Slang
-// (ADR-0026, D475): from each point the prepass left smooth enough, its
+// The scene's screen-space reflections, in Slang:
+// from each point the prepass left smooth enough, its
 // reflection is followed through the World in steps, each seen from the
 // eye, until it passes behind what the prepass left there by less than a
 // step and a half; the meeting is narrowed by halving four times, and what
@@ -7,7 +7,7 @@
 // the point reflects. Its weight fades as the surface roughens, toward the
 // target's edges, toward the far end of the distance, and for reflections
 // turning back toward the eye, which the view cannot have seen. It reads
-// only where its fragment is, so the vertex half passes nothing on (D418).
+// only where its fragment is, so the vertex half passes nothing on.
 
 import screen;
 

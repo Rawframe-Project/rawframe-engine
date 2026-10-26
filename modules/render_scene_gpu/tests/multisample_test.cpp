@@ -1,4 +1,4 @@
-// Multisampling on lavapipe (D343): the edge of an unlit white box turned
+// Multisampling on lavapipe: the edge of an unlit white box turned
 // across the view, on a black sky, takes grey between the two where the
 // models' passes take four samples a pixel, and none where they take one;
 // so too with the ambient occlusion, which reads the depth resolved.

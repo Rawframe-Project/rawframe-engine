@@ -1,12 +1,11 @@
 #pragma once
 
-// Posed models' vertices on the device (D508): each chosen skinned mesh
+// Posed models' vertices on the device: each chosen skinned mesh
 // and the palette it is posed with skinned once a frame, by a compute pass
 // before any drawing, into one buffer of the frame's in the layout the
 // scene's pipelines read; every draw of that model, its shadows' too,
 // reads them in its mesh's place, so no drawing pipeline changes. Each
-// mesh is bound once and skinned with all its palettes by one dispatch
-// (D510).
+// mesh is bound once and skinned with all its palettes by one dispatch.
 
 #include "meshes.h"
 #include "pipelines.h"
@@ -28,8 +27,8 @@ public:
     explicit DeviceSkinning(mrhiDevice* native) noexcept;
 
     /// The frame's posed models whose meshes are chosen and skinned, each
-    /// mesh and palette once, and the drawn ones as posed the frame before
-    /// (D510); none where `ready` is false, as the skinning
+    /// mesh and palette once, and the drawn ones as posed the frame before;
+    /// none where `ready` is false, as the skinning
     /// pipeline is not made yet, and those models are drawn as bound.
     /// Declares the frame's palette, each model's block, and the skinned
     /// vertices, adding what the upload pass writes to `writes`.
@@ -47,7 +46,7 @@ public:
     /// reads; none for one this frame draws as bound.
     [[nodiscard]] std::optional<VerticesAt> posedOf(const HeldMesh* mesh, std::uint32_t palette) const noexcept;
     /// The skinnings this frame: a model and a palette each, its palette
-    /// the frame before's too where it moved (D510).
+    /// the frame before's too where it moved.
     [[nodiscard]] std::size_t skinned() const noexcept {
         return jobs_.size();
     }
@@ -88,7 +87,7 @@ private:
     return skinning != nullptr && run.joints != 0 ? skinning->posedOf(run.mesh, run.palette) : std::nullopt;
 }
 
-/// Its vertices as its model was posed the frame before (D510); none where
+/// Its vertices as its model was posed the frame before; none where
 /// the model is drawn as bound.
 [[nodiscard]] inline std::optional<VerticesAt> posedBeforeOf(const DeviceSkinning* skinning, const Run& run) noexcept {
     return skinning != nullptr && run.joints != 0 ? skinning->posedOf(run.mesh, run.previousPalette) : std::nullopt;

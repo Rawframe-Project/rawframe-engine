@@ -1,4 +1,4 @@
-// The scene's FXAA (D296, ADR-0051), in Slang (ADR-0026, D475): the
+// The scene's FXAA, in Slang: the
 // tonemapped picture antialiased where its contrast marks an edge, in the
 // manner of Timothy Lottes' FXAA: the four diagonal neighbours give the
 // edge's direction, two and then four taps along it blend across it, and

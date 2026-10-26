@@ -1,7 +1,7 @@
 #pragma once
 
 // A program material for the scene's tests, from containers
-// tools/gen_shaders.py built as the cook builds a game's (D484).
+// tools/gen_shaders.py built as the cook builds a game's.
 
 #include "rawframe/material/material.h"
 

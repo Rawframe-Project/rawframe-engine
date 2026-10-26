@@ -11,7 +11,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// What the motion blur's passes read (std140, D334): half the shutter's
+/// What the motion blur's passes read (std140): half the shutter's
 /// share of the frame, a tile's side and the longest blur in pixels, and
 /// the near plane.
 struct MotionBlock {
@@ -19,7 +19,7 @@ struct MotionBlock {
 };
 static_assert(sizeof(MotionBlock) == 16, "the motion blur's shaders read their block as 16 bytes");
 
-/// ADR-0051's motion blur (D334), the post chain's second stage, when the
+/// The motion blur, the post chain's second stage, when the
 /// view asks: McGuire et al. 2012's reconstruction filter over the light
 /// the temporal slot shows, its motion, and its depth. One pass finds the
 /// longest blur in each tile, another the longest among each tile's

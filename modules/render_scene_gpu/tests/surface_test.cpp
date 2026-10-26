@@ -1,4 +1,4 @@
-// A material shapes its model's surface on the device (D299 to D313) on
+// A material shapes its model's surface on the device on
 // lavapipe: its parameters, translucency blending over what is behind, its
 // textures coloring and cutting it, and its packed, emission, and normal
 // textures. Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is
@@ -37,7 +37,7 @@ RAWFRAME_TEST(AMaterialShapesItsModelsSurface) {
         return render_scene::engineMesh(id);
     };
     // A box four meters ahead in the dark, exposed so fifty nits are
-    // middle grey, with its material (D303) second in the frame's.
+    // middle grey, with its material second in the frame's.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
     frame.lights.sun = {0, 0, 0};
@@ -113,7 +113,7 @@ RAWFRAME_TEST(TranslucentModelsBlendOverWhatIsBehindThem) {
         return render_scene::engineMesh(id);
     };
     // A red box eight meters ahead, and before it a blue pane of glass
-    // half opaque (D305), wide enough to cover the box and the sky beside.
+    // half opaque, wide enough to cover the box and the sky beside.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
     SceneDraw pane = box(4, 1, {0, 0, 1, 1});
@@ -205,7 +205,7 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
     // the first row at the top.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
-    // Pixels compared exactly: undithered (D332).
+    // Pixels compared exactly: undithered.
     frame.dither = false;
     SceneDraw shown = box(4, 1.5F, {1, 1, 1, 1});
     shown.material = 1;
@@ -233,7 +233,7 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
                    : std::array<std::array<int, 3>, 4>{};
     };
     const auto [kRed, kGreen, kBlue, kWhite] = kQuartersOf(0x77);
-    // Moved half a texture left (D311), clamped: the green column fills
+    // Moved half a texture left, clamped: the green column fills
     // the face's left half as well as its right.
     unlit[18] = 0.5F;
     frame.materials = {render_scene::noMaterial(), unlit};
@@ -267,8 +267,8 @@ RAWFRAME_TEST(AMaterialsTextureColorsItsModel) {
     for (const std::array<int, 3>& kQuarter : kNone) {
         RAWFRAME_EXPECT(kQuarter == kWhite);
     }
-    // The texture, white, the dark cube bound for no sky's picture (D322),
-    // and the plain grading table for none (D344), each uploaded once.
+    // The texture, white, the dark cube bound for no sky's picture,
+    // and the plain grading table for none, each uploaded once.
     RAWFRAME_EXPECT(asked > 0 && (**made).statistics().texturesUploaded == 4);
 }
 

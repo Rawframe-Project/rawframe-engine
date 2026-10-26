@@ -11,7 +11,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// The temporal pass (D291) and the two pictures it keeps from frame to
+/// The temporal pass and the two pictures it keeps from frame to
 /// frame: each antialiased frame blends into one of them with the other,
 /// the picture before, which the next frame reads. The pictures follow
 /// the target's size, made anew (and the history forgotten) when it
@@ -36,7 +36,7 @@ public:
     [[nodiscard]] bool enabled() const noexcept;
     [[nodiscard]] bool reused() const noexcept;
     /// The picture before, joined to the open frame when it is enabled; a
-    /// picture to read only where it is reused (D331).
+    /// picture to read only where it is reused.
     [[nodiscard]] mrhiResourceId before() const noexcept;
 
     /// What the frame shows: the blended picture, or `scene` without it.

@@ -1,4 +1,4 @@
-// The contact shadows on lavapipe (D338): with the shadow maps off and the
+// The contact shadows on lavapipe: with the shadow maps off and the
 // sun low on the left, the floor just right of a block standing on it is
 // darker with the contact shadows than without, and the floor far from
 // the block is as lit.

@@ -1,4 +1,4 @@
-// The depth of field on lavapipe (D336): through a long lens focused two
+// The depth of field on lavapipe: through a long lens focused two
 // meters ahead, a box there keeps sharp edges while a box sixteen meters
 // away blurs its edges over several pixels; without the depth of field,
 // both are sharp.

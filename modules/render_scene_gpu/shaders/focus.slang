@@ -1,8 +1,8 @@
-// The scene's depth of field (ADR-0051, D336), in Slang (ADR-0026, D475):
+// The scene's depth of field, in Slang:
 // the light halved beside its circles of confusion, Gustafsson's
 // single-pass bokeh at that size, and each full-size point blended toward
 // it. Each entry reads only where its fragment is, so the vertex half
-// passes nothing on (D418).
+// passes nothing on.
 
 import screen;
 

@@ -1,4 +1,4 @@
-// The motion blur on lavapipe (D334): a box moving fast across the view
+// The motion blur on lavapipe: a box moving fast across the view
 // smears its edges over several pixels with the blur (at 64 pixels high,
 // its least reach of four either way) and over none without it, and a box
 // standing still stays sharp with the blur on.

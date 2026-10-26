@@ -1,9 +1,9 @@
-// The reflection probes' atlas (ADR-0051, D340), in Slang (ADR-0026,
-// D475): one face of a probe's picture drawn into one mip of its cube in
+// The reflection probes' atlas, in Slang:
+// one face of a probe's picture drawn into one mip of its cube in
 // the atlas by one triangle covering it, the face and the mip the draw's
 // first instance names (the face times eight, plus the mip). Each mip is
 // the light as an ever rougher surface reflects it, as the picture's
-// levels are (D321): mip m of the atlas's eight from the picture's level m
+// levels are: mip m of the atlas's eight from the picture's level m
 // sevenths of the way to its last.
 
 import screen;

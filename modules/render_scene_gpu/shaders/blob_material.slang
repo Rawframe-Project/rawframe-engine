@@ -1,6 +1,6 @@
-// The engine's own material (D303, D482): the surface the draw's blob
-// gives, its textures sampled where its flags and its packed channels say
-// (D309 to D313). The scene is linked with it for the containers the
+// The engine's own material: the surface the draw's blob
+// gives, its textures sampled where its flags and its packed channels say.
+// The scene is linked with it for the containers the
 // engine ships.
 import material;
 
@@ -13,8 +13,8 @@ struct BlobMaterial : IMaterial
         const float4 specular = materials[at + 1u];
         const float4 emission = materials[at + 2u];
         const float4 rest = materials[at + 3u];
-        // Where each texture is sampled (D311), and what the packed and
-        // the emission textures feed (D312).
+        // Where each texture is sampled, and what the packed and
+        // the emission textures feed.
         const float4 baseMap = materials[at + 4u];
         const float4 packedMap = materials[at + 5u];
         const float4 emissionMap = materials[at + 6u];
@@ -45,8 +45,8 @@ struct BlobMaterial : IMaterial
                                    point.dy * emissionMap.xy)
                        .rgb;
         }
-        // The normal, bent by the normal texture across the tangent frame
-        // (D313): its x and y scaled, glTF's green up the image.
+        // The normal, bent by the normal texture across the tangent frame:
+        // its x and y scaled, glTF's green up the image.
         float3 normal = point.normal;
         if ((flags & 16u) != 0u)
         {
@@ -70,19 +70,19 @@ struct BlobMaterial : IMaterial
         made.roughness = specular.w * channelOf(packedTexel, channels.y);
         made.glowing = emission.rgb * glow;
         made.ior = emission.w;
-        // How much of what is behind it a translucent model hides (D305):
+        // How much of what is behind it a translucent model hides:
         // its material's opacity times its color's alpha.
         made.opacity = rest.x * point.color.a * ((flags & 4u) != 0u ? sampled.a : 1.0);
         made.occlusion = rest.y * channelOf(packedTexel, channels.z);
         made.normal = normal;
-        // The blob holds no coat (D716).
+        // The blob holds no coat.
         made.coat = 0.0;
         made.coatRoughness = 0.0;
         made.coatNormal = point.normal;
-        // Nor any anisotropy (D717).
+        // Nor any anisotropy.
         made.anisotropy = 0.0;
         made.anisotropyRotation = 0.0;
-        // Nor any transmission (D720).
+        // Nor any transmission.
         made.transmission = 0.0;
         made.transmissionColor = float3(1.0, 1.0, 1.0);
         made.transmissionDepth = 0.0;

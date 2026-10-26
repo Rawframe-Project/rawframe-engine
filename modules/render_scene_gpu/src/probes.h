@@ -15,7 +15,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// A reflection probe as the lit pass reads it (std430, D325, D340): its
+/// A reflection probe as the lit pass reads it (std430): its
 /// box's middle relative to the eye and its cube of the atlas, below
 /// nought for none this frame; its half sides; and its light's scale.
 struct ProbeBlock {
@@ -25,8 +25,8 @@ struct ProbeBlock {
 };
 static_assert(sizeof(ProbeBlock) == 48, "the lit shader reads a probe as 48 bytes");
 
-/// The reflection probes' pictures as the lit pass samples them (ADR-0051,
-/// D340): one cube array kept from frame to frame, each cube's mips the
+/// The reflection probes' pictures as the lit pass samples them:
+/// one cube array kept from frame to frame, each cube's mips the
 /// light as ever rougher surfaces reflect it. A probe's picture is drawn
 /// into a cube the first frame it is drawn and held, a few pictures a
 /// frame; it keeps its cube while it is drawn, and the cube least lately

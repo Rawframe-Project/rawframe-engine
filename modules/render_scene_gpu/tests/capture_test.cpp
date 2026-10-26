@@ -1,4 +1,4 @@
-// A frame's light read back (D326): a glowing box reads as its emission in
+// A frame's light read back: a glowing box reads as its emission in
 // candela per square meter, whatever the exposure it was drawn at, and the
 // unlit sky around it as nought; a capture is given once.
 

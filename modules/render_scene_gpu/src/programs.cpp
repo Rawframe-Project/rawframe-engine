@@ -1,11 +1,10 @@
-// A material's own program's pipelines (D485, D487): the scene's
-// containers linked with the material at cook time (D484), the one the
+// A material's own program's pipelines: the scene's
+// containers linked with the material at cook time, the one the
 // build's driver reads made a shader, and the engine's own models'
 // pipelines that run its code made again with it as a frame first wants
 // each: the lit ones, the prepass's that cut or leave surfaces, and, from
-// the shadow's container, the masked casters' (D488); and for a material
-// that moves its vertices, the prepass's depth and the solid casters' too
-// (D691).
+// the shadow's container, the masked casters'; and for a material
+// that moves its vertices, the prepass's depth and the solid casters' too.
 
 #include "pipelines.h"
 
@@ -22,7 +21,7 @@ namespace rawframe::render_scene_gpu {
 namespace {
 
 /// Which of a program material's containers the build's driver reads, as
-/// the engine's own are chosen (RAWFRAME_SHADER_SUFFIX, D416): Vulkan's
+/// the engine's own are chosen (RAWFRAME_SHADER_SUFFIX): Vulkan's
 /// and WebGPU's, Metal's, or Direct3D 12's.
 constexpr std::size_t kContainer = RAWFRAME_PROGRAM_CONTAINER;
 static_assert(kContainer < material::kProgramContainers);
@@ -85,7 +84,7 @@ void Pipelines::wantPrograms(std::span<const std::shared_ptr<const material::Pro
                 }
             }
         }
-        // The prepass's surfaces are wanted once a view wants them (D337).
+        // The prepass's surfaces are wanted once a view wants them.
         const bool kSurfaced = asked_.at(static_cast<std::size_t>(Effect::Surfaces));
         const std::array<mrhiGraphicsPipelineDef, 2> kSurfacing = surfacing(prepass_);
         for (std::size_t variant = 0; variant < shading.variants.size() && !shading.refused; ++variant) {

@@ -10,7 +10,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// The exposure the device holds, and the metering that moves it (D293):
+/// The exposure the device holds, and the metering that moves it:
 /// one buffer kept from frame to frame, which every scene pass reads. Each
 /// frame either writes the camera's exposure into it, or, metered, counts
 /// the frame's light into a histogram after the models' pass and moves the
