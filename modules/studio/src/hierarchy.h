@@ -1,6 +1,6 @@
 #pragma once
 
-// The Hierarchy as a tree (D785): each entity under the one its attachment
+// The Hierarchy as a tree: each entity under the one its attachment
 // follows, as `scene.list_entities` gives its parent.
 
 #include <cstddef>
@@ -25,7 +25,7 @@ struct TreeLine {
 [[nodiscard]] std::vector<TreeLine> treeOf(std::span<const std::string> ids, std::span<const std::string> parents);
 
 /// Whether `entity` is `ancestor` or under it, by `parents` beside `ids`: a
-/// parent that would be its own child refused (D785).
+/// parent that would be its own child refused.
 [[nodiscard]] bool isUnder(std::span<const std::string> ids,
                            std::span<const std::string> parents,
                            const std::string& entity,

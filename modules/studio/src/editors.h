@@ -1,7 +1,7 @@
 #pragma once
 
-// What Studio's document editors keep between frames (D812, D818, D819,
-// D827): the kinds of document listed with the scenes, and what the data,
+// What Studio's document editors keep between frames:
+// the kinds of document listed with the scenes, and what the data,
 // settings, graph, clip, and UI editors last read and laid out.
 
 #include "icons.h"
@@ -27,7 +27,7 @@
 
 namespace rawframe::studio {
 
-/// A graph laid out on the canvas (D819), a clip on its timeline (D827).
+/// A graph laid out on the canvas, a clip on its timeline.
 inline constexpr diagnostics::EventIdentity kNoDevice{"studio", "studio_no_device"};
 inline constexpr diagnostics::EventIdentity kCanvasShown{"studio", "studio_canvas"};
 inline constexpr diagnostics::EventIdentity kBlockoutShown{"studio", "studio_blockout"};
@@ -35,16 +35,16 @@ inline constexpr diagnostics::EventIdentity kPlanShown{"studio", "studio_plan"};
 inline constexpr diagnostics::EventIdentity kTerrainShown{"studio", "studio_terrain"};
 inline constexpr diagnostics::EventIdentity kTilemapShown{"studio", "studio_tilemap"};
 inline constexpr diagnostics::EventIdentity kScatterShown{"studio", "studio_scatter"};
-/// A viewport mode chosen in the mode palette (D910): which, and the
+/// A viewport mode chosen in the mode palette: which, and the
 /// document it shows.
 inline constexpr diagnostics::EventIdentity kModeChosen{"studio", "studio_mode"};
 inline constexpr diagnostics::EventIdentity kSequenceShown{"studio", "studio_sequence"};
 /// Studio joined to a shared session's host, and what it heard there
-/// unasked (D882).
+/// unasked.
 inline constexpr diagnostics::EventIdentity kJoined{"studio", "studio_joined"};
 inline constexpr diagnostics::EventIdentity kHostHeard{"studio", "studio_host_heard"};
 /// The collaborators shown: in the title bar, and their choices and claims
-/// in the Hierarchy (D884).
+/// in the Hierarchy.
 inline constexpr diagnostics::EventIdentity kPresenceShown{"studio", "studio_presence_shown"};
 
 /// Another author at the host, as presence says: the document they have
@@ -56,35 +56,35 @@ struct Collaborating {
     std::vector<std::string> chosen;
     std::vector<std::pair<std::string, std::string>> claims;
 };
-/// A scene's instances listed as districts (D870).
+/// A scene's instances listed as districts.
 inline constexpr diagnostics::EventIdentity kWorldShown{"studio", "studio_world"};
-/// Version control's changes read, and a commit made (D871).
+/// Version control's changes read, and a commit made.
 inline constexpr diagnostics::EventIdentity kChangesShown{"studio", "studio_changes"};
 inline constexpr diagnostics::EventIdentity kCommitted{"studio", "studio_committed"};
-/// An extension's Inspector section shown (D875).
+/// An extension's Inspector section shown.
 inline constexpr diagnostics::EventIdentity kSectionShown{"studio", "studio_section_shown"};
-/// The extensions' panels shown (D878).
+/// The extensions' panels shown.
 inline constexpr diagnostics::EventIdentity kPanelsShown{"studio", "studio_panels_shown"};
-/// A game exported, or its export failed (D872).
+/// A game exported, or its export failed.
 inline constexpr diagnostics::EventIdentity kExported{"studio", "studio_exported"};
 inline constexpr diagnostics::EventIdentity kTimelineShown{"studio", "studio_timeline"};
 inline constexpr diagnostics::EventIdentity kCurveShown{"studio", "studio_curve"};
-/// A style sheet's classes as each variant looks (D837).
+/// A style sheet's classes as each variant looks.
 inline constexpr diagnostics::EventIdentity kStylePreviewShown{"studio", "studio_style_preview"};
-/// A UI document laid out as its game would show it (D832).
+/// A UI document laid out as its game would show it.
 inline constexpr diagnostics::EventIdentity kUiPreviewShown{"studio", "studio_ui_preview"};
-/// The played game's server's profile read (D838).
+/// The played game's server's profile read.
 inline constexpr diagnostics::EventIdentity kProfileRead{"studio", "studio_profile"};
-/// The Frame tab read the preview's last frame, or kept a capture (D842).
+/// The Frame tab read the preview's last frame, or kept a capture.
 inline constexpr diagnostics::EventIdentity kFrameRead{"studio", "studio_frame"};
-/// A capture kept (D842, D844), and one shown, read only (D843).
+/// A capture kept, and one shown, read only.
 inline constexpr diagnostics::EventIdentity kCaptureKept{"studio", "studio_capture_kept"};
 inline constexpr diagnostics::EventIdentity kCaptureShown{"studio", "studio_capture_shown"};
-/// The environment panel's components and their entities (D834).
+/// The environment panel's components and their entities.
 inline constexpr diagnostics::EventIdentity kEnvironmentShown{"studio", "studio_environment"};
 
-/// What each document listed with the scenes is (D637, D643, D722, D730,
-/// D812, D818).
+/// What each document listed with the scenes is.
+///
 enum class Listed : std::uint8_t {
     Scene,
     Sheet,
@@ -101,7 +101,7 @@ enum class Listed : std::uint8_t {
     Sequence,
 };
 
-/// What kind of button the frame draws (D915), as the design's: an icon
+/// What kind of button the frame draws, as the design's: an icon
 /// alone, a raised one, the accent's, a quiet one, a tab.
 enum class ButtonKind : std::uint8_t {
     Icon,
@@ -124,17 +124,17 @@ struct ButtonParts {
 struct EditorsHeld {
     /// The most rows a data document or the settings list.
     static constexpr std::size_t kMostRows = 512;
-    /// The platform's clipboard (D999), none where the host lends none; the
+    /// The platform's clipboard, none where the host lends none; the
     /// field a paste was asked for, by its ticket; and the entities last
     /// copied, each its name and its components as the scene read them.
     view::Clipboard* clipboard = nullptr;
     std::uint64_t pasteTicket = 0;
     ui::Node pasteInto{};
     std::vector<std::pair<std::string, document::Value>> copied;
-    /// Whether the edit view's grid was put on once (D914), after which
+    /// Whether the edit view's grid was put on once, after which
     /// it is the author's to toggle.
     bool gridShown = false;
-    /// Each drawn button's parts by its node's key (D915); the toolbar's
+    /// Each drawn button's parts by its node's key; the toolbar's
     /// buttons that run a command by its name.
     std::map<std::uint64_t, ButtonParts> buttonParts;
     std::vector<std::pair<ui::Node, std::string>> commandButtons;
@@ -152,11 +152,11 @@ struct EditorsHeld {
     ui::Node playersButton{};
     ui::Node statusFigures{};
     /// What the status bar's figures last said, its errors' and warnings'
-    /// buttons, and when they are next counted (D923).
+    /// buttons, and when they are next counted.
     std::string figuresSaid;
     std::vector<ui::Node> figureButtons;
     double nextFigures = 0;
-    /// What the frame does not draw but the commands reach (D915); the
+    /// What the frame does not draw but the commands reach; the
     /// right dock and its tabs.
     ui::Node shelf{};
     ui::Node rightDock{};
@@ -165,20 +165,20 @@ struct EditorsHeld {
     ui::Node titleGame{};
     ui::Node titleDocument{};
     /// The chosen entity's turn as the Inspector shows it, in degrees, and
-    /// the pose it is of (D915).
+    /// the pose it is of.
     std::array<double, 3> turn{};
     std::string turnComponent;
-    /// The chosen blockout's lines as last read (D850), the pixels a meter
-    /// is drawn in its plan (D851), and whether the last press was on a
-    /// footprint there, which a drag moves (D852).
+    /// The chosen blockout's lines as last read, the pixels a meter
+    /// is drawn in its plan, and whether the last press was on a
+    /// footprint there, which a drag moves.
     std::vector<std::string> blockoutLines;
     float planScale = 1;
     bool planPressed = false;
     /// The pixels a second takes on the clip's timeline shown, nought where
     /// none is: a mark pressed there is a press on the plan too, and a drag
-    /// moves its key, event, or marker in time (D890).
+    /// moves its key, event, or marker in time.
     float timelineScale = 0;
-    /// The clip's playhead and its transport (D939): where it is, the
+    /// The clip's playhead and its transport: where it is, the
     /// clip's length and whether it loops, whether it plays and when it
     /// last moved, and the transport's, ruler's, and head's nodes.
     double clipTime = 0;
@@ -194,7 +194,7 @@ struct EditorsHeld {
     ui::Node clipRuler{};
     ui::Node clipHead{};
     /// The chosen terrain's map, each block and the place in meters a
-    /// stroke there brushes, and the brush (D856).
+    /// stroke there brushes, and the brush.
     std::vector<std::pair<ui::Node, std::array<double, 2>>> mapBlocks;
     std::string brushTool = "raise";
     double brushRadius = 2;
@@ -202,28 +202,28 @@ struct EditorsHeld {
     std::size_t strokes = 0;
     /// The chosen tilemap's grid, each block and the cells a paint there
     /// covers (column, row, width, height), its rows' tiles (-1 none), and
-    /// the tile painted (D861).
+    /// the tile painted.
     std::vector<std::pair<ui::Node, std::array<std::uint32_t, 4>>> tileBlocks;
     std::vector<int> tileRows;
     int tilePaint = 0;
     std::size_t tilesPainted = 0;
-    /// The chosen scatter's lines as last read (D866).
+    /// The chosen scatter's lines as last read.
     std::vector<std::string> scatterLines;
-    /// The chosen sequence's lines as last read (D869).
+    /// The chosen sequence's lines as last read.
     std::vector<std::string> sequenceLines;
     /// The scene a prefab's source was opened from, and the bar's link
-    /// back to it (D932).
+    /// back to it.
     std::string prefabFrom;
     ui::Node prefabBack{};
     /// How tall the bar is, the view's overlays below it.
     float prefabTall = 0;
     /// Whether a scene just opened is still to settle on a 2D game's 2D
-    /// view (D933).
+    /// view.
     bool flatPending = false;
     /// The game's meshes when the edit view started: its client reads
-    /// them once, so a cook that changes them starts it again (D981).
+    /// them once, so a cook that changes them starts it again.
     std::size_t meshesPreviewed = 0;
-    /// Its timeline (D931): the playhead's time, whether it plays and when
+    /// Its timeline: the playhead's time, whether it plays and when
     /// it last moved, the key chosen, the snap, the length and how many
     /// pixels a second is; the keys' marks, the playhead's nodes and
     /// height, the ruler, and the transport's and the Inspector's controls.
@@ -246,17 +246,17 @@ struct EditorsHeld {
     ui::Node sequenceLoop{};
     ui::Node sequenceRemove{};
     ui::Node sequenceText{};
-    /// What each entity row of a data document holds, as last read (D812).
+    /// What each entity row of a data document holds, as last read.
     std::vector<document::Value> data;
     /// The game's description's lines as last read, and each settings row's
-    /// lines by their places (D818).
+    /// lines by their places.
     std::vector<std::string> settingsLines;
     std::vector<std::vector<std::size_t>> settings;
     /// The canvas's or the timeline's parts and each one's row, and its
-    /// nodes' or keys' boxes (D819, D827).
+    /// nodes' or keys' boxes.
     std::vector<std::pair<ui::Node, std::size_t>> canvasParts;
     std::vector<std::pair<ui::Node, std::size_t>> canvasBoxes;
-    /// A graph's node cards (D982): each one's row, its layout where it is
+    /// A graph's node cards: each one's row, its layout where it is
     /// drawn, and the one a press holds, following the pointer and placed
     /// where it is let go.
     struct CanvasCard {
@@ -266,7 +266,7 @@ struct EditorsHeld {
     };
     std::vector<CanvasCard> canvasCards;
     std::optional<CanvasCard> cardHeld;
-    /// A graph's ports on the canvas (D977): each output's and input's line,
+    /// A graph's ports on the canvas: each output's and input's line,
     /// its node's row, and its name; and the output a press holds, wired to
     /// the input it is let go on.
     struct CanvasPort {
@@ -278,16 +278,16 @@ struct EditorsHeld {
     std::vector<CanvasPort> canvasInputs;
     std::optional<std::pair<std::string, std::string>> wiring;
     /// A UI document's preview: each node's box and its row, and the frame
-    /// laid over the chosen one (D832).
+    /// laid over the chosen one.
     std::vector<std::pair<ui::Node, std::size_t>> previewBoxes;
     std::optional<ui::Node> previewFrame;
     /// The game's classes made in Studio's tree for the preview.
     std::vector<ui::Style> previewStyles;
     /// The environment panel: its pane, its rows, each entity's button and
-    /// row, and each component it offers to add, by its identity (D834).
+    /// row, and each component it offers to add, by its identity.
     ui::Node environmentColumn{};
     /// Its list of the scene's environment, and below it the viewport's
-    /// camera as numbers (D925).
+    /// camera as numbers.
     ui::Node environmentList{};
     ui::Node viewCamera{};
     std::vector<ui::Node> cameraRows;
@@ -295,20 +295,18 @@ struct EditorsHeld {
     std::vector<std::pair<ui::Node, std::size_t>> environmentParts;
     std::vector<std::pair<ui::Node, std::string>> environmentAdds;
     /// The Profiler: its pane, its rows, when it next reads, and how many
-    /// reads it has shown (D838).
+    /// reads it has shown.
     ui::Node profilerColumn{};
     std::vector<ui::Node> profilerRows;
     double profilerNextRead = 0;
     std::uint64_t profilerReads = 0;
-    /// The Profiler's Save capture button, and the captures it has kept
-    /// (D844).
+    /// The Profiler's Save capture button, and the captures it has kept.
     ui::Node profilerCapture{};
     std::uint64_t profilerCaptures = 0;
     /// The Frame tab: its tab and pane, its Capture button, its rows, when
     /// it next reads, how many reads it has shown, and the captures it has
-    /// kept (D842).
-    /// The Profiler's head: its Frame view, and back to its timeline
-    /// (D928).
+    /// kept.
+    /// The Profiler's head: its Frame view, and back to its timeline.
     ui::Node frameTab{};
     ui::Node timelineTab{};
     ui::Node frameColumn{};
@@ -317,7 +315,7 @@ struct EditorsHeld {
     double frameNextRead = 0;
     std::uint64_t frameReads = 0;
     std::uint64_t frameCaptures = 0;
-    /// The capture shown, as its file holds it (D843).
+    /// The capture shown, as its file holds it.
     document::Value capture;
     /// The Changes tab (D871): its tab and pane, its rows, each changed
     /// file's press with its path, and git as Studio runs it, trusted or
@@ -346,9 +344,9 @@ struct EditorsHeld {
     std::string commitMessage;
     std::uint64_t commits = 0;
     /// Studio's own directory, made afresh for the output of the tools it
-    /// runs, taken away as it stops (D871, D872).
+    /// runs, taken away as it stops.
     std::filesystem::path own;
-    /// The Export dialog (D872): its node, its close and export presses,
+    /// The Export dialog: its node, its close and export presses,
     /// each target's press by its word, and its fields; what the author
     /// chose, an output, title, or address empty for its default; the
     /// export running, the output it writes to, what it said last, and the
@@ -364,13 +362,13 @@ struct EditorsHeld {
     std::string exportAddress;
     std::optional<process::Child> exporting;
     /// The extension's viewport mode on, by its extension's path and its
-    /// name, none for none (D877).
+    /// name, none for none.
     std::optional<std::pair<std::string, std::string>> extensionMode;
-    /// The mode palette on the center's left edge (D910): its column, each
+    /// The mode palette on the center's left edge: its column, each
     /// mode's button by its name, the scene a content mode was chosen
     /// from, which Transform goes back to, and how many modes were chosen.
     ui::Node modePalette{};
-    /// The viewport's own controls over it (D916): the bar of pills, each
+    /// The viewport's own controls over it: the bar of pills, each
     /// pill and the menu it opens, the axes' disc and its three ends, and
     /// the flying hint.
     ui::Node viewBar{};
@@ -380,34 +378,34 @@ struct EditorsHeld {
     std::array<ui::Node, 3> axisEnds{};
     ui::Node flyHint{};
     /// Whether the viewport was wide enough for its overlays when they
-    /// were last shown (D978).
+    /// were last shown.
     bool viewBarWide = false;
-    /// The viewport's note while it has no picture, and its words (D922),
+    /// The viewport's note while it has no picture, and its words,
     /// and whether the edited game stopped of itself.
     ui::Node viewportNote{};
     std::string viewportNoteText;
     bool editStopped = false;
-    /// The settings page's section headings, each its section (D922).
+    /// The settings page's section headings, each its section.
     std::vector<std::pair<ui::Node, std::size_t>> settingsHeadings;
-    /// The Inspector's empty state's buttons, each its New command (D922).
+    /// The Inspector's empty state's buttons, each its New command.
     std::vector<std::pair<ui::Node, std::string>> emptyButtons;
-    /// The empty scene's first steps over the viewport (D923).
+    /// The empty scene's first steps over the viewport.
     std::vector<std::pair<ui::Node, std::string>> sceneStartButtons;
-    /// The Preferences dialog's pages, the one shown, and its close (D923).
+    /// The Preferences dialog's pages, the one shown, and its close.
     std::vector<std::pair<ui::Node, std::size_t>> preferencePages;
     std::size_t preferencePage = 0;
-    /// The preferences' Keys page and About page, the Help menu's (D930),
-    /// and its Extensions page, the Extensions menu's (D938).
+    /// The preferences' Keys page and About page, the Help menu's,
+    /// and its Extensions page, the Extensions menu's.
     static constexpr std::size_t kKeysPage = 1;
     static constexpr std::size_t kExtensionsPage = 3;
     static constexpr std::size_t kAboutPage = 4;
     ui::Node preferencesX{};
     /// The General page's interface scales, each its percent, nought for
-    /// the screen's (D966).
+    /// the screen's.
     std::vector<std::pair<ui::Node, int>> interfaceScales;
-    /// Whether the right dock shows the Scene settings tab (D921).
+    /// Whether the right dock shows the Scene settings tab.
     bool sceneSettingsShown = false;
-    /// The Hierarchy's plus, which opens the New menu (D917).
+    /// The Hierarchy's plus, which opens the New menu.
     ui::Node newMenu{};
     /// Whether the view was last turned to 2D.
     bool flat = false;
@@ -415,27 +413,27 @@ struct EditorsHeld {
     std::string modeReturn;
     std::uint64_t modesChosen = 0;
     /// The toolbar's layout chooser, and how many layouts were put in
-    /// place (D911).
+    /// place.
     ui::Node layoutChooser{};
     std::uint64_t layoutsChosen = 0;
     /// The Mixer tab, its pane, and each strip's press with its bus's
-    /// path in the mixer document (D927).
+    /// path in the mixer document.
     ui::Node mixerTab{};
     ui::Node mixerColumn{};
     std::vector<std::pair<ui::Node, std::string>> mixerStrips;
     std::string mixerDocument;
     /// Whether this opening of the game kept its picture for the start
-    /// screen (D927).
+    /// screen.
     bool gamePictured = false;
     /// Each listed entity an instance brought, by its identity: the scene
-    /// it comes from, by that scene's resource identity (D927).
+    /// it comes from, by that scene's resource identity.
     std::map<std::string, std::string, std::less<>> broughtFrom;
     std::vector<ui::Node> mixerRows;
-    /// The Curves tab and its pane (D927).
+    /// The Curves tab and its pane.
     ui::Node curvesTab{};
     ui::Node curvesColumn{};
     std::vector<ui::Node> curvesRows;
-    /// The Extension panels tab, its pane, and its rows (D878).
+    /// The Extension panels tab, its pane, and its rows.
     ui::Node panelsTab{};
     ui::Node panelsColumn{};
     std::vector<ui::Node> panelsRows;
@@ -443,7 +441,7 @@ struct EditorsHeld {
     std::string exportSaid;
     std::uint64_t exports = 0;
     /// The host Studio joins in place of a session of its own, where
-    /// `studio.join` names one (D882): where, and the files of its pin and
+    /// `studio.join` names one: where, and the files of its pin and
     /// token; the link once welcomed, whom it welcomed, what Studio last
     /// said it has open and chosen there, and whether it said the host
     /// closed.
@@ -455,11 +453,11 @@ struct EditorsHeld {
     std::string joinedAs;
     std::string presented;
     /// Everyone presence names, Studio's own author among them, the title
-    /// bar's place for the others, and their marks there (D884).
+    /// bar's place for the others, and their marks there.
     std::vector<Collaborating> collaborators;
     ui::Node avatarsNode{};
     std::vector<ui::Node> avatars;
-    /// The session's card, while it is open (D935).
+    /// The session's card, while it is open.
     ui::Node sessionCard{};
     bool saidJoined = false;
     bool toldClosed = false;

@@ -87,7 +87,7 @@ void ShellParticipant::startGit() {
     if (held_.git.running() || !held_.git.waiting()) {
         return;
     }
-    // Version control's engine is git, an external tool (SPEC-0051): run as
+    // Version control's engine is git, an external tool: run as
     // its own program in the game's directory, its output read once it ends.
     const std::optional<std::filesystem::path> kOwn = ownDirectory();
     if (!kOwn.has_value()) {

@@ -1,7 +1,7 @@
 #include "hints.h"
 #include "shell.h"
 
-// The Inspector as the screen design draws it (D915): the entity's head,
+// The Inspector as the screen design draws it: the entity's head,
 // and a component's axes as one row of colored X, Y, and Z fields, each
 // still its own field to the session.
 
@@ -33,8 +33,8 @@ constexpr std::array<AxisRun, 9> kRuns = {{{{"x", "y", "z", ""}, 3, "Position"},
                                            {{"toX", "toY", "toZ", ""}, 3, "To"},
                                            {{"bendX", "bendY", "bendZ", ""}, 3, "Bend"}}};
 
-/// An emitter's fields as the design's Particles screen groups them
-/// (D934): how many leave and from where, how they move, and how they
+/// An emitter's fields as the design's Particles screen groups them:
+/// how many leave and from where, how they move, and how they
 /// look. The emitter is the one place particles are written, so its
 /// component is their editor; no document beside it.
 constexpr std::string_view kEmitterType = "rawframe.model.ParticleEmitter";
@@ -222,7 +222,7 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
     RAWFRAME_TRY(words(kName, label, look::kLabelInk, look::kLabelSize));
     RAWFRAME_TRY_ASSIGN(const ui::Node kAxes, box(kLine, ui::Layout{.width = ui::pixels(0), .gap = 4, .grow = 1}, 0));
     // A pose's turn in degrees about X, Y, and Z, its quaternion the
-    // session's (D915).
+    // session's.
     const bool kTurn = axes.size() == 4 && axes.front().name == "qx" && componentName.ends_with(".pose");
     std::array<double, 3> turned{};
     if (kTurn) {
@@ -236,8 +236,7 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
         held_.turn = turned;
         held_.turnComponent = component;
     }
-    // A 2D pose's turn, its cosine and sine, one angle about Z in degrees
-    // (D933).
+    // A 2D pose's turn, its cosine and sine, one angle about Z in degrees.
     const bool kFlatTurn = axes.size() == 2 && axes.front().name == "c" && componentName.ends_with(".pose");
     double flatAngle = 0;
     if (kFlatTurn) {
@@ -306,7 +305,7 @@ result::Status ShellParticipant::vectorRow(const std::string& component,
                                    .type = kType});
     }
     // An instance's own values, each of which it may drop for its
-    // source's, under the row (D443, D925).
+    // source's, under the row.
     const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
     if (kBrought && !kTurn && !kFlatTurn && catalog_.offers("scene.revert_field") &&
         std::ranges::any_of(axes, [](const FieldShown& field) {
@@ -395,7 +394,7 @@ void ShellParticipant::fieldGroupRow(const std::string& component,
 }
 
 void ShellParticipant::asCheckbox(ui::Node value, bool on) {
-    // A truth as the design's box (D916): checked, the accent with its
+    // A truth as the design's box: checked, the accent with its
     // mark; its words kept, unseen, as the value read and toggled.
     static_cast<void>(tree_->setLayout(
         value, ui::Layout{.width = ui::pixels(16), .height = ui::pixels(16), .shrink = 0, .border = {1, 1, 1, 1}}));
@@ -422,7 +421,7 @@ void ShellParticipant::asChooser(ui::Node line) {
 
 void ShellParticipant::showNothingChosen() {
     // With nothing chosen in a scene, the Inspector says how to choose or
-    // make something, as the design's empty state (D922).
+    // make something, as the design's empty state.
     if (!componentRows_.empty() || scene_.empty() || documentChosen() || !entity_.empty() || !browser_.chosen.empty() ||
         live_.on || !tree_->contains(componentsColumn_)) {
         return;

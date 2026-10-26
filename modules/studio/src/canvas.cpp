@@ -50,7 +50,7 @@ std::string shortType(const Value& node) {
     return made;
 }
 
-/// What a node is, as the design colors it (D923): a texture, an input
+/// What a node is, as the design colors it: a texture, an input
 /// the material reads (a parameter, time, a position), its output, or
 /// arithmetic; its dot's color and its header's.
 struct NodeKind {
@@ -168,7 +168,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix,
         }
     }
     // Each node's outputs, as its type's signature lists them, where the
-    // material module lists its type (D923).
+    // material module lists its type.
     const Value* kTypes = nodeTypes_.has_value() ? nodeTypes_->find("types") : nullptr;
     const auto kSignatureOf = [kTypes](const Value& node, std::string_view part) {
         std::vector<std::string> named;
@@ -192,7 +192,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix,
         return kSignatureOf(node, "outputs");
     };
     // Its inputs, every one its type has, each a line whether set or at
-    // its default (D982), then any the document holds its type has not.
+    // its default, then any the document holds its type has not.
     const auto kInputNamesOf = [&kSignatureOf](const Value& node) {
         std::vector<std::string> named = kSignatureOf(node, "inputs");
         const Value* kInputs = inputsOf(node);
@@ -226,7 +226,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix,
         tall = std::max(tall, filled[kColumn] + kMargin);
     }
     // Where the author placed a node instead, as the document's
-    // presentation keeps it (D982), and the sheet as large as they reach.
+    // presentation keeps it, and the sheet as large as they reach.
     // A hand-edited document may hold anything there: only an object's
     // finite numbers, within the million pixels the session keeps.
     static constexpr double kFarthest = 1e6;
@@ -314,7 +314,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix,
             }
         }
     }
-    // Each node a card as the design's (D923): a header in its kind's
+    // Each node a card as the design's: a header in its kind's
     // color with its dot and name, standing for its row in the Hierarchy;
     // its params' values; its inputs, each with its port on the left and
     // the constant it holds; its outputs at the right with their ports.
@@ -423,7 +423,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix,
              kParams != nullptr && kParams->kind() == Value::Kind::Object && param < kParams->names().size();
              ++param) {
             // A resource a node names, as a clip, by the game's file of it
-            // rather than its identity (D940).
+            // rather than its identity.
             std::string shown = constantText(kParams->items()[param]);
             if (const Value& kParam = kParams->items()[param];
                 kParam.kind() == Value::Kind::String && kParam.text() != nullptr) {
@@ -469,7 +469,7 @@ void ShellParticipant::showCanvas(const Value& nodes, const std::string& prefix,
 }
 
 std::optional<std::size_t> ShellParticipant::canvasEntityOf(ui::Node node) const {
-    // The center's parts, and the environment panel's entities (D834).
+    // The center's parts, and the environment panel's entities.
     for (const auto* kParts : {&held_.canvasParts, &held_.environmentParts}) {
         const auto kPart = std::ranges::find(*kParts, node, &std::pair<ui::Node, std::size_t>::first);
         if (kPart != kParts->end()) {
@@ -480,7 +480,7 @@ std::optional<std::size_t> ShellParticipant::canvasEntityOf(ui::Node node) const
 }
 
 void ShellParticipant::followCard(bool released) {
-    // A card held moves with the pointer once it is dragged (D982), its
+    // A card held moves with the pointer once it is dragged, its
     // wires drawn again where it is placed.
     const std::optional<std::array<float, 2>> kPointer =
         released && releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();

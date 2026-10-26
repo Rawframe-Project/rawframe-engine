@@ -35,7 +35,7 @@ bool keyed(const Value& array) {
 
 /// Whether `array`'s items are objects known by nothing of their own, so
 /// each is a row named by its place (a clip's tracks and keys, a skeleton's
-/// bones, D827).
+/// bones).
 bool placed(const Value& array) {
     return !array.items().empty() && !keyed(array) && std::ranges::all_of(array.items(), [](const Value& item) {
         return item.kind() == Value::Kind::Object;
@@ -78,8 +78,7 @@ void ShellParticipant::showData() {
     if (!sheet_.has_value()) {
         return;
     }
-    // A clip's tracks by their bones and channels, its keys by their times
-    // (D939).
+    // A clip's tracks by their bones and channels, its keys by their times.
     const Value* kSheetKind = sheet_->find("kind");
     const std::map<std::string, std::string, std::less<>> kBones =
         kSheetKind != nullptr && kSheetKind->text() != nullptr && *kSheetKind->text() == "animation.clip"
@@ -111,7 +110,7 @@ void ShellParticipant::showData() {
                                            const std::string& path,
                                            const std::string& label,
                                            std::size_t depth) -> void {
-        // A tree row as the design's (D923): what it is named, and the list
+        // A tree row as the design's: what it is named, and the list
         // it is in quieter, read by its whole label.
         const std::size_t kOpen = label.rfind(" (");
         const bool kInList = kOpen != std::string::npos && label.ends_with(')');
@@ -143,7 +142,7 @@ void ShellParticipant::showData() {
             const Value& kHeld = at.items()[each];
             if (kHeld.kind() == Value::Kind::Object) {
                 // An animation graph's node by its kind, its identity
-                // quieter after it (D940).
+                // quieter after it.
                 const bool kNode = path == "graph" && kHeld.find("type") != nullptr;
                 self(self,
                      kHeld,
@@ -186,8 +185,8 @@ void ShellParticipant::showData() {
         }
     };
     kList(kList, *sheet_, "", std::filesystem::path{scene_}.filename().string(), 0);
-    // An animation graph's nodes on the canvas too (D819), and a clip's
-    // keys on its timeline (D827).
+    // An animation graph's nodes on the canvas too, and a clip's
+    // keys on its timeline.
     const Value* kKind = sheet_->find("kind");
     const Value* kGraph = sheet_->find("graph");
     const std::string kNamed = kKind != nullptr && kKind->kind() == Value::Kind::String ? *kKind->text() : "";
@@ -217,7 +216,7 @@ void ShellParticipant::showData() {
         }
         showDataEntry(first);
     }
-    // The bottom dock's views of it, where shown (D927).
+    // The bottom dock's views of it, where shown.
     if (paneShown(Dock::Curves)) {
         showCurves();
     }
@@ -439,7 +438,7 @@ void ShellParticipant::showDataEntry(std::size_t at) {
             tree_->setLook(entityRows_[each], ui::Look{.fill = each == at ? kChosen : kRow, .radius = 4}));
     }
     // A clip's timeline laid out again, the chosen track's curve with it;
-    // a graph's canvas marked (D827, D836).
+    // a graph's canvas marked.
     const Value* kKind = sheet_.has_value() ? sheet_->find("kind") : nullptr;
     const std::string kKindName = kKind != nullptr && kKind->kind() == Value::Kind::String ? *kKind->text() : "";
     if (kKindName == "animation.clip") {
@@ -447,7 +446,7 @@ void ShellParticipant::showDataEntry(std::size_t at) {
     } else if (kKindName == "animation.graph") {
         markCanvas();
     } else if (kKindName == "input.actions") {
-        // The tables again, the chosen row lit (D923, D927).
+        // The tables again, the chosen row lit.
         showActionTables();
     } else if (kKindName == "text.strings") {
         showStringTables();
@@ -500,7 +499,7 @@ void ShellParticipant::setDataValue(const FieldRow& row, const std::string& text
 
 namespace {
 
-/// A control's name as a chip says it (D927): a key's letter or word, a
+/// A control's name as a chip says it: a key's letter or word, a
 /// pad's control with its side first, `left stick` for `stick_left`.
 std::string chipOf(std::string_view control) {
     std::string made{control.starts_with("key_") ? control.substr(4) : control};
@@ -770,7 +769,7 @@ void ShellParticipant::showStringTables() {
     }
     // Its translations: the game's documents named as this one with a
     // locale before `.translations`, as `gale.tr.translations` is
-    // `gale.strings`' Turkish (D927).
+    // `gale.strings`' Turkish.
     const std::string kStem = std::filesystem::path{scene_}.stem().string();
     const std::string kFolder = std::filesystem::path{scene_}.parent_path().generic_string();
     std::vector<std::pair<std::string, Value>> translations;

@@ -87,7 +87,7 @@ void ShellParticipant::readNetwork(double seconds) {
     network_.connections = kCount("connections");
     network_.mostConnections = std::max(network_.mostConnections, network_.connections);
     // Said when the count changes, so what waits for a client to be in
-    // waits for the server's own count (D823).
+    // waits for the server's own count.
     if (network_.connections != kWere) {
         emitter_.log(
             diagnostics::Severity::Info,
@@ -116,7 +116,7 @@ void ShellParticipant::readNetwork(double seconds) {
                     std::to_string(kCount("recordsHeld")) + ", deferred by the budget " +
                     std::to_string(kCount("recordsDeferred")) + "; entities out of interest " +
                     std::to_string(kCount("interestLeft")));
-    // Each connection alone (D840): what its client is told of, its state
+    // Each connection alone: what its client is told of, its state
     // rate since the last read, and what waits on it.
     const Value* kEach = kAnswer->find("perConnection");
     std::size_t connectionLines = 0;

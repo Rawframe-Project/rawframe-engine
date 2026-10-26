@@ -1,6 +1,6 @@
 #pragma once
 
-// Studio's look (D915): the screen design's palette (artifact
+// Studio's look: the screen design's palette (artifact
 // "Rawframe Studio Screens", its Language board), 0xRRGGBBAA, and the
 // sizes its frame is drawn at, as `look::`. Every panel takes its colors
 // from here.
@@ -66,7 +66,7 @@ inline constexpr float kLabelSize = 12;
 inline constexpr float kSmallSize = 11;
 
 /// The image key an icon is drawn under: Studio hands each from its
-/// embedded set (D915), tinted to the color it is shown in.
+/// embedded set, tinted to the color it is shown in.
 inline constexpr std::uint64_t kIconImageBase = 0x49434F4E00000000ULL;
 [[nodiscard]] constexpr std::uint64_t iconImage(studio::Icon icon) noexcept {
     return kIconImageBase + static_cast<std::uint64_t>(icon);

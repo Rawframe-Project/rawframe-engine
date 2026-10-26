@@ -17,7 +17,7 @@ result::Result<ui::Node> ShellParticipant::tabbedColumn(ui::Node parent,
                                                         ui::Node& tab,
                                                         std::string_view extra,
                                                         ui::Node* extraButton) {
-    // The left dock's height, scrolling what does not fit (D441), as
+    // The left dock's height, scrolling what does not fit, as
     // column() lays a column out across the window's width.
     RAWFRAME_TRY_ASSIGN(const ui::Node kColumn,
                         box(parent,
@@ -34,8 +34,8 @@ result::Result<ui::Node> ShellParticipant::tabbedColumn(ui::Node parent,
         box(kColumn, ui::Layout{.height = ui::pixels(22), .alignItems = ui::Align::Center, .shrink = 0}, 0));
     RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{.grow = 1}, 0));
     RAWFRAME_TRY(words(kTitle, heading, kQuiet, 13));
-    // The other panel of the dock, named so a press finds it (D788).
-    // A switch of its own beside it, the Hierarchy's Live (D808).
+    // The other panel of the dock, named so a press finds it.
+    // A switch of its own beside it, the Hierarchy's Live.
     if (extraButton != nullptr) {
         RAWFRAME_TRY_ASSIGN(*extraButton, box(kHeading, ui::Layout{.padding = {6, 2, 6, 2}}, kRow));
         RAWFRAME_TRY(pressWords(*extraButton, extra, kText, 13));
@@ -56,7 +56,7 @@ void ShellParticipant::showLeft(Left shown) {
         static_cast<void>(tree_->attach(leftDock_, kColumn(shown)));
         leftShown_ = shown;
     }
-    // The tab shown underlined (D927).
+    // The tab shown underlined.
     setTab(hierarchyTab_, shown == Left::Hierarchy);
     setTab(layersTab_, shown == Left::Layers);
     setTab(worldTab_, shown == Left::World);
@@ -69,7 +69,7 @@ void ShellParticipant::showLeft(Left shown) {
 }
 
 std::string ShellParticipant::layerName(std::uint32_t layer) const {
-    // The game's names for its layers, from its field line (D783).
+    // The game's names for its layers, from its field line.
     if (const Catalog::Component* kLayerType = catalog_.component(kLayerComponent); kLayerType != nullptr) {
         for (const Catalog::Field& kLayerField : kLayerType->fields) {
             for (const auto& [kValue, kName] : kLayerField.labels) {
@@ -106,7 +106,7 @@ void ShellParticipant::showLayers() {
         }
     }
     if (members.empty()) {
-        // As the design's Layers (D927): what they are for, and how one is
+        // As the design's Layers: what they are for, and how one is
         // made.
         if (auto none =
                 box(layersColumn_, ui::Layout{.width = ui::share(1), .shrink = 0, .padding = {12, 12, 10, 10}}, 0);
@@ -194,8 +194,7 @@ bool ShellParticipant::pressLayers(ui::Node node) {
         showLayers();
         return true;
     }
-    // Its entities chosen, as the Hierarchy's Control presses choose them
-    // (D787).
+    // Its entities chosen, as the Hierarchy's Control presses choose them.
     selected_.clear();
     std::optional<std::size_t> first;
     for (std::size_t at = 0; at < entityLayers_.size() && at < entities_.size(); ++at) {

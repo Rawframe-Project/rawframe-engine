@@ -8,7 +8,7 @@
 #include <utility>
 
 // The scene's view as Studio edits it: typed into the view's fields, and
-// turned into a 2D view or out of one (D471, D793).
+// turned into a 2D view or out of one.
 
 namespace rawframe::studio {
 

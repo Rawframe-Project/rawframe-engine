@@ -8,13 +8,13 @@ namespace rawframe::studio {
 
 namespace {
 
-/// The targets SPEC-0051 gives the dialog, each by the word Studio shows
+/// The export dialog's targets, each by the word Studio shows
 /// and the one `rawframe-export` takes.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kTargets = {
     {{"desktop", "native"}, {"web", "web"}, {"android", "android"}, {"ios", "ios"}}};
 
 /// A target as an author reads it: the desktop named for the system Studio
-/// runs on, which it exports for (D947).
+/// runs on, which it exports for.
 std::string_view shownTarget(std::string_view target) {
     if (target != "desktop") {
         return target;
@@ -58,7 +58,7 @@ void ShellParticipant::openExport() {
     }
     closePopup();
     closePreferences();
-    // As the design's Export dialog (D937): its heading and the tool that
+    // As the design's Export dialog: its heading and the tool that
     // does the work, a card for each target, where it goes and what it is
     // called, what the export said, and Cancel and Export at its foot.
     auto dialog =
@@ -232,7 +232,7 @@ bool ShellParticipant::pressExport(ui::Node node) {
     if (const auto kTarget = std::ranges::find(held_.exportTargets, node, &std::pair<ui::Node, std::string>::first);
         kTarget != held_.exportTargets.end()) {
         held_.exportTarget = kTarget->second;
-        // What the last export said was of the target left (D948).
+        // What the last export said was of the target left.
         held_.exportSaid.clear();
         say("exports for " + std::string{shownTarget(held_.exportTarget)});
         closeExport();
@@ -268,7 +268,7 @@ void ShellParticipant::startExport() {
         say("an export is running");
         return;
     }
-    // Export is a headless operation (ADR-0042): the dialog only tells
+    // Export is a headless operation: the dialog only tells
     // `rawframe-export` what the author chose, and the tools it runs are
     // the ones beside it.
     const std::filesystem::path kOutput = exportOutput();

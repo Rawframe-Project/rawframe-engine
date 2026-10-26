@@ -156,8 +156,7 @@ void ShellParticipant::showSelection(std::size_t at) {
     fields_.clear();
     entityAt_ = at;
     entity_ = entities_[at];
-    // All of them chosen in the session too, so framing holds them all
-    // (D792).
+    // All of them chosen in the session too, so framing holds them all.
     static_cast<void>(ask(selectRecord(next(), scene_, selected_)));
     for (std::size_t each = 0; each < entityRows_.size(); ++each) {
         const bool kIn = std::ranges::contains(selected_, entities_[each]);
@@ -167,8 +166,7 @@ void ShellParticipant::showSelection(std::size_t at) {
     actions_.clear();
     components_ = 0;
     // Each one read, then what they all have: the components they share,
-    // each field's value where they agree and empty where they differ
-    // (SPEC-0051's one selection model).
+    // each field's value where they agree and empty where they differ.
     std::vector<std::optional<Value>> reads;
     for (const std::string& kEach : selected_) {
         reads.push_back(read(scene_, "scene.read_entity", kEach));
@@ -274,7 +272,7 @@ void ShellParticipant::refresh(const std::optional<std::string>& entity) {
         }
     }
     // What an undo, or another's edit, took away is chosen no longer: its
-    // outline and its mark go with it (D997).
+    // outline and its mark go with it.
     std::erase_if(selected_, [this](const std::string& each) {
         return !std::ranges::contains(entities_, each);
     });
@@ -316,7 +314,7 @@ void ShellParticipant::step(std::string_view kind) {
         say(kOutcome.message);
     }
     // A scene's entities chosen as the step left them, as an editor's undo
-    // puts back what was chosen with what was done (D417, D997); another
+    // puts back what was chosen with what was done; another
     // document chooses none of its own.
     if (kOutcome.done && kOutcome.selection.has_value() && chosen(Listed::Scene)) {
         selected_ = *kOutcome.selection;

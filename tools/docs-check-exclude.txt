@@ -76,7 +76,6 @@ modules/scatter
 modules/scene
 modules/scene_bake
 modules/sequence
-modules/studio
 modules/terrain
 modules/texture
 modules/texture_import

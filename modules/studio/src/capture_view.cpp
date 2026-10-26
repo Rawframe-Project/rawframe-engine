@@ -29,8 +29,8 @@ std::string countOf(const Value* value) {
 } // namespace
 
 void ShellParticipant::showCapture() {
-    // A capture is an answer as it was read, a drawn frame's (D842) or a
-    // profile's (D844), kept as a file: read as it is.
+    // A capture is an answer as it was read, a drawn frame's or a
+    // profile's, kept as a file: read as it is.
     const auto kFile = authoring_session::readFile(sceneRoot_ / scene_);
     auto parsed = document::parse(kFile.value_or(std::string{}));
     held_.capture = parsed.has_value() ? std::move(*parsed) : Value{};
@@ -49,7 +49,7 @@ void ShellParticipant::showCapture() {
         places_.push_back(std::nullopt);
         return true;
     };
-    // A profile's capture (D844): its ticks, then each system.
+    // A profile's capture: its ticks, then each system.
     if (const Value* kTicks = held_.capture.find("ticksUs");
         kTicks != nullptr && kTicks->kind() == Value::Kind::Array) {
         if (!kAdd("ticks (" + std::to_string(kTicks->items().size()) + ")", "ticks")) {

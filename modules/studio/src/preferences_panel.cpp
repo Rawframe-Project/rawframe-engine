@@ -23,7 +23,7 @@ void ShellParticipant::openPreferences() {
         return;
     }
     closePopup();
-    // As the design's dialog (D923): over the window dimmed, a card with
+    // As the design's dialog: over the window dimmed, a card with
     // its title and close, its pages on the left, the page chosen, and
     // where it is kept.
     auto backdrop = box(root_,
@@ -55,7 +55,7 @@ void ShellParticipant::openPreferences() {
                                               .outerShadow = {.color = 0x00000099U, .y = 10, .blur = 30}}));
     static_cast<void>(tree_->setRole(*card, ui::Role::Group));
     // Not "Preferences", the command's name, which a screen reader finds
-    // in the Window menu (D777).
+    // in the Window menu.
     static_cast<void>(tree_->setName(*card, "Studio preferences"));
     shortcutFields_.clear();
     editorField_.reset();
@@ -152,7 +152,7 @@ void ShellParticipant::openPreferences() {
         }
     };
     if (held_.preferencePage == 0) {
-        // As an editor's own scaling over the desktop's (D966): the
+        // As an editor's own scaling over the desktop's: the
         // screen's by default, or larger or smaller words and panels.
         kHeading("Interface scale",
                  "How large Studio draws its words and panels. System follows the screen's own scale, now " +
@@ -182,7 +182,7 @@ void ShellParticipant::openPreferences() {
     } else if (held_.preferencePage == 1) {
         // Each command's keys, brighter where the author gave them; a chord
         // two commands share is said under each, the first in the list
-        // taking it (D782).
+        // taking it.
         kHeading("Keys", "Each command's keys, typed as Ctrl+B or F5, apart by commas; empty for none.");
         for (const Command& kCommand : commands_) {
             auto line = fieldRow(kCommand.name + " keys",
@@ -210,8 +210,8 @@ void ShellParticipant::openPreferences() {
         kMono("rawframe-author mcp " + description_.string());
         kHeading("Together", "Two authors on one game: File, then the game's host, as rawframe-author host and join.");
     } else if (held_.preferencePage == 3) {
-        // The game's extensions (SPEC-0051's Preferences: Extensions,
-        // D874): each by its path, what its doors are of, and its
+        // The game's extensions (the Preferences: Extensions):
+        // each by its path, what its doors are of, and its
         // commands, or why it offers none.
         kHeading("Extensions",
                  "Kest programs under the game's extensions/ folder. They run as trusted code, so trust only what "
@@ -234,7 +234,7 @@ void ShellParticipant::openPreferences() {
         }
     } else {
         // What Studio is, how its viewport is flown, and the programs it
-        // found beside it (D930).
+        // found beside it.
         kHeading("Rawframe Studio",
                  "An editor over the engine's headless tools: what it does to a game, rawframe-author and the "
                  "tools beside it do without it, and an agent through MCP.");
