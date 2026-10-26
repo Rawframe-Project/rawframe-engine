@@ -38,10 +38,6 @@ modules/animation
 modules/audio
 modules/authoring
 modules/authoring_session
-modules/build
-modules/content
-modules/cook
-modules/font_import
 modules/input
 modules/input_kest
 modules/input_window
@@ -49,7 +45,6 @@ modules/kest
 modules/kest_library
 modules/localization
 modules/material
-modules/navigation
 modules/particles
 modules/particles_gpu
 modules/render
@@ -58,8 +53,6 @@ modules/render_canvas_gpu
 modules/render_scene
 modules/render_scene_gpu
 modules/studio
-modules/texture
-modules/texture_import
 modules/ui
 modules/view
 modules/window
@@ -68,7 +61,6 @@ modules/world_animation
 modules/world_audio
 modules/world_kest
 modules/world_localization
-modules/world_runtime
 modules/world_ui
 modules/xr
 templates
