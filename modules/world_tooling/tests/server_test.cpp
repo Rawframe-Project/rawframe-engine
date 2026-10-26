@@ -1,4 +1,4 @@
-// The tooling protocol's runtime end (D408), over a provider that hands
+// The tooling protocol's runtime end, over a provider that hands
 // the server what a test gives it: a hello admits only the endpoint's
 // token and version, status reads the World between ticks, and a client out
 // of form, past the limit, or silent past the deadline is refused and
@@ -297,7 +297,7 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
         provider.sent[1].find(R"("id":6,"answer":{"kind":"tooling.looking","previewing":false,"split":0})") !=
             std::string::npos &&
         !preview.kept.has_value());
-    // Split with the views beside it (D797); more than three, or one out
+    // Split with the views beside it; more than three, or one out
     // of form, refused.
     provider.say(1,
                  R"({"kind":"tooling.look","id":7,"view":{"eye":[0,10,10],"target":[0,0,0],"fieldOfView":90},)"
@@ -313,7 +313,7 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
         preview.split_.size() == 1 && preview.split_[0].eye == (std::array<double, 3>{0, 9, 0.1}));
     RAWFRAME_EXPECT(provider.sent[1].find(R"("id":8,"error":{"code":"malformed")") != std::string::npos &&
                     preview.split_.size() == 1);
-    // Overlays by their names, handed on (D798); a name that is no text
+    // Overlays by their names, handed on; a name that is no text
     // refused.
     provider.say(1,
                  R"({"kind":"tooling.overlays","id":9,"overlays":["colliders","lights"]})"
@@ -328,7 +328,7 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
     server->serve(nullptr, {}, {});
     RAWFRAME_EXPECT(provider.sent[1].find(R"("id":10,"error":{"code":"malformed")") != std::string::npos &&
                     preview.overlays_.size() == 2);
-    // A spline's path handed on (D891); a path of one point, or a point
+    // A spline's path handed on; a path of one point, or a point
     // that is no number, refused, the paths kept.
     provider.say(1,
                  R"({"kind":"tooling.paths","id":11,"paths":[[[0,0,0],[1,2,0],[3,2,0]]]})"
@@ -345,7 +345,7 @@ RAWFRAME_TEST(LookingMovesThePreviewUnderTheViewGrant) {
     RAWFRAME_EXPECT(provider.sent[1].find(R"("id":12,"error":{"code":"malformed")") != std::string::npos &&
                     provider.sent[1].find(R"("id":13,"error":{"code":"malformed")") != std::string::npos &&
                     preview.paths_.size() == 1);
-    // Each author's choice outlined (D907): a color and boxes handed on; a
+    // Each author's choice outlined: a color and boxes handed on; a
     // color past one, a box with a side below nought, or a box of another
     // form refused, the outlines kept.
     provider.say(1,

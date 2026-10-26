@@ -43,15 +43,15 @@ struct Settings {
     world::TickRate rate;
     std::uint32_t maximumTicksPerIteration = 4;
     world::WorldSettings world;
-    /// How far behind a World is degraded (SPEC-0013's degraded debt
+    /// How far behind a World is degraded (the degraded debt
     /// threshold), and past which it is overloaded at once (its shutdown
-    /// threshold; nought never), in milliseconds of ticks (D212).
+    /// threshold; nought never), in milliseconds of ticks.
     std::uint64_t degradedMs = 1000;
     std::uint64_t debtLimitMs = 0;
     /// How long a World may stay degraded before it is overloaded; nought
     /// never.
     execution::MonotonicDuration overloadAfter;
-    /// An editor's World (D912): ticks at its rate, but only the systems
+    /// An editor's World: ticks at its rate, but only the systems
     /// that run while editing, so it shows its documents and nothing plays.
     bool edited = false;
 };
@@ -223,7 +223,7 @@ public:
         if (!running_) {
             return;
         }
-        // Paused (D806): the time since the last iteration excused, as a
+        // Paused: the time since the last iteration excused, as a
         // breakpoint's is, and only stepped ticks run, outside the pacer's
         // count, so the World neither hurries nor waits once let go.
         if (paused_ && lastFrame_.has_value()) {
@@ -276,7 +276,7 @@ public:
             }
         }
         // Its debt at most once a second, however often it falls behind and
-        // catches up; caught up, nought once (D950, D952).
+        // catches up; caught up, nought once.
         if ((kDue.debt != 0 || debtShown_ != 0) &&
             (!debtSaid_.has_value() || frame.now - *debtSaid_ >= kDebtSaidEvery)) {
             emitter_.gauge(kTickDebt, diagnostics::Unit::Count, static_cast<double>(kDue.debt));
@@ -284,7 +284,7 @@ public:
             debtShown_ = kDue.debt;
         }
         context_->reportMemory(world_->heldBytes());
-        // SPEC-0012's tick progress, on SPEC-0013's thresholds (D212): a
+        // The tick progress, on the thresholds: a
         // World `world.degraded_ms` or more behind is degraded, and healthy
         // again once it has caught up; one degraded for longer than
         // `world.overload_ms`, or `world.debt_limit_ms` behind, is
@@ -332,8 +332,8 @@ private:
         ++recorded_;
     }
 
-    /// How long ticks took, for SPEC-0013's tick budget, and the entities
-    /// the World holds then (D388): once, at stop.
+    /// How long ticks took, for the tick budget, and the entities
+    /// the World holds then: once, at stop.
     void summarize() {
         if (durations_.empty()) {
             return;
@@ -361,7 +361,7 @@ private:
     const execution::MonotonicSource* clock_ = nullptr;
     std::vector<std::int64_t> durations_;
     std::uint64_t recorded_ = 0;
-    /// The last ticks a profiler reads (D838): each one's duration and its
+    /// The last ticks a profiler reads: each one's duration and its
     /// systems' times, in the order the schedule ran them.
     static constexpr std::size_t kProfiledTicks = 120;
     std::vector<std::string> profiledSystems_;
@@ -396,7 +396,7 @@ private:
     world::TickIndex tick_;
     std::uint64_t generation_ = 0;
     /// Paused, the ticks stepped and not yet run, and when the last
-    /// iteration was (D806).
+    /// iteration was.
     bool paused_ = false;
     std::uint32_t steps_ = 0;
     std::optional<execution::MonotonicInstant> lastFrame_;

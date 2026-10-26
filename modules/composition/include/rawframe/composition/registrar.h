@@ -13,7 +13,7 @@ struct Collector;
 
 /// What a registrar receives: the one way to contribute participants. It
 /// cannot be copied or moved, speaks only for the module whose registrar is
-/// running, and closes when that registrar returns (SPEC-0049 Part 2).
+/// running, and closes when that registrar returns.
 class ParticipantRegistrar {
 public:
     ParticipantRegistrar(detail::Collector& collector,
@@ -49,7 +49,7 @@ private:
 
 /// A module's single registration entry point. Deterministic and effect-free:
 /// it only submits declarations. It constructs nothing, starts nothing, and
-/// reads nothing but its argument (ADR-0068).
+/// reads nothing but its argument.
 using RegistrarFunction = void (*)(ParticipantRegistrar& registrar) noexcept;
 
 [[nodiscard]] constexpr std::uint8_t scopeBit(LifetimeScope scope) noexcept {
@@ -58,7 +58,7 @@ using RegistrarFunction = void (*)(ParticipantRegistrar& registrar) noexcept;
 
 /// One contributing module in a host's registrar list. The list is maintained
 /// by hand in each host, which is the composition root: naming a registrar that
-/// does not exist fails to link (work/decisions.md D16).
+/// does not exist fails to link.
 struct RegistrarEntry {
     std::string_view moduleId;
     RegistrarFunction registrar = nullptr;

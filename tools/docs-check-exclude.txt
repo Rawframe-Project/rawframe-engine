@@ -43,13 +43,11 @@ modules/authoring
 modules/authoring_session
 modules/blockout
 modules/build
-modules/composition
 modules/content
 modules/cook
 modules/font_import
 modules/game_content
 modules/game_textures
-modules/host
 modules/input
 modules/input_kest
 modules/input_window
@@ -90,7 +88,6 @@ modules/world_audio
 modules/world_kest
 modules/world_localization
 modules/world_runtime
-modules/world_tooling
 modules/world_ui
 modules/xr
 templates

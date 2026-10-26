@@ -1,6 +1,6 @@
 #pragma once
 
-// The tooling endpoint's traffic verb (D807): a replication server's totals
+// The tooling endpoint's traffic verb: a replication server's totals
 // and connections, the inspect grant's, for a network panel to turn into
 // rates.
 
