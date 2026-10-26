@@ -647,9 +647,7 @@ void rewrite(const std::filesystem::path& path, std::string_view text, int step)
 
 RAWFRAME_TEST(AChangedProgramReloadsBetweenTicks) {
     std::error_code error;
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path(error) /
-        ("rawframe-reload-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("reload");
     std::filesystem::remove_all(kDirectory, error);
     std::filesystem::create_directories(kDirectory, error);
     const std::string kSource = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest");
