@@ -1,6 +1,6 @@
 #pragma once
 
-// Masks (SPEC-0035): which bones of a skeleton a part of a graph owns, as
+// Masks: which bones of a skeleton a part of a graph owns, as
 // a document people and tools review, in one canonical form:
 //
 //   {
@@ -50,7 +50,7 @@ struct Mask {
     friend bool operator==(const Mask&, const Mask&) = default;
 };
 
-/// SPEC-0035's named limit point for masks; past it is `OverLimit`.
+/// The named limit point for masks; past it is `OverLimit`.
 struct MaskLimits {
     std::size_t maximumChains = 256;
 };
@@ -68,7 +68,7 @@ struct MaskLimits {
 [[nodiscard]] result::Result<std::vector<double>>
 boneWeights(const Mask& mask, const Skeleton& skeleton, base::Bits128 skeletonId);
 
-/// SPEC-0035's server bone subset: for each bone, in the skeleton's order,
+/// The server bone subset: for each bone, in the skeleton's order,
 /// 1 when the mask weighs it or a bone below it, since a bone is placed by
 /// every bone above it, and 0 otherwise. Refused as `boneWeights` is.
 [[nodiscard]] result::Result<std::vector<std::uint8_t>>

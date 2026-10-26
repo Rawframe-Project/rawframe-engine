@@ -1,4 +1,4 @@
-// Plural categories (SPEC-0033): operands from written numbers, and the
+// Plural categories: operands from written numbers, and the
 // compiled CLDR rules held against every example CLDR gives.
 
 #include "plural_samples.h"

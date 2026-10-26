@@ -1,6 +1,6 @@
 #pragma once
 
-// A client's text (ADR-0050, SPEC-0033, D147): the string tables and
+// A client's text: the string tables and
 // translations its game's `text` lines name, read by identity from the
 // Runtime's content and built into one catalog, and the locales it is asked
 // in. Presentation only: a dedicated server never links this.
@@ -26,7 +26,7 @@ namespace rawframe::world_localization {
 
 class GameText {
 public:
-    /// `offered` is what a player may choose among while playing (D539):
+    /// `offered` is what a player may choose among while playing:
     /// the project's default first, then each locale a translation is in,
     /// by its tag.
     GameText(localization::Catalog catalog,
@@ -38,7 +38,7 @@ public:
     [[nodiscard]] const localization::Catalog& catalog() const noexcept {
         return catalog_;
     }
-    /// The locale local player `player` asks for (ADR-0050: per-player
+    /// The locale local player `player` asks for (per-player
     /// presentation state): the one the client was configured with until
     /// that player chooses another. `player` is a local player's place,
     /// which the client bounds.
@@ -57,7 +57,7 @@ public:
     }
     [[nodiscard]] std::size_t chosen(std::size_t player) const noexcept;
     /// `player` asks for the offered locale at `index` from now on, the
-    /// other local players keeping theirs (ADR-0050: a change is a revision
+    /// other local players keeping theirs (a change is a revision
     /// every formatted word follows); false for none such. Choosing the one
     /// asked for changes nothing.
     bool choose(std::size_t player, std::size_t index);
@@ -67,8 +67,8 @@ public:
         return revision_;
     }
     /// Every key formatted as its key token, the key itself, so a screen
-    /// says which key each of its words is: SPEC-0033's display-keys mode,
-    /// which only a development build turns on (D540).
+    /// says which key each of its words is: the display-keys mode,
+    /// which only a development build turns on.
     void showKeys() noexcept {
         showingKeys_ = true;
     }
@@ -96,7 +96,7 @@ private:
 };
 
 /// The Runtime's text: its game's, when it names any and cooked content holds
-/// it; else none, every key unknown (D386).
+/// it; else none, every key unknown.
 inline constexpr composition::Capability<GameText> kGameText{"rawframe.world_localization.text"};
 
 } // namespace rawframe::world_localization

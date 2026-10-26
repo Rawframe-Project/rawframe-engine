@@ -34,15 +34,11 @@ hosts/web_client
 launcher/http
 launcher/install
 launcher/play
-modules/animation
 modules/authoring
 modules/authoring_session
 modules/kest
 modules/kest_library
-modules/localization
 modules/material
-modules/particles
-modules/particles_gpu
 modules/render
 modules/render_canvas
 modules/render_canvas_gpu
@@ -52,7 +48,6 @@ modules/studio
 modules/ui
 modules/world_animation
 modules/world_kest
-modules/world_localization
 modules/world_ui
 templates
 tests/harness

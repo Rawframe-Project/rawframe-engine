@@ -1,4 +1,4 @@
-// The `text.strings` and `text.translations` documents (SPEC-0033).
+// The `text.strings` and `text.translations` documents.
 
 #include "rawframe/localization/table.h"
 
@@ -44,7 +44,7 @@ const std::string* stringOf(const Value* value) {
 
 /// A locale in canonical form, as a document writes it: in case, and
 /// already what intake makes of it, so no alias and no subtag CLDR does
-/// not know (SPEC-0033's alias validity).
+/// not know.
 bool canonicalLocale(const Locale& locale) {
     const auto kParsed = parseLocale(locale.text());
     const auto kTaken = intake(locale.text());

@@ -1,12 +1,11 @@
-// Particle emitters in a view's accounting (D352, D357): an emitter spawns
+// Particle emitters in a view's accounting: an emitter spawns
 // at its rate on the particle clock, its particles born evenly across the
 // frame, and a burst each time its count moves; its ring keeps going
-// around, and starts anew at another size (D353); emitters out of view are
+// around, and starts anew at another size; emitters out of view are
 // left alone, the nearest are kept up to the limit and drawn farthest
 // first, and values past a limit point are held and counted; an emitter
-// gone keeps nothing; its particles inherit its velocity, up to the limit
-// (D359); and a frame that holds any is told as a typed event and summed
-// (D360).
+// gone keeps nothing; its particles inherit its velocity, up to the limit;
+// and a frame that holds any is told as a typed event and summed.
 
 #include "rawframe/diagnostics/router.h"
 #include "rawframe/particles/particles.h"
@@ -90,7 +89,7 @@ RAWFRAME_TEST(AnEmitterSpawnsAtItsRateAndBursts) {
     const Frame& kAround = rig.update(0.1F);
     RAWFRAME_EXPECT(kAround.emitters.size() == 1 && kAround.emitters[0].first == (30 + (70 * 1)) % 105);
     // Its ring the same one all along; another size starts another, which
-    // a device's ring follows (D353).
+    // a device's ring follows.
     RAWFRAME_EXPECT(kAround.emitters.size() == 1 && kAround.emitters[0].ring == 1);
     emitter.rate = 50;
     rig.emitters[kFountain].emitter = emitter;

@@ -1,6 +1,6 @@
 #pragma once
 
-// Clips (SPEC-0035's `animation.clip`): tracks of keys over a duration,
+// Clips (the `animation.clip`): tracks of keys over a duration,
 // with events and sync markers, as a document in one canonical form (its
 // arrays of numbers shown here on one line, where the form has one a line):
 //
@@ -53,13 +53,13 @@
 // component, so it has no `cubic`. A looping clip wraps from its last key
 // to its first, and has no key, event, or marker at its duration, which is
 // its start again. A looping clip's translation or rotation track of its
-// skeleton's root may declare a `drift` (D134): what one period moves it,
+// skeleton's root may declare a `drift`: what one period moves it,
 // added to a translation and turned onto a rotation, so the wrap runs from
 // the last key to the first key moved by it. That is how a walk cycle
 // carries the ground it covers to root motion while its keys stay one
 // period's.
 //
-// A property track (D139) animates a component's field rather than a bone:
+// A property track animates a component's field rather than a bone:
 // `component` is the component's type identity (32 hex digits) and `field`
 // the field's machine name, with channel `float`, for an f32 or f64 field,
 // or `discrete`, for a whole-number field such as a flipbook's frame, whose
@@ -67,7 +67,7 @@
 // values are one number each. A clip of property tracks alone names no
 // skeleton.
 //
-// An additive clip (D137) declares `additive`, the basis its values are
+// An additive clip declares `additive`, the basis its values are
 // differences from: `bind`, the skeleton's bind pose, or `first_frame`, its
 // source animation's first frame, as the import that made it took them. A
 // translation is an offset, a rotation the turn after the basis's, and a
@@ -102,7 +102,7 @@ enum class Channel : std::uint8_t {
     Discrete,
 };
 
-/// A component's field a property track animates (SPEC-0035's property
+/// A component's field a property track animates (the property
 /// binding).
 struct PropertyBinding {
     /// The component's type identity.
@@ -192,7 +192,7 @@ struct Clip {
     friend bool operator==(const Clip&, const Clip&) = default;
 };
 
-/// SPEC-0035's named limit points for clips; past one is `OverLimit`.
+/// The named limit points for clips; past one is `OverLimit`.
 struct ClipLimits {
     std::size_t maximumTracks = 4096;
     std::size_t maximumKeys = 65536;

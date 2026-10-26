@@ -1,4 +1,4 @@
-// Property tracks (SPEC-0035, D139): a component's field animated by a
+// Property tracks: a component's field animated by a
 // clip, as a float weighed among the clips that animate it, or as a
 // discrete value such as a flipbook's frame from the clip counting most.
 

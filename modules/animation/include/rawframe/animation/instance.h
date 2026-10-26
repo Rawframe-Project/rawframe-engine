@@ -1,6 +1,6 @@
 #pragma once
 
-// Playing a graph (SPEC-0035's evaluation contract): a graph compiled
+// Playing a graph: a graph compiled
 // against one skeleton and its clips, shared by every entity that plays
 // it, and each entity's own instance of it, advanced then posed.
 //
@@ -12,7 +12,7 @@
 // deterministic: the same graph, parameters, and deltas give the same
 // events and the same pose bits.
 //
-// Root motion (SPEC-0035, D134): when the skeleton declares a source, each
+// Root motion: when the skeleton declares a source, each
 // advance also says how its clips moved the character, blended as their
 // poses are, and `removeRootMotion` takes that motion out of the pose, so
 // the World moves the entity by the one and draws the other where it is.
@@ -57,7 +57,7 @@ struct NamedMask {
     std::shared_ptr<const Mask> mask;
 };
 
-/// SPEC-0035's named limit points for evaluation.
+/// The named limit points for evaluation.
 struct EvaluationLimits {
     /// An event fires only from a node weighed past this.
     double eventWeightThreshold = 1e-5;
@@ -110,7 +110,7 @@ public:
         return parents_;
     }
     /// Each bone's target identity, in the skeleton's order: what a skinned
-    /// mesh's joints name (D508).
+    /// mesh's joints name.
     [[nodiscard]] std::span<const base::Bits128> bones() const noexcept {
         return bones_;
     }
@@ -221,7 +221,7 @@ public:
         return stages_;
     }
 
-    /// A field the graph's clips animate (D139), and how.
+    /// A field the graph's clips animate, and how.
     struct Property {
         PropertyBinding binding;
         Channel channel = Channel::Float;
@@ -285,8 +285,8 @@ public:
         return values_[parameter.value];
     }
 
-    /// Asks the graph's state machines for a transition on `event`
-    /// (SPEC-0035's runtime transition request): during the next advance an
+    /// Asks the graph's state machines for a transition on `event`:
+    /// during the next advance an
     /// event condition on it holds in every state, as one on an event the
     /// state's clips cross does, and the request is gone after it, taken or
     /// not. False when the limit's worth were already held and the oldest
@@ -311,7 +311,7 @@ public:
     [[nodiscard]] double weight(std::size_t step) const noexcept {
         return weights_[step];
     }
-    /// SPEC-0035's per-tick root delta: how the last advance moved and
+    /// The per-tick root delta: how the last advance moved and
     /// turned the character, in its own frame as it was before; the
     /// identity when the skeleton declares no root motion.
     [[nodiscard]] const Transform& rootMotion() const noexcept {
@@ -321,7 +321,7 @@ public:
 private:
     friend class PoseEvaluator;
 
-    /// A state machine's state, SPEC-0035's typed runtime state.
+    /// A state machine's state, the typed runtime state.
     struct MachineState {
         std::size_t current = 0;
         std::optional<std::size_t> move;
@@ -381,14 +381,14 @@ public:
     /// and cost nothing.
     void evaluate(const GraphInstance& instance, Pose& pose, std::span<const std::uint8_t> only = {});
 
-    /// Each of the graph's properties as the instance plays it (D139), in
+    /// Each of the graph's properties as the instance plays it, in
     /// `properties()` order: a `float` field weighed among the clips that
     /// animate it by how much each counts, a `discrete` one from the clip
     /// counting most (the first of equals); none where no clip counting
     /// anything animates it.
     void evaluateProperties(const GraphInstance& instance, std::vector<std::optional<double>>& values);
 
-    /// SPEC-0035's modifier stages on a local pose the instance evaluated,
+    /// The modifier stages on a local pose the instance evaluated,
     /// in their declared order: all of them, or with `simulationOnly` only
     /// those of `Simulation` relevance. Goals are in the entity's own frame.
     /// Says how many stages turned something.

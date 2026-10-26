@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of the animation documents a mod's Build can hold
-// (D243): clips, graphs, masks, and skeletons. Each reader takes the
+// Coverage-guided fuzzing of the animation documents a mod's Build can hold:
+// clips, graphs, masks, and skeletons. Each reader takes the
 // canonical form only, so what it accepts writes back to the very same
 // text.
 

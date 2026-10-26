@@ -13,24 +13,24 @@ inline constexpr result::ErrorDomain kLocalizationDomain{
 
 /// Codes within kLocalizationDomain.
 enum class LocalizationError : std::uint32_t {
-    /// A locale tag out of SPEC-0033's grammar or canonical case.
+    /// A locale tag out of the grammar or canonical case.
     LocaleInvalid = 1,
     /// A tag of well-formed subtags CLDR does not know, even after its
     /// aliases.
     LocaleUnknown = 2,
     /// More than a named limit allows.
     OverLimit = 3,
-    /// A message out of SPEC-0033's MessageFormat subset.
+    /// A message out of the MessageFormat subset.
     MessageInvalid = 4,
     /// A format call without an argument its message reads.
     ArgumentMissing = 5,
     /// A format call's argument of a type its message's function does not
-    /// take (SPEC-0033's argument typing).
+    /// take.
     ArgumentMistyped = 6,
     /// A string table or translation document out of its form, key
     /// grammar, or canonical bytes.
     DocumentInvalid = 7,
-    /// A translated key its table does not have (SPEC-0033's `orphaned`).
+    /// A translated key its table does not have (the `orphaned`).
     Orphaned = 8,
     /// Documents that do not fit together in a catalog: a table missing or
     /// given twice, two translations of one table into one locale, a

@@ -1,6 +1,6 @@
 #pragma once
 
-// Root motion (SPEC-0035): where a skeleton's root motion source puts the
+// Root motion: where a skeleton's root motion source puts the
 // character at a clip's time, how it moved between two times, played
 // across a loop's wraps, and moves composed and blended. A move is a
 // Transform of unit scale, in the character's own frame as it was when the

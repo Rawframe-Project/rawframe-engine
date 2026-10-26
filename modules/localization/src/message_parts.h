@@ -13,10 +13,10 @@
 
 namespace rawframe::localization {
 
-/// `:number`'s default greatest fraction digits (SPEC-0033), or its least
-/// when that is more (D143).
+/// `:number`'s default greatest fraction digits, or its least
+/// when that is more.
 inline constexpr std::uint32_t kDefaultMaximumFraction = 3;
-/// The fraction-digit options' ceiling: SPEC-0033's named limit.
+/// The fraction-digit options' ceiling: the named limit.
 inline constexpr std::uint32_t kMostFractionDigitsOption = kMostFractionDigits;
 
 /// The most digits a number literal's integer or fraction part has, so an

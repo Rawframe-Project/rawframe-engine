@@ -114,7 +114,7 @@ public:
     }
 
     /// What is provided when the game's text is not read: no table, so every
-    /// key is unknown (D386).
+    /// key is unknown.
     result::Status prepareNone() {
         if (text_ != nullptr) {
             return {};
@@ -200,7 +200,7 @@ public:
 
         std::vector<localization::Translations> pseudo;
 #if !RAWFRAME_SHIPPING
-        // Keys in place of words (D540): SPEC-0033's display-keys mode.
+        // Keys in place of words: the display-keys mode.
         const bool kShowKeys = context.configuration().text("localization.show_keys") == "true";
         if (context.configuration().text("localization.pseudo") == "true") {
             const localization::Locale kPseudo = *localization::parseLocale("en-XA");
@@ -221,7 +221,7 @@ public:
         for (const localization::TableDocument& table : tables) {
             summary_.keys += table.table.entries.size();
         }
-        // What a player may choose among while playing (D539): the
+        // What a player may choose among while playing: the
         // default, then each translation's locale by its tag.
         std::vector<localization::Locale> offered;
         for (const localization::Translations& each : translations) {
@@ -271,7 +271,7 @@ public:
         }
 #if !RAWFRAME_SHIPPING
         // How much of each table its translations cover, for whoever
-        // translates (SPEC-0033's development view).
+        // translates.
         for (const localization::Coverage& covered : text_->catalog().coverage()) {
             emitter.log(diagnostics::Severity::Info,
                         kCoverageEvent,
@@ -301,7 +301,7 @@ public:
             return;
         }
         // The first local player's locale as it ended, and how often a
-        // player chose another (D539).
+        // player chose another.
         emitter_.log(diagnostics::Severity::Info,
                      kTextSummary,
                      "the game's text as it ended",

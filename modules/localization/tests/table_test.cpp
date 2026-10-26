@@ -1,4 +1,4 @@
-// String tables and translations (SPEC-0033): each document in its one
+// String tables and translations: each document in its one
 // form, keys in their grammar, every message checked, and hostile
 // documents refused whole.
 

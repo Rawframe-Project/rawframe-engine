@@ -1,7 +1,7 @@
 #pragma once
 
-// How a blend space shares its weight among its points at a position
-// (SPEC-0035, D135): deterministic, from the four arithmetic operations.
+// How a blend space shares its weight among its points at a position:
+// deterministic, from the four arithmetic operations.
 
 #include <array>
 #include <cstddef>

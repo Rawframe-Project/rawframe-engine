@@ -1,6 +1,6 @@
 #pragma once
 
-// Numbers (ADR-0050, SPEC-0033's `:number` and `:integer`): a value first
+// Numbers (the `:number` and `:integer`): a value first
 // written plainly, in ASCII digits with `-` and `.`, which is what plural
 // categories are chosen from, then in a locale's symbols, digits, and
 // grouping from CLDR, compiled ahead of time. Nothing asks the platform how
@@ -16,7 +16,7 @@
 
 namespace rawframe::localization {
 
-/// SPEC-0033's named fraction-digit ceiling.
+/// The named fraction-digit ceiling.
 inline constexpr std::uint32_t kMostFractionDigits = 15;
 
 /// An integer written plainly: `-1234`.

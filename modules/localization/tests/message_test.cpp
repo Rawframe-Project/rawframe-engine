@@ -1,4 +1,4 @@
-// Messages (SPEC-0033): the MessageFormat 2.0 subset read and checked
+// Messages: the MessageFormat 2.0 subset read and checked
 // whole, selection by exact value, then plural category, then `*`, and
 // placeholders written in the locale's numbers.
 
@@ -55,15 +55,15 @@ RAWFRAME_TEST(ASimpleMessageIsTextAndPlaceholders) {
 
 RAWFRAME_TEST(MessagesOutOfTheSubsetAreRefused) {
     for (const std::string_view kBad : {
-             " Hello",                                // leading whitespace in a simple message (D143)
-             ".hello",                                // a simple message beginning with `.`
-             "{$x :datetime}",                        // an unknown function
-             "{$x :ns:number}",                       // a namespaced function
-             "{#b}bold{/b}",                          // markup
-             "{$x @attribute}",                       // an attribute
-             "{$x :string style=loud}",               // an option :string does not take
-             "{$x :integer minimumFractionDigits=1}", // an option :integer does not take
-             "{$x :number minimumFractionDigits=16}", // past the ceiling
+             " Hello",                                                        // leading whitespace in a simple message
+             ".hello",                                                        // a simple message beginning with `.`
+             "{$x :datetime}",                                                // an unknown function
+             "{$x :ns:number}",                                               // a namespaced function
+             "{#b}bold{/b}",                                                  // markup
+             "{$x @attribute}",                                               // an attribute
+             "{$x :string style=loud}",                                       // an option :string does not take
+             "{$x :integer minimumFractionDigits=1}",                         // an option :integer does not take
+             "{$x :number minimumFractionDigits=16}",                         // past the ceiling
              "{$x :number minimumFractionDigits=2 maximumFractionDigits=1}",  // out of order
              "{$x :number select=$y}",                                        // a variable option
              "{$x :number select=exact select=ordinal}",                      // an option twice

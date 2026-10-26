@@ -464,7 +464,7 @@ std::unexpected<result::Error> asAnimation(result::Error error) {
                                                                      : graphInvalid(error.description());
 }
 
-/// The graph as SPEC-0028's grammar holds it: each node's record, a
+/// The graph as the grammar holds it: each node's record, a
 /// quarantined one as it was read.
 result::Result<graph::Document> documentOf(const Graph& animation) {
     graph::Document made{.kind = "animation.graph", .interface = interfaceValue(animation)};

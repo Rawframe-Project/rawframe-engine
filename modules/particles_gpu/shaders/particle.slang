@@ -1,12 +1,12 @@
-// The particles and ribbons (ADR-0053, D352 to D354, D357), in Slang
-// (ADR-0026, D475), from which the SPIR-V and the WGSL are compiled.
+// The particles and ribbons, in Slang,
+// from which the SPIR-V and the WGSL are compiled.
 //
 // Vertex entry "vs": one square facing the eye for each slot of an
 // emitter's ring, drawn as its instance, where its age puts it. Vertex
 // entry "ribbon": a trail's or a beam's points joined by quads facing the
 // eye. Fragment entry "fs", the fragments of both.
 
-// The view (D353, D357): its projection of the World relative to the eye;
+// The view: its projection of the World relative to the eye;
 // the eye's right and up in the World's axes, and the particle clock now
 // and its period; and the near plane, and one where the view is flat (a
 // canvas's), facing straight down its forward.
@@ -18,7 +18,7 @@ struct View
     float4 lens;
 }
 
-// The emitter, as the spawn reads it (D352, D353).
+// The emitter, as the spawn reads it.
 struct Emitter
 {
     float4 anchor;
@@ -56,11 +56,11 @@ struct Point
     float4 along;
 }
 
-// The material (D357): its color, and what multiplies its texture's; its
+// The material: its color, and what multiplies its texture's; its
 // emission, and what multiplies its emission texture's color; each
 // texture's scale and offset; and its flags: one where its texture's
 // alpha shapes it, two where it multiplies what is behind, four where it
-// is drawn over everything, nothing hiding it (D464).
+// is drawn over everything, nothing hiding it.
 struct Material
 {
     float4 color;
@@ -72,7 +72,7 @@ struct Material
     uint4 flags;
 }
 
-// The device's exposure (D293): its second the multiplier on light.
+// The device's exposure: its second the multiplier on light.
 struct Exposure
 {
     float4 value;
@@ -107,7 +107,7 @@ struct Corner
 
 static const float kPeriod = 4096.0;
 
-// The quads a streak is cut into (D360).
+// The quads a streak is cut into.
 static const uint kStreakSegments = 8u;
 
 // Corners of a quad, two triangles: (0,0), (1,0), (0,1), (0,1), (1,0),
@@ -131,8 +131,8 @@ float3 movedAt(Particle particle, float age)
 // A particle where its age puts it: from where it started, its velocity
 // slowed by its drag and turned by its acceleration in closed form, its
 // size and color between its birth's and its death's, and its flipbook's
-// cell by its age (D359); or, for an emitter with a streak, a ribbon
-// through where it was over its last moments (D360); none for a slot whose
+// cell by its age; or, for an emitter with a streak, a ribbon
+// through where it was over its last moments; none for a slot whose
 // particle is dead or was never born.
 [shader("vertex")]
 Corner vs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
@@ -161,7 +161,7 @@ Corner vs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
     const float streak = emitter.inherited.w;
     if (streak > 0.0)
     {
-        // A streak (D360): its segments through where it was over its last
+        // A streak: its segments through where it was over its last
         // `streak` seconds (none before its birth), facing the eye, its
         // size across at its head narrowing to nothing.
         const uint joint = vertex / 6u + (at >> 1u);
@@ -183,7 +183,7 @@ Corner vs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
     const float2 square = float2(float(at & 1u), float(at >> 1u));
     const float3 placed = start + movedAt(particle, age) +
                           (view.right.xyz * (square.x - 0.5) + view.up.xyz * (square.y - 0.5)) * size;
-    // Its flipbook's cell, stepped over its life (D359), left to right and
+    // Its flipbook's cell, stepped over its life, left to right and
     // top to bottom; the whole texture where it has none.
     const uint2 cells = uint2(emitter.more.w & 0xFFFFu, emitter.more.w >> 16u);
     const uint frames = max(cells.x * cells.y, 1u);
@@ -195,7 +195,7 @@ Corner vs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
     return corner;
 }
 
-// The ribbons (D354): two triangles between each point and the next, each
+// The ribbons: two triangles between each point and the next, each
 // point's edges across the way the ribbon runs there (from the point
 // before it to the one after) and the way to the eye, half its width each
 // side.
@@ -230,7 +230,7 @@ Corner ribbon(uint vertex : SV_VulkanVertexID)
 // disc, a ribbon along its sides) where the texture's alpha does not shape
 // it; its material's emission added, a constant plus a constant times its
 // emission texture's, in physical units times the exposure the device
-// holds (D293), one on a canvas. Hidden behind the depth it is given, and
+// holds, one on a canvas. Hidden behind the depth it is given, and
 // faded where it meets it across half its size, so it never cuts a hard
 // line through the surface behind; a canvas gives a depth of nought, the
 // farthest, and nothing is hidden or faded. Written premultiplied, so its
@@ -246,7 +246,7 @@ float4 fs(Corner corner) : SV_Target0
     // once its textures are sampled; nearer, faded in over half its size.
     // The sky is never in front. Its texel, held to the depth's sides: a
     // canvas's is one texel. A material drawn over everything (flag four,
-    // a line's, D464) is neither hidden nor faded: the depth is taken as
+    // a line's) is neither hidden nor faded: the depth is taken as
     // the farthest.
     const bool over = (material.flags.x & 4u) != 0u;
     uint width;
