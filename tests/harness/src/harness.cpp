@@ -36,7 +36,7 @@ int& failuresInCurrentTest() noexcept {
 }
 
 #if defined(_WIN32)
-// Windows has no fork (D237): runInChild runs this executable again with
+// Windows has no fork: runInChild runs this executable again with
 // `--child <test> <n>`, which runs only that test and, in it, the body of
 // its n-th runInChild, then ends. Earlier calls in the child return at once
 // and its failed expectations say nothing, so standard error is the body's.

@@ -1,4 +1,4 @@
-// The runtime Clang's -wasm-enable-sjlj lowering calls (D383): setjmp
+// The runtime Clang's -wasm-enable-sjlj lowering calls: setjmp
 // records where it was called from and the label of the code after it;
 // longjmp throws the C longjmp tag with the buffer and the value, which the
 // lowered function catches, tests against its own invocation, and resumes at

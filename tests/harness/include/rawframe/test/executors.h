@@ -2,7 +2,7 @@
 
 // The Host's two executors for tests that start a Composition, as a Host
 // hands them to its participants: a participant that declares one, such as
-// checkpoints sealing and writing off the World's safe point (D227), is
+// checkpoints sealing and writing off the World's safe point, is
 // admitted only with it. One worker each, made on first use and kept for
 // the test process. Header-only: include it from a test that links the
 // execution module.

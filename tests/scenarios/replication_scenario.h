@@ -160,14 +160,14 @@ struct Options {
     std::size_t stateBytesPerPublish = 1092;
     bool predicting = false;
     std::optional<world_replication::InterestSettings> interest;
-    /// Districts streamed as units, outliving the scenario (D870).
+    /// Districts streamed as units, outliving the scenario.
     const world_replication::StreamedUnits* units = nullptr;
     bool interpolating = false;
     /// How much time one step is.
     MonotonicDuration stepLength = MonotonicDuration::fromMilliseconds(16);
     /// The game's commands' sizes; the command lane is declared with any.
     std::vector<std::size_t> commandSizes;
-    /// Components sent to their holder's connection alone (D673).
+    /// Components sent to their holder's connection alone.
     std::vector<schema::ComponentTypeId> own;
 };
 

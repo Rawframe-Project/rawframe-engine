@@ -1,6 +1,6 @@
 #pragma once
 
-// Seeded mutations for holding a reader against hostile input (ADR-0084):
+// Seeded mutations for holding a reader against hostile input:
 // a real record, one to four edits at a time, the same edits on every run
 // and every target, so a failure found once is found again.
 

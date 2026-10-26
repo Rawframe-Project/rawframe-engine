@@ -22,11 +22,10 @@ endif()
 # listed there too.
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
     # A 1 MiB stack: wasm-ld's default of 64 KiB is overflowed by Maul3D's
-    # queries, which need between 128 and 256 KiB (D164), and a WebAssembly
+    # queries, which need between 128 and 256 KiB, and a WebAssembly
     # stack that overflows corrupts the memory below it instead of faulting.
     # A link option, not CMAKE_EXE_LINKER_FLAGS_INIT, which seeds only a new
-    # cache and so never reached a build directory configured before it
-    # (D224).
+    # cache and so never reached a build directory configured before it.
     add_link_options("-Wl,-z,stack-size=1048576")
     file(STRINGS "${PROJECT_SOURCE_DIR}/tools/web_modules.txt" rawframe_web_lines REGEX "^[a-z]")
     string(JOIN " " rawframe_web_modules ${rawframe_web_lines})
@@ -190,7 +189,7 @@ add_subdirectory(hosts/author)
 add_subdirectory(hosts/debug)
 add_subdirectory(hosts/studio)
 add_subdirectory(hosts/animation_tool)
-# The launcher family (ADR-0060, ADR-0074, D414): what fetches, installs,
+# The launcher family: what fetches, installs,
 # and updates games, outside every engine closure. Nothing in modules/ or
 # hosts/ depends on it.
 add_subdirectory(launcher/http)
@@ -203,7 +202,7 @@ if(RAWFRAME_BUILD_TESTS)
 endif()
 
 # Every test of a thread build reads ThreadSanitizer's suppressions for the
-# libraries built without it (tools/thread.tsan, D428).
+# libraries built without it (tools/thread.tsan).
 if(RAWFRAME_BUILD_TESTS AND RAWFRAME_SANITIZE STREQUAL "thread")
     function(rawframe_suppress_threads directory)
         get_property(tests DIRECTORY ${directory} PROPERTY TESTS)

@@ -2,7 +2,7 @@
 
 // The test harness: a registry of named test functions, one failure macro, and
 // a child-process runner for the fatal path. Tests register through static
-// objects, which production code may not do (ADR-0010); a test executable is not
+// objects, which production code may not do; a test executable is not
 // production code and has no composition root to register through.
 
 #include <cstddef>
@@ -64,7 +64,7 @@ struct ChildOutcome {
 /// Runs `body` in a child process and reports how the child ended and what it
 /// wrote to standard error. For the fatal path, which never returns. A forked
 /// child on POSIX; on Windows this executable run again for the calling test
-/// alone, whose abort reads as SIGABRT (D237). Not on WebAssembly.
+/// alone, whose abort reads as SIGABRT. Not on WebAssembly.
 [[nodiscard]] ChildOutcome runInChild(void (*body)()) noexcept;
 
 } // namespace rawframe::test
