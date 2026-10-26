@@ -26,7 +26,9 @@ if [ "$android_ndk" = ios-simulator ]; then
     android_api=""
 fi
 root="$PWD/third_party"
-jobs="$(getconf _NPROCESSORS_ONLN)"
+# The machine is shared: as many jobs as tools/check.sh runs, not one
+# for each core.
+jobs="${JOBS:-8}"
 # OpenSSL's name for this machine (D236), or Android's.
 case "$(if [ -n "$android_ndk" ]; then echo Android; elif [ -n "$ios" ]; then echo iOS; else echo "$(uname -s)-$(uname -m)"; fi)" in
     Android) openssl_target=android-arm64 ;;

@@ -15,7 +15,9 @@ cd "$(dirname "$0")/.."
 prefix="$1"
 compiler="$2"
 root="$PWD"
-jobs="$(nproc)"
+# The machine is shared: as many jobs as tools/check.sh runs, not one
+# for each core.
+jobs="${JOBS:-8}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
