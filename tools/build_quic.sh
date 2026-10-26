@@ -26,9 +26,12 @@ if [ "$android_ndk" = ios-simulator ]; then
     android_api=""
 fi
 root="$PWD/third_party"
-# The machine is shared: as many jobs as tools/check.sh runs, not one
-# for each core.
-jobs="${JOBS:-8}"
+# The machine is shared: the check's JOBS, not one job for each core. The
+# native build and the web one may run at once, configured by different
+# trees, so each takes half; trees waiting on the same build's lock use no
+# processor.
+jobs=$(("${JOBS:-8}" / 2))
+[ "$jobs" -ge 1 ] || jobs=1
 # OpenSSL's name for this machine (D236), or Android's.
 case "$(if [ -n "$android_ndk" ]; then echo Android; elif [ -n "$ios" ]; then echo iOS; else echo "$(uname -s)-$(uname -m)"; fi)" in
     Android) openssl_target=android-arm64 ;;
