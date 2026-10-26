@@ -11,40 +11,40 @@ collision class walker 5f23859a6c00ebba
 
 # The mound's triangles, cooked from glTF (the plaza is played with its
 # cooked content), and a crate's, each bringing its own materials, the
-# crate's planks a texture kept exact (D314).
+# crate's planks a texture kept exact.
 mesh 6d3cbd2231e069f1 mound.gltf
 mesh 7f3a9c21e84d06b5 crate.gltf
-# The strollers' figure (D508): legs, a torso, and a head skinned to the
+# The strollers' figure: legs, a torso, and a head skinned to the
 # stroll rig's hips, spine, and head, posed as the strollers walk.
 mesh 6b27dc9178d0e4dd figure.gltf
 
-# What the models are made of (D303): the strollers are brass, the pillars
-# polished marble, and the floor paved, its slabs a texture (D309), kept
+# What the models are made of: the strollers are brass, the pillars
+# polished marble, and the floor paved, its slabs a texture, kept
 # exact: the browser test's software renderer pays dearly for sampling
 # BC7, and its page runs the game on the same thread; everything else has
 # no material and is its color. At the low quality the paving is a plain
-# grey and samples no texture (D318).
+# grey and samples no texture.
 texture 9f822820a44af4fc paving.png
-# The sky all around (D322): a clear day's, written by tools/make_sky.py and
+# The sky all around: a clear day's, written by tools/make_sky.py and
 # cooked into an environment, seen behind everything and lighting it.
 texture a97797a3a58f6d7a sky.hdr
-# What the plaza's middle sees all around (D325, D326): baked by
+# What the plaza's middle sees all around: baked by
 # rawframe-bake from the probe's middle, and reflected, projected onto its
 # box, by what stands in the plaza.
 texture ac452b5e41f745bf hall.hdr
 material 6d2c9bd611d50fdf brass.rfmaterial
 material e4443f63fe935232 marble.rfmaterial
 material b6b2fb38f649a30b paving.rfmaterial
-# A warmth over the picture before the tonemapper (D350): a post process.
+# A warmth over the picture before the tonemapper: a post process.
 material 8d099ac296f9483e warmth.rfmaterial
-# A monitor showing what a lens high over it sees (D361): the lens's view
+# A monitor showing what a lens high over it sees: the lens's view
 # drawn into a render texture of 256 by 144 once a second, when asked,
 # which the monitor's material shines with: a second view costs the
 # browser's software rasterizer dearly.
 rendertexture f18de9a0974d265b 256 144 on_demand
 material a09d6b8277396fcd monitor.rfmaterial
 
-# Split-screen (D362): two local players side by side, three with the
+# Split-screen: two local players side by side, three with the
 # first across the top, four in quarters.
 layout 2 0 0 0.5 1 0.5 0 0.5 1
 layout 3 0 0 1 0.5 0 0.5 0.5 0.5 0.5 0.5 0.5 0.5
@@ -53,7 +53,7 @@ layout 4 0 0 0.5 0.5 0.5 0 0.5 0.5 0 0.5 0.5 0.5 0.5 0.5 0.5 0.5
 component 43f8c60f-1131-4732-8bed-d758dc5b5fa7 plaza.stick Stick
 component 9b8e1f52-3c47-4d0a-a6e2-5f1d7c93b204 plaza.blade Blade
 component 2d6e0b91-7c35-4f48-9a1e-3b5c8d0f6a27 plaza.stroller Stroller
-# How fast a walker goes, which its figure's animator plays (D513).
+# How fast a walker goes, which its figure's animator plays.
 component c2c0913c-ceaf-42d9-9ff2-2368f8cfa1dd plaza.gait Gait
 component 6a1f0c3e-94b2-4d57-8e16-2b7d9c4f0a35 plaza.figure rawframe.model.Model
 component 8e4b2c17-6a39-4d05-b1f8-7c2e9d4a3f61 plaza.look rawframe.model.Model
@@ -73,7 +73,7 @@ component 9c9c4ade-0b73-4b76-ab31-90b52b98ff23 plaza.screen rawframe.model.Model
 component 05158b5b-4886-4c43-9384-9b9a9c0a3f4a plaza.lens rawframe.model.Camera
 component 9ef4a751-96de-4694-b07d-b3fccbd00a18 plaza.watch rawframe.model.View
 component da853e38-3ed1-4e7d-9ddb-4cf11b3834f2 plaza.shutter Shutter
-# A walker's lamp (D599), an entity following its walker, sent with the
+# A walker's lamp, an entity following its walker, sent with the
 # walker it follows; its ball and its light.
 component 3db8ed2c-629a-4e0d-bf0f-b043f215b135 plaza.lamp Lamp
 entity plaza.lamp walker
@@ -89,7 +89,7 @@ animator 3a7d1f0c2b9e4d61 blade.rfanim
 # turned by a look-at the server runs too.
 animator 5c7e2a91f04b3d68 stroll.rfanim parameters plaza.stroller
 # A walker's figure plays the strollers' idle, walk, and run by its pace
-# alone, their root motion taken out: its body moves and turns it (D513).
+# alone, their root motion taken out: its body moves and turns it.
 animator 2b9f6c04e7d1a835 walker.rfanim parameters plaza.gait
 
 system plaza.join simulation join write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.character write rawframe.animation.animator with plaza.stick entities random spawn before rawframe.physics3d.step
@@ -137,11 +137,11 @@ spawn 1 rawframe.physics3d.body motion=0 shape=4 rawframe.physics3d.pose x=-21.4
 spawn 1 plaza.hall halfX=40 halfY=7.5 halfZ=40 rawframe.physics3d.pose y=3 qw=1
 
 # A spring eight meters before the plaza's middle, its jet leaving at
-# seven meters a second (D353).
+# seven meters a second.
 spawn 1 plaza.spring speed=7 rawframe.physics3d.pose x=0 y=0.5 z=-8 qw=1
 
 # A monitor behind the spring, its screen 3.2 meters by 1.8 facing the
-# middle, two and a half meters up (D361): within 30 meters of anywhere a
+# middle, two and a half meters up: within 30 meters of anywhere a
 # walker starts, so every client is sent it.
 spawn 1 plaza.monitor width=1.6 height=0.9 rawframe.physics3d.pose x=0 y=2.5 z=-10 qw=1
 
@@ -155,18 +155,18 @@ spawn 1 plaza.stroller left=90 rawframe.physics3d.pose x=18 y=1.4 z=-8 qw=1 rawf
 spawn 1 plaza.stroller left=60 rawframe.physics3d.pose x=0 y=1.4 z=18 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 spawn 1 plaza.stroller left=30 rawframe.physics3d.pose x=-2 y=1.4 z=-20 qw=1 rawframe.animation.animator graph=stroll.rfanim relevance=1 rawframe.animation.root_motion
 
-# The animators replicate, so a client plays them where it draws (D258)
-# and poses the strollers' figures (D508); their root motion too, which
+# The animators replicate, so a client plays them where it draws
+# and poses the strollers' figures; their root motion too, which
 # takes the walk out of a client's pose as it does out of the server's.
 replicate plaza.stroller plaza.hall plaza.spring plaza.monitor plaza.lamp rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character rawframe.physics3d.mesh plaza.stick rawframe.animation.animator rawframe.animation.root_motion plaza.gait
 player plaza.stick rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.gait rawframe.animation.animator rawframe.animation.root_motion
 input plaza.stick
-# The stick, a headset's hand in it, goes to its own player's client alone
-# (D673, ADR-0081): the others see the lamp the server places.
+# The stick, a headset's hand in it, goes to its own player's client alone:
+# the others see the lamp the server places.
 own plaza.stick
 # A client makes its stick from its player's actions (plaza.actions) with
 # sample.kest, from keys, a gamepad, or a touch screen (the left half's
-# stick to move, the right half to jump; D387); bots press the same
+# stick to move, the right half to jump); bots press the same
 # controls.
 actions plaza.actions
 sample sample.kest sample
@@ -174,15 +174,15 @@ interest rawframe.physics3d.pose x z within 30
 interpolate rawframe.physics3d.pose
 predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.character plaza.stick plaza.gait
 
-# What a client draws (D283): every body it mirrors, by its shape and in
+# What a client draws: every body it mirrors, by its shape and in
 # a color for what it is, the mound and the crates as their own meshes in
 # their own materials, through its own
-# walker's camera, and the strollers as figures where their poses stand
-# (D288), each with a lantern (D290), the view's exposure metered (D293),
-# under the sky's picture (D322), reflecting the plaza's probe (D325),
-# darkened where things meet (D327), warmed (D350), the spring's fountain
-# (D353), the strollers' traces (D354), and the monitor's screen showing
-# its lens's view (D361), and the walkers' lamps (D599); no server carries
+# walker's camera, and the strollers as figures where their poses stand,
+# each with a lantern, the view's exposure metered,
+# under the sky's picture, reflecting the plaza's probe,
+# darkened where things meet, warmed, the spring's fountain,
+# the strollers' traces, and the monitor's screen showing
+# its lens's view, and the walkers' lamps; no server carries
 # a look, a figure, a lantern, a view, a meter, an occlusion, a sky, a
 # probe, a warmth, a fountain, a trace, a screen, a lens, a shutter, a
 # watch, or a lamp's ball or light.

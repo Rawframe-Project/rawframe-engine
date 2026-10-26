@@ -4,15 +4,6 @@
 third_party
 cmake
 CMakeLists.txt
-games/crowd
-games/gale
-games/ledges
-games/lighting
-games/plaza
-games/quarry
-games/reach
-games/runners
-games/tycoon
 hosts/android_client
 hosts/animation_tool
 hosts/arena
@@ -92,7 +83,6 @@ modules/world_runtime
 modules/world_tooling
 modules/world_ui
 modules/xr
-templates
 tests/harness
 tests/scenarios
 tools

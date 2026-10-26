@@ -1,12 +1,12 @@
-# Gale (D681), the small ship game: each player sails a ship of its own on a
+# Gale, the small ship game: each player sails a ship of its own on a
 # sea whose waves roll by, Maul3D bodies all, the server deciding. A ship
 # floats by the water it displaces under its hull, computed by the game's
 # program each tick, and goes where its throttle and rudder take it. The
 # game is Keelstorm's class among the constitution's reference games:
 # moving physical entities on water, authoritative online play. A ship
 # fires its guns to either side; a ball that strikes another ship holes
-# it, and a ship holed enough founders, its player given another (D683).
-# A player's entity is its ship, which its client predicts (D685).
+# it, and a ship holed enough founders, its player given another.
+# A player's entity is its ship, which its client predicts.
 program gale.kest
 physics3d gravity 0 -9.81 0
 
@@ -20,30 +20,30 @@ component 91c03597-33c6-4c73-9ec6-5bdc9e4b356b gale.guns Guns
 component 8c9ece20-a6b4-4a66-9623-035fc0f16d3a gale.sea Sea
 component 3db5d1a4-0e23-4e70-9405-ad7b76af7640 gale.shot Shot
 # What a client draws: the hulls, the sea round its own ship, and its view
-# from behind that ship (D682); no server carries any.
+# from behind that ship; no server carries any.
 component 9684570e-9361-40cc-9327-f56bc11db3ae gale.look rawframe.model.Model
 component f1709939-d7eb-4a52-9acf-8f59734cea9e gale.water rawframe.model.Model
 component 61c67757-1adb-4e63-93c0-5cbbc82656bc gale.waters rawframe.model.Placed
 component 7e0a1180-417d-4fa2-a085-d094457c5bb2 gale.swell rawframe.model.Model
 component 664ccd7d-20b0-45e5-83c6-a91a614b13cf gale.view rawframe.model.Camera
-# Where a client hears another ship's broadsides from (D687): an emitter of
+# Where a client hears another ship's broadsides from: an emitter of
 # its own on each ship.
 component 95079b36-b81f-4629-8fa5-de5ef7425d12 gale.report rawframe.sound.Emitter
-# A ship's wake and its broadsides' smoke (D692), a client's alone.
+# A ship's wake and its broadsides' smoke, a client's alone.
 component 94087d11-f17e-448e-9c29-45ecbf6c71e4 gale.wake rawframe.model.Trail
 component 414e09ec-0b0d-45b5-9541-88f1155700aa gale.smoke rawframe.model.ParticleEmitter
-# The player's HUD (D688): a panel with its ship's hull and hits in words.
+# The player's HUD: a panel with its ship's hull and hits in words.
 component 90bcc31f-27ec-496b-9287-c33df14ecc7d gale.hud rawframe.ui.Node
 component 0d04321d-cd64-4e5b-ad89-1d1b800a9b9c gale.tally rawframe.ui.Node
-# A round's end, shown in the middle of the view for five seconds (D689).
+# A round's end, shown in the middle of the view for five seconds.
 component 413c8d9e-9b17-4267-90bd-0e3d1488941c gale.cheer Cheer
 component a87fef72-48fc-492d-99ba-03551bfeecf4 gale.banner rawframe.ui.Node
 
 # A player's ship is launched, and launched again once abandoned; its guns
 # reload and fire the broadsides its helm asks, which its client predicts
-# and hears at once (D686); its crew sends the balls and abandons a ship
-# that founders (D683); each ship floats, and sails as its player's helm
-# says, which a client predicts for its own (D685).
+# and hears at once; its crew sends the balls and abandons a ship
+# that founders; each ship floats, and sails as its player's helm
+# says, which a client predicts for its own.
 system gale.launch simulation launch write gale.ship write rawframe.physics3d.body write rawframe.physics3d.pose write rawframe.physics3d.velocity lookup gale.sea before gale.aim
 system gale.aim simulation aim read gale.helm write gale.ship entities before rawframe.physics3d.step predicted emits broadside
 system gale.crew simulation crew write gale.ship read rawframe.physics3d.pose read rawframe.physics3d.velocity entities after gale.aim before gale.float
@@ -54,22 +54,22 @@ system gale.float simulation float write gale.ship read gale.helm read rawframe.
 system gale.strike simulation strike write gale.shot read rawframe.physics3d.contact read rawframe.physics3d.pose entities lookup gale.ship lookup gale.guns after rawframe.physics3d.step
 
 # A broadside is a presentation effect its ship's player predicts: heard at
-# once, and once (D219), as cannon.sound (made by tools/make_cannon.py), on
+# once, and once, as cannon.sound (made by tools/make_cannon.py), on
 # the mixer's effects bus.
 effect broadside predicted sound 0032340b6117b8fd
 mixer gale.mixer
 sound 0032340b6117b8fd cannon.sound
 
-# Rounds (D689): the first ship to GOAL hits wins; every player is told by
+# Rounds: the first ship to GOAL hits wins; every player is told by
 # message, and every ship is launched again, whole, its tally cleared.
 system gale.judge simulation judge write gale.sea lookup gale.guns lookup gale.ship after gale.strike
 message won Won
 
 # The sea: how many ships it has been given, and the rounds played, at the
-# World's origin, the still water's height. Its waves roll by the World's tick (D684).
+# World's origin, the still water's height. Its waves roll by the World's tick.
 spawn 1 gale.sea rawframe.physics3d.pose
 
-# Islands to sail round (D693): rocks rising four meters from the sea and
+# Islands to sail round: rocks rising four meters from the sea and
 # reaching three below the keels, static, ahead of where the ships are
 # launched; the first stands before the row's first place.
 spawn 1 rawframe.physics3d.body motion=0 shape=3 width=8 height=3 rawframe.physics3d.pose x=-21 y=1 z=-160 rawframe.physics3d.velocity
@@ -81,9 +81,9 @@ replicate rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.vel
 entity gale.shot ship
 player gale.helm gale.ship gale.guns rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity rawframe.physics3d.impulse
 input gale.helm
-# A player's helm goes to its own client alone (D673): it predicts with it.
+# A player's helm goes to its own client alone: it predicts with it.
 own gale.helm
-# A client predicts its own ship (D685): its body, helm, and hull, floated,
+# A client predicts its own ship: its body, helm, and hull, floated,
 # steered, and flooded by the predicted float system, which reads nothing
 # else; its guns are the server's alone. Every other ship is interpolated.
 predict rawframe.physics3d.body rawframe.physics3d.pose rawframe.physics3d.velocity gale.helm gale.ship
@@ -93,16 +93,16 @@ actions gale.actions
 sample sample.kest sample
 interpolate rawframe.physics3d.pose
 
-# What a client draws (D682): every hull and ball by its shape, a hull
-# darker for each hole in it (D687); the sea round its own ship, wherever
+# What a client draws: every hull and ball by its shape, a hull
+# darker for each hole in it; the sea round its own ship, wherever
 # that sails, its waves rolled by their material as the float system
-# floats the ships on them (D691), over a broad still plane out to the
+# floats the ships on them, over a broad still plane out to the
 # horizon; and its view from behind and above its ship, along its heading.
 # The rolling sea is the engine's grid, its material written by
 # tools/make_waves.py; a server reads neither.
 material 04b83dddccb26127 waves.rfmaterial
-# The islands' rock (D709): sand by its tint's default, its stone laid
-# along each world axis by the engine's triplanar projection (D713), and
+# The islands' rock: sand by its tint's default, its stone laid
+# along each world axis by the engine's triplanar projection, and
 # its instance, grey shore rock, the same program drawn with another tint.
 # The stone is written by tools/make_stone.py, kept exact as plaza's
 # paving is, for the browser test's software renderer.
@@ -118,15 +118,15 @@ present gale.flood flood read gale.sea write gale.water write gale.swell write g
 presentation gale.view on player
 present gale.frame frame read gale.ship write gale.view entities lookup rawframe.physics3d.pose
 # Every other ship's broadsides heard from it as the server's state counts
-# them (D687); a client's own are its predicted effect.
+# them; a client's own are its predicted effect.
 presentation gale.report on gale.ship
 present gale.report report read gale.ship write gale.report entities
 # Every ship leaves a wake of foam, and its broadsides a puff of smoke
-# each time its volleys count one more (D692).
+# each time its volleys count one more.
 presentation gale.wake gale.smoke on gale.ship
 present gale.foam foam read gale.ship write gale.wake write gale.smoke
 
-# The player's HUD (D688): a panel at the top left of its view telling its
+# The player's HUD: a panel at the top left of its view telling its
 # ship's hull and the hits its broadsides made, in words from gale.strings,
 # in Inter 4.1 (Inter-Regular.ttf, from its release archive, SIL Open Font
 # License 1.1 in Inter-LICENSE.txt); gale.ui lays it out, the tally writes

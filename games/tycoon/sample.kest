@@ -6,12 +6,12 @@ module sample
 // points, the ray through its camera picks the place on the ground it
 // meets. A bot, and a player before its first frame, has no view to pick
 // through. A press on the purse asks the server to collect the owner's
-// takings (D425); what the player writes in the sign field and gives by
-// Enter goes to the server as its sign (D426). The menu action (Tab, or a
+// takings; what the player writes in the sign field and gives by
+// Enter goes to the server as its sign. The menu action (Tab, or a
 // gamepad's Start) has the HUD navigated without the mouse: the arrows or
 // the d-pad, Tab or the shoulders, to the purse and the sign field, Enter
-// or the south button to press or write (D430). L changes the language
-// the HUD is in (D539).
+// or the south button to press or write. L changes the language
+// the HUD is in.
 
 import controls
 import rawframe.input
@@ -28,14 +28,14 @@ extern fn Commands.sign(value: controls.Sign)
 
 fn sample(into: [controls.Hand]) {
     // L gives the HUD's words in the game's next locale, round to the
-    // first (D539): English, then Turkish.
+    // first: English, then Turkish.
     if input.pressed(LANGUAGE) && input.locales() > u32(0) {
         input.chooseLocale((input.locale() + u32(1)) % input.locales())
     }
     into[0].moveX = input.x(MOVE)
     into[0].moveZ = 0.0 - input.y(MOVE)
     // A build held now, or pressed in this tick at all: a slow frame reads
-    // a quick tap, press to release, as one tick (D527).
+    // a quick tap, press to release, as one tick.
     into[0].build = 0.0
     if input.on(BUILD) || input.pressed(BUILD) {
         into[0].build = 1.0

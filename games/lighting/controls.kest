@@ -1,6 +1,6 @@
 module controls
 
-// What a player asks of the Lighting Test (D749): to turn its view about
+// What a player asks of the Lighting Test: to turn its view about
 // the wall, from full left (-1) to full right (1).
 struct View {
     turn: f32

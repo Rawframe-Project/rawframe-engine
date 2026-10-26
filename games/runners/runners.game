@@ -8,12 +8,12 @@ physics2d gravity 0 -10 substeps 4
 
 collision class runner 2ebcd16c10c5f6a4
 
-# Split-screen (D364): two local players one over the other, four in
+# Split-screen: two local players one over the other, four in
 # quarters.
 layout 2 0 0 1 0.5 0 0.5 1 0.5
 layout 4 0 0 0.5 0.5 0.5 0 0.5 0.5 0 0.5 0.5 0.5 0.5 0.5 0.5 0.5
 # Every player sees the level in 16:9, however the window or its region is
-# shaped, between slate bars (D369): no shape of window shows more of it.
+# shaped, between slate bars: no shape of window shows more of it.
 aspect 16 9 24 28 40
 
 component 6b05cdb4-0683-437a-aaac-7ad990b2ddb4 runners.stick Stick
@@ -48,8 +48,8 @@ system runners.hurt simulation hurt write runners.score read runners.hit entitie
 system runners.age simulation age write runners.age
 
 # A jump is a presentation effect the runner predicts: its player hears it
-# at once, and once (D219), as jump.sound (D220), and feels it on a gamepad
-# as a short, low thump (D251).
+# at once, and once, as jump.sound, and feels it on a gamepad
+# as a short, low thump.
 effect jump predicted sound 57164ad59d5b6a23 felt thump 0.4 60 90
 
 # The level (level.scene): the ground, eighty meters wide, walls at its
@@ -96,10 +96,10 @@ predict rawframe.physics2d.body rawframe.physics2d.pose rawframe.physics2d.veloc
 # Each shot sounds from the runner that fired it (runners.mixer, shot.sound);
 # clients hear them, a server carries only the counts. A jump sounds from
 # the runner that jumped, heard by its own player only. A hit runner's
-# player hears it wince (hurt.sound) from an emitter of its client's own
-# (D272), cued when the server tells of the hit. A client plays the music
+# player hears it wince (hurt.sound) from an emitter of its client's own,
+# cued when the server tells of the hit. A client plays the music
 # (music.sound, made by tools/make_music.py) round and round on the mixer's
-# music bus, streamed (D629).
+# music bus, streamed.
 mixer runners.mixer
 sound 950e09337d03de69 shot.sound
 sound 57164ad59d5b6a23 jump.sound
@@ -113,19 +113,19 @@ text hud.strings
 text hud.tr.translations
 locale en
 # The HUD's score, its words from hud.strings, in Inter 4.1 (Inter-Regular.ttf,
-# from its release archive, SIL Open Font License 1.1 in Inter-LICENSE.txt;
-# D386).
+# from its release archive, SIL Open Font License 1.1 in
+# Inter-LICENSE.txt).
 font c3b22aa9db1c2239 Inter-Regular.ttf
 label ac39139dad885119 hud.strings hud.score points
 label 0ddc1c32e7926c4c hud.strings hud.loudness
 label 5b0e2d7c9a41f863 hud.strings hud.music
 
-# What a client draws (D254): runners (runner.png) over the level's tiles
-# (tiles.png, the level's runners.tile), through its own runner's camera
-# (D261), 12 meters tall and leading the way it runs. A runner's look is the client's own (D260): each
+# What a client draws: runners (runner.png) over the level's tiles
+# (tiles.png, the level's runners.tile), through its own runner's camera,
+# 12 meters tall and leading the way it runs. A runner's look is the client's own: each
 # client gives every runner it mirrors a look and an animator
 # (runner.rfanim) that steps its sheet's frame from its stick, standing,
-# running, or in the air (D258); no server carries or sends them.
+# running, or in the air; no server carries or sends them.
 animator 4b1c7e29a05d3f86 runner.rfanim parameters runners.stick
 presentation runners.look rawframe.animation.animator on runners.stick
 present runners.dress dress read runners.stick write runners.look write rawframe.animation.animator
@@ -135,29 +135,28 @@ present runners.frame frame read runners.stick write runners.view
 presentation runners.wince on player
 present runners.wince wince write runners.wince
 # Every runner a client mirrors leaves a pale trail as it runs, and throws
-# sparks with each shot it fires, counted by its shot's cue (D357): the
+# sparks with each shot it fires, counted by its shot's cue: the
 # client's own particles, drawn over the canvas.
 presentation runners.dust runners.sparks on runners.stick
 present runners.glint glint read runners.emitter write runners.dust write runners.sparks
-# The player's HUD (D376): a panel along the bottom of its view, a target
-# (hud.png, D378) beside a green meter of the hits its runner landed and a
+# The player's HUD: a panel along the bottom of its view, a target
+# (hud.png) beside a green meter of the hits its runner landed and a
 # red one of those it took, each filling over ten and starting again, and
-# its score in words (D386); the client's own, drawn over all. runners.ui
-# lays it out and starts its look (D619); the gauge writes what changes.
+# its score in words; the client's own, drawn over all. runners.ui
+# lays it out and starts its look; the gauge writes what changes.
 presentation runners.hud runners.target runners.meters runners.landed runners.taken runners.points on player
 ui runners.ui
 present runners.gauge gauge read runners.score write runners.landed write runners.taken write runners.points
-# The effects' volume, a slider at the top right of the view (D625): its
+# The effects' volume, a slider at the top right of the view: its
 # value is the player's volume for the mixer's effects bus.
 presentation runners.loudness runners.dial on player
 present runners.loudness loudness write runners.loudness write runners.dial
-# The music's volume, a slider under it (D629), for the mixer's music bus;
+# The music's volume, a slider under it, for the mixer's music bus;
 # the music plays from the player's own emitter.
 presentation runners.tune runners.peg runners.music on player
 present runners.tune tune write runners.tune write runners.peg write runners.music
 texture eddbc014cab63eb2 runner.png
 texture a44ecb4a39ac5cc8 tiles.png
 texture c067c4be8ce86d12 hud.png
-# The runners' look lit a little warm from within: a canvas material
-# (D356).
+# The runners' look lit a little warm from within: a canvas material.
 material ea61c563796c6e4b runner.rfmaterial

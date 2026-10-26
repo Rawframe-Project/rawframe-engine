@@ -1,10 +1,10 @@
-# Quarry (D735), the small block game: a land of blocks drawn from the
+# Quarry, the small block game: a land of blocks drawn from the
 # World's seed, which players dig and build on, the server deciding. Every
 # block is an entity of its own, persistent. The game is VoxelTech's class
 # among the constitution's reference games at generation 1's scale:
-# procedural land, a World players change, a machine (D737), and a land
-# kept between runs (D738); chunked storage, meshing, and streaming wait for
-# the voxel contract SPEC-0037 and ADR-0058 defer.
+# procedural land, a World players change, a machine, and a land
+# kept between runs; chunked storage, meshing, and streaming wait for
+# a voxel format of the engine's own.
 program quarry.kest
 
 component 5c3e5cc3-74d0-4669-8cb9-08ee3e1ec13d quarry.terrain Terrain
@@ -13,7 +13,7 @@ component 0f03f35b-6f21-46f9-8780-a71c82028ccb quarry.digger Digger
 component 61646d7c-70f6-4a5d-b965-b39c0c8c1ea4 quarry.tool Tool
 component df916e40-28f9-4c15-8e7d-f4718f22d2e0 quarry.part Part
 component 94c14b6e-255e-499f-a6cc-2d6850606dee quarry.ground Ground
-# What a client draws (D736): each block a box where it stands, and its
+# What a client draws: each block a box where it stands, and its
 # view of the whole land from above its near edge; no server carries any.
 component 187bc76e-ac12-43df-a624-73389f27abb7 quarry.look rawframe.model.Model
 component 513d9798-b554-4722-a610-cb1c06056534 quarry.spot rawframe.model.Placed
@@ -23,19 +23,18 @@ component 4c7aaa82-92db-4c13-9256-54c5d17b3ff2 quarry.view rawframe.model.Camera
 # then each player digs or builds where its tool aims.
 system quarry.generate simulation generate write quarry.terrain entities random land
 # Each acting player's column is found among the blocks read whole, not
-# asked of block by block (D747).
+# asked of block by block.
 system quarry.dig simulation dig read quarry.tool write quarry.digger entities lookup quarry.part lookup quarry.terrain scan quarry.block after quarry.generate
-# Power goes from each lever thrown along wire to the lamps it reaches
-# (D737).
+# Power goes from each lever thrown along wire to the lamps it reaches.
 system quarry.power simulation power read quarry.terrain lookup quarry.part lookup quarry.block after quarry.dig
 
 # The land's one entity (land.scene), persistent, so a save keeps it with
-# every block (D738): a server with `save.directory` keeps the land as its
+# every block: a server with `save.directory` keeps the land as its
 # players left it between runs, and one that loads it makes no other.
 scene land.scene
 save land quarry.terrain quarry.block quarry.part
 
-# Anyone may mod it (D740): one mod may give the land its ground, asked
+# Anyone may mod it: one mod may give the land its ground, asked
 # for each column's height as the land is made (quarry-canyon is one).
 mods open
 modapi quarry 1
@@ -43,7 +42,7 @@ extension ground service quarry.ground exclusive
 
 replicate quarry.block quarry.part quarry.terrain quarry.digger
 # Every client sees the whole land, some seven thousand blocks, more than
-# a connection holds by default (D742).
+# a connection holds by default.
 mapped 16384
 player quarry.tool quarry.digger
 input quarry.tool
@@ -52,7 +51,7 @@ input quarry.tool
 actions quarry.actions
 sample sample.kest sample
 
-# What a client draws (D736): every block a box of its kind's color at its
+# What a client draws: every block a box of its kind's color at its
 # place, the land centered on the World's origin, a block's middle half a
 # meter above its height; and the whole land seen from above its near
 # edge, wherever the player's tool aims.

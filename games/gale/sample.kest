@@ -3,8 +3,8 @@ module sample
 // A client's input for Gale (gale.game's `sample` line): its player's helm,
 // made each tick from its actions (gale.actions). The throttle is a lever:
 // held ahead or astern it moves, let go it stays where it was set, built on
-// tick to tick (D525). The rudder is where the stick or the keys hold it,
-// and the guns fire to a side while its key or shoulder is held (D683). On
+// tick to tick. The rudder is where the stick or the keys hold it,
+// and the guns fire to a side while its key or shoulder is held. On
 // a touch screen the left half is the helm's stick and the right half,
 // touched, fires both sides at once.
 

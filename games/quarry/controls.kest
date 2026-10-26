@@ -1,9 +1,9 @@
 module controls
 
-// What a player asks of Quarry (D735): the column it aims at, across the
+// What a player asks of Quarry: the column it aims at, across the
 // land from one side (-1) to the other (1) each way, and whether it digs
-// that column's top block, places one on it, or throws the lever on top
-// (D737), each asked above a half; and what it places (D739): brick below
+// that column's top block, places one on it, or throws the lever on top,
+// each asked above a half; and what it places: brick below
 // a half, wire below one and a half, a lamp below two and a half, else a
 // lever.
 struct Tool {

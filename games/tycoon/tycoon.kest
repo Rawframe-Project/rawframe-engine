@@ -1,14 +1,14 @@
 module tycoon
 
-// Stalls (D388): the second reference game, a simple 3D tycoon, begun. Each
+// Stalls: the second reference game, a simple 3D tycoon, begun. Each
 // player owns coins and a cursor over the lot, twelve plots by twelve, four
 // meters each, centered on the origin. Building puts a stall on the plot
 // under the cursor when no stall stands there and the owner has its cost;
-// building on one of its own stalls raises its level (D391), up to TOP;
+// building on one of its own stalls raises its level, up to TOP;
 // each stall earns its owner a little every second for each level, and
 // customers come through the lot's south edge to buy at a stall, paying
-// more at a higher one (D392). The first owner to GOAL coins wins the
-// round: every owner is told, and the lot starts afresh (D394). The server
+// more at a higher one. The first owner to GOAL coins wins the
+// round: every owner is told, and the lot starts afresh. The server
 // decides every build, sale, and round.
 
 import controls
@@ -26,13 +26,13 @@ import std.math
 // and the customers', the one a stall serves.
 const STALLS: u64 = 0xb0eb8fc52cd9d4ac
 const CUSTOMERS: u64 = 0x1a6375d11861b18d
-// A customer's figure and its animator (tycoon.game, D512).
+// A customer's figure and its animator (tycoon.game).
 const FIGURE: u64 = 0xf08f5a874875ee6c
 const AMBLE: u64 = 0x4d2c8e71a9f03b56
 // The figure's scale, 1.23 meters tall, and how far it is lowered so that
 // its feet stand on the ground below a customer's body, a ball 0.35 high
 // at its middle: the figure's middle is 1.4 times its scale above its
-// feet (D514).
+// feet.
 const FIGURE_SCALE: f32 = 0.6
 const FIGURE_LIFT: f32 = -0.49
 
@@ -51,9 +51,9 @@ const INCOME: i64 = 2
 const PRICE: i64 = 4
 const TOP: u32 = 3
 
-// Customers (D392): one arrives every ARRIVAL ticks when some stall stands,
+// Customers: one arrives every ARRIVAL ticks when some stall stands,
 // heading for the front of a stall drawn among them, FRONT meters south of
-// its middle, past its side and a customer's girth (D400); it walks STEP
+// its middle, past its side and a customer's girth; it walks STEP
 // meters a tick, a stall serves it once within REACH meters of the stall's
 // middle, and it leaves after PATIENCE ticks unserved.
 const ARRIVAL: u32 = 40
@@ -72,7 +72,7 @@ const CHEER: u32 = 300
 
 // The labels of a round won or lost, and of the purse's tooltip
 // (tycoon.game's `label` lines); the HUD's font and its other labels and
-// classes are tycoon.ui's (D619).
+// classes are tycoon.ui's.
 const HUD_WON: u64 = 0xafcb66432b6d2152
 const HUD_LOST: u64 = 0xb777d548435986ab
 const HUD_TIP: u64 = 0x61d16641e8e52da5
@@ -122,8 +122,7 @@ struct Customer {
 
 // How fast a customer walks, in its figure's own meters a second, at
 // most the run's four: the figure is drawn at six tenths of the stroller
-// it was made for, so a customer's 2.4 meters a second is a run to it
-// (D512).
+// it was made for, so a customer's 2.4 meters a second is a run to it.
 struct Amble {
     pace: f64
 }
@@ -233,7 +232,7 @@ fn raise(owner: world.Entity, x: i32, z: i32) {
 // cost and the plot is free: no stall standing there as of this tick's step,
 // and none raised there earlier in this run, which the step has not seen.
 // A press on one of its own stalls raises the stall a level instead, when
-// the owner has the level's cost; the stall is looked up (D391) and given
+// the owner has the level's cost; the stall is looked up and given
 // again at its new level. The owner's pose is the middle of the plot under
 // its cursor, where its client marks it.
 fn tend(count: i32, hands: [controls.Hand], owners: [Owner], poses: [physics3d.Pose3D], entities: [world.Entity]) {
@@ -285,7 +284,7 @@ fn tend(count: i32, hands: [controls.Hand], owners: [Owner], poses: [physics3d.P
 
 // Each second, every owner's stalls earn it their income, each level once,
 // and it takes what its stalls' tills hold past what it took before: every
-// stall is looked up (D391, D393) and its own counted.
+// stall is looked up and its own counted.
 fn earn(count: i32, owners: [Owner], entities: [world.Entity]) {
     let i = 0
     while i < count {
@@ -300,7 +299,7 @@ fn earn(count: i32, owners: [Owner], entities: [world.Entity]) {
 }
 
 // The takings an owner's stalls hold past what it took before, which it
-// takes now: every stall looked up (D391, D393) and its own counted.
+// takes now: every stall looked up and its own counted.
 fn collectTakings(owner: Owner, entity: world.Entity) -> Owner {
     let taken = owner
     let takings = i64(0)
@@ -318,7 +317,7 @@ fn collectTakings(owner: Owner, entity: world.Entity) -> Owner {
     return taken
 }
 
-// An owner whose player pressed its purse (D425) collects its takings at
+// An owner whose player pressed its purse collects its takings at
 // once, not at the second's end; a command from a player who owns nothing
 // here asks for nothing.
 fn collect(count: i32, owners: [Owner], entities: [world.Entity]) {
@@ -340,7 +339,7 @@ fn collect(count: i32, owners: [Owner], entities: [world.Entity]) {
 }
 
 // What an owner's player wrote on its sign, kept with the owner and sent
-// to every client (D426, D427); a sign from a player who owns nothing here
+// to every client; a sign from a player who owns nothing here
 // is no one's.
 fn sign(count: i32, owners: [Owner], signs: [ui.Typed], entities: [world.Entity]) {
     let asks = CommandCount.sign()
@@ -358,11 +357,11 @@ fn sign(count: i32, owners: [Owner], signs: [ui.Typed], entities: [world.Entity]
     }
 }
 
-// The sign field under the purse (D426): a line of at most 32 bytes the
+// The sign field under the purse: a line of at most 32 bytes the
 // player writes in, its text in the purse's look, which asks for a sign
-// while it is empty (D428); its panel and border are the field class's,
-// lit under the mouse and gold while it holds focus (D431). tycoon.ui
-// starts all of it (D619); a press on it is the controls' SIGN.
+// while it is empty; its panel and border are the field class's,
+// lit under the mouse and gold while it holds focus. tycoon.ui
+// starts all of it; a press on it is the controls' SIGN.
 fn field(count: i32, signs: [ui.Node]) {
     let i = 0
     while i < count {
@@ -371,8 +370,8 @@ fn field(count: i32, signs: [ui.Node]) {
     }
 }
 
-// The owner's sign as the server keeps it (D427), in gold under the field
-// as tycoon.ui starts it (D619): its words are the sign's, which the
+// The owner's sign as the server keeps it, in gold under the field
+// as tycoon.ui starts it: its words are the sign's, which the
 // document has it show in place of a label, on a dark panel while it has
 // any.
 fn board(count: i32, signs: [ui.Typed], boards: [ui.Node]) {
@@ -387,7 +386,7 @@ fn board(count: i32, signs: [ui.Typed], boards: [ui.Node]) {
 }
 
 // Every ARRIVAL ticks a customer comes through the south edge, at a place
-// drawn along it, heading for a stall drawn among all that stand (D393);
+// drawn along it, heading for a stall drawn among all that stand;
 // while none stands, nobody comes.
 fn open(count: i32, gates: [Gate]) {
     let i = 0
@@ -407,7 +406,7 @@ fn open(count: i32, gates: [Gate]) {
 
 // A customer at `fromX` on the south edge heading for (x, z): a small
 // kinematic sensor of the customers' class, pushing nothing, free to turn
-// toward where it walks (D512).
+// toward where it walks.
 fn arrive(fromX: f64, x: f64, z: f64) {
     let customer = world.create()
     Customer.insert(customer, Customer(x, z, u32(0)))
@@ -415,11 +414,11 @@ fn arrive(fromX: f64, x: f64, z: f64) {
                                              0.35, 0.35, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0))
     Pose3D.insert(customer, physics3d.Pose3D(fromX, 0.35, HALF, 0.0, 0.0, 0.0, 1.0))
     Velocity3D.insert(customer, physics3d.Velocity3D(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
-    // Steered round the other customers (D411), a little faster than it walks
+    // Steered round the other customers, a little faster than it walks
     // so it can step aside without falling behind.
     Agent.insert(customer, navigation.Agent(f32(0.35), f32(STEP * f64(SECOND) * 1.25), f32(1.0), f32(0.0), f32(0.0)))
     // Its figure, posed where it is drawn by its pace, the clips' walk
-    // taken out of its pose (D512).
+    // taken out of its pose.
     Amble.insert(customer, Amble(0.0))
     Animator.insert(customer, animation.Animator(AMBLE, animation.PRESENTATION, u32(0), u64(0)))
     RootMotion.insert(customer, animation.RootMotion(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -427,7 +426,7 @@ fn arrive(fromX: f64, x: f64, z: f64) {
 }
 
 // Customers walk for their stall the way the navmesh gives round the
-// other stalls (D400), each tick toward the way's next corner, the physics
+// other stalls, each tick toward the way's next corner, the physics
 // moving them by their velocity (a written pose would remake the body
 // where it is put); with no way known (before the first bake), straight for
 // it. One that has walked PATIENCE ticks unserved leaves.
@@ -503,9 +502,8 @@ fn serve(count: i32, stalls: [Stall], tills: [Till], poses: [physics3d.Pose3D]) 
 // Once a tick, after the owners have earned: the first owner (in World
 // order) with the most coins, at least GOAL, wins the round. Every owner is
 // told whether it won and starts again with START coins, its cursor where
-// it was; every stall and customer is gone (D394). The owners are found
-// and given again, and the stalls and customers found, through lookups
-// (D391, D393).
+// it was; every stall and customer is gone. The owners are found
+// and given again, and the stalls and customers found, through lookups.
 fn judge(count: i32, rounds: [Round]) {
     let i = 0
     while i < count {
@@ -552,7 +550,7 @@ fn judge(count: i32, rounds: [Round]) {
     }
 }
 
-// What a client shows (D389): every body it mirrors as a box, the lot's
+// What a client shows: every body it mirrors as a box, the lot's
 // ground grass green and each stall a warm awning red; no server carries a
 // look.
 fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
@@ -563,7 +561,7 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
         if b.collisionClass == STALLS {
             look.color = 0xC8553DFF
         }
-        // A customer (D392): a blue figure walking (D512).
+        // A customer: a blue figure walking.
         if b.collisionClass == CUSTOMERS {
             look = model.Model(FIGURE, FIGURE_SCALE, FIGURE_SCALE, FIGURE_SCALE, 0x3A7BD5FF, u64(0), FIGURE_LIFT)
         }
@@ -572,9 +570,9 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
     }
 }
 
-// The client's own stalls (D390) a sunny gold, told from the others' red
+// The client's own stalls a sunny gold, told from the others' red
 // by the owner each names: the client's own name for its player. A stall
-// stands a meter and a half taller for each level past the first (D391):
+// stands a meter and a half taller for each level past the first:
 // its box, two meters tall about a middle a meter up, is stretched about
 // it, and the ground hides what reaches below.
 fn tint(count: i32, stalls: [Stall], looks: [model.Model]) {
@@ -601,10 +599,10 @@ fn mark(count: i32, owners: [Owner], marks: [model.Model]) {
 
 // The client's view: from a fixed point forty-two meters up and thirty-six
 // south of the lot's middle, looking down at it, the whole lot in sight, wherever the
-// owner's cursor is, nearer or further as the zoom slider says (D621), and
-// from a fixed point nearly straight above while the top view switch is on
-// (D622). The
-// eye is fixed in the World (D520): placed back from the player's pose, the
+// owner's cursor is, nearer or further as the zoom slider says, and
+// from a fixed point nearly straight above while the top view switch is on.
+// The
+// eye is fixed in the World: placed back from the player's pose, the
 // cursor's plot, it lurched for a frame whenever the cursor crossed into
 // another plot between two ticks.
 fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
@@ -631,7 +629,7 @@ fn frame(count: i32, poses: [physics3d.Pose3D], views: [model.Camera]) {
 }
 
 // The view's distance in percent, as the player slid the zoom slider: 60
-// to 140 by tens, 100 until it has one (D621).
+// to 140 by tens, 100 until it has one.
 fn zoomed() -> f32 {
     let slid = ui.value(controls.ZOOM)
     if slid == 0.0 {
@@ -640,11 +638,11 @@ fn zoomed() -> f32 {
     return slid
 }
 
-// The zoom slider under the board (D621), as tycoon.ui starts it: a dark
+// The zoom slider under the board, as tycoon.ui starts it: a dark
 // track whose knob sits at the value's share of it, so a drag of the knob
 // moves the value with the pointer; a press on it is the controls' ZOOM.
 // While the top view switch is on, which the zoom does not move, it is
-// disabled and faded, its knob too (D624).
+// disabled and faded, its knob too.
 fn zoom(count: i32, zooms: [ui.Node], knobs: [ui.Node]) {
     let share = (zoomed() - 60.0) / 80.0
     let top = ui.value(controls.TOP) == 1.0
@@ -663,7 +661,7 @@ fn zoom(count: i32, zooms: [ui.Node], knobs: [ui.Node]) {
     }
 }
 
-// The top view switch under the zoom slider (D622), as tycoon.ui starts it:
+// The top view switch under the zoom slider, as tycoon.ui starts it:
 // a pill that turns green when on, its knob at its left end when off and
 // at its right when on; a press on it is the controls' TOP.
 fn top(count: i32, tops: [ui.Node], flips: [ui.Node]) {
@@ -677,11 +675,11 @@ fn top(count: i32, tops: [ui.Node], flips: [ui.Node]) {
     }
 }
 
-// The owner's coins in its HUD, of the coins that win a round (D647):
+// The owner's coins in its HUD, of the coins that win a round:
 // words along the top left of its view, a panel a click on builds nothing
-// under (D421), a button that lights under the mouse, darkens as it is
-// pressed, and is ringed while it holds focus (the button class, D431), as
-// tycoon.ui starts it (D619); a press on it
+// under, a button that lights under the mouse, darkens as it is
+// pressed, and is ringed while it holds focus (the button class), as
+// tycoon.ui starts it; a press on it
 // is the controls' PURSE.
 fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
     let i = 0
@@ -693,7 +691,7 @@ fn purse(count: i32, owners: [Owner], huds: [ui.Node]) {
     }
 }
 
-// The purse's tooltip (D623): "Collect your takings" in a dark box under
+// The purse's tooltip: "Collect your takings" in a dark box under
 // the purse, over all, while the mouse is over the purse, and nothing
 // otherwise; tycoon.ui places it.
 fn tip(count: i32, tips: [ui.Node]) {
@@ -710,8 +708,8 @@ fn tip(count: i32, tips: [ui.Node]) {
     }
 }
 
-// A round's end, in the middle of the client's view for five seconds
-// (D394), placed and sized as tycoon.ui starts it (D619): "You won round
+// A round's end, in the middle of the client's view for five seconds,
+// placed and sized as tycoon.ui starts it: "You won round
 // 3!" in gold, or that another owner won it, in a dark panel; nothing
 // between rounds.
 fn cheer(count: i32, cheers: [Cheer], banners: [ui.Node]) {

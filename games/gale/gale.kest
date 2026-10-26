@@ -1,15 +1,15 @@
 module gale
 
-// Gale (D681): each player sails a ship of its own on a rolling sea. A ship
+// Gale: each player sails a ship of its own on a rolling sea. A ship
 // is a dynamic box on Maul3D; the sea is the program's: each tick it finds
 // how deep below the waves six points under the hull are, and pushes each
 // up by the weight of the water it displaces there, so a ship floats at
 // its draft, rides the waves, and rights itself as it rolls. Its throttle
 // drives it ahead from the stern, its rudder turns it as it goes, and its
-// keel keeps it from sliding sideways. Its guns fire a ball to either side
-// (D683); a ball that strikes another ship holes it, and a ship holed
+// keel keeps it from sliding sideways. Its guns fire a ball to either side;
+// a ball that strikes another ship holes it, and a ship holed
 // through floods, sinks, and is abandoned, its player given another. A
-// player's entity is its ship (D685), so its client predicts how it sails.
+// player's entity is its ship, so its client predicts how it sails.
 
 import controls
 import rawframe.model
@@ -68,7 +68,7 @@ const FLIGHT: u32 = 240
 const SPACING: f64 = 14.0
 const ROWS: f64 = 20.0
 
-// The sea: how many ships it has launched, and the rounds played (D689).
+// The sea: how many ships it has launched, and the rounds played.
 struct Sea {
     launched: u32
     round: u32
@@ -89,10 +89,10 @@ struct Cheer {
     round: u32
 }
 
-// A ship, its player's own entity (D685): whether it has been launched,
+// A ship, its player's own entity: whether it has been launched,
 // the holes it can still take, the ticks it has foundered for, the ticks
 // until its guns are loaded, the sides it fires to this tick (PORT,
-// STARBOARD, D686), and the broadsides it has fired (D687); a client
+// STARBOARD), and the broadsides it has fired; a client
 // predicts all of it for its own.
 struct Ship {
     launched: bool
@@ -154,8 +154,8 @@ extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
 
 // The water's height at `x`, `z` after `time` seconds: two swells crossing,
 // a quarter meter and fifteen centimeters high. The time is the World's
-// tick's (D684), so a client predicting a tick finds the same sea. The
-// drawn sea's material rolls the same waves (D691): change them together
+// tick's, so a client predicting a tick finds the same sea. The
+// drawn sea's material rolls the same waves: change them together
 // in tools/make_waves.py.
 fn height(x: f32, z: f32, time: f32) -> f32 {
     let one = f64(0.25) * math.sin(f64(0.3 * x + 1.0995574 * time))
@@ -219,13 +219,13 @@ fn dot(a: Offset, b: Offset) -> f32 {
 
 // Each ship pushed by the water under it and by its helm, for the step to
 // apply, and a foundered one flooded a tick more. A client predicts it for
-// its own ship (D685), from the same tick and nothing it does not predict.
+// its own ship, from the same tick and nothing it does not predict.
 fn float(count: i32, ships: [Ship], helms: [controls.Helm], poses: [physics3d.Pose3D],
          velocities: [physics3d.Velocity3D], impulses: [physics3d.Impulse3D]) {
-    // The World's time in seconds, as the drawn sea's material reads it
-    // (D691): the tick over the tick rate, wrapped where the material's is,
-    // at the ten minutes the waves repeat in (D702), so the two seas stay
-    // one (D693) however long a game runs.
+    // The World's time in seconds, as the drawn sea's material reads it:
+    // the tick over the tick rate, wrapped where the material's is,
+    // at the ten minutes the waves repeat in, so the two seas stay
+    // one however long a game runs.
     let time = f32(f64(world.tick() % u64(36000)) / f64(60.0))
     // The water under one of the six points carries a sixth of the hull's
     // bottom.
@@ -304,19 +304,19 @@ fn float(count: i32, ships: [Ship], helms: [controls.Helm], poses: [physics3d.Po
 // Meters of sea a client draws round its ship, each way, and how far
 // behind and above the ship its view is.
 const REACH: f32 = 300.0
-// The rolling sea (D691): the engine's grid, SWELL meters each way, a
+// The rolling sea: the engine's grid, SWELL meters each way, a
 // vertex every STEP meters, and its waves' material, written by
 // tools/make_waves.py.
 const SWELL: f32 = 100.0
 const STEP: f64 = 1.5625
 const WAVES: u64 = 0x04b83dddccb26127
-// The islands' materials (D709): rock.rfmaterial and its instance.
+// The islands' materials: rock.rfmaterial and its instance.
 const ROCK: u64 = 0xd42b8d7ca0f22201
 const SHORE: u64 = 0xa1e844c906888b94
 const BEHIND: f32 = 16.0
 const ABOVE: f32 = 7.0
 
-// Every hull, as the box its body is, darker for each hole in it (D687),
+// Every hull, as the box its body is, darker for each hole in it,
 // and every ball.
 fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities: [world.Entity]) {
     let i = 0
@@ -330,8 +330,8 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model], entities:
         if b.shape == physics3d.SPHERE {
             looks[i] = model.Model(model.SPHERE, b.width, b.width, b.width, 0x202020FF, u64(0), 0.0)
         }
-        // An island's rock (D693): a small one grey shore rock, a broad
-        // one sand, one material and its instance (D709).
+        // An island's rock: a small one grey shore rock, a broad
+        // one sand, one material and its instance.
         if b.shape == physics3d.CYLINDER {
             let rock = ROCK
             if b.width < 12.0 {
@@ -389,7 +389,7 @@ fn frame(count: i32, ships: [Ship], views: [model.Camera], entities: [world.Enti
 }
 
 // Each ship's guns: they reload, and once loaded fire to the sides its
-// player asks, a broadside its client predicts and hears at once (D686);
+// player asks, a broadside its client predicts and hears at once;
 // the balls are the crew's to send.
 fn aim(count: i32, helms: [controls.Helm], ships: [Ship], entities: [world.Entity]) {
     let i = 0
@@ -510,7 +510,7 @@ fn report(count: i32, ships: [Ship], emitters: [sound.Emitter], entities: [world
     }
 }
 
-// A ship's wake (D692): foam left on the water behind it, widening as it
+// A ship's wake: foam left on the water behind it, widening as it
 // fades; and its broadsides' smoke, a burst rising round the ship each
 // time its volleys count one more, as its report is heard.
 fn foam(count: i32, ships: [Ship], wakes: [model.Trail], smokes: [model.ParticleEmitter]) {
@@ -524,7 +524,7 @@ fn foam(count: i32, ships: [Ship], wakes: [model.Trail], smokes: [model.Particle
     }
 }
 
-// The player's HUD (D688): its ship's hull and the hits its broadsides
+// The player's HUD: its ship's hull and the hits its broadsides
 // made, the label's two arguments.
 fn tally(count: i32, ships: [Ship], guns: [Guns], tallies: [ui.Node]) {
     let i = 0
@@ -535,7 +535,7 @@ fn tally(count: i32, ships: [Ship], guns: [Guns], tallies: [ui.Node]) {
     }
 }
 
-// The hits a ship's broadsides must make to win a round (D689), the ticks
+// The hits a ship's broadsides must make to win a round, the ticks
 // a round's end is shown for, and its words (gale.game's `label` lines).
 const GOAL: u32 = 10
 const CHEER: u32 = 300

@@ -1,15 +1,15 @@
-# Stalls (D388), the second reference game's beginning (ROADMAP Phase 5): a
+# Stalls, the second reference game's beginning (ROADMAP Phase 5): a
 # simple 3D tycoon. Each player owns coins and a cursor over a lot of twelve
 # plots by twelve; a build puts a stall on the plot under the cursor when it
 # is free and the owner has its cost, or raises one of the owner's own a
-# level (D391), and each stall earns its owner every second for each level
+# level, and each stall earns its owner every second for each level
 # (tycoon.kest). The server decides every build; the lot's ground and the
 # stalls are static bodies, so a build asks the physics which plots are
-# taken, and looks up the stall it finds. Customers buy at the stalls
-# (D392); the first owner to a thousand coins wins the round (D394).
+# taken, and looks up the stall it finds. Customers buy at the stalls;
+# the first owner to a thousand coins wins the round.
 program tycoon.kest
 physics3d gravity 0 -10 0
-# Customers find their way round the stalls (D400): the server bakes a
+# Customers find their way round the stalls: the server bakes a
 # navmesh for them from the static bodies, the lot and the stalls, and bakes
 # again where a stall is built or goes.
 navigation radius 0.35 height 1.8 step 0.3 slope 30 cell 0.2
@@ -19,14 +19,14 @@ component 0097c04f-e081-44c5-b93d-ba7a6836d3e8 tycoon.hand Hand
 component 4143f760-31c1-469d-bda7-7946878bcaba tycoon.owner Owner
 component 20f1dacf-e8f6-4c1f-be56-5fc36f9ade8e tycoon.stall Stall
 component bd13f2d3-dc87-46f2-b480-ff2eaf5fcdf1 tycoon.customer Customer
-# How fast a customer walks, which its figure's animator plays (D512).
+# How fast a customer walks, which its figure's animator plays.
 component d00b9d85-270c-4c13-a1ee-f423ffa148c8 tycoon.amble Amble
 component 160c062b-09b3-46a0-8435-9575f99339c1 tycoon.till Till
 component 11a256e6-f691-4f0f-8feb-aef4694891f0 tycoon.gate Gate
 component 7c496087-7144-4230-85e9-fd119433276c tycoon.round Round
 component c6cf12bf-81c1-4db9-a042-e3883a084d52 tycoon.named rawframe.ui.Typed
 # A stall's owner is an entity: sent as one, each client reads its own
-# name for it (D390).
+# name for it.
 entity tycoon.stall owner
 component 63d9aa3b-30b0-49df-9371-b682ff281ec0 tycoon.look rawframe.model.Model
 component 2e380a54-69cf-4905-86f2-68f895d954fe tycoon.mark rawframe.model.Model
@@ -44,8 +44,8 @@ component 3128607a-7d0b-4df5-bd60-434ded311b7d tycoon.top rawframe.ui.Node
 component 080d4691-174c-45b3-8772-0a56699ad064 tycoon.flip rawframe.ui.Node
 system tycoon.join simulation join write tycoon.owner
 system tycoon.tend simulation tend read tycoon.hand write tycoon.owner write rawframe.physics3d.pose entities lookup tycoon.stall after tycoon.join after rawframe.physics3d.step
-# Customers (D392): through the gate, walking before the step moves their
-# bodies, each an agent the engine steers round the others (D411) between
+# Customers: through the gate, walking before the step moves their
+# bodies, each an agent the engine steers round the others between
 # the walk and the step; served by the stalls after it; their price taken
 # by the owners.
 system tycoon.open simulation open write tycoon.gate random arrivals lookup tycoon.stall after rawframe.physics3d.step
@@ -54,7 +54,7 @@ system tycoon.serve simulation serve read tycoon.stall write tycoon.till read ra
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
 system tycoon.collect simulation collect write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.earn
 system tycoon.sign simulation sign read tycoon.owner write tycoon.named entities after tycoon.collect
-# Rounds (D394): the first owner to the goal wins; every owner is told by
+# Rounds: the first owner to the goal wins; every owner is told by
 # message, and the lot starts afresh.
 system tycoon.judge simulation judge write tycoon.round lookup tycoon.owner lookup tycoon.stall lookup tycoon.customer after tycoon.earn
 # The lot's ground, its top at nought.
@@ -63,23 +63,22 @@ spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 ra
 spawn 1 tycoon.gate
 spawn 1 tycoon.round
 message won Won
-# Pressing its purse asks the server to collect the owner's takings now
-# (D425).
+# Pressing its purse asks the server to collect the owner's takings now.
 command collect controls.Collect
-# What the player writes in its sign field and gives by Enter (D426).
+# What the player writes in its sign field and gives by Enter.
 command sign controls.Sign
 
-# A customer's figure (D512): Plaza's strollers' figure and its idle, walk,
+# A customer's figure: Plaza's strollers' figure and its idle, walk,
 # and run, copied under amble/ with ids of their own, blended by pace
 # alone.
 mesh f08f5a874875ee6c amble/figure.gltf
 animator 4d2c8e71a9f03b56 amble.rfanim parameters tycoon.amble
 
 # Networked play: every owner, stall, and customer is sent to every client,
-# which shows the customers walking between the states it receives (D392);
+# which shows the customers walking between the states it receives;
 # each player's hand is its input, and its pose the plot under its cursor.
 replicate tycoon.owner tycoon.stall tycoon.named rawframe.physics3d.body rawframe.physics3d.pose
-# A customer's figure is posed where it is drawn (D512): its animator, the
+# A customer's figure is posed where it is drawn: its animator, the
 # pace it plays at, and its root motion, which takes the clips' walk out
 # of its pose, as the navmesh moves it.
 replicate tycoon.amble rawframe.animation.animator rawframe.animation.root_motion
@@ -93,19 +92,19 @@ input tycoon.hand
 actions tycoon.actions
 sample sample.kest sample
 
-# What a client shows (D389): every body as a box, the ground green and the
-# stalls red, its own stalls gold (D390); its own cursor's plot marked; the
+# What a client shows: every body as a box, the ground green and the
+# stalls red, its own stalls gold; its own cursor's plot marked; the
 # lot seen from a fixed point above its south edge; and its coins in words
 # (tycoon.strings) in Inter 4.1 (Inter-Regular.ttf from its release archive,
 # SIL Open Font License 1.1 in Inter-LICENSE.txt), along the top of its
-# view; a round's end in its middle for five seconds (D394). No server
+# view; a round's end in its middle for five seconds. No server
 # carries any of it.
 text tycoon.strings
 text tycoon.tr.translations
 locale en
 font 8e12f827f47f7d51 Inter-Regular.ttf
-# The HUD's classes (D431), and its nodes' layout, look, and words as
-# tycoon.ui starts them (D619); the present systems write what changes.
+# The HUD's classes, and its nodes' layout, look, and words as
+# tycoon.ui starts them; the present systems write what changes.
 styles tycoon.styles
 ui tycoon.ui
 label f1182d0420cc09a0 tycoon.strings hud.coins coins goal
@@ -122,15 +121,15 @@ presentation tycoon.mark tycoon.view tycoon.purse tycoon.cheer tycoon.banner tyc
 present tycoon.mark mark read tycoon.owner write tycoon.mark
 present tycoon.frame frame read rawframe.physics3d.pose write tycoon.view
 present tycoon.purse purse read tycoon.owner write tycoon.purse
-# The purse's tooltip while the mouse is over it (D623), beside the
+# The purse's tooltip while the mouse is over it, beside the
 # wallet that holds them both: a node with words lays out no children.
 present tycoon.tip tip write tycoon.tip
 present tycoon.cheer cheer write tycoon.cheer write tycoon.banner
 present tycoon.field field write tycoon.sign
-# The owner's sign as the server keeps it, shown under the field (D427):
+# The owner's sign as the server keeps it, shown under the field:
 # tycoon.ui has the board show tycoon.named.
 present tycoon.board board read tycoon.named write tycoon.board
-# The view's zoom, a slider under the board (D621).
+# The view's zoom, a slider under the board.
 present tycoon.zoom zoom write tycoon.zoom write tycoon.knob
-# The top view switch under it (D622).
+# The top view switch under it.
 present tycoon.top top write tycoon.top write tycoon.flip
