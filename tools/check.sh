@@ -1,403 +1,303 @@
 #!/usr/bin/env bash
-# The one definition of "it passes".
+# The checks, in four tiers. Each tier includes the one before it.
 #
-#   tools/check.sh fast   repository rules, format, one incremental build, tests
-#   tools/check.sh push   repository rules, format, gcc's debug tree and the
-#                         address sanitizer's, then clang's development tree
-#                         alone, each running the tests the change can reach
-#                         (tools/affected.py) but Studio's window tests: the
-#                         pre-push hook's gate; the runner's full check after
-#                         the push runs the rest (D898, D986)
-#   tools/check.sh        the above plus GCC and Clang in every configuration,
-#                         the address and thread sanitizers, the web build
-#                         (wasm32 without threads, tests under Node), the web
-#                         page against the dedicated server over WebTransport,
-#                         a real browser playing from a canvas where Puppeteer
-#                         is installed,
-#                         and the tick budget (tools/bench.sh check) and the
-#                         web client's download and start budget
-#                         (tools/web_budget.sh check) once all pass; and
-#                         last, alone, the tests a push leaves it that no
-#                         tree above plays: Studio's gestures and the tests
-#                         labeled `alone` or `headset` (D986)
+#   tools/check.sh changed   the files changed against origin/main: the
+#                            repository rules, the documentation check,
+#                            formatting, clang-development built, and the
+#                            tests the change reaches but the integration
+#                            ones. Run it before every push.
+#   tools/check.sh pr        what the pull request check runs: every rule on
+#                            every file, clang-development and clang-sanitize
+#                            built, the reached tests in both trees, and the
+#                            integration tests the change reaches in
+#                            clang-development, a few at a time.
+#   tools/check.sh full      what main runs after a merge: every test in
+#                            clang-sanitize, gcc-debug and clang-thread, the
+#                            web build and its tests, the web page against the
+#                            dedicated server, real browsers playing the sample
+#                            games, and every integration test.
+#   tools/check.sh nightly   also clang-shipping and wasm-shipping, and the
+#                            tick and web download budgets measured in them.
 #
-# Build trees live under out/ and are reused, so a second run only rebuilds
-# what changed.
+# The builds are the presets of CMakePresets.json, in out/<preset>, reused
+# from run to run. Each tree's logs sit beside it. JOBS (default 8) bounds
+# the jobs of the whole check, split between the trees that build at once.
 set -euo pipefail
+
+tier=${1:-changed}
+case "$tier" in
+changed | pr | full | nightly) ;;
+*)
+    echo "usage: tools/check.sh [changed|pr|full|nightly]" >&2
+    exit 2
+    ;;
+esac
+
 cd "$(dirname "$0")/.."
-tier="${1:-full}"
+root=$PWD
+mkdir -p out
+org=${ORG_DEFAULTS:-$root/../../.github}
+jobs=${JOBS:-8}
 start=$(date +%s)
 failures=0
 
-# Each step says how long the one before it took, so a check that grows
-# says where.
-last=$(date +%s)
-step() {
-    local now
-    now=$(date +%s)
-    printf '== %s (previous step %ss)\n' "$*" "$((now - last))"
-    last=$now
+# Tests that drive windows, browsers, headsets or played games: a few
+# end-to-end scenarios that may read the clock, kept out of the changed tier
+# and run a few at a time, since each plays a server, a client and a GPU on
+# the processor.
+integration='window|headset|alone|gesture|studio|heavy'
+
+step() { printf '\n== %s (%ss so far)\n' "$*" "$(($(date +%s) - start))"; }
+fail() {
+    printf 'FAILED: %s\n' "$*"
+    failures=$((failures + 1))
 }
-fail() { printf 'FAILED: %s\n' "$*"; failures=$((failures + 1)); }
 
-mkdir -p out
-
-# Where Mesa's software Vulkan (lavapipe) is installed, as on the machine
-# the CI runs on, a device test that finds no adapter fails instead of
-# skipping (D277): pixels are checked, not assumed. The loader sees lavapipe
-# alone, so every run draws on the same rasterizer, and no other driver
-# probes this machine's hardware from inside a sanitized test (radv did,
-# and leaked).
+# Where Mesa's software Vulkan (lavapipe) is installed, a device test that
+# finds no adapter fails instead of skipping: pixels are checked, not
+# assumed. The loader sees lavapipe alone, so every run draws on the same
+# rasterizer and no hardware driver is probed from a sanitized test.
 lavapipe=$(compgen -G "/usr/share/vulkan/icd.d/lvp_icd*.json" | head -1 || true)
 if [ -n "$lavapipe" ]; then
     export RAWFRAME_REQUIRE_GPU=1 VK_DRIVER_FILES="$lavapipe"
 fi
-# Where the shader toolchain is installed, as on the machine the CI runs on,
-# the pinned Slang compiler where tools/gen_shaders.py looks for it and the
-# cross compilers on the path, a material that needs its own program is
-# cooked through it, and a test that finds no toolchain fails instead of
-# skipping (D484).
+# Where the shader toolchain is installed (the pinned Slang compiler, DXC and
+# SPIRV-Cross), a material that needs its own program is cooked through it,
+# and a test that finds no toolchain fails instead of skipping.
 slangc="${RAWFRAME_SLANGC:-$HOME/.cache/rawframe/slang-2026.19/bin/slangc}"
 dxc_bin=$(compgen -G "/opt/dxc/*/bin" | head -1 || true)
 if [ -x "$slangc" ] && [ -n "$dxc_bin" ] && command -v spirv-cross >/dev/null; then
     export RAWFRAME_REQUIRE_SHADER_TOOLCHAIN=1 RAWFRAME_SLANGC="$slangc" PATH="$dxc_bin:$PATH"
 fi
 
-step "repository rules"
-python3 tools/check_repo.py || fail "repository rules"
-
-step "format"
-# Files not yet added count too, so a check before a commit sees them.
-mapfile -t sources < <(git ls-files --cached --others --exclude-standard '*.h' '*.cpp' | grep -v '^third_party/' || true)
-if [ "${#sources[@]}" -gt 0 ]; then
-    if ! clang-format-20 --dry-run --Werror "${sources[@]}" >out/format.log 2>&1; then
-        head -20 out/format.log; fail "format (run: clang-format-20 -i on the files above)"
+rules() {
+    step "repository rules"
+    python3 tools/check_repo.py || fail "repository rules"
+    if [ -f "$org/scripts/docs_check.py" ]; then
+        local exclude=()
+        while read -r path; do
+            [ -n "$path" ] && exclude+=(--exclude "$path")
+        done < <(grep -v '^#' tools/docs-check-exclude.txt)
+        python3 "$org/scripts/docs_check.py" "${exclude[@]}" || fail "documentation check"
+    else
+        echo "skipped the organization's documentation check: no checkout at $org"
     fi
-fi
+}
 
-# Test jobs per preset: the whole machine for one preset, a quarter of it
-# each when eight run at once, so tests that play in real time are not
-# starved by eight times as many jobs as cores.
-jobs=$(nproc)
+format() {
+    step "format"
+    local sources
+    if [ "$tier" = changed ]; then
+        local base
+        base=$(git merge-base HEAD origin/main 2>/dev/null || echo HEAD)
+        mapfile -t sources < <({
+            git diff --name-only --diff-filter=d "$base" -- '*.h' '*.cpp'
+            git ls-files --others --exclude-standard '*.h' '*.cpp'
+        } | grep -v '^third_party/' | sort -u || true)
+        if [ "${#sources[@]}" -eq 0 ]; then
+            echo "no changed C++ file"
+            return
+        fi
+    else
+        mapfile -t sources < <(git ls-files --cached --others --exclude-standard '*.h' '*.cpp' |
+            grep -v '^third_party/' || true)
+        if [ "${#sources[@]}" -eq 0 ]; then
+            fail "format: no C++ file found"
+            return
+        fi
+    fi
+    if ! clang-format-20 --dry-run --Werror "${sources[@]}" >out/format.log 2>&1; then
+        head -20 out/format.log
+        fail "format (run clang-format-20 -i on the files above)"
+    fi
+}
 
+# Builds one preset and runs its tests. `select` is reached (the tests the
+# change can reach), all, or none; `labels` is unit (every test but the
+# integration ones), integration (those alone), or every.
 build_and_test() {
-    local preset="$1"
+    local preset=$1 select=$2 labels=$3 run_jobs=$4
     step "$preset"
-    # A tree whose cache no longer fits its preset (a compiler moved, say)
-    # is made again from nothing, once.
-    if ! cmake --preset "$preset" >"out/$preset.configure.log" 2>&1 &&
-        ! { rm -rf "out/$preset" && cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; }; then
-        tail -20 "out/$preset.configure.log"; fail "$preset configure"; return
+    if ! cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; then
+        # A tree whose cache no longer fits its preset (a compiler moved) is
+        # made again from nothing, once.
+        rm -rf "out/$preset"
+        if ! cmake --preset "$preset" >"out/$preset.configure.log" 2>&1; then
+            tail -20 "out/$preset.configure.log"
+            fail "$preset configure"
+            return
+        fi
     fi
     local began built
     began=$(date +%s)
-    if ! cmake --build "out/$preset" >"out/$preset.build.log" 2>&1; then
-        grep -E 'error|FAILED' "out/$preset.build.log" | head -20; fail "$preset build"; return
-    fi
-    built=$(date +%s)
-    # The full check builds clang-development and tests it nowhere else: the
-    # fast check runs every one of its tests, alone, before every push, and
-    # the same tests run here in clang's optimized tree, both sanitizers'
-    # trees, and gcc's debug tree. Its run here was a seventh of the check's
-    # processor time on a machine the trees keep full (D618).
-    if [ "$preset" = clang-development ] && [ "$tier" = full ]; then
-        printf '   %s: built in %ss, tested by the fast check\n' "$preset" "$((built - began))"
+    if ! cmake --build "out/$preset" -j "$run_jobs" >"out/$preset.build.log" 2>&1; then
+        grep -E 'error|FAILED' "out/$preset.build.log" | head -20
+        fail "$preset build"
         return
     fi
-    # Window tests play in real time against a software rasterizer, and gcc's
-    # optimized tree finds nothing in them that clang's optimized tree, the
-    # sanitizers, and gcc's slow debug tree do not; it leaves them out (D493).
-    # So does clang-development in the full check: the fast check before
-    # every push plays them there, alone, and gcc's debug tree plays them
-    # under the full check's load (D500). So does clang-shipping: optimized
-    # clang code is played by that fast check and by the thread sanitizer's
-    # optimized tree, and no window failure was its alone but a port the
-    # machine held (D526).
-    # A test labeled `alone` needs a player's frame rate, which the full
-    # check's load takes away: a predicted game's input then never reaches
-    # its server (D521). The fast check plays it with nothing beside it.
-    # A test labeled `headset` draws a game for a headless headset on the
-    # software rasterizer, each 60 to 80 s in the instrumented trees: the
-    # full check plays it in clang-development alone, as the fast check
-    # does, and the XR module's own test and the client's headset window
-    # test cover its code under the sanitizers (D602).
-    # The optimized trees leave `alone` tests to the fast check too: playing
-    # them here put them beside every other tree's tests, against D829's
-    # word (D888).
-    local leave=()
-    if [ "$preset" = clang-development ] && [ "$tier" = push ]; then
-        # Before a push it plays, alone, the reached tests that neither of
-        # the other two trees played: those labeled `alone`, `headset`, or
-        # `heavy` (D898, D902). Studio's window tests, its gestures with
-        # them, are the full check's after the push (owner, D986): each
-        # plays a Studio, a server, and a client on the processor, and they
-        # were twenty of a push's twenty-five minutes.
-        leave=(-L 'alone|headset|heavy' -LE studio)
-    elif [ "$preset" = clang-development ] && [ "$tier" = played ]; then
-        # The full check's last step: what only a push played before
-        # (D986), on a machine its trees no longer load.
-        leave=(-L 'alone|headset|gesture|heavy')
-    elif [ "$preset" = gcc-shipping ] || [ "$preset" = clang-shipping ]; then
-        leave=(-LE 'window|headset')
-        [ "$tier" != fast ] && leave=(-LE 'window|headset|alone')
-    elif [ "$preset" = clang-development ] && [ "$tier" = full ]; then
-        leave=(-LE window)
-    elif [ "$preset" = clang-thread ] && [ "$tier" != fast ]; then
-        # Studio's window tests play under the address sanitizer, not here
-        # too: they were most of this tree's time, the full check's longest
-        # (D527).
-        leave=(-LE 'alone|studio|headset|heavy')
-    elif [ "$preset" = gcc-debug ] && [ "$tier" != fast ]; then
-        # Studio's window tests play under the address sanitizer alone:
-        # here as well they were half this tree's test time (D602).
-        leave=(-LE 'alone|headset|studio|heavy')
-    elif [ "$preset" = clang-sanitize ] && [ "$tier" != fast ]; then
-        # Studio's played tests that differ only in a gesture are left to
-        # the fast check: nine instrumented games drawing were a third of
-        # this tree's time, the full check's longest (D645).
-        leave=(-LE 'alone|headset|gesture|heavy')
-        [ "$tier" = push ] && leave=(-LE 'alone|headset|gesture|heavy|studio')
-    elif [ "$tier" != fast ]; then
-        leave=(-LE 'alone|headset')
-    fi
-    # The trees that play the window tests run twice the jobs (D507): those
-    # tests mostly wait on frames, not processors, and the thread tree alone
-    # took 169 s at twelve jobs where it took 319 s at six, the same 1,150 s
-    # of tests.
-    local run=$jobs
-    if [ "$tier" != fast ] && [[ "${leave[1]:-}" != window* ]] && [[ "$preset" != wasm-* ]] &&
-        ! { [[ "$tier" = push || "$tier" = played ]] && [ "$preset" = clang-development ]; }; then
-        run=$((jobs * 2))
-    fi
-    # Where clang's development tree plays Studio's or a played game's
-    # tests, each a Studio, a server, and a client drawing on the CPU: a
-    # quarter of the processors at once, not one each. At one each,
-    # twenty-four started together on a machine other work loaded to 350,
-    # and the first nine to start all ran out of time together (D909).
-    if [[ "$tier" = push || "$tier" = played ]] && [ "$preset" = clang-development ]; then
-        run=$((jobs / 4 > 2 ? jobs / 4 : 2))
-    fi
-    # A test that sets no limit of its own has none under ctest: twenty
-    # minutes, three times the slowest sanitized test, so one that hangs
-    # (a played client waiting for a click that never came) ends the check
-    # rather than holding it for hours (D816).
-    # A test that failed is run once more with at most one other beside
-    # it, where it failed by no sanitizer's report and at most ten failed
-    # other than by running out of time: on a machine other work loads past
-    # two hundred, a test that waits on frames, a peer, or a deadline misses
-    # them in a tree that is sound, and passes alone; at a load of 350,
-    # thirteen Studio tests ran out of time together and two more missed
-    # what they waited for (D909). A sanitizer's report is never run again:
-    # a race or a bad access that shows once is a finding (D895).
-    # Before a push, only the tests the change can reach (D898).
-    local picked=()
-    if [ "$tier" = push ]; then
+    built=$(date +%s)
+    [ "$select" = none ] && {
+        printf '   %s: built in %ss\n' "$preset" "$((built - began))"
+        return
+    }
+    local filter=()
+    case "$labels" in
+    unit) filter=(-LE "$integration") ;;
+    integration) filter=(-L "$integration") ;;
+    esac
+    if [ "$select" = reached ]; then
         local reached
         mapfile -t reached < <(python3 tools/affected.py "out/$preset")
         if [ "${#reached[@]}" -eq 0 ]; then
             printf '   %s: built in %ss, no test reached\n' "$preset" "$((built - began))"
             return
         fi
-        picked=(-R "^($(IFS='|'; echo "${reached[*]}"))\$")
-        printf '   %s: %s tests reached\n' "$preset" "${#reached[@]}"
+        filter+=(-R "^($(IFS='|'; echo "${reached[*]}"))\$")
     fi
-    if ! ctest --test-dir "out/$preset" "${leave[@]}" "${picked[@]}" --output-on-failure --timeout 1200 -j "$run" \
-        >"out/$preset.test.log" 2>&1 &&
-        ! { ! grep -qE 'WARNING: ThreadSanitizer|ERROR: (Address|Leak)Sanitizer|runtime error:' "out/$preset.test.log" &&
-            [ "$(grep -E 'Test +#[0-9]+: .*\*\*\*' "out/$preset.test.log" | grep -cv '\*\*\*Timeout')" -le 10 ] &&
-            ctest --test-dir "out/$preset" --rerun-failed --output-on-failure --timeout 1200 -j 2 \
-                >"out/$preset.rerun.log" 2>&1 &&
-            printf '   %s: run again alone and passed: %s\n' "$preset" \
-                "$(grep -oE 'Test +#[0-9]+: [A-Za-z0-9_]+' "out/$preset.rerun.log" | awk '{print $3}' | tr '\n' ' ')"; }; then
-        # Each failed test's status and its output's last lines, cut short
-        # (its records are long), so a failure seen only under CI's load can
-        # be read there.
+    # Integration tests play a server, a client and a GPU each: a few at once.
+    local test_jobs=$run_jobs
+    [ "$labels" = integration ] && test_jobs=$((run_jobs < 4 ? run_jobs : 4))
+    # A test that sets no limit of its own ends after twenty minutes, so one
+    # that hangs ends the check rather than holding it.
+    if ctest --test-dir "out/$preset" "${filter[@]}" --output-on-failure --timeout 1200 \
+        -j "$test_jobs" >"out/$preset.$labels.log" 2>&1; then
+        printf '   %s: built in %ss, %s tests in %ss: %s\n' "$preset" "$((built - began))" "$labels" \
+            "$(($(date +%s) - built))" "$(grep -E '^[0-9]+% tests passed' "out/$preset.$labels.log" || echo none)"
+    elif grep -q 'No tests were found' "out/$preset.$labels.log"; then
+        printf '   %s: built in %ss, no %s test selected\n' "$preset" "$((built - began))" "$labels"
+    else
+        # Each failed test's last lines, cut short, then the summary. CI's
+        # logs are public, and libFuzzer prints a finding's input from its
+        # first mutation line on, so a fuzz target's output stops there: the
+        # finding is reproduced by running the target locally.
         awk 'function flush() { if (shown) { print head; for (i = (n > 40 ? n - 39 : 1); i <= n; i++) print kept[i] } }
-             /Test +#[0-9]+: / { flush(); shown = /\*\*\*|Failed|Exception|Timeout/; head = $0; n = 0; next }
+             /Test +#[0-9]+: / { flush(); shown = /\*\*\*|Failed|Exception|Timeout/; head = $0; n = 0
+                                 fuzz = /_fuzz_/; dump = 0; next }
              /^(The following tests|[0-9]+% tests passed)/ { flush(); shown = 0 }
-             shown { kept[++n] = substr($0, 1, 1200) }
-             END { flush() }' "out/$preset.test.log"
-        tail -30 "out/$preset.test.log"; fail "$preset tests"; return
+             fuzz && /^MS: [0-9]/ { dump = 1 }
+             shown && !dump { kept[++n] = substr($0, 1, 1200) }
+             END { flush() }' "out/$preset.$labels.log"
+        sed -n '/^[0-9]*% tests passed/,$p' "out/$preset.$labels.log"
+        fail "$preset $labels tests"
     fi
-    printf '   %s: built in %ss, tested in %ss\n' "$preset" "$((built - began))" "$(($(date +%s) - built))"
 }
 
-# The browser's page and shader steps, after clang-development's and the
-# web's development trees are built and tested, beside the other trees.
-web_steps() {
-    # Two trees at once: the browser's page modules drive the web client
-    # against the native dedicated server over WebTransport (D173).
-    # A page that fails is played once more, and fails the check only if it
-    # fails again, as a tree's failed tests are run again (D895, D897): a
-    # page plays for seconds against a server on the same machine.
-    step "web page"
-    page_status=1
-    for attempt in 1 2; do
-        if tools/node_page.sh hosts/web_client/tests/browser_page.mjs \
-            out/clang-development/hosts/dedicated_server/rawframe-server \
-            out/wasm-development/hosts/web_client/rawframe-web-client.wasm "$PWD" >out/web-page.log 2>&1; then
-            page_status=0
-            break
-        fi
-        [ "$attempt" = 1 ] && echo "   web page: played again: $(grep '^page:' out/web-page.log | tail -1)"
+# Runs build_and_test for each "preset select labels" triple at once, the
+# jobs shared between them, and prints each tree's report in order.
+in_parallel() {
+    local share=$((jobs / $# > 1 ? jobs / $# : 1))
+    local pids=() names=() spec
+    for spec in "$@"; do
+        local name=${spec// /.}
+        # shellcheck disable=SC2086
+        (build_and_test $spec "$share") >"out/$name.check.log" 2>&1 &
+        pids+=($!)
+        names+=("$name")
     done
-    if [ "$page_status" -ne 0 ]; then
-        tail -30 out/web-page.log; fail "web page"
-    else
+    local i
+    for i in "${!pids[@]}"; do
+        wait "${pids[$i]}" || true
+        cat "out/${names[$i]}.check.log"
+        if grep -q '^FAILED' "out/${names[$i]}.check.log"; then
+            failures=$((failures + 1))
+        fi
+    done
+}
+
+# The web page against the native dedicated server over WebTransport, and
+# every engine shader's WGSL compiled by the browser's WebGPU.
+web_steps() {
+    step "web page"
+    if tools/node_page.sh hosts/web_client/tests/browser_page.mjs \
+        out/clang-development/hosts/dedicated_server/rawframe-server \
+        out/wasm-development/hosts/web_client/rawframe-web-client.wasm "$root" >out/web-page.log 2>&1; then
         grep '^page:' out/web-page.log
+    else
+        tail -30 out/web-page.log
+        fail "web page"
     fi
-    # Every engine shader's WGSL compiled by the browser's WebGPU (D286).
     step "web shaders"
-    wgsl_status=0
+    local status=0
     RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
         PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
-        tools/node_page.sh tools/check_wgsl.mjs "$PWD" >out/web-shaders.log 2>&1 || wgsl_status=$?
-    if [ "$wgsl_status" -eq 77 ]; then
+        tools/node_page.sh tools/check_wgsl.mjs "$root" >out/web-shaders.log 2>&1 || status=$?
+    if [ "$status" -eq 77 ]; then
         echo "web shaders skipped: no Puppeteer or no browser for it"
-    elif [ "$wgsl_status" -ne 0 ]; then
-        tail -30 out/web-shaders.log; fail "web shaders"
+    elif [ "$status" -ne 0 ]; then
+        tail -30 out/web-shaders.log
+        fail "web shaders"
     else
         grep '^page: [0-9]' out/web-shaders.log
     fi
 }
 
-# Real browsers playing the sample games: after the trees, never beside
-# them, where a page drawing a few frames a second failed its own
-# expectations (D529).
+# A real browser plays each sample game from a canvas against a dedicated
+# server, after the trees, never beside them: a page drawing a few frames a
+# second misses its own expectations.
 web_plays() {
-    # A real browser plays from a canvas (D250), where Puppeteer and its
-    # browser are installed: RAWFRAME_NODE_MODULES and
-    # PUPPETEER_CACHE_DIR, or under /opt/webtest, which any user
-    # (the CI runner's too) can read.
-    # Runners, then the plaza, the sample 3D game (D287), then Stalls,
-    # typed into by a screen reader (D613), then Gale, its sea a program
-    # material (D703), then Quarry, seven thousand blocks (D742), then the
-    # Lighting Test, its lamps' light read from the canvas (D750), each
-    # exported for the web and played from its site (D397).
-    # A game whose play fails is played once more, as the page is above.
+    local game status
     for game in runners plaza tycoon gale quarry lighting; do
         step "web play $game"
-        for attempt in 1 2; do
-            play_status=0
-            RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
-                PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
-                tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
-                out/clang-development/hosts/export/rawframe-export \
-                out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
-                out/clang-development/hosts/dedicated_server/rawframe-server \
-                out/clang-development/hosts/bots/rawframe-bots \
-                out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
-                out/wasm-development/third_party/maul-window/maul-window.mjs \
-                out/wasm-development/third_party/maul-rhi/maul-rhi.mjs \
-                out/wasm-development/third_party/maul-ui/maul-ui.mjs "$PWD" \
-                "$game" >"out/web-play-$game.log" 2>&1 ||
-                play_status=$?
-            if [ "$play_status" -eq 0 ] || [ "$play_status" -eq 77 ] || [ "$attempt" = 2 ]; then
-                break
-            fi
-            echo "   web play $game: played again: $(grep '^page: unmet' "out/web-play-$game.log" | tail -1)"
-        done
-        if [ "$play_status" -eq 77 ]; then
+        status=0
+        RAWFRAME_NODE_MODULES="${RAWFRAME_NODE_MODULES:-/opt/webtest/node_modules}" \
+            PUPPETEER_CACHE_DIR="${PUPPETEER_CACHE_DIR:-/opt/webtest/cache}" \
+            tools/node_page.sh hosts/web_client/tests/browser_play.mjs \
+            out/clang-development/hosts/export/rawframe-export \
+            out/clang-development/hosts/cook/rawframe-cook out/clang-development/hosts/build/rawframe-build \
+            out/clang-development/hosts/dedicated_server/rawframe-server \
+            out/clang-development/hosts/bots/rawframe-bots \
+            out/wasm-development/hosts/web_client/rawframe-web-client.wasm \
+            out/wasm-development/third_party/maul-window/maul-window.mjs \
+            out/wasm-development/third_party/maul-rhi/maul-rhi.mjs \
+            out/wasm-development/third_party/maul-ui/maul-ui.mjs "$root" \
+            "$game" >"out/web-play-$game.log" 2>&1 || status=$?
+        if [ "$status" -eq 77 ]; then
             echo "web play skipped: no Puppeteer or no browser for it"
-        elif [ "$play_status" -ne 0 ]; then
-            # The page's own lines say which part failed; the tail is
-            # the client's summaries after them.
-            grep '^page:' "out/web-play-$game.log"
-            tail -30 "out/web-play-$game.log"; fail "web play $game"
+        elif [ "$status" -ne 0 ]; then
+            grep '^page:' "out/web-play-$game.log" || true
+            tail -30 "out/web-play-$game.log"
+            fail "web play $game"
         else
             grep '^page:' "out/web-play-$game.log"
         fi
     done
 }
 
-if [ "$tier" = "fast" ]; then
-    build_and_test clang-development
-elif [ "$tier" = "push" ]; then
-    # The two trees that find the most: gcc's warnings and debug checks, and
-    # the address and undefined-behavior sanitizers. The optimized trees,
-    # the thread sanitizer's, the web's, and the budgets are the runner's
-    # full check after the push, whose failure is fixed before other work
-    # (D224): run here too they doubled every push's hour (D898).
-    jobs=$(( ($(nproc) + 3) / 4 ))
-    presets=(gcc-debug clang-sanitize)
-    pids=()
-    for preset in "${presets[@]}"; do
-        ( build_and_test "$preset" ) >"out/$preset.check.log" 2>&1 &
-        pids+=($!)
-    done
-    for i in "${!presets[@]}"; do
-        wait "${pids[$i]}" 2>/dev/null || true
-        cat "out/${presets[$i]}.check.log"
-        grep -q '^FAILED' "out/${presets[$i]}.check.log" && failures=$((failures + 1))
-    done
-    # Then clang's development tree alone, as the fast check plays it: the
-    # tests labeled `alone` need a quiet machine, and no other tier plays
-    # them (D521, D898).
-    jobs=$(nproc)
-    build_and_test clang-development
-else
-    # Independent build trees, so they build in parallel.
-    jobs=$(( ($(nproc) + 3) / 4 ))
-    presets=(gcc-debug gcc-shipping clang-development clang-shipping clang-sanitize clang-thread wasm-development wasm-shipping)
-    pids=()
-    for preset in "${presets[@]}"; do
-        ( build_and_test "$preset" ) >"out/$preset.check.log" 2>&1 &
-        pids+=($!)
-    done
-    # The browser's steps need only clang-development's and the web's
-    # development trees: they play once those two are done, beside the
-    # other trees' tests, not after them (D526).
-    web=""
-    wait "${pids[2]}" || true
-    wait "${pids[6]}" || true
-    # The web budget's slowest part, brotli's size of the shipping module,
-    # is not a time: it is made beside the trees, and the budget measured
-    # after them reads it (D618).
-    wait "${pids[7]}" || true
-    squeeze=""
-    if ! grep -q '^FAILED' out/wasm-shipping.check.log; then
-        tools/web_budget.sh squeeze >out/web-squeeze.log 2>&1 &
-        squeeze=$!
-    fi
-    if ! grep -q '^FAILED' out/clang-development.check.log out/wasm-development.check.log; then
-        ( web_steps ) >out/web.check.log 2>&1 &
-        web=$!
-    fi
-    for i in "${!presets[@]}"; do
-        # Those two were waited for already.
-        wait "${pids[$i]}" 2>/dev/null || true
-        cat "out/${presets[$i]}.check.log"
-        grep -q '^FAILED' "out/${presets[$i]}.check.log" && failures=$((failures + 1))
-    done
-    if [ -n "$web" ]; then
-        wait "$web" || true
-        cat out/web.check.log
-        grep -q '^FAILED' out/web.check.log && failures=$((failures + 1))
-    fi
-    if [ "$failures" -eq 0 ]; then
-        web_plays
-    fi
-    # Then clang's development tree's tests a push no longer plays (D986):
-    # those labeled `alone`, `headset`, and Studio's gestures, alone.
-    step "played alone"
-    ( tier=played; jobs=$(nproc); build_and_test clang-development ) >out/clang-development.played.log 2>&1
-    cat out/clang-development.played.log
-    grep -q '^FAILED' out/clang-development.played.log && failures=$((failures + 1))
-    # Measured last, alone, so the builds do not share the machine with it.
-    if [ "$failures" -eq 0 ]; then
-        step "tick budget"
-        tools/bench.sh check || fail "tick budget"
-        step "web budget"
-        [ -n "$squeeze" ] && { wait "$squeeze" || true; }
-        tools/web_budget.sh check || fail "web budget"
-    fi
-fi
+rules
+format
 
-printf '   (last step %ss)\n' "$(($(date +%s) - last))"
-elapsed=$(( $(date +%s) - start ))
+case "$tier" in
+changed)
+    build_and_test clang-development reached unit "$jobs"
+    ;;
+pr)
+    in_parallel "clang-development reached unit" "clang-sanitize reached unit"
+    [ "$failures" -eq 0 ] && build_and_test clang-development reached integration "$jobs"
+    ;;
+full | nightly)
+    in_parallel "clang-development all unit" "clang-sanitize all unit" "gcc-debug all unit" \
+        "clang-thread all unit" "wasm-development all every"
+    if [ "$failures" -eq 0 ]; then
+        web_steps
+        web_plays
+        build_and_test clang-development all integration "$jobs"
+    fi
+    if [ "$tier" = nightly ] && [ "$failures" -eq 0 ]; then
+        in_parallel "clang-shipping none every" "wasm-shipping none every"
+        if [ "$failures" -eq 0 ]; then
+            step "tick budget"
+            tools/bench.sh check || fail "tick budget"
+            step "web budget"
+            tools/web_budget.sh check || fail "web budget"
+        fi
+    fi
+    ;;
+esac
+
+elapsed=$(($(date +%s) - start))
 if [ "$failures" -eq 0 ]; then
-    printf 'check %s passed in %ss\n' "$tier" "$elapsed"
+    printf '\ncheck %s passed in %ss\n' "$tier" "$elapsed"
 else
-    printf 'check %s FAILED (%s) in %ss\n' "$tier" "$failures" "$elapsed"
+    printf '\ncheck %s FAILED (%s) in %ss\n' "$tier" "$failures" "$elapsed"
     exit 1
 fi

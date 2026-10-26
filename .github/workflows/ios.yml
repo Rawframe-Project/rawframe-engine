@@ -1,8 +1,7 @@
-# iOS, the second mobile target after Android (ADR-0084): on request only,
-# while its build is begun. The engine is compiled for the iOS simulator
-# (D584) against LLVM 20's libc++ built for it, as Xcode's libc++ lacks what
-# the engine asks of C++23's library before iOS 26 (D583, whose probe job
-# this replaced), and its test programs run in a booted simulator.
+# iOS, on request only while its build is begun. The engine is compiled for
+# the iOS simulator against LLVM 20's libc++ built for it, as Xcode's libc++
+# lacks what the engine asks of C++23's library before iOS 26, and its test
+# programs run in a booted simulator.
 name: ios
 
 on:
@@ -13,25 +12,32 @@ on:
         type: boolean
         default: true
 
-permissions:
-  contents: read
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build:
     if: github.repository == 'Rawframe-Project/rawframe-engine'
     runs-on: macos-15
     timeout-minutes: 90
+    permissions:
+      contents: read
     env:
       RAWFRAME_IOS_LIBCXX: ${{ github.workspace }}/../ios/libcxx
       RAWFRAME_DEPENDENCY_CACHE: ${{ github.workspace }}/../ios/dependencies
       CCACHE_DIR: ${{ github.workspace }}/../ccache
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Tools
         run: |
           brew install llvm@20 ninja ccache >/dev/null
           python3 -m pip install --break-system-packages aioquic fb-idb
-          # idb's companion, which reads a simulator's accessibility (D588):
+          # idb's companion, which reads a simulator's accessibility:
           # its release, checked by its SHA-256, as Homebrew's formula
           # compiles it with an Xcode the runner does not select.
           curl -sSfL -o "$RUNNER_TEMP/idb.tar.gz" \
@@ -43,12 +49,12 @@ jobs:
       # libc++, MsQuic, and OpenSSL are kept once configure has built them,
       # and the compilations once the build has run, whatever its outcome.
       - name: Restore libc++ and dependencies
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/../ios
           key: ios-${{ hashFiles('tools/build_libcxx_ios.sh', 'tools/build_quic.sh', 'third_party/quic.cmake') }}
       - name: Restore compilations
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/../ccache
           key: ios-ccache-${{ github.sha }}
@@ -59,7 +65,7 @@ jobs:
       - name: Configure
         run: cmake --preset ios-simulator
       - name: Keep libc++ and dependencies
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/../ios
           key: ios-${{ hashFiles('tools/build_libcxx_ios.sh', 'tools/build_quic.sh', 'third_party/quic.cmake') }}
@@ -76,7 +82,7 @@ jobs:
           exit $status
       - name: Keep compilations
         if: always()
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/../ccache
           key: ios-ccache-${{ github.sha }}
@@ -92,26 +98,26 @@ jobs:
         if: inputs.tests
         run: tools/ios_tests.sh out/ios-simulator
       # Runners played by the iOS client against a dedicated server, both
-      # in the simulator (D586): its surface made, admitted, and playing,
+      # in the simulator: its surface made, admitted, and playing,
       # with no device there, as Maul RHI's Metal floor is past the
       # simulator's.
       - name: Play Runners in the simulator
         if: always() && env.RAWFRAME_IOS_DEVICE != ''
         run: tools/ios_play.sh out/ios-simulator
-      # Runners exported for iOS and its application played (D587): the
+      # Runners exported for iOS and its application played: the
       # export run in the simulator, the application reading the game and
       # its configuration from its own bundle.
       - name: Play exported Runners in the simulator
         if: always() && env.RAWFRAME_IOS_DEVICE != ''
         # Touched in the screen's right half, Runners' button there, for
-        # whether a touch reaches a client that no reader reads (D588).
+        # whether a touch reaches a client that no reader reads.
         run: RAWFRAME_IOS_TOUCH="300 500" tools/ios_play_exported.sh out/ios-simulator
       # Stalls exported and played, its UI read through UIAccessibility as
-      # a screen reader reads it (D588): the purse a button named by its
+      # a screen reader reads it: the purse a button named by its
       # coins, and the client saying assistive technology reads it. The
       # button is then touched where its element says it is, and what the
       # touch did is shown: a simulator's touches from idb do not reach
-      # the client yet (D588).
+      # the client yet.
       - name: Read Stalls through UIAccessibility
         if: always() && env.RAWFRAME_IOS_DEVICE != ''
         run: |

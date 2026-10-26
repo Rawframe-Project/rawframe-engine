@@ -9,7 +9,7 @@
 #
 # Moving the pin: change the version and hash below, run this again, read the
 # release's notes for new tables or dependencies, and update
-# third_party/ots.cmake's sources and third_party/README.md.
+# third_party/ots.cmake's sources and docs/operations/dependencies.md.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

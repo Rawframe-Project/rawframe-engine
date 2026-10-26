@@ -1,11 +1,25 @@
-// SPEC-0021's golden vectors for this container generation and packer
-// generation 2: the gear table, where chunks end for specified inputs, the
-// exact canonical BuildManifest of a specified Build with its root hash, and
-// the exact signature envelope of it under a specified key. A change to any
-// of them is a new generation, never a silent one.
+// The golden vectors of container generation 1 and packer generation 2
+// (rawframe.build.2: Zstandard 1.5.7 at level 12, window log 22), in
+// tests/golden/. A change to any of them is a new generation, never a silent
+// one:
+//
+//   gear.txt            the FastCDC gear table: entry i is the first eight
+//                       bytes of SHA-256 of the one byte i, big-endian
+//   chunks.txt          where chunks end for `noise` inputs of the listed
+//                       sizes; noise is SHA-256 of the decimal text of 0, 1,
+//                       2 and so on, concatenated and cut to size
+//   build.manifest      the canonical BuildManifest of the Build packed from
+//                       cooked.h's output plus resource 4 (the decimal
+//                       numbers from 0 up, each followed by a space, cut to
+//                       1 MiB)
+//   root.txt            that Build's root hash
+//   build.manifest.sig  its signature envelope under the key whose seed is
+//                       32 bytes of 0x2a, kid 2a2a2a2a2a2a2a2a
+//   rawframe.keys       that key's publisher key set, updated_at 1790000000
 //
 // To regenerate them on purpose, run the test with RAWFRAME_WRITE_GOLDEN=1
-// set, and commit the files with the new generation recorded.
+// set, and commit the files with the new generation recorded beside the
+// packer's parameters.
 
 #include "cooked.h"
 #include "rawframe/build/chunking.h"

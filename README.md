@@ -1,52 +1,65 @@
 # Rawframe Engine
 
-A performance-oriented, network-first engine for 2D and 3D games and real-time simulations. The core is C++23. Gameplay and tooling are written in [Kest](https://github.com/Rawframe-Project/kest), a deterministic, statically typed game language. Physics comes from [Maul2D](https://github.com/Rawframe-Project/maul2d) and [Maul3D](https://github.com/Rawframe-Project/maul3d), and navigation from [Maul Nav](https://github.com/Rawframe-Project/maul-nav).
+A network-first engine for 2D and 3D games, made with Kest and text documents, from a terminal or an editor.
 
-Its first milestone, a headless, networked, Kest-scripted World with a dedicated server, is done. Clients play from a window on the desktop and from a canvas in a browser, drawn through [Maul RHI](https://github.com/Rawframe-Project/maul-rhi) (Vulkan, and WebGPU in the browser) in 2D and 3D, heard, and felt through a gamepad. The reference games are under `games/`: Runners (2D) and Stalls (a small 3D tycoon), with the plaza as the 3D sample. A game can be exported into a folder that plays on its own, or into a site that plays in a browser. There are no releases yet, and every surface is unstable.
+[![CI](https://github.com/Rawframe-Project/rawframe-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Rawframe-Project/rawframe-engine/actions/workflows/ci.yml)
+[![License: source-available](https://img.shields.io/badge/license-source--available-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Rawframe-Project/rawframe-engine)](https://github.com/Rawframe-Project/rawframe-engine/releases)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Rawframe-Project/rawframe-engine/badge)](https://scorecard.dev/viewer/?uri=github.com/Rawframe-Project/rawframe-engine)
 
-## Building
+Most engines treat multiplayer as something added later, and their editors as the only place a game can really be made. Rawframe starts from the other end:
 
-Requirements: CMake 3.28, Ninja, and GCC 14 or Clang 19 or newer (MSVC 17.10 on Windows). On Linux, the window module's backends need the development files of Wayland and X11: `libwayland-dev`, `wayland-protocols`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`, `libxcb1-dev`, `libxcb-randr0-dev`, `libxcb-xkb-dev`, `libxcb-cursor-dev`, and `libxcb-xinput-dev`; and Maul Audio's devices, the headers of PipeWire, PulseAudio, and ALSA: `libpipewire-0.3-dev`, `libpulse-dev`, and `libasound2-dev` (the libraries themselves are opened at run time).
+- **Every game is networked.** An authoritative server runs the game even when one person plays alone, so a game made for one player already plays online. Clients predict their own player and are corrected by ordinary state, and shots hit what the shooter saw.
+- **Deterministic simulation.** Worlds tick at a fixed rate and give the same bits on every platform and compiler, which prediction, checkpoints and bots rely on.
+- **Made without an editor.** A game is a Kest program and text documents: scenes, materials, UI, sounds, actions and strings, each in one canonical form that diffs and merges. Every change is a typed operation that `rawframe-author`, a script or an AI agent over MCP can run. Studio, the editor, calls the same operations.
+- **2D and 3D as equals.** A 2D canvas with sprites and tilemaps, and a 3D renderer with physically based lighting, shadows, probes and post-processing; physics through Maul2D and Maul3D; navigation, animation, UI with accessibility, spatial sound and localization.
+- **Safe with downloaded content.** Scripts and mods run on fuel in a sandbox, every parser is bounded and fuzzed, and installed games are verified by signature and digest, never by where they came from.
+
+## Quick start
+
+On Linux with CMake 3.28, Ninja, ccache, GCC 14 and Clang 20, and the development packages listed in [development setup](docs/operations/development.md#toolchain):
 
 ```sh
+git clone https://github.com/Rawframe-Project/rawframe-engine.git
+cd rawframe-engine
 cmake --preset clang-development
 cmake --build out/clang-development
-ctest --test-dir out/clang-development
+tree=out/clang-development
+"$tree/hosts/export/rawframe-export" games/runners /tmp/runners \
+  --cook "$tree/hosts/cook/rawframe-cook" --build "$tree/hosts/build/rawframe-build" \
+  --server "$tree/hosts/dedicated_server/rawframe-server" \
+  --client "$tree/hosts/client/rawframe-client" --play "$tree/launcher/play/rawframe-play"
+/tmp/runners/runners
 ```
 
-Presets exist for `gcc` and `clang` in each of the three configurations (`debug`, `development`, `shipping`), plus `clang-sanitize` (AddressSanitizer and UndefinedBehaviorSanitizer).
+That exports Runners, the 2D sample, into a folder with its own server and client, and plays it. [Getting started](docs/user/getting-started.md) goes on to make a game of your own.
 
-## Checking
+## Platforms
 
-`tools/check.sh fast` runs the repository rules, the formatter, one build, and the tests. `tools/check.sh` runs everything: both compilers, every configuration, and the sanitizers. Install the pre-push hook with `git config core.hooksPath tools/hooks`.
+| Platform | Clients | Drawing |
+|---|---|---|
+| Linux (x86-64, arm64) | desktop, headsets | Vulkan |
+| Windows | desktop | Direct3D 12 |
+| macOS | desktop | Metal |
+| Web | any browser with WebGPU and WebTransport | WebGPU |
+| Android, iOS | phones | Vulkan, Metal |
 
-The full check needs, beyond GCC and Clang 20 with `clang-format-20`:
+The dedicated server runs on Linux, Windows and macOS without a GPU or a display. Linux is checked on every change, the others every night, and iOS on request.
 
-- the web build's toolchain: `libc++-20-dev-wasm32`, `libclang-rt-20-dev-wasm32`, `wasi-libc`, `lld-20`, and Node.js 18 or later;
-- Python 3 with `python3-aioquic`, an independent HTTP/3 and WebTransport implementation that plays the browser in `network_quic`'s tests;
-- `brotli`, which compresses the web client as a server would send it for its download budget (`tools/web_budget.sh`);
-- optionally `xvfb`, in whose display the desktop client plays a dedicated server (`client_plays_runners`), and Puppeteer with its browser under `/opt/webtest` (or `RAWFRAME_NODE_MODULES` and `PUPPETEER_CACHE_DIR`), with which a real browser plays from a canvas. Without them those tests are skipped.
+## Status
 
-On Debian or Ubuntu, `apt-get install` installs each of them under the name given.
+The engine is at 0.x. Every release may change the API, the file formats and the wire protocol; there is no stability promise before 1.0.
 
-## Exporting a game
+## Documentation
 
-`rawframe-export <game directory> <output directory>` cooks the game, packs and signs it, installs it into the folder's own library, and copies the dedicated server, the client, and the launcher beside it. Running the folder's `rawframe-play` starts the game's server on this machine and then its client. Pass `--key <secret key> --publisher <name>` to sign with a publisher key made by `rawframe-build key`; `export.receipt` lists what was written.
+- [Making games](docs/README.md#making-games): getting started, the game description, Kest, multiplayer, exporting.
+- [How it works](docs/internals/overview.md) and [how to develop it](docs/operations/development.md).
+- [Changelog](CHANGELOG.md).
 
-With `--target web`, the folder holds a site and its server instead. Serve `web/` as it is from any static file server, and run `server/rawframe-server --config server/server.conf` on the same host: it listens for browsers over WebTransport on every address at the port given, and writes the fingerprint of the certificate it makes as it starts into `web/`, where the page reads it. A browser trusts such a certificate for at most fourteen days: the server makes a new one a day before its own ends and writes its fingerprint over the old, so a page loaded after that pins the new one while players already in keep playing (`network.quic.renew_ms` renews sooner). Or give it a certificate for the host's name (`network.quic.certificate_file` and `network.quic.private_key_file` in place of `network.quic.self_signed`, and no `network.quic.fingerprint_file`).
+## Contributing
 
-## Layout
-
-| Path | Holds |
-|---|---|
-| `modules/<name>/` | One engine module: `include/rawframe/<name>/`, `src/`, `tests/`. |
-| `hosts/<name>/` | One program over the modules: the server, the client, and their tools. |
-| `launcher/<name>/` | The launcher's own, outside every engine closure: its HTTPS client, and `rawframe-install`, which updates a library from a mirror on disk or at an `http` or `https` URL (`--authorities <PEM file>` to trust other than the system's). |
-| `templates/<name>/` | A game a new game is made from, by `rawframe-author new` or Studio's start screen. |
-| `tools/modules.txt` | The module graph: which module may depend on which. The build and the check enforce it. |
-| `tests/harness/` | The test harness. |
-| `cmake/` | Build policy: language, warnings, determinism, configurations. |
+Issues are welcome; pull requests are not accepted. See [CONTRIBUTING.md](CONTRIBUTING.md). The engine is developed by its maintainers with AI coding agents, directed and reviewed by them; see the [AI policy](https://github.com/Rawframe-Project/.github/blob/main/AI_POLICY.md).
 
 ## License
 
-Rawframe is source-available under the Rawframe Source-Available License; see [LICENSE.md](LICENSE.md). External code contributions are not open yet. Report security issues through GitHub's private vulnerability reporting.
+Source-available under the Rawframe Source-Available License; see [LICENSE](LICENSE). It is not an open source license. Vendored libraries under `third_party/` keep their own licenses. "Rawframe", "Kest" and "Maul" are trademarks; see the [trademark policy](https://github.com/Rawframe-Project/.github/blob/main/TRADEMARK.md).

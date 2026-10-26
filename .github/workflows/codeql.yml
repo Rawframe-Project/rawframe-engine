@@ -1,0 +1,41 @@
+# CodeQL on every pull request and on main. An advanced setup without a
+# build (build-mode none): the engine's build needs toolchains only the
+# self-hosted runner has, and that runner never runs a fork's code, so the
+# analysis reads the sources on a hosted runner instead.
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 8 * * 0"
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: c-cpp
+          build-mode: none
+          # Vendored code is upstream's.
+          config: |
+            paths-ignore:
+              - third_party
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:c-cpp

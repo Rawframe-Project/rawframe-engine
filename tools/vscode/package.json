@@ -4,7 +4,7 @@
   "description": "Debug a running Rawframe game's Kest scripts.",
   "version": "0.0.1",
   "publisher": "rawframe",
-  "license": "SEE LICENSE IN ../../LICENSE.md",
+  "license": "SEE LICENSE IN ../../LICENSE",
   "engines": {
     "vscode": "^1.80.0"
   },

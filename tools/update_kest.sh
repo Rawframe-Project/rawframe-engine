@@ -21,4 +21,4 @@ git -C "$checkout" archive "$revision" include src lib LICENSE | tar -x -m -C "$
 rm "$target/src/main.c"
 cp "$keep" "$target/CMakeLists.txt"
 rm "$keep"
-echo "third_party/kest is now $revision; update the table in third_party/README.md"
+echo "third_party/kest is now $revision; update the table in docs/operations/dependencies.md"
