@@ -1,10 +1,10 @@
 #pragma once
 
-// A game description cooked (D88, D95): its text, the documents it names
+// A game description cooked: its text, the documents it names
 // beside it (actions, mixer, sounds), each Kest program it names as a file
-// of the game's Kest sources resource (D87), and each scene, mesh,
-// animator's graph, text document (D147), texture (D254), material (D303),
-// and font (D386) it names as a resource, all in one record. A process
+// of the game's Kest sources resource, and each scene, mesh,
+// animator's graph, text document, texture, material,
+// and font it names as a resource, all in one record. A process
 // reads the game from it and opens no path: every name the text uses is
 // answered from the record.
 //
@@ -63,13 +63,13 @@ struct CookedGameScene {
     base::Bits128 scene{};
 };
 
-/// A mesh the description names, by the resource it is (D112).
+/// A mesh the description names, by the resource it is.
 struct CookedGameMesh {
     std::string path;
     base::Bits128 mesh{};
 };
 
-/// A material the description names (D303), by the resource it is.
+/// A material the description names, by the resource it is.
 struct CookedGameMaterial {
     std::string path;
     base::Bits128 material{};
@@ -81,38 +81,38 @@ struct CookedGameAnimator {
     base::Bits128 graph{};
 };
 
-/// A string table or translation (SPEC-0033), by the resource it is.
+/// A string table or translation, by the resource it is.
 struct CookedGameText {
     std::string path;
     base::Bits128 document{};
 };
 
-/// A texture the description names (D254), by the resource it is.
+/// A texture the description names, by the resource it is.
 struct CookedGameTexture {
     std::string path;
     base::Bits128 texture{};
 };
 
-/// A tilemap the description names (D858), by the resource it is.
+/// A tilemap the description names, by the resource it is.
 struct CookedGameTilemap {
     std::string path;
     base::Bits128 tilemap{};
 };
 
-/// A scatter the description names (D864), by the resource its placements
+/// A scatter the description names, by the resource its placements
 /// are.
 struct CookedGameScatter {
     std::string path;
     base::Bits128 placed{};
 };
 
-/// A sequence the description names (D869), by the resource it is.
+/// A sequence the description names, by the resource it is.
 struct CookedGameSequence {
     std::string path;
     base::Bits128 sequence{};
 };
 
-/// A font the description names (D386), by the resource it is.
+/// A font the description names, by the resource it is.
 struct CookedGameFont {
     std::string path;
     base::Bits128 font{};
@@ -132,9 +132,9 @@ struct CookedGame {
     /// Written only where there are any, so a game without one keeps the
     /// bytes it had.
     std::vector<CookedGameTilemap> tilemaps;
-    /// The same of scatters (D864).
+    /// The same of scatters.
     std::vector<CookedGameScatter> scatters;
-    /// The same of sequences (D869).
+    /// The same of sequences.
     std::vector<CookedGameSequence> sequences;
 
     /// The document the description names `path`, or none.

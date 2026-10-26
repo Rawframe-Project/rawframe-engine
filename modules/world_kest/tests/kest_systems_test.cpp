@@ -191,7 +191,7 @@ RAWFRAME_TEST(AKestSystemMovesEveryMatchingArchetype) {
 }
 
 RAWFRAME_TEST(ASystemReadsTheTickItSimulates) {
-    // World.tick (D684): the tick each run simulates, as the schedule
+    // World.tick: the tick each run simulates, as the schedule
     // numbers them.
     const auto kRegistry = registry();
     world::World world{kRegistry};
@@ -235,7 +235,7 @@ RAWFRAME_TEST(ARefusedSystemChangesNothing) {
 }
 
 RAWFRAME_TEST(ATicksJournalIsBoundedAcrossItsSystems) {
-    // SPEC-0013's mutation journal per tick (D229): two systems each
+    // The mutation journal per tick: two systems each
     // journal five positions, 40 bytes; with 64 a tick, the second is
     // refused and changes nothing, and the next tick starts afresh.
     const auto kRegistry = registry();
@@ -403,7 +403,7 @@ RAWFRAME_TEST(AnEntityMadeInOneRunIsNotTakenInAnother) {
 }
 
 RAWFRAME_TEST(ATicksOperationsAreBoundedAcrossItsSystems) {
-    // SPEC-0013's journal operations per tick (D240): two systems each
+    // The journal operations per tick: two systems each
     // create three entities, three commands; with four a tick, the second
     // is refused and records nothing, and the next tick starts afresh.
     const std::array<kest::SourceFile, 2> kFiles = {
@@ -606,7 +606,7 @@ RAWFRAME_TEST(AProgramReloadsAtomicallyKeepingTheWorld) {
 }
 
 RAWFRAME_TEST(AnUntrustedProgramWritesItsColumnsAndOpensNoWorldDoor) {
-    // A mod's handlers (D181): its columns lent and written as a game's are.
+    // A mod's handlers: its columns lent and written as a game's are.
     const auto kRegistry = registry();
     world::World world{kRegistry};
     const Movers kMovers = spawn(world);
@@ -649,7 +649,7 @@ RAWFRAME_TEST(AnUntrustedProgramWritesItsColumnsAndOpensNoWorldDoor) {
 
 namespace {
 
-/// A mod's handlers as a hostile author writes them (D183): each writes
+/// A mod's handlers as a hostile author writes them: each writes
 /// first, then never ends, reads past its array, or grows without bound.
 constexpr std::string_view kHostileHandlers = "module mod\n"
                                               "\n"

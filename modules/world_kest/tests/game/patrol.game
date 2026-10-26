@@ -1,5 +1,5 @@
 # Guards that walk their posts and look about at each, as a body that waits
-# (Kest's `resumes`) kept in a replicated component (D268).
+# (Kest's `resumes`) kept in a replicated component.
 program patrol.kest
 
 component 7c2e9a14-3b58-4d61-9f0a-2e8d5b1c6a73 patrol.guard Guard
@@ -9,5 +9,5 @@ system patrol.watch simulation watch write patrol.guard
 replicate patrol.guard
 
 spawn 2 patrol.guard posts=3
-# One that spawns at the end of its round, its case named (D269).
+# One that spawns at the end of its round, its case named.
 spawn 1 patrol.guard posts=3 post=3 at=Done

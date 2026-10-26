@@ -1,6 +1,6 @@
 #pragma once
 
-// The Mod API lines of a game description (SPEC-0042, D177), read by
+// The Mod API lines of a game description, read by
 // parseGame.
 
 #include "rawframe/result/result.h"

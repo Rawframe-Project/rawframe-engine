@@ -1,4 +1,4 @@
-// Effects in a game (D219): `effect` lines and the `emits` pairs of
+// Effects in a game: `effect` lines and the `emits` pairs of
 // predicted systems, and the `Effects.<name>` doors a predictor keeps what
 // a step emitted through, each with its kind, emitter, and ordinal; an
 // effect's sound, and what the player feels of it.
@@ -79,7 +79,7 @@ RAWFRAME_TEST(EffectLinesAndEmittersAreChecked) {
                     kGame->effects[1].effectClass == world_replication::EffectClass::ConfirmedOnly);
 }
 
-// An effect may name a declared sound a client plays for it (D220).
+// An effect may name a declared sound a client plays for it.
 RAWFRAME_TEST(AnEffectsSoundIsOneTheGameDeclares) {
     constexpr std::string_view kAudio = "mixer game.mixer\nsound 57164ad59d5b6a23 jump.sound\n";
     const auto kGame =
@@ -93,7 +93,7 @@ RAWFRAME_TEST(AnEffectsSoundIsOneTheGameDeclares) {
     RAWFRAME_EXPECT(!parses(std::string{kAudio} + "effect jump predicted sound\n"));
 }
 
-// An effect may say what the player feels of it (D251).
+// An effect may say what the player feels of it.
 RAWFRAME_TEST(AnEffectIsFeltByAHapticWithinItsRanges) {
     constexpr std::string_view kAudio = "mixer game.mixer\nsound 57164ad59d5b6a23 jump.sound\n";
     const auto kGame = parseGame(std::string{kHead} + std::string{kAudio} +

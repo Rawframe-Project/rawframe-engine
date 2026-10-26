@@ -1,7 +1,7 @@
-// A game's guaranteed messages at its doors (D266): a server's systems send
+// A game's guaranteed messages at its doors: a server's systems send
 // them, kept only when the run that sent them succeeds, in order; a client's
 // present systems read what arrived; a message holding an entity is refused.
-// Sessions the game ends (D267) are kept the same way.
+// Sessions the game ends are kept the same way.
 
 #include "../src/message_doors.h"
 #include "rawframe/kest_library/library.h"

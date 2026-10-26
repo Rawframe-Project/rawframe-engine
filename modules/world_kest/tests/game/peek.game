@@ -1,4 +1,4 @@
-# A program asking the lookup doors (D391, D393) and the player door (D390)
+# A program asking the lookup doors and the player door
 # for what is not there: places past either end and far past them, an
 # entity this run made, one without the component, and the null entity.
 program peek.kest

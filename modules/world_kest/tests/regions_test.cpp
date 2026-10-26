@@ -1,5 +1,5 @@
-// A split-screen layout's regions placed in a window's pixels (D362), and
-// a region constrained to an aspect, centered between its bars (D369).
+// A split-screen layout's regions placed in a window's pixels, and
+// a region constrained to an aspect, centered between its bars.
 
 #include "rawframe/test/test.h"
 #include "rawframe/world_kest/game.h"

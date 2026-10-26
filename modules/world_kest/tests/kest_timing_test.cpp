@@ -1,4 +1,4 @@
-// Kest time per World tick (D210): each tick's runs add up, a new tick
+// Kest time per World tick: each tick's runs add up, a new tick
 // closes the last, and the summary counts the one still open.
 
 #include "rawframe/test/test.h"

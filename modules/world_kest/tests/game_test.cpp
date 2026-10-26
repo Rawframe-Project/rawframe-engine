@@ -621,7 +621,7 @@ RAWFRAME_TEST(ARunnerHitIsToldSo) {
 }
 
 RAWFRAME_TEST(ARunnerShootsAtThePointItsPlayerPointsAt) {
-    // A pointed World point wins over the stick (D368): aimed left but
+    // A pointed World point wins over the stick: aimed left but
     // pointing at the mark, every shot after the first meets it; aimed
     // right but pointing high above it, none does.
     const auto kAtMark =
@@ -874,7 +874,7 @@ RAWFRAME_TEST(CheckpointsCarryEntityReferences) {
 }
 
 RAWFRAME_TEST(AWaitingBodyLivesInAComponent) {
-    // D268: a guard's round is a body that waits a tick at a time, where it
+    // A guard's round is a body that waits a tick at a time, where it
     // waits a tag among its fields; it replicates, and a checkpoint taken
     // mid-round restores it waiting where it was.
     struct Guard {

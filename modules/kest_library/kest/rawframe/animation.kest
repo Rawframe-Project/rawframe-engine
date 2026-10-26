@@ -1,6 +1,6 @@
 module rawframe.animation
 
-// Animation as World data (ADR-0039, SPEC-0035, D124): an entity with an
+// Animation as World data: an entity with an
 // Animator plays the graph of the game's `animator` line it names, its
 // parameters set every step from the fields of the component that line
 // names. The step, `rawframe.animation.step`, runs in the simulation phase:
@@ -30,7 +30,7 @@ struct Animator {
     request: u64
 }
 
-// Root motion (D134): beside an Animator, asks that the skeleton's root
+// Root motion: beside an Animator, asks that the skeleton's root
 // motion source move the character rather than its pose. Every step
 // writes this step's move and turn (a unit quaternion) in the character's
 // own frame as it was before, and the running whole since the component

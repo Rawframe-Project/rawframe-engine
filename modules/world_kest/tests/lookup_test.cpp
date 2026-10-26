@@ -1,10 +1,10 @@
-// A Kest system looking up components on entities it does not run over
-// (D391): a declared lookup reads another entity's value and is ordered as
+// A Kest system looking up components on entities it does not run over:
+// a declared lookup reads another entity's value and is ordered as
 // a read; an entity without the component is answered by `has`; a system
 // that never declared the lookup, a `get` of what an entity lacks, and a
 // lookup of a component the system writes are refused. A declared lookup
-// also counts and names the component's holders across archetypes (D393).
-// A scan lends every holder's value and entity at once (D747).
+// also counts and names the component's holders across archetypes.
+// A scan lends every holder's value and entity at once.
 
 #include "rawframe/kest_library/library.h"
 #include "rawframe/test/test.h"

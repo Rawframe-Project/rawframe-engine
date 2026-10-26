@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of a game's sources as a resource holds them
-// (D242), which a mod's Build can carry. The reader is exact: files it
+// Coverage-guided fuzzing of a game's sources as a resource holds them,
+// which a mod's Build can carry. The reader is exact: files it
 // accepts write back to the very same bytes.
 
 #include "rawframe/kest_library/library.h"

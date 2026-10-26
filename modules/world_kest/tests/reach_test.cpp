@@ -1,11 +1,11 @@
-// Reach's hands (D656): a player joined is seated round the table and given
+// Reach's hands: a player joined is seated round the table and given
 // two hands, kinematic balls that go where its input holds them; a hand
 // that grips above a block takes it on a joint, lifts it, and throws it
-// when it opens moving, knocking as it lands (D660); a second player sits
+// when it opens moving, knocking as it lands; a second player sits
 // a quarter turn round; and a player gone takes its hands with it. The test
 // makes the players as admission would and sets their hands between ticks,
 // as their clients' input would. A client draws its own hands where its
-// input holds them, and a block one holds with it (D665).
+// input holds them, and a block one holds with it.
 
 #include "game_harness.h"
 #include "rawframe/physics3d/components.h"
@@ -155,7 +155,7 @@ RAWFRAME_TEST(AHandTakesABlockLiftsItAndThrowsIt) {
         return;
     }
     RAWFRAME_EXPECT(near(poseOf(world, kRight), 0.2, 0.95, 0.55, 0.01));
-    // It hears from a seated eye above its seat (D660).
+    // It hears from a seated eye above its seat.
     RAWFRAME_EXPECT(near(poseOf(world, kPlayer), 0, 1.2, 0.9, 1e-6));
     // The right hand just above the middle block of the near row: 0.15
     // from the table's middle, 0.75 ahead of the seat.
@@ -195,7 +195,7 @@ RAWFRAME_TEST(AHandTakesABlockLiftsItAndThrowsIt) {
     const std::uint32_t kKnocked = valueOf<Emitter>(world, kBlock, kKnockId)->cue;
     played.run(90);
     RAWFRAME_EXPECT(poseOf(world, kBlock).z < -0.6);
-    // It knocked as it landed (D660).
+    // It knocked as it landed.
     const Emitter* const kKnock = valueOf<Emitter>(world, kBlock, kKnockId);
     RAWFRAME_EXPECT(kKnock->sound == 0x3494a617bc371640 && kKnock->cue > kKnocked);
     // A second player sits a quarter turn round, at the table's +X side.
@@ -213,7 +213,7 @@ RAWFRAME_TEST(AHandTakesABlockLiftsItAndThrowsIt) {
 RAWFRAME_TEST(AClientDrawsItsOwnHandsWhereItsInputHoldsThem) {
     // A client presents the World it mirrors; here the server's own, so the
     // hands' poses are where the server last put them and the player's
-    // input is moved on since, as a client's predicted input is (D665).
+    // input is moved on since, as a client's predicted input is.
     PlayedReach played{kReachPresented};
     RAWFRAME_EXPECT(played.started() && presentationPlan != nullptr);
     if (!played.started() || presentationPlan == nullptr) {

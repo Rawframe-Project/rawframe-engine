@@ -1,6 +1,6 @@
 module rawframe.replication
 
-// What replication hands a Kest-scripted game (SPEC-0041).
+// What replication hands a Kest-scripted game.
 
 import rawframe.world
 

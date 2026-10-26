@@ -1,4 +1,4 @@
-# The Kest library every game compiles against (D86): Kest's `std` and the
+# The Kest library every game compiles against: Kest's `std` and the
 # engine's own Kest modules, embedded in the engine when it is built.
 set(embedded "${CMAKE_CURRENT_BINARY_DIR}/embedded.cpp")
 file(GLOB_RECURSE kest_library_sources CONFIGURE_DEPENDS

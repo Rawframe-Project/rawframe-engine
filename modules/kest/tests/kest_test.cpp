@@ -440,7 +440,7 @@ RAWFRAME_TEST(EngineMemoryIsLentWithoutCopying) {
 
 RAWFRAME_TEST(AnEntrysArgumentsAndAnswerAreItsOwn) {
     // What it takes and answers, not only how wide its frame is: two lent
-    // arrays are two words, as two numbers are two slots (D167).
+    // arrays are two words, as two numbers are two slots.
     auto machine = Machine::start(compile(kMovers), {}, Trust::Trusted, kLimits);
     RAWFRAME_EXPECT(machine.has_value());
     if (!machine.has_value()) {
@@ -716,7 +716,7 @@ RAWFRAME_TEST(ABreakpointStopsACallWhichCarriesOn) {
     // The answer is the program's: stopping changed nothing it did.
     RAWFRAME_EXPECT(frame[0].integer == 30);
     // Stopped at count's start, called from outer, its argument read; and
-    // again as outer calls it again, the breakpoint stepped past (D630).
+    // again as outer calls it again, the breakpoint stepped past.
     RAWFRAME_EXPECT(machine->stops() == 2 && seen.size() == 2);
     RAWFRAME_EXPECT(seen[0].size() == 2 && seen[0][0].function == "t.count" && seen[0][1].function == "t.outer");
     // A function's start is its first statement's line.
@@ -803,7 +803,7 @@ RAWFRAME_TEST(AStoppedMachineStepsLineByLine) {
     const std::array<std::string, 1> kOuter = {"outer"};
     RAWFRAME_EXPECT(outer.has_value() && machine->breakAt(kOuter).functions == 1);
     // Each stop said by its function and line, then stepped as the next of
-    // `steps` asks, carrying on once they run out (D632).
+    // `steps` asks, carrying on once they run out.
     std::vector<kest::Step> steps;
     std::vector<std::string> seen;
     machine->whenStopped([&] {
@@ -838,8 +838,7 @@ RAWFRAME_TEST(AStoppedMachineStepsLineByLine) {
 RAWFRAME_TEST(AStoppedFrameSaysWhatItsBodyHasWritten) {
     // A local not yet written holds whatever the stack held: Kest's proof
     // says which are written where the frame stands, and which are one
-    // piece of text, so text is said by its bytes and the rest by value
-    // (D631).
+    // piece of text, so text is said by its bytes and the rest by value.
     auto machine = start("module t\n"
                          "\n"
                          "fn named(n: i32) -> i32 {\n"

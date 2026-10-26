@@ -1,6 +1,6 @@
 #pragma once
 
-// A Kest field's kind as the save (ADR-0057) and checkpoint (SPEC-0011)
+// A Kest field's kind as the save and checkpoint
 // formats name it: none for a kind neither can hold.
 
 #include "rawframe/kest/program.h"

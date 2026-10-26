@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's scenes read as spawns (ADR-0048): its own scenes, the scenes its
+// A game's scenes read as spawns: its own scenes, the scenes its
 // mods contribute, and its prefabs, each read against the game's components
 // and the layouts its program gives them.
 
@@ -36,7 +36,7 @@ struct SceneReference {
     std::size_t target = 0;
 };
 
-/// A district of the scene streamed as one (D870): whether it is
+/// A district of the scene streamed as one: whether it is
 /// persistent, and its entities by their places among the spawns.
 struct SceneUnit {
     bool persistent = false;
@@ -56,13 +56,13 @@ struct SceneSpawns {
 };
 
 /// Where one of the game's scenes lies among the spawns `addScenes`
-/// appends (D410): its path, its first spawn, and each spawn's entity id in
+/// appends: its path, its first spawn, and each spawn's entity id in
 /// the scene, in order.
 struct SceneRange {
     std::string path;
     std::size_t first = 0;
     std::vector<base::Bits128> ids;
-    /// Its districts, their spawns counted from `first` (D870).
+    /// Its districts, their spawns counted from `first`.
     std::vector<SceneUnit> units;
 };
 
@@ -94,11 +94,11 @@ public:
                                            std::vector<GameSpawn>& spawns,
                                            std::vector<SceneReference>& references,
                                            std::vector<SceneRange>* ranges = nullptr) const;
-    /// Appends each scene a mod contributes (D180): every entity one spawn
+    /// Appends each scene a mod contributes: every entity one spawn
     /// holding the point's component and nothing else, so a mod adds values
     /// and never a behavior, a reference, or a persistent name.
     [[nodiscard]] result::Status addModScenes(const GameFiles& files, std::vector<GameSpawn>& spawns) const;
-    /// Appends each scatter's copies of its prefab (D864): the prefab's
+    /// Appends each scatter's copies of its prefab: the prefab's
     /// entities once for each placement, each that has a pose placed there,
     /// its own offset and turn within the prefab kept, and each copy's
     /// references among its own entities. A copy is not persistent, as a

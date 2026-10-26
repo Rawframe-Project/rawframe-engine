@@ -1,4 +1,4 @@
-// Games that start from scenes (D92 to D94): a scene's entities spawned
+// Games that start from scenes: a scene's entities spawned
 // beside spawn lines, checked against the program's layouts; references
 // between them; and a game's spawn lines written as a scene.
 
@@ -240,7 +240,7 @@ RAWFRAME_TEST(SpawnLinesBecomeAScene) {
 RAWFRAME_TEST(AGameResolvesItsScenesInstances) {
     // Movers whose start scene instances a two-mover prefab twice, found by
     // its sidecar: one copy as authored, one moved and slowed and streamed
-    // as a district (D870).
+    // as a district.
     const std::filesystem::path kDirectory = test::scratchDirectory("instances");
     std::filesystem::create_directories(kDirectory / "prefabs");
     writeText(kDirectory / "movers.kest", readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest"));
@@ -521,7 +521,7 @@ RAWFRAME_TEST(AProgramSpawnsAPrefabWhole) {
 }
 
 RAWFRAME_TEST(AnEnumGoesIntoAndOutOfAScene) {
-    // D270: spawn lines naming a case become a scene naming it (none at an
+    // Spawn lines naming a case become a scene naming it (none at an
     // enum's first case), and a game spawned from that scene holds it.
     const std::filesystem::path kDirectory = test::scratchDirectory("guards");
     std::filesystem::create_directories(kDirectory);

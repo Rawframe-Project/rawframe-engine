@@ -23,7 +23,7 @@ struct Program::State {
     KestBuild* build = nullptr;
 
     /// A byte of the build written over with the breakpoint instruction,
-    /// and what was there (D460). The build's, so every machine of the
+    /// and what was there. The build's, so every machine of the
     /// program can take one out to carry on and put it back.
     struct Written {
         std::int32_t entry = -1;
@@ -35,7 +35,7 @@ struct Program::State {
     std::vector<Written> written;
     /// How many machines stand on the program: breakpoints are written only
     /// into one that a single machine does, so no other, on whatever thread,
-    /// runs into them (D460).
+    /// runs into them.
     std::atomic<std::uint32_t> machines{0};
 
     /// Puts a written byte back, or writes the breakpoint again, through any
@@ -46,7 +46,7 @@ struct Program::State {
     }
 
     /// The byte alone, whether it is out unchanged: a walk of a body reads it
-    /// as compiled, its breakpoints put back for the walk (D630).
+    /// as compiled, its breakpoints put back for the walk.
     void write(KestRuntime* runtime, const Written& one, bool breaking) const {
         std::uint32_t count = 0;
         std::uint8_t* const kCode = kest_code_of(runtime, one.entry, &count);

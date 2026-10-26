@@ -166,7 +166,7 @@ struct ClientPresentation::State {
     }
 
     /// What `component` starts as now, `size` bytes: as `starts` says, or
-    /// zeroed (D619).
+    /// zeroed.
     void startOf(schema::ComponentTypeId component, std::size_t size, std::vector<std::byte>& into) const {
         const std::span<const std::byte> kStart =
             starts != nullptr ? starts->startOf(component) : std::span<const std::byte>{};
@@ -253,7 +253,7 @@ struct ClientPresentation::State {
 
     /// Each presentation component onto every entity that has its `on`
     /// component (or is `player`) and lacks it: as `starts` says, or
-    /// zeroed (D619).
+    /// zeroed.
     result::Status attach(world::World& mirror, world::EntityHandle player) {
         for (Attached& each : attached) {
             for (const schema::ComponentRuntimeId kComponent : each.components) {
@@ -414,8 +414,8 @@ constexpr std::uint64_t kMostTicksPerFrame = 4;
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 constexpr std::string_view kPresentedProvided[] = {world_animation::kPresentedPoses.name, kPresentedVolumes.name};
 
-/// Presents the Worlds of the process's local players (D362), each a frame,
-/// and tells what draws them the poses it played them with (D508).
+/// Presents the Worlds of the process's local players, each a frame,
+/// and tells what draws them the poses it played them with.
 class PresentedParticipant final : public composition::Participant, public world_animation::PresentedPoses {
 public:
     result::Status load(composition::ParticipantContext& context) {
@@ -511,7 +511,7 @@ public:
             if (kTicks != 0) {
                 each.seenMessages = clients_->readMessages(kClient, each.seenMessages, each.arrived);
             }
-            // The mouse is the first player's (D422).
+            // The mouse is the first player's.
             each.presentation->hover(player == 0 && ui_ != nullptr ? ui_->hovered() : 0);
             for (std::uint64_t tick = 0; tick < std::min(kTicks, kMostTicksPerFrame); ++tick) {
                 const std::span<const world_replication::ReceivedMessage> kArrived =
@@ -579,7 +579,7 @@ private:
     std::shared_ptr<const kest::Program> program_;
     world_replication::ClientWorlds* clients_ = nullptr;
     const UiQueries* ui_ = nullptr;
-    /// The player's volumes its present systems set (D625).
+    /// The player's volumes its present systems set.
     PresentedVolumes volumes_;
     /// Each local player's presentation, and the game messages it has read.
     struct Presented {

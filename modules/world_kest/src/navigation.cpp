@@ -144,7 +144,7 @@ result::Status GameNavmesh::declareSystems(const schema::SchemaRegistry& registr
                                                .phase = world::Phase::Simulation,
                                                .after = kAfter,
                                                .system = system_.get()});
-    // Agents, where the game has them (D411).
+    // Agents, where the game has them.
     if (!registry.find(NavigationAgent::kComponentTypeId).has_value()) {
         return {};
     }

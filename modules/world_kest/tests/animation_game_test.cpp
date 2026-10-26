@@ -1,11 +1,11 @@
-// Games with animators (D127): an `animator` line's graph read beside the
+// Games with animators: an `animator` line's graph read beside the
 // description, its clip and skeleton found by their sidecars, its parameter
 // bound to the game's component by name, and entities played by the
 // World's animation, all of them in a client's World and only the
 // simulation's on a dedicated server. A program reads their bones and
 // events through rawframe.animation's doors, which answer nothing past the
 // bones and events there are. A sequence starts an animator on the entity
-// it casts and fires its events for the program (D869).
+// it casts and fires its events for the program.
 
 #include "game_harness.h"
 #include "rawframe/animation/clip.h"

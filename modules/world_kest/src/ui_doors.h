@@ -1,8 +1,8 @@
 #pragma once
 
 // The doors rawframe.ui's Kest module asks for: what the client's UI shows
-// under the mouse, for a present system to light (D422), and the value a
-// range holds (D621).
+// under the mouse, for a present system to light, and the value a
+// range holds.
 
 #include "rawframe/kest/doors.h"
 #include "rawframe/world_kest/ui_queries.h"

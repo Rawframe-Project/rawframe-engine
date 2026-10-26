@@ -9,7 +9,7 @@ rawframe_module(NAME world_kest
 
 # Games read from directories, written by the test or in the tree, where
 # there are files; the web build runs the rest, which play the test games
-# held in memory as a web client holds its files (D167).
+# held in memory as a web client holds its files.
 set(rawframe_world_kest_directory_tests "")
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(rawframe_world_kest_directory_tests tests/animation_game_test.cpp tests/game_description_test.cpp tests/game_scene_test.cpp tests/game_test.cpp tests/persistent_test.cpp tests/gale_test.cpp tests/plaza_test.cpp tests/quarry_test.cpp tests/reach_test.cpp tests/save_game_test.cpp tests/stalls_test.cpp)

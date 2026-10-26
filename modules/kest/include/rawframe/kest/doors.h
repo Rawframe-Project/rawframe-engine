@@ -1,6 +1,6 @@
 #pragma once
 
-// Engine functions a Kest program may call (ADR-0014, ADR-0084). A program
+// Engine functions a Kest program may call. A program
 // declares `extern fn World.spawn(...)`; the engine binds a Door of that name.
 
 #include "rawframe/result/result.h"

@@ -1,7 +1,7 @@
 #pragma once
 
-// What a game keeps: its save documents (ADR-0057, D105) and its checkpoint
-// projection (SPEC-0011, D29), from its description and its components' Kest
+// What a game keeps: its save documents and its checkpoint
+// projection, from its description and its components' Kest
 // layouts.
 
 #include "rawframe/kest/program.h"

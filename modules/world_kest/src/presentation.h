@@ -1,11 +1,11 @@
 #pragma once
 
-// A client's presentation of the World it mirrors (D260): what only a client
+// A client's presentation of the World it mirrors: what only a client
 // that draws decides. Once a game tick, before the canvas extracts: each
 // `presentation` component attached, zeroed, to every mirrored entity that
 // has its `on` component; the game's `present` systems run over the mirror
 // in line order, a schedule of their own on the game's program; then every
-// animator played (D258). A dedicated server never holds any of it.
+// animator played. A dedicated server never holds any of it.
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/composition/registrar.h"
@@ -44,7 +44,7 @@ struct PresentationStatistics {
     /// Presentation components attached to mirrored entities.
     std::uint64_t attached = 0;
     /// Attached components given the fields their start changed in, as
-    /// their document was edited while the game plays (D619).
+    /// their document was edited while the game plays.
     std::uint64_t restarted = 0;
     /// Present systems refused or run out, each changing nothing that tick.
     std::uint64_t systemsFailed = 0;
@@ -69,8 +69,8 @@ public:
     [[nodiscard]] result::Status reload(std::shared_ptr<const kest::Program> program);
 
     /// One game tick of `mirror`, whose own player is `player` (or none
-    /// yet), its present systems reading the messages `arrived` for it
-    /// (D266), bound afresh when it is another World than the last (a
+    /// yet), its present systems reading the messages `arrived` for it,
+    /// bound afresh when it is another World than the last (a
     /// client that made a new one). A present system that is refused or
     /// runs out changes nothing that tick, as a system does, and is counted
     /// and logged (`present_failed`) through `emitter`.
@@ -81,22 +81,22 @@ public:
                                          diagnostics::Emitter emitter = {});
 
     /// The press code of the UI node under the mouse from now on, which
-    /// `UI.hovered` answers its present systems; nought for none (D422).
+    /// `UI.hovered` answers its present systems; nought for none.
     void hover(std::int64_t code) noexcept;
     /// The UI whose ranges `UI.value` reads, local player `player`'s view
-    /// of it (D621); none answers nought. `queries` outlives it.
+    /// of it; none answers nought. `queries` outlives it.
     void askUi(const UiQueries* queries, std::size_t player) noexcept;
     /// Where its present systems' `Sound.volume` writes the player's
-    /// volumes (D625); none, as in a simulation, for nowhere. `volumes`
+    /// volumes; none, as in a simulation, for nowhere. `volumes`
     /// outlives it.
     void setVolumesIn(PresentedVolumes* volumes) noexcept;
-    /// What its components start as when it attaches them (D619); none,
+    /// What its components start as when it attaches them; none,
     /// as without it, starts every one at nought. `starts` outlives it.
     void startWith(const PresentationStarts* starts) noexcept;
     [[nodiscard]] PresentationStatistics statistics() const noexcept;
     [[nodiscard]] world_animation::AnimationStatistics animationStatistics() const noexcept;
     /// The animation that played `world`, if it is the World last
-    /// presented and the game has animators; null otherwise (D508).
+    /// presented and the game has animators; null otherwise.
     [[nodiscard]] const world_animation::AnimationQueries* poses(const world::World& world) const noexcept;
 
     struct State;

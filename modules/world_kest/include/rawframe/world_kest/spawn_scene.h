@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's spawn lines as a scene (D94), for moving its starting entities
+// A game's spawn lines as a scene, for moving its starting entities
 // into a scene document: each entity a line spawns becomes one entity of
 // the scene, with a new SourceEntityId, the fields the line gives in their
 // canonical text (a collision class named by its identity), and each

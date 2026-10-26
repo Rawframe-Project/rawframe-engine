@@ -1,6 +1,6 @@
 #pragma once
 
-// What a client's UI answers its present systems (D422, D621): the node
+// What a client's UI answers its present systems: the node
 // under the mouse, for a present system to light through `ui.hovered()`,
 // and the value a range holds, which the player may have moved, through
 // `ui.value(press)`. The client's UI provides it (`rawframe.world_ui`,

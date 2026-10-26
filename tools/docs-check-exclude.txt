@@ -54,8 +54,6 @@ modules/input
 modules/input_kest
 modules/input_window
 modules/install
-modules/kest
-modules/kest_library
 modules/localization
 modules/material
 modules/mesh
@@ -91,7 +89,6 @@ modules/window
 modules/window_host
 modules/world_animation
 modules/world_audio
-modules/world_kest
 modules/world_localization
 modules/world_replication
 modules/world_runtime

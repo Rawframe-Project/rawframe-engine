@@ -1,6 +1,6 @@
 #pragma once
 
-// What Kest's World doors reach and the doors themselves (D125 onward):
+// What Kest's World doors reach and the doors themselves:
 // creating, spawning, and destroying entities, a run's random streams, and
 // each component a program may insert, remove, get, or look up, all staged
 // in the running system's commands. KestSystems offers them to its
@@ -52,8 +52,8 @@ struct KestSystems::Doorway {
         const schema::ComponentDescriptor* descriptor = nullptr;
         std::vector<std::byte> scratch;
         std::vector<std::size_t> entityFields;
-        /// Every entity holding it, for a lookup's count and entity doors
-        /// (D393); made with the descriptor.
+        /// Every entity holding it, for a lookup's count and entity doors;
+        /// made with the descriptor.
         std::optional<world::ColumnQuery> holders;
         /// Offered though the game does not list it: a World without it
         /// refuses the door when called, not the systems when declared.
@@ -69,20 +69,20 @@ struct KestSystems::Doorway {
     };
 
     world::SystemContext* context = nullptr;
-    /// What the running system may look up on any entity (D391).
+    /// What the running system may look up on any entity.
     std::span<const schema::ComponentRuntimeId> lookups;
     /// Journal bytes the machine's systems took in `journalTick`, against
-    /// `journalLimit` (D229).
+    /// `journalLimit`.
     std::uint64_t journalTick = std::numeric_limits<std::uint64_t>::max();
     std::size_t journaled = 0;
     std::size_t journalLimit = kMaximumJournalBytes;
-    /// Commands recorded in `journalTick`, against `operationLimit` (D240).
+    /// Commands recorded in `journalTick`, against `operationLimit`.
     std::size_t operations = 0;
     std::size_t operationLimit = kMaximumJournalOperations;
     std::uint32_t run = 0;
-    /// Where runs are timed, or nowhere (D210).
+    /// Where runs are timed, or nowhere.
     KestTiming* timing = nullptr;
-    /// Told of each run (D266).
+    /// Told of each run.
     std::vector<KestStaging*> staging;
     std::vector<Component> components;
     std::vector<Prefab> prefabs;

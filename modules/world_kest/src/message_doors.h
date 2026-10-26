@@ -1,13 +1,13 @@
 #pragma once
 
-// A game's guaranteed messages as doors (D266): for each message a game
+// A game's guaranteed messages as doors: for each message a game
 // declares, `Messages.<name>(to: Entity, value: T)` sends one,
 // `ReceivedCount.<name>() -> i32` says how many arrived for this tick, and
 // `Received.<name>(index: i32) -> T` reads one. A server's doors stage what
 // its systems send, kept only when the run that sent it succeeds; a client's
 // present systems read what arrived since their last tick; a predictor's
 // send nothing and have nothing arrived. `Players.terminate(player: Entity,
-// note: text)` ends a player's session (ADR-0073, D267), staged and kept the
+// note: text)` ends a player's session, staged and kept the
 // same way; trusted code only, as every door here is.
 
 #include "rawframe/kest/doors.h"
@@ -26,7 +26,7 @@
 
 namespace rawframe::world_kest {
 
-/// SPEC-0013's queued guaranteed events per connection, held per tick: a
+/// The queued guaranteed events per connection, held per tick: a
 /// server's systems send at most so many in one tick, together.
 inline constexpr std::size_t kMaximumMessagesPerTick = 1024;
 

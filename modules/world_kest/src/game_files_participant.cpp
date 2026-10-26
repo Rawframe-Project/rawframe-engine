@@ -44,7 +44,7 @@ result::Result<composition::ParticipantOwner> makeGameFiles(composition::Partici
         if (context.has(game_content::kGameContent.name)) {
             RAWFRAME_TRY_ASSIGN(content, context.capability(game_content::kGameContent));
         }
-        // From the files the host holds when it holds some (D167): the
+        // From the files the host holds when it holds some: the
         // description's directory's files.
         if (const composition::HeldFiles* held = context.heldFiles()) {
             const std::string_view kHeld = *kPath;
@@ -79,7 +79,7 @@ result::Result<composition::ParticipantOwner> makeGameFiles(composition::Partici
         RAWFRAME_TRY_ASSIGN(participant->files, GameFiles::fromContent(*content, content::ResourceId{kId.value}));
     }
     // An editor's preview hides a layer, which its client sees only
-    // replicated (D791); its server is told the same, so both agree.
+    // replicated; its server is told the same, so both agree.
     RAWFRAME_TRY_ASSIGN(const bool kLayers, context.configuration().truth("kest.replicate_layers", false));
     if (kLayers) {
         participant->files.replicateLayers();

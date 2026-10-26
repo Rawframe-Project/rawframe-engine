@@ -1,4 +1,4 @@
-// Service points (D199): a game's program asks `Mods.<point>` and gets what
+// Service points: a game's program asks `Mods.<point>` and gets what
 // the mod's provider left in the value it was lent, or the value it asked
 // about when no mod provides it or the provider fails.
 

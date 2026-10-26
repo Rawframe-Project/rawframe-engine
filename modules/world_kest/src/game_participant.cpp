@@ -72,7 +72,7 @@ constexpr std::string_view kProvides[] = {world_replication::kReplicationPlan.na
                                           world_runtime::kPicking.name,
                                           world_runtime::kDebugging.name,
                                           kPresentationPlan.name};
-/// A presenting client's machine (D260): its heap, and the fuel of one call.
+/// A presenting client's machine: its heap, and the fuel of one call.
 constexpr kest::MachineLimits kPresentationLimits{.heapBytes = std::size_t{4} << 20U, .fuelPerCall = 1'000'000};
 
 constexpr diagnostics::EventIdentity kGameLoaded{"world_kest", "game_loaded"};
@@ -185,11 +185,11 @@ public:
         RAWFRAME_TRY_ASSIGN(own_, replicatedAmong(game_, game_.own, "a component kept to its holder replicates"));
         RAWFRAME_TRY_ASSIGN(persistence_, planPersistence(game_, layouts_));
         // Both sides declare the game's message lane, so a process that
-        // plays elsewhere measures the messages too (D266). These systems,
+        // plays elsewhere measures the messages too. These systems,
         // where they run, run where the World is authoritative: what they
         // send goes out after the tick.
         RAWFRAME_TRY_ASSIGN(messages_, MessageDoors::create(game_, *program_, MessageDoors::Role::Send));
-        // And the command lane, by the commands' sizes (D425).
+        // And the command lane, by the commands' sizes.
         RAWFRAME_TRY_ASSIGN(commands_, CommandDoors::create(game_, *program_, CommandDoors::Role::Read));
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
@@ -223,7 +223,7 @@ public:
             }
         }
         // A system a mod replaces runs the mod's function instead, on the
-        // mod's machine (D200).
+        // mod's machine.
         std::vector<std::string> replaced;
         for (const GameModProgram& modProgram : files.modPrograms()) {
             for (const ModReplacement& replacement : modProgram.replacements) {
@@ -277,7 +277,7 @@ public:
         }
         modServices_ = std::make_unique<ModServices>(game_, sizes);
         RAWFRAME_TRY(modServices_->addDoors(doors));
-        // A server presents nothing: its effect doors keep nothing (D219).
+        // A server presents nothing: its effect doors keep nothing.
         effects_ = std::make_unique<EffectDoors>(game_, false);
         RAWFRAME_TRY(effects_->addDoors(doors));
         RAWFRAME_TRY(messages_->addDoors(doors));
@@ -289,14 +289,13 @@ public:
         if (game_.physics.has_value()) {
             RAWFRAME_TRY(addPhysicsDoors(doors, game_.physics->dimensions, &doorContext_));
         }
-        // Splines its programs follow, measured from their points (D868).
+        // Splines its programs follow, measured from their points.
         RAWFRAME_TRY(planSplines());
         RAWFRAME_TRY(addSplineDoors(doors, splines_.get()));
-        // Sequences it plays, and the events they fire (D869).
+        // Sequences it plays, and the events they fire.
         RAWFRAME_TRY(planSequences());
         RAWFRAME_TRY(addSequenceDoors(doors, sequences_.get()));
-        // The server bakes the navmesh its programs ask the way across
-        // (D400).
+        // The server bakes the navmesh its programs ask the way across.
         if (game_.navigation.has_value()) {
             navmesh_ = std::make_unique<GameNavmesh>(*game_.navigation);
             navmesh_->attach(doorContext_.queries3d);
@@ -304,9 +303,9 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kHeap, configuration.unsignedInteger("kest.heap_bytes", 64U << 20U));
         // Half a million steps: about 3.5 ms of a spinning loop here, so a
-        // system that runs away is stopped within SPEC-0013's 8 ms
-        // containment with room for a slower machine, and deterministically
-        // (D228). The crowd's busiest system takes a few tens of thousands.
+        // system that runs away is stopped within the 8 ms
+        // containment with room for a slower machine, and deterministically.
+        // The crowd's busiest system takes a few tens of thousands.
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kFuel, configuration.unsignedInteger("kest.fuel_per_system", 500'000));
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{
@@ -327,7 +326,7 @@ public:
                                                    .fuelPerCall = kAdmissionFuel};
             RAWFRAME_TRY_ASSIGN(admission_, KestAdmission::create(program_, game_.admission, admissionLimits_));
         }
-        // Each taken mod's handlers on a machine of its own (D181).
+        // Each taken mod's handlers on a machine of its own.
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kModHeap,
                             configuration.unsignedInteger("kest.mod_heap_bytes", 4U << 20U));
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kModFuel,
@@ -358,7 +357,7 @@ public:
             RAWFRAME_TRY(simulation_->addSystems(*sequences_));
         }
         debugging_.attach(systems_->machine());
-        // Time a breakpoint holds a tick is not owed (D492).
+        // Time a breakpoint holds a tick is not owed.
         debugging_.tellStood(context.clock(), [this](execution::MonotonicDuration stood) {
             simulation_->excuse(stood);
         });
@@ -409,7 +408,7 @@ public:
                 ++spawned;
             }
         }
-        // Its scenes' districts, streamed as units to clients (D870).
+        // Its scenes' districts, streamed as units to clients.
         districts_.held.clear();
         for (const SceneRange& range : sceneRanges_) {
             for (const SceneUnit& unit : range.units) {
@@ -421,8 +420,7 @@ public:
             }
         }
         ++districts_.changed;
-        // A game's own scenes are followed where its sources are watched
-        // (D410).
+        // A game's own scenes are followed where its sources are watched.
         scenes_ = SceneFollower::spawned(*files_, sceneRanges_, made, authored);
         context.emitter().log(diagnostics::Severity::Info,
                               kGameLoaded,
@@ -437,7 +435,7 @@ public:
         return {};
     }
 
-    /// SPEC-0013's aggregate script time per World tick, once, at stop.
+    /// The aggregate script time per World tick, once, at stop.
     void stop() noexcept override {
         if (navmesh_ != nullptr) {
             navmesh_->report(emitter_);
@@ -475,7 +473,7 @@ public:
     /// Between ticks, on the Host thread: when the program's sources changed,
     /// compiles and swaps it in, or says why not and keeps the old one.
     void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
-        // SPEC-0013's Kest attribution (D216): what the game's machine and
+        // The Kest attribution: what the game's machine and
         // each mod's hold on their heaps.
         if (context_ != nullptr && systems_ != nullptr) {
             std::uint64_t heap = systems_->machine().heapUsed();
@@ -562,7 +560,7 @@ public:
     }
 
 #if RAWFRAME_FILE_SYSTEM
-    /// Applies to the World what changed in the game's scenes (D410).
+    /// Applies to the World what changed in the game's scenes.
     void followScenes(const std::filesystem::path& directory) noexcept {
         std::vector<result::Error> refusals;
         const auto kChanges = scenes_.follow(*simulation_->world(),
@@ -787,8 +785,8 @@ public:
         return {};
     }
 
-    /// The first 3D body along the ray, and the scene that brought it
-    /// (D456): the physics' answer from its last step, and the scenes the
+    /// The first 3D body along the ray, and the scene that brought it:
+    /// the physics' answer from its last step, and the scenes the
     /// World follows.
     std::optional<world_runtime::Picked> pick(const std::array<double, 3>& origin,
                                               const std::array<double, 3>& toward) const noexcept override {
@@ -880,7 +878,7 @@ private:
         return GameScenes{game_, layouts_}.spawnValues(spawn);
     }
 
-    /// Splines (D868): the game's components of the spline types, laid out
+    /// Splines: the game's components of the spline types, laid out
     /// as the engine reads them, measured by the pose of its physics.
     result::Status planSplines() {
         GameSplineComponents found{.dimensions =
@@ -916,7 +914,7 @@ private:
         return {};
     }
 
-    /// Sequences (D869): the game's components of the sequence types, laid
+    /// Sequences: the game's components of the sequence types, laid
     /// out as the engine reads them, and its sequences as read.
     result::Status planSequences() {
         GameSequenceSettings found;
@@ -998,7 +996,7 @@ private:
     GameDescription game_;
     std::shared_ptr<const kest::Program> program_;
     std::vector<kest::TypeLayout> layouts_;
-    /// The components field by field, for a reader of the World (D409).
+    /// The components field by field, for a reader of the World.
     std::vector<world_runtime::ComponentFieldSet> fieldSets_;
     std::vector<schema::ComponentDescriptor> descriptors_;
     world_replication::ReplicationTable table_;
@@ -1018,7 +1016,7 @@ private:
     std::vector<SceneReference> references_;
     std::vector<SceneRange> sceneRanges_;
     /// The districts its scenes spawned, as the replication server reads
-    /// them (D870).
+    /// them.
     struct Districts final : world_replication::StreamedUnits {
         std::vector<world_replication::StreamedUnit> held;
         std::uint64_t changed = 0;
@@ -1056,14 +1054,14 @@ private:
     std::vector<std::vector<KestScan>> scans_;
     /// Before the machines whose doors name its services.
     std::unique_ptr<ModServices> modServices_;
-    /// Every Kest system's time per tick, the game's and its mods' (D210).
+    /// Every Kest system's time per tick, the game's and its mods'.
     std::unique_ptr<KestTiming> timing_;
     std::unique_ptr<EffectDoors> effects_;
     std::unique_ptr<MessageDoors> messages_;
     std::unique_ptr<CommandDoors> commands_;
     std::array<KestStaging*, 2> staging_{};
     std::vector<world_replication::EffectClass> effectClasses_;
-    /// Before the systems, so it outlives the machine that calls it (D460).
+    /// Before the systems, so it outlives the machine that calls it.
     GameDebugging debugging_;
     std::unique_ptr<KestSystems> systems_;
     /// Each taken mod's handlers, on its own machine.

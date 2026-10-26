@@ -1,6 +1,6 @@
 module rawframe.scene
 
-// Scenes spawned while a game runs (D98): a prefab, a scene the game's
+// Scenes spawned while a game runs: a prefab, a scene the game's
 // description declares with `prefab <identity> <file>`, made whole at the
 // next barrier, its entities naming each other as the scene has them.
 

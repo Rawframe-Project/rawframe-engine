@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's commands as a program lays them out (D425): the kinds a client's
+// A game's commands as a program lays them out: the kinds a client's
 // sample function may send and the server's systems read, each by its
 // place among the game's command lines and the exact size of its value,
 // which is all the server knows to check a hostile one by.
