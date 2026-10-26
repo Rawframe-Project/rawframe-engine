@@ -1,6 +1,6 @@
 #pragma once
 
-// The view stage's reflection probes (ADR-0051, D325, D340): which of the
+// The view stage's reflection probes: which of the
 // extracted probes a frame keeps, in the order a point takes them, and the
 // clusters each names.
 

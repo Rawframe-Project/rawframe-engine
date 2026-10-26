@@ -1,6 +1,6 @@
 #pragma once
 
-// The view stage's decals (ADR-0051, D339): which of the extracted decals a
+// The view stage's decals: which of the extracted decals a
 // frame keeps, how a device places each, and the clusters each names.
 
 #include "clusters.h"

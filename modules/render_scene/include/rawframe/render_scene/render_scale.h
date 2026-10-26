@@ -1,7 +1,7 @@
 #pragma once
 
 // A local player's view's render scale as its frames keep up with the
-// device (ADR-0052's render scale, D533): drawn at fewer pixels while
+// device: drawn at fewer pixels while
 // frames certainly take well over what they are to, and at more again
 // once they take well under it, or have kept within it a while, between
 // the least and the most a client allows.
@@ -20,7 +20,7 @@ inline constexpr std::uint32_t kScaleWindow = 8;
 inline constexpr std::uint32_t kRoomyWindows = 3;
 /// The windows in a row no frame of which was over its budget before the
 /// scale grows to try, at first and at most: a device that waits for the
-/// display (vsync) is never seen to have room (D533). A try followed by a
+/// display (vsync) is never seen to have room. A try followed by a
 /// window over doubles the wait.
 inline constexpr std::uint32_t kFirstPatience = 16;
 inline constexpr std::uint32_t kMostPatience = 512;

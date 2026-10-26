@@ -36,7 +36,7 @@ void Scene::State::posePalette(const world_animation::AnimationQueries* poses, M
 namespace {
 
 /// Each of the game's trail or beam components copied out of `world`,
-/// where its entity's pose puts it (D354).
+/// where its entity's pose puts it.
 template <typename Ribbon>
 void extractRibbons(world::World& world,
                     std::vector<world::ColumnQuery>& queries,
@@ -80,7 +80,7 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
             for (std::size_t row = 0; row < chunk.entities.size(); ++row) {
                 ModelInstance instance{.entity = chunk.entities[row],
                                        .component = static_cast<std::uint32_t>(component)};
-                // Left out where an editor's preview hides its layer (D791).
+                // Left out where an editor's preview hides its layer.
                 if (!state.hiddenLayers.empty() && state.layer.has_value()) {
                     if (const auto* layer =
                             static_cast<const world::Layer*>(world.getErased(instance.entity, *state.layer));
@@ -97,7 +97,7 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
                         instance.rotation = {pose->qx, pose->qy, pose->qz, pose->qw};
                     }
                 }
-                // Drawn where it is placed, if it is (D665).
+                // Drawn where it is placed, if it is.
                 for (const schema::ComponentRuntimeId kPlacement : state.placements) {
                     if (const auto* placed = static_cast<const Placed*>(world.getErased(instance.entity, kPlacement));
                         placed != nullptr && placed->placed) {
@@ -106,7 +106,7 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
                         break;
                     }
                 }
-                // Drawn where its hand is this frame, if it is (D676).
+                // Drawn where its hand is this frame, if it is.
                 for (const schema::ComponentRuntimeId kTracking : state.tracking) {
                     const auto* tracked = static_cast<const Tracked*>(world.getErased(instance.entity, kTracking));
                     if (tracked == nullptr || hands == nullptr || tracked->hand == 0 || tracked->hand > hands->size()) {
@@ -120,7 +120,7 @@ void Scene::extract(world::World& world, const world_animation::AnimationQueries
                         break;
                     }
                 }
-                // Drawn `lift` along the pose's own up (D514).
+                // Drawn `lift` along the pose's own up.
                 const auto [kX, kY, kZ, kW] = instance.rotation;
                 const double kLift = instance.model.lift;
                 instance.position[0] += kLift * 2.0 * ((kX * kY) - (kW * kZ));

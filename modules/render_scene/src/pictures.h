@@ -1,8 +1,8 @@
 #pragma once
 
-// The textures a scene's materials sample (D309), read together and held,
+// The textures a scene's materials sample, read together and held,
 // and the pictures its World names (the sky's, a reflection probe's, a
-// decal's, a grading table: D322, D325, D339, D342, D344), each read alone
+// decal's, a grading table), each read alone
 // on its first naming, so a game's other textures are never read for one.
 // What cannot be read is said so and sampled as white, or is none.
 
@@ -31,7 +31,7 @@ public:
     /// sample, of those the game declares, decoded on a CPU worker; a
     /// material sampling one it does not declare samples white (its
     /// texture made nought), and is said so at start. A render texture is
-    /// drawn, not read (D361).
+    /// drawn, not read.
     [[nodiscard]] result::Status read(composition::ParticipantContext& context,
                                       const world_kest::GameFiles& files,
                                       std::vector<SceneMaterial>& materials,
@@ -39,10 +39,10 @@ public:
     /// At start: says what load could not ask for, and says through
     /// `emitter` from then on.
     void start(const diagnostics::Emitter& emitter);
-    /// The materials and post processes read again from new revisions
-    /// (D734, D760): a texture one
+    /// The materials and post processes read again from new revisions:
+    /// a texture one
     /// samples that load did not read is asked for alone, as a picture is,
-    /// so it is not sampled as white until the game is played again (D758).
+    /// so it is not sampled as white until the game is played again.
     void follow(const world_kest::GameFiles& files,
                 const std::vector<SceneMaterial>& materials,
                 const std::vector<ScenePostProcessMaterial>& postProcesses) noexcept;

@@ -94,7 +94,7 @@ void packClusters(SceneFrame& frame, std::vector<ClusterName>& named, const Scen
     clusters.indices.clear();
     const std::array<std::size_t, 3> kLimits = {
         limits.maximumLightsPerCluster, limits.maximumDecalsPerCluster, limits.maximumProbesPerCluster};
-    // Placed by counting rather than sorted (D537): each class of each
+    // Placed by counting rather than sorted: each class of each
     // cluster counted, the first named up to its limit, so each one's place
     // is known, then each name put in its place in the order named. A
     // stable sort of every name each frame was a tenth of a client's own

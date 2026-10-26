@@ -1,8 +1,8 @@
 #pragma once
 
-// A cooked surface material as the scene draws it (D303, D484, D709): the one
+// A cooked surface material as the scene draws it: the one
 // reading of a material's cooked bytes, which a scene loading its game's
-// content and a tool drawing a material's thumbnail (D900) share.
+// content and a tool drawing a material's thumbnail share.
 
 #include "rawframe/base/bits128.h"
 #include "rawframe/content/identity.h"
@@ -20,10 +20,9 @@
 
 namespace rawframe::render_scene {
 
-/// A program material read (D484), with the revision it was read from: one
-/// program however many instances draw with it (D709), so they share its
-/// pipelines, and one a reload finds unchanged kept, so it keeps them
-/// (D734).
+/// A program material read, with the revision it was read from: one
+/// program however many instances draw with it, so they share its
+/// pipelines, and one a reload finds unchanged kept, so it keeps them.
 struct ReadProgram {
     content::ContentDigest revision;
     std::shared_ptr<const material::ProgramMaterial> program;
@@ -47,11 +46,11 @@ struct CookedMaterial {
 using CookedMaterials = std::function<result::Result<CookedMaterial>(base::Bits128 id)>;
 
 /// The surface material `cooked`, of resource `id`, as the scene draws it
-/// under `identity`: its blob at `quality` (D303), or, cooked with its own
-/// program (D484), that program, its states in the blob and its textures at
-/// their slots (D485), the program kept in `programs`; or, an instance
-/// (D709), its base's read through `bases`, its parameters and texture
-/// overrides the instance's (D710). An instance's base is no instance.
+/// under `identity`: its blob at `quality`, or, cooked with its own
+/// program, that program, its states in the blob and its textures at
+/// their slots, the program kept in `programs`; or, an instance,
+/// its base's read through `bases`, its parameters and texture
+/// overrides the instance's. An instance's base is no instance.
 [[nodiscard]] result::Result<SceneMaterial> sceneMaterialOf(std::uint64_t identity,
                                                             base::Bits128 id,
                                                             const CookedMaterial& cooked,

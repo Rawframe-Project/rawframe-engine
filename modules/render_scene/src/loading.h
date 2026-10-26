@@ -1,6 +1,6 @@
 #pragma once
 
-// What a scene reads as it loads (D289-D373, D349): its `scene.*` keys, and
+// What a scene reads as it loads: its `scene.*` keys, and
 // the game's materials from its cooked content.
 
 #include "rawframe/composition/configuration.h"
@@ -36,7 +36,7 @@ struct SceneConfiguration {
     std::uint32_t multisamples = kDefaultMultisamples;
     material::Quality quality = material::Quality::High;
     /// Each local player's view drawn at most at this many hundredths of
-    /// its region's pixels each way, and at least at the least (D533).
+    /// its region's pixels each way, and at least at the least.
     std::uint32_t renderScalePercent = 100;
     std::uint32_t leastRenderScalePercent = 100;
 };
@@ -48,7 +48,7 @@ struct SceneConfiguration {
 /// `materials` and post processes into `postProcesses`; one that cannot be
 /// read is drawn as none, and its path and why put in `unread`. What
 /// `readGameMaterials` reads once its representations are admitted, and
-/// what a reload reads again (D734).
+/// what a reload reads again.
 void readMaterials(content::ContentStore& store,
                    const world_kest::GameFiles& files,
                    material::Quality quality,
@@ -59,7 +59,7 @@ void readMaterials(content::ContentStore& store,
 
 /// Each of the game's materials' cooked revision in the catalog `store`
 /// reads in now, in the game's order; an empty digest for one it does not
-/// hold (D734).
+/// hold.
 [[nodiscard]] std::vector<content::ContentDigest> materialRevisions(const content::ContentStore& store,
                                                                     const world_kest::GameFiles& files);
 
