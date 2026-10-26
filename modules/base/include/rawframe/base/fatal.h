@@ -46,7 +46,7 @@ void freezeFatalHandler() noexcept;
 /// to it, not because ordinary code should call it.
 [[noreturn]] void raiseFatal(const FatalRecord& record) noexcept;
 
-/// Installs the platform crash handler ADR-0017 admits (D617): a fault that
+/// Installs the platform crash handler: a fault that
 /// ends the process (a bad address, a bus error, an illegal instruction, an
 /// arithmetic fault, an abort the fatal path did not raise; on Windows an
 /// unhandled exception) first writes minimal bounded evidence to standard

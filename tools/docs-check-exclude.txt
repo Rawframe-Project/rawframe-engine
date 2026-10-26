@@ -41,7 +41,6 @@ modules/audio
 modules/audio_import
 modules/authoring
 modules/authoring_session
-modules/base
 modules/blockout
 modules/build
 modules/composition

@@ -6,8 +6,7 @@
 namespace rawframe::base {
 
 /// Whether a secret given is the one expected, in a time that depends on
-/// their lengths only, so a token is not guessed a byte at a time (D408,
-/// D881).
+/// their lengths only, so a token is not guessed a byte at a time.
 [[nodiscard]] inline bool sameSecret(std::string_view given, std::string_view expected) noexcept {
     unsigned difference = given.size() == expected.size() ? 0U : 1U;
     for (std::size_t at = 0; at < given.size(); ++at) {

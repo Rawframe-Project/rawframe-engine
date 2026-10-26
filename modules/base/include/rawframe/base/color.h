@@ -1,6 +1,6 @@
 #pragma once
 
-// The packed color the engine's components carry (D357): 0xRRGGBBAA, its
+// The packed color the engine's components carry: 0xRRGGBBAA, its
 // red, green, and blue sRGB-encoded and its alpha straight, decoded once
 // here for every client module that draws one.
 

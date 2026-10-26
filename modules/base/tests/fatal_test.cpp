@@ -1,6 +1,6 @@
 // The fatal path end to end: each scenario runs in a child process, because the
 // path never returns, and checks how the child ended and what it wrote. The
-// crash handler too (D617): a fault leaves its bounded record, and the process
+// crash handler too: a fault leaves its bounded record, and the process
 // still ends as it would have.
 
 #include "rawframe/base/assert.h"
@@ -142,7 +142,7 @@ RAWFRAME_TEST(AnAbortTheFatalPathDidNotRaiseLeavesACrashRecord) {
 #if !defined(__ANDROID__)
     // The x86_64 emulators these tests run on play arm64 programs by
     // translation, which hands a program's own SIGABRT to no handler of its
-    // (a raise reaches none either), though its faults reach it (D617).
+    // (a raise reaches none either), though its faults reach it.
     RAWFRAME_EXPECT(contains(kOutcome.standardError, "rawframe crash: SIGABRT\n"));
 #endif
     // The fatal path's own abort says what it says once.

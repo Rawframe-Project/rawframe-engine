@@ -1,4 +1,4 @@
-// What a process uses (D211, D213): where the platform says, what is
+// What a process uses: where the platform says, what is
 // resident now is within the peak, touching more raises both, and work
 // takes processor time.
 
