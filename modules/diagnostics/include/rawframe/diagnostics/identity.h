@@ -5,7 +5,7 @@
 
 namespace rawframe::diagnostics {
 
-/// The longest domain, code, or field key (SPEC-0047 kMaximumIdentifierBytes).
+/// The longest domain, code, or field key.
 inline constexpr std::size_t kMaximumIdentifierBytes = 64;
 
 namespace detail {
@@ -47,7 +47,7 @@ void fieldKeyMustBeLowerCamelCase() noexcept;
 
 /// What an event is: an owner-scoped domain and a code within it, both
 /// lower_snake_case. Constructible only from constants, so text from untrusted
-/// input can never become an identity (SPEC-0004).
+/// input can never become an identity.
 struct EventIdentity {
     std::string_view domain;
     std::string_view code;

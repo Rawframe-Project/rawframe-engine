@@ -1,9 +1,9 @@
 // What the process tests start (child_test.cpp): `exit <code>` ends with
 // that code; `say <words>...` writes its words to its standard output, then
 // "said" to its standard error, and ends; `wait` says "waiting", waits for
-// a stop request (SIGTERM, or on Windows Ctrl+Break or its stop event set,
-// D944), and ends with code 3, or with code 4 after ten seconds without one;
-// `parent` writes the parent it was told to stop with (D646), or "none".
+// a stop request (SIGTERM, or on Windows Ctrl+Break or its stop event
+// set), and ends with code 3, or with code 4 after ten seconds without one;
+// `parent` writes the parent it was told to stop with, or "none".
 
 #include <atomic>
 #include <chrono>

@@ -5,7 +5,7 @@
 
 namespace rawframe::result {
 
-/// Why an operation failed, in the closed vocabulary SPEC-0004 fixes. There is
+/// Why an operation failed, in a closed vocabulary. There is
 /// no success value and no cancellation value: success is the Result's value and
 /// cancellation is a task outcome, not an error. Ordinals are not identity and
 /// are never serialized.
@@ -25,7 +25,7 @@ enum class ErrorClass : std::uint8_t {
     Internal,
 };
 
-/// The SPEC-0004 snake_case name of a class. Developer-facing text, never
+/// The snake_case name of a class. Developer-facing text, never
 /// identity: nothing durable may be keyed by it.
 [[nodiscard]] constexpr std::string_view describe(ErrorClass errorClass) noexcept {
     switch (errorClass) {

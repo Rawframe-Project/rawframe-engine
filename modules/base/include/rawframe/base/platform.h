@@ -1,7 +1,7 @@
 #pragma once
 
 // Compiler and architecture detection, and the debugger-break primitive
-// (ADR-0075 class 4). A detection macro lands when a facility needs it.
+// A detection macro lands when a facility needs it.
 //
 // Everything here is a macro because the answers are used in `#if` and because
 // a debugger break must expand at the call site to stop there.
@@ -34,7 +34,7 @@
 #endif
 
 // Whether the target has threads: 1 everywhere but WebAssembly built without
-// them, the browser's main thread (ADR-0084), where rawframe/base/threads.h
+// them, the browser's main thread, where rawframe/base/threads.h
 // gives locks that are empty and waits that cannot happen.
 #if (defined(__wasi__) && !defined(_REENTRANT)) || (defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__))
 #define RAWFRAME_THREADS 0
@@ -44,7 +44,7 @@
 
 // Whether the target reads and writes files: 1 everywhere but WebAssembly,
 // where a client's content arrives over the network and nothing it keeps is
-// the engine's to write (ADR-0084). A provider over directories exists only
+// the engine's to write. A provider over directories exists only
 // where this is 1; code above providers never asks.
 #if defined(RAWFRAME_ARCH_WASM32)
 #define RAWFRAME_FILE_SYSTEM 0

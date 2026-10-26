@@ -1,4 +1,4 @@
-# Execution (SPEC-0005, SPEC-0048): monotonic time, cancellation, task
+# Execution: monotonic time, cancellation, task
 # outcomes, the executors, scoped jobs, and async operations.
 rawframe_module(NAME execution
     SOURCES

@@ -1,7 +1,7 @@
 #pragma once
 
-// What this process uses, as the platform counts it: memory (SPEC-0013's
-// memory objectives, D211) and processor time (its CPU objective, D213).
+// What this process uses, as the platform counts it: memory and
+// processor time, as the performance budgets measure them.
 // Measurement only: nothing the engine decides depends on it. A platform
 // that does not say answers nothing.
 
@@ -14,12 +14,12 @@ namespace rawframe::base {
 [[nodiscard]] std::optional<std::uint64_t> residentBytes() noexcept;
 
 /// Of those, bytes backed by files: the program, its libraries, and files
-/// mapped in (SPEC-0013's mapped artifacts, D216).
+/// mapped in.
 [[nodiscard]] std::optional<std::uint64_t> fileResidentBytes() noexcept;
 
 /// The C heap as its allocator counts it: bytes handed out and not yet
-/// freed, and bytes it holds free for later, SPEC-0013's allocator overhead
-/// (D233).
+/// freed, and bytes it holds free for later, its overhead.
+///
 struct HeapUsage {
     std::uint64_t inUseBytes = 0;
     std::uint64_t freeBytes = 0;

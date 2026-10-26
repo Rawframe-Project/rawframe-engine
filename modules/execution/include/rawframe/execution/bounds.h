@@ -1,6 +1,6 @@
 #pragma once
 
-// The SPEC-0048 bounds, in the one owned header that specification requires.
+// The execution layer's bounds, in their one owned header.
 // Every value is a hard ceiling or a contract constant, never a performance
 // target. No use site restates any of them as a literal.
 
@@ -35,8 +35,8 @@ inline constexpr MonotonicDuration kExecutorJoinBudget = MonotonicDuration::from
 // kDefaultOperationDeadline is deliberately absent: deadlines are explicit or
 // there is none.
 
-// Implementation bounds this module adds (work/decisions.md D15). They keep
-// storage finite and are not SPEC-0048 authority values.
+// Implementation bounds this module adds. They keep storage finite and are
+// not part of the execution contract.
 
 /// Owners with an accepted quota on one executor.
 inline constexpr std::size_t kMaximumQuotaOwners = 64;

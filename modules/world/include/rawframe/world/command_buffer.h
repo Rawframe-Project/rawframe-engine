@@ -31,7 +31,7 @@ using CommandTarget = std::variant<EntityHandle, PendingEntity>;
 /// How a component value names an entity the same buffer creates: a handle
 /// of generation 0, never live, whose slot is the pending index plus one.
 /// An insert that says where its value holds entities has each such handle
-/// replaced by the created entity's when the buffer is applied (D97).
+/// replaced by the created entity's when the buffer is applied.
 [[nodiscard]] constexpr EntityHandle pendingReference(PendingEntity pending) noexcept {
     return EntityHandle{.slot = pending.index + 1U, .generation = 0};
 }
@@ -42,8 +42,8 @@ struct CommandBufferSettings {
     std::size_t maximumValueBytes = 64 * 1024;
 };
 
-/// Structural changes recorded while systems run and applied at a barrier
-/// (SPEC-0005). Recording never allocates: both limits are reserved at
+/// Structural changes recorded while systems run and applied at a barrier.
+/// Recording never allocates: both limits are reserved at
 /// construction, and recording past either fails with `resource_exhausted`.
 class CommandBuffer {
 public:

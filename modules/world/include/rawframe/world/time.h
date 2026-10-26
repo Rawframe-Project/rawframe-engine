@@ -9,7 +9,7 @@
 namespace rawframe::world {
 
 /// Which authoritative tick. Never derived from accumulated float seconds, and
-/// never skipped (SPEC-0005 simulation time). 64 bits: at 1000 Hz it lasts
+/// never skipped. 64 bits: at 1000 Hz it lasts
 /// longer than any process.
 struct TickIndex {
     std::uint64_t value = 0;
@@ -31,7 +31,7 @@ struct TickRate {
 /// Decides how many ticks a Host iteration runs. Ticks owed accumulate from
 /// monotonic time; at most `maximumTicksPerIteration` run in one iteration and
 /// the rest stays measured as debt, never dropped and never folded into a
-/// larger delta (SPEC-0005 catch-up and overload).
+/// larger delta.
 class TickPacer {
 public:
     TickPacer(TickRate rate, std::uint32_t maximumTicksPerIteration, execution::MonotonicInstant start) noexcept
@@ -49,7 +49,7 @@ public:
         executed_ += ticks;
     }
     /// Time the World stood still on purpose, a debugger's breakpoint
-    /// holding a tick (D492): not owed, as though it began that much later.
+    /// holding a tick: not owed, as though it began that much later.
     void excuse(execution::MonotonicDuration stood) noexcept {
         if (stood.nanoseconds > 0) {
             start_ = start_ + stood;

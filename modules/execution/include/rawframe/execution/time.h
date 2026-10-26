@@ -7,7 +7,7 @@
 namespace rawframe::execution {
 
 /// A span of monotonic time in nanoseconds. Monotonic time owns durations,
-/// deadlines, and timeouts; it is never converted from wall time (SPEC-0005).
+/// deadlines, and timeouts; it is never converted from wall time.
 struct MonotonicDuration {
     std::int64_t nanoseconds = 0;
 

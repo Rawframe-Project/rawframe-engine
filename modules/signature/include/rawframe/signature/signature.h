@@ -1,8 +1,8 @@
 #pragma once
 
 // Ed25519 signatures as Rawframe carries them: one algorithm and no
-// algorithm field anywhere (SPEC-0019), a detached `{kid, sig}` envelope
-// over exact record bytes, and publisher key sets (SPEC-0023) whose typed
+// algorithm field anywhere, a detached `{kid, sig}` envelope
+// over exact record bytes, and publisher key sets whose typed
 // key states decide a verdict fail-closed.
 
 #include "rawframe/result/result.h"
@@ -54,7 +54,7 @@ struct PublisherKey {
     std::int64_t since = 0;
 };
 
-/// SPEC-0023's publisher key set: one publisher's keys, retired and revoked
+/// The publisher key set: one publisher's keys, retired and revoked
 /// ones listed forever.
 struct PublisherKeySet {
     std::string publisher;
@@ -70,7 +70,7 @@ struct PublisherKeySet {
 [[nodiscard]] result::Result<PublisherKeySet> readPublisherKeySet(std::string_view text);
 [[nodiscard]] result::Result<std::string> writePublisherKeySet(const PublisherKeySet& keys);
 
-/// SPEC-0023's verdict on `envelope` over `message`: an active or retired
+/// The verdict on `envelope` over `message`: an active or retired
 /// key's valid signature passes; a revoked key is refused (`KeyRevoked`)
 /// whatever the signature; a key the set does not list is refused
 /// (`UnknownKey`), after which the caller may refresh its set once and ask

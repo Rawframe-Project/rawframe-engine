@@ -1,6 +1,6 @@
 #pragma once
 
-// The generation-1 container's fixed-width pieces (SPEC-0011): little-endian
+// The generation-1 container's fixed-width pieces: little-endian
 // integers, the prologue, chunk headers, and the footer.
 
 #include "rawframe/result/result.h"
@@ -23,7 +23,7 @@ inline constexpr std::size_t kFooterSize = 128;
 inline constexpr std::uint16_t kGeneration = 1;
 inline constexpr std::uint8_t kLittleEndian = 1;
 inline constexpr std::uint8_t kSha256 = 1;
-/// Rawframe's canonical field records rather than FlatBuffers (D29).
+/// Rawframe's canonical field records rather than FlatBuffers.
 inline constexpr std::uint16_t kPayloadCodec = 2;
 inline constexpr std::uint16_t kNoCompression = 0;
 
@@ -32,9 +32,9 @@ enum class ChunkKind : std::uint16_t {
     EntityDirectory = 2,
     ComponentRows = 3,
     Manifest = 4,
-    /// The World's random streams, which D18 keeps in the World (D29).
+    /// The World's random streams, which the World keeps.
     RandomStreams = 5,
-    /// The mods the World ran with, when there are any (D197).
+    /// The mods the World ran with, when there are any.
     ModSet = 6,
 };
 

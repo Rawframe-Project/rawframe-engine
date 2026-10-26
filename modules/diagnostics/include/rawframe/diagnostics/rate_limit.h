@@ -25,7 +25,7 @@ struct RateLimit {
 /// Passes log records to another sink at most `recordsPerWindow` times per
 /// identity per window, on the record's monotonic time. What it holds back is
 /// counted, and the first record passed in a later window carries the count as
-/// a `suppressed` field (SPEC-0004: rate limiting preserves the count).
+/// a `suppressed` field (rate limiting preserves the count).
 class RateLimitedSink final : public Sink {
 public:
     RateLimitedSink(Sink& next, RateLimit limit) noexcept : next_(&next), limit_(limit) {

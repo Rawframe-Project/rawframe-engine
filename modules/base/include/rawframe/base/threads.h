@@ -2,7 +2,7 @@
 
 // The engine's one mutex and one condition, over the standard ones where the
 // target has threads (RAWFRAME_THREADS, rawframe/base/platform.h). Where it
-// has none, the web's main thread (ADR-0084), a lock has nothing to exclude
+// has none, the web's main thread, a lock has nothing to exclude
 // and is empty, and a wait could only be ended by work on this same thread:
 // every engine wait first runs what it waits on (the executors' helping
 // waits), so a wait still unsatisfied is a deadlock and takes the fatal path

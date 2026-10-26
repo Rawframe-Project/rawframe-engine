@@ -1,4 +1,4 @@
-# Authored documents: SPEC-0028's canonicalization profile, JSON read
+# Authored documents: the canonicalization profile, JSON read
 # strictly and written one way.
 rawframe_module(NAME document
     SOURCES src/json.cpp src/record.cpp

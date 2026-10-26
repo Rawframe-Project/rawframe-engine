@@ -76,7 +76,7 @@ RAWFRAME_TEST(AFileIsReadWhole) {
 RAWFRAME_TEST(AFileIsMovedOverOneBeingRead) {
     // A picture streamed a frame at a time while an editor reads it: on
     // Windows a classic move was refused while the reader had it open, and
-    // the frame was lost (D965). Read without a pause meanwhile, every move
+    // the frame was lost. Read without a pause meanwhile, every move
     // goes through, and every read is one whole picture.
     const std::filesystem::path kDirectory = test::scratchDirectory("files_moved");
     std::filesystem::create_directories(kDirectory);
@@ -116,7 +116,7 @@ RAWFRAME_TEST(AFileIsMovedOverOneBeingRead) {
 #if defined(__unix__) || defined(__APPLE__)
 RAWFRAME_TEST(AFileIsNeverWrittenThroughALink) {
     // A directory from elsewhere, a game's, may hold links to files outside
-    // it where a write would go (D847): the file they name is kept.
+    // it where a write would go: the file they name is kept.
     const std::filesystem::path kDirectory = test::scratchDirectory("files_linked");
     std::filesystem::create_directories(kDirectory);
     const std::filesystem::path kElsewhere = kDirectory / "elsewhere.txt";

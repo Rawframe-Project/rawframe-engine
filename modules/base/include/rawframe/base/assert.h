@@ -6,7 +6,7 @@
 #include <string_view>
 
 // The assertion level is a build input, set by cmake/rawframe.cmake from the
-// configuration (ADR-0006):
+// configuration:
 //
 //   1  contract_only  shipping: RAWFRAME_CHECK and RAWFRAME_PANIC only
 //   2  full           debug and development: RAWFRAME_ASSERT as well
@@ -21,7 +21,7 @@
 #error "RAWFRAME_ASSERTIONS must be 1 (contract_only) or 2 (full); no other assertion level is implemented."
 #endif
 
-/// Reports a developer invariant. Side-effect free by contract, per SPEC-0004:
+/// Reports a developer invariant. Side-effect free by contract:
 /// the condition is not evaluated in `build.shipping`, so an expression whose
 /// effect the program needs must not appear here.
 ///
@@ -53,8 +53,8 @@
         }                                                                                                              \
     } while (false)
 #else
-// Shipping removes the evaluation and keeps the type check. SPEC-0004 permits
-// removing the assertion completely; removing the text as well means a
+// Shipping removes the evaluation and keeps the type check. Removing the
+// assertion completely would be allowed; removing the text as well means a
 // condition naming a renamed variable compiles here and fails in debug, so the
 // defect is found by whichever configuration someone happened to build. The
 // condition therefore appears in an unevaluated operand: `sizeof` type-checks

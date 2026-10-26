@@ -1,4 +1,4 @@
-# Curated game saves (ADR-0057): a declared projection of a World's
+# Curated game saves: a declared projection of a World's
 # persistent entities captured into canonical, digested bytes, read as
 # hostile input, and applied through one command buffer.
 rawframe_module(NAME world_save

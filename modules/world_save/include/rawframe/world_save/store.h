@@ -1,6 +1,6 @@
 #pragma once
 
-// Where saves are kept (ADR-0057's provider boundary): a store keeps a
+// Where saves are kept: a store keeps a
 // save's bytes under a slot name and gives them back, and knows nothing of
 // what they hold. Absence and failure are typed; a store never truncates,
 // and a save being kept never destroys the one kept before it until it is

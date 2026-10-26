@@ -1,4 +1,4 @@
-# World checkpoints (ADR-0016, SPEC-0011): capture a committed World into a
+# World checkpoints: capture a committed World into a
 # canonical, integrity-checked artifact and restore one into a candidate
 # World. Bytes in, bytes out; where they are kept is the caller's.
 rawframe_module(NAME world_snapshot

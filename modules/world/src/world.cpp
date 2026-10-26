@@ -13,7 +13,7 @@ namespace rawframe::world {
 namespace {
 
 // A slot whose generation reaches this is retired rather than reused, so no
-// generation value is ever live twice (SPEC-0006).
+// generation value is ever live twice.
 constexpr std::uint32_t kLastGeneration = std::numeric_limits<std::uint32_t>::max();
 
 } // namespace

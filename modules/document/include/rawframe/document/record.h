@@ -2,7 +2,7 @@
 
 // Typed records in authored documents: an object whose members its kind
 // declares, in the declared order, none unknown, and none written at its
-// declared default (SPEC-0028: a default-valued field is omitted, so the
+// declared default (a default-valued field is omitted, so the
 // same meaning is the same bytes). Refusals name the field by its path in
 // the document (`actions[2].bindings[0].deadzoneLower`).
 

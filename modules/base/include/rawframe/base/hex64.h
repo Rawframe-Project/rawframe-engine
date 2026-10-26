@@ -7,7 +7,7 @@
 namespace rawframe::base {
 
 /// A 64-bit identity's canonical text, as documents and game descriptions
-/// write actions, contexts, labels, components, and style classes (D431):
+/// write actions, contexts, labels, components, and style classes:
 /// exactly 16 lowercase hexadecimal digits, no prefix, no separators.
 /// Anything else is no identity.
 [[nodiscard]] constexpr std::optional<std::uint64_t> parseHex64(std::string_view text) noexcept {

@@ -87,7 +87,7 @@ RAWFRAME_TEST(ACheckpointRestoresEveryValueReferenceAndStream) {
 }
 
 RAWFRAME_TEST(AStagedCaptureSealsAsTheWorldWasWhenStaged) {
-    // D227: only staging reads the World; what is sealed after the World has
+    // Only staging reads the World; what is sealed after the World has
     // run on is the artifact of the World as it was staged, with its
     // SnapshotDigest.
     Sample sample;
@@ -145,7 +145,7 @@ RAWFRAME_TEST(RowGroupsFollowTheProfile) {
 }
 
 RAWFRAME_TEST(ChunksAreHeldToTheProfile) {
-    // SPEC-0013's chunk ceilings (D231): a component's rows wider than the
+    // The chunk ceilings: a component's rows wider than the
     // chunk allows split into groups that fit; too many chunks are refused
     // on capture, and on restore before anything is decoded.
     Sample sample;

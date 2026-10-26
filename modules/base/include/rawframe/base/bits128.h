@@ -24,7 +24,7 @@ struct Bits128 {
 inline constexpr std::size_t kBits128HexDigits = 32;
 
 /// What parsing produced. Deliberately not a Result: base is below
-/// rawframe.result and inverting that is the dependency ADR-0075 forbids.
+/// rawframe.result, and base depends on nothing above it.
 struct Bits128Parse {
     Bits128 value;
     bool parsed = false;
@@ -42,7 +42,7 @@ struct Bits128Parse {
     std::uint64_t low = 0;
     // Indexing is spelled as pointer arithmetic throughout this header. The
     // bounds-safe alternative the analyzer asks for is `at`, which throws, and
-    // ADR-0008 disables exceptions; the repository's own analysis policy admits
+    // the engine builds without exceptions; the repository's own analysis policy admits
     // pointer arithmetic for exactly this reason. Every offset below is bounded
     // by the size check above or by the span's static extent.
     for (std::size_t index = 0; index < kBits128HexDigits; ++index) {
@@ -83,8 +83,8 @@ constexpr void formatBits128Hex(const Bits128& value, std::span<char, kBits128He
 /// Makes Bits128 usable as a key in standard associative containers, and nothing
 /// else. The value is unspecified and unstable across builds, runs, and
 /// platforms, and it MUST NOT be persisted, transmitted, logged as identity, or
-/// used to derive any durable value: ADR-0011 forbids deriving stable identity
-/// from layout or implementation, and a hash that reached a durable artifact
+/// used to derive any durable value: stable identity is never derived from
+/// layout or implementation, and a hash that reached a durable artifact
 /// would be exactly that.
 template <> struct std::hash<rawframe::base::Bits128> {
     [[nodiscard]] std::size_t operator()(const rawframe::base::Bits128& value) const noexcept {

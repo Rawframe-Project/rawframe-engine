@@ -1,6 +1,6 @@
 #pragma once
 
-// A file mapped into memory, written or read in place (D967): what one
+// A file mapped into memory, written or read in place: what one
 // process writes there another sees without a file made, closed, or read
 // again, so nothing scans it each time as Windows' real-time protection
 // scans a file written whole. Where there are files (RAWFRAME_FILE_SYSTEM)

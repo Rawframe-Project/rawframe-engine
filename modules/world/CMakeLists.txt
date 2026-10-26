@@ -1,4 +1,4 @@
-# World (ADR-0010, ADR-0011, SPEC-0005, SPEC-0006): entity identity, archetype
+# World: entity identity, archetype
 # storage, queries, command buffers, and the simulation schedule.
 rawframe_module(NAME world
     SOURCES

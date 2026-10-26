@@ -5,7 +5,7 @@
 #include <utility>
 
 #if defined(_WIN32)
-// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file.
 #include <windows.h>
 #else
 #include <fcntl.h>

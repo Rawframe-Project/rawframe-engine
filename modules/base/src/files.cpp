@@ -14,7 +14,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #elif defined(_WIN32)
-// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file.
 #include <io.h>
 #include <windows.h>
 #endif
@@ -25,7 +25,7 @@ namespace {
 
 #if defined(__unix__) || defined(__APPLE__)
 /// `bytes` written to the file `path` opened with `flags`, never through a
-/// link at it (D847), and flushed to the disk.
+/// link at it, and flushed to the disk.
 bool writeOpened(const std::filesystem::path& path, std::span<const std::byte> bytes, int flags) noexcept {
     const int kFile = ::open(path.c_str(), O_WRONLY | O_CLOEXEC | O_NOFOLLOW | flags, 0644);
     if (kFile < 0) {
@@ -50,7 +50,7 @@ bool writeOpened(const std::filesystem::path& path, std::span<const std::byte> b
 #if defined(_WIN32)
 std::optional<std::string> readWholeFile(const std::filesystem::path& path) {
     // Shared for deletion too, so moveOver can put a new file at `path`
-    // while this one reads the old (D965); a stream shares no deletion.
+    // while this one reads the old; a stream shares no deletion.
     const HANDLE kFile = ::CreateFileW(path.c_str(),
                                        GENERIC_READ,
                                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -117,7 +117,7 @@ bool moveOver(const std::filesystem::path& from, const std::filesystem::path& to
 #if defined(_WIN32)
     // With POSIX semantics, which a classic move lacks: that one is refused
     // while any handle has `to` open, so a reader of a picture streamed a
-    // frame at a time lost the writer one frame in a few (D965). Where the
+    // frame at a time lost the writer one frame in a few. Where the
     // volume cannot (before Windows 10 1809, or not NTFS), the classic one.
     // Named whole: a name alone would be taken as one in `from`'s directory.
     std::error_code absolute;
@@ -189,7 +189,7 @@ bool replaceFile(const std::filesystem::path& path, std::span<const std::byte> b
     std::error_code error;
     // What is at the partial file's place, one a crash left or a link a
     // directory came with, is taken away, and the partial file made new:
-    // never written through to what a link names (D847).
+    // never written through to what a link names.
     std::filesystem::remove(partial, error);
 #if defined(__unix__) || defined(__APPLE__)
     const bool kWritten = writeOpened(partial, bytes, O_CREAT | O_EXCL);

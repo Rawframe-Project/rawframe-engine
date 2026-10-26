@@ -1,4 +1,4 @@
-// Splines (D867): a path through every point, straight where its points
+// Splines: a path through every point, straight where its points
 // are in a line, measured along its length, wrapping where it is closed,
 // and the same for the same points.
 

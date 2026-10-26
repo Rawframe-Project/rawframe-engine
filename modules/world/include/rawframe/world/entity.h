@@ -8,7 +8,7 @@
 namespace rawframe::world {
 
 /// A World-local runtime entity: a 32-bit slot and a 32-bit generation, valid
-/// only with the World that issued it (SPEC-0006 runtime entity handle). It is
+/// only with the World that issued it. It is
 /// never persisted, replicated, or handed to scripts as a number. Generation 0
 /// is never live, so the default value is the null handle.
 struct EntityHandle {

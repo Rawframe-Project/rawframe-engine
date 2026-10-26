@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the JSON reader (D242), which reads what a
+// Coverage-guided fuzzing of the JSON reader, which reads what a
 // Build, a mod, a save's manifest, and a game's documents hold. What the
 // reader accepts must write back as its profile promises: canonical text
 // byte for byte, and any accepted text as canonical text that reads again

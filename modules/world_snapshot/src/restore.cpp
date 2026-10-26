@@ -15,8 +15,8 @@ using detail::Input;
 namespace {
 
 /// An artifact that does not fit the process restoring it is an argument
-/// that is wrong whatever the process's state: SPEC-0012's incompatible
-/// artifact, exit 65 (D198).
+/// that is wrong whatever the process's state: the incompatible
+/// artifact, exit 65.
 std::unexpected<result::Error> mismatch(std::string_view why) {
     return detail::fail(result::ErrorClass::InvalidArgument, SnapshotError::Mismatch, why);
 }
@@ -312,7 +312,7 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
         Input in{kPayload};
         // Row groups are the profile's: every chunk of a run but the last is
         // full, so one World has one artifact. A component's group follows
-        // how wide its rows are (D231).
+        // how wide its rows are.
         const ChunkHeader& kBefore = kChunks[index - 1];
         const bool kGrouped = kChunk.kind != ChunkKind::RandomStreams && kChunk.kind != ChunkKind::ModSet;
         std::size_t group = limits.rowsPerChunk;

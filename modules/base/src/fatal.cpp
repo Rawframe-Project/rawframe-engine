@@ -11,7 +11,7 @@
 #include <string_view>
 
 #ifdef _WIN32
-// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file.
 #include <windows.h>
 #else
 #include <unistd.h>
@@ -41,7 +41,7 @@ void defaultFatalHandler(const FatalRecord& record) noexcept;
 
 // The two process-global mutable objects base owns, and the only two.
 //
-// SPEC-0046 states the reconciliation with ADR-0075's "no global mutable state":
+// Why they are the exception to "no global mutable state":
 // a fatal path cannot receive its handler as a parameter, because it is entered
 // from an assertion macro in arbitrary code that has no handler to pass, and
 // because it must work before any composition root exists.
@@ -57,7 +57,7 @@ constinit std::atomic<FatalHandler> fatalHandlerSlot{nullptr};
 constinit std::atomic<bool> fatalPathEntered{false};
 // NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
 
-// The fatal path may not take a lock: SPEC-0004 forbids one there, and a fatal
+// The fatal path may not take a lock: a fatal
 // path that blocks on a lock held by the thread that just died never terminates.
 static_assert(std::atomic<FatalHandler>::is_always_lock_free,
               "the fatal handler slot must be lock-free on every admitted platform");
@@ -135,7 +135,7 @@ struct BoundedText {
 /// Writes to the platform standard-error primitive directly rather than through
 /// a buffered stream, because a stream takes a lock and the fatal path may not.
 /// A failing write is ignored: the process is terminating either way, and
-/// SPEC-0004 requires the path to terminate even when enrichment fails.
+/// the path must terminate even when enrichment fails.
 void writeStandardError(std::string_view text) noexcept {
 #ifdef _WIN32
     void* handle = GetStdHandle(STD_ERROR_HANDLE);
@@ -171,8 +171,8 @@ void writeStandardError(std::string_view text) noexcept {
 /// opening a file.
 ///
 /// Windows answers this from the process environment block. Linux has no such
-/// answer: every tracer check there reads /proc, which SPEC-0004 forbids on this
-/// path. The break is therefore skipped on Linux rather than taken blindly,
+/// answer: every tracer check there reads /proc, which this path
+/// may not do. The break is therefore skipped on Linux rather than taken blindly,
 /// because an unconditional trap with no debugger attached terminates the
 /// process before the record is written, which loses the crash text in exactly
 /// the case it matters. A Linux debugger still stops on the SIGABRT that
@@ -226,7 +226,7 @@ struct CrashFrames {
     std::size_t count = 0;
 };
 
-/// A crash's minimal bounded evidence (ADR-0017, D617), written before the
+/// A crash's minimal bounded evidence, written before the
 /// process ends as it would have.
 void writeCrashRecord(std::string_view what,
                       std::uint64_t code,
@@ -261,7 +261,7 @@ void writeCrashRecord(std::string_view what,
 constexpr std::array<int, 5> kCrashSignals = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT};
 
 // The crash handler's state, which a signal handler can reach in no other
-// way, as the fatal path's (SPEC-0046): the handlers it replaced, the
+// way, as the fatal path's: the handlers it replaced, the
 // program's load address, and the stack it runs on when the thread's own
 // overflowed. Each is set once, by `installCrashCapture`, before any crash.
 //
@@ -436,7 +436,7 @@ void raiseFatal(const FatalRecord& record) noexcept {
     if (fatalPathEntered.exchange(true, std::memory_order_acq_rel)) {
         // Re-entry means the failure happened inside a handler, so the record a
         // handler would read is no longer trustworthy and no handler runs.
-        // SPEC-0046 still requires the re-entry to be distinguishable in a crash
+        // The re-entry must still be distinguishable in a crash
         // artifact, which is what FatalReason::FatalPathReentered exists for, so
         // one constant line is written. It reads no state and formats nothing.
         writeStandardError("rawframe fatal: FatalPathReentered\n");

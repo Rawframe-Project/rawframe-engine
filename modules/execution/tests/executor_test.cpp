@@ -281,7 +281,7 @@ RAWFRAME_TEST(BudgetsMustNest) {
         refusedWith(checkBudgetNesting(kSecond, kEqual), ErrorClass::InvalidArgument, ExecutionError::BudgetNotNested));
     RAWFRAME_EXPECT(refusedWith(
         checkBudgetNesting(kSecond, kOversum), ErrorClass::InvalidArgument, ExecutionError::BudgetNotNested));
-    // The executor's own budgets nest inside SPEC-0013's 8 s shutdown bound.
+    // The executor's own budgets nest inside the 8 s shutdown bound.
     const std::array<MonotonicDuration, 2> kExecutor{kExecutorDrainBudget, kExecutorJoinBudget};
     RAWFRAME_EXPECT(checkBudgetNesting(MonotonicDuration::fromSeconds(8), kExecutor).has_value());
 }

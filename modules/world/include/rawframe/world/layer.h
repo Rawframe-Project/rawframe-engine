@@ -1,6 +1,6 @@
 #pragma once
 
-// The layer an entity is put on (D788, SPEC-0051's Layers row): a number
+// The layer an entity is put on: a number
 // the authored scene holds as an ordinary component, so a scene's
 // entities are grouped where an editor shows, hides, locks, and chooses
 // them together, and a program may read it as any other value. A game
