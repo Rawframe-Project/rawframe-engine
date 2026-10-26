@@ -5,16 +5,15 @@
 // shapes and joints on a body. Pure readers.
 
 #include "body.h"
-
+#include "fpenv.h"
+#include "object_ids.h"
 #include "shape.h"
-#include "world.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
 
-float m2Body_GetMass(m2BodyId bodyId)
+static M2_NOINLINE float BodyGetMassWorker(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -24,9 +23,16 @@ float m2Body_GetMass(m2BodyId bodyId)
     return world->bodies.invMass[index] > 0.0f ? 1.0f / world->bodies.invMass[index] : 0.0f;
 }
 
-bool m2Body_IsAwake(m2BodyId bodyId)
+float m2Body_GetMass(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    float result = BodyGetMassWorker(world, bodyId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+bool m2Body_IsAwake(const m2World* world, m2BodyId bodyId)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -37,9 +43,9 @@ bool m2Body_IsAwake(m2BodyId bodyId)
                                                                  : true;
 }
 
-m2Pos2 m2Body_GetWorldPoint(m2BodyId bodyId, m2Vec2 localPoint)
+static M2_NOINLINE m2Pos2 BodyGetWorldPointWorker(const m2World* world, m2BodyId bodyId,
+                                                  m2Vec2 localPoint)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -52,9 +58,17 @@ m2Pos2 m2Body_GetWorldPoint(m2BodyId bodyId, m2Vec2 localPoint)
     return (m2Pos2){xf.p.x + (double)r.x, xf.p.y + (double)r.y};
 }
 
-m2Vec2 m2Body_GetLocalPoint(m2BodyId bodyId, m2Pos2 worldPoint)
+m2Pos2 m2Body_GetWorldPoint(const m2World* world, m2BodyId bodyId, m2Vec2 localPoint)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Pos2 result = BodyGetWorldPointWorker(world, bodyId, localPoint);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Vec2 BodyGetLocalPointWorker(const m2World* world, m2BodyId bodyId,
+                                                  m2Pos2 worldPoint)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -66,9 +80,17 @@ m2Vec2 m2Body_GetLocalPoint(m2BodyId bodyId, m2Pos2 worldPoint)
     return (m2Vec2){xf.q.c * rel.x + xf.q.s * rel.y, -xf.q.s * rel.x + xf.q.c * rel.y};
 }
 
-m2Vec2 m2Body_GetWorldVector(m2BodyId bodyId, m2Vec2 localVector)
+m2Vec2 m2Body_GetLocalPoint(const m2World* world, m2BodyId bodyId, m2Pos2 worldPoint)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = BodyGetLocalPointWorker(world, bodyId, worldPoint);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Vec2 BodyGetWorldVectorWorker(const m2World* world, m2BodyId bodyId,
+                                                   m2Vec2 localVector)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -80,9 +102,17 @@ m2Vec2 m2Body_GetWorldVector(m2BodyId bodyId, m2Vec2 localVector)
                     q.s * localVector.x + q.c * localVector.y};
 }
 
-m2Vec2 m2Body_GetLocalVector(m2BodyId bodyId, m2Vec2 worldVector)
+m2Vec2 m2Body_GetWorldVector(const m2World* world, m2BodyId bodyId, m2Vec2 localVector)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = BodyGetWorldVectorWorker(world, bodyId, localVector);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Vec2 BodyGetLocalVectorWorker(const m2World* world, m2BodyId bodyId,
+                                                   m2Vec2 worldVector)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -94,9 +124,17 @@ m2Vec2 m2Body_GetLocalVector(m2BodyId bodyId, m2Vec2 worldVector)
                     -q.s * worldVector.x + q.c * worldVector.y};
 }
 
-m2Vec2 m2Body_GetWorldPointVelocity(m2BodyId bodyId, m2Pos2 worldPoint)
+m2Vec2 m2Body_GetLocalVector(const m2World* world, m2BodyId bodyId, m2Vec2 worldVector)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = BodyGetLocalVectorWorker(world, bodyId, worldVector);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Vec2 BodyGetWorldPointVelocityWorker(const m2World* world, m2BodyId bodyId,
+                                                          m2Pos2 worldPoint)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -115,9 +153,16 @@ m2Vec2 m2Body_GetWorldPointVelocity(m2BodyId bodyId, m2Pos2 worldPoint)
     return (m2Vec2){v.x - w * r.y, v.y + w * r.x};
 }
 
-int32_t m2Body_GetJoints(m2BodyId bodyId, m2JointId* ids, int32_t capacity)
+m2Vec2 m2Body_GetWorldPointVelocity(const m2World* world, m2BodyId bodyId, m2Pos2 worldPoint)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = BodyGetWorldPointVelocityWorker(world, bodyId, worldPoint);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+int32_t m2Body_GetJoints(const m2World* world, m2BodyId bodyId, m2JointId* ids, int32_t capacity)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -131,7 +176,7 @@ int32_t m2Body_GetJoints(m2BodyId bodyId, m2JointId* ids, int32_t capacity)
         int32_t j = e >> 1;
         if (ids != NULL && total < capacity)
         {
-            m2JointId id = {j + 1, world->idWorld, world->joints.jointGenerations[j]};
+            m2JointId id = {(uint32_t)(j + 1), world->joints.jointGenerations[j]};
             ids[total] = id;
         }
         total += 1;
@@ -139,26 +184,42 @@ int32_t m2Body_GetJoints(m2BodyId bodyId, m2JointId* ids, int32_t capacity)
     return total;
 }
 
-m2Vec2 m2Body_GetLocalPointVelocity(m2BodyId bodyId, m2Vec2 localPoint)
+static M2_NOINLINE m2Vec2 BodyGetLocalPointVelocityWorker(const m2World* world, m2BodyId bodyId,
+                                                          m2Vec2 localPoint)
 {
-    return m2Body_GetWorldPointVelocity(bodyId, m2Body_GetWorldPoint(bodyId, localPoint));
+    return m2Body_GetWorldPointVelocity(world, bodyId,
+                                        m2Body_GetWorldPoint(world, bodyId, localPoint));
 }
 
-m2Pos2 m2Body_GetWorldCenterOfMass(m2BodyId bodyId)
+m2Vec2 m2Body_GetLocalPointVelocity(const m2World* world, m2BodyId bodyId, m2Vec2 localPoint)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = BodyGetLocalPointVelocityWorker(world, bodyId, localPoint);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Pos2 BodyGetWorldCenterOfMassWorker(const m2World* world, m2BodyId bodyId)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
         m2Refuse(world, m2_errorInvalid);
         return (m2Pos2){0.0, 0.0};
     }
-    return m2Body_GetWorldPoint(bodyId, world->bodies.localCenters[index]);
+    return m2Body_GetWorldPoint(world, bodyId, world->bodies.localCenters[index]);
 }
 
-float m2Body_GetRotationalInertia(m2BodyId bodyId)
+m2Pos2 m2Body_GetWorldCenterOfMass(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Pos2 result = BodyGetWorldCenterOfMassWorker(world, bodyId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE float BodyGetRotationalInertiaWorker(const m2World* world, m2BodyId bodyId)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -169,24 +230,17 @@ float m2Body_GetRotationalInertia(m2BodyId bodyId)
     return invI > 0.0f ? 1.0f / invI : 0.0f;
 }
 
-m2WorldId m2Body_GetWorld(m2BodyId bodyId)
+float m2Body_GetRotationalInertia(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
-    m2WorldId id = {0, 0};
-    if (world == NULL)
-    {
-        m2Refuse(world, m2_errorInvalid);
-        return id;
-    }
-    id.index1 = (uint16_t)(world->slot + 1);
-    id.generation = world->worldGeneration;
-    return id;
+    uint64_t env = m2FloatEnvEnter();
+    float result = BodyGetRotationalInertiaWorker(world, bodyId);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
-m2AabbResult m2Body_ComputeAabb(m2BodyId bodyId)
+static M2_NOINLINE m2AabbResult BodyComputeAabbWorker(const m2World* world, m2BodyId bodyId)
 {
     m2AabbResult result = {{0.0, 0.0}, {0.0, 0.0}};
-    m2World* world = m2GetBodyWorld(bodyId);
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -219,9 +273,16 @@ m2AabbResult m2Body_ComputeAabb(m2BodyId bodyId)
     return result;
 }
 
-int8_t m2Body_GetDominance(m2BodyId bodyId)
+m2AabbResult m2Body_ComputeAabb(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2AabbResult result = BodyComputeAabbWorker(world, bodyId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+int8_t m2Body_GetDominance(const m2World* world, m2BodyId bodyId)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -231,17 +292,20 @@ int8_t m2Body_GetDominance(m2BodyId bodyId)
     return world->bodies.dominances[index];
 }
 
-bool m2Body_IsEnabled(m2BodyId bodyId)
+bool m2Body_IsEnabled(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    return index >= 0 && world->bodies.disabled[index] == 0;
+    if (index < 0)
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return false;
+    }
+    return world->bodies.disabled[index] == 0;
 }
 
-m2MassData m2Body_GetMassData(m2BodyId bodyId)
+static M2_NOINLINE m2MassData BodyGetMassDataWorker(const m2World* world, m2BodyId bodyId)
 {
     m2MassData data = {0.0f, {0.0f, 0.0f}, 0.0f};
-    m2World* world = m2GetBodyWorld(bodyId);
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -252,15 +316,20 @@ m2MassData m2Body_GetMassData(m2BodyId bodyId)
     data.mass = invMass > 0.0f ? 1.0f / invMass : 0.0f;
     data.center = world->bodies.localCenters[index];
     float invI = world->bodies.invInertia[index];
-    float inertiaCenter = invI > 0.0f ? 1.0f / invI : 0.0f;
-    data.rotationalInertia =
-        inertiaCenter + data.mass * (data.center.x * data.center.x + data.center.y * data.center.y);
+    data.centralInertia = invI > 0.0f ? 1.0f / invI : 0.0f;
     return data;
 }
 
-m2BodyType m2Body_GetType(m2BodyId bodyId)
+m2MassData m2Body_GetMassData(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2MassData result = BodyGetMassDataWorker(world, bodyId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+m2BodyType m2Body_GetType(const m2World* world, m2BodyId bodyId)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -270,9 +339,8 @@ m2BodyType m2Body_GetType(m2BodyId bodyId)
     return (m2BodyType)world->bodies.types[index];
 }
 
-m2Vec2 m2Body_GetLocalCenter(m2BodyId bodyId)
+static M2_NOINLINE m2Vec2 BodyGetLocalCenterWorker(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -283,9 +351,16 @@ m2Vec2 m2Body_GetLocalCenter(m2BodyId bodyId)
     return world->bodies.localCenters[index];
 }
 
-bool m2Body_IsBullet(m2BodyId bodyId)
+m2Vec2 m2Body_GetLocalCenter(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = BodyGetLocalCenterWorker(world, bodyId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+bool m2Body_IsBullet(const m2World* world, m2BodyId bodyId)
+{
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -295,9 +370,8 @@ bool m2Body_IsBullet(m2BodyId bodyId)
     return world->bodies.bullets[index] != 0;
 }
 
-float m2Body_GetGravityScale(m2BodyId bodyId)
+static M2_NOINLINE float BodyGetGravityScaleWorker(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -307,9 +381,16 @@ float m2Body_GetGravityScale(m2BodyId bodyId)
     return world->bodies.gravityScales[index];
 }
 
-int32_t m2Body_GetShapes(m2BodyId bodyId, m2ShapeId* ids, int32_t capacity)
+float m2Body_GetGravityScale(const m2World* world, m2BodyId bodyId)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    float result = BodyGetGravityScaleWorker(world, bodyId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+int32_t m2Body_GetShapes(const m2World* world, m2BodyId bodyId, m2ShapeId* ids, int32_t capacity)
+{
     int32_t bodyIndex = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (bodyIndex < 0)
     {

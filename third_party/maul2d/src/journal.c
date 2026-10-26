@@ -2,27 +2,27 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Command journal. Wire format, all little-endian raw structs (floats
-// as IEEE-754 bit patterns): a header { magic, version, world echo,
+// as IEEE-754 bit patterns): a header { the state prefix, world echo,
 // snapshotSize }, the embedded snapshot, then op records, each one op
 // byte followed by that op's payload (journal.h). Replay restores the
 // snapshot and re-applies every op through the same public entry
 // points; every recreated id must match the recording.
 
 #include "journal.h"
-#include "world.h"
+
+#include "fpenv.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
 
 #include <string.h>
 
-#define M2_JOURNAL_MAGIC   0x4D324A4Eu // 'M2JN'
-#define M2_JOURNAL_VERSION 1u
+#define M2_JOURNAL_MAGIC   M2_STATE_MAGIC('M', '2', 'J', 'N')
+#define M2_JOURNAL_VERSION 7u
 
 typedef struct m2JournalHeader
 {
-    uint32_t magic;
-    uint32_t version;
+    m2StatePrefix prefix;
     m2Vec2 gravity;
     int32_t bodyCapacity;
     int32_t shapeCapacity;
@@ -30,7 +30,7 @@ typedef struct m2JournalHeader
     int32_t snapshotSize;
 } m2JournalHeader;
 
-_Static_assert(sizeof(m2JournalHeader) == 32, "journal header must be padding-free");
+_Static_assert(sizeof(m2JournalHeader) == 40, "journal header must be padding-free");
 
 // Reserves one record of 1 + bytes and writes its op byte. Returns where
 // the payload goes, or NULL when nothing is recording or the buffer is
@@ -116,9 +116,9 @@ void m2JournalRecordChain(m2World* world, m2BodyId bodyId, const m2ChainDef* def
     memcpy(out + sizeof(header), def->points, (size_t)pointBytes);
 }
 
-int32_t m2World_GetJournalBaseSize(m2WorldId worldId)
+static M2_NOINLINE int32_t WorldGetJournalBaseSizeWorker(const m2World* world)
 {
-    int32_t snapshot = m2World_SnapshotSize(worldId);
+    int32_t snapshot = m2World_SnapshotSize(world);
     if (snapshot <= 0)
     {
         return 0;
@@ -126,25 +126,39 @@ int32_t m2World_GetJournalBaseSize(m2WorldId worldId)
     return (int32_t)sizeof(m2JournalHeader) + snapshot;
 }
 
-bool m2World_StartJournal(m2WorldId worldId, void* buffer, int32_t capacity)
+int32_t m2World_GetJournalBaseSize(const m2World* world)
 {
-    m2World* world = m2WorldFromId(worldId);
-    if (world == NULL || buffer == NULL || world->recorder.journalActive != 0)
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result = WorldGetJournalBaseSizeWorker(world);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Result WorldStartJournalWorker(m2World* world, void* buffer, int32_t capacity)
+{
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return false;
+        return writer;
     }
-    int32_t snapshotSize = m2World_SnapshotSize(worldId);
+    if (buffer == NULL)
+    {
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    if (world->recorder.journalActive != 0)
+    {
+        return m2Refuse(world, m2_errorState);
+    }
+    int32_t snapshotSize = m2World_SnapshotSize(world);
     if (capacity < (int32_t)sizeof(m2JournalHeader) + snapshotSize)
     {
-        m2Refuse(world, m2_errorCapacity);
-        return false;
+        return m2Refuse(world, m2_errorCapacity);
     }
 
     m2JournalHeader header;
     memset(&header, 0, sizeof(header));
-    header.magic = M2_JOURNAL_MAGIC;
-    header.version = M2_JOURNAL_VERSION;
+    header.prefix =
+        m2MakeStatePrefix(M2_JOURNAL_MAGIC, M2_JOURNAL_VERSION, (int32_t)sizeof(header));
     header.gravity = world->gravity;
     header.bodyCapacity = world->bodies.bodyCapacity;
     header.shapeCapacity = world->shapes.shapeCapacity;
@@ -153,70 +167,96 @@ bool m2World_StartJournal(m2WorldId worldId, void* buffer, int32_t capacity)
 
     uint8_t* out = buffer;
     memcpy(out, &header, sizeof(header));
-    if (m2World_Snapshot(worldId, out + sizeof(header), snapshotSize) != snapshotSize)
-    {
-        m2Refuse(world, m2_errorCapacity);
-        return false;
-    }
+    int32_t written = 0;
+    m2Result snapshot = m2World_Snapshot(world, out + sizeof(header), snapshotSize, &written);
+    M2_ASSERT(snapshot == m2_success && written == snapshotSize); // sized just above
+    (void)snapshot;
 
     world->recorder.journal = out;
     world->recorder.journalCapacity = capacity;
     world->recorder.journalCursor = (int32_t)sizeof(header) + snapshotSize;
     world->recorder.journalActive = 1;
     world->recorder.journalOverflow = 0;
-    return true;
+    return m2_success;
 }
 
-int32_t m2World_StopJournal(m2WorldId worldId)
+m2Result m2World_StartJournal(m2World* world, void* buffer, int32_t capacity)
 {
-    m2World* world = m2WorldFromId(worldId);
-    if (world == NULL || world->recorder.journalActive == 0)
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = WorldStartJournalWorker(world, buffer, capacity);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Result WorldStopJournalWorker(m2World* world, int32_t* bytesOut)
+{
+    if (bytesOut == NULL)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return 0;
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    *bytesOut = 0;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    if (world->recorder.journalActive == 0)
+    {
+        return m2Refuse(world, m2_errorState);
     }
     int32_t size = world->recorder.journalCursor;
-    if (world->recorder.journalOverflow != 0)
-    {
-        size = 0;
-        m2Refuse(world, m2_errorCapacity);
-    }
+    bool overflowed = world->recorder.journalOverflow != 0;
     world->recorder.journalActive = 0;
     world->recorder.journal = NULL;
     world->recorder.journalCapacity = 0;
     world->recorder.journalCursor = 0;
     world->recorder.journalOverflow = 0;
-    return size;
+    if (overflowed)
+    {
+        return m2Refuse(world, m2_errorCapacity);
+    }
+    *bytesOut = size;
+    return m2_success;
+}
+
+m2Result m2World_StopJournal(m2World* world, int32_t* bytesOut)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = WorldStopJournalWorker(world, bytesOut);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 // Applies a tape to a world: header, snapshot, then one command per op.
 // Stops at the first op that is malformed, unknown, or recreates an
 // object under a different id than the recording saw; the caller rolls
 // the world back.
-static m2Result ReplayOps(m2WorldId worldId, m2World* world, const uint8_t* data, int32_t size)
+static m2Result ReplayOps(m2World* world, const uint8_t* data, int32_t size)
 {
     m2JournalHeader header;
     memcpy(&header, data, sizeof(header));
-    if (header.magic != M2_JOURNAL_MAGIC || header.version != M2_JOURNAL_VERSION ||
-        header.bodyCapacity != world->bodies.bodyCapacity ||
+    if (header.bodyCapacity != world->bodies.bodyCapacity ||
         header.shapeCapacity != world->shapes.shapeCapacity ||
         header.jointCapacity != world->joints.jointCapacity)
     {
-        return m2_errorConfig; // a tape from another build or another world shape
+        return m2_errorInvalid; // a tape from another world shape
     }
-    if (header.snapshotSize < 0 || size - (int32_t)sizeof(header) < header.snapshotSize ||
-        !m2World_Restore(worldId, data + sizeof(header), header.snapshotSize))
+    if (header.snapshotSize < 0 || size - (int32_t)sizeof(header) < header.snapshotSize)
     {
         return m2_errorInvalid;
     }
+    // The embedded snapshot's refusal is the tape's: one from another
+    // release or build stays m2_errorVersion.
+    m2Result restored = m2World_Restore(world, data + sizeof(header), header.snapshotSize);
+    if (restored != m2_success)
+    {
+        return restored;
+    }
 
-    // Recorded ids carry the recording world's registry index; every
-    // apply rebinds them to the target world, so replay can never reach
-    // across the registry into the original.
+    // Ids carry no world: the recorded ids name slots of whichever world
+    // replays the tape.
     m2ReplayCursor cursor;
-    cursor.worldId = worldId;
     cursor.world = world;
-    cursor.here = world->idWorld;
     cursor.data = data;
     cursor.size = size;
     cursor.offset = (int32_t)sizeof(header) + header.snapshotSize;
@@ -232,6 +272,13 @@ static m2Result ReplayOps(m2WorldId worldId, m2World* world, const uint8_t* data
         {
             return m2_errorInvalid; // unknown op or truncated payload
         }
+        for (int32_t k = 0; k < command->boolCount; ++k)
+        {
+            if (data[cursor.offset + command->bools[k]] > 1)
+            {
+                return m2_errorInvalid; // a bool that is neither false nor true
+            }
+        }
         memcpy(&payload, data + cursor.offset, (size_t)command->payloadSize);
         cursor.offset += command->payloadSize;
         if (!command->apply(&cursor, &payload))
@@ -242,35 +289,64 @@ static m2Result ReplayOps(m2WorldId worldId, m2World* world, const uint8_t* data
     return m2_success;
 }
 
-bool m2World_ReplayJournal(m2WorldId worldId, const void* data, int32_t size)
+static M2_NOINLINE m2Result WorldReplayJournalWorker(m2World* world, const void* data, int32_t size)
 {
-    m2World* world = m2WorldFromId(worldId);
-    if (world == NULL || data == NULL || size < (int32_t)sizeof(m2JournalHeader) ||
-        world->recorder.journalActive != 0)
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return false;
+        return writer;
+    }
+    if (data == NULL)
+    {
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    if (world->recorder.journalActive != 0)
+    {
+        return m2Refuse(world, m2_errorState);
+    }
+    // From here on the tape is untrusted input: refusing it is no misuse
+    // of the API, so nothing is counted. Only the release that wrote a
+    // tape replays it.
+    m2Result prefix = m2CheckStatePrefix(data, size, M2_JOURNAL_MAGIC, M2_JOURNAL_VERSION,
+                                         (int32_t)sizeof(m2JournalHeader));
+    if (prefix != m2_success)
+    {
+        return prefix;
     }
     // Atomic: the world takes the whole tape or none of it. A snapshot
     // taken first backs out a replay that fails part way, so a corrupt
     // or truncated tape never leaves a half-built world behind.
-    int32_t backupSize = m2World_SnapshotSize(worldId);
-    void* backup = m2AllocZeroed((size_t)backupSize);
+    int32_t backupSize = m2World_SnapshotSize(world);
+    void* backup = m2WorldAlloc(world, (size_t)backupSize);
     if (backup == NULL)
     {
-        m2Refuse(world, m2_errorCapacity);
-        return false; // no memory for the guarantee means no replay
+        return m2Refuse(world, m2_errorCapacity); // no memory for the guarantee means no replay
     }
-    m2Result result = m2World_Snapshot(worldId, backup, backupSize) == backupSize
-                          ? ReplayOps(worldId, world, data, size)
-                          : m2_errorCapacity;
+    int32_t written = 0;
+    m2Result snapshot = m2World_Snapshot(world, backup, backupSize, &written);
+    M2_ASSERT(snapshot == m2_success && written == backupSize); // sized just above
+    (void)snapshot;
+    // The ops re-enter the public calls with the tape's values; a value
+    // they refuse is the tape's fault, not the caller's, and counts nothing
+    // (m2Refuse). Host code the replay runs is the caller's and still
+    // counts, whatever it gets wrong.
+    world->replaying = 1;
+    m2Result result = ReplayOps(world, data, size);
     if (result != m2_success)
     {
-        bool restored = m2World_Restore(worldId, backup, backupSize);
-        M2_ASSERT(restored); // our own snapshot must restore: invariant
+        m2Result restored = m2World_Restore(world, backup, backupSize);
+        M2_ASSERT(restored == m2_success); // our own snapshot must restore: invariant
         (void)restored;
-        m2Refuse(world, result);
     }
-    m2Free(backup);
-    return result == m2_success;
+    world->replaying = 0;
+    m2WorldFree(world, backup, (size_t)backupSize);
+    return result;
+}
+
+m2Result m2World_ReplayJournal(m2World* world, const void* data, int32_t size)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = WorldReplayJournalWorker(world, data, size);
+    m2FloatEnvLeave(env);
+    return result;
 }

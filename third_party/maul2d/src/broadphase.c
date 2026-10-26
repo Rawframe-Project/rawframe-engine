@@ -6,52 +6,16 @@
 
 #include "broadphase.h"
 
-#include "body.h"
 #include "contact.h"
-#include "joint.h"
+#include "island.h"
+#include "joint_edges.h"
+#include "proxies.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-// Fat margin in meters: how far a shape may move before its proxy refits.
-#define M2_AABB_MARGIN 0.1
-
-// --- Broadphase helpers ------------------------------------------------------
-
-m2Aabb m2Fatten(m2Aabb aabb)
-{
-    aabb.lowerBound.x -= M2_AABB_MARGIN;
-    aabb.lowerBound.y -= M2_AABB_MARGIN;
-    aabb.upperBound.x += M2_AABB_MARGIN;
-    aabb.upperBound.y += M2_AABB_MARGIN;
-    return aabb;
-}
-
-m2Aabb m2ShapeTightAabb(const m2World* world, int32_t shapeIndex)
-{
-    int32_t body = world->shapes.shapeBody[shapeIndex];
-    return m2ComputeShapeAabb(&world->shapes.shapeGeometry[shapeIndex],
-                              world->bodies.transforms[body]);
-}
-
-int32_t m2ShapeTreeIndex(const m2World* world, int32_t shapeIndex)
-{
-    return world->bodies.types[world->shapes.shapeBody[shapeIndex]];
-}
-
-void m2PushMoved(m2World* world, int32_t shapeIndex)
-{
-    if (world->broadphase.inMoved[shapeIndex] != 0)
-    {
-        return;
-    }
-    world->broadphase.inMoved[shapeIndex] = 1;
-    world->broadphase.moved[world->broadphase.movedCount] = shapeIndex;
-    world->broadphase.movedCount += 1;
-}
 
 // The filter takes effect through the normal rebuild road: wake both
 // ends and push their shapes, and the pair diff emits the end events.
@@ -105,6 +69,7 @@ static bool MoverSeesTree(const m2World* world, int32_t shapeIndex, int32_t tree
            tree == (int32_t)m2_dynamicBody;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): rebuild, merge, diff: one pair stash
 void m2UpdatePairs(m2World* world)
 {
     world->contacts.pairOverflow = 0;

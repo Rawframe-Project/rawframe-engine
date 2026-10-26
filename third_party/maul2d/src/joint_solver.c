@@ -9,8 +9,8 @@
 
 #include "joint_solver.h"
 
-#include "joint.h"
-#include "solver.h"
+#include "math_functions.h"
+#include "solver_base.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -68,8 +68,9 @@ static m2Vec2 AnchorGap(const m2World* world, const m2JointConstraint* c)
     m2Transform tB = world->bodies.transforms[c->bodyB];
     m2Vec2 centerA = m2RotateVec2(tA.q, world->bodies.localCenters[c->bodyA]);
     m2Vec2 centerB = m2RotateVec2(tB.q, world->bodies.localCenters[c->bodyB]);
-    return (m2Vec2){(float)(tB.p.x - tA.p.x) + (centerB.x - centerA.x) + (c->armB.x - c->armA.x),
-                    (float)(tB.p.y - tA.p.y) + (centerB.y - centerA.y) + (c->armB.y - c->armA.y)};
+    return (m2Vec2){
+        m2WorldOffset(tB.p.x - tA.p.x) + (centerB.x - centerA.x) + (c->armB.x - c->armA.x),
+        m2WorldOffset(tB.p.y - tA.p.y) + (centerB.y - centerA.y) + (c->armB.y - c->armA.y)};
 }
 
 static void PrepareCommon(const m2World* world, m2JointConstraint* c, int32_t j, float h)
@@ -98,18 +99,9 @@ static void PrepareCommon(const m2World* world, m2JointConstraint* c, int32_t j,
     c->armA = WorldArm(world, c->bodyA, joints->jointLocalAnchorA[j]);
     c->armB = WorldArm(world, c->bodyB, joints->jointLocalAnchorB[j]);
     c->gap = AnchorGap(world, c);
-    m2JointBodies masses = {{0.0f, 0.0f},
-                            0.0f,
-                            {0.0f, 0.0f},
-                            0.0f,
-                            world->bodies.invMass[c->bodyA],
-                            world->bodies.invInertia[c->bodyA],
-                            world->bodies.invMass[c->bodyB],
-                            world->bodies.invInertia[c->bodyB]};
-    c->pointMass = m2MakePointMass(c->armA, c->armB, &masses);
     m2Rot qA = world->bodies.transforms[c->bodyA].q;
     m2Rot qB = world->bodies.transforms[c->bodyB].q;
-    c->angle = m2UnwindAngle(m2RelativeJointAngle(qA, qB) - joints->jointRefAngle[j]);
+    c->angle = m2UnwindAngleWork(m2RelativeJointAngle(qA, qB) - joints->jointRefAngle[j]);
 }
 
 int32_t m2PrepareJoints(m2World* world, m2JointConstraint* joints, float h)
@@ -235,7 +227,7 @@ m2JointRow m2AxisRow(const m2JointPose* pose, m2Vec2 gap, m2Vec2 axis)
 
 float m2PoseAngle(const m2JointConstraint* c, const m2JointPose* pose)
 {
-    return m2UnwindAngle(c->angle + m2RelativeJointAngle(pose->turnA, pose->turnB));
+    return m2UnwindAngleWork(c->angle + m2RelativeJointAngle(pose->turnA, pose->turnB));
 }
 
 void m2SolveLimits(m2JointConstraint* c, const m2JointRow* row, float value, m2Softness soft,

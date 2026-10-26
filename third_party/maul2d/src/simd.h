@@ -9,9 +9,11 @@
 // backend and its hashes join the cross-platform comparison).
 //
 // Rules that keep the law:
-// - min/max are compare+select, NEVER the native instructions: SSE
-//   and NEON disagree about NaN propagation and signed zero, and
-//   MSVC on arm64 lowers the ternary differently.
+// - min/max follow the ternary law a>b?a:b and a<b?a:b. NEON and the
+//   scalar fallback spell it as compare + select, since NEON's native
+//   min/max propagate NaN and order signed zeros, and MSVC on arm64
+//   lowers the ternary differently. AVX2 uses MAXPS and MINPS, which
+//   Intel defines as exactly that law (see F8Max below).
 // - fused multiply-add is EXPLICIT and used identically everywhere:
 //   _mm256_fmadd_ps, vfmaq_f32 and fmaf are all correctly rounded, so
 //   they agree bit for bit. Implicit contraction stays forbidden by
@@ -180,26 +182,30 @@ static inline m2f8 m2F8NegMulAdd(m2f8 a, m2f8 b, m2f8 c)
 }
 static inline m2f8 m2F8Select(m2f8 mask, m2f8 a, m2f8 b)
 {
-    m2f8 r = {vbslq_f32(vreinterpretq_u32_f32(mask.lo), a.lo, b.lo),
-              vbslq_f32(vreinterpretq_u32_f32(mask.hi), a.hi, b.hi)};
+    m2f8 r;
+    r.lo = vbslq_f32(vreinterpretq_u32_f32(mask.lo), a.lo, b.lo);
+    r.hi = vbslq_f32(vreinterpretq_u32_f32(mask.hi), a.hi, b.hi);
     return r;
 }
 static inline m2f8 m2F8GT(m2f8 a, m2f8 b)
 {
-    m2f8 r = {vreinterpretq_f32_u32(vcgtq_f32(a.lo, b.lo)),
-              vreinterpretq_f32_u32(vcgtq_f32(a.hi, b.hi))};
+    m2f8 r;
+    r.lo = vreinterpretq_f32_u32(vcgtq_f32(a.lo, b.lo));
+    r.hi = vreinterpretq_f32_u32(vcgtq_f32(a.hi, b.hi));
     return r;
 }
 static inline m2f8 m2F8LT(m2f8 a, m2f8 b)
 {
-    m2f8 r = {vreinterpretq_f32_u32(vcltq_f32(a.lo, b.lo)),
-              vreinterpretq_f32_u32(vcltq_f32(a.hi, b.hi))};
+    m2f8 r;
+    r.lo = vreinterpretq_f32_u32(vcltq_f32(a.lo, b.lo));
+    r.hi = vreinterpretq_f32_u32(vcltq_f32(a.hi, b.hi));
     return r;
 }
 static inline m2f8 m2F8EQ(m2f8 a, m2f8 b)
 {
-    m2f8 r = {vreinterpretq_f32_u32(vceqq_f32(a.lo, b.lo)),
-              vreinterpretq_f32_u32(vceqq_f32(a.hi, b.hi))};
+    m2f8 r;
+    r.lo = vreinterpretq_f32_u32(vceqq_f32(a.lo, b.lo));
+    r.hi = vreinterpretq_f32_u32(vceqq_f32(a.hi, b.hi));
     return r;
 }
 static inline m2f8 m2F8Div(m2f8 a, m2f8 b)
@@ -380,7 +386,20 @@ static inline m2f8 m2F8And(m2f8 a, m2f8 b)
 #endif
 
 // Ternary-law min/max: a>b?a:b and a<b?a:b, identical on every
-// backend by construction (compare + select, no native min/max).
+// backend. AVX2's MAXPS and MINPS are defined as exactly that law
+// (the second operand when either is NaN or both are zero), so they
+// stand in for compare + select. NEON's vmaxq/vminq propagate NaN and
+// order signed zeros, so NEON and scalar keep compare + select.
+#if defined(M2_SIMD_AVX2)
+static inline m2f8 m2F8Max(m2f8 a, m2f8 b)
+{
+    return _mm256_max_ps(a, b);
+}
+static inline m2f8 m2F8Min(m2f8 a, m2f8 b)
+{
+    return _mm256_min_ps(a, b);
+}
+#else
 static inline m2f8 m2F8Max(m2f8 a, m2f8 b)
 {
     return m2F8Select(m2F8GT(a, b), a, b);
@@ -389,5 +408,6 @@ static inline m2f8 m2F8Min(m2f8 a, m2f8 b)
 {
     return m2F8Select(m2F8LT(a, b), a, b);
 }
+#endif
 
 #endif // MAUL2D_SRC_SIMD_H

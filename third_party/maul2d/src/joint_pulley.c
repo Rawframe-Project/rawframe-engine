@@ -4,14 +4,14 @@
 // The pulley joint: two ropes over fixed ground anchors sharing one
 // total length, one side geared by a ratio.
 
-#include "joint_solver.h"
-
 #include "body.h"
 #include "broadphase.h"
+#include "fpenv.h"
 #include "joint.h"
+#include "joint_solver.h"
 #include "journal.h"
-#include "solver.h"
-#include "world.h"
+#include "object_ids.h"
+#include "solver_base.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -31,7 +31,7 @@ m2PulleyJointDef m2DefaultPulleyJointDef(void)
 // Live rope length for one pulley side: attach point (f64 body origin
 // plus rotated local anchor) against the f64 ground anchor, a single
 // f64 crossing like every other narrowphase entry.
-float m2PulleyLiveLength(m2World* world, int32_t index, int32_t side)
+float m2PulleyLiveLength(const m2World* world, int32_t index, int32_t side)
 {
     int32_t body = side == 0 ? world->joints.jointBodyA[index] : world->joints.jointBodyB[index];
     m2Vec2 la =
@@ -39,8 +39,8 @@ float m2PulleyLiveLength(m2World* world, int32_t index, int32_t side)
     m2Pos2 g = side == 0 ? world->joints.jointTargets[index] : world->joints.jointTargetsB[index];
     m2Rot q = world->bodies.transforms[body].q;
     m2Vec2 arm = {q.c * la.x - q.s * la.y, q.s * la.x + q.c * la.y};
-    float dx = (float)(world->bodies.transforms[body].p.x - g.x) + arm.x;
-    float dy = (float)(world->bodies.transforms[body].p.y - g.y) + arm.y;
+    float dx = m2WorldOffset(world->bodies.transforms[body].p.x - g.x) + arm.x;
+    float dy = m2WorldOffset(world->bodies.transforms[body].p.y - g.y) + arm.y;
     return sqrtf(dx * dx + dy * dy);
 }
 
@@ -54,30 +54,41 @@ float m2PulleyLiveLength(m2World* world, int32_t index, int32_t side)
 static bool DefValid(const m2PulleyJointDef* def)
 {
     return m2FinitePos2(def->groundAnchorA) && m2FinitePos2(def->groundAnchorB) &&
-           m2FiniteVec2(def->localAnchorA) && m2FiniteVec2(def->localAnchorB) &&
-           m2FiniteF(def->ratio) && def->ratio > 0.0f;
+           m2LocalVec2(def->localAnchorA) && m2LocalVec2(def->localAnchorB) &&
+           m2ValidRatio(def->ratio) && def->ratio > 0.0f;
 }
 
-m2JointId m2CreatePulleyJoint(m2WorldId worldId, const m2PulleyJointDef* def)
+static M2_NOINLINE m2Result CreatePulleyJointWorker(m2World* world, const m2PulleyJointDef* def,
+                                                    m2JointId* jointOut)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || def == NULL || def->internalValue != M2_PLJOINT_COOKIE || !DefValid(def))
+    if (jointOut == NULL)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    *jointOut = m2_nullJointId;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    if (def == NULL || def->internalValue != M2_PLJOINT_COOKIE || !DefValid(def))
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
-    if (bodyA < 0 || bodyB < 0 || bodyA == bodyB)
+    if (bodyA < 0 || bodyB < 0)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorStale);
+    }
+    if (bodyA == bodyB)
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t index = m2AllocateJoint(world);
     if (index < 0)
     {
-        m2Refuse(world, m2_errorCapacity);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorCapacity);
     }
     m2JointId jointId = m2FinishJoint(world, index, (uint8_t)m2_pulleyJoint, bodyA, bodyB,
                                       def->localAnchorA, def->localAnchorB, def->ratio, 0.0f, 0.0f);
@@ -100,50 +111,104 @@ m2JointId m2CreatePulleyJoint(m2WorldId worldId, const m2PulleyJointDef* def)
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreatePulleyJoint, &record, (int32_t)sizeof(record));
     }
-    return jointId;
+    *jointOut = jointId;
+    return m2_success;
 }
 
-void m2PulleyJoint_SetRatio(m2JointId jointId, float ratio)
+m2Result m2CreatePulleyJoint(m2World* world, const m2PulleyJointDef* def, m2JointId* jointOut)
 {
-    m2SetJointParamInternal(m2WorldFromTag(jointId.world), jointId, m2_jointParamPulleyRatio,
-                            ratio);
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreatePulleyJointWorker(world, def, jointOut);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
-float m2PulleyJoint_GetRatio(m2JointId jointId)
+static M2_NOINLINE void PulleyJointSetRatioWorker(m2World* world, m2JointId jointId, float ratio)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    m2SetJointParamInternal(world, jointId, m2_jointParamPulleyRatio, ratio);
+}
+
+void m2PulleyJoint_SetRatio(m2World* world, m2JointId jointId, float ratio)
+{
+    uint64_t env = m2FloatEnvEnter();
+    PulleyJointSetRatioWorker(world, jointId, ratio);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE float PulleyJointGetRatioWorker(const m2World* world, m2JointId jointId)
+{
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_pulleyJoint);
     return index >= 0 ? world->joints.jointLength[index] : 0.0f;
 }
 
-float m2PulleyJoint_GetLengthA(m2JointId jointId)
+float m2PulleyJoint_GetRatio(const m2World* world, m2JointId jointId)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    uint64_t env = m2FloatEnvEnter();
+    float result = PulleyJointGetRatioWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE float PulleyJointGetLengthAWorker(const m2World* world, m2JointId jointId)
+{
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_pulleyJoint);
     return index >= 0 ? m2PulleyLiveLength(world, index, 0) : 0.0f;
 }
 
-float m2PulleyJoint_GetLengthB(m2JointId jointId)
+float m2PulleyJoint_GetLengthA(const m2World* world, m2JointId jointId)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    uint64_t env = m2FloatEnvEnter();
+    float result = PulleyJointGetLengthAWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE float PulleyJointGetLengthBWorker(const m2World* world, m2JointId jointId)
+{
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_pulleyJoint);
     return index >= 0 ? m2PulleyLiveLength(world, index, 1) : 0.0f;
 }
 
-m2Pos2 m2PulleyJoint_GetGroundAnchorA(m2JointId jointId)
+float m2PulleyJoint_GetLengthB(const m2World* world, m2JointId jointId)
+{
+    uint64_t env = m2FloatEnvEnter();
+    float result = PulleyJointGetLengthBWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Pos2 PulleyJointGetGroundAnchorAWorker(const m2World* world, m2JointId jointId)
 {
     m2Pos2 zero = {0.0, 0.0};
-    m2World* world = m2WorldFromTag(jointId.world);
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_pulleyJoint);
     return index >= 0 ? world->joints.jointTargets[index] : zero;
 }
 
-m2Pos2 m2PulleyJoint_GetGroundAnchorB(m2JointId jointId)
+m2Pos2 m2PulleyJoint_GetGroundAnchorA(const m2World* world, m2JointId jointId)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Pos2 result = PulleyJointGetGroundAnchorAWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE m2Pos2 PulleyJointGetGroundAnchorBWorker(const m2World* world, m2JointId jointId)
 {
     m2Pos2 zero = {0.0, 0.0};
-    m2World* world = m2WorldFromTag(jointId.world);
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_pulleyJoint);
     return index >= 0 ? world->joints.jointTargetsB[index] : zero;
+}
+
+m2Pos2 m2PulleyJoint_GetGroundAnchorB(const m2World* world, m2JointId jointId)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Pos2 result = PulleyJointGetGroundAnchorBWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 // --- Solver ---------------------------------------------------------------
@@ -159,10 +224,10 @@ static void PreparePulley(m2World* world, m2JointConstraint* c, const m2JointFra
     m2Pos2 originB = world->bodies.transforms[c->bodyB].p;
     m2Vec2 anchorA = m2RotateVec2(f->qA, world->joints.jointLocalAnchorA[j]);
     m2Vec2 anchorB = m2RotateVec2(f->qB, world->joints.jointLocalAnchorB[j]);
-    c->ropeA = (m2Vec2){(float)(originA.x - world->joints.jointTargets[j].x) + anchorA.x,
-                        (float)(originA.y - world->joints.jointTargets[j].y) + anchorA.y};
-    c->ropeB = (m2Vec2){(float)(originB.x - world->joints.jointTargetsB[j].x) + anchorB.x,
-                        (float)(originB.y - world->joints.jointTargetsB[j].y) + anchorB.y};
+    c->ropeA = (m2Vec2){m2WorldOffset(originA.x - world->joints.jointTargets[j].x) + anchorA.x,
+                        m2WorldOffset(originA.y - world->joints.jointTargets[j].y) + anchorA.y};
+    c->ropeB = (m2Vec2){m2WorldOffset(originB.x - world->joints.jointTargetsB[j].x) + anchorB.x,
+                        m2WorldOffset(originB.y - world->joints.jointTargetsB[j].y) + anchorB.y};
     c->ratio = world->joints.jointLength[j];
     c->length = world->joints.jointRefAngle[j];
 }

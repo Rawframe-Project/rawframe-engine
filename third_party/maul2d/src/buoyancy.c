@@ -21,8 +21,10 @@
 // have no area and do not float.
 
 #include "buoyancy.h"
+
+#include "fpenv.h"
 #include "journal.h"
-#include "world.h"
+#include "math_functions.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -35,7 +37,7 @@ static float Acos(float x)
 {
     float s = 1.0f - x * x;
     s = s > 0.0f ? sqrtf(s) : 0.0f;
-    return m2Atan2(s, x);
+    return m2Atan2Work(s, x);
 }
 
 static m2Vec2 Rotate(m2Rot q, m2Vec2 v)
@@ -158,11 +160,16 @@ static int32_t RoundedOutline(const m2Vec2* verts, const m2Vec2* normals, int32_
     {
         m2Vec2 from = normals[i > 0 ? i - 1 : count - 1];
         m2Vec2 to = normals[i];
-        float turn = m2Atan2(from.x * to.y - from.y * to.x, from.x * to.x + from.y * to.y);
+        float turn = m2Atan2Work(from.x * to.y - from.y * to.x, from.x * to.x + from.y * to.y);
         turn = turn < 0.0f ? turn + 2.0f * (float)M2_PI : turn; // a half turn may read as -pi
+        // The world builds every normal from an edge at least
+        // M2_MIN_EDGE_LENGTH long within M2_HUGE, so the turn is finite and
+        // the cast below sees at most 17.
+        M2_ASSERT(turn >= 0.0f && turn <= 2.0f * (float)M2_PI);
         int32_t steps = (int32_t)ceilf(turn * (8.0f / (float)M2_PI));
         steps = steps < 2 ? 2 : steps;
-        m2Rot rot = m2MakeRot(turn / (float)steps);
+        M2_ASSERT(steps <= 17);
+        m2Rot rot = m2MakeRotWork(turn / (float)steps);
         float inner = FanRadius(radius, steps, turn / (float)steps, rot.s);
         m2Vec2 dir = from;
         for (int32_t k = 0; k <= steps && n < M2_OUTLINE_MAX; ++k)
@@ -221,24 +228,32 @@ m2FluidVolumeDef m2DefaultFluidVolumeDef(void)
     return def;
 }
 
-m2FluidVolumeId m2CreateFluidVolume(m2WorldId worldId, const m2FluidVolumeDef* def)
+static M2_NOINLINE m2Result CreateFluidVolumeWorker(m2World* world, const m2FluidVolumeDef* def,
+                                                    m2FluidVolumeId* volumeOut)
 {
-    m2World* world = m2WorldFromId(worldId);
-    if (world == NULL || def == NULL || def->internalValue != M2_FVOLUME_COOKIE ||
-        world->volumes.fvCapacity == 0)
+    if (volumeOut == NULL)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullFluidVolumeId;
+        return m2Refuse(world, m2_errorInvalid);
     }
-    if (!(def->density >= 0.0f) || !(def->linearDrag >= 0.0f) || !(def->angularDrag >= 0.0f) ||
-        !m2FiniteD(def->surface))
+    *volumeOut = m2_nullFluidVolumeId;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullFluidVolumeId;
+        return writer;
+    }
+    if (def == NULL || def->internalValue != M2_FVOLUME_COOKIE || world->volumes.fvCapacity == 0)
+    {
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    if (!m2ValidDensity(def->density) || !m2ValidRate(def->linearDrag) ||
+        !m2ValidRate(def->angularDrag) || !m2ValidVelocity(def->flow) || !m2FiniteD(def->surface) ||
+        !m2FinitePos2(def->regionLower) || !m2FinitePos2(def->regionUpper))
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     if (world->volumes.fvFreeCount == 0)
     {
-        return m2_nullFluidVolumeId; // pool full: a runtime fact
+        return m2Refuse(world, m2_errorCapacity); // pool full: a runtime fact
     }
     int32_t index = world->volumes.fvFreeQueue[world->volumes.fvFreeHead];
     world->volumes.fvFreeHead = (world->volumes.fvFreeHead + 1) % world->volumes.fvCapacity;
@@ -256,7 +271,7 @@ m2FluidVolumeId m2CreateFluidVolume(m2WorldId worldId, const m2FluidVolumeDef* d
     world->volumes.fvFlow[index] = def->flow;
     world->volumes.fvUserData[index] = def->userData;
     world->volumes.fvAlive[index] = 1;
-    m2FluidVolumeId id = {index + 1, world->idWorld, world->volumes.fvGenerations[index]};
+    m2FluidVolumeId id = {(uint32_t)(index + 1), world->volumes.fvGenerations[index]};
     if (world->recorder.journalActive != 0)
     {
         m2OpCreateFluidVolume record;
@@ -265,12 +280,22 @@ m2FluidVolumeId m2CreateFluidVolume(m2WorldId worldId, const m2FluidVolumeDef* d
         record.expected = id;
         m2JournalRecord(world, m2_opCreateFluidVolume, &record, (int32_t)sizeof(record));
     }
-    return id;
+    *volumeOut = id;
+    return m2_success;
+}
+
+m2Result m2CreateFluidVolume(m2World* world, const m2FluidVolumeDef* def,
+                             m2FluidVolumeId* volumeOut)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreateFluidVolumeWorker(world, def, volumeOut);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 static int32_t FvSlot(const m2World* world, m2FluidVolumeId id)
 {
-    int32_t index = id.index1 - 1;
+    int32_t index = (int32_t)id.index1 - 1;
     if (world == NULL || index < 0 || index >= world->volumes.fvCapacity ||
         world->volumes.fvAlive[index] == 0 || world->volumes.fvGenerations[index] != id.generation)
     {
@@ -279,35 +304,55 @@ static int32_t FvSlot(const m2World* world, m2FluidVolumeId id)
     return index;
 }
 
-void m2DestroyFluidVolume(m2FluidVolumeId volumeId)
+static M2_NOINLINE m2Result DestroyFluidVolumeWorker(m2World* world, m2FluidVolumeId volumeId)
 {
-    m2World* world = m2WorldFromTag(volumeId.world);
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
     int32_t index = FvSlot(world, volumeId);
     if (index < 0)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return;
+        return m2Refuse(world, m2_errorStale);
     }
     if (world->recorder.journalActive != 0)
     {
         m2JournalRecord(world, m2_opDestroyFluidVolume, &volumeId, (int32_t)sizeof(volumeId));
     }
     world->volumes.fvAlive[index] = 0;
+    if (world->volumes.fvGenerations[index] == M2_LAST_GENERATION)
+    {
+        world->volumes.fvRetiredCount += 1;
+        return m2_success;
+    }
     world->volumes.fvGenerations[index] += 1;
     world->volumes.fvFreeQueue[(world->volumes.fvFreeHead + world->volumes.fvFreeCount) %
                                world->volumes.fvCapacity] = index;
     world->volumes.fvFreeCount += 1;
+    return m2_success;
 }
 
-bool m2FluidVolume_IsValid(m2FluidVolumeId volumeId)
+m2Result m2DestroyFluidVolume(m2World* world, m2FluidVolumeId volumeId)
 {
-    m2World* world = m2WorldFromTag(volumeId.world);
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = DestroyFluidVolumeWorker(world, volumeId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+bool m2FluidVolume_IsValid(const m2World* world, m2FluidVolumeId volumeId)
+{
     return FvSlot(world, volumeId) >= 0;
 }
 
-void m2FluidVolume_SetSurface(m2FluidVolumeId volumeId, double surface)
+static M2_NOINLINE void FluidVolumeSetSurfaceWorker(m2World* world, m2FluidVolumeId volumeId,
+                                                    double surface)
 {
-    m2World* world = m2WorldFromTag(volumeId.world);
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = FvSlot(world, volumeId);
     if (index < 0 || !m2FiniteD(surface))
     {
@@ -325,18 +370,56 @@ void m2FluidVolume_SetSurface(m2FluidVolumeId volumeId, double surface)
     world->volumes.fvSurface[index] = surface;
 }
 
-double m2FluidVolume_GetSurface(m2FluidVolumeId volumeId)
+void m2FluidVolume_SetSurface(m2World* world, m2FluidVolumeId volumeId, double surface)
 {
-    m2World* world = m2WorldFromTag(volumeId.world);
-    int32_t index = FvSlot(world, volumeId);
-    return index >= 0 ? world->volumes.fvSurface[index] : 0.0;
+    uint64_t env = m2FloatEnvEnter();
+    FluidVolumeSetSurfaceWorker(world, volumeId, surface);
+    m2FloatEnvLeave(env);
 }
 
-uint64_t m2FluidVolume_GetUserData(m2FluidVolumeId volumeId)
+static M2_NOINLINE double FluidVolumeGetSurfaceWorker(const m2World* world,
+                                                      m2FluidVolumeId volumeId)
 {
-    m2World* world = m2WorldFromTag(volumeId.world);
     int32_t index = FvSlot(world, volumeId);
-    return index >= 0 ? world->volumes.fvUserData[index] : 0;
+    if (index < 0)
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return 0.0;
+    }
+    return world->volumes.fvSurface[index];
+}
+
+double m2FluidVolume_GetSurface(const m2World* world, m2FluidVolumeId volumeId)
+{
+    uint64_t env = m2FloatEnvEnter();
+    double result = FluidVolumeGetSurfaceWorker(world, volumeId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+uint64_t m2FluidVolume_GetUserData(const m2World* world, m2FluidVolumeId volumeId)
+{
+    int32_t index = FvSlot(world, volumeId);
+    if (index < 0)
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return 0;
+    }
+    return world->volumes.fvUserData[index];
+}
+
+// The squared radius of gyration the angular drag takes, at most twice
+// M2_HUGE squared.
+#define M2_MAX_GYRATION2 (4.0f * M2_HUGE * M2_HUGE)
+
+// Holds a body's accumulated force and torque within M2_MAX_FORCE, as the
+// load writers do: the lift on a hundred-kilometer body reaches 1e22 N.
+static void SaturateLoad(m2World* world, int32_t b)
+{
+    m2Vec2* f = &world->bodies.forces[b];
+    f->x = m2SaturateF(f->x, M2_MAX_FORCE);
+    f->y = m2SaturateF(f->y, M2_MAX_FORCE);
+    world->bodies.torques[b] = m2SaturateF(world->bodies.torques[b], M2_MAX_FORCE);
 }
 
 static bool InWater(const m2World* world, int32_t b, int32_t v)
@@ -385,10 +468,13 @@ static void Soak(m2World* world, int32_t b, int32_t vol)
     float invI = world->bodies.invInertia[b];
     if (invM > 0.0f && invI > 0.0f)
     {
-        // I / m is the squared radius of gyration.
-        world->bodies.torques[b] -=
-            (invM / invI) * wet.area * w * world->volumes.fvAngularDrag[vol];
+        // I / m is the squared radius of gyration. Mass data set by hand
+        // can make it as large as the inertia and mass ranges allow; no
+        // body reaches past twice M2_HUGE, so it is held to that.
+        float gyration2 = m2MinF(invM / invI, M2_MAX_GYRATION2);
+        world->bodies.torques[b] -= gyration2 * wet.area * w * world->volumes.fvAngularDrag[vol];
     }
+    SaturateLoad(world, b);
 }
 
 // The per-step pass, volume by volume, bodies in slot order.
@@ -446,5 +532,6 @@ void m2ApplyWind(m2World* world, float dt)
         m2Vec2 v = world->bodies.linearVelocities[b];
         world->bodies.forces[b].x += -drag * area * (v.x - wind.x);
         world->bodies.forces[b].y += -drag * area * (v.y - wind.y);
+        SaturateLoad(world, b);
     }
 }

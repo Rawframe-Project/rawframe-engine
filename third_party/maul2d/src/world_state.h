@@ -10,6 +10,7 @@
 #ifndef MAUL2D_SRC_WORLD_STATE_H
 #define MAUL2D_SRC_WORLD_STATE_H
 
+#include "world_hash.h"
 #include "world_internal.h"
 
 // Allocates every array, sized from the capacities already set in the
@@ -25,7 +26,25 @@ int32_t m2StateWalk(m2World* world, uint8_t* out, const uint8_t* in, int directi
 
 // Checks an incoming snapshot block against the table before any of it
 // lands: every index in range, every flag a flag, every count within its
-// capacity. The block must be exactly the walk's size.
+// capacity, every number within its range. The block must be exactly the
+// walk's size.
 bool m2StateValidate(const m2World* world, const uint8_t* in);
+
+// Checks one body slot against the same rules a restore applies, so a
+// creation that checked its def can assert it wrote a slot a snapshot of
+// the world will restore.
+bool m2StateBodyValid(const m2World* world, int32_t index);
+
+// Where an incoming snapshot block, already accepted by m2StateValidate,
+// holds the bytes of one state field (a world member such as
+// &world->bodies.alive); NULL when the field is not in this world's
+// snapshots. The bytes may be unaligned: read them with memcpy.
+const uint8_t* m2StateIncoming(const m2World* world, const uint8_t* in, const void* field);
+
+// Folds the state the table marks as hashed into one hash: per-object
+// arrays by live slot, keyed by the slot index; counted arrays up to their
+// count, keyed by it; and each pool's identity (its cursors, free queue in
+// order and generations), which decides where the next object lands.
+uint64_t m2StateHash(const m2World* world, m2HashPart part);
 
 #endif // MAUL2D_SRC_WORLD_STATE_H

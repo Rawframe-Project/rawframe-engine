@@ -15,8 +15,8 @@
 // overlaps least is taken instead.
 
 #include "core.h"
+#include "fpenv.h"
 #include "query.h"
-#include "world.h"
 
 #include "maul2d/base.h"
 
@@ -25,10 +25,11 @@
 // Planes for a posed capsule: one distance query per nearby shape. A
 // collar of four linear slops lets a controller see a wall before it
 // reaches it.
-int32_t m2World_CollideMover(m2WorldId worldId, const m2Capsule* mover, m2Transform origin,
-                             m2MoverPlane* results, int32_t capacity, m2QueryFilter filter)
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one tree walk, a plane per shape
+static M2_NOINLINE int32_t WorldCollideMoverWorker(const m2World* world, const m2Capsule* mover,
+                                                   m2Transform origin, m2MoverPlane* results,
+                                                   int32_t capacity, m2QueryFilter filter)
 {
-    m2World* world = m2WorldFromId(worldId);
     m2DistanceProxy moverLocal = m2CapsuleProxy(mover);
     if (world == NULL || moverLocal.count == 0 || !m2QueryMotionValid(origin, (m2Vec2){0.0f, 0.0f}))
     {
@@ -95,7 +96,6 @@ int32_t m2World_CollideMover(m2WorldId worldId, const m2Capsule* mover, m2Transf
             {
                 m2MoverPlane* out = results + total;
                 out->shapeId.index1 = shapeIndex + 1;
-                out->shapeId.world = world->idWorld;
                 out->shapeId.generation = world->shapes.shapeGenerations[shapeIndex];
                 out->normal = (m2Vec2){xf.q.c * normalLocal.x - xf.q.s * normalLocal.y,
                                        xf.q.s * normalLocal.x + xf.q.c * normalLocal.y};
@@ -120,6 +120,15 @@ int32_t m2World_CollideMover(m2WorldId worldId, const m2Capsule* mover, m2Transf
         results[j + 1] = key;
     }
     return total;
+}
+
+int32_t m2World_CollideMover(const m2World* world, const m2Capsule* mover, m2Transform origin,
+                             m2MoverPlane* results, int32_t capacity, m2QueryFilter filter)
+{
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result = WorldCollideMoverWorker(world, mover, origin, results, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 // How far a move may stand inside a plane and still count as clear.
@@ -204,7 +213,8 @@ static void Consider(m2Vec2 wish, const m2MoverPlane* planes, int32_t count, con
     }
 }
 
-m2MoverMove m2SolveMover(m2Vec2 wish, const m2MoverPlane* planes, int32_t count)
+static M2_NOINLINE m2MoverMove SolveMoverWorker(m2Vec2 wish, const m2MoverPlane* planes,
+                                                int32_t count)
 {
     m2MoverMove move = {wish, 0};
     if (planes == NULL || count <= 0 || !m2FiniteVec2(wish))
@@ -234,10 +244,18 @@ m2MoverMove m2SolveMover(m2Vec2 wish, const m2MoverPlane* planes, int32_t count)
     return move;
 }
 
+m2MoverMove m2SolveMover(m2Vec2 wish, const m2MoverPlane* planes, int32_t count)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2MoverMove result = SolveMoverWorker(wish, planes, count);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
 // The velocity closest to the given one that no pressed plane opposes:
 // the same problem with the pressed planes at zero separation.
-m2Vec2 m2ClipMoverVelocity(m2Vec2 velocity, const m2MoverPlane* planes, int32_t count,
-                           uint32_t pressed)
+static M2_NOINLINE m2Vec2 ClipMoverVelocityWorker(m2Vec2 velocity, const m2MoverPlane* planes,
+                                                  int32_t count, uint32_t pressed)
 {
     if (planes == NULL || count <= 0 || pressed == 0)
     {
@@ -255,4 +273,13 @@ m2Vec2 m2ClipMoverVelocity(m2Vec2 velocity, const m2MoverPlane* planes, int32_t 
         }
     }
     return m2SolveMover(velocity, touching, n).translation;
+}
+
+m2Vec2 m2ClipMoverVelocity(m2Vec2 velocity, const m2MoverPlane* planes, int32_t count,
+                           uint32_t pressed)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = ClipMoverVelocityWorker(velocity, planes, count, pressed);
+    m2FloatEnvLeave(env);
+    return result;
 }

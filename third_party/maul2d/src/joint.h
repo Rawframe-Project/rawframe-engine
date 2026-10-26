@@ -20,22 +20,21 @@
 #define M2_JOINT_ROPE        16u // distance: spring enabled (stored with the joint)
 #define M2_JOINT_FREE_LENGTH 32u // distance: zero-stiffness spring, skip the rest row
 
-void m2UnlinkJoint(m2World* world, int32_t joint);
-void m2RebuildJointEdges(m2World* world);
-bool m2JointsForbidPair(const m2World* world, int32_t bodyA, int32_t bodyB);
-float m2RelativeJointAngle(m2Rot qA, m2Rot qB);
-
-// Def checks shared by the kinds: a finite value, and a finite value that
-// is not negative (stiffness, damping, budgets).
-static inline bool m2JointGain(float x)
-{
-    return m2FiniteF(x) && x >= 0.0f;
-}
-
 // Slot lookups: the live slot of a joint id, or -1. The typed lookup
 // also demands a joint type and refuses (world may be NULL) on a miss.
 int32_t m2JointSlotChecked(const m2World* world, m2JointId jointId);
-int32_t m2TypedJointSlot(m2World* world, m2JointId jointId, uint8_t type);
+int32_t m2TypedJointSlot(const m2World* world, m2JointId jointId, uint8_t type);
+
+// The joint kinds with a motor and limits (bit n = m2JointType n). The
+// motor joint's torque budget rides the max motor channel too. Other
+// kinds may keep their own state where these kinds keep limits (the
+// ratchet's tooth), so the channels refuse them.
+#define M2_MOTOR_LIMIT_KINDS                                                                       \
+    ((1u << m2_revoluteJoint) | (1u << m2_prismaticJoint) | (1u << m2_wheelJoint))
+#define M2_MAX_MOTOR_KINDS (M2_MOTOR_LIMIT_KINDS | (1u << m2_motorJoint))
+
+// A distance joint's maximum length when it has none.
+#define M2_OPEN_LENGTH 3.4e38f
 
 // Creation: a free slot (or -1), then the fields every joint starts
 // with, linked into both bodies' lists, both bodies awake.
@@ -44,7 +43,7 @@ m2JointId m2FinishJoint(m2World* world, int32_t index, uint8_t type, int32_t bod
                         m2Vec2 anchorA, m2Vec2 anchorB, float length, float hertz, float damping);
 
 // The rope length on one side of a pulley (0 = A, 1 = B) right now.
-float m2PulleyLiveLength(m2World* world, int32_t index, int32_t side);
+float m2PulleyLiveLength(const m2World* world, int32_t index, int32_t side);
 
 // A def is valid only when its internalValue matches its cookie.
 #define M2_DJOINT_COOKIE  (M2_COOKIE ^ ((int32_t)sizeof(m2DistanceJointDef) << 8) ^ 4)

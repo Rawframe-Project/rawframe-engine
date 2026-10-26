@@ -8,24 +8,21 @@
 
 #include "world_internal.h"
 
-m2World* m2GetBodyWorld(m2BodyId id);
-int32_t m2BodySlot(const m2World* world, m2BodyId id);
-void m2RecomputeMass(m2World* world, int32_t bodyIndex);
-
-// Wakes a dynamic body; static and kinematic bodies never sleep.
-static inline void m2WakeIfDynamic(m2World* world, int32_t body)
-{
-    if (world->bodies.types[body] == (uint8_t)m2_dynamicBody)
-    {
-        world->bodies.asleep[body] = 0;
-        world->bodies.sleepTimes[body] = 0.0f;
-    }
-}
-
 // A def is valid only when its internalValue matches its cookie.
 #define M2_BODY_COOKIE (M2_COOKIE ^ ((int32_t)sizeof(m2BodyDef) << 8) ^ 2)
 
 // The journaled parameter channel (codes in journal.h).
 bool m2SetBodyParamInternal(m2World* world, m2BodyId bodyId, uint8_t param, float value);
+
+// Holds a body's velocity within M2_MAX_SPEED after an impulse, a blast
+// or a shatter, as the solver does after each of its pushes.
+static inline void m2SaturateBodyVelocity(m2World* world, int32_t index)
+{
+    m2Vec2* v = &world->bodies.linearVelocities[index];
+    v->x = m2SaturateF(v->x, M2_MAX_SPEED);
+    v->y = m2SaturateF(v->y, M2_MAX_SPEED);
+    world->bodies.angularVelocities[index] =
+        m2SaturateF(world->bodies.angularVelocities[index], M2_MAX_SPEED);
+}
 
 #endif // MAUL2D_SRC_BODY_H

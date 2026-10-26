@@ -4,14 +4,14 @@
 // The revolute joint: a pinned point with optional angular spring,
 // motor and angle limits.
 
-#include "joint_solver.h"
-
 #include "body.h"
 #include "broadphase.h"
+#include "fpenv.h"
 #include "joint.h"
+#include "joint_solver.h"
 #include "journal.h"
-#include "solver.h"
-#include "world.h"
+#include "object_ids.h"
+#include "solver_base.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -31,34 +31,45 @@ m2RevoluteJointDef m2DefaultRevoluteJointDef(void)
 // ordered ranges.
 static bool DefValid(const m2RevoluteJointDef* def)
 {
-    return m2FiniteVec2(def->localAnchorA) && m2FiniteVec2(def->localAnchorB) &&
-           m2JointGain(def->hertz) && m2JointGain(def->dampingRatio) &&
-           m2JointGain(def->springHertz) && m2JointGain(def->springDampingRatio) &&
-           m2FiniteF(def->motorSpeed) && m2JointGain(def->maxMotorTorque) &&
-           m2FiniteF(def->lowerAngle) && m2FiniteF(def->upperAngle) &&
+    return m2LocalVec2(def->localAnchorA) && m2LocalVec2(def->localAnchorB) &&
+           m2ValidRate(def->hertz) && m2ValidCoefficient(def->dampingRatio) &&
+           m2ValidRate(def->springHertz) && m2ValidCoefficient(def->springDampingRatio) &&
+           m2ValidSpeed(def->motorSpeed) && m2ValidMaxForce(def->maxMotorTorque) &&
+           m2ValidAngle(def->lowerAngle) && m2ValidAngle(def->upperAngle) &&
            def->lowerAngle <= def->upperAngle;
 }
 
-m2JointId m2CreateRevoluteJoint(m2WorldId worldId, const m2RevoluteJointDef* def)
+static M2_NOINLINE m2Result CreateRevoluteJointWorker(m2World* world, const m2RevoluteJointDef* def,
+                                                      m2JointId* jointOut)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || def == NULL || def->internalValue != M2_RJOINT_COOKIE || !DefValid(def))
+    if (jointOut == NULL)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    *jointOut = m2_nullJointId;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    if (def == NULL || def->internalValue != M2_RJOINT_COOKIE || !DefValid(def))
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
-    if (bodyA < 0 || bodyB < 0 || bodyA == bodyB)
+    if (bodyA < 0 || bodyB < 0)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorStale);
+    }
+    if (bodyA == bodyB)
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t index = m2AllocateJoint(world);
     if (index < 0)
     {
-        m2Refuse(world, m2_errorCapacity);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorCapacity);
     }
     m2JointId jointId =
         m2FinishJoint(world, index, (uint8_t)m2_revoluteJoint, bodyA, bodyB, def->localAnchorA,
@@ -87,7 +98,16 @@ m2JointId m2CreateRevoluteJoint(m2WorldId worldId, const m2RevoluteJointDef* def
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateRevoluteJoint, &record, (int32_t)sizeof(record));
     }
-    return jointId;
+    *jointOut = jointId;
+    return m2_success;
+}
+
+m2Result m2CreateRevoluteJoint(m2World* world, const m2RevoluteJointDef* def, m2JointId* jointOut)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreateRevoluteJointWorker(world, def, jointOut);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 // --- Solver ---------------------------------------------------------------
@@ -137,8 +157,8 @@ static void SolveRevolute(m2JointConstraint* c, const m2JointPose* pose, m2Joint
     m2Vec2 gap = pass->biased ? m2PoseGap(c, pose) : (m2Vec2){0.0f, 0.0f};
     m2RowDrive x = m2HeldDrive(c->soft, gap.x, pass->biased);
     m2RowDrive y = m2HeldDrive(c->soft, gap.y, pass->biased);
-    m2SolvePointPair(pose->armA, pose->armB, c->pointMass, b, (m2Vec2){x.bias, y.bias}, x,
-                     &c->impulse, M2_ROW_FREE);
+    m2SolvePointPair(pose->armA, pose->armB, b, (m2Vec2){x.bias, y.bias}, x, &c->impulse,
+                     M2_ROW_FREE);
 }
 
 static void RevoluteReaction(const m2World* world, int32_t j, float invH, float* force,

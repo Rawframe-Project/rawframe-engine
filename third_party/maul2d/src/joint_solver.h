@@ -8,9 +8,8 @@
 #ifndef MAUL2D_SRC_JOINT_SOLVER_H
 #define MAUL2D_SRC_JOINT_SOLVER_H
 
-#include "joint.h"
 #include "joint_row.h"
-#include "solver.h"
+#include "solver_base.h"
 #include "world_internal.h"
 
 // A joint as the solver sees it for one step. Accumulated impulses live
@@ -38,13 +37,11 @@ typedef struct m2JointConstraint
     float maxMotorImpulse; // h times the motor's force or torque
     float maxPullImpulse;  // motor, mouse: h times the linear force budget
     float correction;      // motor: the fraction of error removed per step
+    float compliance;      // mouse: the pull's compliance per inverse mass, 0 for none
     m2Softness soft;       // the constraint rows
     m2Softness spring;     // the kind's spring (see each kind)
     bool linearSpring;     // a real spring: pulls in the relax pass too
     bool angularSpring;
-    // The point pair's mass inverse, taken once per step at the prepare
-    // arms: within a step the arms turn by one step's rotation at most.
-    m2PointMass pointMass;
     m2Vec2 impulse;
     float motorImpulse;
     float lowerImpulse;
