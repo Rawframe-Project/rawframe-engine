@@ -128,17 +128,17 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(crates_prediction PROPERTIES
                          PROCESSORS 6
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,")
-    # One bot predicts its own ship on Gale's sea (D685): hundreds of ticks
+    # One bot predicts its own ship on Gale's sea: hundreds of ticks
     # confirmed, a ship floated in Kest and resimulated alike, and its
-    # broadsides heard as it fires them (D686). Its rollback bound is a
-    # real-time one, as Plaza's (D829): the thread tree's full check rolled
-    # back 107 times, so it plays alone, in the fast check (D835).
+    # broadsides heard as it fires them. Its rollback bound is a real-time
+    # one, as Plaza's: a loaded machine's late inputs roll back more, so it
+    # is an integration test, played alone in clang-development.
     add_test(NAME gale_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/gale_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(gale_prediction PROPERTIES
                          PROCESSORS 6
-                         LABELS alone
+                         LABELS integration
                          RUN_SERIAL TRUE
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9],\"rollbacks\":[0-9][0-9]?,[^\n]*\"effectsDelivered\":[1-9][0-9]*,")
     # Sixteen bots play the sample platformer: nine bodies of the level and
@@ -409,43 +409,13 @@ if(RAWFRAME_BUILD_TESTS)
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,\"drawCalls\":[1-9][0-9]+,\"modelsLeftOut\":0,\"meshesUploaded\":([3-9]|1[0-9]),[^\n]*\"framesOccluded\":[1-9][0-9]+,[^\n]*\"postProcessesRun\":[1-9][0-9]+,\"postProcessesLeftOut\":0,\"emittersDrawn\":[1-9][0-9]+,\"emittersLeftOut\":0,\"particlesSpawned\":[1-9][0-9]+,\"ribbonsDrawn\":[1-9][0-9]+,\"viewFrames\":[1-9][0-9]*,[^\n]*\"modelsSkinned\":[1-9][0-9]*.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"mostColors\":[1-9][0-9][0-9]+,[^\n]*\"captured\":true")
-        # The plaza on a headset (D593): under a headless Monado of its own
-        # (tools/xr_run.sh), the device made by the headset's runtime, the
-        # session focused, each eye's view drawn from its pose (D595), the
-        # frames submitted to the headset, and its controllers located but
-        # fed to no one, the arena lending no client devices (D596); with no
-        # runtime, played flat and drawn offscreen all the same.
-        configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf @ONLY)
-        # Played with a runtime that does not exist named (D654).
+        # The plaza where the headset's runtime is absent, played flat and
+        # drawn offscreen all the same; the headset itself is the client's
+        # integration test. The configuration names a runtime that does not
+        # exist.
         set(RAWFRAME_TEST_XR_RUNTIME "xr.runtime = no_runtime.json")
         configure_file(tests/plaza_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset_absent.conf @ONLY)
         unset(RAWFRAME_TEST_XR_RUNTIME)
-        if(RAWFRAME_ARENA_HEADSET AND RAWFRAME_MONADO_SERVICE AND NOT WIN32)
-            add_test(NAME plaza_headset
-                     COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL}
-                             ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh $<TARGET_FILE:rawframe_host_arena>
-                             ${CMAKE_CURRENT_BINARY_DIR}/plaza_headset.conf
-                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-            set_tests_properties(plaza_headset PROPERTIES
-                                 LABELS headset
-                                 FIXTURES_REQUIRED plaza_content
-                                 PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"xr_ready\".*\"code\":\"xr_session_state\"[^\n]*\"state\":\"focused\".*\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,.*\"code\":\"scene_eyes_summary\"[^\n]*\"eyes\":2,\"eyeFrames\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"width\":128,\"height\":128,[^\n]*\"headsetFrames\":[1-9][0-9]+.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,[^\n]*\"framesHandLocated\":[1-9][0-9]+,\"controllerEvents\":0,\"handsPointing\":0,\"hapticsFelt\":0,\"hapticsUnfelt\":0,\"away\":[1-9][0-9]*,\"failed\":false")
-            # Stalls on a headset with its UI on the panel (D597): the HUD
-            # laid out at the panel's size and drawn on it, and the panel
-            # submitted over the eyes.
-            configure_file(tests/tycoon_headset.conf.in ${CMAKE_CURRENT_BINARY_DIR}/tycoon_headset.conf @ONLY)
-            add_test(NAME tycoon_headset
-                     COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xr_run.sh ${RAWFRAME_SHELL}
-                             ${CMAKE_CURRENT_SOURCE_DIR}/tests/runners_drawn.sh $<TARGET_FILE:rawframe_host_arena>
-                             ${CMAKE_CURRENT_BINARY_DIR}/tycoon_headset.conf
-                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-            set_tests_properties(tycoon_headset PROPERTIES
-                                 LABELS headset
-                                 FIXTURES_REQUIRED tycoon_content
-                                 PASS_REGULAR_EXPRESSION
-                                 "\"code\":\"scene_eyes_drawing_summary\"[^\n]*\"eyes\":2,\"frames\":[1-9][0-9]+.*\"code\":\"ui_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,\"framesOnPanel\":[1-9][0-9]+,[^\n]*\"glyphRuns\":[1-9][0-9]+,.*\"code\":\"xr_summary\"[^\n]*\"framesSubmitted\":[1-9][0-9]+,\"framesPanelSubmitted\":[1-9][0-9]+,[^\n]*\"failed\":false")
-        endif()
         if(RAWFRAME_ARENA_HEADSET)
             # Drawn flat where no runtime answers: any frame shows it, however
             # few a loaded machine draws (nine in a check rebuilding every
@@ -533,21 +503,19 @@ if(RAWFRAME_BUILD_TESTS)
                              "\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]*,[^\n]*\"regionFrames\":[1-9][0-9]+.*\"code\":\"scene_summary\"[^\n]*\"players\":2,\"playerFrames\":[0-9]+.*\"code\":\"frame_summary\"[^\n]*\"readBacks\":[1-9][0-9]*,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
     endif()
     # Four bots predict their walkers in 3D: at least a thousand ticks
-    # confirmed, fewer rollbacks than that, and no checksum diverged (D274).
-    # Run alone it rolls back some thirty times; a loaded machine, whose
-    # inputs arrive late, more than a hundred over twice the ticks; a
-    # prediction that missed every tick would roll back each (D511). Its
-    # bound is a real-time one: CI's full check at a load of 111, the
-    # server's ticks 20 ms at p95 in gcc's debug tree, rolled back 1,585
-    # times, past the bound in the run before it too, so it plays alone,
-    # in the fast check (D829).
+    # confirmed, fewer rollbacks than that, and no checksum diverged. Run
+    # alone it rolls back some thirty times; a prediction that missed every
+    # tick would roll back each. Its bound is a real-time one, which a
+    # loaded machine's late inputs pass (over a thousand rollbacks in a
+    # debug tree at full load), so it is an integration test, played alone
+    # in clang-development.
     add_test(NAME plaza_prediction
              COMMAND rawframe_host_arena --config ${CMAKE_CURRENT_BINARY_DIR}/plaza_prediction.conf
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(plaza_prediction PROPERTIES
                          FIXTURES_REQUIRED plaza_content
                          PROCESSORS 6
-                         LABELS alone
+                         LABELS integration
                          RUN_SERIAL TRUE
                          PASS_REGULAR_EXPRESSION "\"confirmed\":[1-9][0-9][0-9][0-9],\"rollbacks\":[0-9]?[0-9]?[0-9],"
                          FAIL_REGULAR_EXPRESSION "\"checksumsDiverged\":[1-9]")

@@ -57,7 +57,7 @@ Follow the [repository standard's Tests section](https://github.com/Rawframe-Pro
 
 - A module's tests are `RAWFRAME_TEST(name)` functions in its `tests/`, checking with `RAWFRAME_EXPECT`, which reports and continues. Add a case to the module's existing test file; cross-module scenarios go in `tests/scenarios/`. The fatal path is tested in a child process with the harness's runner.
 - Test through public headers. Do not test private state or call order.
-- Window, browser, headset and played-game tests carry one of the integration labels (`window`, `headset`, `alone`, `gesture`, `studio`, `heavy`). Keep them to a few end-to-end scenarios; never add one for a cosmetic change.
+- Window, browser, headset and played-game tests carry the label `integration`. Keep them to a few end-to-end scenarios; never add one for a cosmetic change.
 - Studio's behavior is tested through the authoring session (`hosts/author/tests`, `modules/authoring_session/tests`), not by driving its window.
 - A new reader of untrusted input gets a fuzz target (`rawframe_module_fuzz` in the module's `CMakeLists.txt`) with seed inputs, and a fuzz finding becomes a test in its module's suite.
 - Pixel tests draw on lavapipe and compare exact or bounded values; a device test that finds no adapter fails where `RAWFRAME_REQUIRE_GPU` is set.

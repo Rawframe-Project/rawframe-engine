@@ -20,6 +20,7 @@ obj/
 tmp/
 coverage/
 CMakeUserPresets.json
+__pycache__/
 
 # Logs and crash artifacts
 *.log

@@ -65,7 +65,7 @@ out/clang-development/modules/world/rawframe_world_tests --list   # the cases in
 out/clang-development/modules/world/rawframe_world_tests Barrier  # the cases whose name contains Barrier
 ```
 
-Tests read the source tree's files through `RAWFRAME_TEST_FILES` and start programs from the build tree. Window, browser, headset and played-game tests run under their own X server (`tools/xvfb_run.sh`) and carry one of the labels the check treats as integration tests; see [checks.md](checks.md).
+Tests read the source tree's files through `RAWFRAME_TEST_FILES` and start programs from the build tree. Window, browser, headset and played-game tests run under their own X server (`tools/xvfb_run.sh`) and carry the label `integration`; see [checks.md](checks.md).
 
 ## Playing a game from a build
 
