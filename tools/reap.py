@@ -135,6 +135,10 @@ def main() -> int:
         for pid in remaining:
             end(pid)
             left += 1
+    else:
+        # What still runs is named, so nothing outlives the run unnamed.
+        if still := children(me, command.pid):
+            print(f"reap: still running after {LAST_ROUNDS} rounds: {' '.join(map(str, still))}", flush=True)
     if left:
         print(f"reap: {left} process(es) outlived the tests that started them", flush=True)
         return status or 1
