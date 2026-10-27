@@ -13,11 +13,14 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 #include "rawframe/test/test.h"
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <optional>
+#include <vector>
 
 using namespace rawframe;
 using namespace rawframe::scene_fixture;
@@ -182,6 +185,96 @@ RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
         const std::array<int, 3> kBar = at(*pixels, kSide * 3 / 4, 2);
         RAWFRAME_EXPECT(kBar[0] == 0 && kBar[1] == 0 && kBar[2] >= 254);
     }
+}
+
+RAWFRAME_TEST(SplitScreenViewsJoiningAfterTheSceneDrawTheSamePicture) {
+    // The scene draws the whole picture alone first; then two players'
+    // views join after it, as a split's views join a running client's
+    // frames, the scene drawing nothing of its own while they show. The
+    // picture is the one the same views make when they come before the
+    // scene: the scene's earlier frame leaves nothing behind, and nothing
+    // the scene records covers the views' regions.
+    const auto kDevice = opened();
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto scene = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(scene.has_value() && framer.has_value());
+    if (!scene.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    render_scene::MaterialBlob unlit = render_scene::noMaterial();
+    unlit[15] = 1 + 2;
+    const auto kWall = [&](std::array<float, 4> color) {
+        SceneFrame seen = looking();
+        seen.shadows.count = 0;
+        seen.dither = false;
+        seen.tonemapper = render_scene::Tonemapper::Linear;
+        SceneDraw wall = box(4, 20, color);
+        wall.material = 1;
+        seen.draws = {wall};
+        seen.materials = {render_scene::noMaterial(), unlit};
+        seen.textures = {{}, {}};
+        return seen;
+    };
+    const SceneFrame kWhite = kWall({1, 1, 1, 1});
+    const SceneFrame kRed = kWall({1, 0, 0, 1});
+    const SceneFrame kGreen = kWall({0, 1, 0, 1});
+    // The scene alone, white across the picture.
+    const auto kAlone = drawn(**framer, **scene, kWhite, kMeshes);
+    RAWFRAME_EXPECT(kAlone.has_value() && at(*kAlone, kSide / 2, kSide / 2)[1] > 200);
+    // The views, in the scene's order or before it, until each has drawn.
+    constexpr std::array<std::uint8_t, 3> kBlue{0, 0, 255};
+    const auto kSplit = [&](bool afterTheScene) -> std::optional<std::vector<std::byte>> {
+        auto left = render_scene_gpu::TextureView::create(*kDevice, **scene, 0, kSide / 2, kSide);
+        auto right = render_scene_gpu::TextureView::create(*kDevice, **scene, 0, kSide / 2, kSide / 2);
+        RAWFRAME_EXPECT(left.has_value() && right.has_value());
+        if (!left.has_value() || !right.has_value()) {
+            return std::nullopt;
+        }
+        const std::array<render::FrameRecorder*, 3> kRecorders =
+            afterTheScene ? std::array<render::FrameRecorder*, 3>{scene->get(), left->get(), right->get()}
+                          : std::array<render::FrameRecorder*, 3>{left->get(), right->get(), scene->get()};
+        std::optional<std::vector<std::byte>> pixels;
+        for (int attempt = 0;
+             attempt < 1000 && ((**left).statistics().frames == 0 || (**right).statistics().frames == 0);
+             ++attempt) {
+            (**left).prepare(&kRed, kMeshes, {}, {}, render_scene_gpu::Placement{.x = 0, .y = 0, .bars = kBlue});
+            (**right).prepare(
+                &kGreen, kMeshes, {}, {}, render_scene_gpu::Placement{.x = kSide / 2, .y = kSide / 4, .bars = kBlue});
+            (**scene).prepare(nullptr, kMeshes);
+            RAWFRAME_EXPECT(
+                (*framer)->make(kRecorders, {.width = kSide, .height = kSide, .readBack = true}).value_or(false));
+            RAWFRAME_EXPECT((*framer)->finish(scene_fixture::kFrameWait).has_value());
+            pixels = (*framer)->pixels();
+        }
+        return pixels;
+    };
+    const auto kLate = kSplit(true);
+    const auto kEarly = kSplit(false);
+    RAWFRAME_EXPECT(kLate.has_value() && kEarly.has_value() && kLate->size() == kEarly->size());
+    if (!kLate.has_value() || !kEarly.has_value() || kLate->size() != kEarly->size()) {
+        return;
+    }
+    // Every channel of every pixel within 2 of the other order's.
+    int most = 0;
+    for (std::size_t channel = 0; channel < kLate->size(); ++channel) {
+        most = std::max(most,
+                        std::abs(std::to_integer<int>((*kLate)[channel]) - std::to_integer<int>((*kEarly)[channel])));
+    }
+    std::printf("the orders differ by %d at most\n", most);
+    RAWFRAME_EXPECT(most <= 2);
+    // And it is the split: red, green between blue bars, no white left.
+    const std::array<int, 3> kLeft = at(*kLate, kSide / 4, kSide / 2);
+    const std::array<int, 3> kRight = at(*kLate, kSide * 3 / 4, kSide / 2);
+    const std::array<int, 3> kBar = at(*kLate, kSide * 3 / 4, 2);
+    RAWFRAME_EXPECT(kLeft[0] > 200 && kLeft[1] < 40 && kLeft[2] < 40);
+    RAWFRAME_EXPECT(kRight[0] < 40 && kRight[1] > 200 && kRight[2] < 40);
+    RAWFRAME_EXPECT(kBar[0] == 0 && kBar[1] == 0 && kBar[2] >= 254);
 }
 
 RAWFRAME_TEST(AViewDrawnAtItsRenderScaleFillsItsRegion) {
