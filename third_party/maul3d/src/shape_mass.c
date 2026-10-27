@@ -3,23 +3,16 @@
 //
 // Shape mass properties and the body mass they sum to.
 
-#include "body.h"
-#include "broad_phase.h"
-#include "hull.h"
-#include "journal.h"
-#include "manifold.h"
-#include "quickhull.h"
 #include "shape.h"
-#include "voxel.h"
-#include "world.h"
 #include "world_internal.h"
 
+#include <float.h>
 #include <string.h>
 
-// Invert a symmetric positive-definite 3x3 via the adjugate. A
-// singular or non-positive matrix returns zero (an unrotatable body),
-// never NaN.
-static m3Mat3 InvertSymmetric(m3Mat3 m)
+// Invert a symmetric positive-definite 3x3 via the adjugate, writing its
+// determinant to *detOut. A singular or non-positive matrix returns zero
+// (an unrotatable body).
+static m3Mat3 AdjugateInverse(m3Mat3 m, m3real* detOut)
 {
     m3real a = m.cx.x;
     m3real b = m.cy.x; // = m.cx.y by symmetry
@@ -31,6 +24,7 @@ static m3Mat3 InvertSymmetric(m3Mat3 m)
     m3real co01 = c * e - b * f;
     m3real co02 = b * e - c * d;
     m3real det = a * co00 + b * co01 + c * co02;
+    *detOut = det;
     if (!(det > 0.0f))
     {
         return m3MakeZeroMat3();
@@ -41,6 +35,37 @@ static m3Mat3 InvertSymmetric(m3Mat3 m)
     r.cy = (m3Vec3){co01 * inv, (a * f - c * c) * inv, (b * c - a * e) * inv};
     r.cz = (m3Vec3){co02 * inv, (b * c - a * e) * inv, (a * d - b * b) * inv};
     return r;
+}
+
+static bool FiniteMat3(m3Mat3 m)
+{
+    return m3FiniteV3(m.cx) && m3FiniteV3(m.cy) && m3FiniteV3(m.cz);
+}
+
+// The adjugate works in the cube of the inertia's scale, which leaves
+// float range for a body small or large enough. The direct result stands
+// whenever its determinant is a normal float and every entry is finite,
+// which covers every ordinary body bit for bit; otherwise the matrix is
+// inverted at unit scale and the result rescaled. A body too thin even
+// for that gets zero, as a singular one does.
+static m3Mat3 InvertSymmetric(m3Mat3 m)
+{
+    m3real det;
+    m3Mat3 direct = AdjugateInverse(m, &det);
+    if (det >= FLT_MIN && det <= FLT_MAX && FiniteMat3(direct))
+    {
+        return direct;
+    }
+    m3real scale = m3MaxF(m.cx.x, m3MaxF(m.cy.y, m.cz.z));
+    if (!(scale > 0.0f) || !(scale <= FLT_MAX))
+    {
+        return m3MakeZeroMat3();
+    }
+    m3real k = 1.0f / scale;
+    m3Mat3 unit = {m3MulSV3(k, m.cx), m3MulSV3(k, m.cy), m3MulSV3(k, m.cz)};
+    m3Mat3 r = AdjugateInverse(unit, &det);
+    r = (m3Mat3){m3MulSV3(k, r.cx), m3MulSV3(k, r.cy), m3MulSV3(k, r.cz)};
+    return FiniteMat3(r) ? r : m3MakeZeroMat3();
 }
 
 // Density-scaled mass, centroid, and centroid inertia of one shape.
@@ -84,17 +109,18 @@ static void ComposeMassProps(const m3World* world, int32_t s, m3Vec3* com, m3Mat
                            r.cx.z * t.cz.x + r.cy.z * t.cz.y + r.cz.z * t.cz.z};
 }
 
-static int ShapeMassProps(const m3World* world, int32_t s, float* massOut, m3Vec3* comOut,
-                          m3Mat3* inertiaOut)
+// A shape's mass properties from its type, geometry and density, and for
+// a hull its interned content.
+static int MassPropsOf(uint8_t type, const m3ShapeGeom* geom, const m3HullData* hull, float density,
+                       float* massOut, m3Vec3* comOut, m3Mat3* inertiaOut)
 {
-    uint8_t type = world->shapes.shapeType[s];
     if (type == (uint8_t)m3_sphereShape)
     {
-        float r = world->shapes.shapeGeom[s].s;
-        float m = world->shapes.shapeDensity[s] * (4.0f / 3.0f) * M3_PI * r * r * r;
+        float r = geom->s;
+        float m = density * (4.0f / 3.0f) * M3_PI * r * r * r;
         float ic = 0.4f * m * r * r;
         *massOut = m;
-        *comOut = world->shapes.shapeGeom[s].v;
+        *comOut = geom->v;
         *inertiaOut = m3MakeZeroMat3();
         inertiaOut->cx.x = ic;
         inertiaOut->cy.y = ic;
@@ -109,9 +135,9 @@ static int ShapeMassProps(const m3World* world, int32_t s, float* massOut, m3Vec
         // because t1(x)t1 + t2(x)t2 = Identity - u(x)u for any
         // orthonormal basis {t1, u, t2}. No basis matrix needed and
         // the result is exactly symmetric.
-        m3Vec3 p1 = world->shapes.shapeGeom[s].v;
-        m3Vec3 p2 = world->shapes.shapeGeom[s].v2;
-        float r = world->shapes.shapeGeom[s].s;
+        m3Vec3 p1 = geom->v;
+        m3Vec3 p2 = geom->v2;
+        float r = geom->s;
         m3Vec3 axis = m3Sub3(p2, p1);
         float length = sqrtf(m3Dot3(axis, axis));
         // The create walls demand length > 0, but a mutated snapshot
@@ -120,7 +146,6 @@ static int ShapeMassProps(const m3World* world, int32_t s, float* massOut, m3Vec
         // term below vanishes and the isotropic (sphere) inertia is
         // exactly right, so any unit stand-in axis is correct.
         m3Vec3 u = length > 0.0f ? m3MulSV3(1.0f / length, axis) : (m3Vec3){1.0f, 0.0f, 0.0f};
-        float density = world->shapes.shapeDensity[s];
         float mCyl = density * M3_PI * r * r * length;
         float mSph = density * (4.0f / 3.0f) * M3_PI * r * r * r;
         float axial = 0.5f * mCyl * r * r + 0.4f * mSph * r * r;
@@ -138,8 +163,6 @@ static int ShapeMassProps(const m3World* world, int32_t s, float* massOut, m3Vec
     }
     if (type == (uint8_t)m3_hullShape)
     {
-        const m3HullData* hull = &world->hulls.hullData[world->shapes.shapeHullIndex[s]];
-        float density = world->shapes.shapeDensity[s];
         *massOut = density * hull->unitMass;
         *comOut = hull->unitCom;
         m3Mat3 ic = hull->unitInertiaCom;
@@ -150,6 +173,84 @@ static int ShapeMassProps(const m3World* world, int32_t s, float* massOut, m3Vec
         return 1;
     }
     return 0;
+}
+
+// Shape s's interned hull, or NULL for a shape that holds none.
+static const m3HullData* ShapeHull(const m3World* world, int32_t s)
+{
+    int32_t h = world->shapes.shapeHullIndex[s];
+    return h >= 0 ? &world->hulls.hullData[h] : NULL;
+}
+
+static int ShapeMassProps(const m3World* world, int32_t s, float* massOut, m3Vec3* comOut,
+                          m3Mat3* inertiaOut)
+{
+    return MassPropsOf(world->shapes.shapeType[s], &world->shapes.shapeGeom[s], ShapeHull(world, s),
+                       world->shapes.shapeDensity[s], massOut, comOut, inertiaOut);
+}
+
+// Whether every principal moment of a symmetric inertia is at least
+// floor: inertia - floor E is positive semidefinite exactly when all
+// seven of its principal minors are non-negative. Doubles, no libm, so
+// every platform decides alike.
+static bool InertiaAtLeast(const m3Mat3* ic, double floor)
+{
+    double a = (double)ic->cx.x - floor;
+    double d = (double)ic->cy.y - floor;
+    double f = (double)ic->cz.z - floor;
+    double b = (double)ic->cy.x;
+    double c = (double)ic->cz.x;
+    double e = (double)ic->cz.y;
+    double det = a * (d * f - e * e) - b * (b * f - e * c) + c * (b * e - d * c);
+    return a >= 0.0 && d >= 0.0 && f >= 0.0 && a * d - b * b >= 0.0 && a * f - c * c >= 0.0 &&
+           d * f - e * e >= 0.0 && det >= 0.0; // false for NaN
+}
+
+bool m3ShapeMassFloors(uint8_t type, const m3ShapeGeom* geom, const m3HullData* hull, float density,
+                       double* total)
+{
+    float m;
+    m3Vec3 c;
+    m3Mat3 ic;
+    if (MassPropsOf(type, geom, hull, density, &m, &c, &ic) == 0)
+    {
+        return true;
+    }
+    *total += (double)m;
+    return m >= M3_MASS_FLOOR && InertiaAtLeast(&ic, (double)M3_INERTIA_FLOOR);
+}
+
+// The mass floors and ceiling over body's shapes, with slot (or -1 for
+// none) taking the given type, geometry and density.
+static bool MassFits(const m3World* world, int32_t body, int32_t slot, uint8_t type,
+                     const m3ShapeGeom* geom, float density)
+{
+    double total = 0.0;
+    for (int32_t s = world->bodies.bodyShapeHead[body]; s != -1; s = world->shapes.shapeNext[s])
+    {
+        bool fits = s == slot ? m3ShapeMassFloors(type, geom, ShapeHull(world, s), density, &total)
+                              : m3ShapeMassFloors(world->shapes.shapeType[s],
+                                                  &world->shapes.shapeGeom[s], ShapeHull(world, s),
+                                                  world->shapes.shapeDensity[s], &total);
+        if (!fits)
+        {
+            return false;
+        }
+    }
+    return total <= (double)M3_MASS_LIMIT;
+}
+
+bool m3ShapeMassFits(const m3World* world, int32_t slot, uint8_t type, const m3ShapeGeom* geom,
+                     float density)
+{
+    int32_t body = world->shapes.shapeBody[slot];
+    return world->bodies.types[body] != (uint8_t)m3_dynamicBody ||
+           MassFits(world, body, slot, type, geom, density);
+}
+
+bool m3BodyMassFits(const m3World* world, int32_t body)
+{
+    return MassFits(world, body, -1, 0, NULL, 0.0f);
 }
 
 // Adds one shape's inertia about the body center: I += Ic + m (|d|^2 E -
@@ -267,7 +368,9 @@ void m3RecomputeMass(m3World* world, int32_t bodyIndex)
             center = m3Add3(center, m3MulSV3(m, c));
         }
     }
-    if (!(mass > 0.0f))
+    // A mass below the smallest normal float has no finite inverse, so
+    // such a body is treated like one whose shapes carry no mass.
+    if (!(mass >= FLT_MIN))
     {
         SetMassless(world, bodyIndex, 1.0f);
         return;

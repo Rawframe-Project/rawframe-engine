@@ -7,7 +7,6 @@
 #include "geometry.h"
 #include "joints.h"
 #include "meshes.h"
-#include "rawframe/base/threads.h"
 #include "rawframe/physics/filters.h"
 #include "rawframe/physics/rewind.h"
 #include "rawframe/physics3d/components.h"
@@ -19,7 +18,6 @@
 #include <cmath>
 #include <map>
 #include <maul3d/maul3d.h>
-#include <mutex>
 #include <optional>
 #include <string_view>
 #include <tuple>
@@ -31,13 +29,6 @@ namespace {
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Physics3DError error, std::string_view why) {
     return result::fail(errorClass, kPhysics3DDomain, code(error), why);
-}
-
-/// Maul3D keeps its worlds in one process-wide table that the caller must
-/// serialize.
-base::Mutex& worldTableLock() noexcept {
-    static base::Mutex lock;
-    return lock;
 }
 
 } // namespace
@@ -57,7 +48,7 @@ struct Physics3D::State {
     mutable std::uint64_t rewindsClamped = 0;
     mutable std::vector<m3RayHit> rayHits;
     mutable std::vector<m3ShapeId> overlapShapes;
-    m3WorldId physics{};
+    m3World* physics = nullptr;
     Physics3DStatistics statistics;
     std::map<world::EntityHandle, Mapped> mapped;
     std::optional<world::Query<world::Read<Body3D>, world::Write<Pose3D>, world::Write<Velocity3D>>> bodies;
@@ -84,8 +75,7 @@ struct Physics3D::State {
     std::uint64_t staticRevision = 0;
 
     ~State() {
-        if (m3World_IsValid(physics)) {
-            const std::lock_guard kLock{worldTableLock()};
+        if (physics != nullptr) {
             m3DestroyWorld(physics);
         }
     }
@@ -131,8 +121,8 @@ struct Physics3D::State {
             definition.motionLocks.angularZ = true;
         }
         definition.userData = (std::uint64_t{row.entity.slot} << 32U) | row.entity.generation;
-        const m3BodyId kBody = m3CreateBody(physics, &definition);
-        if (kBody.index1 == 0) {
+        m3BodyId kBody{};
+        if (m3CreateBody(physics, &definition, &kBody) != m3_success) {
             into.refused = true;
             ++statistics.bodiesRefused;
             return false;
@@ -156,28 +146,36 @@ struct Physics3D::State {
         if (into.character) {
             shape.maskBits &= ~physics::kCharacterQuery;
         }
+        // The shape made, or the null shape where Maul3D refused it.
         const auto kShape = [&](const m3ShapeDef& definitionOf) {
+            m3ShapeId made{};
+            m3Result result = m3_errorInvalid;
             switch (static_cast<Shape>(body.shape)) {
             case Shape::Sphere: {
                 const m3Sphere kSphere{.center = {0, 0, 0}, .radius = body.width};
-                return m3CreateSphereShape(kBody, &definitionOf, &kSphere);
+                result = m3CreateSphereShape(physics, kBody, &definitionOf, &kSphere, &made);
+                break;
             }
             case Shape::Box:
-                return m3CreateBoxShape(kBody, &definitionOf, m3Vec3{body.width, body.height, body.depth});
+                result =
+                    m3CreateBoxShape(physics, kBody, &definitionOf, m3Vec3{body.width, body.height, body.depth}, &made);
+                break;
             case Shape::Capsule: {
                 const m3Capsule kCapsule{
                     .point1 = {0, -body.height, 0}, .point2 = {0, body.height, 0}, .radius = body.width};
-                return m3CreateCapsuleShape(kBody, &definitionOf, &kCapsule);
+                result = m3CreateCapsuleShape(physics, kBody, &definitionOf, &kCapsule, &made);
+                break;
             }
             case Shape::Cylinder: {
                 const m3Cylinder kCylinder{
                     .point1 = {0, -body.height, 0}, .point2 = {0, body.height, 0}, .radius = body.width};
-                return m3CreateCylinderShape(kBody, &definitionOf, &kCylinder, kCylinderSides);
+                result = m3CreateCylinderShape(physics, kBody, &definitionOf, &kCylinder, kCylinderSides, &made);
+                break;
             }
             case Shape::Mesh:
                 break;
             }
-            return m3ShapeId{};
+            return result == m3_success ? made : m3ShapeId{};
         };
         if (kMesh != nullptr) {
             return makeMesh(row.entity, *kMesh, kBody, shape, into);
@@ -195,7 +193,8 @@ struct Physics3D::State {
             twin = kShape(sensor);
         }
         if (kMade.index1 == 0 || (!body.sensor && filter.triggerMask != 0 && twin.index1 == 0)) {
-            m3DestroyBody(kBody);
+            // A body made a moment ago, with nothing joined to it yet.
+            static_cast<void>(m3DestroyBody(physics, kBody));
             into.refused = true;
             ++statistics.bodiesRefused;
             return false;
@@ -220,19 +219,22 @@ struct Physics3D::State {
                                 Mapped& into) {
         std::vector<m3ShapeId> made;
         for (const PreparedMesh::Piece& kPiece : prepared.pieces) {
-            const m3ShapeId kMade = m3CreateMeshShape(body,
-                                                      &shape,
-                                                      kPiece.vertices.data(),
-                                                      static_cast<std::int32_t>(kPiece.vertices.size()),
-                                                      kPiece.indices.data(),
-                                                      static_cast<std::int32_t>(kPiece.indices.size() / 3));
-            if (kMade.index1 == 0) {
-                m3DestroyBody(body);
+            m3ShapeId piece{};
+            if (m3CreateMeshShape(physics,
+                                  body,
+                                  &shape,
+                                  kPiece.vertices.data(),
+                                  static_cast<std::int32_t>(kPiece.vertices.size()),
+                                  kPiece.indices.data(),
+                                  static_cast<std::int32_t>(kPiece.indices.size() / 3),
+                                  &piece) != m3_success) {
+                // A body made a moment ago, with nothing joined to it yet.
+                static_cast<void>(m3DestroyBody(physics, body));
                 into.refused = true;
                 ++statistics.bodiesRefused;
                 return false;
             }
-            made.push_back(kMade);
+            made.push_back(piece);
         }
         into.body = body;
         into.shape = made.front();
@@ -280,7 +282,7 @@ struct Physics3D::State {
             !finite(controlled.groundNormal) || !finite(controlled.snap) || !(seconds > 0)) {
             return;
         }
-        const m3Vec3 kWish = m3Body_GetLinearVelocity(entry.body);
+        const m3Vec3 kWish = m3Body_GetLinearVelocity(physics, entry.body);
         const m3QueryFilter kFilter{.categoryBits = physics::kCharacterQuery,
                                     .maskBits = filters.filter(*filters.classIndex(body.collisionClass)).solidMask &
                                                 physics::kSolids};
@@ -288,15 +290,16 @@ struct Physics3D::State {
             physics3d::moveCharacter(physics,
                                      body.width,
                                      body.height,
-                                     m3Body_GetPosition(entry.body),
+                                     m3Body_GetPosition(physics, entry.body),
                                      m3Vec3{kWish.x * seconds, kWish.y * seconds, kWish.z * seconds},
                                      controlled,
                                      kWasGrounded,
                                      kFilter);
         m3Body_SetLinearVelocity(
+            physics,
             entry.body,
             m3Vec3{kMove.translation.x / seconds, kMove.translation.y / seconds, kMove.translation.z / seconds});
-        m3Body_SetAngularVelocity(entry.body, m3Vec3{0, 0, 0});
+        m3Body_SetAngularVelocity(physics, entry.body, m3Vec3{0, 0, 0});
         controlled.ground = static_cast<std::uint8_t>(kMove.ground);
         controlled.groundNormalX = kMove.normal.x;
         controlled.groundNormalY = kMove.normal.y;
@@ -314,7 +317,8 @@ struct Physics3D::State {
             for (const m3ShapeId kPiece : entry.pieces) {
                 owners.erase(kPiece.index1);
             }
-            m3DestroyBody(entry.body);
+            // Every made body is live until here: only this destroys one.
+            static_cast<void>(m3DestroyBody(physics, entry.body));
             ++statistics.bodiesRemoved;
         }
         // Gone with its shapes: no end will be told for them.
@@ -343,8 +347,8 @@ struct Physics3D::State {
                 ++entry;
                 continue;
             }
-            if (m3Joint_IsValid(entry->second.joint)) {
-                m3DestroyJoint(entry->second.joint);
+            if (m3Joint_IsValid(physics, entry->second.joint)) {
+                static_cast<void>(m3DestroyJoint(physics, entry->second.joint));
             }
             ++statistics.jointsRemoved;
             entry = joints.erase(entry);
@@ -356,11 +360,11 @@ struct Physics3D::State {
             const m3BodyId kB = bodyOf(kJoint->b);
             // A joint whose body was made again went with the body.
             if (!kNew && same(entry.made, *kJoint) && sameBody(entry.a, kA) && sameBody(entry.b, kB) &&
-                (entry.refused || m3Joint_IsValid(entry.joint))) {
+                (entry.refused || m3Joint_IsValid(physics, entry.joint))) {
                 continue;
             }
-            if (!entry.refused && m3Joint_IsValid(entry.joint)) {
-                m3DestroyJoint(entry.joint);
+            if (!entry.refused && m3Joint_IsValid(physics, entry.joint)) {
+                static_cast<void>(m3DestroyJoint(physics, entry.joint));
             }
             entry = MappedJoint{.joint = {}, .made = *kJoint, .a = kA, .b = kB, .refused = true};
             // Broken, it waits for gameplay to mend it.
@@ -370,11 +374,12 @@ struct Physics3D::State {
             const auto kDefinition =
                 kA.index1 != 0 && kB.index1 != 0 && !sameBody(kA, kB) ? jointDef(*kJoint, kA, kB) : std::nullopt;
             if (kDefinition.has_value()) {
-                entry.joint = m3CreateJoint(physics, &*kDefinition);
-                entry.refused = entry.joint.index1 == 0;
+                m3JointId made{};
+                entry.refused = m3CreateJoint(physics, &*kDefinition, &made) != m3_success;
+                entry.joint = entry.refused ? m3JointId{} : made;
             }
             if (!entry.refused && (kJoint->breakForce > 0 || kJoint->breakTorque > 0)) {
-                m3Joint_SetBreakThresholds(entry.joint, kJoint->breakForce, kJoint->breakTorque);
+                m3Joint_SetBreakThresholds(physics, entry.joint, kJoint->breakForce, kJoint->breakTorque);
             }
             ++(entry.refused ? statistics.jointsRefused : statistics.jointsMade);
         }
@@ -482,9 +487,9 @@ struct Physics3D::State {
                     const Velocity3D& velocity = *row.velocity;
                     if (finite(velocity.x) && finite(velocity.y) && finite(velocity.z) && finite(velocity.angularX) &&
                         finite(velocity.angularY) && finite(velocity.angularZ)) {
-                        m3Body_SetLinearVelocity(entry.body, m3Vec3{velocity.x, velocity.y, velocity.z});
-                        m3Body_SetAngularVelocity(entry.body,
-                                                  m3Vec3{velocity.angularX, velocity.angularY, velocity.angularZ});
+                        m3Body_SetLinearVelocity(physics, entry.body, m3Vec3{velocity.x, velocity.y, velocity.z});
+                        m3Body_SetAngularVelocity(
+                            physics, entry.body, m3Vec3{velocity.angularX, velocity.angularY, velocity.angularZ});
                         ++statistics.velocitiesSet;
                     }
                 }
@@ -494,9 +499,9 @@ struct Physics3D::State {
                 if (kImpulse != nullptr && !same(*kImpulse, Impulse3D{})) {
                     if (finite(kImpulse->x) && finite(kImpulse->y) && finite(kImpulse->z) &&
                         finite(kImpulse->angularX) && finite(kImpulse->angularY) && finite(kImpulse->angularZ)) {
-                        m3Body_ApplyLinearImpulse(entry.body, m3Vec3{kImpulse->x, kImpulse->y, kImpulse->z});
-                        m3Body_ApplyAngularImpulse(entry.body,
-                                                   m3Vec3{kImpulse->angularX, kImpulse->angularY, kImpulse->angularZ});
+                        m3Body_ApplyLinearImpulse(physics, entry.body, m3Vec3{kImpulse->x, kImpulse->y, kImpulse->z});
+                        m3Body_ApplyAngularImpulse(
+                            physics, entry.body, m3Vec3{kImpulse->angularX, kImpulse->angularY, kImpulse->angularZ});
                         ++statistics.impulses;
                     }
                     *kImpulse = Impulse3D{};
@@ -515,7 +520,8 @@ struct Physics3D::State {
                     if (entry.made.motion == static_cast<std::uint8_t>(physics::Motion::Kinematic) &&
                         std::isfinite(kGoal.x) && std::isfinite(kGoal.y) && std::isfinite(kGoal.z) &&
                         finite(kGoal.qx) && finite(kGoal.qy) && finite(kGoal.qz) && finite(kGoal.qw)) {
-                        m3Body_SetTargetTransform(entry.body, m3Pos3{kGoal.x, kGoal.y, kGoal.z}, rotationOf(kGoal));
+                        m3Body_SetTargetTransform(
+                            physics, entry.body, m3Pos3{kGoal.x, kGoal.y, kGoal.z}, rotationOf(kGoal));
                         ++statistics.targets;
                     }
                     kTarget->set = false;
@@ -546,9 +552,9 @@ struct Physics3D::State {
             if (entry.refused) {
                 continue;
             }
-            const m3Transform kTransform = m3Body_GetTransform(entry.body);
-            const m3Vec3 kLinear = m3Body_GetLinearVelocity(entry.body);
-            const m3Vec3 kAngular = m3Body_GetAngularVelocity(entry.body);
+            const m3Transform kTransform = m3Body_GetTransform(physics, entry.body);
+            const m3Vec3 kLinear = m3Body_GetLinearVelocity(physics, entry.body);
+            const m3Vec3 kAngular = m3Body_GetAngularVelocity(physics, entry.body);
             *row.pose = Pose3D{.x = kTransform.p.x,
                                .y = kTransform.p.y,
                                .z = kTransform.p.z,
@@ -692,11 +698,7 @@ result::Result<std::unique_ptr<Physics3D>> Physics3D::create(const Physics3DSett
     definition.enableSleeping = settings.sleeping;
     // Every hit is told, however slow: Contact3D says how hard.
     definition.hitEventThreshold = 0;
-    {
-        const std::lock_guard kLock{worldTableLock()};
-        state->physics = m3CreateWorld(&definition);
-    }
-    if (state->physics.index1 == 0) {
+    if (m3CreateWorld(&definition, &state->physics) != m3_success) {
         return refuse(result::ErrorClass::ResourceExhausted,
                       Physics3DError::Capacity,
                       "no room for another physics world in this process");
@@ -872,7 +874,7 @@ RayHit3D Physics3D::castRayAt(double originX,
         const bool kRewound = kSince.has_value() && *kSince < state.lastTick;
         const std::uint64_t kTick = kRewound ? std::max(kBase, *kSince) : kBase;
         const bool kTrail = entry.since.has_value() && *entry.since <= kTick;
-        const m3Transform kNow = m3Body_GetTransform(entry.body);
+        const m3Transform kNow = m3Body_GetTransform(state.physics, entry.body);
         m3Transform then = kNow;
         if (kTrail && kRewound) {
             const Pose3D& from = entry.history[kTick % kKept];

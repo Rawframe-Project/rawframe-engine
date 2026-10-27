@@ -8,13 +8,6 @@
 
 #include "world_internal.h"
 
-// Registry lookup: NULL for a stale or null id.
-m3World* m3WorldFromId(m3WorldId worldId);
-
-// The world an object id names (its world field: slot and generation),
-// or NULL when that world is gone.
-m3World* m3WorldFromTag(uint16_t tag);
-
 // Tuning defaults, shared by the def,
 // the solver reads, and the off-default hash folds.
 #define M3_CONTACT_HERTZ_DEFAULT 30.0f
@@ -51,13 +44,19 @@ void m3EmitContactEvents(m3World* world, const uint64_t* oldKeys, const m3Manifo
 // One move event per mover, in the movers' ascending order.
 void m3EmitMoveEvents(m3World* world, const int32_t* movers, int32_t moverCount);
 
+// What every door of each world setting accepts: the public setters, the
+// world def, replay and restore all ask these.
+bool m3GravityValid(m3Vec3 gravity);
+bool m3ContactTuningValid(float hertz, float dampingRatio, float pushSpeed);
+// A world speed cap: positive and within M3_SPEED_LIMIT.
+bool m3SpeedCapValid(float value);
+bool m3WindValid(m3Vec3 direction, float speed, float gustHertz, float gustScale);
+bool m3StepValid(float dt, int32_t substeps);
+
 void m3SetGravityInternal(m3World* world, m3Vec3 gravity);
 
-void m3RebuildBroadphaseInternal(m3World* world);
-
-int32_t m3CreateWaterVolumeInternal(m3World* world, const m3WaterVolumeDef* def);
-
-void m3DestroyWaterVolumeInternal(m3World* world, int32_t slot);
+// False, with the tree untouched, when the allocator refuses the scratch.
+bool m3RebuildBroadphaseInternal(m3World* world);
 
 void m3SetContactTuningInternal(m3World* world, float hertz, float dampingRatio, float pushSpeed);
 

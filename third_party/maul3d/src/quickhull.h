@@ -13,6 +13,10 @@
 // properties integrated. Returns false on degenerate input (fewer than
 // four points, flat clouds, non-finite coordinates) or when the result
 // exceeds the fixed caps.
-bool m3ComputeHull(const m3Vec3* points, int32_t count, m3HullData* out);
+bool m3ComputeHull(m3Heap* heap, const m3Vec3* points, int32_t count, m3HullData* out);
+
+// A cloud a hull shape's create and its replay accept: 1 to
+// M3_HULL_MAX_INPUT points, each within M3_LOCAL_LIMIT of the body.
+bool m3HullCloudValid(const m3Vec3* points, int32_t count);
 
 #endif // MAUL3D_SRC_QUICKHULL_H

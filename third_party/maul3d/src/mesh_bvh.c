@@ -14,13 +14,20 @@
 
 #include <string.h>
 
+// The build's scratch: each item's bounds and centroid and the merge
+// sort's buffer, views into one block of m3MeshBvhScratchBytes(count).
 typedef struct BvhScratch
 {
-    m3Vec3 triLo[M3_MESH_MAX_TRIS];
-    m3Vec3 triHi[M3_MESH_MAX_TRIS];
-    m3Vec3 centroid[M3_MESH_MAX_TRIS];
-    uint16_t tmp[M3_MESH_MAX_TRIS];
+    m3Vec3* triLo;
+    m3Vec3* triHi;
+    m3Vec3* centroid;
+    uint16_t* tmp;
 } BvhScratch;
+
+int32_t m3MeshBvhScratchBytes(int32_t count)
+{
+    return count * (3 * (int32_t)sizeof(m3Vec3) + (int32_t)sizeof(uint16_t));
+}
 
 static m3real CentroidAxis(const BvhScratch* scratch, uint16_t tri, int32_t axis)
 {
@@ -68,6 +75,14 @@ static void SortByAxis(BvhScratch* scratch, uint16_t* order, int32_t s, int32_t 
     memcpy(order + s, scratch->tmp, (size_t)w * sizeof(uint16_t));
 }
 
+// A coordinate on the 16-bit grid, clamped to it. A NaN, from bounds or a
+// query far outside any real range, parks at the low edge instead of
+// reaching the cast; every other value lands where the plain clamp put it.
+static uint16_t QuantClamp(m3real q)
+{
+    return (uint16_t)(q > 0.0f ? (q < 65535.0f ? q : 65535.0f) : 0.0f);
+}
+
 static int32_t BuildRange(m3MeshBvh* bvh, BvhScratch* scratch, int32_t s, int32_t e)
 {
     int32_t nodeIndex = bvh->nodeCount;
@@ -104,8 +119,8 @@ static int32_t BuildRange(m3MeshBvh* bvh, BvhScratch* scratch, int32_t s, int32_
         m3real sc = k == 0 ? bvh->quantScale.x : (k == 1 ? bvh->quantScale.y : bvh->quantScale.z);
         m3real ql = floorf((l - rl) * sc);
         m3real qh = ceilf((h - rl) * sc);
-        node->qlo[k] = (uint16_t)m3MaxF(0.0f, m3MinF(65535.0f, ql));
-        node->qhi[k] = (uint16_t)m3MaxF(0.0f, m3MinF(65535.0f, qh));
+        node->qlo[k] = QuantClamp(ql);
+        node->qhi[k] = QuantClamp(qh);
     }
 
     int32_t count = e - s;
@@ -167,69 +182,81 @@ static void SetQuantFrame(m3MeshBvh* bvh, const m3Vec3* los, const m3Vec3* his, 
     bvh->quantScale.z = extent.z > 1.0e-9f ? 65535.0f / extent.z : 0.0f;
 }
 
-void m3MeshBvhFree(m3MeshBvh* bvh)
+void m3MeshBvhFree(m3Heap* heap, m3MeshBvh* bvh)
 {
-    m3Free(bvh->nodes);
-    m3Free(bvh->order);
+    m3Free(heap, bvh->nodes);
+    m3Free(heap, bvh->order);
     memset(bvh, 0, sizeof(*bvh));
 }
 
-void m3MeshBvhBuildBounds(m3MeshBvh* bvh, const m3Vec3* los, const m3Vec3* his, int32_t count)
+void m3MeshBvhBuildIn(m3MeshBvh* bvh, void* scratchBlock, const m3Vec3* los, const m3Vec3* his,
+                      int32_t count)
 {
-    // Derived data, exact-size: free the old build, size the
-    // new one from the count (2 * count nodes bounds the tree).
-    m3MeshBvhFree(bvh);
-    if (count <= 0 || count > M3_MESH_MAX_TRIS)
-    {
-        return;
-    }
-    bvh->nodes = (m3MeshBvhNode*)m3AllocZeroed(2 * count * (int32_t)sizeof(m3MeshBvhNode));
-    bvh->order = (uint16_t*)m3AllocZeroed(count * (int32_t)sizeof(uint16_t));
-    if (bvh->nodes == NULL || bvh->order == NULL)
-    {
-        m3MeshBvhFree(bvh);
-        return; // nodeCount 0 makes every gather empty, loud enough
-    }
-    BvhScratch* scratch = (BvhScratch*)m3AllocZeroed((int32_t)sizeof(BvhScratch));
-    if (scratch == NULL)
-    {
-        return; // loud enough: nodeCount 0 makes every gather empty,
-                // and creation paths never run out in tests
-    }
+    M3_ASSERT(count > 0 && count <= M3_MESH_MAX_TRIS);
+    BvhScratch scratch;
+    scratch.triLo = (m3Vec3*)scratchBlock;
+    scratch.triHi = scratch.triLo + count;
+    scratch.centroid = scratch.triHi + count;
+    scratch.tmp = (uint16_t*)(scratch.centroid + count);
+    bvh->nodeCount = 0;
     for (int32_t t = 0; t < count; ++t)
     {
         m3Vec3 lo = los[t];
         m3Vec3 hi = his[t];
-        scratch->triLo[t] = lo;
-        scratch->triHi[t] = hi;
+        scratch.triLo[t] = lo;
+        scratch.triHi[t] = hi;
         // The arithmetic mean of the box corners: cheap, deterministic,
         // and only a split heuristic (never a correctness input).
-        scratch->centroid[t] =
+        scratch.centroid[t] =
             (m3Vec3){0.5f * (lo.x + hi.x), 0.5f * (lo.y + hi.y), 0.5f * (lo.z + hi.z)};
         bvh->order[t] = (uint16_t)t;
     }
     SetQuantFrame(bvh, los, his, count);
-    BuildRange(bvh, scratch, 0, count);
-    m3Free(scratch);
+    BuildRange(bvh, &scratch, 0, count);
 }
 
-void m3MeshBvhBuild(m3MeshBvh* bvh, const m3MeshData* mesh)
+bool m3MeshBvhBuildBounds(m3Heap* heap, m3MeshBvh* bvh, const m3Vec3* los, const m3Vec3* his,
+                          int32_t count)
+{
+    // Derived data, exact-size: free the old build, size the
+    // new one from the count (2 * count nodes bounds the tree).
+    m3MeshBvhFree(heap, bvh);
+    if (count <= 0 || count > M3_MESH_MAX_TRIS)
+    {
+        return count <= 0; // nothing to bound is an empty tree
+    }
+    bvh->nodes = (m3MeshBvhNode*)m3AllocZeroed(heap, 2 * count * (int32_t)sizeof(m3MeshBvhNode));
+    bvh->order = (uint16_t*)m3AllocZeroed(heap, count * (int32_t)sizeof(uint16_t));
+    void* scratch = m3AllocZeroed(heap, m3MeshBvhScratchBytes(count));
+    if (bvh->nodes == NULL || bvh->order == NULL || scratch == NULL)
+    {
+        // An empty tree gathers nothing, so the caller must not keep it.
+        m3Free(heap, scratch);
+        m3MeshBvhFree(heap, bvh);
+        return false;
+    }
+    m3MeshBvhBuildIn(bvh, scratch, los, his, count);
+    m3Free(heap, scratch);
+    return true;
+}
+
+bool m3MeshBvhBuild(m3Heap* heap, m3MeshBvh* bvh, const m3MeshData* mesh)
 {
     int32_t triCount = mesh->triangleCount;
     if (triCount <= 0 || triCount > M3_MESH_MAX_TRIS)
     {
-        m3MeshBvhFree(bvh);
-        return;
+        m3MeshBvhFree(heap, bvh);
+        return triCount <= 0;
     }
-    // Heap staging: 65k bounds no longer fit a stack.
-    m3Vec3* los = (m3Vec3*)m3AllocZeroed(triCount * (int32_t)sizeof(m3Vec3));
-    m3Vec3* his = (m3Vec3*)m3AllocZeroed(triCount * (int32_t)sizeof(m3Vec3));
+    // Heap staging: 65k bounds do not fit a stack.
+    m3Vec3* los = (m3Vec3*)m3AllocZeroed(heap, triCount * (int32_t)sizeof(m3Vec3));
+    m3Vec3* his = (m3Vec3*)m3AllocZeroed(heap, triCount * (int32_t)sizeof(m3Vec3));
     if (los == NULL || his == NULL)
     {
-        m3Free(los);
-        m3Free(his);
-        m3MeshBvhFree(bvh);
-        return;
+        m3Free(heap, los);
+        m3Free(heap, his);
+        m3MeshBvhFree(heap, bvh);
+        return false;
     }
     for (int32_t t = 0; t < triCount; ++t)
     {
@@ -241,9 +268,10 @@ void m3MeshBvhBuild(m3MeshBvh* bvh, const m3MeshData* mesh)
         his[t] = (m3Vec3){m3MaxF(a.x, m3MaxF(b.x, c.x)), m3MaxF(a.y, m3MaxF(b.y, c.y)),
                           m3MaxF(a.z, m3MaxF(b.z, c.z))};
     }
-    m3MeshBvhBuildBounds(bvh, los, his, triCount);
-    m3Free(los);
-    m3Free(his);
+    bool built = m3MeshBvhBuildBounds(heap, bvh, los, his, triCount);
+    m3Free(heap, los);
+    m3Free(heap, his);
+    return built;
 }
 
 // Ascending insertion of gathered leaves would cost per-element
@@ -299,8 +327,8 @@ int32_t m3MeshBvhGather(const m3MeshBvh* bvh, m3Vec3 lo, m3Vec3 hi, uint16_t* ou
         m3real h = k == 0 ? hi.x : (k == 1 ? hi.y : hi.z);
         m3real rl = k == 0 ? bvh->rootLo.x : (k == 1 ? bvh->rootLo.y : bvh->rootLo.z);
         m3real sc = k == 0 ? bvh->quantScale.x : (k == 1 ? bvh->quantScale.y : bvh->quantScale.z);
-        qlo[k] = (uint16_t)m3MaxF(0.0f, m3MinF(65535.0f, floorf((l - rl) * sc)));
-        qhi[k] = (uint16_t)m3MaxF(0.0f, m3MinF(65535.0f, ceilf((h - rl) * sc)));
+        qlo[k] = QuantClamp(floorf((l - rl) * sc));
+        qhi[k] = QuantClamp(ceilf((h - rl) * sc));
     }
     int32_t stack[64]; // median split depth is ~log2(2048/4) + 1; 64
                        // is unreachable headroom

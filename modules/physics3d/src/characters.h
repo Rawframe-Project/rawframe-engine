@@ -22,7 +22,7 @@ struct CharacterMove {
 /// along what it meets, and says what it stands on after. `wasGrounded` and
 /// `character.snap` step it down to ground it walked off. Reads the world
 /// only.
-[[nodiscard]] CharacterMove moveCharacter(m3WorldId world,
+[[nodiscard]] CharacterMove moveCharacter(const m3World* world,
                                           float radius,
                                           float halfHeight,
                                           m3Pos3 from,

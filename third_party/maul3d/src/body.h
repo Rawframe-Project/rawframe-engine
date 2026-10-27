@@ -8,12 +8,30 @@
 
 #include "world_internal.h"
 
-// Slot lookup with generation check: -1 for a stale or foreign id.
-int32_t m3BodySlot(const m3World* world, m3BodyId bodyId);
+// What a force, torque or impulse may add, and the velocities a body of a
+// type may hold (src/body_motion.c): the public calls and replay refuse
+// what these refuse, before anything changes.
+bool m3ForceFits(const m3World* world, int32_t index, m3Vec3 force);
+bool m3TorqueFits(const m3World* world, int32_t index, m3Vec3 torque);
+bool m3ForceAtPointFits(const m3World* world, int32_t index, m3Vec3 force, m3Pos3 point);
+bool m3LinearImpulseFits(const m3World* world, int32_t index, m3Vec3 impulse);
+bool m3AngularImpulseFits(const m3World* world, int32_t index, m3Vec3 impulse);
+bool m3ImpulseAtPointFits(const m3World* world, int32_t index, m3Vec3 impulse, m3Pos3 point);
+bool m3BodyVelocityValid(uint8_t type, m3Vec3 velocity);
+bool m3BodySpinValid(m3Vec3 velocity);
 
-// Resolves a body id to its world and slot; for anything stale or
-// foreign, refuses and returns NULL with a -1 index.
-m3World* m3ResolveBody(m3BodyId bodyId, int32_t* indexOut);
+// The checks the body setters and replay share (src/body.c): a pose
+// within M3_POSITION_LIMIT with a near-unit rotation, a servo target within reach of a kinematic
+// body, a type change that keeps the velocities within the new type's limit, and a gravity scale or
+// damping in range (an m3BodyParam).
+bool m3PoseValid(m3Transform pose);
+bool m3TargetValid(const m3World* world, int32_t index, m3Transform pose);
+// The same for a body of this type at now, as restore reads it.
+bool m3TargetFits(uint8_t type, m3Pos3 now, m3Transform pose);
+bool m3TypeChangeValid(const m3World* world, int32_t index, int32_t type);
+bool m3BodyParamValid(int32_t param, float value);
+// A sleep threshold, m/s: finite and not negative.
+bool m3SleepThresholdValid(float threshold);
 
 void m3ApplyForceInternal(m3World* world, int32_t index, m3Vec3 force);
 
@@ -28,26 +46,6 @@ void m3SetEnabledInternal(m3World* world, int32_t index, int enabled);
 void m3SetMotionLocksInternal(m3World* world, int32_t index, uint8_t locks);
 
 void m3SetSleepControlsInternal(m3World* world, int32_t index, float threshold, int canSleep);
-
-void m3SetAwakeInternal(m3World* world, int32_t index, int awake);
-
-void m3WakeRegionAabb(m3World* world, const double lo[3], const double hi[3]);
-
-// Wakes a dynamic body; static and kinematic bodies never sleep.
-static inline void m3WakeIfDynamic(m3World* world, int32_t body)
-{
-    if (world->bodies.types[body] == (uint8_t)m3_dynamicBody)
-    {
-        world->bodies.awake[body] = 1;
-        world->bodies.sleepTimes[body] = 0.0f;
-    }
-}
-
-// bodyLocks bit 6: this body bypasses the angular speed cap (fast
-// rotation allowed, for wheels). Bits 0..5 stay the
-// motion locks; the byte already snapshots and hashes off-default
-// as one block, so the flag rides for free.
-#define M3_LOCKS_ALLOW_FAST_ROTATION 0x40u
 
 // The six lock flags as bits 0..5: linear x, y, z, then angular x, y, z.
 uint8_t m3LockBits(m3MotionLocks locks);

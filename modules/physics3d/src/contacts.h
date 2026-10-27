@@ -18,7 +18,7 @@ namespace rawframe::physics3d {
 /// What the report reads of the step, and what it writes besides the
 /// Contact3D components.
 struct ContactReport {
-    m3WorldId physics{};
+    const m3World* physics = nullptr;
     const std::vector<Row>* rows = nullptr;
     const std::map<world::EntityHandle, Mapped>* mapped = nullptr;
     const ShapeOwners* owners = nullptr;

@@ -7,8 +7,9 @@
 // (narrowphase.c). Every kernel is a pure function of its inputs.
 
 #include "manifold.h"
+
 #include "distance.h"
-#include "shape.h"
+#include "shape_state.h"
 #include "world_internal.h"
 
 #include <float.h>
@@ -61,7 +62,10 @@ int32_t m3ReduceContactPoints(const m3Vec3* points, const m3real* separations, i
     {
         a = separations[i] < separations[a] ? i : a;
     }
-    int32_t b = -1;
+    // Every pick starts at the deepest point, so each names a point of
+    // the patch even when no comparison below picks another; the picks
+    // index points, so one outside [0, count) would read past the array.
+    int32_t b = a;
     m3real far = -1.0f;
     for (int32_t i = 0; i < count; ++i)
     {
@@ -74,7 +78,7 @@ int32_t m3ReduceContactPoints(const m3Vec3* points, const m3real* separations, i
             b = i;
         }
     }
-    int32_t c = -1;
+    int32_t c = a;
     m3real area = -1.0f;
     for (int32_t i = 0; i < count; ++i)
     {
@@ -94,7 +98,7 @@ int32_t m3ReduceContactPoints(const m3Vec3* points, const m3real* separations, i
         b = c;
         c = t;
     }
-    int32_t d = -1;
+    int32_t d = a;
     m3real outside = 0.0f;
     for (int32_t i = 0; i < count; ++i)
     {

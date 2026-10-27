@@ -12,16 +12,18 @@
 // and the soft bodies.
 
 #include "solver.h"
-#include "body.h"
+
 #include "broad_phase.h"
 #include "character.h"
 #include "contact_solver.h"
 #include "continuous.h"
+#include "fpenv.h"
 #include "integrate.h"
 #include "island.h"
 #include "joint.h"
 #include "joint_solver.h"
 #include "journal.h"
+#include "misuse.h"
 #include "narrowphase.h"
 #include "softbody.h"
 #include "vehicle.h"
@@ -30,63 +32,6 @@
 #include "world_internal.h"
 
 #include <string.h>
-
-// With w = 2 pi hertz, stiffness k = m w^2 and damping c = 2 m zeta w, an
-// implicit Euler step of length h turns the spring into a row that solves
-//   J v + (k / (h k + c)) C + (1 / (h (h k + c))) lambda = 0
-// for the total impulse lambda. Let a = h w (2 zeta + h w). Then
-//   biasRate     = k / (h k + c) = w / (2 zeta + h w)
-//   massScale    = a / (1 + a)   (m against m + the lambda term)
-//   impulseScale = 1 / (1 + a)   (the lambda term on the accumulated part)
-// and a solve adds -m massScale (J v + biasRate C) - impulseScale
-// accumulated. Zero hertz is a rigid row with no position feedback.
-m3Softness m3MakeSoft(m3real hertz, m3real zeta, m3real h)
-{
-    if (hertz == 0.0f)
-    {
-        return (m3Softness){0.0f, 0.0f, 0.0f};
-    }
-    m3real omega = 2.0f * M3_PI * hertz;
-    m3real a1 = 2.0f * zeta + h * omega;
-    m3real a2 = h * omega * a1;
-    m3real a3 = 1.0f / (1.0f + a2);
-    return (m3Softness){omega / a1, a2 * a3, a3};
-}
-
-// I_w^-1 = R I_l^-1 R^T, built by applying the operator to the world
-// basis vectors. Fixed at prepare like the contact anchors.
-m3Mat3 m3WorldInvInertia(const m3World* world, int32_t body)
-{
-    if (world->bodies.types[body] != (uint8_t)m3_dynamicBody)
-    {
-        return m3MakeZeroMat3();
-    }
-    m3Quat q = world->bodies.transforms[body].q;
-    m3Mat3 il = world->bodies.invInertiaLocal[body];
-    m3Mat3 r;
-    r.cx = m3RotateVec3(q, m3MulMV3(il, m3InvRotateVec3(q, (m3Vec3){1.0f, 0.0f, 0.0f})));
-    r.cy = m3RotateVec3(q, m3MulMV3(il, m3InvRotateVec3(q, (m3Vec3){0.0f, 1.0f, 0.0f})));
-    r.cz = m3RotateVec3(q, m3MulMV3(il, m3InvRotateVec3(q, (m3Vec3){0.0f, 0.0f, 1.0f})));
-    return r;
-}
-
-// Solve J * x = b for a general 3x3 via Cramer's rule. A singular
-// Jacobian returns zero, which leaves omega unchanged (the safe step).
-m3Vec3 m3Solve3(const m3Mat3* J, m3Vec3 b)
-{
-    m3Vec3 cxy = m3Cross3(J->cy, J->cz);
-    m3real det = m3Dot3(J->cx, cxy);
-    if (det == 0.0f)
-    {
-        return (m3Vec3){0.0f, 0.0f, 0.0f};
-    }
-    m3real inv = 1.0f / det;
-    m3Vec3 x;
-    x.x = inv * m3Dot3(b, cxy);
-    x.y = inv * m3Dot3(J->cx, m3Cross3(b, J->cz));
-    x.z = inv * m3Dot3(J->cx, m3Cross3(J->cy, b));
-    return x;
-}
 
 static void SizeScratchForStep(m3World* world)
 {
@@ -111,8 +56,8 @@ static void SizeScratchForStep(m3World* world)
             {
                 grown *= 2;
             }
-            m3StackDestroy(&world->scratch);
-            world->scratch = m3StackCreate(grown);
+            m3StackDestroy(&world->heap, &world->scratch);
+            world->scratch = m3StackCreate(&world->heap, grown);
         }
     }
 }
@@ -145,7 +90,8 @@ static void AdvanceWind(m3World* world, float dt)
         world->windPhase += 2.0f * M3_PI * world->windGustHertz * dt;
         if (world->windPhase > 2.0f * M3_PI)
         {
-            world->windPhase -= 2.0f * M3_PI * (m3real)(int32_t)(world->windPhase / (2.0f * M3_PI));
+            world->windPhase -=
+                2.0f * M3_PI * (m3real)m3CellFromF(world->windPhase / (2.0f * M3_PI), 0.0f);
         }
     }
 }
@@ -175,7 +121,7 @@ static void BreakJoints(m3World* world, m3real invH)
             m3JointReactionMagnitudes(world, j, invH, &force, &torque);
             if ((maxForce > 0.0f && force > maxForce) || (maxTorque > 0.0f && torque > maxTorque))
             {
-                m3JointId id = {j + 1, world->idWorld, world->joints.jointPool.generations[j]};
+                m3JointId id = {j + 1, world->joints.jointPool.generations[j]};
                 m3AppendJointBreakEvent(world, id);
                 m3DestroyJointInternal(world, j);
             }
@@ -242,8 +188,8 @@ static void GrowScratchAfterStall(m3World* world)
     if (world->scratch.overflow != 0 && world->scratch.capacity < (1 << 28))
     {
         int32_t bigger = world->scratch.capacity * 2;
-        m3StackDestroy(&world->scratch);
-        world->scratch = m3StackCreate(bigger);
+        m3StackDestroy(&world->heap, &world->scratch);
+        world->scratch = m3StackCreate(&world->heap, bigger);
     }
 }
 
@@ -351,10 +297,10 @@ static bool PrepareSolve(m3World* world, m3StepScratch* s, float dt, int32_t sub
     return true;
 }
 
-// The substeps: forces in; warm start, then the biased pass pushing
-// overlap and joint error out (joints first, so contacts see the
-// joints' result); positions move; then the relax pass, unbiased,
-// removes the velocity the push added.
+// The substeps: forces in; warm start, held within the speed limit, then
+// the biased pass pushing overlap and joint error out (joints first, so
+// contacts see the joints' result); positions move; then the relax pass,
+// unbiased, removes the velocity the push added.
 static void SolveSubsteps(m3World* world, m3StepScratch* s, int32_t substeps)
 {
     for (int32_t sub = 0; sub < substeps; ++sub)
@@ -362,6 +308,7 @@ static void SolveSubsteps(m3World* world, m3StepScratch* s, int32_t substeps)
         m3IntegrateVelocities(world, s->movers, s->moverCount, &s->buoy, s->h);
         m3WarmStartJoints(world, s->joints, s->jointCount, s->deltaPos, s->deltaRot);
         m3RunContactStage(world, &s->contacts, m3_contactWarmStart);
+        m3CapMoverSpeeds(world, s->movers, s->moverCount);
         m3SolveJoints(world, s->joints, s->jointCount, s->deltaPos, s->deltaRot, s->h, s->invH,
                       true);
         m3RunContactStage(world, &s->contacts, m3_contactSolve);
@@ -373,7 +320,8 @@ static void SolveSubsteps(m3World* world, m3StepScratch* s, int32_t substeps)
 }
 
 // After the substeps: host forces are consumed (a force lives for one
-// step, and only movers can carry one), restitution runs, impulses are
+// step, and only movers can carry one), restitution runs and the speed
+// limit holds its result, impulses are
 // stored for the next warm start, the wind advances and overloaded
 // joints break.
 static void FinishSolve(m3World* world, const m3StepScratch* s, float dt)
@@ -384,6 +332,7 @@ static void FinishSolve(m3World* world, const m3StepScratch* s, float dt)
         world->bodies.bodyTorque[s->movers[m]] = (m3Vec3){0.0f, 0.0f, 0.0f};
     }
     m3RunContactStage(world, &s->contacts, m3_contactRestitution);
+    m3CapMoverSpeeds(world, s->movers, s->moverCount);
     m3RunContactStage(world, &s->contacts, m3_contactStore);
     m3StoreJointImpulses(world, s->joints, s->jointCount);
     world->lastInvH = s->invH;
@@ -478,23 +427,27 @@ void m3StepInternal(m3World* world, float dt, int32_t substeps)
     world->lastScratchPeak = world->scratch.top;
 }
 
-void m3World_Step(m3WorldId worldId, float dt, int32_t substeps)
+static M3_NOINLINE void WorldStepWorker(m3World* world, float dt, int32_t substeps)
 {
-    m3World* world = m3WorldFromId(worldId);
-    if (world == NULL || !m3FiniteF(dt) || !(dt > 0.0f) || substeps < 1 ||
-        substeps > M3_MAX_SUBSTEPS)
+    if (m3WorldBusy(world))
+    {
+        m3Refuse(world, m3_errorState);
+        return;
+    }
+    if (world == NULL || !m3StepValid(dt, substeps))
     {
         m3Refuse(world, m3_errorInvalid);
         return;
     }
     world->contacts.stepVetoCount = 0;
+    m3WorldEnter(world);
     m3StepInternal(world, dt, substeps);
+    m3WorldLeave(world);
     if (world->recorder.journalActive != 0)
     {
-        // Recording moved BEHIND the execution: nothing can
-        // journal during a step, so callback-less streams are
-        // byte-identical to the old order, and a step that vetoed
-        // contacts writes those keys first. A bare replay (no
+        // Recording follows the execution, since nothing can
+        // journal during a step: a step that vetoed contacts writes
+        // those keys first. A bare replay (no
         // callback installed) then applies the recorded vetoes and
         // lands on the recorded bits: the tape is self-sufficient.
         if (world->contacts.stepVetoCount > 0)
@@ -508,4 +461,11 @@ void m3World_Step(m3WorldId worldId, float dt, int32_t substeps)
         record.substeps = substeps;
         m3JournalRecord(world, m3_opStep, &record, (int32_t)sizeof(record));
     }
+}
+
+void m3World_Step(m3World* world, float dt, int32_t substeps)
+{
+    uint64_t env = m3FloatEnvEnter();
+    WorldStepWorker(world, dt, substeps);
+    m3FloatEnvLeave(env);
 }

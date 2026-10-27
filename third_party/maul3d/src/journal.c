@@ -5,9 +5,9 @@
 // handlers live in journal_replay*.c.
 
 #include "journal.h"
-#include "body.h"
-#include "query.h"
-#include "world.h"
+
+#include "misuse.h"
+#include "state_prefix.h"
 #include "world_internal.h"
 
 #include <stddef.h>
@@ -50,72 +50,221 @@ void m3JournalRecord(m3World* world, int32_t op, const void* payload, int32_t by
     m3JournalRecordParts(world, op, &part, 1);
 }
 
-bool m3World_StartJournal(m3WorldId worldId, void* buffer, int32_t capacity)
+void m3JournalBodyDef(m3BodyDef* out, const m3BodyDef* def)
 {
-    m3World* world = m3WorldFromId(worldId);
-    if (world == NULL || buffer == NULL || capacity < 8 || world->recorder.journalActive != 0)
-    {
-        m3Refuse(world, m3_errorInvalid);
-        return false; // contract, not invariant
-    }
-    world->recorder.journalBuffer = (uint8_t*)buffer;
-    world->recorder.journalCapacity = capacity;
-    world->recorder.journalCursor = 0;
-    world->recorder.journalActive = 1;
-    world->recorder.journalOverflow = 0;
-    return true;
+    memset(out, 0, sizeof(*out));
+    out->type = def->type;
+    out->position = def->position;
+    out->rotation = def->rotation;
+    out->linearVelocity = def->linearVelocity;
+    out->angularVelocity = def->angularVelocity;
+    out->gravityScale = def->gravityScale;
+    out->linearDamping = def->linearDamping;
+    out->angularDamping = def->angularDamping;
+    out->userData = def->userData;
+    out->isBullet = def->isBullet;
+    out->motionLocks = def->motionLocks;
+    out->enableSleep = def->enableSleep;
+    out->sleepThreshold = def->sleepThreshold;
+    out->isEnabled = def->isEnabled;
+    out->enableFastRotation = def->enableFastRotation;
+    out->internalValue = def->internalValue;
 }
 
-int32_t m3World_StopJournal(m3WorldId worldId)
+void m3JournalCharacterDef(m3CharacterDef* out, const m3CharacterDef* def)
 {
-    m3World* world = m3WorldFromId(worldId);
-    if (world == NULL)
+    memset(out, 0, sizeof(*out));
+    out->position = def->position;
+    out->radius = def->radius;
+    out->halfHeight = def->halfHeight;
+    out->maxSlopeAngle = def->maxSlopeAngle;
+    out->snapDistance = def->snapDistance;
+    out->skin = def->skin;
+    out->stepHeight = def->stepHeight;
+    out->mass = def->mass;
+    out->pushMaxMassRatio = def->pushMaxMassRatio;
+    out->userData = def->userData;
+    out->internalValue = def->internalValue;
+}
+
+void m3JournalSoftBodyDef(m3SoftBodyDef* out, const m3SoftBodyDef* def)
+{
+    memcpy(out, def, sizeof(*out)); // no padding
+}
+
+static void JournalWheelDef(m3WheelDef* out, const m3WheelDef* def)
+{
+    out->anchor = def->anchor;
+    out->direction = def->direction;
+    out->restLength = def->restLength;
+    out->travel = def->travel;
+    out->hertz = def->hertz;
+    out->zeta = def->zeta;
+    out->radius = def->radius;
+    out->steerable = def->steerable;
+    out->driven = def->driven;
+    out->brakeShare = def->brakeShare;
+}
+
+void m3JournalVehicleDef(m3VehicleDef* out, const m3VehicleDef* def)
+{
+    memset(out, 0, sizeof(*out));
+    out->chassisId = def->chassisId;
+    out->wheelCount = def->wheelCount;
+    for (int32_t w = 0; w < M3_VEHICLE_MAX_WHEELS; ++w)
     {
-        m3Refuse(world, m3_errorInvalid);
-        return -1; // contract, not invariant
+        JournalWheelDef(&out->wheels[w], &def->wheels[w]);
     }
-    int32_t bytes = world->recorder.journalOverflow != 0 ? -1 : world->recorder.journalCursor;
+    out->maxSteerAngle = def->maxSteerAngle;
+    out->driveForce = def->driveForce;
+    out->brakeForce = def->brakeForce;
+    out->tireGrip = def->tireGrip;
+    out->leanStabilization = def->leanStabilization;
+    out->userData = def->userData;
+    out->internalValue = def->internalValue;
+}
+
+void m3JournalWaterVolumeDef(m3WaterVolumeDef* out, const m3WaterVolumeDef* def)
+{
+    memset(out, 0, sizeof(*out));
+    out->lo = def->lo;
+    out->hi = def->hi;
+    out->density = def->density;
+    out->linearDrag = def->linearDrag;
+    out->angularDrag = def->angularDrag;
+    out->flow = def->flow;
+    out->internalValue = def->internalValue;
+}
+
+void m3JournalShapeDef(m3ShapeDef* out, const m3ShapeDef* def)
+{
+    memset(out, 0, sizeof(*out));
+    out->density = def->density;
+    out->friction = def->friction;
+    out->restitution = def->restitution;
+    out->categoryBits = def->categoryBits;
+    out->maskBits = def->maskBits;
+    out->groupIndex = def->groupIndex;
+    out->rollingResistance = def->rollingResistance;
+    out->surfaceVelocity = def->surfaceVelocity;
+    out->userData = def->userData;
+    out->isSensor = def->isSensor;
+    out->enableHitEvents = def->enableHitEvents;
+    out->enablePreSolveEvents = def->enablePreSolveEvents;
+    out->localPosition = def->localPosition;
+    out->localRotation = def->localRotation;
+    out->internalValue = def->internalValue;
+}
+
+void m3JournalJointDef(m3JointDef* out, const m3JointDef* def)
+{
+    memset(out, 0, sizeof(*out));
+    out->type = def->type;
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->localAnchorA = def->localAnchorA;
+    out->localAnchorB = def->localAnchorB;
+    out->localAxisA = def->localAxisA;
+    out->localAxisB = def->localAxisB;
+    out->enableLimit = def->enableLimit;
+    out->lowerLimit = def->lowerLimit;
+    out->upperLimit = def->upperLimit;
+    out->enableMotor = def->enableMotor;
+    out->motorSpeed = def->motorSpeed;
+    out->maxMotorEffort = def->maxMotorEffort;
+    out->enableCone = def->enableCone;
+    out->coneAngle = def->coneAngle;
+    out->collideConnected = def->collideConnected;
+    memcpy(out->genericLinear, def->genericLinear, sizeof(out->genericLinear));
+    memcpy(out->genericAngular, def->genericAngular, sizeof(out->genericAngular));
+    out->genericMotorAxis = def->genericMotorAxis;
+    out->genericReserved = def->genericReserved;
+    memcpy(out->genericLinearLower, def->genericLinearLower, sizeof(out->genericLinearLower));
+    memcpy(out->genericLinearUpper, def->genericLinearUpper, sizeof(out->genericLinearUpper));
+    memcpy(out->genericAngularLower, def->genericAngularLower, sizeof(out->genericAngularLower));
+    memcpy(out->genericAngularUpper, def->genericAngularUpper, sizeof(out->genericAngularUpper));
+    out->ratio = def->ratio;
+    out->groundAnchorA = def->groundAnchorA;
+    out->groundAnchorB = def->groundAnchorB;
+    out->internalValue = def->internalValue;
+}
+
+void m3JournalDrivetrainDef(m3DrivetrainDef* out, const m3DrivetrainDef* def)
+{
+    memset(out, 0, sizeof(*out));
+    out->curveCount = def->curveCount;
+    memcpy(out->curveRpm, def->curveRpm, sizeof(out->curveRpm));
+    memcpy(out->curveTorque, def->curveTorque, sizeof(out->curveTorque));
+    out->gearCount = def->gearCount;
+    memcpy(out->gearRatio, def->gearRatio, sizeof(out->gearRatio));
+    out->reverseRatio = def->reverseRatio;
+    out->finalDrive = def->finalDrive;
+    out->shiftUpRpm = def->shiftUpRpm;
+    out->shiftDownRpm = def->shiftDownRpm;
+    out->clutchSteps = def->clutchSteps;
+    out->autoShift = def->autoShift;
+    out->diffMode = def->diffMode;
+    out->diffCouple = def->diffCouple;
+    out->internalValue = def->internalValue;
+}
+
+void m3JournalExplosionDef(m3ExplosionDef* out, const m3ExplosionDef* def)
+{
+    memcpy(out, def, sizeof(*out)); // no padding
+}
+
+m3Result m3World_StartJournal(m3World* world, void* buffer, int32_t capacity)
+{
+    if (m3WorldBusy(world))
+    {
+        return m3Refuse(world, m3_errorState);
+    }
+    // The buffer holds at least the tape's header, which is written now.
+    if (world == NULL || buffer == NULL || capacity < M3_JOURNAL_HEADER_BYTES)
+    {
+        return m3Refuse(world, m3_errorInvalid);
+    }
+    if (world->recorder.journalActive != 0)
+    {
+        return m3Refuse(world, m3_errorState);
+    }
+    m3StatePrefix header =
+        m3MakeStatePrefix(M3_JOURNAL_MAGIC, M3_JOURNAL_VERSION, M3_JOURNAL_HEADER_BYTES);
+    memcpy(buffer, &header, sizeof(header));
+    world->recorder.journalBuffer = (uint8_t*)buffer;
+    world->recorder.journalCapacity = capacity;
+    world->recorder.journalCursor = M3_JOURNAL_HEADER_BYTES;
+    world->recorder.journalActive = 1;
+    world->recorder.journalOverflow = 0;
+    return m3_success;
+}
+
+m3Result m3World_StopJournal(m3World* world, int32_t* bytesOut)
+{
+    if (m3WorldBusy(world))
+    {
+        return m3Refuse(world, m3_errorState);
+    }
+    if (world == NULL || bytesOut == NULL)
+    {
+        return m3Refuse(world, m3_errorInvalid);
+    }
+    *bytesOut = 0;
+    if (world->recorder.journalActive == 0)
+    {
+        return m3Refuse(world, m3_errorState);
+    }
+    bool overflow = world->recorder.journalOverflow != 0;
+    int32_t bytes = world->recorder.journalCursor;
     world->recorder.journalBuffer = NULL;
     world->recorder.journalCapacity = 0;
     world->recorder.journalCursor = 0;
     world->recorder.journalActive = 0;
     world->recorder.journalOverflow = 0;
-    return bytes;
-}
-
-bool m3World_ReplayJournal(m3WorldId worldId, const void* data, int32_t size)
-{
-    m3World* world = m3WorldFromId(worldId);
-    if (world == NULL || data == NULL || size < 0)
+    if (overflow)
     {
-        m3Refuse(world, m3_errorInvalid);
-        return false; // contract, not invariant
+        return m3_errorCapacity; // the buffer filled up: the tape is unusable
     }
-    // Atomic replay: the world either takes the whole session
-    // or none of it. A pre-replay snapshot backs out any partial
-    // application on refusal, so a corrupted or truncated journal
-    // can never leave a half-built world behind.
-    int32_t snapBytes = m3World_SnapshotSize(worldId);
-    uint8_t* snap = (uint8_t*)m3AllocZeroed(snapBytes);
-    if (snap == NULL)
-    {
-        m3Refuse(world, m3_errorCapacity);
-        return false; // no memory for the guarantee means no replay
-    }
-    if (m3World_Snapshot(worldId, snap, snapBytes) != snapBytes)
-    {
-        m3Free(snap);
-        m3Refuse(world, m3_errorCapacity);
-        return false;
-    }
-    bool ok = m3JournalReplayApply(world, data, size);
-    if (!ok)
-    {
-        bool restored = m3World_Restore(worldId, snap, snapBytes);
-        M3_ASSERT(restored); // our own snapshot must restore: invariant
-        (void)restored;
-        m3Refuse(world, m3_errorInvalid);
-    }
-    m3Free(snap);
-    return ok;
+    *bytesOut = bytes;
+    return m3_success;
 }

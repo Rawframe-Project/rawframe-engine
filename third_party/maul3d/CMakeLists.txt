@@ -1,14 +1,16 @@
-# Maul3D, vendored at the exact revision recorded in third_party/README.md.
-# This file is ours; everything else in this directory is Maul3D's own,
-# unchanged. Built the way Maul3D's CMake builds its static library: C17 with
-# the flags its determinism contract depends on, AVX2 and FMA kernels on x64
-# (every backend gives the same bits), and the CPU check compiled without
-# them so it can refuse on a CPU that lacks them.
+# Maul3D, vendored at the exact revision recorded in
+# docs/operations/dependencies.md. This file is ours; everything else in this
+# directory is Maul3D's own, unchanged. Built the way Maul3D's CMake builds its
+# static library: C23 with the flags its determinism contract depends on, AVX2
+# and FMA kernels on x64 (every backend gives the same bits), and the CPU check
+# compiled without them, its public header first, so it can refuse on a CPU
+# that lacks them.
 add_library(rawframe_maul3d_vendor STATIC
     src/allocator.c
     src/body.c
     src/body_motion.c
     src/body_read.c
+    src/body_state.c
     src/broad_phase.c
     src/character.c
     src/contact_kernel.c
@@ -21,10 +23,12 @@ add_library(rawframe_maul3d_vendor STATIC
     src/distance.c
     src/draw.c
     src/dynamic_tree.c
+    src/format_layout.c
+    src/fpenv.c
     src/hash.c
     src/hull.c
-    src/island.c
     src/integrate.c
+    src/island.c
     src/joint.c
     src/joint_distance.c
     src/joint_fixed.c
@@ -41,16 +45,18 @@ add_library(rawframe_maul3d_vendor STATIC
     src/joint_spherical.c
     src/joint_wheel.c
     src/journal.c
-    src/journal_replay.c
     src/journal_replay_actors.c
+    src/journal_replay.c
     src/journal_replay_joints.c
     src/journal_replay_shapes.c
     src/manifold.c
     src/manifold_mesh.c
     src/math_functions.c
     src/mesh_bvh.c
+    src/misuse.c
     src/mover.c
     src/narrowphase.c
+    src/parallel.c
     src/query.c
     src/query_proxy.c
     src/quickhull.c
@@ -62,15 +68,23 @@ add_library(rawframe_maul3d_vendor STATIC
     src/shape_data.c
     src/shape_mass.c
     src/shape_params.c
+    src/shape_state.c
+    src/snapshot_bounds.c
     src/snapshot.c
+    src/snapshot_links.c
+    src/snapshot_values.c
     src/softbody.c
+    src/softbody_cull.c
     src/softbody_pairs.c
     src/softbody_solver.c
     src/solver.c
+    src/solver_math.c
+    src/state_prefix.c
     src/triangle_contact.c
     src/vehicle.c
     src/vehicle_drivetrain.c
     src/voxel.c
+    src/voxel_coverage.c
     src/voxel_fracture.c
     src/water.c
     src/world.c
@@ -83,13 +97,22 @@ target_sources(rawframe_maul3d_vendor PRIVATE $<TARGET_OBJECTS:rawframe_maul3d_c
 add_library(maul3d::maul3d ALIAS rawframe_maul3d_vendor)
 target_include_directories(rawframe_maul3d_vendor PUBLIC include PRIVATE src)
 target_include_directories(rawframe_maul3d_cpu PRIVATE include src)
+if(MSVC)
+    target_compile_options(rawframe_maul3d_cpu PRIVATE /FImaul3d/base.h)
+else()
+    target_compile_options(rawframe_maul3d_cpu PRIVATE -include maul3d/base.h)
+endif()
 foreach(target rawframe_maul3d_vendor rawframe_maul3d_cpu)
-    set_target_properties(${target} PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF
+    set_target_properties(${target} PROPERTIES C_STANDARD 23 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF
                                                 C_VISIBILITY_PRESET hidden)
     # Maul3D's own warnings, but not -Werror: a new compiler's new warning
     # in code we do not edit must not stop the engine building.
-    rawframe_gnu_options(${target} PRIVATE -ffp-contract=off -fno-trapping-math -fno-fast-math
-                                             -fno-unsafe-math-optimizations -Wall -Wextra)
+    rawframe_gnu_options(${target} PRIVATE -ffp-contract=off -fno-fast-math -fno-unsafe-math-optimizations
+                                             -fno-math-errno -Wall -Wextra)
+    # clang-cl takes C23 from Clang's own spelling, as Maul3D's CMake gives it.
+    if(MSVC)
+        target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:C>:/clang:-std=c23>)
+    endif()
 endforeach()
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64" AND RAWFRAME_GNU_OPTIONS)
     rawframe_gnu_options(rawframe_maul3d_vendor PRIVATE -mavx2 -mfma)

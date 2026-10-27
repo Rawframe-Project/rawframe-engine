@@ -85,13 +85,13 @@ static void ResetNodes(m3Tree* tree)
     tree->nodeCount = 0;
 }
 
-m3Tree m3TreeCreate(int32_t capacity)
+m3Tree m3TreeCreate(m3Heap* heap, int32_t capacity)
 {
     m3Tree tree;
     memset(&tree, 0, sizeof(tree));
     tree.root = M3_TREE_NULL;
     tree.freeList = M3_TREE_NULL;
-    M3_ALLOC(tree.nodes, capacity, m3TreeNode);
+    M3_ALLOC(heap, tree.nodes, capacity, m3TreeNode);
     if (tree.nodes != NULL)
     {
         tree.capacity = capacity; // out of memory leaves capacity 0 for the caller
@@ -100,9 +100,9 @@ m3Tree m3TreeCreate(int32_t capacity)
     return tree;
 }
 
-void m3TreeDestroy(m3Tree* tree)
+void m3TreeDestroy(m3Heap* heap, m3Tree* tree)
 {
-    m3Free(tree->nodes);
+    m3Free(heap, tree->nodes);
     memset(tree, 0, sizeof(*tree));
     tree->root = M3_TREE_NULL;
     tree->freeList = M3_TREE_NULL;
@@ -415,6 +415,11 @@ void m3TreeQueryMask(const m3Tree* tree, const double lo[3], const double hi[3],
     }
 }
 
+bool m3TreeOverlaps(const m3Tree* tree, int32_t nodeId, const double lo[3], const double hi[3])
+{
+    return Overlap(tree->nodes[nodeId].lo, tree->nodes[nodeId].hi, lo, hi);
+}
+
 void m3TreeQuery(const m3Tree* tree, const double lo[3], const double hi[3], m3TreeQueryFn fn,
                  void* context)
 {
@@ -560,17 +565,12 @@ static int32_t BuildRange(m3Tree* tree, RebuildInput* in, int32_t s, int32_t e)
 }
 
 bool m3TreeRebuild(m3Tree* tree, const double (*los)[3], const double (*his)[3],
-                   const int32_t* userDatas, const uint32_t* masks, int32_t count,
+                   const int32_t* userDatas, const uint32_t* masks, int32_t count, int32_t* order,
                    int32_t* outNodes)
 {
     if (count < 0 || (count > 0 && 2 * count - 1 > tree->capacity))
     {
         return false; // a tree over n leaves needs 2n - 1 nodes
-    }
-    int32_t* order = (int32_t*)m3AllocZeroed(2 * count * (int32_t)sizeof(int32_t) + 1);
-    if (order == NULL)
-    {
-        return false; // the old tree stays untouched
     }
     // Every node goes back on the free chain in ascending order, so the
     // rebuilt layout is a pure function of the input list.
@@ -584,6 +584,6 @@ bool m3TreeRebuild(m3Tree* tree, const double (*los)[3], const double (*his)[3],
     {
         tree->root = BuildRange(tree, &in, 0, count);
     }
-    m3Free(order);
+    M3_ASSERT(m3TreeValidate(tree));
     return true;
 }

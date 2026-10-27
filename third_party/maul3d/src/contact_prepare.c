@@ -6,11 +6,11 @@
 // the step's starting pose.
 
 #include "contact_solver.h"
-
 #include "manifold.h"
-#include "solver.h"
+#include "solver_math.h"
 #include "world_internal.h"
 
+#include <float.h>
 #include <math.h>
 #include <string.h>
 
@@ -81,8 +81,8 @@ static bool Vetoed(m3World* world, const m3Manifold* manifold, uint64_t key, int
         return false;
     }
     m3Pos3 point = DeepestPoint(world, manifold, world->shapes.shapeBody[shapeB]);
-    m3ShapeId idA = {shapeA + 1, world->idWorld, world->shapes.shapePool.generations[shapeA]};
-    m3ShapeId idB = {shapeB + 1, world->idWorld, world->shapes.shapePool.generations[shapeB]};
+    m3ShapeId idA = {shapeA + 1, world->shapes.shapePool.generations[shapeA]};
+    m3ShapeId idB = {shapeB + 1, world->shapes.shapePool.generations[shapeB]};
     if (world->preSolveFn(idA, idB, point, manifold->normal, world->preSolveContext))
     {
         return false;
@@ -185,6 +185,33 @@ static void PreparePoints(const m3World* world, m3ContactConstraint* c, const m3
     }
 }
 
+// The inverse of the tangent pair's symmetric 2x2 mass matrix. The direct
+// inverse stands whenever the determinant is a normal float, so every
+// ordinary pair keeps its bits; otherwise, a zero determinant included,
+// the pair is inverted at the scale of its larger diagonal. A singular
+// pair, or one that is not finite even at that scale, gets zero: no
+// tangent rows.
+static void InvertPair(m3real k11, m3real k22, m3real k12, m3ContactConstraint* c)
+{
+    m3real det = k11 * k22 - k12 * k12;
+    if (det >= FLT_MIN && det <= FLT_MAX)
+    {
+        m3real inv = 1.0f / det;
+        c->frictionK11 = k22 * inv;
+        c->frictionK22 = k11 * inv;
+        c->frictionK12 = -k12 * inv;
+        return;
+    }
+    m3real r[3] = {0.0f, 0.0f, 0.0f};
+    if (!(det < 0.0f))
+    {
+        (void)m3InvertPairAtScale(k11, k22, k12, m3MaxF(k11, k22), r);
+    }
+    c->frictionK11 = r[0];
+    c->frictionK22 = r[1];
+    c->frictionK12 = r[2];
+}
+
 // The rows at the manifold's center: the tangent pair, inverted once,
 // whose warm impulse comes from the manifold's world-frame store so a
 // new tangent basis cannot scramble it; the twist row about the normal
@@ -215,11 +242,7 @@ static void PrepareCenterRows(m3ContactConstraint* c, const m3Manifold* manifold
     m3real k22 = c->invMassA + c->invMassB + m3Dot3(a2, m3MulMV3(c->invIA, a2)) +
                  m3Dot3(b2, m3MulMV3(c->invIB, b2));
     m3real k12 = m3Dot3(a1, m3MulMV3(c->invIA, a2)) + m3Dot3(b1, m3MulMV3(c->invIB, b2));
-    m3real det = k11 * k22 - k12 * k12;
-    m3real inv = det > 0.0f ? 1.0f / det : 0.0f;
-    c->frictionK11 = det > 0.0f ? k22 * inv : 0.0f;
-    c->frictionK22 = det > 0.0f ? k11 * inv : 0.0f;
-    c->frictionK12 = det > 0.0f ? -k12 * inv : 0.0f;
+    InvertPair(k11, k22, k12, c);
     c->frictionImpulse1 = m3Dot3(manifold->frictionImpulse, c->t1);
     c->frictionImpulse2 = m3Dot3(manifold->frictionImpulse, c->t2);
 
@@ -235,6 +258,38 @@ static void PrepareCenterRows(m3ContactConstraint* c, const m3Manifold* manifold
         c->rollingK.cy = m3Add3(c->invIA.cy, c->invIB.cy);
         c->rollingK.cz = m3Add3(c->invIA.cz, c->invIB.cz);
     }
+}
+
+// The loaded impulses, held as a whole within M3_WARM_LIMIT (core.h) at
+// this step's masses and levers. Only a moving side's levers enter the
+// warm start.
+static void HoldWarmStart(m3ContactConstraint* c)
+{
+    double lever = 0.0;
+    double sum = (double)m3AbsF(c->frictionImpulse1) + (double)m3AbsF(c->frictionImpulse2) +
+                 (double)m3AbsF(c->twistImpulse) + m3NormL1(c->rollingImpulse);
+    for (int32_t k = 0; k < c->pointCount; ++k)
+    {
+        const m3ConstraintPoint* cp = &c->points[k];
+        sum += (double)m3AbsF(cp->normalImpulse);
+        double a = c->invMassA > 0.0f ? m3NormL1(cp->rA) : 0.0;
+        double b = c->invMassB > 0.0f ? m3NormL1(cp->rB) : 0.0;
+        lever = lever > a ? lever : a;
+        lever = lever > b ? lever : b;
+    }
+    m3real scale = m3WarmHold(c->invMassA, &c->invIA, c->invMassB, &c->invIB, lever, sum);
+    if (scale == 1.0f)
+    {
+        return;
+    }
+    for (int32_t k = 0; k < c->pointCount; ++k)
+    {
+        c->points[k].normalImpulse *= scale;
+    }
+    c->frictionImpulse1 *= scale;
+    c->frictionImpulse2 *= scale;
+    c->twistImpulse *= scale;
+    c->rollingImpulse = m3MulSV3(scale, c->rollingImpulse);
 }
 
 static void PrepareConstraint(const m3World* world, m3ContactConstraint* c, int32_t pair,
@@ -263,6 +318,7 @@ static void PrepareConstraint(const m3World* world, m3ContactConstraint* c, int3
     PrepareMaterial(world, c, manifold, shapeA, shapeB);
     PreparePoints(world, c, manifold);
     PrepareCenterRows(c, manifold);
+    HoldWarmStart(c);
 }
 
 int32_t m3PrepareContacts(m3World* world, m3ContactConstraint* constraints, m3real h)

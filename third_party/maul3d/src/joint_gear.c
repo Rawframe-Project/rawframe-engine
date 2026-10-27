@@ -14,10 +14,8 @@
 //
 // Slots: the gear row (perpImpulse.z).
 
-#include "joint_solver.h"
-
 #include "joint.h"
-#include "solver.h"
+#include "joint_solver.h"
 #include "world_internal.h"
 
 #include <math.h>
