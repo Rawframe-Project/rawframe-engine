@@ -7,15 +7,18 @@ running orphans that process. On Linux the orphan is handed to this
 process instead of to init: every 30 seconds, any process handed here
 more than a minute before is named and killed (SIGKILL, by the exact pid,
 which nothing else can have reused while it is this process's child); so
-is any still running ten seconds after the command ends. A child that
-ends is reaped at once, as init would: a test waiting for a process it
-orphaned to go must not see it linger as a zombie. A stopped server ignores stop signals
-while its leak check runs, so SIGKILL is the one that ends one stuck there.
+is any still running `--grace` seconds (ten unless given) after the
+command ends, and then any child such a process leaves in turn. A child
+that ends is reaped at once, as init would: a test waiting for a process
+it orphaned to go must not see it linger as a zombie. A stopped server
+ignores stop signals while its leak check runs, so SIGKILL is the one that
+ends one stuck there.
 
 Exits with the command's status, or 1 when anything was left behind.
-Elsewhere it only runs the command.
+Elsewhere, or where the system refuses it a subreaper, it says so and
+only runs the command.
 
-usage: reap.py <command> [arguments...]
+usage: reap.py [--grace <seconds>] <command> [arguments...]
 """
 
 import ctypes
@@ -29,8 +32,12 @@ PR_SET_CHILD_SUBREAPER = 36
 SWEEP_SECONDS = 30
 ORPHAN_GRACE_SECONDS = 60
 # Once the command ends, what is still finishing (a server's leak check)
-# has this long to end of itself.
+# has this long to end of itself, unless `--grace` says otherwise.
 LAST_GRACE_SECONDS = 10
+# A killed process's own children are handed here as it goes, and theirs
+# after them: the last pass is repeated until none is left, at most this
+# many times.
+LAST_ROUNDS = 16
 
 
 def children(of: int, besides: int) -> list[int]:
@@ -75,18 +82,26 @@ def end(pid: int) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
+    arguments = sys.argv[1:]
+    grace = LAST_GRACE_SECONDS
+    if arguments[:1] == ["--grace"] and len(arguments) >= 2:
+        grace = float(arguments[1])
+        arguments = arguments[2:]
+    if not arguments:
         print(__doc__, file=sys.stderr)
         return 2
     if not sys.platform.startswith("linux"):
-        return subprocess.call(sys.argv[1:])
+        print("reap: not Linux, so what the tests leave running is not reaped", flush=True)
+        return subprocess.call(arguments)
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
-        return subprocess.call(sys.argv[1:])
+        print(f"reap: no subreaper ({os.strerror(ctypes.get_errno())}), so what the tests leave running is not reaped",
+              flush=True)
+        return subprocess.call(arguments)
     me = os.getpid()
     ended = [False]
     signal.signal(signal.SIGCHLD, lambda *_: ended.__setitem__(0, True))
-    command = subprocess.Popen(sys.argv[1:])
+    command = subprocess.Popen(arguments)
     first_seen: dict[int, float] = {}
     left = 0
     swept = time.monotonic()
@@ -110,12 +125,16 @@ def main() -> int:
                 end(pid)
                 del first_seen[pid]
                 left += 1
-    deadline = time.monotonic() + LAST_GRACE_SECONDS
+    deadline = time.monotonic() + grace
     while children(me, command.pid) and time.monotonic() < deadline:
         time.sleep(0.2)
-    for pid in children(me, command.pid):
-        end(pid)
-        left += 1
+    for _ in range(LAST_ROUNDS):
+        remaining = children(me, command.pid)
+        if not remaining:
+            break
+        for pid in remaining:
+            end(pid)
+            left += 1
     if left:
         print(f"reap: {left} process(es) outlived the tests that started them", flush=True)
         return status or 1
