@@ -4,6 +4,7 @@
 
 #include "../src/console.h"
 #include "../src/records.h"
+#include "rawframe/test/scratch.h"
 #include "rawframe/test/test.h"
 
 #include <filesystem>
@@ -56,7 +57,7 @@ RAWFRAME_TEST(APlaceThatClimbsOutOfTheGameIsNone) {
 }
 
 RAWFRAME_TEST(OnlyTheGamesOwnFilesAreOpened) {
-    const std::filesystem::path kRoot = std::filesystem::temp_directory_path() / "rawframe_console_test";
+    const std::filesystem::path kRoot = rawframe::test::scratchDirectory("console");
     std::filesystem::remove_all(kRoot);
     std::filesystem::create_directories(kRoot / "game" / "scripts");
     std::ofstream(kRoot / "game" / "scripts" / "move.kest") << "x";
