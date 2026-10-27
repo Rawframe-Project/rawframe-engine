@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- The iOS client's Info.plist in the simulator (D586), as Maul Window's
-     own test applications have it (mwin-0025): the scene manifest its
+<!-- The iOS client's Info.plist in the simulator, as Maul Window's
+     own test applications have it: the scene manifest its
      scenes need, naming no class; a mouse's clicks as the pointer's, not a
      finger's; and a launch screen, without which iOS shows the application
      letterboxed. -->

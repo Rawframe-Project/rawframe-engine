@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A running Android client's UI as accessibility services read it (D576):
+# A running Android client's UI as accessibility services read it:
 # uiautomator dumps the screen's accessibility tree, which asks the client's
 # view for its node provider; the first asking makes the client's access, so
 # the dump is asked again until the UI's nodes are in it, up to a minute (a

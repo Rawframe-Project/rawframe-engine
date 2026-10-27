@@ -18,7 +18,7 @@
 #
 # RAWFRAME_PLAY_WORK, when set, names the directory the logs are written to,
 # kept after, each bots process's id beside its log (bots-<n>.pid): for a
-# script that drives a client to wait on its records and stop it (D430).
+# script that drives a client to wait on its records and stop it.
 set -euo pipefail
 
 server="$1"
@@ -31,12 +31,12 @@ server_settings="${7:-/dev/null}"
 bots_settings="${8:-/dev/null}"
 bots_game="${9-$game}"
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
 here="$(native "$PWD")"
-# Paths in a configuration are under its own directory (D188); the games
+# Paths in a configuration are under its own directory; the games
 # named here are under the repository root, where this runs from.
 absolute() {
     case "$1" in
@@ -83,7 +83,7 @@ cat "$bots_settings" >>"$work/bots.conf"
 
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 server_pid=$!
-# The server admits once it is active, not when it listens (D99): a bot
+# The server admits once it is active, not when it listens: a bot
 # that asks before is refused as unavailable, which a bot with no retries
 # keeps. A sanitized server on a loaded machine takes seconds to get there.
 for _ in $(seq 1200); do
@@ -100,7 +100,7 @@ for pid in ${pids[@]+"${pids[@]}"}; do
 done
 pids=()
 # A server that stopped itself before the bots ended is said by its log,
-# printed below, rather than by kill's refusal (D736).
+# printed below, rather than by kill's refusal.
 kill -TERM "$server_pid" 2>/dev/null || true
 wait "$server_pid" || true
 cat "$work/server.log" "$work"/bots-*.log

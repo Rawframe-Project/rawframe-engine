@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# A game's data document authored in a session (D811), over a copy of
+# A game's data document authored in a session, over a copy of
 # Plaza's action map: the map read whole, its move action's shown name set
 # and written, its members kept in their order; undone back to its very
 # bytes and redone; a value the map's reader refuses, a path through an
 # action it does not hold, and a scene's operation refused with the file
-# untouched. And a skeleton and a clip of Plaza's walker (D827): read, a
+# untouched. And a skeleton and a clip of Plaza's walker: read, a
 # bone's translation and a key's time set through their places, a key taken
 # away by its place and a place past the tracks refused.
 #

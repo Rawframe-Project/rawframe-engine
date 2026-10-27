@@ -1,6 +1,6 @@
 # Two bots play the sample platformer for three seconds while the first's
 # canvas is drawn on the one device into a 4:3 offscreen picture: runners
-# declares a 16:9 aspect (D369), so its view is letterboxed, bars above and
+# declares a 16:9 aspect, so its view is letterboxed, bars above and
 # below, slate. The last frame read back is written to a TGA image in the build
 # tree for runners_boxed.sh to look at. A software rasterizer may serve.
 host.maximum_iterations = 360
@@ -20,10 +20,10 @@ render.read_every = 8
 render.capture = @CAPTURE@
 # What is checked is what is drawn, not how fast a loaded machine ticks:
 # the World may fall behind without the server refusing the bots, as a
-# World a second behind refuses players (D212, D516). Nor how fast it stops:
+# World a second behind refuses players. Nor how fast it stops:
 # a software rasterizer starved by a full check took 5.2 s to finish its
 # frames as the device went, past the default budget, and the run ended as
-# a shutdown timeout before the picture was looked at (D615).
+# a shutdown timeout before the picture was looked at.
 world.degraded_ms = 600000
 world.overload_ms = 0
 host.shutdown_budget_ms = 30000

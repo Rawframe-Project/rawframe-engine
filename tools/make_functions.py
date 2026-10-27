@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Writes the engine's functions (D711): SPEC-0026's standard subgraphs, each
+# Writes the engine's functions: the standard subgraphs, each
 # a function document over the atomic core, into modules/material/library,
 # which the material module embeds. A node of a function's type calls it.
 # Change one here and run this again; its output is committed.

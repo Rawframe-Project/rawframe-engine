@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Writes Gale's stone (D713): a small, tiling picture of layered rock,
+# Writes Gale's stone: a small, tiling picture of layered rock,
 # light grey strata grained by value noise, which the islands' material
 # lays on them along each world axis. Run again only to change the
 # picture; its output is committed.

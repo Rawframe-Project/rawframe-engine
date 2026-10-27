@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A mesh's and a material's thumbnails (D899, D900): the plaza cooked through a session, then its
+# A mesh's and a material's thumbnails: the plaza cooked through a session, then its
 # crate's thumbnail asked, which sets every mesh of the cook drawing by one
 # run of the thumbnail tool beside the session, answered as being drawn
 # until it is while other records are answered; the mound's then answered
@@ -7,7 +7,7 @@
 # the level that fits; each mesh covers some of its picture and not all of
 # it. Then the brass changed and the game cooked again into the same
 # directory: its picture drawn again, not refused as one the tool could not
-# draw (D972). Says "skip: no device" where the tool found no adapter, unless
+# draw. Says "skip: no device" where the tool found no adapter, unless
 # RAWFRAME_REQUIRE_GPU is set, as the check sets it where lavapipe is.
 #
 # usage: author_mesh_thumbnails.sh <rawframe-author> <rawframe-cook> <rawframe-thumbnail> <repository> <work directory>
@@ -30,7 +30,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.cook","id":2,"output":"'"$work/content"'","cache":null}'
-    # Four minutes only bounds a cook on a sanitized tree under load (D507).
+    # Four minutes only bounds a cook on a sanitized tree under load.
     for _ in $(seq 2400); do
         grep -q '"id":2,"answer"\|"id":2,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1
@@ -93,11 +93,11 @@ grep -q '"answer":{"kind":"authoring.thumbnail","asset":"crate.gltf","object":"[
 grep -q '"answer":{"kind":"authoring.thumbnail","asset":"mound.gltf","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":3,"width":32,"height":32}' "$work/replies"
 reply 5 | grep -q '"code":"unsupported_operation"'
 # The brass changed and cooked again into the same directory, then drawn
-# again (D972).
+# again.
 reply 7 | grep -q '"answer":{"kind":"authoring.outcome"'
 reply 8 | grep -q '"answer":{"kind":"authoring.cooked"'
 grep -q '"id":"again[0-9]*","answer":{"kind":"authoring.thumbnail","asset":"brass.rfmaterial"' "$work/replies"
-# The paving, a material sampling its picture, on the engine's ball (D900).
+# The paving, a material sampling its picture, on the engine's ball.
 grep -q '"answer":{"kind":"authoring.thumbnail","asset":"paving.rfmaterial","object":"[^"]*/content/thumbnails/[0-9a-f]\{64\}.texture","level":2,"width":64,"height":64}' "$work/replies"
 # One run drew them all, the plaza's three meshes and seven materials (its
 # crate's two among them), each covering some of its picture and not all of

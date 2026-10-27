@@ -1,4 +1,4 @@
-// Bakes a game's reflection probes (D326): a server and one headless bot
+// Bakes a game's reflection probes: a server and one headless bot
 // in one process over the loopback network, as the arena runs them, the
 // bot's mirrored World drawn offscreen on the one device, and each probe
 // the scene extracts drawn six ways and written as the Radiance picture its

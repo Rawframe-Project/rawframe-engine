@@ -1,4 +1,4 @@
-# The animation tool (ADR-0039, SPEC-0035): a glTF skin and its animations
+# The animation tool: a glTF skin and its animations
 # made into skeleton and clip documents. Tooling only; no client or server
 # closure contains it.
 rawframe_host(NAME animation_tool OUTPUT rawframe-animation

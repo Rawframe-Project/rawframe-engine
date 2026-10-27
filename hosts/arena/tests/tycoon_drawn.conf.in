@@ -1,5 +1,5 @@
 # Two bots play Stalls for ten seconds while the first one's view is drawn
-# offscreen on the one device (D389): the lot and the stalls as boxes from
+# offscreen on the one device: the lot and the stalls as boxes from
 # above, its cursor's plot marked, and its coins in its HUD in the game's
 # font, read from Stalls' content cooked into the build tree. One frame in
 # eight is read back; the last is written to a TGA image in the build tree.
@@ -21,6 +21,6 @@ scene.shadow_side = 256
 render.read_every = 8
 # What is checked is what is drawn, not how fast a loaded machine ticks:
 # the World may fall behind without the server refusing the bots, as a
-# World a second behind refuses players (D212, D516).
+# World a second behind refuses players.
 world.degraded_ms = 600000
 world.overload_ms = 0

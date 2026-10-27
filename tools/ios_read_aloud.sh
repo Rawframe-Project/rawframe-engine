@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A running iOS client's UI as accessibility clients read it, in a booted
-# simulator (D588): idb reads the screen's accessibility elements, which
+# simulator: idb reads the screen's accessibility elements, which
 # asks the client's view for its elements; the first asking makes the
 # client's access, so the reading is asked again until a button the pattern
 # names is in it, up to five minutes, as the client may still be on its way

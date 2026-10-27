@@ -1,7 +1,7 @@
-// The debug adapter for a running game (ADR-0066's debugger bridge, D461):
+// The debug adapter for a running game:
 // an editor starts it and speaks the Debug Adapter Protocol on its standard
 // input and output, and it attaches to a game's tooling endpoint, which
-// grants debug (D460). VS Code starts it through tools/vscode.
+// grants debug. VS Code starts it through tools/vscode.
 //
 //   rawframe-debug
 //

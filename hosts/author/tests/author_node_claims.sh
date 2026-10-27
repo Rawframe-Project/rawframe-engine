@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claims on a UI document's nodes (ADR-0085 section 3, D886), headless,
+# Claims on a UI document's nodes, headless,
 # over a copy of Stalls' UI: Ada chooses the purse and claims it; Ben's
 # change to the purse is refused naming her, and so are his removing the
 # wallet that holds it and moving it out; his change to the wallet's own

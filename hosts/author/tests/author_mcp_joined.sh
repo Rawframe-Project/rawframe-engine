@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# An agent a collaborator of a shared session (ADR-0085 section 7, D883):
+# An agent a collaborator of a shared session:
 # Runners' level hosted headless, an MCP client joined through
 # `rawframe-author mcp --join` under the token named "claude", and Ben
 # joined headless. The agent's tools are the session's; its rename of the
 # ground is kept under its own name, which Ben hears; its undo takes back
 # only its own change; it cooks through the host into its own directory
-# there (D885); and the level holds what the agent left.
+# there; and the level holds what the agent left.
 #
 # usage: author_mcp_joined.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail

@@ -1,4 +1,4 @@
-// The browser's path end to end, without a browser (D173): the dedicated
+// The browser's path end to end, without a browser: the dedicated
 // server accepts browsers over WebTransport with a fresh 13-day identity;
 // the page's own modules (page/) load the web client with the browser's
 // WASI and its transport over WebTransport, trust the server by its

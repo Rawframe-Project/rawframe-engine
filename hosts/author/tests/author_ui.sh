@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# A game's UI document authored in a session (D641), over a copy of
+# A game's UI document authored in a session, over a copy of
 # Stalls': the document read whole; the purse's fill set, a node made
 # inside the wallet, and the banner removed by one atomic request, run dry
-# first (D650: answered as it would be kept, nothing kept), then written; the history listed; undone back to its very bytes; and a field
+# first (answered as it would be kept, nothing kept), then written; the history listed; undone back to its very bytes; and a field
 # a node has not, a node the document has not, and a style sheet's
 # operation refused with the file untouched.
 #

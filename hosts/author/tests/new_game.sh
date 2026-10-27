@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A new game from a template (D780): two games made from the starter
+# A new game from a template: two games made from the starter
 # template share no identity, a game is not made over another or under a
 # name that is not a Kest project's, and the new game plays: four bots move
 # their boxes about its ground for five seconds. Run from the repository

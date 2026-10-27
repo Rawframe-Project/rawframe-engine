@@ -1,5 +1,5 @@
-// A stand-in for the browser's WebTransport class under Node, which has none
-// (D173): the W3C API's shape (ready, closed, datagrams, streams both ways)
+// A stand-in for the browser's WebTransport class under Node, which has none:
+// the W3C API's shape (ready, closed, datagrams, streams both ways)
 // over webtransport_bridge.py, where aioquic does the HTTP/3. Only the page's
 // tests use it; a browser has the real one.
 import { spawn } from 'node:child_process';

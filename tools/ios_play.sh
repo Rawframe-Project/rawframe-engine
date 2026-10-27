@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Plays a game in a booted iOS simulator (D586): the dedicated server built
+# Plays a game in a booted iOS simulator: the dedicated server built
 # for the simulator runs there through simctl spawn, and the iOS client
 # application, installed and launched, plays its own player against it over
 # QUIC until its iterations end. A simulator's processes read this
@@ -10,7 +10,7 @@
 # confirmed, unstalled, and it showed frames or said that no adapter
 # answered: Maul RHI's Metal floor asks for cube array textures, which the
 # simulator's Metal lacks, so a device draws there and the simulator does
-# not (D586).
+# not.
 #
 #   tools/ios_play.sh <build tree> [<game>] [<client iterations>]
 #

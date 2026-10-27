@@ -1,4 +1,4 @@
-// A running client's UI as macOS accessibility clients read it (D579):
+// A running client's UI as macOS accessibility clients read it:
 // the application of the process named is found, and its tree is read
 // through the AX API until a button the pattern names is in it, or any
 // button where none is given, a minute at most (the first asking makes the

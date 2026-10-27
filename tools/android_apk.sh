@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Makes the Android client's application (D551) with the SDK's own tools and
+# Makes the Android client's application with the SDK's own tools and
 # no Gradle:
 #
 #   tools/android_apk.sh <out.apk> <librawframe_client.so> <package> <label> [<game files>
 #                        [<keystore> <alias>]]
 #
 # Maul Window's Java activity (third_party/maul-window/java), Maul UI's
-# accessibility provider (third_party/maul-ui/java, D576), and the client's
+# accessibility provider (third_party/maul-ui/java), and the client's
 # (hosts/android_client/android/java) compiled by javac and d8,
 # hosts/android_client/android/AndroidManifest.xml with the package and label
 # filled in, linked by aapt2 as debuggable, with the game files' directory,
 # when given, carried as assets/game (its client.conf and the game it names,
-# which the activity unpacks into the app's files, D553), the client's
+# which the activity unpacks into the app's files), the client's
 # library under lib/arm64-v8a/, aligned, and signed with a debug key kept
 # beside the output. Given the publisher's keystore and its key's alias, the
-# package is a release one (D581): not debuggable, signed with that key,
+# package is a release one: not debuggable, signed with that key,
 # whose keystore password RAWFRAME_ANDROID_KEYSTORE_PASSWORD holds, never
 # the command line; the key's own password is the keystore's. ANDROID_HOME
 # names the SDK; its newest build tools and platform are used.

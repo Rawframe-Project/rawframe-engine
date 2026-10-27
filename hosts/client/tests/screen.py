@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-# Watches the X server's screen while a client runs (D280): every quarter
+# Watches the X server's screen while a client runs: every quarter
 # second it takes the top left 1280 by 720 pixels of the screen, a server
 # started with a black root window (Xvfb -br), and counts those not black,
 # until the process ends. It prints the most counted in one picture, and
 # writes that picture as a TGA file when asked. Asked to, once the screen
 # has been lit for a second it resizes the window, as a user dragging its
-# edge would (D281).
+# edge would.
 #
 # usage: screen.py <pid> [picture.tga] [<width>x<height>]
 
@@ -63,7 +63,7 @@ def main():
         width, height, pitch = info.width, info.height, info.bytes_per_line
         rows = bytes(ctypes.cast(info.data, ctypes.POINTER(ctypes.c_ubyte * (pitch * height))).contents)
         # Each picture copied, then given back: kept, a quarter second's
-        # 3.7 MB grew a long run to gigabytes (D945).
+        # 3.7 MB grew a long run to gigabytes.
         x.XDestroyImage(image)
         counted = 0
         for row in range(height):

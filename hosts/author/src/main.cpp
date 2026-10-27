@@ -1,4 +1,4 @@
-// The authoring tool (ADR-0032, SPEC-0040, D152): the operation surface from
+// The authoring tool: the operation surface from
 // a command line, run by an author, a pipeline, or an agent; never part of a
 // client or a server.
 //
@@ -21,18 +21,18 @@
 // game description, by the identity their sidecars give them, and the
 // scene's own sidecar gives the document's.
 //
-// `new` makes a game from a template (D780), as Studio's start screen
+// `new` makes a game from a template, as Studio's start screen
 // does: the template's files copied to a directory that is absent or empty,
 // its description and Kest project named after that directory, and every
 // identity its sidecars and component lines mint made fresh. It writes the
 // new description's path.
 //
-// `read` answers a query document (D155) against the scene: the document's
+// `read` answers a query document against the scene: the document's
 // generation read, and per query its answer or the one error record, each
 // on its own. It never writes.
 //
 // `migrate` brings scenes authored against older layouts of the game's
-// components to the current ones (ADR-0067, D153): per scene, every
+// components to the current ones: per scene, every
 // component whose recorded mark differs is remarked in one atomic
 // transaction, and the report gives each scene's verdict, `unchanged`,
 // `migrated`, `refused` (with the fields that do not carry over, or the
@@ -40,38 +40,38 @@
 // as it was; nothing is dropped.
 //
 // `session` holds an authoring session on standard input and output
-// (D407, authoring/session.h): records a line, the game read once, scenes
+// (authoring/session.h): records a line, the game read once, scenes
 // under the scene root (the game's directory unless named) opened as
 // records name them and kept open with their undo histories, each change
 // written to its file as it commits, and each with its selection, which
-// `select` sets and undo and redo put back (D417), and its view, which
-// `view` sets and undo and redo put back too (D432). A scene whose file
+// `select` sets and undo and redo put back, and its view, which
+// `view` sets and undo and redo put back too. A scene whose file
 // changed under the session is opened again, its history and selection
 // let go, and the answer says so. `preview` connects the session to a
-// running client's tooling endpoint granted `view` (D433), which then shows
+// running client's tooling endpoint granted `view`, which then shows
 // one scene's game from that scene's view, handed it each time it changes;
 // the endpoint is a loopback address, so the token the record's file holds
 // goes to no other machine. `cook` cooks the game's directory with the cook
 // tool `--cook` names, or the rawframe-cook beside this program, as a
-// long-running operation (D502): records are read and answered while it
+// long-running operation: records are read and answered while it
 // runs, its progress and its reply said as they come. A mesh's thumbnail
 // is drawn by the tool `--thumbnail` names, or the rawframe-thumbnail
-// beside this program (D899).
+// beside this program.
 //
 // `mcp` holds the same session for an AI agent over the Model Context
-// Protocol on standard input and output (D773, authoring_session/mcp.h):
+// Protocol on standard input and output (authoring_session/mcp.h):
 // each operation the session describes is a tool, as are its own verbs,
 // every call one of the session's records. An agent is given it as
 // `claude mcp add rawframe -- rawframe-author mcp <game description>`. With
-// `--join`, the agent is a collaborator of a shared session's host instead
-// (D883), under its own token's name and grants.
+// `--join`, the agent is a collaborator of a shared session's host instead,
+// under its own token's name and grants.
 //
-// `connect` is a client of a running Runtime's tooling endpoint (D408,
-// connect.h): records a line on standard input, the replies on standard
+// `connect` is a client of a running Runtime's tooling endpoint
+// (connect.h): records a line on standard input, the replies on standard
 // output, the hello said for it with the token from its file.
 //
-// `host` shares the session with collaborators over QUIC (ADR-0085, D881,
-// authoring_session/host.h): at `--endpoint`, each admitted by a token
+// `host` shares the session with collaborators over QUIC
+// (authoring_session/host.h): at `--endpoint`, each admitted by a token
 // `--tokens` names with its grants, under a certificate made for the run
 // whose fingerprint goes to `--fingerprint-file`, a collaborator's cook
 // going into `--cooks`; it runs until asked to stop. `join` is a
@@ -79,7 +79,7 @@
 // unasked written as it is heard.
 //
 // `copy-cooked` brings the cook a collaborator made at a host, by the plain
-// name it was cooked under, into a directory on this machine (D905), each
+// name it was cooked under, into a directory on this machine, each
 // file checked against the cook's manifest, so it is played here.
 //
 // Exit status 0 when everything succeeded, 1 otherwise, and 2 for a usage
@@ -258,7 +258,7 @@ int describe(const char* game) {
     return 0;
 }
 
-/// A new game from a template (D780): its description, how many files it
+/// A new game from a template: its description, how many files it
 /// has, and how many identities were made fresh.
 int makeGame(const std::filesystem::path& from, const std::filesystem::path& directory) {
     const auto kMade = rawframe::authoring_session::newGame(from, directory);
@@ -430,7 +430,7 @@ bool readLine(std::FILE* in, std::string& line) {
 
 /// The records read from standard input, by a thread of their own, so a
 /// running operation is heard while the client is quiet: as the debug
-/// adapter reads its editor (D461, D502).
+/// adapter reads its editor.
 struct Inbox {
     std::mutex mutex;
     std::condition_variable arrived;
@@ -528,7 +528,7 @@ template <typename Answer, typename Poll, typename Close, typename Clean>
 }
 
 /// `mcp`: the session offered to an agent over the Model Context
-/// Protocol's standard input and output transport (D773, mcp.h), until the
+/// Protocol's standard input and output transport (mcp.h), until the
 /// input ends, as MCP ends a session; always 0, a failed call being the
 /// agent's to read, not the process's.
 [[noreturn]] void mcp(const std::filesystem::path& game,
@@ -552,8 +552,8 @@ template <typename Answer, typename Poll, typename Close, typename Clean>
         });
 }
 
-/// `mcp --join`: an agent a collaborator of a shared session's host
-/// (ADR-0085 section 7, D883), under its own token's name and grants, its
+/// `mcp --join`: an agent a collaborator of a shared session's host,
+/// under its own token's name and grants, its
 /// tools the same over the host as over a session of its own.
 [[noreturn]] void mcpJoined(const char* endpoint, const char* pinFile, const char* tokenFile) {
     std::string said;

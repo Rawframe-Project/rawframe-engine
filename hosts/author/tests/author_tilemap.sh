@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# A tilemap painted in a session (D860), headless: an empty level written as
+# A tilemap painted in a session, headless: an empty level written as
 # a file, a floor of ground painted along its bottom row and a cell of it
 # taken away again, written as the tilemap module writes it and undone back
 # to the file's very bytes; a tile past the sheet and a rectangle past the
 # grid refused with the file untouched; then imported from outside into a
-# copy of Ledges as a tilemap and cooked (D858).
+# copy of Ledges as a tilemap and cooked.
 #
 # usage: author_tilemap.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -13,7 +13,7 @@ author=$1
 cook=$2
 repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

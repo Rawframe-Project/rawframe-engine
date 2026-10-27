@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A game exported for Android (D555), shown on this machine: the package's
+# A game exported for Android, shown on this machine: the package's
 # client configuration pins the identity the exported server holds, and the
 # exported server, started as it was written, admits a bot that plays from
 # the package's own library with the package's pin, reaching the server on
@@ -10,7 +10,7 @@
 #                       <rawframe-server> <rawframe-bots> <game directory> <output>
 #                       [ios]
 #
-# Given ios, the game is exported for iOS the same way (D587), with
+# Given ios, the game is exported for iOS the same way, with
 # `--ios-client` naming a stand-in for the iOS build's client bundle, which
 # is not built here: the application made from it carries the game, and its
 # Info.plist names it by the publisher and the game.
@@ -34,7 +34,7 @@ if [ "$target_name" = ios ]; then
     client=(--ios-client "$out.client/rawframe-client.app")
 fi
 # A port nothing holds: the check's trees run this test at once, and a
-# game's own port is one (D402), so a bot could reach another tree's server.
+# game's own port is one, so a bot could reach another tree's server.
 port="$(python3 "$(dirname "$0")/../../../tools/free_port.py")"
 "$export_tool" "$game" "$out" --target "$target_name" --address 10.0.2.2 --port "$port" --cook "$cook" \
     --build "$build" --server "$server" ${client[@]+"${client[@]}"} || exit 1

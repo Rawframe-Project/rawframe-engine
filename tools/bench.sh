@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# The engine against SPEC-0013's tick budget: 64 bots play each sample game
+# The engine against the tick budget: 64 bots play each sample game
 # for six seconds in one arena process built for shipping, and the server
-# World's tick durations are read from its summary. The crowd is SPEC-0013's
+# World's tick durations are read from its summary. The crowd is the
 # canonical workload: 10,000 entities, 2,048 of them walking.
 #
 #   tools/bench.sh          measure, and add a dated, commit-stamped row for
 #                           each game to out/bench/results.tsv, the
 #                           machine's own history, never committed
 #   tools/bench.sh check    measure and record nothing; fail on a tick past
-#                           SPEC-0013's ceilings (p50 5 ms, p95 8.33 ms, p99
+#                           the ceilings (p50 5 ms, p95 8.33 ms, p99
 #                           12.5 ms), on Kest time per tick past its p95 of
 #                           4 ms, or on a p95 past twice this machine's
 #                           recorded one (the median of its last three rows)
@@ -17,12 +17,12 @@
 #                           is past them each time: the owner's machine is
 #                           shared, and a tick slowed by another's build is
 #                           told from a slower engine only by measuring
-#                           again (D504, D896).
+#                           again.
 #
 # Needs out/clang-shipping built; the full check builds it first. Last, the
 # crowd is served over QUIC to bots in processes of their own, and the
-# server's memory and tick are held to SPEC-0013 there too, and a checkpoint
-# of the crowd is captured and restored within SPEC-0013's deadlines.
+# server's memory and tick are held to the budgets there too, and a checkpoint
+# of the crowd is captured and restored within the deadlines.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -46,10 +46,10 @@ failures=0
 # Before a measurement past its bounds is taken again: the load average
 # said, then a wait for the last minute's to fall below half the
 # processors, as the trees' tests leave the machine loaded for a while
-# after they end, and CI's run beside other work (D509). Below the
+# after they end, and CI's run beside other work. Below the
 # processors was not enough: at a load of 23 on 24 processors the plaza
 # was starved into 650 ticks where it plays 360, and measured twice its
-# own (D896). The waits of one run come to ten minutes at most, so a
+# own. The waits of one run come to ten minutes at most, so a
 # machine loaded throughout keeps the check within its time.
 waited=0
 quieter() {
@@ -65,9 +65,9 @@ quieter() {
 }
 # Whether the machine is loaded past its processors now: a measurement
 # past its bounds taken so, after the waits above ran out, says what it
-# measured but is not judged (D908). At loads of 370 to 440 on 24
+# measured but is not judged. At loads of 370 to 440 on 24
 # processors, other projects' and the trees' together, the plaza and the
-# crowd were measured past SPEC-0013's ceilings three times each while
+# crowd were measured past the ceilings three times each while
 # alone they keep well inside them.
 overloaded() {
     awk -v most="$(nproc 2>/dev/null || echo 2)" '{ exit !($1 >= most) }' /proc/loadavg 2>/dev/null
@@ -92,7 +92,7 @@ for game in "${games[@]}"; do
 done
 # The check plays the four at once, each a process of its own on a machine
 # of many processors: their ticks measured so were within the noise of
-# each alone (D528). A game past its bounds is measured again alone. A
+# each alone. A game past its bounds is measured again alone. A
 # recorded measurement plays each alone, as the records always have.
 if [ "$mode" = check ]; then
     for game in "${games[@]}"; do
@@ -115,7 +115,7 @@ for game in "${games[@]}"; do
 import json, sys
 f = json.loads(sys.argv[1])["fields"]
 print(f["ticks"], *("%.3f" % (f[k] / 1000) for k in ("p50", "p95", "p99")))' "$summary")
-        # Kest time per tick, SPEC-0013's aggregate script time (D210).
+        # Kest time per tick, the aggregate script time.
         kest95="$(python3 -c '
 import json, sys
 print("%.3f" % (json.loads(sys.argv[1])["fields"]["p95"] / 1000) if sys.argv[1] else "none")' "$kest")"
@@ -127,10 +127,10 @@ import statistics, sys
 path, machine, game, p50, p95, p99, kest95 = sys.argv[1:8]
 p50, p95, p99 = float(p50), float(p95), float(p99)
 if p50 > 5 or p95 > 8.33 or p99 > 12.5:
-    print("past SPEC-0013 ceilings")
+    print("past the budget's ceilings")
     sys.exit()
 if kest95 == "none" or float(kest95) > 4:
-    print("Kest time per tick past SPEC-0013 p95 4 ms, or not reported")
+    print("Kest time per tick past the budget's p95 4 ms, or not reported")
     sys.exit()
 rows = [line.rstrip("\n").split("\t") for line in open(path)][1:]
 mine = [float(r[7]) for r in rows if r[2] == machine and r[3] == game][-3:]
@@ -158,10 +158,10 @@ done
 
 # Runs a measurement, which sets `verdict`, and says it. In check mode one
 # past its bounds is measured up to twice more, each once the machine is
-# quieter, and fails only if past them each time, as each game's is above
-# (D504, D509, D896): the checkpoint's hold is one capture's, which one
+# quieter, and fails only if past them each time, as each game's is above:
+# the checkpoint's hold is one capture's, which one
 # preemption puts past its 5 ms. Past them on a machine still loaded past
-# its processors, it is not judged (D908).
+# its processors, it is not judged.
 held() {
     "$2"
     for _ in 1 2; do
@@ -181,16 +181,16 @@ held() {
     fi
 }
 
-# The crowd as SPEC-0013 deploys it: the dedicated server over QUIC, and 64
-# bots in four processes of their own (D211), under SPEC-0013's overload
-# thresholds (bench/canonical_profile.conf, D212). What is held here is the
+# The crowd as the budget deploys it: the dedicated server over QUIC, and 64
+# bots in four processes of their own, under the overload
+# thresholds (bench/canonical_profile.conf). What is held here is the
 # server's memory (ready at most 128 MiB, peak at most 512 MiB), that it was
 # never degraded (100 ms behind), its start and shutdown within their hard
-# values (5 s, 8 s), its configured normal shutdown within 8 s too (D230),
-# and its average processor use while active within 1.5 CPUs (D213). Its
+# values (5 s, 8 s), its configured normal shutdown within 8 s too,
+# and its average processor use while active within 1.5 CPUs. Its
 # tick is reported, not held: four bots processes with their own MsQuic
-# threads share this machine, and their load shows in its tail
-# (D215); the arena's runs above hold the tick.
+# threads share this machine, and their load shows in its tail;
+# the arena's runs above hold the tick.
 quic() {
     play="$(hosts/bots/tests/play.sh "$build/hosts/dedicated_server/rawframe-server" "$build/hosts/bots/rawframe-bots" \
         16 4 1440 games/crowd/crowd.game "$PWD/bench/canonical_profile.conf" 2>&1 || true)"
@@ -213,12 +213,12 @@ cpus = (stopped["cpuMs"] - started["cpuMs"]) / active
 line = "ready %.1f MiB, peak %.1f MiB; tick p50 %.3f ms, p95 %.3f ms, p99 %.3f ms; " % (
     ready, peak, tick["p50"] / 1000, tick["p95"] / 1000, tick["p99"] / 1000)
 line += "ready in %d ms, shutdown %d ms, %.2f CPUs active" % (started["readyMs"], stopped["shutdownMs"], cpus)
-# What the participants account for, and what they do not (D216).
+# What the participants account for, and what they do not.
 summary = first("memory_summary")
 if summary:
     line += "; attributed %.1f MiB, files %.1f MiB, unattributed %.1f MiB" % (
         summary["attributedBytes"] / 2**20, summary["fileBackedBytes"] / 2**20, summary["unattributedBytes"] / 2**20)
-    # Of the unattributed, as the allocator counts it (D233).
+    # Of the unattributed, as the allocator counts it.
     line += " (heap unclaimed %.1f, allocator free %.1f, outside the heap %.1f)" % (
         summary["heapUnclaimedBytes"] / 2**20, summary["allocatorFreeBytes"] / 2**20,
         summary["outsideHeapBytes"] / 2**20)
@@ -227,14 +227,13 @@ if degraded:
 if ready > 128 or peak > 512 or degraded or stopped["exit"] != "clean_stop" or \
         started["readyMs"] > 5000 or stopped["shutdownMs"] > 8000 or cpus > 1.5 or \
         started["normalShutdownBoundMs"] > 8000:
-    line = "FAIL past SPEC-0013: " + line
+    line = "FAIL past the budget: " + line
 print(line)' "$play")"
 }
 held "crowd over QUIC" quic
-# A checkpoint of the crowd captured and restored (D215): capture within
+# A checkpoint of the crowd captured and restored: capture within
 # 10 s, restore within 15 s, the artifact within 128 MiB, and the World held
-# for the capture's safe point within 5 ms (SPEC-0013's snapshot ceilings;
-# D227).
+# for the capture's safe point within 5 ms (the snapshot ceilings).
 checkpoint() {
     common="$(printf 'host.iteration_rate = 1000\nworld.tick_rate = 1000\nkest.game = %s' "$PWD/games/crowd/crowd.game")"
     printf '%s\nhost.maximum_iterations = 200\ncheckpoint.capture_ticks = 100\ncheckpoint.capture_prefix = %s/a-\n' \
@@ -255,12 +254,12 @@ line = "%d entities, %.1f KiB, World held %.2f ms, captured in %d ms, restored i
     r["entities"], c["bytes"] / 1024, c["pauseUs"] / 1000, c["captureMs"], r["restoreMs"])
 if c["captureMs"] > 10000 or r["restoreMs"] > 15000 or c["bytes"] > 128 * 2**20 or c["digest"] != r["digest"] or \
         c["pauseUs"] > 5000:
-    line = "FAIL past SPEC-0013: " + line
+    line = "FAIL past the budget: " + line
 print(line)' "$logs")"
 }
 held "crowd checkpoint" checkpoint
-# A Kest system that never ends (D228): its fuel stops it every tick, and
-# the tick it spoils stays within SPEC-0013's 8 ms emergency containment.
+# A Kest system that never ends: its fuel stops it every tick, and
+# the tick it spoils stays within the 8 ms emergency containment.
 runaway() {
     printf 'world.tick_rate = 60\nhost.iteration_rate = 60\nhost.maximum_iterations = 60\nkest.game = %s\n' \
         "$PWD/modules/world_kest/tests/game/runaway.game" >"$work/runaway.conf"
@@ -275,7 +274,7 @@ if not failed or not tick:
     sys.exit()
 line = "stopped %d times, tick p50 %.3f ms, p99 %.3f ms" % (len(failed), tick[0]["p50"] / 1000, tick[0]["p99"] / 1000)
 if tick[0]["p99"] > 8000:
-    line = "FAIL past SPEC-0013: " + line
+    line = "FAIL past the budget: " + line
 print(line)' "$logs")"
 }
 held "runaway Kest" runaway

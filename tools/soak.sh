@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPEC-0013's soak (D214): the dedicated server serves the crowd over QUIC
+# the soak: the dedicated server serves the crowd over QUIC
 # under the canonical profile (bench/canonical_profile.conf) while bots come
 # and go in rounds, and its resident memory is sampled every five seconds.
 # After the warm-up, growth past max(8 MiB, 2% of the warm baseline) fails,
@@ -8,7 +8,7 @@
 #
 #   tools/soak.sh [minutes] [warm-up minutes] [round seconds] [settings]
 #
-# Defaults: 30 minutes, 15 of them warm-up (SPEC-0013's measurement
+# Defaults: 30 minutes, 15 of them warm-up (the measurement
 # protocol), and rounds of 60 seconds. Four bots processes of 16 bots each
 # play a round and are started again, staggered, so connections join and
 # leave all the time. A settings file, when given, is appended to the

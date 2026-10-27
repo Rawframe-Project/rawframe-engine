@@ -1,12 +1,12 @@
-# The launcher (D395): a standalone game's dedicated server started as a
+# The launcher: a standalone game's dedicated server started as a
 # process of its own, then its client pinned to it, after following its
-# release channel where it does (D434). No runtime closure contains it.
+# release channel where it does. No runtime closure contains it.
 rawframe_host(NAME play_tool OUTPUT rawframe-play
     SOURCES src/main.cpp
     DEPS process composition result base
 )
 # A windowed program on Windows: a player starting an exported game sees no
-# console (D944); `main` stays the entry. Rawframe's mark as its icon.
+# console; `main` stays the entry. Rawframe's mark as its icon.
 if(WIN32)
     target_sources(rawframe_host_play_tool PRIVATE resources/rawframe-play.rc)
     set_target_properties(rawframe_host_play_tool PROPERTIES WIN32_EXECUTABLE TRUE)
@@ -26,7 +26,7 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(play_launched PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bots\":1,\"admitted\":1,.*\"exit\":\"clean_stop\".*play: exit 0")
-    # The launcher killed: its server and client stop with it (D649).
+    # The launcher killed: its server and client stop with it.
     add_test(NAME play_orphaned
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/orphaned.sh
                      $<TARGET_FILE:rawframe_host_play_tool> $<TARGET_FILE:rawframe_host_dedicated_server>

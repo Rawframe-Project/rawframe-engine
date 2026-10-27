@@ -1,4 +1,4 @@
-# The sound import tool (ADR-0058): import tooling's process entry, over
+# The sound import tool: import tooling's process entry, over
 # rawframe.audio_import. No runtime closure contains it.
 rawframe_host(NAME import OUTPUT rawframe-import
     SOURCES src/main.cpp

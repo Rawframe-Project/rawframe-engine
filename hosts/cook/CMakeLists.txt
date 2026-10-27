@@ -1,10 +1,10 @@
-# The cook tool (ADR-0024): import tooling's process entry over rawframe.cook.
+# The cook tool: import tooling's process entry over rawframe.cook.
 # No runtime closure contains it.
 rawframe_host(NAME cook_tool OUTPUT rawframe-cook
     SOURCES src/main.cpp
     DEPS cook host process localization animation material graph mesh_import mesh scene world_kest input kest_library kest audio_import audio content document execution result base
 )
-# The engine's shader generator, which builds a program material (D484).
+# The engine's shader generator, which builds a program material.
 target_compile_definitions(rawframe_host_cook_tool PRIVATE
     RAWFRAME_SHADER_GENERATOR="${PROJECT_SOURCE_DIR}/tools/gen_shaders.py")
 
@@ -17,7 +17,7 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/map_subassets.sh
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/map_subassets)
-    # A game under a folder no single ANSI code page names (D956).
+    # A game under a folder no single ANSI code page names.
     add_test(NAME cook_unicode_path
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/unicode_path.sh
                      $<TARGET_FILE:rawframe_host_cook_tool> ${PROJECT_SOURCE_DIR}

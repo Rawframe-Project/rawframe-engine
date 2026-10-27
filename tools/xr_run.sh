@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Runs a command against an OpenXR runtime of its own (D591): Monado's
+# Runs a command against an OpenXR runtime of its own: Monado's
 # service, headless (its null compositor, which shows nothing, its
-# simulated headset, and a simulated simple controller in each hand, D596),
+# simulated headset, and a simulated simple controller in each hand),
 # in a runtime directory of its own, so tests started at the same moment
 # never share a service; its manifest named in RAWFRAME_XR_RUNTIME for
 # tests that name it themselves, as a game names one in `xr.runtime`
-# (D654: the loader's own XR_RUNTIME_JSON is never trusted); and
+# (the loader's own XR_RUNTIME_JSON is never trusted); and
 # RAWFRAME_REQUIRE_XR set, so a test that finds no runtime fails instead of
 # skipping. The service reads its standard input to quit, so it is given a
 # pipe held open until the command ends. Vulkan is the caller's: the check's lavapipe
@@ -15,8 +15,8 @@
 # controllers that <program> places and presses over a socket, started
 # beside the command with the port the driver listens on and a file to
 # write once its first state is written, so a test presses what the
-# simulated controllers never do (D662). The command starts after that
-# file, never on the driver's own first state (D667 follow-up).
+# simulated controllers never do. The command starts after that
+# file, never on the driver's own first state.
 #
 # usage: xr_run.sh [--hands <program>] <command> [<argument>...]
 set -uo pipefail

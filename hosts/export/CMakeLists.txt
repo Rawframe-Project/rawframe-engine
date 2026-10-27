@@ -1,4 +1,4 @@
-# The export tool (D396): a game made into a folder that plays standalone,
+# The export tool: a game made into a folder that plays standalone,
 # through the cook and the build tool run as processes. Packaging tooling;
 # no runtime closure contains it.
 rawframe_host(NAME export_tool OUTPUT rawframe-export
@@ -10,7 +10,7 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME export_usage COMMAND rawframe_host_export_tool)
     set_tests_properties(export_usage PROPERTIES WILL_FAIL TRUE)
     # A web export without its web player stops before cooking, saying what
-    # is missing, and leaves no folder (D948).
+    # is missing, and leaves no folder.
     add_test(NAME export_missing_player
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/missing.sh $<TARGET_FILE:rawframe_host_export_tool>
                      $<TARGET_FILE:rawframe_host_cook_tool> $<TARGET_FILE:rawframe_host_build_tool>
@@ -19,7 +19,7 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(export_missing_player PROPERTIES
                          PASS_REGULAR_EXPRESSION
                          "export: 1\nrawframe-export: the web player's rawframe-web-client.wasm is not at [^\n]*nowhere[^\n]*\nfolder left: no")
-    # Runners exported for Android (D555): its package's configuration pinned
+    # Runners exported for Android: its package's configuration pinned
     # to the identity the exported server holds, and that server, started as
     # written, admitting a bot that plays from the package's library.
     add_test(NAME runners_exported_android
@@ -32,7 +32,7 @@ if(RAWFRAME_BUILD_TESTS)
                          TIMEOUT 300
                          PASS_REGULAR_EXPRESSION
                          "android export: \"target\":\"android\", pinned to the server's identity: yes, admitted 1")
-    # Runners exported for iOS the same way (D587), the application made
+    # Runners exported for iOS the same way, the application made
     # from a stand-in client bundle carrying the game and named by it.
     add_test(NAME runners_exported_ios
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/exported_android.sh
@@ -44,7 +44,7 @@ if(RAWFRAME_BUILD_TESTS)
                          TIMEOUT 300
                          PASS_REGULAR_EXPRESSION
                          "ios export: \"target\":\"ios\", pinned to the server's identity: yes, admitted 1, application <string>local.runners</string> carrying the game")
-    # Reach exported to be shown on a headset (D658): its client asks for
+    # Reach exported to be shown on a headset: its client asks for
     # one, its README says so, and its server admits a bot from its folder;
     # the web is refused one.
     if(TARGET rawframe_host_client)
@@ -59,10 +59,10 @@ if(RAWFRAME_BUILD_TESTS)
                              "headset export: asked yes, told yes, web refused, admitted 1")
     endif()
     # Stalls exported under a studio's key and played from its folder with
-    # the real client in a window (D396): the key set pinned and the secret
+    # the real client in a window: the key set pinned and the secret
     # left out, its font read from the folder's library, the player
     # admitted, frames shown, its window titled as the export was told
-    # (D519) and carrying the game's own icon at its three sides (D951),
+    # and carrying the game's own icon at its three sides,
     # the server stopping cleanly, and the launcher
     # ending with the client's code (a clean stop, or under load a
     # controlled overload of the software rasterizer's window).
@@ -83,7 +83,7 @@ if(RAWFRAME_BUILD_TESTS)
             # A client drawn long under load leaves a thread's allocations in
             # a library unloaded before LeakSanitizer reports, so no
             # suppression can name them; the report stays in client.log, but
-            # does not change the code the launcher must pass on (D433b).
+            # does not change the code the launcher must pass on.
             set_tests_properties(stalls_exported PROPERTIES ENVIRONMENT "LSAN_OPTIONS=exitcode=0")
         endif()
     endif()

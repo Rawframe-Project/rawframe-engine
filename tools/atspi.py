@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# A program's controls found by name through its accessibility tree (D774),
+# A program's controls found by name through its accessibility tree,
 # so a test presses "Undo" rather than a point that moves whenever the
 # layout does. The tree is read over the AT-SPI bus a test starts for the
 # program (AT_SPI_BUS_ADDRESS, as read_aloud.sh does), with busctl, so
@@ -122,8 +122,7 @@ def scroll_to(address, owner, path):
 def settled(address, owner, path):
     """The node's extents once a scroll it asked for has moved it: the same
     twice running, or after a second; first a moment for the scroll to be
-    applied at all, a program idle drawing only a few frames a second
-    (D925)."""
+    applied at all, a program idle drawing only a few frames a second."""
     time.sleep(0.6)
     box = extents(address, owner, path)
     for _ in range(10):
@@ -137,8 +136,8 @@ def settled(address, owner, path):
 
 def centre(address, owner, wanted, role=None, unless=None):
     """The centre of the control named `wanted`, its n-th when it ends with
-    `#n`, of `role` if given and not of `unless` (D925), scrolled into view
-    first (D776); None when there is none."""
+    `#n`, of `role` if given and not of `unless`, scrolled into view
+    first; None when there is none."""
     count = 1
     if "#" in wanted:
         wanted, nth = wanted.rsplit("#", 1)

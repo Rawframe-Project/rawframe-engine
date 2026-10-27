@@ -1,5 +1,5 @@
 # The plaza seen as plaza_seen.conf.in has it, its materials drawn at the
-# low quality (D318): the paving's switch gives the floor a plain grey, so
+# low quality: the paving's switch gives the floor a plain grey, so
 # the one texture sampled is the crates' planks.
 host.maximum_iterations = 240
 host.iteration_rate = 120

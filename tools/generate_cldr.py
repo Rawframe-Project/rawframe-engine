@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Makes the localization module's CLDR tables (ADR-0050).
+"""Makes the localization module's CLDR tables.
 
 Reads the pinned CLDR data in third_party/cldr, never the network, and
 writes C++ tables under modules/localization/src/generated/, formatted as

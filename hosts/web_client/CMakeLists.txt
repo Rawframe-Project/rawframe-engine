@@ -1,4 +1,4 @@
-# The web client (ADR-0084, D169): a WebAssembly reactor over rawframe.host
+# The web client: a WebAssembly reactor over rawframe.host
 # whose exports a page's JavaScript calls. Built only for the web.
 rawframe_host(NAME web_client OUTPUT rawframe-web-client
     SOURCES src/main.cpp
@@ -6,15 +6,15 @@ rawframe_host(NAME web_client OUTPUT rawframe-web-client
          world_localization world_replication world_kest world_runtime composition execution diagnostics result base
 )
 # A reactor: no `main`; the page calls `_initialize`, then the exports. The
-# page's side of the window calls back into the client through its table
-# (Maul Window's mwin-0022).
+# page's side of the window calls back into the client through its table,
+# as Maul Window requires.
 target_link_options(rawframe_host_web_client PRIVATE -mexec-model=reactor -Wl,--export-table)
 
 if(RAWFRAME_BUILD_TESTS)
     # Node plays the page: it holds a test game's files, starts the client,
     # drives it frame by frame, and stops it; no file system is lent. Pages
     # end with a verdict tools/node_page.sh reads, which fails a page that
-    # gives none in two minutes (D238).
+    # gives none in two minutes.
     add_test(NAME web_client_game
              COMMAND ${PROJECT_SOURCE_DIR}/tools/node_page.sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/page.mjs
                      $<TARGET_FILE:rawframe_host_web_client> ${PROJECT_SOURCE_DIR}/modules/world_kest/tests/game)

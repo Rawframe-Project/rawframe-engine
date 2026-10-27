@@ -1,4 +1,4 @@
-// The animation tool (ADR-0039, SPEC-0035): authoring help for animation
+// The animation tool: authoring help for animation
 // documents, run by an author on their own files; never part of a client or
 // a server.
 //
@@ -7,13 +7,13 @@
 //
 // `from-gltf` writes the source's first skin as `skeleton.rfanim` and each
 // of its animations as `<name>.rfanim` in the directory, each beside a
-// sidecar naming it for the cook's `rawframe.animation` importer (D125). A
+// sidecar naming it for the cook's `rawframe.animation` importer. A
 // document whose sidecar is already there keeps its resource identity, so
 // importing again replaces the documents and nothing that names them breaks;
 // otherwise the identity is new. An animation's name is lowercased, and what
 // is not a letter, a digit, or `-` becomes `_`. With `loop`, every clip
 // repeats. With `additive`, every clip holds differences from the basis
-// named (D137): the bind pose, or each channel's first key.
+// named: the bind pose, or each channel's first key.
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/errors.h"

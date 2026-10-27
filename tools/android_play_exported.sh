@@ -8,11 +8,11 @@
 # package, installed and launched, plays from the files it carries. Given
 # label patterns, separated by commas, the first node whose accessibility
 # name matches each is touched in turn at the middle of its bounds once the
-# client is admitted, as a player's finger would (D590): the touch is the
+# client is admitted, as a player's finger would: the touch is the
 # UI's press, and the press the game's command, which the server takes. The
 # client is stopped by the back key, the server as a supervisor stops it,
 # both for their totals. Given a settings pattern, the player's settings
-# the client kept in its files directory must match it (D628).
+# the client kept in its files directory must match it.
 #
 #   tools/android_play_exported.sh <android build tree> [<game directory> [<label patterns> [<settings pattern>]]]
 #
@@ -53,7 +53,7 @@ tar -cf "$work/game.tar" "$game"
 "${adb[@]}" shell tail -1 "$device/export.log"
 
 # An emulator running arm64 programs by translation, on a loaded machine,
-# falls behind for long stretches: neither side stops for it (D576). Each is
+# falls behind for long stretches: neither side stops for it. Each is
 # bounded, ten minutes, the server started once the package is installed,
 # which a loaded emulator can take minutes over.
 relaxed='world.overload_ms = 0\nworld.degraded_ms = 600000\nhost.maximum_iterations = 72000\n'
@@ -114,7 +114,7 @@ for pattern in "${wanted[@]}"; do
         read -r left top right bottom label <<<"$bounds"
         "${adb[@]}" shell input tap $(((left + right) / 2)) $(((top + bottom) / 2))
         echo "touched $label at $(((left + right) / 2)) $(((top + bottom) / 2))"
-        # The client has heard the touch once it says so (D559), up to a
+        # The client has heard the touch once it says so, up to a
         # minute; then its command is on its way, a few frames more.
         for _ in $(seq 60); do
             client_log | grep -q '"code":"input_seen".*"device":"touch"' && break
@@ -124,7 +124,7 @@ for pattern in "${wanted[@]}"; do
     fi
 done
 
-# The client says it sees touches once, at the first (D559), so what a
+# The client says it sees touches once, at the first, so what a
 # later touch keeps is waited for in the file itself, up to three minutes:
 # a slow emulator in CI has drawn the frame that hears it ten seconds on.
 if [ -n "$kept" ]; then

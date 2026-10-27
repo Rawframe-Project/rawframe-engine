@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Android client's application (D551, tools/android_apk.sh): Maul
+<!-- The Android client's application (tools/android_apk.sh): Maul
      Window's activity, after the files the package carries are unpacked
-     (rawframe.client.Activity, D553), running the client's native library. The network is
+     (rawframe.client.Activity), running the client's native library. The network is
      its server's, over QUIC. The on-screen keyboard stays hidden until the
-     client asks for text input, which Maul Window shows it for (D552):
+     client asks for text input, which Maul Window shows it for:
      otherwise the activity's input view, taking focus, brings it up at
-     start. Vulkan 1.3 is Maul RHI's floor (mrhi-0003): a store offers the
-     package to no device below it, where the client would draw nothing
-     (D769). -->
+     start. Vulkan 1.3 is Maul RHI's floor: a store offers the
+     package to no device below it, where the client would draw nothing. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="@PACKAGE@">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x403000" android:required="true" />

@@ -9,7 +9,7 @@ set -euo pipefail
 
 server="$1"
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

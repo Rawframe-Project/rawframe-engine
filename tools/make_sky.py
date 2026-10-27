@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# Writes a clear day's sky as a Radiance picture (D322): Preetham, Shirley,
+# Writes a clear day's sky as a Radiance picture: Preetham, Shirley,
 # and Smits's analytic daylight (SIGGRAPH 1999) above the horizon, for a
 # turbidity and the sun's direction, without the sun's disc, which a game
 # lights with its own sun; below it, a level ground giving back its albedo
 # of the sun's light and the sky's. Equirectangular, its middle looking
-# along -Z and its top +Y, as the texture cook takes it (D321); scaled so
+# along -Z and its top +Y, as the texture cook takes it; scaled so
 # the sky above the horizon averages one, so a game's Sky luminance is the
 # sky's in candela per square meter. Run again only to change the picture;
 # its output is committed.
@@ -15,7 +15,7 @@ import math
 import sys
 
 # The sun as plaza's default light has it (toward the sun, normalized), its
-# illuminance over the sky's luminance, and the ground's albedo (D304's
+# illuminance over the sky's luminance, and the ground's albedo (the
 # default, sRGB 0x7C).
 TO_SUN = (0.3, 1.0, 0.4)
 SUN_OVER_SKY = 100000.0 / 5000.0

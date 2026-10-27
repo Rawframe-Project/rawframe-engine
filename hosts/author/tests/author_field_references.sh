@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A source's references with the scenes that name it in a field (D892):
+# A source's references with the scenes that name it in a field:
 # Runners cooked in a session; its tiles picture is used by the game's
 # description, which declares it, and by the level and the platform, whose
 # sprites hold its identity in their texture fields; the runner's picture,
@@ -24,7 +24,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
 {
     echo '{"kind":"authoring.hello","id":1,"surfaceGeneration":1}'
     echo '{"kind":"authoring.cook","id":2,"output":"'"$work/content"'","cache":null}'
-    # Four minutes only bounds a cook on a sanitized tree under load (D507).
+    # Four minutes only bounds a cook on a sanitized tree under load.
     for _ in $(seq 2400); do
         grep -q '"id":2,"answer"\|"id":2,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1

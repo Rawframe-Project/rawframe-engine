@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A server's self-signed identity renewed while it serves (D419): renewed
+# A server's self-signed identity renewed while it serves: renewed
 # three seconds after it starts (`network.quic.renew_ms`), it writes the new
 # fingerprint over the old. Bots pinned before play on through it; bots
 # pinned to the new fingerprint are admitted, and bots still pinned to the
@@ -73,7 +73,7 @@ if cmp -s "$work/fingerprint" "$work/first"; then
 fi
 cp "$work/fingerprint" "$work/second"
 # Ten seconds each, so that a debug tree on a machine loaded by other work
-# is admitted before its iterations run out (D893).
+# is admitted before its iterations run out.
 bots_conf after "$work/second" 1200
 bots_conf stale "$work/first" 1200
 "$bots" --config "$work/after.conf" >"$work/after.log" 2>&1 || true

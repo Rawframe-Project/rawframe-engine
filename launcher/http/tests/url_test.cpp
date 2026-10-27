@@ -1,4 +1,4 @@
-// URLs as the launcher's client reads them (D414).
+// URLs as the launcher's client reads them.
 
 #include "rawframe/http/url.h"
 #include "rawframe/test/test.h"

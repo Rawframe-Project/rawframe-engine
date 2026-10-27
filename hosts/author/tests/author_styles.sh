@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# A game's style sheet authored in a session (D636), over a copy of
+# A game's style sheet authored in a session, over a copy of
 # Stalls' styles: the sheet read whole, a button's fill set and a pressed
 # look made by one atomic request, written to the file; undone back to
 # its very bytes and redone; a value the sheet does not read and a scene's
 # operation refused with the file untouched; and a stale request refused.
-# Classes made, renamed, and removed, and the sheet's history (D638).
+# Classes made, renamed, and removed, and the sheet's history.
 #
 # usage: author_styles.sh <rawframe-author> <repository> <work directory>
 set -euo pipefail
@@ -62,7 +62,7 @@ reply 6 | grep -q '"code":"validation_failed".*"message":"the operation does not
 reply 7 | grep -q '"code":"target_stale"'
 cmp "$work/root/tycoon.styles" "$work/redone.styles"
 
-# Classes made, renamed, and removed (D638), the sheet's history listed,
+# Classes made, renamed, and removed, the sheet's history listed,
 # and undone back to the bytes before.
 tip='{"operation":"styles.create_class","style":"00000000000000a1","name":"tip","place":0}'
 renamed='{"operation":"styles.rename_class","style":"00000000000000a1","name":"tooltip"}'

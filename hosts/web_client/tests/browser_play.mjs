@@ -1,44 +1,44 @@
-// A browser plays runners from a canvas (D250): headless Chrome loads the
+// A browser plays runners from a canvas: headless Chrome loads the
 // page's own modules, the web client, and Maul Window's page side; the
 // client plays (`play`), so a canvas is its window and the window's frames
 // drive it; it joins a dedicated server over the browser's own
 // WebTransport, trusting the server by its certificate's hash; a key held
 // in the canvas runs the player, another makes it jump, a jump the player
-// feels (D251, though the page has no gamepad to feel it on) and hears
-// (D259: the page takes the client's sound and plays it), seen through the
-// camera the page's own present system places (D261), its HUD's score in
-// words drawn (D398), and a stop
-// asked of the page ends the run in order. The game is as a web game ships
-// (D256, D397): exported for the web, so cooked, packed into a signed
+// feels (though the page has no gamepad to feel it on) and hears
+// (the page takes the client's sound and plays it), seen through the
+// camera the page's own present system places, its HUD's score in
+// words drawn, and a stop
+// asked of the page ends the run in order. The game is as a web game ships:
+// exported for the web, so cooked, packed into a signed
 // Build, installed in the site's library, and named by a Composition, which
 // the exported server reads from the site and the page holds, so the client
 // reads its game, scenes, and textures from the Build; the site is served
 // as it was written, and its server run as it was written, its certificate's
 // fingerprint read by the page from beside itself.
-// Native players share the server with the page (D263): a bots process of
+// Native players share the server with the page: a bots process of
 // two runners joins from the same Composition over QUIC, pinning the
 // server's certificate, and plays beside the browser throughout. The game
 // is drawn in the canvas through the browser's WebGPU with Maul RHI's page
-// side (D282): frames are shown, WebGPU reports no error, and a screenshot
+// side: frames are shown, WebGPU reports no error, and a screenshot
 // of the canvas shows what was drawn.
-// Runners' HUD is read by a screen reader (D612): the elements Maul UI's
+// Runners' HUD is read by a screen reader: the elements Maul UI's
 // ARIA adapter keeps over the canvas wait behind its hidden button, which a
 // screen reader's user presses; then Chrome's accessibility tree, what a
 // screen reader reads, holds the HUD's frame, its picture, and its score.
-// Stalls plays when named too, read and typed into by a screen reader alone
-// (D613): its HUD's purse and its sign's field, named by its label's words,
+// Stalls plays when named too, read and typed into by a screen reader alone:
+// its HUD's purse and its sign's field, named by its label's words,
 // are read once the button is pressed; the sign is typed into the page's own
 // field, which hands each edit to the game as typing, and Enter gives it to
 // the game, which sends it to the server as the owner's sign.
-// The sample 3D game plays the same way when named (D287): plaza, its
+// The sample 3D game plays the same way when named: plaza, its
 // walker walked by W and made to jump, its scene drawn in the canvas (its
 // models seen through the player's camera and drawn), no sprites asked of
 // it, and the sound the export asks of every game played as silence, since
-// the plaza declares no mixer (D397). Gale, the Keelstorm-class sample
-// (D703), plays as the plaza does, its ship sailed by W and a broadside
+// the plaza declares no mixer. Gale, the Keelstorm-class sample,
+// plays as the plaza does, its ship sailed by W and a broadside
 // fired by Q, its sea's program material drawn by WebGPU, its HUD's words
-// drawn, and the broadside heard. Quarry, the VoxelTech-class sample
-// (D742), plays its land of seven thousand blocks, each a model drawn by
+// drawn, and the broadside heard. Quarry, the VoxelTech-class sample,
+// plays its land of seven thousand blocks, each a model drawn by
 // WebGPU, its tool aimed by W and digging by Q; it predicts nothing, has
 // no HUD, and is silent.
 // Puppeteer comes from RAWFRAME_NODE_MODULES, and its browser from where
@@ -104,17 +104,17 @@ execFileSync(exportPath, [join(repository, 'games', name), exported, '--target',
                           join(repository, 'hosts/web_client/page')],
              { stdio: ['ignore', 'inherit', 'inherit'] });
 const setup = JSON.parse(await readFile(join(site, 'play.json'), 'utf8'));
-// The folder says how to host it (D958): the server's command and its port.
+// The folder says how to host it: the server's command and its port.
 const readme = await readFile(join(exported, 'README.txt'), 'utf8');
 // Quarry's server ticks a land of seven thousand entities: behind on a
 // loaded machine, it is not let degrade and refuse the page as unavailable,
-// nor stop itself (D212, D742).
+// nor stop itself.
 if (quarry) {
     await appendFile(join(exported, 'server', 'server.conf'), '\nworld.degraded_ms = 600000\nworld.overload_ms = 0\n');
 }
 // The export draws on whatever adapter the browser gives, a software one
-// here (D958); a 3D game's shadow map is small, and its view drawn at half
-// scale (D373, D379), for the software rasterizer.
+// here; a 3D game's shadow map is small, and its view drawn at half
+// scale, for the software rasterizer.
 const drawsAsExported = /^render\.device = any$/m.test(setup.configuration);
 setup.configuration += [
     ...(scened ? ['scene.shadow_side = 256', 'scene.shadow_filter = hardware', 'scene.render_scale_percent = 50'] : []),
@@ -189,7 +189,7 @@ const browser = await puppeteer.launch({
 });
 
 // The pixels of a PNG screenshot that are not black, and those red or
-// green over the others, as the Lighting Test's lamps make them (D750):
+// green over the others, as the Lighting Test's lamps make them:
 // Chrome's are 8-bit RGB or RGBA, not interlaced.
 const pixelCounts = (png) => {
     const width = png.readUInt32BE(16);
@@ -295,7 +295,7 @@ try {
     await until(/page: play 0/, 30000);
     // A 3D game's scene is drawn by a software rasterizer here: its canvas
     // is made a quarter of the size, which the client follows as a window
-    // resized (D281), so the page's drawing leaves its game time to play.
+    // resized, so the page's drawing leaves its game time to play.
     if (scened) {
         await tab.evaluate(() => {
             const canvas = document.querySelector('canvas');
@@ -334,13 +334,13 @@ try {
     // The plaza's page draws about eight frames a second on the software
     // rasterizer, and confirms fewer of its ticks for it: it plays five
     // seconds longer, so its confirmations clear the bar by more than chance
-    // (D333; two more once its fountain and traces cost it a frame in
-    // twelve, D354; and two more once a machine shared with other work
-    // left it 97, D355).
+    // (two more once its fountain and traces cost it a frame in
+    // twelve; and two more once a machine shared with other work
+    // left it 97).
     // Its first frames make the rasterizer compile what each new way of
     // drawing needs (an effect's pipeline, a texture kind first sampled),
     // and a player starting during them confirms a fifth fewer ticks: it
-    // starts once they are drawn (D341).
+    // starts once they are drawn.
     // Gale's ship fires a broadside in the run where the others jump.
     const forward = scened ? 'KeyW' : 'KeyD';
     const act = gale || quarry ? 'KeyQ' : 'Space';
@@ -383,13 +383,13 @@ try {
         console.log(`page: WebGPU: ${error}`);
     }
     // The server is dedicated and plays no presentation animator: a runner
-    // drawn past its sheet's first cell was animated by the page (D258),
-    // through its own camera, which the page's present system placed (D261).
+    // drawn past its sheet's first cell was animated by the page,
+    // through its own camera, which the page's present system placed.
     console.log(`page: the canvas drew ${drawn ? drawn[1] : 'no'} sprites, ${drawn ? drawn[2] : 'no'} animated, ` +
                 `with ${drawn ? drawn[3] : 'no'} textures, ${viewed ? viewed[1] : 'no'} frames through the ` +
                 `player's camera`);
     // The HUD's words, in the game's font, read from its string tables and
-    // drawn from the glyph atlas (D398).
+    // drawn from the glyph atlas.
     const worded = /"code":"ui_drawing_summary"[^\n]*"glyphRuns":(\d+),"glyphs":(\d+),"glyphRunsWaiting":(\d+)/.exec(
         clientLog);
     if (!plaza) {
@@ -445,10 +445,10 @@ try {
             });
         } else if (quarry) {
             // The whole land, past the 4,096 a connection holds by
-            // default (D742).
+            // default.
             checks.landWhole = field('mirroredEntities') > 6000;
         } else {
-            // The red lamp's light and the green's, through WebGPU (D750).
+            // The red lamp's light and the green's, through WebGPU.
             console.log(`page: the lamps lit ${pixels.red} red and ${pixels.green} green pixels`);
             checks.lamps = pixels.red > 200 && pixels.green > 50;
         }

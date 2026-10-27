@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The launcher plays a game as a standalone export does (D395): it starts
+# The launcher plays a game as a standalone export does: it starts
 # the dedicated server, waits for its fingerprint, starts the client pinned
 # to it (here a bots process with one bot, which plays for eight seconds and
 # ends), and then asks the server to stop. Prints the client's log, the
@@ -12,7 +12,7 @@ play="$1"
 server="$2"
 bots="$3"
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

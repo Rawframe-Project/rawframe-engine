@@ -1,4 +1,4 @@
-# The Android client (D551): the client as the shared library Maul Window's
+# The Android client: the client as the shared library Maul Window's
 # activity loads and starts. Only on Android, where the window system and
 # the device layer are built.
 if(NOT ANDROID OR NOT TARGET rawframe_input_window OR NOT TARGET rawframe_render_canvas_gpu)

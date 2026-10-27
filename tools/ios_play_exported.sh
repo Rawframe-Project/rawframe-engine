@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exports a game for iOS and plays the application made (D587), all in a
+# Exports a game for iOS and plays the application made, all in a
 # booted simulator: rawframe-export, built for the simulator, runs there
 # through simctl spawn with the cook, the build tool, and the server beside
 # it, and makes the application from the iOS client's bundle; the exported
@@ -14,7 +14,7 @@
 #
 # RAWFRAME_IOS_DEVICE names the simulator, the booted one when unset.
 # RAWFRAME_IOS_TOUCH, "<x> <y>" in points, has idb touch there three times
-# once the client is admitted, for what its touches reach (D588).
+# once the client is admitted, for what its touches reach.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

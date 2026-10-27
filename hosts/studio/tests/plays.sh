@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Studio playing a game to preview it (D445, D446): opened on a copy of a
+# Studio playing a game to preview it: opened on a copy of a
 # game, so what it writes is the copy's, with the dedicated server's and the
 # client's programs to play it, and clicked at the points given
 # (tools/click.py) once it says it is shown. Prints the clicks, Studio's
-# log, the played client's and server's logs, and where a debugger attaches
-# (D462). A machine with no adapter the configuration allows skips, unless
+# log, the played client's and server's logs, and where a debugger attaches.
+# A machine with no adapter the configuration allows skips, unless
 # RAWFRAME_REQUIRE_GPU is set. Run under an X server whose root window is
 # black (Xvfb -br), from the repository root. With STUDIO_COOK naming the
 # cook tool, Studio is given it and the client's settings name no content,
-# so the game plays from what Studio cooks (D502).
+# so the game plays from what Studio cooks.
 #
 # usage: plays.sh <rawframe-studio> <rawframe-server> <rawframe-client> <game>
 #                 <server settings> <client settings>
@@ -21,13 +21,13 @@ source "$here/bus.sh"
 trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$work"' EXIT
 cp -R "$(dirname "$4")" "$work/game"
 # And files of its own beside the game's: `from=to` pairs in
-# STUDIO_EXTRA_FILES, `to` under the copy, as an extension (D877).
+# STUDIO_EXTRA_FILES, `to` under the copy, as an extension.
 for pair in ${STUDIO_EXTRA_FILES:-}; do
     mkdir -p "$work/game/$(dirname "${pair#*=}")"
     cp "${pair%%=*}" "$work/game/${pair#*=}"
 done
 # The played client's window over Studio's viewport, clear of its docks,
-# where Studio is clicked (D925): with no window manager, a later window
+# where Studio is clicked: with no window manager, a later window
 # lies over an earlier.
 if [ -n "${STUDIO_COOK:-}" ]; then
     grep -v '^content.root' "$6" >"$work/client.conf"
@@ -37,8 +37,8 @@ fi
 printf 'window.width = 560\nwindow.height = 360\nwindow.x = 366\nwindow.y = 100\n' >>"$work/client.conf"
 # A played client that falls behind keeps playing: under a full check's
 # crowd a sanitized one ran thirty seconds behind and stopped itself as
-# overloaded before Studio read its server, which then held no connection
-# (D825). A client's settings that say their own limit keep it.
+# overloaded before Studio read its server, which then held no connection.
+# A client's settings that say their own limit keep it.
 if ! grep -q '^world.overload_ms' "$work/client.conf"; then
     echo "world.overload_ms = 0" >>"$work/client.conf"
 fi
@@ -46,7 +46,7 @@ cat >"$work/studio.conf" <<CONF
 host.maximum_iterations = 36000
 host.iteration_rate = 120
 render.device = any
-# No one answers a message box here: a missing device is a skip (D962).
+# No one answers a message box here: a missing device is a skip.
 render.unavailable_says = false
 studio.game = $work/game/$(basename "$4")
 studio.play.server = $2
@@ -59,18 +59,18 @@ CONF
 if [ -n "${STUDIO_COOK:-}" ]; then
     echo "studio.cook = $STUDIO_COOK" >>"$work/studio.conf"
 fi
-# And settings of its own, in STUDIO_SETTINGS, as playing in the viewport
-# (D789); else the game plays in its own window, where these tests click
-# (D790 made the viewport Studio's default).
+# And settings of its own, in STUDIO_SETTINGS, as playing in the viewport;
+# else the game plays in its own window, where these tests click (the
+# viewport is Studio's default).
 if [ -n "${STUDIO_SETTINGS:-}" ]; then
     printf '%s\n' "$STUDIO_SETTINGS" >>"$work/studio.conf"
 fi
 if ! grep -q '^studio.play_in_viewport' "$work/studio.conf"; then
     echo "studio.play_in_viewport = false" >>"$work/studio.conf"
 fi
-# Its window the screen's size: no window manager runs to maximize it (D925).
+# Its window the screen's size: no window manager runs to maximize it.
 grep -q '^window.height' "$work/studio.conf" || printf 'window.height = 720\n' >>"$work/studio.conf"
-# Its preferences its own, never those of whoever runs it (D925).
+# Its preferences its own, never those of whoever runs it.
 grep -q '^studio.preferences' "$work/studio.conf" ||
     printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
 "$1" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
@@ -93,7 +93,7 @@ if [ -z "${RAWFRAME_REQUIRE_GPU:-}" ]; then
     watcher=$!
 fi
 # `{game}` in a step names the copy, where an `edit=` writes as an author
-# would while the game plays (D949).
+# would while the game plays.
 steps=()
 for step in "${@:7}"; do
     steps+=("${step//\{game\}/$work/game}")

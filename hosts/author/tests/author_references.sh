@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # References between a game's UI document and its style sheet kept in a
-# session (D642), over a copy of Stalls: a node's style set to a class the
+# session, over a copy of Stalls: a node's style set to a class the
 # sheet lacks is refused, to one it has kept; a class a node names is not
 # removed; a class made and named by a node is not undone while the node
 # names it, its history as it was, and is once the node's change is undone.
 # The game's node components are told as such, and a node is made only of
-# one (D672): of the owner's component it is refused, and the tip, removed,
+# one: of the owner's component it is refused, and the tip, removed,
 # is made again.
 #
 # usage: author_references.sh <rawframe-author> <repository> <work directory>

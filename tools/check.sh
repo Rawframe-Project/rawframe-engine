@@ -64,7 +64,8 @@ fi
 # Where the shader toolchain is installed (the pinned Slang compiler, DXC and
 # SPIRV-Cross), a material that needs its own program is cooked through it,
 # and a test that finds no toolchain fails instead of skipping.
-slangc="${RAWFRAME_SLANGC:-$HOME/.cache/rawframe/slang-2026.19/bin/slangc}"
+slang_release=2026.19
+slangc="${RAWFRAME_SLANGC:-$HOME/.cache/rawframe/slang-$slang_release/bin/slangc}"
 dxc_bin=$(compgen -G "/opt/dxc/*/bin" | head -1 || true)
 if [ -x "$slangc" ] && [ -n "$dxc_bin" ] && command -v spirv-cross >/dev/null; then
     export RAWFRAME_REQUIRE_SHADER_TOOLCHAIN=1 RAWFRAME_SLANGC="$slangc" PATH="$dxc_bin:$PATH"

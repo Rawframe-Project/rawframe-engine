@@ -1,4 +1,4 @@
-// A client's sound played by the browser (D259): the frames the client
+// A client's sound played by the browser: the frames the client
 // rendered, taken a few times a frame's worth at a time and queued on the
 // page's AudioContext just ahead of what it plays. The browser plays sound
 // on its own thread, which cannot call into the client; the page can.

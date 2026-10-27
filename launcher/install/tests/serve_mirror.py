@@ -1,5 +1,5 @@
-"""A directory served over HTTPS with HTTP/1.1, for runners_updated.sh
-(D414): the certificate and key in KEYS, the port chosen by the system and
+"""A directory served over HTTPS with HTTP/1.1, for runners_updated.sh:
+the certificate and key in KEYS, the port chosen by the system and
 written to PORT once listening.
 
 usage: serve_mirror.py <directory> <keys> <port file>

@@ -1,5 +1,5 @@
-# The client's own player, drawn on the one device and shown in its window
-# (D280): its textures read from runners' content cooked into the build
+# The client's own player, drawn on the one device and shown in its window:
+# its textures read from runners' content cooked into the build
 # tree, a software rasterizer allowed, and the picture read back once in
 # sixty frames, the last written to a TGA image in the build tree.
 bots.player = true
@@ -7,8 +7,8 @@ render.device = any
 content.root = @CONTENT@
 render.capture = @CAPTURE@
 # The machine's gamepads left out: another program's virtual pads would
-# play this client's player (D467).
+# play this client's player.
 input.gamepads = false
 # Thirty frames a second: drawn by software, as many as the Host iterates
-# held most of a full check's processors (D495).
+# held most of a full check's processors.
 render.frame_rate = 30

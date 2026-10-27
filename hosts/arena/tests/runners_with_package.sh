@@ -18,7 +18,7 @@ work=$5
 
 rm -rf "$work"
 mkdir -p "$work/game" "$work/package" "$work/elsewhere"
-# A step that fails says which, and how the arena ended (D569).
+# A step that fails says which, and how the arena ended.
 trap 'echo "runners_with_package: failed at line $LINENO"; grep -o "\"code\":\"stopped\".*" "$work/log.ndjson" 2>/dev/null | cut -c1-600' ERR
 cp -r "$repository/games/runners/." "$work/game/"
 mv "$work/game/shot.wav" "$work/game/shot.wav.rfmeta" "$work/package/"
@@ -50,8 +50,7 @@ replication.endpoint = arena
 bots.count = 4
 bots.endpoint = arena
 audio.record = $work/heard.wav
-# What is checked is what is heard, not how fast a loaded machine ticks
-# (D516, D569).
+# What is checked is what is heard, not how fast a loaded machine ticks.
 world.degraded_ms = 600000
 world.overload_ms = 0
 CONF

@@ -1,4 +1,4 @@
-# The Lighting Test's probe baked (D755): a bot looks at the wall while its
+# The Lighting Test's probe baked: a bot looks at the wall while its
 # scene is drawn offscreen, and once sixty frames were presented the
 # probe's picture is drawn six ways from its middle, before the wall among
 # the lamps, and written, as Radiance, into the build tree. A loaded

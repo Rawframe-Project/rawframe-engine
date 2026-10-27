@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A Studio extension run headless (D874, D875, D877, D878): a Kest program under a copy of
+# A Studio extension run headless: a Kest program under a copy of
 # Ledges' `extensions/` listed with its commands and what its doors are of;
 # one command raising the chosen points, read and staged through its
 # doors, applied as one step and undone; another making a marker entity
@@ -15,7 +15,7 @@ set -euo pipefail
 author=$1
 repository=$2
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

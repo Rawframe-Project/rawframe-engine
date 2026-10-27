@@ -1,5 +1,5 @@
-// The export tool (ADR-0041's standalone export; ADR-0042: export is a
-// headless operation over the one container model, with receipts, D396):
+// The export tool (the standalone export: a headless operation over the
+// one container model, with receipts):
 // a game made into a folder that plays on this machine with nothing else.
 // It runs the cook and the build tool as they run for any Build (the game
 // cooked, packed into a Build signed by the publisher's key, installed into
@@ -8,7 +8,7 @@
 // beside it, and writes their configurations: the launcher starts the
 // server on this machine's loopback at the port given (by default one of
 // 20000 to 29999 taken from the game's resource identity, so two exported
-// games can run at once, D402), and the client,
+// games can run at once), and the client,
 // pinned to the certificate the server makes as it starts, plays it.
 //
 //   rawframe-export <game directory> <output directory> [--game <file>]
@@ -28,9 +28,9 @@
 // is signed.
 //
 // The client's window carries `--title`, the game's directory name unless
-// given (D519), and the icon `--icon` names, a square image of 16 pixels a
+// given, and the icon `--icon` names, a square image of 16 pixels a
 // side or more (PNG, JPEG, BMP, or TGA), else the game's own `icon.png`
-// where it has one (D951); a native folder only.
+// where it has one; a native folder only.
 //
 // The game is `<directory name>.game` unless named. The tools (rawframe-cook,
 // rawframe-build, rawframe-server, rawframe-client, rawframe-play) are found
@@ -38,14 +38,14 @@
 // `--<tool> <path>` names one (`--cook`, `--build`, `--server`, `--client`,
 // `--play`). The output directory must not exist, or be empty. Running the
 // folder's launcher, named after the game's directory (`rawframe-play` where
-// that name is one of the other programs', D944), plays the game;
+// that name is one of the other programs'), plays the game;
 // `export.receipt` lists what was
 // written, each file's SHA-256, the Build's root, and the Composition.
 //
 // The folder's library is installed as `rawframe-install` leaves one: its
 // Composition kept under `compositions/` and named active by `installed`,
-// so the server and the client play the library's active Composition
-// (D434). With `--follow`, the game follows its subject's channel
+// so the server and the client play the library's active Composition.
+// With `--follow`, the game follows its subject's channel
 // (`stable` unless `--channel` names another) on that origin, a directory
 // or an http or https URL: `rawframe-install` is copied beside the
 // launcher, found as the other tools are (`--install`), and the launcher
@@ -53,7 +53,7 @@
 // channel at is installed, verified against the key set the library pins,
 // before the game starts.
 //
-// With `--target web` (D397) the game is packed for the web and the folder
+// With `--target web` the game is packed for the web and the folder
 // holds a site and its server instead. `web/` is served as it is by any
 // static file server: its page (`index.html`, with the page's modules under
 // `page/`), the web client (`client.wasm`), Maul Window's and Maul RHI's
@@ -68,10 +68,10 @@
 // `maul-ui.mjs`, and `page/`, the page's own files) unless named
 // (`--web-client`, `--maul-window`, `--maul-rhi`, `--maul-ui`, `--page`).
 //
-// With `--target android` (D555) the game is packed for Android and the
+// With `--target android` the game is packed for Android and the
 // folder holds what its package carries and the server it plays on.
 // `android/game/` is the directory `tools/android_apk.sh` carries into the
-// client's package (D553): the library with its active Composition, and the
+// client's package: the library with its active Composition, and the
 // client's configuration, pinned to the server's identity and reaching it at
 // `--address`, the host or IP address a phone reaches the server's machine
 // by. `server/` holds the dedicated server, listening on every address at
@@ -84,14 +84,14 @@
 // `librawframe_client.so`) and `--packager` (`tools/android_apk.sh`, which
 // finds the SDK by ANDROID_HOME), the export makes the package itself,
 // `android/<name>.apk`, named `<publisher>.<name>` unless `--package` names
-// it (D556). With `--android-keystore` and `--android-key-alias`, the
+// it. With `--android-keystore` and `--android-key-alias`, the
 // publisher's key signs a release package, not debuggable, the keystore's
 // password read by the packager from RAWFRAME_ANDROID_KEYSTORE_PASSWORD and
-// never given on a command line (D581).
+// never given on a command line.
 //
-// With `--target ios` (D587) the game is packed for iOS as for Android:
+// With `--target ios` the game is packed for iOS as for Android:
 // `ios/game/` holds what the application carries, read by the iOS client
-// from `game/` in its bundle (D586), and `server/` the server it plays on,
+// from `game/` in its bundle, and `server/` the server it plays on,
 // pinned the same way. With `--ios-client` (the iOS build's
 // `rawframe-client.app`) the export makes the application itself,
 // `ios/<name>.app`, the client's bundle with `ios/game/` in it as `game/`,
@@ -194,7 +194,7 @@ std::optional<std::string> wordAfter(const std::string& printed, std::string_vie
     return std::nullopt;
 }
 
-/// A control as a player reads it (D542), not as the action set names it:
+/// A control as a player reads it, not as the action set names it:
 /// `key_a` is A, `arrow_up` the up arrow, `face_south` the bottom face
 /// button, `trigger_left` the left trigger.
 std::string controlText(std::string_view name) {
@@ -273,7 +273,7 @@ std::string bindingText(const rawframe::input::Binding& binding) {
 
 /// The launcher's name in an exported folder: the game's directory, as a
 /// player looks for it (`stalls.exe`), unless that is a name the folder's
-/// other programs have (D944).
+/// other programs have.
 std::string launcherOf(const std::string& game) {
     if (game.empty() || game == "rawframe-server" || game == "rawframe-client" || game == "rawframe-install") {
         return "rawframe-play";
@@ -283,8 +283,8 @@ std::string launcherOf(const std::string& game) {
 
 /// The C++ runtime's libraries the programs import on Windows, from beside
 /// this tool (where Studio's package keeps them) or else the system's
-/// directory; Microsoft lets an application carry them in its own folder
-/// (D944). None elsewhere, and none of a build that does not import them.
+/// directory; Microsoft lets an application carry them in its own folder.
+/// None elsewhere, and none of a build that does not import them.
 std::vector<fs::path> runtimeFor(const fs::path& self) {
     std::vector<fs::path> found;
 #if defined(_WIN32)
@@ -306,7 +306,7 @@ std::vector<fs::path> runtimeFor(const fs::path& self) {
 /// The game's name in its subject, as `content::validSubject` reads one:
 /// its directory's name in lower case, each run of anything but a letter or
 /// a digit one `-`, none at either end, and `game` where nothing is left; a
-/// game made in Studio is `my_game` (D944).
+/// game made in Studio is `my_game`.
 std::string subjectNameOf(std::string_view game) {
     std::string name;
     for (const char kEach : game) {
@@ -374,7 +374,7 @@ howToPlay(const std::filesystem::path& game, const std::string& gameFile, const 
     return text + controlsOf(game, gameFile);
 }
 
-/// What whoever hosts a web export reads first (D958): how to start its
+/// What whoever hosts a web export reads first: how to start its
 /// server, serve its site, and play it, and the game's controls. The
 /// command is written with the system's separator, as its shell reads it:
 /// cmd takes `server/...` for a switch.
@@ -452,7 +452,7 @@ bool portLike(const std::string& text) {
 
 /// The port a game's export uses unless one is given: 20000 to 29999, from
 /// FNV-1a over the game's resource identity, so two exported games running
-/// at once do not reach for the same one (D402). The window is under the
+/// at once do not reach for the same one. The window is under the
 /// ports systems hand out for outgoing connections (from 32768 on Linux,
 /// 49152 on Windows and macOS).
 std::string portOf(const std::string& gameResource) {
@@ -495,7 +495,7 @@ bool packageLike(std::string_view name) {
     return !partStart;
 }
 
-/// The icon at `path` as the client reads it (D951): its texture, every
+/// The icon at `path` as the client reads it: its texture, every
 /// level down to one texel, exact; or why not.
 std::expected<std::vector<std::byte>, std::string> iconOf(const fs::path& path) {
     std::ifstream file{path, std::ios::binary};
@@ -676,7 +676,7 @@ int main(int argc, char** argv) {
     }
     // What the target is made from, all found before anything is cooked: a
     // web export once failed a minute in, for the web player Studio's
-    // package did not carry (D948).
+    // package did not carry.
     std::vector<std::pair<std::string, fs::path>> needed = {{"the cook tool", kTool("cook")},
                                                             {"the build tool", kTool("build")},
                                                             {"the dedicated server", kTool("server")}};
@@ -701,7 +701,7 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    // The game's own icon on its window (D951), checked before anything is
+    // The game's own icon on its window, checked before anything is
     // made, as what the target needs is.
     if (!icon.has_value() && target == Target::Native && fs::is_regular_file(kGame / "icon.png", error)) {
         icon = kGame / "icon.png";
@@ -719,7 +719,7 @@ int main(int argc, char** argv) {
         iconTexture = *kIcon;
     }
     // A folder this export makes is taken away again if it fails, so a
-    // failed export leaves nothing half made behind (D948).
+    // failed export leaves nothing half made behind.
     struct Unmade {
         fs::path folder;
         bool made = false;
@@ -822,7 +822,7 @@ int main(int argc, char** argv) {
     }
     // A native folder's library, and a phone package's, is installed as
     // rawframe-install leaves one: the record kept by its digest and named
-    // active (D434).
+    // active.
     std::vector<std::string> installed;
     if (!kWeb && !installRecord(kOutput, kLibrary, kSite / kRecord, installed)) {
         return 1;
@@ -873,7 +873,7 @@ int main(int argc, char** argv) {
     if (!kWritten) {
         return 1;
     }
-    // The package itself, carrying `android/game` (D556).
+    // The package itself, carrying `android/game`.
     if (androidClient.has_value()) {
         const std::string kPackage = package.value_or(publisher + "." + kName);
         const std::string kApk = "android/" + kName + ".apk";
@@ -885,7 +885,7 @@ int main(int argc, char** argv) {
         // key beside it, and moved into the folder alone.
         std::vector<std::string> packed = {
             (kWork / "package.apk").string(), androidClient->string(), kPackage, title, kSite.string()};
-        // A release package, under the publisher's key (D581).
+        // A release package, under the publisher's key.
         if (keystore.has_value()) {
             packed.push_back(keystore->string());
             packed.push_back(*keyAlias);
@@ -900,7 +900,7 @@ int main(int argc, char** argv) {
         }
         written.push_back(kApk);
     }
-    // The application itself, carrying `ios/game` (D587).
+    // The application itself, carrying `ios/game`.
     if (iosClient.has_value() && !bundleIdentifierLike(publisher + "." + kName)) {
         std::fprintf(stderr, "rawframe-export: %s.%s is not a bundle identifier\n", publisher.c_str(), kName.c_str());
         return 1;

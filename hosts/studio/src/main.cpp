@@ -1,4 +1,4 @@
-// Studio (ADR-0032, D435): a window onto an authoring session, never part of
+// Studio: a window onto an authoring session, never part of
 // a client or a server. It is a client of the session like any other: it
 // holds one in its own process and speaks only the session's records, so
 // nothing it does is beyond what `rawframe-author session` does.
@@ -36,7 +36,7 @@ constexpr std::array<composition::RegistrarEntry, 3> kRegistrars = {
 };
 
 host::HostExit play(const host::HostRequest& request) noexcept {
-    // Its own icon in the title bar and the taskbar (D920).
+    // Its own icon in the title bar and the taskbar.
     std::vector<window::IconImage> icon;
     std::span<const std::uint8_t> pixels = studio::appIconPixels();
     for (const std::uint32_t kSide : studio::kAppIconSides) {
@@ -70,9 +70,9 @@ int main(int argc, char** argv) {
                            .registrars = kRegistrars,
                            .drive = &play,
                            // The shell's own stop takes up to four seconds
-                           // beside the others' (D952).
+                           // beside the others'.
                            .defaultShutdownBudgetMs = 9500,
-                           // Opened as an application is, with no file (D920): drawn on the
+                           // Opened as an application is, with no file: drawn on the
                            // best device there is, a game given as its argument opened.
                            .defaults = "render.device = any\nrender.unavailable_says = true\nwindow.shown_when_asked = "
                                        "true\nwindow.maximized = "

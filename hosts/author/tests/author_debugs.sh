@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# A game's scripts debugged through the tooling endpoint (D460): a dedicated
+# A game's scripts debugged through the tooling endpoint: a dedicated
 # server plays the plaza with the debug grant; a breakpoint at plaza's
 # stroll system stops the game in its tick, where the stopped frame names
 # the function, the line it stands at, and its arguments, every other verb
 # is refused, and the breakpoints are taken out; told to carry on, the game
-# runs again, a line stepped first (D632). Stopped again at a line of the
-# stroll (D630), with its
+# runs again, a line stepped first. Stopped again at a line of the
+# stroll, with its
 # debugger still there, the server asked to stop carries on and drains,
 # rather than waiting for the debugger.
 #
@@ -28,7 +28,7 @@ port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/token"
 # What is asked of the stop is that it is clean, not how fast: under the
 # thread sanitizer the Kest game's destruction alone took 0.37 s, and 5.7 s
-# at the full check's load, past the Host's five (D489).
+# at the full check's load, past the Host's five.
 cat "$content" >"$work/server.conf"
 cat >>"$work/server.conf" <<CONF
 host.maximum_iterations = 6000
@@ -72,7 +72,7 @@ grep -q '"id":1,"answer":{"kind":"debug.broken","found":1,"lines":\[false\]}' "$
 grep '"id":2,' "$work/replies" |
     grep -q '"answer":{"kind":"debug.status","stopped":true,"stops":[1-9][0-9]*,"frames":\[{"function":"plaza.stroll","file":"[^"]*plaza.kest","line":[0-9][0-9]*,"locals":\[{"name":"count","value":"[0-9]*"}'
 grep -q '"id":3,"error":{"code":"stopped"' "$work/replies"
-# A line on (D632): stopped again at the stroll's next line.
+# A line on: stopped again at the stroll's next line.
 grep -q '"id":21,"error":{"code":"malformed"' "$work/replies"
 grep -q '"id":22,"answer":{"kind":"debug.stepped"}' "$work/replies"
 first=$(grep -o '"id":2,"answer":{"kind":"debug.status","stopped":true,"stops":[0-9]*,"frames":\[{"function":"plaza.stroll","file":"[^"]*","line":[0-9]*' "$work/replies" | grep -o '[0-9]*$')
@@ -109,7 +109,7 @@ fi
 wait $holding || true
 grep -q '"id":10,"answer":{"kind":"debug.broken","found":0,"lines":\[true\]}' "$work/held"
 # Asked to stop, it stopped cleanly: where kill sends a signal. Git's bash
-# on Windows ends a native program outright, so there it only ended (D501).
+# on Windows ends a native program outright, so there it only ended.
 if ! command -v cygpath >/dev/null 2>&1; then
     grep -q '"exit":"clean_stop"' "$work/server.log"
 fi

@@ -71,7 +71,7 @@ int join(const char* endpoint, const char* pinFile, const char* tokenFile) {
             continue;
         }
         // A cook is answered when it ends: what is said of it written as
-        // it comes, until its reply (D885).
+        // it comes, until its reply.
         const auto kParsed = document::parse(line);
         const document::Value* kKind = kParsed.has_value() ? kParsed->find("kind") : nullptr;
         if (kKind != nullptr && kKind->kind() == document::Value::Kind::String && *kKind->text() == "authoring.cook") {

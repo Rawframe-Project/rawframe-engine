@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Studio joined to a shared session's host (ADR-0085, D882): Runners'
+# Studio joined to a shared session's host: Runners'
 # level hosted by `rawframe-author host`, Studio joining as Ada with the
 # token the host's owner gave her, and Ben joining headless. Studio says
 # what it has open, which Ben waits to hear; Ben renames the ground; Studio
 # hears his change and shows the level as the host now holds it, the row
 # Ben named found in its Hierarchy by that name, the title bar's Session
-# pressed for the session's card, of Ada alone as Ben has nothing open
-# (D935); then Cook cooks the game
-# on the host, into Ada's own directory there (D885). Prints what
+# pressed for the session's card, of Ada alone as Ben has nothing open;
+# then Cook cooks the game
+# on the host, into Ada's own directory there. Prints what
 # clicked.sh prints.
 #
 #   joined.sh <rawframe-studio> <rawframe-author> <rawframe-cook>

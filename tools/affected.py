@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The tests a change can reach (D898), for the check's push tier.
+"""The tests a change can reach, for the check's push tier.
 
     tools/affected.py <build tree> [<base>]
 
@@ -14,7 +14,7 @@ changed counts as changed, as does a directory the build's own file only
 adds. A change the graph cannot place (the build's own files otherwise, a
 vendored library, a game, a template, a test harness) reaches every test;
 one that no test reads (the check's own scripts, documents) reaches none,
-the full check after the push running everything (D898).
+the full check after the push running everything.
 """
 
 import pathlib

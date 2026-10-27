@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # A web export whose web player is not there stops before anything is
-# cooked, saying what is missing and where, and leaves no folder behind
-# (D948): it once failed a minute in, its folder half made.
+# cooked, saying what is missing and where, and leaves no folder behind:
+# it once failed a minute in, its folder half made.
 #
 #   missing.sh <rawframe-export> <rawframe-cook> <rawframe-build> <rawframe-server> <game directory> <work directory>
 set -uo pipefail

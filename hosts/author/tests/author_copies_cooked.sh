@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A cook made at a shared session's host brought to a collaborator's
-# machine (D905): Ada, granted cooking, cooks Runners at the host by a
+# machine: Ada, granted cooking, cooks Runners at the host by a
 # plain name and brings it into a directory of her own with `copy-cooked`,
 # which then holds the host's manifest and every file it locates, alike;
 # brought again, nothing is read over; a file spoiled here is read over
@@ -13,7 +13,7 @@ set -euo pipefail
 author=$1
 cook=$2
 repository=$3
-# Paths as the programs under test read them (D237).
+# Paths as the programs under test read them.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

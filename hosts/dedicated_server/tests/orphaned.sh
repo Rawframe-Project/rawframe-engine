@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# A server started to stop with its parent (D646) stops in order when the
+# A server started to stop with its parent stops in order when the
 # parent is killed, as a test's runner kills a tool that started it: a
 # shell starts the server, told its identity, and is killed with SIGKILL;
 # the server, set to run a minute, stops at once. On Linux and macOS; a
 # shell's identity on Windows is not the system's, and the launcher's
-# test (D649) proves it there.
+# test proves it there.
 #
 # usage: orphaned.sh <rawframe-server> <work directory>
 set -euo pipefail

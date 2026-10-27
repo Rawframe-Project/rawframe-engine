@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A port one server holds is not shared with a second (D470): server A
+# A port one server holds is not shared with a second: server A
 # serves the arena game on a port; server B, told the same port, ends with
 # the endpoint taken, rather than sharing it and splitting the datagrams
 # sent to it between the two. Run from the repository root.
@@ -9,7 +9,7 @@ set -uo pipefail
 
 server="$1"
 # Paths as the server reads them: Git's bash on Windows names D:/a as /d/a,
-# which only its own tools understand (D237, D501).
+# which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

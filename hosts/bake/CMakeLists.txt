@@ -1,4 +1,4 @@
-# The probe bake (D326): a server and a bot over loopback, the bot's scene
+# The probe bake: a server and a bot over loopback, the bot's scene
 # drawn offscreen, each reflection probe's picture written (Tool role).
 # Only where Maul RHI is built.
 if(NOT TARGET rawframe_scene_bake)
@@ -27,7 +27,7 @@ if(RAWFRAME_BUILD_TESTS)
                          SKIP_REGULAR_EXPRESSION "skip: no device"
                          PASS_REGULAR_EXPRESSION
                          "\"code\":\"probe_baked\"[^\n]*\"texture\":\"ac452b5e41f745bf\",\"path\":\"[^\"]*plaza_baked/hall.hdr\",\"width\":256.*\"code\":\"bake_summary\"[^\n]*\"probes\":1,\"baked\":1,\"notBaked\":0")
-    # The Lighting Test's probe baked the same way (D755), from its middle
+    # The Lighting Test's probe baked the same way, from its middle
     # before the wall: the picture games/lighting/hall.hdr was made so.
     set(LIGHTING_CONTENT ${PROJECT_BINARY_DIR}/hosts/arena/lighting_content)
     set(BAKED ${CMAKE_CURRENT_BINARY_DIR}/lighting_baked)

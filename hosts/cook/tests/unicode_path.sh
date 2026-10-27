@@ -2,7 +2,7 @@
 # A game kept under a folder whose name no single ANSI code page holds,
 # as a Windows profile named in Turkish or Japanese puts one: the cook
 # reads its sources and writes its content there. On Windows a program's
-# narrow strings are UTF-8 only by its manifest (D956); without it the
+# narrow strings are UTF-8 only by its manifest; without it the
 # name reached the cook with '?' for each such character.
 #
 # usage: unicode_path.sh <rawframe-cook> <repository> <work directory>

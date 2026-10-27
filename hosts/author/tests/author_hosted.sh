@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A shared session (ADR-0085, D881): Runners' level hosted over QUIC to
+# A shared session: Runners' level hosted over QUIC to
 # three collaborators, each admitted by a token with its grants. Ben joins
 # and stays; Ada renames the ground and claims it; Ben hears that Ada
 # changed the level and who is present, and his rename of the ground is
@@ -9,7 +9,7 @@
 # tokens file disconnects him at once; and the level holds Ada's change.
 #
 # Ada, granted cooking, cooks the level by a plain name into the host's
-# cooking directory, in her own, and is refused one naming a path (D885).
+# cooking directory, in her own, and is refused one naming a path.
 #
 # usage: author_hosted.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -18,7 +18,7 @@ author=$1
 cook=$2
 repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

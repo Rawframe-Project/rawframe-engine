@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# Writes Gale's waves (D691): the material that rolls them along the sea,
+# Writes Gale's waves: the material that rolls them along the sea,
 # the engine's grid, lifting each vertex to the height Gale's float system
 # floats its ships on (gale.kest's `height`) at the presented World's time,
-# and bending its normal by the waves' slope; foam whitens the crests
-# (D700). The waves' sums here are
+# and bending its normal by the waves' slope; foam whitens the crests.
+# The waves' sums here are
 # gale.kest's: change one, change both, and run this again. Its output is
 # committed.
 #
@@ -13,7 +13,7 @@ import json
 import math
 import sys
 
-# The seconds the sea repeats in (D702): gale.kest's `float` wraps the
+# The seconds the sea repeats in: gale.kest's `float` wraps the
 # World's time at them, and the material's time node at the same, so both
 # read a game days long as finely as one a minute long. Each wave's rate
 # turns it a whole number of times in them, and the foam drifts round once.
@@ -23,7 +23,7 @@ PERIOD = 600
 WAVES = ((0.25, "r", 0.3, 1.0995574, 0.0), (0.15, "b", 0.23, 0.7958701, 1.3))
 # The water's color, linear, and its roughness; and the foam's, which
 # whitens the crests where they rise past FOAM_FROM toward FOAM_TO meters,
-# broken up by value noise drifting with the sea (D700), round a circle
+# broken up by value noise drifting with the sea, round a circle
 # DRIFT across, in noise cells, once a period.
 COLOR = (0.012, 0.1, 0.19)
 ROUGHNESS = 0.2

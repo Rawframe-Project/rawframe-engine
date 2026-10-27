@@ -1,4 +1,4 @@
-// The Rawframe debug type (ADR-0066's debugger bridge, D461): VS Code starts
+// The Rawframe debug type: VS Code starts
 // `rawframe-debug`, which speaks the Debug Adapter Protocol and attaches to a
 // running game's tooling endpoint. Breakpoints are set on functions (the
 // Breakpoints view's "+"), by name, with the module or without it.

@@ -1,4 +1,4 @@
-// The build tool (ADR-0024, SPEC-0021, SPEC-0023): packs a cook's
+// The build tool: packs a cook's
 // receipt-proven output into a Build named by its root hash, signed with the
 // publisher's key, and makes such keys. Packaging tooling, run by an author
 // or by CI; never part of a client or a server. The engine version is this
@@ -19,10 +19,10 @@
 // CompositionRecord of the library's Build of that root as the Game, with
 // the library's Builds of any package roots as its Packages and of any mod
 // roots as its Mods, and prints its CompositionId. Whether the game takes
-// those mods is decided when the Composition is opened (D179).
+// those mods is decided when the Composition is opened.
 //
 // `release` publishes a CompositionRecord to a mirror as a Release of its
-// game's subject (SPEC-0020, D424): the record kept by its CompositionId,
+// game's subject: the record kept by its CompositionId,
 // a ReleaseRecord naming it (after the Release the channel pointed at, if
 // any), and the channel pointed at it with the next sequence, each signed
 // with the key. `point` points a channel at a Release the mirror holds,
@@ -189,7 +189,7 @@ int compose(const std::filesystem::path& library,
         std::fputs("rawframe-build: compose: the library has no such Build\n", stderr);
         return 1;
     }
-    // A record lists its Packages and Mods in subject order (SPEC-0021).
+    // A record lists its Packages and Mods in subject order.
     std::ranges::sort(packages, {}, &rawframe::content::BuildReference::subject);
     std::ranges::sort(mods, {}, &rawframe::content::BuildReference::subject);
     const auto kText =

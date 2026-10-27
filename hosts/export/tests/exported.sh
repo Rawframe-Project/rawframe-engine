@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A game exported (D396), signed by a studio's own publisher key, and played
+# A game exported, signed by a studio's own publisher key, and played
 # from its folder as a player would: the folder's launcher starts its
 # server, then its client in a real window, and is asked to stop three
 # seconds after the player is admitted, as a player closing the game
@@ -9,11 +9,11 @@
 # Prints the keys the folder holds (the studio's key set, never its
 # secret), the fonts the client read from the folder's library, the
 # players admitted, the frames shown, whether the window carried the title
-# the export was given (D519) and the game's own icon (its `icon.png`, a
-# crate, D951) at the sides it was made in, how each side stopped, and whether
+# the export was given and the game's own icon (its `icon.png`, a
+# crate) at the sides it was made in, how each side stopped, and whether
 # the launcher ended with the client's code. The game is exported from a
 # folder named as Studio names a new game, with capitals and underscores,
-# which its subject cannot carry (D944): the launcher takes the folder's
+# which its subject cannot carry: the launcher takes the folder's
 # name. A machine with no adapter the client allows skips, unless
 # RAWFRAME_REQUIRE_GPU is set. Run under an X server, from the repository
 # root.
@@ -67,7 +67,7 @@ stopped() {
 }
 same=no
 [ "$(stopped client.log exitCode)" = "$status" ] && same=yes
-# The README names the controls as a player reads them (D542): Space, not
+# The README names the controls as a player reads them: Space, not
 # `space` or `key_` anything.
 readable=no
 grep -q 'keyboard Space' "$out/README.txt" && ! grep -qE 'key_|keyboard space' "$out/README.txt" && readable=yes

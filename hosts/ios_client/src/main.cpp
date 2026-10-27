@@ -1,22 +1,22 @@
-// The iOS client (ADR-0084's second mobile target, D586): the client as an
+// The iOS client: the client as an
 // application UIKit runs. Maul Window's run hands the main thread to UIKit
-// and never returns (mwin-0025), so the client ends the process itself once
+// and never returns, so the client ends the process itself once
 // its Host has stopped, with the exit code a desktop client's main returns.
 // The program plays the process's own player as the desktop client does,
 // from the window's input and frames.
 //
 // Its configuration is the game's `client.conf` the application carries in
-// `game/` beside its executable, as `rawframe-export --target ios` packs it
-// (D587), its relative paths under that directory (D188): a bundle is read
+// `game/` beside its executable, as `rawframe-export --target ios` packs it,
+// its relative paths under that directory: a bundle is read
 // as it lies, nothing unpacked. A `client.conf` in the application's
 // Documents directory (`$HOME/Documents`, HOME being the application's
 // container) is read instead where there is one, its paths under
-// Documents, as a developer's run gives it (D586). The run's NDJSON
+// Documents, as a developer's run gives it. The run's NDJSON
 // diagnostics go to `client.log` in Documents, since an application has no
 // standard output anyone reads. The player's settings are kept in
 // `Library/Application Support/settings.json` in its container, which a
 // bundle's directory cannot be, unless the configuration keeps them
-// elsewhere (D626).
+// elsewhere.
 
 #include "rawframe/base/fatal.h"
 #include "rawframe/composition/configuration.h"
@@ -91,7 +91,7 @@ std::optional<std::string> readText(const std::string& path) {
 }
 
 /// `text` keeping the player's settings at `path` unless it keeps them
-/// somewhere itself (D626).
+/// somewhere itself.
 std::string keptAt(std::string text, const std::string& path) {
     const auto kParsed = composition::Configuration::parse(text);
     if (kParsed.has_value() && !kParsed->text("ui.kept").has_value()) {
@@ -148,7 +148,7 @@ int main() {
     }
     const std::string kFiles = std::string{kHome} + "/Documents";
     std::FILE* const kLog = std::fopen((kFiles + "/client.log").c_str(), "wb");
-    // Standard error is the log, so a crash's record lands in it (D617); the
+    // Standard error is the log, so a crash's record lands in it; the
     // system's own crash report still follows it.
     if (kLog != nullptr) {
         static_cast<void>(::dup2(::fileno(kLog), STDERR_FILENO));

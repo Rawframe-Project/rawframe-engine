@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reach exported to be shown on a headset (D658): the client's
+# Reach exported to be shown on a headset: the client's
 # configuration asks for one, the folder's README says so, and the exported
 # server, started as it was written, admits a bot that plays from the
 # folder's library with the client's pin. An export for the web is refused

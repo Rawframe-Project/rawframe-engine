@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runners played with mods from a Composition (D180, D181): the game and
+# Runners played with mods from a Composition: the game and
 # the runners-timers and runners-sting mods are cooked, packed, and signed
 # apart, and composed with them as Mods. Runners takes them under its open
 # policy: the two timers join the World beside the game's own entities, and
@@ -7,11 +7,11 @@
 # time, so each score kept has an even count of hits taken. A mod whose range
 # the game's Mod API version is outside, and one whose timer is also
 # persistent, are refused before any World runs. A checkpoint taken with a
-# mod is refused without it, naming the mod removed (D197).
+# mod is refused without it, naming the mod removed.
 #
 # usage: runners_with_mod.sh <rawframe-arena> <rawframe-cook> <rawframe-build> <repository> <work directory>
 # errtrace too: the trap below is a function's as well, where a run that
-# failed inside `run` once ended the script without a word (D810).
+# failed inside `run` once ended the script without a word.
 set -Eeuo pipefail
 
 arena=$1
@@ -112,12 +112,12 @@ save.directory = $work/saves
 save.namespace = 72756e6e657273000000000000000001
 ${3:-}
 # What is checked is what the run did, not how fast a loaded machine
-# ticks (D516, D569): stopped as overloaded, the script ends before it.
+# ticks: stopped as overloaded, the script ends before it.
 world.degraded_ms = 600000
 world.overload_ms = 0
 # Nor how fast its disk syncs: nine saves kept as it stopped took 5.1 s
 # under a full check and another session's builds, past the default
-# budget, and the run ended as a shutdown timeout (D615's cause; D810).
+# budget, and the run ended as a shutdown timeout.
 host.shutdown_budget_ms = 30000
 CONF
     (cd "$work/elsewhere" && "$arena" --config "$work/arena.conf" >"$work/log.ndjson" 2>"$work/errors.txt")
@@ -149,7 +149,7 @@ if [ "$modded" -ne $((plain + 2)) ]; then
     exit 1
 fi
 
-# A checkpoint knows the mods it ran with (D197): restored without the mod,
+# A checkpoint knows the mods it ran with: restored without the mod,
 # it is refused naming the mod removed; with it, it restores.
 status=0
 run "$work/plain.composition" 30 "checkpoint.restore = $work/modded-10.rfsn" || status=$?
@@ -197,7 +197,7 @@ grep -q '"code":"game_loaded".*"modHandlers":1' "$work/log.ndjson"
 stung=$(taken_in_twos "runners-sting's handler")
 
 # Penalized: runners-penalty's provider is bound, the lenient one's claim
-# is set aside by runners' preference (D202), and every hit costs two taken.
+# is set aside by runners' preference, and every hit costs two taken.
 rm -rf "$work/saves"
 run "$work/penalized.composition" 600
 grep -q '"code":"game_loaded".*"modProviders":1,.*"modClaimsSetAside":1' "$work/log.ndjson"

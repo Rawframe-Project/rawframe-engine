@@ -1,73 +1,73 @@
 #!/usr/bin/env python3
-# Clicks in a program's window as a user would (D421): once the program's
+# Clicks in a program's window as a user would: once the program's
 # log holds the record that says it is ready (a client's `bots_admitted`,
-# Studio's `studio_shown`, D435) and the screen has been lit for two seconds
+# Studio's `studio_shown`) and the screen has been lit for two seconds
 # (a server started with a black root window, Xvfb -br), the mouse moves to
 # each point given, in the window's pixels from its top left (which is the
 # screen's: no window manager runs), and its left button is pressed there
 # and let go, a second apart. XTest injects the events through the X server,
 # so they reach the window as a real mouse's do. Before each press it prints
 # how bright a patch of five by five pixels at the point was before the
-# mouse came and after, and whether it grew lighter by 8 or more of 255
-# (D422), waiting up to three seconds for that; with CLICK_CURSOR set, for a
+# mouse came and after, and whether it grew lighter by 8 or more of 255,
+# waiting up to three seconds for that; with CLICK_CURSOR set, for a
 # program drawing its own cursor, it waits for the point to hold still
-# before and up to fifteen seconds after (D453b). A point followed by `:`
+# before and up to fifteen seconds after. A point followed by `:`
 # and lower-case text has the text typed after its click, a key at a time,
-# then Return (D426); a dot, a comma, a minus, and a space are typed as
-# their keys, a colon with Shift (D473), and a slash, an underscore, and
-# capitals as their keys too, so a path is typed whole (D505). An argument `keys=` and X key names apart by commas presses
+# then Return; a dot, a comma, a minus, and a space are typed as
+# their keys, a colon with Shift, and a slash, an underscore, and
+# capitals as their keys too, so a path is typed whole. An argument `keys=` and X key names apart by commas presses
 # those keys alone, a name joined by pluses as a chord, the keys before the
-# last held through it (D777), a third of a second apart, and waits a second and a half
-# after them (D430). An argument `wheel=`, a point, and a count turns the
+# last held through it, a third of a second apart, and waits a second and a half
+# after them. An argument `wheel=`, a point, and a count turns the
 # wheel there that many detents toward the user, or away for a count below
-# nought, 0.15 seconds apart (D441), and `drag=` and two points presses the
-# left button at the first, carries it to the second, and lets it go there
-# (D457), holding the X key a fifth part names through it, Shift_L or
-# Control_L (D463); a press is held longer, as a drag is, the more loaded
-# the machine is (D815), and so is a wait (D822). An argument `drop=`, a
+# nought, 0.15 seconds apart, and `drag=` and two points presses the
+# left button at the first, carries it to the second, and lets it go there,
+# holding the X key a fifth part names through it, Shift_L or
+# Control_L; a press is held longer, as a drag is, the more loaded
+# the machine is, and so is a wait. An argument `drop=`, a
 # point, a colon, and paths apart by colons drops those files there as a
 # file manager does, by XDND
-# (tools/xdnd.py, D802). An argument `frozen=` and X key names presses them with
-# the program stopped, so it reads them in one frame (D458), and
+# (tools/xdnd.py). An argument `frozen=` and X key names presses them with
+# the program stopped, so it reads them in one frame, and
 # `frozenclick=` and a point with its text clicks there and types it with
-# the program stopped, once the mouse is over the point (D477). The
+# the program stopped, once the mouse is over the point. The
 # arguments `freeze` and `thaw` stop the program and let it go on, so what
-# comes between, clicks and the wheel among it, is read in one frame
-# (D479); `tree` prints every control the accessibility bus shows, a line
-# each, and `shot=` and a path keeps the screen there as xwd keeps it
-# (D925); `where=` and a window's title prints where it is and how large
-# (D994). An argument `quick=` and X key names presses them a few
+# comes between, clicks and the wheel among it, is read in one frame;
+# `tree` prints every control the accessibility bus shows, a line
+# each, and `shot=` and a path keeps the screen there as xwd keeps it;
+# `where=` and a window's title prints where it is and how large.
+# An argument `quick=` and X key names presses them a few
 # milliseconds apart with the program running, as a quick player does,
-# so they reach it within one world tick (D506). An argument
+# so they reach it within one world tick. An argument
 # `move=` and a point moves the pointer there with no press, a second
-# before going on (D468), and `orbit=` and two points drags as `drag=`
-# does with the right button (D469), a key a fifth part names held through
-# it too (D472). An argument `context=` and a point or a name clicks it
-# with the right button, as a context menu is opened (D973). An argument
+# before going on, and `orbit=` and two points drags as `drag=`
+# does with the right button, a key a fifth part names held through
+# it too. An argument `context=` and a point or a name clicks it
+# with the right button, as a context menu is opened. An argument
 # `wait=` and a number of seconds waits that long, and `until=` and a
-# record's code waits, up to three minutes, until the log holds it (D445),
-# one whose field has a value where `,name=value` follows (D476), or a
+# record's code waits, up to three minutes, until the log holds it,
+# one whose field has a value where `,name=value` follows, or a
 # number at least that where `,name>=value` does; ending `#` and a count,
 # that many such records, and `@` and a path, in that log beside the
-# watched one, such as a played client's (D734); ending `~` and a number
+# watched one, such as a played client's; ending `~` and a number
 # of seconds, up to that long instead, for what a loaded sanitized tree
 # may take longer than three minutes to make, such as a cook. A record
 # never seen in that time is said ("never saw"), which the tests read as a
-# failure: the wait it stands for was three minutes lost (D627). An argument `edit=`
+# failure: the wait it stands for was three minutes lost. An argument `edit=`
 # and a file, the text in it to replace, and what with, separated by
-# colons, edits the file as an author would while the game plays (D634).
+# colons, edits the file as an author would while the game plays.
 # A point may be a control's name instead, `@` and the name as the program
-# gives it to assistive technology, `#n` after it for the n-th so named
-# (D774): found through the accessibility bus the test started
+# gives it to assistive technology, `#n` after it for the n-th so named:
+# found through the accessibility bus the test started
 # (AT_SPI_BUS_ADDRESS) by tools/atspi.py when its turn comes, since what
 # came before may have moved it, `|` and a pixel offset after it for a
-# point beside it (D925), in the application CLICK_APPLICATION
+# point beside it, in the application CLICK_APPLICATION
 # names, rawframe-studio unless set; between `freeze` and `thaw`, before
 # the program is stopped, since a stopped program answers nobody.
-# Five seconds after, it stops the program whose pid its pid file holds
-# (D430), whose iterations only bound it, and waits for the process it
+# Five seconds after, it stops the program whose pid its pid file holds,
+# whose iterations only bound it, and waits for the process it
 # watches to end; half a second, where the last argument waited for a
-# record that came, since what the test asked for has been seen (D493).
+# record that came, since what the test asked for has been seen.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | @<name>[#<n>][:<text>] | keys=<key>[,<key>...]
@@ -101,22 +101,21 @@ class XImage(ctypes.Structure):
 
 
 # Characters typed whose X key names are words.
-# A vector's brackets among them, as a material's override is typed (D722),
-# and an equals sign (D731).
+# A vector's brackets among them, as a material's override is typed,
+# and an equals sign.
 KEYS = {".": "period", ",": "comma", "-": "minus", " ": "space", "/": "slash", "[": "bracketleft",
         "]": "bracketright", "=": "equal"}
-# Characters typed with Shift held, by the key that types them (D473), a
-# color's # among them (D637), and a plus, as a shortcut's keys are typed
-# (D782).
+# Characters typed with Shift held, by the key that types them, a
+# color's # among them, and a plus, as a shortcut's keys are typed.
 SHIFTED = {":": "semicolon", "_": "underscore", "#": "3", "+": "equal"}
-# Capitals typed with Shift held, as a path may hold them (D505).
+# Capitals typed with Shift held, as a path may hold them.
 SHIFTED.update({letter: letter.lower() for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"})
 
 
 def stretched(seconds):
     """`seconds` stretched by how far the machine's runnable work passes
     its processors: a game drawing a frame every few seconds on a loaded
-    machine still sees a press and its release in frames apart (D815)."""
+    machine still sees a press and its release in frames apart."""
     try:
         busy = os.getloadavg()[0] / (os.cpu_count() or 1)
     except OSError:
@@ -133,19 +132,19 @@ def alive(pid):
 
 
 class Secondary(str):
-    """A click with the right button, which opens a context menu (D973)."""
+    """A click with the right button, which opens a context menu."""
 
 
 class Frozen(str):
-    """A click's text typed with the program stopped (D477)."""
+    """A click's text typed with the program stopped."""
 
 
 def logged(log, code):
     """Whether the log holds the record `code`; a code followed by
-    `,name=value`, a record of it whose field `name` is `value` (D476), and
-    by `,name>=number`, one whose field is a number at least that (D627);
+    `,name=value`, a record of it whose field `name` is `value`, and
+    by `,name>=number`, one whose field is a number at least that;
     ending `#count`, that many records of it, and `@path`, in the log at
-    that path beside `log` (D734)."""
+    that path beside `log`."""
     if "@" in code:
         code, _, beside = code.rpartition("@")
         log = os.path.join(os.path.dirname(log), beside)
@@ -199,8 +198,7 @@ def stop(pid_file):
 
 def brightness(x, display, root, at, y):
     """The mean of the red, green, and blue of the five by five pixels
-    around a point; 0 for a point off the screen, which X refuses to read
-    (D925)."""
+    around a point; 0 for a point off the screen, which X refuses to read."""
     screen = x.XDefaultScreen(display)
     if not (2 <= at < x.XDisplayWidth(display, screen) - 2 and 2 <= y < x.XDisplayHeight(display, screen) - 2):
         print(f"{at},{y} is off the screen", flush=True)
@@ -217,22 +215,22 @@ def brightness(x, display, root, at, y):
 
 
 def named_point(name):
-    """The centre of the control called `name` (D774), waiting up to six
+    """The centre of the control called `name`, waiting up to six
     seconds for it to be shown; (None, None) if it never is."""
     import atspi
 
     address = os.environ.get("AT_SPI_BUS_ADDRESS", "")
     application = os.environ.get("CLICK_APPLICATION", "rawframe-studio")
     # `|` and an offset in pixels after the name: a point beside the
-    # control, as where a row it adds in the same frame will be (D925).
+    # control, as where a row it adds in the same frame will be.
     dx = dy = 0
     if "|" in name:
         name, _, offset = name.rpartition("|")
         dx, dy = (int(part) for part in offset.split(","))
     for _ in range(30):
         owner = atspi.application(address, application) if address else None
-        # A control before words of the same name, as a button's own label
-        # (D925); the words where no control is so named.
+        # A control before words of the same name, as a button's own label;
+        # the words where no control is so named.
         point = (atspi.centre(address, owner, name, unless="label") or atspi.centre(address, owner, name)
                  if owner else None)
         if point is not None:
@@ -270,11 +268,11 @@ def main():
             points.append((None, None, ("shot", argument[len("shot="):])))
             continue
         if argument.startswith("where="):
-            # Where a window is and how large, by its title (D994).
+            # Where a window is and how large, by its title.
             points.append((None, None, ("where", argument[len("where="):])))
             continue
         if argument.startswith("close="):
-            # A window closed by its title, as its close button does (D988).
+            # A window closed by its title, as its close button does.
             points.append((None, None, ("close", argument[len("close="):])))
             continue
         if argument in ("freeze", "thaw", "tree"):
@@ -295,12 +293,12 @@ def main():
             points.append((toX, toY, ("move",)))
             continue
         if argument.startswith("drag=@") and argument.split(",")[1:2] and argument.split(",")[1].startswith("@"):
-            # From a control onto another, both by their names (D929).
+            # From a control onto another, both by their names.
             name, onto, *rest = argument[len("drag="):].split(",")
             points.append((name, None, ("dragto", onto, rest[0] if rest else "", 1)))
             continue
         if argument.startswith("drag=@"):
-            # From a control by its name, by an offset in pixels (D852).
+            # From a control by its name, by an offset in pixels.
             name, dx, dy, *rest = argument[len("drag="):].split(",")
             points.append((name, None, ("dragby", int(dx), int(dy), rest[0] if rest else "", 1)))
             continue
@@ -366,8 +364,7 @@ def main():
             lit += 1 if any(bytes(data)) else 0
             x.XDestroyImage(image)
     def press(name, held):
-        # A chord, "Control_L+z": the keys before the last held through it
-        # (D777).
+        # A chord, "Control_L+z": the keys before the last held through it.
         *holding, name = name.split("+") if len(name) > 1 else [name]
         codes = [x.XKeysymToKeycode(display, x.XStringToKeysym(each.encode())) for each in holding]
         for code in codes:
@@ -409,15 +406,14 @@ def main():
             # Which control a point is on, for moving a test to names.
             print(f"point {at},{y} is on {point_name(at, y)}")
         if isinstance(text, tuple) and text[0] == "drop":
-            # Files dropped there from outside, as a file manager drops them
-            # (D802).
+            # Files dropped there from outside, as a file manager drops them.
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             import xdnd
             xdnd.drop(at, y, text[1])
             time.sleep(1)
             continue
         if isinstance(text, tuple) and text[0] == "wheel":
-            # The wheel turned with a key held through it (D472).
+            # The wheel turned with a key held through it.
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
             x.XFlush(display)
             time.sleep(0.25)
@@ -512,16 +508,16 @@ def main():
         if isinstance(text, tuple) and text[0] == "drag":
             # Pressed at the point, held a second, carried to the other in
             # ten steps a tenth of a second apart, held a second, and let go
-            # there (D457): a played game drawing a frame a second on a
+            # there: a played game drawing a frame a second on a
             # loaded machine sees the press, the motion, and the release
-            # in frames of their own (D814), each wait longer the more
-            # loaded the machine is (D815).
+            # in frames of their own, each wait longer the more
+            # loaded the machine is.
             xtest.XTestFakeMotionEvent(display, -1, at, y, 0)
             x.XFlush(display)
             # Where the press comes seen in a frame before it, or a loaded
-            # Studio found the last drag's end there (D826).
+            # Studio found the last drag's end there.
             time.sleep(stretched(0.5))
-            # A key held through the drag, Shift_L or Control_L (D463).
+            # A key held through the drag, Shift_L or Control_L.
             held = x.XKeysymToKeycode(display, x.XStringToKeysym(text[3].encode())) if text[3] else 0
             if held:
                 xtest.XTestFakeKeyEvent(display, held, 1, 0)
@@ -564,7 +560,7 @@ def main():
             continue
         if isinstance(text, float):
             # A wait stands for frames a game draws, so it stretches with
-            # the machine's load as a press does (D815, D822).
+            # the machine's load as a press does.
             time.sleep(stretched(text))
             print(f"waited {text:g} seconds")
             continue
@@ -581,7 +577,7 @@ def main():
             print(f"turned the wheel {text} at {at},{y}")
             # What scrolls eases into place over frames, slower on a loaded
             # machine: wait until the column about the wheel holds still,
-            # four looks in a row, before the next step (D475).
+            # four looks in a row, before the next step.
             # Looks off the screen are kept on its edge: X refuses them.
             tall = x.XDisplayHeight(display, 0)
 
@@ -601,7 +597,7 @@ def main():
             continue
         if at is None:
             # Frozen keys are pressed while the program is stopped, so it
-            # reads them all in one frame, as a slow machine's does (D458).
+            # reads them all in one frame, as a slow machine's does.
             if y == "frozen":
                 with open(pid_file, encoding="utf-8") as told:
                     frozen = int(told.read().strip())
@@ -622,9 +618,9 @@ def main():
         # frames there, and the cursor is waited for up to fifteen seconds (a
         # sanitized client at load 130 drew 25 frames in a run). Otherwise a
         # click waits half a second: no other test asks for the light, and
-        # input read in one frame is taken in its order (D486, D489), so the
+        # input read in one frame is taken in its order, so the
         # three seconds it waited cost a full check's every tree six minutes
-        # of clicks lighting nothing (D493).
+        # of clicks lighting nothing.
         cursor = bool(os.environ.get("CLICK_CURSOR"))
         before = brightness(x, display, root, at, y)
         steady = 0
@@ -654,7 +650,7 @@ def main():
         xtest.XTestFakeButtonEvent(display, button, 1, 0)
         x.XFlush(display)
         # Not stretched while the program is stopped, which reads the press
-        # and the release in one frame (D458).
+        # and the release in one frame.
         time.sleep(0.2 if stopped else stretched(0.2))
         xtest.XTestFakeButtonEvent(display, button, 0, 0)
         x.XFlush(display)

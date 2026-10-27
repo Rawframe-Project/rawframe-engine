@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# A blockout authored in a session (D849), headless: a yard written as a
+# A blockout authored in a session, headless: a yard written as a
 # file, its lines read, a ramp put in and a pit cut, kept as written; a
 # solid its reader refuses, refused with the file untouched; a line taken
 # away and undone back to its bytes; then the blockout imported from
 # outside into a copy of Runners as a mesh with the blockout importer,
-# declared by the game, and cooked (D848).
+# declared by the game, and cooked.
 #
 # usage: author_blockout.sh <rawframe-author> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -13,7 +13,7 @@ author=$1
 cook=$2
 repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

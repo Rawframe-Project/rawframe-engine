@@ -1,11 +1,11 @@
 #pragma once
 
-// The Debug Adapter Protocol spoken for a running game (ADR-0066's debugger
-// bridge, D461): an editor's requests turned into the tooling endpoint's
-// debug verbs (D460), and what the game does turned into the protocol's
-// events. Function and line breakpoints (D630), the stopped frames, where
-// they stand, and their locals (D631), carrying on, and stepping a line
-// over, into, or out (D632).
+// The Debug Adapter Protocol spoken for a running game (the debugger
+// bridge): an editor's requests turned into the tooling endpoint's
+// debug verbs, and what the game does turned into the protocol's
+// events. Function and line breakpoints, the stopped frames, where
+// they stand, and their locals, carrying on, and stepping a line
+// over, into, or out.
 
 #include "rawframe/authoring_session/attach.h"
 #include "rawframe/authoring_session/link.h"
@@ -41,7 +41,7 @@ private:
     /// `why`).
     std::optional<document::Value> ask(document::Value record, std::string& why);
     /// Every breakpoint asked for, the functions and each source's lines,
-    /// written into the game at once (D630): its answer, or none.
+    /// written into the game at once: its answer, or none.
     std::optional<document::Value> breakAll(std::string& why);
     /// An editor's path as the game's build names its file: under the
     /// game's directory, the path from it; else the file's name alone,

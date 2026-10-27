@@ -1,6 +1,6 @@
-# The launcher's HTTP client (D414): GET over HTTP/1.1, plain or TLS through
+# The launcher's HTTP client: GET over HTTP/1.1, plain or TLS through
 # OpenSSL, verifying every certificate for its host. A launcher unit, outside
-# every engine closure (ADR-0060, ADR-0074): no module or host depends on it.
+# every engine closure: no module or host depends on it.
 rawframe_module(NAME http
     SOURCES src/client.cpp src/connection.cpp src/response.cpp src/url.cpp
     DEPS result base

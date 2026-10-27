@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A game's description, its settings, authored in a session (D817), over a
+# A game's description, its settings, authored in a session, over a
 # copy of Quarry's: its lines read, an aspect put in after its program line
 # and written, the lines no change named (its comments among them) kept as
 # they stand; undone back to its very bytes and redone; a line its reader

@@ -1,5 +1,5 @@
-// A standalone game's launcher (ADR-0041's standalone export; ADR-0084: a
-// launcher may start a local dedicated-server process, D395). It starts the
+// A standalone game's launcher (the standalone export, which may start a
+// local dedicated-server process). It starts the
 // game's dedicated server, waits for the certificate fingerprint the server
 // writes as it listens, starts the client pinned to that file, and when the
 // client ends, asks the server to stop as a Host stops and kills it if it
@@ -21,7 +21,7 @@
 //   play.wait_ms         how long the server has to listen (30000)
 //   play.grace_ms        how long it has to stop (10000)
 //
-// A game that follows a release channel (D434) is updated before it plays:
+// A game that follows a release channel is updated before it plays:
 // with `play.installer`, the launcher first runs that program (an
 // rawframe-install) as `follow <library> <subject> <channel> <origin>`,
 // which installs the channel's Release if the pointer moved past the one
@@ -47,7 +47,7 @@
 //
 // On Windows it is a windowed program, so a player starting it sees no
 // console; started so, with no standard error, its own lines go to
-// `play.log` beside it (D944).
+// `play.log` beside it.
 
 #include "rawframe/composition/configuration.h"
 #include "rawframe/process/child.h"
@@ -69,7 +69,7 @@
 #include <vector>
 
 #if defined(_WIN32)
-// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file.
 #include <windows.h>
 #endif
 
@@ -109,7 +109,7 @@ void bridgeStops() {
 #if defined(_WIN32)
     ::SetConsoleCtrlHandler(&askStopOnEvent, TRUE);
     // Started by Studio or another launcher, it is asked by the event it
-    // inherited (D944).
+    // inherited.
     if (const char* event = std::getenv(process::kStopVariable); event != nullptr) {
         auto* held = reinterpret_cast<HANDLE>(static_cast<std::uintptr_t>(std::strtoull(event, nullptr, 10)));
         HANDLE wait = nullptr;
@@ -307,7 +307,7 @@ int main(int argc, char** argv) {
     // A fingerprint left from an earlier run is not this server's.
     std::filesystem::remove(*kFingerprint, error);
     // The server and the client stop with the launcher however it ends, so
-    // a launcher killed leaves no server holding the game's port (D649).
+    // a launcher killed leaves no server holding the game's port.
     auto server = process::Child::start({.program = *kServer,
                                          .arguments = {"--config", *kServerConfig},
                                          .output = configuration.path("play.server_log").value_or(""),

@@ -1,10 +1,9 @@
 #pragma once
 
-// A publisher's mirror over HTTP (D414): laid out as a library, as
+// A publisher's mirror over HTTP: laid out as a library, as
 // rawframe.install's mirror on disk is, at a base URL any web server or CDN
 // can serve. What it serves is trusted for nothing: every manifest is
-// verified against the pinned key set and every blob against its digest
-// (SPEC-0020, SPEC-0021).
+// verified against the pinned key set and every blob against its digest.
 
 #include "rawframe/http/client.h"
 #include "rawframe/install/origin.h"

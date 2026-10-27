@@ -1,4 +1,4 @@
-// The thumbnail tool (SPEC-0051's asset browser, D899, D900): a cooked mesh,
+// The thumbnail tool: a cooked mesh,
 // or a cooked material on a ball, drawn offscreen by the scene's renderer,
 // its picture kept as a texture of the engine's with its smaller levels,
 // which the authoring session hands an asset browser as it hands a
@@ -59,7 +59,7 @@ using namespace rawframe;
 constexpr std::uint32_t kSide = 256;
 constexpr std::uint32_t kSmallest = 16;
 /// How long a frame may take: lavapipe makes a pipeline on the CPU the
-/// first time a frame uses it, slowly on a loaded machine (D476).
+/// first time a frame uses it, slowly on a loaded machine.
 constexpr std::uint64_t kFrameWait = 60'000'000'000;
 
 void say(const char* what, const std::string& about) {

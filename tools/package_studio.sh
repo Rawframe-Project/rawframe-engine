@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Packages Studio for an author with no build of their own (D768): Studio,
+# Packages Studio for an author with no build of their own: Studio,
 # the cook tool, the dedicated server, the client, the authoring tool, the
-# thumbnail tool, the debug adapter with its VS Code extension (D957), and
+# thumbnail tool, the debug adapter with its VS Code extension, and
 # what Export runs (the export and build tools, the launcher, the install
-# tool; D944, and the web player, D948) from one build tree, with the shader
-# toolchain where the machine has one (D945), beside the templates and the
+# tool, and the web player) from one build tree, with the shader
+# toolchain where the machine has one, beside the templates and the
 # sources of the games named, which Studio's start screen offers as
 # samples. Studio opens as an application does, with no configuration and
-# no script (D920): double-clicked, it shows its start screen. A Windows
+# no script: double-clicked, it shows its start screen. A Windows
 # tree's programs take the DLLs they import from the tree, and the C++
 # runtime's from the system. Each game also has an MCP configuration giving
-# an agent the game's authoring tools without Studio (D773):
+# an agent the game's authoring tools without Studio:
 # `claude --mcp-config <game>.mcp.json` from the folder.
 #
 #   tools/package_studio.sh <build tree> <folder> <game>...
@@ -27,11 +27,11 @@ cp "$tree/hosts/studio/rawframe-studio$exe" "$tree/hosts/cook/rawframe-cook$exe"
     "$tree/hosts/dedicated_server/rawframe-server$exe" "$tree/hosts/client/rawframe-client$exe" \
     "$tree/hosts/author/rawframe-author$exe" "$into/"
 # And the tool that draws a mesh's thumbnail, where the tree has the
-# scene's renderer (D899).
+# scene's renderer.
 thumbnail="$tree/hosts/thumbnail/rawframe-thumbnail$exe"
 [ -e "$thumbnail" ] && cp "$thumbnail" "$into/"
 # The debug adapter and the VS Code extension that starts it, so a game's
-# Kest is debugged from an editor without Studio (D461, D957).
+# Kest is debugged from an editor without Studio.
 cp "$tree/hosts/debug/rawframe-debug$exe" "$into/"
 mkdir -p "$into/vscode"
 cp tools/vscode/* "$into/vscode/"
@@ -40,8 +40,8 @@ cp "$tree/hosts/export/rawframe-export$exe" "$tree/hosts/build/rawframe-build$ex
     "$tree/launcher/play/rawframe-play$exe" "$tree/launcher/install/rawframe-install$exe" "$into/"
 # The shader toolchain, where this machine has one (RAWFRAME_SLANGC or
 # slangc, dxc, spirv-cross, spirv-val, spirv-dis and spirv-as on the path),
-# so the packaged cook builds a material graph the blob cannot fold (D484,
-# D945): the generator and the sources it reads laid out as the engine's
+# so the packaged cook builds a material graph the blob cannot fold:
+# the generator and the sources it reads laid out as the engine's
 # tree lays them, the programs in its bin, their libraries beside them on
 # Windows and in its lib elsewhere, dxc's without their debugging symbols.
 # Python is the machine's own.
@@ -73,7 +73,7 @@ if [ -n "$slangc" ] && [ -n "$dxc" ] && [ -n "$cross" ] && [ -n "$validator" ] &
 else
     echo "package_studio.sh: no shader toolchain here; the packaged cook refuses a material graph the blob cannot fold" >&2
 fi
-# The web player a web export lays out (D948), the same for every system:
+# The web player a web export lays out, the same for every system:
 # from the WebAssembly tree RAWFRAME_WEB_TREE names, else the shipping one
 # beside the tree packaged, and the page from the sources.
 web="${RAWFRAME_WEB_TREE:-$(dirname "$tree")/wasm-shipping}"
@@ -85,7 +85,7 @@ if [ -e "$web/hosts/web_client/rawframe-web-client.wasm" ]; then
 else
     echo "package_studio.sh: no web player at $web; the packaged Studio's web export says so" >&2
 fi
-# The templates a new game is made from (D780).
+# The templates a new game is made from.
 cp -R templates "$into/templates"
 for game in "$@"; do
     cp -R "games/$game" "$into/games/$game"
@@ -95,7 +95,7 @@ MCP
 done
 # On Linux, its icon and a desktop entry beside it, double-clicked from
 # the folder or copied to ~/.local/share/applications to sit in the
-# desktop's menu, naming where the folder is now (D926).
+# desktop's menu, naming where the folder is now.
 if [ -z "$exe" ]; then
     cp hosts/studio/resources/rawframe-studio.png "$into/"
     at="$(cd "$into" && pwd)"

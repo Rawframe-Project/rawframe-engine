@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Files from outside made a game's assets through a session (D503), in a
+# Files from outside made a game's assets through a session, in a
 # copy of the plaza: a texture imported into a new directory, declared by
 # the game and listed among its assets; a glTF imported with the image it
 # names beside it, its materials mapped by the cook tool; then the game
@@ -14,7 +14,7 @@ author=$1
 cook=$2
 repository=$3
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
@@ -41,8 +41,7 @@ reply() { grep "\"id\":$1," "$work/replies"; }
     echo '{"kind":"authoring.import","id":8,"source":"'"$plaza"'/crate.gltf","as":"art/crate.png"}'
     echo '{"kind":"authoring.cook","id":9,"output":"'"$work/content"'","cache":null}'
     # Each wait ends as the reply comes; four minutes only bounds a cook
-    # on a sanitized tree under load, which took more than thirty seconds
-    # (D507).
+    # on a sanitized tree under load, which took more than thirty seconds.
     for _ in $(seq 2400); do
         grep -q '"id":9,"answer"\|"id":9,"error"' "$work/replies" 2>/dev/null && break
         sleep 0.1

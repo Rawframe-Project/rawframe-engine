@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# A launcher killed leaves nothing playing (D649): the launcher starts the
+# A launcher killed leaves nothing playing: the launcher starts the
 # arena's dedicated server and a bots client set to play for a minute, both
-# told to stop with it (D646), and is killed as a task manager kills it;
+# told to stop with it, and is killed as a task manager kills it;
 # both stop in order within ten seconds, on every system. Run from the
 # repository root.
 #
@@ -12,7 +12,7 @@ play="$1"
 server="$2"
 bots="$3"
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

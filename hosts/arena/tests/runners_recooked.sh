@@ -3,8 +3,8 @@
 # cooked first to the short-form tier, is recooked to Opus once the host has
 # started, and the tiles, cooked exact, are recooked block-compressed; the
 # running client publishes the changed manifest, hears the new revision of
-# the shot, and draws the new revision of the tiles (D262). Runners hit
-# are told so by messages (D266).
+# the shot, and draws the new revision of the tiles. Runners hit
+# are told so by messages.
 #
 # usage: runners_recooked.sh <rawframe-arena> <rawframe-cook> <repository> <work directory>
 set -euo pipefail
@@ -17,7 +17,7 @@ work=$4
 rm -rf "$work"
 mkdir -p "$work/sources"
 # A step that fails says which, and how the arena ended: under a loaded
-# machine its World may fall behind and stop it (D302).
+# machine its World may fall behind and stop it.
 trap 'echo "runners_recooked: failed at line $LINENO"; grep -o "\"code\":\"stopped\".*" "$work/log.ndjson" 2>/dev/null | cut -c1-600' ERR
 cp -r "$repository/games/runners/." "$work/sources/"
 "$cook" "$work/sources" "$work/content" "$work/cache" >/dev/null
@@ -34,8 +34,7 @@ replication.endpoint = arena
 bots.count = 4
 bots.endpoint = arena
 audio.record = $work/heard.wav
-# What is checked is what is heard, not how fast a loaded machine ticks
-# (D516, D569).
+# What is checked is what is heard, not how fast a loaded machine ticks.
 world.degraded_ms = 600000
 world.overload_ms = 0
 CONF
@@ -67,7 +66,7 @@ grep -q '"code":"texture_reloaded"' "$work/log.ndjson"
 if grep -q '"code":"sound_reload_failed"\|"code":"texture_reload_failed"' "$work/log.ndjson"; then
     exit 1
 fi
-# Runners hit were told so (D266): none sent to no one, and all arrived but
+# Runners hit were told so: none sent to no one, and all arrived but
 # those still on their way when the run ended, one per runner at most.
 sent=$(grep -o '"messagesSent":[0-9]*' "$work/log.ndjson" | grep -o '[0-9]*$')
 received=$(grep -o '"messagesReceived":[0-9]*' "$work/log.ndjson" | grep -o '[0-9]*$')

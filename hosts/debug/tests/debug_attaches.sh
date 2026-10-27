@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# An editor debugging the plaza through the debug adapter (D461): a
+# An editor debugging the plaza through the debug adapter: a
 # dedicated server plays it with the debug grant, and an editor, here a
 # script speaking the Debug Adapter Protocol, attaches, breaks at the stroll
 # system, is told the game stopped, reads the frame and its arguments,
 # carries on, and disconnects, leaving the game running without breakpoints.
 # An endpoint off this machine is refused, and a play directory others may
-# enter; the game alone, through where Studio's Play records it (D462),
+# enter; the game alone, through where Studio's Play records it,
 # attaches too.
 #
 # usage: debug_attaches.sh <rawframe-debug> <rawframe-server> <repository>
@@ -43,12 +43,12 @@ for _ in $(seq 200); do
 done
 
 # Where Studio's Play would have recorded the game, as it names the
-# directory (D462): under the user's runtime directory, by the digest of
+# directory: under the user's runtime directory, by the digest of
 # the game's absolute path, its owner's alone.
 game="$repository/games/plaza/plaza.game"
 # Windows has it in the user's temporary directory, which TMP names there,
 # kept to the user by its ACL: Git's bash sets no mode bits, and a POSIX
-# path in XDG_RUNTIME_DIR would mean another place to the adapter (D505).
+# path in XDG_RUNTIME_DIR would mean another place to the adapter.
 runtime="$work/runtime"
 if command -v cygpath >/dev/null 2>&1; then
     mkdir -p "$runtime"
@@ -83,7 +83,7 @@ adapter, endpoint, pin, token, game, played, server_log = sys.argv[1:8]
 
 def explain(seen):
     """What a failed wait saw, and the server's last words, so a failure
-    seen only in a loaded check says why (D478): the adapter's messages
+    seen only in a loaded check says why: the adapter's messages
     the wait passed over, whether the server is still there, and its last
     records."""
     print("passed over:", " ".join(seen[-20:]) or "nothing", flush=True)
@@ -108,8 +108,8 @@ class Editor:
         self.seen = []
         self.kept = []
         # Its messages read whole by a thread of their own, so a wait can
-        # end on time on every system: select takes no pipe on Windows
-        # (D501). None says it ended.
+        # end on time on every system: select takes no pipe on Windows.
+        # None says it ended.
         self.messages = queue.Queue()
         threading.Thread(target=self.read, daemon=True).start()
 
@@ -149,7 +149,7 @@ class Editor:
             message = self.messages.get(timeout=max(0.0, end - time.time()))
         except queue.Empty:
             # Where each of its threads waits, for a hang seen only in a
-            # loaded check (D474).
+            # loaded check.
             tasks = "/proc/%d/task" % self.child.pid
             for task in sorted(os.listdir(tasks)) if os.path.isdir(tasks) else []:
                 with open("%s/%s/wchan" % (tasks, task)) as wchan:
@@ -162,10 +162,9 @@ class Editor:
 
     # What the adapter tells waits on the game, which on a loaded machine
     # may take a while to run a tick; a minute still fails a silent one
-    # well inside the test's own limit (D476).
+    # well inside the test's own limit.
     # A message a wait passes over is kept for the next: the adapter tells
-    # an event once, and the game may stop before a request's answer comes
-    # (D478).
+    # an event once, and the game may stop before a request's answer comes.
     def until(self, test, what, seconds=60):
         for at, message in enumerate(self.kept):
             if test(message):
@@ -209,7 +208,7 @@ remote.leave()
 print("a remote endpoint refused", flush=True)
 
 # A play directory others may enter is not trusted, where mode bits say
-# so; Windows keeps it to its owner by its ACL (D501).
+# so; Windows keeps it to its owner by its ACL.
 if os.name != "nt":
     open_to_others = Editor()
     refused = open_to_others.attach({"game": game})
@@ -224,7 +223,7 @@ assert attached["success"], attached
 editor.until(lambda m: m.get("event") == "initialized", "initialized")
 broken = editor.answer(editor.send("setFunctionBreakpoints", {"breakpoints": [{"name": "stroll"}, {"name": "nowhere"}]}))
 assert [each["verified"] for each in broken["body"]["breakpoints"]] == [True, False], broken
-# A line of the stroll's loop, and a line with no code (D630).
+# A line of the stroll's loop, and a line with no code.
 lines = editor.answer(editor.send("setBreakpoints", {"source": {"path": "plaza.kest"},
                                                      "breakpoints": [{"line": 262}, {"line": 1}]}))
 assert [each["verified"] for each in lines["body"]["breakpoints"]] == [True, False], lines
@@ -245,7 +244,7 @@ assert editor.answer(editor.send("continue", {"threadId": 1}))["success"]
 editor.until(lambda m: m.get("event") == "stopped", "stopped again")
 stack = editor.answer(editor.send("stackTrace", {"threadId": 1}))
 assert stack["body"]["stackFrames"][0]["line"] == 262, stack
-# A line on (D632): the stop is the step's, at the next line.
+# A line on: the stop is the step's, at the next line.
 assert editor.answer(editor.send("next", {"threadId": 1}))["success"]
 stepped = editor.until(lambda m: m.get("event") == "stopped", "stepped")
 assert stepped["body"]["reason"] == "step", stepped

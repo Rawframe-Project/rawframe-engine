@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A game exported to follow its channel (D434), as a studio ships one that
+# A game exported to follow its channel, as a studio ships one that
 # updates: runners exported under the rawframe publisher's key with
 # --follow naming the studio's mirror. The studio then publishes 0.2.0 on
 # the mirror and points stable at it. The folder's launcher follows stable

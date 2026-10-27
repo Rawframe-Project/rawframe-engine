@@ -1,5 +1,5 @@
 # The dedicated server executable: a thin process entry over rawframe.host with
-# the server closure's registrars (ADR-0017, SPEC-0012).
+# the server closure's registrars.
 rawframe_host(NAME dedicated_server OUTPUT rawframe-server
     SOURCES src/main.cpp
     DEPS host game_content network_quic physics2d physics3d world_animation world_replication world_tooling world_kest world_runtime composition diagnostics result base
@@ -10,7 +10,7 @@ if(RAWFRAME_BUILD_TESTS)
     add_test(NAME dedicated_server_smoke
              COMMAND rawframe_host_dedicated_server --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke.conf)
     set_tests_properties(dedicated_server_smoke PROPERTIES PASS_REGULAR_EXPRESSION "\"code\":\"stopped\"")
-    # Stops in order when the tool that started it is killed (D646).
+    # Stops in order when the tool that started it is killed.
     add_test(NAME dedicated_server_orphaned
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/orphaned.sh $<TARGET_FILE:rawframe_host_dedicated_server>
                      ${CMAKE_CURRENT_BINARY_DIR}/orphaned)
@@ -22,7 +22,7 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(dedicated_server_kest_game PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"code\":\"game_loaded\".*\"code\":\"stopped\"")
-    # Stalls (D388): three owners build on one plot in one tick and one stall
+    # Stalls: three owners build on one plot in one tick and one stall
     # stands, besides the lot's ground; a fourth, without coins, builds none.
     add_test(NAME tycoon_crowded
              COMMAND rawframe_host_dedicated_server --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/tycoon_crowded.conf
@@ -30,7 +30,7 @@ if(RAWFRAME_BUILD_TESTS)
     set_tests_properties(tycoon_crowded PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"bodiesMade\":2,\"bodiesRemoved\":0,\"bodiesRefused\":0,.*\"code\":\"tick_summary\"[^\n]*\"entities\":6}")
     # The same, started from elsewhere: the configuration's paths are under
-    # its own directory, not where the process starts (D188).
+    # its own directory, not where the process starts.
     add_test(NAME dedicated_server_elsewhere
              COMMAND rawframe_host_dedicated_server --config ${CMAKE_CURRENT_SOURCE_DIR}/tests/kest_game.conf
              WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
@@ -42,7 +42,7 @@ if(RAWFRAME_BUILD_TESTS)
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     set_tests_properties(dedicated_server_quic PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"code\":\"ready\".*\"code\":\"listening\".*\"code\":\"stopped\"")
-    # A port one server holds is refused to a second, not shared (D470).
+    # A port one server holds is refused to a second, not shared.
     add_test(NAME dedicated_server_port_taken
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/taken.sh $<TARGET_FILE:rawframe_host_dedicated_server>
              WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})

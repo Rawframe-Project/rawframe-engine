@@ -2,25 +2,3 @@
 # areas whose source comments still cite records of the old documentation.
 # Each comment cleanup removes its area's line; the list ends with third_party.
 third_party
-hosts/android_client
-hosts/animation_tool
-hosts/arena
-hosts/author
-hosts/bake
-hosts/bots
-hosts/build
-hosts/client
-hosts/cook
-hosts/debug
-hosts/dedicated_server
-hosts/export
-hosts/import
-hosts/ios_client
-hosts/scene_tool
-hosts/studio
-hosts/thumbnail
-hosts/web_client
-launcher/http
-launcher/install
-launcher/play
-tools

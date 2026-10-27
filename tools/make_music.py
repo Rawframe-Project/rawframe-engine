@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Writes Runners' music (D629): eight bars at 120 beats a minute, sixteen
+# Writes Runners' music: eight bars at 120 beats a minute, sixteen
 # seconds, made here from nothing but sines, triangles, and noise, so the
 # game carries no one else's recording. A minor's progression (A minor, F,
 # C, G, twice) as a pad, a bass on each beat, an arpeggio in eighths, and a

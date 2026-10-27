@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A scatter edited in a session (D865), headless: its count and seed set
+# A scatter edited in a session, headless: its count and seed set
 # line by line and written; a count past its limit and a layer with no
 # terrain refused by the scatter's reader with the file untouched; and the
 # change undone back to the file's very bytes.
@@ -10,7 +10,7 @@ set -euo pipefail
 author=$1
 repository=$2
 # Paths as the programs under test read them: Git's bash on Windows names
-# D:/a as /d/a, which only its own tools understand (D237).
+# D:/a as /d/a, which only its own tools understand.
 native() {
     if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }

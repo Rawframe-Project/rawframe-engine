@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Drops files on a window as a file manager does (D802), by XDND 5 over the
+# Drops files on a window as a file manager does, by XDND 5 over the
 # X server the tests run: a source window of its own offers text/uri-list,
 # enters the window under the point, moves there, and drops once the window
 # says it takes the drop; the window then asks for the list, which is given

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# A game's material instance authored in a session (D721), over a copy of
+# A game's material instance authored in a session, over a copy of
 # Gale's shore and the rock it is an instance of: the instance read whole
 # with its base's interface, its tint changed and a texture override made
 # by one atomic request, written to the file in its canonical form; undone
 # back to its very bytes and redone; its last override unset, an input not
 # named as Kest names are, and a scene's operation refused with the file
 # untouched; and its history listed. The rock, a material graph, authored
-# too (D728): read whole, its surface's roughness set and undone to its
+# too: read whole, its surface's roughness set and undone to its
 # very bytes, and an instance's operation refused.
 #
 # usage: author_material.sh <rawframe-author> <repository> <work directory>

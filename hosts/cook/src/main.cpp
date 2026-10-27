@@ -1,7 +1,7 @@
-// The cook tool (ADR-0024): cooks every sidecar-identified source under a
+// The cook tool: cooks every sidecar-identified source under a
 // directory into content-addressed artifacts, a content manifest, and a
 // receipt; or, asked to map, gives each subasset a source holds and its
-// sidecar does not map a new random identity, and writes the sidecar (D316).
+// sidecar does not map a new random identity, and writes the sidecar.
 // Import tooling, run by an author or by CI; never part of a client or a
 // server.
 //
@@ -11,15 +11,15 @@
 // Each source is told on standard output as it is begun
 // (`cooking <n>/<count> <source>`), so a caller shows how far it is; a stop
 // request (SIGTERM, or Ctrl+Break on Windows) stops the cook before the next
-// source, publishing nothing, and it ends with 3 (SPEC-0040's long-running
-// operations, D502).
+// source, publishing nothing, and it ends with 3 (the long-running
+// operations).
 //
 // A material whose graph the blob cannot fold is built with the shader
-// toolchain (D484): the engine's tools/gen_shaders.py run by the python3 on
+// toolchain: the engine's tools/gen_shaders.py run by the python3 on
 // the path (`python` or `py` on Windows), with the pinned Slang compiler
 // RAWFRAME_SLANGC names or the slangc on the path, and dxc, spirv-cross,
 // spirv-val, spirv-dis and spirv-as on the path; or the toolchain Studio's
-// package lays beside this tool in `shader-tools` (D945). Without them such
+// package lays beside this tool in `shader-tools`. Without them such
 // a material is refused, and every other source cooks as before.
 
 #include "rawframe/host/main.h"
@@ -78,7 +78,7 @@ void print(const rawframe::result::Error& error) {
 }
 
 /// A new random identity, its first half never nought: a game knows a
-/// subasset by it (D314).
+/// subasset by it.
 rawframe::content::ResourceId freshIdentity() {
     static std::random_device device;
     const auto kWord = [] {
@@ -119,7 +119,7 @@ std::filesystem::path onPath(std::string_view name) {
 }
 
 /// The program `name` in the `bin` of a toolchain packaged beside this
-/// tool (D945); an empty path for none.
+/// tool; an empty path for none.
 std::filesystem::path packagedTool(const std::filesystem::path& packaged, std::string_view name) {
 #if defined(_WIN32)
     const std::filesystem::path kBeside = packaged / "bin" / (std::string{name} + ".exe");
@@ -130,13 +130,13 @@ std::filesystem::path packagedTool(const std::filesystem::path& packaged, std::s
     return std::filesystem::is_regular_file(kBeside, error) ? kBeside : std::filesystem::path{};
 }
 
-/// The shader toolchain where all of it is found (D484), its identity the
+/// The shader toolchain where all of it is found, its identity the
 /// digest of every file it runs or reads: the generator, Maul RHI's tools
 /// and the contract its container writer reads, the scene's Slang sources, the Slang compiler with its libraries, dxc,
 /// spirv-cross, spirv-val, spirv-dis, and spirv-as; none where any is
 /// missing. A
 /// toolchain packaged beside this tool (`shader-tools`, as Studio's package
-/// lays one out, D945) is taken first: the generator and the sources under
+/// lays one out) is taken first: the generator and the sources under
 /// it as in the engine's tree, the programs in its `bin`; else the engine
 /// tree's generator this tool was built from, and the programs on the path
 /// (the Slang compiler where RAWFRAME_SLANGC names it, unless the package
@@ -209,7 +209,7 @@ std::optional<rawframe::cook::ShaderTools> shaderTools(const std::optional<std::
     // time last written, so a cook digests the toolchain (hundreds of
     // megabytes: Slang's and dxc's libraries, 16 s on the Windows test
     // machine) only when a file of it changed; one changed with its size
-    // and time kept is missed, as a compiler cache misses it (D947).
+    // and time kept is missed, as a compiler cache misses it.
     rawframe::base::Sha256 stamped;
     for (const fs::path& kFile : files) {
         const auto kSize = fs::file_size(kFile, failed);
@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
     const std::vector<rawframe::cook::Importer> kImporters = rawframe::cook::engineImporters(
         shaderTools(!kMap && argc == 4 ? std::optional<std::filesystem::path>{argv[3]} : std::nullopt));
     if (kMap) {
-        // One source alone where named (D536), its path under the sources.
+        // One source alone where named, its path under the sources.
         const auto kReport = rawframe::cook::mapSubassets(
             argv[2], kImporters, &freshIdentity, argc == 4 ? std::optional<std::string>{argv[3]} : std::nullopt);
         if (!kReport.has_value()) {

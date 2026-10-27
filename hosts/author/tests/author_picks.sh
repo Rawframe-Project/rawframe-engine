@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# What a ray meets in a running World, and where it was authored (D456): a
+# What a ray meets in a running World, and where it was authored: a
 # dedicated server plays the plaza with its tooling endpoint, and a ray cast
 # from in front of the gate's post at it names the post and its id in the
 # gate scene; a ray up into the sky meets nothing; and a pick out of form

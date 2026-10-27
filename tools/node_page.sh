@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs a test page under Node and ends with the page's verdict, the line
 # `page: passed` or `page: failed` it writes last (verdict.mjs). Node 24 has
-# been seen to hang in its own teardown after a page had passed (D238): a
+# been seen to hang in its own teardown after a page had passed: a
 # Node still running five seconds after its page's verdict is killed, and
 # says so, and the verdict stands. A page that writes none in two minutes
 # fails.
@@ -32,7 +32,7 @@ fi
 if kill -0 "$node" 2>/dev/null; then
     kill -KILL "$node"
     if [ "$verdict_seen" = 1 ]; then
-        echo "node_page: Node did not exit after the page's verdict, and was killed (D238)" >>"$log"
+        echo "node_page: Node did not exit after the page's verdict, and was killed" >>"$log"
     else
         echo "node_page: the page wrote no verdict in two minutes" >>"$log"
     fi

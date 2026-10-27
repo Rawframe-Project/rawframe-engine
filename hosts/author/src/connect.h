@@ -1,6 +1,6 @@
 #pragma once
 
-// `rawframe-author connect` (D408): a client of a running Runtime's tooling
+// `rawframe-author connect`: a client of a running Runtime's tooling
 // endpoint, over authoring_session's link.
 
 namespace rawframe::author {

@@ -1,4 +1,4 @@
-// The sound import tool (ADR-0058): reads a WAVE, Ogg Vorbis, or MP3 source
+// The sound import tool: reads a WAVE, Ogg Vorbis, or MP3 source
 // and writes it cooked: in the short-form tier to a `.wav` file, or as
 // cooked Opus to a `.rfopus` file. Import tooling, run by an author on their
 // own files; never part of a client or a server.
