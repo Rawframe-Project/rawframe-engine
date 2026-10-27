@@ -27,7 +27,7 @@ A test reached by a change is one whose module or host is changed, or depends on
 
 The tests of every tier run under `tools/reap.py`, which on Linux takes over any process a test leaves behind as the test ends. A server, client or helper still running a minute after its test ended, or ten seconds after the last test, is killed by its pid and named, and the check fails: a stopped server ignores stop signals while its leak check runs, so one stuck there would otherwise outlive the run.
 
-The documentation check skips the paths in `tools/docs-check-exclude.txt`: vendored code, and the areas whose source comments still cite records of the old documentation. The list shrinks as those comments are rewritten; it ends with `third_party` alone.
+The documentation check skips the paths in `tools/docs-check-exclude.txt`: `third_party` alone, the vendored code, which follows its upstream's own documentation.
 
 ## In CI
 
