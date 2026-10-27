@@ -78,7 +78,7 @@ std::array<Vector, 3> axesOf(const SceneCamera& camera) noexcept {
 CameraMatrices matricesOf(const SceneCamera& camera) noexcept {
     const auto [kRight, kUp, kForward] = axesOf(camera);
     const float kFocal = 1 / std::tan(camera.fovY / 2);
-    // Reversed-Z with the far plane at infinity (ADR-0051): clip z is the
+    // Reversed-Z with the far plane at infinity: clip z is the
     // near distance and w the distance ahead, so depth is one at the near
     // plane and falls toward nought.
     return CameraMatrices{.view = Matrix{kRight[0],

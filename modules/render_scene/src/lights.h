@@ -9,7 +9,7 @@
 
 namespace rawframe::render_scene {
 
-/// A model a punctual light's shadow may take (D292): its draw, and its
+/// A model a punctual light's shadow may take: its draw, and its
 /// bounding sphere relative to the eye.
 struct ShadowCandidate {
     SceneDraw draw;
@@ -17,7 +17,7 @@ struct ShadowCandidate {
     float radius = 0;
 };
 
-/// The view stage's lights (ADR-0051, D290): each punctual light that
+/// The view stage's lights: each punctual light that
 /// lights something and reaches the view, in the order of its entity, into
 /// `frame.lights3d`, and into `named` for every cluster its sphere may
 /// reach; the rest counted. `shadowed` says which kept light asks for
@@ -31,7 +31,7 @@ void clusterLights(SceneFrame& frame,
                    std::vector<bool>& shadowed,
                    std::vector<ClusterName>& named);
 
-/// The punctual lights' shadows (D292). Those that ask, by how much of the
+/// The punctual lights' shadows. Those that ask, by how much of the
 /// view they may cover (their range over their distance, at most one),
 /// ties in their order, each granted squares of the side that cover earns
 /// (the largest from a half, halving as the cover halves) or smaller where

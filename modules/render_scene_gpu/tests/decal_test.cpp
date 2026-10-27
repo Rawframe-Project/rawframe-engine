@@ -1,8 +1,8 @@
-// The decals on lavapipe (D339): a decal thrown onto an unlit white box's
+// The decals on lavapipe: a decal thrown onto an unlit white box's
 // face shows its texture there the right way round, green on its left and
 // blue on its right, and the face around it stays white. A decal's normal
 // texture turns a lit face toward its right where it lies, to a sun there,
-// and its roughness spreads a smooth metal's highlight there (D342).
+// and its roughness spreads a smooth metal's highlight there.
 
 #include "fixture.h"
 #include "rawframe/render/frame.h"

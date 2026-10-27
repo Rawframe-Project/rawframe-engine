@@ -1,8 +1,8 @@
-// modules/material/tests/seeds/faded.material written by hand (ADR-0026,
-// D490): the base texture's color faded by its own alpha, its roughness
+// modules/material/tests/seeds/faded.material written by hand:
+// the base texture's color faded by its own alpha, its roughness
 // that alpha, lit; the rest at the Surface's defaults. faded_graph.slang is
-// what rawframe.material writes from that graph (D483), and the two are
-// built by tools/gen_shaders.py alike, as the cook builds a game's (D484).
+// what rawframe.material writes from that graph, and the two are
+// built by tools/gen_shaders.py alike, as the cook builds a game's.
 import material;
 
 struct Faded : IMaterial

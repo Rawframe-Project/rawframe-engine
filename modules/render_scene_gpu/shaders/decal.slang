@@ -1,4 +1,4 @@
-// The decals' atlas (ADR-0051, D339), in Slang (ADR-0026, D475): a decal's
+// The decals' atlas, in Slang: a decal's
 // texture drawn into one mip of its layer by one triangle covering it,
 // sampled at the texture's own mip nearest that size (the triangle's
 // coordinates step one target texel a pixel), filtered between its mips.

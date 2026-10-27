@@ -1,8 +1,8 @@
-// A material written by hand for the scene's tests (ADR-0026, D485): a
+// A material written by hand for the scene's tests: a
 // checkerboard of eight cells across the mesh's first coordinates, red and
 // green, standing unlit as it is; the red cells clear, so a masked model
-// of it is cut there (D487). tools/gen_shaders.py builds the scene
-// with it as the cook builds a game's program material (D484), so the
+// of it is cut there. tools/gen_shaders.py builds the scene
+// with it as the cook builds a game's program material, so the
 // renderer's program path is tested on what a game would give it.
 import material;
 

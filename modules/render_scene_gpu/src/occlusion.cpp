@@ -41,7 +41,7 @@ result::Status OcclusionPass::declare(const render_scene::SceneFrame& frame,
     if (!enabled_) {
         return {};
     }
-    // The near plane, where the projection keeps it (reversed-Z, D284).
+    // The near plane, where the projection keeps it (reversed-Z).
     block_ = OcclusionBlock{.toPoint = inverseOf(block.viewProjection),
                             .viewProjection = block.viewProjection,
                             .settings = {frame.occlusion.radius, frame.occlusion.intensity, frame.projection[14], 0}};

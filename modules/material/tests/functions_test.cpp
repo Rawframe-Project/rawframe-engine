@@ -1,4 +1,4 @@
-// The engine's functions (D711): each standard subgraph reads and checks,
+// The engine's functions: each standard subgraph reads and checks,
 // a surface calls them, each call written in the material's code with its
 // inputs given, defaulted, or streamed, and what a function document or a
 // call may not say is refused.

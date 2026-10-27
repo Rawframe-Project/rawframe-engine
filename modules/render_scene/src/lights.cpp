@@ -139,7 +139,7 @@ void clusterLights(SceneFrame& frame,
             continue;
         }
         const Vector kColor = colorOf(kLight.color);
-        // Lumens to candela (ADR-0051): over the sphere for a point,
+        // Lumens to candela: over the sphere for a point,
         // over π for a spot.
         const float kCandela =
             kLight.lumens / (instance->spot ? std::numbers::pi_v<float> : 4 * std::numbers::pi_v<float>);

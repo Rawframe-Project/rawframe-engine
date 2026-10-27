@@ -21,7 +21,7 @@ using Point = std::array<double, 3>;
 /// mark's gizmo.
 constexpr float kWidth = 1.0F / 180;
 constexpr std::size_t kPieces = 16;
-/// A body's lines by what it is (D839): a dynamic body moving, one at
+/// A body's lines by what it is: a dynamic body moving, one at
 /// rest (its replicated velocity under a few centimeters a second), a
 /// kinematic one, a static one, and a sensor.
 constexpr std::array<float, 4> kSolid{0.2F, 1, 0.3F, 1};
@@ -31,7 +31,7 @@ constexpr std::array<float, 4> kStatic{0.6F, 0.6F, 0.55F, 1};
 constexpr std::array<float, 4> kSensor{0.2F, 0.9F, 1, 1};
 constexpr float kRestingSpeed = 0.02F;
 /// A body touching another, where its contacts replicate, and its hardest
-/// hit's normal, drawn this long from its place (D845).
+/// hit's normal, drawn this long from its place.
 constexpr std::array<float, 4> kTouching{1, 0.55F, 0.1F, 1};
 constexpr double kHitLength = 0.5;
 constexpr std::array<float, 4> kLit{1, 0.85F, 0.2F, 1};
@@ -69,7 +69,7 @@ std::array<float, 4> colliderColor(const physics3d::Body3D& body,
     if (body.sensor) {
         return kSensor;
     }
-    // Touching something, where the game replicates its contacts (D845).
+    // Touching something, where the game replicates its contacts.
     if (contact.has_value() && contact->touching > 0) {
         return kTouching;
     }
@@ -210,7 +210,7 @@ void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines) {
 
 namespace {
 
-/// The ground's grid an editor shows (D914), on the plane where Y is
+/// The ground's grid an editor shows, on the plane where Y is
 /// nought, a hair above it so a floor there does not hide it: a line a
 /// meter, brighter every ten, about the point under the eye, as far out
 /// as the eye is high and at least forty meters; the X axis red and the Z
@@ -274,7 +274,7 @@ void drawOverlays(world::World& world,
         }
         if (bodies.has_value()) {
             // Each body's velocity where it has one, to say whether it rests,
-            // and its contacts where the game replicates them (D845).
+            // and its contacts where the game replicates them.
             const auto kVelocity = world.registry().key<physics3d::Velocity3D>();
             const auto kContact = world.registry().key<physics3d::Contact3D>();
             bodies->forEachChunk(world, [&](const world::ColumnChunk& chunk) {

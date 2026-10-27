@@ -53,7 +53,7 @@ result::Status DepthOfFieldPass::declare(const render_scene::SceneFrame& frame,
                        static_cast<float>(height) / (2 * kSensorHeight);
     // The longest blur reaches a fortieth of the target's height.
     const float kLongest = std::max(4.0F, static_cast<float>(height) / 40);
-    // The near plane, where the projection keeps it (reversed-Z, D284).
+    // The near plane, where the projection keeps it (reversed-Z).
     block_ = LensBlock{.settings = {kFar, frame.depthOfField.focus, frame.projection[14], kLongest}};
     for (const auto& [kWidth, kHeight, kMade] : {std::tuple{(width + 1) / 2, (height + 1) / 2, &halved_},
                                                  std::tuple{(width + 1) / 2, (height + 1) / 2, &bokeh_},

@@ -1,5 +1,5 @@
-// ADR-0047's output modes resolved against a window's HDR capability
-// record (ADR-0052, D365): the mode asked for used only where the surface
+// The output modes resolved against a window's HDR capability
+// record: the mode asked for used only where the surface
 // offers it, the display's HDR output is on, and the engine draws it;
 // otherwise SDR, with why; and the reference white the platform's where it
 // tells one.
@@ -47,7 +47,7 @@ RAWFRAME_TEST(AnOutputModeIsUsedOnlyWhereItCanBe) {
     auto moved = kUsed;
     moved.display.sdrWhiteNits = 300;
     RAWFRAME_EXPECT(revised.sameAs(kUsed) && !moved.sameAs(kUsed));
-    // Named as ADR-0047 names them.
+    // Named as the output modes are named.
     RAWFRAME_EXPECT(render::outputModeNamed("hdr10_pq_rec2020") == OutputMode::Hdr10PqRec2020 &&
                     render::nameOf(OutputMode::HdrLinearFp16Rec709) == "hdr_linear_fp16_rec709" &&
                     !render::outputModeNamed("scRGB").has_value());

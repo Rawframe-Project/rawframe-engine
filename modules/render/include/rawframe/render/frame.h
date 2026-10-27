@@ -1,10 +1,10 @@
 #pragma once
 
-// SPEC-0024's frame, owned by the device's module (D285): one frame a Host
+// The frame, owned by the device's module: one frame a Host
 // iteration, which every bridge (the scene, the canvas) records into, then
 // submitted and displayed once. The frame begins, the view's picture is
 // declared, and each recorder declares its resources and passes in its
-// order (SPEC-0024's per-view composition: the scene, then the canvas);
+// order (the per-view composition: the scene, then the canvas);
 // the picture is shown on a window's surface or read back; the frame
 // compiles, each recorder records what it declared, and the frame is
 // submitted. One frame is on the GPU at a time: a frame asked for while
@@ -27,10 +27,10 @@
 
 namespace rawframe::render {
 
-/// The most passes one frame times on the GPU (D894).
+/// The most passes one frame times on the GPU.
 inline constexpr std::size_t kMostTimedPasses = 64;
 
-/// The open frame as a recorder sees it (SPEC-0024's `record`).
+/// The open frame as a recorder sees it (the `record`).
 struct Frame {
     Device* device = nullptr;
     /// The view's size in pixels.
@@ -49,14 +49,13 @@ struct Frame {
     bool drawn = false;
     /// What drew into the picture first, under all after it, told by the
     /// recorder `clearsPicture` answered true if it cares: the canvas's
-    /// local players learn from it whether theirs is the views' ground
-    /// (D369).
+    /// local players learn from it whether theirs is the views' ground.
     const void* ground = nullptr;
     /// What covers each image the target names (`FrameTarget::images`), in
     /// their order, as a recorder tells it while it declares: a texture of
     /// the frame drawn over `viewport` (left, top, width, height in the
     /// image's pixels, as far past its edges as it reaches), a headset's
-    /// eye drawn from its own pose (D595). An image nothing covers gets the
+    /// eye drawn from its own pose. An image nothing covers gets the
     /// picture placed whole.
     struct Cover {
         std::uint64_t picture = 0;
@@ -64,7 +63,7 @@ struct Frame {
     };
     std::vector<std::optional<Cover>> covers;
     /// Where the target shows the UI apart (`FrameTarget::panel`, a
-    /// headset's panel, D597): a texture of the frame of the panel's size,
+    /// headset's panel): a texture of the frame of the panel's size,
     /// clear where nothing is drawn, which the UI draws into instead of
     /// the picture and which is placed into the panel's image; 0 for none.
     std::uint64_t panel = 0;
@@ -75,8 +74,8 @@ struct Frame {
         return !std::exchange(panelDrawn, true);
     }
     bool panelDrawn = false;
-    /// Each of the target's asides (`FrameTarget::asides`, in their order,
-    /// D988): its window, a texture of the frame of its size (RGBA8 sRGB,
+    /// Each of the target's asides (`FrameTarget::asides`, in their
+    /// order): its window, a texture of the frame of its size (RGBA8 sRGB,
     /// as the picture) which is shown on its surface, black where nothing
     /// is drawn; and whether a pass drew in it, which the first to draw
     /// asks as the picture's (`clearsAside`).
@@ -91,7 +90,7 @@ struct Frame {
     [[nodiscard]] bool clearsAside(std::size_t at) noexcept {
         return at < asides.size() && !std::exchange(asides[at].drawn, true);
     }
-    /// The frame's timestamps (D894): a query set named as `requestKey`
+    /// The frame's timestamps: a query set named as `requestKey`
     /// names ids, 0 where the frame does not time its passes; and the
     /// passes timed, by name, in their order. `time`, asked as a graphics
     /// pass is declared, gives the query its start is written to, its end
@@ -102,14 +101,14 @@ struct Frame {
     [[nodiscard]] std::optional<std::uint32_t> time(std::string_view pass);
 };
 
-/// A pass of a frame as the GPU timed it, from its start to its end (D894).
+/// A pass of a frame as the GPU timed it, from its start to its end.
 struct PassTime {
     std::string pass;
     std::uint64_t nanoseconds = 0;
 };
 
 /// An 8-bit sRGB channel in linear light, what a pass clearing an sRGB
-/// target to that color is given (a constrained view's bars, D369).
+/// target to that color is given (a constrained view's bars).
 [[nodiscard]] float linearOf(std::uint8_t encoded) noexcept;
 
 /// A bridge's part of each frame (the scene's, the canvas's).
@@ -142,16 +141,16 @@ struct FrameTarget {
     /// shows.
     std::optional<std::uint64_t> surface;
     /// Adopted images (`Device::adopt`) the picture is placed into, each
-    /// whole, scaled to it: an OpenXR session's views (D592).
+    /// whole, scaled to it: an OpenXR session's views.
     std::vector<std::uint64_t> images;
     /// Of `images`, the one the UI is shown in apart, at its own size
-    /// (`Frame::panel`): a headset's panel (D597).
+    /// (`Frame::panel`): a headset's panel.
     std::optional<std::size_t> panel;
     /// Whether its passes are timed on the GPU, where the device writes
-    /// timestamps (D894): an editor's preview asks.
+    /// timestamps: an editor's preview asks.
     bool timed = false;
-    /// Windows beside the one shown, where an editor shows a panel apart
-    /// (D988): each one's prepared surface, its size in pixels, and which
+    /// Windows beside the one shown, where an editor shows a panel apart:
+    /// each one's prepared surface, its size in pixels, and which
     /// window it is (`window::WindowId`'s value). The UI draws each one's
     /// own in its texture (`Frame::asides`), which is shown there.
     struct Aside {
@@ -204,7 +203,7 @@ public:
     [[nodiscard]] std::optional<std::vector<std::byte>> pixels();
     /// The passes of the last frame timed, as the GPU timed them, once it
     /// is done; those of the frame before until then, and none before the
-    /// first (D894).
+    /// first.
     [[nodiscard]] std::span<const PassTime> passTimes() const noexcept;
 
     [[nodiscard]] const FramerStatistics& statistics() const noexcept;
@@ -219,14 +218,14 @@ private:
 /// The frames as the bridges reach them (`rawframe.render.frames`): the
 /// frame participant plans one at the start of each `present` and makes it
 /// once every recorder that joined is ready.
-/// The longest a window that nothing changes in goes undrawn (D494).
+/// The longest a window that nothing changes in goes undrawn.
 inline constexpr execution::MonotonicDuration kLongestUnchanged = execution::MonotonicDuration::fromMilliseconds(250);
 
 /// Whether the platform keeps a window's last picture while another
 /// covers it, as a compositor that always runs does: Windows, Apple's
 /// systems, Android, and a browser. There an unchanged window is never
 /// drawn again for its age; a Linux desktop may run none, so there it is
-/// after `kLongestUnchanged` (D952). On a device that draws on the
+/// after `kLongestUnchanged`. On a device that draws on the
 /// processor, an idle editor redrawn four times a second took four cores.
 #if defined(_WIN32) || defined(__APPLE__) || defined(__ANDROID__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
 inline constexpr bool kWindowsKeepTheirPictures = true;
@@ -234,7 +233,7 @@ inline constexpr bool kWindowsKeepTheirPictures = true;
 inline constexpr bool kWindowsKeepTheirPictures = false;
 #endif
 
-/// How the last frame done kept up with the device (D533), as the frames
+/// How the last frame done kept up with the device, as the frames
 /// saw it from Host iterations: from its submission, it certainly took
 /// until the last iteration that found it running, and at most until the
 /// first that found it done. Its budget is `render.frame_rate`'s period, a
@@ -263,13 +262,13 @@ public:
     /// The size of the planned frame's panel, where it shows the UI apart
     /// (`Frame::panel`): the UI is laid out at it. None for none.
     [[nodiscard]] virtual std::optional<std::pair<std::uint32_t, std::uint32_t>> plannedPanel() const noexcept = 0;
-    /// The planned frame's asides (`FrameTarget::asides`, D988): the
+    /// The planned frame's asides (`FrameTarget::asides`): the
     /// windows beside the one shown, each one's UI laid out at its size.
     /// None where none is planned.
     [[nodiscard]] virtual std::span<const FrameTarget::Aside> plannedAsides() const noexcept = 0;
     /// Joins every frame from the next ready on, recorded in `order`'s
     /// order: the scene is 0, the canvas 1, and the scene's post processes
-    /// over the composed picture 2 (D351).
+    /// over the composed picture 2.
     virtual void join(FrameRecorder& recorder, std::uint32_t order) = 0;
     /// Leaves the frames, before the recorder ends.
     virtual void leave(FrameRecorder& recorder) noexcept = 0;
@@ -277,8 +276,8 @@ public:
     /// has nothing: once every one that joined is ready, the frame is made.
     virtual void ready(FrameRecorder& recorder) noexcept = 0;
     /// Ready, and what it prepared draws what it drew in the last frame
-    /// made (D494). A frame every recorder says so of, as large as the
-    /// last, read back by no one but the stream (D952), is not made, so a
+    /// made. A frame every recorder says so of, as large as the
+    /// last, read back by no one but the stream, is not made, so a
     /// window nothing changes in is not drawn again; where windows may lose
     /// their pictures (`kWindowsKeepTheirPictures`), one is all the same at
     /// least every `kLongestUnchanged`, so what a window lost while covered
@@ -286,10 +285,10 @@ public:
     virtual void unchanged(FrameRecorder& recorder) noexcept = 0;
     /// How the last frame done kept up with the device.
     [[nodiscard]] virtual FramePace pace() const noexcept = 0;
-    /// Times the passes of every frame from the next on, or no longer
-    /// (D894): an editor's preview asks while it looks.
+    /// Times the passes of every frame from the next on, or no longer:
+    /// an editor's preview asks while it looks.
     virtual void timePasses(bool timed) noexcept = 0;
-    /// The passes of the last frame timed, as the GPU timed them (D894).
+    /// The passes of the last frame timed, as the GPU timed them.
     [[nodiscard]] virtual std::span<const PassTime> passTimes() const noexcept = 0;
 };
 

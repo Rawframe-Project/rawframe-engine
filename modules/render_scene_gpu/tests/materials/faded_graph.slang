@@ -1,4 +1,4 @@
-// A surface material written by rawframe.material (D483); generated, never edited.
+// A surface material written by rawframe.material; generated, never edited.
 import material;
 
 struct Generated : IMaterial

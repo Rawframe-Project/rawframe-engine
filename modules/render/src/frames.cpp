@@ -38,9 +38,9 @@ bool readable(std::uint32_t width, std::uint32_t height) noexcept {
     return (kPitch * height + 511) / 512 * 512 <= kReadbackBytes;
 }
 
-/// Why a Host stops whose frames failed (D538).
+/// Why a Host stops whose frames failed.
 constexpr std::string_view kPresentationFailed = "presentation_failed";
-/// A frame's budget where `render.frame_rate` sets none (D533).
+/// A frame's budget where `render.frame_rate` sets none.
 constexpr execution::MonotonicDuration kSixtieth{1'000'000'000 / 60};
 constexpr std::string_view kMaybe[] = {kDevice.name, window::kSurfaces.name, kHeadset.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
@@ -74,7 +74,7 @@ std::uint64_t colorsOf(const std::vector<std::byte>& pixels) {
     return colors.size();
 }
 
-/// Owns the frames (D285): at the start of each `present` it plans the
+/// Owns the frames: at the start of each `present` it plans the
 /// Host iteration's frame, at the first window's size where the process
 /// has windows, else offscreen when asked; the bridges that joined prepare
 /// their parts and say they are ready, and the last makes the frame. Some
@@ -118,7 +118,7 @@ public:
         if (!context.has(kDevice.name)) {
             return {};
         }
-        // A headset that answered is drawn for (D593), with or without a
+        // A headset that answered is drawn for, with or without a
         // window.
         if (context.has(kHeadset.name)) {
             RAWFRAME_TRY_ASSIGN(headset_, context.capability(kHeadset));
@@ -127,7 +127,7 @@ public:
             }
         }
         // Asked offscreen, it draws offscreen with a window too: a window
-        // an editor keeps hidden while it shows the stream (D789).
+        // an editor keeps hidden while it shows the stream.
         if (context.has(window::kSurfaces.name) && kOffscreen != "true") {
             RAWFRAME_TRY_ASSIGN(windows_, context.capability(window::kSurfaces));
         } else if (kOffscreen != "true" && headset_ == nullptr) {
@@ -160,9 +160,9 @@ public:
             return;
         }
         // How the last frame keeps up with the device, seen in every
-        // iteration, the frame limit's too (D533).
+        // iteration, the frame limit's too.
         watchPace();
-        // Not sooner than the frame limit allows after the last (D495).
+        // Not sooner than the frame limit allows after the last.
         if (framePeriod_.has_value() && madeAt_.has_value() && now_ - *madeAt_ < *framePeriod_) {
             ++framesLimited_;
             return;
@@ -209,7 +209,7 @@ public:
                 return;
             }
             // Each window beside it that shows something, where an editor
-            // shows a panel apart (D988): drawn with the picture.
+            // shows a panel apart: drawn with the picture.
             for (std::size_t at = 1; at < windows_->states().size(); ++at) {
                 const window::WindowId kWindow = windows_->states()[at].window;
                 const auto kAside = devices_->prepare(kWindow);
@@ -229,8 +229,7 @@ public:
             if (std::optional<Headset::Views> views = headset_->views(*device); views.has_value()) {
                 headsetOpen_ = true;
                 target_.images = std::move(views->images);
-                // Its panel, the last image, where it shows the UI apart
-                // (D597).
+                // Its panel, the last image, where it shows the UI apart.
                 if (const std::optional<window::PixelSize> kPanel = views->panel && !target_.images.empty()
                                                                         ? device->adoptedSize(target_.images.back())
                                                                         : std::nullopt;
@@ -249,7 +248,7 @@ public:
         }
         // A picture past what the device keeps for readbacks is not read
         // back: asked anyway, it failed the frame, and no frame was made
-        // again, so a window put on a 4K screen froze (D534).
+        // again, so a window put on a 4K screen froze.
         if (target_.readBack && !readable(target_.width, target_.height)) {
             target_.readBack = false;
             ++readBacksTooLarge_;
@@ -368,11 +367,11 @@ public:
             return;
         }
         made_ = true;
-        // What the last frame made shows still, and it is not old (D494).
+        // What the last frame made shows still, and it is not old.
         // Never for a headset, whose images are others each frame, nor for
         // a picture read back to be kept or counted; one read back for the
         // stream alone has been streamed already, however old, as no window
-        // of its own shows it to be drawn again (D952): a device too slow
+        // of its own shows it to be drawn again: a device too slow
         // to draw four frames a second never skipped one.
         const bool kReadForStream = stream_.has_value() && !capture_.has_value();
         if (madeAt_.has_value() &&
@@ -449,7 +448,7 @@ private:
         headsetFrames_ += drawn ? 1U : 0U;
     }
 
-    /// The last frame submitted, found running or done (D533): from its
+    /// The last frame submitted, found running or done: from its
     /// submission on the clock, not the iteration's start, so what the
     /// iteration did before it is not counted as the device's.
     void watchPace() noexcept {
@@ -482,7 +481,7 @@ private:
             // A frame of one color, the target as cleared (a stopping
             // host's last, once what drew in it has stopped), does not take
             // the capture's place.
-            // Streamed whole to whoever shows it (D789): written apart, then
+            // Streamed whole to whoever shows it: written apart, then
             // put in the stream's place, so a reader never meets half of
             // one.
             if (stream_.has_value()) {
@@ -498,7 +497,7 @@ private:
 
     void stream(const std::vector<std::byte>& pixels) {
 #if RAWFRAME_FILE_SYSTEM
-        // Into the one file, written in place (D967).
+        // Into the one file, written in place.
         if (!streamWriter_.has_value()) {
             streamWriter_.emplace(*stream_);
         }
@@ -526,8 +525,8 @@ private:
             "a frame could not be made: no more are",
             {diagnostics::field("reason", std::string{error.description()}), diagnostics::field("detail", detail)});
         // A window that no longer changes while its game goes on is a freeze
-        // to its player: the Host stops instead, as SPEC-0024 has a lost
-        // device's client do, and says why (D538).
+        // to its player: the Host stops instead, as a client with a lost
+        // device does, and says why.
         if (context_ != nullptr) {
             context_->reportHealth(composition::Health::Unhealthy, kPresentationFailed);
         }
@@ -535,7 +534,7 @@ private:
 
     DeviceHolder* devices_ = nullptr;
     window::Surfaces* windows_ = nullptr;
-    /// The headset drawn for, where one answered (D593), and whether its
+    /// The headset drawn for, where one answered, and whether its
     /// frame is begun for this iteration's plan.
     Headset* headset_ = nullptr;
     bool headsetOpen_ = false;
@@ -555,7 +554,7 @@ private:
     std::optional<std::pair<std::uint32_t, std::uint32_t>> planned_;
     std::optional<std::pair<std::uint32_t, std::uint32_t>> plannedPanel_;
     FrameTarget target_;
-    /// Whether its frames' passes are timed (D894).
+    /// Whether its frames' passes are timed.
     bool timed_ = false;
     bool made_ = false;
     bool failed_ = false;
@@ -564,7 +563,7 @@ private:
     std::uint64_t readEvery_ = 60;
     std::optional<std::string> capture_;
     /// Where each picture read back is streamed, how many were, and how
-    /// many could not be (D789).
+    /// many could not be.
     std::optional<std::string> stream_;
 #if RAWFRAME_FILE_SYSTEM
     std::optional<PictureStreamWriter> streamWriter_;
@@ -574,7 +573,7 @@ private:
     /// The last frame read back, kept for the capture.
     std::optional<std::vector<std::byte>> last_;
     std::uint32_t lastWidth_ = 0;
-    /// The last frame made's asides, each window and its size (D988): one
+    /// The last frame made's asides, each window and its size: one
     /// opened, closed, or resized since is drawn.
     std::vector<std::array<std::uint64_t, 3>> lastAsides_;
     [[nodiscard]] bool sameAsides() const {
@@ -589,7 +588,7 @@ private:
     std::uint32_t capturedHeight_ = 0;
     std::uint64_t submitted_ = 0;
     /// When the last frame was submitted and last found running, on the
-    /// process's clock (D533).
+    /// process's clock.
     execution::SteadyClock clock_;
     execution::MonotonicInstant submittedAt_;
     std::optional<execution::MonotonicInstant> runningAt_;
@@ -606,7 +605,7 @@ private:
     std::uint64_t mostCovered_ = 0;
     std::uint64_t lastColors_ = 0;
     /// The most any read-back picture had, so a run whose last picture is
-    /// a camera against a wall still says what it drew (D433a).
+    /// a camera against a wall still says what it drew.
     std::uint64_t mostColors_ = 0;
     diagnostics::Emitter emitter_;
     composition::ParticipantContext* context_ = nullptr;

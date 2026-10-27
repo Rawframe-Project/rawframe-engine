@@ -1,4 +1,4 @@
-// Centered metering on lavapipe (D345): a sunlit white box in the middle
+// Centered metering on lavapipe: a sunlit white box in the middle
 // of a dim sky. Every pixel counted alike, the box's few bright ones fall
 // in the brightest tenth left out and the sky sets the exposure; with the
 // middle counting more, the box does, and the sky shows darker.

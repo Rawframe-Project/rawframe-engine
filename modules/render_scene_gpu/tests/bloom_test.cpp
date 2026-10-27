@@ -1,4 +1,4 @@
-// The bloom on lavapipe (D328): a small, very bright glowing box in the
+// The bloom on lavapipe: a small, very bright glowing box in the
 // dark spreads light around itself with the bloom, where without it the
 // dark stays dark; the more the camera asks, the more it spreads.
 

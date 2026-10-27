@@ -1,5 +1,5 @@
-// The multisampled depth's resolve (ADR-0051, D343), in Slang (ADR-0026,
-// D475): each texel's first sample's depth, into the one-sample depth the
+// The multisampled depth's resolve, in Slang:
+// each texel's first sample's depth, into the one-sample depth the
 // screen-space effects and the post chain read.
 
 import screen;

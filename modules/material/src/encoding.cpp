@@ -243,7 +243,7 @@ std::vector<std::byte> encodeProgram(const ProgramMaterial& made) {
     bytes.push_back(static_cast<std::byte>(made.shading));
     bytes.push_back(static_cast<std::byte>(made.blend));
     bytes.push_back(static_cast<std::byte>(made.doubleSided ? 1 : 0));
-    // Its flags (format 5, D720): one where it moves, two where it
+    // Its flags (format 5): one where it moves, two where it
     // transmits.
     bytes.push_back(static_cast<std::byte>((made.moves ? 1 : 0) | (made.transmits ? 2 : 0)));
     putWord(bytes, std::bit_cast<std::uint32_t>(made.alphaCutoff));

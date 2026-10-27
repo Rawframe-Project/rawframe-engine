@@ -1,8 +1,8 @@
 #pragma once
 
-// The scene's passes timed on the GPU (D894): the renderer points the
+// The scene's passes timed on the GPU: the renderer points the
 // timer at the frame it declares, and each pass it times is named as it
-// is added, through render's one timing of a pass (D901).
+// is added, through render's one timing of a pass.
 
 #include "rawframe/render/frame.h"
 #include "rawframe/render/timing.h"

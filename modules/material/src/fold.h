@@ -1,6 +1,6 @@
 #pragma once
 
-// The folded families' graphs (D348, D355): the post-process and canvas
+// The folded families' graphs: the post-process and canvas
 // domains read their nodes alike and fold their values into one form, a
 // constant plus what multiplies the picture's color, one texture's, and
 // the two multiplied. A domain names its output node, the node giving
@@ -117,7 +117,7 @@ public:
     [[nodiscard]] const SampledTexture& sampled() const noexcept;
 
 private:
-    /// The coordinates scaled and moved (SPEC-0026's `tile_and_offset`,
+    /// The coordinates scaled and moved (the `tile_and_offset`,
     /// folded).
     struct Affine {
         std::array<double, 2> scale{1, 1};

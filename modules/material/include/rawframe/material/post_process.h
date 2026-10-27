@@ -1,7 +1,6 @@
 #pragma once
 
-// Post-process materials (ADR-0031, ADR-0051, SPEC-0026's `post_process`
-// domain, D348): graph documents of kind `post_process`, one of them a
+// Post-process materials (the `post_process` domain): graph documents of kind `post_process`, one of them a
 // `rawframe/post_process@1` node, the domain's output, whose one input,
 // `color` (color4), is what the chain's picture becomes at its insertion
 // point: its color where its alpha is one, blended over the picture coming
@@ -31,7 +30,7 @@
 //   }
 //
 // (shown on fewer lines than the canonical form). The one state,
-// `insertion`, is where in ADR-0051's chain it runs, the closed set of
+// `insertion`, is where in the chain it runs, the closed set of
 // five: `after_temporal` (scene-linear, after the temporal slot),
 // `before_tonemap` (scene-linear, after the grade), `after_tonemap` (the
 // default: display-referred, before FXAA), `scene_output` (the view's
@@ -45,7 +44,7 @@
 // `multiply` and `add` take a number, two, three, or four as literals
 // (float, vec2, color3, color4); `combine4` makes a color4 of a color3
 // `in1` and a float `in2`, each connected or a literal. A node of another
-// type is kept whole, as SPEC-0028 keeps what it does not know.
+// type is kept whole, as a graph keeps what it does not know.
 //
 // Generation 1 compiles what folds, with no shader made for a material:
 // every value is a sum of a constant, the picture's color, one texture's
@@ -71,7 +70,7 @@
 
 namespace rawframe::material {
 
-/// ADR-0051's closed set of insertion points, in the chain's order.
+/// The closed set of insertion points, in the chain's order.
 enum class Insertion : std::uint8_t {
     AfterTemporal,
     BeforeTonemap,
@@ -97,7 +96,7 @@ struct PostProcess {
     friend bool operator==(const PostProcess&, const PostProcess&) = default;
 };
 
-/// The cooked post process's resource type and representation (ADR-0024).
+/// The cooked post process's resource type and representation.
 inline constexpr base::Bits128 kPostProcessType = base::parseBits128Hex("5b0e2a7c91d64f38a1e7c3d95f02b864").value;
 inline constexpr std::string_view kPostProcessRepresentation = "rawframe.postprocess";
 

@@ -1,4 +1,4 @@
-// Post processes on lavapipe (D350): a fade after the tonemapper darkens
+// Post processes on lavapipe: a fade after the tonemapper darkens
 // the picture by its weight; the picture without red before the
 // tonemapper, or after the temporal slot, comes out without red through
 // the linear tonemapper; a red wash over the scene's output comes after
@@ -143,8 +143,8 @@ RAWFRAME_TEST(PostProcessesRunWhereTheyAreInserted) {
     }
 
     // Over the composed picture: left out, and counted, where nothing
-    // records it; drawn after the scene's other recorders by its own
-    // (D351), here whole black.
+    // records it; drawn after the scene's other recorders by its own,
+    // here whole black.
     const std::uint64_t kLeftOut = (*made)->statistics().postProcessesLeftOut;
     const material::PostProcess kComposed{.insertion = material::Insertion::FinalOutput, .constant = {0, 0, 0, 1}};
     SceneFrame composed = seen();

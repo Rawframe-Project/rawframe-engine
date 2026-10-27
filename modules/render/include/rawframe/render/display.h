@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0024's `display` stage (D280): a frame's finished picture shown on a
+// The `display` stage: a frame's finished picture shown on a
 // window's surface. The picture is drawn in an sRGB texture of the frame,
 // blended in linear light; a surface's images are unorm (Maul RHI's
 // surfaces are, and a pass cannot target a texture through its sRGB twin),
@@ -8,7 +8,7 @@
 // image through the picture's linear view, whichever the image's channel
 // order. The same pass is where a picture of another size is scaled; and,
 // through its sRGB view into a rectangle of another sRGB picture, where a
-// view drawn at its render scale is placed at its region's size (D373). For
+// view drawn at its render scale is placed at its region's size. For
 // the rendering cluster, which records frames.
 
 #include "rawframe/render/device.h"
@@ -51,7 +51,7 @@ public:
     /// top, width, height in pixels, as far past the edges of `into` as it
     /// reaches) of `into`, another `size` pixels large, kept to it: a
     /// headset's eye drawn wider than its image, the image showing the part
-    /// its field of view sees (D595). The pass's key given, recorded by
+    /// its field of view sees. The pass's key given, recorded by
     /// `record`; none while the pipeline is still being made.
     [[nodiscard]] result::Result<std::optional<std::uint64_t>>
     cover(std::uint64_t from, std::uint64_t into, std::array<float, 4> viewport, std::array<std::uint32_t, 2> size);

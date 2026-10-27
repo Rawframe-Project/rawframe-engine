@@ -1,12 +1,11 @@
-// The sky's picture on lavapipe (D322): seen behind everything the way
+// The sky's picture on lavapipe: seen behind everything the way
 // each point of the target looks, a face of the cube a way; a texture that
 // is not an environment is none; a mirror reflects what is behind the eye;
 // a rough white ball under a uniform picture is as bright as the sky, and
 // under a picture bright above, its top outshines its underside; a point a
 // reflection probe of its cluster holds reflects the probe's picture,
 // projected onto its box, the first of those holding it that a point takes,
-// and the sky's where no probe holds it or the probe's picture is not held
-// (D325, D340).
+// and the sky's where no probe holds it or the probe's picture is not held.
 
 #include "fixture.h"
 #include "rawframe/render/frame.h"
@@ -123,7 +122,7 @@ RAWFRAME_TEST(TheSkysPictureIsSeenTheWayEachPointLooks) {
         const std::array<int, 3> kGrey = at(*kPlain, kSide / 2, kSide / 2);
         print("not a cube", kGrey);
         // Grey within a step: AgX's way through Rec.2020 and back keeps it
-        // grey to a rounding a device may tip (D580).
+        // grey to a rounding a device may tip.
         RAWFRAME_EXPECT(kGrey[0] > 150 && std::abs(kGrey[0] - kGrey[1]) <= 1 && std::abs(kGrey[1] - kGrey[2]) <= 1);
     }
 }
@@ -226,7 +225,7 @@ RAWFRAME_TEST(APointReflectsTheProbesThatHoldIt) {
         }
         return id == kGreen ? kGreenCube : nullptr;
     };
-    // A frame that draws a probe waits for the probes' pipeline (D337).
+    // A frame that draws a probe waits for the probes' pipeline.
     const auto kCenter = [&](const SceneFrame& frame, bool probed = true) {
         const auto kPixels =
             probed

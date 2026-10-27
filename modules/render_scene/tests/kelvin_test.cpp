@@ -1,4 +1,4 @@
-// `model.kelvin`, ADR-0051's color-temperature input: 6,500 K is white,
+// `model.kelvin`, the color-temperature input: 6,500 K is white,
 // lower is warmer and higher bluer along the black body's colors, the
 // brightest channel full, and the ends held; `model.channel` encodes sRGB.
 

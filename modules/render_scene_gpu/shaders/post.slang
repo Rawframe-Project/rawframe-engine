@@ -1,4 +1,4 @@
-// A post process (D348, D350), in Slang (ADR-0026, D475): the picture
+// A post process, in Slang: the picture
 // coming in at the texel under it, and the post process's texture where
 // its map puts the texel, folded as its material's form, per channel the
 // constant, the picture times its factor, the texture times its, and the

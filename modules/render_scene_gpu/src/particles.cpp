@@ -33,7 +33,7 @@ std::vector<particles_gpu::Material> particleMaterialsOf(std::span<const render_
         const render_scene::MaterialBlob& kBlob = materials[place];
         const render_scene::SceneTextures kTextures =
             place < textures.size() ? textures[place] : render_scene::SceneTextures{};
-        // The blob's flags (ADR-0031, D303): two where the base texture's
+        // The blob's flags: two where the base texture's
         // color multiplies the base color, four where its alpha multiplies
         // the opacity, eight where the emission texture's color multiplies
         // the emission.
@@ -56,7 +56,7 @@ std::vector<particles_gpu::Material> particleMaterialsOf(std::span<const render_
                                                .color = kBound(kTextures.base),
                                                .emission = kBound(kTextures.emission)});
     }
-    // The lines' two (D464), after the frame's own: white, whole,
+    // The lines' two, after the frame's own: white, whole,
     // untextured, so a line's color stands as it is, whatever the
     // exposure; the second drawn over everything.
     for (const std::uint32_t kFlags : {0U, particles_gpu::kOverEverything}) {

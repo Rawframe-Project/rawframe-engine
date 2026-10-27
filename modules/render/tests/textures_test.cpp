@@ -1,6 +1,6 @@
-// Textures held on the device (D307): a new revision of a texture that the
+// Textures held on the device: a new revision of a texture that the
 // frame's budget cannot take yet leaves the one held drawn, of its shape,
-// until a later frame uploads it (D970). A machine with no adapter skips,
+// until a later frame uploads it. A machine with no adapter skips,
 // unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "rawframe/render/device.h"

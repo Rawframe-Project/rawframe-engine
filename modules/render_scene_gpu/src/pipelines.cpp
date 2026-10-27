@@ -144,7 +144,7 @@ result::Status Pipelines::refused(mrhiResult outcome, const char* label, std::si
     if (labelLength > 0) {
         error = std::move(error).withContext("pipeline", std::string{label, labelLength});
     }
-    // Maul RHI's own word on an input it refused (mrhi-0027).
+    // Maul RHI's own word on an input it refused.
     mrhiDiagnostic diagnostic{};
     if (mrhiNextDeviceDiagnostic(native, &diagnostic) == mrhi_success) {
         error = std::move(error).withContext("diagnostic", mrhiDiagnosticText(diagnostic.code));
@@ -180,7 +180,7 @@ result::Status Pipelines::make() {
     RAWFRAME_TRY(makeShader(kSkyContainer, skyShader));
     RAWFRAME_TRY(makeShader(kMeterContainer, meterShader));
     // Each vertex of the mesh, then each draw's placement, then each vertex
-    // as it was the frame before (D510).
+    // as it was the frame before.
     static constexpr std::array<mrhiVertexBufferLayout, 3> kBuffers = {
         mrhiVertexBufferLayout{.stride = kVertexBytes, .stepMode = mrhi_stepVertex},
         mrhiVertexBufferLayout{.stride = kInstanceBytes, .stepMode = mrhi_stepInstance},
@@ -230,9 +230,9 @@ result::Status Pipelines::make() {
     cutDef.fragmentEntryLength = 3;
     RAWFRAME_TRY(ask(cutDef, cutout));
     // The casters into the sun's shadow map: the vertex's place, pushed
-    // from the sun by its slope (the depth half of ADR-0051's bias; the
+    // from the sun by its slope (the depth half of the bias; the
     // normal half is where the map is read); and its normal, color, and
-    // coordinates, which a material moving its vertices reads (D691), and
+    // coordinates, which a material moving its vertices reads, and
     // its material, which WGSL keeps in the caster's struct though only a
     // masked caster reads it.
     static constexpr std::array<mrhiVertexAttribute, 11> kCasterAttributes = {kAttributes[0],
@@ -278,7 +278,7 @@ result::Status Pipelines::make() {
     if (const mrhiResult kMade = mrhiCreateSampler(native, &samplerDef, &shadowSampler); kMade != mrhi_success) {
         return failed("the shadow sampler could not be made", kMade);
     }
-    // A material's texture's (D309): across its levels as it is filtered,
+    // A material's texture's: across its levels as it is filtered,
     // repeated or clamped.
     for (const material::Filter kFilter : {material::Filter::Linear, material::Filter::Nearest}) {
         for (const material::Address kAddress : {material::Address::Repeat, material::Address::Clamp}) {
@@ -317,7 +317,7 @@ result::Status Pipelines::make() {
     maskedDef.labelLength = kMaskedLabel.size();
     maskedDef.depthCompare = mrhi_compareEqual;
     RAWFRAME_TRY(ask(maskedDef, maskedLit));
-    // The translucent models (D305): over the opaque ones and the sky,
+    // The translucent models: over the opaque ones and the sky,
     // tested against their depth but writing none, blended by their
     // opacity, and leaving the motion to what is behind them.
     mrhiGraphicsPipelineDef glassDef = models;
@@ -350,7 +350,7 @@ result::Status Pipelines::make() {
     behind.colorTargets[0].format = kSceneFormat;
     behind.colorTargets[1].format = kMotionFormat;
     RAWFRAME_TRY(ask(behind, sky));
-    // The metering (D293): the frame's histogram, then the exposure moved.
+    // The metering: the frame's histogram, then the exposure moved.
     for (const auto& [kEntry, kAsked] :
          {std::pair{std::string_view{"histogram"}, &histogram}, std::pair{std::string_view{"adapt"}, &adapt}}) {
         mrhiComputePipelineDef metering = mrhiDefaultComputePipelineDef();
@@ -395,7 +395,7 @@ result::Status Pipelines::make() {
     picture.colorTargets[0].format = kPictureFormat;
     RAWFRAME_TRY(ask(picture, tonemap));
     // What the effects' pipelines are made from when a view first wants
-    // them (D337).
+    // them.
     prepass_ = prepass;
     shading_ = {models, maskedDef, glassDef};
     cut_ = cutDef;
@@ -436,13 +436,13 @@ result::Status Pipelines::askFor(Effect effect) {
     switch (effect) {
     case Effect::Surfaces: {
         // The prepass also leaving each point's surface, for the ambient
-        // occlusion and the reflections (D327, D331): whole, and masked.
+        // occlusion and the reflections: whole, and masked.
         const auto [kSurfacesDef, kCutSurfacesDef] = surfacing(prepass_);
         RAWFRAME_TRY(ask(kSurfacesDef, surfaces));
         return ask(kCutSurfacesDef, cutSurfaces);
     }
     case Effect::Multisampled: {
-        // The models' passes taking `samples` a pixel (D343): every
+        // The models' passes taking `samples` a pixel: every
         // pipeline drawing into their targets, the same but for that.
         const auto [kSurfacesDef, kCutSurfacesDef] = surfacing(prepass_);
         const std::array<std::pair<mrhiGraphicsPipelineDef, Asked*>, 11> kSampled = {
@@ -505,7 +505,7 @@ result::Status Pipelines::askFor(Effect effect) {
     case Effect::Reflections: {
         RAWFRAME_TRY(makeShader(kReflectContainer, reflectShader));
         // The screen-space reflections from the prepass's depth and surfaces
-        // and the picture before (D331), a triangle over the target.
+        // and the picture before, a triangle over the target.
         mrhiGraphicsPipelineDef marching = mrhiDefaultGraphicsPipelineDef();
         constexpr std::string_view kMarchLabel = "rawframe.scene.reflections";
         marching.label = kMarchLabel.data();
@@ -523,7 +523,7 @@ result::Status Pipelines::askFor(Effect effect) {
     case Effect::MotionBlur: {
         RAWFRAME_TRY(makeShader(kMotionContainer, motionShader));
         // The motion blur's tiles and their neighbors, then its gathering, each
-        // a triangle over its target (D334).
+        // a triangle over its target.
         for (const auto& [kEntry, kLabel, kFormat, kAsked] :
              {std::tuple{std::string_view{"tile"},
                          std::string_view{"rawframe.scene.motion.tiles"},
@@ -554,7 +554,7 @@ result::Status Pipelines::askFor(Effect effect) {
     case Effect::DepthOfField: {
         RAWFRAME_TRY(makeShader(kFocusContainer, focusShader));
         // The depth of field's halving and bokeh at half size, then its blend,
-        // each a triangle over its target (D336).
+        // each a triangle over its target.
         for (const auto& [kEntry, kLabel, kAsked] :
              {std::tuple{
                   std::string_view{"prefilter"}, std::string_view{"rawframe.scene.focus.halved"}, &focusPrefilter},
@@ -577,7 +577,7 @@ result::Status Pipelines::askFor(Effect effect) {
     }
     case Effect::Bloom: {
         RAWFRAME_TRY(makeShader(kBloomContainer, bloomShader));
-        // The bloom's chain (D328): halvings, then doublings added to the
+        // The bloom's chain: halvings, then doublings added to the
         // level above.
         for (const auto& [kEntry, kLabel, kAsked] :
              {std::tuple{std::string_view{"first"}, std::string_view{"rawframe.scene.bloom.first"}, &bloomFirst},
@@ -605,7 +605,7 @@ result::Status Pipelines::askFor(Effect effect) {
         return {};
     }
     case Effect::Skinning: {
-        // Posed models' vertices, skinned into the frame's (D508).
+        // Posed models' vertices, skinned into the frame's.
         RAWFRAME_TRY(makeShader(kSkinContainer, skinShader));
         mrhiComputePipelineDef def = mrhiDefaultComputePipelineDef();
         constexpr std::string_view kEntry = "skin";
@@ -615,7 +615,7 @@ result::Status Pipelines::askFor(Effect effect) {
         return ask(def, skin);
     }
     case Effect::ContactShadows: {
-        // The contact shadows from the prepass's depth (D338), a triangle
+        // The contact shadows from the prepass's depth, a triangle
         // over the target.
         RAWFRAME_TRY(makeShader(kContactContainer, contactShader));
         mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
@@ -632,7 +632,7 @@ result::Status Pipelines::askFor(Effect effect) {
         return ask(def, contactShade);
     }
     case Effect::Decals: {
-        // A decal's texture into one mip of its layer of the atlas (D339).
+        // A decal's texture into one mip of its layer of the atlas.
         RAWFRAME_TRY(makeShader(kDecalContainer, decalShader));
         mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
         constexpr std::string_view kLabel = "rawframe.scene.decals.fill";
@@ -646,7 +646,7 @@ result::Status Pipelines::askFor(Effect effect) {
         def.colorTargetCount = 1;
         def.colorTargets[0].format = kPictureFormat;
         RAWFRAME_TRY(ask(def, decalFill));
-        // A decal's normal texture into the normals' atlas (D342).
+        // A decal's normal texture into the normals' atlas.
         constexpr std::string_view kNormalLabel = "rawframe.scene.decals.fill.normal";
         def.label = kNormalLabel.data();
         def.labelLength = kNormalLabel.size();
@@ -662,8 +662,7 @@ result::Status Pipelines::askFor(Effect effect) {
         return {};
     }
     case Effect::Probes: {
-        // A probe's picture into one face's mip of its cube of the atlas
-        // (D340).
+        // A probe's picture into one face's mip of its cube of the atlas.
         RAWFRAME_TRY(makeShader(kProbeContainer, probeShader));
         mrhiGraphicsPipelineDef def = mrhiDefaultGraphicsPipelineDef();
         constexpr std::string_view kLabel = "rawframe.scene.probes.fill";
@@ -680,8 +679,8 @@ result::Status Pipelines::askFor(Effect effect) {
     }
     case Effect::PostProcess: {
         RAWFRAME_TRY(makeShader(kPostContainer, postShader));
-        // A post process over the chain's light, or over the picture
-        // (D350); and the picture graded only, from the picture's shader.
+        // A post process over the chain's light, or over the picture;
+        // and the picture graded only, from the picture's shader.
         mrhiGraphicsPipelineDef def = picture_;
         def.shader = postShader;
         for (const auto& [kLabel, kFormat, kAsked] :
@@ -701,7 +700,7 @@ result::Status Pipelines::askFor(Effect effect) {
     }
     case Effect::Fxaa: {
         RAWFRAME_TRY(makeShader(kFxaaContainer, fxaaShader));
-        // FXAA: the tonemapped picture into the frame's (D296).
+        // FXAA: the tonemapped picture into the frame's.
         mrhiGraphicsPipelineDef smoothed = picture_;
         constexpr std::string_view kFxaaLabel = "rawframe.scene.fxaa";
         smoothed.label = kFxaaLabel.data();

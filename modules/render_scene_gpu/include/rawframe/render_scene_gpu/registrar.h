@@ -7,13 +7,13 @@
 namespace rawframe::render_scene_gpu {
 
 /// Contributes the World-scoped participant
-/// `rawframe.render_scene_gpu.drawing` (D284, D285), which records the
+/// `rawframe.render_scene_gpu.drawing`, which records the
 /// frame the scene queued (`rawframe.render_scene.frames`) into each frame
 /// `render` makes (`rawframe.render.frames`), first, and sizes the scene's
 /// view to the frame. It logs a summary when the World stops. Without
 /// frames or a scene it is idle; the frames' configuration (offscreen or on
 /// a window, read back, captured) is `render`'s. It provides
-/// `rawframe.render_scene_gpu.captures` (D326): a tool's frame drawn in
+/// `rawframe.render_scene_gpu.captures`: a tool's frame drawn in
 /// place of the scene's, its light read back.
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 

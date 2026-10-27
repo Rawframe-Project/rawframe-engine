@@ -42,7 +42,7 @@ result::Status MotionBlurPass::declare(const render_scene::SceneFrame& frame,
     // The longest blur reaches a thirty-second of the target's height
     // either way, whatever its size; a tile is as wide.
     const std::uint32_t kSide = std::max<std::uint32_t>(4, (height + 16) / 32);
-    // The near plane, where the projection keeps it (reversed-Z, D284).
+    // The near plane, where the projection keeps it (reversed-Z).
     block_ =
         MotionBlock{.settings = {frame.motionBlur.shutter * 0.5F, static_cast<float>(kSide), frame.projection[14], 0}};
     for (const auto& [kFormat, kWidth, kHeight, kMade] :

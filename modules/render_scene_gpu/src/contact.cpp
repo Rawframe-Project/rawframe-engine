@@ -31,7 +31,7 @@ result::Status ContactPass::declare(const render_scene::SceneFrame& frame,
     if (!enabled_) {
         return {};
     }
-    // The near plane, where the projection keeps it (reversed-Z, D284).
+    // The near plane, where the projection keeps it (reversed-Z).
     block_ = ContactBlock{.toPoint = inverseOf(block.viewProjection),
                           .viewProjection = block.viewProjection,
                           .toSun = block.toSun,

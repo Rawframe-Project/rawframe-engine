@@ -1,6 +1,6 @@
 #pragma once
 
-// The components of `rawframe.model` as C++ reads them (D283 onward): the
+// The components of `rawframe.model` as C++ reads them: the
 // records a game's Kest program lays out, checked against its layout when
 // its scene loads, which the scene's CPU half (scene.h) copies out of a
 // World.
@@ -18,11 +18,11 @@ struct Model {
     float scaleZ = 1;
     std::uint32_t color = 0xFFFFFFFF;
     std::uint64_t material = 0;
-    /// Meters along the pose's own up the mesh is drawn from it (D514).
+    /// Meters along the pose's own up the mesh is drawn from it.
     float lift = 0;
 };
 
-/// `rawframe.model.Placed` as C++ reads it (D665): where an entity's
+/// `rawframe.model.Placed` as C++ reads it: where an entity's
 /// models are drawn in place of its pose, while placed.
 struct Placed {
     bool placed = false;
@@ -31,7 +31,7 @@ struct Placed {
     double z = 0;
 };
 
-/// `rawframe.model.Tracked` as C++ reads it (D676): where an entity's
+/// `rawframe.model.Tracked` as C++ reads it: where an entity's
 /// models are drawn each frame the headset shows its `hand` (1 the left,
 /// 2 the right), moved by `x`, `y`, and `z`.
 struct Tracked {
@@ -52,14 +52,14 @@ struct Camera {
     float near = 0;
     float exposure = 0;
     std::uint32_t tonemapper = 0;
-    /// Whether the offsets are from the World's origin, not the pose (D520).
+    /// Whether the offsets are from the World's origin, not the pose.
     std::uint32_t anchor = 0;
 };
 
-/// `rawframe.model.FIXED`: a camera placed in the World (D520).
+/// `rawframe.model.FIXED`: a camera placed in the World.
 inline constexpr std::uint32_t kCameraFixed = 1;
 
-/// `rawframe.model.View` as C++ reads it (ADR-0052, D361): the render
+/// `rawframe.model.View` as C++ reads it: the render
 /// texture its entity's camera draws into, its order among the views
 /// naming it, and the update it asks for, where the texture is drawn on
 /// demand.
@@ -69,7 +69,7 @@ struct View {
     std::uint32_t request = 0;
 };
 
-/// ADR-0047's closed tonemapper set, as a camera names it (D295): AgX, the
+/// The closed tonemapper set, as a camera names it: AgX, the
 /// default; Khronos PBR Neutral; and linear, for measuring.
 enum class Tonemapper : std::uint8_t {
     Agx = 0,
@@ -77,34 +77,34 @@ enum class Tonemapper : std::uint8_t {
     Linear = 2
 };
 
-/// `rawframe.model.AmbientOcclusion` as C++ reads it (D327).
+/// `rawframe.model.AmbientOcclusion` as C++ reads it.
 struct AmbientOcclusion {
     float radius = 0;
     float intensity = 0;
 };
 
-/// `rawframe.model.Bloom` as C++ reads it (D328).
+/// `rawframe.model.Bloom` as C++ reads it.
 struct Bloom {
     float intensity = 0;
 };
 
-/// `rawframe.model.ScreenSpaceReflections` as C++ reads it (D331).
+/// `rawframe.model.ScreenSpaceReflections` as C++ reads it.
 struct ScreenSpaceReflections {
     float distance = 0;
 };
 
-/// `rawframe.model.MotionBlur` as C++ reads it (D334).
+/// `rawframe.model.MotionBlur` as C++ reads it.
 struct MotionBlur {
     float shutter = 0;
 };
 
-/// `rawframe.model.DepthOfField` as C++ reads it (D336).
+/// `rawframe.model.DepthOfField` as C++ reads it.
 struct DepthOfField {
     float focus = 0;
     float aperture = 0;
 };
 
-/// `rawframe.model.ContactShadows` as C++ reads it (D338).
+/// `rawframe.model.ContactShadows` as C++ reads it.
 struct ContactShadows {
     float length = 0;
 };
@@ -124,7 +124,7 @@ struct Grading {
     float contrast = 1;
     float temperature = 0;
     float tint = 0;
-    /// A grading table, a game texture; nought for none (D344).
+    /// A grading table, a game texture; nought for none.
     std::uint64_t table = 0;
 };
 
@@ -137,7 +137,7 @@ struct AutoExposure {
     float compensation = 0;
     float low = 0;
     float high = 0;
-    /// How much more the middle of the picture counts (D345).
+    /// How much more the middle of the picture counts.
     float centered = 0;
 
     friend bool operator==(const AutoExposure&, const AutoExposure&) = default;
@@ -150,7 +150,7 @@ struct Sun {
     float directionZ = 0;
     float illuminance = 0;
     std::uint32_t color = 0xFFFFFFFF;
-    /// The angle its disc spans, in radians (D347).
+    /// The angle its disc spans, in radians.
     float angle = 0;
 };
 
@@ -162,7 +162,7 @@ struct Sky {
     std::uint64_t environment = 0;
 };
 
-/// `rawframe.model.Decal` as C++ reads it (D339).
+/// `rawframe.model.Decal` as C++ reads it.
 struct Decal {
     float halfX = 0;
     float halfY = 0;
@@ -170,18 +170,18 @@ struct Decal {
     std::uint32_t color = 0xFFFFFFFF;
     std::uint64_t texture = 0;
     /// The texture bending the normals it covers, nought for none; the
-    /// roughness it lays, nought for the surface's (D342).
+    /// roughness it lays, nought for the surface's.
     std::uint64_t normal = 0;
     float roughness = 0;
 };
 
-/// `rawframe.model.PostProcess` as C++ reads it (D349).
+/// `rawframe.model.PostProcess` as C++ reads it.
 struct PostProcess {
     std::uint64_t material = 0;
     float weight = 0;
 };
 
-/// `rawframe.model.ReflectionProbe` as C++ reads it (D325).
+/// `rawframe.model.ReflectionProbe` as C++ reads it.
 struct ReflectionProbe {
     float halfX = 0;
     float halfY = 0;
@@ -196,7 +196,7 @@ struct PointLight {
     float lumens = 0;
     float range = 0;
     std::uint32_t color = 0xFFFFFFFF;
-    /// Whether it casts shadows, within the view's budget (D292).
+    /// Whether it casts shadows, within the view's budget.
     bool shadows = false;
 };
 

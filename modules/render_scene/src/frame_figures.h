@@ -1,6 +1,6 @@
 #pragma once
 
-// What a frame the scene drew holds, for an editor's preview (D842): its
+// What a frame the scene drew holds, for an editor's preview: its
 // figures (what was drawn, culled, and left out, which effects ran) and
 // its steps, pass by pass, each run of draws sharing a mesh and a material
 // one step with its instances.

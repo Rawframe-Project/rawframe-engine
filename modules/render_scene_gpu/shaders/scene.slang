@@ -1,40 +1,40 @@
-// The 3D scene's models (D284), in Slang (ADR-0026, D475), from which the
+// The 3D scene's models, in Slang, from which the
 // SPIR-V and the WGSL are compiled.
 //
 // Vertex entry "vs": a mesh's vertex placed by its instance's model rows
 // relative to the eye, then seen through the frame's view and reversed-Z
 // projection, jittered. The depth prepass runs the same entry, so both
 // land every vertex on the same depth; its position is marked invariant
-// after Slang compiles it, which Slang cannot say (D475). Where the vertex
+// after Slang compiles it, which Slang cannot say. Where the vertex
 // is seen without the jitter, and where it was seen the frame before, go
-// on for its motion (D291): where it was in its model's space then, which
-// is where it is but for a skinned model's posed the frame before (D510),
+// on for its motion: where it was in its model's space then, which
+// is where it is but for a skinned model's posed the frame before,
 // placed by the model's rows then.
 //
 // Fragment entries "fs" and "fsDecaled", the latter for frames that draw
-// decals, which it lays over the base color first (D339): the surface its
-// material gives it (D303, ADR-0031's blob; the model's color tinting the
-// base color), lit through ADR-0031's lit shading model (D299) by the sun,
-// where the sun's shadow map says it reaches (D289); by the point and spot
-// lights of its cluster (D290), each where its squares of the punctual
-// shadows' atlas say it reaches (D292); and by the sky (brighter facing
+// decals, which it lays over the base color first: the surface its
+// material gives it (the blob; the model's color tinting the
+// base color), lit through the lit shading model by the sun,
+// where the sun's shadow map says it reaches; by the point and spot
+// lights of its cluster, each where its squares of the punctual
+// shadows' atlas say it reaches; and by the sky (brighter facing
 // up, and seen in reflection), or by its picture, all around and reflected
-// by roughness (D322), its reflection the reflection probes' of its
-// cluster that hold the point, projected onto each probe's box (D325,
-// D340); in physical units, times the exposure the device holds (the
-// camera's, or its metering's, D293), so the scene target holds
-// pre-exposed scene-linear light (ADR-0047). And how far the point moved
-// on the screen since the frame before, for the temporal pass (D291).
+// by roughness, its reflection the reflection probes' of its
+// cluster that hold the point, projected onto each probe's box;
+// in physical units, times the exposure the device holds (the
+// camera's, or its metering's), so the scene target holds
+// pre-exposed scene-linear light. And how far the point moved
+// on the screen since the frame before, for the temporal pass.
 //
 // Fragment entries "cut", "normal", and "cutNormal", for the depth
-// prepass (D310, D327): masked models cut where their opacity falls below
+// prepass: masked models cut where their opacity falls below
 // their alpha cutoff, and each point's normal and roughness where a
 // screen-space effect asks for them.
 
 import lighting;
 import material;
 
-// The material the scene is linked with (D481, D482): the blob's for the
+// The material the scene is linked with: the blob's for the
 // containers the engine ships, or one compiled for a game.
 extern struct Material : IMaterial;
 
@@ -46,54 +46,53 @@ struct Frame
     float4 sky;
     float4 exposure;
     // The eye's forward; each cascade's far end and texel; the cascades,
-    // the shadows' distance, a cascade's side in texels (D289), and one
-    // where the shadows are filtered soft (D330).
+    // the shadows' distance, a cascade's side in texels, and one
+    // where the shadows are filtered soft.
     float4 forward;
     float4 cascadeFar;
     float4 cascadeTexel;
     float4 shadow;
     float4x4 cascades[4];
     // The clusters' tiles across and down, their slices, and the lights;
-    // their near end, and the slices over the log of their far over near
-    // (D290).
+    // their near end, and the slices over the log of their far over near.
     float4 clusterGrid;
     float4 clusterDepth;
     // The view and projection without the jitter, and the frame before's
-    // taking this frame's places (D291).
+    // taking this frame's places.
     float4x4 unjittered;
     float4x4 previous;
-    // The ground's luminance below the horizon (D304).
+    // The ground's luminance below the horizon.
     float4 ground;
-    // The sky's picture (D322): its levels, nought for none; and the
+    // The sky's picture: its levels, nought for none; and the
     // irradiance over π it gives, per unit of the sky's light, as nine
     // spherical harmonics' coefficients.
     float4 environment;
     float4 irradiance[9];
-    // Whether the view's ambient occlusion is on (D327), its screen-space
-    // reflections (D331), its contact shadows (D338), and whether it has
-    // decals (D339).
+    // Whether the view's ambient occlusion is on, its screen-space
+    // reflections, its contact shadows, and whether it has
+    // decals.
     float4 occlusion;
     float4 reflections;
     float4 contact;
     float4 decals;
     // The eye's place in the World's axes, and the presented World's time
-    // in seconds, now and the frame before (D691), each its whole seconds
-    // and the fraction left (D702): where a material that moves its
+    // in seconds, now and the frame before, each its whole seconds
+    // and the fraction left: where a material that moves its
     // vertices reads them.
     float4 eye;
     float4 time;
     // The view's turn from the World's axes to the eye's, which a
-    // material's transform reads (D714).
+    // material's transform reads.
     float4x4 view;
-    // How an editor's preview draws (D794): nought lit, one its surfaces'
+    // How an editor's preview draws: nought lit, one its surfaces'
     // own colors, two their normals as colors.
     float4 mode;
 }
 
-// A point or spot light (D290): its place relative to the eye and its
+// A point or spot light: its place relative to the eye and its
 // range; its intensity in candela, and whether it is a spot; the way a spot
 // shines; the cosines of its cone's inner and outer edges; and its first
-// square of the shadows' atlas and how many, none without shadows (D292).
+// square of the shadows' atlas and how many, none without shadows.
 struct Light
 {
     float4 placeRange;
@@ -103,7 +102,7 @@ struct Light
     float4 shadow;
 }
 
-// A square of the punctual shadows' atlas (D292): where it lies in the
+// A square of the punctual shadows' atlas: where it lies in the
 // atlas and its side, as fractions of the atlas, and its near plane; the
 // light's axes across, up, and ahead, with how wide it sees; and the
 // light's place, with a texel's width a meter ahead.
@@ -116,14 +115,14 @@ struct ShadowSlot
     float4 position;
 }
 
-// The exposure the device holds (D293): its EV100 and the factor it scales
+// The exposure the device holds: its EV100 and the factor it scales
 // light by, a metered camera's moved from frame to frame.
 struct Exposure
 {
     float4 value;
 }
 
-// The frame's reflection probes (D325, D340): each one's box's middle
+// The frame's reflection probes: each one's box's middle
 // relative to the eye and its cube of the atlas, below nought for none;
 // its half sides; and its light's scale.
 struct Probe
@@ -133,7 +132,7 @@ struct Probe
     float4 light;
 }
 
-// The frame's decals (D339): each one's box, tint, and layer of the atlas
+// The frame's decals: each one's box, tint, and layer of the atlas
 // its texture is drawn in, below nought for none.
 struct Decal
 {
@@ -153,30 +152,30 @@ struct Decal
 [[vk::binding(6, 0)]] DepthTexture2D lightShadowMap;
 [[vk::binding(7, 0)]] StructuredBuffer<ShadowSlot> slots;
 [[vk::binding(8, 0)]] StructuredBuffer<Exposure> exposure;
-// The sky's picture (D322), each level its light as a rougher surface
+// The sky's picture, each level its light as a rougher surface
 // reflects it.
 [[vk::binding(18, 0)]] TextureCube environmentTexture;
 [[vk::binding(19, 0)]] SamplerState environmentSampler;
 [[vk::binding(20, 0)]] StructuredBuffer<Probe> probes;
-// What of the light from all around reaches each texel (D327), where the
+// What of the light from all around reaches each texel, where the
 // view's ambient occlusion is on: at half the target's size.
 [[vk::binding(21, 0)]] Texture2D occlusionTexture;
 // What each texel's reflection met in the picture before, pre-exposed, and
-// how much of it to take (D331), where the view's screen-space reflections
+// how much of it to take, where the view's screen-space reflections
 // are on.
 [[vk::binding(22, 0)]] Texture2D reflectionTexture;
-// How much of the sun's light the contact shadows let reach each texel
-// (D338), where the view's contact shadows are on.
+// How much of the sun's light the contact shadows let reach each texel,
+// where the view's contact shadows are on.
 [[vk::binding(23, 0)]] Texture2D contactTexture;
 [[vk::binding(24, 0)]] StructuredBuffer<Decal> decals;
 [[vk::binding(25, 0)]] Texture2DArray decalAtlas;
-// The probes' pictures (D340), each cube's eight mips the light as ever
+// The probes' pictures, each cube's eight mips the light as ever
 // rougher surfaces reflect it.
 [[vk::binding(26, 0)]] TextureCubeArray probeAtlas;
-// The decals' normal textures (D342), linear.
+// The decals' normal textures, linear.
 [[vk::binding(27, 0)]] Texture2DArray decalNormals;
 // What the opaque models and the sky made, exposed, which a transmitting
-// model sees through itself (D720); white where none transmits.
+// model sees through itself; white where none transmits.
 [[vk::binding(28, 0)]] Texture2D behindTexture;
 
 // What the vertex half passes on.
@@ -192,7 +191,7 @@ struct Corner
     [[vk::location(5)]] nointerpolation uint material;
     [[vk::location(6)]] float2 uv;
     [[vk::location(7)]] float4 tangent;
-    // The model's rows, which a material's transform reads (D714).
+    // The model's rows, which a material's transform reads.
     [[vk::location(8)]] nointerpolation float4 model0;
     [[vk::location(9)]] nointerpolation float4 model1;
     [[vk::location(10)]] nointerpolation float4 model2;
@@ -214,15 +213,15 @@ struct Vertex
     [[vk::location(10)]] float4 previous1;
     [[vk::location(11)]] float4 previous2;
     [[vk::location(12)]] float material;
-    // The vertex's texture coordinates, the mesh's first set (D309).
+    // The vertex's texture coordinates, the mesh's first set.
     [[vk::location(13)]] float2 uv;
-    // The vertex's tangent and the bitangent's sign (D313).
+    // The vertex's tangent and the bitangent's sign.
     [[vk::location(14)]] float4 tangent;
-    // Where the vertex was in its model's space the frame before (D510).
+    // Where the vertex was in its model's space the frame before.
     [[vk::location(15)]] float3 before;
 }
 
-// The spaces a material's transform reads (D714): the model's rows given,
+// The spaces a material's transform reads: the model's rows given,
 // the frame's eye, view, and its view and projection unjittered.
 Spaces spacesOf(float4 model0, float4 model1, float4 model2)
 {
@@ -243,7 +242,7 @@ Corner vs(Vertex vertex)
     // The normal's rows, written as GLSL's columns, so it multiplies them
     // from the left.
     const float3 normal = mul(vertex.normal, float3x3(vertex.normal0, vertex.normal1, vertex.normal2));
-    // Moved as the material moves it (D691), now and the frame before: it
+    // Moved as the material moves it, now and the frame before: it
     // reads the World's axes, and its offset is added where the vertex is
     // placed relative to the eye, so a material moving none changes no bit.
     const float3 still = float3(dot(vertex.model0, at), dot(vertex.model1, at), dot(vertex.model2, at));
@@ -289,7 +288,7 @@ Corner vs(Vertex vertex)
     return corner;
 }
 
-// Every input of a prepass entry read, though it needs only some (D418):
+// Every input of a prepass entry read, though it needs only some:
 // Slang leaves an input never read out of the entry, and Direct3D 12 links
 // stages by place, so the rest would not line up with the vertex entry's.
 // A point whose inputs are not numbers is dropped; a mesh's never are.
@@ -300,9 +299,9 @@ bool unreadable(Corner corner)
                  corner.model2.x);
 }
 
-// Where the material is evaluated at `corner` (D482): the coordinates'
+// Where the material is evaluated at `corner`: the coordinates'
 // derivatives taken before anything branches; `front` whether the face
-// drawn is the front (D705).
+// drawn is the front.
 Point pointOf(Corner corner, bool front)
 {
     Point point;
@@ -322,22 +321,22 @@ Point pointOf(Corner corner, bool front)
 }
 
 // Whether a masked model is cut away where its material gives `evaluated`:
-// where its opacity falls below its alpha cutoff (D310), a declared state
-// every material's blob holds (D487).
+// where its opacity falls below its alpha cutoff, a declared state
+// every material's blob holds.
 bool cutAway(Corner corner, Evaluated evaluated)
 {
     return evaluated.opacity < materials[blobOf(corner.material) + 3u].z;
 }
 
 // Each point's normal in the World's axes, turned toward the eye, and the
-// roughness its material gives (D327, D487).
+// roughness its material gives.
 float4 surfaceOf(Corner corner, Evaluated evaluated)
 {
     const float3 normal = normalize(corner.normal);
     return float4(dot(normal, corner.placed) > 0.0 ? -normal : normal, evaluated.roughness);
 }
 
-// The masked models in the depth prepass (D310): where the material's
+// The masked models in the depth prepass: where the material's
 // opacity falls below its alpha cutoff the model is cut away, so the depth
 // the prepass leaves is where the model stands. The lit pass draws a
 // masked model only where its depth equals what the prepass left, so it
@@ -357,7 +356,7 @@ void cut(Corner corner, bool front: SV_IsFrontFace)
 }
 
 // The models in the depth prepass when a screen-space effect asks for
-// their surfaces (ADR-0051, D327), into the normal-roughness target.
+// their surfaces, into the normal-roughness target.
 [shader("fragment")]
 float4 normal(Corner corner, bool front: SV_IsFrontFace) : SV_Target0
 {
@@ -370,7 +369,7 @@ float4 normal(Corner corner, bool front: SV_IsFrontFace) : SV_Target0
 }
 
 // The masked models in the depth prepass when a screen-space effect asks
-// for their surfaces (D310, D327): cut as "cut" cuts them, and where they
+// for their surfaces: cut as "cut" cuts them, and where they
 // stand, their normal and roughness as "normal" gives them.
 [shader("fragment")]
 float4 cutNormal(Corner corner, bool front: SV_IsFrontFace) : SV_Target0
@@ -411,7 +410,7 @@ float2 environmentBrdf(float roughness, float nv)
     return float2(-1.04, 1.04) * a + fit.zw;
 }
 
-// ADR-0051's middle shadow filter (D330), Castaño's optimized PCF: a five
+// The middle shadow filter, Castaño's optimized PCF: a five
 // by five tent over the map's texels about `texel` (in texels), taken as
 // nine of the hardware's blends of four, each tap's middle in the map's
 // coordinates, of a map `size` texels square, and its weight, the nine
@@ -458,7 +457,7 @@ float2 sizeOf(DepthTexture2D map)
     return float2(float(width), float(height));
 }
 
-// ADR-0051's top shadow filter (D347), contact hardening (PCSS): the sun's
+// The top shadow filter, contact hardening (PCSS): the sun's
 // shadow at `inMap`, `depth` in cascade `at`, as sharp where it meets its
 // caster as the map lets it be, and wider with the distance from it, as
 // the sun's disc makes it. Sixteen of the map's depths within eight texels
@@ -551,7 +550,7 @@ float sunlit(float3 placed, float3 normal, float2 pixel)
 // How much of a light reaches `placed` through its square of the atlas:
 // the point moved along its normal by a texel and a half there, then
 // compared, nearer the light being greater (reversed-Z), four texels
-// blended, or twenty-five filtered soft (D330), kept within the square.
+// blended, or twenty-five filtered soft, kept within the square.
 float lightShadow(ShadowSlot slot, float3 placed, float3 normal)
 {
     const float near = slot.rect.w;
@@ -583,8 +582,8 @@ float lightShadow(ShadowSlot slot, float3 placed, float3 normal)
 }
 
 // The cluster `placed` falls in, by where the view puts it and how far
-// ahead it is: its first index, its lights, its decals (D339), and its
-// probes (D340).
+// ahead it is: its first index, its lights, its decals, and its
+// probes.
 uint4 clusterOf(float3 placed)
 {
     const float4 clip = mul(frame.unjittered, float4(placed, 1.0));
@@ -623,7 +622,7 @@ float3 punctual(uint4 range, float3 placed, float3 normal, Surface surface, floa
         // Only a light that reaches the point adds to it, and it adds inside
         // the body: SPIRV-Cross's HLSL read a light's intensity for the sum
         // after the loop had moved to the next one, so Direct3D 12 lit each
-        // light's place with the next one's color (D765).
+        // light's place with the next one's color.
         if (falloff > 0.0)
         {
             if (light.shadow.y > 0.5)
@@ -647,7 +646,7 @@ float3 punctual(uint4 range, float3 placed, float3 normal, Surface surface, floa
     return sum;
 }
 
-// The surface under the decals of its cluster (D339, D342), each in the
+// The surface under the decals of its cluster, each in the
 // frame's order over those before: inside a decal's box, its texture at
 // the place's spot of it, tinted, covers the color by its alpha, fading
 // toward the box's front and back and on surfaces turned from it, `facing`
@@ -712,11 +711,11 @@ float3 projected(Probe probe, float3 placed, float3 mirrored)
 }
 
 // What the cluster `range`'s probes that hold `placed` reflect along
-// `mirrored` (D340), the first a point takes first: each its picture's mip
+// `mirrored`, the first a point takes first: each its picture's mip
 // for `roughness` (of eight), projected onto its box, over what the ones
 // before left, fading out across a tenth of its size past its box; and in
 // `left` what they leave to the sky. The base's reflection and a coat's
-// each read them along their own (D725).
+// each read them along their own.
 float3 probedAlong(uint4 range, float3 placed, float3 mirrored, float roughness, out float left)
 {
     float3 probed = float3(0.0);
@@ -753,15 +752,14 @@ Lit shaded(Corner corner, bool decaled, bool front)
     const float3 toEye = normalize(-corner.placed);
     // The coordinates' derivatives, taken before anything branches, so a
     // texture is sampled only where its material has one; and the place's,
-    // for the decals' textures (D339).
+    // for the decals' textures.
     const float2 dx = ddx(corner.uv);
     const float2 dy = ddy(corner.uv);
     const float3 along = ddx(corner.placed);
     const float3 aside = ddy(corner.placed);
-    // The cluster's lights, decals, and probes, where any is clustered
-    // (D339, D340).
+    // The cluster's lights, decals, and probes, where any is clustered.
     const uint4 range = frame.clusterDepth.y > 0.0 ? clusterOf(corner.placed) : uint4(0u);
-    // The surface the material gives (D482).
+    // The surface the material gives.
     Point point;
     point.uv = corner.uv;
     point.dx = dx;
@@ -797,7 +795,7 @@ Lit shaded(Corner corner, bool decaled, bool front)
         lit.color = float4(color, opacity);
         return lit;
     }
-    // An editor's view modes (D794): every surface's own color standing
+    // An editor's view modes: every surface's own color standing
     // as an unlit material's does, or its normal as a color.
     if (frame.mode.x > 0.5)
     {
@@ -806,7 +804,7 @@ Lit shaded(Corner corner, bool decaled, bool front)
     }
     const float reflectance = (evaluated.ior - 1.0) / (evaluated.ior + 1.0);
     // What a transmitting model lets through of what lies behind it
-    // (KHR_materials_transmission and KHR_materials_volume, D720): the copy
+    // (KHR_materials_transmission and KHR_materials_volume): the copy
     // of the opaque models' light where the way to the eye, bent into the
     // model at its normal by its index, leaves it its thickness on, or
     // where it enters for a thin wall; dimmed toward its volume's color by
@@ -833,7 +831,7 @@ Lit shaded(Corner corner, bool decaled, bool front)
         behindTexture.GetDimensions(0, width, height, levels);
         const float2 size = float2(float(width), float(height));
         const float2 place = there.xy / max(there.w, 1e-6) * float2(0.5, -0.5) + 0.5;
-        // A rough model blurs it (D723): read at the level whose texels are
+        // A rough model blurs it: read at the level whose texels are
         // as wide as its lobe, its roughness squared, is on the screen's
         // height, the copy's levels each halved from the one before.
         const float lobe = roughness * roughness * size.y;
@@ -853,7 +851,7 @@ Lit shaded(Corner corner, bool decaled, bool front)
     surface.coat = evaluated.coat;
     surface.coatRoughness = evaluated.coatRoughness;
     surface.coatNormal = normalize(evaluated.coatNormal);
-    // The anisotropy's directions (D717): the mesh's tangent turned by its
+    // The anisotropy's directions: the mesh's tangent turned by its
     // rotation toward the bitangent, about the normal the material gives.
     surface.anisotropy = evaluated.anisotropy;
     surface.along = float3(0.0);
@@ -871,16 +869,15 @@ Lit shaded(Corner corner, bool decaled, bool front)
     surface.tint = color * through;
     surface.ior = evaluated.ior;
     const int2 texel = int2(pixel);
-    // What of the sun's light the contact shadows let through (D338), for
-    // an opaque model the prepass saw, which a transmitting one is not
-    // (D720).
+    // What of the sun's light the contact shadows let through, for
+    // an opaque model the prepass saw, which a transmitting one is not.
     const bool prepassed = opacity >= 0.999 && transmission <= 0.0;
     const float contact = frame.contact.x > 0.5 && prepassed ? contactTexture.Load(int3(texel, 0)).r : 1.0;
     const float3 direct = frame.sun.rgb * sunlit(corner.placed, normal, pixel) * contact *
                               (reflected(surface, normal, toEye, frame.toSun.xyz) +
                                passed(surface, normal, toEye, frame.toSun.xyz)) +
                           punctual(range, corner.placed, normal, surface, toEye);
-    // The sky above and the ground below (D304): their light across the
+    // The sky above and the ground below: their light across the
     // normal's side, diffused, and along the reflection, the Fresnel of a
     // rough surface; what the material occludes of both.
     const float nv = max(dot(normal, toEye), 0.0);
@@ -895,15 +892,15 @@ Lit shaded(Corner corner, bool decaled, bool front)
         const float bend = pow(1.0 - surface.anisotropy * (1.0 - surface.roughness), 4.0);
         mirrored = reflect(-toEye, normalize(lerp(grain, normal, bend)));
     }
-    // With the sky's picture (D322), its irradiance across the normal's
+    // With the sky's picture, its irradiance across the normal's
     // side.
     float3 around = lerp(frame.ground.rgb, frame.sky.rgb, 0.5 + 0.5 * normal.y);
     if (frame.environment.w > 0.5)
     {
         around = frame.sky.rgb * irradianceAt(normal);
     }
-    // Along the reflection, the cluster's probes that hold the point
-    // (D340), weighed by the split sum (D322).
+    // Along the reflection, the cluster's probes that hold the point,
+    // weighed by the split sum.
     const float2 scaleBias = environmentBrdf(surface.roughness, nv);
     const float3 split = surface.headOn * scaleBias.x + scaleBias.y;
     float left;
@@ -924,27 +921,27 @@ Lit shaded(Corner corner, bool decaled, bool front)
         }
         alongReflection += left * beyond;
     }
-    // Over it, what the screen-space reflection met, as much as it found
-    // (D331), for an opaque model the prepass saw.
+    // Over it, what the screen-space reflection met, as much as it found,
+    // for an opaque model the prepass saw.
     if (frame.reflections.x > 0.5 && prepassed)
     {
         const float4 met = reflectionTexture.Load(int3(texel, 0));
         const float3 weight = left < 1.0 || frame.environment.w > 0.5 ? split : sheen;
         alongReflection = lerp(alongReflection, weight * met.rgb / max(exposure[0].value.y, 1e-12), met.a);
     }
-    // What of it reaches the point (D327): for an opaque model, what the
+    // What of it reaches the point: for an opaque model, what the
     // ambient occlusion found; a translucent one the prepass never saw
     // takes all of it. An opaque model's alpha, interpolated, can fall a
     // hair short of one.
     const float reaches =
         frame.occlusion.x > 0.5 && prepassed ? occlusionTexture.Load(int3(texel / 2, 0)).r : 1.0;
     float3 sky = occlusion * reaches * ((1.0 - sheen) * surface.diffuse * around + alongReflection);
-    // What it lets through, under the reflection's Fresnel (D720).
+    // What it lets through, under the reflection's Fresnel.
     sky += (1.0 - sheen) * transmission * transmitted;
-    // Under a coat (D716): what it lets through of that by its Fresnel to
+    // Under a coat: what it lets through of that by its Fresnel to
     // the eye, and what it reflects along its own normal's reflection at
-    // its roughness, by the split sum: the probes that hold the point
-    // (D725), and what they leave of the sky's picture, or of the sky
+    // its roughness, by the split sum: the probes that hold the point,
+    // and what they leave of the sky's picture, or of the sky
     // above and the ground below. The screen-space reflection marches the
     // base's reflection alone.
     if (surface.coat > 0.0)
@@ -972,7 +969,7 @@ Lit shaded(Corner corner, bool decaled, bool front)
 
 // Every input read whatever the material reads: an input it leaves unread
 // is dropped from the entry otherwise, and D3D12 refuses a pixel shader
-// whose inputs are not its vertex shader's outputs (D418, D501). Chosen
+// whose inputs are not its vertex shader's outputs. Chosen
 // after the shading, so nothing it samples is behind a branch, and with no
 // discard, which would cost an opaque model its early depth test.
 Lit shade(Corner corner, bool decaled, bool front)

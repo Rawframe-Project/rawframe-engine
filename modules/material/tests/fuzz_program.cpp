@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of the program materials a mod's Build can hold
-// (D484): decoding never fails but by refusal, and what it accepts encodes
+// Coverage-guided fuzzing of the program materials a mod's Build can hold:
+// decoding never fails but by refusal, and what it accepts encodes
 // back to the very same bytes.
 
 #include "rawframe/material/material.h"

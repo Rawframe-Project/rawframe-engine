@@ -1,4 +1,4 @@
-// Surface materials: one canonical text on the graph grammar, SPEC-0026's
+// Surface materials: one canonical text on the graph grammar, the
 // Surface contract held (shapes, ranges, defaults left out, states), a
 // literal surface compiled to its blob, a sampled texture feeding its base
 // color and opacity, and what generation 1 cannot compile refused, never
@@ -529,7 +529,7 @@ RAWFRAME_TEST(AQualitySwitchGivesEachQualityItsInput) {
 RAWFRAME_TEST(WhatTheBlobCannotFoldIsWrittenAsSlang) {
     // A texture's color times its own alpha, and the roughness that alpha
     // too: the blob folds neither, the generated material says both,
-    // sampling the texture once, bound at the base slot (D483).
+    // sampling the texture once, bound at the base slot.
     const graph::Document kSurface =
         surfaceOf(objectOf({{"base_color", from(kNode + 3, "out")}, {"specular_roughness", from(kSampler, "alpha")}}),
                   {samplerOf({}), mathOf(kNode + 3, kMultiplyType, from(kSampler, "color"), from(kSampler, "alpha"))});
@@ -558,8 +558,8 @@ RAWFRAME_TEST(WhatTheBlobCannotFoldIsWrittenAsSlang) {
 }
 
 RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
-    // States, parameters (D708), two textures at their slots, and a scene's
-    // and a shadow's container a backend (D484, D488).
+    // States, parameters, two textures at their slots, and a scene's
+    // and a shadow's container a backend.
     ProgramMaterial made{
         .shading = Shading::Unlit, .blend = Blend::Masked, .alphaCutoff = 0.25F, .doubleSided = true, .moves = true};
     made.textures = {{.id = 0xa44ecb4a39ac5cc8ULL}, {.id = 7, .filter = Filter::Nearest, .address = Address::Clamp}};
@@ -610,7 +610,7 @@ RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
     std::vector<std::byte> blended = kBytes;
     blended[9] = std::byte{3};
     RAWFRAME_EXPECT(refusedWith(decodeProgram(blended), MaterialError::Invalid));
-    // The flags are moving (D691) and transmitting (D720), no other bit;
+    // The flags are moving and transmitting, no other bit;
     // none, as before either was said.
     std::vector<std::byte> moving = kBytes;
     moving[11] = std::byte{4};
@@ -624,7 +624,7 @@ RAWFRAME_TEST(AProgramMaterialRoundTripsAndRefusesWhatItWouldNotWrite) {
 }
 
 RAWFRAME_TEST(AGraphIsWrittenAsTheSlangItsHandwrittenTwinIsCheckedAgainst) {
-    // ADR-0026's proof (D490): faded.material, which the blob cannot fold,
+    // The proof: faded.material, which the blob cannot fold,
     // is written as faded_graph.slang word for word; the scene's tests
     // build that and faded.slang, written by hand, through one pipeline
     // and find the same pixels. A change to the writer shows here first.

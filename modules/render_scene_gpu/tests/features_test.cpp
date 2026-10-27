@@ -1,10 +1,10 @@
-// SPEC-0026's feature groups drawn on lavapipe, each from a graph's
+// The feature groups drawn on lavapipe, each from a graph's
 // material as rawframe.material writes it, built by tools/gen_shaders.py
-// as the cook builds a game's (D484): a coat over a rough base (D716) and
-// the probes it reflects (D725), an anisotropy's stretched highlight
-// (D717), glass showing what lies behind it (D720), blurring it when rough
-// (D723), and letting the sun through (D724), and a see-through caster's
-// partial shadow (D726). Skips where no adapter answers, unless
+// as the cook builds a game's: a coat over a rough base and
+// the probes it reflects, an anisotropy's stretched highlight,
+// glass showing what lies behind it, blurring it when rough,
+// and letting the sun through, and a see-through caster's
+// partial shadow. Skips where no adapter answers, unless
 // RAWFRAME_REQUIRE_GPU is set.
 
 #include "fixture.h"
@@ -56,7 +56,7 @@ RAWFRAME_TEST(ACoatShinesOverARoughBase) {
     };
     // A black ball under the default sun, rough (0.9), its highlight spread
     // thin; then coated.material as rawframe.material writes it
-    // (coated_graph.slang, D716), the same base under a smooth coat, which
+    // (coated_graph.slang), the same base under a smooth coat, which
     // gathers the sun's highlight where the plain one spreads it.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
@@ -104,8 +104,8 @@ RAWFRAME_TEST(AnAnisotropyStretchesTheHighlightAlongItsTurn) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // brushed.material as rawframe.material writes it (brushed_graph.slang,
-    // D717) on a black ball under the default sun, no sky or ground: its
+    // brushed.material as rawframe.material writes it (brushed_graph.slang)
+    // on a black ball under the default sun, no sky or ground: its
     // roughness stretched
     // along the mesh's tangent turned by its turn parameter. The sun's
     // highlight, the pixels at least half as red as the brightest, is
@@ -169,7 +169,7 @@ RAWFRAME_TEST(AGlassShowsWhatLiesBehindIt) {
     };
     // A red box six meters ahead and a ball between, drawn after it as the
     // translucent are: white and plain, it hides the box; of glass.material
-    // as rawframe.material writes it (glass_graph.slang, D720), it shows
+    // as rawframe.material writes it (glass_graph.slang), it shows
     // the box through itself, a copy of what the opaque models made.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
@@ -221,7 +221,7 @@ RAWFRAME_TEST(AFrostedGlassBlursWhatLiesBehindIt) {
     // A red box and a blue one six meters ahead, meeting in the middle,
     // and a ball between: through clear glass (glass_graph.slang) the two
     // stand apart on either side of the middle; through frosted glass,
-    // rough (frosted_graph.slang, D723), the copy is read at a level its
+    // rough (frosted_graph.slang), the copy is read at a level its
     // roughness picks, and the two run into each other there.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
@@ -275,7 +275,7 @@ RAWFRAME_TEST(AGlassLetsTheSunThroughFromBehindIt) {
         return render_scene::engineMesh(id);
     };
     // A glass ball alone, in the dark but for the sun straight behind it:
-    // its light passes through the glass toward the eye (D724), brightest
+    // its light passes through the glass toward the eye, brightest
     // where the way to the eye and the way to the sun meet, the ball's
     // middle, and dark toward its edge; with no sun, the ball shows only
     // the dark behind it.
@@ -367,9 +367,9 @@ RAWFRAME_TEST(ACoatReflectsTheProbesThatHoldIt) {
     const render_scene_gpu::TextureSource kTextures = [&](std::uint64_t id) -> std::shared_ptr<const texture::Texture> {
         return id == kSky ? kRed : id == kRoom ? kGreen : nullptr;
     };
-    // A black ball under coated.material's smooth coat (coated_graph.slang,
-    // D716) in a green room, under a red sky: its coat reflects the room
-    // that holds it (D725), as its base does, and not the sky beyond it.
+    // A black ball under coated.material's smooth coat (coated_graph.slang)
+    // in a green room, under a red sky: its coat reflects the room
+    // that holds it, as its base does, and not the sky beyond it.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
     frame.lights.sun = {0, 0, 0};
@@ -387,7 +387,7 @@ RAWFRAME_TEST(ACoatReflectsTheProbesThatHoldIt) {
     frame.clusters.indices = {0};
     frame.programs = {nullptr, programOf(kCoatedGraphScene, kCoatedGraphShadow, material::Shading::Lit)};
     // Its probe's pipeline, then its program's, each made as the device
-    // answers (D337, D485).
+    // answers.
     static_cast<void>(
         drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::probesDrawn, kTextures));
     const auto kCoated = drawnWith(
@@ -417,7 +417,7 @@ RAWFRAME_TEST(ASeeThroughCasterCastsAsMuchShadowAsItCovers) {
     };
     // The sun's shadows' scene again: a white floor and a box above it. The
     // box opaque casts all its shadow; drawn translucent at half its
-    // opacity, about half (D726); of glass.material, which transmits all
+    // opacity, about half; of glass.material, which transmits all
     // but its reflection, almost none. Each blends, as the scene marks it.
     SceneFrame frame = looking();
     SceneDraw floor = box(8, 1, {1, 1, 1, 1});

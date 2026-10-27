@@ -1,6 +1,6 @@
 #pragma once
 
-// What the material families share (D348): their refusals, and the
+// What the material families share: their refusals, and the
 // library's node records read alike.
 
 #include "rawframe/document/json.h"

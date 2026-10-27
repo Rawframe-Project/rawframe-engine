@@ -1,9 +1,8 @@
 #pragma once
 
-// A surface material's graph read node by node (D308, D311 to D313,
-// D318): what each node of the library this family knows says, checked,
+// A surface material's graph read node by node: what each node of the library this family knows says, checked,
 // and what its outputs carry. Compiling to the blob folds it (material.cpp);
-// generating Slang writes it out as code (slang.cpp, D483).
+// generating Slang writes it out as code (slang.cpp).
 
 #include "rawframe/document/json.h"
 #include "rawframe/graph/graph.h"
@@ -28,16 +27,16 @@ enum class Carried : std::uint8_t {
     Color3,
     Vec2,
     Vec3,
-    /// What the logic nodes take and give (D697).
+    /// What the logic nodes take and give.
     Bool,
-    /// The four-wide types (D706).
+    /// The four-wide types.
     Vec4,
     Color4,
     /// A texture an interface input gives, which only a sampled texture
-    /// takes (D710).
+    /// takes.
     Texture2d,
     /// A whole number, which the int-taking math nodes, compare, and select
-    /// take with ints alone (D715).
+    /// take with ints alone.
     Int
 };
 
@@ -70,7 +69,7 @@ private:
     mutable std::map<std::pair<graph::NodeId, std::string>, std::optional<Carried>> found_;
 };
 
-/// SPEC-0026's states' words, in their enumerations' order.
+/// The states' words, in their enumerations' order.
 inline constexpr std::array<std::string_view, 2> kShadings = {"lit", "unlit"};
 inline constexpr std::array<std::string_view, 3> kBlends = {"opaque", "masked", "translucent"};
 
@@ -86,7 +85,7 @@ inline constexpr std::array<std::string_view, 3> kBlends = {"opaque", "masked", 
 [[nodiscard]] bool known(const graph::Node& node);
 
 /// The params and inputs a node of one of the family's own types may hold,
-/// and the outputs a connection may name, each in name order (D732, D733):
+/// and the outputs a connection may name, each in name order:
 /// what its reader checks a node against and `nodeSignatures` lists. The
 /// surface's inputs are the Surface contract's and an inline-Slang node's
 /// inputs and outputs those its params declare, so neither holds them here.
@@ -109,7 +108,7 @@ ownPartsOf(const graph::Node& node);
 /// What a `uv` node's params say: the channel.
 [[nodiscard]] result::Result<std::uint32_t> uvIn(const graph::Node& node);
 
-/// An input of `multiply` or `add` (D311): connected, or a literal, and
+/// An input of `multiply` or `add`: connected, or a literal, and
 /// what it carries when that is known.
 struct Operand {
     std::optional<graph::Connection> from;
@@ -119,7 +118,7 @@ struct Operand {
 
 [[nodiscard]] result::Result<Operand> operandOf(const Graph& surface, const document::Value& value);
 
-/// How a math node types its inputs and its `out` (SPEC-0026; D691, D694).
+/// How a math node types its inputs and its `out`.
 enum class Rule : std::uint8_t {
     /// Each input of one type, or a float; the out of that type.
     Componentwise,
@@ -131,22 +130,22 @@ enum class Rule : std::uint8_t {
     Between,
     /// Two vec3s in, a vec3 out: cross, reflect.
     Across,
-    /// Bools in, a bool out: and, or, xor, not (D697).
+    /// Bools in, a bool out: and, or, xor, not.
     Logical,
     /// A bool, then two inputs of one type or floats; one of them out:
-    /// select (D697).
+    /// select.
     Choice,
-    /// A color3 in, a float out: luminance (D698).
+    /// A color3 in, a float out: luminance.
     Tone,
-    /// A color3 in, a color3 out: rgb_to_hsv, hsv_to_rgb (D698).
+    /// A color3 in, a color3 out: rgb_to_hsv, hsv_to_rgb.
     Recolor,
-    /// A vec2 in, a float out: the 2D noise kernels (D699).
+    /// A vec2 in, a float out: the 2D noise kernels.
     Noise2,
-    /// A vec3 in, a float out: the 3D noise kernel (D699).
+    /// A vec3 in, a float out: the 3D noise kernel.
     Noise3
 };
 
-/// One of the atomic core's math nodes (SPEC-0026, D694): its type, its
+/// One of the atomic core's math nodes: its type, its
 /// inputs in the order its code takes them, how it types them, and its
 /// Slang, `$0` to `$4` standing for its inputs. A componentwise call
 /// (`call`) has its float inputs made the out's vector where the out is
@@ -159,7 +158,7 @@ struct MathNode {
     std::string_view code;
     bool call = false;
     /// The functions its code calls, those they call first, each written
-    /// once before the material where any node uses it (D698, D699); none
+    /// once before the material where any node uses it; none
     /// for most.
     std::array<std::string_view, 3> helpers;
 };
@@ -171,7 +170,7 @@ struct MathNode {
 
 /// The code a math node is written as over ints, `$0` to `$2` its inputs:
 /// add, subtract, multiply, divide (truncating), modulo (floored, as the
-/// float's is), negate, abs, sign, min, max, and clamp (D715); none for
+/// float's is), negate, abs, sign, min, max, and clamp; none for
 /// another.
 [[nodiscard]] std::optional<std::string_view> wholeCodeOf(std::string_view type);
 
@@ -199,8 +198,7 @@ struct Math {
 [[nodiscard]] result::Result<Math> mathIn(const Graph& surface, const graph::Node& node);
 
 /// A `combine2`, `combine3`, or `combine4` node's inputs, `x`, `y`, and
-/// for three `z`, for four `w` too, checked: each a float, all given (D691,
-/// D695, D706).
+/// for three `z`, for four `w` too, checked: each a float, all given.
 struct Combined {
     std::array<Operand, 4> parts;
     std::size_t count = 0;
@@ -208,18 +206,17 @@ struct Combined {
 
 [[nodiscard]] result::Result<Combined> combineIn(const Graph& surface, const graph::Node& node);
 
-/// A `separate2` node's input, checked: a vec2, its outputs `x` and `y`
-/// (D695).
+/// A `separate2` node's input, checked: a vec2, its outputs `x` and `y`.
 [[nodiscard]] result::Result<Operand> separate2In(const Graph& surface, const graph::Node& node);
 
 /// A `separate4` node's input, checked: a vec4 or a color4, its outputs
-/// `r`, `g`, `b`, and `a`, as a separate3's are (D706).
+/// `r`, `g`, `b`, and `a`, as a separate3's are.
 [[nodiscard]] result::Result<Operand> separate4In(const Graph& surface, const graph::Node& node);
 
-/// A `swizzle` node's input and its declared pattern, checked (D695): one
+/// A `swizzle` node's input and its declared pattern, checked: one
 /// to four of `x`, `y`, `z`, and `w`, each within the input's width, a
 /// vector or a color; its `out` a float or a vector by the pattern's
-/// length, a color3 or a color4 for three or four of a color (D706).
+/// length, a color3 or a color4 for three or four of a color.
 struct Swizzle {
     Operand in;
     std::string pattern;
@@ -228,23 +225,23 @@ struct Swizzle {
 
 [[nodiscard]] result::Result<Swizzle> swizzleIn(const Graph& surface, const graph::Node& node);
 
-/// A `constant` node's declared type and value, checked (D704): a float, a
+/// A `constant` node's declared type and value, checked: a float, a
 /// bool, a vec2, a vec3, or a color3, its value of that shape; an int, a
 /// vec4, or a color4 waits for those types. Its `out` is the value.
 [[nodiscard]] result::Result<Operand> constantIn(const graph::Node& node);
 
-/// One of a surface's interface inputs (SPEC-0028's interface, D708): its
+/// One of a surface's interface inputs: its
 /// name, its type, and its default, held in the parameters' vector `slot`.
 struct InterfaceInput {
     std::string_view name;
     Carried carried = Carried::Float;
     std::array<double, 4> initial{};
     std::size_t slot = 0;
-    /// A texture input's default, the game's texture by its identity (D710);
+    /// A texture input's default, the game's texture by its identity;
     /// nought for any other.
     std::uint64_t texture = 0;
     /// The stream a function's input defaults to (`uv`, `world_position`,
-    /// `world_normal`, or `view_direction`, D711); empty for a literal.
+    /// `world_normal`, or `view_direction`); empty for a literal.
     std::string_view stream;
 };
 
@@ -254,7 +251,7 @@ struct InterfaceInput {
 [[nodiscard]] bool kestNamed(std::string_view name);
 
 /// What an interface input's default or an instance's override of it
-/// says, of the input's type (D708, D715): numbers, three or four a vector
+/// says, of the input's type: numbers, three or four a vector
 /// or a color alike; an int a whole number within 2^24 either way of
 /// nought, which the blob's float holds exactly; a bool true or false, held
 /// as one or nought.
@@ -262,11 +259,11 @@ struct InterfaceInput {
 
 /// The document's interface, checked: none, or `inputs`, each named as a
 /// Kest name is, eight at most, its `default` and its `type` (a float, an
-/// int, a bool, D715, a vector, a color, or a `texture_2d` defaulting to a
-/// game's texture by 16 lowercase hex digits, D710), in name order, a slot
+/// int, a bool, a vector, a color, or a `texture_2d` defaulting to a
+/// game's texture by 16 lowercase hex digits), in name order, a slot
 /// each in that order.
 /// A function's texture input is its type alone, each call giving it a
-/// texture (D713).
+/// texture.
 [[nodiscard]] result::Result<std::vector<InterfaceInput>> interfaceOf(const Graph& surface);
 
 /// A `parameter` node's input, checked: the interface input its `name`
@@ -275,7 +272,7 @@ struct InterfaceInput {
 /// texture.
 [[nodiscard]] result::Result<InterfaceInput> parameterIn(const Graph& surface, const graph::Node& node);
 
-/// A `compare` node's operator and inputs, checked (D697): `less`,
+/// A `compare` node's operator and inputs, checked: `less`,
 /// `less_equal`, `greater`, `greater_equal`, `equal`, or `not_equal`, over
 /// two floats; a bool out.
 struct Compare {
@@ -286,18 +283,17 @@ struct Compare {
 
 [[nodiscard]] result::Result<Compare> compareIn(const Graph& surface, const graph::Node& node);
 
-/// A `time` node's params, checked (D691): its timeline, the simulation's,
-/// the presented World's ticks over its tick rate in seconds (ADR-0010);
-/// and the whole seconds it wraps at, none when it is not wrapped (D702).
+/// A `time` node's params, checked: its timeline, the simulation's,
+/// the presented World's ticks over its tick rate in seconds;
+/// and the whole seconds it wraps at, none when it is not wrapped.
 [[nodiscard]] result::Result<std::uint32_t> timeIn(const graph::Node& node);
 
 /// A stream node, `world_position`, `world_normal`, `vertex_color`,
-/// `view_direction`, or `world_tangent`, checked: no params and no inputs
-/// (D691, D694 to D696).
+/// `view_direction`, or `world_tangent`, checked: no params and no inputs.
 [[nodiscard]] result::Status streamIn(const graph::Node& node);
 
-/// A `quality_switch` node's inputs, checked, and what its `out` carries
-/// (D318): `default` given, all of one type where it is known.
+/// A `quality_switch` node's inputs, checked, and what its `out` carries:
+/// `default` given, all of one type where it is known.
 struct Switch {
     std::array<std::optional<Operand>, 4> inputs;
     std::optional<Carried> out;
@@ -308,8 +304,8 @@ inline constexpr std::array<std::string_view, 4> kSwitchInputs = {"default", "hi
 
 [[nodiscard]] result::Result<Switch> switchIn(const Graph& surface, const graph::Node& node);
 
-/// A `transform` node's spaces, what it takes, and its input, checked
-/// (D714): `from` and `to` two of `object`, `world`, `view`, `tangent`,
+/// A `transform` node's spaces, what it takes, and its input, checked:
+/// `from` and `to` two of `object`, `world`, `view`, `tangent`,
 /// and `clip`, which differ; `kind` a `point`, a `vector`, or a `normal`;
 /// `in` a vec3. A point has no place in the tangent frame, and only a
 /// point goes to the clip's space, where its `out` is a vec4, any other a
@@ -323,8 +319,7 @@ struct Transform {
 
 [[nodiscard]] result::Result<Transform> transformIn(const Graph& surface, const graph::Node& node);
 
-/// One of a surface's static switches (ADR-0027's explicit declarations,
-/// SPEC-0026's permutation axis, D719): its name and the branch it takes
+/// One of a surface's static switches: its name and the branch it takes
 /// unless an instance overrides it.
 struct StaticSwitch {
     std::string_view name;
@@ -355,7 +350,7 @@ struct Pin {
     Carried carried = Carried::Float;
 };
 
-/// An `inline_slang` node, checked (SPEC-0026's inline-Slang node, D718):
+/// An `inline_slang` node, checked:
 /// its params `body`, one function's, at most 4096 bytes of printable
 /// ASCII, tabs, and new lines, with no preprocessor line, string, import,
 /// include, module, extern, export, or double underscore, and its braces
@@ -376,11 +371,11 @@ struct Inline {
 
 [[nodiscard]] result::Result<Inline> inlineIn(const Graph& surface, const graph::Node& node);
 
-/// A `separate3` node's input, checked: a color3 (D312), or a vec3, a
-/// place's axes r, g, and b (D691).
+/// A `separate3` node's input, checked: a color3, or a vec3, a
+/// place's axes r, g, and b.
 [[nodiscard]] result::Result<Operand> separate3In(const Graph& surface, const graph::Node& node);
 
-/// A `normal_map` node's input and scale, checked (D313).
+/// A `normal_map` node's input and scale, checked.
 struct NormalMap {
     Operand in;
     double scale = 1;
@@ -390,7 +385,7 @@ struct NormalMap {
 
 /// What a `sample_texture_2d` node's params say, and what its `uv` comes
 /// from, if connected. Its texture is its `texture` param's, or the
-/// texture input its `texture` input is connected to (D710), then `input`
+/// texture input its `texture` input is connected to, then `input`
 /// that input's slot and the texture its default.
 struct Sampling {
     SampledTexture texture;
@@ -401,7 +396,7 @@ struct Sampling {
 [[nodiscard]] result::Result<Sampling> sampleIn(const Graph& surface, const graph::Node& node);
 
 /// A node of a type this family knows, other than the surface, checked as
-/// its type checks it: in a surface or a function's document (D711).
+/// its type checks it: in a surface or a function's document.
 [[nodiscard]] result::Status nodeChecked(const Graph& surface, const graph::Node& node);
 
 /// What the output a connection names carries, if its node is of a type

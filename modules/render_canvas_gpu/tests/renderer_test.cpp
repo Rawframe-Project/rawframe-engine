@@ -1,15 +1,15 @@
-// The canvas's GPU half (D278) on lavapipe: a frame the queue stage could
+// The canvas's GPU half on lavapipe: a frame the queue stage could
 // have built drawn into an offscreen target and read back. A 2 by 2 texture
 // lands the right way up, each texel whole (exact textures are sampled
 // nearest); a half-clear sprite drawn after it blends over it in linear
 // light; a draw whose texture is not ready is left out; and a texture is
 // uploaded once, and again only when a reload replaces it; and draws blend
-// by their materials (D356): added, multiplied, a sprite with no texture
+// by their materials: added, multiplied, a sprite with no texture
 // drawn white, and an emission added where nothing covers; and particles
 // and ribbons drawn over the sprites through the scene's device half, each
-// by its material's blend (D357). Skips where no
+// by its material's blend. Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
-// `render`'s framer (D285), as the frame participant makes them.
+// `render`'s framer, as the frame participant makes them.
 
 #include "rawframe/particles/particles.h"
 #include "rawframe/render/device.h"
@@ -163,7 +163,7 @@ RAWFRAME_TEST(TheCanvasDrawsItsFrameInOrder) {
     // The missing texture drew nothing; the rest is the clear color.
     RAWFRAME_EXPECT(near(kPixels, 56, 4, {0, 0, 0, 255}) && near(kPixels, 60, 60, {0, 0, 0, 255}));
     // Two textures uploaded, and the white a sprite with no texture
-    // samples (D356).
+    // samples.
     RAWFRAME_EXPECT(renderer.statistics().draws == 2 && renderer.statistics().drawsLeftOut == 1 &&
                     renderer.statistics().texturesUploaded == 3);
 
@@ -177,7 +177,7 @@ RAWFRAME_TEST(TheCanvasDrawsItsFrameInOrder) {
 }
 
 RAWFRAME_TEST(ACanvasTimesItsDrawWhereAsked) {
-    // D901: in a frame that times its passes, on a device that writes
+    // In a frame that times its passes, on a device that writes
     // timestamps, the canvas's draw is timed as "canvas".
     const auto kDevice = opened();
     if (kDevice == nullptr) {
@@ -359,7 +359,7 @@ RAWFRAME_TEST(AParticleShowsItsFlipbooksCell) {
     frame.extent = {8, 8};
     frame.particles.clock = 1;
     // Newly born: its first cell, the red, where the whole sheet would show
-    // green at its middle (D359).
+    // green at its middle.
     frame.particles.emitters.push_back(particles::EmitterDraw{.key = 1,
                                                               .material = 1,
                                                               .lifetime = 10,
@@ -402,7 +402,7 @@ RAWFRAME_TEST(AStreakedParticleTrailsWhereItWas) {
     frame.particles.clock = 1;
     // One white particle a meter across, leaving six meters left of the
     // middle at four meters a second, straight right, streaked over its
-    // last half second (D360).
+    // last half second.
     frame.particles.emitters.push_back(particles::EmitterDraw{.key = 1,
                                                               .anchor = {-6, 0, 0},
                                                               .direction = {1, 0, 0},
@@ -445,7 +445,7 @@ RAWFRAME_TEST(AStreakedParticleTrailsWhereItWas) {
 }
 
 RAWFRAME_TEST(SplitScreenCanvasesDrawInTheirRegions) {
-    // Two local players' canvases (D364), each its whole view filled, each
+    // Two local players' canvases, each its whole view filled, each
     // landing in its half of the picture and nowhere else.
     const auto kDevice = opened();
     if (kDevice == nullptr) {

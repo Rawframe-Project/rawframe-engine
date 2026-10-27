@@ -1,11 +1,11 @@
 #pragma once
 
-// The sky's picture on the device (D322): a cooked environment, a cube of
+// The sky's picture on the device: a cooked environment, a cube of
 // half floats whose levels are its light as ever rougher surfaces reflect
-// it (D321), sampled behind everything by the sky's pass and along each
+// it, sampled behind everything by the sky's pass and along each
 // reflection by the lit shader; and its irradiance, taken on the CPU once
 // for each picture, as nine spherical harmonics. The reflection probes'
-// pictures, cooked environments too, are the probes' atlas's (D340).
+// pictures, cooked environments too, are the probes' atlas's.
 
 #include "blocks.h"
 #include "rawframe/texture/texture.h"

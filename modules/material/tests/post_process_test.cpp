@@ -1,4 +1,4 @@
-// Post-process materials (D348): one canonical text on the graph grammar,
+// Post-process materials: one canonical text on the graph grammar,
 // the domain's contract held (the output a color4, the insertion in its
 // set, the domain's nodes and their types), what folds compiled to its
 // constant, picture, texture, and both, cooked and read back, and what

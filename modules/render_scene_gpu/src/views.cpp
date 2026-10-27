@@ -37,7 +37,7 @@ struct TextureView::State {
     std::optional<mrhiPassId> clearing;
     std::optional<mrhiPassId> copying;
     /// Placed at another size than its own, scaled there by a pass of its
-    /// own (D373), made the first time it is.
+    /// own, made the first time it is.
     std::unique_ptr<render::Display> scaler;
     std::optional<std::uint64_t> scaling;
     mrhiResourceId imported{};
@@ -171,12 +171,12 @@ result::Status TextureView::declare(render::Frame& frame) {
     if (state.drawn || state.drawing) {
         state.picture = kPicture;
     }
-    // Covering an image of the target, once drawn this frame (D595).
+    // Covering an image of the target, once drawn this frame.
     if (state.covering.has_value() && state.drawing && state.covering->image < frame.covers.size()) {
         frame.covers[state.covering->image] =
             render::Frame::Cover{.picture = kPicture, .viewport = state.covering->viewport};
     }
-    // Placed at another size, scaled into its region once drawn (D373).
+    // Placed at another size, scaled into its region once drawn.
     const bool kScaled = state.placed.has_value() && state.placed->width != 0 && state.placed->height != 0 &&
                          (state.placed->width != state.width || state.placed->height != state.height);
     if (kScaled && state.picture.has_value() && state.placed->x < frame.width && state.placed->y < frame.height) {

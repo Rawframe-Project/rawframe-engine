@@ -67,46 +67,46 @@ struct SceneRenderer::State {
     RendererLimits limits;
     RendererStatistics statistics;
     /// Its shaders, samplers, and pipelines, shared with the renderers made
-    /// to share them (D361).
+    /// to share them.
     std::shared_ptr<Pipelines> pipelines;
-    /// The temporal pass and its pictures (D291).
+    /// The temporal pass and its pictures.
     std::optional<TemporalPass> temporal;
-    /// The exposure the device holds, and its metering (D293).
+    /// The exposure the device holds, and its metering.
     std::optional<Metering> metering;
     std::optional<DeviceSkinning> skinning;
-    /// Its light read back for a tool (D326).
+    /// Its light read back for a tool.
     std::optional<LightCapturing> capturing;
-    /// Its ambient occlusion, when a view asks (D327).
+    /// Its ambient occlusion, when a view asks.
     std::optional<OcclusionPass> occlusion;
-    /// Its screen-space reflections, when a view asks (D331).
+    /// Its screen-space reflections, when a view asks.
     std::optional<ReflectionPass> reflecting;
-    /// Its contact shadows, when a view asks (D338).
+    /// Its contact shadows, when a view asks.
     std::optional<ContactPass> contact;
-    /// The shadow maps (D289, D292).
+    /// The shadow maps.
     std::optional<ShadowPasses> shadows;
-    /// The models' passes and their targets (D284, D343).
+    /// The models' passes and their targets.
     std::optional<ModelPasses> models;
-    /// The decals' textures (D339).
+    /// The decals' textures.
     std::optional<DecalAtlas> decalAtlas;
-    /// The reflection probes' pictures (D340).
+    /// The reflection probes' pictures.
     std::optional<ProbeAtlas> probeAtlas;
-    /// Its motion blur, when a view asks (D334).
+    /// Its motion blur, when a view asks.
     std::optional<MotionBlurPass> motionBlur;
-    /// Its depth of field, when a view asks (D336).
+    /// Its depth of field, when a view asks.
     std::optional<DepthOfFieldPass> focus;
-    /// Its bloom, when a view asks (D328).
+    /// Its bloom, when a view asks.
     std::optional<BloomPass> bloom;
-    /// What times the scene's passes (D894).
+    /// What times the scene's passes.
     PassTimer timer;
     /// Its picture, graded and tonemapped, and antialiased by FXAA when a
-    /// view asks (D294 to D296).
+    /// view asks.
     std::optional<PicturePass> picture;
-    /// Its post processes, where a view's camera has them (D350).
+    /// Its post processes, where a view's camera has them.
     std::optional<PostProcessPass> post;
-    /// Its particles, trails, and beams, where a view draws any (D353,
-    /// D354, D357).
+    /// Its particles, trails, and beams, where a view draws any.
+    ///
     std::unique_ptr<particles_gpu::Particles> particles;
-    /// What it draws over the composed picture, after the canvas (D351),
+    /// What it draws over the composed picture, after the canvas,
     /// and whether the open frame has that.
     struct Composed final : render::FrameRecorder {
         State* state = nullptr;
@@ -122,29 +122,29 @@ struct SceneRenderer::State {
     Composed composed;
     bool composing = false;
     std::optional<DeviceMeshes> held;
-    /// The materials' textures (D309), and the white one a material
+    /// The materials' textures, and the white one a material
     /// sampling none samples, held as texture nought.
     std::unique_ptr<render::DeviceTextures> textures;
     std::shared_ptr<const texture::Texture> white;
-    /// The sky's picture (D322): the black cube bound where there is
+    /// The sky's picture: the black cube bound where there is
     /// none, the picture last seen, and its irradiance.
     std::shared_ptr<const texture::Texture> dark;
     /// The grading table that changes nothing, bound where a frame looks up
-    /// none (D344).
+    /// none.
     std::shared_ptr<const texture::Texture> plain;
     std::shared_ptr<const texture::Texture> environment;
     std::array<std::array<float, 4>, 9> irradiance{};
     /// The samples a pixel the device renders every target of the models'
-    /// passes with, as Maul RHI's mask (D343).
+    /// passes with, as Maul RHI's mask.
     std::uint8_t sampleCounts = 0;
     /// The reflection probes' pictures this frame holds to draw into the
-    /// atlas, each an environment (D325, D340).
+    /// atlas, each an environment.
     std::set<std::uint64_t> probePictures;
     /// What the next frame draws.
     const render_scene::SceneFrame* frame = nullptr;
     MeshSource meshes;
     TextureSource sampled;
-    /// The render textures' views this one samples (D361).
+    /// The render textures' views this one samples.
     std::vector<TextureView*> views;
 
     /// The meshes this frame draws, chosen within the frame's upload
@@ -174,7 +174,7 @@ struct SceneRenderer::State {
         static_cast<void>(textures->choose(0, white));
         static_cast<void>(textures->choose(kNoEnvironment, dark));
         static_cast<void>(textures->choose(kNoTable, plain));
-        // The grading table, if the grade has one (D344).
+        // The grading table, if the grade has one.
         if (const std::uint64_t kTable = scene.grading.table; kTable != 0 && sampled) {
             static_cast<void>(textures->choose(kTable, sampled(kTable)));
         }
@@ -191,7 +191,7 @@ struct SceneRenderer::State {
             }
         }
         // Each reflection probe's picture, if it is one and the atlas does
-        // not hold it already (D325, D340).
+        // not hold it already.
         probePictures.clear();
         for (const render_scene::SceneProbe& kProbe : scene.probes) {
             if (probeAtlas->holds(kProbe.environment)) {
@@ -231,23 +231,23 @@ struct SceneRenderer::State {
         mrhiResourceId instances{};
         mrhiResourceId blockResource{};
         mrhiPassId upload{};
-        /// The light the bloom and the picture take (D328, D350).
+        /// The light the bloom and the picture take.
         mrhiResourceId shown{};
         /// The frame's lights, each cluster's first index and count, and
-        /// the indices (D290), as written and as declared.
+        /// the indices, as written and as declared.
         std::vector<LightBlock> lights;
         std::vector<std::uint32_t> ranges;
         std::vector<std::uint32_t> indices;
         mrhiResourceId lightsResource{};
-        /// The frame's materials' blobs (D303).
+        /// The frame's materials' blobs.
         std::vector<render_scene::MaterialBlob> materials;
         mrhiResourceId materialsResource{};
         mrhiResourceId rangesResource{};
         mrhiResourceId indicesResource{};
-        /// The sky's light, as its pass reads it (D293); the target's size.
+        /// The sky's light, as its pass reads it; the target's size.
         SkyBlock sky;
         mrhiResourceId skyResource{};
-        /// The sky's picture bound this frame, or the dark cube (D322).
+        /// The sky's picture bound this frame, or the dark cube.
         std::uint64_t environment = kNoEnvironment;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
@@ -256,7 +256,7 @@ struct SceneRenderer::State {
     };
 
     /// Whether an effect a frame `wants` can be drawn: its pipelines asked
-    /// for the first time it is wanted, and made (D337).
+    /// for the first time it is wanted, and made.
     result::Result<bool> made(bool wants, Effect effect) {
         if (!wants) {
             return false;
@@ -265,7 +265,7 @@ struct SceneRenderer::State {
     }
 
     result::Status declare(render::Frame& open) {
-        // The frame's passes timed while it is declared, none after (D894).
+        // The frame's passes timed while it is declared, none after.
         timer.declaring(&open);
         auto declaredNow = declareTimed(open);
         timer.declaring(nullptr);
@@ -302,7 +302,7 @@ struct SceneRenderer::State {
         now.placed = placeDraws(*frame, kUsable, statistics.modelsLeftOut);
         now.block = blockOf(*frame, open.width, open.height);
         now.lights = lightsOf(*frame);
-        // The clusters, where the lights or the decals are clustered (D339).
+        // The clusters, where the lights or the decals are clustered.
         const bool kClustered = now.block.clusterDepth[1] > 0;
         now.ranges = kClustered ? frame->clusters.ranges : std::vector<std::uint32_t>{0, 0, 0, 0};
         now.indices =
@@ -313,8 +313,7 @@ struct SceneRenderer::State {
         std::vector<mrhiAccess> meshReads;
         RAWFRAME_TRY(held->import(meshWrites, meshReads));
         RAWFRAME_TRY(textures->import());
-        // The render textures' pictures, drawn by the views before this one
-        // (D361).
+        // The render textures' pictures, drawn by the views before this one.
         for (const TextureView* kView : views) {
             if (const std::optional<std::uint64_t> kPicture = kView->picture()) {
                 textures->lend(kView->id(), *kPicture);
@@ -385,15 +384,15 @@ struct SceneRenderer::State {
         if (now.draws || now.casters) {
             writes.push_back(wholeOf(now.instances, mrhi_accessCopyDestination));
         }
-        // Posed models' vertices, skinned before anything draws them (D508).
+        // Posed models' vertices, skinned before anything draws them.
         RAWFRAME_TRY_ASSIGN(const bool kSkinning, made(!frame->palette.empty(), Effect::Skinning));
         RAWFRAME_TRY(skinning->declare(*frame, kUsable, kSkinning, writes));
         statistics.modelsSkinned += skinning->skinned();
         RAWFRAME_TRY(shadows->declare(*frame, now.block, writes));
         // Antialiased over time, the temporal pass blends the frame with the
-        // picture before into the other kept picture (D291).
+        // picture before into the other kept picture.
         RAWFRAME_TRY(temporal->declare(*frame, open.width, open.height, writes));
-        // Each effect the view wants, once its pipelines are made (D337).
+        // Each effect the view wants, once its pipelines are made.
         RAWFRAME_TRY_ASSIGN(const bool kSurfaces,
                             made(frame->occlusion.enabled || frame->reflections.enabled, Effect::Surfaces));
         RAWFRAME_TRY_ASSIGN(const bool kOccluding, made(frame->occlusion.enabled, Effect::Occlusion));
@@ -418,7 +417,7 @@ struct SceneRenderer::State {
             writes));
         RAWFRAME_TRY(occlusion->declare(*frame, kSurfaces && kOccluding, now.block, open.width, open.height, writes));
         // The reflections read the picture before, so only where it is
-        // reused (D331).
+        // reused.
         RAWFRAME_TRY(
             reflecting->declare(*frame,
                                 kSurfaces && kReflecting,
@@ -432,21 +431,21 @@ struct SceneRenderer::State {
         now.block.contact = {contact->enabled() ? 1.0F : 0.0F, 0, 0, 0};
         // Multisampled where the view asks it, the device renders every
         // target so, and the pipelines, asked for the first count a view
-        // asks, are made (D343).
+        // asks, are made.
         if (pipelines->samples == 0 && frame->samples > 1 && (sampleCounts & frame->samples) != 0) {
             pipelines->samples = frame->samples;
         }
         RAWFRAME_TRY_ASSIGN(const bool kSampling,
                             made(frame->samples > 1 && frame->samples == pipelines->samples, Effect::Multisampled));
         // With the ambient occlusion or the reflections, each point's
-        // surface beside its depth (D327, D331).
+        // surface beside its depth.
         // Where a translucent model transmits, a copy of what the opaque made
-        // for it to read (D720).
+        // for it to read.
         const bool kTransmits = std::ranges::any_of(now.placed.translucentRuns, [](const Run& run) {
             return run.program != nullptr && run.program->transmits;
         });
         // Its levels halved by the bloom's halving, once its pipelines are
-        // made, so a rough model blurs what it lets through (D723).
+        // made, so a rough model blurs what it lets through.
         RAWFRAME_TRY_ASSIGN(const bool kHalving, made(kTransmits, Effect::Bloom));
         RAWFRAME_TRY(models->declare(open.width,
                                      open.height,
@@ -455,8 +454,8 @@ struct SceneRenderer::State {
                                      kTransmits,
                                      kHalving));
         // Each material's own program's pipelines, as this frame draws its
-        // models; until they are made, the engine's own draw them (D485,
-        // D487). A model is drawn by its program when every pass it is
+        // models; until they are made, the engine's own draw them.
+        // A model is drawn by its program when every pass it is
         // drawn in that runs a material's code has its program's pipeline.
         const bool kDecaled = decalAtlas->drawn() > 0;
         const bool kSurfaced = occlusion->enabled() || reflecting->enabled();
@@ -473,7 +472,7 @@ struct SceneRenderer::State {
                 }
                 // The prepass's pipeline running the material's code, if
                 // any: an opaque model's depth only where it moves its
-                // vertices (D691).
+                // vertices.
                 const bool kMoves = kRun.program->moves;
                 const std::optional<Shade> kPrepass = kMasked
                                                           ? std::optional{kSurfaced ? Shade::CutSurfaces : Shade::Cut}
@@ -481,8 +480,8 @@ struct SceneRenderer::State {
                                                       : kOpaque && kMoves    ? std::optional{Shade::Depth}
                                                                              : std::nullopt;
                 // A masked model casting shadows is cut by its program there
-                // too (D488), as is a translucent one by what it covers
-                // (D726), and a moving one is moved there (D691).
+                // too, as is a translucent one by what it covers,
+                // and a moving one is moved there.
                 const std::optional<Shade> kCast = kMasked || kShade == Shade::Glass ? std::optional{Shade::CutCasting}
                                                    : kMoves                          ? std::optional{Shade::Casting}
                                                                                      : std::nullopt;
@@ -520,9 +519,9 @@ struct SceneRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &uploadDef, &now.upload); kAdded != mrhi_success) {
             return failed("the upload pass could not be added", kAdded);
         }
-        // New decals' textures into the atlas, after their upload (D339).
+        // New decals' textures into the atlas, after their upload.
         RAWFRAME_TRY(decalAtlas->addPasses());
-        // New probes' pictures into the atlas (D340).
+        // New probes' pictures into the atlas.
         RAWFRAME_TRY(probeAtlas->addPasses());
         RAWFRAME_TRY(skinning->addPass(*held, meshReads));
         // The shadow map first: its casters from each cascade's view.
@@ -530,7 +529,7 @@ struct SceneRenderer::State {
             meshReads.push_back(wholeOf(now.instances, mrhi_accessVertex));
         }
         // Every pass drawing models reads the materials and their textures:
-        // the shadow passes to cut masked casters (D310).
+        // the shadow passes to cut masked casters.
         meshReads.push_back(wholeOf(now.materialsResource, mrhi_accessStorageRead));
         for (const std::uint64_t kTexture : textures->chosen()) {
             meshReads.push_back(wholeOf(resourceOf(kTexture), mrhi_accessSampled));
@@ -562,7 +561,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(reflecting->addPasses(models->depth(), models->surfaces()));
         RAWFRAME_TRY(contact->addPasses(models->depth()));
         // The models, then the sky where none lies, drawn with the exposure
-        // the device holds (D293), reading what the occlusion found and
+        // the device holds, reading what the occlusion found and
         // what the reflections met.
         std::vector<mrhiAccess> litReads = reads;
         if (occlusion->enabled()) {
@@ -576,8 +575,8 @@ struct SceneRenderer::State {
         }
         RAWFRAME_TRY(models->addLitPass(litReads));
         // The trails and beams, then the particles, over the models' light,
-        // before anything reads it (D353, D354), through the device half the
-        // canvas's share (D357).
+        // before anything reads it, through the device half the
+        // canvas's share.
         const auto kKey = [](mrhiResourceId resource) {
             return render::requestKey(resource.index1, resource.generation);
         };
@@ -590,9 +589,9 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(capturing->declare(models->scene(), open.width, open.height, now.block.exposure[0]));
         RAWFRAME_TRY(metering->addPasses(models->scene()));
         RAWFRAME_TRY(temporal->addPass(models->scene(), models->motion()));
-        // The post chain in ADR-0051's order: the temporal slot, the post
+        // The post chain in the order: the temporal slot, the post
         // processes after it, the motion blur, the depth of field, the
-        // bloom, then the picture (D350).
+        // bloom, then the picture.
         RAWFRAME_TRY_ASSIGN(const mrhiResourceId kSteady,
                             post->addStage(material::Insertion::AfterTemporal,
                                            temporal->shown(models->scene()),
@@ -609,7 +608,7 @@ struct SceneRenderer::State {
         return {};
     }
 
-    /// The picture from the light `shown` (D350): graded, the post
+    /// The picture from the light `shown`: graded, the post
     /// processes before the tonemapper, tonemapped, those after it, FXAA,
     /// and those over the scene's output, each into a picture between
     /// steps but the last, which writes the frame's.
@@ -661,7 +660,7 @@ struct SceneRenderer::State {
 
     /// The post processes over the composed picture: each into a picture
     /// of its own, the first reading the frame's, and the last copied back
-    /// into it (D351).
+    /// into it.
     result::Status declareComposed(render::Frame& open) {
         composing = false;
         if (!declared.has_value() || post->at(material::Insertion::FinalOutput) == 0) {
@@ -748,16 +747,16 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(skinning->record(*pipelines, *held));
         RAWFRAME_TRY(shadows->record(castingOf(now), now.placed));
         // The scene's table: slots 10 to 17 are each run's textures; 18 and
-        // 19 the sky's picture (D322); 20 the reflection probes (D325); 21
-        // what the ambient occlusion found, or white (D327); 22 what the
-        // screen-space reflections met, or white (D331); 23 what the contact
-        // shadows let through, or white (D338); 24 and 25 the decals and
-        // their atlas, or white seen as an array where none is drawn
-        // (D339); 26 the probes' atlas, or the dark cube seen as an array
-        // where none is drawn (D340); 27 the decals' normals' atlas, or
-        // white seen as an array where none bends the normals (D342); 28
-        // what the opaque models made, which a transmitting model reads
-        // (D720), the model passes' own copy where one is drawn, white
+        // 19 the sky's picture; 20 the reflection probes; 21
+        // what the ambient occlusion found, or white; 22 what the
+        // screen-space reflections met, or white; 23 what the contact
+        // shadows let through, or white; 24 and 25 the decals and
+        // their atlas, or white seen as an array where none is drawn;
+        // 26 the probes' atlas, or the dark cube seen as an array
+        // where none is drawn; 27 the decals' normals' atlas, or
+        // white seen as an array where none bends the normals; 28
+        // what the opaque models made, which a transmitting model reads,
+        // the model passes' own copy where one is drawn, white
         // here.
         const mrhiBinding kPicture = cubeAt(18, resourceOf(textures->resource(now.environment)));
         const mrhiBinding kPictureSampler =
@@ -798,10 +797,10 @@ struct SceneRenderer::State {
                                                  kPictureSampler};
         skyBinding[2].slot = 2;
         skyBinding[3].slot = 3;
-        // The opaque models, their depth first, the masked cut there
-        // (D310); then, lit, the sky where none lies; then the translucent
-        // over both (D305). The occlusion, the reflections, and the contact
-        // shadows are found between the two (D327, D331, D338).
+        // The opaque models, their depth first, the masked cut there;
+        // then, lit, the sky where none lies; then the translucent
+        // over both. The occlusion, the reflections, and the contact
+        // shadows are found between the two.
         const Drawing kDrawing{.pipelines = pipelines.get(),
                                .held = &*held,
                                .skinning = &*skinning,

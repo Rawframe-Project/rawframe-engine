@@ -19,18 +19,18 @@ namespace rawframe::render_scene_gpu {
 
 /// The id the plain grading table is held as among the frame's textures:
 /// bound where the frame looks up none, since the table's slot takes a
-/// volume (D344).
+/// volume.
 inline constexpr std::uint64_t kNoTable = 0x6b1e94d2c07a35f8ULL;
 
 /// A grading table that changes nothing: two texels a side, each its own
 /// coordinates.
 [[nodiscard]] std::shared_ptr<const texture::Texture> plainTable();
 
-/// The frame's picture: the light it shows graded and tonemapped (D294,
-/// D295), the bloom's spread light mixed in first (D328); with FXAA, a
-/// pass more over the tonemapped picture (D296). With post processes
+/// The frame's picture: the light it shows graded and tonemapped,
+/// the bloom's spread light mixed in first; with FXAA, a
+/// pass more over the tonemapped picture. With post processes
 /// before the tonemapper, graded first into a light of its own, which the
-/// tonemapper takes once they are done with it (D350). Each step writes
+/// tonemapper takes once they are done with it. Each step writes
 /// where it is told: the frame's picture, or a picture between steps.
 class PicturePass {
 public:
@@ -38,7 +38,7 @@ public:
 
     /// Joins the open frame, at `width` by `height`, with the bloom's
     /// `bloomLevels` (nought for none) and the grading `table` its colors
-    /// are looked up in where `tabled` (the plain one otherwise, D344),
+    /// are looked up in where `tabled` (the plain one otherwise),
     /// graded first where `gradedFirst`: its grade declared, and what the
     /// upload pass writes added to `writes`.
     result::Status declare(const render_scene::SceneFrame& frame,
@@ -72,7 +72,7 @@ public:
     result::Status recordTonemap(const Pipelines& pipelines);
     result::Status recordFxaa(const Pipelines& pipelines);
 
-    /// What times its passes on the GPU (D894).
+    /// What times its passes on the GPU.
     void timeBy(const PassTimer& timer) noexcept {
         timer_ = &timer;
     }

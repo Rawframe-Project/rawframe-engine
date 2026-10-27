@@ -1,4 +1,4 @@
-// The camera's metering (D293, ADR-0051), in Slang (ADR-0026, D475): the
+// The camera's metering, in Slang: the
 // frame's light counted into a histogram, then the exposure the device
 // holds moved toward what it meters.
 
@@ -35,7 +35,7 @@ static const float kSpan = 32.0;
 // drawn with, counted into 128 bins: the first for no light, the rest
 // spanning log2 luminance from -8 to 24, the last also taking light the
 // target could not hold. A texel counts more nearer the middle as the
-// camera's metering is centered (D345): up to sixteen times a corner's.
+// camera's metering is centered: up to sixteen times a corner's.
 // Each workgroup counts its texels in shared bins, then adds them to the
 // frame's.
 [shader("compute")]

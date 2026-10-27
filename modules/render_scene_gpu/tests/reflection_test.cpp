@@ -1,4 +1,4 @@
-// The screen-space reflections on lavapipe (D331): a mirror floor shows
+// The screen-space reflections on lavapipe: a mirror floor shows
 // the red block standing on it below the block's foot with the
 // reflections, where without them it shows only the sky's light; and the
 // first frame, with no picture before, draws none.

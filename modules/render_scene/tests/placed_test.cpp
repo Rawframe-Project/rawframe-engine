@@ -1,10 +1,10 @@
-// A model drawn where its entity is placed in place of its pose (D665):
+// A model drawn where its entity is placed in place of its pose:
 // at the place, turned as the pose turns, its lift still along the pose's
 // up; at the pose again once it is not placed. And where a headset's hand
 // is this frame, moved as it says, before its place, and placed again
-// where the hand is not located (D676); a headset's hand placed in the
+// where the hand is not located; a headset's hand placed in the
 // World by the player's camera as its eyes are. And left out while an
-// editor's preview hides its layer (D791).
+// editor's preview hides its layer.
 
 #include "../src/camera.h"
 #include "rawframe/render_scene/components.h"
@@ -87,7 +87,7 @@ RAWFRAME_TEST(AModelFollowsAHeadsetsHandBeforeItsPlace) {
 }
 
 RAWFRAME_TEST(AModelOnAHiddenLayerIsLeftOut) {
-    // Two boxes ahead of the eye, one on layer 2 (D791).
+    // Two boxes ahead of the eye, one on layer 2.
     Rig rig;
     rig.spawn(Model{.mesh = kBox, .color = 0xFF0000FF}, physics3d::Pose3D{.x = -1, .z = -5, .qw = 1});
     const world::EntityHandle kLayered =

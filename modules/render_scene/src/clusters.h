@@ -18,7 +18,7 @@ struct ViewShape {
     float near = 0.1F;
 };
 
-/// ADR-0051's cluster item classes (D339, D340): punctual lights, decals,
+/// The cluster item classes: punctual lights, decals,
 /// and reflection probes, in the order a cluster holds them.
 enum class ClusterItem : std::uint32_t {
     Light = 0,
@@ -52,7 +52,7 @@ void nameSphere(const SceneClusters& clusters,
                 std::uint32_t index,
                 std::vector<ClusterName>& named);
 
-/// The clusters' ranges and indices from `named` (D339): each cluster's
+/// The clusters' ranges and indices from `named`: each cluster's
 /// lights, then its decals, then its probes, each in the order they were
 /// named, at most the limit of each class; the rest are counted in
 /// `frame.clusterOverflow`.

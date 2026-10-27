@@ -1,8 +1,7 @@
-// A surface material written as Slang (D483): the graph's nodes as code,
+// A surface material written as Slang: the graph's nodes as code,
 // each output once, the Surface's inputs gathered into what the scene's
 // `IMaterial` gives (modules/render_scene_gpu/shaders/material.slang):
-// the fragment stage's surface, and the vertex stage's position offset
-// (D691).
+// the fragment stage's surface, and the vertex stage's position offset.
 
 #include "common.h"
 #include "functions.h"
@@ -78,7 +77,7 @@ std::string literalText(const std::array<double, 4>& literal, std::size_t count)
 
 std::size_t channelsOf(Carried carried);
 
-/// A literal of `carried`'s type: a bool's word, an int's digits (D715),
+/// A literal of `carried`'s type: a bool's word, an int's digits,
 /// or `literalText`'s numbers.
 std::string valueText(Carried carried, const std::array<double, 4>& literal) {
     if (carried == Carried::Bool) {
@@ -107,7 +106,7 @@ std::size_t switchInputOf(Quality quality) {
 }
 
 /// Where code is written: the fragment stage's `evaluate`, at a `Point`,
-/// or the vertex stage's `offset`, at a `Placed` (D691), where no texture
+/// or the vertex stage's `offset`, at a `Placed`, where no texture
 /// is sampled.
 enum class Stage : std::uint8_t {
     Fragment,
@@ -122,7 +121,7 @@ struct Code {
     std::vector<SampledTexture> textures;
     std::array<std::uint8_t, 4> inputs{};
     std::vector<std::string_view> helpers;
-    /// Each inline-Slang node's function, by its name (D718).
+    /// Each inline-Slang node's function, by its name.
     std::vector<std::pair<std::string, std::string>> inlined;
     std::size_t next = 0;
 };
@@ -130,7 +129,7 @@ struct Code {
 class Writer;
 
 /// A function called, and the writer writing its nodes in its caller's
-/// code (D711).
+/// code.
 struct Called {
     functions::Call call;
     std::unique_ptr<Writer> writer;
@@ -146,8 +145,8 @@ public:
     }
 
     /// A function's writer, adding to `caller`'s code, each of the
-    /// function's inputs the expression `bindings` gives it (D711), each
-    /// texture input the texture `textures` does (D713).
+    /// function's inputs the expression `bindings` gives it, each
+    /// texture input the texture `textures` does.
     Writer(const graph::Document& function,
            Writer& caller,
            std::map<std::string, std::string, std::less<>> bindings,
@@ -197,8 +196,8 @@ public:
             return "(" + kInText + ")." + kSwizzle.pattern;
         }
         if (kType == kParameterType) {
-            // Its vector after the material's blob's nine (D708); in a
-            // function, what its caller gives it (D711).
+            // Its vector after the material's blob's nine; in a
+            // function, what its caller gives it.
             RAWFRAME_TRY_ASSIGN(const surface_graph::InterfaceInput kInput,
                                 surface_graph::parameterIn(surface_, *kNode));
             if (bound_) {
@@ -207,7 +206,7 @@ public:
             constexpr std::array<std::string_view, 5> kWidths = {"", ".x", ".xy", ".xyz", ""};
             const std::string kRead = "materials[blobOf(" + at_ + ".material) + " + std::to_string(9 + kInput.slot) +
                                       "u]" + std::string{kWidths.at(channelsOf(kInput.carried))};
-            // An int or a bool held as a float, exactly (D715).
+            // An int or a bool held as a float, exactly.
             if (kInput.carried == Carried::Int) {
                 return "int(" + kRead + ")";
             }
@@ -223,7 +222,7 @@ public:
             return inlinedOutput(*kNode, from);
         }
         if (kType == kStaticSwitchType) {
-            // The branch its switch takes, alone written (D719).
+            // The branch its switch takes, alone written.
             RAWFRAME_TRY_ASSIGN(const surface_graph::SwitchChoice kChoice,
                                 surface_graph::staticSwitchIn(surface_, *kNode));
             return operandText(kChoice.taken ? kChoice.on : kChoice.off);
@@ -240,7 +239,7 @@ public:
             return operandText(kConstant);
         }
         if (kType == kTimeType) {
-            // Whole seconds and the fraction left (D702): wrapped at a
+            // Whole seconds and the fraction left: wrapped at a
             // whole period before they are added, so a material reads a
             // time days long as finely as one a minute long.
             RAWFRAME_TRY_ASSIGN(const std::uint32_t kPeriod, surface_graph::timeIn(*kNode));
@@ -276,12 +275,12 @@ public:
         std::string expression;
         Carried carried = Carried::Float;
         if (surface_graph::math(kType)) {
-            // The node's code with its inputs in place (D694): in a call, a
+            // The node's code with its inputs in place: in a call, a
             // float input made the out's vector.
             const surface_graph::MathNode& kShape = *surface_graph::mathNodeOf(kType);
             RAWFRAME_TRY_ASSIGN(const surface_graph::MathInputs kMath, surface_graph::mathInputsOf(surface_, *kNode));
             carried = kMath.out.value_or(Carried::Float);
-            // Over ints, the code an int takes (D715).
+            // Over ints, the code an int takes.
             expression = std::string{carried == Carried::Int && kShape.rule != surface_graph::Rule::Choice
                                          ? *surface_graph::wholeCodeOf(kType)
                                          : kShape.code};
@@ -316,7 +315,7 @@ public:
                 return unsupported("a material's vertex stage reads no tangent in generation 1");
             }
             RAWFRAME_TRY_ASSIGN(const std::string kIn, operandText(kTransform.in));
-            // Through the World's axes (D714): from the space given, then to
+            // Through the World's axes: from the space given, then to
             // the one asked.
             const std::string kKind = kTransform.kind == "point"    ? "kPoint"
                                       : kTransform.kind == "vector" ? "kVector"
@@ -360,7 +359,7 @@ public:
         } else if (kType == kNormalMapType) {
             RAWFRAME_TRY_ASSIGN(const surface_graph::NormalMap kMap, surface_graph::normalMapIn(surface_, *kNode));
             RAWFRAME_TRY_ASSIGN(const std::string kIn, operandText(kMap.in));
-            // The tangent-space normal across the tangent frame (D313), its
+            // The tangent-space normal across the tangent frame, its
             // x and y scaled, as the blob's normal texture bends it.
             const std::string kName = name();
             code_->statements += "        float3 " + kName + "Bent = " + kIn + " * 2.0 - 1.0;\n";
@@ -388,7 +387,7 @@ public:
     }
 
     /// The functions the written code calls, each before those that call
-    /// it (D698, D699).
+    /// it.
     [[nodiscard]] const std::vector<std::string_view>& helpers() const noexcept {
         return code_->helpers;
     }
@@ -398,7 +397,7 @@ public:
     }
 
     /// Which interface input gives each slot's texture, one more than its
-    /// slot among the inputs, nought for a fixed texture (D710).
+    /// slot among the inputs, nought for a fixed texture.
     [[nodiscard]] const std::array<std::uint8_t, 4>& textureInputs() const noexcept {
         return code_->inputs;
     }
@@ -423,8 +422,7 @@ private:
         }
         RAWFRAME_TRY_ASSIGN(surface_graph::Sampling sampling, surface_graph::sampleIn(surface_, node));
         if (bound_ && sampling.input.has_value()) {
-            // A function's texture input: the texture its call gives it
-            // (D713).
+            // A function's texture input: the texture its call gives it.
             const functions::GivenTexture& kGiven = textures_.at(*sampling.input);
             sampling.texture.id = kGiven.id;
             sampling.input = kGiven.input;
@@ -436,7 +434,7 @@ private:
         }
         std::size_t slot = 0;
         // One slot a texture and sampler state, a fixed texture's apart from
-        // an input's, which an instance may change (D710).
+        // an input's, which an instance may change.
         const std::uint8_t kInput =
             kSampling.input.has_value() ? static_cast<std::uint8_t>(*kSampling.input + 1) : std::uint8_t{0};
         while (slot < code_->textures.size() &&
@@ -460,7 +458,7 @@ private:
 
     /// A call's output: its function written in this code once a call, each
     /// of its inputs what the call gives it, its default, or the stream it
-    /// defaults to (D711).
+    /// defaults to.
     result::Result<std::string> calledOutput(const graph::Node& node, const graph::Connection& from) {
         std::unique_ptr<Called>& called = calls_[from.node];
         if (called == nullptr) {
@@ -500,7 +498,7 @@ private:
         return called->writer->operandText(kOutput->from);
     }
 
-    /// An inline-Slang node's output (D718): its body written once a
+    /// An inline-Slang node's output: its body written once a
     /// material as a function of its declared inputs and outputs, called
     /// once a node, each output a variable the call fills.
     result::Result<std::string> inlinedOutput(const graph::Node& node, const graph::Connection& from) {
@@ -556,7 +554,7 @@ private:
     /// What the stage's function names where it is written.
     std::string at_;
     std::map<graph::NodeId, std::string> made_;
-    /// The root's code, which a function's writer adds to (D711).
+    /// The root's code, which a function's writer adds to.
     std::unique_ptr<Code> own_;
     Code* code_ = nullptr;
     /// A function's writer's inputs: each interface input's expression in
@@ -589,14 +587,14 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& document, Qu
         inputs.emplace(kParameter.name, literalText(initial, kParameter.channels));
     }
     std::string normal = "point.normal";
-    // The coat's (D716): none, smooth, over the mesh's own normal, unless
+    // The coat's: none, smooth, over the mesh's own normal, unless
     // given.
     inputs.emplace("coat_weight", "0.0");
     inputs.emplace("coat_roughness", "0.0");
-    // The anisotropy's (D717): none, along the tangent, unless given.
+    // The anisotropy's: none, along the tangent, unless given.
     inputs.emplace("specular_roughness_anisotropy", "0.0");
     inputs.emplace("specular_anisotropy_rotation", "0.0");
-    // The transmission's (D720): none, untinted, thin.
+    // The transmission's: none, untinted, thin.
     inputs.emplace("transmission_weight", "0.0");
     inputs.emplace("transmission_color", "float3(1.0, 1.0, 1.0)");
     inputs.emplace("transmission_depth", "0.0");
@@ -648,7 +646,7 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& document, Qu
     for (const std::string_view kHelper : helpers) {
         helped += std::string{kHelper} + "\n";
     }
-    // Then each inline-Slang node's function, once (D718).
+    // Then each inline-Slang node's function, once.
     std::vector<std::string_view> written;
     for (const auto* kStage : {&writer, &placing}) {
         for (const auto& [kFunction, kText] : kStage->inlined()) {
@@ -658,7 +656,7 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& document, Qu
             }
         }
     }
-    made.source = "// A surface material written by rawframe.material (D483); generated, never edited.\n"
+    made.source = "// A surface material written by rawframe.material; generated, never edited.\n"
                   "import material;\n\n" +
                   helped +
                   "struct Generated : IMaterial\n"
@@ -704,7 +702,7 @@ result::Result<GeneratedSlang> generateSlang(const graph::Document& document, Qu
     made.blend = kStates.blend;
     made.alphaCutoff = kStates.alphaCutoff;
     made.doubleSided = kStates.doubleSided;
-    // Each interface input's default in its own vector (D708).
+    // Each interface input's default in its own vector.
     RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::InterfaceInput> kInterface,
                         surface_graph::interfaceOf(surface));
     for (const surface_graph::InterfaceInput& kInput : kInterface) {

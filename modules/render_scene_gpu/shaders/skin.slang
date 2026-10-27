@@ -1,9 +1,9 @@
-// Skinned models' vertices (D508), in Slang (ADR-0026, D475): each vertex
+// Skinned models' vertices, in Slang: each vertex
 // of a posed model's mesh, as the scene's pipelines read it, moved by the
 // joints it follows into a buffer of the same layout, which the frame's
 // draws of that model read in its mesh's place. One dispatch skins one
 // mesh with every palette it is posed with this frame, a palette a row of
-// workgroups (D510).
+// workgroups.
 
 // One mesh's skinning: its vertex count and its first job among the
 // frame's.

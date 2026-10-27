@@ -127,7 +127,7 @@ struct OwnNode {
 };
 
 /// The family's own node types, neither a math node's nor a function's,
-/// and their members (D731, D732, D733): what `known` takes and
+/// and their members: what `known` takes and
 /// `nodeSignatures` lists, but a function's output, which a function alone
 /// holds.
 constexpr auto kOwnNodes =
@@ -279,7 +279,7 @@ result::Result<MathInputs> mathInputsOf(const Graph& surface, const graph::Node&
         })) {
         return invalid("a texture input's texture is sampled, never computed with");
     }
-    // A whole literal beside an int is an int (D715).
+    // A whole literal beside an int is an int.
     if (kAny(Carried::Int)) {
         for (Operand& each : kIn) {
             if (!each.from.has_value() && each.carried == Carried::Float && wholeNumber(each.literal[0])) {
@@ -324,8 +324,7 @@ result::Result<MathInputs> mathInputsOf(const Graph& surface, const graph::Node&
             }
             kind = each.carried;
         }
-        // An int is computed with ints alone, by the nodes that take them
-        // (D715).
+        // An int is computed with ints alone, by the nodes that take them.
         if (kind == Carried::Int) {
             if (!kChoice && !wholeCodeOf(kNode.type).has_value()) {
                 return invalid("an int is computed with by the nodes that take ints alone");
@@ -474,7 +473,7 @@ result::Result<Operand> constantIn(const graph::Node& node) {
     // shape: a literal of three or four numbers reads as a color either way.
     const graph::Document kNone;
     RAWFRAME_TRY_ASSIGN(Operand made, operandOf(Graph{kNone}, *kValue));
-    // An int's a whole number an int holds (D715).
+    // An int's a whole number an int holds.
     if (kFound->second == Carried::Int && made.carried == Carried::Float && wholeNumber(made.literal[0])) {
         made.carried = Carried::Int;
     }
@@ -510,7 +509,7 @@ result::Result<Compare> compareIn(const Graph& surface, const graph::Node& node)
     Compare made{.symbol = kFound->second};
     RAWFRAME_TRY_ASSIGN(made.a, operandOf(surface, *kA));
     RAWFRAME_TRY_ASSIGN(made.b, operandOf(surface, *kB));
-    // Two floats, or two ints, a whole literal beside an int one (D715).
+    // Two floats, or two ints, a whole literal beside an int one.
     const bool kWhole = made.a.carried == Carried::Int || made.b.carried == Carried::Int;
     for (Operand* each : {&made.a, &made.b}) {
         if (kWhole && !each->from.has_value() && each->carried == Carried::Float && wholeNumber(each->literal[0])) {
@@ -662,7 +661,7 @@ result::Result<Sampling> sampleIn(const Graph& surface, const graph::Node& node)
         return invalid("a sampled texture's texture is its texture param's or a texture input's, one of them");
     }
     if (kGiven != nullptr) {
-        // A texture input's, by a parameter_texture_2d node (D710).
+        // A texture input's, by a parameter_texture_2d node.
         const std::optional<graph::Connection> kFrom = graph::connectionOf(*kGiven);
         const graph::Node* kSource = kFrom.has_value() ? nodeOf(surface, kFrom->node) : nullptr;
         if (kSource == nullptr || !known(*kSource) || typeOf(*kSource) != kParameterTexture2dType ||
@@ -788,7 +787,7 @@ result::Result<std::optional<Carried>> findCarried(const Graph& surface, const g
         return std::optional<Carried>{};
     }
     const std::string_view kType = typeOf(*kSource);
-    // An own node's outputs are its type's (D733); an inline node's as it
+    // An own node's outputs are its type's; an inline node's as it
     // declares, and a call's as its function's.
     if (const std::optional<Members> kOwn = ownMembersOf(kType);
         kOwn.has_value() && kType != kInlineSlangType && !std::ranges::contains(kOwn->outputs, from.output)) {
@@ -826,7 +825,7 @@ result::Result<std::optional<Carried>> findCarried(const Graph& surface, const g
         return kChoice.out;
     }
     if (kType == kInlineSlangType) {
-        // An inline node's output is as it declares (D718).
+        // An inline node's output is as it declares.
         RAWFRAME_TRY_ASSIGN(const Inline kInline, inlineIn(surface, *kSource));
         const auto kOutput = std::ranges::find(kInline.outputs, from.output, &Pin::name);
         if (kOutput != kInline.outputs.end()) {
@@ -842,7 +841,7 @@ result::Result<std::optional<Carried>> findCarried(const Graph& surface, const g
         return std::optional{Carried::Bool};
     }
     if (functions::isFunction(kType)) {
-        // A call's output is its function's (D711).
+        // A call's output is its function's.
         RAWFRAME_TRY_ASSIGN(const functions::Call kCall, functions::callIn(surface, *kSource));
         const auto kOutput = std::ranges::find(kCall.function.outputs, from.output, &functions::Output::name);
         if (kOutput != kCall.function.outputs.end()) {

@@ -11,7 +11,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// ADR-0051's bloom (D328), when the view asks: the scene's light, after
+/// The bloom, when the view asks: the scene's light, after
 /// the temporal slot, halved level by level into a chain (at most six, the
 /// first at a quarter of the target's sides) by Jimenez's thirteen taps,
 /// the first level through Karis's average; then each level doubled by a
@@ -38,7 +38,7 @@ public:
     /// Its passes recorded.
     result::Status record(const Pipelines& pipelines, mrhiResourceId scene);
 
-    /// What times its passes on the GPU (D894).
+    /// What times its passes on the GPU.
     void timeBy(const PassTimer& timer) noexcept {
         timer_ = &timer;
     }

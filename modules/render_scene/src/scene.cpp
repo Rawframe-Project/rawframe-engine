@@ -37,13 +37,12 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, RenderScene
     return std::unexpected<result::Error>{result::fail(errorClass, kRenderSceneDomain, code(error), why).error()};
 }
 
-/// A clear sky's color, sRGB: the sky's default (D288).
+/// A clear sky's color, sRGB: the sky's default.
 constexpr std::uint32_t kClearSky = 0x8FB8EBFF;
-/// The default ground's albedo, sRGB: a fifth, near the Earth's land's
-/// (D304).
+/// The default ground's albedo, sRGB: a fifth, near the Earth's land's.
 constexpr std::uint32_t kGround = 0x7C7C7CFF;
 /// The angle the Sun's disc spans seen from the Earth, in radians, the
-/// default sun's (D347); and the most a sun's may, twenty degrees.
+/// default sun's; and the most a sun's may, twenty degrees.
 constexpr float kSunAngle = 0.0093F;
 constexpr float kMostSunAngle = 0.35F;
 
@@ -249,7 +248,7 @@ const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
             }
         }
         // A posed mesh may reach past its bind's bounds: twice as far
-        // holds a limb swung about its middle (D508).
+        // holds a limb swung about its middle.
         const float kRadius = kBounds.radius * (instance->joints != 0 ? 2.0F : 1.0F) *
                               std::max({std::abs(kScale[0]), std::abs(kScale[1]), std::abs(kScale[2])});
         SceneDraw draw{.mesh = kModel.mesh, .entity = instance->entity};
@@ -279,7 +278,7 @@ const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
         const Vector kColor = colorOf(kModel.color);
         draw.color = {kColor[0], kColor[1], kColor[2], static_cast<float>(kModel.color & 0xFFU) / 255.0F};
         // A draw for each run of parts of one material: the Model's for
-        // all when it names one, else each part's own (D314); runs that
+        // all when it names one, else each part's own; runs that
         // come to one material are one draw.
         const auto kPlaceOf = [&](std::uint64_t id) -> std::uint32_t {
             if (id == 0) {
@@ -293,8 +292,8 @@ const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
             return kMaterial->second;
         };
         // Its palette, the frame's from here, for its draws and its
-        // shadows' alike, and the frame before's (D510); past the
-        // frame's room, drawn as bound (D508).
+        // shadows' alike, and the frame before's; past the
+        // frame's room, drawn as bound.
         if (instance->joints != 0 &&
             !paletteInto(std::span{posed}.subspan(instance->palette, instance->joints),
                          kBefore != placed.end() ? std::span<const Matrix>{kBefore->second.palette}
@@ -361,7 +360,7 @@ const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
         frame.tracked += instance->tracked ? 1 : 0;
     }
     // The translucent after the opaque, farthest first, so each blends
-    // over what is behind it (D305); the opaque keep their order.
+    // over what is behind it; the opaque keep their order.
     const auto kTranslucent = std::ranges::stable_partition(frame.draws, [this](const SceneDraw& draw) {
         return draw.material >= translucent.size() || !translucent[draw.material];
     });
@@ -374,7 +373,7 @@ const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
         return kAway(left) > kAway(right);
     });
     // The opaque by their material's program, so a device sets each
-    // once (D485), then by its texture, so it binds each once (D309);
+    // once, then by its texture, so it binds each once;
     // within one, by mesh as they were.
     const auto kTextureOf = [this](const SceneDraw& draw) {
         return draw.material < frame.textures.size() ? frame.textures[draw.material] : SceneTextures{};
@@ -395,7 +394,7 @@ const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
     temporal(camera, kSees);
     frame.metering.snap = frame.metering.enabled && (!meteredBefore || !continuous);
     meteredBefore = frame.metering.enabled;
-    // The lights and the decals in one clustered structure (D339).
+    // The lights and the decals in one clustered structure.
     named.clear();
     clusterLights(frame,
                   punctual,
@@ -421,7 +420,7 @@ const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
                   named);
     packClusters(frame, named, settings.limits);
     shadowLights(frame, shadowed, candidates, settings.lightShadows, settings.limits);
-    // The particles, on a clock the Host's timeline moves (D352).
+    // The particles, on a clock the Host's timeline moves.
     const std::array<Vector, 3> kAxes = {kRight, kUp, kForward};
     const ViewShape kView{.sees = kSees, .half = kHalf, .aspect = kAspect, .near = kNear};
     particles.update(frame.particles,
@@ -436,7 +435,7 @@ const SceneFrame& Scene::State::queue(const SceneCamera& camera) {
                      materials,
                      settings.limits.particles,
                      camera.elapsed);
-    // The lines shown, on the material after the frame's own (D464).
+    // The lines shown, on the material after the frame's own.
     addLines(frame, lines, camera.eye);
     return frame;
 }
@@ -529,7 +528,7 @@ void placeMaterials(Scene::State& state, std::span<const SceneMaterial> material
         }
         const auto [kAt, kNew] =
             state.materials.try_emplace(kMaterial.id, static_cast<std::uint32_t>(state.frame.materials.size()));
-        // A material that blends says so to the device too (D726).
+        // A material that blends says so to the device too.
         MaterialBlob blob = kMaterial.blob;
         if (kMaterial.translucent) {
             blob[kFlagsAt] = static_cast<float>(static_cast<std::uint32_t>(blob[kFlagsAt]) | kBlendsFlag);

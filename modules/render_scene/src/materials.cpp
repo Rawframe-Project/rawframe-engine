@@ -38,7 +38,7 @@ result::Result<SceneMaterial> readSurface(std::uint64_t identity,
                             readSurface(identity, kInstance.base, kBase, quality, programs, bases, false));
         std::ranges::copy(kInstance.parameters, made.blob.begin() + material::kBlobFloats);
         // The textures its texture inputs' overrides give, each at its
-        // base's slot, its sampler state the base's (D710).
+        // base's slot, its sampler state the base's.
         const std::array<SceneTexture*, 4> kSlots = {
             &made.textures.base, &made.textures.packed, &made.textures.emission, &made.textures.normal};
         for (std::size_t slot = 0; slot < kSlots.size(); ++slot) {
@@ -68,7 +68,7 @@ result::Result<SceneMaterial> readSurface(std::uint64_t identity,
             .id = identity,
             .blob = sceneBlobOf(material::blobOf(kStates), program->parameters),
             // A transmitting model is drawn after the opaque, over a copy of
-            // what they made, as the translucent are (D720).
+            // what they made, as the translucent are.
             .translucent = program->blend == material::Blend::Translucent || program->transmits,
             .textures = {.base = slots[0], .packed = slots[1], .emission = slots[2], .normal = slots[3]},
             .program = program};

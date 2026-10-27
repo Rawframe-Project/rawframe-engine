@@ -1,6 +1,6 @@
 #pragma once
 
-// What an editor's preview draws over its scene, kind by kind (D798): each
+// What an editor's preview draws over its scene, kind by kind: each
 // body's collider and each light's reach as lines, so an author sees what
 // the models do not show.
 
@@ -17,9 +17,9 @@
 
 namespace rawframe::render_scene {
 
-/// The color a body's lines are drawn in (D839): a static body grey, a
+/// The color a body's lines are drawn in: a static body grey, a
 /// kinematic one blue, a dynamic one green, dim while `velocity` says it
-/// rests, orange while `contact` says it touches another (D845), and a
+/// rests, orange while `contact` says it touches another, and a
 /// sensor cyan.
 [[nodiscard]] std::array<float, 4>
 colliderColor(const physics3d::Body3D& body,
@@ -37,7 +37,7 @@ void addColliderLines(const physics3d::Body3D& body,
                       const std::optional<physics3d::Contact3D>& contact = std::nullopt);
 
 /// The hardest hit of a body that `contact` says touched another this
-/// step, as a line half a meter from `pose` along its normal (D845);
+/// step, as a line half a meter from `pose` along its normal;
 /// nothing where none was hit.
 void addContactLines(const physics3d::Pose3D& pose, const physics3d::Contact3D& contact, std::vector<SceneLine>& lines);
 
@@ -46,7 +46,7 @@ void addContactLines(const physics3d::Pose3D& pose, const physics3d::Contact3D& 
 /// Yellow.
 void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines);
 
-/// A box an editor outlines what an author chose with (D907), its center
+/// A box an editor outlines what an author chose with, its center
 /// and then half its sides along x, y, and z: its twelve edges, in
 /// `color`, drawn over what is nearer, appended to `lines`.
 void addOutlineLines(const std::array<double, 6>& box,
@@ -56,7 +56,7 @@ void addOutlineLines(const std::array<double, 6>& box,
 /// The overlays `overlays` asks for (`view::Overlay` bits), appended to
 /// `lines` until it holds `kMostSceneLines`: each body's collider in
 /// `world`, `bodies` resolved on first need and kept, each light in
-/// `lights`, and the ground's grid about the point under `eye` (D914).
+/// `lights`, and the ground's grid about the point under `eye`.
 void drawOverlays(world::World& world,
                   std::uint8_t overlays,
                   std::span<const LightInstance> lights,

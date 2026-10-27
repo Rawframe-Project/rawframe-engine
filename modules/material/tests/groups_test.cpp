@@ -1,5 +1,5 @@
-// The Surface contract's feature groups: the coat's (D716) and the
-// anisotropy's (D717), their inputs given as literals or connected, the
+// The Surface contract's feature groups: the coat's and the
+// anisotropy's, their inputs given as literals or connected, the
 // material then a program material written with them, and what the
 // groups' inputs refuse.
 
@@ -70,7 +70,7 @@ RAWFRAME_TEST(ACoatIsWrittenOverItsBase) {
                     MaterialError::Invalid));
 }
 RAWFRAME_TEST(AGraphCoatedOverItsBaseIsWrittenAsTheSlangTheScenesTestsDraw) {
-    // coated.material is rough beneath a smooth coat (D716): a program
+    // coated.material is rough beneath a smooth coat: a program
     // material, which the blob holds no coat for; the scene's tests draw
     // what it is written as, coated_graph.slang, word for word.
     const std::string_view kDocument{reinterpret_cast<const char*>(kCoatedMaterial.data()), kCoatedMaterial.size()};
@@ -87,7 +87,7 @@ RAWFRAME_TEST(AGraphCoatedOverItsBaseIsWrittenAsTheSlangTheScenesTestsDraw) {
 
 RAWFRAME_TEST(AnAnisotropyIsWrittenAlongItsTurn) {
     // brushed.material stretches its roughness along the tangent turned by
-    // its turn parameter (D717); the scene's tests draw what it is written
+    // its turn parameter; the scene's tests draw what it is written
     // as, brushed_graph.slang, word for word.
     const std::string_view kDocument{reinterpret_cast<const char*>(kBrushedMaterial.data()), kBrushedMaterial.size()};
     const auto kRead = readMaterial(kDocument);
@@ -109,7 +109,7 @@ RAWFRAME_TEST(AnAnisotropyIsWrittenAlongItsTurn) {
 }
 
 RAWFRAME_TEST(ATransmissionIsWrittenWithItsVolume) {
-    // D720: a weight, a tint and the depth it is reached at, a thickness,
+    // A weight, a tint and the depth it is reached at, a thickness,
     // and a thin wall, each written; the material transmits.
     const Value kTint = Value::array({Value::real(0.5), Value::real(0.9), Value::real(0.7)});
     const graph::Document kGlass = coated(objectOf({{"geometry_thickness", Value::real(0.25)},
@@ -144,8 +144,8 @@ RAWFRAME_TEST(ATransmissionIsWrittenWithItsVolume) {
 }
 
 RAWFRAME_TEST(AGlassIsWrittenAsTheSlangTheScenesTestsDraw) {
-    // glass.material transmits all but its reflection, half a meter thick
-    // (D720); the scene's tests draw what it is written as,
+    // glass.material transmits all but its reflection, half a meter thick;
+    // the scene's tests draw what it is written as,
     // glass_graph.slang, word for word.
     const std::string_view kDocument{reinterpret_cast<const char*>(kGlassMaterial.data()), kGlassMaterial.size()};
     const auto kRead = readMaterial(kDocument);
@@ -156,7 +156,7 @@ RAWFRAME_TEST(AGlassIsWrittenAsTheSlangTheScenesTestsDraw) {
     const auto kWritten = generateSlang(*kRead);
     const std::string_view kGolden{reinterpret_cast<const char*>(kGlassGraph.data()), kGlassGraph.size()};
     RAWFRAME_EXPECT(kWritten.has_value() && kWritten->transmits && kWritten->source == kGolden);
-    // frosted.material is the same glass but rough (D723), written as
+    // frosted.material is the same glass but rough, written as
     // frosted_graph.slang.
     const std::string_view kFrosted{reinterpret_cast<const char*>(kFrostedMaterial.data()), kFrostedMaterial.size()};
     const auto kRough = readMaterial(kFrosted);

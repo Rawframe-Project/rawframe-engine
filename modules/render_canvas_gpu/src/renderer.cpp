@@ -43,7 +43,7 @@ mrhiResourceId resourceOf(std::uint64_t key) noexcept {
                           .generation = static_cast<std::uint32_t>(key)};
 }
 
-/// A material as the sprite shader reads it (std140, D356): its color and
+/// A material as the sprite shader reads it (std140): its color and
 /// what multiplies its texture's; its emission, and one when it multiplies;
 /// what multiplies its texture's color in its emission; and its texture's
 /// scale and offset.
@@ -59,7 +59,7 @@ static_assert(sizeof(MaterialBlock) == 80, "the sprite shader reads a material a
 /// The stride between materials' blocks: no device asks uniform offsets
 /// aligned past 256 bytes.
 constexpr std::uint64_t kBlockStride = 256;
-/// What the canvas tells a frame it cleared, as the views' ground (D369).
+/// What the canvas tells a frame it cleared, as the views' ground.
 constexpr char kCanvasGround = 0;
 
 /// None: white, over what is behind.
@@ -82,7 +82,7 @@ MaterialBlock blockOf(const material::CanvasMaterial& made) noexcept {
         .map = {made.sampled.scale[0], made.sampled.scale[1], made.sampled.offset[0], made.sampled.offset[1]}};
 }
 
-/// A canvas material as the particles draw it (D357): its color and
+/// A canvas material as the particles draw it: its color and
 /// emission in the same terms, its one texture for both, its texture's
 /// alpha shaping it where that adds to its alpha, and its blend.
 particles_gpu::Material particleMaterialOf(const material::CanvasMaterial& made) noexcept {
@@ -106,7 +106,7 @@ particles_gpu::Material particleMaterialOf(const material::CanvasMaterial& made)
                                                                : particles_gpu::Blend::Over};
 }
 
-/// The canvas as the particles see it (D357): flat, `extent` meters each
+/// The canvas as the particles see it: flat, `extent` meters each
 /// way from its middle, its depth a constant the clip keeps; the particle
 /// clock `clock`.
 particles_gpu::ViewBlock particleViewOf(const std::array<float, 2>& extent, float clock) noexcept {
@@ -158,7 +158,7 @@ struct CanvasRenderer::State {
     RendererLimits limits;
     RendererStatistics statistics;
     mrhiShaderId shader{};
-    /// A pipeline for each of the canvas blends (D356): over what is
+    /// A pipeline for each of the canvas blends: over what is
     /// behind, added to it, and multiplying it.
     std::array<mrhiGraphicsPipelineId, 3> pipelines{};
     std::array<std::uint64_t, 3> pipelineRequests{};
@@ -167,11 +167,11 @@ struct CanvasRenderer::State {
     /// block-compressed ones linearly, across their levels.
     mrhiSamplerId nearest{};
     mrhiSamplerId linear{};
-    /// A material's texture's, by its declared filter and address (D356).
+    /// A material's texture's, by its declared filter and address.
     std::array<mrhiSamplerId, 4> materialSamplers{};
     /// What a sprite with no texture, or a material with none, samples.
     std::shared_ptr<const texture::Texture> white;
-    /// The particles, trails, and beams (D357): the device half the scene's
+    /// The particles, trails, and beams: the device half the scene's
     /// share.
     std::unique_ptr<particles_gpu::Particles> particles;
     /// The open frame's materials' blocks.
@@ -182,10 +182,10 @@ struct CanvasRenderer::State {
     const render_canvas::CanvasFrame* frame = nullptr;
     TextureSource textures;
     std::optional<std::array<std::uint32_t, 4>> region;
-    /// What the picture is cleared to, 8-bit sRGB (D369).
+    /// What the picture is cleared to, 8-bit sRGB.
     std::array<std::uint8_t, 3> bars{};
     /// What the open frame declared, until it is recorded and ends: and,
-    /// where the canvas is the ground of a region between bars (D369), the
+    /// where the canvas is the ground of a region between bars, the
     /// passes clearing the picture to the bars, a picture the region's size
     /// to black, and copying that into the region.
     bool declared = false;
@@ -246,7 +246,7 @@ struct CanvasRenderer::State {
         def.vertexAttributeCount = static_cast<std::uint32_t>(kAttributes.size());
         def.colorTargetCount = 1;
         // Premultiplied, in linear light: over what is behind, added to it,
-        // and multiplying it, its alpha left as it was (D356).
+        // and multiplying it, its alpha left as it was.
         def.colorTargets[0].format = mrhi_formatRgba8UnormSrgb;
         def.colorTargets[0].blend = true;
         const std::array<std::array<mrhiBlendComponent, 2>, 3> kBlends = {{
@@ -321,7 +321,7 @@ struct CanvasRenderer::State {
                 }
             }
         }
-        // The particles' and ribbons' materials' textures (D357).
+        // The particles' and ribbons' materials' textures.
         std::vector<std::uint32_t> shown;
         for (const particles::EmitterDraw& kEmitter : canvas.particles.emitters) {
             shown.push_back(kEmitter.material);
@@ -337,7 +337,7 @@ struct CanvasRenderer::State {
         }
     }
 
-    /// The frame's materials as the particles draw them (D357), none where
+    /// The frame's materials as the particles draw them, none where
     /// it holds none: each one's texture as held this frame, white for none
     /// and for one not held.
     [[nodiscard]] std::vector<particles_gpu::Material> particleMaterials() const {
@@ -366,7 +366,7 @@ struct CanvasRenderer::State {
             return {};
         }
         // A region as far as the frame reaches: the view's size follows the
-        // frame's a frame late, so a region may pass it once (D364).
+        // frame's a frame late, so a region may pass it once.
         if (region.has_value()) {
             auto& [x, y, width, height] = *region;
             x = std::min(x, open.width);
@@ -414,7 +414,7 @@ struct CanvasRenderer::State {
                 return failed("the frame's corners could not be declared", mrhi_errorCapacity);
             }
             // Each of the game's materials' blocks, at a stride every
-            // device's uniform offsets allow (D356).
+            // device's uniform offsets allow.
             const std::size_t kMaterials = std::max<std::size_t>(frame->materials.size(), 1);
             blocks.assign(kMaterials * kBlockStride, 0);
             for (std::size_t at = 0; at < kMaterials; ++at) {
@@ -479,7 +479,7 @@ struct CanvasRenderer::State {
         if (const mrhiResult kAdded = mrhiAddPass(native, &drawDef, &drawing); kAdded != mrhi_success) {
             return failed("the drawing pass could not be added", kAdded);
         }
-        // The particles, trails, and beams over every sprite (D357).
+        // The particles, trails, and beams over every sprite.
         RAWFRAME_TRY(particles->declare(
             frame->particles,
             particleMaterials(),
@@ -490,7 +490,7 @@ struct CanvasRenderer::State {
     }
 
     /// A canvas region of a picture whose ground the canvas is, between
-    /// bars of a color (D369): the picture cleared to the bars first if
+    /// bars of a color: the picture cleared to the bars first if
     /// this clears it, then the region cleared black, through a picture of
     /// its own (a pass clears a whole target), as the whole picture is
     /// without bars.
@@ -605,7 +605,7 @@ struct CanvasRenderer::State {
         if (mrhiBeginPass(native, drawing) != mrhi_success) {
             return failed("the drawing pass could not begin", mrhi_errorState);
         }
-        // A local player's region in split-screen (D364): its draws land
+        // A local player's region in split-screen: its draws land
         // there and nowhere else.
         if (region.has_value()) {
             const auto& [kX, kY, kWidth, kHeight] = *region;

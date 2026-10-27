@@ -15,7 +15,7 @@ ModelPasses::ModelPasses(mrhiDevice* native) noexcept : native_(native) {
 namespace {
 
 /// The most levels the copy behind transmitting models halves into, the
-/// first its own size (D723).
+/// first its own size.
 constexpr std::uint32_t kMostBehindLevels = 7;
 
 } // namespace
@@ -44,7 +44,7 @@ result::Status ModelPasses::declare(
     sampledSurfaces_ = {};
     resolve_ = {};
     // The lit pipeline writes the motion whether or not it is read; the
-    // twins only where the frame is multisampled (D343).
+    // twins only where the frame is multisampled.
     for (const auto& [kFormat, kMade, kSamples, kWanted] :
          {std::tuple{kSceneFormat, &scene_, 1U, true},
           std::tuple{kMotionFormat, &motion_, 1U, true},
@@ -154,7 +154,7 @@ result::Status ModelPasses::addLitPass(const std::vector<mrhiAccess>& reads) {
         }
         return {};
     }
-    // Where a model transmits (D720): the opaque models and the sky, kept,
+    // Where a model transmits: the opaque models and the sky, kept,
     // and resolved where multisampled; their light copied; then the
     // translucent models over it, reading the copy.
     for (mrhiColorTarget& kept : std::span{def.colorTargets, def.colorTargetCount}) {
@@ -180,7 +180,7 @@ result::Status ModelPasses::addLitPass(const std::vector<mrhiAccess>& reads) {
     if (const mrhiResult kAdded = mrhiAddPass(native_, &copy, &copying_); kAdded != mrhi_success) {
         return failed("the copy of the opaque models' light could not be added", kAdded);
     }
-    // Each level after the first halved from the one before (D723).
+    // Each level after the first halved from the one before.
     for (std::uint32_t level = 1; level < behindLevels_; ++level) {
         const mrhiAccess kRead{
             .resource = behind_,
@@ -228,7 +228,7 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
     if (runs.empty()) {
         return {};
     }
-    // Multisampled, every pipeline's twin taking the frame's samples (D343).
+    // Multisampled, every pipeline's twin taking the frame's samples.
     const mrhiGraphicsPipelineId kEngine = (samples_ > 1 ? many : single).pipeline;
     mrhiGraphicsPipelineId set = kEngine;
     if (mrhiSetGraphicsPipeline(native_, pass, set) != mrhi_success ||
@@ -236,7 +236,7 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
         return failed("the models could not be set up", mrhi_errorState);
     }
     // The table set again where a run samples another texture than the one
-    // before (D309), white for none and for one not held this frame, or
+    // before, white for none and for one not held this frame, or
     // where another pipeline is set.
     std::optional<render_scene::SceneTextures> bound;
     for (const Run& run : runs) {
@@ -286,9 +286,9 @@ result::Status ModelPasses::recordPrepass(const Drawing& with) {
     if (mrhiBeginPass(native_, prepass_) != mrhi_success) {
         return failed("a scene pass could not begin", mrhi_errorState);
     }
-    // A material's program cuts its masked models and gives its surfaces
-    // (D487); the opaque models' depth alone runs its code only where it
-    // moves their vertices (D691).
+    // A material's program cuts its masked models and gives its surfaces;
+    // the opaque models' depth alone runs its code only where it
+    // moves their vertices.
     RAWFRAME_TRY(surfaced_ ? drawRuns(with,
                                       table,
                                       prepass_,
@@ -366,7 +366,7 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
     }
     // Where a model transmits, the translucent are drawn in a pass of their
     // own, over a copy of what came before, which their table's slot 28
-    // reads (D720).
+    // reads.
     mrhiPassId translucent = lit_;
     if (transmits_) {
         if (mrhiEndPass(native_, lit_) != mrhi_success) {

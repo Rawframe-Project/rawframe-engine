@@ -14,7 +14,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// A decal as the lit pass reads it (std430, D339, D342): the
+/// A decal as the lit pass reads it (std430): the
 /// eye-relative World into its box, its tint with how much it covers, and
 /// its layer of the colors' atlas, below nought for none this frame; its
 /// layer of the normals' atlas, below nought for none; and the roughness
@@ -26,8 +26,8 @@ struct DecalBlock {
 };
 static_assert(sizeof(DecalBlock) == 96, "the scene's shaders read a decal as 96 bytes");
 
-/// The decals' textures as the lit pass samples them (ADR-0051, D339,
-/// D342): two array textures kept from frame to frame, their layers square
+/// The decals' textures as the lit pass samples them:
+/// two array textures kept from frame to frame, their layers square
 /// with every mip, one of the decals' colors (sRGB) and one of their
 /// normal textures (linear). A texture is drawn into a layer the first
 /// frame it is drawn and held, each mip from the texture's own nearest

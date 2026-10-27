@@ -33,7 +33,7 @@ MaterialBlob noMaterial() noexcept {
 
 namespace {
 
-/// A material's cooked bytes of `type`, read and waited for (D303).
+/// A material's cooked bytes of `type`, read and waited for.
 result::Result<content::VerifiedContent>
 readCooked(content::ContentStore& store, base::Bits128 id, base::Bits128 type) {
     RAWFRAME_TRY_ASSIGN(
@@ -46,7 +46,7 @@ readCooked(content::ContentStore& store, base::Bits128 id, base::Bits128 type) {
                                                               .description = "a material's read was cancelled"});
 }
 
-/// A surface material as the scene draws it, read from `store` (D303):
+/// A surface material as the scene draws it, read from `store`:
 /// what `sceneMaterialOf` makes of its cooked bytes, an instance's base
 /// read from the same store.
 result::Result<SceneMaterial> readMaterial(content::ContentStore& store,
@@ -89,8 +89,8 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
     }
     read.width = static_cast<std::uint32_t>(kWidth);
     read.height = static_cast<std::uint32_t>(kHeight);
-    // The sun's shadows (ADR-0051's typed cascade configuration, a
-    // profile's values; D289).
+    // The sun's shadows (the typed cascade configuration, a
+    // profile's values).
     const ShadowSettings kShadowDefaults;
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kCascades,
                         configuration.unsignedInteger("scene.shadow_cascades", kShadowDefaults.cascades));
@@ -108,7 +108,7 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
                          "scene.shadow_distance 1 to 10000 meters")
                 .error()};
     }
-    // Its filter, a class of ADR-0051's ladder (D330).
+    // Its filter, a class of the ladder.
     const std::string_view kFilter = configuration.text("scene.shadow_filter").value_or("soft");
     if (kFilter != "hardware" && kFilter != "soft" && kFilter != "contact_hardening") {
         return std::unexpected<result::Error>{
@@ -125,7 +125,7 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
                                   .filter = kFilter == "contact_hardening" ? ShadowFilter::ContactHardening
                                             : kFilter == "soft"            ? ShadowFilter::Soft
                                                                            : ShadowFilter::Hardware};
-    // The punctual lights' shadow atlas (D292): its side, a power of two,
+    // The punctual lights' shadow atlas: its side, a power of two,
     // or nought for none; its squares from a quarter of it, at most 512
     // texels, down to a quarter of that.
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kAtlas,
@@ -141,7 +141,7 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
     const auto kLargest = static_cast<std::uint32_t>(std::min<std::uint64_t>(512, kAtlas / 4));
     read.lightShadows =
         LightShadowSettings{.side = static_cast<std::uint32_t>(kAtlas), .largest = kLargest, .smallest = kLargest / 4};
-    // ADR-0051's anti-aliasing method (D291, D296, D343): temporal
+    // The anti-aliasing method: temporal
     // unless another is named; multisampling's samples, two or four.
     const std::string_view kMethod = configuration.text("scene.anti_aliasing").value_or("taa");
     if (kMethod != "taa" && kMethod != "fxaa" && kMethod != "msaa" && kMethod != "off") {
@@ -165,7 +165,7 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
                                                   .error()};
     }
     read.multisamples = static_cast<std::uint32_t>(kSamples);
-    // SPEC-0026's quality axis (D318): which of their qualities the
+    // The quality axis: which of their qualities the
     // game's materials are drawn at, the high unless another is named.
     const std::string_view kQuality = configuration.text("scene.quality").value_or("high");
     if (kQuality != "low" && kQuality != "medium" && kQuality != "high") {
@@ -178,7 +178,7 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
     read.quality = kQuality == "low"      ? material::Quality::Low
                    : kQuality == "medium" ? material::Quality::Medium
                                           : material::Quality::High;
-    // ADR-0052's render scale (D373): each local player's view drawn at
+    // The render scale: each local player's view drawn at
     // this many hundredths of its region's pixels each way, and scaled
     // to its region; every one unless asked.
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kPercent, configuration.unsignedInteger("scene.render_scale_percent", 100));
@@ -191,7 +191,7 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
     }
     read.renderScalePercent = static_cast<std::uint32_t>(kPercent);
     // Where a client allows fewer, the scale follows how the frames keep up
-    // with the device, down to this many (D533).
+    // with the device, down to this many.
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kLeast,
                         configuration.unsignedInteger("scene.render_scale_least_percent", kPercent));
     if (kLeast < 25 || kLeast > kPercent) {
@@ -228,7 +228,7 @@ void readMaterials(content::ContentStore& store,
                                          .texture = sceneTextureOf(process->sampled)});
                 continue;
             }
-            // One of a third type is a canvas material (D356),
+            // One of a third type is a canvas material,
             // the canvas's to draw.
             if (missing(process.error(), content::ContentError::ResourceTypeMismatch)) {
                 continue;
@@ -239,7 +239,7 @@ void readMaterials(content::ContentStore& store,
             materials.push_back(std::move(*read));
         } else if (!each.subasset || !missing(read.error(), content::ContentError::ResourceNotFound)) {
             // A mesh's subasset its source no longer has names
-            // no resource and is no material (D314).
+            // no resource and is no material.
             unread.emplace_back(each.path, std::string{read.error().description()});
         }
     }

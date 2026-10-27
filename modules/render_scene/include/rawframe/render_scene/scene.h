@@ -1,14 +1,14 @@
 #pragma once
 
-// The 3D scene's CPU half (SPEC-0024's scene contract, D283): entities with
+// The 3D scene's CPU half: entities with
 // `rawframe.model` models, copied out of a World where their poses put
 // them, then seen through a camera, culled, and put in an order a device
 // draws, lit by the sun and the sky. Client only; a server carries the same
 // components as plain values and links none of this.
 //
 // Positions stay in doubles until the view: every instance is placed
-// relative to the eye before it becomes floats (ADR-0046's large worlds).
-// The projection is reversed-Z with an infinite far plane (ADR-0051): the
+// relative to the eye before it becomes floats.
+// The projection is reversed-Z with an infinite far plane: the
 // near plane maps to depth one, the horizon to nought.
 
 #include "rawframe/kest/program.h"
@@ -41,7 +41,7 @@ namespace rawframe::render_scene {
 /// The engine's own meshes (`rawframe.model`'s BOX, SPHERE, CYLINDER, and
 /// CAPSULE), each one meter from its center to its sides; and GRID, a flat
 /// square of half sides one facing up, a vertex every `kGridCells`th of
-/// its side, for a surface its material moves (D691).
+/// its side, for a surface its material moves.
 inline constexpr std::uint64_t kBox = 0x3ff8cd61f01cf46bULL;
 inline constexpr std::uint64_t kSphere = 0x2c6b82d75f7be712ULL;
 inline constexpr std::uint64_t kCylinder = 0xaee26a717a3a62a0ULL;
@@ -53,14 +53,14 @@ inline constexpr std::uint32_t kGridCells = 128;
 [[nodiscard]] std::shared_ptr<const mesh::Mesh> engineMesh(std::uint64_t id);
 
 /// A mesh the scene may draw, by the identity a Model names it by.
-/// A compiled material as a device reads it (`material::blobOf`, D303),
-/// then its interface inputs' values (D708). A frame's copy of a material
-/// that blends also carries `kBlendsFlag` among its flags (D726).
+/// A compiled material as a device reads it (`material::blobOf`),
+/// then its interface inputs' values. A frame's copy of a material
+/// that blends also carries `kBlendsFlag` among its flags.
 using MaterialBlob = std::array<float, material::kBlobFloats + material::kParameterFloats>;
 
 /// The flag a frame's material carries where it blends over what is behind
-/// it (SceneMaterial's `translucent`), so a shadow is cut by what it covers
-/// (D726): beside `material::blobOf`'s flags, in the same float.
+/// it (SceneMaterial's `translucent`), so a shadow is cut by what it covers:
+/// beside `material::blobOf`'s flags, in the same float.
 inline constexpr std::uint32_t kBlendsFlag = 32;
 inline constexpr std::size_t kFlagsAt = 15;
 
@@ -72,7 +72,7 @@ inline constexpr std::size_t kFlagsAt = 15;
 /// color, so the model's color is its base color.
 [[nodiscard]] MaterialBlob noMaterial() noexcept;
 
-/// The texture a material samples, as a device binds it (D309): the game's
+/// The texture a material samples, as a device binds it: the game's
 /// texture by the identity its `texture` line gives it, none when nought,
 /// and the material's declared sampler state.
 struct SceneTexture {
@@ -83,7 +83,7 @@ struct SceneTexture {
     friend bool operator==(const SceneTexture&, const SceneTexture&) = default;
 };
 
-/// A material's textures (D312, D313): its base, packed, emission, and
+/// A material's textures: its base, packed, emission, and
 /// normal textures, each none when its identity is nought.
 struct SceneTextures {
     SceneTexture base;
@@ -102,17 +102,16 @@ struct SceneTextures {
 struct SceneMaterial {
     std::uint64_t id = 0;
     MaterialBlob blob{};
-    /// Whether it blends over what is behind it (SPEC-0026's `translucent`,
-    /// D305).
+    /// Whether it blends over what is behind it (`translucent`).
     bool translucent = false;
     SceneTextures textures;
-    /// Its own program, where the blob cannot say it (D484, D485): the
+    /// Its own program, where the blob cannot say it: the
     /// scene's containers linked with it, its models lit by them. Its blob
     /// then holds its declared states only.
     std::shared_ptr<const material::ProgramMaterial> program;
 };
 
-/// A game's post-process material (D348, D349): its identity, where it
+/// A game's post-process material: its identity, where it
 /// runs, what a device reads of it, and the texture it samples.
 struct ScenePostProcessMaterial {
     std::uint64_t id = 0;
@@ -121,7 +120,7 @@ struct ScenePostProcessMaterial {
     SceneTexture texture;
 };
 
-/// A post process a frame runs (D349): where, what the device reads of
+/// A post process a frame runs: where, what the device reads of
 /// its material, its texture, and how much of it, above nought and at
 /// most one.
 struct ScenePostProcess {
@@ -140,20 +139,20 @@ struct SceneMesh {
 
 /// A model as the extract stage copies it out of the World: owned values,
 /// placed where its entity's `rawframe.physics3d.pose` puts it (the origin,
-/// unturned, without one), or where its entity is placed (D665).
+/// unturned, without one), or where its entity is placed.
 struct ModelInstance {
     world::EntityHandle entity;
     /// Which of the game's model components it is, by its place.
     std::uint32_t component = 0;
     Model model;
     std::array<double, 3> position{};
-    /// Drawn where its entity is placed, not at its pose (D665).
+    /// Drawn where its entity is placed, not at its pose.
     bool placed = false;
-    /// Drawn where a headset's hand is this frame (D676).
+    /// Drawn where a headset's hand is this frame.
     bool tracked = false;
     /// The pose's turn as a unit quaternion, x, y, z, w.
     std::array<float, 4> rotation{0, 0, 0, 1};
-    /// A skinned mesh's palette as its entity's animation posed it (D508):
+    /// A skinned mesh's palette as its entity's animation posed it:
     /// its first matrix among the scene's extracted ones, and how many; none
     /// for a model drawn as its mesh was bound.
     std::uint32_t palette = 0;
@@ -169,38 +168,38 @@ struct SceneCamera {
     float pitch = 0;
     float fovY = 1;
     float near = 0.1F;
-    /// EV100 (ADR-0047).
+    /// EV100.
     float exposure = 15;
     float aspect = 16.0F / 9.0F;
     /// The exposure metered from what the view sees, starting from
-    /// `exposure`, if the camera asks (D293); and the seconds since the
+    /// `exposure`, if the camera asks; and the seconds since the
     /// frame before, on the Host's timeline.
     std::optional<AutoExposure> metering;
-    /// The camera's grading, if it asks (D294).
+    /// The camera's grading, if it asks.
     std::optional<Grading> grading;
-    /// The camera's ambient occlusion, if it asks (D327).
+    /// The camera's ambient occlusion, if it asks.
     std::optional<AmbientOcclusion> occlusion;
-    /// The camera's bloom, if it asks (D328).
+    /// The camera's bloom, if it asks.
     std::optional<Bloom> bloom;
-    /// The camera's screen-space reflections, if it asks (D331).
+    /// The camera's screen-space reflections, if it asks.
     std::optional<ScreenSpaceReflections> reflections;
-    /// The camera's motion blur, if it asks (D334).
+    /// The camera's motion blur, if it asks.
     std::optional<MotionBlur> motionBlur;
-    /// The camera's depth of field, if it asks (D336).
+    /// The camera's depth of field, if it asks.
     std::optional<DepthOfField> depthOfField;
-    /// The camera's contact shadows, if it asks (D338).
+    /// The camera's contact shadows, if it asks.
     std::optional<ContactShadows> contactShadows;
     /// The camera's tonemapper, as its component numbers it: another
-    /// number is AgX (D295).
+    /// number is AgX.
     std::uint32_t tonemapper = 0;
-    /// The camera's post processes, in the game's order (D349).
+    /// The camera's post processes, in the game's order.
     std::vector<PostProcess> postProcesses;
     float elapsed = 0;
     /// The eye's own turn in the World's axes, a unit quaternion (x, y, z,
-    /// w), rolled as a head is: a headset's eye (D595), for which `yaw` and
+    /// w), rolled as a head is: a headset's eye, for which `yaw` and
     /// `pitch` say nothing; none for the eye `yaw` and `pitch` aim.
     std::optional<std::array<float, 4>> orientation;
-    /// How an editor's preview draws the scene (D794).
+    /// How an editor's preview draws the scene.
     view::ViewMode mode = view::ViewMode::Lit;
 };
 
@@ -210,18 +209,18 @@ using Matrix = std::array<float, 16>;
 /// A camera's view (World axes to the eye's, about the eye) and its
 /// projection (reversed-Z, the far plane at infinity), column-major, from
 /// its aim, lens, and aspect: what the scene draws by, and what picking
-/// agrees with (D366).
+/// agrees with.
 struct CameraMatrices {
     Matrix view{};
     Matrix projection{};
 };
 [[nodiscard]] CameraMatrices matricesOf(const SceneCamera& camera) noexcept;
 
-/// Where a headset's hands are in the World this frame (D676), the left
+/// Where a headset's hands are in the World this frame, the left
 /// then the right; none for one not located.
 using HandsInWorld = std::array<std::optional<std::array<double, 3>>, 2>;
 
-/// A headset's eye's view of a player's camera (D595): the camera the eye
+/// A headset's eye's view of a player's camera: the camera the eye
 /// sees through, the size its picture is drawn at, and where that picture
 /// lies over the eye's image (left, top, width, height in the image's
 /// pixels).
@@ -240,17 +239,17 @@ struct EyeView {
 /// whose angles see nothing or whose image has no size.
 [[nodiscard]] std::optional<EyeView> eyeViewOf(const SceneCamera& player, const view::HeadsetEye& eye);
 
-/// A camera's view geometry for picking (ADR-0052, D366): its eye, aim,
+/// A camera's view geometry for picking: its eye, aim,
 /// and lens; the view's size is the caller's.
 [[nodiscard]] view::Perspective perspectiveOf(const SceneCamera& camera) noexcept;
 
 /// Where a camera puts the eye in the World: its offsets from `pose`, or
-/// from the origin when it is fixed (D520); none when it follows and its
+/// from the origin when it is fixed; none when it follows and its
 /// entity has no pose.
 [[nodiscard]] std::optional<std::array<double, 3>> eyeOf(const Camera& camera, const physics3d::Pose3D* pose) noexcept;
 
 /// One model to draw, or a run of its mesh's parts that draw with one
-/// material (D314): its mesh and the run's indices, where it is relative to
+/// material: its mesh and the run's indices, where it is relative to
 /// the eye (the World's axes, meters), and its surface's base color in
 /// linear light.
 struct SceneDraw {
@@ -264,56 +263,56 @@ struct SceneDraw {
     /// columns of four with the last nought.
     Matrix normal{};
     std::array<float, 4> color{1, 1, 1, 1};
-    /// Its material's place in the frame's materials (D303): the Model's
-    /// when it names one, else its parts' own (D314).
+    /// Its material's place in the frame's materials: the Model's
+    /// when it names one, else its parts' own.
     std::uint32_t material = 0;
     world::EntityHandle entity;
     /// Where the model was the frame before, relative to this frame's eye:
-    /// what its motion is measured from (D291); the model itself where it
+    /// what its motion is measured from; the model itself where it
     /// was not drawn then.
     Matrix previous{};
-    /// A posed skinned mesh's palette (D508): its first matrix among the
+    /// A posed skinned mesh's palette: its first matrix among the
     /// frame's, and how many; none for one drawn as its mesh was bound. A
     /// vertex is skinned in the model's space, then the model places it.
     std::uint32_t palette = 0;
     std::uint32_t joints = 0;
     /// The palette it was posed with the frame before, as many matrices
     /// among the frame's: what its vertices' motion is measured from, as
-    /// `previous` is its model's (D510); `palette` where it was not posed
+    /// `previous` is its model's; `palette` where it was not posed
     /// then.
     std::uint32_t previousPalette = 0;
 
     friend bool operator==(const SceneDraw&, const SceneDraw&) = default;
 };
 
-/// The light a frame is drawn in, linear Rec. 709 (ADR-0047) in physical
-/// units (ADR-0051): the sun's illuminance in lux and the direction toward
+/// The light a frame is drawn in, linear Rec. 709 in physical
+/// units: the sun's illuminance in lux and the direction toward
 /// it, and the sky's luminance in candela per square meter.
 struct SceneLights {
     std::array<float, 3> toSun{0, 1, 0};
     std::array<float, 3> sun{0, 0, 0};
     std::array<float, 3> sky{0, 0, 0};
-    /// The sun's width (D347): twice the tangent of half the angle its disc
+    /// The sun's width: twice the tangent of half the angle its disc
     /// spans, how far its penumbra spreads for each meter between a caster
     /// and what it shades.
     float sunWidth = 0;
-    /// The ground's luminance below the horizon (D304): its albedo times
+    /// The ground's luminance below the horizon: its albedo times
     /// the sun's illuminance on it and the sky's, over π.
     std::array<float, 3> ground{0, 0, 0};
-    /// The sky's picture (D322): the texture the game names, a cube whose
+    /// The sky's picture: the texture the game names, a cube whose
     /// light `sky` scales, in place of the sky's and the ground's; nought
     /// for none.
     std::uint64_t environment = 0;
     /// Whether a sky with no picture is drawn as a clear day's, deeper
-    /// overhead and paler at the horizon, as an editor's view shows it
-    /// (D914, D925); a game's own view draws its light flat.
+    /// overhead and paler at the horizon, as an editor's view shows it;
+    /// a game's own view draws its light flat.
     bool graded = false;
 
     friend bool operator==(const SceneLights&, const SceneLights&) = default;
 };
 
 /// A punctual light as the extract stage copies it out of the World, where
-/// its entity's pose puts it (D290): a point's or a spot's.
+/// its entity's pose puts it: a point's or a spot's.
 struct LightInstance {
     world::EntityHandle entity;
     bool spot = false;
@@ -323,7 +322,7 @@ struct LightInstance {
 };
 
 /// A reflection probe as the extract stage copies it out of the World,
-/// where its entity's pose puts it (D325).
+/// where its entity's pose puts it.
 struct ProbeInstance {
     world::EntityHandle entity;
     ReflectionProbe probe;
@@ -331,7 +330,7 @@ struct ProbeInstance {
 };
 
 /// A decal as the extract stage copies it out of the World, where its
-/// entity's pose puts it (D339).
+/// entity's pose puts it.
 struct DecalInstance {
     world::EntityHandle entity;
     Decal decal;
@@ -339,11 +338,11 @@ struct DecalInstance {
     std::array<float, 4> rotation{0, 0, 0, 1};
 };
 
-/// A decal as a device reads it (D339): the eye-relative World into its
+/// A decal as a device reads it: the eye-relative World into its
 /// box, which spans -1 to 1 along each axis and is seen along -Z, x to the
 /// texture's right and y to its top; its tint in linear light, with how
 /// much it covers; its texture; and its normal texture and the roughness
-/// it lays, nought for none (D342).
+/// it lays, nought for none.
 struct SceneDecal {
     Matrix toBox{};
     std::array<float, 4> color{};
@@ -354,7 +353,7 @@ struct SceneDecal {
     friend bool operator==(const SceneDecal&, const SceneDecal&) = default;
 };
 
-/// A reflection probe as a device reads it (D325): its box's middle
+/// A reflection probe as a device reads it: its box's middle
 /// relative to the eye, its half sides, what it holds, and its light's
 /// scale.
 struct SceneProbe {
@@ -366,7 +365,7 @@ struct SceneProbe {
     friend bool operator==(const SceneProbe&, const SceneProbe&) = default;
 };
 
-/// A punctual light as a device reads it (D290): where it is relative to
+/// A punctual light as a device reads it: where it is relative to
 /// the eye, its reach, its intensity (linear color times candela), and, for
 /// a spot, the way it shines and the cosines of its cone.
 struct SceneLight {
@@ -379,14 +378,14 @@ struct SceneLight {
     float cosInner = -1;
     float cosOuter = -1;
     /// Its first square in the punctual shadows' atlas, and how many: one
-    /// for a spot, six for a point; none without shadows (D292).
+    /// for a spot, six for a point; none without shadows.
     std::uint32_t shadowSlot = 0;
     std::uint32_t shadowSlots = 0;
 
     friend bool operator==(const SceneLight&, const SceneLight&) = default;
 };
 
-/// One square of the punctual lights' shadow atlas (D292): a spot's map or
+/// One square of the punctual lights' shadow atlas: a spot's map or
 /// one face of a point's cube, seen from the light along `forward` through
 /// a perspective `tangent` wide each way (reversed-Z with no far plane,
 /// depth one at `near`), placed relative to the eye; where it lies in the
@@ -409,12 +408,12 @@ struct ShadowSlot {
 };
 
 /// A punctual light's square of the shadows' atlas as seen from it, not yet
-/// placed in the atlas nor given casters (D292): a spot's along its
+/// placed in the atlas nor given casters: a spot's along its
 /// direction, as wide as its cone; a point's `face` along +X, -X, +Y, -Y,
 /// +Z, or -Z, a quarter turn wide.
 [[nodiscard]] ShadowSlot shadowSlotOf(const SceneLight& light, std::uint32_t face) noexcept;
 
-/// The punctual lights' shadows for a frame (D292): the atlas's side (none
+/// The punctual lights' shadows for a frame: the atlas's side (none
 /// without a shadowed light), its squares, and their casters; the lights
 /// that asked for shadows and got none for the budget, and casters past
 /// the models' limit.
@@ -428,7 +427,7 @@ struct SceneLightShadows {
     friend bool operator==(const SceneLightShadows&, const SceneLightShadows&) = default;
 };
 
-/// ADR-0051's one clustered structure for the view (D290): screen tiles by
+/// The one clustered structure for the view: screen tiles by
 /// exponential depth slices, each cluster naming the lights that reach it.
 /// Built by the view stage; a device reads a cluster's lights by where a
 /// point is on the screen and how far ahead.
@@ -441,8 +440,8 @@ struct SceneClusters {
     float near = 0.1F;
     float far = 500;
     /// Each cluster's first index in `indices`, how many lights follow it,
-    /// how many decals follow those (D339), and how many reflection probes
-    /// follow those (D340); x fastest, then y from the top, then slices
+    /// how many decals follow those, and how many reflection probes
+    /// follow those; x fastest, then y from the top, then slices
     /// from the eye.
     std::vector<std::uint32_t> ranges;
     /// Lights by their place in the frame's lights, decals by theirs in
@@ -452,7 +451,7 @@ struct SceneClusters {
     friend bool operator==(const SceneClusters&, const SceneClusters&) = default;
 };
 
-/// One cascade of the sun's shadow map (ADR-0051): a light-space box
+/// One cascade of the sun's shadow map: a light-space box
 /// holding the part of the view from the cascade before it to `far`.
 struct ShadowCascade {
     /// Eye-relative World space to the cascade's clip space: x and y across
@@ -462,17 +461,17 @@ struct ShadowCascade {
     float far = 0;
     /// The World size of one of its texels, for the normal bias.
     float texel = 0;
-    /// Its casters, a run of `SceneShadows::casters` (D298).
+    /// Its casters, a run of `SceneShadows::casters`.
     std::uint32_t firstCaster = 0;
     std::uint32_t casterCount = 0;
 
     friend bool operator==(const ShadowCascade&, const ShadowCascade&) = default;
 };
 
-/// ADR-0051's typed ladder of shadow filters (D330): the hardware's two by
+/// The typed ladder of shadow filters: the hardware's two by
 /// two blend of four compared texels, its base; a five by five
 /// tent-weighted blend from nine of those (Castaño's optimized PCF), the
-/// middle class; and contact hardening (PCSS), the top class (D347): the
+/// middle class; and contact hardening (PCSS), the top class: the
 /// sun's shadows sharp where they meet their casters and wider with the
 /// distance from them, as wide as the sun's disc makes them. A point or
 /// spot light has no size, so its shadows are filtered by the middle class
@@ -483,9 +482,9 @@ enum class ShadowFilter : std::uint8_t {
     ContactHardening
 };
 
-/// The sun's shadows as the view stage derives them (ADR-0051's cascaded
+/// The sun's shadows as the view stage derives them (the cascaded
 /// shadow maps): up to four cascades, nearest first, and the models that
-/// cast into each, cascade by cascade, in draw order (D298). None without
+/// cast into each, cascade by cascade, in draw order. None without
 /// a sun or shadows.
 struct SceneShadows {
     std::size_t count = 0;
@@ -495,7 +494,7 @@ struct SceneShadows {
     /// Where shadows end, in meters from the eye; they fade over the last
     /// cascade's last tenth.
     float distance = 0;
-    /// How every shadow map is filtered, the punctual lights' too (D330).
+    /// How every shadow map is filtered, the punctual lights' too.
     ShadowFilter filter = ShadowFilter::Soft;
     std::vector<SceneDraw> casters;
     /// Casters left out past the models' limit, once for each cascade.
@@ -506,7 +505,7 @@ struct SceneShadows {
 
 /// What the queue stage builds: the view, the light, and the draws in the
 /// order a device draws them, grouped by mesh; and what was left out.
-/// ADR-0051's metering (D293): whether the frame's exposure follows what it
+/// The metering: whether the frame's exposure follows what it
 /// sees; its bounds, rates, compensation, and the fractions of its pixels
 /// left out, made sound (finite, the maximum above the minimum, the rates
 /// not negative, the fractions within nought and one, low below high); the
@@ -522,12 +521,12 @@ struct SceneMetering {
     friend bool operator==(const SceneMetering&, const SceneMetering&) = default;
 };
 
-/// ADR-0051's grading form (D294), as the display stage applies it to the
+/// The grading form, as the display stage applies it to the
 /// scene's linear light before the tonemapper: whether it grades; the white
 /// balance as one matrix of linear Rec. 709 (rows of three, the camera's
 /// temperature and tint taken through LMS); the ASC CDL slope, offset, and
 /// power; saturation; contrast about middle grey; and the grading table
-/// looked up last, nought for none (D344). A grade with a value not finite
+/// looked up last, nought for none. A grade with a value not finite
 /// or a power not above nought grades nothing.
 struct SceneGrading {
     bool enabled = false;
@@ -542,10 +541,10 @@ struct SceneGrading {
     friend bool operator==(const SceneGrading&, const SceneGrading&) = default;
 };
 
-/// The grading a camera's `Grading` asks for, made sound (D294).
+/// The grading a camera's `Grading` asks for, made sound.
 [[nodiscard]] SceneGrading gradingOf(const std::optional<Grading>& asked) noexcept;
 
-/// ADR-0051's screen-space ambient occlusion (D327): whether the view has
+/// The screen-space ambient occlusion: whether the view has
 /// it, how far around a point it looks, in meters (a hundredth to ten),
 /// and how strongly it takes what it finds (up to four).
 struct SceneOcclusion {
@@ -556,12 +555,12 @@ struct SceneOcclusion {
     friend bool operator==(const SceneOcclusion&, const SceneOcclusion&) = default;
 };
 
-/// The occlusion a camera's `AmbientOcclusion` asks for, made sound
-/// (D327): none for a value not finite, or a radius or an intensity not
+/// The occlusion a camera's `AmbientOcclusion` asks for, made sound:
+/// none for a value not finite, or a radius or an intensity not
 /// above nought.
 [[nodiscard]] SceneOcclusion occlusionOf(const std::optional<AmbientOcclusion>& asked) noexcept;
 
-/// ADR-0051's bloom (D328): whether the view has it, and how much of the
+/// The bloom: whether the view has it, and how much of the
 /// spread light is mixed with the light as it is (up to one).
 struct SceneBloom {
     bool enabled = false;
@@ -570,11 +569,11 @@ struct SceneBloom {
     friend bool operator==(const SceneBloom&, const SceneBloom&) = default;
 };
 
-/// The bloom a camera's `Bloom` asks for, made sound (D328): none for an
+/// The bloom a camera's `Bloom` asks for, made sound: none for an
 /// intensity not finite or not above nought.
 [[nodiscard]] SceneBloom bloomOf(const std::optional<Bloom>& asked) noexcept;
 
-/// ADR-0051's screen-space reflections (D331): whether the view has them,
+/// The screen-space reflections: whether the view has them,
 /// and how far a reflection is followed, in meters (a tenth to a hundred).
 struct SceneScreenReflections {
     bool enabled = false;
@@ -584,10 +583,10 @@ struct SceneScreenReflections {
 };
 
 /// The reflections a camera's `ScreenSpaceReflections` asks for, made
-/// sound (D331): none for a distance not finite or not above nought.
+/// sound: none for a distance not finite or not above nought.
 [[nodiscard]] SceneScreenReflections reflectionsOf(const std::optional<ScreenSpaceReflections>& asked) noexcept;
 
-/// ADR-0051's motion blur (D334): whether the view has it, and for what
+/// The motion blur: whether the view has it, and for what
 /// share of each frame's time its shutter is open (above nought, at most
 /// one).
 struct SceneMotionBlur {
@@ -597,11 +596,11 @@ struct SceneMotionBlur {
     friend bool operator==(const SceneMotionBlur&, const SceneMotionBlur&) = default;
 };
 
-/// The motion blur a camera's `MotionBlur` asks for, made sound (D334):
+/// The motion blur a camera's `MotionBlur` asks for, made sound:
 /// none for a shutter not finite or not above nought.
 [[nodiscard]] SceneMotionBlur motionBlurOf(const std::optional<MotionBlur>& asked) noexcept;
 
-/// ADR-0051's depth of field (D336): whether the view has it, the distance
+/// The depth of field: whether the view has it, the distance
 /// in focus in meters (a tenth to ten thousand), and the lens's f-number
 /// (a half to 64).
 struct SceneDepthOfField {
@@ -612,11 +611,11 @@ struct SceneDepthOfField {
     friend bool operator==(const SceneDepthOfField&, const SceneDepthOfField&) = default;
 };
 
-/// The depth of field a camera's `DepthOfField` asks for, made sound
-/// (D336): none for a focus or an aperture not finite or not above nought.
+/// The depth of field a camera's `DepthOfField` asks for, made sound:
+/// none for a focus or an aperture not finite or not above nought.
 [[nodiscard]] SceneDepthOfField depthOfFieldOf(const std::optional<DepthOfField>& asked) noexcept;
 
-/// ADR-0051's contact shadows (D338): whether the view has them, and how
+/// The contact shadows: whether the view has them, and how
 /// far toward the sun a point looks for what shades it, in meters (a
 /// hundredth to ten).
 struct SceneContactShadows {
@@ -626,11 +625,11 @@ struct SceneContactShadows {
     friend bool operator==(const SceneContactShadows&, const SceneContactShadows&) = default;
 };
 
-/// The contact shadows a camera's `ContactShadows` asks for, made sound
-/// (D338): none for a length not finite or not above nought.
+/// The contact shadows a camera's `ContactShadows` asks for, made sound:
+/// none for a length not finite or not above nought.
 [[nodiscard]] SceneContactShadows contactShadowsOf(const std::optional<ContactShadows>& asked) noexcept;
 
-/// ADR-0051's temporal inputs (D291). Whether the frame is antialiased
+/// The temporal inputs. Whether the frame is antialiased
 /// over time; its subpixel jitter, a pixel's fraction across and down in
 /// [-0.5, 0.5), which the GPU half applies to the projection at its size;
 /// the frame before's view and projection, unjittered, taking this frame's
@@ -646,7 +645,7 @@ struct SceneTemporal {
 };
 
 /// The subpixel jitter of a frame counted from nought: Halton (2, 3) over
-/// eight frames, centered on the pixel (ADR-0051).
+/// eight frames, centered on the pixel.
 [[nodiscard]] std::array<float, 2> temporalJitter(std::uint64_t frame) noexcept;
 
 struct SceneFrame {
@@ -659,7 +658,7 @@ struct SceneFrame {
     std::array<float, 3> forward{0, 0, -1};
     /// The eye's place in the World's axes, which the models are placed
     /// relative to; and the presented World's time in seconds, now and the
-    /// frame before, the same for the first (`Scene::shownAt`, D691).
+    /// frame before, the same for the first (`Scene::shownAt`).
     std::array<double, 3> eye{0, 0, 0};
     std::array<double, 2> time{0, 0};
     SceneShadows shadows;
@@ -674,60 +673,59 @@ struct SceneFrame {
     SceneDepthOfField depthOfField;
     SceneContactShadows contactShadows;
     Tonemapper tonemapper = Tonemapper::Agx;
-    /// Whether the tonemapped picture is antialiased by FXAA (D296): never
+    /// Whether the tonemapped picture is antialiased by FXAA: never
     /// with the temporal inputs, which are then off.
     bool fxaa = false;
-    /// The camera's view mode (D794).
+    /// The camera's view mode.
     view::ViewMode mode = view::ViewMode::Lit;
     /// The samples a pixel of the models' passes takes: one, or more where
-    /// multisampling antialiases the frame (D343), never with the temporal
+    /// multisampling antialiases the frame, never with the temporal
     /// inputs or FXAA.
     std::uint32_t samples = 1;
     /// Whether the picture is dithered by under one step of its eight-bit
-    /// encoding (ADR-0051's debanding, D332): on unless a test compares
+    /// encoding: on unless a test compares
     /// pixels exactly.
     bool dither = true;
     /// The punctual lights that reach the view, and the clusters they are
-    /// culled into (D290).
+    /// culled into.
     std::vector<SceneLight> lights3d;
     SceneClusters clusters;
     std::size_t lightsCulled = 0;
     std::size_t lightsOverLimit = 0;
     /// Lights a full cluster could not name, counted once each time.
     std::size_t clusterOverflow = 0;
-    /// The reflection probes that reach the view (D325), the nearest to the
+    /// The reflection probes that reach the view, the nearest to the
     /// eye kept up to the limit, then ordered as a point takes them: the
-    /// highest priority first, then the smaller box (D340); and those past
+    /// highest priority first, then the smaller box; and those past
     /// the limit.
     std::vector<SceneProbe> probes;
     std::size_t probesOverLimit = 0;
     /// The decals that reach the view, in their entities' order, at most
-    /// the limit; those out of view or not sound, and those past the limit
-    /// (D339).
+    /// the limit; those out of view or not sound, and those past the limit.
     std::vector<SceneDecal> decals;
     std::size_t decalsCulled = 0;
     std::size_t decalsOverLimit = 0;
-    /// The camera's post processes to run, in its order (D349); and those
+    /// The camera's post processes to run, in its order; and those
     /// left out: a material the game has not, a weight not finite, or past
     /// the limit. Material nought, or a weight of nought or less, runs
     /// nothing and is not counted.
     std::vector<ScenePostProcess> postProcesses;
     std::size_t postProcessesLeftOut = 0;
     /// The particle emitters, trails, and beams that reach the view, and
-    /// what they spawn and leave out (D352, D354, D357), a material named
+    /// what they spawn and leave out, a material named
     /// by its place among the frame's materials.
     rawframe::particles::Frame particles;
     /// EV100.
     float exposure = 15;
     SceneLights lights;
-    /// The opaque draws, grouped by their material's texture, then by mesh
-    /// (D309); then the last `translucent` of them the translucent ones,
-    /// farthest first (D305).
+    /// The opaque draws, grouped by their material's texture, then by mesh;
+    /// then the last `translucent` of them the translucent ones,
+    /// farthest first.
     std::vector<SceneDraw> draws;
     std::size_t translucent = 0;
     std::size_t drawn = 0;
-    /// Of those drawn, those where their entity is placed (D665), and
-    /// those where a headset's hand is this frame (D676).
+    /// Of those drawn, those where their entity is placed, and
+    /// those where a headset's hand is this frame.
     std::size_t placed = 0;
     std::size_t tracked = 0;
     /// Outside the view.
@@ -740,17 +738,17 @@ struct SceneFrame {
     std::size_t unknownMeshes = 0;
     /// A material the game has not, drawn with none.
     std::size_t unknownMaterials = 0;
-    /// Every material's blob (ADR-0031, D303), a draw naming its place: the
+    /// Every material's blob, a draw naming its place: the
     /// first none's, then the game's in the order they were given.
     std::vector<MaterialBlob> materials;
-    /// Every material's texture, at its blob's place (D309).
+    /// Every material's texture, at its blob's place.
     std::vector<SceneTextures> textures;
-    /// Every material's own program, at its blob's place (D485): none for
+    /// Every material's own program, at its blob's place: none for
     /// one the blob says, and for every place past the list's end.
     std::vector<std::shared_ptr<const material::ProgramMaterial>> programs;
     std::size_t overLimit = 0;
     /// The posed skinned meshes' joint matrices, from their meshes' bind
-    /// space to their models' (D508), the draws naming theirs; skinned
+    /// space to their models', the draws naming theirs; skinned
     /// models drawn posed; and those drawn as bound for want of room.
     std::vector<Matrix> palette;
     std::size_t skinned = 0;
@@ -760,36 +758,36 @@ struct SceneFrame {
 };
 
 /// `frame` without its reflection probes, in its list or its clusters: as
-/// a probe's own bake sees the scene (D326, D340).
+/// a probe's own bake sees the scene.
 void withoutProbes(SceneFrame& frame) noexcept;
 
-/// SPEC-0024's limit points for the scene: the models one frame queues
-/// (SPEC-0024's `recorded_commands_per_frame`, one draw each). Models past
+/// The limit points for the scene: the models one frame queues
+/// (the `recorded_commands_per_frame`, one draw each). Models past
 /// it are left out, from the last in draw order, counted as over the limit.
 struct SceneLimits {
     std::size_t maximumModels = 16384;
-    /// ADR-0051's maximum clustered lights per view and per-cluster cap for
-    /// lights (D290).
+    /// The maximum clustered lights per view and per-cluster cap for
+    /// lights.
     std::size_t maximumLights = 256;
     std::size_t maximumLightsPerCluster = 64;
-    /// ADR-0051's decals a view draws, and a cluster holds (D339).
+    /// The decals a view draws, and a cluster holds.
     std::size_t maximumDecals = 64;
     std::size_t maximumDecalsPerCluster = 16;
-    /// ADR-0051's maximum shadow-casting punctual lights per view (D292).
+    /// The maximum shadow-casting punctual lights per view.
     std::size_t maximumShadowedLights = 8;
-    /// ADR-0051's reflection probes a view resolves at once (D325), and a
-    /// cluster holds (D340).
+    /// The reflection probes a view resolves at once, and a
+    /// cluster holds.
     std::size_t maximumProbes = 32;
     std::size_t maximumProbesPerCluster = 8;
-    /// The post processes a view runs (D349).
+    /// The post processes a view runs.
     std::size_t maximumPostProcesses = 8;
-    /// ADR-0053's particle, trail, and beam limit points (D352, D354).
+    /// The particle, trail, and beam limit points.
     rawframe::particles::Limits particles;
-    /// The joint matrices one frame's skinned models are drawn with (D508).
+    /// The joint matrices one frame's skinned models are drawn with.
     std::size_t maximumPalette = 16384;
 };
 
-/// ADR-0051's one typed atlas for the punctual lights' shadows (D292), a
+/// The one typed atlas for the punctual lights' shadows, a
 /// profile's values: its side, and its squares' sides, the largest for a
 /// light covering much of the view and halving as it covers less, never
 /// below the smallest. A side of nought gives no punctual shadows.
@@ -799,7 +797,7 @@ struct LightShadowSettings {
     std::uint32_t smallest = 128;
 };
 
-/// ADR-0051's typed cascade configuration, a profile's values: how many
+/// The typed cascade configuration, a profile's values: how many
 /// cascades, how far shadows reach, how the splits blend a logarithmic
 /// scheme (one) with a uniform one (nought), and each cascade's side in
 /// texels. Cascades of nought draw no shadows.
@@ -812,11 +810,11 @@ struct ShadowSettings {
     ShadowFilter filter = ShadowFilter::Soft;
 };
 
-/// ADR-0051's closed set of anti-aliasing methods: none, the first-party
-/// temporal one, the default (D291), FXAA, the cheap one, run on the
-/// display-referred picture after the tonemapper (D296), and multisampling,
+/// The closed set of anti-aliasing methods: none, the first-party
+/// temporal one, the default, FXAA, the cheap one, run on the
+/// display-referred picture after the tonemapper, and multisampling,
 /// the forward path's own, the models' passes taking several samples a
-/// pixel (D343).
+/// pixel.
 enum class AntiAliasing : std::uint8_t {
     Off,
     Taa,
@@ -824,8 +822,7 @@ enum class AntiAliasing : std::uint8_t {
     Msaa
 };
 
-/// The samples a pixel multisampling may take (ADR-0051's typed limit
-/// point, D343): two or four, four unless a profile says otherwise.
+/// The samples a pixel multisampling may take: two or four, four unless a profile says otherwise.
 inline constexpr std::uint32_t kDefaultMultisamples = 4;
 
 /// An eye moving farther than this in a frame cuts: the picture before is
@@ -836,10 +833,10 @@ struct SceneSettings {
     /// The game's components of `rawframe.model.Model`'s type, in its order:
     /// an entity may show one of each.
     std::vector<schema::ComponentTypeId> models;
-    /// The game's components of `rawframe.model.Placed`'s type (D665): an
+    /// The game's components of `rawframe.model.Placed`'s type: an
     /// entity's models are drawn where the first placed one says.
     std::vector<schema::ComponentTypeId> placements;
-    /// The game's components of `rawframe.model.Tracked`'s type (D676): an
+    /// The game's components of `rawframe.model.Tracked`'s type: an
     /// entity's models are drawn where the first one's hand is, where it
     /// is this frame, before any placement.
     std::vector<schema::ComponentTypeId> tracking;
@@ -849,30 +846,30 @@ struct SceneSettings {
     /// The game's point and spot light components.
     std::vector<schema::ComponentTypeId> points;
     std::vector<schema::ComponentTypeId> spots;
-    /// The game's reflection probe components (D325).
+    /// The game's reflection probe components.
     std::vector<schema::ComponentTypeId> probes;
-    /// The game's decal components (D339).
+    /// The game's decal components.
     std::vector<schema::ComponentTypeId> decals;
-    /// The game's particle emitter components (D352).
+    /// The game's particle emitter components.
     std::vector<schema::ComponentTypeId> emitters;
-    /// The game's trail and beam components (D354).
+    /// The game's trail and beam components.
     std::vector<schema::ComponentTypeId> trails;
     std::vector<schema::ComponentTypeId> beams;
     /// The game's meshes, by their identities.
     std::vector<SceneMesh> meshes;
-    /// The game's materials, by their identities (D303).
+    /// The game's materials, by their identities.
     std::vector<SceneMaterial> materials;
-    /// The game's post-process materials, by their identities (D349).
+    /// The game's post-process materials, by their identities.
     std::vector<ScenePostProcessMaterial> postProcesses;
     SceneLimits limits;
     ShadowSettings shadows;
     LightShadowSettings lightShadows;
     AntiAliasing antiAliasing = AntiAliasing::Taa;
-    /// With multisampling, the samples a pixel takes: two or four (D343).
+    /// With multisampling, the samples a pixel takes: two or four.
     std::uint32_t multisamples = kDefaultMultisamples;
 };
 
-/// A line a scene draws over the World (D464): from one point to another,
+/// A line a scene draws over the World: from one point to another,
 /// in World meters, its linear color and alpha, and its width: meters, or,
 /// `ofView`, a share of the view's height wherever it is, as a gizmo
 /// keeps its size on the screen. Hidden behind what is nearer, as beams
@@ -889,8 +886,8 @@ struct SceneLine {
     bool over = false;
 };
 
-/// The lines a scene draws at most (a limit point, ADR-0014): enough for an
-/// editor's overlays to outline a level's bodies (D798).
+/// The lines a scene draws at most (a limit point): enough for an
+/// editor's overlays to outline a level's bodies.
 inline constexpr std::size_t kMostSceneLines = 1024;
 
 class Scene {
@@ -906,23 +903,23 @@ public:
     /// World, copied with its pose, and the sun and sky, if one is set; read
     /// only (the World is not const because its queries cache what they
     /// matched). Nothing of it is kept. A skinned model whose entity
-    /// `poses` played is posed as it left it (D508), its palette among
+    /// `poses` played is posed as it left it, its palette among
     /// `extractedPalette`; one it did not is drawn as its mesh was bound.
     /// A model whose `rawframe.model.Tracked` names a hand in `hands` is
-    /// drawn there, moved as it says (D676).
+    /// drawn there, moved as it says.
     void extract(world::World& world,
                  const world_animation::AnimationQueries* poses = nullptr,
                  const HandsInWorld* hands = nullptr);
 
     /// The layers whose models are left out from the next extract on, as
-    /// an editor's preview hides them (D791): a model whose entity's
+    /// an editor's preview hides them: a model whose entity's
     /// `rawframe.world.layer` is one of them. None leaves nothing out.
     void hideLayers(const std::vector<std::uint32_t>& layers);
     /// How many models were left out so, summed over the extracts.
     [[nodiscard]] std::uint64_t modelsHidden() const noexcept;
 
-    /// The presented World's time on its simulation timeline, in seconds
-    /// (ADR-0010, D691), which the frames queued from now show: what a
+    /// The presented World's time on its simulation timeline, in seconds,
+    /// which the frames queued from now show: what a
     /// material that moves its vertices reads. Nought until told, and for
     /// a time not finite.
     void shownAt(double seconds) noexcept;
@@ -932,17 +929,17 @@ public:
     /// of their meshes, then of their entities, then of their components.
     const SceneFrame& queue(const SceneCamera& camera);
 
-    /// The lines each frame from the next draws (D464), in place of those
+    /// The lines each frame from the next draws, in place of those
     /// before, at most `kMostSceneLines`.
     void show(std::span<const SceneLine> lines);
 
     /// Whether each frame from the next draws a sky with no picture
-    /// graded, as an editor's view does (D925).
+    /// graded, as an editor's view does.
     void gradeSky(bool graded) noexcept;
 
     /// The game's materials and post-process materials, read again, in
     /// place of those it was made with, as each frame from the next draws
-    /// them (D734, D760).
+    /// them.
     void replaceMaterials(std::vector<SceneMaterial> materials, std::vector<ScenePostProcessMaterial> postProcesses);
 
     [[nodiscard]] std::span<const ModelInstance> extracted() const noexcept;
@@ -966,14 +963,14 @@ private:
 };
 
 /// A game's scene, declared: its model components, its camera
-/// components (a player's and its views', D361), its sun and sky
+/// components (a player's and its views'), its sun and sky
 /// components, if it has them, and its meshes.
 struct GameScene {
     std::vector<schema::ComponentTypeId> models;
     std::vector<schema::ComponentTypeId> placements;
     std::vector<schema::ComponentTypeId> tracking;
     std::vector<schema::ComponentTypeId> cameras;
-    /// The views into render textures (D361).
+    /// The views into render textures.
     std::optional<schema::ComponentTypeId> view;
     std::optional<schema::ComponentTypeId> autoExposure;
     std::optional<schema::ComponentTypeId> grading;
@@ -989,9 +986,9 @@ struct GameScene {
     std::vector<schema::ComponentTypeId> spots;
     std::vector<schema::ComponentTypeId> probes;
     std::vector<schema::ComponentTypeId> decals;
-    /// A camera's post processes (D349), in the game's order.
+    /// A camera's post processes, in the game's order.
     std::vector<schema::ComponentTypeId> postProcesses;
-    /// The particle emitters (D352), trails, and beams (D354).
+    /// The particle emitters, trails, and beams.
     std::vector<schema::ComponentTypeId> emitters;
     std::vector<schema::ComponentTypeId> trails;
     std::vector<schema::ComponentTypeId> beams;
