@@ -4,11 +4,13 @@
 #include "rawframe/render/errors.h"
 #include "rawframe/render/timing.h"
 
+#include <algorithm>
 #include <cmath>
 #include <maul-rhi/device.h>
 #include <maul-rhi/encoder.h>
 #include <maul-rhi/frame.h>
 #include <maul-rhi/resources.h>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -29,6 +31,50 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
 
 /// A picture's sides at most.
 constexpr std::uint32_t kMaximumSide = 8192;
+
+/// The limit a refusal's diagnostic names: a frame limit after its
+/// `mrhiDeviceLimits` member, or the budget a driver ran out of. None for
+/// any other check.
+std::optional<std::string_view> limitOf(mrhiDiagnosticCode code) noexcept {
+    switch (code) {
+    case mrhi_diagnosticFrameResources:
+        return "frameResources";
+    case mrhi_diagnosticFramePasses:
+        return "framePasses";
+    case mrhi_diagnosticFrameAccesses:
+        return "frameAccesses";
+    case mrhi_diagnosticFrameBarriers:
+        return "frameBarriers";
+    case mrhi_diagnosticFrameCommandBytes:
+        return "frameCommandBytes";
+    case mrhi_diagnosticFrameUploadBytes:
+        return "frameUploadBytes";
+    case mrhi_diagnosticFrameIndirectDraws:
+        return "frameIndirectDraws";
+    case mrhi_diagnosticReadbacks:
+        return "readbacks";
+    case mrhi_diagnosticReadbackBytes:
+        return "readbackBytes";
+    case mrhi_diagnosticFramesInFlight:
+        return "framesInFlight";
+    case mrhi_diagnosticNotifications:
+        return "notifications";
+    case mrhi_diagnosticNativePasses:
+        return "nativePasses";
+    case mrhi_diagnosticSubmitMemory:
+        return "submitMemory";
+    case mrhi_diagnosticSubmitDescriptors:
+        return "submitDescriptors";
+    case mrhi_diagnosticSubmitScratch:
+        return "submitScratch";
+    case mrhi_diagnosticSubmitCommandLists:
+        return "submitCommandLists";
+    case mrhi_diagnosticDriverSubmitBudget:
+        return "driverSubmitBudget";
+    default:
+        return std::nullopt;
+    }
+}
 
 } // namespace
 
@@ -104,8 +150,49 @@ struct Framer::State {
         }
     }
 
+    /// Takes every record the device's diagnostic queue holds: the limit
+    /// the last of them names, if one does.
+    std::optional<std::string_view> takeLimit() noexcept {
+        std::optional<std::string_view> named;
+        mrhiDiagnostic diagnostic{};
+        while (mrhiNextDeviceDiagnostic(native, &diagnostic) == mrhi_success) {
+            if (const std::optional<std::string_view> kLimit = limitOf(diagnostic.code); kLimit.has_value()) {
+                named = kLimit;
+            }
+        }
+        return named;
+    }
+
+    /// What the frame begun last took of each limit, kept where it is the
+    /// most yet.
+    void measure() noexcept {
+        mrhiFrameUsage usage{};
+        if (mrhiGetFrameUsage(native, &usage) != mrhi_success) {
+            return;
+        }
+        FrameUsage& most = statistics.mostUsed;
+        most.resources = std::max(most.resources, usage.frameResources);
+        most.passes = std::max(most.passes, usage.framePasses);
+        most.accesses = std::max(most.accesses, usage.frameAccesses);
+        most.barriers = std::max(most.barriers, usage.frameBarriers);
+        most.commandBytes = std::max(most.commandBytes, usage.frameCommandBytes);
+        most.uploadBytes = std::max(most.uploadBytes, usage.frameUploadBytes);
+        most.indirectDraws = std::max(most.indirectDraws, usage.frameIndirectDraws);
+    }
+
+    /// `error`, which a frame call's refusal led to, with the limit the
+    /// device named for it, whoever made the call.
+    result::Error named(result::Error error) noexcept {
+        measure();
+        if (const std::optional<std::string_view> kLimit = takeLimit(); kLimit.has_value()) {
+            return std::move(error).withContext("limit", std::string{*kLimit});
+        }
+        return error;
+    }
+
     /// Drops the open frame: every recorder that declared learns it.
     std::unexpected<result::Error> drop(std::span<FrameRecorder* const> recorders, result::Error error) {
+        error = named(std::move(error));
         static_cast<void>(mrhiDropFrame(native));
         for (FrameRecorder* recorder : recorders) {
             recorder->ended(false);
@@ -130,9 +217,12 @@ struct Framer::State {
         if ((target.surface.has_value() || !target.images.empty() || !target.asides.empty()) && display == nullptr) {
             RAWFRAME_TRY_ASSIGN(display, Display::create(*device));
         }
+        // What earlier refusals left, the pipelines' among them, is taken,
+        // so the queue has room for this frame's and names nothing older.
+        static_cast<void>(takeLimit());
         const mrhiFrameDef kFrameDef = mrhiDefaultFrameDef();
         if (const mrhiResult kBegun = mrhiBeginFrame(native, &kFrameDef); kBegun != mrhi_success) {
-            return failed("a frame could not begin", kBegun);
+            return std::unexpected<result::Error>{named(failed("a frame could not begin", kBegun).error())};
         }
         mrhiTextureDef pictureDef = mrhiDefaultTextureDef();
         pictureDef.format = mrhi_formatRgba8UnormSrgb;
@@ -142,8 +232,7 @@ struct Framer::State {
         pictureDef.height = target.height;
         mrhiResourceId picture{};
         if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &pictureDef, &picture); kDeclared != mrhi_success) {
-            static_cast<void>(mrhiDropFrame(native));
-            return failed("the picture could not be declared", kDeclared);
+            return drop({}, failed("the picture could not be declared", kDeclared).error());
         }
         Frame open{.device = device,
                    .width = target.width,
@@ -173,10 +262,11 @@ struct Framer::State {
             const std::optional<window::PixelSize> kSize =
                 *target.panel < target.images.size() ? device->adoptedSize(target.images[*target.panel]) : std::nullopt;
             if (!kSize.has_value()) {
-                static_cast<void>(mrhiDropFrame(native));
-                return refuse(result::ErrorClass::FailedPrecondition,
-                              RenderError::State,
-                              "the panel is not an adopted image of the target");
+                return drop({},
+                            refuse(result::ErrorClass::FailedPrecondition,
+                                   RenderError::State,
+                                   "the panel is not an adopted image of the target")
+                                .error());
             }
             mrhiTextureDef panelDef = pictureDef;
             panelDef.viewFormats[0] = mrhi_formatNone;
@@ -185,8 +275,7 @@ struct Framer::State {
             mrhiResourceId declared{};
             if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &panelDef, &declared);
                 kDeclared != mrhi_success) {
-                static_cast<void>(mrhiDropFrame(native));
-                return failed("the panel could not be declared", kDeclared);
+                return drop({}, failed("the panel could not be declared", kDeclared).error());
             }
             panel = declared;
             open.panel = requestKey(declared.index1, declared.generation);
@@ -201,9 +290,11 @@ struct Framer::State {
         for (const FrameTarget::Aside& kAside : target.asides) {
             if (kAside.width == 0 || kAside.height == 0 || kAside.width > kMaximumSide ||
                 kAside.height > kMaximumSide) {
-                static_cast<void>(mrhiDropFrame(native));
-                return refuse(
-                    result::ErrorClass::OutOfRange, RenderError::OverLimit, "an aside's sides are from 1 to 8192");
+                return drop({},
+                            refuse(result::ErrorClass::OutOfRange,
+                                   RenderError::OverLimit,
+                                   "an aside's sides are from 1 to 8192")
+                                .error());
             }
             mrhiTextureDef asideDef = pictureDef;
             asideDef.viewFormats[0] = mrhi_formatRgba8Unorm;
@@ -212,8 +303,7 @@ struct Framer::State {
             mrhiResourceId declared{};
             if (const mrhiResult kDeclared = mrhiDeclareTexture(native, &asideDef, &declared);
                 kDeclared != mrhi_success) {
-                static_cast<void>(mrhiDropFrame(native));
-                return failed("an aside could not be declared", kDeclared);
+                return drop({}, failed("an aside could not be declared", kDeclared).error());
             }
             asides.push_back(declared);
             open.asides.push_back(Frame::Aside{.window = kAside.window,
@@ -446,8 +536,10 @@ struct Framer::State {
             for (FrameRecorder* recorder : recorders) {
                 recorder->ended(false);
             }
-            return failed("the frame could not be submitted", kSubmitted);
+            return std::unexpected<result::Error>{
+                named(failed("the frame could not be submitted", kSubmitted).error())};
         }
+        measure();
         for (FrameRecorder* recorder : recorders) {
             recorder->ended(true);
         }
@@ -479,6 +571,15 @@ result::Result<std::unique_ptr<Framer>> Framer::create(Device& device) {
     auto state = std::make_unique<State>();
     state->device = &device;
     state->native = device.native();
+    if (mrhiDeviceLimits limits{}; mrhiGetDeviceOwnLimits(state->native, &limits) == mrhi_success) {
+        state->statistics.limits = FrameUsage{.resources = limits.frameResources,
+                                              .passes = limits.framePasses,
+                                              .accesses = limits.frameAccesses,
+                                              .barriers = limits.frameBarriers,
+                                              .commandBytes = limits.frameCommandBytes,
+                                              .uploadBytes = limits.frameUploadBytes,
+                                              .indirectDraws = limits.frameIndirectDraws};
+    }
     return std::unique_ptr<Framer>{new Framer{std::move(state)}};
 }
 

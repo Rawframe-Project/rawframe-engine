@@ -15,6 +15,7 @@
 #include <maul-rhi/encoder.h>
 #include <maul-rhi/frame.h>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -27,8 +28,8 @@ bool required() {
     return value != nullptr && value[0] != '\0';
 }
 
-std::unique_ptr<render::Device> opened() {
-    auto device = render::Device::request({.allowSoftware = true});
+std::unique_ptr<render::Device> opened(const render::DeviceSettings& settings = {.allowSoftware = true}) {
+    auto device = render::Device::request(settings);
     if (!device.has_value()) {
         return nullptr;
     }
@@ -169,6 +170,52 @@ RAWFRAME_TEST(FramesAreMadeOfTheirRecordersInOrder) {
     green.refuse = false;
     RAWFRAME_EXPECT(kMade(kBoth).value_or(false));
     RAWFRAME_EXPECT((*framer)->statistics().frames == 3);
+}
+
+RAWFRAME_TEST(AFrameSaysWhatItTookOfItsLimitsAndWhichOneRefusedIt) {
+    // Four passes a frame: two recorders and the readback take three, kept
+    // as the most taken beside the limits. Five recorders are one past:
+    // the frame is refused naming the limit, though the recorder refused
+    // gave no reason of the device's, and the refused frame's four count.
+    const auto kDevice = opened({.allowSoftware = true, .framePasses = 4});
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(framer.has_value());
+    if (!framer.has_value()) {
+        return;
+    }
+    RAWFRAME_EXPECT((*framer)->statistics().limits.passes == 4 &&
+                    (*framer)->statistics().limits.commandBytes == render::DeviceSettings{}.frameCommandBytes);
+    std::vector<std::string> log;
+    std::vector<std::unique_ptr<Filling>> fillings;
+    std::vector<render::FrameRecorder*> recorders;
+    for (int at = 0; at < 5; ++at) {
+        fillings.push_back(std::make_unique<Filling>(std::array<float, 4>{0, 0, 1, 1}, log, "blue"));
+        recorders.push_back(fillings.back().get());
+    }
+    const render::FrameTarget kTarget{.width = kSide, .height = kSide, .readBack = true};
+    RAWFRAME_EXPECT((*framer)->make(std::span{recorders}.first(2), kTarget).value_or(false));
+    const render::FramerStatistics& kStatistics = (*framer)->statistics();
+    RAWFRAME_EXPECT(kStatistics.mostUsed.passes == 3 && kStatistics.mostUsed.resources >= 1 &&
+                    kStatistics.mostUsed.commandBytes > 0 && kStatistics.mostUsed.accesses > 0);
+    RAWFRAME_EXPECT((*framer)->finish(5'000'000'000).has_value());
+
+    const auto kRefused = (*framer)->make(recorders, kTarget);
+    RAWFRAME_EXPECT(!kRefused.has_value());
+    if (!kRefused.has_value()) {
+        std::string limit;
+        for (const auto& kField : kRefused.error().context()) {
+            if (kField.key == "limit") {
+                limit = kField.value;
+            }
+        }
+        RAWFRAME_EXPECT(kRefused.error().description() == "no pass" && limit == "framePasses");
+    }
+    RAWFRAME_EXPECT((*framer)->statistics().mostUsed.passes == 4);
+    // The next frame within the limit is whole, and names nothing.
+    RAWFRAME_EXPECT((*framer)->make(std::span{recorders}.first(3), kTarget).value_or(false));
 }
 
 RAWFRAME_TEST(AFrameTimesItsPassesWhereAsked) {

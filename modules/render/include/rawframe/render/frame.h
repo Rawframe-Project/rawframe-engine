@@ -162,7 +162,24 @@ struct FrameTarget {
     std::vector<Aside> asides;
 };
 
+/// What a frame takes of each of the device's frame limits, each named
+/// after the Maul RHI limit (`mrhiDeviceLimits`) it is measured against;
+/// command bytes count in whole 4 KiB chunks.
+struct FrameUsage {
+    std::uint32_t resources = 0;
+    std::uint32_t passes = 0;
+    std::uint32_t accesses = 0;
+    std::uint32_t barriers = 0;
+    std::uint32_t commandBytes = 0;
+    std::uint32_t uploadBytes = 0;
+    std::uint32_t indirectDraws = 0;
+};
+
 struct FramerStatistics {
+    /// The device's frame limits, and the most of each that any frame
+    /// took, a refused one too.
+    FrameUsage limits;
+    FrameUsage mostUsed;
     /// Frames submitted, those shown on a surface and those that were to be
     /// and were not (no image, or its pipeline being made).
     std::uint64_t frames = 0;
