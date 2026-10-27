@@ -714,25 +714,27 @@ struct Particles::State {
     result::Status recordUpload() {
         constexpr std::array<float, 4> kExposure = {0, 1, 0, 0};
         const mrhiPassId kPass = *uploadPass;
-        if (mrhiBeginPass(native, kPass) != mrhi_success) {
-            return failed("the particles' upload could not begin", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiBeginPass(native, kPass); kOutcome != mrhi_success) {
+            return failed("the particles' upload could not begin", kOutcome);
         }
-        if (mrhiWriteBuffer(native, kPass, viewResource, 0, &view, sizeof(view)) != mrhi_success ||
-            mrhiWriteBuffer(native, kPass, materialsResource, 0, materialBlocks.data(), materialBlocks.size()) !=
-                mrhi_success ||
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiWriteBuffer(native, kPass, viewResource, 0, &view, sizeof(view))) != mrhi_success ||
+            (outcome = mrhiWriteBuffer(
+                 native, kPass, materialsResource, 0, materialBlocks.data(), materialBlocks.size())) != mrhi_success ||
             (!with.exposure.has_value() &&
-             mrhiWriteBuffer(native, kPass, exposure, 0, kExposure.data(), sizeof(kExposure)) != mrhi_success) ||
-            (emitting &&
-             mrhiWriteBuffer(native, kPass, blocksResource, 0, blocks.data(), blocks.size()) != mrhi_success) ||
+             (outcome = mrhiWriteBuffer(native, kPass, exposure, 0, kExposure.data(), sizeof(kExposure))) !=
+                 mrhi_success) ||
+            (emitting && (outcome = mrhiWriteBuffer(native, kPass, blocksResource, 0, blocks.data(), blocks.size())) !=
+                             mrhi_success) ||
             (ribboned &&
-             (mrhiWriteBuffer(native, kPass, pointsResource, 0, points.data(), points.size() * kPointBytes) !=
-                  mrhi_success ||
-              mrhiWriteBuffer(native, kPass, ribbonsResource, 0, ribbonBlocks.data(), ribbonBlocks.size()) !=
-                  mrhi_success))) {
-            return failed("the particles could not be written", mrhi_errorCapacity);
+             ((outcome = mrhiWriteBuffer(
+                   native, kPass, pointsResource, 0, points.data(), points.size() * kPointBytes)) != mrhi_success ||
+              (outcome = mrhiWriteBuffer(
+                   native, kPass, ribbonsResource, 0, ribbonBlocks.data(), ribbonBlocks.size())) != mrhi_success))) {
+            return failed("the particles could not be written", outcome);
         }
-        if (mrhiEndPass(native, kPass) != mrhi_success) {
-            return failed("the particles' upload could not end", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiEndPass(native, kPass); kOutcome != mrhi_success) {
+            return failed("the particles' upload could not end", kOutcome);
         }
         return {};
     }
@@ -748,9 +750,10 @@ struct Particles::State {
             if (!kPass.has_value()) {
                 continue;
             }
-            if (mrhiBeginPass(native, *kPass) != mrhi_success ||
-                mrhiSetComputePipeline(native, *kPass, kPipeline) != mrhi_success) {
-                return failed("the particles' births could not begin", mrhi_errorState);
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiBeginPass(native, *kPass)) != mrhi_success ||
+                (outcome = mrhiSetComputePipeline(native, *kPass, kPipeline)) != mrhi_success) {
+                return failed("the particles' births could not begin", outcome);
             }
             for (std::size_t at = 0; at < drawing.size(); ++at) {
                 const std::uint32_t kCount =
@@ -759,13 +762,15 @@ struct Particles::State {
                     continue;
                 }
                 spawning[0].offset = at * kBlockStride;
-                if (mrhiSetBindings(native, *kPass, 0, spawning.data(), spawning.size()) != mrhi_success ||
-                    mrhiDispatch(native, *kPass, (kCount + kSpawnGroup - 1) / kSpawnGroup, 1, 1) != mrhi_success) {
-                    return failed("an emitter's births could not be recorded", mrhi_errorState);
+                if (mrhiResult outcome = mrhi_success;
+                    (outcome = mrhiSetBindings(native, *kPass, 0, spawning.data(), spawning.size())) != mrhi_success ||
+                    (outcome = mrhiDispatch(native, *kPass, (kCount + kSpawnGroup - 1) / kSpawnGroup, 1, 1)) !=
+                        mrhi_success) {
+                    return failed("an emitter's births could not be recorded", outcome);
                 }
             }
-            if (mrhiEndPass(native, *kPass) != mrhi_success) {
-                return failed("the particles' births could not end", mrhi_errorState);
+            if (const mrhiResult kOutcome = mrhiEndPass(native, *kPass); kOutcome != mrhi_success) {
+                return failed("the particles' births could not end", kOutcome);
             }
         }
         return {};
@@ -782,8 +787,8 @@ struct Particles::State {
 
     result::Status recordDraws() {
         const mrhiPassId kPass = *drawPass;
-        if (mrhiBeginPass(native, kPass) != mrhi_success) {
-            return failed("the particles' drawing could not begin", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiBeginPass(native, kPass); kOutcome != mrhi_success) {
+            return failed("the particles' drawing could not begin", kOutcome);
         }
         if (with.region.has_value()) {
             const auto& [kX, kY, kWidth, kHeight] = *with.region;
@@ -794,9 +799,10 @@ struct Particles::State {
                                          .minDepth = 0,
                                          .maxDepth = 1};
             const mrhiScissorRect kScissor{.x = kX, .y = kY, .width = kWidth, .height = kHeight};
-            if (mrhiSetViewport(native, kPass, &kViewport) != mrhi_success ||
-                mrhiSetScissor(native, kPass, &kScissor) != mrhi_success) {
-                return failed("the particles' region could not be set", mrhi_errorState);
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiSetViewport(native, kPass, &kViewport)) != mrhi_success ||
+                (outcome = mrhiSetScissor(native, kPass, &kScissor)) != mrhi_success) {
+                return failed("the particles' region could not be set", outcome);
             }
         }
         std::array<mrhiBinding, 10> table = {bufferAt(0, viewResource, sizeof(ViewBlock)),
@@ -818,16 +824,18 @@ struct Particles::State {
                 const Material& kMaterial = materials[ribbonMaterials[at]];
                 if (blending != kMaterial.blend) {
                     blending = kMaterial.blend;
-                    if (mrhiSetGraphicsPipeline(
-                            native, kPass, programs->ribbons.at(static_cast<std::size_t>(*blending))) != mrhi_success) {
-                        return failed("the ribbons could not begin", mrhi_errorState);
+                    if (const mrhiResult kOutcome = mrhiSetGraphicsPipeline(
+                            native, kPass, programs->ribbons.at(static_cast<std::size_t>(*blending)));
+                        kOutcome != mrhi_success) {
+                        return failed("the ribbons could not begin", kOutcome);
                     }
                 }
                 table[1].offset = at * kBlockStride;
                 bindMaterial(table, kMaterial, ribbonMaterials[at]);
-                if (mrhiSetBindings(native, kPass, 0, table.data(), table.size()) != mrhi_success ||
-                    mrhiDraw(native, kPass, (ribbonCounts[at] - 1) * 6, 1, 0, 0) != mrhi_success) {
-                    return failed("a ribbon could not be drawn", mrhi_errorState);
+                if (mrhiResult outcome = mrhi_success;
+                    (outcome = mrhiSetBindings(native, kPass, 0, table.data(), table.size())) != mrhi_success ||
+                    (outcome = mrhiDraw(native, kPass, (ribbonCounts[at] - 1) * 6, 1, 0, 0)) != mrhi_success) {
+                    return failed("a ribbon could not be drawn", outcome);
                 }
             }
         }
@@ -842,22 +850,24 @@ struct Particles::State {
                 const Material& kMaterial = materials[kDrawn.material];
                 if (blending != kMaterial.blend) {
                     blending = kMaterial.blend;
-                    if (mrhiSetGraphicsPipeline(
-                            native, kPass, programs->particles.at(static_cast<std::size_t>(*blending))) !=
-                        mrhi_success) {
-                        return failed("the particles could not begin", mrhi_errorState);
+                    if (const mrhiResult kOutcome = mrhiSetGraphicsPipeline(
+                            native, kPass, programs->particles.at(static_cast<std::size_t>(*blending)));
+                        kOutcome != mrhi_success) {
+                        return failed("the particles could not begin", kOutcome);
                     }
                 }
                 table[1].offset = at * kBlockStride;
                 bindMaterial(table, kMaterial, kDrawn.material);
-                if (mrhiSetBindings(native, kPass, 0, table.data(), table.size()) != mrhi_success ||
-                    mrhiDraw(native, kPass, kDrawn.corners, kDrawn.capacity, 0, kDrawn.offset) != mrhi_success) {
-                    return failed("an emitter's particles could not be drawn", mrhi_errorState);
+                if (mrhiResult outcome = mrhi_success;
+                    (outcome = mrhiSetBindings(native, kPass, 0, table.data(), table.size())) != mrhi_success ||
+                    (outcome = mrhiDraw(native, kPass, kDrawn.corners, kDrawn.capacity, 0, kDrawn.offset)) !=
+                        mrhi_success) {
+                    return failed("an emitter's particles could not be drawn", outcome);
                 }
             }
         }
-        if (mrhiEndPass(native, kPass) != mrhi_success) {
-            return failed("the particles' drawing could not end", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiEndPass(native, kPass); kOutcome != mrhi_success) {
+            return failed("the particles' drawing could not end", kOutcome);
         }
         return {};
     }
@@ -868,9 +878,10 @@ struct Particles::State {
         }
         RAWFRAME_TRY(recordUpload());
         RAWFRAME_TRY(recordBirths());
-        if (depthPass.has_value() &&
-            (mrhiBeginPass(native, *depthPass) != mrhi_success || mrhiEndPass(native, *depthPass) != mrhi_success)) {
-            return failed("the particles' depth could not be cleared", mrhi_errorState);
+        if (mrhiResult outcome = mrhi_success;
+            depthPass.has_value() && ((outcome = mrhiBeginPass(native, *depthPass)) != mrhi_success ||
+                                      (outcome = mrhiEndPass(native, *depthPass)) != mrhi_success)) {
+            return failed("the particles' depth could not be cleared", outcome);
         }
         return recordDraws();
     }

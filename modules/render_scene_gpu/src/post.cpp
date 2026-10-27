@@ -45,8 +45,9 @@ result::Status PostProcessPass::declare(const render_scene::SceneFrame& frame,
             .sampler = samplerOf(kProcess.texture.filter, kProcess.texture.address)});
         mrhiBufferDef def = mrhiDefaultBufferDef();
         def.size = sizeof(PostBlock);
-        if (mrhiDeclareBuffer(native_, &def, &step.blockResource) != mrhi_success) {
-            return failed("a post process could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, &step.blockResource);
+            kOutcome != mrhi_success) {
+            return failed("a post process could not be declared", kOutcome);
         }
         writes.push_back(wholeOf(step.blockResource, mrhi_accessCopyDestination));
     }
@@ -62,8 +63,9 @@ result::Status PostProcessPass::declare(const render_scene::SceneFrame& frame,
         copy_.texture = resourceOf(textures.resource(0));
         mrhiBufferDef def = mrhiDefaultBufferDef();
         def.size = sizeof(PostBlock);
-        if (mrhiDeclareBuffer(native_, &def, &copy_.blockResource) != mrhi_success) {
-            return failed("a post process could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, &copy_.blockResource);
+            kOutcome != mrhi_success) {
+            return failed("a post process could not be declared", kOutcome);
         }
         writes.push_back(wholeOf(copy_.blockResource, mrhi_accessCopyDestination));
     }
@@ -140,13 +142,17 @@ result::Status PostProcessPass::addCopy(mrhiResourceId from, mrhiResourceId into
 
 result::Status PostProcessPass::write(mrhiPassId upload) {
     for (const Step& kStep : steps_) {
-        if (mrhiWriteBuffer(native_, upload, kStep.blockResource, 0, &kStep.block, sizeof(PostBlock)) != mrhi_success) {
-            return failed("a post process could not be written", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome =
+                mrhiWriteBuffer(native_, upload, kStep.blockResource, 0, &kStep.block, sizeof(PostBlock));
+            kOutcome != mrhi_success) {
+            return failed("a post process could not be written", kOutcome);
         }
     }
-    if (copy_.blockResource.index1 != 0 &&
-        mrhiWriteBuffer(native_, upload, copy_.blockResource, 0, &copy_.block, sizeof(PostBlock)) != mrhi_success) {
-        return failed("a post process could not be written", mrhi_errorCapacity);
+    if (mrhiResult outcome = mrhi_success;
+        copy_.blockResource.index1 != 0 &&
+        (outcome = mrhiWriteBuffer(native_, upload, copy_.blockResource, 0, &copy_.block, sizeof(PostBlock))) !=
+            mrhi_success) {
+        return failed("a post process could not be written", outcome);
     }
     return {};
 }
@@ -162,12 +168,13 @@ result::Status PostProcessPass::record(const Pipelines& pipelines, material::Ins
                                                      samplerAt(3, pipelines.materialSamplers.at(kStep.sampler))};
         const mrhiGraphicsPipelineId kPipeline =
             linear(insertion) ? pipelines.postLinear.pipeline : pipelines.postDisplay.pipeline;
-        if (mrhiBeginPass(native_, kStep.pass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native_, kStep.pass, kPipeline) != mrhi_success ||
-            mrhiSetBindings(native_, kStep.pass, 0, kBinding.data(), kBinding.size()) != mrhi_success ||
-            mrhiDraw(native_, kStep.pass, 3, 1, 0, 0) != mrhi_success ||
-            mrhiEndPass(native_, kStep.pass) != mrhi_success) {
-            return failed("a post process could not be drawn", mrhi_errorState);
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiBeginPass(native_, kStep.pass)) != mrhi_success ||
+            (outcome = mrhiSetGraphicsPipeline(native_, kStep.pass, kPipeline)) != mrhi_success ||
+            (outcome = mrhiSetBindings(native_, kStep.pass, 0, kBinding.data(), kBinding.size())) != mrhi_success ||
+            (outcome = mrhiDraw(native_, kStep.pass, 3, 1, 0, 0)) != mrhi_success ||
+            (outcome = mrhiEndPass(native_, kStep.pass)) != mrhi_success) {
+            return failed("a post process could not be drawn", outcome);
         }
     }
     if (insertion != material::Insertion::FinalOutput || copy_.pass.index1 == 0) {
@@ -177,11 +184,13 @@ result::Status PostProcessPass::record(const Pipelines& pipelines, material::Ins
                                                  bufferAt(1, copy_.blockResource, sizeof(PostBlock)),
                                                  textureAt(2, copy_.texture),
                                                  samplerAt(3, pipelines.materialSamplers[0])};
-    if (mrhiBeginPass(native_, copy_.pass) != mrhi_success ||
-        mrhiSetGraphicsPipeline(native_, copy_.pass, pipelines.postDisplay.pipeline) != mrhi_success ||
-        mrhiSetBindings(native_, copy_.pass, 0, kBinding.data(), kBinding.size()) != mrhi_success ||
-        mrhiDraw(native_, copy_.pass, 3, 1, 0, 0) != mrhi_success || mrhiEndPass(native_, copy_.pass) != mrhi_success) {
-        return failed("the composed picture could not be copied back", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native_, copy_.pass)) != mrhi_success ||
+        (outcome = mrhiSetGraphicsPipeline(native_, copy_.pass, pipelines.postDisplay.pipeline)) != mrhi_success ||
+        (outcome = mrhiSetBindings(native_, copy_.pass, 0, kBinding.data(), kBinding.size())) != mrhi_success ||
+        (outcome = mrhiDraw(native_, copy_.pass, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiEndPass(native_, copy_.pass)) != mrhi_success) {
+        return failed("the composed picture could not be copied back", outcome);
     }
     return {};
 }

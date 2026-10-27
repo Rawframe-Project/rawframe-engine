@@ -59,8 +59,8 @@ result::Status MotionBlurPass::declare(const render_scene::SceneFrame& frame,
     }
     mrhiBufferDef def = mrhiDefaultBufferDef();
     def.size = sizeof(MotionBlock);
-    if (mrhiDeclareBuffer(native_, &def, &blockResource_) != mrhi_success) {
-        return failed("the motion blur's settings could not be declared", mrhi_errorCapacity);
+    if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, &blockResource_); kOutcome != mrhi_success) {
+        return failed("the motion blur's settings could not be declared", kOutcome);
     }
     writes.push_back(wholeOf(blockResource_, mrhi_accessCopyDestination));
     return {};
@@ -108,8 +108,10 @@ result::Status MotionBlurPass::addPasses(mrhiResourceId shown, mrhiResourceId mo
 }
 
 result::Status MotionBlurPass::write(mrhiPassId upload) {
-    if (enabled_ && mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(MotionBlock)) != mrhi_success) {
-        return failed("the motion blur's settings could not be written", mrhi_errorCapacity);
+    if (mrhiResult outcome = mrhi_success;
+        enabled_ &&
+        (outcome = mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(MotionBlock))) != mrhi_success) {
+        return failed("the motion blur's settings could not be written", outcome);
     }
     return {};
 }
@@ -127,11 +129,13 @@ result::Status MotionBlurPass::record(const Pipelines& pipelines) {
                                                       depthAt(2, depth_),
                                                       textureAt(3, kFound),
                                                       bufferAt(4, blockResource_, sizeof(MotionBlock))};
-        if (mrhiBeginPass(native_, kPass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native_, kPass, kPipeline) != mrhi_success ||
-            mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-            mrhiDraw(native_, kPass, 3, 1, 0, 0) != mrhi_success || mrhiEndPass(native_, kPass) != mrhi_success) {
-            return failed("the motion blur could not be drawn", mrhi_errorState);
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiBeginPass(native_, kPass)) != mrhi_success ||
+            (outcome = mrhiSetGraphicsPipeline(native_, kPass, kPipeline)) != mrhi_success ||
+            (outcome = mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+            (outcome = mrhiDraw(native_, kPass, 3, 1, 0, 0)) != mrhi_success ||
+            (outcome = mrhiEndPass(native_, kPass)) != mrhi_success) {
+            return failed("the motion blur could not be drawn", outcome);
         }
     }
     return {};

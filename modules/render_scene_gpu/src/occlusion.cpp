@@ -57,8 +57,8 @@ result::Status OcclusionPass::declare(const render_scene::SceneFrame& frame,
     }
     mrhiBufferDef def = mrhiDefaultBufferDef();
     def.size = sizeof(OcclusionBlock);
-    if (mrhiDeclareBuffer(native_, &def, &blockResource_) != mrhi_success) {
-        return failed("the ambient occlusion's view could not be declared", mrhi_errorCapacity);
+    if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, &blockResource_); kOutcome != mrhi_success) {
+        return failed("the ambient occlusion's view could not be declared", kOutcome);
     }
     writes.push_back(wholeOf(blockResource_, mrhi_accessCopyDestination));
     return {};
@@ -111,9 +111,10 @@ result::Status OcclusionPass::addPasses(mrhiResourceId depth, mrhiResourceId sur
 }
 
 result::Status OcclusionPass::write(mrhiPassId upload) {
-    if (enabled_ &&
-        mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(OcclusionBlock)) != mrhi_success) {
-        return failed("the ambient occlusion's view could not be written", mrhi_errorCapacity);
+    if (mrhiResult outcome = mrhi_success;
+        enabled_ && (outcome = mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(OcclusionBlock))) !=
+                        mrhi_success) {
+        return failed("the ambient occlusion's view could not be written", outcome);
     }
     return {};
 }
@@ -130,11 +131,13 @@ result::Status OcclusionPass::record(const Pipelines& pipelines, mrhiResourceId 
                                                       textureAt(1, surfaces_),
                                                       bufferAt(2, blockResource_, sizeof(OcclusionBlock)),
                                                       textureAt(3, kFound)};
-        if (mrhiBeginPass(native_, kPass) != mrhi_success ||
-            mrhiSetGraphicsPipeline(native_, kPass, kPipeline) != mrhi_success ||
-            mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-            mrhiDraw(native_, kPass, 3, 1, 0, 0) != mrhi_success || mrhiEndPass(native_, kPass) != mrhi_success) {
-            return failed("the ambient occlusion could not be drawn", mrhi_errorState);
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiBeginPass(native_, kPass)) != mrhi_success ||
+            (outcome = mrhiSetGraphicsPipeline(native_, kPass, kPipeline)) != mrhi_success ||
+            (outcome = mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+            (outcome = mrhiDraw(native_, kPass, 3, 1, 0, 0)) != mrhi_success ||
+            (outcome = mrhiEndPass(native_, kPass)) != mrhi_success) {
+            return failed("the ambient occlusion could not be drawn", outcome);
         }
     }
     return {};

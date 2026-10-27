@@ -82,8 +82,8 @@ result::Status PicturePass::declare(const render_scene::SceneFrame& frame,
         }
         mrhiBufferDef blockDef = mrhiDefaultBufferDef();
         blockDef.size = sizeof(PictureBlock);
-        if (mrhiDeclareBuffer(native_, &blockDef, kMade) != mrhi_success) {
-            return failed("the picture's grade could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &blockDef, kMade); kOutcome != mrhi_success) {
+            return failed("the picture's grade could not be declared", kOutcome);
         }
         writes.push_back(wholeOf(*kMade, mrhi_accessCopyDestination));
     }
@@ -171,10 +171,13 @@ result::Status PicturePass::addFxaa(mrhiResourceId display, mrhiResourceId into,
 }
 
 result::Status PicturePass::write(mrhiPassId upload) {
-    if (mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(PictureBlock)) != mrhi_success ||
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(PictureBlock))) !=
+            mrhi_success ||
         (gradedFirst_ &&
-         mrhiWriteBuffer(native_, upload, gradeResource_, 0, &gradeBlock_, sizeof(PictureBlock)) != mrhi_success)) {
-        return failed("the picture's grade could not be written", mrhi_errorCapacity);
+         (outcome = mrhiWriteBuffer(native_, upload, gradeResource_, 0, &gradeBlock_, sizeof(PictureBlock))) !=
+             mrhi_success)) {
+        return failed("the picture's grade could not be written", outcome);
     }
     return {};
 }
@@ -197,11 +200,13 @@ result::Status drawPicture(mrhiDevice* native,
                                           samplerAt(3, pipelines.filteredSampler),
                                           textureAt(4, kTable)};
     binding[4].viewKind = mrhi_texture3d;
-    if (mrhiBeginPass(native, pass) != mrhi_success ||
-        mrhiSetGraphicsPipeline(native, pass, pipeline) != mrhi_success ||
-        mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success ||
-        mrhiDraw(native, pass, 3, 1, 0, 0) != mrhi_success || mrhiEndPass(native, pass) != mrhi_success) {
-        return failed("the picture could not be drawn", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native, pass)) != mrhi_success ||
+        (outcome = mrhiSetGraphicsPipeline(native, pass, pipeline)) != mrhi_success ||
+        (outcome = mrhiSetBindings(native, pass, 0, binding.data(), binding.size())) != mrhi_success ||
+        (outcome = mrhiDraw(native, pass, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiEndPass(native, pass)) != mrhi_success) {
+        return failed("the picture could not be drawn", outcome);
     }
     return {};
 }
@@ -227,11 +232,14 @@ result::Status PicturePass::recordFxaa(const Pipelines& pipelines) {
     }
     const std::array<mrhiBinding, 2> kDisplayBinding = {textureAt(0, display_),
                                                         samplerAt(1, pipelines.filteredSampler)};
-    if (mrhiBeginPass(native_, fxaaPass_) != mrhi_success ||
-        mrhiSetGraphicsPipeline(native_, fxaaPass_, pipelines.fxaa.pipeline) != mrhi_success ||
-        mrhiSetBindings(native_, fxaaPass_, 0, kDisplayBinding.data(), kDisplayBinding.size()) != mrhi_success ||
-        mrhiDraw(native_, fxaaPass_, 3, 1, 0, 0) != mrhi_success || mrhiEndPass(native_, fxaaPass_) != mrhi_success) {
-        return failed("the picture could not be antialiased", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native_, fxaaPass_)) != mrhi_success ||
+        (outcome = mrhiSetGraphicsPipeline(native_, fxaaPass_, pipelines.fxaa.pipeline)) != mrhi_success ||
+        (outcome = mrhiSetBindings(native_, fxaaPass_, 0, kDisplayBinding.data(), kDisplayBinding.size())) !=
+            mrhi_success ||
+        (outcome = mrhiDraw(native_, fxaaPass_, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiEndPass(native_, fxaaPass_)) != mrhi_success) {
+        return failed("the picture could not be antialiased", outcome);
     }
     return {};
 }

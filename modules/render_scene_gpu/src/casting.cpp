@@ -12,13 +12,15 @@ namespace rawframe::render_scene_gpu {
 result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square> squares) {
     mrhiDevice* native = with.native;
     const Pipelines& pipelines = *with.pipelines;
-    if (mrhiBeginPass(native, pass) != mrhi_success) {
-        return failed("a shadow pass could not begin", mrhi_errorState);
+    if (const mrhiResult kOutcome = mrhiBeginPass(native, pass); kOutcome != mrhi_success) {
+        return failed("a shadow pass could not begin", kOutcome);
     }
     const auto kDraw = [&with, native, pass](const Run& run) -> result::Status {
         RAWFRAME_TRY(with.held->bind(pass, *run.mesh, posedOf(with.skinning, run)));
-        if (mrhiDrawIndexed(native, pass, run.indexCount, run.count, run.firstIndex, 0, run.first) != mrhi_success) {
-            return failed("a caster could not be drawn", mrhi_errorState);
+        if (const mrhiResult kOutcome =
+                mrhiDrawIndexed(native, pass, run.indexCount, run.count, run.firstIndex, 0, run.first);
+            kOutcome != mrhi_success) {
+            return failed("a caster could not be drawn", kOutcome);
         }
         return {};
     };
@@ -39,15 +41,16 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
                                                samplerAt(15, pipelines.materialSamplers[0]),
                                                textureAt(16, kWhite),
                                                samplerAt(17, pipelines.materialSamplers[0])};
-        if (mrhiSetViewport(native, pass, &kSquare.viewport) != mrhi_success) {
-            return failed("a shadow square could not be set up", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiSetViewport(native, pass, &kSquare.viewport); kOutcome != mrhi_success) {
+            return failed("a shadow square could not be set up", kOutcome);
         }
         if (!kSquare.casters->solid.empty()) {
             mrhiGraphicsPipelineId set = pipelines.casting.pipeline;
-            if (mrhiSetGraphicsPipeline(native, pass, set) != mrhi_success ||
-                mrhiSetVertexBuffer(native, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
-                mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
-                return failed("the casters could not be set up", mrhi_errorState);
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiSetGraphicsPipeline(native, pass, set)) != mrhi_success ||
+                (outcome = mrhiSetVertexBuffer(native, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE)) != mrhi_success ||
+                (outcome = mrhiSetBindings(native, pass, 0, binding.data(), binding.size())) != mrhi_success) {
+                return failed("the casters could not be set up", outcome);
             }
             // A caster whose material moves its vertices is moved by its
             // program, once its pipeline is made; it samples no
@@ -61,9 +64,10 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
                     wanted = kOwn->pipeline;
                 }
                 if (wanted.index1 != set.index1 || wanted.generation != set.generation) {
-                    if (mrhiSetGraphicsPipeline(native, pass, wanted) != mrhi_success ||
-                        mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
-                        return failed("a material's program could not be set", mrhi_errorState);
+                    if (mrhiResult outcome = mrhi_success;
+                        (outcome = mrhiSetGraphicsPipeline(native, pass, wanted)) != mrhi_success ||
+                        (outcome = mrhiSetBindings(native, pass, 0, binding.data(), binding.size())) != mrhi_success) {
+                        return failed("a material's program could not be set", outcome);
                     }
                     set = wanted;
                 }
@@ -74,9 +78,10 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
             continue;
         }
         mrhiGraphicsPipelineId set = pipelines.cutCasting.pipeline;
-        if (mrhiSetGraphicsPipeline(native, pass, set) != mrhi_success ||
-            mrhiSetVertexBuffer(native, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
-            return failed("the masked casters could not be set up", mrhi_errorState);
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiSetGraphicsPipeline(native, pass, set)) != mrhi_success ||
+            (outcome = mrhiSetVertexBuffer(native, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE)) != mrhi_success) {
+            return failed("the masked casters could not be set up", outcome);
         }
         // A caster whose material has its own program is cut by it, once
         // its pipeline is made; the table set again after a switch.
@@ -90,8 +95,9 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
                 wanted = kOwn->pipeline;
             }
             if (wanted.index1 != set.index1 || wanted.generation != set.generation) {
-                if (mrhiSetGraphicsPipeline(native, pass, wanted) != mrhi_success) {
-                    return failed("a material's program could not be set", mrhi_errorState);
+                if (const mrhiResult kOutcome = mrhiSetGraphicsPipeline(native, pass, wanted);
+                    kOutcome != mrhi_success) {
+                    return failed("a material's program could not be set", kOutcome);
                 }
                 set = wanted;
                 bound.reset();
@@ -101,16 +107,17 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
                 bindTexture(*with.textures, pipelines, binding[4], binding[5], run.texture.packed);
                 bindTexture(*with.textures, pipelines, binding[6], binding[7], run.texture.emission);
                 bindTexture(*with.textures, pipelines, binding[8], binding[9], run.texture.normal);
-                if (mrhiSetBindings(native, pass, 0, binding.data(), binding.size()) != mrhi_success) {
-                    return failed("a masked caster's texture could not be bound", mrhi_errorState);
+                if (const mrhiResult kOutcome = mrhiSetBindings(native, pass, 0, binding.data(), binding.size());
+                    kOutcome != mrhi_success) {
+                    return failed("a masked caster's texture could not be bound", kOutcome);
                 }
                 bound = run.texture;
             }
             RAWFRAME_TRY(kDraw(run));
         }
     }
-    if (mrhiEndPass(native, pass) != mrhi_success) {
-        return failed("a shadow pass could not end", mrhi_errorState);
+    if (const mrhiResult kOutcome = mrhiEndPass(native, pass); kOutcome != mrhi_success) {
+        return failed("a shadow pass could not end", kOutcome);
     }
     return {};
 }
@@ -161,8 +168,8 @@ ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& b
     for (std::size_t at = 0; at < cascadeCount_; ++at) {
         mrhiBufferDef def = mrhiDefaultBufferDef();
         def.size = sizeof(CasterBlock);
-        if (mrhiDeclareBuffer(native_, &def, &cascades_[at]) != mrhi_success) {
-            return failed("a cascade's view could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, &cascades_[at]); kOutcome != mrhi_success) {
+            return failed("a cascade's view could not be declared", kOutcome);
         }
         writes.push_back(wholeOf(cascades_[at], mrhi_accessCopyDestination));
     }
@@ -182,15 +189,16 @@ ShadowPasses::declare(const render_scene::SceneFrame& frame, const FrameBlock& b
     }
     mrhiBufferDef slotsDef = mrhiDefaultBufferDef();
     slotsDef.size = squareBytes();
-    if (mrhiDeclareBuffer(native_, &slotsDef, &slotsResource_) != mrhi_success) {
-        return failed("the lights' shadow squares could not be declared", mrhi_errorCapacity);
+    if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &slotsDef, &slotsResource_); kOutcome != mrhi_success) {
+        return failed("the lights' shadow squares could not be declared", kOutcome);
     }
     writes.push_back(wholeOf(slotsResource_, mrhi_accessCopyDestination));
     for (const render_scene::ShadowSlot& slot : kLightShadows.slots) {
         mrhiBufferDef def = mrhiDefaultBufferDef();
         def.size = sizeof(CasterBlock);
-        if (mrhiDeclareBuffer(native_, &def, &slotViews_.emplace_back()) != mrhi_success) {
-            return failed("a shadow square's view could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, &slotViews_.emplace_back());
+            kOutcome != mrhi_success) {
+            return failed("a shadow square's view could not be declared", kOutcome);
         }
         writes.push_back(wholeOf(slotViews_.back(), mrhi_accessCopyDestination));
         slotBlocks_.push_back({.viewProjection = slot.viewProjection,
@@ -251,18 +259,21 @@ result::Status ShadowPasses::addPasses(const std::vector<mrhiAccess>& reads) {
 
 result::Status ShadowPasses::write(mrhiPassId upload) {
     for (std::size_t at = 0; at < cascadeCount_; ++at) {
-        if (mrhiWriteBuffer(native_, upload, cascades_[at], 0, &cascadeBlocks_[at], sizeof(CasterBlock)) !=
-            mrhi_success) {
-            return failed("a cascade's view could not be written", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome =
+                mrhiWriteBuffer(native_, upload, cascades_[at], 0, &cascadeBlocks_[at], sizeof(CasterBlock));
+            kOutcome != mrhi_success) {
+            return failed("a cascade's view could not be written", kOutcome);
         }
     }
-    if (mrhiWriteBuffer(native_, upload, slotsResource_, 0, slots_.data(), squareBytes()) != mrhi_success) {
-        return failed("the lights' shadow squares could not be written", mrhi_errorCapacity);
+    if (const mrhiResult kOutcome = mrhiWriteBuffer(native_, upload, slotsResource_, 0, slots_.data(), squareBytes());
+        kOutcome != mrhi_success) {
+        return failed("the lights' shadow squares could not be written", kOutcome);
     }
     for (std::size_t at = 0; at < slotViews_.size(); ++at) {
-        if (mrhiWriteBuffer(native_, upload, slotViews_[at], 0, &slotBlocks_[at], sizeof(CasterBlock)) !=
-            mrhi_success) {
-            return failed("a shadow square's view could not be written", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome =
+                mrhiWriteBuffer(native_, upload, slotViews_[at], 0, &slotBlocks_[at], sizeof(CasterBlock));
+            kOutcome != mrhi_success) {
+            return failed("a shadow square's view could not be written", kOutcome);
         }
     }
     return {};

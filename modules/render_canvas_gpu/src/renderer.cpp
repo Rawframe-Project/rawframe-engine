@@ -409,9 +409,10 @@ struct CanvasRenderer::State {
             cornersDef.size = frame->vertices.size() * kVertexBytes;
             mrhiBufferDef indicesDef = mrhiDefaultBufferDef();
             indicesDef.size = frame->indices.size() * sizeof(std::uint32_t);
-            if (mrhiDeclareBuffer(native, &cornersDef, &corners_) != mrhi_success ||
-                mrhiDeclareBuffer(native, &indicesDef, &indices_) != mrhi_success) {
-                return failed("the frame's corners could not be declared", mrhi_errorCapacity);
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiDeclareBuffer(native, &cornersDef, &corners_)) != mrhi_success ||
+                (outcome = mrhiDeclareBuffer(native, &indicesDef, &indices_)) != mrhi_success) {
+                return failed("the frame's corners could not be declared", outcome);
             }
             // Each of the game's materials' blocks, at a stride every
             // device's uniform offsets allow.
@@ -423,8 +424,9 @@ struct CanvasRenderer::State {
             }
             mrhiBufferDef blocksDef = mrhiDefaultBufferDef();
             blocksDef.size = blocks.size();
-            if (mrhiDeclareBuffer(native, &blocksDef, &blocksResource) != mrhi_success) {
-                return failed("the frame's materials could not be declared", mrhi_errorCapacity);
+            if (const mrhiResult kOutcome = mrhiDeclareBuffer(native, &blocksDef, &blocksResource);
+                kOutcome != mrhi_success) {
+                return failed("the frame's materials could not be declared", kOutcome);
             }
         }
         // The upload pass writes what the drawing reads.
@@ -555,9 +557,10 @@ struct CanvasRenderer::State {
 
     result::Status recordGround() {
         for (const std::optional<mrhiPassId>& kClearing : {barsClearing, groundClearing}) {
-            if (kClearing.has_value() && (mrhiBeginPass(native, *kClearing) != mrhi_success ||
-                                          mrhiEndPass(native, *kClearing) != mrhi_success)) {
-                return failed("the bars or a region's ground could not be cleared", mrhi_errorState);
+            if (mrhiResult outcome = mrhi_success;
+                kClearing.has_value() && ((outcome = mrhiBeginPass(native, *kClearing)) != mrhi_success ||
+                                          (outcome = mrhiEndPass(native, *kClearing)) != mrhi_success)) {
+                return failed("the bars or a region's ground could not be cleared", outcome);
             }
         }
         if (groundCopying.has_value()) {
@@ -565,10 +568,11 @@ struct CanvasRenderer::State {
             const mrhiTextureCopy kFrom{.resource = ground};
             const mrhiTextureCopy kTo{.resource = groundOf, .x = kX, .y = kY};
             const mrhiExtent3d kExtent{.width = kWidth, .height = kHeight, .depthOrLayers = 1};
-            if (mrhiBeginPass(native, *groundCopying) != mrhi_success ||
-                mrhiCopyTexture(native, *groundCopying, &kFrom, &kTo, &kExtent) != mrhi_success ||
-                mrhiEndPass(native, *groundCopying) != mrhi_success) {
-                return failed("a region's ground could not be laid", mrhi_errorState);
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiBeginPass(native, *groundCopying)) != mrhi_success ||
+                (outcome = mrhiCopyTexture(native, *groundCopying, &kFrom, &kTo, &kExtent)) != mrhi_success ||
+                (outcome = mrhiEndPass(native, *groundCopying)) != mrhi_success) {
+                return failed("a region's ground could not be laid", outcome);
             }
         }
         return {};
@@ -580,30 +584,32 @@ struct CanvasRenderer::State {
         }
         const bool kQuads = !frame->indices.empty();
         if (upload.has_value()) {
-            if (mrhiBeginPass(native, *upload) != mrhi_success) {
-                return failed("the upload pass could not begin", mrhi_errorState);
+            if (const mrhiResult kOutcome = mrhiBeginPass(native, *upload); kOutcome != mrhi_success) {
+                return failed("the upload pass could not begin", kOutcome);
             }
-            if (kQuads &&
-                (mrhiWriteBuffer(
-                     native, *upload, corners_, 0, frame->vertices.data(), frame->vertices.size() * kVertexBytes) !=
+            if (mrhiResult outcome = mrhi_success;
+                kQuads &&
+                ((outcome = mrhiWriteBuffer(
+                      native, *upload, corners_, 0, frame->vertices.data(), frame->vertices.size() * kVertexBytes)) !=
                      mrhi_success ||
-                 mrhiWriteBuffer(native,
-                                 *upload,
-                                 indices_,
-                                 0,
-                                 frame->indices.data(),
-                                 frame->indices.size() * sizeof(std::uint32_t)) != mrhi_success ||
-                 mrhiWriteBuffer(native, *upload, blocksResource, 0, blocks.data(), blocks.size()) != mrhi_success)) {
-                return failed("the frame's corners could not be written", mrhi_errorCapacity);
+                 (outcome = mrhiWriteBuffer(native,
+                                            *upload,
+                                            indices_,
+                                            0,
+                                            frame->indices.data(),
+                                            frame->indices.size() * sizeof(std::uint32_t))) != mrhi_success ||
+                 (outcome = mrhiWriteBuffer(native, *upload, blocksResource, 0, blocks.data(), blocks.size())) !=
+                     mrhi_success)) {
+                return failed("the frame's corners could not be written", outcome);
             }
             RAWFRAME_TRY(held->write(render::requestKey(upload->index1, upload->generation)));
-            if (mrhiEndPass(native, *upload) != mrhi_success) {
-                return failed("the upload pass could not end", mrhi_errorState);
+            if (const mrhiResult kOutcome = mrhiEndPass(native, *upload); kOutcome != mrhi_success) {
+                return failed("the upload pass could not end", kOutcome);
             }
         }
         RAWFRAME_TRY(recordGround());
-        if (mrhiBeginPass(native, drawing) != mrhi_success) {
-            return failed("the drawing pass could not begin", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiBeginPass(native, drawing); kOutcome != mrhi_success) {
+            return failed("the drawing pass could not begin", kOutcome);
         }
         // A local player's region in split-screen: its draws land
         // there and nowhere else.
@@ -616,17 +622,20 @@ struct CanvasRenderer::State {
                                          .minDepth = 0,
                                          .maxDepth = 1};
             const mrhiScissorRect kScissor{.x = kX, .y = kY, .width = kWidth, .height = kHeight};
-            if (mrhiSetViewport(native, drawing, &kViewport) != mrhi_success ||
-                mrhiSetScissor(native, drawing, &kScissor) != mrhi_success) {
-                return failed("the drawing's region could not be set", mrhi_errorState);
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiSetViewport(native, drawing, &kViewport)) != mrhi_success ||
+                (outcome = mrhiSetScissor(native, drawing, &kScissor)) != mrhi_success) {
+                return failed("the drawing's region could not be set", outcome);
             }
         }
         drawn = 0;
         std::uint64_t leftOut = 0;
         if (kQuads) {
-            if (mrhiSetVertexBuffer(native, drawing, 0, corners_, 0, MRHI_WHOLE_SIZE) != mrhi_success ||
-                mrhiSetIndexBuffer(native, drawing, indices_, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
-                return failed("the drawing could not be set up", mrhi_errorState);
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiSetVertexBuffer(native, drawing, 0, corners_, 0, MRHI_WHOLE_SIZE)) != mrhi_success ||
+                (outcome = mrhiSetIndexBuffer(native, drawing, indices_, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE)) !=
+                    mrhi_success) {
+                return failed("the drawing could not be set up", outcome);
             }
             std::optional<material::CanvasBlend> blending;
             for (const render_canvas::CanvasDraw& draw : frame->draws) {
@@ -638,9 +647,10 @@ struct CanvasRenderer::State {
                     continue;
                 }
                 if (blending != kMaterial.blend) {
-                    if (mrhiSetGraphicsPipeline(
-                            native, drawing, pipelines.at(static_cast<std::size_t>(kMaterial.blend))) != mrhi_success) {
-                        return failed("the drawing could not be set up", mrhi_errorState);
+                    if (const mrhiResult kOutcome = mrhiSetGraphicsPipeline(
+                            native, drawing, pipelines.at(static_cast<std::size_t>(kMaterial.blend)));
+                        kOutcome != mrhi_success) {
+                        return failed("the drawing could not be set up", kOutcome);
                     }
                     blending = kMaterial.blend;
                 }
@@ -654,15 +664,18 @@ struct CanvasRenderer::State {
                     block,
                     textureAt(3, resourceOf(kSampled)),
                     samplerAt(4, materialSamplers.at(samplerOf(kMaterial.sampled.filter, kMaterial.sampled.address)))};
-                if (mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-                    mrhiDrawIndexed(native, drawing, draw.indexCount, 1, draw.firstIndex, 0, 0) != mrhi_success) {
-                    return failed("a draw could not be recorded", mrhi_errorState);
+                if (mrhiResult outcome = mrhi_success;
+                    (outcome = mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
+                        mrhi_success ||
+                    (outcome = mrhiDrawIndexed(native, drawing, draw.indexCount, 1, draw.firstIndex, 0, 0)) !=
+                        mrhi_success) {
+                    return failed("a draw could not be recorded", outcome);
                 }
                 ++drawn;
             }
         }
-        if (mrhiEndPass(native, drawing) != mrhi_success) {
-            return failed("the drawing pass could not end", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiEndPass(native, drawing); kOutcome != mrhi_success) {
+            return failed("the drawing pass could not end", kOutcome);
         }
         RAWFRAME_TRY(particles->record());
         leftOutNow = leftOut;

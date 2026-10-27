@@ -19,10 +19,13 @@
 #include "rawframe/test/test.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 using namespace rawframe;
@@ -37,8 +40,8 @@ bool required() {
     return value != nullptr && value[0] != '\0';
 }
 
-std::unique_ptr<render::Device> opened() {
-    auto device = render::Device::request({.allowSoftware = true});
+std::unique_ptr<render::Device> opened(render::DeviceSettings settings = {.allowSoftware = true}) {
+    auto device = render::Device::request(settings);
     if (!device.has_value()) {
         return nullptr;
     }
@@ -174,6 +177,54 @@ RAWFRAME_TEST(TheCanvasDrawsItsFrameInOrder) {
     const std::vector<std::byte> kReloaded = kDraw();
     RAWFRAME_EXPECT(renderer.statistics().texturesUploaded == 4 && renderer.statistics().texturesReplaced == 1);
     RAWFRAME_EXPECT(near(kReloaded, 4, 4, {0, 255, 0, 255}));
+}
+
+RAWFRAME_TEST(AFrameOutOfCommandSpaceIsRefusedWithMaulRhisOwnOutcome) {
+    // Frames of one 4 KiB chunk of commands, and a canvas whose quads
+    // switch texture each time, which takes more: the frame is refused with
+    // the capacity error Maul RHI answered, never a state error the canvas
+    // chose.
+    const auto kDevice = opened({.allowSoftware = true, .frameCommandBytes = 4096});
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_canvas_gpu::CanvasRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    auto quarters = image(2, {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255});
+    const auto kWhiteTexel = image(1, {255, 255, 255, 255});
+    const render_canvas_gpu::TextureSource kTextures = [&](std::uint64_t id) {
+        return id == kQuarters ? quarters : kWhiteTexel;
+    };
+    CanvasFrame frame;
+    for (int at = 0; at < 400; ++at) {
+        const float kLeft = -1 + (static_cast<float>(at % 20) * 0.1F);
+        const float kTop = 1 - (static_cast<float>(at / 20) * 0.1F);
+        quad(frame, at % 2 == 0 ? kQuarters : kWhite, kLeft, kTop, kLeft + 0.1F, kTop - 0.1F, 0xFFFFFFFF);
+    }
+    const std::array<render::FrameRecorder*, 1> kRecorders = {made->get()};
+    std::optional<result::Error> refused;
+    for (int attempt = 0; attempt < 1000 && !refused.has_value(); ++attempt) {
+        (**made).prepare(&frame, kTextures);
+        RAWFRAME_EXPECT((*framer)->finish(10'000'000'000ULL).has_value());
+        if (auto kMade = (*framer)->make(kRecorders, {.width = kSide, .height = kSide}); !kMade.has_value()) {
+            refused = std::move(kMade).error();
+        }
+    }
+    RAWFRAME_EXPECT(refused.has_value());
+    if (refused.has_value()) {
+        std::string outcome;
+        for (const auto& kField : refused->context()) {
+            if (kField.key == "outcome") {
+                outcome = kField.value;
+            }
+        }
+        std::printf("refused: %s, outcome %s\n", std::string{refused->description()}.c_str(), outcome.c_str());
+        RAWFRAME_EXPECT(outcome == "mrhi_errorCapacity");
+    }
 }
 
 RAWFRAME_TEST(ACanvasTimesItsDrawWhereAsked) {

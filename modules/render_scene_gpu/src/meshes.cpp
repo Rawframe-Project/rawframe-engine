@@ -130,18 +130,21 @@ result::Status DeviceMeshes::write(mrhiPassId upload) const {
     for (const HeldMesh* mesh : uploads_) {
         const std::vector<float> kVertices = verticesOf(*mesh->source);
         const FrameMesh& kMade = imported_.at(mesh);
-        if (mrhiWriteBuffer(native_, upload, kMade.vertices, 0, kVertices.data(), kVertices.size() * sizeof(float)) !=
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiWriteBuffer(
+                 native_, upload, kMade.vertices, 0, kVertices.data(), kVertices.size() * sizeof(float))) !=
                 mrhi_success ||
-            mrhiWriteBuffer(
-                native_, upload, kMade.indices, 0, mesh->source->indices.data(), mesh->source->indices.size() * 4) !=
+            (outcome = mrhiWriteBuffer(
+                 native_, upload, kMade.indices, 0, mesh->source->indices.data(), mesh->source->indices.size() * 4)) !=
                 mrhi_success) {
-            return failed("a mesh could not be written", mrhi_errorCapacity);
+            return failed("a mesh could not be written", outcome);
         }
         if (kMade.influences.index1 != 0) {
             const std::vector<std::uint32_t> kInfluences = influencesOf(*mesh->source);
-            if (mrhiWriteBuffer(native_, upload, kMade.influences, 0, kInfluences.data(), kInfluences.size() * 4) !=
-                mrhi_success) {
-                return failed("a mesh's influences could not be written", mrhi_errorCapacity);
+            if (const mrhiResult kOutcome =
+                    mrhiWriteBuffer(native_, upload, kMade.influences, 0, kInfluences.data(), kInfluences.size() * 4);
+                kOutcome != mrhi_success) {
+                return failed("a mesh's influences could not be written", kOutcome);
             }
         }
     }
@@ -158,23 +161,26 @@ result::Status DeviceMeshes::bind(mrhiPassId pass, const HeldMesh& mesh, std::op
     // an offset with a size.
     const FrameMesh& kMade = imported_.at(&mesh);
     const mrhiResourceId kVertices = posed.has_value() ? posed->buffer : kMade.vertices;
-    if (mrhiSetVertexBuffer(native_, pass, 0, kVertices, posed.has_value() ? posed->offset : 0, MRHI_WHOLE_SIZE) !=
-            mrhi_success ||
-        mrhiSetIndexBuffer(native_, pass, kMade.indices, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE) != mrhi_success) {
-        return failed("a mesh could not be set to draw from", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiSetVertexBuffer(
+             native_, pass, 0, kVertices, posed.has_value() ? posed->offset : 0, MRHI_WHOLE_SIZE)) != mrhi_success ||
+        (outcome = mrhiSetIndexBuffer(native_, pass, kMade.indices, mrhi_indexUint32, 0, MRHI_WHOLE_SIZE)) !=
+            mrhi_success) {
+        return failed("a mesh could not be set to draw from", outcome);
     }
     return {};
 }
 
 result::Status DeviceMeshes::bindBefore(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> before) const {
     const FrameMesh& kMade = imported_.at(&mesh);
-    if (mrhiSetVertexBuffer(native_,
-                            pass,
-                            2,
-                            before.has_value() ? before->buffer : kMade.vertices,
-                            before.has_value() ? before->offset : 0,
-                            MRHI_WHOLE_SIZE) != mrhi_success) {
-        return failed("a mesh could not be set to draw from", mrhi_errorState);
+    if (const mrhiResult kOutcome = mrhiSetVertexBuffer(native_,
+                                                        pass,
+                                                        2,
+                                                        before.has_value() ? before->buffer : kMade.vertices,
+                                                        before.has_value() ? before->offset : 0,
+                                                        MRHI_WHOLE_SIZE);
+        kOutcome != mrhi_success) {
+        return failed("a mesh could not be set to draw from", kOutcome);
     }
     return {};
 }

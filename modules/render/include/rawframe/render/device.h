@@ -60,6 +60,15 @@ struct DeviceSettings {
     /// Whether a rasterizer running on the CPU may serve: CI and tests,
     /// never a product's first choice.
     bool allowSoftware = false;
+    /// The passes one frame may declare, and the bytes its commands may
+    /// take. Every view a frame draws (a preview split four ways, a
+    /// headset's eyes, the render textures) records its whole scene's
+    /// passes and commands into the one frame. Plaza split four ways takes
+    /// more than Maul RHI's defaults of 256 passes and 1 MiB, and at most
+    /// 288 and 1.5 MiB; a scene with more draws takes more commands. A frame
+    /// past either is refused with Maul RHI's capacity error.
+    std::uint32_t framePasses = 512;
+    std::uint32_t frameCommandBytes = std::uint32_t{4} << 20U;
     /// Who makes the Vulkan objects, when an OpenXR runtime does; the
     /// device layer makes its own when none. Outlives the device.
     VulkanMaker* vulkan = nullptr;

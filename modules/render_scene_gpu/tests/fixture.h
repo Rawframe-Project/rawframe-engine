@@ -31,10 +31,10 @@ inline bool required() {
     return value != nullptr && value[0] != '\0';
 }
 
-/// The one device, opened on any adapter, software too; none where no
-/// adapter answers.
-inline std::unique_ptr<render::Device> opened() {
-    auto device = render::Device::request({.allowSoftware = true});
+/// The one device, opened on any adapter, software too, with `settings`;
+/// none where no adapter answers.
+inline std::unique_ptr<render::Device> opened(render::DeviceSettings settings = {.allowSoftware = true}) {
+    auto device = render::Device::request(settings);
     if (!device.has_value()) {
         return nullptr;
     }

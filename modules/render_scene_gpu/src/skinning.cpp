@@ -99,8 +99,8 @@ result::Status DeviceSkinning::declare(const render_scene::SceneFrame& frame,
                                         std::pair{vertices_ * kVertexBytes, &posedResource_}}) {
         mrhiBufferDef def = mrhiDefaultBufferDef();
         def.size = kBytes;
-        if (mrhiDeclareBuffer(native_, &def, kMade) != mrhi_success) {
-            return failed("the skinned models could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, kMade); kOutcome != mrhi_success) {
+            return failed("the skinned models could not be declared", kOutcome);
         }
     }
     writes.push_back(wholeOf(paletteResource_, mrhi_accessCopyDestination));
@@ -136,10 +136,14 @@ result::Status DeviceSkinning::write(mrhiPassId upload) const {
     if (jobs_.empty()) {
         return {};
     }
-    if (mrhiWriteBuffer(native_, upload, paletteResource_, 0, palette_.data(), palette_.size() * 4) != mrhi_success ||
-        mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blocks_.size() * 4) != mrhi_success ||
-        mrhiWriteBuffer(native_, upload, tableResource_, 0, table_.data(), table_.size() * 4) != mrhi_success) {
-        return failed("the skinned models could not be written", mrhi_errorCapacity);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiWriteBuffer(native_, upload, paletteResource_, 0, palette_.data(), palette_.size() * 4)) !=
+            mrhi_success ||
+        (outcome = mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blocks_.size() * 4)) !=
+            mrhi_success ||
+        (outcome = mrhiWriteBuffer(native_, upload, tableResource_, 0, table_.data(), table_.size() * 4)) !=
+            mrhi_success) {
+        return failed("the skinned models could not be written", outcome);
     }
     return {};
 }
@@ -148,9 +152,10 @@ result::Status DeviceSkinning::record(const Pipelines& pipelines, const DeviceMe
     if (jobs_.empty()) {
         return {};
     }
-    if (mrhiBeginPass(native_, pass_) != mrhi_success ||
-        mrhiSetComputePipeline(native_, pass_, pipelines.skin.compute) != mrhi_success) {
-        return failed("the skinning pass could not be recorded", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native_, pass_)) != mrhi_success ||
+        (outcome = mrhiSetComputePipeline(native_, pass_, pipelines.skin.compute)) != mrhi_success) {
+        return failed("the skinning pass could not be recorded", outcome);
     }
     // A mesh bound once and dispatched once, a row of workgroups a palette.
     for (std::size_t at = 0; at < meshed_.size(); ++at) {
@@ -165,15 +170,16 @@ result::Status DeviceSkinning::record(const Pipelines& pipelines, const DeviceMe
                                                       bufferAt(3, posedResource_, vertices_ * kVertexBytes),
                                                       block,
                                                       bufferAt(5, tableResource_, table_.size() * 4)};
-        if (mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-            mrhiDispatch(
-                native_, pass_, static_cast<std::uint32_t>((kVertices + kGroup - 1) / kGroup), kMeshed.jobs, 1) !=
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+            (outcome = mrhiDispatch(
+                 native_, pass_, static_cast<std::uint32_t>((kVertices + kGroup - 1) / kGroup), kMeshed.jobs, 1)) !=
                 mrhi_success) {
-            return failed("the skinning pass could not be recorded", mrhi_errorState);
+            return failed("the skinning pass could not be recorded", outcome);
         }
     }
-    if (mrhiEndPass(native_, pass_) != mrhi_success) {
-        return failed("the skinning pass could not be recorded", mrhi_errorState);
+    if (const mrhiResult kOutcome = mrhiEndPass(native_, pass_); kOutcome != mrhi_success) {
+        return failed("the skinning pass could not be recorded", kOutcome);
     }
     return {};
 }
