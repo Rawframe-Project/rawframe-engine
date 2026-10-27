@@ -117,8 +117,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              "the screen showed [1-9][0-9][0-9][0-9][0-9]+ lit pixels.*\"code\":\"output_record\"[^\n]*\"revision\":1,\"offered\":\"sdr_srgb[^\"]*\",\"active\":\"sdr_srgb\".*\"code\":\"scene_drawing_summary\"[^\n]*\"frames\":[1-9][0-9]+,[^\n]*\"models\":[1-9][0-9]+,[^\n]*\"modelsLeftOut\":0,[^\n]*\"historyReused\":[1-9][0-9]+,\"framesMetered\":[1-9][0-9]+.*\"code\":\"frame_summary\"[^\n]*\"framesShown\":[1-9][0-9]+,[^\n]*\"colors\":[1-9][0-9][0-9]+,\"captured\":true")
         # The plaza previewed for an authoring session: the client's own
         # tooling endpoint, with the view grant, attached as a scene's
-        # preview, shown the scene's views, and let go, which gives the
-        # player's camera back.
+        # preview, shown the scene's views, split four ways, and let go,
+        # which gives the player's camera back. Four views draw the scene
+        # four times into one frame, past Maul RHI's default frame limits.
         add_test(NAME client_previews_plaza
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/previewed.sh $<TARGET_FILE:rawframe_host_dedicated_server>
@@ -130,7 +131,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"id\":2,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":true}.*\"id\":3,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":4,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":5,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":false}.*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
+                             "\"id\":2,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":true}.*\"id\":3,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":4,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":5,\"answer\":{\"kind\":\"authoring.split\",\"views\":4,\"shown\":true}.*\"id\":6,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":false}.*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
         # The plaza shown on a headset, under Monado's simulated one
         # (tools/xr_run.sh): drawn for both its eyes, its simulated
         # controllers read in both hands, located, and fed to the player's
@@ -158,7 +159,10 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         set_tests_properties(client_plays_runners client_drawn client_reads_runners_aloud client_types_stalls client_plaza_drawn client_previews_plaza
                              PROPERTIES PROCESSORS 2)
     endif()
-    # A record a test waited for and never saw fails it at once.
+    # A record a test waited for and never saw fails it at once, and so
+    # does a frame the client could not make: its pattern may already have
+    # matched before the frames stopped.
     get_property(client_tests DIRECTORY PROPERTY TESTS)
-    set_tests_properties(${client_tests} PROPERTIES LABELS integration FAIL_REGULAR_EXPRESSION "never saw")
+    set_tests_properties(${client_tests} PROPERTIES LABELS integration FAIL_REGULAR_EXPRESSION
+                                                   "never saw;\"code\":\"frame_failed\"")
 endif()

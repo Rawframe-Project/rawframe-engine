@@ -263,8 +263,8 @@ result::Status Play::launch() {
         viewported = "window.visible = false\nwindow.width = " + kWidth + "\nwindow.height = " + kHeight +
                      "\nrender.offscreen = true\nrender.read_every = 1\nrender.width = " + kWidth +
                      "\nrender.height = " + kHeight + "\nrender.stream = " + (kAt / "picture").string() +
-                     // Split three ways at most, in the viewport only.
-                     "\npreview.views = 3\n" +
+                     // Split four ways at most, in the viewport only.
+                     "\npreview.views = 4\n" +
                      // Edited, its camera flown as an editor's.
                      // and its picture still while time alone moves it.
                      (settings_.edited ? "preview.flight = true\npreview.edited = true\n" : "") +

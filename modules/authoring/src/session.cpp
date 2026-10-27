@@ -703,8 +703,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     } else if (record.verb == SessionVerb::Split) {
         const Value* kViews = parsed->find("views");
         const std::optional<std::int64_t> kCount = kViews != nullptr ? kViews->integer() : std::nullopt;
-        if (!kCount.has_value() || *kCount < 1 || *kCount > 3) {
-            return malformed("split's views are 1, 2, or 3");
+        if (!kCount.has_value() || *kCount < 1 || *kCount > 4) {
+            return malformed("split's views are 1 to 4");
         }
         record.views = static_cast<std::uint8_t>(*kCount);
     } else if (record.verb == SessionVerb::Bookmark) {

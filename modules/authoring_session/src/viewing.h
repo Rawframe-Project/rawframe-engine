@@ -81,8 +81,8 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 [[nodiscard]] authoring::SceneView pannedView(const authoring::SceneView& view, double across, double up) noexcept;
 
 /// The views a preview split `views` ways shows beside `view`:
-/// from straight over its target, then before it along +Z, each as far
-/// from it as `view`'s eye and as wide; none for one.
+/// from straight over its target, then before it along +Z, then beside it
+/// along +X, each as far from it as `view`'s eye and as wide; none for one.
 [[nodiscard]] std::vector<authoring::SceneView> othersOf(const authoring::SceneView& view, std::size_t views);
 
 /// `view` as a record gives it: its eye, target, and field of view.

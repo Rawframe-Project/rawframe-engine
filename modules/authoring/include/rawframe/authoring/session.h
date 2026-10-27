@@ -139,7 +139,7 @@ enum class SessionVerb : std::uint8_t {
     Bookmark,
     /// The scene's bookmarks.
     Bookmarks,
-    /// The scene's preview split into one, two, or three views.
+    /// The scene's preview split into one to four views.
     Split,
     /// What each author has chosen, a box about each in the preview, in
     /// their color.
@@ -295,7 +295,7 @@ struct SessionRecord {
     /// of keeping `view` there.
     std::uint8_t slot = 0;
     bool clears = false;
-    /// `split`'s views: 1, 2, or 3.
+    /// `split`'s views: 1 to 4.
     std::uint8_t views = 1;
     /// `overlays`' names, at most 8 of at most 32 bytes.
     std::vector<std::string> overlays;

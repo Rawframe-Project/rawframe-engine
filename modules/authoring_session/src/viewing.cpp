@@ -347,6 +347,9 @@ std::vector<authoring::SceneView> othersOf(const authoring::SceneView& view, std
     if (views >= 3) {
         made.push_back(kFrom(0, 0, kFar));
     }
+    if (views >= 4) {
+        made.push_back(kFrom(kFar, 0, 0));
+    }
     return made;
 }
 

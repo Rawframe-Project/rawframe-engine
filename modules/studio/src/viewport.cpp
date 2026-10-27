@@ -200,7 +200,7 @@ bool pillLists(std::string_view pill, std::string_view command) {
         return command.starts_with("Go to bookmark ") || command.starts_with("Set bookmark ");
     }
     if (pill == kSplitPill) {
-        return command == "One view" || command == "Two views" || command == "Three views";
+        return command == "One view" || command == "Two views" || command == "Three views" || command == "Four views";
     }
     if (pill == "New entity") {
         return command.starts_with("New ");

@@ -83,9 +83,9 @@ constexpr std::array<std::pair<std::string_view, std::uint32_t>, 4> kPlayers = {
 constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kOverlays = {
     {{"Show grid", "grid"}, {"Show colliders", "colliders"}, {"Show lights", "lights"}, {"Show game UI", "ui"}}};
 
-/// The preview split one, two, or three ways.
-constexpr std::array<std::pair<std::string_view, std::uint8_t>, 3> kSplits = {
-    {{"One view", 1}, {"Two views", 2}, {"Three views", 3}}};
+/// The preview split one to four ways.
+constexpr std::array<std::pair<std::string_view, std::uint8_t>, 4> kSplits = {
+    {{"One view", 1}, {"Two views", 2}, {"Three views", 3}, {"Four views", 4}}};
 
 /// A bookmark's commands, each followed by its slot.
 constexpr std::string_view kGoTo = "Go to bookmark ";
