@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A shader container's decoded reflection (mrhi-0009): one block from
-// the device's allocator, held by the shader and by every pipeline made
-// from it, freed when the last lets go.
+// A shader container's decoded reflection: one block from the device's
+// allocator, held by the shader and by every pipeline made from it,
+// freed when the last lets go.
 
 #ifndef MAUL_RHI_SRC_REFLECTION_H
 #define MAUL_RHI_SRC_REFLECTION_H

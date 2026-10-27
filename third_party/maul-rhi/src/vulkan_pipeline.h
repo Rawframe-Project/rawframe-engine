@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A Vulkan device's shaders and pipelines (mrhi-0003): shader modules
-// from the container's SPIR-V, pipeline layouts from the reflection
-// (a descriptor set per binding table, the device's heap layout after
-// them for containers reading heaps, the root block as push constants),
+// A Vulkan device's shaders and pipelines: shader modules from the
+// container's SPIR-V, pipeline layouts from the reflection (a
+// descriptor set per binding table, the device's heap layout after them
+// for containers reading heaps, the root block as push constants),
 // pipelines made at the call and answered at the next poll, and the
 // device's pipeline cache.
 

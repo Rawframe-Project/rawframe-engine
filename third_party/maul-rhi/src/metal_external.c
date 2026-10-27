@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Metal objects for vendor upscalers and MetalFX (maul-rhi/metal.h,
-// mrhi-0019): the functions a program integrating one calls, answered by
-// the Metal driver and unsupported on every other.
+// Metal objects for vendor upscalers and MetalFX (maul-rhi/metal.h): the
+// functions a program integrating one calls, answered by the Metal
+// driver and unsupported on every other.
 
 #include "device_core.h"
 #include "encoder_core.h"

@@ -51,6 +51,10 @@ static bool IsSamplerDefValid(const mrhiSamplerDef* def)
 mrhiResult mrhiCreateSampler(mrhiDevice* device, const mrhiSamplerDef* def,
                              mrhiSamplerId* samplerOut)
 {
+    if (samplerOut != nullptr)
+    {
+        *samplerOut = (mrhiSamplerId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -142,6 +146,10 @@ mrhiResult mrhiCheckBufferShape(mrhiDevice* device, const mrhiBufferDef* def)
 
 mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBufferId* bufferOut)
 {
+    if (bufferOut != nullptr)
+    {
+        *bufferOut = (mrhiBufferId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -173,6 +181,8 @@ mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBu
     uint64_t handle = 0;
     mrhiBufferDef driverDef = *def;
     mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
+    // Its first frame zeroes it with a clear, a copy into it.
+    driverDef.usage |= mrhi_bufferCopyDestination;
     status = mrhiDriverStatus(
         device, device->driver.vtable->createBuffer(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
@@ -181,7 +191,7 @@ mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBu
         return status;
     }
     device->bufferSlots[index1 - 1] =
-        (mrhiBufferSlot){.handle = handle, .size = def->size, .usage = def->usage};
+        (mrhiBufferSlot){.handle = handle, .size = def->size, .usage = def->usage, .fresh = true};
     *bufferOut = (mrhiBufferId){index1, generation};
     return mrhi_success;
 }

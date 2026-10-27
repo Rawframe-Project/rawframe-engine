@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's objects (mrhi-0003). Buffers and textures live in
-// private memory, since the frame graph fills and reads them; a
-// transient render target lives in tile memory where the device keeps
-// one there. A texture with view formats, or with stencil, which a view
-// sees as X32_Stencil8, may be viewed in another pixel format. Samplers
-// are made to sit in argument buffers, for the heaps.
+// The Metal driver's objects. Buffers and textures live in private
+// memory, since the frame graph fills and reads them; a transient
+// render target lives in tile memory where the device keeps one there.
+// A texture with view formats, or with stencil, which a view sees as
+// X32_Stencil8, may be viewed in another pixel format. Samplers are
+// made to sit in argument buffers, for the heaps.
 
 #include "metal_resource.h"
 
+#include "capabilities_core.h"
 #include "invariant.h"
 #include "metal_names.h"
 
@@ -63,7 +64,11 @@ static MTLTextureUsage UsageOf(const mrhiTextureDef* def)
     usage |= (def->usage & mrhi_textureStorage) != 0
                  ? MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite
                  : 0;
-    usage |= (def->usage & mrhi_textureRenderTarget) != 0 ? MTLTextureUsageRenderTarget : 0;
+    // Every depth texture, so that its first frame clears it in a render
+    // pass.
+    usage |= (def->usage & mrhi_textureRenderTarget) != 0 || mrhiFormatHasDepth(def->format)
+                 ? MTLTextureUsageRenderTarget
+                 : 0;
     bool views = def->format == mrhi_formatDepthStencil;
     for (int i = 0; i < MRHI_VIEW_FORMATS; ++i)
     {

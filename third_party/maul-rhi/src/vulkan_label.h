@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Labels on Vulkan (mrhi-0003): object names and command labels through
+// Labels on Vulkan: object names and command labels through
 // VK_EXT_debug_utils where the instance has it, and nothing where it has
 // not. Labels are UTF-8 without NUL, at most MRHI_LABEL_BYTES; Vulkan's
 // are NUL-terminated, so each is copied first.

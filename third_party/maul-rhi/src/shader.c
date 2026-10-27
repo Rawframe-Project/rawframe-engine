@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Shader containers on a device (mrhi-0009): the container checked as
-// hostile input and against the device, its reflection kept for the
-// shader and its pipelines, and its code handed to the driver.
+// Shader containers on a device: the container checked as hostile
+// input and against the device, its reflection kept for the shader
+// and its pipelines, and its code handed to the driver.
 
 #include "device_core.h"
 #include "label.h"
@@ -143,7 +143,7 @@ static bool IsWithin(const mrhiDevice* device, const mrhiContainer* container)
 }
 
 // Checks a def and its container: success with the container, or the
-// refusal, invalid input counted as misuse.
+// refusal, invalid input counted as misuse and a bad container not.
 static mrhiResult CheckShaderDef(mrhiDevice* device, const mrhiShaderDef* def,
                                  mrhiContainer* containerOut)
 {
@@ -157,9 +157,9 @@ static mrhiResult CheckShaderDef(mrhiDevice* device, const mrhiShaderDef* def,
         return mrhiDeviceMisuse(device, mrhi_diagnosticShaderBytes);
     }
     status = mrhiParseContainer(def->bytes, def->byteCount, containerOut);
-    if (status == mrhi_errorInvalid)
+    if (status == mrhi_errorFormat)
     {
-        return mrhiDeviceMisuse(device, mrhi_diagnosticShaderContainer);
+        return mrhiDeviceBadData(device, mrhi_diagnosticShaderContainer);
     }
     return status == mrhi_success && !IsWithin(device, containerOut) ? mrhi_errorUnsupported
                                                                      : status;
@@ -167,6 +167,10 @@ static mrhiResult CheckShaderDef(mrhiDevice* device, const mrhiShaderDef* def,
 
 mrhiResult mrhiCreateShader(mrhiDevice* device, const mrhiShaderDef* def, mrhiShaderId* shaderOut)
 {
+    if (shaderOut != nullptr)
+    {
+        *shaderOut = (mrhiShaderId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

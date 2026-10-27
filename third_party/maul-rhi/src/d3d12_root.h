@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's root signatures (mrhi-0003): made from a
-// container's layout and its D3D12 map. Included by the driver's files
-// only.
+// The D3D12 driver's root signatures: made from a container's layout
+// and its D3D12 map. Included by the driver's files only.
 
 #ifndef MAUL_RHI_SRC_D3D12_ROOT_H
 #define MAUL_RHI_SRC_D3D12_ROOT_H

@@ -65,7 +65,7 @@ static D3D12_CPU_DESCRIPTOR_HANDLE ColorView(mrhiD3d12Recorder* recorder,
     else
     {
         desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
-        // A layer per view (mrhi-0020).
+        // A layer per view.
         desc.Texture2DArray = (D3D12_TEX2D_ARRAY_RTV){.MipSlice = target->mip,
                                                       .FirstArraySlice = target->layer,
                                                       .ArraySize = recorder->pass->viewCount};
@@ -170,7 +170,7 @@ static void StartTargets(mrhiD3d12Recorder* recorder)
         SUCCEEDED(ID3D12GraphicsCommandList_QueryInterface(
             recorder->list, &IID_ID3D12GraphicsCommandList1, (void**)&views)))
     {
-        // Every view of a multiview pass (mrhi-0020).
+        // Every view of a multiview pass.
         ID3D12GraphicsCommandList1_SetViewInstanceMask(views, (1u << pass->viewCount) - 1);
         ID3D12GraphicsCommandList1_Release(views);
     }
@@ -200,7 +200,7 @@ static void Resolve(mrhiD3d12Recorder* recorder)
         }
         const mrhiD3d12Object* source = TargetOf(recorder, target->resource);
         const mrhiD3d12Object* into = TargetOf(recorder, target->resolve);
-        // Each view's layer (mrhi-0020).
+        // Each view's layer.
         for (uint32_t view = 0; view < pass->viewCount; ++view)
         {
             UINT from = SubresourceOf(source->texture, target->mip, target->layer + view);

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Queries on Vulkan (mrhi-0003, mrhi-0012, mrhi-0023): each query set a
-// frame names reset once at its start, occlusion and statistics queries
-// around work, a pass's timestamps at its start and end, and resolves
-// that copy the queries the frame wrote and write 0 for the others.
+// Queries on Vulkan: each query set a frame names reset once at its
+// start, occlusion and statistics queries around work, a pass's
+// timestamps at its start and end, and resolves that copy the queries
+// the frame wrote and write 0 for the others.
 
 #ifndef MAUL_RHI_SRC_VULKAN_QUERY_H
 #define MAUL_RHI_SRC_VULKAN_QUERY_H

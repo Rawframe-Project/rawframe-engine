@@ -6,6 +6,8 @@
 
 #include "pool.h"
 
+#include "invariant.h"
+
 void mrhiPoolInit(mrhiPool* pool, uint32_t capacity, uint32_t* generations, uint32_t* nextFree)
 {
     *pool = (mrhiPool){
@@ -28,6 +30,9 @@ bool mrhiPoolAcquire(mrhiPool* pool, uint32_t* index1Out, uint32_t* generationOu
         return false;
     }
     uint32_t index1 = pool->freeHead;
+    MRHI_ASSERT(index1 <= pool->capacity && pool->used < pool->capacity);
+    // A free slot's generation is even.
+    MRHI_ASSERT((pool->generations[index1 - 1] & 1u) == 0u);
     pool->freeHead = pool->nextFree[index1 - 1];
     // Odd while live, so a live id's generation is never 0, even after the
     // counter wraps.
@@ -47,6 +52,9 @@ bool mrhiPoolIsLive(const mrhiPool* pool, uint32_t index1, uint32_t generation)
 
 void mrhiPoolRelease(mrhiPool* pool, uint32_t index1)
 {
+    // Only a live slot is released, once.
+    MRHI_ASSERT(index1 != 0 && index1 <= pool->capacity && pool->used > 0);
+    MRHI_ASSERT((pool->generations[index1 - 1] & 1u) == 1u);
     ++pool->generations[index1 - 1];
     pool->nextFree[index1 - 1] = pool->freeHead;
     pool->freeHead = index1;

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's pass encoding (mrhi-0003). A pass's bindings, root
-// block and buffer sizes are kept as the stream sets them and applied
-// before each draw or dispatch, through the pipeline's map, so their
-// order against the pipeline does not matter. Copies and query resolves
-// in a compute pass leave its compute encoder for a blit encoder, and
-// the compute encoder that follows takes up the pipeline and state
-// again; the pass's open debug groups close on each encoder and open on
-// the next, as Metal keeps them per encoder. Metal tracks the hazards
-// between encoders of private resources, so the core's barriers need no
+// The Metal driver's pass encoding. A pass's bindings, root block and
+// buffer sizes are kept as the stream sets them and applied before each
+// draw or dispatch, through the pipeline's map, so their order against
+// the pipeline does not matter. Copies and query resolves in a compute
+// pass leave its compute encoder for a blit encoder, and the compute
+// encoder that follows takes up the pipeline and state again; the
+// pass's open debug groups close on each encoder and open on the next,
+// as Metal keeps them per encoder. Metal tracks the hazards between
+// encoders of private resources, so the core's barriers need no
 // commands. A texture binding is a view of its texture unless it sees
 // the whole of it as it is.
 
@@ -218,7 +218,7 @@ static void StartRender(mrhiMetalEncoder* encoder)
     descriptor.renderTargetHeight = pass->height;
     if (pass->viewCount > 1)
     {
-        // A layer per view from the attachments' slices (mrhi-0020).
+        // A layer per view from the attachments' slices.
         descriptor.renderTargetArrayLength = pass->viewCount;
     }
     if (pass->occlusionSet != 0)
@@ -596,8 +596,8 @@ uint64_t mrhiMetalClampedBytes(const mrhiDriverFrame* frame)
 
 // Clamps the records of the pass's counted multi-draws into the clamped
 // buffer, in a compute encoder before the pass's render encoder, so that
-// each record past its draw's count draws no instances (mrhi-0020).
-// Metal orders the render encoder's indirect reads after the writes.
+// each record past its draw's count draws no instances. Metal orders the
+// render encoder's indirect reads after the writes.
 static void ClampPass(const mrhiMetalEncoder* encoder)
 {
     id<MTLComputeCommandEncoder> compute = nil;
@@ -716,6 +716,49 @@ static void Occlusion(const mrhiMetalEncoder* encoder, const mrhiCommand* comman
                                       offset:(NSUInteger)command->a * 8];
 }
 
+// Zeroes a new texture whole: a depth texture, which every one is made
+// to take a render pass, and a render target of one layer by render
+// passes that clear each mip and layer, faster than copies; any other by
+// copies of zeros, which take no usage. The pass's blit encoder is open
+// after.
+static void ClearTexture(mrhiMetalEncoder* encoder, const mrhiCommand* command)
+{
+    const mrhiTextureDef* def = encoder->frame->resources[command->a - 1].texture;
+    bool depth = mrhiFormatHasDepth(def->format);
+    bool target = (def->usage & mrhi_textureRenderTarget) != 0 && def->kind != mrhi_texture3d &&
+                  def->depthOrLayers == 1;
+    if (!depth && !target)
+    {
+        mrhiMetalCopyZeros(encoder, command);
+        return;
+    }
+    id<MTLTexture> texture = encoder->objects[command->a - 1];
+    EndEncoder(encoder);
+    for (uint32_t mip = 0; mip < def->mipLevels; ++mip)
+    {
+        for (uint32_t layer = 0; layer < def->depthOrLayers; ++layer)
+        {
+            MTLRenderPassDescriptor* descriptor = [MTLRenderPassDescriptor renderPassDescriptor];
+            descriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+            descriptor.depthAttachment.clearDepth = 0.0;
+            descriptor.stencilAttachment.clearStencil = 0;
+            MTLRenderPassAttachmentDescriptor* attachments[2] = {
+                depth ? (MTLRenderPassAttachmentDescriptor*)descriptor.depthAttachment
+                      : descriptor.colorAttachments[0],
+                mrhiFormatHasStencil(def->format) ? descriptor.stencilAttachment : nil,
+            };
+            for (int i = 0; i < 2 && attachments[i] != nil; ++i)
+            {
+                Place(attachments[i], texture, mip, layer);
+                attachments[i].loadAction = MTLLoadActionClear;
+                attachments[i].storeAction = MTLStoreActionStore;
+            }
+            [[encoder->commands renderCommandEncoderWithDescriptor:descriptor] endEncoding];
+        }
+    }
+    StartBlit(encoder);
+}
+
 static bool IsLabel(const mrhiCommand* command)
 {
     return command->type >= mrhiCommandPushDebugGroup && command->type <= mrhiCommandDebugMarker;
@@ -771,6 +814,9 @@ static void Encode(mrhiMetalEncoder* encoder, Work work, const mrhiCommand* comm
         break;
     case mrhiCommandResolveQueries:
         mrhiMetalResolve(encoder, command);
+        break;
+    case mrhiCommandClearTexture:
+        ClearTexture(encoder, command);
         break;
     default:
         if (command->type >= mrhiCommandCopyBuffer)

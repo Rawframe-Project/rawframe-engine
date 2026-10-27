@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Adapter requests (mrhi-0003): the adapter table keeps the ids of
-// adapters found again and retires the others, and the listing orders
-// them by the request's preference.
+// Adapter requests: the adapter table keeps the ids of adapters found
+// again and retires the others, and the listing orders them by the
+// request's preference.
 
 #include "capabilities_core.h"
 #include "chain.h"
@@ -175,6 +175,10 @@ mrhiResult mrhiRefreshAdapters(mrhiInstance* instance, const mrhiPending* search
 mrhiResult mrhiRequestAdapters(mrhiInstance* instance, const mrhiAdapterRequestDef* def,
                                mrhiRequestId* requestOut)
 {
+    if (requestOut != nullptr)
+    {
+        *requestOut = (mrhiRequestId){0};
+    }
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;

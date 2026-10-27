@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// D3D12 objects for vendor upscalers (maul-rhi/d3d12.h, mrhi-0019): the
-// functions a program integrating one calls, answered by the D3D12
-// driver and unsupported on every other.
+// D3D12 objects for vendor upscalers (maul-rhi/d3d12.h): the functions
+// a program integrating one calls, answered by the D3D12 driver and
+// unsupported on every other.
 
 #include "device_core.h"
 #include "encoder_core.h"

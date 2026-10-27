@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Surface configuration (mrhi-0007): a device configures a surface of its
-// instance with a color, usages, a size and modes the surface reports on
-// the device's adapter, and keeps the driver's swapchain in its table.
-// A surface is configured on one device at a time.
+// Surface configuration: a device configures a surface of its instance
+// with a color, usages, a size and modes the surface reports on the
+// device's adapter, and keeps the driver's swapchain in its table. A
+// surface is configured on one device at a time.
 
 #include "capabilities_core.h"
 #include "device_core.h"

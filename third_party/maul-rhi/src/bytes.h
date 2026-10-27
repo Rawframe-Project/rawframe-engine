@@ -3,11 +3,12 @@
 //
 // Little-endian numbers in byte arrays, read and written a byte at a
 // time, so that nothing depends on the host's byte order or on the
-// array's alignment.
+// array's alignment, and runs of zero bytes.
 
 #ifndef MAUL_RHI_SRC_BYTES_H
 #define MAUL_RHI_SRC_BYTES_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 static inline uint16_t mrhiRead16(const uint8_t* at)
@@ -37,6 +38,19 @@ static inline void mrhiWrite64(uint8_t* at, uint64_t value)
 {
     mrhiWrite32(at, (uint32_t)value);
     mrhiWrite32(at + 4, (uint32_t)(value >> 32));
+}
+
+// Whether count bytes from at are all zero.
+static inline bool mrhiIsZero(const uint8_t* at, size_t count)
+{
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (at[i] != 0)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 #endif // MAUL_RHI_SRC_BYTES_H

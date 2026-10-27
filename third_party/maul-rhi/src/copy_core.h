@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What copies and uploads share (mrhi-0011): the pass they record in,
-// the resources they name, the texture side of a transfer checked as
+// What copies and uploads share: the pass they record in, the
+// resources they name, the texture side of a transfer checked as
 // WebGPU checks it, and linear texel layouts.
 
 #ifndef MAUL_RHI_SRC_COPY_CORE_H

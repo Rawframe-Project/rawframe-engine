@@ -17,6 +17,7 @@
 #include "d3d12_names.h"
 #include "invariant.h"
 
+#include <limits.h>
 #include <string.h>
 
 // Where a placed footprint must start.
@@ -226,6 +227,257 @@ static void CopyTexture(const mrhiD3d12Recorder* recorder, const mrhiCommand* co
     }
 }
 
+// Takes a clear's views, its CPU-only one and a shader-visible one:
+// false, with neither taken, when either ring has run out.
+static bool TakeClearViews(mrhiD3d12Recorder* recorder, D3D12_CPU_DESCRIPTOR_HANDLE* cpuOut,
+                           D3D12_CPU_DESCRIPTOR_HANDLE* visibleOut,
+                           D3D12_GPU_DESCRIPTOR_HANDLE* gpuOut)
+{
+    mrhiD3d12Ring* clears = &recorder->clears;
+    mrhiD3d12GpuRing* views = &recorder->views;
+    if (clears->taken == clears->capacity || views->taken == views->capacity)
+    {
+        return false;
+    }
+    cpuOut->ptr = clears->start.ptr + (SIZE_T)clears->step * clears->taken++;
+    visibleOut->ptr = views->cpu.ptr + (SIZE_T)views->step * views->taken;
+    gpuOut->ptr = views->gpu.ptr + (UINT64)views->step * views->taken++;
+    return true;
+}
+
+// Zeroes a buffer's range with ClearUnorderedAccessViewUint, many times
+// faster than copies of zeros, on the lists that take it: every lane but
+// the copy lane, which no pass that clears runs on. A clear
+// past the slot's views, or of more words than one view holds, copies
+// zeros instead. Either way it ends in the copy destination state the
+// frame's plan gives it, so the frame's next use of the buffer waits
+// for it.
+static void Clear(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
+{
+    MRHI_ASSERT(recorder->lane != mrhiD3d12LaneCopy);
+    uint64_t words = command->d / sizeof(uint32_t);
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu;
+    D3D12_CPU_DESCRIPTOR_HANDLE visible;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu;
+    if (words > (UINT64_C(1) << D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP) ||
+        !TakeClearViews(recorder, &cpu, &visible, &gpu))
+    {
+        ID3D12Resource* target =
+            BufferOf(recorder, command->a, false, D3D12_RESOURCE_STATE_COPY_DEST);
+        mrhiD3d12FlushBarriers(recorder);
+        mrhiD3d12CopyZeros(recorder, target, command->c, command->d);
+        return;
+    }
+    ID3D12Resource* target =
+        BufferOf(recorder, command->a, false, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    mrhiD3d12FlushBarriers(recorder);
+    const D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {
+        .Format = DXGI_FORMAT_R32_UINT,
+        .ViewDimension = D3D12_UAV_DIMENSION_BUFFER,
+        .Buffer = {.FirstElement = command->c / sizeof(uint32_t), .NumElements = (UINT)words},
+    };
+    ID3D12Device_CreateUnorderedAccessView(recorder->device, target, nullptr, &desc, cpu);
+    ID3D12Device_CreateUnorderedAccessView(recorder->device, target, nullptr, &desc, visible);
+    static const UINT zeros[4] = {0, 0, 0, 0};
+    ID3D12GraphicsCommandList_ClearUnorderedAccessViewUint(recorder->list, gpu, cpu, target, zeros,
+                                                           0, nullptr);
+    (void)BufferOf(recorder, command->a, false, D3D12_RESOURCE_STATE_COPY_DEST);
+    mrhiD3d12FlushBarriers(recorder);
+}
+
+bool mrhiD3d12ClearsOnDirect(const mrhiTextureDef* def)
+{
+    return mrhiFormatHasDepth(def->format) || (def->usage & mrhi_textureRenderTarget) != 0;
+}
+
+// The descriptor one past a ring's, which a slot's heap holds for the
+// clears of new textures: D3D12 reads a target or depth view when a
+// clear is recorded, so each clear takes the same one again.
+static D3D12_CPU_DESCRIPTOR_HANDLE PastRing(const mrhiD3d12Ring* ring)
+{
+    return (D3D12_CPU_DESCRIPTOR_HANDLE){.ptr =
+                                             ring->start.ptr + (SIZE_T)ring->step * ring->capacity};
+}
+
+static uint32_t LayersOf(const mrhiTextureDef* def)
+{
+    return def->kind == mrhi_texture3d ? 1 : def->depthOrLayers;
+}
+
+// Clears a depth texture's mip, both its planes, through a view of every
+// layer.
+static void ClearDepthMip(const mrhiD3d12Recorder* recorder, ID3D12Resource* resource,
+                          const mrhiTextureDef* def, uint32_t mip)
+{
+    D3D12_DEPTH_STENCIL_VIEW_DESC desc = {.Format = mrhiD3d12Format(def->format)};
+    if (def->sampleCount > 1)
+    {
+        desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+        desc.Texture2DMSArray = (D3D12_TEX2DMS_ARRAY_DSV){.ArraySize = LayersOf(def)};
+    }
+    else
+    {
+        desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+        desc.Texture2DArray = (D3D12_TEX2D_ARRAY_DSV){.MipSlice = mip, .ArraySize = LayersOf(def)};
+    }
+    D3D12_CPU_DESCRIPTOR_HANDLE view = PastRing(&recorder->depths);
+    ID3D12Device_CreateDepthStencilView(recorder->device, resource, &desc, view);
+    D3D12_CLEAR_FLAGS flags =
+        D3D12_CLEAR_FLAG_DEPTH |
+        (mrhiFormatHasStencil(def->format) ? D3D12_CLEAR_FLAG_STENCIL : (D3D12_CLEAR_FLAGS)0);
+    ID3D12GraphicsCommandList_ClearDepthStencilView(recorder->list, view, flags, 0.0F, 0, 0,
+                                                    nullptr);
+}
+
+// Clears a render target's mip through a view of every layer or depth
+// slice.
+static void ClearColorMip(const mrhiD3d12Recorder* recorder, ID3D12Resource* resource,
+                          const mrhiTextureDef* def, uint32_t mip)
+{
+    D3D12_RENDER_TARGET_VIEW_DESC desc = {.Format = mrhiD3d12Format(def->format)};
+    if (def->kind == mrhi_texture3d)
+    {
+        desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
+        desc.Texture3D = (D3D12_TEX3D_RTV){.MipSlice = mip, .WSize = UINT_MAX};
+    }
+    else if (def->sampleCount > 1)
+    {
+        desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+        desc.Texture2DMSArray = (D3D12_TEX2DMS_ARRAY_RTV){.ArraySize = LayersOf(def)};
+    }
+    else
+    {
+        desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+        desc.Texture2DArray = (D3D12_TEX2D_ARRAY_RTV){.MipSlice = mip, .ArraySize = LayersOf(def)};
+    }
+    D3D12_CPU_DESCRIPTOR_HANDLE view = PastRing(&recorder->targets);
+    ID3D12Device_CreateRenderTargetView(recorder->device, resource, &desc, view);
+    static const FLOAT zero[4] = {0.0F, 0.0F, 0.0F, 0.0F};
+    ID3D12GraphicsCommandList_ClearRenderTargetView(recorder->list, view, zero, 0, nullptr);
+}
+
+// Clears a storage texture's mip through a view of every layer or depth
+// slice. ClearUnorderedAccessViewUint copies the bits of its values
+// into any format, and zero bits are zero in each.
+static void ClearStorageMip(mrhiD3d12Recorder* recorder, ID3D12Resource* resource,
+                            const mrhiTextureDef* def, uint32_t mip)
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu;
+    D3D12_CPU_DESCRIPTOR_HANDLE visible;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpu;
+    bool taken = TakeClearViews(recorder, &cpu, &visible, &gpu);
+    MRHI_ASSERT(taken);
+    D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {.Format = mrhiD3d12Format(def->format)};
+    if (def->kind == mrhi_texture3d)
+    {
+        desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+        desc.Texture3D = (D3D12_TEX3D_UAV){.MipSlice = mip, .WSize = UINT_MAX};
+    }
+    else
+    {
+        desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+        desc.Texture2DArray = (D3D12_TEX2D_ARRAY_UAV){.MipSlice = mip, .ArraySize = LayersOf(def)};
+    }
+    ID3D12Device_CreateUnorderedAccessView(recorder->device, resource, nullptr, &desc, cpu);
+    ID3D12Device_CreateUnorderedAccessView(recorder->device, resource, nullptr, &desc, visible);
+    static const UINT zeros[4] = {0, 0, 0, 0};
+    ID3D12GraphicsCommandList_ClearUnorderedAccessViewUint(recorder->list, gpu, cpu, resource,
+                                                           zeros, 0, nullptr);
+}
+
+// Copies the device's zeros over a mip's layer or depth slice, in boxes
+// of as many rows of blocks as the zeros hold at D3D12's row pitch:
+// they hold a row of the widest texture D3D12 takes, 16384 texels of 16
+// bytes.
+static void CopyZerosToMip(const mrhiD3d12Recorder* recorder, ID3D12Resource* resource,
+                           const mrhiTextureDef* def, uint32_t mip, uint32_t z)
+{
+    mrhiFormatBlock block = mrhiGetFormatBlock(def->format);
+    bool volume = def->kind == mrhi_texture3d;
+    uint32_t across =
+        ((def->width >> mip > 0 ? def->width >> mip : 1) + block.width - 1) / block.width;
+    uint32_t down =
+        ((def->height >> mip > 0 ? def->height >> mip : 1) + block.height - 1) / block.height;
+    uint32_t pitch = (across * mrhiGetFormatCopy(def->format, mrhi_aspectAll).bytes +
+                      D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) /
+                     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
+    MRHI_ASSERT(pitch > 0 && pitch <= MRHI_D3D12_ZERO_BYTES);
+    uint32_t rows = (uint32_t)(MRHI_D3D12_ZERO_BYTES / pitch);
+    UINT subresource = SubresourceOf(def, mip, volume ? 0 : z, mrhi_aspectAll);
+    for (uint32_t y = 0; y < down; y += rows)
+    {
+        const uint32_t origin[3] = {0, y * block.height, volume ? z : 0};
+        const uint32_t size[3] = {across * block.width,
+                                  (down - y < rows ? down - y : rows) * block.height, 1};
+        CopyBox(recorder, true, recorder->zeros, 0, pitch, resource, def, mrhi_aspectAll,
+                subresource, origin, size);
+    }
+}
+
+// Zeroes a texture's mip in the state its clear takes.
+static void ZeroMip(mrhiD3d12Recorder* recorder, const mrhiD3d12Object* object,
+                    D3D12_RESOURCE_STATES state, uint32_t mip)
+{
+    const mrhiTextureDef* def = object->texture;
+    switch (state)
+    {
+    case D3D12_RESOURCE_STATE_DEPTH_WRITE:
+        ClearDepthMip(recorder, object->resource, def, mip);
+        break;
+    case D3D12_RESOURCE_STATE_RENDER_TARGET:
+        ClearColorMip(recorder, object->resource, def, mip);
+        break;
+    case D3D12_RESOURCE_STATE_UNORDERED_ACCESS:
+        ClearStorageMip(recorder, object->resource, def, mip);
+        break;
+    default:
+    {
+        uint32_t depth = def->depthOrLayers >> mip > 0 ? def->depthOrLayers >> mip : 1;
+        uint32_t slices = def->kind == mrhi_texture3d ? depth : def->depthOrLayers;
+        for (uint32_t z = 0; z < slices; ++z)
+        {
+            CopyZerosToMip(recorder, object->resource, def, mip, z);
+        }
+        break;
+    }
+    }
+}
+
+// Zeroes a new texture whole, every mip, layer and plane, in the copy
+// destination state the frame's plan gives it, by the usage it was made
+// with: a render target and a depth texture through views of each mip,
+// on the direct list that alone clears them; a storage texture through
+// views of each mip while the slot's views last; any other by copies of
+// zeros, which take no usage.
+static void ClearTexture(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
+{
+    MRHI_ASSERT(command->a != 0 && command->a <= recorder->frame->resourceCount);
+    const mrhiD3d12Object* object = &recorder->table[command->a - 1];
+    const mrhiTextureDef* def = object->texture;
+    bool depth = mrhiFormatHasDepth(def->format);
+    D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST;
+    if (mrhiD3d12ClearsOnDirect(def))
+    {
+        state = depth ? D3D12_RESOURCE_STATE_DEPTH_WRITE : D3D12_RESOURCE_STATE_RENDER_TARGET;
+    }
+    else if ((def->usage & mrhi_textureStorage) != 0 &&
+             recorder->clears.capacity - recorder->clears.taken >= def->mipLevels &&
+             recorder->views.capacity - recorder->views.taken >= def->mipLevels)
+    {
+        state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    }
+    mrhiD3d12Transition(recorder, object->resource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                        D3D12_RESOURCE_STATE_COPY_DEST, state);
+    mrhiD3d12FlushBarriers(recorder);
+    for (uint32_t mip = 0; mip < def->mipLevels; ++mip)
+    {
+        ZeroMip(recorder, object, state, mip);
+    }
+    mrhiD3d12Transition(recorder, object->resource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, state,
+                        D3D12_RESOURCE_STATE_COPY_DEST);
+    mrhiD3d12FlushBarriers(recorder);
+}
+
 void mrhiD3d12Copy(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
 {
     switch (command->type)
@@ -254,13 +506,11 @@ void mrhiD3d12Copy(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
         CopyTexture(recorder, command);
         break;
     case mrhiCommandClearBuffer:
-    {
-        ID3D12Resource* target =
-            BufferOf(recorder, command->a, false, D3D12_RESOURCE_STATE_COPY_DEST);
-        mrhiD3d12FlushBarriers(recorder);
-        mrhiD3d12CopyZeros(recorder, target, command->c, command->d);
+        Clear(recorder, command);
         break;
-    }
+    case mrhiCommandClearTexture:
+        ClearTexture(recorder, command);
+        break;
     default:
         CopyWithTexture(recorder, command);
         break;

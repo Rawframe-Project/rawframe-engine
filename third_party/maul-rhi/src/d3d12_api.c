@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Opens d3d12.dll and dxgi.dll (mrhi-0003) and reads the driver's entry
-// points. This file also defines the interface ids the headers declare
+// Opens d3d12.dll and dxgi.dll and reads the driver's entry points.
+// This file also defines the interface ids the headers declare
 // (INITGUID), once for the whole driver.
 
 #define INITGUID

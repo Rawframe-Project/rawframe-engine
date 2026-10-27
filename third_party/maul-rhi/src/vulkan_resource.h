@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Buffers and textures as Vulkan creates them (mrhi-0003): their create
-// infos from the defs the core has checked, as the contract's Vulkan
-// rows map them.
+// Buffers and textures as Vulkan creates them: their create infos from
+// the defs the core has checked, as the contract's Vulkan rows map
+// them.
 
 #ifndef MAUL_RHI_SRC_VULKAN_RESOURCE_H
 #define MAUL_RHI_SRC_VULKAN_RESOURCE_H

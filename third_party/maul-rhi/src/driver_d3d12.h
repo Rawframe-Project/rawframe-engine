@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver (mrhi-0003): the system's DXGI adapters that open a
-// D3D12 device at the floor, listed as adapters, requests answered at
-// the next poll.
+// The D3D12 driver: the system's DXGI adapters that open a D3D12
+// device at the floor, listed as adapters, requests answered at the
+// next poll.
 
 #ifndef MAUL_RHI_SRC_DRIVER_D3D12_H
 #define MAUL_RHI_SRC_DRIVER_D3D12_H

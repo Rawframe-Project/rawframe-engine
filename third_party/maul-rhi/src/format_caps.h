@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Format capabilities where an API's are WebGPU's (mrhi-0006): the
-// floor, which is WebGPU's guarantee, and what an adapter's features
-// add. The test driver and the WebGPU driver report them.
+// Format capabilities where an API's are WebGPU's: the floor, which
+// is WebGPU's guarantee, and what an adapter's features add. The
+// test driver and the WebGPU driver report them.
 
 #ifndef MAUL_RHI_SRC_FORMAT_CAPS_H
 #define MAUL_RHI_SRC_FORMAT_CAPS_H

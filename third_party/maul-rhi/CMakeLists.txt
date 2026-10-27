@@ -20,12 +20,12 @@ option(MAUL_RHI_BUILD_SAMPLES "Build the samples" ${PROJECT_IS_TOP_LEVEL})
 option(MAUL_RHI_BUILD_SHARED "Build a shared library instead of a static one" OFF)
 option(MAUL_RHI_INSTALL "Generate install rules" ${PROJECT_IS_TOP_LEVEL})
 set(MAUL_RHI_CONFORMANCE_DRIVER "" CACHE STRING
-    "A target defining mrhiConformanceDriver, to run the conformance suite on (mrhi-0024)")
+    "A target defining mrhiConformanceDriver, to run the conformance suite on")
 option(MAUL_RHI_WERROR "Treat compiler warnings as errors" OFF)
 option(MAUL_RHI_SANITIZE "Instrument with AddressSanitizer and UBSan" OFF)
 option(MAUL_RHI_TSAN "Instrument with ThreadSanitizer" OFF)
-option(MAUL_RHI_VALIDATION "Build the validation layer around the driver SPI (mrhi-0025)" OFF)
-option(MAUL_RHI_LABELS "Hand debug labels to drivers and record label commands (mrhi-0029)" ON)
+option(MAUL_RHI_VALIDATION "Build the validation layer around the driver SPI" OFF)
+option(MAUL_RHI_LABELS "Hand debug labels to drivers and record label commands" ON)
 if(NOT MAUL_RHI_LABELS)
     # Labels are still checked, then dropped: every target here sees it.
     add_compile_definitions(MAUL_RHI_LABELS=0)
@@ -40,21 +40,25 @@ else()
     set(maul_rhi_test_driver OFF)
 endif()
 option(MAUL_RHI_TEST_DRIVER "Build the test driver (mrhiTestDriverDef)" ${maul_rhi_test_driver})
-# The web: Emscripten's, or a plain WebAssembly toolchain's (mrhi-0016).
+# The web: Emscripten's, or a plain WebAssembly toolchain's.
 if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(maul_rhi_web ON)
 else()
     set(maul_rhi_web OFF)
 endif()
-# The native driver (mrhi-0003), one per build: Metal on Apple systems,
-# D3D12 on Windows, Vulkan on the others; the web has none. A Windows
-# build may take Vulkan instead of D3D12.
+# The native driver, one per build: Metal on Apple systems, D3D12 on
+# Windows, Vulkan on the others; the web has none. A Windows build may
+# take Vulkan instead of D3D12.
 if(maul_rhi_web OR APPLE OR WIN32)
     set(maul_rhi_vulkan_default OFF)
 else()
     set(maul_rhi_vulkan_default ON)
 endif()
 option(MAUL_RHI_VULKAN_DRIVER "Build the Vulkan driver" ${maul_rhi_vulkan_default})
+# Each pass class's Vulkan work as submissions of its own on the one
+# queue, waiting on each other through timeline semaphores: a check of
+# the driver's batches, never a release build's.
+option(MAUL_RHI_VULKAN_SPLIT_LANES "Submit each pass class's Vulkan work apart (test only)" OFF)
 # The Metal driver, in Objective-C.
 option(MAUL_RHI_METAL_DRIVER "Build the Metal driver" ${APPLE})
 if(MAUL_RHI_METAL_DRIVER AND NOT APPLE)
@@ -64,7 +68,7 @@ if(MAUL_RHI_METAL_DRIVER AND MAUL_RHI_VULKAN_DRIVER)
     message(FATAL_ERROR "A build has one native driver: turn MAUL_RHI_VULKAN_DRIVER off "
                         "with MAUL_RHI_METAL_DRIVER on")
 endif()
-# The D3D12 driver (mrhi-0003), the native driver of Windows builds.
+# The D3D12 driver, the native driver of Windows builds.
 option(MAUL_RHI_D3D12_DRIVER "Build the D3D12 driver" ${WIN32})
 if(MAUL_RHI_D3D12_DRIVER AND NOT WIN32)
     message(FATAL_ERROR "The D3D12 driver builds on Windows only")
@@ -73,7 +77,7 @@ if(MAUL_RHI_D3D12_DRIVER AND MAUL_RHI_VULKAN_DRIVER)
     message(FATAL_ERROR "A build has one native driver: turn MAUL_RHI_VULKAN_DRIVER off "
                         "with MAUL_RHI_D3D12_DRIVER on")
 endif()
-# The WebGPU driver (mrhi-0003): every web build.
+# The WebGPU driver: every web build.
 option(MAUL_RHI_WEBGPU_DRIVER "Build the WebGPU driver" ${maul_rhi_web})
 
 # Every executable (tests, benchmarks, tools) lands in the top of the
@@ -103,6 +107,7 @@ add_library(maul-rhi ${MAUL_LIBRARY_KIND}
     src/metal_external.c
     src/compile.c
     src/container.c
+    src/container_table.c
     src/container_interface.c
     src/spirv_caps.c
     src/device.c
@@ -160,12 +165,15 @@ endif()
 if(MAUL_RHI_VULKAN_DRIVER)
     target_sources(maul-rhi PRIVATE src/driver_vulkan.c src/vulkan_adapter.c src/vulkan_api.c
                                    src/vulkan_device.c src/vulkan_facts.c src/vulkan_frame.c src/vulkan_graphics.c
-                                   src/vulkan_heap.c src/vulkan_label.c src/vulkan_memory.c
+                                   src/vulkan_heap.c src/vulkan_label.c src/vulkan_lanes.c src/vulkan_memory.c
                                    src/vulkan_object.c src/vulkan_pass.c src/vulkan_pipeline.c
                                    src/vulkan_query.c src/vulkan_recipe.c src/vulkan_record.c
                                    src/vulkan_resource.c
                                    src/vulkan_surface.c src/vulkan_swapchain.c)
     target_compile_definitions(maul-rhi PRIVATE MAUL_RHI_VULKAN_DRIVER)
+    if(MAUL_RHI_VULKAN_SPLIT_LANES)
+        target_compile_definitions(maul-rhi PRIVATE MAUL_RHI_VULKAN_SPLIT_LANES)
+    endif()
     # The Khronos headers, kept as published (khronos/README.md).
     target_include_directories(maul-rhi SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/khronos)
     target_link_libraries(maul-rhi PRIVATE ${CMAKE_DL_LIBS})
@@ -174,8 +182,8 @@ if(MAUL_RHI_METAL_DRIVER)
     enable_language(OBJC)
     target_sources(maul-rhi PRIVATE src/driver_metal.m src/metal_device.m src/metal_names.m
                                    src/metal_copy.m src/metal_encode.m src/metal_frame.m
-                                   src/metal_graphics.m src/metal_pipeline.m src/metal_resource.m
-                                   src/metal_surface.m)
+                                   src/metal_graphics.m src/metal_lanes.m src/metal_pipeline.m
+                                   src/metal_resource.m src/metal_surface.m)
     target_compile_definitions(maul-rhi PRIVATE MAUL_RHI_METAL_DRIVER)
     # The family's C23 for Objective-C, with manual retain and release so
     # that Metal objects sit in plain C structs.
@@ -193,10 +201,10 @@ if(MAUL_RHI_D3D12_DRIVER)
     target_sources(maul-rhi PRIVATE src/driver_d3d12.c src/d3d12_api.c src/d3d12_device.c
                                    src/d3d12_names.c src/d3d12_resource.c src/d3d12_slots.c
                                    src/d3d12_view.c src/d3d12_pipeline.c src/d3d12_root.c
-                                   src/d3d12_graphics.c src/d3d12_frame.c src/d3d12_record.c
-                                   src/d3d12_barrier.c src/d3d12_copy.c src/d3d12_bind.c
-                                   src/d3d12_draw.c src/d3d12_heap.c src/d3d12_surface.c
-                                   src/d3d12_swapchain.c)
+                                   src/d3d12_graphics.c src/d3d12_frame.c src/d3d12_lanes.c
+                                   src/d3d12_record.c src/d3d12_barrier.c src/d3d12_copy.c
+                                   src/d3d12_bind.c src/d3d12_draw.c src/d3d12_heap.c
+                                   src/d3d12_surface.c src/d3d12_swapchain.c)
     target_compile_definitions(maul-rhi PRIVATE MAUL_RHI_D3D12_DRIVER)
     # The DirectX headers, kept as published (directx/README.md).
     target_include_directories(maul-rhi SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/directx)
@@ -224,8 +232,11 @@ if(MAUL_RHI_BUILD_TESTS)
         maul_add_test(vulkan_surface WHITEBOX)
         maul_add_test(vulkan_swapchain WHITEBOX)
         maul_add_test(vulkan_external WHITEBOX)
+        maul_add_test(vulkan_frame WHITEBOX)
+        maul_add_test(vulkan_zero)
+        maul_add_test(vulkan_cache WHITEBOX)
         foreach(test vulkan_label vulkan_limits vulkan_facts vulkan_surface vulkan_swapchain
-                     vulkan_external)
+                     vulkan_external vulkan_frame vulkan_zero vulkan_cache)
             if(TARGET test_${test})
                 target_include_directories(test_${test} SYSTEM PRIVATE
                                            ${PROJECT_SOURCE_DIR}/khronos)
@@ -233,24 +244,56 @@ if(MAUL_RHI_BUILD_TESTS)
         endforeach()
     endif()
     if(MAUL_RHI_METAL_DRIVER)
-        # A native pass on Metal (mrhi-0019), in Objective-C as the driver
-        # is, without ARC.
-        add_executable(test_metal_native test/test_metal_native.m)
-        target_link_libraries(test_metal_native PRIVATE maul-rhi "-framework Metal"
-                              "-framework Foundation")
-        set_target_properties(test_metal_native PROPERTIES OBJC_STANDARD 23
-                                                           OBJC_STANDARD_REQUIRED ON)
-        target_compile_options(test_metal_native PRIVATE -fno-objc-arc)
-        maul_apply_flags(test_metal_native)
-        add_test(NAME metal_native COMMAND test_metal_native)
+        # A native pass on Metal, and the queues a frame's passes run on,
+        # seen through the command buffers' methods the suite swaps; in
+        # Objective-C as the driver is, without ARC.
+        foreach(test metal_native metal_queues)
+            add_executable(test_${test} test/test_${test}.m)
+            target_link_libraries(test_${test} PRIVATE maul-rhi "-framework Metal"
+                                  "-framework Foundation")
+            set_target_properties(test_${test} PROPERTIES OBJC_STANDARD 23
+                                                          OBJC_STANDARD_REQUIRED ON)
+            target_compile_options(test_${test} PRIVATE -fno-objc-arc)
+            maul_apply_flags(test_${test})
+            add_test(NAME ${test} COMMAND test_${test})
+        endforeach()
     endif()
     if(MAUL_RHI_D3D12_DRIVER)
-        # A native pass on D3D12, under the debug layer and the Agility
-        # SDK the exe exports (mrhi-0019).
-        maul_add_test(d3d12_native)
-        target_sources(test_d3d12_native PRIVATE test/d3d12_debug.c)
-        target_include_directories(test_d3d12_native SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/directx)
-        target_link_libraries(test_d3d12_native PRIVATE d3d12 dxgi)
+        # A native pass on D3D12, and the queues a frame's passes run on,
+        # seen through the runtime's tables the suite wraps: under the
+        # debug layer and the Agility SDK each exe exports.
+        foreach(test d3d12_native d3d12_queues)
+            maul_add_test(${test})
+            target_sources(test_${test} PRIVATE test/d3d12_debug.c)
+            target_include_directories(test_${test} SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/directx)
+            target_link_libraries(test_${test} PRIVATE d3d12 dxgi)
+        endforeach()
+        # A failed frame's drain that never returns is a hang: the suite
+        # runs in about a second on CI.
+        set_tests_properties(d3d12_queues PROPERTIES TIMEOUT 10)
+        # GPU-based validation's false state errors (#7) reproduced without
+        # library code: built with the tests so that it keeps compiling,
+        # run by hand as docs/operations/debugging.md says.
+        add_executable(d3d12_uav_check test/d3d12_uav_check.c test/d3d12_debug.c)
+        target_include_directories(d3d12_uav_check SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/directx)
+        target_link_libraries(d3d12_uav_check PRIVATE d3d12 dxgi)
+        maul_apply_flags(d3d12_uav_check)
+        # The suites export the Agility SDK they run on from D3D12/ beside
+        # them (test/d3d12_debug.c), where this copies the redistributable
+        # DLLs of its NuGet package, the version the directx/ headers are.
+        set(MAUL_RHI_D3D12_AGILITY "" CACHE PATH
+            "The Agility SDK's bin/x64 folder, copied into D3D12/ beside the tests")
+        if(MAUL_RHI_D3D12_AGILITY)
+            file(GLOB maul_rhi_agility "${MAUL_RHI_D3D12_AGILITY}/*.dll")
+            if(NOT maul_rhi_agility)
+                message(FATAL_ERROR "MAUL_RHI_D3D12_AGILITY holds no DLL: ${MAUL_RHI_D3D12_AGILITY}")
+            endif()
+            add_custom_target(maul_rhi_agility ALL
+                COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:test_d3d12_native>/D3D12
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${maul_rhi_agility}
+                        $<TARGET_FILE_DIR:test_d3d12_native>/D3D12
+                VERBATIM)
+        endif()
     endif()
     maul_add_test(instance)
     if(MAUL_RHI_TEST_DRIVER)
@@ -264,14 +307,18 @@ if(MAUL_RHI_BUILD_TESTS)
         maul_add_test(format)
         maul_add_test(sampler)
         maul_add_test(buffer)
+        maul_add_test(zero)
+        maul_add_test(zero_texture)
         maul_add_test(texture)
         maul_add_test(view)
         maul_add_test(surface)
         maul_add_test(swapchain)
         maul_add_test(frame)
+        maul_add_test(frame_usage)
         maul_add_test(frame_resource)
         maul_add_test(pass)
         maul_add_test(plan)
+        maul_add_test(lanes WHITEBOX)
         maul_add_test(memory)
         maul_add_test(shader WHITEBOX)
         maul_add_test(container_d3d12 WHITEBOX)
@@ -292,6 +339,7 @@ if(MAUL_RHI_BUILD_TESTS)
         maul_add_test(acquire WHITEBOX)
         maul_add_test(loss WHITEBOX)
         maul_add_test(external WHITEBOX)
+        maul_add_test(outputs)
         if(MAUL_RHI_VALIDATION)
             maul_add_test(validation WHITEBOX)
         endif()
@@ -301,18 +349,19 @@ if(MAUL_RHI_BUILD_TESTS)
             add_test(NAME container_writer
                      COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/test/test_container_writer.py
                              $<TARGET_FILE:test_shader>)
+            set_tests_properties(container_writer PROPERTIES LABELS container_writer)
         endif()
         # The D3D12 tool's refusal of a loop variable read after its step.
         if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
             add_test(NAME dxil_order COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/test/test_dxil_order.py)
+            set_tests_properties(dxil_order PROPERTIES LABELS dxil_order)
         endif()
     endif()
-    # Every driver the build has, through the public API (mrhi-0003).
-    # Where the XCB client library is installed, the suite also makes a
-    # window to check surfaces on; only the test links it. On the web it
-    # runs in headless Chrome (test/web_runner.cjs), sleeping through
-    # JSPI while the browser settles its promises, with Emscripten or
-    # without (mrhi-0016).
+    # Every driver the build has, through the public API. Where the XCB
+    # client library is installed, the suite also makes a window to
+    # check surfaces on; only the test links it. On the web it runs in
+    # headless Chrome (test/web_runner.cjs), sleeping through JSPI while
+    # the browser settles its promises, with Emscripten or without.
     if(maul_rhi_web)
         maul_add_test(conformance MANUAL)
         if(EMSCRIPTEN)
@@ -320,18 +369,19 @@ if(MAUL_RHI_BUILD_TESTS)
                                 -sEXPORTED_RUNTIME_METHODS=ENV)
         else()
             # A reactor whose main the runner calls through JSPI, with the
-            # driver's imports from maul-rhi.mjs (mrhi-0016).
+            # driver's imports from maul-rhi.mjs.
             target_link_options(test_conformance PRIVATE -mexec-model=reactor -Wl,--export-table
                                 -Wl,--export=main)
         endif()
         add_test(NAME conformance
                  COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
                          $<TARGET_FILE:test_conformance>)
-        # Again in a dedicated worker, on the canvases' OffscreenCanvases
-        # (mrhi-0026).
+        # Again in a dedicated worker, on the canvases'
+        # OffscreenCanvases.
         add_test(NAME conformance_worker
                  COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs --worker
                          $<TARGET_FILE:test_conformance>)
+        # hygiene: no adapter is exit 77, and CI fails any skipped test
         set_tests_properties(conformance conformance_worker PROPERTIES SKIP_RETURN_CODE 77)
     else()
         maul_add_test(conformance)
@@ -354,9 +404,9 @@ if(MAUL_RHI_BUILD_TESTS)
             target_link_libraries(test_conformance PRIVATE d3d12 dxgi)
         endif()
     endif()
-    # The suite's cases are the mustpass list of the SPI version
-    # (mrhi-0024), conformance/mustpass/spi-<N>.txt, which must match
-    # what the suite lists.
+    # The suite's cases are the mustpass list of the SPI version,
+    # conformance/mustpass/spi-<N>.txt, which must match what the
+    # suite lists.
     file(STRINGS src/driver.h maul_rhi_spi REGEX "^#define MRHI_SPI_VERSION ")
     string(REGEX REPLACE ".* ([0-9]+)$" "\\1" maul_rhi_spi "${maul_rhi_spi}")
     target_compile_definitions(test_conformance PRIVATE MRHI_TEST_SPI_VERSION=${maul_rhi_spi})
@@ -370,6 +420,7 @@ if(MAUL_RHI_BUILD_TESTS)
                  COMMAND ${CMAKE_COMMAND} -DSUITE=$<TARGET_FILE:test_conformance>
                          -DLIST=${PROJECT_SOURCE_DIR}/conformance/mustpass/spi-${maul_rhi_spi}.txt
                          -P ${PROJECT_SOURCE_DIR}/test/mustpass.cmake)
+        set_tests_properties(mustpass PROPERTIES LABELS mustpass)
     endif()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND AND MAUL_RHI_VULKAN_DRIVER AND NOT CMAKE_CROSSCOMPILING)
@@ -381,7 +432,7 @@ if(MAUL_RHI_BUILD_TESTS)
     endif()
     # On Android the suite also runs as an application on the system's
     # NativeActivity, whose window its surface checks present to
-    # (test/android_activity.c, mrhi-0017).
+    # (test/android_activity.c).
     if(ANDROID AND MAUL_RHI_VULKAN_DRIVER)
         set(package org.maul.rhi.tests.conformance)
         add_library(test_conformance_app SHARED test/test_conformance.c test/android_activity.c)
@@ -407,8 +458,9 @@ if(MAUL_RHI_BUILD_TESTS)
                              ENVIRONMENT MAUL_RHI_REQUIRE_SURFACE=1)
     endif()
     maul_add_header_tests()
-    # The suite on a driver from outside the tree (mrhi-0024): a target
-    # defining mrhiConformanceDriver(mrhiExternalDriverDef*), named by
+    maul_add_exports_test()
+    # The suite on a driver from outside the tree: a target defining
+    # mrhiConformanceDriver(mrhiExternalDriverDef*), named by
     # MAUL_RHI_CONFORMANCE_DRIVER. Without one, a Linux build hands the
     # suite its own Vulkan driver through the external path.
     set(maul_rhi_outside "${MAUL_RHI_CONFORMANCE_DRIVER}")
@@ -436,8 +488,8 @@ if(MAUL_RHI_BUILD_TESTS)
     # The Vulkan loader keeps drivers loaded after an instance ends, so
     # that LeakSanitizer reads their memory as held, not lost. Where the
     # validation layer runs, it logs to the test's output, and a
-    # validation error there fails the test (mrhi-0003). ThreadSanitizer
-    # leaves lavapipe's own threads alone (test/tsan.supp).
+    # validation error there fails the test. ThreadSanitizer leaves
+    # lavapipe's own threads alone (test/tsan.supp).
     set(maul_rhi_test_env VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
     if(MAUL_RHI_TSAN)
         list(APPEND maul_rhi_test_env
@@ -447,25 +499,47 @@ if(MAUL_RHI_BUILD_TESTS)
     set_tests_properties(${maul_rhi_tests} PROPERTIES
                          ENVIRONMENT "${maul_rhi_test_env}"
                          FAIL_REGULAR_EXPRESSION "Validation Error")
+    # The tests that drive a real GPU, window or browser: the changed-files
+    # check leaves them out, every other check runs them.
+    foreach(test conformance conformance_worker conformance_external conformance_app
+                 vulkan_external vulkan_frame vulkan_zero vulkan_cache metal_native metal_queues
+                 d3d12_native d3d12_queues external_build)
+        if(TEST ${test})
+            set_property(TEST ${test} APPEND PROPERTY LABELS integration)
+        endif()
+    endforeach()
 endif()
 
 # The fuzz targets: test/fuzz_<area>.c, run as fuzz_<area> <corpus dir>,
 # over the bytes programs load from disk and hand the library.
-# tools/container_seed.py writes fuzz_container's seed; fuzz_cache makes
-# its own envelopes.
+# tools/container_seed.py writes fuzz_container's seeds; fuzz_cache makes
+# its own envelopes, and fuzz_vulkan_cache seals its own around the
+# Vulkan driver's payload on the first Vulkan adapter.
+# test/fuzz_coverage_ignore.txt names the sources coverage leaves out.
 if(MAUL_RHI_FUZZ)
     # The library is instrumented too: its coverage guides libFuzzer, and
-    # the sanitizers watch its code, not only the targets'.
-    target_compile_options(maul-rhi PRIVATE -fsanitize=fuzzer-no-link,address,undefined)
+    # the sanitizers watch its code, not only the targets'. Undefined
+    # behavior aborts the run, so libFuzzer writes the input that found it
+    # instead of printing and going on.
+    set(ignored ${PROJECT_SOURCE_DIR}/test/fuzz_coverage_ignore.txt)
+    target_compile_options(maul-rhi PRIVATE -fsanitize=fuzzer-no-link,address,undefined
+                                            -fno-sanitize-recover=all
+                                            -fsanitize-coverage-ignorelist=${ignored})
     target_link_options(maul-rhi PUBLIC -fsanitize=address,undefined)
-    foreach(area container cache)
+    set(areas container cache)
+    if(MAUL_RHI_VULKAN_DRIVER)
+        list(APPEND areas vulkan_cache)
+    endif()
+    foreach(area ${areas})
         add_executable(fuzz_${area} test/fuzz_${area}.c)
         target_link_libraries(fuzz_${area} PRIVATE maul-rhi)
         # The targets reach the library's own functions.
         target_include_directories(fuzz_${area} PRIVATE ${PROJECT_SOURCE_DIR}/src)
         maul_apply_flags(fuzz_${area})
-        target_compile_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined)
-        target_link_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined)
+        target_compile_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined
+                                                   -fno-sanitize-recover=all)
+        target_link_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined
+                                                -fno-sanitize-recover=all)
     endforeach()
 endif()
 
@@ -483,26 +557,27 @@ if(MAUL_RHI_BUILD_SAMPLES)
     add_subdirectory(samples)
 endif()
 
-# The guide's C snippets as written (family record 0019), run natively on
-# the samples' harness and triangle; the web's waits are a later frame's.
+# The guide's C snippets as written, run natively on the samples' harness
+# and triangle; the web's waits are a later frame's.
 if(MAUL_RHI_BUILD_TESTS AND NOT (EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI"))
     add_executable(test_guide test/test_guide.c samples/harness.c)
     target_link_libraries(test_guide PRIVATE maul-rhi)
     target_include_directories(test_guide PRIVATE ${PROJECT_SOURCE_DIR}/samples)
     maul_apply_flags(test_guide)
     add_test(NAME guide COMMAND test_guide)
+    # hygiene: no adapter is exit 77, and CI fails any skipped test
     set_tests_properties(guide PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${maul_rhi_test_env}"
-                         FAIL_REGULAR_EXPRESSION "Validation Error")
+                         FAIL_REGULAR_EXPRESSION "Validation Error" LABELS "guide;integration")
 endif()
 
-# The seam with Maul Window, test only (mrhi-0028).
+# The seam with Maul Window, test only.
 if(MAUL_RHI_SEAM AND MAUL_RHI_BUILD_TESTS)
     add_subdirectory(test/seam)
 endif()
 
 if(MAUL_RHI_INSTALL)
     include(cmake/Install.cmake)
-    # The driver SPI, for drivers built outside the tree (mrhi-0024).
+    # The driver SPI, for drivers built outside the tree.
     install(FILES src/driver.h src/command.h src/reflection.h src/container.h
                   src/container_interface.h
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/spi)
@@ -515,5 +590,7 @@ if(MAUL_RHI_INSTALL)
                          -DSOURCE=${PROJECT_SOURCE_DIR}/test/external -DGENERATOR=${CMAKE_GENERATOR}
                          -DCC=${CMAKE_C_COMPILER} -DCONFIG=$<CONFIG> -P
                          ${PROJECT_SOURCE_DIR}/test/external/run.cmake)
+        # Added after the loop above labels the integration tests.
+        set_tests_properties(external_build PROPERTIES LABELS "external_build;integration")
     endif()
 endif()

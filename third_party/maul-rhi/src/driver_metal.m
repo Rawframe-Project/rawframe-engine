@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's instance (mrhi-0003): every Metal device the system
-// lists (the one default device outside macOS), each an adapter under
-// its registry id, so an adapter found again keeps its id. Searches and
-// device openings are answered at the next poll. Limits are WebGPU's
-// floor, raised where every Metal device of the family goes further.
-// Features are what the device reports among those the driver runs:
-// timestamps, present timing, multiview, counted multi-draws, pipeline
-// statistics and heaps are not granted yet. Every entry
-// point that touches Objective-C objects drains its own autorelease
-// pool, since the calling thread may have none. A surface is a
-// CAMetalLayer the driver retains, which every adapter presents to.
+// The Metal driver's instance: every Metal device the system lists (the
+// one default device outside macOS), each an adapter under its registry
+// id, so an adapter found again keeps its id. Searches and device
+// openings are answered at the next poll. Limits are WebGPU's floor,
+// raised where every Metal device of the family goes further. Features
+// are what the device reports among those the driver runs: timestamps,
+// present timing, multiview, counted multi-draws, pipeline statistics
+// and heaps are not granted yet. Every entry point that touches
+// Objective-C objects drains its own autorelease pool, since the calling
+// thread may have none. A surface is a CAMetalLayer the driver retains,
+// which every adapter presents to.
 
 #include "driver_metal.h"
 
@@ -117,8 +117,8 @@ static uint32_t Clamp32(uint64_t value)
 }
 
 // The views a multiview pass may render, by vertex amplification onto
-// layers (mrhi-0020): the largest count the device amplifies to, where
-// it renders layers; 1 otherwise.
+// layers: the largest count the device amplifies to, where it renders
+// layers; 1 otherwise.
 static uint32_t ViewsOf(id<MTLDevice> device)
 {
     bool layered =

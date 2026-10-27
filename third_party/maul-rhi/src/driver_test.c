@@ -235,6 +235,8 @@ typedef struct TestDevice
     // Running frames; held ones finish only through a wait.
     bool holdFrames;
     mrhiResult frameOutcome;
+    // The budget every submission runs out of; 0 for none.
+    mrhiDiagnosticCode submitBudget;
     TestFrame frames[TEST_FRAMES];
     uint32_t frameCount;
     // The live views and their textures, so that a texture destroyed
@@ -635,8 +637,10 @@ static bool IsHandleOf(const void* self, uint64_t handle)
     return IsMade(self, handle);
 }
 
-// Walks the frame as a driver would translate it, then runs it at once.
-static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag)
+// Walks the frame as a driver would translate it, then runs it at once,
+// unless the adapter makes it run out of a budget.
+static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag,
+                              mrhiDiagnosticCode* budgetOut)
 {
     TestDevice* device = self;
     MRHI_ASSERT(tag != 0 && device->frameCount < TEST_FRAMES && !device->lossTold);
@@ -652,6 +656,11 @@ static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t
     if (mrhiWalkFrame(frame, IsHandleOf, device, &log) != 0)
     {
         __builtin_trap();
+    }
+    if (device->submitBudget != 0)
+    {
+        *budgetOut = device->submitBudget;
+        return mrhi_errorCapacity;
     }
     // Every image the frame acquired is presented.
     MRHI_ASSERT(log.presented <= device->imagesOut);
@@ -822,6 +831,7 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
         .madeBeforeFailure = driver->adapters[adapter - 1].objectsBeforeFailure,
         .holdFrames = driver->adapters[adapter - 1].holdFrames,
         .frameOutcome = driver->adapters[adapter - 1].frameOutcome,
+        .submitBudget = driver->adapters[adapter - 1].submitBudget,
         .pipelineOutcome = driver->adapters[adapter - 1].pipelineOutcome,
         .frameLog = driver->adapters[adapter - 1].frameLog,
         .acquireOutcome = driver->adapters[adapter - 1].acquireOutcome,

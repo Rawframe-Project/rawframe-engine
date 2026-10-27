@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's tables, buffers, textures and query sets
-// (mrhi-0003); views and samplers are in d3d12_view.c. Buffers and
-// textures are committed resources in the GPU's default heap, as the
-// frame graph fills and reads them, and start in the common state. A
-// buffer's size rounds up to 256 bytes, so that a uniform binding's
-// constant buffer view, whose size D3D12 rounds up alike, stays inside
-// it. A texture whose views see it in other formats, or a depth
-// texture, which views read as a color format, is made in its typeless
-// family.
+// The D3D12 driver's tables, buffers, textures and query sets; views
+// and samplers are in d3d12_view.c. Buffers and textures are committed
+// resources in the GPU's default heap, as the frame graph fills and
+// reads them, and start in the common state. A buffer's size rounds up
+// to 256 bytes, so that a uniform binding's constant buffer view,
+// whose size D3D12 rounds up alike, stays inside it. A texture whose
+// views see it in other formats, or a depth texture, which views read
+// as a color format, is made in its typeless family.
 
 #include "d3d12_resource.h"
 
@@ -132,8 +131,8 @@ static D3D12_RESOURCE_DESC DescribeBuffer(const mrhiBufferDef* def)
         .MipLevels = 1,
         .SampleDesc = {.Count = 1},
         .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-        .Flags = (def->usage & mrhi_bufferStorage) != 0 ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
-                                                        : D3D12_RESOURCE_FLAG_NONE,
+        // Every buffer, so that a clear of it is ClearUnorderedAccessViewUint.
+        .Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
     };
 }
 
@@ -171,11 +170,14 @@ static D3D12_RESOURCE_DESC DescribeTexture(const mrhiTextureDef* def)
     {
         views = views || def->viewFormats[i] != mrhi_formatNone;
     }
-    D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
-    if ((def->usage & mrhi_textureRenderTarget) != 0)
+    // Every depth texture takes a depth view, so that its first frame
+    // clears it: D3D12 copies into a depth texture only whole
+    // subresources at once, from a buffer as large.
+    D3D12_RESOURCE_FLAGS flags =
+        depth ? D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL : D3D12_RESOURCE_FLAG_NONE;
+    if (!depth && (def->usage & mrhi_textureRenderTarget) != 0)
     {
-        flags |= depth ? D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL
-                       : D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     }
     if ((def->usage & mrhi_textureStorage) != 0)
     {
@@ -275,7 +277,7 @@ mrhiResult mrhiD3d12CreateQuerySet(mrhiD3d12Objects* objects, const mrhiQuerySet
         [mrhi_queryTimestamp] = D3D12_QUERY_TYPE_TIMESTAMP,
         [mrhi_queryPipelineStatistics] = D3D12_QUERY_TYPE_PIPELINE_STATISTICS,
     };
-    // D3D12's record is Maul RHI's eleven counters in order (mrhi-0023).
+    // D3D12's record is Maul RHI's eleven counters in order.
     static_assert(sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS) ==
                       MRHI_STATISTICS_COUNTERS * sizeof(uint64_t),
                   "statistics resolve as D3D12 writes them");

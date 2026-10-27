@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver (mrhi-0003): the system's Metal devices listed as
-// adapters, requests answered at the next poll. Its files are
-// Objective-C, compiled on Apple systems only.
+// The Metal driver: the system's Metal devices listed as adapters,
+// requests answered at the next poll. Its files are Objective-C,
+// compiled on Apple systems only.
 
 #ifndef MAUL_RHI_SRC_DRIVER_METAL_H
 #define MAUL_RHI_SRC_DRIVER_METAL_H

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Generation-checked ids over a fixed number of slots (family record
-// 0016): a free list, and a generation per slot that a release bumps,
-// so that an id kept past its object's end is refused. The arrays come
-// from the owner's block; the pool never allocates.
+// Generation-checked ids over a fixed number of slots: a free list,
+// and a generation per slot that a release bumps, so that an id kept
+// past its object's end is refused. The arrays come from the owner's
+// block; the pool never allocates.
 
 #ifndef MAUL_RHI_SRC_POOL_H
 #define MAUL_RHI_SRC_POOL_H

@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Queries on Vulkan (vulkan_query.h), pipeline statistics among them
-// (mrhi-0023). A frame's recording marks the queries it writes, so that
-// a resolve copies those, waiting for their results, and fills the rest
-// with 0: Vulkan leaves a query that was never written unwritten in the
-// buffer.
+// Queries on Vulkan (vulkan_query.h), pipeline statistics among them. A
+// frame's recording marks the queries it writes, so that a resolve
+// copies those, waiting for their results, and fills the rest with 0:
+// Vulkan leaves a query that was never written unwritten in the buffer.
 
 #include "vulkan_query.h"
 
@@ -22,11 +21,11 @@ static mrhiVulkanQuerySet* SetOf(const mrhiVulkanRecording* recording, uint64_t 
 static void Reset(const mrhiVulkanRecording* recording, uint64_t handle)
 {
     mrhiVulkanQuerySet* set = SetOf(recording, handle);
-    if (set->resetSerial == recording->serial)
+    if (set->resetRecorded == recording->recorded)
     {
         return;
     }
-    set->resetSerial = recording->serial;
+    set->resetRecorded = recording->recorded;
     memset(set->written, 0, sizeof(set->written));
     recording->frames->api->vkCmdResetQueryPool(recording->slot->commands, set->pool, 0,
                                                 set->count);

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A Vulkan device's memory for its objects (vulkan_memory.h,
-// mrhi-0003): device-local pools of 64 MiB blocks, or an eighth of the
-// heap if smaller.
+// A Vulkan device's memory for its objects (vulkan_memory.h):
+// device-local pools of 64 MiB blocks, or an eighth of the heap if
+// smaller.
 
 #include "vulkan_memory.h"
 

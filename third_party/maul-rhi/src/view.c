@@ -158,6 +158,10 @@ static mrhiResult CheckView(mrhiDevice* device, const mrhiViewDef* def, mrhiView
 
 mrhiResult mrhiCreateView(mrhiDevice* device, const mrhiViewDef* def, mrhiViewId* viewOut)
 {
+    if (viewOut != nullptr)
+    {
+        *viewOut = (mrhiViewId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

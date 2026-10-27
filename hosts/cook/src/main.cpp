@@ -176,7 +176,7 @@ std::optional<rawframe::cook::ShaderTools> shaderTools(const std::optional<std::
     }
     const fs::path kRoot = kGenerator.parent_path().parent_path();
     std::vector<fs::path> files = {kGenerator,
-                                   kRoot / "third_party" / "maul-rhi" / "docs" / "contract" / "mrhi.json",
+                                   kRoot / "third_party" / "maul-rhi" / "contract" / "mrhi.json",
                                    kSlangc,
                                    kDxc,
                                    kCross,

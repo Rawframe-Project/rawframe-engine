@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Shader containers (mrhi-0009, docs/contract/container.md): the parse
-// that checks every byte as hostile input, and the decoded reflection.
+// Shader containers (docs/user/shader-container-format.md): the parse that
+// checks every byte as hostile input, and the decoded reflection.
 
 #ifndef MAUL_RHI_SRC_CONTAINER_H
 #define MAUL_RHI_SRC_CONTAINER_H
@@ -120,7 +120,8 @@ typedef struct mrhiD3d12Entry
 // SPIR-V's capabilities), subgroup operations and 64-bit integers, and the
 // builtins and
 // heap uses of its entries together; the WGSL is absent (NULL, 0 bytes)
-// exactly when an entry uses a heap. The Metal map is NULL without Metal
+// exactly when an entry uses a heap or the view index, or the SPIR-V
+// declares 64-bit integers. The Metal map is NULL without Metal
 // code, and the MSL and metallib each NULL and 0 bytes when absent; the
 // D3D12 map and DXIL are both NULL and 0 bytes, or both present.
 typedef struct mrhiContainer
@@ -163,7 +164,7 @@ typedef struct mrhiContainer
 } mrhiContainer;
 
 // Checks a container: success with its sections, mrhi_errorVersion for
-// another version, or mrhi_errorInvalid.
+// another version, or mrhi_errorFormat.
 mrhiResult mrhiParseContainer(const void* bytes, size_t size, mrhiContainer* containerOut);
 
 // The records of a checked container, by index.

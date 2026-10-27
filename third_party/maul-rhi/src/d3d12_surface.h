@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's surfaces (mrhi-0003): Win32 windows, each surface's
-// handle holding its window, and what DXGI's flip model shows there.
-// Included by the driver's files only.
+// The D3D12 driver's surfaces: Win32 windows, each surface's handle
+// holding its window, and what DXGI's flip model shows there. Included
+// by the driver's files only.
 
 #ifndef MAUL_RHI_SRC_D3D12_SURFACE_H
 #define MAUL_RHI_SRC_D3D12_SURFACE_H

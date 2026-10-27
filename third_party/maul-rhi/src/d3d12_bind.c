@@ -128,7 +128,7 @@ static bool Take(mrhiD3d12Recorder* recorder, mrhiD3d12GpuRing* ring, uint32_t c
 {
     if (ring->capacity - ring->taken < count)
     {
-        recorder->status = mrhi_errorCapacity;
+        mrhiD3d12RunOut(recorder, mrhi_diagnosticSubmitDescriptors);
         return false;
     }
     *firstOut = ring->taken;

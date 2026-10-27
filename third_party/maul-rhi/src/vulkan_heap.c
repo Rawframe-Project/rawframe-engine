@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Heaps on Vulkan (mrhi-0015): the device's set layout, a pool and a set
-// per heap, and entries written as the core accepts them. Only a set's
-// last binding may have a variable count, so every heap takes the
-// device's counts; the core bounds the indices each heap takes. Clearing
-// an entry writes nothing: a partially bound entry no shader reads may
-// be stale.
+// Heaps on Vulkan: the device's set layout, a pool and a set per heap,
+// and entries written as the core accepts them. Only a set's last
+// binding may have a variable count, so every heap takes the device's
+// counts; the core bounds the indices each heap takes. Clearing an entry
+// writes nothing: a partially bound entry no shader reads may be stale.
 
 #include "vulkan_heap.h"
 

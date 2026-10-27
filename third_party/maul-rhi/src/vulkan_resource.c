@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Buffers and textures as Vulkan creates them (mrhi-0003).
+// Buffers and textures as Vulkan creates them.
 
 #include "vulkan_resource.h"
 

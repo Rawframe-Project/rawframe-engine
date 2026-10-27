@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's names (mrhi-0003): the contract's values as D3D12
-// and DXGI take them, from values the core has checked. Included by the
-// driver's files only.
+// The D3D12 driver's names: the contract's values as D3D12 and DXGI
+// take them, from values the core has checked. Included by the driver's
+// files only.
 
 #ifndef MAUL_RHI_SRC_D3D12_NAMES_H
 #define MAUL_RHI_SRC_D3D12_NAMES_H

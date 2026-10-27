@@ -13,6 +13,7 @@
 #include "vulkan_adapter.h"
 #include "vulkan_heap.h"
 #include "vulkan_label.h"
+#include "vulkan_lanes.h"
 #include "vulkan_pass.h"
 #include "vulkan_query.h"
 
@@ -57,7 +58,7 @@ static const Use s_uses[] = {
                                     VK_IMAGE_LAYOUT_GENERAL},
     [mrhi_stateCopySource] = {VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
-    // Copies and clears (mrhi-0022) write a copy destination.
+    // Copies and clears write a copy destination.
     [mrhi_stateCopyDestination] = {VK_PIPELINE_STAGE_2_COPY_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT,
                                    VK_ACCESS_2_TRANSFER_WRITE_BIT,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
@@ -148,7 +149,7 @@ static const Use s_aliased = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_ACCESS_2_
                               VK_IMAGE_LAYOUT_UNDEFINED};
 
 // What a barrier into a native pass waits for and makes visible: the
-// program's commands may use any stage (mrhi-0018).
+// program's commands may use any stage.
 static const Use s_native = {VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                              VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
                              VK_IMAGE_LAYOUT_UNDEFINED};
@@ -355,6 +356,109 @@ static void CopyTextures(const mrhiVulkanRecording* recording, const mrhiCommand
                                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
+// The regions one copy of zeros takes at most.
+#define ZERO_REGIONS 32
+
+// The copies of zeros that cover a mip's layer or depth slice from the
+// band of rows of blocks at *nextBand on, at most `room` of them: bands
+// of as many rows as the device's zeros hold, each laid out tightly from
+// their start. The zeros hold a row of the widest texture the device
+// takes. Returns the regions it added.
+static uint32_t ZeroRegions(VkBufferImageCopy* regions, uint32_t room, const mrhiTextureDef* def,
+                            uint64_t zeroBytes, uint32_t mip, uint32_t z, uint32_t* nextBand)
+{
+    mrhiFormatBlock block = mrhiGetFormatBlock(def->format);
+    bool volume = def->kind == mrhi_texture3d;
+    uint32_t width = def->width >> mip > 0 ? def->width >> mip : 1;
+    uint32_t height = def->height >> mip > 0 ? def->height >> mip : 1;
+    uint64_t rowBytes = (uint64_t)((width + block.width - 1) / block.width) *
+                        mrhiGetFormatCopy(def->format, mrhi_aspectAll).bytes;
+    MRHI_ASSERT(rowBytes > 0 && rowBytes <= zeroBytes);
+    uint32_t down = (height + block.height - 1) / block.height;
+    uint32_t rows = (uint32_t)(zeroBytes / rowBytes);
+    uint32_t added = 0;
+    for (; *nextBand < down && added < room; *nextBand += rows)
+    {
+        uint32_t y = *nextBand * block.height;
+        regions[added++] = (VkBufferImageCopy){
+            .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, volume ? 0 : z, 1},
+            .imageOffset = {0, (int32_t)y, volume ? (int32_t)z : 0},
+            .imageExtent = {width,
+                            height - y < rows * block.height ? height - y : rows * block.height, 1},
+        };
+    }
+    return added;
+}
+
+// Zeroes a compressed texture, which no clear takes, by copies from the
+// device's zeros, ZERO_REGIONS at a time.
+static void CopyZeros(const mrhiVulkanRecording* recording, mrhiVulkanFrameTexture image)
+{
+    const mrhiTextureDef* def = image.def;
+    const mrhiVulkanFrames* frames = recording->frames;
+    bool volume = def->kind == mrhi_texture3d;
+    VkBufferImageCopy regions[ZERO_REGIONS];
+    uint32_t count = 0;
+    for (uint32_t mip = 0; mip < def->mipLevels; ++mip)
+    {
+        uint32_t depth = def->depthOrLayers >> mip > 0 ? def->depthOrLayers >> mip : 1;
+        for (uint32_t z = 0; z < (volume ? depth : def->depthOrLayers); ++z)
+        {
+            uint32_t band = 0;
+            uint32_t added = 0;
+            do
+            {
+                added = ZeroRegions(&regions[count], ZERO_REGIONS - count, def, frames->zeroBytes,
+                                    mip, z, &band);
+                count += added;
+                if (count == ZERO_REGIONS)
+                {
+                    frames->api->vkCmdCopyBufferToImage(
+                        recording->slot->commands, frames->zeros, image.image,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions);
+                    count = 0;
+                }
+            } while (added > 0);
+        }
+    }
+    if (count > 0)
+    {
+        frames->api->vkCmdCopyBufferToImage(recording->slot->commands, frames->zeros, image.image,
+                                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, count, regions);
+    }
+}
+
+// Zeroes a whole texture in the transfer destination layout: one clear
+// of every mip and layer for a color or depth format, copies of zeros
+// for a compressed one.
+static void ClearTexture(const mrhiVulkanRecording* recording, const mrhiCommand* command)
+{
+    mrhiVulkanFrameTexture image = mrhiVulkanFrameImage(recording, command->a);
+    const mrhiTextureDef* def = image.def;
+    const mrhiVulkanDevice* api = recording->frames->api;
+    const VkImageSubresourceRange range = {
+        .aspectMask = mrhiVulkanAspect(mrhi_aspectAll, def->format),
+        .levelCount = VK_REMAINING_MIP_LEVELS,
+        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+    };
+    if (mrhiFormatHasDepth(def->format) || mrhiFormatHasStencil(def->format))
+    {
+        const VkClearDepthStencilValue zero = {0};
+        api->vkCmdClearDepthStencilImage(recording->slot->commands, image.image,
+                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
+        return;
+    }
+    mrhiFormatBlock block = mrhiGetFormatBlock(def->format);
+    if (block.width == 1 && block.height == 1)
+    {
+        const VkClearColorValue zero = {0};
+        api->vkCmdClearColorImage(recording->slot->commands, image.image,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero, 1, &range);
+        return;
+    }
+    CopyZeros(recording, image);
+}
+
 static void SetPipeline(mrhiVulkanRecording* recording, const mrhiCommand* command)
 {
     const mrhiVulkanPipeline* pipeline = &recording->frames->pipelines->pipelines[command->b - 1];
@@ -362,7 +466,7 @@ static void SetPipeline(mrhiVulkanRecording* recording, const mrhiCommand* comma
     recording->frames->api->vkCmdBindPipeline(recording->slot->commands, pipeline->bindPoint,
                                               pipeline->pipeline);
     // The pass's heap, bound again with each pipeline reading heaps,
-    // since pipelines of other table layouts disturb it (mrhi-0015).
+    // since pipelines of other table layouts disturb it.
     uint64_t heap = recording->pass->heap;
     if (pipeline->heap && heap != 0)
     {
@@ -528,6 +632,9 @@ static void RecordCommand(mrhiVulkanRecording* recording, const mrhiCommand* com
                                                 mrhiVulkanFrameBuffer(recording, command->a),
                                                 command->c, command->d, 0);
         break;
+    case mrhiCommandClearTexture:
+        ClearTexture(recording, command);
+        break;
     case mrhiCommandBeginOcclusionQuery:
     case mrhiCommandEndOcclusionQuery:
     case mrhiCommandBeginStatisticsQuery:
@@ -552,39 +659,18 @@ static void RecordCommand(mrhiVulkanRecording* recording, const mrhiCommand* com
     }
 }
 
-// Places a native pass (mrhi-0018): ends the part recorded so far,
-// queues it and the program's command buffer, and begins the next part
-// with a barrier that orders every later command after the program's
-// and makes its writes visible.
+// Places a native pass: ends the part recorded so far, queues it and
+// the program's command buffer in the pass's batch, and begins the next
+// part with a barrier that orders every later command after the
+// program's and makes its writes visible.
 static void RunNative(mrhiVulkanRecording* recording)
 {
     mrhiVulkanFrames* frames = recording->frames;
     mrhiVulkanSlot* slot = recording->slot;
-    MRHI_ASSERT(slot->partsUsed < 1 + MRHI_NATIVE_PASSES);
-    VkResult result = frames->api->vkEndCommandBuffer(slot->commands);
-    slot->submits[slot->submitCount++] = (VkCommandBufferSubmitInfo){
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .commandBuffer = slot->commands,
-    };
-    if (recording->pass->nativeCommands != nullptr)
-    {
-        slot->submits[slot->submitCount++] = (VkCommandBufferSubmitInfo){
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-            .commandBuffer = (VkCommandBuffer)recording->pass->nativeCommands,
-        };
-    }
-    slot->commands = slot->parts[slot->partsUsed++];
-    const VkCommandBufferBeginInfo begin = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-    if (result == VK_SUCCESS)
-    {
-        result = frames->api->vkBeginCommandBuffer(slot->commands, &begin);
-    }
-    if (result != VK_SUCCESS)
+    if (!mrhiVulkanNextPart(recording, recording->pass->nativeCommands))
     {
         recording->status = mrhi_errorCapacity;
+        recording->budget = mrhi_diagnosticSubmitCommandLists;
         return;
     }
     const VkMemoryBarrier2 after = {
@@ -602,52 +688,86 @@ static void RunNative(mrhiVulkanRecording* recording)
     frames->api->vkCmdPipelineBarrier2(slot->commands, &dependency);
 }
 
+// Records a kept pass in its lane's batch: its barriers, then the
+// program's command buffer for a native pass, or its label, timestamps
+// and commands.
+static void RecordPass(mrhiVulkanRecording* recording, size_t* barrier)
+{
+    mrhiVulkanFrames* frames = recording->frames;
+    const mrhiDriverFrame* frame = recording->frame;
+    mrhiVulkanEnterPass(recording);
+    if (recording->result != VK_SUCCESS)
+    {
+        return;
+    }
+    if (recording->pass->native)
+    {
+        Barriers(recording, barrier, recording->pass->id);
+        RunNative(recording);
+        mrhiVulkanLeavePass(recording);
+        return;
+    }
+    VkCommandBuffer commands = recording->slot->commands;
+    bool labelled = recording->pass->labelLength > 0;
+    if (labelled)
+    {
+        mrhiVulkanBeginLabel(frames->api, commands, recording->pass->label,
+                             recording->pass->labelLength);
+    }
+    Barriers(recording, barrier, recording->pass->id);
+    mrhiVulkanPassTimestamp(recording, false);
+    mrhiVulkanBeginPass(recording);
+    for (uint32_t chunk = recording->pass->firstChunk; chunk != 0;
+         chunk = frame->chunks[chunk - 1].next)
+    {
+        const mrhiCommandChunk* at = &frame->chunks[chunk - 1];
+        for (uint32_t i = 0; i < at->count; i += 1u + at->commands[i].payload)
+        {
+            RecordCommand(recording, &at->commands[i]);
+        }
+    }
+    mrhiVulkanEndPass(recording);
+    mrhiVulkanPassTimestamp(recording, true);
+    if (labelled)
+    {
+        mrhiVulkanEndLabel(frames->api, commands);
+    }
+    mrhiVulkanLeavePass(recording);
+}
+
 mrhiResult mrhiVulkanRecord(mrhiVulkanFrames* frames, mrhiVulkanSlot* slot,
-                            const mrhiDriverFrame* frame)
+                            const mrhiDriverFrame* frame, VkResult* resultOut,
+                            mrhiDiagnosticCode* budgetOut)
 {
     mrhiVulkanRecording recording = {
         .frames = frames,
         .slot = slot,
         .frame = frame,
-        .serial = frames->submitted + 1,
+        .recorded = ++frames->recorded,
         .status = mrhi_success,
+        .result = VK_SUCCESS,
     };
-    mrhiVulkanResetQueries(&recording);
+    mrhiVulkanBeginLanes(&recording);
     size_t barrier = 0;
-    for (uint32_t p = 0; p < frame->passCount && recording.status == mrhi_success; ++p)
+    for (uint32_t p = 0;
+         p < frame->passCount && recording.status == mrhi_success && recording.result == VK_SUCCESS;
+         ++p)
     {
         recording.pass = &frame->passes[p];
-        if (recording.pass->native)
-        {
-            Barriers(&recording, &barrier, recording.pass->id);
-            RunNative(&recording);
-            continue;
-        }
-        bool labelled = recording.pass->labelLength > 0;
-        if (labelled)
-        {
-            mrhiVulkanBeginLabel(frames->api, slot->commands, recording.pass->label,
-                                 recording.pass->labelLength);
-        }
-        Barriers(&recording, &barrier, recording.pass->id);
-        mrhiVulkanPassTimestamp(&recording, false);
-        mrhiVulkanBeginPass(&recording);
-        for (uint32_t chunk = recording.pass->firstChunk; chunk != 0;
-             chunk = frame->chunks[chunk - 1].next)
-        {
-            const mrhiCommandChunk* at = &frame->chunks[chunk - 1];
-            for (uint32_t i = 0; i < at->count; i += 1u + at->commands[i].payload)
-            {
-                RecordCommand(&recording, &at->commands[i]);
-            }
-        }
-        mrhiVulkanEndPass(&recording);
-        mrhiVulkanPassTimestamp(&recording, true);
-        if (labelled)
-        {
-            mrhiVulkanEndLabel(frames->api, slot->commands);
-        }
+        RecordPass(&recording, &barrier);
     }
-    Barriers(&recording, &barrier, (mrhiPassId){0});
+    if (recording.status == mrhi_success && recording.result == VK_SUCCESS)
+    {
+        mrhiVulkanEndLanes(&recording);
+    }
+    if (recording.status == mrhi_success && recording.result == VK_SUCCESS)
+    {
+        Barriers(&recording, &barrier, (mrhiPassId){0});
+        mrhiVulkanCloseLanes(&recording);
+        // The barriers run in pass order, so a recorded frame took them all.
+        MRHI_ASSERT(barrier == frame->barrierCount);
+    }
+    *resultOut = recording.result;
+    *budgetOut = recording.budget;
     return recording.status;
 }

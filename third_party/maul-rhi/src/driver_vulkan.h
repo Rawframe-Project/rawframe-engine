@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Vulkan driver (mrhi-0003): the loader opened at run time, physical
-// devices listed as adapters, requests answered at the next poll.
+// The Vulkan driver: the loader opened at run time, physical devices
+// listed as adapters, requests answered at the next poll.
 
 #ifndef MAUL_RHI_SRC_DRIVER_VULKAN_H
 #define MAUL_RHI_SRC_DRIVER_VULKAN_H
@@ -28,7 +28,7 @@ void* mrhiVulkanPhysicalDevice(uint64_t adapter);
 // Ends the last device description.
 void mrhiForgetVulkanDevice(const mrhiInstanceDriver* driver);
 
-// Describes the device a def makes on an adapter (mrhi-0018): its
+// Describes the device a def makes on an adapter: its
 // VkDeviceCreateInfo, which the driver holds until the next description
 // or its end; mrhi_errorCapacity or mrhi_errorInvalid as the recipe
 // fails.

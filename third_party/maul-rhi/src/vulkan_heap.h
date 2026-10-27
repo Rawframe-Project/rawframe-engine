@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A Vulkan device's heaps (mrhi-0015): one descriptor set layout for the
-// device at set 4, whose binding 0 holds the resource heap's entries
-// (sampled images, or mutable descriptors that may also be storage
-// images and buffers) and binding 1 the sampler heap's, both updated
-// after bind and partially bound; each heap one set from a pool of its
-// own, written as the core accepts entries.
+// A Vulkan device's heaps: one descriptor set layout for the device at
+// set 4, whose binding 0 holds the resource heap's entries (sampled
+// images, or mutable descriptors that may also be storage images and
+// buffers) and binding 1 the sampler heap's, both updated after bind and
+// partially bound; each heap one set from a pool of its own, written as
+// the core accepts entries.
 
 #ifndef MAUL_RHI_SRC_VULKAN_HEAP_H
 #define MAUL_RHI_SRC_VULKAN_HEAP_H

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The WebGPU driver's instance (mrhi-0003): the browser's navigator.gpu,
-// reached through EM_JS functions. Each instance has a state on the
-// JavaScript side, where requests wait as promises and settle into a
-// queue of request slots; a poll drains it. A search asks for the
-// browser's adapter and lists it under one handle, so an adapter found
-// again keeps its id; devices ask for a fresh adapter, since a WebGPU
-// adapter makes one device. Features and limits follow the contract's
-// WebGPU rows; an adapter without core features falls below the floor.
-// A surface is a canvas named by selector, with its WebGPU context.
+// The WebGPU driver's instance: the browser's navigator.gpu, reached
+// through EM_JS functions. Each instance has a state on the JavaScript
+// side, where requests wait as promises and settle into a queue of
+// request slots; a poll drains it. A search asks for the browser's
+// adapter and lists it under one handle, so an adapter found again keeps
+// its id; devices ask for a fresh adapter, since a WebGPU adapter makes
+// one device. Features and limits follow the contract's WebGPU rows; an
+// adapter without core features falls below the floor. A surface is a
+// canvas named by selector, with its WebGPU context.
 
 #include "driver_webgpu.h"
 
@@ -164,8 +164,8 @@ EM_JS(int, mrhiJsAdapterName, (int state, char* out, int capacity), {
 // A canvas the selector names and its WebGPU context, kept as a state of
 // its own so that any device reaches it by handle: the handle, or 0 for a
 // selector naming no canvas, or a canvas without a WebGPU context. The
-// program's registered canvases come first (mrhi-0026): in a worker,
-// which has no document, an OffscreenCanvas.
+// program's registered canvases come first: in a worker, which has no
+// document, an OffscreenCanvas.
 EM_JS(int, mrhiJsCreateCanvas, (const char* selector, int selectorLength), {
     const name = UTF8ToString(selector, selectorLength);
     const registered = Module.mrhiCanvases;

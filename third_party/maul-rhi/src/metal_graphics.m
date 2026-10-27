@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's render pipeline descriptions (mrhi-0003). Vertex
-// attributes take their locations as attribute indices, as SPIRV-Cross's
-// MSL reads them, and vertex buffer n lies at buffer index 30 minus n,
-// above the container's buffers. A buffer of stride 0 is one element
-// every vertex shares: Metal's constant step, with a stride that holds
-// its attributes. The blend constant is Metal's blend color, or its
-// alpha for alpha factors.
+// The Metal driver's render pipeline descriptions. Vertex attributes
+// take their locations as attribute indices, as SPIRV-Cross's MSL reads
+// them, and vertex buffer n lies at buffer index 30 minus n, above the
+// container's buffers. A buffer of stride 0 is one element every vertex
+// shares: Metal's constant step, with a stride that holds its
+// attributes. The blend constant is Metal's blend color, or its alpha
+// for alpha factors.
 
 #include "metal_graphics.h"
 
@@ -208,7 +208,7 @@ MTLRenderPipelineDescriptor* mrhiMetalDescribeRender(const mrhiGraphicsPipelineD
     descriptor.inputPrimitiveTopology = TopologyClassOf(def->topology);
     if (def->viewCount > 1)
     {
-        // Each view an amplification of the vertices (mrhi-0020).
+        // Each view an amplification of the vertices.
         descriptor.maxVertexAmplificationCount = def->viewCount;
     }
     if (def->labelLength > 0)

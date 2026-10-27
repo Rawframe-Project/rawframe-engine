@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The view of a submitted frame (mrhi-0013): the frame's resources, kept
-// passes with the resources they declare, barriers, commands, uploads
-// and readback ring, built in tables the device allocated for them, as
-// its driver reads them.
+// The view of a submitted frame: the frame's resources, kept passes with
+// the resources they declare, barriers, commands, uploads and readback
+// ring, built in tables the device allocated for them, as its driver
+// reads them.
 
 #include "device_core.h"
 #include "invariant.h"
@@ -84,6 +84,11 @@ static mrhiDriverPass ViewPass(const mrhiDevice* device, uint32_t index, uint32_
         .native = pass->native,
         .nativeCommands = pass->nativeCommands,
     };
+    for (uint32_t c = 0; c < MRHI_PASS_CLASSES; ++c)
+    {
+        uint32_t wait = pass->waitFor[c];
+        view.waitFor[c] = (mrhiPassId){wait, wait == 0 ? 0 : device->frameSerial};
+    }
     for (uint32_t i = 0; i < pass->colorTargetCount; ++i)
     {
         view.colorTargets[i] = pass->colorTargets[i];

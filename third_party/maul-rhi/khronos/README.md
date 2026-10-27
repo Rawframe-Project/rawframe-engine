@@ -1,8 +1,8 @@
 # Khronos Vulkan headers
 
 The C headers of the Vulkan API, kept exactly as published, for the
-Vulkan driver (mrhi-0003; the library profile, mrhi-0001, names the
-Vulkan loader as a platform dependency). They are the platform's API,
+Vulkan driver, whose platform dependency is the Vulkan loader
+(docs/internals/overview.md). They are the platform's API,
 not code of this project.
 
 - **Source:** https://github.com/KhronosGroup/Vulkan-Headers

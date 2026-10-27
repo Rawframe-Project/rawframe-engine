@@ -7,6 +7,7 @@
 #include "reflection.h"
 
 #include "allocator.h"
+#include "invariant.h"
 
 #include <stdalign.h>
 #include <string.h>
@@ -127,6 +128,7 @@ mrhiReflection* mrhiKeepReflection(const mrhiAllocator* allocator, const mrhiCon
 
 void mrhiReleaseReflection(const mrhiAllocator* allocator, mrhiReflection* reflection)
 {
+    MRHI_ASSERT(reflection->references > 0);
     if (--reflection->references == 0)
     {
         mrhiRelease(allocator, reflection, reflection->bytes, alignof(mrhiReflection));

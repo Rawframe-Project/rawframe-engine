@@ -1,8 +1,8 @@
 # Microsoft DirectX headers
 
 The C headers of the Direct3D 12 API, kept exactly as published, for
-the D3D12 driver (mrhi-0003; the library profile, mrhi-0001, names
-`d3d12.dll` and `dxgi.dll` as platform dependencies). They are the
+the D3D12 driver, whose platform dependencies are `d3d12.dll` and
+`dxgi.dll` (docs/internals/overview.md). They are the
 platform's API, not code of this project. DXGI's interface headers
 (`dxgi1_6.h`) come from the Windows SDK every Windows toolchain has.
 

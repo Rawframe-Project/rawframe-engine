@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The frame's memory and stores (mrhi-0008): declared resources are
-// placed by lifetime, in first-use order, each at the lowest aligned
-// offset clear of every placed resource whose kept passes it meets; and
-// a target's store is kept only when something later reads it or the
-// texture outlives the frame.
+// The frame's memory and stores: declared resources are placed by
+// lifetime, in first-use order, each at the lowest aligned offset clear
+// of every placed resource whose kept passes it meets; and a target's
+// store is kept only when something later reads it or the texture
+// outlives the frame.
 
 #include "device_core.h"
+#include "invariant.h"
 
 #include <stdckdint.h>
 
@@ -46,6 +47,25 @@ static void Measure(const mrhiDevice* device, const mrhiFrameResource* resource,
     def.size = resource->size;
     def.usage = resource->usage;
     device->driver.vtable->bufferMemory(device->driver.self, &def, bytesOut, alignmentOut);
+}
+
+// Whether a range of the frame's memory is clear of every placed resource
+// whose kept passes meet the resource's. Only an assertion calls it, which
+// a release build compiles away.
+[[maybe_unused]] static bool ClearOfOthers(const mrhiDevice* device,
+                                           const mrhiFrameResource* resource, uint64_t offset,
+                                           uint64_t end)
+{
+    for (uint32_t i = 0; i < device->frameResourceCount; ++i)
+    {
+        const mrhiFrameResource* other = &device->frameResources[i];
+        if (other->placed && Meets(resource, other) && other->memoryOffset < end &&
+            offset < other->memoryOffset + other->memoryBytes)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Places one resource: the lowest aligned offset past the placed ones it
@@ -95,6 +115,7 @@ static bool PlaceOne(mrhiDevice* device, mrhiFrameResource* resource, uint64_t b
     {
         return false;
     }
+    MRHI_ASSERT(ClearOfOthers(device, resource, offset, end));
     resource->placed = true;
     resource->memoryOffset = offset;
     resource->memoryBytes = bytes;
@@ -213,7 +234,7 @@ mrhiResult mrhiGetPassPlan(mrhiDevice* device, mrhiPassId pass, mrhiPassPlan* pl
     {
         return mrhi_errorState;
     }
-    if (pass.generation != device->frameSerial || pass.index1 == 0 ||
+    if (pass.generation != device->frameSerial || pass.index1 <= MRHI_LIBRARY_PASSES ||
         pass.index1 > device->framePassCount)
     {
         return mrhi_errorStale;

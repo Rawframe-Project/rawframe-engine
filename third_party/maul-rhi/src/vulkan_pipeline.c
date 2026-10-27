@@ -3,8 +3,8 @@
 //
 // A Vulkan device's shaders, pipeline layouts, compute pipelines,
 // answers and cache (vulkan_pipeline.h). Pipelines are made at the call,
-// with no thread (family record 0017), and answered at the next
-// poll as the contract's requests are.
+// with no thread, and answered at the next poll as the contract's
+// requests are.
 
 #include "vulkan_pipeline.h"
 

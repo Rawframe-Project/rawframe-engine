@@ -381,9 +381,9 @@ static void Put(Stream* stream, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE type, const 
 
 #define PUT(stream, type, value) Put(stream, type, &(value), sizeof(value), alignof(typeof(value)))
 
-// Makes a graphics pipeline rendering views (mrhi-0020): the desc's state
-// as a stream with its view instancing, each view on the next layer of
-// the targets, through ID3D12Device2.
+// Makes a graphics pipeline rendering views: the desc's state as a stream
+// with its view instancing, each view on the next layer of the targets,
+// through ID3D12Device2.
 static HRESULT CreateViewed(ID3D12Device* device, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* desc,
                             uint32_t views, ID3D12PipelineState** stateOut)
 {

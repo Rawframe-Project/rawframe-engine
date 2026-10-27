@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Sirac Ozmen
 #
-# Writes a shader container (docs/contract/container.md) from a SPIR-V
+# Writes a shader container (docs/user/shader-container-format.md) from a SPIR-V
 # module, a WGSL module and a JSON reflection. It checks the reflection
 # by the rules the library's reader applies, and refuses code that
 # disagrees with it:
@@ -12,18 +12,17 @@
 #   WGSL binding's kind, and a texture's dimension, match it.
 # A module may leave out a binding it does not use.
 #
-# An entry may read the pass's heap (record mrhi-0015), listing its
-# "heap_uses" ("sampled_textures", "storage_textures", "storage_buffers",
-# "samplers", and "writes" with a storage kind, never in a vertex entry).
-# SPIR-V reads the resource heap at set 4 binding 0 and the sampler heap
-# at set 4 binding 1 (DXC: -fvk-bind-resource-heap 0 4
-# -fvk-bind-sampler-heap 1 4). An entry reading the view index of a
-# multiview pass (record mrhi-0020) lists the builtin "view_index", in a
-# vertex entry too. WGSL reads no heaps yet and has no view index or
-# 64-bit integers, so a container whose entries use any (its SPIR-V
-# declaring Int64) has no WGSL: pass - for it.
+# An entry may read the pass's heap, listing its "heap_uses"
+# ("sampled_textures", "storage_textures", "storage_buffers", "samplers",
+# and "writes" with a storage kind, never in a vertex entry). SPIR-V
+# reads the resource heap at set 4 binding 0 and the sampler heap at set
+# 4 binding 1 (DXC: -fvk-bind-resource-heap 0 4 -fvk-bind-sampler-heap 1
+# 4). An entry reading the view index of a multiview pass lists the
+# builtin "view_index", in a vertex entry too. WGSL reads no heaps yet
+# and has no view index or 64-bit integers, so a container whose entries
+# use any (its SPIR-V declaring Int64) has no WGSL: pass - for it.
 #
-# The enum names are the contract's (docs/contract/mrhi.json) without
+# The enum names are the contract's (contract/mrhi.json) without
 # their prefixes. The reflection:
 #   {
 #     "root_block_bytes": 16,
@@ -90,7 +89,8 @@ import struct
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONTRACT = os.path.join(ROOT, "docs", "contract", "mrhi.json")
+CONTRACT = os.path.join(ROOT, "contract", "mrhi.json")
+VERSION = 2
 SPIRV_MAGIC = 0x07230203
 COLOR_TARGETS = 8
 MAX_ROOT_BLOCK = 256
@@ -174,6 +174,12 @@ class Enums:
         self.builtins = enum(contract, "shader_builtins", "builtin_")
         self.heap_uses = enum(contract, "shader_heap_uses", "heap_use_")
         self.constants = enum(contract, "constant_type", "constant_")
+
+    def canonical(self):
+        """Every value the writer reads from the contract, sorted, as bytes:
+        what a container's bytes depend on, apart from the contract's prose."""
+        return json.dumps({field: sorted(values.items()) for field, values in vars(self).items()},
+                          sort_keys=True).encode()
 
 
 def need(condition, message):
@@ -283,8 +289,8 @@ def pack_entries(reflection, enums, strings, inputs, outputs, variables):
         storage = number(entry.get("workgroup_storage_bytes", 0), f"{where}: workgroup storage",
                          0, 0xFFFFFFFF if compute else 0)
         builtins = entry.get("builtins", [])
-        # The view index is a vertex or fragment builtin (record
-        # mrhi-0020); the others are a fragment entry's.
+        # The view index is a vertex or fragment builtin; the
+        # others are a fragment entry's.
         need(isinstance(builtins, list) and
              all(stage == "fragment" or (b == "view_index" and stage == "vertex")
                  for b in builtins),
@@ -809,7 +815,9 @@ def build(spirv, wgsl, reflection, enums, msl=None, metallib=None, dxil=None):
         (9, wgsl),
         (10, b"".join(r for _, r in variables)),
     ]
-    sections = [(kind, data) for kind, data in sections if kind != 9 or data]
+    # A section that holds its default is left out: the meta of an empty
+    # root block, and every empty array or code section.
+    sections = [(kind, data) for kind, data in sections if data and (kind != 1 or root)]
     sections += metal_sections(reflection, root, msl, metallib)
     sections += d3d12_sections(reflection, root, spirv, dxil)
     offset = 64 + 24 * len(sections)
@@ -821,7 +829,7 @@ def build(spirv, wgsl, reflection, enums, msl=None, metallib=None, dxil=None):
     size = offset + len(body)
     signed = struct.pack("<I12x", len(sections)) + table + body
     digest = hashlib.sha256(signed).digest()
-    return b"MRSC" + struct.pack("<IQ", 1, size) + digest + signed
+    return b"MRSC" + struct.pack("<IQ", VERSION, size) + digest + signed
 
 
 def read_entries(reflection, folder, suffix):
@@ -840,7 +848,7 @@ def read_entries(reflection, folder, suffix):
     return found
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(prog="mrhi_container.py")
     parser.add_argument("--msl", metavar="DIR", help="each entry's MSL, in DIR/NAME.metal")
     parser.add_argument("--metallib", metavar="FILE", help="a Metal library of every entry")
@@ -849,7 +857,7 @@ def main():
     parser.add_argument("wgsl", metavar="WGSL|-")
     parser.add_argument("reflection", metavar="REFLECTION")
     parser.add_argument("output", metavar="OUTPUT")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     spirv_path, wgsl_path, reflection_path, output_path = (args.spirv, args.wgsl,
                                                            args.reflection, args.output)
     try:

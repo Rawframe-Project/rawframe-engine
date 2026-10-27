@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A WebGPU device (mrhi-0003): opened from a fresh adapter with the
-// granted features and limits, its errors kept where the web test runner
-// reads them (a validation scope held for its life, read as it closes),
-// and its loss reported by the next poll. Objects
-// live on the JavaScript side under small handles. A destroyed object
-// waits there until the next frame submitted after its destruction
-// finishes, since frames are recorded at submission; frames are
-// reported finished in order. WebGPU places memory itself,
-// so a declared resource's bytes are an estimate for the frame's report.
+// A WebGPU device: opened from a fresh adapter with the granted features
+// and limits, its errors kept where the web test runner reads them (a
+// validation scope held for its life, read as it closes), and its loss
+// reported by the next poll. Objects live on the JavaScript side under
+// small handles. A destroyed object waits there until the next frame
+// submitted after its destruction finishes, since frames are recorded at
+// submission; frames are reported finished in order. WebGPU places
+// memory itself, so a declared resource's bytes are an estimate for the
+// frame's report.
 
 #include "webgpu_device.h"
 
@@ -623,8 +623,11 @@ static void ReleaseImage(void* self, uint64_t swapchain, uint64_t image)
     mrhiJsForget(device->state, (int)image);
 }
 
-static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag)
+// The browser holds a frame's budgets: a submission never runs out here.
+static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag,
+                              mrhiDiagnosticCode* budgetOut)
 {
+    (void)budgetOut;
     WebGpuDevice* device = self;
     device->submitted += 1;
     MRHI_ASSERT(device->submitted - device->finished <= device->tagCount);

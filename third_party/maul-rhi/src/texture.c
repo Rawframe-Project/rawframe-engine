@@ -208,7 +208,7 @@ static mrhiResult CheckTexture(mrhiDevice* device, const mrhiTextureDef* def)
     {
         return status;
     }
-    // An adopted image (mrhi-0018) is Vulkan's, made, and a render target.
+    // An adopted image is Vulkan's, made, and a render target.
     const mrhiTextureVulkanAdopt* adopt =
         (const mrhiTextureVulkanAdopt*)mrhiFindStruct(def->next, mrhi_structTextureVulkanAdopt);
     if (adopt != nullptr && device->adapterInfo.driver != mrhi_driverVulkan)
@@ -237,6 +237,10 @@ static mrhiResourceState RestingOf(const mrhiTextureDef* def)
 mrhiResult mrhiCreateTexture(mrhiDevice* device, const mrhiTextureDef* def,
                              mrhiTextureId* textureOut)
 {
+    if (textureOut != nullptr)
+    {
+        *textureOut = (mrhiTextureId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -268,7 +272,12 @@ mrhiResult mrhiCreateTexture(mrhiDevice* device, const mrhiTextureDef* def,
     }
     mrhiTextureSlot* slot = &device->textureSlots[index1 - 1];
     mrhiResourceState resting = RestingOf(def);
-    *slot = (mrhiTextureSlot){.handle = handle, .def = *def, .state = resting, .resting = resting};
+    *slot = (mrhiTextureSlot){.handle = handle,
+                              .def = *def,
+                              .fresh = resting == mrhi_stateUndefined &&
+                                       (def->usage & mrhi_textureTransient) == 0,
+                              .state = resting,
+                              .resting = resting};
     slot->def.next = nullptr;
     slot->def.label = nullptr;
     slot->def.labelLength = 0;

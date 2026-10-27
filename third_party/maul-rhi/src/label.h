@@ -10,10 +10,10 @@
 #include "maul-rhi/base.h"
 
 // Labels reach drivers and recorded commands only where the build keeps
-// them (MAUL_RHI_LABELS, on by default; mrhi-0029). Without them every
-// label is still checked, so that a call refused in one build is
-// refused in every build, and then dropped: no driver names an object,
-// no label is copied or recorded, and frames keep no label storage.
+// them (MAUL_RHI_LABELS, on by default). Without them every label is
+// still checked, so that a call refused in one build is refused in
+// every build, and then dropped: no driver names an object, no label is
+// copied or recorded, and frames keep no label storage.
 #ifndef MAUL_RHI_LABELS
 #define MAUL_RHI_LABELS 1
 #endif

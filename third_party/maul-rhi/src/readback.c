@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Readbacks (mrhi-0011): a copy into the device's readback ring,
-// recorded with a request that the frame's finish answers, and taken out
-// once by the program. Records and ring bytes are used in order, taken
-// under a lock since passes record in parallel, and freed as the oldest
-// are taken.
+// Readbacks: a copy into the device's readback ring, recorded with a
+// request that the frame's finish answers, and taken out once by the
+// program. Records and ring bytes are used in order, taken under a lock
+// since passes record in parallel, and freed as the oldest are taken.
 
 #include "copy_core.h"
+#include "invariant.h"
 
 #include <stdatomic.h>
 #include <stdckdint.h>
@@ -36,6 +36,11 @@ void mrhiDropReadbacks(mrhiDevice* device)
     device->readbackPending -= device->readbackHead - device->frameReadbackFirst;
     device->readbackHead = device->frameReadbackFirst;
     device->ringHead = device->frameRingFirst;
+    // A wrap of the empty ring in the dropped frame moved the tail too.
+    if (device->ringTail > device->ringHead)
+    {
+        device->ringTail = device->ringHead;
+    }
 }
 
 void mrhiAnswerReadbacks(mrhiDevice* device, uint32_t first, uint32_t count, mrhiResult outcome)
@@ -52,7 +57,8 @@ void mrhiAnswerReadbacks(mrhiDevice* device, uint32_t first, uint32_t count, mrh
 
 // Takes bytes of the ring after its head, wrapping to its start rather
 // than splitting them: their position, or false when the ring lacks
-// room. No bytes take no room.
+// room. No bytes take no room, and the bytes an empty ring skips to wrap
+// are free at once, so an empty ring holds a readback of its whole size.
 static bool TakeRing(mrhiDevice* device, uint64_t bytes, uint64_t* positionOut)
 {
     uint64_t ring = device->deviceLimits.readbackBytes;
@@ -67,19 +73,31 @@ static bool TakeRing(mrhiDevice* device, uint64_t bytes, uint64_t* positionOut)
         return false;
     }
     uint64_t physical = at % ring;
-    at += physical + bytes > ring ? ring - physical : 0;
+    if (physical + bytes > ring)
+    {
+        bool empty = device->ringTail == at;
+        at += ring - physical;
+        if (empty)
+        {
+            device->ringTail = at;
+        }
+    }
     if (at + bytes - device->ringTail > ring)
     {
         return false;
     }
     device->ringHead = at + bytes;
+    // The bytes lie in one piece of the ring, and the ring never holds more
+    // than its size.
+    MRHI_ASSERT(at % ring + bytes <= ring && device->ringHead - device->ringTail <= ring);
     *positionOut = at;
     return true;
 }
 
 // Records a readback of ring bytes that the program takes as size bytes
 // of rows: its record, or NULL when the device lacks a record, the
-// bytes, or answer room for it and its frame.
+// bytes, or answer room for it and its frame, recorded as a refusal by
+// that limit.
 static mrhiReadback* Reserve(mrhiDevice* device, uint64_t ringBytes, uint64_t size, uint32_t pitch,
                              uint32_t rowBytes, uint32_t rows)
 {
@@ -89,9 +107,20 @@ static mrhiReadback* Reserve(mrhiDevice* device, uint64_t ringBytes, uint64_t si
     uint64_t rounded = (ringBytes + PLACEMENT - 1) / PLACEMENT * PLACEMENT;
     uint64_t position = 0;
     mrhiReadback* readback = nullptr;
-    if (device->readbackHead - device->readbackTail < device->deviceLimits.readbacks &&
-        mrhiAnswerRoom(device) >= 2 && ringBytes <= UINT64_MAX - PLACEMENT &&
-        TakeRing(device, rounded, &position))
+    mrhiDiagnosticCode full = 0;
+    if (device->readbackHead - device->readbackTail >= device->deviceLimits.readbacks)
+    {
+        full = mrhi_diagnosticReadbacks;
+    }
+    else if (mrhiAnswerRoom(device) < 2)
+    {
+        full = mrhi_diagnosticNotifications;
+    }
+    else if (ringBytes > UINT64_MAX - PLACEMENT || !TakeRing(device, rounded, &position))
+    {
+        full = mrhi_diagnosticReadbackBytes;
+    }
+    else
     {
         readback = RecordAt(device, device->readbackHead++);
         *readback = (mrhiReadback){
@@ -107,6 +136,10 @@ static mrhiReadback* Reserve(mrhiDevice* device, uint64_t ringBytes, uint64_t si
         ++device->readbackPending;
     }
     atomic_flag_clear_explicit(&device->readbackLock, memory_order_release);
+    if (full != 0)
+    {
+        mrhiRecordDiagnostic(&device->diagnostics, full);
+    }
     return readback;
 }
 
@@ -120,6 +153,10 @@ static uint64_t RingOffset(const mrhiDevice* device, const mrhiReadback* readbac
 mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
                           uint64_t offset, uint64_t size, mrhiRequestId* requestOut)
 {
+    if (requestOut != nullptr)
+    {
+        *requestOut = (mrhiRequestId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -174,6 +211,10 @@ mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId reso
 mrhiResult mrhiReadTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureCopy* source,
                            const mrhiExtent3d* size, mrhiRequestId* requestOut)
 {
+    if (requestOut != nullptr)
+    {
+        *requestOut = (mrhiRequestId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -270,7 +311,11 @@ static void Free(mrhiDevice* device, mrhiReadback* readback)
            RecordAt(device, device->readbackTail)->state == mrhiReadbackTaken)
     {
         const mrhiReadback* oldest = RecordAt(device, device->readbackTail++);
-        device->ringTail = oldest->position + oldest->bytes;
+        uint64_t end = oldest->position + oldest->bytes;
+        // A record of no bytes may lie behind a tail an empty ring's wrap
+        // moved.
+        device->ringTail = end > device->ringTail ? end : device->ringTail;
+        MRHI_ASSERT(device->ringTail <= device->ringHead);
     }
 }
 
@@ -309,6 +354,9 @@ mrhiResult mrhiTakeReadback(mrhiDevice* device, mrhiRequestId request, void* byt
     {
         return mrhi_errorCapacity;
     }
+    MRHI_ASSERT(readback->size <= readback->bytes &&
+                RingOffset(device, readback) + readback->bytes <=
+                    device->deviceLimits.readbackBytes);
     const uint8_t* ring = device->readbackRing + RingOffset(device, readback);
     // A buffer's bytes, or rows of none, which have no pitch either.
     if (readback->pitch == 0)

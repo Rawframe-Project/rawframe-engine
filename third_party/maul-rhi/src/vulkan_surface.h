@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Surfaces on Vulkan (mrhi-0003, mrhi-0007): the instance extensions
-// they need, a surface made from the source a def chains, and what a
-// surface can do on a physical device, as the contract's rows map it.
+// Surfaces on Vulkan: the instance extensions they need, a surface
+// made from the source a def chains, and what a surface can do on a
+// physical device, as the contract's rows map it.
 
 #ifndef MAUL_RHI_SRC_VULKAN_SURFACE_H
 #define MAUL_RHI_SRC_VULKAN_SURFACE_H

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Draws and dispatches (mrhi-0011): vertex and index buffers set per
-// slot, and each draw or dispatch checked against the pass's state as
-// WebGPU checks it: its pipeline, the tables that pipeline reads, and
-// buffers large enough for the elements it names. Indirect forms check
-// the same state and where their arguments lie, but not the arguments,
+// Draws and dispatches: vertex and index buffers set per slot, and
+// each draw or dispatch checked against the pass's state as WebGPU
+// checks it: its pipeline, the tables that pipeline reads, and buffers
+// large enough for the elements it names. Indirect forms check the
+// same state and where their arguments lie, but not the arguments,
 // which are on the GPU.
 
 #include "encoder_core.h"
@@ -431,9 +431,8 @@ mrhiResult mrhiDrawIndexedIndirect(mrhiDevice* device, mrhiPassId id, mrhiResour
                : RecordIndirect(device, pass, mrhiCommandDrawIndexedIndirect, resource, offset, 20);
 }
 
-// Records a counted multi-draw (mrhi-0020): maxCount packed records and a
-// 32-bit count, each in a buffer the pass declares with the indirect
-// access.
+// Records a counted multi-draw: maxCount packed records and a 32-bit
+// count, each in a buffer the pass declares with the indirect access.
 static mrhiResult RecordCounted(mrhiDevice* device, mrhiPassId id, bool indexed,
                                 mrhiResourceId resource, uint64_t offset,
                                 mrhiResourceId countResource, uint64_t countOffset,
@@ -480,7 +479,7 @@ static mrhiResult RecordCounted(mrhiDevice* device, mrhiPassId id, bool indexed,
     {
         if (maxCount > device->deviceLimits.frameIndirectDraws - taken)
         {
-            return mrhi_errorCapacity;
+            return mrhiDeviceFull(device, mrhi_diagnosticFrameIndirectDraws);
         }
     } while (!atomic_compare_exchange_weak_explicit(&device->countedTaken, &taken, taken + maxCount,
                                                     memory_order_relaxed, memory_order_relaxed));

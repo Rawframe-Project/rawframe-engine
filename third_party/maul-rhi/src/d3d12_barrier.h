@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's barriers (mrhi-0003): the core's barriers of
-// textures as transitions of their subresources, and buffers moved to
-// the state each use needs, since the core's plan only orders a
-// buffer's writes. Included by the driver's files only.
+// The D3D12 driver's barriers: the core's barriers of textures as
+// transitions of their subresources, and buffers moved to the state
+// each use needs, since the core's plan only orders a buffer's
+// writes. Included by the driver's files only.
 
 #ifndef MAUL_RHI_SRC_D3D12_BARRIER_H
 #define MAUL_RHI_SRC_D3D12_BARRIER_H

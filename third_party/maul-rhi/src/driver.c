@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The SPI handshake (mrhi-0024): a vtable's version, its size, and its
-// functions.
+// The SPI handshake: a vtable's version, its size, and its functions.
 
 #include "driver.h"
 

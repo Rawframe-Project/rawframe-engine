@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's shaders and pipelines (mrhi-0003). A shader holds a
-// library per entry point, compiled from the container's MSL or taken
-// from its metallib, and the Metal map; a pipeline holds its state and
-// what its frames bind, copied from the map, so that it outlives its
-// shader. Pipelines are made at the call, with no thread, and answered
-// at the next poll. Included by the driver's Objective-C files only.
+// The Metal driver's shaders and pipelines. A shader holds a library per
+// entry point, compiled from the container's MSL or taken from its
+// metallib, and the Metal map; a pipeline holds its state and what its
+// frames bind, copied from the map, so that it outlives its shader.
+// Pipelines are made at the call, with no thread, and answered at the
+// next poll. Included by the driver's Objective-C files only.
 
 #ifndef MAUL_RHI_SRC_METAL_PIPELINE_H
 #define MAUL_RHI_SRC_METAL_PIPELINE_H

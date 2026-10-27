@@ -54,11 +54,11 @@ assembler="$(command -v spirv-as || true)"
 if [ -n "$slangc" ] && [ -n "$dxc" ] && [ -n "$cross" ] && [ -n "$validator" ] && [ -n "$disassembler" ] &&
     [ -n "$assembler" ]; then
     shaders="$into/shader-tools"
-    mkdir -p "$shaders/tools" "$shaders/third_party/maul-rhi/tools" "$shaders/third_party/maul-rhi/docs/contract" \
+    mkdir -p "$shaders/tools" "$shaders/third_party/maul-rhi/tools" "$shaders/third_party/maul-rhi/contract" \
         "$shaders/modules/render_scene_gpu/shaders" "$shaders/bin" "$shaders/lib"
     cp tools/gen_shaders.py "$shaders/tools/"
     cp third_party/maul-rhi/tools/*.py "$shaders/third_party/maul-rhi/tools/"
-    cp third_party/maul-rhi/docs/contract/mrhi.json "$shaders/third_party/maul-rhi/docs/contract/"
+    cp third_party/maul-rhi/contract/mrhi.json "$shaders/third_party/maul-rhi/contract/"
     cp modules/render_scene_gpu/shaders/* "$shaders/modules/render_scene_gpu/shaders/"
     cp "$slangc" "$dxc" "$cross" "$validator" "$disassembler" "$assembler" "$shaders/bin/"
     if [ -n "$exe" ]; then

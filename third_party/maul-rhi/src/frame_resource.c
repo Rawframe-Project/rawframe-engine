@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The open frame's resources (mrhi-0008): textures and buffers the graph
-// makes, whose usages its passes will decide, device textures and
-// buffers imported once per frame, and images acquired from surfaces.
-// Their ids carry the frame's serial, so they end with it.
+// The open frame's resources: textures and buffers the graph makes,
+// whose usages its passes will decide, device textures and buffers
+// imported once per frame, and images acquired from surfaces. Their ids
+// carry the frame's serial, so they end with it.
 
 #include "device_core.h"
 #include "instance_core.h"
@@ -18,7 +18,7 @@ static mrhiResult Add(mrhiDevice* device, mrhiFrameResource resource, mrhiResour
     }
     if (device->frameResourceCount == device->deviceLimits.frameResources)
     {
-        return mrhi_errorCapacity;
+        return mrhiDeviceFull(device, mrhi_diagnosticFrameResources);
     }
     device->frameResources[device->frameResourceCount++] = resource;
     *resourceOut = (mrhiResourceId){device->frameResourceCount, device->frameSerial};
@@ -28,6 +28,10 @@ static mrhiResult Add(mrhiDevice* device, mrhiFrameResource resource, mrhiResour
 mrhiResult mrhiDeclareTexture(mrhiDevice* device, const mrhiTextureDef* def,
                               mrhiResourceId* resourceOut)
 {
+    if (resourceOut != nullptr)
+    {
+        *resourceOut = (mrhiResourceId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -55,6 +59,10 @@ mrhiResult mrhiDeclareTexture(mrhiDevice* device, const mrhiTextureDef* def,
 mrhiResult mrhiDeclareBuffer(mrhiDevice* device, const mrhiBufferDef* def,
                              mrhiResourceId* resourceOut)
 {
+    if (resourceOut != nullptr)
+    {
+        *resourceOut = (mrhiResourceId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -96,6 +104,10 @@ static mrhiResult Import(mrhiDevice* device, mrhiImport* import, mrhiFrameResour
 
 mrhiResult mrhiImportTexture(mrhiDevice* device, mrhiTextureId texture, mrhiResourceId* resourceOut)
 {
+    if (resourceOut != nullptr)
+    {
+        *resourceOut = (mrhiResourceId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -109,6 +121,9 @@ mrhiResult mrhiImportTexture(mrhiDevice* device, mrhiTextureId texture, mrhiReso
         return mrhi_errorStale;
     }
     const mrhiTextureSlot* slot = &device->textureSlots[texture.index1 - 1];
+    // The frame's first pass zeroes a fresh texture the first time the
+    // frame imports it.
+    bool zero = slot->fresh && !(device->frameOpen && slot->import.frame == device->frameSerial);
     mrhiFrameResource resource = {
         .kind = mrhiImportedTexture,
         .texture = slot->def,
@@ -119,11 +134,21 @@ mrhiResult mrhiImportTexture(mrhiDevice* device, mrhiTextureId texture, mrhiReso
         .sealed = slot->state == mrhi_stateSealed,
         .resting = slot->resting,
     };
-    return Import(device, &device->textureSlots[texture.index1 - 1].import, resource, resourceOut);
+    mrhiResult status =
+        Import(device, &device->textureSlots[texture.index1 - 1].import, resource, resourceOut);
+    if (zero && status == mrhi_success)
+    {
+        mrhiZeroOnFirstUse(device, resourceOut->index1);
+    }
+    return status;
 }
 
 mrhiResult mrhiImportBuffer(mrhiDevice* device, mrhiBufferId buffer, mrhiResourceId* resourceOut)
 {
+    if (resourceOut != nullptr)
+    {
+        *resourceOut = (mrhiResourceId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -137,6 +162,9 @@ mrhiResult mrhiImportBuffer(mrhiDevice* device, mrhiBufferId buffer, mrhiResourc
         return mrhi_errorStale;
     }
     const mrhiBufferSlot* slot = &device->bufferSlots[buffer.index1 - 1];
+    // The frame's first pass zeroes a fresh buffer the first time the frame
+    // imports it.
+    bool zero = slot->fresh && !(device->frameOpen && slot->import.frame == device->frameSerial);
     mrhiFrameResource resource = {
         .kind = mrhiImportedBuffer,
         .size = slot->size,
@@ -145,8 +173,15 @@ mrhiResult mrhiImportBuffer(mrhiDevice* device, mrhiBufferId buffer, mrhiResourc
         .generation = buffer.generation,
         .initialState = slot->state,
         .sealed = slot->state == mrhi_stateSealed,
+        .zeroState = zero || slot->zeroState,
     };
-    return Import(device, &device->bufferSlots[buffer.index1 - 1].import, resource, resourceOut);
+    mrhiResult status =
+        Import(device, &device->bufferSlots[buffer.index1 - 1].import, resource, resourceOut);
+    if (zero && status == mrhi_success)
+    {
+        mrhiZeroOnFirstUse(device, resourceOut->index1);
+    }
+    return status;
 }
 
 // Finds an imported object of the open frame to seal or unseal: its
@@ -234,6 +269,10 @@ static mrhiTextureDef ImageDef(const mrhiSurfaceConfig* config)
 mrhiResult mrhiAcquireSurfaceImage(mrhiDevice* device, mrhiSurfaceId surface,
                                    mrhiResourceId* imageOut)
 {
+    if (imageOut != nullptr)
+    {
+        *imageOut = (mrhiResourceId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -242,7 +281,6 @@ mrhiResult mrhiAcquireSurfaceImage(mrhiDevice* device, mrhiSurfaceId surface,
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
-    *imageOut = (mrhiResourceId){0};
     if (mrhiFindSurface(device->instance, surface) == 0)
     {
         return mrhi_errorStale;
@@ -266,7 +304,7 @@ mrhiResult mrhiAcquireSurfaceImage(mrhiDevice* device, mrhiSurfaceId surface,
     // Room first, so that an image is never acquired and then lost.
     if (device->frameResourceCount == device->deviceLimits.frameResources)
     {
-        return mrhi_errorCapacity;
+        return mrhiDeviceFull(device, mrhi_diagnosticFrameResources);
     }
     uint64_t image = 0;
     mrhiResult outcome =

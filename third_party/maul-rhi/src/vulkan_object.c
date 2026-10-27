@@ -108,6 +108,11 @@ mrhiResult mrhiVulkanCreateTexture(mrhiVulkanObjects* objects, const mrhiTexture
     }
     mrhiVulkanImage image;
     mrhiVulkanImageOf(def, objects->depthStencil, &image);
+    // Every texture but a transient one, whose contents live only inside
+    // a render pass, so that the first frame that imports it can clear
+    // it.
+    image.info.usage |=
+        (def->usage & mrhi_textureTransient) == 0 ? VK_IMAGE_USAGE_TRANSFER_DST_BIT : 0;
     VkResult result =
         objects->api->vkCreateImage(objects->device, &image.info, nullptr, &made->image);
     mrhiResult status = result == VK_SUCCESS ? mrhiVulkanPlace(objects->memory, VK_NULL_HANDLE,
@@ -294,7 +299,7 @@ mrhiResult mrhiVulkanCreateQuerySet(mrhiVulkanObjects* objects, const mrhiQueryS
         [mrhi_queryPipelineStatistics] = VK_QUERY_TYPE_PIPELINE_STATISTICS,
     };
     // Every counter, in bit order, which is the order a resolve writes
-    // them in (mrhi-0023).
+    // them in.
     const VkQueryPoolCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
         .queryType = types[def->type],

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The driver SPI at the instance level (mrhi-0003), as the core calls
-// it. A driver reports finished work only when the core polls it, and
-// never calls the core. Installed as maul-rhi/spi/driver.h, with
-// command.h, reflection.h and container.h, for drivers built outside
-// the tree (mrhi-0024): their types are the SPI, while the core
-// functions they declare are not.
+// The driver SPI at the instance level, as the core calls it. A
+// driver reports finished work only when the core polls it, and never
+// calls the core. Installed as maul-rhi/spi/driver.h, with command.h,
+// reflection.h and container.h, for drivers built outside the tree:
+// their types are the SPI, while the core functions they declare are
+// not.
 
 #ifndef MAUL_RHI_SRC_DRIVER_H
 #define MAUL_RHI_SRC_DRIVER_H
@@ -18,10 +18,13 @@
 #include "maul-rhi/pipeline.h"
 
 // The SPI version a driver's vtable must carry. Any change to the SPI
-// headers raises it (mrhi-0024); 4 is the first installed.
-#define MRHI_SPI_VERSION 5
+// headers raises it; 4 is the first installed.
+#define MRHI_SPI_VERSION 9
 
-// The 64-bit counters a pipeline statistics query writes (mrhi-0023).
+// The pass classes (mrhiPassClass): graphics, async compute and transfer.
+#define MRHI_PASS_CLASSES 3
+
+// The 64-bit counters a pipeline statistics query writes.
 #define MRHI_STATISTICS_COUNTERS 11
 
 // The bytes a resolve writes per query of a type: eleven counters for a
@@ -97,8 +100,8 @@ typedef enum mrhiDriverResourceKind
 // texture's def, whose usage is the usage field for a transient; a
 // buffer's bytes; its usage, a transient's the one its passes derive;
 // where a transient lives in the frame's memory; and whether a device
-// object began the frame sealed (mrhi-0015), which a heap may read it in
-// without the frame declaring it.
+// object began the frame sealed, which a heap may read it in without the
+// frame declaring it.
 typedef struct mrhiDriverResource
 {
     mrhiDriverResourceKind kind;
@@ -127,9 +130,14 @@ typedef struct mrhiDriverAccess
 // derived; its render area; its occlusion query set's handle (0 for
 // none); its timestamp query set's handle and the queries written at
 // its start and end (MRHI_NO_QUERY for none); its heap's handle (0 for
-// none); the resources it declares, which a heap may reach unbound; and
-// its first command chunk, an index into the frame's chunks plus one (0
-// for none), each chunk naming the next.
+// none); the resources it declares, which a heap may reach unbound; its
+// first command chunk, an index into the frame's chunks plus one (0 for
+// none), each chunk naming the next; and, by class, the latest pass of
+// that class it must follow (a null id for none, always for its own
+// class). Passes of one class run in the frame's order. A driver that runs
+// classes on queues of their own orders each pass after the passes its
+// waitFor names, and the frame's end after every class's last pass; one
+// that runs every pass on one queue in the frame's order may ignore it.
 typedef struct mrhiDriverPass
 {
     mrhiPassId id;
@@ -144,8 +152,8 @@ typedef struct mrhiDriverPass
     mrhiStoreOp stencilStore;
     uint32_t width;
     uint32_t height;
-    // The views it renders (mrhi-0020), each into the next layer of every
-    // target: 1 without multiview.
+    // The views it renders, each into the next layer of every target: 1
+    // without multiview.
     uint32_t viewCount;
     uint64_t occlusionSet;
     uint64_t timestampSet;
@@ -160,11 +168,12 @@ typedef struct mrhiDriverPass
     // pass the program gave none (NULL).
     bool native;
     void* nativeCommands;
+    mrhiPassId waitFor[MRHI_PASS_CLASSES];
 } mrhiDriverPass;
 
-// A heap entry as its driver writes it (mrhi-0015): its kind, the
-// view's or buffer's driver handle, a buffer's range with its size
-// resolved, and whether shaders may write it.
+// A heap entry as its driver writes it: its kind, the view's or
+// buffer's driver handle, a buffer's range with its size resolved,
+// and whether shaders may write it.
 typedef struct mrhiDriverHeapEntry
 {
     mrhiHeapEntryKind kind;
@@ -174,15 +183,15 @@ typedef struct mrhiDriverHeapEntry
     uint64_t size;
 } mrhiDriverHeapEntry;
 
-// A submitted frame as the driver sees it (mrhi-0013): its
-// resources by frame slot less one; its kept passes in the order they
-// run; its barriers in the order they run, each before a pass or, with
-// a null pass id, at the frame's end; its command chunks; its upload
-// bytes, which copies from staging read at the offsets they name, valid
-// until the frame finishes; the readback ring, which the driver fills
-// at the offsets readbacks name before it reports the frame finished;
-// and the bytes its transients take together. Everything else is valid
-// during the call.
+// A submitted frame as the driver sees it: its resources by frame slot
+// less one; its kept passes in the order they run; its barriers in the
+// order they run, each before a pass or, with a null pass id, at the
+// frame's end; its command chunks; its upload bytes, which copies from
+// staging read at the offsets they name, valid until the frame
+// finishes; the readback ring, which the driver fills at the offsets
+// readbacks name before it reports the frame finished; and the bytes
+// its transients take together. Everything else is valid during the
+// call.
 typedef struct mrhiDriverFrame
 {
     const mrhiDriverResource* resources;
@@ -288,8 +297,11 @@ typedef struct mrhiDeviceDriverVtable
     void (*bufferMemory)(const void* self, const mrhiBufferDef* def, uint64_t* bytesOut,
                          uint64_t* alignmentOut);
     // Runs a frame on the GPU; finished, it is reported by poll with the
-    // tag.
-    mrhiResult (*submitFrame)(void* self, const mrhiDriverFrame* frame, uint64_t tag);
+    // tag. A refusal for capacity names the budget that ran out in
+    // budgetOut, one of the mrhi_diagnosticSubmit codes; any other
+    // answer leaves it 0.
+    mrhiResult (*submitFrame)(void* self, const mrhiDriverFrame* frame, uint64_t tag,
+                              mrhiDiagnosticCode* budgetOut);
     // Moves up to capacity finished frames and pipelines into events and
     // returns how many it moved.
     size_t (*poll)(void* self, mrhiDriverEvent* events, size_t capacity);
@@ -355,8 +367,8 @@ typedef struct mrhiInstanceDriver
     void* self;
 } mrhiInstanceDriver;
 
-// The handshake (mrhi-0024): success for a vtable of this SPI version,
-// at least the size the core knows, with every function; otherwise
+// The handshake: success for a vtable of this SPI version, at least
+// the size the core knows, with every function; otherwise
 // mrhi_errorVersion for another version, or mrhi_errorInvalid. A
 // driver's own functions are not checked further.
 mrhiResult mrhiCheckInstanceVtable(const mrhiInstanceDriverVtable* vtable);

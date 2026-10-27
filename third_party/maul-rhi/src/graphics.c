@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Graphics pipelines (mrhi-0010): every state of the def checked against
-// its shader's reflection, the device and WebGPU's rules for render
-// pipelines, before the driver sees it. A contradiction is invalid
-// input; what the device cannot do is unsupported, and invalid input
-// wins when both are found. Arrays longer than their limit are refused
-// unsupported unread.
+// Graphics pipelines: every state of the def checked against its
+// shader's reflection, the device and WebGPU's rules for render
+// pipelines, before the driver sees it. State that contradicts itself
+// is invalid input; state the shader's reflection refuses is bad data,
+// format, since the shader may come from content; what the device cannot
+// do is unsupported. Invalid input wins over format, and format over
+// unsupported. Arrays longer than their limit are refused unsupported
+// unread.
 
 #include "capabilities_core.h"
 #include "label.h"
@@ -46,13 +48,17 @@ mrhiGraphicsPipelineDef mrhiDefaultGraphicsPipelineDef(void)
     return def;
 }
 
-// The worse of two outcomes: invalid input over unsupported over
-// success.
+// The worse of two outcomes: invalid input over format over unsupported
+// over success.
 static mrhiResult Worse(mrhiResult a, mrhiResult b)
 {
-    if (a == mrhi_errorInvalid || b == mrhi_errorInvalid)
+    static const mrhiResult ranked[] = {mrhi_errorInvalid, mrhi_errorFormat};
+    for (size_t i = 0; i < sizeof(ranked) / sizeof(ranked[0]); ++i)
     {
-        return mrhi_errorInvalid;
+        if (a == ranked[i] || b == ranked[i])
+        {
+            return ranked[i];
+        }
     }
     return a != mrhi_success ? a : b;
 }
@@ -61,6 +67,12 @@ static mrhiResult Worse(mrhiResult a, mrhiResult b)
 static mrhiResult Need(bool condition)
 {
     return condition ? mrhi_success : mrhi_errorInvalid;
+}
+
+// Format unless the condition, one the shader's reflection decides, holds.
+static mrhiResult Match(bool condition)
+{
+    return condition ? mrhi_success : mrhi_errorFormat;
 }
 
 // Unsupported unless the condition holds.
@@ -176,8 +188,8 @@ static mrhiResult CheckVertex(const mrhiDevice* device, const mrhiGraphicsPipeli
             ++j;
         }
         status =
-            Worse(status, Need(j < def->vertexAttributeCount &&
-                               mrhiGetVertexLayout(attributes[j].format).scalar == input->type));
+            Worse(status, Match(j < def->vertexAttributeCount &&
+                                mrhiGetVertexLayout(attributes[j].format).scalar == input->type));
     }
     uint64_t slots = (uint64_t)TablesOf(stages.reflection) + def->vertexBufferCount;
     return Worse(status, Within(slots <= device->limits.tablesPlusVertexBuffers));
@@ -241,7 +253,8 @@ static mrhiResult CheckDepthStencil(const mrhiDevice* device, const mrhiGraphics
         Need((format == mrhi_formatNone || depth || stencil) && IsCompare(def->depthCompare) &&
              IsStencilValid(&def->stencilFront) && IsStencilValid(&def->stencilBack) &&
              isfinite(def->depthBiasSlopeScale) && isfinite(def->depthBiasClamp) &&
-             (triangles || !biased) && (depth || !writesDepth));
+             (triangles || !biased));
+    status = Worse(status, Match(depth || !writesDepth));
     status = Worse(status, Need(depth || (!def->depthWrite &&
                                           def->depthCompare == mrhi_compareAlways && !biased)));
     status = Worse(
@@ -322,11 +335,13 @@ static mrhiResult CheckTarget(const mrhiDevice* device, const mrhiColorTargetSta
         ReadsSourceAlpha(target->color.srcFactor) || ReadsSourceAlpha(target->color.dstFactor);
     mrhiResult status =
         Need(facts.channels > 0 && (target->writeMask & ~mrhiColorWritesKnown) == 0 &&
-             (!target->blend || (IsBlendValid(&target->color) && IsBlendValid(&target->alpha))) &&
-             (output != nullptr || target->writeMask == 0) &&
-             (output == nullptr ||
-              (output->components >= facts.channels && Writes(output->type, facts.scalar) &&
-               (!target->blend || !readsAlpha || output->components == 4))));
+             (!target->blend || (IsBlendValid(&target->color) && IsBlendValid(&target->alpha))));
+    status =
+        Worse(status,
+              Match((output != nullptr || target->writeMask == 0) &&
+                    (output == nullptr ||
+                     (output->components >= facts.channels && Writes(output->type, facts.scalar) &&
+                      (!target->blend || !readsAlpha || output->components == 4)))));
     return Worse(status, Within(caps.rendering && (!target->blend || caps.blending)));
 }
 
@@ -370,9 +385,9 @@ static mrhiResult CheckTargets(const mrhiDevice* device, const mrhiGraphicsPipel
         second = second || (target->blend && (ReadsSecondSource(&target->color) ||
                                               ReadsSecondSource(&target->alpha)));
     }
-    status =
-        Worse(status, Within(!second || (device->features.dualSourceBlending &&
-                                         def->colorTargetCount == 1 && HasSecondSource(stages))));
+    status = Worse(status, Within(!second || (device->features.dualSourceBlending &&
+                                              def->colorTargetCount == 1)));
+    status = Worse(status, Match(!second || HasSecondSource(stages)));
     return Worse(status, Within(bytes <= device->limits.colorBytesPerSample));
 }
 
@@ -400,8 +415,8 @@ static mrhiResult CheckMultisample(const mrhiDevice* device, const mrhiGraphicsP
     bool first = def->colorTargetCount > 0 && stages.fragment != nullptr;
     mrhiFormat format = first ? def->colorTargets[0].format : mrhi_formatNone;
     bool masks = first && (stages.fragment->builtins & mrhi_builtinSampleMaskOut) != 0;
-    status = Worse(status,
-                   Need(first && count > 1 && mrhiGetFormatTarget(format).channels == 4 && !masks));
+    status = Worse(status, Need(first && count > 1 && mrhiGetFormatTarget(format).channels == 4));
+    status = Worse(status, Match(!masks));
     return Worse(status, Within(CapsOf(device, format).blending));
 }
 
@@ -426,7 +441,7 @@ static mrhiResult CheckInterface(const mrhiDevice* device, const mrhiGraphicsPip
                       outputs[j].interpolation == input->interpolation &&
                       outputs[j].sampling == input->sampling;
         }
-        status = Worse(status, Need(matched));
+        status = Worse(status, Match(matched));
     }
     return status;
 }
@@ -481,15 +496,20 @@ static void KeepVertexFacts(mrhiDevice* device, uint32_t index1, const mrhiGraph
     }
 }
 
-// Finds the def's entries in the shader: false when either is missing.
-static bool FindStages(const mrhiShaderSlot* shader, const mrhiGraphicsPipelineDef* def,
-                       Stages* stagesOut)
+// Finds the def's entries in the shader: success, mrhi_errorInvalid for a
+// NULL vertex entry or a NULL fragment entry with a length, or
+// mrhi_errorFormat when the shader lacks either.
+static mrhiResult FindStages(const mrhiShaderSlot* shader, const mrhiGraphicsPipelineDef* def,
+                             Stages* stagesOut)
 {
+    if (def->vertexEntry == nullptr ||
+        (def->fragmentEntry == nullptr && def->fragmentEntryLength > 0))
+    {
+        return mrhi_errorInvalid;
+    }
     const mrhiReflection* reflection = shader->reflection;
     uint32_t vertex =
-        def->vertexEntry == nullptr
-            ? reflection->entryCount
-            : mrhiFindEntry(reflection, def->vertexEntry, def->vertexEntryLength, mrhi_stageVertex);
+        mrhiFindEntry(reflection, def->vertexEntry, def->vertexEntryLength, mrhi_stageVertex);
     uint32_t fragment = def->fragmentEntry == nullptr
                             ? reflection->entryCount
                             : mrhiFindEntry(reflection, def->fragmentEntry,
@@ -499,13 +519,13 @@ static bool FindStages(const mrhiShaderSlot* shader, const mrhiGraphicsPipelineD
         .vertex = vertex < reflection->entryCount ? &reflection->entries[vertex] : nullptr,
         .fragment = fragment < reflection->entryCount ? &reflection->entries[fragment] : nullptr,
     };
-    bool fragmentFound = def->fragmentEntry == nullptr ? def->fragmentEntryLength == 0
-                                                       : stagesOut->fragment != nullptr;
-    return stagesOut->vertex != nullptr && fragmentFound;
+    bool fragmentFound = def->fragmentEntry == nullptr || stagesOut->fragment != nullptr;
+    return stagesOut->vertex != nullptr && fragmentFound ? mrhi_success : mrhi_errorFormat;
 }
 
 // Checks a graphics pipeline def: its shader, with its stages, or NULL
-// with the refusal, invalid input counted as misuse.
+// with the refusal, invalid input counted as misuse and entries or
+// constants the reflection lacks not.
 static mrhiShaderSlot* CheckGraphicsDef(mrhiDevice* device, const mrhiGraphicsPipelineDef* def,
                                         Stages* stagesOut, mrhiResult* statusOut)
 {
@@ -515,18 +535,22 @@ static mrhiShaderSlot* CheckGraphicsDef(mrhiDevice* device, const mrhiGraphicsPi
     {
         return nullptr;
     }
-    if (!FindStages(shader, def, stagesOut))
+    mrhiResult found = FindStages(shader, def, stagesOut);
+    if (found != mrhi_success)
     {
-        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticPipelineEntry);
+        *statusOut = found == mrhi_errorInvalid
+                         ? mrhiDeviceMisuse(device, mrhi_diagnosticPipelineEntry)
+                         : mrhiDeviceBadData(device, mrhi_diagnosticPipelineEntry);
         return nullptr;
     }
-    if (!mrhiAreConstantsValid(shader->reflection, def->constants, def->constantCount))
+    *statusOut = mrhiCheckConstants(device, shader->reflection, def->constants, def->constantCount);
+    if (*statusOut != mrhi_success)
     {
-        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticPipelineConstants);
         return nullptr;
     }
-    // Every state is checked, and invalid input outranks what the device
-    // cannot do; the first invalid state names the refusal.
+    // Every state is checked; invalid input outranks format, which
+    // outranks what the device cannot do, and the first state of the worst
+    // outcome names the refusal.
     const mrhiResult states[] = {
         CheckVertex(device, def, *stagesOut),       CheckPrimitive(device, def),
         CheckDepthStencil(device, def, *stagesOut), CheckTargets(device, def, *stagesOut),
@@ -540,12 +564,20 @@ static mrhiShaderSlot* CheckGraphicsDef(mrhiDevice* device, const mrhiGraphicsPi
     mrhiResult status = mrhi_success;
     for (size_t i = 0; i < sizeof(states) / sizeof(states[0]); ++i)
     {
-        if (states[i] == mrhi_errorInvalid)
+        status = Worse(status, states[i]);
+    }
+    for (size_t i = 0; i < sizeof(states) / sizeof(states[0]); ++i)
+    {
+        if (states[i] == status && status == mrhi_errorInvalid)
         {
             *statusOut = mrhiDeviceMisuse(device, codes[i]);
             return nullptr;
         }
-        status = Worse(status, states[i]);
+        if (states[i] == status && status == mrhi_errorFormat)
+        {
+            *statusOut = mrhiDeviceBadData(device, codes[i]);
+            return nullptr;
+        }
     }
     *statusOut = status;
     return status == mrhi_success ? shader : nullptr;
@@ -555,6 +587,14 @@ mrhiResult mrhiCreateGraphicsPipeline(mrhiDevice* device, const mrhiGraphicsPipe
                                       mrhiGraphicsPipelineId* pipelineOut,
                                       mrhiRequestId* requestOut)
 {
+    if (pipelineOut != nullptr)
+    {
+        *pipelineOut = (mrhiGraphicsPipelineId){0};
+    }
+    if (requestOut != nullptr)
+    {
+        *requestOut = (mrhiRequestId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

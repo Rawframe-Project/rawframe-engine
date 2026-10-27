@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Vulkan objects made outside the library (maul-rhi/vulkan.h, mrhi-0018): the
-// functions an OpenXR program calls, answered by the Vulkan driver and
-// unsupported on every other.
+// Vulkan objects made outside the library (maul-rhi/vulkan.h): the functions
+// an OpenXR program calls, answered by the Vulkan driver and unsupported on
+// every other.
 
 #include "device_core.h"
 #include "encoder_core.h"

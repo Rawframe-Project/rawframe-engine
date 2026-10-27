@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // A two-level segregated fit allocator over offsets (TLSF: Masmano,
-// Ripoll, Crespo and Real, ECRTS 2004; docs/references.md), for GPU
+// Ripoll, Crespo and Real, ECRTS 2004; docs/internals/memory.md), for GPU
 // memory a driver suballocates: a pool's free ranges, across any number
 // of the pool's blocks, in lists by size class found with two bit
 // scans, so allocating and freeing take constant time and freed

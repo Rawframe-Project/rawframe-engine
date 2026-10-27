@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The extension chain a def carries (mrhi-0005): critical structs the
-// library does not know are refused, hints it does not know are
-// skipped, and the chain's depth is bounded, which also stops a cycle.
+// The extension chain a def carries: critical structs the library does
+// not know are refused, hints it does not know are skipped, and the
+// chain's depth is bounded, which also stops a cycle.
 
 #ifndef MAUL_RHI_SRC_CHAIN_H
 #define MAUL_RHI_SRC_CHAIN_H
@@ -17,8 +17,7 @@
 // mrhi_errorInvalid for a node without a type, mrhi_errorUnsupported
 // for an unknown critical type, mrhi_errorCapacity for more than
 // depthLimit nodes. known may be NULL when knownCount is 0; listing
-// MRHI_STRUCT_DRIVER_DEFINED accepts every driver-defined type
-// (mrhi-0024).
+// MRHI_STRUCT_DRIVER_DEFINED accepts every driver-defined type.
 mrhiResult mrhiCheckChain(const mrhiChain* head, const mrhiStructType* known, size_t knownCount,
                           uint32_t depthLimit);
 

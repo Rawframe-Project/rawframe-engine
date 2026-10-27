@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What the encoder's commands share (mrhi-0011): a recording pass found
-// by id, what it records, and records taken from the frame's arena.
+// What the encoder's commands share: a recording pass found by id, what
+// it records, and records taken from the frame's arena.
 
 #ifndef MAUL_RHI_SRC_ENCODER_CORE_H
 #define MAUL_RHI_SRC_ENCODER_CORE_H
@@ -27,9 +27,9 @@ mrhiPassWork mrhiWorkOf(const mrhiFramePass* pass);
 // refusal.
 mrhiFramePass* mrhiRecordingPass(mrhiDevice* device, mrhiPassId id, mrhiResult* statusOut);
 
-// Hands a native pass the program's command buffer (mrhi-0019), once,
-// while it is recorded: success, mrhi_errorState, or a counted misuse
-// for a NULL buffer or a pass that is not native.
+// Hands a native pass the program's command buffer, once, while it is
+// recorded: success, mrhi_errorState, or a counted misuse for a NULL
+// buffer or a pass that is not native.
 mrhiResult mrhiSetNativeCommands(mrhiDevice* device, mrhiPassId id, void* commands);
 
 // The pass the id names, begun and not ended, native or not: NULL with
@@ -37,8 +37,9 @@ mrhiResult mrhiSetNativeCommands(mrhiDevice* device, mrhiPassId id, void* comman
 mrhiFramePass* mrhiOpenPass(mrhiDevice* device, mrhiPassId id, mrhiResult* statusOut);
 
 // Takes count records, at most a chunk's, in the pass's last chunk or a
-// new one: the records, or NULL when the arena is full, which marks the
-// pass so that its frame is never submitted without the command.
+// new one: the records, or NULL when the arena or the staging was full,
+// recorded as a refusal by that limit. A full arena marks the pass so
+// that its frame is never submitted without the command.
 mrhiCommand* mrhiTakeCommands(mrhiDevice* device, mrhiFramePass* pass, uint32_t count);
 
 // The access kinds as bits, for the kinds a command accepts.
