@@ -29,8 +29,9 @@ root="$PWD/third_party"
 # The machine is shared: the check's JOBS, not one job for each core. The
 # native build and the web one may run at once, configured by different
 # trees, so each takes half; trees waiting on the same build's lock use no
-# processor.
-jobs=$(("${JOBS:-8}" / 2))
+# processor. No quotes inside the arithmetic: macOS's bash 3.2 refuses
+# them.
+jobs=$((${JOBS:-8} / 2))
 [ "$jobs" -ge 1 ] || jobs=1
 # OpenSSL's name for this machine, or Android's.
 case "$(if [ -n "$android_ndk" ]; then echo Android; elif [ -n "$ios" ]; then echo iOS; else echo "$(uname -s)-$(uname -m)"; fi)" in
