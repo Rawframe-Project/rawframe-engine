@@ -699,11 +699,12 @@ result::Result<std::unique_ptr<Physics3D>> Physics3D::create(const Physics3DSett
     // Every hit is told, however slow: Contact3D says how hard.
     definition.hitEventThreshold = 0;
     if (const m3Result kMade = m3CreateWorld(&definition, &state->physics); kMade == m3_errorCapacity) {
-        // Maul3D refuses capacities whose snapshot could pass 2 GiB,
-        // well inside the 2^20 each that the settings allow on their own.
-        return refuse(result::ErrorClass::InvalidArgument,
-                      Physics3DError::InvalidSettings,
-                      "physics settings: capacities past what one physics world can hold");
+        // Maul3D answers the same for capacities whose snapshot could pass
+        // 2 GiB, well inside the 2^20 each the settings allow on their own,
+        // and for an allocator that refused the world; both are named.
+        return refuse(result::ErrorClass::ResourceExhausted,
+                      Physics3DError::Capacity,
+                      "no physics world of these capacities: past what one world can hold, or no memory for it");
     } else if (kMade != m3_success) {
         return refuse(result::ErrorClass::ResourceExhausted,
                       Physics3DError::Capacity,

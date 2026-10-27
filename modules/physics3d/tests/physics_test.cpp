@@ -12,6 +12,7 @@
 #include <cstring>
 #include <numbers>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 using namespace rawframe;
@@ -359,9 +360,12 @@ RAWFRAME_TEST(SettingsAndDocumentsAreChecked) {
     RAWFRAME_EXPECT(!Physics3D::create({.historyTicks = 1024}).has_value());
     RAWFRAME_EXPECT(Physics3D::create({.bodyCapacity = 1024, .historyTicks = 1024}).has_value());
     // Each capacity within 2^20, but more shapes than one world can
-    // snapshot: refused as settings, not as a process out of room.
+    // snapshot: refused as a world there is no room for, its message
+    // naming the bound as well as memory.
     const auto kHuge = Physics3D::create({.shapeCapacity = 1U << 20U});
-    RAWFRAME_EXPECT(!kHuge.has_value() && kHuge.error().code() == code(Physics3DError::InvalidSettings));
+    RAWFRAME_EXPECT(!kHuge.has_value() && kHuge.error().code() == code(Physics3DError::Capacity) &&
+                    kHuge.error().errorClass() == result::ErrorClass::ResourceExhausted &&
+                    kHuge.error().description().find("past what one world can hold") != std::string_view::npos);
     const auto kBad = Physics3D::create({.collision = {.classes = {{0x1, "one"}, {0x1, "again"}}}});
     RAWFRAME_EXPECT(!kBad.has_value() && kBad.error().code() == physics::code(physics::PhysicsError::InvalidDocument));
 }
