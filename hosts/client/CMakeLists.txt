@@ -118,8 +118,9 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
         # The plaza previewed for an authoring session: the client's own
         # tooling endpoint, with the view grant, attached as a scene's
         # preview, shown the scene's views, split four ways, and let go,
-        # which gives the player's camera back. Four views draw the scene
-        # four times into one frame, past Maul RHI's default frame limits.
+        # which gives the player's camera back. The split's views join the
+        # frame long after the device started, and four of them draw the
+        # scene four times into one frame, past Maul RHI's default limits.
         add_test(NAME client_previews_plaza
                  COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xvfb_run.sh -s "-screen 0 1280x720x24 -br" ${RAWFRAME_SHELL}
                          ${CMAKE_CURRENT_SOURCE_DIR}/tests/previewed.sh $<TARGET_FILE:rawframe_host_dedicated_server>
@@ -131,7 +132,7 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
                              FIXTURES_REQUIRED plaza_content
                              SKIP_REGULAR_EXPRESSION "skip: no device"
                              PASS_REGULAR_EXPRESSION
-                             "\"id\":2,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":true}.*\"id\":3,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":4,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":5,\"answer\":{\"kind\":\"authoring.split\",\"views\":4,\"shown\":true}.*\"id\":6,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":false}.*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
+                             "\"id\":2,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":true}.*\"id\":3,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":4,\"answer\":{\"kind\":\"authoring.view\",[^\n]*\"previewing\":true}.*\"id\":5,\"answer\":{\"kind\":\"authoring.split\",\"views\":4,\"shown\":true}.*\"id\":6,\"answer\":{\"kind\":\"authoring.preview\",\"reopened\":false,\"previewing\":false}.*\"code\":\"scene_drawing_summary\"[^\n]*\"regionFrames\":[1-9][0-9]*.*\"code\":\"scene_summary\"[^\n]*\"framesPreviewed\":[1-9][0-9]*,")
         # The plaza shown on a headset, under Monado's simulated one
         # (tools/xr_run.sh): drawn for both its eyes, its simulated
         # controllers read in both hands, located, and fed to the player's

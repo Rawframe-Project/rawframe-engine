@@ -255,16 +255,13 @@ result::Status Play::launch() {
                          "render.height",
                          "render.stream",
                          "render.frame_rate",
-                         "preview.views",
                          "preview.flight",
                          "preview.edited"});
         const std::string kWidth = std::to_string((*settings_.viewport)[0]);
         const std::string kHeight = std::to_string((*settings_.viewport)[1]);
         viewported = "window.visible = false\nwindow.width = " + kWidth + "\nwindow.height = " + kHeight +
                      "\nrender.offscreen = true\nrender.read_every = 1\nrender.width = " + kWidth +
-                     "\nrender.height = " + kHeight + "\nrender.stream = " + (kAt / "picture").string() +
-                     // Split four ways at most, in the viewport only.
-                     "\npreview.views = 4\n" +
+                     "\nrender.height = " + kHeight + "\nrender.stream = " + (kAt / "picture").string() + "\n" +
                      // Edited, its camera flown as an editor's.
                      // and its picture still while time alone moves it.
                      (settings_.edited ? "preview.flight = true\npreview.edited = true\n" : "") +
@@ -308,14 +305,10 @@ result::Status Play::launch() {
     // The other players: clients as the first, each in a window of
     // its own set down and right of the last, with no tooling endpoint and
     // nothing of the viewport's.
-    const std::string kOthersGiven = settings_.link + without(contents(settings_.clientSettings),
-                                                              {"window.visible",
-                                                               "window.x",
-                                                               "window.y",
-                                                               "render.offscreen",
-                                                               "render.read_every",
-                                                               "render.stream",
-                                                               "preview.views"});
+    const std::string kOthersGiven =
+        settings_.link +
+        without(contents(settings_.clientSettings),
+                {"window.visible", "window.x", "window.y", "render.offscreen", "render.read_every", "render.stream"});
     for (std::uint32_t player = 2; player <= std::min<std::uint32_t>(settings_.players, 4); ++player) {
         const std::string kName = "client-" + std::to_string(player);
         RAWFRAME_TRY(written(kAt / (kName + ".conf"),

@@ -53,10 +53,6 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kHeadsetEyes.name,
                                        view::kHeadsetHands.name};
 
-/// The most looks a split preview draws beside its own: a preview
-/// splits at most four ways, its window's quarters.
-constexpr std::size_t kMostOthers = 3;
-
 /// Draws one client's mirrored World in 3D each frame through its player's
 /// camera: the extract stage in `presentation_extract`, the queue stage in
 /// `present`. Idle without a game that has models or without clients. The
@@ -154,15 +150,6 @@ public:
         if ((aspect_.has_value() || renderScale_.scale() < 1 || renderScale_.follows()) && regions_.empty()) {
             regions_.push_back(world_kest::GameRegion{});
             regionFrames_.resize(1);
-        }
-        // A preview may be split as many ways as its window allows,
-        // which an editor playing it asks for: its regions are placed from
-        // the start, shown only while it is, as a device joins its regions'
-        // views once. A client that holds idle region views draws its window
-        // unlit, so no other client is given them.
-        previewViews_ = preview_ != nullptr ? std::clamp<std::size_t>(preview_->views(), 1, kMostOthers + 1) : 1;
-        if (previewViews_ > 1 && regionFrames_.size() < previewViews_) {
-            regionFrames_.resize(previewViews_);
         }
         cameras_ = GameCameras(*game);
         textureViews_ = TextureViews(game->view, files->description().renderTextures);
@@ -706,7 +693,7 @@ private:
     /// looks; none while the preview is not split.
     void extractSplits(world::World& world, bool owned) {
         const bool kSplit = owned && preview_ != nullptr && preview_->looking().has_value();
-        splits_ = kSplit ? std::min(preview_->others().size(), previewViews_ - 1) : 0;
+        splits_ = kSplit ? preview_->others().size() : 0;
         for (std::size_t at = 0; at < splits_; ++at) {
             if (at == splitScenes_.size()) {
                 auto made = Scene::create(world.registry(), settings_);
@@ -897,7 +884,6 @@ private:
     std::vector<LocalPlayer> localPlayers_;
     /// A split preview's other looks: how many this frame, each's
     /// scene and camera, and the frames they drew.
-    std::size_t previewViews_ = 1;
     std::size_t splits_ = 0;
     std::vector<std::unique_ptr<Scene>> splitScenes_;
     std::vector<SceneCamera> splitCameras_;

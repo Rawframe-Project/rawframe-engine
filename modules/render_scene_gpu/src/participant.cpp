@@ -27,9 +27,11 @@ constexpr std::string_view kMaybe[] = {
     render::kFrames.name, render_scene::kSceneFrames.name, view::kPreviewCamera.name};
 constexpr std::string_view kProvided[] = {kSceneCaptures.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
-/// The scene's place in a frame: first; and its post
-/// processes over the composed picture's, after the canvas.
+/// The scene's place in a frame: first; split-screen players' views
+/// after it, each copied into its region, however late it joined; and its
+/// post processes over the composed picture's, after the canvas.
 constexpr std::uint32_t kOrder = 0;
+constexpr std::uint32_t kRegionOrder = 1;
 constexpr std::uint32_t kComposedOrder = 2;
 
 /// Records the scene's frames into the frames `render` makes: in
@@ -129,21 +131,6 @@ public:
                 // is drawn again.
                 scene_->missed(kTexture.id);
             }
-            // In split-screen, each local player's view, in the players'
-            // order, after the render textures.
-            for (const render_scene::RegionFrame& kRegion : scene_->regionFrames()) {
-                auto view = TextureView::create(*device, *renderer_, 0, scaled(kRegion.width), scaled(kRegion.height));
-                if (!view.has_value()) {
-                    failed_ = true;
-                    emitter_.log(diagnostics::Severity::Error,
-                                 kFailed,
-                                 "a local player's view could not be drawn: nothing more is",
-                                 {diagnostics::field("reason", std::string{view.error().description()})});
-                    return;
-                }
-                frames_->join(**view, kOrder);
-                regions_.push_back(std::move(*view));
-            }
             frames_->join(*renderer_, kOrder);
             frames_->join(renderer_->composed(), kComposedOrder);
         }
@@ -195,6 +182,27 @@ public:
             }
         }
         const std::span<const render_scene::RegionFrame> kRegions = scene_->regionFrames();
+        // In split-screen, each local player's view, in the players' order,
+        // made as its region is first placed: a split preview's while it
+        // splits, a game's players' from their first frame.
+        while (regions_.size() < kRegions.size()) {
+            const render_scene::RegionFrame& kRegion = kRegions[regions_.size()];
+            if (kRegion.width == 0 || kRegion.height == 0) {
+                break;
+            }
+            auto view =
+                TextureView::create(*frames_->device(), *renderer_, 0, scaled(kRegion.width), scaled(kRegion.height));
+            if (!view.has_value()) {
+                failed_ = true;
+                emitter_.log(diagnostics::Severity::Error,
+                             kFailed,
+                             "a local player's view could not be drawn: nothing more is",
+                             {diagnostics::field("reason", std::string{view.error().description()})});
+                return;
+            }
+            frames_->join(**view, kRegionOrder);
+            regions_.push_back(std::move(*view));
+        }
         for (std::size_t at = 0; at < regions_.size() && at < kRegions.size(); ++at) {
             const render_scene::RegionFrame& kRegion = kRegions[at];
             const bool kShown = kRegion.width != 0 && kRegion.height != 0;
