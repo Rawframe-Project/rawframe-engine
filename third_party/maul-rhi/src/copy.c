@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Copies (mrhi-0011): between buffers, buffers and textures, and
-// textures, in a pass without targets, each checked as WebGPU checks it
-// and against the copy accesses the pass declares.
+// Copies: between buffers, buffers and textures, and textures, in a
+// pass without targets, each checked as WebGPU checks it and against
+// the copy accesses the pass declares.
 
 #include "copy_core.h"
 

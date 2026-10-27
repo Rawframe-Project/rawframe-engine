@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The VkDeviceCreateInfo a device def makes (mrhi-0003, mrhi-0018): one queue
-// with graphics and compute, the floor's features and the granted ones,
-// the swapchain extensions offered, mutable descriptors for
-// heterogeneous heaps, and the def's own extensions
-// (mrhiDeviceVulkanExtensions). The driver opens devices from it, and
-// mrhiDescribeVulkanDevice gives it to a program whose OpenXR runtime
-// makes the device.
+// The VkDeviceCreateInfo a device def makes: one queue with graphics and
+// compute, the floor's features and the granted ones, the swapchain
+// extensions offered, mutable descriptors for heterogeneous heaps, and the
+// def's own extensions (mrhiDeviceVulkanExtensions). The driver opens devices
+// from it, and mrhiDescribeVulkanDevice gives it to a program whose OpenXR
+// runtime makes the device.
 
 #ifndef MAUL_RHI_SRC_VULKAN_RECIPE_H
 #define MAUL_RHI_SRC_VULKAN_RECIPE_H

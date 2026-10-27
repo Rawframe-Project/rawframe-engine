@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Surfaces (mrhi-0007): instance ids made from exactly one chained
-// native source, which the instance's driver turns into its surface,
-// and what each adapter can do with them.
+// Surfaces: instance ids made from exactly one chained native
+// source, which the instance's driver turns into its surface, and
+// what each adapter can do with them.
 
 #include "chain.h"
 #include "device_core.h"
@@ -24,8 +24,8 @@ static const mrhiStructType s_sources[] = {
 #ifdef MAUL_RHI_TEST_DRIVER
     mrhi_structSurfaceSourceTest,
 #endif
-    // Last: an outside driver's own sources (mrhi-0024), which only an
-    // instance of such a driver accepts.
+    // Last: an outside driver's own sources, which only an instance of
+    // such a driver accepts.
     MRHI_STRUCT_DRIVER_DEFINED,
 };
 
@@ -111,6 +111,10 @@ static const mrhiChain* CheckDef(mrhiInstance* instance, const mrhiSurfaceDef* d
 mrhiResult mrhiCreateSurface(mrhiInstance* instance, const mrhiSurfaceDef* def,
                              mrhiSurfaceId* surfaceOut)
 {
+    if (surfaceOut != nullptr)
+    {
+        *surfaceOut = (mrhiSurfaceId){0};
+    }
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;

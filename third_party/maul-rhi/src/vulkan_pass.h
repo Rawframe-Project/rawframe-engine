@@ -15,14 +15,29 @@ typedef struct mrhiVulkanRecording
     mrhiVulkanFrames* frames;
     mrhiVulkanSlot* slot;
     const mrhiDriverFrame* frame;
-    // The frame's serial, and the occlusion query open in the pass.
-    uint64_t serial;
+    // The frame's recording (mrhiVulkanFrames' recorded), and the
+    // occlusion query open in the pass.
+    uint64_t recorded;
     uint32_t openQuery;
     // The pass recording, and the pipeline it set last.
     const mrhiDriverPass* pass;
     const mrhiVulkanPipeline* pipeline;
-    // The first failure: views or descriptors the device could not make.
+    // By lane: whether the frame opened a batch on it, the value its last
+    // closed batch signals, the batch it records into (an index plus one,
+    // 0 for none), the command buffer it records into now, and the ones
+    // that batch has ended so far.
+    bool laneStarted[MRHI_VULKAN_LANES];
+    uint64_t laneLast[MRHI_VULKAN_LANES];
+    uint32_t laneBatch[MRHI_VULKAN_LANES];
+    VkCommandBuffer laneCommands[MRHI_VULKAN_LANES];
+    VkCommandBufferSubmitInfo laneSubmits[MRHI_VULKAN_LANES][MRHI_VULKAN_BATCH_SUBMITS];
+    uint32_t laneSubmitCount[MRHI_VULKAN_LANES];
+    // The first failure: views or descriptors the device could not make,
+    // or a command buffer it could not begin or end; and with a capacity
+    // status, the budget that ran out.
     mrhiResult status;
+    mrhiDiagnosticCode budget;
+    VkResult result;
 } mrhiVulkanRecording;
 
 // A frame resource's image and def, and its buffer.

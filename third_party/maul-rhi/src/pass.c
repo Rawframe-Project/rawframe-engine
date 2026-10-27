@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Passes (mrhi-0008): each declares every resource it uses, as an access
-// or a target, checked against the resource and the pass's class. Within
-// a pass a subresource is either only read or written by one use
-// (WebGPU's usage scopes), and a declared resource is written before it
-// is read.
+// Passes: each declares every resource it uses, as an access or a
+// target, checked against the resource and the pass's class. Within a
+// pass a subresource is either only read or written by one use (WebGPU's
+// usage scopes), and a declared resource is written before it is read.
 
 #include "capabilities_core.h"
 #include "device_core.h"
@@ -138,7 +137,7 @@ static bool IsKindAllowed(mrhiAccessKind kind, bool buffer, mrhiPassClass passCl
                       kind == mrhi_accessIndex || kind == mrhi_accessIndirect ||
                       kind == mrhi_accessQueryResolve;
     bool copy = kind == mrhi_accessCopySource || kind == mrhi_accessCopyDestination;
-    // Queries are resolved only in graphics passes (mrhi-0012).
+    // Queries are resolved only in graphics passes.
     bool graphicsOnly =
         kind == mrhi_accessVertex || kind == mrhi_accessIndex || kind == mrhi_accessQueryResolve;
     bool classOk = passClass == mrhi_passGraphics ||
@@ -254,7 +253,7 @@ static bool Agrees(TargetShape* shape, const mrhiTextureDef* def, uint32_t mip)
     return shape->width == width && shape->height == height && shape->samples == def->sampleCount;
 }
 
-// The views a pass def renders: 1 for 0 (mrhi-0020).
+// The views a pass def renders: 1 for 0.
 static uint32_t ViewsOf(const mrhiPassDef* def)
 {
     return def->viewCount > 1 ? def->viewCount : 1;
@@ -485,10 +484,9 @@ static uint32_t MakeUses(const mrhiDevice* device, const mrhiPassDef* def, mrhiR
     return *statusOut == mrhi_success ? count : 0;
 }
 
-// Checks what a def says before its uses: success, or the refusal.
-// Checks a native pass's def (mrhi-0019): on a Vulkan, D3D12 or Metal device, without
-// targets, queries or a heap, its accesses to imported resources only,
-// and room for it in the frame.
+// Checks what a def says before its uses: success, or the refusal. Checks a native
+// pass's def: on a Vulkan, D3D12 or Metal device, without targets, queries or a heap,
+// its accesses to imported resources only, and room for it in the frame.
 static mrhiResult CheckNative(mrhiDevice* device, const mrhiPassDef* def)
 {
     if (device->adapterInfo.driver != mrhi_driverVulkan &&
@@ -517,7 +515,8 @@ static mrhiResult CheckNative(mrhiDevice* device, const mrhiPassDef* def)
     {
         natives += device->framePasses[i].native ? 1u : 0u;
     }
-    return natives < MRHI_NATIVE_PASSES ? mrhi_success : mrhi_errorCapacity;
+    return natives < MRHI_NATIVE_PASSES ? mrhi_success
+                                        : mrhiDeviceFull(device, mrhi_diagnosticNativePasses);
 }
 
 static mrhiResult CheckDef(mrhiDevice* device, const mrhiPassDef* def)
@@ -556,10 +555,13 @@ static mrhiResult CheckDef(mrhiDevice* device, const mrhiPassDef* def)
     // A pass has at most its accesses, two uses per color target and its
     // depth target.
     uint64_t most = (uint64_t)def->accessCount + 2u * def->colorTargetCount + 1u;
-    if (device->framePassCount == device->deviceLimits.framePasses ||
-        most > device->deviceLimits.frameAccesses - device->frameUseCount)
+    if (device->framePassCount - MRHI_LIBRARY_PASSES == device->deviceLimits.framePasses)
     {
-        return mrhi_errorCapacity;
+        return mrhiDeviceFull(device, mrhi_diagnosticFramePasses);
+    }
+    if (most > device->deviceLimits.frameAccesses - device->frameUseCount)
+    {
+        return mrhiDeviceFull(device, mrhi_diagnosticFrameAccesses);
     }
     return def->native ? CheckNative(device, def) : mrhi_success;
 }
@@ -593,6 +595,10 @@ static void MeasureTargets(const mrhiDevice* device, mrhiFramePass* pass)
 
 mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* passOut)
 {
+    if (passOut != nullptr)
+    {
+        *passOut = (mrhiPassId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

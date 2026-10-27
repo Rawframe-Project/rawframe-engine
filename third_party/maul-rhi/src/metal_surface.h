@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's surfaces (mrhi-0003): a surface is a CAMetalLayer,
-// a swapchain its configuration, and an image one of its drawables,
-// retained until a frame presents it or the core takes it back.
-// Included by the driver's Objective-C files only.
+// The Metal driver's surfaces: a surface is a CAMetalLayer, a swapchain
+// its configuration, and an image one of its drawables, retained until
+// a frame presents it or the core takes it back. Included by the
+// driver's Objective-C files only.
 
 #ifndef MAUL_RHI_SRC_METAL_SURFACE_H
 #define MAUL_RHI_SRC_METAL_SURFACE_H

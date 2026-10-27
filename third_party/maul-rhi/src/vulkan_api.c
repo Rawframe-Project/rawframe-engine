@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Opens the Vulkan loader by its platform names (mrhi-0003) and reads the
-// driver's functions from it.
+// Opens the Vulkan loader by its platform names and reads the driver's
+// functions from it.
 
 #include "vulkan_api.h"
 

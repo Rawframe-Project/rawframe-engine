@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Vulkan physical devices as adapters (mrhi-0003): the floor a device must
-// meet to be listed, and its facts, features, limits and format caps,
-// as the contract's Vulkan rows map them.
+// Vulkan physical devices as adapters: the floor a device must meet to be
+// listed, and its facts, features, limits and format caps, as the
+// contract's Vulkan rows map them.
 
 #ifndef MAUL_RHI_SRC_VULKAN_ADAPTER_H
 #define MAUL_RHI_SRC_VULKAN_ADAPTER_H

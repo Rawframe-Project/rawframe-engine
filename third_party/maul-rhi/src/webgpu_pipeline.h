@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// WebGPU shaders and pipelines (mrhi-0003): shader modules from the
-// container's WGSL; pipeline layouts from the whole container's
-// reflection, a bind group layout per binding table and the root block
-// as immediates; pipelines made asynchronously, each settling its handle
-// into the device state's queue.
+// WebGPU shaders and pipelines: shader modules from the container's
+// WGSL; pipeline layouts from the whole container's reflection, a bind
+// group layout per binding table and the root block as immediates;
+// pipelines made asynchronously, each settling its handle into the
+// device state's queue.
 
 #ifndef MAUL_RHI_SRC_WEBGPU_PIPELINE_H
 #define MAUL_RHI_SRC_WEBGPU_PIPELINE_H

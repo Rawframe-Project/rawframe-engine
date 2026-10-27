@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Vulkan loader, opened at run time (mrhi-0003): the Khronos headers with
-// no prototypes, and the functions the driver reaches through
+// The Vulkan loader, opened at run time: the Khronos headers with no
+// prototypes, and the functions the driver reaches through
 // vkGetInstanceProcAddr.
 
 #ifndef MAUL_RHI_SRC_VULKAN_API_H
@@ -86,6 +86,8 @@
     X(vkCmdCopyBufferToImage)                                                                      \
     X(vkCmdCopyImageToBuffer)                                                                      \
     X(vkCmdCopyImage)                                                                              \
+    X(vkCmdClearColorImage)                                                                        \
+    X(vkCmdClearDepthStencilImage)                                                                 \
     X(vkCreateDescriptorPool)                                                                      \
     X(vkDestroyDescriptorPool)                                                                     \
     X(vkResetDescriptorPool)                                                                       \
@@ -172,8 +174,8 @@ typedef struct mrhiVulkanDevice
 bool mrhiOpenVulkan(mrhiVulkan* vulkan);
 
 // Reads the global functions through a program's vkGetInstanceProcAddr,
-// opening no loader, for an instance made elsewhere (mrhi-0018): false, with
-// nothing kept, when one is missing.
+// opening no loader, for an instance made elsewhere: false, with nothing
+// kept, when one is missing.
 bool mrhiAdoptVulkan(mrhiVulkan* vulkan, PFN_vkGetInstanceProcAddr entry);
 
 // Reads the instance's functions: false when one is missing.

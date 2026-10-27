@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What compute and graphics pipelines share (mrhi-0010): constant
-// values checked against the reflection, and slots that hold their
+// What compute and graphics pipelines share: constant values
+// checked against the reflection, and slots that hold their
 // reflection, reserve their answer and carry their tag.
 
 #ifndef MAUL_RHI_SRC_PIPELINE_CORE_H
@@ -10,11 +10,13 @@
 
 #include "device_core.h"
 
-// Whether a pipeline's constant values suit its reflection: each id
-// known, given once, with a value its type holds, and every constant
-// without a default given.
-bool mrhiAreConstantsValid(const mrhiReflection* reflection, const mrhiConstantValue* values,
-                           uint32_t count);
+// Checks a pipeline's constant values: success, mrhi_errorInvalid counted
+// as misuse for NULL values with a count or an id given twice, or
+// mrhi_errorFormat, counting none, for more values than constants or
+// unless each id is known with a value its type holds and every constant
+// without a default is given.
+mrhiResult mrhiCheckConstants(mrhiDevice* device, const mrhiReflection* reflection,
+                              const mrhiConstantValue* values, uint32_t count);
 
 // Checks a pipeline def's cookie, chain and label, the device, and its
 // shader: the shader, or NULL with the refusal, invalid input counted as

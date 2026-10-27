@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's names (mrhi-0003): tables indexed by the
-// contract's values, which the core has checked. D3D12 has no ETC2 or
-// ASTC formats, which the contract maps as absent.
+// The D3D12 driver's names: tables indexed by the contract's values,
+// which the core has checked. D3D12 has no ETC2 or ASTC formats,
+// which the contract maps as absent.
 
 #include "d3d12_names.h"
 

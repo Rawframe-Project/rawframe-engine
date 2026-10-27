@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Encoders (mrhi-0011): a kept pass of a compiled frame, begun by the
-// thread that claims it, records commands into chunks of the frame's
-// arena, which it takes with one atomic counter, and is ended before
-// the frame is submitted. Every command is checked against its pass.
+// Encoders: a kept pass of a compiled frame, begun by the thread that
+// claims it, records commands into chunks of the frame's arena, which
+// it takes with one atomic counter, and is ended before the frame is
+// submitted. Every command is checked against its pass.
 
 #include "encoder_core.h"
 #include "invariant.h"
@@ -33,7 +33,7 @@ static mrhiFramePass* Find(mrhiDevice* device, mrhiPassId id, mrhiResult* status
         *statusOut = mrhi_errorState;
         return nullptr;
     }
-    if (id.generation != device->frameSerial || id.index1 == 0 ||
+    if (id.generation != device->frameSerial || id.index1 <= MRHI_LIBRARY_PASSES ||
         id.index1 > device->framePassCount)
     {
         *statusOut = mrhi_errorStale;
@@ -105,7 +105,7 @@ mrhiResult mrhiSetNativeCommands(mrhiDevice* device, mrhiPassId id, void* comman
 mrhiFramePass* mrhiRecordingPass(mrhiDevice* device, mrhiPassId id, mrhiResult* statusOut)
 {
     mrhiFramePass* pass = mrhiOpenPass(device, id, statusOut);
-    // A native pass's commands are the program's own (mrhi-0018).
+    // A native pass's commands are the program's own.
     if (pass != nullptr && pass->native)
     {
         *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticRecordedInNativePass);
@@ -117,8 +117,9 @@ mrhiFramePass* mrhiRecordingPass(mrhiDevice* device, mrhiPassId id, mrhiResult* 
 mrhiCommand* mrhiTakeCommands(mrhiDevice* device, mrhiFramePass* pass, uint32_t count)
 {
     MRHI_ASSERT(count <= MRHI_CHUNK_COMMANDS);
-    if (pass->overflowed)
+    if (pass->overflow != 0)
     {
+        mrhiRecordDiagnostic(&device->diagnostics, pass->overflow);
         return nullptr;
     }
     mrhiCommandChunk* chunk =
@@ -127,9 +128,10 @@ mrhiCommand* mrhiTakeCommands(mrhiDevice* device, mrhiFramePass* pass, uint32_t 
     {
         uint32_t index =
             atomic_fetch_add_explicit(&device->frameChunksTaken, 1, memory_order_relaxed);
-        if (index >= device->frameChunkCount)
+        if (index >= device->frameChunkLimit)
         {
-            pass->overflowed = true;
+            pass->overflow = mrhi_diagnosticFrameCommandBytes;
+            mrhiRecordDiagnostic(&device->diagnostics, pass->overflow);
             return nullptr;
         }
         mrhiCommandChunk* fresh = &device->frameChunks[index];
@@ -148,6 +150,7 @@ mrhiCommand* mrhiTakeCommands(mrhiDevice* device, mrhiFramePass* pass, uint32_t 
     }
     mrhiCommand* records = &chunk->commands[chunk->count];
     chunk->count += count;
+    MRHI_ASSERT(chunk->count <= MRHI_CHUNK_COMMANDS);
     return records;
 }
 
@@ -491,12 +494,15 @@ static mrhiResult Label(mrhiDevice* device, mrhiPassId id, mrhiCommandType type,
     {
         return status;
     }
-    mrhiCommand command = {.type = (uint16_t)type, .b = length};
     if (type == mrhiCommandPushDebugGroup)
     {
         ++pass->debugDepth;
     }
-    return MAUL_RHI_LABELS ? Record(device, pass, command, label, length) : mrhi_success;
+    // A build without labels checks them and records nothing.
+    return MAUL_RHI_LABELS
+               ? Record(device, pass, (mrhiCommand){.type = (uint16_t)type, .b = length}, label,
+                        length)
+               : mrhi_success;
 }
 
 mrhiResult mrhiPushDebugGroup(mrhiDevice* device, mrhiPassId pass, const char* label,

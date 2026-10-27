@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A diagnostic queue (mrhi-0027): the records of an instance's or a
-// device's refusals, kept from the first until the program takes them,
-// up to a capacity the program chose.
+// A diagnostic queue: the records of an instance's or a device's
+// refusals, kept from the first until the program takes them, up to a
+// capacity the program chose.
 
 #ifndef MRHI_DIAGNOSTICS_H
 #define MRHI_DIAGNOSTICS_H

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's views and samplers (mrhi-0003). A view's record
-// holds a shader resource view where it is sampled and an unordered
-// access view of its first mip where it is stored to, written in its
-// slot of the CPU-only heap when it is made. A 2D view of a texture's
-// first layer is a 2D view, and one of a later layer a one-layer array,
-// since only arrays name their first layer; cubes alike. A stencil view
-// reads the stencil plane.
+// The D3D12 driver's views and samplers. A view's record holds a shader
+// resource view where it is sampled and an unordered access view of its
+// first mip where it is stored to, written in its slot of the CPU-only
+// heap when it is made. A 2D view of a texture's first layer is a 2D
+// view, and one of a later layer a one-layer array, since only arrays
+// name their first layer; cubes alike. A stencil view reads the stencil
+// plane.
 
 #include "d3d12_names.h"
 #include "d3d12_resource.h"

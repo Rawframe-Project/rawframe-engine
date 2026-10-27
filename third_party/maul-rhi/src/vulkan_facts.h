@@ -2,9 +2,9 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // What a Vulkan physical device reports, and what the contract makes of
-// it (mrhi-0003): whether the device meets the driver's floor, and its
-// features and limits as the contract's Vulkan rows map them. Nothing
-// here calls Vulkan, so a test can give any device's facts.
+// it: whether the device meets the driver's floor, and its features and
+// limits as the contract's Vulkan rows map them. Nothing here calls
+// Vulkan, so a test can give any device's facts.
 
 #ifndef MAUL_RHI_SRC_VULKAN_FACTS_H
 #define MAUL_RHI_SRC_VULKAN_FACTS_H

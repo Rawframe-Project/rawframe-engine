@@ -63,11 +63,11 @@ struct mrhiInstance
     uint64_t misuse;
     mrhiDiagnosticQueue diagnostics;
     // No driver when its vtable is NULL; external for one the program
-    // made (mrhi-0024), whose adapters the core reports as such.
+    // made, whose adapters the core reports as such.
     mrhiInstanceDriver driver;
     bool external;
-    // Breaches of the SPI the validation layer found (mrhi-0025), its
-    // devices' included, which may count on their threads.
+    // Breaches of the SPI the validation layer found, its devices'
+    // included, which may count on their threads.
     _Atomic uint64_t driverFaults;
     uint32_t nextRequest;
     uint32_t deviceCount;

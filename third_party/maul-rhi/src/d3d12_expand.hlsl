@@ -2,11 +2,10 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Expands counted multi-draw records for a D3D12 pipeline that reads its
-// first vertex or instance (mrhi-0020): each record of `words` 32-bit
-// words is written after a copy of the two words at `info` in it, the
-// base vertex and first instance its command signature sets as root
-// constants. tools/gen_kernels.py compiles it to
-// src/generated/d3d12_expand.h.
+// first vertex or instance: each record of `words` 32-bit words is
+// written after a copy of the two words at `info` in it, the base vertex
+// and first instance its command signature sets as root constants.
+// tools/gen_kernels.py compiles it to src/generated/d3d12_expand.h.
 
 #define EXPAND_ROOT                                                                                \
     "RootConstants(num32BitConstants=3, b0), SRV(t0), UAV(u0)"

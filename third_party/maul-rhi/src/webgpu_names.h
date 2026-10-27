@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The WebGPU names of the contract's features, limits and formats, as
-// its WebGPU rows give them (mrhi-0006).
+// its WebGPU rows give them.
 
 #ifndef MAUL_RHI_SRC_WEBGPU_NAMES_H
 #define MAUL_RHI_SRC_WEBGPU_NAMES_H

@@ -44,9 +44,8 @@ static const mrhiStructType s_instanceStructs[] = {
     mrhi_structNone,
 };
 
-// Whether the def's Vulkan structs are well formed (mrhi-0018): name lists,
-// an adopted instance, and no extra extensions for an instance the
-// program made.
+// Whether the def's Vulkan structs are well formed: name lists, an adopted
+// instance, and no extra extensions for an instance the program made.
 static bool AreVulkanStructsValid(const mrhiInstanceDef* def)
 {
     const mrhiInstanceVulkanAdopt* adopt =
@@ -61,7 +60,7 @@ static bool AreVulkanStructsValid(const mrhiInstanceDef* def)
 }
 
 // Whether the def asks for more than one driver: the test driver, an
-// external one (mrhi-0024), or the Vulkan driver through its structs.
+// external one, or the Vulkan driver through its structs.
 static bool MixesDrivers(const mrhiInstanceDef* def)
 {
     bool vulkan = mrhiFindStruct(def->next, mrhi_structInstanceVulkanAdopt) != nullptr ||
@@ -71,18 +70,23 @@ static bool MixesDrivers(const mrhiInstanceDef* def)
     return (vulkan && test) || (external && (vulkan || test));
 }
 
+// The cookie first and the ABI version second, before anything else of the
+// def is read: a def of another release may have another layout.
 static mrhiResult CheckDef(const mrhiInstanceDef* def)
 {
-    const mrhiInstanceLimits* limits = &def->limits;
-    if (def->cookie != MRHI_INSTANCE_DEF_COOKIE || limits->chainDepth == 0 ||
-        limits->notifications == 0 || limits->adapters == 0 || limits->surfaces == 0 ||
-        !mrhiIsAllocatorValid(&def->allocator))
+    if (def->cookie != MRHI_INSTANCE_DEF_COOKIE)
     {
         return mrhi_errorInvalid;
     }
-    if (def->contractVersion != MRHI_CONTRACT_VERSION)
+    if (def->abiVersion != MRHI_ABI_VERSION)
     {
         return mrhi_errorVersion;
+    }
+    const mrhiInstanceLimits* limits = &def->limits;
+    if (limits->chainDepth == 0 || limits->notifications == 0 || limits->adapters == 0 ||
+        limits->surfaces == 0 || !mrhiIsAllocatorValid(&def->allocator))
+    {
+        return mrhi_errorInvalid;
     }
     size_t accepted = sizeof(s_instanceStructs) / sizeof(s_instanceStructs[0]) - 1;
     mrhiResult chain = mrhiCheckChain(def->next, s_instanceStructs, accepted, limits->chainDepth);
@@ -151,7 +155,7 @@ static mrhiInstance* Allocate(const mrhiInstanceDef* def)
 }
 
 // Starts the driver the def's chain asks for, otherwise the build's
-// native driver (mrhi-0003); no driver where there is neither.
+// native driver; no driver where there is neither.
 static mrhiResult StartDriver(mrhiInstance* instance, const mrhiInstanceDef* def)
 {
     for (const mrhiChain* node = def->next; node != nullptr; node = node->next)

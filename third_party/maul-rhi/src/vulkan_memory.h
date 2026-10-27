@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A Vulkan device's memory for its objects (mrhi-0003): pools per
-// memory type and kind (buffers apart from textures, so that
-// bufferImageGranularity never applies) suballocated with TLSF from
-// blocks, and dedicated allocations for what the driver wants alone or
-// is over half a block. Its bookkeeping lies in arrays the device sizes
-// from its limits when it is made.
+// A Vulkan device's memory for its objects: pools per memory type and
+// kind (buffers apart from textures, so that bufferImageGranularity
+// never applies) suballocated with TLSF from blocks, and dedicated
+// allocations for what the driver wants alone or is over half a block.
+// Its bookkeeping lies in arrays the device sizes from its limits when
+// it is made.
 
 #ifndef MAUL_RHI_SRC_VULKAN_MEMORY_H
 #define MAUL_RHI_SRC_VULKAN_MEMORY_H

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The device as the core sees it (mrhi-0004): its instance, what it was
-// granted, its state and its driver.
+// The device as the core sees it: its instance, what it was granted,
+// its state and its driver.
 
 #ifndef MAUL_RHI_SRC_DEVICE_CORE_H
 #define MAUL_RHI_SRC_DEVICE_CORE_H
@@ -66,11 +66,11 @@ typedef struct mrhiSamplerSlot
     uint32_t heapRefs;
 } mrhiSamplerSlot;
 
-// A heap entry as its heap keeps it (mrhi-0015): the view, buffer or
-// sampler slot it names and that slot's generation, 0 for an empty
-// entry; a buffer's range; its kind and whether it is writable; and the
-// token of the last frame submitted when it was emptied, 0 when no
-// frame can still read it.
+// A heap entry as its heap keeps it: the view, buffer or sampler slot
+// it names and that slot's generation, 0 for an empty entry; a buffer's
+// range; its kind and whether it is writable; and the token of the last
+// frame submitted when it was emptied, 0 when no frame can still read
+// it.
 typedef struct mrhiHeapEntrySlot
 {
     uint32_t object;
@@ -104,12 +104,22 @@ typedef struct mrhiQuerySetSlot
     mrhiQueryType type;
 } mrhiQuerySetSlot;
 
-// A buffer as its device keeps it.
+// The passes of every frame that are the library's own, before the
+// program's: the first zeroes the buffers no frame has run with yet, and
+// is culled when the frame imports none.
+#define MRHI_LIBRARY_PASSES 1
+
+// A buffer as its device keeps it: whether no submitted frame has
+// zeroed it yet, which its first frame's first pass does.
 typedef struct mrhiBufferSlot
 {
     uint64_t handle;
     uint64_t size;
     mrhiBufferUsage usage;
+    bool fresh;
+    // Whether the state frames left it in is the one the first pass's
+    // clear left, no program pass having used it since.
+    bool zeroState;
     mrhiImport import;
     // The state frames leave it in.
     mrhiResourceState state;
@@ -124,6 +134,10 @@ typedef struct mrhiTextureSlot
     uint64_t handle;
     mrhiTextureDef def;
     uint32_t firstView;
+    // Whether no submitted frame has imported it, so the next that does
+    // zeroes it first; an adopted image and a transient texture never
+    // are.
+    bool fresh;
     mrhiImport import;
     // The state frames leave it in, and the one every frame ends an
     // adopted image in (undefined for the others).
@@ -181,6 +195,10 @@ typedef struct mrhiFrameResource
     uint64_t image;
     // Whether a pass declared so far writes it; imports count as written.
     bool written;
+    // Whether it begins the program's passes in the state the first
+    // pass's clear leaves, in this frame or carried from an earlier one:
+    // the barrier its first program use may then take is the library's.
+    bool zeroState;
     // Whether a kept pass needs it, and the usages kept passes make of
     // it, found by the compile, with the plan's transience, its first
     // and last kept passes (0 for none), the state its first use puts
@@ -192,13 +210,18 @@ typedef struct mrhiFrameResource
     uint32_t lastPass;
     mrhiResourceState firstState;
     mrhiResourceState finalState;
+    // Its last kept pass of each class, 0 for none.
+    uint32_t lastPassOf[MRHI_PASS_CLASSES];
     // Where the compile placed a declared resource in the frame's memory.
     bool placed;
     uint64_t memoryOffset;
     uint64_t memoryBytes;
 } mrhiFrameResource;
 
-// A part of a resource in one state, in the compile's map of it.
+// A part of a resource in one state, in the compile's map of it, with,
+// by pass class, the latest kept pass that used it since its state was
+// last set and the latest that set it (frame pass indices plus one, 0 for
+// none): a use racing the part follows its users, any other its setters.
 typedef struct mrhiBox
 {
     uint32_t baseMip;
@@ -207,6 +230,8 @@ typedef struct mrhiBox
     uint32_t layerCount;
     uint8_t planes;
     mrhiResourceState state;
+    uint32_t users[MRHI_PASS_CLASSES];
+    uint32_t setters[MRHI_PASS_CLASSES];
 } mrhiBox;
 
 // The uses a pass makes of a resource beyond the access kinds.
@@ -248,7 +273,7 @@ typedef struct mrhiRenderLayout
     mrhiFormat colors[MRHI_COLOR_TARGETS];
     mrhiFormat depth;
     uint32_t samples;
-    // The views rendered (mrhi-0020): 1 without multiview.
+    // The views rendered: 1 without multiview.
     uint32_t views;
     bool writesDepth;
     bool writesStencil;
@@ -278,7 +303,7 @@ typedef struct mrhiFramePass
     mrhiColorTarget colorTargets[MRHI_COLOR_TARGETS];
     uint32_t colorTargetCount;
     mrhiDepthTarget depthTarget;
-    // The views it renders (mrhi-0020): 1 without multiview.
+    // The views it renders: 1 without multiview.
     uint32_t viewCount;
     // The stores the compile derived for its targets.
     mrhiStoreOp colorStores[MRHI_COLOR_TARGETS];
@@ -286,9 +311,10 @@ typedef struct mrhiFramePass
     mrhiStoreOp stencilStore;
     // Its recording: an mrhiRecording, claimed atomically by the thread
     // that begins it; its chunks (indices plus one, 0 for none); its open
-    // debug groups; whether a command found the arena full; for a render
-    // pass, its targets' layout and size; the pipeline last set (a slot
-    // plus one and its generation, 0 for none); the tables set, by bit,
+    // debug groups; the code of the limit a command or an upload found
+    // full (0 for none); for a render pass, its targets' layout and size;
+    // the pipeline last set (a slot plus one and its generation, 0 for
+    // none); the tables set, by bit,
     // with the digests of the containers they were set under; and the
     // index buffer's format (none when unset) and bytes. Its vertex
     // buffers' bytes are in the device's frameVertexBytes.
@@ -296,7 +322,7 @@ typedef struct mrhiFramePass
     uint32_t firstChunk;
     uint32_t lastChunk;
     uint32_t debugDepth;
-    bool overflowed;
+    mrhiDiagnosticCode overflow;
     mrhiRenderLayout layout;
     uint32_t width;
     uint32_t height;
@@ -312,8 +338,8 @@ typedef struct mrhiFramePass
     uint32_t occlusionGeneration;
     uint64_t occlusionHandle;
     bool occlusionOpen;
-    // Its open statistics query (mrhi-0023): the query and its set's
-    // driver handle, which its end records.
+    // Its open statistics query: the query and its set's driver
+    // handle, which its end records.
     uint32_t statisticsQuery;
     uint64_t statisticsSet;
     bool statisticsOpen;
@@ -326,6 +352,11 @@ typedef struct mrhiFramePass
     uint64_t heap;
     // Its label's bytes, in the device's frameLabels.
     uint32_t labelLength;
+    // By class, the latest kept pass of that class it must follow, found by
+    // the compile (frame pass indices plus one, 0 for none), and the latest
+    // of each class it follows through those and its class's order.
+    uint32_t waitFor[MRHI_PASS_CLASSES];
+    uint32_t follows[MRHI_PASS_CLASSES];
 } mrhiFramePass;
 
 // A surface as the device that configured it keeps it: the surface, the
@@ -460,6 +491,9 @@ struct mrhiDevice
     uint32_t frameResourceCount;
     mrhiFramePass* framePasses;
     uint32_t framePassCount;
+    // The uses of the frame's passes: the program's, frameAccesses of
+    // them, then the first pass's, one for each fresh buffer the frame
+    // imports, added as it imports it.
     mrhiFrameUse* frameUses;
     uint32_t frameUseCount;
     // The compile's plan: the barriers in the order they run, and room to
@@ -467,6 +501,13 @@ struct mrhiDevice
     mrhiBarrier* frameBarriers;
     mrhiBarrier* frameBarrierScratch;
     uint32_t frameBarrierCount;
+    // The program's frameBarriers and one more a resource, and how many
+    // of the planned barriers are the library's: a buffer the first pass
+    // zeroes is left in the copy destination state, so its next program
+    // use, in that frame or a later one, may take a barrier it would not
+    // have taken.
+    uint32_t frameBarrierLimit;
+    uint32_t frameLibraryBarriers;
     uint32_t* frameCounts;
     mrhiBox* frameBoxes;
     uint32_t frameBoxLimit;
@@ -498,15 +539,21 @@ struct mrhiDevice
     uint8_t* frameStaging;
     uint32_t stagingRegion;
     _Atomic uint64_t stagingTaken;
-    // The draws the open frame's counted multi-draws make at most, in all
-    // (mrhi-0020), never past frameIndirectDraws.
+    // The draws the open frame's counted multi-draws make at most, in
+    // all, never past frameIndirectDraws.
     _Atomic uint64_t countedTaken;
     uint32_t* runningRegions;
     // Each pass's vertex buffers' bytes plus one (0 for unset),
     // vertexBuffers per pass.
     uint64_t* frameVertexBytes;
+    // The command arena: the program's frameCommandBytes in chunks, and
+    // beyond them room for the clears of the frame's first pass, which
+    // records first, so the program's passes may take as many chunks as
+    // the program asked for past those.
     mrhiCommandChunk* frameChunks;
     uint32_t frameChunkCount;
+    uint32_t frameProgramChunks;
+    uint32_t frameChunkLimit;
     _Atomic uint32_t frameChunksTaken;
     // Each pass's label, MRHI_LABEL_BYTES apiece; and the tables a
     // submitted frame's view is built in.
@@ -546,6 +593,14 @@ const mrhiDriverAdapter* mrhiCheckDeviceDef(mrhiInstance* instance, const mrhiDe
 // Counts one misuse refused by a check on the device, records it, and
 // returns mrhi_errorInvalid.
 mrhiResult mrhiDeviceMisuse(mrhiDevice* device, mrhiDiagnosticCode code);
+
+// Records bad untrusted data refused by a check on the device, counting no
+// misuse, and returns mrhi_errorFormat.
+mrhiResult mrhiDeviceBadData(mrhiDevice* device, mrhiDiagnosticCode code);
+
+// Records a refusal by the limit a code names, counting no misuse, and
+// returns mrhi_errorCapacity.
+mrhiResult mrhiDeviceFull(mrhiDevice* device, mrhiDiagnosticCode code);
 
 // The head every object def opens with.
 typedef struct mrhiDefHead
@@ -647,15 +702,32 @@ void mrhiDeriveStores(mrhiDevice* device);
 mrhiResult mrhiPlace(mrhiDevice* device);
 
 // Marks the first use of each placed resource that takes memory used
-// earlier in the frame, adding a buffer's barrier for it: success, or
-// mrhi_errorCapacity when the barriers run out.
+// earlier in the frame, adding a buffer's barrier for it, and orders its
+// uses after the other classes' passes that used that memory: success,
+// or mrhi_errorCapacity when the barriers run out.
 mrhiResult mrhiPlanAliasing(mrhiDevice* device);
+
+// Completes the kept passes' waits with the native passes' and finds the
+// passes each follows through them and its class's order.
+void mrhiOrderPasses(mrhiDevice* device);
 
 // Leaves each imported object in the state the submitted frame left it.
 void mrhiApplyFinalStates(mrhiDevice* device);
 
 // Compiles the open frame: culls, derives usages and checks them.
 mrhiResult mrhiCompile(mrhiDevice* device);
+
+// Opens the frame's first pass, the library's own, which zeroes the
+// fresh buffers and textures the frame imports.
+void mrhiBeginZeroPass(mrhiDevice* device);
+
+// Gives the first pass a whole copy destination use of a fresh buffer or
+// texture the frame has just imported, by its frame slot plus one.
+void mrhiZeroOnFirstUse(mrhiDevice* device, uint32_t resource);
+
+// After a frame was submitted: the buffers and textures it imported are
+// no longer fresh.
+void mrhiMarkZeroed(mrhiDevice* device);
 
 // Whether a format can take the usages on the device.
 bool mrhiFormatTakes(const mrhiDevice* device, mrhiFormat format, mrhiTextureUsage usage);
@@ -705,8 +777,8 @@ void mrhiFinishPipeline(mrhiDevice* device, uint64_t tag, mrhiResult outcome);
 // Answers every pending pipeline of a device being lost.
 void mrhiLosePipelines(mrhiDevice* device);
 
-// Loses a device, once (mrhi-0014): its state, the driver's report, then
-// a loss notice and every answer still owed, each mrhi_errorDeviceLost.
+// Loses a device, once: its state, the driver's report, then a loss
+// notice and every answer still owed, each mrhi_errorDeviceLost.
 void mrhiLoseDevice(mrhiDevice* device);
 
 // Passes a driver call's status through, losing the device when it is
@@ -724,8 +796,8 @@ mrhiResult mrhiCheckPassQueries(const mrhiDevice* device, const mrhiPassDef* def
 // keeps them in its pass.
 void mrhiMarkPassTimestamps(mrhiDevice* device, const mrhiPassDef* def, mrhiFramePass* pass);
 
-// Builds the view of the open, compiled frame a driver is submitted
-// (mrhi-0013).
+// Builds the view of the open, compiled frame a driver is
+// submitted.
 void mrhiViewFrame(mrhiDevice* device, mrhiDriverFrame* frameOut);
 
 #endif // MAUL_RHI_SRC_DEVICE_CORE_H

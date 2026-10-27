@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The diagnostic queue (mrhi-0027).
+// The diagnostic queue.
 
 #include "diagnostics.h"
+
+#include "invariant.h"
 
 void mrhiInitDiagnostics(mrhiDiagnosticQueue* queue, mrhiDiagnostic* records, uint32_t capacity)
 {
@@ -33,9 +35,12 @@ void mrhiRecordDiagnostic(mrhiDiagnosticQueue* queue, mrhiDiagnosticCode code)
     {
         return;
     }
+    // Every refusal names the check that refused it.
+    MRHI_ASSERT(code != 0);
     Lock(queue);
     uint32_t capacity = queue->capacity;
     uint32_t count = queue->count;
+    MRHI_ASSERT(count <= capacity && queue->head < capacity);
     mrhiDiagnostic* newest = &records[(queue->head + count + capacity - 1) % capacity];
     if (count > 0 && newest->code == code)
     {

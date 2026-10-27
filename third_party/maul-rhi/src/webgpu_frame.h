@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// WebGPU frames (mrhi-0003): recorded at submission into one command
-// encoder, one call into JavaScript per command, the browser's
-// synchronization in place of barriers; finished when their readbacks
-// are mapped and copied into the ring, or when the queue has done their
-// work.
+// WebGPU frames: recorded at submission into one command encoder, one
+// call into JavaScript per command, the browser's synchronization in
+// place of barriers; finished when their readbacks are mapped and
+// copied into the ring, or when the queue has done their work.
 
 #ifndef MAUL_RHI_SRC_WEBGPU_FRAME_H
 #define MAUL_RHI_SRC_WEBGPU_FRAME_H

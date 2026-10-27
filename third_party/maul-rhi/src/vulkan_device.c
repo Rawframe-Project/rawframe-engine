@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A Vulkan device (mrhi-0003): opened with the floor's features and the
-// granted ones, one queue, and a timeline semaphore for the frames. The
-// memory a declared resource takes is read from the create info alone
-// (Vulkan 1.3's device memory requirements). Buffers, textures, views
-// and samplers are made in device-local memory, query sets as query
-// pools; shader modules and pipelines are made at the call; configured
+// A Vulkan device: opened with the floor's features and the granted
+// ones, one queue, and a timeline semaphore for the frames. The memory
+// a declared resource takes is read from the create info alone (Vulkan
+// 1.3's device memory requirements). Buffers, textures, views and
+// samplers are made in device-local memory, query sets as query pools;
+// shader modules and pipelines are made at the call; configured
 // surfaces get swapchains (vulkan_swapchain.c). Frames run.
 
 #include "vulkan_device.h"
@@ -51,7 +51,7 @@ typedef struct VulkanDevice
     // transient targets on chip.
     uint32_t lazyTypes;
     double timestampPeriod;
-    // Made elsewhere and adopted (mrhi-0018): never destroyed here.
+    // Made elsewhere and adopted: never destroyed here.
     bool adopted;
     size_t bytes;
     mrhiVulkanMemory memory;
@@ -351,10 +351,11 @@ static size_t Poll(void* self, mrhiDriverEvent* events, size_t capacity)
     return moved + mrhiVulkanPollFrames(&device->frames, events + moved, capacity - moved);
 }
 
-static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag)
+static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag,
+                              mrhiDiagnosticCode* budgetOut)
 {
     VulkanDevice* device = self;
-    return mrhiVulkanSubmit(&device->frames, frame, tag);
+    return mrhiVulkanSubmit(&device->frames, frame, tag, budgetOut);
 }
 
 static bool WaitFrame(void* self, uint64_t tag, uint64_t timeoutNs)
@@ -455,7 +456,7 @@ static VkResult Open(VulkanDevice* device, const mrhiDeviceDef* def)
     device->swapchains.mutableFormat = recipe.mutableFormat;
     bool swapchain = recipe.swapchain;
     // A device made elsewhere from this recipe is adopted, never made or
-    // destroyed here (mrhi-0018).
+    // destroyed here.
     device->adopted = AdoptedOf(def) != VK_NULL_HANDLE;
     VkResult result = VK_SUCCESS;
     if (device->adopted)
@@ -529,6 +530,17 @@ typedef struct Layout
     size_t readbacks;
     size_t frameViews;
     uint32_t viewLimit;
+    // Each slot's command buffers, submits, batches and their submissions
+    // and semaphores, and the frames' marks by pass.
+    uint32_t partLimit;
+    uint32_t batchLimit;
+    size_t parts;
+    size_t submits;
+    size_t batches;
+    size_t infos;
+    size_t semaphores;
+    size_t followed;
+    size_t passBatches;
     size_t retire;
     uint32_t retireCount;
     // The swapchains, and room for one frame's surface images.
@@ -543,6 +555,33 @@ typedef struct Layout
     uint32_t blockCount;
     uint32_t nodeCount;
 } Layout;
+
+// Adds each slot's command buffers, submits, batches and their
+// submissions and semaphores, and the frames' marks by pass.
+static void LayoutBatches(Layout* at, const mrhiDeviceLimits* limits, uint32_t slots)
+{
+    mrhiLayout* layout = &at->layout;
+    // With one lane a frame is one batch; with more, a pass opens one at
+    // most, beside the frame's first and last. A batch takes a command
+    // buffer, and each native pass one more and the program's.
+    at->batchLimit = MRHI_VULKAN_SPLIT ? limits->framePasses + 2 : 1;
+    at->partLimit = at->batchLimit + MRHI_NATIVE_PASSES;
+    at->parts = mrhiLayoutAdd(layout, (size_t)slots * at->partLimit, sizeof(VkCommandBuffer),
+                              alignof(VkCommandBuffer));
+    at->submits =
+        mrhiLayoutAdd(layout, (size_t)slots * (at->partLimit + MRHI_NATIVE_PASSES),
+                      sizeof(VkCommandBufferSubmitInfo), alignof(VkCommandBufferSubmitInfo));
+    at->batches = mrhiLayoutAdd(layout, (size_t)slots * at->batchLimit, sizeof(mrhiVulkanBatch),
+                                alignof(mrhiVulkanBatch));
+    at->infos = mrhiLayoutAdd(layout, (size_t)slots * at->batchLimit, sizeof(VkSubmitInfo2),
+                              alignof(VkSubmitInfo2));
+    at->semaphores = mrhiLayoutAdd(layout, (size_t)slots * at->batchLimit * (MRHI_VULKAN_LANES + 1),
+                                   sizeof(VkSemaphoreSubmitInfo), alignof(VkSemaphoreSubmitInfo));
+    at->followed =
+        mrhiLayoutAdd(layout, (size_t)limits->framePasses + 1, sizeof(bool), alignof(bool));
+    at->passBatches =
+        mrhiLayoutAdd(layout, (size_t)limits->framePasses + 1, sizeof(uint32_t), alignof(uint32_t));
+}
 
 static Layout LayoutOf(const mrhiDeviceDef* def)
 {
@@ -592,6 +631,7 @@ static Layout LayoutOf(const mrhiDeviceDef* def)
                                   alignof(VkImageView));
     at.readbacks = mrhiLayoutAdd(layout, (size_t)slots * limits->readbacks, sizeof(mrhiVulkanRange),
                                  alignof(mrhiVulkanRange));
+    LayoutBatches(&at, limits, slots);
     at.retireCount = limits->buffers + limits->textures + limits->views + limits->samplers +
                      limits->querySets + limits->pipelines + limits->heaps;
     at.retire =
@@ -710,6 +750,10 @@ static void PlaceFrames(VulkanDevice* device, const Layout* at, const mrhiDevice
         .swapchains = &device->swapchains,
         .slots = (mrhiVulkanSlot*)(block + at->frames),
         .slotCount = def->limits.framesInFlight,
+        .partLimit = at->partLimit,
+        .batchLimit = at->batchLimit,
+        .followed = (bool*)(block + at->followed),
+        .passBatches = (uint32_t*)(block + at->passBatches),
         .readbackLimit = limits->readbacks,
         .viewLimit = at->viewLimit,
         .atom = device->atom,
@@ -725,6 +769,13 @@ static void PlaceFrames(VulkanDevice* device, const Layout* at, const mrhiDevice
             .own = (VkDeviceMemory*)(block + at->own) + first,
             .readbacks = (mrhiVulkanRange*)(block + at->readbacks) + (size_t)i * limits->readbacks,
             .views = (VkImageView*)(block + at->frameViews) + (size_t)i * at->viewLimit,
+            .parts = (VkCommandBuffer*)(block + at->parts) + (size_t)i * at->partLimit,
+            .submits = (VkCommandBufferSubmitInfo*)(block + at->submits) +
+                       (size_t)i * (at->partLimit + MRHI_NATIVE_PASSES),
+            .batches = (mrhiVulkanBatch*)(block + at->batches) + (size_t)i * at->batchLimit,
+            .infos = (VkSubmitInfo2*)(block + at->infos) + (size_t)i * at->batchLimit,
+            .semaphores = (VkSemaphoreSubmitInfo*)(block + at->semaphores) +
+                          (size_t)i * at->batchLimit * (MRHI_VULKAN_LANES + 1),
         };
     }
 }
@@ -794,7 +845,8 @@ mrhiResult mrhiCreateVulkanDevice(const mrhiAllocator* allocator, const mrhiVulk
     }
     if (status == mrhi_success)
     {
-        status = mrhiVulkanFramesInit(&device->frames, device->family, &def->deviceLimits);
+        status = mrhiVulkanFramesInit(&device->frames, device->family, &def->deviceLimits,
+                                      def->limits.textureDimension2d);
     }
     if (status != mrhi_success)
     {

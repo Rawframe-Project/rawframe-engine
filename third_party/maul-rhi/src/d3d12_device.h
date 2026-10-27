@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's devices (mrhi-0003). Included by the driver's
-// files only.
+// The D3D12 driver's devices. Included by the driver's files only.
 
 #ifndef MAUL_RHI_SRC_D3D12_DEVICE_H
 #define MAUL_RHI_SRC_D3D12_DEVICE_H
@@ -24,8 +23,8 @@ mrhiResult mrhiCreateD3d12Device(const mrhiAllocator* allocator, const mrhiD3d12
                                  IDXGIFactory4* factory, ID3D12Device* device,
                                  const mrhiDeviceDef* def, mrhiDeviceDriver* deviceOut);
 
-// Reads a device's ID3D12Device and command queue, borrowed
-// (mrhi-0019): false for a device driver that is not D3D12's.
+// Reads a device's ID3D12Device and command queue, borrowed:
+// false for a device driver that is not D3D12's.
 bool mrhiD3d12DeviceNative(const mrhiDeviceDriver* driver, ID3D12Device** deviceOut,
                            ID3D12CommandQueue** queueOut);
 

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's objects (mrhi-0003): buffers, textures and query
-// sets, each a D3D12 object in its table's slot, and views and
-// samplers, whose slots are also their descriptors' in CPU-only
+// The D3D12 driver's objects: buffers, textures and query sets, each a D3D12 object in its
+// table's slot, and views and samplers, whose slots are also their descriptors' in CPU-only
 // descriptor heaps, copied to the GPU's heaps when bound. Included by the driver's files only.
 
 #ifndef MAUL_RHI_SRC_D3D12_RESOURCE_H
@@ -38,8 +37,7 @@ typedef struct mrhiD3d12View
     bool write;
 } mrhiD3d12View;
 
-// The most queries a set has (mrhi-0012), and the words of a set's
-// bits.
+// The most queries a set has, and the words of a set's bits.
 #define MRHI_D3D12_SET_QUERIES 4096
 #define MRHI_D3D12_SET_WORDS   (MRHI_D3D12_SET_QUERIES / 64)
 

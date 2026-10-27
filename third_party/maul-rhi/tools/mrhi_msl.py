@@ -2,18 +2,17 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 Sirac Ozmen
 #
-# Makes each entry's Metal Shading Language for tools/mrhi_container.py
-# --msl, offline, with SPIRV-Cross: it rewrites a copy of the SPIR-V so
-# that every binding's descriptor set is 0 and its binding number is the
-# index the container's Metal map gives it (docs/contract/container.md),
-# then crosses each entry alone to DIR/NAME.metal with SPIRV-Cross's
-# --msl-decoration-binding, which takes those numbers as the MSL indices.
-# The root block, which has no binding, takes buffer 0. The MSL is made
-# for macOS at MSL_VERSION. An entry reading the view index (record
-# mrhi-0020) runs under vertex amplification: SPIRV-Cross writes its view
-# index as the constant line VIEW_INDEX, which becomes a parameter, the
-# amplification id in a vertex entry and the render target array index,
-# its view's layer, in a fragment one. spirv-cross must be on the path.
+# Makes each entry's Metal Shading Language for tools/mrhi_container.py --msl,
+# offline, with SPIRV-Cross: it rewrites a copy of the SPIR-V so that every
+# binding's descriptor set is 0 and its binding number is the index the
+# container's Metal map gives it (docs/user/shader-container-format.md), then
+# crosses each entry alone to DIR/NAME.metal with SPIRV-Cross's
+# --msl-decoration-binding, which takes those numbers as the MSL indices. The root
+# block, which has no binding, takes buffer 0. The MSL is made for macOS at
+# MSL_VERSION. An entry reading the view index runs under vertex amplification:
+# SPIRV-Cross writes its view index as the constant line VIEW_INDEX, which becomes
+# a parameter, the amplification id in a vertex entry and the render target array
+# index, its view's layer, in a fragment one. spirv-cross must be on the path.
 #
 # usage: mrhi_msl.py SPIRV REFLECTION DIR
 

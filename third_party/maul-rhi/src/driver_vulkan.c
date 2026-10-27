@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Vulkan driver's instance (mrhi-0003): a Vulkan 1.3 instance on the
-// loader opened at run time, with the surface extensions it offers;
-// adapter searches answered at the next poll from the physical devices
-// then present; and surfaces (vulkan_surface.c).
+// The Vulkan driver's instance: a Vulkan 1.3 instance on the loader
+// opened at run time, with the surface extensions it offers; adapter
+// searches answered at the next poll from the physical devices then
+// present; and surfaces (vulkan_surface.c).
 
 #include "driver_vulkan.h"
 
@@ -35,7 +35,7 @@ typedef struct VulkanDriver
     // Room for the physical devices one search reads.
     VkPhysicalDevice* devices;
     uint32_t deviceLimit;
-    // An instance made elsewhere, never destroyed here (mrhi-0018).
+    // An instance made elsewhere, never destroyed here.
     bool adopted;
     // The last device description, its adapter and features, held until
     // the next or the end.
@@ -337,10 +337,10 @@ static bool Names(const char* names, size_t bytes, const char* name)
     return false;
 }
 
-// Takes an instance made elsewhere (mrhi-0018): its functions read through
-// the program's vkGetInstanceProcAddr, surfaces and labels used where
-// its extensions name them; VK_NULL_HANDLE where it is older than 1.3
-// or a function is missing.
+// Takes an instance made elsewhere: its functions read through the
+// program's vkGetInstanceProcAddr, surfaces and labels used where its
+// extensions name them; VK_NULL_HANDLE where it is older than 1.3 or a
+// function is missing.
 static VkInstance AdoptInstance(mrhiVulkan* vulkan, const mrhiInstanceVulkanAdopt* adopt,
                                 uint32_t* enabledOut)
 {

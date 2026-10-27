@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Pipeline caches (mrhi-0010): the driver's blob in an envelope that
-// names the library version, driver and adapter it came from and a
-// SHA-256 digest of it all. A cache only saves time, so an import never
-// fails the device; one that does not fit is ignored and reported.
+// Pipeline caches: the driver's blob in an envelope that names the ABI
+// version, driver and adapter it came from and a SHA-256 digest of it
+// all. A cache is state, read only under the ABI version that wrote it.
+// It only saves time, so an import never fails the device; one that does
+// not fit is ignored and reported.
 
 #include "bytes.h"
 #include "device_core.h"
@@ -13,20 +14,18 @@
 #include <string.h>
 
 // The envelope's header: the magic, its version, the whole size, the
-// digest of what follows it, then the library version, the driver kind,
-// and the adapter's vendor and device ids.
+// digest of what follows it, then the ABI version, the driver kind, and
+// the adapter's vendor and device ids.
 #define HEADER_BYTES  64
 #define DIGESTED_FROM 48
-#define CACHE_VERSION 1u
-#define LIBRARY ((uint32_t)MRHI_VERSION_MAJOR << 20 | MRHI_VERSION_MINOR << 10 | MRHI_VERSION_PATCH)
+#define CACHE_VERSION 2u
 
 static const uint8_t MAGIC[4] = {'M', 'R', 'P', 'C'};
 
-// Whether an envelope names this library, driver and adapter.
+// Whether an envelope names this driver and adapter.
 static bool IsOurs(const mrhiDevice* device, const uint8_t* bytes)
 {
-    return mrhiRead32(bytes + 4) == CACHE_VERSION && mrhiRead32(bytes + 48) == LIBRARY &&
-           mrhiRead32(bytes + 52) == device->adapterInfo.driver &&
+    return mrhiRead32(bytes + 52) == device->adapterInfo.driver &&
            mrhiRead32(bytes + 56) == device->adapterInfo.vendorId &&
            mrhiRead32(bytes + 60) == device->adapterInfo.deviceId;
 }
@@ -38,8 +37,18 @@ mrhiResult mrhiImportPipelineCache(mrhiDevice* device, const void* bytes, size_t
         return mrhi_empty;
     }
     const uint8_t* data = bytes;
-    if (size < HEADER_BYTES || memcmp(data, MAGIC, sizeof(MAGIC)) != 0 ||
-        mrhiRead64(data + 8) != size)
+    if (size < HEADER_BYTES || memcmp(data, MAGIC, sizeof(MAGIC)) != 0)
+    {
+        return mrhi_errorInvalid;
+    }
+    // Every envelope version keeps the magic and its version here; the
+    // rest of another version's header may lie elsewhere, so the version
+    // is read before anything it places.
+    if (mrhiRead32(data + 4) != CACHE_VERSION)
+    {
+        return mrhi_errorVersion;
+    }
+    if (mrhiRead64(data + 8) != size)
     {
         return mrhi_errorInvalid;
     }
@@ -48,6 +57,10 @@ mrhiResult mrhiImportPipelineCache(mrhiDevice* device, const void* bytes, size_t
     if (memcmp(digest, data + 16, MRHI_DIGEST_BYTES) != 0)
     {
         return mrhi_errorInvalid;
+    }
+    if (mrhiRead32(data + 48) != MRHI_ABI_VERSION)
+    {
+        return mrhi_errorVersion;
     }
     bool taken =
         IsOurs(device, data) && device->driver.vtable->importPipelineCache(
@@ -91,7 +104,7 @@ mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytes, size_t capacity
     memcpy(data, MAGIC, sizeof(MAGIC));
     mrhiWrite32(data + 4, CACHE_VERSION);
     mrhiWrite64(data + 8, *sizeOut);
-    mrhiWrite32(data + 48, LIBRARY);
+    mrhiWrite32(data + 48, MRHI_ABI_VERSION);
     mrhiWrite32(data + 52, device->adapterInfo.driver);
     mrhiWrite32(data + 56, device->adapterInfo.vendorId);
     mrhiWrite32(data + 60, device->adapterInfo.deviceId);

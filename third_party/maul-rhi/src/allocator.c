@@ -5,6 +5,8 @@
 
 #include "allocator.h"
 
+#include "invariant.h"
+
 #include <stdckdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -39,6 +41,8 @@ void mrhiRelease(const mrhiAllocator* allocator, void* memory, size_t size, size
 
 size_t mrhiLayoutAdd(mrhiLayout* layout, size_t count, size_t itemSize, size_t alignment)
 {
+    // The library's own parts, aligned to their types.
+    MRHI_ASSERT(alignment != 0 && (alignment & (alignment - 1)) == 0);
     size_t padded = 0;
     size_t bytes = 0;
     size_t end = 0;

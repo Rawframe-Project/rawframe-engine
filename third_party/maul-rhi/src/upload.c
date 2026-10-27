@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Uploads (mrhi-0011): the program's bytes copied at the call into the
-// open frame's staging, each upload at a 512-byte boundary and a
-// texture's rows at a 256-byte pitch, and recorded as a copy from the
-// staging, whose side names no resource.
+// Uploads: the program's bytes copied at the call into the open
+// frame's staging, each upload at a 512-byte boundary and a texture's
+// rows at a 256-byte pitch, and recorded as a copy from the staging,
+// whose side names no resource.
 
 #include "copy_core.h"
 
@@ -19,21 +19,25 @@
 
 // Takes bytes of the open frame's staging at a placement boundary: a
 // pointer to them and their offset in the frame's region, or NULL when
-// the staging is full, which marks the pass as a full arena does.
+// the staging is full, which marks the pass as a full arena does and
+// leaves the staging as it was.
 static uint8_t* TakeStaging(mrhiDevice* device, mrhiFramePass* pass, uint64_t bytes,
                             uint64_t* offsetOut)
 {
     uint64_t room = device->deviceLimits.frameUploadBytes;
-    if (pass->overflowed || bytes > room)
+    uint64_t at = atomic_load_explicit(&device->stagingTaken, memory_order_relaxed);
+    bool fits = pass->overflow == 0 && bytes <= room && at <= room - bytes;
+    uint64_t rounded = fits ? (bytes + PLACEMENT - 1) / PLACEMENT * PLACEMENT : 0;
+    while (fits &&
+           !atomic_compare_exchange_weak_explicit(&device->stagingTaken, &at, at + rounded,
+                                                  memory_order_relaxed, memory_order_relaxed))
     {
-        pass->overflowed = true;
-        return nullptr;
+        fits = at <= room - bytes;
     }
-    uint64_t rounded = (bytes + PLACEMENT - 1) / PLACEMENT * PLACEMENT;
-    uint64_t at = atomic_fetch_add_explicit(&device->stagingTaken, rounded, memory_order_relaxed);
-    if (at > room - bytes)
+    if (!fits)
     {
-        pass->overflowed = true;
+        pass->overflow = pass->overflow != 0 ? pass->overflow : mrhi_diagnosticFrameUploadBytes;
+        mrhiRecordDiagnostic(&device->diagnostics, pass->overflow);
         return nullptr;
     }
     *offsetOut = at;
@@ -71,11 +75,11 @@ mrhiResult mrhiWriteBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId res
         return mrhiDeviceMisuse(device, fault);
     }
     // An empty write is valid and copies nothing; drivers never see it
-    // (Vulkan refuses empty regions). A pass whose staging overflowed
+    // (Vulkan refuses empty regions). A pass that found a limit full
     // refuses it too, as every write after.
     if (size == 0)
     {
-        return pass->overflowed ? mrhi_errorCapacity : mrhi_success;
+        return pass->overflow != 0 ? mrhiDeviceFull(device, pass->overflow) : mrhi_success;
     }
     uint64_t staged = 0;
     uint8_t* staging = TakeStaging(device, pass, size, &staged);
@@ -162,7 +166,7 @@ mrhiResult mrhiWriteTexture(mrhiDevice* device, mrhiPassId id, const mrhiTexture
     // An empty write copies nothing, as above.
     if (mrhiIsEmptyExtent(size))
     {
-        return pass->overflowed ? mrhi_errorCapacity : mrhi_success;
+        return pass->overflow != 0 ? mrhiDeviceFull(device, pass->overflow) : mrhi_success;
     }
     uint64_t staged = 0;
     uint8_t* staging = TakeStaging(device, pass, stagedBytes, &staged);

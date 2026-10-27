@@ -5,11 +5,14 @@
 // transitions. A texture's state follows the core's plan, which gives a
 // barrier at each of its changes; a transition between two uses of the
 // same unordered access state is a UAV barrier. A buffer's state is the
-// driver's: the plan gives no barrier between two reads, which D3D12's
-// states tell apart, so each use moves the buffer where its state lacks
-// the use's, gathering read states together, and a plan's barrier
-// between storage writes on a buffer in the unordered access state is a
-// UAV barrier.
+// driver's: D3D12's read states gather several reads into one, which the
+// plan's do not, so each use moves the buffer where its state lacks the
+// use's, gathering read states together. A plan's barrier between two
+// reads of a buffer does nothing, and one between storage writes on a
+// buffer in the unordered access state is a UAV barrier. A buffer's
+// state is kept for each lane, and its reads take only the states the
+// lane's lists take: on the compute queue no pixel shader or index
+// buffer state, on the copy queue only the copy states.
 
 #include "d3d12_barrier.h"
 
@@ -116,6 +119,8 @@ void mrhiD3d12Transition(mrhiD3d12Recorder* recorder, ID3D12Resource* resource, 
         }
         return;
     }
+    // A pass runs on a lane whose lists make its transitions.
+    MRHI_ASSERT(((before | after) & ~recorder->laneStates) == 0);
     D3D12_RESOURCE_BARRIER barrier = {
         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         .Transition = {.pResource = resource,
@@ -214,7 +219,8 @@ void mrhiD3d12RecordBarriers(mrhiD3d12Recorder* recorder, mrhiPassId pass)
         {
             TextureBarrier(recorder, object, barrier);
         }
-        else if (Writes(barrier->before) && object->state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+        else if (Writes(barrier->before) &&
+                 object->state[recorder->lane] == D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
         {
             QueueUav(recorder, object->resource);
         }
@@ -277,14 +283,19 @@ void mrhiD3d12Use(mrhiD3d12Recorder* recorder, uint32_t object, D3D12_RESOURCE_S
     MRHI_ASSERT(object != 0 && object <= recorder->frame->resourceCount);
     mrhiD3d12Object* buffer = &recorder->table[object - 1];
     MRHI_ASSERT(buffer->texture == nullptr && buffer->resource != nullptr);
-    D3D12_RESOURCE_STATES current = buffer->state;
+    D3D12_RESOURCE_STATES* state = &buffer->state[recorder->lane];
+    D3D12_RESOURCE_STATES current = *state;
+    // A read the lane's lists cannot name is a use its work never makes,
+    // as a sealed buffer's index reads on the compute queue.
+    needed &= recorder->laneStates;
     bool gather = IsRead(current) && IsRead(needed);
-    if (current == needed || (gather && (current & needed) == needed))
+    if (needed == D3D12_RESOURCE_STATE_COMMON || current == needed ||
+        (gather && (current & needed) == needed))
     {
         return;
     }
     D3D12_RESOURCE_STATES next = gather ? current | needed : needed;
     mrhiD3d12Transition(recorder, buffer->resource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
                         current, next);
-    buffer->state = next;
+    *state = next;
 }

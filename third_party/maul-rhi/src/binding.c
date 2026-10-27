@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Binding tables (mrhi-0011): a whole table set while recording, each
-// binding checked against its slot in the pass's pipeline's reflection
-// as WebGPU checks a bind group, and against an access the pass
-// declares, then recorded after the table's command.
+// Binding tables: a whole table set while recording, each binding
+// checked against its slot in the pass's pipeline's reflection as
+// WebGPU checks a bind group, and against an access the pass declares,
+// then recorded after the table's command.
 
 #include "capabilities_core.h"
 #include "encoder_core.h"

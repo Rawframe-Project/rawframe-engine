@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A Vulkan device's swapchains (mrhi-0003, mrhi-0007, mrhi-0013): a
-// configured surface's swapchain, its images and the semaphores that
-// order acquiring, the frame's work and presenting. Each swapchain has a
-// semaphore per image signalled for its present, and one more acquire
-// semaphore than images, each tagged with the frame that waited on it,
-// reused once that frame finishes. An image a frame gives back stays
-// acquired and is handed out at the next acquire.
+// A Vulkan device's swapchains: a configured surface's swapchain, its
+// images and the semaphores that order acquiring, the frame's work and
+// presenting. Each swapchain has a semaphore per image signalled for its
+// present, and one more acquire semaphore than images, each tagged with
+// the frame that waited on it, reused once that frame finishes. An image
+// a frame gives back stays acquired and is handed out at the next
+// acquire.
 
 #ifndef MAUL_RHI_SRC_VULKAN_SWAPCHAIN_H
 #define MAUL_RHI_SRC_VULKAN_SWAPCHAIN_H

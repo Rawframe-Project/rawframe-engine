@@ -56,8 +56,8 @@ static void Enable(const mrhiFeatures* granted, mrhiVulkanEnabled* enabled)
     enabled->features12.descriptorIndexing = VK_TRUE;
     enabled->features13.dynamicRendering = VK_TRUE;
     enabled->features13.synchronization2 = VK_TRUE;
-    // Heaps (mrhi-0015): descriptor indexing over sampled images and samplers,
-    // and over storage images and buffers through mutable descriptors.
+    // Heaps: descriptor indexing over sampled images and samplers, and over
+    // storage images and buffers through mutable descriptors.
     VkPhysicalDeviceVulkan12Features* indexing = &enabled->features12;
     bool sampling = granted->bindlessSampling;
     bool heterogeneous = granted->bindlessHeterogeneous;
@@ -87,9 +87,9 @@ static void Merge(void* into, const void* from, size_t offset, size_t size)
     }
 }
 
-// Merges the def's features chain (mrhi-0018) into the recipe's: the
-// core feature structs' true members; false for a struct of another
-// type, which the library cannot place without knowing its size.
+// Merges the def's features chain into the recipe's: the core
+// feature structs' true members; false for a struct of another type,
+// which the library cannot place without knowing its size.
 static bool MergeFeatures(const VkBaseInStructure* chain, mrhiVulkanEnabled* enabled)
 {
     for (const VkBaseInStructure* node = chain; node != nullptr; node = node->pNext)

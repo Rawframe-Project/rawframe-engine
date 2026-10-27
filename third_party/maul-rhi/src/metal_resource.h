@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's objects (mrhi-0003): buffers, textures, views,
-// samplers and query sets, each a retained Metal object whose pointer is
-// its handle. Metal's command buffers retain what they use, so an object
-// is released as soon as the core destroys it. Included by the driver's
-// Objective-C files only.
+// The Metal driver's objects: buffers, textures, views, samplers and
+// query sets, each a retained Metal object whose pointer is its handle.
+// Metal's command buffers retain what they use, so an object is released
+// as soon as the core destroys it. Included by the driver's Objective-C
+// files only.
 
 #ifndef MAUL_RHI_SRC_METAL_RESOURCE_H
 #define MAUL_RHI_SRC_METAL_RESOURCE_H

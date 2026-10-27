@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Devices (mrhi-0004): made at once and opened by their driver, with
-// the features and limits asked for checked against the adapter and
-// the floor.
+// Devices: made at once and opened by their driver, with the
+// features and limits asked for checked against the adapter and the
+// floor.
 
 #include "allocator.h"
 #include "capabilities_core.h"
@@ -59,7 +59,7 @@ static const mrhiStructType s_deviceStructs[] = {
     mrhi_structNone,
 };
 
-// Whether the def's Vulkan structs are well formed (mrhi-0018).
+// Whether the def's Vulkan structs are well formed.
 static bool AreVulkanStructsValid(const mrhiDeviceDef* def)
 {
     const mrhiDeviceVulkanAdopt* adopt =
@@ -75,9 +75,12 @@ static bool AreDeviceLimitsValid(const mrhiDeviceLimits* limits)
 {
     return limits->notifications >= 2 && limits->samplers != 0 && limits->buffers != 0 &&
            limits->textures != 0 && limits->views != 0 && limits->surfaces != 0 &&
-           limits->frameResources != 0 && limits->framePasses != 0 && limits->frameAccesses != 0 &&
-           limits->frameBarriers != 0 && limits->shaders != 0 && limits->pipelines != 0 &&
-           limits->frameCommandBytes >= MRHI_CHUNK_BYTES && limits->readbackBytes % 512 == 0;
+           limits->frameResources != 0 && limits->framePasses != 0 &&
+           limits->framePasses <= UINT32_MAX - MRHI_LIBRARY_PASSES && limits->frameAccesses != 0 &&
+           limits->frameBarriers != 0 &&
+           limits->frameBarriers <= UINT32_MAX - limits->frameResources && limits->shaders != 0 &&
+           limits->pipelines != 0 && limits->frameCommandBytes >= MRHI_CHUNK_BYTES &&
+           limits->readbackBytes % 512 == 0;
 }
 
 // The check a device def fails first, or 0 when it is well formed.
@@ -268,6 +271,7 @@ typedef struct FrameParts
     size_t uses;
     size_t barriers;
     size_t scratch;
+    size_t barrierLimit;
     size_t counts;
     size_t boxes;
     size_t boxLimit;
@@ -279,44 +283,48 @@ typedef struct FrameParts
     size_t driverPasses;
     size_t driverResources;
     size_t driverAccesses;
+    uint32_t programChunks;
 } FrameParts;
 
 // Lays out the tables of the open frame, sized by the device's limits.
 static FrameParts AddFrameParts(mrhiLayout* layout, const mrhiDeviceDef* def)
 {
     const mrhiDeviceLimits* limits = &def->deviceLimits;
+    size_t passes = (size_t)limits->framePasses + MRHI_LIBRARY_PASSES;
+    // The first pass's use and clear of each fresh buffer a frame imports,
+    // at most one a resource.
+    size_t clears = limits->frameResources;
+    // And a barrier each, for the first use after the clear.
+    size_t barriers = (size_t)limits->frameBarriers + limits->frameResources;
     FrameParts parts = {
         .boxLimit = (size_t)limits->frameAccesses * 4 + 16,
-        .chunkCount = limits->frameCommandBytes / MRHI_CHUNK_BYTES,
+        .programChunks = limits->frameCommandBytes / MRHI_CHUNK_BYTES,
+        .barrierLimit = barriers,
     };
+    parts.chunkCount =
+        parts.programChunks + (uint32_t)((clears + MRHI_CHUNK_COMMANDS - 1) / MRHI_CHUNK_COMMANDS);
     parts.resources = mrhiLayoutAdd(layout, limits->frameResources, sizeof(mrhiFrameResource),
                                     alignof(mrhiFrameResource));
-    parts.passes =
-        mrhiLayoutAdd(layout, limits->framePasses, sizeof(mrhiFramePass), alignof(mrhiFramePass));
-    parts.uses =
-        mrhiLayoutAdd(layout, limits->frameAccesses, sizeof(mrhiFrameUse), alignof(mrhiFrameUse));
-    parts.barriers =
-        mrhiLayoutAdd(layout, limits->frameBarriers, sizeof(mrhiBarrier), alignof(mrhiBarrier));
-    parts.scratch =
-        mrhiLayoutAdd(layout, limits->frameBarriers, sizeof(mrhiBarrier), alignof(mrhiBarrier));
-    parts.counts =
-        mrhiLayoutAdd(layout, (size_t)limits->framePasses + 2, sizeof(uint32_t), alignof(uint32_t));
+    parts.passes = mrhiLayoutAdd(layout, passes, sizeof(mrhiFramePass), alignof(mrhiFramePass));
+    parts.uses = mrhiLayoutAdd(layout, limits->frameAccesses + clears, sizeof(mrhiFrameUse),
+                               alignof(mrhiFrameUse));
+    parts.barriers = mrhiLayoutAdd(layout, barriers, sizeof(mrhiBarrier), alignof(mrhiBarrier));
+    parts.scratch = mrhiLayoutAdd(layout, barriers, sizeof(mrhiBarrier), alignof(mrhiBarrier));
+    parts.counts = mrhiLayoutAdd(layout, passes + 2, sizeof(uint32_t), alignof(uint32_t));
     parts.boxes = mrhiLayoutAdd(layout, parts.boxLimit, sizeof(mrhiBox), alignof(mrhiBox));
     parts.order =
         mrhiLayoutAdd(layout, limits->frameResources, sizeof(uint32_t), alignof(uint32_t));
-    parts.vertexBytes =
-        mrhiLayoutAdd(layout, (size_t)limits->framePasses * def->limits.vertexBuffers,
-                      sizeof(uint64_t), alignof(uint64_t));
+    parts.vertexBytes = mrhiLayoutAdd(layout, passes * def->limits.vertexBuffers, sizeof(uint64_t),
+                                      alignof(uint64_t));
     parts.chunks = mrhiLayoutAdd(layout, parts.chunkCount, sizeof(mrhiCommandChunk),
                                  alignof(mrhiCommandChunk));
-    parts.labels = mrhiLayoutAdd(
-        layout, MAUL_RHI_LABELS ? (size_t)limits->framePasses * MRHI_LABEL_BYTES : 0, 1, 1);
+    parts.labels = mrhiLayoutAdd(layout, MAUL_RHI_LABELS ? passes * MRHI_LABEL_BYTES : 0, 1, 1);
     parts.driverPasses =
-        mrhiLayoutAdd(layout, limits->framePasses, sizeof(mrhiDriverPass), alignof(mrhiDriverPass));
+        mrhiLayoutAdd(layout, passes, sizeof(mrhiDriverPass), alignof(mrhiDriverPass));
     parts.driverResources = mrhiLayoutAdd(layout, limits->frameResources,
                                           sizeof(mrhiDriverResource), alignof(mrhiDriverResource));
-    parts.driverAccesses = mrhiLayoutAdd(layout, limits->frameAccesses, sizeof(mrhiDriverAccess),
-                                         alignof(mrhiDriverAccess));
+    parts.driverAccesses = mrhiLayoutAdd(layout, limits->frameAccesses + clears,
+                                         sizeof(mrhiDriverAccess), alignof(mrhiDriverAccess));
     return parts;
 }
 
@@ -328,6 +336,7 @@ static void PlaceFrameParts(mrhiDevice* device, unsigned char* block, const Fram
     device->frameUses = (mrhiFrameUse*)(block + parts->uses);
     device->frameBarriers = (mrhiBarrier*)(block + parts->barriers);
     device->frameBarrierScratch = (mrhiBarrier*)(block + parts->scratch);
+    device->frameBarrierLimit = (uint32_t)parts->barrierLimit;
     device->frameCounts = (uint32_t*)(block + parts->counts);
     device->frameBoxes = (mrhiBox*)(block + parts->boxes);
     device->frameBoxLimit = (uint32_t)parts->boxLimit;
@@ -335,6 +344,7 @@ static void PlaceFrameParts(mrhiDevice* device, unsigned char* block, const Fram
     device->frameVertexBytes = (uint64_t*)(block + parts->vertexBytes);
     device->frameChunks = (mrhiCommandChunk*)(block + parts->chunks);
     device->frameChunkCount = parts->chunkCount;
+    device->frameProgramChunks = parts->programChunks;
     device->frameLabels = (char*)(block + parts->labels);
     device->driverPasses = (mrhiDriverPass*)(block + parts->driverPasses);
     device->driverResources = (mrhiDriverResource*)(block + parts->driverResources);
@@ -397,19 +407,22 @@ static mrhiDevice* Allocate(const mrhiDeviceDef* def)
 mrhiResult mrhiCreateDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
                             mrhiDevice** deviceOut, mrhiRequestId* requestOut)
 {
+    if (deviceOut != nullptr)
+    {
+        *deviceOut = nullptr;
+    }
+    if (requestOut != nullptr)
+    {
+        *requestOut = (mrhiRequestId){0};
+    }
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;
     }
     if (deviceOut == nullptr || requestOut == nullptr || def == nullptr)
     {
-        if (deviceOut != nullptr)
-        {
-            *deviceOut = nullptr;
-        }
         return mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
-    *deviceOut = nullptr;
     mrhiResult status = mrhi_success;
     const mrhiDriverAdapter* adapter = mrhiCheckDeviceDef(instance, def, &status);
     if (adapter == nullptr)
@@ -441,11 +454,15 @@ mrhiResult mrhiCreateDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
     MRHI_ASSERT(instance->driver.vtable != nullptr);
     mrhiDeviceDef driverDef = *def;
     mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
+    // A frame holds the library's passes and their barriers beside the
+    // program's.
+    driverDef.deviceLimits.framePasses += MRHI_LIBRARY_PASSES;
+    driverDef.deviceLimits.frameBarriers += def->deviceLimits.frameResources;
     status = instance->driver.vtable->createDevice(instance->driver.self, adapter->handle,
                                                    &driverDef, device->request, &device->driver);
     if (status == mrhi_success)
     {
-        // The handshake (mrhi-0024); destroy comes first in every version.
+        // The handshake; destroy comes first in every version.
         status = mrhiCheckDeviceVtable(device->driver.vtable);
         if (status != mrhi_success && device->driver.vtable != nullptr &&
             device->driver.vtable->destroy != nullptr)
@@ -516,6 +533,18 @@ mrhiResult mrhiDeviceMisuse(mrhiDevice* device, mrhiDiagnosticCode code)
     atomic_fetch_add_explicit(&device->misuse, 1, memory_order_relaxed);
     mrhiRecordDiagnostic(&device->diagnostics, code);
     return mrhi_errorInvalid;
+}
+
+mrhiResult mrhiDeviceBadData(mrhiDevice* device, mrhiDiagnosticCode code)
+{
+    mrhiRecordDiagnostic(&device->diagnostics, code);
+    return mrhi_errorFormat;
+}
+
+mrhiResult mrhiDeviceFull(mrhiDevice* device, mrhiDiagnosticCode code)
+{
+    mrhiRecordDiagnostic(&device->diagnostics, code);
+    return mrhi_errorCapacity;
 }
 
 mrhiResult mrhiDeviceUsable(const mrhiDevice* device)

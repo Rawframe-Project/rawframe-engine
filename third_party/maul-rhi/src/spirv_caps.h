@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The device features a SPIR-V module's code needs, read from the
-// capabilities it declares (docs/contract/container.md).
+// capabilities it declares (docs/user/shader-container-format.md).
 
 #ifndef MAUL_RHI_SRC_SPIRV_CAPS_H
 #define MAUL_RHI_SRC_SPIRV_CAPS_H

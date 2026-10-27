@@ -1,9 +1,8 @@
-# The WebGPU driver (mrhi-0003). Its browser side is JavaScript in the
-# library's objects (EM_JS): with Emscripten the program's link takes it
-# in and nothing else is needed. Without Emscripten (wasm32-wasi) the same
+# The WebGPU driver. Its browser side is JavaScript in the library's
+# objects (EM_JS): with Emscripten the program's link takes it in and
+# nothing else is needed. Without Emscripten (wasm32-wasi) the same
 # functions are imports, and the build writes maul-rhi.mjs, which gives
-# the page them (mrhi-0016); the library's MAUL_RHI_WEB_GLUE property
-# names it.
+# the page them; the library's MAUL_RHI_WEB_GLUE property names it.
 
 set(MRHI_WEB_SOURCES
     src/driver_webgpu.c

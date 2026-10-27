@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's names for the contract's values (mrhi-0003):
-// formats, texture shapes, sampler states and labels. Included by the
-// driver's Objective-C files only.
+// The Metal driver's names for the contract's values: formats,
+// texture shapes, sampler states and labels. Included by the driver's
+// Objective-C files only.
 
 #ifndef MAUL_RHI_SRC_METAL_NAMES_H
 #define MAUL_RHI_SRC_METAL_NAMES_H

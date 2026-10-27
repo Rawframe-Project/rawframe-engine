@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // A shader container's interface records: vertex inputs, color outputs
-// and inter-stage variables, 8 bytes each (docs/contract/container.md),
+// and inter-stage variables, 8 bytes each (docs/user/shader-container-format.md),
 // read and checked.
 
 #ifndef MAUL_RHI_SRC_CONTAINER_INTERFACE_H

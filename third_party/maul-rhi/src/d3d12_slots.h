@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's tables (mrhi-0003): free slots of a table in the
-// device's block, linked by index plus one, a handle being its slot's
-// index plus one.
+// The D3D12 driver's tables: free slots of a table in the device's
+// block, linked by index plus one, a handle being its slot's index
+// plus one.
 
 #ifndef MAUL_RHI_SRC_D3D12_SLOTS_H
 #define MAUL_RHI_SRC_D3D12_SLOTS_H

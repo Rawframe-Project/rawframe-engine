@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The WebGPU driver (mrhi-0003): the browser's WebGPU reached through
-// EM_JS glue, its promises settled into a queue the driver's poll drains.
+// The WebGPU driver: the browser's WebGPU reached through EM_JS glue, its
+// promises settled into a queue the driver's poll drains.
 
 #ifndef MAUL_RHI_SRC_DRIVER_WEBGPU_H
 #define MAUL_RHI_SRC_DRIVER_WEBGPU_H

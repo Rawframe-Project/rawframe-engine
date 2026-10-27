@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's names (mrhi-0003): tables indexed by the
-// contract's values, which the core has checked.
+// The Metal driver's names: tables indexed by the contract's
+// values, which the core has checked.
 
 #include "metal_names.h"
 

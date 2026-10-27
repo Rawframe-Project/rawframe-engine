@@ -5,9 +5,8 @@
 // as EM_JS functions. Emscripten compiles it into the program. A build
 // without Emscripten (wasm32-wasi) imports each of those functions under
 // its own name from the module "env", as Emscripten's own are, and the
-// page passes what tools/gen_web_glue.py wrote from the same files
-// (mrhi-0016). This is the one file of the library that includes
-// Emscripten's headers.
+// page passes what tools/gen_web_glue.py wrote from the same files. This
+// is the one file of the library that includes Emscripten's headers.
 
 #ifndef MAUL_RHI_SRC_WEB_JS_H
 #define MAUL_RHI_SRC_WEB_JS_H

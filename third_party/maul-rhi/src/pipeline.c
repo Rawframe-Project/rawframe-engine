@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Pipelines (mrhi-0009): checked against their shader's reflection,
-// started in the driver with a tag that carries their slot, and answered
-// in the device's queue, whose room each creation reserves.
+// Pipelines: checked against their shader's reflection, started in the
+// driver with a tag that carries their slot, and answered in the
+// device's queue, whose room each creation reserves.
 
 #include "invariant.h"
 #include "label.h"
@@ -49,12 +49,31 @@ static uint32_t FindConstant(const mrhiReflection* reflection, uint32_t id)
     return i;
 }
 
-bool mrhiAreConstantsValid(const mrhiReflection* reflection, const mrhiConstantValue* values,
-                           uint32_t count)
+// The refusal of a pipeline's constant values, uncounted: mrhi_errorInvalid
+// or mrhi_errorFormat as mrhiCheckConstants describes, or success.
+static mrhiResult ConstantsFault(const mrhiReflection* reflection, const mrhiConstantValue* values,
+                                 uint32_t count)
 {
-    if (count > reflection->constantCount || (values == nullptr && count > 0))
+    if (values == nullptr && count > 0)
     {
-        return false;
+        return mrhi_errorInvalid;
+    }
+    // More values than constants is refused first, so the scans below stay
+    // within the reflection's count, at most a section's MAX_RECORDS, however
+    // long a list from content is.
+    if (count > reflection->constantCount)
+    {
+        return mrhi_errorFormat;
+    }
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        for (uint32_t j = 0; j < i; ++j)
+        {
+            if (values[j].id == values[i].id)
+            {
+                return mrhi_errorInvalid;
+            }
+        }
     }
     for (uint32_t i = 0; i < count; ++i)
     {
@@ -62,14 +81,7 @@ bool mrhiAreConstantsValid(const mrhiReflection* reflection, const mrhiConstantV
         if (at == reflection->constantCount ||
             !IsValueValid(reflection->constants[at].type, values[i].value))
         {
-            return false;
-        }
-        for (uint32_t j = 0; j < i; ++j)
-        {
-            if (values[j].id == values[i].id)
-            {
-                return false;
-            }
+            return mrhi_errorFormat;
         }
     }
     for (uint32_t i = 0; i < reflection->constantCount; ++i)
@@ -81,10 +93,22 @@ bool mrhiAreConstantsValid(const mrhiReflection* reflection, const mrhiConstantV
         }
         if (reflection->constants[i].required && !given)
         {
-            return false;
+            return mrhi_errorFormat;
         }
     }
-    return true;
+    return mrhi_success;
+}
+
+mrhiResult mrhiCheckConstants(mrhiDevice* device, const mrhiReflection* reflection,
+                              const mrhiConstantValue* values, uint32_t count)
+{
+    mrhiResult fault = ConstantsFault(reflection, values, count);
+    if (fault == mrhi_errorInvalid)
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticPipelineConstants);
+    }
+    return fault == mrhi_errorFormat ? mrhiDeviceBadData(device, mrhi_diagnosticPipelineConstants)
+                                     : mrhi_success;
 }
 
 mrhiResult mrhiTakePipelineSlot(mrhiDevice* device, mrhiPipelineKind kind,
@@ -147,7 +171,8 @@ mrhiShaderSlot* mrhiCheckPipelineHead(mrhiDevice* device, mrhiDefHead head, uint
 }
 
 // Checks a compute pipeline def: the shader, with the entry's index, or
-// NULL with the refusal, invalid input counted as misuse.
+// NULL with the refusal, invalid input counted as misuse and an entry or
+// constants the reflection lacks not.
 static mrhiShaderSlot* CheckComputeDef(mrhiDevice* device, const mrhiComputePipelineDef* def,
                                        uint32_t* entryOut, mrhiResult* statusOut)
 {
@@ -158,25 +183,32 @@ static mrhiShaderSlot* CheckComputeDef(mrhiDevice* device, const mrhiComputePipe
         return nullptr;
     }
     const mrhiReflection* reflection = shader->reflection;
-    *entryOut = def->entry == nullptr
-                    ? reflection->entryCount
-                    : mrhiFindEntry(reflection, def->entry, def->entryLength, mrhi_stageCompute);
-    if (*entryOut == reflection->entryCount)
+    if (def->entry == nullptr)
     {
         *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticPipelineEntry);
         return nullptr;
     }
-    if (!mrhiAreConstantsValid(reflection, def->constants, def->constantCount))
+    *entryOut = mrhiFindEntry(reflection, def->entry, def->entryLength, mrhi_stageCompute);
+    if (*entryOut == reflection->entryCount)
     {
-        *statusOut = mrhiDeviceMisuse(device, mrhi_diagnosticPipelineConstants);
+        *statusOut = mrhiDeviceBadData(device, mrhi_diagnosticPipelineEntry);
         return nullptr;
     }
-    return shader;
+    *statusOut = mrhiCheckConstants(device, reflection, def->constants, def->constantCount);
+    return *statusOut == mrhi_success ? shader : nullptr;
 }
 
 mrhiResult mrhiCreateComputePipeline(mrhiDevice* device, const mrhiComputePipelineDef* def,
                                      mrhiComputePipelineId* pipelineOut, mrhiRequestId* requestOut)
 {
+    if (pipelineOut != nullptr)
+    {
+        *pipelineOut = (mrhiComputePipelineId){0};
+    }
+    if (requestOut != nullptr)
+    {
+        *requestOut = (mrhiRequestId){0};
+    }
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

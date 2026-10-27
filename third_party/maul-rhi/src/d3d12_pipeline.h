@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's shaders and pipelines (mrhi-0003). A shader holds
-// each entry's DXIL, copied from the container, and the root signature
-// its bindings make, which every pipeline of the shader shares; a
-// pipeline holds its state, a reference on the root signature, and what
-// its frames bind, copied, so that it outlives its shader. Pipelines are
-// made at the call, with no thread, and answered at the next poll.
-// Included by the driver's files only.
+// The D3D12 driver's shaders and pipelines. A shader holds each entry's
+// DXIL, copied from the container, and the root signature its bindings
+// make, which every pipeline of the shader shares; a pipeline holds its
+// state, a reference on the root signature, and what its frames bind,
+// copied, so that it outlives its shader. Pipelines are made at the
+// call, with no thread, and answered at the next poll. Included by the
+// driver's files only.
 
 #ifndef MAUL_RHI_SRC_D3D12_PIPELINE_H
 #define MAUL_RHI_SRC_D3D12_PIPELINE_H

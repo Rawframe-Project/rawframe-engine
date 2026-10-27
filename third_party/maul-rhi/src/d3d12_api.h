@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's view of the platform (mrhi-0003): the DirectX
-// headers kept as published in directx/ with their C interfaces
-// (COBJMACROS), DXGI's from the Windows SDK, and the entry points of
-// d3d12.dll and dxgi.dll, opened at run time. Included by the driver's
-// files only.
+// The D3D12 driver's view of the platform: the DirectX headers kept as
+// published in directx/ with their C interfaces (COBJMACROS), DXGI's
+// from the Windows SDK, and the entry points of d3d12.dll and
+// dxgi.dll, opened at run time. Included by the driver's files only.
 
 #ifndef MAUL_RHI_SRC_D3D12_API_H
 #define MAUL_RHI_SRC_D3D12_API_H

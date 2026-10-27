@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Vulkan physical devices as adapters (mrhi-0003), read through the Vulkan
-// 1.1, 1.2 and 1.3 feature and property structs, with each feature,
-// limit and format capability as the contract's Vulkan row maps it.
+// Vulkan physical devices as adapters, read through the Vulkan 1.1, 1.2
+// and 1.3 feature and property structs, with each feature, limit and
+// format capability as the contract's Vulkan row maps it.
 
 #include "vulkan_adapter.h"
 

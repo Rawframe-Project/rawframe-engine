@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's devices (mrhi-0003): a retained Metal device and
-// its command queue, released when the device is destroyed, its objects
-// (metal_resource.m), shaders and pipelines (metal_pipeline.m) and
-// frames (metal_frame.m). A destroyed object or pipeline may still be
-// named by the next frame submitted, so it waits until that frame is
-// committed, whose command buffer then holds what it uses; surfaces are
+// The Metal driver's devices: a retained Metal device and its command
+// queue, released when the device is destroyed, the lanes beside it
+// (metal_lanes.m), its objects (metal_resource.m), shaders and pipelines
+// (metal_pipeline.m) and frames (metal_frame.m). A destroyed object or
+// pipeline may still be named by the next frame submitted, so it waits
+// until that frame is committed, whose command buffers then hold what it
+// uses; surfaces are
 // layers (metal_surface.m). Heaps are not made yet: those calls answer
 // mrhi_errorUnsupported.
 
@@ -15,6 +16,7 @@
 #include "allocator.h"
 #include "invariant.h"
 #include "metal_frame.h"
+#include "metal_lanes.h"
 #include "metal_pipeline.h"
 #include "metal_resource.h"
 #include "metal_surface.h"
@@ -70,6 +72,7 @@ static void Destroy(void* self)
 {
     MetalDevice* device = self;
     mrhiMetalCloseFrames(&device->frames);
+    mrhiMetalCloseLanes(&device->frames.lanes);
     ReleaseRetirees(device);
     [device->queue release];
     [device->device release];
@@ -231,10 +234,17 @@ static void BufferMemory(const void* self, const mrhiBufferDef* def, uint64_t* b
     mrhiMetalBufferMemory(device->device, def, bytesOut, alignmentOut);
 }
 
-static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag)
+static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag,
+                              mrhiDiagnosticCode* budgetOut)
 {
     MetalDevice* device = self;
     mrhiResult status = mrhiMetalSubmitFrame(&device->frames, frame, tag);
+    // Metal runs out only of the memory a frame's buffers and transients
+    // take.
+    if (status == mrhi_errorCapacity)
+    {
+        *budgetOut = mrhi_diagnosticSubmitMemory;
+    }
     if (status == mrhi_success)
     {
         ReleaseRetirees(device);
@@ -321,7 +331,8 @@ static const mrhiDeviceDriverVtable s_vtable = {
 };
 
 // The room a device takes: itself, the pipelines' answers, a frame's
-// objects and encoding, and the retirees.
+// objects, encoding and batches, the passes' lanes, each slot's
+// committed command buffers, and the retirees.
 typedef struct Room
 {
     mrhiLayout layout;
@@ -329,6 +340,13 @@ typedef struct Room
     size_t handles;
     size_t objects;
     size_t encoder;
+    size_t batches;
+    size_t passLanes;
+    size_t passBatches;
+    size_t followed;
+    size_t commits;
+    uint32_t batchLimit;
+    uint32_t commitLimit;
     size_t retirees;
     uint32_t retireeLimit;
 } Room;
@@ -342,6 +360,18 @@ static Room RoomOf(const mrhiDeviceLimits* limits)
     room.handles = mrhiLayoutAdd(layout, limits->pipelines, sizeof(uint64_t), alignof(uint64_t));
     room.objects = mrhiLayoutAdd(layout, limits->frameResources, sizeof(id), alignof(id));
     room.encoder = mrhiLayoutAdd(layout, 1, sizeof(mrhiMetalEncoder), alignof(mrhiMetalEncoder));
+    // A pass opens one batch at most, beside the frame's first and last,
+    // and each native pass commits one more command buffer before its own.
+    room.batchLimit = limits->framePasses + 2;
+    room.commitLimit = room.batchLimit + MRHI_NATIVE_PASSES;
+    room.batches =
+        mrhiLayoutAdd(layout, room.batchLimit, sizeof(mrhiMetalBatch), alignof(mrhiMetalBatch));
+    size_t passes = (size_t)limits->framePasses + 1;
+    room.passLanes = mrhiLayoutAdd(layout, passes, sizeof(mrhiMetalLane), alignof(mrhiMetalLane));
+    room.passBatches = mrhiLayoutAdd(layout, passes, sizeof(uint32_t), alignof(uint32_t));
+    room.followed = mrhiLayoutAdd(layout, passes, sizeof(bool), alignof(bool));
+    room.commits = mrhiLayoutAdd(layout, (size_t)MRHI_METAL_FRAMES * room.commitLimit, sizeof(id),
+                                 alignof(id));
     uint64_t retirees = (uint64_t)limits->buffers + limits->textures + limits->views +
                         limits->samplers + limits->querySets + limits->pipelines;
     room.retireeLimit = retirees < UINT32_MAX ? (uint32_t)retirees : UINT32_MAX;
@@ -363,11 +393,24 @@ static void Lay(MetalDevice* made, const Room* room, const mrhiDeviceLimits* lim
     };
     made->frames = (mrhiMetalFrames){
         .device = made->device,
-        .queue = made->queue,
+        .lanes =
+            {
+                .commitLimit = room->commitLimit,
+                .batchLimit = room->batchLimit,
+                .batches = (mrhiMetalBatch*)(void*)(block + room->batches),
+                .passLanes = (mrhiMetalLane*)(void*)(block + room->passLanes),
+                .passBatches = (uint32_t*)(void*)(block + room->passBatches),
+                .followed = (bool*)(block + room->followed),
+            },
         .objects = (id*)(void*)(block + room->objects),
         .objectLimit = limits->frameResources,
         .encoder = (mrhiMetalEncoder*)(void*)(block + room->encoder),
     };
+    for (int i = 0; i < MRHI_METAL_FRAMES; ++i)
+    {
+        made->frames.slots[i].commits.buffers =
+            (id<MTLCommandBuffer>*)(void*)(block + room->commits) + (size_t)i * room->commitLimit;
+    }
     made->retirees = (Retiree*)(void*)(block + room->retirees);
     made->retireeLimit = room->retireeLimit;
 }
@@ -406,7 +449,8 @@ mrhiResult mrhiCreateMetalDevice(const mrhiAllocator* allocator, id<MTLDevice> d
     }
     Lay(made, &room, &def->deviceLimits);
     made->frames.counted = def->features.multiDrawIndirectCount;
-    if (mrhiMetalOpenFrames(&made->frames) != mrhi_success)
+    if (!mrhiMetalOpenLanes(&made->frames.lanes, made->device, made->queue, made->queue.label) ||
+        mrhiMetalOpenFrames(&made->frames) != mrhi_success)
     {
         Destroy(made);
         return mrhi_errorPlatform;

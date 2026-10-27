@@ -89,7 +89,7 @@ static bool TakeScratch(mrhiD3d12Recorder* recorder, uint64_t bytes, uint64_t* o
     }
     if (*recorder->scratch == nullptr || recorder->scratchBytes - recorder->scratchUsed < bytes)
     {
-        recorder->status = mrhi_errorCapacity;
+        mrhiD3d12RunOut(recorder, mrhi_diagnosticSubmitScratch);
         return false;
     }
     *offsetOut = recorder->scratchUsed;
@@ -149,11 +149,11 @@ static void Indirect(mrhiD3d12Recorder* recorder, uint32_t object, uint64_t offs
                                               0);
 }
 
-// A counted multi-draw (mrhi-0020), reading its records in place; or,
-// for a pipeline reading the vertex information, its records first
-// expanded into the scratch buffer by the library's kernel, each after
-// a copy of its base vertex and first instance for the pipeline's
-// command signature.
+// A counted multi-draw, reading its records in place; or, for a
+// pipeline reading the vertex information, its records first expanded
+// into the scratch buffer by the library's kernel, each after a copy
+// of its base vertex and first instance for the pipeline's command
+// signature.
 static void Counted(mrhiD3d12Recorder* recorder, const mrhiCommand* command, bool indexed,
                     bool expanded)
 {

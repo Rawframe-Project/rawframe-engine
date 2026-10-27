@@ -221,7 +221,9 @@ EM_JS(void, mrhiJsAddDepthTarget, (int state, uint32_t resource, uint32_t mip, u
 // Begins a pass: its label a debug group on the encoder, a render pass
 // with the targets given, a compute pass at once only for its
 // timestamps. A compute pass that leaves for the encoder writes its end
-// timestamp in a pass of its own.
+// timestamp in a pass of its own, and a transfer pass, whose copies are
+// the encoder's, writes each of its timestamps in an empty compute pass,
+// since WebGPU times only passes.
 EM_JS(void, mrhiJsBeginPass, (int state, int work, const char* label, int labelLength,
                           int occlusion, int timestamps, uint32_t begin, uint32_t end,
                           bool split), {
@@ -242,7 +244,7 @@ EM_JS(void, mrhiJsBeginPass, (int state, int work, const char* label, int labelL
     if (writes && begin !== none) {
         writes.beginningOfPassWriteIndex = begin;
     }
-    if (writes && end !== none && !(work === 2 && split)) {
+    if (writes && end !== none && !(work === 2 && split) && work !== 0) {
         writes.endOfPassWriteIndex = end;
     } else if (writes && end !== none) {
         frame.ending = {querySet: writes.querySet, endOfPassWriteIndex: end};
@@ -261,6 +263,8 @@ EM_JS(void, mrhiJsBeginPass, (int state, int work, const char* label, int labelL
         frame.depth = undefined;
     } else if (work === 2 && writes && Object.keys(writes).length > 1) {
         frame.pass = frame.encoder.beginComputePass({timestampWrites: writes});
+    } else if (work === 0 && writes && begin !== none) {
+        frame.encoder.beginComputePass({timestampWrites: writes}).end();
     }
 });
 
@@ -842,6 +846,9 @@ static void Copy(int state, const mrhiDriverFrame* frame, const mrhiCommand* com
     }
     case mrhiCommandClearBuffer:
         mrhiJsClearBuffer(state, command->a, (double)command->c, (double)command->d);
+        break;
+    case mrhiCommandClearTexture:
+        // WebGPU gives every new texture zeros already.
         break;
     default:
         CopyWithTexture(state, frame, command);

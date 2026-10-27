@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The command stream (mrhi-0011): 32-byte records in 4 KiB chunks of a
-// frame's arena, each pass linking its own chunks. A command's payload
-// records follow it in the same chunk.
+// The command stream: 32-byte records in 4 KiB chunks of a frame's
+// arena, each pass linking its own chunks. A command's payload records
+// follow it in the same chunk.
 
 #ifndef MAUL_RHI_SRC_COMMAND_H
 #define MAUL_RHI_SRC_COMMAND_H
@@ -51,9 +51,9 @@ typedef enum mrhiCommandType
     mrhiCommandDrawIndirect,
     mrhiCommandDrawIndexedIndirect,
     mrhiCommandDispatchIndirect,
-    // A counted multi-draw (mrhi-0020). a: the records' frame resource's slot
-    // plus one; b: the count's slot plus one, and the most draws in the
-    // upper half; c: the records' offset; d: the count's offset.
+    // A counted multi-draw. a: the records' frame resource's slot plus one;
+    // b: the count's slot plus one, and the most draws in the upper half; c:
+    // the records' offset; d: the count's offset.
     mrhiCommandDrawIndirectCount,
     mrhiCommandDrawIndexedIndirectCount,
     // a: the query; b: the query set's driver handle.
@@ -83,9 +83,13 @@ typedef enum mrhiCommandType
     // device's readback ring (object 0), placed and pitched as uploads.
     mrhiCommandReadBuffer,
     mrhiCommandReadTexture,
-    // Zeros a buffer's range (mrhi-0022). a: the frame resource's slot
-    // plus one; c: the offset; d: the bytes, a positive multiple of 4.
+    // Zeros a buffer's range. a: the frame resource's slot plus one;
+    // c: the offset; d: the bytes, a positive multiple of 4.
     mrhiCommandClearBuffer,
+    // Zeros a whole texture, every mip, layer or depth slice and aspect,
+    // in the copy destination state. a: the frame resource's slot plus
+    // one, an imported texture.
+    mrhiCommandClearTexture,
     // One past the last type.
     mrhiCommandTypeEnd,
 } mrhiCommandType;

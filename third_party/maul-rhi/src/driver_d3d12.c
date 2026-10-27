@@ -1,23 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The D3D12 driver's instance (mrhi-0003): every DXGI adapter that opens
-// a feature level 12_0 device with shader model 6.0, each under its
-// LUID, so an adapter found again keeps its id; WARP, DXGI's software
-// adapter, is one of them. A search opens a device on each adapter to
-// read it, which D3D12 keeps as the adapter's one device while it is
-// held. Searches and device openings are answered at the next poll.
-// Limits are WebGPU's floor, raised where every device at the floor
-// goes further. Feature level 12_0 grants timestamps on the direct
-// queue, BC textures, filtering of 32-bit floats, rg11b10ufloat
-// targets, dual-source blending, unclipped depth and first instances in
-// indirect draws on every device (the format tables of feature level
-// 11_0 require the formats' parts); 64-bit integers and wave operations
-// are the device's to report. Resource binding tier 3 grants bindless
-// heaps of every kind (mrhi-0015): 65536 entries, the portable ceiling,
-// and 256 samplers, since the heaps and the frames' rings share D3D12's
-// 2048 shader-visible samplers. Surfaces are Win32 windows
-// (d3d12_surface.c).
+// The D3D12 driver's instance: every DXGI adapter that opens a feature
+// level 12_0 device with shader model 6.0, each under its LUID, so an
+// adapter found again keeps its id; WARP, DXGI's software adapter, is
+// one of them. A search opens a device on each adapter to read it, which
+// D3D12 keeps as the adapter's one device while it is held. Searches and
+// device openings are answered at the next poll. Limits are WebGPU's
+// floor, raised where every device at the floor goes further. Feature
+// level 12_0 grants timestamps on the direct queue, BC textures,
+// filtering of 32-bit floats, rg11b10ufloat targets, dual-source
+// blending, unclipped depth and first instances in indirect draws on
+// every device (the format tables of feature level 11_0 require the
+// formats' parts); 64-bit integers and wave operations are the device's
+// to report. Resource binding tier 3 grants bindless heaps of every
+// kind: 65536 entries, the portable ceiling, and 256 samplers, since the
+// heaps and the frames' rings share D3D12's 2048 shader-visible
+// samplers. Surfaces are Win32 windows (d3d12_surface.c).
 
 #include "driver_d3d12.h"
 
@@ -171,7 +170,7 @@ static mrhiFeatures FeaturesOf(ID3D12Device* device)
                              device, D3D12_FEATURE_SHADER_MODEL, &model62, sizeof(model62))) &&
                          model62.HighestShaderModel >= D3D_SHADER_MODEL_6_2;
     // Multiview through view instancing, its shaders reading SV_ViewID
-    // of shader model 6.1 (mrhi-0020).
+    // of shader model 6.1.
     D3D12_FEATURE_DATA_D3D12_OPTIONS3 options3 = {0};
     D3D12_FEATURE_DATA_SHADER_MODEL model = {.HighestShaderModel = D3D_SHADER_MODEL_6_1};
     features.multiview = SUCCEEDED(ID3D12Device_CheckFeatureSupport(

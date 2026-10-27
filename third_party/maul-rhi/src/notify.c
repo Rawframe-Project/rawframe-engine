@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The instance's notification queue (family record 0018): pending work,
-// its driver polled when the queue is drained, and exactly one record
-// per request.
+// The instance's notification queue: pending work, its driver polled
+// when the queue is drained, and exactly one record per request.
 
 #include "instance_core.h"
+#include "invariant.h"
 
 // Driver events a poll moves at a time.
 #define POLL_BATCH 8
@@ -26,6 +26,8 @@ uint32_t mrhiNextRequest(mrhiInstance* instance)
 
 void mrhiPushInstanceNotification(mrhiInstance* instance, mrhiInstanceNotification notification)
 {
+    // Every request reserved its answer's room when it was accepted.
+    MRHI_ASSERT(instance->queueCount < instance->limits.notifications);
     uint32_t tail = (instance->queueHead + instance->queueCount) % instance->limits.notifications;
     instance->queue[tail] = notification;
     ++instance->queueCount;
@@ -33,6 +35,7 @@ void mrhiPushInstanceNotification(mrhiInstance* instance, mrhiInstanceNotificati
 
 void mrhiAddPending(mrhiInstance* instance, mrhiPending pending)
 {
+    MRHI_ASSERT(mrhiHasRoomForAnswer(instance) && pending.request != 0);
     instance->pending[instance->pendingCount++] = pending;
 }
 
@@ -40,6 +43,7 @@ void mrhiAddPending(mrhiInstance* instance, mrhiPending pending)
 // record.
 static void Answer(mrhiInstance* instance, uint32_t index, mrhiResult outcome)
 {
+    MRHI_ASSERT(index < instance->pendingCount);
     mrhiPending pending = instance->pending[index];
     instance->pending[index] = instance->pending[--instance->pendingCount];
     mrhiInstanceNotificationKind kind = mrhi_instanceAdaptersFound;

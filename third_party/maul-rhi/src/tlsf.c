@@ -70,6 +70,8 @@ static void ReturnNode(mrhiTlsfNodes* store, uint32_t id)
 static void Insert(mrhiTlsf* pool, mrhiTlsfNodes* store, uint32_t id)
 {
     mrhiTlsfNode* node = NODE(store, id);
+    // An empty range would never merge and keep its block from emptying.
+    MRHI_ASSERT(node->size > 0);
     uint32_t first = 0;
     uint32_t second = 0;
     Classify(node->size, &first, &second);
@@ -93,6 +95,9 @@ static void Remove(mrhiTlsf* pool, mrhiTlsfNodes* store, uint32_t id)
     uint32_t first = 0;
     uint32_t second = 0;
     Classify(node->size, &first, &second);
+    // A free range is in its class's list, whose bits say it is not empty.
+    MRHI_ASSERT((pool->secondMap[first] & (1u << second)) != 0 &&
+                (pool->firstMap & (UINT64_C(1) << first)) != 0);
     if (node->previousFree != 0)
     {
         NODE(store, node->previousFree)->nextFree = node->nextFree;
@@ -158,6 +163,29 @@ static uint32_t FindFitting(const mrhiTlsf* pool, uint64_t size)
         seconds = pool->secondMap[first];
     }
     return pool->heads[first][(uint32_t)__builtin_ctz(seconds)];
+}
+
+// Whether a range meets its neighbours end to end, in its block, linked
+// both ways. Only assertions call it.
+[[maybe_unused]] static bool IsJoined(const mrhiTlsfNodes* store, uint32_t id)
+{
+    const mrhiTlsfNode* node = NODE(store, id);
+    const mrhiTlsfNode* before = node->previous != 0 ? NODE(store, node->previous) : nullptr;
+    const mrhiTlsfNode* after = node->next != 0 ? NODE(store, node->next) : nullptr;
+    return (before == nullptr || (before->next == id && before->block == node->block &&
+                                  before->offset + before->size == node->offset)) &&
+           (after == nullptr || (after->previous == id && after->block == node->block &&
+                                 node->offset + node->size == after->offset));
+}
+
+// Whether a range meets its neighbours, none of them free: free ranges
+// never meet, as each free merges with its free neighbours. Only
+// assertions call it.
+[[maybe_unused]] static bool IsMerged(const mrhiTlsfNodes* store, uint32_t id)
+{
+    const mrhiTlsfNode* node = NODE(store, id);
+    return IsJoined(store, id) && (node->previous == 0 || !NODE(store, node->previous)->free) &&
+           (node->next == 0 || !NODE(store, node->next)->free);
 }
 
 // Links a new node after a node of the same block.
@@ -280,6 +308,7 @@ uint32_t mrhiTlsfAllocate(mrhiTlsf* pool, mrhiTlsfNodes* store, uint64_t size, u
         Insert(pool, store, tail);
     }
     node->free = false;
+    MRHI_ASSERT(node->size >= size && (node->offset & (alignment - 1)) == 0 && IsJoined(store, id));
     *blockOut = node->block;
     *offsetOut = node->offset;
     return id;
@@ -317,6 +346,7 @@ uint32_t mrhiTlsfFree(mrhiTlsf* pool, mrhiTlsfNodes* store, uint32_t allocation)
         Remove(pool, store, after);
         Absorb(store, id);
     }
+    MRHI_ASSERT(IsMerged(store, id));
     Insert(pool, store, id);
     return id;
 }

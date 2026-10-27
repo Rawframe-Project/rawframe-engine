@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's shaders and pipelines (mrhi-0003). MSL is compiled
-// without fast math, which the family's floating-point rules forbid; a
-// metallib carries the choices its cook made. Each entry point is a
-// function of its own name, specialized with the pipeline's constants as
-// function constants of their ids; the ones a pipeline leaves out keep
-// the defaults written in the code.
+// The Metal driver's shaders and pipelines. MSL is compiled without fast
+// math, which the family's floating-point rules forbid; a metallib
+// carries the choices its cook made. Each entry point is a function of
+// its own name, specialized with the pipeline's constants as function
+// constants of their ids; the ones a pipeline leaves out keep the
+// defaults written in the code.
 
 #include "metal_pipeline.h"
 

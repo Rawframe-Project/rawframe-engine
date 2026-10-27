@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The validation layer (mrhi-0025): vtables around whichever driver an
-// instance starts, which pass every call through and count what breaks
-// the SPI's contract: a frame no driver could translate, and answers no
-// core could trust. Counts a driver could make the core overrun are
-// clamped; everything else passes through as the driver gave it.
+// The validation layer: vtables around whichever driver an instance
+// starts, which pass every call through and count what breaks the SPI's
+// contract: a frame no driver could translate, and answers no core
+// could trust. Counts a driver could make the core overrun are clamped;
+// everything else passes through as the driver gave it.
 
 // Built only with the layer; defined here too for tools that read the
 // file alone, outside such a build.
@@ -21,7 +21,7 @@
 #include <stdalign.h>
 
 // Where breaches go: the instance's fault count and its diagnostic
-// queue (mrhi-0027).
+// queue.
 typedef struct Watch
 {
     _Atomic uint64_t* faults;
@@ -452,12 +452,25 @@ static bool IsHandle(const void* handles, uint64_t handle)
     return handle != 0;
 }
 
-static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag)
+// Whether a code is one a driver names a submission's budget with.
+static bool IsSubmitBudget(mrhiDiagnosticCode code)
+{
+    return code == mrhi_diagnosticSubmitMemory || code == mrhi_diagnosticSubmitDescriptors ||
+           code == mrhi_diagnosticSubmitScratch || code == mrhi_diagnosticSubmitCommandLists;
+}
+
+static mrhiResult SubmitFrame(void* self, const mrhiDriverFrame* frame, uint64_t tag,
+                              mrhiDiagnosticCode* budgetOut)
 {
     DeviceLayer* device = self;
     Expect(&device->watch, mrhiWalkFrame(frame, IsHandle, nullptr, nullptr) == 0,
            mrhi_diagnosticDriverFrameWalk);
-    return device->inner.vtable->submitFrame(device->inner.self, frame, tag);
+    mrhiResult status =
+        device->inner.vtable->submitFrame(device->inner.self, frame, tag, budgetOut);
+    Expect(&device->watch,
+           status == mrhi_errorCapacity ? IsSubmitBudget(*budgetOut) : *budgetOut == 0,
+           mrhi_diagnosticDriverSubmitBudget);
+    return status;
 }
 
 static size_t PollDevice(void* self, mrhiDriverEvent* events, size_t capacity)

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The walk of a submitted frame (mrhi-0013): every pass's commands
-// checked as a real driver would read them. The test driver traps on a
-// fault; the validation layer counts them (mrhi-0025).
+// The walk of a submitted frame: every pass's commands checked as a
+// real driver would read them. The test driver traps on a fault; the
+// validation layer counts them.
 
 #ifndef MAUL_RHI_SRC_FRAME_WALK_H
 #define MAUL_RHI_SRC_FRAME_WALK_H

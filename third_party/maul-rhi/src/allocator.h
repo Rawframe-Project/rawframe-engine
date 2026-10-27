@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Memory through a def's allocator (conventions section 9): a zeroed
-// allocator means the C library's functions, which serve alignments up
-// to that of max_align_t.
+// Memory through a def's allocator: a zeroed allocator means the C
+// library's functions, which serve alignments up to that of
+// max_align_t.
 
 #ifndef MAUL_RHI_SRC_ALLOCATOR_H
 #define MAUL_RHI_SRC_ALLOCATOR_H

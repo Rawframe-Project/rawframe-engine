@@ -1,40 +1,33 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's frames (mrhi-0003): each submitted frame recorded
-// into a command buffer and committed, then polled for completion in
-// order. Included by the driver's Objective-C files only.
+// The Metal driver's frames: each submitted frame recorded into command
+// buffers on the device's lanes and committed, then polled for
+// completion in order.
+// Included by the driver's Objective-C files only.
 
 #ifndef MAUL_RHI_SRC_METAL_FRAME_H
 #define MAUL_RHI_SRC_METAL_FRAME_H
 
+#include "metal_lanes.h"
 #include "metal_state.h"
 
 #include "maul-rhi/frame.h"
 
-#include <stdatomic.h>
-
 // The frames a device lets run at once.
 #define MRHI_METAL_FRAMES 3
 
-// A running frame: its tag, command buffer and the semaphore its
-// completion signals; its staging and readback buffers, kept for the
-// frames that use the slot after it; and the core's readback ring, with
-// the range the frame writes.
+// A running frame: its tag and the command buffers it committed; its
+// staging and readback buffers, kept for the frames that use the slot
+// after it; and the core's readback ring, with the range the frame
+// writes.
 typedef struct mrhiMetalSlot
 {
     uint64_t tag;
-    // The command buffers the frame committed, retained, in order: its
-    // own, with each native pass's between them (mrhi-0019). The frame is
-    // done when all have completed; the last completion handler to run
-    // signals done.
-    id<MTLCommandBuffer> runs[1 + 2 * MRHI_NATIVE_PASSES];
-    uint32_t runCount;
-    _Atomic uint32_t running;
-    dispatch_semaphore_t done;
+    mrhiMetalCommits commits;
     id<MTLBuffer> staging;
     id<MTLBuffer> readback;
-    // The records counted multi-draws draw from, clamped (mrhi-0020).
+    // The records counted multi-draws draw from, clamped.
     id<MTLBuffer> clamped;
     uint8_t* ring;
     uint64_t low;
@@ -44,11 +37,13 @@ typedef struct mrhiMetalSlot
 typedef struct mrhiMetalFrames
 {
     id<MTLDevice> device;
-    id<MTLCommandQueue> queue;
+    mrhiMetalLanes lanes;
     // The depth and stencil state of a pipeline without one.
     id<MTLDepthStencilState> noDepth;
+    // The zeros copies into new textures read.
+    id<MTLBuffer> zeros;
     // Whether the device draws counted multi-draws, and the kernel that
-    // clamps their records (mrhi-0020), made when it does.
+    // clamps their records, made when it does.
     bool counted;
     id<MTLComputePipelineState> clamp;
     mrhiMetalSlot slots[MRHI_METAL_FRAMES];

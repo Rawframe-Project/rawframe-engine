@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The validation layer (mrhi-0025), in builds with MAUL_RHI_VALIDATION:
-// an instance driver and its devices wrapped so that every frame the
-// core submits is walked and every answer the driver gives is checked,
-// each breach counted.
+// The validation layer, in builds with MAUL_RHI_VALIDATION: an instance
+// driver and its devices wrapped so that every frame the core submits
+// is walked and every answer the driver gives is checked, each breach
+// counted.
 
 #ifndef MAUL_RHI_SRC_VALIDATION_H
 #define MAUL_RHI_SRC_VALIDATION_H

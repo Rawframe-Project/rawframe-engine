@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Metal driver's render pipeline descriptions (mrhi-0003): a
-// graphics pipeline def as a render pipeline descriptor, a depth and
-// stencil state, and the state render encoders set per pipeline.
-// Included by the driver's Objective-C files only.
+// The Metal driver's render pipeline descriptions: a graphics
+// pipeline def as a render pipeline descriptor, a depth and stencil
+// state, and the state render encoders set per pipeline. Included by
+// the driver's Objective-C files only.
 
 #ifndef MAUL_RHI_SRC_METAL_GRAPHICS_H
 #define MAUL_RHI_SRC_METAL_GRAPHICS_H

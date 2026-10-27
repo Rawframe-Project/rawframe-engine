@@ -7,8 +7,8 @@
 // container has them, then per table a descriptor table of its
 // resources and one of its samplers where it has them, each binding a
 // one-descriptor range at its register and space, in the container's
-// order, then a heap table of each class of the container's heap ranges
-// (mrhi-0015), each range unbounded from the table's start: D3D12 lets
+// order, then a heap table of each class of the container's heap
+// ranges, each range unbounded from the table's start: D3D12 lets
 // ranges of one class alias, not of two. Every parameter is visible to
 // every stage. Resource data is volatile, since frames may write a
 // resource between passes that read it; heap descriptors are volatile
