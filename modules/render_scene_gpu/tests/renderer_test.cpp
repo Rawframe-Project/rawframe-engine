@@ -160,7 +160,8 @@ RAWFRAME_TEST(TheSceneDrawsItsModelsInDepth) {
 RAWFRAME_TEST(AFrameOutOfCommandSpaceIsRefusedWithMaulRhisOwnOutcome) {
     // Frames of one 4 KiB chunk of commands: the scene's passes take more,
     // and the frame is refused with the capacity error Maul RHI answered,
-    // which says what ran out, never a state error the renderer chose.
+    // which says what ran out, never a state error the renderer chose, and
+    // with the limit the device named.
     const auto kDevice = opened({.allowSoftware = true, .frameCommandBytes = 4096});
     if (kDevice == nullptr) {
         return;
@@ -188,13 +189,19 @@ RAWFRAME_TEST(AFrameOutOfCommandSpaceIsRefusedWithMaulRhisOwnOutcome) {
     RAWFRAME_EXPECT(refused.has_value());
     if (refused.has_value()) {
         std::string outcome;
+        std::string limit;
         for (const auto& kField : refused->context()) {
             if (kField.key == "outcome") {
                 outcome = kField.value;
+            } else if (kField.key == "limit") {
+                limit = kField.value;
             }
         }
-        std::printf("refused: %s, outcome %s\n", std::string{refused->description()}.c_str(), outcome.c_str());
-        RAWFRAME_EXPECT(outcome == "mrhi_errorCapacity");
+        std::printf("refused: %s, outcome %s, limit %s\n",
+                    std::string{refused->description()}.c_str(),
+                    outcome.c_str(),
+                    limit.c_str());
+        RAWFRAME_EXPECT(outcome == "mrhi_errorCapacity" && limit == "frameCommandBytes");
     }
 }
 

@@ -15,7 +15,9 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #if RAWFRAME_FILE_SYSTEM
@@ -61,6 +63,30 @@ std::uint64_t coveredOf(const std::vector<std::byte>& pixels) noexcept {
         }
     }
     return covered;
+}
+
+/// The limit the frames came closest to, and the most they took of it in
+/// whole percent, rounded up; none where no limit is known.
+std::pair<std::string_view, std::uint64_t> fullestOf(const FrameUsage& most, const FrameUsage& limits) noexcept {
+    const std::pair<std::string_view, std::pair<std::uint32_t, std::uint32_t>> kEach[] = {
+        {"frameResources", {most.resources, limits.resources}},
+        {"framePasses", {most.passes, limits.passes}},
+        {"frameAccesses", {most.accesses, limits.accesses}},
+        {"frameBarriers", {most.barriers, limits.barriers}},
+        {"frameCommandBytes", {most.commandBytes, limits.commandBytes}},
+        {"frameUploadBytes", {most.uploadBytes, limits.uploadBytes}},
+        {"frameIndirectDraws", {most.indirectDraws, limits.indirectDraws}}};
+    std::pair<std::string_view, std::uint64_t> fullest{"", 0};
+    for (const auto& [kName, kTaken] : kEach) {
+        if (kTaken.second == 0) {
+            continue;
+        }
+        const std::uint64_t kShare = (std::uint64_t{kTaken.first} * 100 + kTaken.second - 1) / kTaken.second;
+        if (fullest.first.empty() || kShare > fullest.second) {
+            fullest = {kName, kShare};
+        }
+    }
+    return fullest;
 }
 
 /// The colors of a read-back picture, up to `kMostColors`.
@@ -282,6 +308,7 @@ public:
             captured = static_cast<bool>(file);
 #endif
         }
+        const auto [kFullest, kFullestShare] = fullestOf(statistics.mostUsed, statistics.limits);
         emitter_.log(diagnostics::Severity::Info,
                      kFrameSummary,
                      "the frames made on the device",
@@ -305,6 +332,15 @@ public:
                       diagnostics::field("captured", captured),
                       diagnostics::field("readBacksTooLarge", readBacksTooLarge_),
                       diagnostics::field("headsetFrames", headsetFrames_),
+                      diagnostics::field("mostResources", statistics.mostUsed.resources),
+                      diagnostics::field("mostPasses", statistics.mostUsed.passes),
+                      diagnostics::field("mostAccesses", statistics.mostUsed.accesses),
+                      diagnostics::field("mostBarriers", statistics.mostUsed.barriers),
+                      diagnostics::field("mostCommandBytes", statistics.mostUsed.commandBytes),
+                      diagnostics::field("mostUploadBytes", statistics.mostUsed.uploadBytes),
+                      diagnostics::field("mostIndirectDraws", statistics.mostUsed.indirectDraws),
+                      diagnostics::field("fullestLimit", std::string{kFullest}),
+                      diagnostics::field("fullestShare", kFullestShare),
                       diagnostics::field("streamed", streamed_),
                       diagnostics::field("streamFailures", streamFailures_)});
     }
@@ -514,16 +550,23 @@ private:
     /// Reported once; no more frames are made.
     void fail(const result::Error& error) noexcept {
         failed_ = true;
-        // The reason, and what it names (a device's outcome, a pipeline).
+        // The reason, the limit the device named where one refused it, and
+        // what else it names (a device's outcome, a pipeline).
+        std::string limit;
         std::string detail;
         for (const auto& each : error.context()) {
+            if (each.key == "limit") {
+                limit = each.value;
+                continue;
+            }
             detail += (detail.empty() ? "" : ", ") + std::string{each.key} + " " + std::string{each.value};
         }
-        emitter_.log(
-            diagnostics::Severity::Error,
-            kFailed,
-            "a frame could not be made: no more are",
-            {diagnostics::field("reason", std::string{error.description()}), diagnostics::field("detail", detail)});
+        emitter_.log(diagnostics::Severity::Error,
+                     kFailed,
+                     "a frame could not be made: no more are",
+                     {diagnostics::field("reason", std::string{error.description()}),
+                      diagnostics::field("limit", limit),
+                      diagnostics::field("detail", detail)});
         // A window that no longer changes while its game goes on is a freeze
         // to its player: the Host stops instead, as a client with a lost
         // device does, and says why.

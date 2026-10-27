@@ -41,6 +41,10 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
             .withContext("outcome", std::string{mrhiResultName(outcome)})};
 }
 
+/// The device's diagnostic records: more than one frame's refusals leave,
+/// since a frame stops at its first.
+constexpr std::uint32_t kDiagnostics = 64;
+
 enum class Phase : std::uint8_t {
     /// The instance is made; the adapters are asked for at the first open.
     Asking,
@@ -444,6 +448,10 @@ struct Device::State {
         def.deviceLimits.readbackBytes = kReadbackBytes;
         def.deviceLimits.framePasses = settings.framePasses;
         def.deviceLimits.frameCommandBytes = settings.frameCommandBytes;
+        // Where Maul RHI says which check or limit refused a call: a frame's
+        // failure names its limit, a pipeline's refusal its check. Maul RHI
+        // keeps none unless asked; frames take what is there as each begins.
+        def.deviceLimits.diagnostics = kDiagnostics;
         constexpr std::string_view kLabel = "rawframe.render";
         def.label = kLabel.data();
         def.labelLength = kLabel.size();
