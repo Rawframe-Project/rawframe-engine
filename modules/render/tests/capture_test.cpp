@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <thread>
 #include <vector>
@@ -54,7 +55,10 @@ RAWFRAME_TEST(AStreamWrittenInPlaceIsReadOnePictureAtATimeWhole) {
         for (std::uint32_t each = 1; each <= 400; ++each) {
             // Larger after the first half: a second file, put in its place.
             const std::uint32_t kSide = each <= 200 ? 256 : 640;
-            while (each == 201 && taken.load() == 0) {
+            // A reader that never takes one fails the test in seconds, not at
+            // the check's timeout.
+            const auto kGiveUp = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+            while (each == 201 && taken.load() == 0 && std::chrono::steady_clock::now() < kGiveUp) {
                 std::this_thread::yield();
             }
             const std::vector<std::byte> kPixels(std::size_t{kSide} * kSide * 4, static_cast<std::byte>(each % 251));
