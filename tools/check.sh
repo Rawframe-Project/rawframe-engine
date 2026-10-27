@@ -158,8 +158,9 @@ build_and_test() {
     local test_jobs=$run_jobs
     [ "$labels" = integration ] && test_jobs=$((run_jobs < 4 ? run_jobs : 4))
     # A test that sets no limit of its own ends after twenty minutes, so one
-    # that hangs ends the check rather than holding it.
-    if ctest --test-dir "out/$preset" "${filter[@]}" --output-on-failure --timeout 1200 \
+    # that hangs ends the check rather than holding it. A process a test
+    # left running is killed and named, and fails the check (tools/reap.py).
+    if python3 tools/reap.py ctest --test-dir "out/$preset" "${filter[@]}" --output-on-failure --timeout 1200 \
         -j "$test_jobs" >"out/$preset.$labels.log" 2>&1; then
         printf '   %s: built in %ss, %s tests in %ss: %s\n' "$preset" "$((built - began))" "$labels" \
             "$(($(date +%s) - built))" "$(grep -E '^[0-9]+% tests passed' "out/$preset.$labels.log" || echo none)"

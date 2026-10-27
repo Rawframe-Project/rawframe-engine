@@ -25,6 +25,8 @@ Run `changed` before every push; `git config core.hooksPath tools/hooks` makes t
 
 A test reached by a change is one whose module or host is changed, or depends on a changed module through `tools/modules.txt`, however indirectly; `tools/affected.py` decides. The cross-module scenarios run whenever any module is reached. A change the module graph cannot place (the root build files, a vendored library, a game, a template, the test harness) reaches every test.
 
+The tests of every tier run under `tools/reap.py`, which on Linux takes over any process a test leaves behind as the test ends. A server, client or helper still running a minute after its test ended, or ten seconds after the last test, is killed by its pid and named, and the check fails: a stopped server ignores stop signals while its leak check runs, so one stuck there would otherwise outlive the run.
+
 The documentation check skips the paths in `tools/docs-check-exclude.txt`: vendored code, and the areas whose source comments still cite records of the old documentation. The list shrinks as those comments are rewritten; it ends with `third_party` alone.
 
 ## In CI
