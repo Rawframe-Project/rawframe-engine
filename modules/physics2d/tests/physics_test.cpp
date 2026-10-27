@@ -276,7 +276,7 @@ RAWFRAME_TEST(TheSameWorldAndWritesGiveTheSameBits) {
     RAWFRAME_EXPECT(first.physics->digest() == second.physics->digest());
     // The same bits on every compiler and target the check builds, x86-64
     // and wasm32 alike: a moved digest says why in its commit.
-    RAWFRAME_EXPECT(first.physics->digest() == 0xfc0695d0dc1ed14fULL);
+    RAWFRAME_EXPECT(first.physics->digest() == 0xc42bbb4bf908bd7fULL);
     RAWFRAME_EXPECT(kFirst.size() == kSecond.size() &&
                     std::memcmp(kFirst.data(), kSecond.data(), kFirst.size() * sizeof(Pose2D)) == 0);
     // And something did happen: the balls moved and bounced apart.

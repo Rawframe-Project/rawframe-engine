@@ -5,11 +5,13 @@
 
 #include "chain.h"
 
-#include "body.h"
+#include "fpenv.h"
 #include "geometry.h"
+#include "island.h"
 #include "journal.h"
+#include "mass.h"
+#include "object_ids.h"
 #include "shape.h"
-#include "world.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -19,7 +21,7 @@
 void m2RetireChainSlot(m2World* world, int32_t chainIndex)
 {
     world->chains.chainAlive[chainIndex] = 0;
-    if (world->chains.chainGenerations[chainIndex] == UINT16_MAX)
+    if (world->chains.chainGenerations[chainIndex] == M2_LAST_GENERATION)
     {
         world->chains.chainRetiredCount += 1;
         return;
@@ -60,17 +62,18 @@ static int32_t ChainSegmentCount(const m2ChainDef* def)
     return def->isLoop ? def->count : def->count - 3;
 }
 
-// Finite points and a real length on every segment, so the segment
-// creates below can only fail for capacity.
+// Points within M2_HUGE and a real length on every segment, so the
+// segment creates below can only fail for capacity.
 static bool ChainDefValid(const m2ChainDef* def)
 {
-    if (def->points == NULL || (def->isLoop ? def->count < 3 : def->count < 4))
+    if (def->points == NULL || (def->isLoop ? def->count < 3 : def->count < 4) ||
+        !m2ValidCoefficient(def->friction) || !m2ValidRestitution(def->restitution))
     {
         return false;
     }
     for (int32_t i = 0; i < def->count; ++i)
     {
-        if (!m2FiniteVec2(def->points[i]))
+        if (!m2LocalVec2(def->points[i]))
         {
             return false;
         }
@@ -86,30 +89,12 @@ static bool ChainDefValid(const m2ChainDef* def)
     return true;
 }
 
-m2ChainId m2CreateChain(m2BodyId bodyId, const m2ChainDef* def)
+// Creates the chain's segment shapes, each tagged with its chain as it
+// is born, and returns how many fit. One journal op describes the whole
+// chain, so the per-shape creates must not record.
+static int32_t CreateSegments(m2World* world, m2BodyId bodyId, const m2ChainDef* def,
+                              int32_t chainIndex)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
-    int32_t bodyIndex = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (bodyIndex < 0 || def == NULL || def->internalValue != M2_CHAIN_COOKIE ||
-        !ChainDefValid(def))
-    {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullChainId;
-    }
-    if (world->chains.chainFreeCount == 0 || world->shapes.shapeFreeCount == 0)
-    {
-        m2Refuse(world, m2_errorCapacity);
-        return m2_nullChainId;
-    }
-
-    // Claim the chain slot before making shapes so each segment can be
-    // tagged with its owner as it is born.
-    int32_t chainIndex = world->chains.chainFreeQueue[world->chains.chainFreeHead];
-    world->chains.chainFreeHead = (world->chains.chainFreeHead + 1) % world->shapes.shapeCapacity;
-    world->chains.chainFreeCount -= 1;
-
-    // One journal op describes the whole chain; the per-shape creates
-    // below must not double-record.
     uint8_t journalWasActive = world->recorder.journalActive;
     world->recorder.journalActive = 0;
 
@@ -129,16 +114,52 @@ m2ChainId m2CreateChain(m2BodyId bodyId, const m2ChainDef* def)
         memset(&geometry, 0, sizeof(geometry));
         geometry.type = m2_chainSegmentShape;
         geometry.chainSegment = ChainSegmentAt(def, i);
-        m2ShapeId shape = m2CreateShape(bodyId, &shapeDef, &geometry);
-        if (shape.index1 == 0)
+        m2ShapeId shape = m2_nullShapeId;
+        if (m2CreateShape(world, bodyId, &shapeDef, &geometry, &shape) != m2_success)
         {
             break; // capacity: partial chain, loud via the segment count
         }
-        world->shapes.shapeChain[shape.index1 - 1] = chainIndex;
+        world->shapes.shapeChain[(int32_t)shape.index1 - 1] = chainIndex;
         created += 1;
     }
-
     world->recorder.journalActive = journalWasActive;
+    return created;
+}
+
+static M2_NOINLINE m2Result CreateChainWorker(m2World* world, m2BodyId bodyId,
+                                              const m2ChainDef* def, m2ChainId* chainOut)
+{
+    if (chainOut == NULL)
+    {
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    *chainOut = m2_nullChainId;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    int32_t bodyIndex = m2BodySlot(world, bodyId);
+    if (bodyIndex < 0)
+    {
+        return m2Refuse(world, m2_errorStale);
+    }
+    if (def == NULL || def->internalValue != M2_CHAIN_COOKIE || !ChainDefValid(def))
+    {
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    if (world->chains.chainFreeCount == 0 || world->shapes.shapeFreeCount == 0)
+    {
+        return m2Refuse(world, m2_errorCapacity);
+    }
+
+    // Claim the chain slot before making shapes so each segment can be
+    // tagged with its owner as it is born.
+    int32_t chainIndex = world->chains.chainFreeQueue[world->chains.chainFreeHead];
+    world->chains.chainFreeHead = (world->chains.chainFreeHead + 1) % world->shapes.shapeCapacity;
+    world->chains.chainFreeCount -= 1;
+
+    int32_t created = CreateSegments(world, bodyId, def, chainIndex);
     if (created == 0)
     {
         // Unreachable while the shape pool had room: hand the claimed slot
@@ -149,8 +170,7 @@ m2ChainId m2CreateChain(m2BodyId bodyId, const m2ChainDef* def)
             world->shapes.shapeCapacity;
         world->chains.chainFreeQueue[world->chains.chainFreeHead] = chainIndex;
         world->chains.chainFreeCount += 1;
-        m2Refuse(world, m2_errorCapacity);
-        return m2_nullChainId;
+        return m2Refuse(world, m2_errorCapacity);
     }
     world->chains.chainAlive[chainIndex] = 1;
     world->chains.chainBody[chainIndex] = bodyIndex;
@@ -159,13 +179,22 @@ m2ChainId m2CreateChain(m2BodyId bodyId, const m2ChainDef* def)
         world->chains.maxChainIndex = chainIndex + 1;
     }
     m2JournalRecordChain(world, bodyId, def, created);
-    m2ChainId id = {chainIndex + 1, world->idWorld, world->chains.chainGenerations[chainIndex]};
-    return id;
+    m2ChainId id = {(uint32_t)(chainIndex + 1), world->chains.chainGenerations[chainIndex]};
+    *chainOut = id;
+    return m2_success;
+}
+
+m2Result m2CreateChain(m2World* world, m2BodyId bodyId, const m2ChainDef* def, m2ChainId* chainOut)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreateChainWorker(world, bodyId, def, chainOut);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 static int32_t ChainSlot(const m2World* world, m2ChainId chainId)
 {
-    int32_t index = chainId.index1 - 1;
+    int32_t index = (int32_t)chainId.index1 - 1;
     if (index < 0 || index >= world->shapes.shapeCapacity || world->chains.chainAlive[index] == 0 ||
         world->chains.chainGenerations[index] != chainId.generation)
     {
@@ -174,14 +203,17 @@ static int32_t ChainSlot(const m2World* world, m2ChainId chainId)
     return index;
 }
 
-void m2DestroyChain(m2ChainId chainId)
+static M2_NOINLINE m2Result DestroyChainWorker(m2World* world, m2ChainId chainId)
 {
-    m2World* world = m2WorldFromTag(chainId.world);
-    int32_t index = world != NULL ? ChainSlot(world, chainId) : -1;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    int32_t index = ChainSlot(world, chainId);
     if (index < 0)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return;
+        return m2Refuse(world, m2_errorStale);
     }
     m2JournalRecord(world, m2_opDestroyChain, &chainId, (int32_t)sizeof(chainId));
 
@@ -216,17 +248,24 @@ void m2DestroyChain(m2ChainId chainId)
     m2RetireChainSlot(world, index);
     m2RecomputeMass(world, bodyIndex);
     m2WakeIfDynamic(world, bodyIndex);
+    return m2_success;
 }
 
-bool m2Chain_IsValid(m2ChainId chainId)
+m2Result m2DestroyChain(m2World* world, m2ChainId chainId)
 {
-    m2World* world = m2WorldFromTag(chainId.world);
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = DestroyChainWorker(world, chainId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+bool m2Chain_IsValid(const m2World* world, m2ChainId chainId)
+{
     return world != NULL && ChainSlot(world, chainId) >= 0;
 }
 
-int32_t m2Chain_GetSegmentCount(m2ChainId chainId)
+int32_t m2Chain_GetSegmentCount(const m2World* world, m2ChainId chainId)
 {
-    m2World* world = m2WorldFromTag(chainId.world);
     int32_t index = world != NULL ? ChainSlot(world, chainId) : -1;
     if (index < 0)
     {
@@ -271,11 +310,14 @@ static void ChainMaterialInternal(m2World* world, m2ChainId chainId, int32_t cha
     }
 }
 
-void m2Chain_SetFriction(m2ChainId chainId, float friction)
+static M2_NOINLINE void ChainSetFrictionWorker(m2World* world, m2ChainId chainId, float friction)
 {
-    m2World* world = m2WorldFromTag(chainId.world);
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? ChainSlot(world, chainId) : -1;
-    if (index < 0 || !m2FiniteF(friction) || friction < 0.0f)
+    if (index < 0 || !m2ValidCoefficient(friction))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -283,11 +325,22 @@ void m2Chain_SetFriction(m2ChainId chainId, float friction)
     ChainMaterialInternal(world, chainId, index, m2_opChainFriction, friction);
 }
 
-void m2Chain_SetRestitution(m2ChainId chainId, float restitution)
+void m2Chain_SetFriction(m2World* world, m2ChainId chainId, float friction)
 {
-    m2World* world = m2WorldFromTag(chainId.world);
+    uint64_t env = m2FloatEnvEnter();
+    ChainSetFrictionWorker(world, chainId, friction);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void ChainSetRestitutionWorker(m2World* world, m2ChainId chainId,
+                                                  float restitution)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? ChainSlot(world, chainId) : -1;
-    if (index < 0 || !(restitution >= 0.0f && restitution <= 1.0f))
+    if (index < 0 || !m2ValidRestitution(restitution))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -295,26 +348,19 @@ void m2Chain_SetRestitution(m2ChainId chainId, float restitution)
     ChainMaterialInternal(world, chainId, index, m2_opChainRestitution, restitution);
 }
 
-m2WorldId m2Chain_GetWorld(m2ChainId chainId)
+void m2Chain_SetRestitution(m2World* world, m2ChainId chainId, float restitution)
 {
-    m2World* world = m2WorldFromTag(chainId.world);
-    m2WorldId id = {0, 0};
-    if (world == NULL)
-    {
-        m2Refuse(world, m2_errorInvalid);
-        return id;
-    }
-    id.index1 = (uint16_t)(world->slot + 1);
-    id.generation = world->worldGeneration;
-    return id;
+    uint64_t env = m2FloatEnvEnter();
+    ChainSetRestitutionWorker(world, chainId, restitution);
+    m2FloatEnvLeave(env);
 }
 
-int32_t m2Chain_GetShapes(m2ChainId chainId, m2ShapeId* ids, int32_t capacity)
+int32_t m2Chain_GetShapes(const m2World* world, m2ChainId chainId, m2ShapeId* ids, int32_t capacity)
 {
-    m2World* world = m2WorldFromTag(chainId.world);
     int32_t chainIndex = world != NULL ? ChainSlot(world, chainId) : -1;
     if (chainIndex < 0)
     {
+        m2Refuse(world, m2_errorInvalid);
         return 0;
     }
     int32_t total = 0;

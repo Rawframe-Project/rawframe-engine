@@ -4,14 +4,14 @@
 // The distance joint: a rest-length row, optionally soft, with an
 // optional hard length range.
 
-#include "joint_solver.h"
-
 #include "body.h"
 #include "broadphase.h"
+#include "fpenv.h"
 #include "joint.h"
+#include "joint_solver.h"
 #include "journal.h"
-#include "solver.h"
-#include "world.h"
+#include "object_ids.h"
+#include "solver_base.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -31,32 +31,44 @@ m2DistanceJointDef m2DefaultDistanceJointDef(void)
 // ordered ranges.
 static bool DefValid(const m2DistanceJointDef* def)
 {
-    return m2FiniteVec2(def->localAnchorA) && m2FiniteVec2(def->localAnchorB) &&
-           m2FiniteF(def->length) && m2FiniteF(def->minLength) && m2FiniteF(def->maxLength) &&
-           !(def->maxLength > 0.0f && def->minLength > def->maxLength) && m2JointGain(def->hertz) &&
-           m2JointGain(def->dampingRatio);
+    return m2LocalVec2(def->localAnchorA) && m2LocalVec2(def->localAnchorB) &&
+           m2ValidReach(def->length) && m2ValidReach(def->minLength) &&
+           m2ValidReach(def->maxLength) &&
+           !(def->maxLength > 0.0f && def->minLength > def->maxLength) && m2ValidRate(def->hertz) &&
+           m2ValidCoefficient(def->dampingRatio);
 }
 
-m2JointId m2CreateDistanceJoint(m2WorldId worldId, const m2DistanceJointDef* def)
+static M2_NOINLINE m2Result CreateDistanceJointWorker(m2World* world, const m2DistanceJointDef* def,
+                                                      m2JointId* jointOut)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || def == NULL || def->internalValue != M2_DJOINT_COOKIE || !DefValid(def))
+    if (jointOut == NULL)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    *jointOut = m2_nullJointId;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    if (def == NULL || def->internalValue != M2_DJOINT_COOKIE || !DefValid(def))
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
-    if (bodyA < 0 || bodyB < 0 || bodyA == bodyB)
+    if (bodyA < 0 || bodyB < 0)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorStale);
+    }
+    if (bodyA == bodyB)
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t index = m2AllocateJoint(world);
     if (index < 0)
     {
-        m2Refuse(world, m2_errorCapacity);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorCapacity);
     }
     float length = def->length;
     if (!(length > 0.0f))
@@ -68,8 +80,8 @@ m2JointId m2CreateDistanceJoint(m2WorldId worldId, const m2DistanceJointDef* def
                      xfA.q.s * def->localAnchorA.x + xfA.q.c * def->localAnchorA.y};
         m2Vec2 wB = {xfB.q.c * def->localAnchorB.x - xfB.q.s * def->localAnchorB.y,
                      xfB.q.s * def->localAnchorB.x + xfB.q.c * def->localAnchorB.y};
-        float dx = (float)(xfB.p.x - xfA.p.x) + wB.x - wA.x;
-        float dy = (float)(xfB.p.y - xfA.p.y) + wB.y - wA.y;
+        float dx = m2WorldOffset(xfB.p.x - xfA.p.x) + wB.x - wA.x;
+        float dy = m2WorldOffset(xfB.p.y - xfA.p.y) + wB.y - wA.y;
         length = sqrtf(dx * dx + dy * dy);
     }
     m2JointId jointId =
@@ -78,7 +90,7 @@ m2JointId m2CreateDistanceJoint(m2WorldId worldId, const m2DistanceJointDef* def
     // The hard range: off by default (0 .. huge); a def maxLength <= 0
     // means unbounded, mirroring "length <= 0 derives".
     world->joints.jointLower[index] = def->minLength > 0.0f ? def->minLength : 0.0f;
-    world->joints.jointUpper[index] = def->maxLength > 0.0f ? def->maxLength : 3.4e38f;
+    world->joints.jointUpper[index] = def->maxLength > 0.0f ? def->maxLength : M2_OPEN_LENGTH;
     if (def->enableSpring)
     {
         world->joints.jointFlags[index] |= M2_JOINT_ROPE; // rope/rod: gate the rest-length row
@@ -97,18 +109,43 @@ m2JointId m2CreateDistanceJoint(m2WorldId worldId, const m2DistanceJointDef* def
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateDistanceJoint, &record, (int32_t)sizeof(record));
     }
-    return jointId;
+    *jointOut = jointId;
+    return m2_success;
 }
 
-void m2DistanceJoint_SetLength(m2JointId jointId, float length)
+m2Result m2CreateDistanceJoint(m2World* world, const m2DistanceJointDef* def, m2JointId* jointOut)
 {
-    m2SetJointParamInternal(m2WorldFromTag(jointId.world), jointId, m2_jointParamLength, length);
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreateDistanceJointWorker(world, def, jointOut);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
-void m2DistanceJoint_SetLengthRange(m2JointId jointId, float minLength, float maxLength)
+static M2_NOINLINE void DistanceJointSetLengthWorker(m2World* world, m2JointId jointId,
+                                                     float length)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
-    if (!m2FiniteF(minLength) || !m2FiniteF(maxLength))
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    m2SetJointParamInternal(world, jointId, m2_jointParamLength, length);
+}
+
+void m2DistanceJoint_SetLength(m2World* world, m2JointId jointId, float length)
+{
+    uint64_t env = m2FloatEnvEnter();
+    DistanceJointSetLengthWorker(world, jointId, length);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void DistanceJointSetLengthRangeWorker(m2World* world, m2JointId jointId,
+                                                          float minLength, float maxLength)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    if (!m2ValidReach(minLength) || !m2ValidReach(maxLength))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -124,6 +161,20 @@ void m2DistanceJoint_SetLengthRange(m2JointId jointId, float minLength, float ma
     }
 }
 
+void m2DistanceJoint_SetLengthRange(m2World* world, m2JointId jointId, float minLength,
+                                    float maxLength)
+{
+    uint64_t env = m2FloatEnvEnter();
+    DistanceJointSetLengthRangeWorker(world, jointId, minLength, maxLength);
+    m2FloatEnvLeave(env);
+}
+
+bool m2DistanceJoint_IsSpringEnabled(const m2World* world, m2JointId jointId)
+{
+    int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_distanceJoint);
+    return index >= 0 && (world->joints.jointFlags[index] & M2_JOINT_ROPE) != 0;
+}
+
 // --- Solver ---------------------------------------------------------------
 //
 // One row along the line between the anchors: the rest length (impulse.x)
@@ -134,7 +185,7 @@ static void PrepareDistance(m2World* world, m2JointConstraint* c, const m2JointF
 {
     int32_t j = f->joint;
     c->length = world->joints.jointLength[j];
-    if (world->joints.jointLower[j] > 0.0f || world->joints.jointUpper[j] < 3.0e38f)
+    if (world->joints.jointLower[j] > 0.0f || world->joints.jointUpper[j] < M2_OPEN_LENGTH)
     {
         c->flags |= M2_JOINT_HARD_RANGE;
         c->spring = m2StiffJointSoftness(f->h);
@@ -191,7 +242,7 @@ static void DistanceReaction(const m2World* world, int32_t j, float invH, float*
 {
     // The rest row, plus the range rows when bounded.
     float axial = world->joints.jointImpulse[j].x;
-    if (world->joints.jointLower[j] > 0.0f || world->joints.jointUpper[j] < 3.0e38f)
+    if (world->joints.jointLower[j] > 0.0f || world->joints.jointUpper[j] < M2_OPEN_LENGTH)
     {
         axial += world->joints.jointLowerImpulse[j] - world->joints.jointUpperImpulse[j];
     }

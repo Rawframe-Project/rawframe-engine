@@ -8,6 +8,7 @@
 
 #include "ccd.h"
 #include "contact_solver.h"
+#include "joint.h"
 #include "joint_solver.h"
 #include "rotation.h"
 #include "world_internal.h"
@@ -42,7 +43,8 @@ static void HoldLockedAxes(m2World* world, int32_t i)
 
 // Forces, gravity and damping for one substep. Damping is implicit,
 // v' = v / (1 + h d), so it can never reverse a velocity however large
-// h d grows; the forces add on top: v' = h (F / m + s g) + v / (1 + h d).
+// h d grows; the forces add on top: v' = h (F / m + s g) + v / (1 + h d),
+// held within M2_MAX_SPEED.
 static void IntegrateVelocities(m2World* world, float h)
 {
     for (int32_t i = 0; i < world->bodies.maxBodyIndex; ++i)
@@ -57,11 +59,14 @@ static void IntegrateVelocities(m2World* world, float h)
                      h * world->bodies.gravityScales[i] * world->gravity.x;
         float lvdy = h * world->bodies.invMass[i] * world->bodies.forces[i].y +
                      h * world->bodies.gravityScales[i] * world->gravity.y;
-        world->bodies.linearVelocities[i].x = lvdx + linDamp * world->bodies.linearVelocities[i].x;
-        world->bodies.linearVelocities[i].y = lvdy + linDamp * world->bodies.linearVelocities[i].y;
+        world->bodies.linearVelocities[i].x =
+            m2SaturateF(lvdx + linDamp * world->bodies.linearVelocities[i].x, M2_MAX_SPEED);
+        world->bodies.linearVelocities[i].y =
+            m2SaturateF(lvdy + linDamp * world->bodies.linearVelocities[i].y, M2_MAX_SPEED);
         world->bodies.angularVelocities[i] =
-            h * world->bodies.invInertia[i] * world->bodies.torques[i] +
-            angDamp * world->bodies.angularVelocities[i];
+            m2SaturateF(h * world->bodies.invInertia[i] * world->bodies.torques[i] +
+                            angDamp * world->bodies.angularVelocities[i],
+                        M2_MAX_SPEED);
         HoldLockedAxes(world, i);
     }
 }
@@ -175,7 +180,6 @@ static void BreakJoints(m2World* world, float invH)
                 &world->events.jointBreakEvents[world->events.jointBreakEventCount++];
             memset(e, 0, sizeof(*e));
             e->jointId.index1 = j + 1;
-            e->jointId.world = world->idWorld;
             e->jointId.generation = world->joints.jointGenerations[j];
             e->step = world->stepCount;
             e->force = force;

@@ -4,14 +4,15 @@
 // The motor joint: drives body B toward an offset pose relative to
 // body A within force and torque budgets, hard or as a spring.
 
-#include "joint_solver.h"
-
 #include "body.h"
 #include "broadphase.h"
+#include "fpenv.h"
+#include "island.h"
 #include "joint.h"
+#include "joint_solver.h"
 #include "journal.h"
-#include "solver.h"
-#include "world.h"
+#include "object_ids.h"
+#include "solver_base.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -39,32 +40,43 @@ m2MotorJointDef m2DefaultMotorJointDef(void)
 // ordered ranges.
 static bool DefValid(const m2MotorJointDef* def)
 {
-    return m2FiniteVec2(def->linearOffset) && m2FiniteF(def->angularOffset) &&
-           m2JointGain(def->maxForce) && m2JointGain(def->maxTorque) &&
-           m2JointGain(def->correctionFactor) && def->correctionFactor <= 1.0f &&
-           m2JointGain(def->hertz) && m2JointGain(def->dampingRatio);
+    return m2LocalVec2(def->linearOffset) && m2ValidAngle(def->angularOffset) &&
+           m2ValidMaxForce(def->maxForce) && m2ValidMaxForce(def->maxTorque) &&
+           m2ValidFraction(def->correctionFactor) && m2ValidRate(def->hertz) &&
+           m2ValidCoefficient(def->dampingRatio);
 }
 
-m2JointId m2CreateMotorJoint(m2WorldId worldId, const m2MotorJointDef* def)
+static M2_NOINLINE m2Result CreateMotorJointWorker(m2World* world, const m2MotorJointDef* def,
+                                                   m2JointId* jointOut)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || def == NULL || def->internalValue != M2_MOJOINT_COOKIE || !DefValid(def))
+    if (jointOut == NULL)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    *jointOut = m2_nullJointId;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    if (def == NULL || def->internalValue != M2_MOJOINT_COOKIE || !DefValid(def))
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
-    if (bodyA < 0 || bodyB < 0 || bodyA == bodyB)
+    if (bodyA < 0 || bodyB < 0)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorStale);
+    }
+    if (bodyA == bodyB)
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t index = m2AllocateJoint(world);
     if (index < 0)
     {
-        m2Refuse(world, m2_errorCapacity);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorCapacity);
     }
     m2Vec2 zero = {0.0f, 0.0f};
     m2JointId jointId = m2FinishJoint(world, index, (uint8_t)m2_motorJoint, bodyA, bodyB, zero,
@@ -93,18 +105,31 @@ m2JointId m2CreateMotorJoint(m2WorldId worldId, const m2MotorJointDef* def)
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateMotorJoint, &record, (int32_t)sizeof(record));
     }
-    return jointId;
+    *jointOut = jointId;
+    return m2_success;
 }
 
-void m2MotorJoint_SetOffsets(m2JointId jointId, m2Vec2 linearOffset, float angularOffset)
+m2Result m2CreateMotorJoint(m2World* world, const m2MotorJointDef* def, m2JointId* jointOut)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreateMotorJointWorker(world, def, jointOut);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE void MotorJointSetOffsetsWorker(m2World* world, m2JointId jointId,
+                                                   m2Vec2 linearOffset, float angularOffset)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_motorJoint);
     if (index < 0)
     {
         return; // TypedJointSlot refused
     }
-    if (!m2FiniteVec2(linearOffset) || !m2FiniteF(angularOffset))
+    if (!m2LocalVec2(linearOffset) || !m2ValidAngle(angularOffset))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -127,33 +152,70 @@ void m2MotorJoint_SetOffsets(m2JointId jointId, m2Vec2 linearOffset, float angul
     m2WakeIfDynamic(world, bodyB);
 }
 
-m2Vec2 m2MotorJoint_GetLinearOffset(m2JointId jointId)
+void m2MotorJoint_SetOffsets(m2World* world, m2JointId jointId, m2Vec2 linearOffset,
+                             float angularOffset)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    uint64_t env = m2FloatEnvEnter();
+    MotorJointSetOffsetsWorker(world, jointId, linearOffset, angularOffset);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE m2Vec2 MotorJointGetLinearOffsetWorker(const m2World* world, m2JointId jointId)
+{
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_motorJoint);
     m2Vec2 zero = {0.0f, 0.0f};
     return index >= 0 ? world->joints.jointLocalAxisA[index] : zero;
 }
 
-float m2MotorJoint_GetAngularOffset(m2JointId jointId)
+m2Vec2 m2MotorJoint_GetLinearOffset(const m2World* world, m2JointId jointId)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = MotorJointGetLinearOffsetWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE float MotorJointGetAngularOffsetWorker(const m2World* world, m2JointId jointId)
+{
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_motorJoint);
     return index >= 0 ? world->joints.jointRefAngle[index] : 0.0f;
 }
 
-float m2MotorJoint_GetMaxForce(m2JointId jointId)
+float m2MotorJoint_GetAngularOffset(const m2World* world, m2JointId jointId)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    uint64_t env = m2FloatEnvEnter();
+    float result = MotorJointGetAngularOffsetWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE float MotorJointGetMaxForceWorker(const m2World* world, m2JointId jointId)
+{
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_motorJoint);
     return index >= 0 ? world->joints.jointLength[index] : 0.0f;
 }
 
-float m2MotorJoint_GetCorrectionFactor(m2JointId jointId)
+float m2MotorJoint_GetMaxForce(const m2World* world, m2JointId jointId)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    uint64_t env = m2FloatEnvEnter();
+    float result = MotorJointGetMaxForceWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE float MotorJointGetCorrectionFactorWorker(const m2World* world,
+                                                             m2JointId jointId)
+{
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_motorJoint);
     return index >= 0 ? world->joints.jointDamping[index] : 0.0f;
+}
+
+float m2MotorJoint_GetCorrectionFactor(const m2World* world, m2JointId jointId)
+{
+    uint64_t env = m2FloatEnvEnter();
+    float result = MotorJointGetCorrectionFactorWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 // --- Solver ---------------------------------------------------------------
@@ -200,8 +262,8 @@ static void SolveMotor(m2JointConstraint* c, const m2JointPose* pose, m2JointBod
     m2Vec2 gap = m2PoseGap(c, pose);
     m2RowDrive x = MotorDrive(c, gap.x - offset.x, pass->invH);
     m2RowDrive y = MotorDrive(c, gap.y - offset.y, pass->invH);
-    m2SolvePointPair(pose->armA, pose->armB, c->pointMass, b, (m2Vec2){x.bias, y.bias}, x,
-                     &c->impulse, c->maxPullImpulse);
+    m2SolvePointPair(pose->armA, pose->armB, b, (m2Vec2){x.bias, y.bias}, x, &c->impulse,
+                     c->maxPullImpulse);
 }
 
 static void MotorReaction(const m2World* world, int32_t j, float invH, float* force, float* torque)

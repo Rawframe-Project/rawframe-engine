@@ -3,7 +3,6 @@
 #include "attachments.h"
 #include "characters.h"
 #include "joints.h"
-#include "rawframe/base/threads.h"
 #include "rawframe/physics/filters.h"
 #include "rawframe/physics/rewind.h"
 #include "rawframe/physics2d/components.h"
@@ -17,7 +16,6 @@
 #include <cstring>
 #include <map>
 #include <maul2d/maul2d.h>
-#include <mutex>
 #include <optional>
 #include <string_view>
 #include <tuple>
@@ -29,13 +27,6 @@ namespace {
 
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Physics2DError error, std::string_view why) {
     return result::fail(errorClass, kPhysics2DDomain, code(error), why);
-}
-
-/// Maul2D keeps its worlds in one process-wide table that the caller must
-/// serialize.
-base::Mutex& worldTableLock() noexcept {
-    static base::Mutex lock;
-    return lock;
 }
 
 /// Bit for bit, so a value written back is told from any other, NaNs and
@@ -125,7 +116,7 @@ struct Row {
 }
 
 [[nodiscard]] bool sameBody(m2BodyId left, m2BodyId right) noexcept {
-    return left.index1 == right.index1 && left.generation == right.generation && left.world == right.world;
+    return left.index1 == right.index1 && left.generation == right.generation;
 }
 
 } // namespace
@@ -144,7 +135,7 @@ struct Physics2D::State {
     bool stepped = false;
     mutable std::uint64_t raysRewound = 0;
     mutable std::uint64_t rewindsClamped = 0;
-    m2WorldId physics{};
+    m2World* physics = nullptr;
     Physics2DStatistics statistics;
     std::map<world::EntityHandle, Mapped> mapped;
     std::optional<world::Query<world::Read<Body2D>, world::Write<Pose2D>, world::Write<Velocity2D>>> bodies;
@@ -161,7 +152,7 @@ struct Physics2D::State {
     std::vector<std::pair<world::EntityHandle, Joint2D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
     /// reused index from the shape an event names.
-    std::map<std::int32_t, std::pair<std::uint16_t, world::EntityHandle>> owners;
+    std::map<std::uint32_t, std::pair<std::uint32_t, world::EntityHandle>> owners;
     /// Live sensor shapes, in entity order.
     std::vector<m2ShapeId> sensors;
     std::vector<m2ShapeId> overlaps;
@@ -174,8 +165,7 @@ struct Physics2D::State {
     std::vector<Row> rows;
 
     ~State() {
-        if (m2World_IsValid(physics)) {
-            const std::lock_guard kLock{worldTableLock()};
+        if (physics != nullptr) {
             m2DestroyWorld(physics);
         }
     }
@@ -215,8 +205,8 @@ struct Physics2D::State {
         definition.fixedRotation = body.fixedRotation;
         definition.isBullet = body.bullet;
         definition.userData = (std::uint64_t{row.entity.slot} << 32U) | row.entity.generation;
-        const m2BodyId kBody = m2CreateBody(physics, &definition);
-        if (kBody.index1 == 0) {
+        m2BodyId kBody{};
+        if (m2CreateBody(physics, &definition, &kBody) != m2_success) {
             into.refused = true;
             ++statistics.bodiesRefused;
             return false;
@@ -233,17 +223,21 @@ struct Physics2D::State {
         if (into.character) {
             shape.maskBits &= ~physics::kCharacterQuery;
         }
+        // The shape made, or the null shape where Maul2D refused it.
         const auto kShape = [&](const m2ShapeDef& definitionOf) {
+            m2ShapeId made{};
+            m2Result result = m2_success;
             if (body.shape == static_cast<std::uint8_t>(Shape::Circle)) {
                 const m2Circle kCircle{.center = {0, 0}, .radius = body.width};
-                return m2CreateCircleShape(kBody, &definitionOf, &kCircle);
-            }
-            if (body.shape == static_cast<std::uint8_t>(Shape::Box)) {
+                result = m2CreateCircleShape(physics, kBody, &definitionOf, &kCircle, &made);
+            } else if (body.shape == static_cast<std::uint8_t>(Shape::Box)) {
                 const m2Polygon kBox = m2MakeBox(body.width, body.height);
-                return m2CreatePolygonShape(kBody, &definitionOf, &kBox);
+                result = m2CreatePolygonShape(physics, kBody, &definitionOf, &kBox, &made);
+            } else {
+                const m2Capsule kCapsule{.point1 = {0, -body.height}, .point2 = {0, body.height}, .radius = body.width};
+                result = m2CreateCapsuleShape(physics, kBody, &definitionOf, &kCapsule, &made);
             }
-            const m2Capsule kCapsule{.point1 = {0, -body.height}, .point2 = {0, body.height}, .radius = body.width};
-            return m2CreateCapsuleShape(kBody, &definitionOf, &kCapsule);
+            return result == m2_success ? made : m2ShapeId{};
         };
         if (kRuns != nullptr) {
             return makeTiles(row.entity, *kRuns, kBody, shape, into);
@@ -259,7 +253,8 @@ struct Physics2D::State {
             twin = kShape(sensor);
         }
         if (kMade.index1 == 0 || (!body.sensor && filter.triggerMask != 0 && twin.index1 == 0)) {
-            m2DestroyBody(kBody);
+            // A body made a moment ago, with nothing joined to it yet.
+            static_cast<void>(m2DestroyBody(physics, kBody));
             into.refused = true;
             ++statistics.bodiesRefused;
             return false;
@@ -282,8 +277,8 @@ struct Physics2D::State {
                                  m2BodyId body,
                                  const m2ShapeDef& shape,
                                  Mapped& into) {
-        std::vector<m2ShapeId> made;
-        made.reserve(runs.size());
+        std::vector<m2ShapeId> pieces;
+        pieces.reserve(runs.size());
         for (const tilemap::SolidRun& kRun : runs) {
             const auto kLeft = static_cast<float>(kRun.left);
             const auto kRight = static_cast<float>(kRun.left + kRun.width);
@@ -291,20 +286,22 @@ struct Physics2D::State {
             const auto kBottom = static_cast<float>(kRun.top - kRun.height);
             const std::array<m2Vec2, 4> kCorners = {
                 m2Vec2{kLeft, kBottom}, m2Vec2{kRight, kBottom}, m2Vec2{kRight, kTop}, m2Vec2{kLeft, kTop}};
-            const m2Polygon kBox = m2MakePolygon(kCorners.data(), static_cast<std::int32_t>(kCorners.size()), 0);
-            const m2ShapeId kMade = kBox.count == 0 ? m2ShapeId{} : m2CreatePolygonShape(body, &shape, &kBox);
-            if (kMade.index1 == 0) {
-                m2DestroyBody(body);
+            m2Polygon box{};
+            m2ShapeId made{};
+            if (m2MakePolygon(kCorners.data(), static_cast<std::int32_t>(kCorners.size()), 0, &box) != m2_success ||
+                m2CreatePolygonShape(physics, body, &shape, &box, &made) != m2_success) {
+                // A body made a moment ago, with nothing joined to it yet.
+                static_cast<void>(m2DestroyBody(physics, body));
                 into.refused = true;
                 ++statistics.bodiesRefused;
                 return false;
             }
-            made.push_back(kMade);
+            pieces.push_back(made);
         }
         into.body = body;
-        into.shape = made.front();
-        into.pieces.assign(made.begin() + 1, made.end());
-        for (const m2ShapeId kMade : made) {
+        into.shape = pieces.front();
+        into.pieces.assign(pieces.begin() + 1, pieces.end());
+        for (const m2ShapeId kMade : pieces) {
             owners[kMade.index1] = {kMade.generation, entity};
         }
         ++statistics.bodiesMade;
@@ -458,11 +455,11 @@ struct Physics2D::State {
         }
         for (const m2ShapeId kSensor : sensors) {
             overlaps.resize(std::max<std::size_t>(overlaps.size(), 16));
-            std::int32_t inside =
-                m2Shape_GetSensorOverlaps(kSensor, overlaps.data(), static_cast<std::int32_t>(overlaps.size()));
+            std::int32_t inside = m2Shape_GetSensorOverlaps(
+                physics, kSensor, overlaps.data(), static_cast<std::int32_t>(overlaps.size()));
             if (static_cast<std::size_t>(inside) > overlaps.size()) {
                 overlaps.resize(static_cast<std::size_t>(inside));
-                inside = m2Shape_GetSensorOverlaps(kSensor, overlaps.data(), inside);
+                inside = m2Shape_GetSensorOverlaps(physics, kSensor, overlaps.data(), inside);
             }
             const world::EntityHandle kSensorEntity = ownerOf(kSensor);
             Contact2D* const kSensorContact = contactOf(world, kSensorEntity);
@@ -496,20 +493,21 @@ struct Physics2D::State {
             !finite(controlled.groundNormal) || !finite(controlled.snap) || !(seconds > 0)) {
             return;
         }
-        const m2Vec2 kWish = m2Body_GetLinearVelocity(entry.body);
+        const m2Vec2 kWish = m2Body_GetLinearVelocity(physics, entry.body);
         const m2QueryFilter kFilter{.categoryBits = physics::kCharacterQuery,
                                     .maskBits = filters.filter(*filters.classIndex(body.collisionClass)).solidMask &
                                                 physics::kSolids};
         const CharacterMove kMove = physics2d::moveCharacter(physics,
                                                              body.width,
                                                              body.height,
-                                                             m2Body_GetTransform(entry.body),
+                                                             m2Body_GetTransform(physics, entry.body),
                                                              m2Vec2{kWish.x * seconds, kWish.y * seconds},
                                                              controlled,
                                                              kWasGrounded,
                                                              kFilter);
-        m2Body_SetLinearVelocity(entry.body, m2Vec2{kMove.translation.x / seconds, kMove.translation.y / seconds});
-        m2Body_SetAngularVelocity(entry.body, 0);
+        m2Body_SetLinearVelocity(
+            physics, entry.body, m2Vec2{kMove.translation.x / seconds, kMove.translation.y / seconds});
+        m2Body_SetAngularVelocity(physics, entry.body, 0);
         controlled.ground = static_cast<std::uint8_t>(kMove.ground);
         controlled.groundNormalX = kMove.normal.x;
         controlled.groundNormalY = kMove.normal.y;
@@ -523,7 +521,8 @@ struct Physics2D::State {
             for (const m2ShapeId kPiece : entry.pieces) {
                 owners.erase(kPiece.index1);
             }
-            m2DestroyBody(entry.body);
+            // Every made body is live until here: only this destroys one.
+            static_cast<void>(m2DestroyBody(physics, entry.body));
             ++statistics.bodiesRemoved;
         }
     }
@@ -548,8 +547,8 @@ struct Physics2D::State {
                 ++entry;
                 continue;
             }
-            if (m2Joint_IsValid(entry->second.joint)) {
-                m2DestroyJoint(entry->second.joint);
+            if (m2Joint_IsValid(physics, entry->second.joint)) {
+                static_cast<void>(m2DestroyJoint(physics, entry->second.joint));
             }
             ++statistics.jointsRemoved;
             entry = joints.erase(entry);
@@ -561,11 +560,11 @@ struct Physics2D::State {
             const m2BodyId kB = bodyOf(kJoint->b);
             // A joint whose body was made again went with the body.
             if (!kNew && same(entry.made, *kJoint) && sameBody(entry.a, kA) && sameBody(entry.b, kB) &&
-                (entry.refused || m2Joint_IsValid(entry.joint))) {
+                (entry.refused || m2Joint_IsValid(physics, entry.joint))) {
                 continue;
             }
-            if (!entry.refused && m2Joint_IsValid(entry.joint)) {
-                m2DestroyJoint(entry.joint);
+            if (!entry.refused && m2Joint_IsValid(physics, entry.joint)) {
+                static_cast<void>(m2DestroyJoint(physics, entry.joint));
             }
             entry = MappedJoint{.joint = {}, .made = *kJoint, .a = kA, .b = kB, .refused = true};
             // Broken, it waits for gameplay to mend it.
@@ -577,7 +576,7 @@ struct Physics2D::State {
                 entry.refused = entry.joint.index1 == 0;
             }
             if (!entry.refused && (kJoint->breakForce > 0 || kJoint->breakTorque > 0)) {
-                m2Joint_SetBreakLimits(entry.joint, kJoint->breakForce, kJoint->breakTorque);
+                m2Joint_SetBreakLimits(physics, entry.joint, kJoint->breakForce, kJoint->breakTorque);
             }
             ++(entry.refused ? statistics.jointsRefused : statistics.jointsMade);
         }
@@ -666,8 +665,8 @@ struct Physics2D::State {
                 }
                 if (!same(entry.velocity, *row.velocity)) {
                     if (finite(row.velocity->x) && finite(row.velocity->y) && finite(row.velocity->angular)) {
-                        m2Body_SetLinearVelocity(entry.body, m2Vec2{row.velocity->x, row.velocity->y});
-                        m2Body_SetAngularVelocity(entry.body, row.velocity->angular);
+                        m2Body_SetLinearVelocity(physics, entry.body, m2Vec2{row.velocity->x, row.velocity->y});
+                        m2Body_SetAngularVelocity(physics, entry.body, row.velocity->angular);
                         ++statistics.velocitiesSet;
                     }
                 }
@@ -676,8 +675,8 @@ struct Physics2D::State {
                 auto* const kImpulse = static_cast<Impulse2D*>(world.getErased(row.entity, *impulse));
                 if (kImpulse != nullptr && !same(*kImpulse, Impulse2D{})) {
                     if (finite(kImpulse->x) && finite(kImpulse->y) && finite(kImpulse->angular)) {
-                        m2Body_ApplyLinearImpulse(entry.body, m2Vec2{kImpulse->x, kImpulse->y});
-                        m2Body_ApplyAngularImpulse(entry.body, kImpulse->angular);
+                        m2Body_ApplyLinearImpulse(physics, entry.body, m2Vec2{kImpulse->x, kImpulse->y});
+                        m2Body_ApplyAngularImpulse(physics, entry.body, kImpulse->angular);
                         ++statistics.impulses;
                     }
                     *kImpulse = Impulse2D{};
@@ -689,7 +688,8 @@ struct Physics2D::State {
                     const Pose2D kGoal{.x = kTarget->x, .y = kTarget->y, .c = kTarget->c, .s = kTarget->s};
                     if (entry.made.motion == static_cast<std::uint8_t>(physics::Motion::Kinematic) &&
                         std::isfinite(kGoal.x) && std::isfinite(kGoal.y) && finite(kGoal.c) && finite(kGoal.s)) {
-                        m2Body_SetTargetTransform(entry.body, m2Pos2{kGoal.x, kGoal.y}, rotationOf(kGoal), kSeconds);
+                        m2Body_SetTargetTransform(
+                            physics, entry.body, m2Pos2{kGoal.x, kGoal.y}, rotationOf(kGoal), kSeconds);
                         ++statistics.targets;
                     }
                     kTarget->set = false;
@@ -719,11 +719,11 @@ struct Physics2D::State {
             if (entry.refused) {
                 continue;
             }
-            const m2Transform kTransform = m2Body_GetTransform(entry.body);
-            const m2Vec2 kLinear = m2Body_GetLinearVelocity(entry.body);
+            const m2Transform kTransform = m2Body_GetTransform(physics, entry.body);
+            const m2Vec2 kLinear = m2Body_GetLinearVelocity(physics, entry.body);
             *row.pose = Pose2D{.x = kTransform.p.x, .y = kTransform.p.y, .c = kTransform.q.c, .s = kTransform.q.s};
             *row.velocity =
-                Velocity2D{.x = kLinear.x, .y = kLinear.y, .angular = m2Body_GetAngularVelocity(entry.body)};
+                Velocity2D{.x = kLinear.x, .y = kLinear.y, .angular = m2Body_GetAngularVelocity(physics, entry.body)};
             entry.pose = *row.pose;
             entry.velocity = *row.velocity;
             if (settings.historyTicks != 0) {
@@ -806,11 +806,7 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
     definition.shapeCapacity = static_cast<std::int32_t>(settings.shapeCapacity);
     definition.jointCapacity = static_cast<std::int32_t>(settings.jointCapacity);
     definition.enableSleeping = settings.sleeping;
-    {
-        const std::lock_guard kLock{worldTableLock()};
-        state->physics = m2CreateWorld(&definition);
-    }
-    if (state->physics.index1 == 0) {
+    if (m2CreateWorld(&definition, &state->physics) != m2_success) {
         return refuse(result::ErrorClass::ResourceExhausted,
                       Physics2DError::Capacity,
                       "no room for another physics world in this process");
@@ -973,7 +969,7 @@ RayHit2D Physics2D::castRayAt(double originX,
         if (entry.refused || (among != physics::kEveryClass && entry.made.collisionClass != among)) {
             continue;
         }
-        const m2Transform kNow = m2Body_GetTransform(entry.body);
+        const m2Transform kNow = m2Body_GetTransform(state.physics, entry.body);
         // The gate may hold it to a later tick, or keep it where it is.
         const std::optional<std::uint64_t> kSince =
             moment.gate == nullptr ? std::optional<std::uint64_t>{0} : moment.gate->since(entity);
@@ -998,9 +994,9 @@ RayHit2D Physics2D::castRayAt(double originX,
         const m2Pos2 kOrigin = toWorld(kNow, toLocal(then, m2Pos2{originX, originY}));
         const m2Vec2 kDirection = turnToWorld(kNow, turnToLocal(then, kToward));
         // A tiles body's nearest piece.
-        m2RayCastResult nearest = m2Shape_CastRay(entry.shape, kOrigin, kDirection);
+        m2RayCastResult nearest = m2Shape_CastRay(state.physics, entry.shape, kOrigin, kDirection);
         for (const m2ShapeId kPiece : entry.pieces) {
-            const m2RayCastResult kPieceResult = m2Shape_CastRay(kPiece, kOrigin, kDirection);
+            const m2RayCastResult kPieceResult = m2Shape_CastRay(state.physics, kPiece, kOrigin, kDirection);
             if (kPieceResult.hit && (!nearest.hit || kPieceResult.fraction < nearest.fraction)) {
                 nearest = kPieceResult;
             }

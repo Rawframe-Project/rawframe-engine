@@ -32,7 +32,7 @@ constexpr float kSlope = 0.05F;
 /// of it that is clear, from 0 to 1. A sweep that starts inside something
 /// is left to the planes, which push out of it.
 [[nodiscard]] float clearPart(
-    m2WorldId world, const m2Capsule& thinner, m2Transform at, m2Vec2 translation, m2QueryFilter filter) noexcept {
+    const m2World* world, const m2Capsule& thinner, m2Transform at, m2Vec2 translation, m2QueryFilter filter) noexcept {
     const float kLength = lengthOf(translation);
     if (!(kLength > 0)) {
         return 0;
@@ -46,7 +46,7 @@ constexpr float kSlope = 0.05F;
 
 } // namespace
 
-CharacterMove moveCharacter(m2WorldId world,
+CharacterMove moveCharacter(const m2World* world,
                             float radius,
                             float halfHeight,
                             m2Transform from,

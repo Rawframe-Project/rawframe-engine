@@ -4,24 +4,55 @@
 // Body motion: velocities, impulses, forces and teleports.
 
 #include "body.h"
-
-#include "broadphase.h"
+#include "fpenv.h"
+#include "island.h"
 #include "joint.h"
+#include "joint_row.h"
 #include "journal.h"
-#include "world.h"
+#include "math_functions.h"
+#include "object_ids.h"
+#include "proxies.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
 
 #include <string.h>
 
-void m2Body_SetLinearVelocity(m2BodyId bodyId, m2Vec2 velocity)
+// Adds a load to a body's accumulated force and torque, each held within
+// M2_MAX_FORCE however many calls add up.
+static void AddLoad(m2World* world, int32_t index, m2Vec2 force, float torque)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
-    int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0 || !m2FiniteVec2(velocity))
+    m2Vec2* f = &world->bodies.forces[index];
+    f->x = m2SaturateF(f->x + force.x, M2_MAX_FORCE);
+    f->y = m2SaturateF(f->y + force.y, M2_MAX_FORCE);
+    world->bodies.torques[index] = m2SaturateF(world->bodies.torques[index] + torque, M2_MAX_FORCE);
+}
+
+// The arm from a body's center of mass to a world point, each axis
+// clamped to M2_JOINT_REACH.
+static m2Vec2 ArmToPoint(const m2World* world, int32_t index, m2Pos2 worldPoint)
+{
+    m2Transform xf = world->bodies.transforms[index];
+    m2Vec2 rlc = {xf.q.c * world->bodies.localCenters[index].x -
+                      xf.q.s * world->bodies.localCenters[index].y,
+                  xf.q.s * world->bodies.localCenters[index].x +
+                      xf.q.c * world->bodies.localCenters[index].y};
+    return (m2Vec2){m2WorldOffset(worldPoint.x - xf.p.x) - rlc.x,
+                    m2WorldOffset(worldPoint.y - xf.p.y) - rlc.y};
+}
+
+static M2_NOINLINE void BodySetLinearVelocityWorker(m2World* world, m2BodyId bodyId,
+                                                    m2Vec2 velocity)
+{
+    if (m2CheckWriter(world) != m2_success)
     {
-        m2Refuse(world, m2_errorInvalid);
+        return;
+    }
+    int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
+    if (index < 0 || world->bodies.types[index] == (uint8_t)m2_staticBody ||
+        !m2ValidVelocity(velocity))
+    {
+        m2Refuse(world, m2_errorInvalid); // a static body never moves
         return;
     }
     world->bodies.linearVelocities[index] = velocity;
@@ -37,13 +68,25 @@ void m2Body_SetLinearVelocity(m2BodyId bodyId, m2Vec2 velocity)
     }
 }
 
-void m2Body_SetAngularVelocity(m2BodyId bodyId, float velocity)
+void m2Body_SetLinearVelocity(m2World* world, m2BodyId bodyId, m2Vec2 velocity)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
-    int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0 || !m2FiniteF(velocity))
+    uint64_t env = m2FloatEnvEnter();
+    BodySetLinearVelocityWorker(world, bodyId, velocity);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodySetAngularVelocityWorker(m2World* world, m2BodyId bodyId,
+                                                     float velocity)
+{
+    if (m2CheckWriter(world) != m2_success)
     {
-        m2Refuse(world, m2_errorInvalid);
+        return;
+    }
+    int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
+    if (index < 0 || world->bodies.types[index] == (uint8_t)m2_staticBody ||
+        !m2ValidSpeed(velocity))
+    {
+        m2Refuse(world, m2_errorInvalid); // a static body never moves
         return;
     }
     world->bodies.angularVelocities[index] = velocity;
@@ -59,12 +102,23 @@ void m2Body_SetAngularVelocity(m2BodyId bodyId, float velocity)
     }
 }
 
-void m2Body_ApplyLinearImpulseAtPoint(m2BodyId bodyId, m2Vec2 impulse, m2Pos2 worldPoint)
+void m2Body_SetAngularVelocity(m2World* world, m2BodyId bodyId, float velocity)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    BodySetAngularVelocityWorker(world, bodyId, velocity);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodyApplyLinearImpulseAtPointWorker(m2World* world, m2BodyId bodyId,
+                                                            m2Vec2 impulse, m2Pos2 worldPoint)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody ||
-        !m2FiniteVec2(impulse) || !m2FinitePos2(worldPoint))
+        !m2ValidImpulseVec(impulse) || !m2FinitePos2(worldPoint))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -78,27 +132,34 @@ void m2Body_ApplyLinearImpulseAtPoint(m2BodyId bodyId, m2Vec2 impulse, m2Pos2 wo
         record.point = worldPoint;
         m2JournalRecord(world, m2_opApplyLinearImpulse, &record, (int32_t)sizeof(record));
     }
-    // Arm from the center of mass; the single f64 crossing.
-    m2Transform xf = world->bodies.transforms[index];
-    m2Vec2 rlc = {xf.q.c * world->bodies.localCenters[index].x -
-                      xf.q.s * world->bodies.localCenters[index].y,
-                  xf.q.s * world->bodies.localCenters[index].x +
-                      xf.q.c * world->bodies.localCenters[index].y};
-    m2Vec2 r = {(float)(worldPoint.x - xf.p.x) - rlc.x, (float)(worldPoint.y - xf.p.y) - rlc.y};
+    m2Vec2 r = ArmToPoint(world, index, worldPoint);
     world->bodies.linearVelocities[index].x += world->bodies.invMass[index] * impulse.x;
     world->bodies.linearVelocities[index].y += world->bodies.invMass[index] * impulse.y;
     world->bodies.angularVelocities[index] +=
         world->bodies.invInertia[index] * (r.x * impulse.y - r.y * impulse.x);
+    m2SaturateBodyVelocity(world, index);
     world->bodies.asleep[index] = 0;
     world->bodies.sleepTimes[index] = 0.0f;
 }
 
-void m2Body_ApplyForceAtPoint(m2BodyId bodyId, m2Vec2 force, m2Pos2 worldPoint)
+void m2Body_ApplyLinearImpulseAtPoint(m2World* world, m2BodyId bodyId, m2Vec2 impulse,
+                                      m2Pos2 worldPoint)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    BodyApplyLinearImpulseAtPointWorker(world, bodyId, impulse, worldPoint);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodyApplyForceAtPointWorker(m2World* world, m2BodyId bodyId, m2Vec2 force,
+                                                    m2Pos2 worldPoint)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody ||
-        !m2FiniteVec2(force) || !m2FinitePos2(worldPoint))
+        !m2ValidForceVec(force) || !m2FinitePos2(worldPoint))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -112,25 +173,28 @@ void m2Body_ApplyForceAtPoint(m2BodyId bodyId, m2Vec2 force, m2Pos2 worldPoint)
         record.point = worldPoint;
         m2JournalRecord(world, m2_opApplyForce, &record, (int32_t)sizeof(record));
     }
-    // Arm from the center of mass, exactly like the impulse path.
-    m2Transform xf = world->bodies.transforms[index];
-    m2Vec2 rlc = {xf.q.c * world->bodies.localCenters[index].x -
-                      xf.q.s * world->bodies.localCenters[index].y,
-                  xf.q.s * world->bodies.localCenters[index].x +
-                      xf.q.c * world->bodies.localCenters[index].y};
-    m2Vec2 r = {(float)(worldPoint.x - xf.p.x) - rlc.x, (float)(worldPoint.y - xf.p.y) - rlc.y};
-    world->bodies.forces[index].x += force.x;
-    world->bodies.forces[index].y += force.y;
-    world->bodies.torques[index] += r.x * force.y - r.y * force.x;
+    m2Vec2 r = ArmToPoint(world, index, worldPoint);
+    AddLoad(world, index, force, r.x * force.y - r.y * force.x);
     world->bodies.asleep[index] = 0;
     world->bodies.sleepTimes[index] = 0.0f;
 }
 
-void m2Body_ApplyForce(m2BodyId bodyId, m2Vec2 force)
+void m2Body_ApplyForceAtPoint(m2World* world, m2BodyId bodyId, m2Vec2 force, m2Pos2 worldPoint)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    BodyApplyForceAtPointWorker(world, bodyId, force, worldPoint);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodyApplyForceWorker(m2World* world, m2BodyId bodyId, m2Vec2 force)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody || !m2FiniteVec2(force))
+    if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody ||
+        !m2ValidForceVec(force))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -143,17 +207,26 @@ void m2Body_ApplyForce(m2BodyId bodyId, m2Vec2 force)
         record.value = force;
         m2JournalRecord(world, m2_opApplyForceCenter, &record, (int32_t)sizeof(record));
     }
-    world->bodies.forces[index].x += force.x;
-    world->bodies.forces[index].y += force.y;
+    AddLoad(world, index, force, 0.0f);
     world->bodies.asleep[index] = 0;
     world->bodies.sleepTimes[index] = 0.0f;
 }
 
-void m2Body_ApplyTorque(m2BodyId bodyId, float torque)
+void m2Body_ApplyForce(m2World* world, m2BodyId bodyId, m2Vec2 force)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    BodyApplyForceWorker(world, bodyId, force);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodyApplyTorqueWorker(m2World* world, m2BodyId bodyId, float torque)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody || !m2FiniteF(torque))
+    if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody || !m2ValidForce(torque))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -166,16 +239,28 @@ void m2Body_ApplyTorque(m2BodyId bodyId, float torque)
         record.value = torque;
         m2JournalRecord(world, m2_opApplyTorque, &record, (int32_t)sizeof(record));
     }
-    world->bodies.torques[index] += torque;
+    AddLoad(world, index, (m2Vec2){0.0f, 0.0f}, torque);
     world->bodies.asleep[index] = 0;
     world->bodies.sleepTimes[index] = 0.0f;
 }
 
-void m2Body_ApplyAngularImpulse(m2BodyId bodyId, float impulse)
+void m2Body_ApplyTorque(m2World* world, m2BodyId bodyId, float torque)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    BodyApplyTorqueWorker(world, bodyId, torque);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodyApplyAngularImpulseWorker(m2World* world, m2BodyId bodyId,
+                                                      float impulse)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody || !m2FiniteF(impulse))
+    if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody ||
+        !m2ValidImpulse(impulse))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -189,16 +274,28 @@ void m2Body_ApplyAngularImpulse(m2BodyId bodyId, float impulse)
         m2JournalRecord(world, m2_opApplyAngularImpulse, &record, (int32_t)sizeof(record));
     }
     world->bodies.angularVelocities[index] += world->bodies.invInertia[index] * impulse;
+    m2SaturateBodyVelocity(world, index);
     world->bodies.asleep[index] = 0;
     world->bodies.sleepTimes[index] = 0.0f;
 }
 
-void m2Body_ApplyLinearImpulse(m2BodyId bodyId, m2Vec2 impulse)
+void m2Body_ApplyAngularImpulse(m2World* world, m2BodyId bodyId, float impulse)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    BodyApplyAngularImpulseWorker(world, bodyId, impulse);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodyApplyLinearImpulseWorker(m2World* world, m2BodyId bodyId,
+                                                     m2Vec2 impulse)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0 || world->bodies.types[index] != (uint8_t)m2_dynamicBody ||
-        !m2FiniteVec2(impulse))
+        !m2ValidImpulseVec(impulse))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -213,13 +310,25 @@ void m2Body_ApplyLinearImpulse(m2BodyId bodyId, m2Vec2 impulse)
     }
     world->bodies.linearVelocities[index].x += world->bodies.invMass[index] * impulse.x;
     world->bodies.linearVelocities[index].y += world->bodies.invMass[index] * impulse.y;
+    m2SaturateBodyVelocity(world, index);
     world->bodies.asleep[index] = 0;
     world->bodies.sleepTimes[index] = 0.0f;
 }
 
-void m2Body_SetTransform(m2BodyId bodyId, m2Pos2 position, m2Rot rotation)
+void m2Body_ApplyLinearImpulse(m2World* world, m2BodyId bodyId, m2Vec2 impulse)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    BodyApplyLinearImpulseWorker(world, bodyId, impulse);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodySetTransformWorker(m2World* world, m2BodyId bodyId, m2Pos2 position,
+                                               m2Rot rotation)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0 || !m2FinitePos2(position) || !m2UnitRot(rotation))
     {
@@ -266,34 +375,53 @@ void m2Body_SetTransform(m2BodyId bodyId, m2Pos2 position, m2Rot rotation)
         {
             continue;
         }
-        m2Aabb tight = m2ShapeTightAabb(world, shape);
-        int32_t tree = m2ShapeTreeIndex(world, shape);
-        if (!m2Aabb_Contains(
-                world->broadphase.treeNodes[tree][world->broadphase.proxyIds[shape]].aabb, tight))
-        {
-            m2TreeMove(&world->broadphase.trees[tree], world->broadphase.treeNodes[tree],
-                       world->broadphase.proxyIds[shape], m2Fatten(tight));
-        }
+        (void)m2RefitProxy(world, shape);
         m2PushMoved(world, shape);
     }
 }
 
-void m2Body_SetTargetTransform(m2BodyId bodyId, m2Pos2 position, m2Rot rotation, float dt)
+void m2Body_SetTransform(m2World* world, m2BodyId bodyId, m2Pos2 position, m2Rot rotation)
 {
-    m2World* world = m2GetBodyWorld(bodyId);
+    uint64_t env = m2FloatEnvEnter();
+    BodySetTransformWorker(world, bodyId, position, rotation);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void BodySetTargetTransformWorker(m2World* world, m2BodyId bodyId,
+                                                     m2Pos2 position, m2Rot rotation, float dt)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0 || !(dt > 0.0f) || !m2FinitePos2(position) || !m2UnitRot(rotation) ||
-        !m2FiniteF(dt))
+    if (index < 0 || world->bodies.types[index] == (uint8_t)m2_staticBody || !m2ValidTimeStep(dt) ||
+        !m2FinitePos2(position) || !m2UnitRot(rotation))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
     }
     // Velocities that land the pose in one step; applied through the
-    // journaled setters, so replays get this for free.
+    // journaled setters, so replays get this for free. A pose too far to
+    // reach within M2_MAX_SPEED is refused before either is set.
     float invDt = 1.0f / dt;
     m2Transform xf = world->bodies.transforms[index];
-    m2Vec2 v = {(float)(position.x - xf.p.x) * invDt, (float)(position.y - xf.p.y) * invDt};
-    float w = m2UnwindAngle(m2RelativeJointAngle(xf.q, rotation)) * invDt;
-    m2Body_SetLinearVelocity(bodyId, v);
-    m2Body_SetAngularVelocity(bodyId, w);
+    m2Vec2 v = {m2WorldOffset(position.x - xf.p.x) * invDt,
+                m2WorldOffset(position.y - xf.p.y) * invDt};
+    float w = m2UnwindAngleWork(m2RelativeJointAngle(xf.q, rotation)) * invDt;
+    if (!m2ValidVelocity(v) || !m2ValidSpeed(w))
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return;
+    }
+    m2Body_SetLinearVelocity(world, bodyId, v);
+    m2Body_SetAngularVelocity(world, bodyId, w);
+}
+
+void m2Body_SetTargetTransform(m2World* world, m2BodyId bodyId, m2Pos2 position, m2Rot rotation,
+                               float dt)
+{
+    uint64_t env = m2FloatEnvEnter();
+    BodySetTargetTransformWorker(world, bodyId, position, rotation, dt);
+    m2FloatEnvLeave(env);
 }

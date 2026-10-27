@@ -4,14 +4,14 @@
 // The wheel joint: a slider with a suspension spring and free
 // rotation, driven by a rotational motor.
 
-#include "joint_solver.h"
-
 #include "body.h"
 #include "broadphase.h"
+#include "fpenv.h"
 #include "joint.h"
+#include "joint_solver.h"
 #include "journal.h"
-#include "solver.h"
-#include "world.h"
+#include "object_ids.h"
+#include "solver_base.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -35,40 +35,50 @@ m2WheelJointDef m2DefaultWheelJointDef(void)
 // ordered ranges.
 static bool DefValid(const m2WheelJointDef* def)
 {
-    return m2FiniteVec2(def->localAnchorA) && m2FiniteVec2(def->localAnchorB) &&
-           m2FiniteVec2(def->localAxisA) && m2JointGain(def->hertz) &&
-           m2JointGain(def->dampingRatio) && m2FiniteF(def->motorSpeed) &&
-           m2JointGain(def->maxMotorTorque) && m2FiniteF(def->lowerTranslation) &&
-           m2FiniteF(def->upperTranslation) && def->lowerTranslation <= def->upperTranslation;
+    return m2LocalVec2(def->localAnchorA) && m2LocalVec2(def->localAnchorB) &&
+           m2LocalVec2(def->localAxisA) && m2ValidRate(def->hertz) &&
+           m2ValidCoefficient(def->dampingRatio) && m2ValidSpeed(def->motorSpeed) &&
+           m2ValidMaxForce(def->maxMotorTorque) && m2ValidReach(def->lowerTranslation) &&
+           m2ValidReach(def->upperTranslation) && def->lowerTranslation <= def->upperTranslation;
 }
 
-m2JointId m2CreateWheelJoint(m2WorldId worldId, const m2WheelJointDef* def)
+static M2_NOINLINE m2Result CreateWheelJointWorker(m2World* world, const m2WheelJointDef* def,
+                                                   m2JointId* jointOut)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || def == NULL || def->internalValue != M2_WHJOINT_COOKIE || !DefValid(def))
+    if (jointOut == NULL)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    *jointOut = m2_nullJointId;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    if (def == NULL || def->internalValue != M2_WHJOINT_COOKIE || !DefValid(def))
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
-    if (bodyA < 0 || bodyB < 0 || bodyA == bodyB)
+    if (bodyA < 0 || bodyB < 0)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorStale);
+    }
+    if (bodyA == bodyB)
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     float axisLength =
         sqrtf(def->localAxisA.x * def->localAxisA.x + def->localAxisA.y * def->localAxisA.y);
     if (!(axisLength > 1.19209290e-7f))
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t index = m2AllocateJoint(world);
     if (index < 0)
     {
-        m2Refuse(world, m2_errorCapacity);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorCapacity);
     }
     m2JointId jointId =
         m2FinishJoint(world, index, (uint8_t)m2_wheelJoint, bodyA, bodyB, def->localAnchorA,
@@ -96,7 +106,16 @@ m2JointId m2CreateWheelJoint(m2WorldId worldId, const m2WheelJointDef* def)
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateWheelJoint, &record, (int32_t)sizeof(record));
     }
-    return jointId;
+    *jointOut = jointId;
+    return m2_success;
+}
+
+m2Result m2CreateWheelJoint(m2World* world, const m2WheelJointDef* def, m2JointId* jointOut)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreateWheelJointWorker(world, def, jointOut);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 // --- Solver ---------------------------------------------------------------

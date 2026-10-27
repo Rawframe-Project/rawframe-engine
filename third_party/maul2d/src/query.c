@@ -11,8 +11,9 @@
 // the origin.
 
 #include "query.h"
+
 #include "distance.h"
-#include "world.h"
+#include "fpenv.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -140,8 +141,9 @@ static void RayCastTree(const m2World* world, int32_t treeIndex, m2RayState* ray
     }
 }
 
-m2RayCastResult m2World_CastRayClosest(m2WorldId worldId, m2Pos2 origin, m2Vec2 translation,
-                                       m2QueryFilter filter)
+static M2_NOINLINE m2RayCastResult WorldCastRayClosestWorker(const m2World* world, m2Pos2 origin,
+                                                             m2Vec2 translation,
+                                                             m2QueryFilter filter)
 {
     m2RayCastResult result;
     result.shapeId = m2_nullShapeId;
@@ -150,7 +152,6 @@ m2RayCastResult m2World_CastRayClosest(m2WorldId worldId, m2Pos2 origin, m2Vec2 
     result.fraction = 0.0f;
     result.hit = false;
 
-    m2World* world = m2WorldFromId(worldId);
     if (world == NULL || !m2FinitePos2(origin) || !m2FiniteVec2(translation))
     {
         m2Refuse(world, m2_errorInvalid);
@@ -176,13 +177,21 @@ m2RayCastResult m2World_CastRayClosest(m2WorldId worldId, m2Pos2 origin, m2Vec2 
     }
 
     result.shapeId.index1 = ray.shapeIndex + 1;
-    result.shapeId.world = world->idWorld;
     result.shapeId.generation = world->shapes.shapeGenerations[ray.shapeIndex];
     result.fraction = ray.initialOverlap ? 0.0f : ray.fraction;
     result.point = (m2Pos2){origin.x + (double)result.fraction * (double)translation.x,
                             origin.y + (double)result.fraction * (double)translation.y};
     result.normal = ray.normal;
     result.hit = true;
+    return result;
+}
+
+m2RayCastResult m2World_CastRayClosest(const m2World* world, m2Pos2 origin, m2Vec2 translation,
+                                       m2QueryFilter filter)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2RayCastResult result = WorldCastRayClosestWorker(world, origin, translation, filter);
+    m2FloatEnvLeave(env);
     return result;
 }
 
@@ -231,7 +240,7 @@ static void OfferShape(ShapeSelection* sel, const m2World* world, int32_t shapeI
     {
         return;
     }
-    m2ShapeId id = {shapeIndex + 1, world->idWorld, world->shapes.shapeGenerations[shapeIndex]};
+    m2ShapeId id = {(uint32_t)(shapeIndex + 1), world->shapes.shapeGenerations[shapeIndex]};
     if (sel->size < sel->capacity)
     {
         // Sift up.
@@ -265,10 +274,10 @@ static int32_t FinishSelection(ShapeSelection* sel)
     return sel->total;
 }
 
-int32_t m2World_OverlapAabb(m2WorldId worldId, m2Pos2 lower, m2Pos2 upper, m2ShapeId* results,
-                            int32_t capacity, m2QueryFilter filter)
+static M2_NOINLINE int32_t WorldOverlapAabbWorker(const m2World* world, m2Pos2 lower, m2Pos2 upper,
+                                                  m2ShapeId* results, int32_t capacity,
+                                                  m2QueryFilter filter)
 {
-    m2World* world = m2WorldFromId(worldId);
     if (world == NULL || !m2FinitePos2(lower) || !m2FinitePos2(upper) || upper.x < lower.x ||
         upper.y < lower.y)
     {
@@ -305,6 +314,15 @@ int32_t m2World_OverlapAabb(m2WorldId worldId, m2Pos2 lower, m2Pos2 upper, m2Sha
     return FinishSelection(&sel);
 }
 
+int32_t m2World_OverlapAabb(const m2World* world, m2Pos2 lower, m2Pos2 upper, m2ShapeId* results,
+                            int32_t capacity, m2QueryFilter filter)
+{
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result = WorldOverlapAabbWorker(world, lower, upper, results, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
 // ---------------------------------------------------------------
 // Convex sweeps and overlaps. One generic
 // walk serves circle, capsule and polygon: the cast geometry becomes
@@ -312,7 +330,8 @@ int32_t m2World_OverlapAabb(m2WorldId worldId, m2Pos2 lower, m2Pos2 upper, m2Sha
 // both proxies meet in the TARGET's body-local frame (the same single
 // f64 crossing as rays).
 
-static m2RayCastResult CastProxyClosest(m2WorldId worldId, const m2DistanceProxy* castLocal,
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one tree walk keeping the closest
+static m2RayCastResult CastProxyClosest(const m2World* world, const m2DistanceProxy* castLocal,
                                         m2Transform pose, m2Vec2 translation, m2QueryFilter filter)
 {
     m2RayCastResult result;
@@ -322,7 +341,6 @@ static m2RayCastResult CastProxyClosest(m2WorldId worldId, const m2DistanceProxy
     result.fraction = 0.0f;
     result.hit = false;
 
-    m2World* world = m2WorldFromId(worldId);
     if (world == NULL || castLocal->count == 0 || !m2QueryMotionValid(pose, translation))
     {
         m2Refuse(world, m2_errorInvalid);
@@ -395,7 +413,6 @@ static m2RayCastResult CastProxyClosest(m2WorldId worldId, const m2DistanceProxy
     int32_t body = world->shapes.shapeBody[bestShape];
     m2Transform xf = world->bodies.transforms[body];
     result.shapeId.index1 = bestShape + 1;
-    result.shapeId.world = world->idWorld;
     result.shapeId.generation = world->shapes.shapeGenerations[bestShape];
     result.fraction = bestOverlap ? 0.0f : bestFraction;
     result.hit = true;
@@ -412,10 +429,10 @@ static m2RayCastResult CastProxyClosest(m2WorldId worldId, const m2DistanceProxy
     return result;
 }
 
-static int32_t OverlapProxy(m2WorldId worldId, const m2DistanceProxy* castLocal, m2Transform pose,
-                            m2ShapeId* ids, int32_t capacity, m2QueryFilter filter)
+static int32_t OverlapProxy(const m2World* world, const m2DistanceProxy* castLocal,
+                            m2Transform pose, m2ShapeId* ids, int32_t capacity,
+                            m2QueryFilter filter)
 {
-    m2World* world = m2WorldFromId(worldId);
     if (world == NULL || castLocal->count == 0 || !m2QueryMotionValid(pose, (m2Vec2){0.0f, 0.0f}))
     {
         m2Refuse(world, m2_errorInvalid);
@@ -467,49 +484,118 @@ static int32_t OverlapProxy(m2WorldId worldId, const m2DistanceProxy* castLocal,
     return FinishSelection(&sel);
 }
 
-m2RayCastResult m2World_CastCircleClosest(m2WorldId worldId, const m2Circle* circle,
+static M2_NOINLINE m2RayCastResult WorldCastCircleClosestWorker(const m2World* world,
+                                                                const m2Circle* circle,
+                                                                m2Transform origin,
+                                                                m2Vec2 translation,
+                                                                m2QueryFilter filter)
+{
+    m2DistanceProxy p = m2CircleProxy(circle);
+    return CastProxyClosest(world, &p, origin, translation, filter);
+}
+
+m2RayCastResult m2World_CastCircleClosest(const m2World* world, const m2Circle* circle,
                                           m2Transform origin, m2Vec2 translation,
                                           m2QueryFilter filter)
 {
-    m2DistanceProxy p = m2CircleProxy(circle);
-    return CastProxyClosest(worldId, &p, origin, translation, filter);
+    uint64_t env = m2FloatEnvEnter();
+    m2RayCastResult result =
+        WorldCastCircleClosestWorker(world, circle, origin, translation, filter);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
-m2RayCastResult m2World_CastCapsuleClosest(m2WorldId worldId, const m2Capsule* capsule,
-                                           m2Transform origin, m2Vec2 translation,
-                                           m2QueryFilter filter)
+static M2_NOINLINE m2RayCastResult WorldCastCapsuleClosestWorker(const m2World* world,
+                                                                 const m2Capsule* capsule,
+                                                                 m2Transform origin,
+                                                                 m2Vec2 translation,
+                                                                 m2QueryFilter filter)
 {
     m2DistanceProxy p = m2CapsuleProxy(capsule);
-    return CastProxyClosest(worldId, &p, origin, translation, filter);
+    return CastProxyClosest(world, &p, origin, translation, filter);
 }
 
-m2RayCastResult m2World_CastPolygonClosest(m2WorldId worldId, const m2Polygon* polygon,
+m2RayCastResult m2World_CastCapsuleClosest(const m2World* world, const m2Capsule* capsule,
                                            m2Transform origin, m2Vec2 translation,
                                            m2QueryFilter filter)
 {
-    m2DistanceProxy p = m2PolygonProxy(polygon);
-    return CastProxyClosest(worldId, &p, origin, translation, filter);
+    uint64_t env = m2FloatEnvEnter();
+    m2RayCastResult result =
+        WorldCastCapsuleClosestWorker(world, capsule, origin, translation, filter);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
-int32_t m2World_OverlapCircle(m2WorldId worldId, const m2Circle* circle, m2Transform origin,
+static M2_NOINLINE m2RayCastResult WorldCastPolygonClosestWorker(const m2World* world,
+                                                                 const m2Polygon* polygon,
+                                                                 m2Transform origin,
+                                                                 m2Vec2 translation,
+                                                                 m2QueryFilter filter)
+{
+    m2DistanceProxy p = m2PolygonProxy(polygon);
+    return CastProxyClosest(world, &p, origin, translation, filter);
+}
+
+m2RayCastResult m2World_CastPolygonClosest(const m2World* world, const m2Polygon* polygon,
+                                           m2Transform origin, m2Vec2 translation,
+                                           m2QueryFilter filter)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2RayCastResult result =
+        WorldCastPolygonClosestWorker(world, polygon, origin, translation, filter);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE int32_t WorldOverlapCircleWorker(const m2World* world, const m2Circle* circle,
+                                                    m2Transform origin, m2ShapeId* ids,
+                                                    int32_t capacity, m2QueryFilter filter)
+{
+    m2DistanceProxy p = m2CircleProxy(circle);
+    return OverlapProxy(world, &p, origin, ids, capacity, filter);
+}
+
+int32_t m2World_OverlapCircle(const m2World* world, const m2Circle* circle, m2Transform origin,
                               m2ShapeId* ids, int32_t capacity, m2QueryFilter filter)
 {
-    m2DistanceProxy p = m2CircleProxy(circle);
-    return OverlapProxy(worldId, &p, origin, ids, capacity, filter);
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result = WorldOverlapCircleWorker(world, circle, origin, ids, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
-int32_t m2World_OverlapCapsule(m2WorldId worldId, const m2Capsule* capsule, m2Transform origin,
-                               m2ShapeId* ids, int32_t capacity, m2QueryFilter filter)
+static M2_NOINLINE int32_t WorldOverlapCapsuleWorker(const m2World* world, const m2Capsule* capsule,
+                                                     m2Transform origin, m2ShapeId* ids,
+                                                     int32_t capacity, m2QueryFilter filter)
 {
     m2DistanceProxy p = m2CapsuleProxy(capsule);
-    return OverlapProxy(worldId, &p, origin, ids, capacity, filter);
+    return OverlapProxy(world, &p, origin, ids, capacity, filter);
 }
 
-int32_t m2World_OverlapPolygon(m2WorldId worldId, const m2Polygon* polygon, m2Transform origin,
+int32_t m2World_OverlapCapsule(const m2World* world, const m2Capsule* capsule, m2Transform origin,
                                m2ShapeId* ids, int32_t capacity, m2QueryFilter filter)
 {
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result = WorldOverlapCapsuleWorker(world, capsule, origin, ids, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE int32_t WorldOverlapPolygonWorker(const m2World* world, const m2Polygon* polygon,
+                                                     m2Transform origin, m2ShapeId* ids,
+                                                     int32_t capacity, m2QueryFilter filter)
+{
     m2DistanceProxy p = m2PolygonProxy(polygon);
-    return OverlapProxy(worldId, &p, origin, ids, capacity, filter);
+    return OverlapProxy(world, &p, origin, ids, capacity, filter);
+}
+
+int32_t m2World_OverlapPolygon(const m2World* world, const m2Polygon* polygon, m2Transform origin,
+                               m2ShapeId* ids, int32_t capacity, m2QueryFilter filter)
+{
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result = WorldOverlapPolygonWorker(world, polygon, origin, ids, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 // One shape, the world ray conventions, the one-sided chain law: the
@@ -528,7 +614,8 @@ struct m2CastHitInternal m2RayCastShapeIndex(const m2World* world, int32_t shape
 }
 
 // same RayCastShape the world walk uses, minus the walk.
-m2RayCastResult m2Shape_CastRay(m2ShapeId shapeId, m2Pos2 origin, m2Vec2 translation)
+static M2_NOINLINE m2RayCastResult ShapeCastRayWorker(const m2World* world, m2ShapeId shapeId,
+                                                      m2Pos2 origin, m2Vec2 translation)
 {
     m2RayCastResult result;
     result.shapeId = m2_nullShapeId;
@@ -537,13 +624,12 @@ m2RayCastResult m2Shape_CastRay(m2ShapeId shapeId, m2Pos2 origin, m2Vec2 transla
     result.fraction = 0.0f;
     result.hit = false;
 
-    m2World* world = m2WorldFromTag(shapeId.world);
     if (world == NULL)
     {
         m2Refuse(world, m2_errorInvalid);
         return result;
     }
-    int32_t index = shapeId.index1 - 1;
+    int32_t index = (int32_t)shapeId.index1 - 1;
     if (index < 0 || index >= world->shapes.shapeCapacity || world->shapes.shapeAlive[index] == 0 ||
         world->shapes.shapeGenerations[index] != shapeId.generation || !m2FinitePos2(origin) ||
         !m2FiniteVec2(translation))
@@ -563,6 +649,15 @@ m2RayCastResult m2Shape_CastRay(m2ShapeId shapeId, m2Pos2 origin, m2Vec2 transla
     result.normal = hit.normal;
     result.point = (m2Pos2){origin.x + (double)result.fraction * (double)translation.x,
                             origin.y + (double)result.fraction * (double)translation.y};
+    return result;
+}
+
+m2RayCastResult m2Shape_CastRay(const m2World* world, m2ShapeId shapeId, m2Pos2 origin,
+                                m2Vec2 translation)
+{
+    uint64_t env = m2FloatEnvEnter();
+    m2RayCastResult result = ShapeCastRayWorker(world, shapeId, origin, translation);
+    m2FloatEnvLeave(env);
     return result;
 }
 
@@ -598,10 +693,34 @@ static int32_t InsertHitSorted(m2RayHit* hits, int32_t kept, int32_t capacity, m
     return kept < capacity ? kept + 1 : kept;
 }
 
-int32_t m2World_CastRayAll(m2WorldId worldId, m2Pos2 origin, m2Vec2 translation, m2RayHit* hits,
-                           int32_t capacity, m2QueryFilter filter)
+// One tree leaf of m2World_CastRayAll: false when the shape is dead,
+// filtered out or missed, else the hit in world space.
+static bool RayHitOnShape(const m2World* world, int32_t shapeIndex, m2Pos2 origin,
+                          m2Vec2 translation, m2QueryFilter filter, m2RayHit* out)
 {
-    m2World* world = m2WorldFromId(worldId);
+    if (world->shapes.shapeAlive[shapeIndex] == 0 || !m2QueryShouldSee(world, shapeIndex, filter))
+    {
+        return false;
+    }
+    m2CastHit hit = RayCastShape(world, shapeIndex, origin, translation, 1.0f);
+    if (!hit.hit)
+    {
+        return false;
+    }
+    bool initialOverlap = hit.normal.x == 0.0f && hit.normal.y == 0.0f;
+    out->shapeId.index1 = shapeIndex + 1;
+    out->shapeId.generation = world->shapes.shapeGenerations[shapeIndex];
+    out->fraction = initialOverlap ? 0.0f : hit.fraction;
+    out->normal = hit.normal;
+    out->point = (m2Pos2){origin.x + (double)out->fraction * (double)translation.x,
+                          origin.y + (double)out->fraction * (double)translation.y};
+    return true;
+}
+
+static M2_NOINLINE int32_t WorldCastRayAllWorker(const m2World* world, m2Pos2 origin,
+                                                 m2Vec2 translation, m2RayHit* hits,
+                                                 int32_t capacity, m2QueryFilter filter)
+{
     if (world == NULL || !m2FinitePos2(origin) || !m2FiniteVec2(translation))
     {
         m2Refuse(world, m2_errorInvalid);
@@ -645,26 +764,11 @@ int32_t m2World_CastRayAll(m2WorldId worldId, m2Pos2 origin, m2Vec2 translation,
                 stack[top++] = nodes[index].child1;
                 continue;
             }
-            int32_t shapeIndex = nodes[index].userData;
-            if (world->shapes.shapeAlive[shapeIndex] == 0 ||
-                !m2QueryShouldSee(world, shapeIndex, filter))
-            {
-                continue;
-            }
-            m2CastHit hit = RayCastShape(world, shapeIndex, origin, translation, 1.0f);
-            if (!hit.hit)
-            {
-                continue;
-            }
-            bool initialOverlap = hit.normal.x == 0.0f && hit.normal.y == 0.0f;
             m2RayHit out;
-            out.shapeId.index1 = shapeIndex + 1;
-            out.shapeId.world = world->idWorld;
-            out.shapeId.generation = world->shapes.shapeGenerations[shapeIndex];
-            out.fraction = initialOverlap ? 0.0f : hit.fraction;
-            out.normal = hit.normal;
-            out.point = (m2Pos2){origin.x + (double)out.fraction * (double)translation.x,
-                                 origin.y + (double)out.fraction * (double)translation.y};
+            if (!RayHitOnShape(world, nodes[index].userData, origin, translation, filter, &out))
+            {
+                continue;
+            }
             total += 1;
             if (cap > 0)
             {
@@ -675,11 +779,63 @@ int32_t m2World_CastRayAll(m2WorldId worldId, m2Pos2 origin, m2Vec2 translation,
     return total;
 }
 
-static int32_t CastProxyAll(m2WorldId worldId, const m2DistanceProxy* castLocal, m2Transform pose,
-                            m2Vec2 translation, m2RayHit* hits, int32_t capacity,
+int32_t m2World_CastRayAll(const m2World* world, m2Pos2 origin, m2Vec2 translation, m2RayHit* hits,
+                           int32_t capacity, m2QueryFilter filter)
+{
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result = WorldCastRayAllWorker(world, origin, translation, hits, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+// One candidate of CastProxyAll: false when the shape is dead, filtered
+// out, behind a chain's ghost side or missed, else the hit in world space.
+static bool ProxyHitOnShape(const m2World* world, int32_t shapeIndex, const m2ProxyQuery* q,
+                            m2Transform pose, m2QueryFilter filter, m2RayHit* out)
+{
+    if (world->shapes.shapeAlive[shapeIndex] == 0 || !m2QueryShouldSee(world, shapeIndex, filter))
+    {
+        return false;
+    }
+    m2DistanceProxy target;
+    m2DistanceProxy cast;
+    m2Vec2 translationLocal;
+    m2Vec2 startLocal;
+    m2ProxiesInBodyFrame(world, shapeIndex, q, &target, &cast, &translationLocal, &startLocal);
+    if (m2ChainGhostSide(world, shapeIndex, startLocal))
+    {
+        return false;
+    }
+    m2CastResult hit = m2ShapeCastProxy(&target, &cast, translationLocal, 1.0f);
+    if (!hit.hit)
+    {
+        return false;
+    }
+    int32_t body = world->shapes.shapeBody[shapeIndex];
+    m2Transform xf = world->bodies.transforms[body];
+    bool initialOverlap = hit.normal.x == 0.0f && hit.normal.y == 0.0f;
+    out->shapeId.index1 = shapeIndex + 1;
+    out->shapeId.generation = world->shapes.shapeGenerations[shapeIndex];
+    out->fraction = initialOverlap ? 0.0f : hit.fraction;
+    if (initialOverlap)
+    {
+        out->normal = (m2Vec2){0.0f, 0.0f};
+        out->point = pose.p;
+    }
+    else
+    {
+        out->normal = (m2Vec2){xf.q.c * hit.normal.x - xf.q.s * hit.normal.y,
+                               xf.q.s * hit.normal.x + xf.q.c * hit.normal.y};
+        out->point = (m2Pos2){xf.p.x + (double)(xf.q.c * hit.pointA.x - xf.q.s * hit.pointA.y),
+                              xf.p.y + (double)(xf.q.s * hit.pointA.x + xf.q.c * hit.pointA.y)};
+    }
+    return true;
+}
+
+static int32_t CastProxyAll(const m2World* world, const m2DistanceProxy* castLocal,
+                            m2Transform pose, m2Vec2 translation, m2RayHit* hits, int32_t capacity,
                             m2QueryFilter filter)
 {
-    m2World* world = m2WorldFromId(worldId);
     if (world == NULL || castLocal->count == 0 || !m2QueryMotionValid(pose, translation))
     {
         m2Refuse(world, m2_errorInvalid);
@@ -711,46 +867,10 @@ static int32_t CastProxyAll(m2WorldId worldId, const m2DistanceProxy* castLocal,
         int32_t shapeIndex;
         while (m2TreeNextQuery(&cursor, &shapeIndex))
         {
-            if (world->shapes.shapeAlive[shapeIndex] == 0 ||
-                !m2QueryShouldSee(world, shapeIndex, filter))
-            {
-                continue;
-            }
-            m2DistanceProxy target;
-            m2DistanceProxy cast;
-            m2Vec2 translationLocal;
-            m2Vec2 startLocal;
-            m2ProxiesInBodyFrame(world, shapeIndex, &q, &target, &cast, &translationLocal,
-                                 &startLocal);
-            if (m2ChainGhostSide(world, shapeIndex, startLocal))
-            {
-                continue;
-            }
-            m2CastResult hit = m2ShapeCastProxy(&target, &cast, translationLocal, 1.0f);
-            if (!hit.hit)
-            {
-                continue;
-            }
-            int32_t body = world->shapes.shapeBody[shapeIndex];
-            m2Transform xf = world->bodies.transforms[body];
-            bool initialOverlap = hit.normal.x == 0.0f && hit.normal.y == 0.0f;
             m2RayHit out;
-            out.shapeId.index1 = shapeIndex + 1;
-            out.shapeId.world = world->idWorld;
-            out.shapeId.generation = world->shapes.shapeGenerations[shapeIndex];
-            out.fraction = initialOverlap ? 0.0f : hit.fraction;
-            if (initialOverlap)
+            if (!ProxyHitOnShape(world, shapeIndex, &q, pose, filter, &out))
             {
-                out.normal = (m2Vec2){0.0f, 0.0f};
-                out.point = pose.p;
-            }
-            else
-            {
-                out.normal = (m2Vec2){xf.q.c * hit.normal.x - xf.q.s * hit.normal.y,
-                                      xf.q.s * hit.normal.x + xf.q.c * hit.normal.y};
-                out.point =
-                    (m2Pos2){xf.p.x + (double)(xf.q.c * hit.pointA.x - xf.q.s * hit.pointA.y),
-                             xf.p.y + (double)(xf.q.s * hit.pointA.x + xf.q.c * hit.pointA.y)};
+                continue;
             }
             total += 1;
             if (cap > 0)
@@ -762,26 +882,62 @@ static int32_t CastProxyAll(m2WorldId worldId, const m2DistanceProxy* castLocal,
     return total;
 }
 
-int32_t m2World_CastCircleAll(m2WorldId worldId, const m2Circle* circle, m2Transform origin,
+static M2_NOINLINE int32_t WorldCastCircleAllWorker(const m2World* world, const m2Circle* circle,
+                                                    m2Transform origin, m2Vec2 translation,
+                                                    m2RayHit* hits, int32_t capacity,
+                                                    m2QueryFilter filter)
+{
+    m2DistanceProxy p = m2CircleProxy(circle);
+    return CastProxyAll(world, &p, origin, translation, hits, capacity, filter);
+}
+
+int32_t m2World_CastCircleAll(const m2World* world, const m2Circle* circle, m2Transform origin,
                               m2Vec2 translation, m2RayHit* hits, int32_t capacity,
                               m2QueryFilter filter)
 {
-    m2DistanceProxy p = m2CircleProxy(circle);
-    return CastProxyAll(worldId, &p, origin, translation, hits, capacity, filter);
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result =
+        WorldCastCircleAllWorker(world, circle, origin, translation, hits, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
-int32_t m2World_CastCapsuleAll(m2WorldId worldId, const m2Capsule* capsule, m2Transform origin,
-                               m2Vec2 translation, m2RayHit* hits, int32_t capacity,
-                               m2QueryFilter filter)
+static M2_NOINLINE int32_t WorldCastCapsuleAllWorker(const m2World* world, const m2Capsule* capsule,
+                                                     m2Transform origin, m2Vec2 translation,
+                                                     m2RayHit* hits, int32_t capacity,
+                                                     m2QueryFilter filter)
 {
     m2DistanceProxy p = m2CapsuleProxy(capsule);
-    return CastProxyAll(worldId, &p, origin, translation, hits, capacity, filter);
+    return CastProxyAll(world, &p, origin, translation, hits, capacity, filter);
 }
 
-int32_t m2World_CastPolygonAll(m2WorldId worldId, const m2Polygon* polygon, m2Transform origin,
+int32_t m2World_CastCapsuleAll(const m2World* world, const m2Capsule* capsule, m2Transform origin,
                                m2Vec2 translation, m2RayHit* hits, int32_t capacity,
                                m2QueryFilter filter)
 {
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result =
+        WorldCastCapsuleAllWorker(world, capsule, origin, translation, hits, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE int32_t WorldCastPolygonAllWorker(const m2World* world, const m2Polygon* polygon,
+                                                     m2Transform origin, m2Vec2 translation,
+                                                     m2RayHit* hits, int32_t capacity,
+                                                     m2QueryFilter filter)
+{
     m2DistanceProxy p = m2PolygonProxy(polygon);
-    return CastProxyAll(worldId, &p, origin, translation, hits, capacity, filter);
+    return CastProxyAll(world, &p, origin, translation, hits, capacity, filter);
+}
+
+int32_t m2World_CastPolygonAll(const m2World* world, const m2Polygon* polygon, m2Transform origin,
+                               m2Vec2 translation, m2RayHit* hits, int32_t capacity,
+                               m2QueryFilter filter)
+{
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result =
+        WorldCastPolygonAllWorker(world, polygon, origin, translation, hits, capacity, filter);
+    m2FloatEnvLeave(env);
+    return result;
 }

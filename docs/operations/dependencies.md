@@ -13,7 +13,7 @@ Every third-party library is vendored under `third_party/` at an exact revision 
 | Library | Upstream | Revision | License | What is vendored |
 |---|---|---|---|---|
 | Kest | `Rawframe-Project/kest` | `fa092f540ffe2cb94f75199842792fb61e68451f` | MIT | `include/`, `src/` except `main.c`, `lib/`, `LICENSE` |
-| Maul2D | `Rawframe-Project/maul2d` | `1589de32bed38a8e1d8f388789bf3151e084542d` | MIT | `include/`, `src/`, `LICENSE`; the build file is the engine's |
+| Maul2D 0.4.0 | `Rawframe-Project/maul2d` release archive `maul2d-0.4.0.tar.gz`, SHA-256 `43c5cb62599ec64de3284975f4d668b709566cf189142ae12e187e7bde4182eb` | `eab40045fe8f1bd193d7cecc383ff04253108bcd` (`v0.4.0`) | MIT | `include/`, `src/`, `LICENSE`; the build file is the engine's |
 | Maul3D 0.6.0 | `Rawframe-Project/maul3d` release archive `maul3d-0.6.0.tar.gz`, SHA-256 `944c740109b1212f72de20bc8a4537b1afd56446b23c148d32a85aca1c2986fd` | `d152345512bed3bbe77327360918ba55353c0544` (`v0.6.0`) | MIT | `include/`, `src/`, `LICENSE`; the build file is the engine's |
 | Maul Unicode 0.3.0 | `Rawframe-Project/maul-unicode` | `45523494be854c073dcb1a26a0b55dd07ca68879` | MIT; its Unicode tables Unicode-3.0 | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
 | Maul Window 0.13.0 and its main after it | `Rawframe-Project/maul-window` | `a0b6e4413e5d9ba3979e5dc756b1af5f7328b177` | MIT | `include/`, `src/`, `cmake/`, `protocols/`, `java/`, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |

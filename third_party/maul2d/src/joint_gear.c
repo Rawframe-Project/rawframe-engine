@@ -3,14 +3,15 @@
 //
 // The gear joint: couples the spins of two bodies by a ratio.
 
-#include "joint_solver.h"
-
 #include "body.h"
 #include "broadphase.h"
+#include "fpenv.h"
 #include "joint.h"
+#include "joint_solver.h"
 #include "journal.h"
-#include "solver.h"
-#include "world.h"
+#include "math_functions.h"
+#include "object_ids.h"
+#include "solver_base.h"
 #include "world_internal.h"
 
 #include "maul2d/base.h"
@@ -35,29 +36,40 @@ m2GearJointDef m2DefaultGearJointDef(void)
 // ordered ranges.
 static bool DefValid(const m2GearJointDef* def)
 {
-    return m2FiniteF(def->ratio) && def->ratio != 0.0f;
+    return m2ValidRatio(def->ratio);
 }
 
-m2JointId m2CreateGearJoint(m2WorldId worldId, const m2GearJointDef* def)
+static M2_NOINLINE m2Result CreateGearJointWorker(m2World* world, const m2GearJointDef* def,
+                                                  m2JointId* jointOut)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || def == NULL || def->internalValue != M2_GJOINT_COOKIE || !DefValid(def))
+    if (jointOut == NULL)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorInvalid);
+    }
+    *jointOut = m2_nullJointId;
+    m2Result writer = m2CheckWriter(world);
+    if (writer != m2_success)
+    {
+        return writer;
+    }
+    if (def == NULL || def->internalValue != M2_GJOINT_COOKIE || !DefValid(def))
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
-    if (bodyA < 0 || bodyB < 0 || bodyA == bodyB)
+    if (bodyA < 0 || bodyB < 0)
     {
-        m2Refuse(world, m2_errorInvalid);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorStale);
+    }
+    if (bodyA == bodyB)
+    {
+        return m2Refuse(world, m2_errorInvalid);
     }
     int32_t index = m2AllocateJoint(world);
     if (index < 0)
     {
-        m2Refuse(world, m2_errorCapacity);
-        return m2_nullJointId;
+        return m2Refuse(world, m2_errorCapacity);
     }
     m2Vec2 zero = {0.0f, 0.0f};
     m2JointId jointId = m2FinishJoint(world, index, (uint8_t)m2_gearJoint, bodyA, bodyB, zero, zero,
@@ -82,19 +94,46 @@ m2JointId m2CreateGearJoint(m2WorldId worldId, const m2GearJointDef* def)
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateGearJoint, &record, (int32_t)sizeof(record));
     }
-    return jointId;
+    *jointOut = jointId;
+    return m2_success;
 }
 
-void m2GearJoint_SetRatio(m2JointId jointId, float ratio)
+m2Result m2CreateGearJoint(m2World* world, const m2GearJointDef* def, m2JointId* jointOut)
 {
-    m2SetJointParamInternal(m2WorldFromTag(jointId.world), jointId, m2_jointParamGearRatio, ratio);
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreateGearJointWorker(world, def, jointOut);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
-float m2GearJoint_GetRatio(m2JointId jointId)
+static M2_NOINLINE void GearJointSetRatioWorker(m2World* world, m2JointId jointId, float ratio)
 {
-    m2World* world = m2WorldFromTag(jointId.world);
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    m2SetJointParamInternal(world, jointId, m2_jointParamGearRatio, ratio);
+}
+
+void m2GearJoint_SetRatio(m2World* world, m2JointId jointId, float ratio)
+{
+    uint64_t env = m2FloatEnvEnter();
+    GearJointSetRatioWorker(world, jointId, ratio);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE float GearJointGetRatioWorker(const m2World* world, m2JointId jointId)
+{
     int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_gearJoint);
     return index >= 0 ? world->joints.jointLength[index] : 0.0f;
+}
+
+float m2GearJoint_GetRatio(const m2World* world, m2JointId jointId)
+{
+    uint64_t env = m2FloatEnvEnter();
+    float result = GearJointGetRatioWorker(world, jointId);
+    m2FloatEnvLeave(env);
+    return result;
 }
 
 // --- Solver ---------------------------------------------------------------
@@ -137,8 +176,8 @@ static void SolveGear(m2JointConstraint* c, const m2JointPose* pose, m2JointBodi
     float C = 0.0f;
     if (pass->biased)
     {
-        float turnA = m2Atan2(pose->turnA.s, pose->turnA.c);
-        float turnB = m2Atan2(pose->turnB.s, pose->turnB.c);
+        float turnA = m2Atan2Work(pose->turnA.s, pose->turnA.c);
+        float turnB = m2Atan2Work(pose->turnB.s, pose->turnB.c);
         C = c->angle + c->ratio * turnA + turnB;
     }
     m2JointRow row = GearRow(c);

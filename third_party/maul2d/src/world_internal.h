@@ -12,6 +12,7 @@
 #include "core.h"
 #include "dynamic_tree.h"
 #include "geometry.h"
+
 #include "maul2d/base.h"
 #include "maul2d/body.h"
 #include "maul2d/events.h"
@@ -24,6 +25,10 @@
 // Per-body motion lock bits (the angular lock is fixedRotation).
 #define M2_LOCK_LINEAR_X 1u
 #define M2_LOCK_LINEAR_Y 2u
+
+// A slot names objects under generations 0 to M2_LAST_GENERATION, then
+// retires, so a stale id never names a later object in it.
+#define M2_LAST_GENERATION UINT32_MAX
 
 // Bodies: parallel POD arrays at fixed capacity, and the id pool
 // (FIFO free queue plus generations; saturated slots retire).
@@ -38,6 +43,7 @@ typedef struct m2Bodies
     float* linearDampings;   // Pade-damped in integrate (snapshot state)
     float* angularDampings;  // (snapshot state)
     uint8_t* fixedRotations; // invInertia forced 0 (snapshot state)
+    uint8_t* massOverrides;  // mass data from m2Body_SetMassData, not the shapes
     uint8_t* motionLocks;    // M2_LOCK_LINEAR_X | M2_LOCK_LINEAR_Y (snapshot state)
     uint8_t* sleepEnables;   // 0 = this body never sleeps (snapshot state)
     m2Vec2* forces;          // accumulated, cleared at step end (snapshot state)
@@ -49,13 +55,13 @@ typedef struct m2Bodies
     uint8_t* alive;
     int32_t* bodyShapeHead; // head of the body's shape list (-1 = none)
     float* invMass;         // dynamic bodies: derived from shapes, floored
-    float* invInertia;      // about the body origin; 0 = no rotation response
+    float* invInertia;      // about the center of mass; 0 = no rotation response
     m2Vec2* localCenters;   // body-frame center of mass (snapshot state)
     uint8_t* asleep;        // sleep flag (snapshot + hashed: the sleep law)
     float* sleepTimes;      // seconds under tolerance (snapshot + hashed)
     uint8_t* sleepStreak;   // step-ends asleep, saturating at 2 (snapshot state)
     uint8_t* bullets;       // isBullet flag (snapshot + hashed)
-    uint16_t* generations;
+    uint32_t* generations;
     int32_t* freeQueue;
     int32_t freeHead;
     int32_t freeTail;
@@ -82,7 +88,7 @@ typedef struct m2Shapes
     uint8_t* shapeSensor;     // overlap-only shapes (snapshot state)
     float* shapeTangentSpeed; // conveyor surface speed (snapshot state)
     int32_t* shapeChain;      // owning chain slot, -1 = free-standing (snapshot state)
-    uint16_t* shapeGenerations;
+    uint32_t* shapeGenerations;
     int32_t* shapeFreeQueue;
     int32_t shapeFreeHead;
     int32_t shapeFreeTail;
@@ -127,7 +133,7 @@ typedef struct m2Joints
     m2Pos2* jointTargets;    // mouse joints: world target (snapshot state)
     m2Pos2* jointTargetsB;   // pulley: second ground anchor (snapshot state)
     uint64_t* jointUserData; // opaque (snapshot state)
-    uint16_t* jointGenerations;
+    uint32_t* jointGenerations;
     int32_t* jointFreeQueue;
     int32_t jointFreeHead;
     int32_t jointFreeTail;
@@ -145,7 +151,7 @@ typedef struct m2Chains
     int32_t maxChainIndex;
     uint8_t* chainAlive;
     int32_t* chainBody;
-    uint16_t* chainGenerations;
+    uint32_t* chainGenerations;
     int32_t* chainFreeQueue;
     int32_t chainFreeHead;
     int32_t chainFreeTail;
@@ -167,13 +173,14 @@ typedef struct m2Particles
     m2Pos2* particlePositions;
     m2Vec2* particleVelocities;
     uint8_t* particleAlive;
-    uint16_t* particleGenerations;
+    uint32_t* particleGenerations;
     uint32_t* particleFlags;    // behavior bits (snapshot state)
     float* particleLifetime;    // seconds left, 0 = immortal (snapshot state)
     uint64_t* particleUserData; // opaque game data (snapshot state)
     int32_t* particleFreeQueue;
     int32_t particleFreeHead;
     int32_t particleFreeCount;
+    int32_t particleRetiredCount;
     float particleRadius;
     float particleDensity;
     float particleGravityScale;
@@ -243,10 +250,11 @@ typedef struct m2FluidVolumes
     m2Vec2* fvFlow;
     uint64_t* fvUserData;
     uint8_t* fvAlive;
-    uint16_t* fvGenerations;
+    uint32_t* fvGenerations;
     int32_t* fvFreeQueue;
     int32_t fvFreeHead;
     int32_t fvFreeCount;
+    int32_t fvRetiredCount;
 } m2FluidVolumes;
 
 // Broadphase: one tree per body type whose leaves are shape proxies,
@@ -355,17 +363,81 @@ typedef struct m2World
     m2Events events;
     m2Recorder recorder;
 
+    // One byte per slot of the largest pool: the marks the snapshot check
+    // (snapshot_check.c) uses to prove a free queue holds each dead slot
+    // once. Scratch, cleared by every check, never walked.
+    uint8_t* restoreMarks;
+
     // Host hooks and diagnostics (never snapshot state).
+    m2Allocator allocator;        // the def's, or the C library's; kept for the world's life
     m2EnqueueTaskFn* enqueueTask; // host executor; both NULL =
     m2FinishTaskFn* finishTask;   // serial; never snapshot state
     void* userTaskContext;
     m2Profile profile; // diagnostics only (never walked/hashed)
-    volatile long long
-        misuseCount;     // cumulative refusals; atomic access only (m2Refuse, m2MisuseCount)
+    // Cumulative misuse, accessed only atomically (m2Refuse, m2MisuseCount);
+    // 8-aligned on 32-bit x86 too, where a 64-bit atomic needs it.
+    M2_ALIGN8 volatile long long misuseCount;
     int64_t memoryBytes; // persistent footprint, from create
-    uint16_t worldGeneration;
-    uint16_t slot;    // 0-based registry slot
-    uint16_t idWorld; // the world field of every id this world hands out
+    volatile long busy;  // host code running: a step's tasks, debug draws; atomic access only
+    uint8_t replaying;   // applying a journal tape: refusals outside host code count no misuse
 } m2World;
+
+// Refuses a caller's call against a world and returns the reason, so a
+// status function can return it directly. Misuse (an invalid argument, a
+// stale id, a call while the world is busy) counts one in
+// m2Counters.misuse; a full pool is a runtime fact and counts nothing.
+// Untrusted bytes refused by a restore or a replay are not misuse either:
+// those paths return their status without calling this, and a value a
+// tape's op refuses while the world replays counts nothing. world may be
+// NULL, which counts nothing.
+m2Result m2Refuse(const m2World* world, m2Result reason);
+uint64_t m2MisuseCount(const m2World* world);
+
+// Brackets host code the world runs (a step's tasks, a debug draw's
+// callbacks); in between, the world's writers refuse. Readers may draw on
+// several threads at once, so the count is atomic.
+void m2EnterHostCode(const m2World* world);
+void m2LeaveHostCode(const m2World* world);
+
+// The world's allocator, called as host code: an allocator that calls
+// back into the world it serves is refused like a task hook. Every
+// allocation and free a live world makes goes through these.
+void* m2WorldAlloc(const m2World* world, size_t bytes);
+void m2WorldFree(const m2World* world, void* memory, size_t bytes);
+
+// The check every mutating call makes before anything else: a null world
+// is invalid, and a world running host code (a step's tasks, a debug draw
+// callback) refuses with m2_errorState. Returns m2_success otherwise.
+m2Result m2CheckWriter(const m2World* world);
+
+// The 16 bytes every state format starts with, the snapshot's and the
+// journal tape's alike, in the layout maul3d shares: the format's magic,
+// the M2_ABI_VERSION of the release that wrote it, the format's own
+// number and the size of the whole header. Little-endian like the rest.
+typedef struct m2StatePrefix
+{
+    uint32_t magic;
+    uint32_t abiVersion;
+    uint32_t formatVersion;
+    uint32_t headerBytes;
+} m2StatePrefix;
+
+// A format's magic: the uint32_t whose little-endian bytes are the four
+// characters in order, so the bytes as stored spell the name.
+#define M2_STATE_MAGIC(a, b, c, d)                                                                 \
+    ((uint32_t)(uint8_t)(a) | (uint32_t)(uint8_t)(b) << 8 | (uint32_t)(uint8_t)(c) << 16 |         \
+     (uint32_t)(uint8_t)(d) << 24)
+
+// The prefix this release writes for a format.
+m2StatePrefix m2MakeStatePrefix(uint32_t magic, uint32_t formatVersion, int32_t headerBytes);
+
+// Checks the prefix of untrusted bytes, in the order every state format
+// shares: too short or another magic is m2_errorInvalid, since the bytes
+// are not this format; another release or format number is
+// m2_errorVersion, since only the release that wrote them reads them; a
+// header size that is not this format's, or bytes too short to hold it,
+// is m2_errorInvalid. Counts nothing: the bytes are untrusted.
+m2Result m2CheckStatePrefix(const void* bytes, int32_t size, uint32_t magic, uint32_t formatVersion,
+                            int32_t headerBytes);
 
 #endif // MAUL2D_SRC_WORLD_INTERNAL_H

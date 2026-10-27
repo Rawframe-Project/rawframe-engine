@@ -25,6 +25,6 @@ struct MappedJoint {
 /// move: a weld, a revolute, a prismatic along one frame axis, or a filter;
 /// the null joint for any other shape of axes or values out of range.
 /// Maul2D refuses the rest (a limit's order, a body pair it cannot join).
-[[nodiscard]] m2JointId makeJoint(m2WorldId physics, const Joint2D& joint, m2BodyId a, m2BodyId b) noexcept;
+[[nodiscard]] m2JointId makeJoint(m2World* physics, const Joint2D& joint, m2BodyId a, m2BodyId b) noexcept;
 
 } // namespace rawframe::physics2d

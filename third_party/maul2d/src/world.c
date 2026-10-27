@@ -1,84 +1,34 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The world: the registry of live worlds, creation and destruction,
-// the step, world settings, enumeration and the invariant check.
+// The world: creation and destruction, the step, world settings,
+// enumeration; world_validate.c holds the invariant check.
 
 #include "world.h"
 
-#include "buoyancy.h"
-#include "island.h"
-#include "particle.h"
-#include "solver.h"
-#include "world_state.h"
-
+#include "allocator.h"
 #include "broadphase.h"
+#include "buoyancy.h"
 #include "contact.h"
+#include "cpu.h"
+#include "fpenv.h"
+#include "island.h"
 #include "journal.h"
+#include "parallel.h"
+#include "particle.h"
+#include "proxies.h"
+#include "solver.h"
 #include "world_internal.h"
+#include "world_state.h"
 
 #include "maul2d/base.h"
 
+#include <stdckdint.h>
 #include <string.h>
-
-#define M2_MAX_WORLDS 16
-_Static_assert(M2_MAX_WORLDS <= (1 << M2_WORLD_SLOT_BITS), "a world slot fits the id bits");
-
-static m2World* s_worlds[M2_MAX_WORLDS];
-
-static uint16_t s_worldGenerations[M2_MAX_WORLDS];
-
-m2World* m2GetWorld(m2WorldId id)
-{
-    if (id.index1 < 1 || id.index1 > M2_MAX_WORLDS)
-    {
-        return NULL;
-    }
-    m2World* world = s_worlds[id.index1 - 1];
-    if (world == NULL || s_worldGenerations[id.index1 - 1] != id.generation)
-    {
-        return NULL;
-    }
-    return world;
-}
-
-m2World* m2WorldFromId(m2WorldId worldId)
-{
-    return m2GetWorld(worldId);
-}
-
-m2World* m2WorldFromTag(uint16_t tag)
-{
-    // Slots past the table read as empty rather than wrapping onto a
-    // live world.
-    uint32_t slot = tag & ((1u << M2_WORLD_SLOT_BITS) - 1u);
-    m2World* world = slot < M2_MAX_WORLDS ? s_worlds[slot] : NULL;
-    if (world == NULL || world->idWorld != tag)
-    {
-        m2Refuse(NULL, m2_errorInvalid); // an id of a world that is gone
-        return NULL;
-    }
-    return world;
-}
 
 // --- Defs & world lifecycle ----------------------------------------------------
 
-void m2RunParallel(m2World* world, m2TaskFn* fn, void* ctx, int32_t itemCount, int32_t minRange)
-{
-    if (itemCount <= 0)
-    {
-        return;
-    }
-    if (world->enqueueTask != NULL)
-    {
-        void* task = world->enqueueTask(fn, itemCount, minRange, ctx, world->userTaskContext);
-        world->finishTask(task, world->userTaskContext);
-        return;
-    }
-    fn(0, itemCount, ctx);
-}
-
-m2WorldDef m2DefaultWorldDef(void)
+m2WorldDef m2DefaultWorldDefValues(void)
 {
     m2WorldDef def;
     memset(&def, 0, sizeof(def));
@@ -104,13 +54,14 @@ m2WorldDef m2DefaultWorldDef(void)
     return def;
 }
 
-// Checks a world def. The fluids radius floor is 4x linear slop so the
-// skin laws keep meaning.
+// Checks a world def past its cookie and version. The fluids radius
+// floor is 4x linear slop so the skin laws keep meaning.
 static bool ValidWorldDef(const m2WorldDef* def)
 {
-    if (def == NULL || def->internalValue != M2_WORLD_COOKIE || def->bodyCapacity < 1 ||
-        def->shapeCapacity < 1 || def->jointCapacity < 1 || def->fluidVolumeCapacity < 0 ||
-        def->particleCapacity < 0)
+    if (def->bodyCapacity < 1 || def->shapeCapacity < 1 || def->jointCapacity < 1 ||
+        def->fluidVolumeCapacity < 0 || def->particleCapacity < 0 ||
+        (def->allocator.alloc == NULL) != (def->allocator.free == NULL) ||
+        !m2ValidAcceleration(def->gravity))
     {
         return false;
     }
@@ -118,33 +69,50 @@ static bool ValidWorldDef(const m2WorldDef* def)
     {
         return true;
     }
-    return def->particleRadius >= 0.02f && def->particleDensity > 0.0f &&
-           m2FiniteF(def->particleGravityScale) && def->particlePressureStrength >= 0.0f &&
-           def->particleDampingStrength >= 0.0f && def->particleViscousStrength >= 0.0f &&
-           def->particleCohesionStrength >= 0.0f && def->particleNearPressureStrength >= 0.0f &&
-           def->particlePowderStrength >= 0.0f && def->particleSpringStrength >= 0.0f &&
-           def->particleElasticStrength >= 0.0f;
+    // A particle's mass is its density over a square of 1.5 radii, the
+    // spacing of a fill; it must be a mass a body could have.
+    float stride = 1.5f * def->particleRadius;
+    return m2WithinF(def->particleRadius, 0.02f, M2_HUGE) && m2ValidDensity(def->particleDensity) &&
+           m2ValidMass(def->particleDensity * stride * stride) &&
+           m2ValidGravityScale(def->particleGravityScale) &&
+           m2ValidCoefficient(def->particlePressureStrength) &&
+           m2ValidCoefficient(def->particleDampingStrength) &&
+           m2ValidCoefficient(def->particleViscousStrength) &&
+           m2ValidCoefficient(def->particleCohesionStrength) &&
+           m2ValidCoefficient(def->particleNearPressureStrength) &&
+           m2ValidCoefficient(def->particlePowderStrength) &&
+           m2ValidCoefficient(def->particleSpringStrength) &&
+           m2ValidCoefficient(def->particleElasticStrength);
 }
 
-// Copies the def's settings and capacities into a zeroed world.
-static void ApplyWorldDef(m2World* world, const m2WorldDef* def)
+// Copies the def's settings and capacities into a zeroed world. The
+// derived capacities are checked products, so a def too large to address
+// is refused instead of wrapping.
+static bool ApplyWorldDef(m2World* world, const m2WorldDef* def)
 {
     int32_t shapeCap = def->shapeCapacity;
+    int32_t particleCap = def->particleCapacity;
+    m2Particles* p = &world->particles;
+    if (ckd_mul(&world->broadphase.treeNodeCapacity, 2, shapeCap) ||
+        ckd_mul(&world->contacts.pairCapacity, 8, shapeCap) ||
+        ckd_mul(&p->particlePairCapacity, 12, particleCap) ||
+        ckd_mul(&p->particleSpringCapacity, 4, particleCap) ||
+        ckd_mul(&p->particleTriadCapacity, 2, particleCap) ||
+        ckd_mul(&p->particleBodyCapacity, 4, particleCap))
+    {
+        return false;
+    }
     world->gravity = def->gravity;
     world->windVelocity = (m2Vec2){0.0f, 0.0f};
     world->windLinearDrag = 0.0f; // wind is opt-in via m2World_SetWind
     world->bodies.bodyCapacity = def->bodyCapacity;
     world->shapes.shapeCapacity = shapeCap;
     world->joints.jointCapacity = def->jointCapacity;
-    world->broadphase.treeNodeCapacity = 2 * shapeCap;
-    world->contacts.pairCapacity = 8 * shapeCap;
     world->volumes.fvCapacity = def->fluidVolumeCapacity;
     world->enqueueTask = def->enqueueTask;
     world->finishTask = def->finishTask;
     world->userTaskContext = def->userTaskContext;
 
-    m2Particles* p = &world->particles;
-    int32_t particleCap = def->particleCapacity;
     p->particleCapacity = particleCap;
     p->particleRadius = def->particleRadius;
     p->particleDensity = def->particleDensity;
@@ -157,10 +125,7 @@ static void ApplyWorldDef(m2World* world, const m2WorldDef* def)
     p->particleSpringStrength = def->particleSpringStrength;
     p->particleElasticStrength = def->particleElasticStrength;
     p->particleNearPressure = def->particleNearPressureStrength;
-    p->particlePairCapacity = 12 * particleCap;
-    p->particleSpringCapacity = 4 * particleCap;
-    p->particleTriadCapacity = 2 * particleCap;
-    p->particleBodyCapacity = 4 * particleCap;
+    return true;
 }
 
 // Fills every free list and clears every link of freshly allocated state.
@@ -174,8 +139,12 @@ static void SeedFreeLists(m2World* world)
         m2TreeInit(&world->broadphase.trees[t], world->broadphase.treeNodes[t],
                    world->broadphase.treeNodeCapacity);
     }
+    // Every body slot, live or not, holds a unit rotation, which is what
+    // a restore checks; a destroyed body leaves its last one behind.
+    m2Transform identity = {{0.0, 0.0}, {1.0f, 0.0f}};
     for (int32_t i = 0; i < cap; ++i)
     {
+        world->bodies.transforms[i] = identity;
         world->bodies.freeQueue[i] = i;
         world->bodies.bodyShapeHead[i] = -1;
         world->joints.bodyJointHead[i] = -1;
@@ -212,72 +181,79 @@ static void SeedFreeLists(m2World* world)
     world->chains.chainFreeCount = shapeCap;
 }
 
-m2WorldId m2CreateWorld(const m2WorldDef* def)
+static M2_NOINLINE m2Result CreateWorldWorker(const m2WorldDef* def, m2World** worldOut)
 {
+    if (worldOut == NULL)
+    {
+        return m2_errorInvalid;
+    }
+    *worldOut = NULL;
     // Before any solver kernel runs, make sure this CPU can execute the
     // backend the binary was built for: a typed refusal beats a bare
     // illegal-instruction trap on pre-Haswell hardware.
-    if (m2VerifyCpuBackend() == 0)
+    if (m2CheckCpu(NULL) == 0)
     {
-        m2Refuse(NULL, m2_errorConfig);
-        return m2_nullWorldId;
+        return m2_errorUnsupported;
+    }
+    if (def == NULL || def->internalValue != M2_WORLD_COOKIE)
+    {
+        return m2_errorInvalid;
+    }
+    if (def->version != M2_ABI_VERSION)
+    {
+        return m2_errorVersion;
     }
     if (!ValidWorldDef(def))
     {
-        m2Refuse(NULL, m2_errorInvalid);
-        return m2_nullWorldId;
+        return m2_errorInvalid;
     }
-    int32_t slot = -1;
-    for (int32_t i = 0; i < M2_MAX_WORLDS && slot < 0; ++i)
-    {
-        slot = s_worlds[i] == NULL ? i : -1;
-    }
-    m2World* world = slot < 0 ? NULL : m2AllocZeroed(sizeof(m2World));
+    m2Allocator allocator = m2ResolveAllocator(&def->allocator);
+    m2World* world = m2AllocZeroed(&allocator, sizeof(m2World));
     if (world == NULL)
     {
-        m2Refuse(NULL, m2_errorCapacity);
-        return m2_nullWorldId;
+        return m2_errorCapacity;
     }
-    ApplyWorldDef(world, def);
-    if (!m2StateAllocate(world))
+    world->allocator = allocator;
+    if (!ApplyWorldDef(world, def) || !m2StateAllocate(world))
     {
-        m2Refuse(NULL, m2_errorCapacity); // out of memory
-        m2WorldId failed = {(uint16_t)(slot + 1), s_worldGenerations[slot]};
-        s_worlds[slot] = world;
-        m2DestroyWorld(failed);
-        return m2_nullWorldId;
+        m2StateFree(world);
+        m2Free(&allocator, world, sizeof(m2World));
+        return m2_errorCapacity;
     }
     SeedFreeLists(world);
 
-    s_worldGenerations[slot] += 1;
-    world->worldGeneration = s_worldGenerations[slot];
-    world->slot = (uint16_t)slot;
-    world->idWorld =
-        (uint16_t)(((uint32_t)world->worldGeneration << M2_WORLD_SLOT_BITS) | (uint32_t)slot);
     world->sleepEnabled = def->enableSleeping ? 1 : 0;
-    s_worlds[slot] = world;
-    return (m2WorldId){(uint16_t)(slot + 1), world->worldGeneration};
+    *worldOut = world;
+    return m2_success;
 }
 
-void m2DestroyWorld(m2WorldId worldId)
+m2Result m2CreateWorld(const m2WorldDef* def, m2World** worldOut)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL && worldId.index1 >= 1 && worldId.index1 <= M2_MAX_WORLDS)
-    {
-        world = s_worlds[worldId.index1 - 1]; // failed-allocation path
-    }
+    uint64_t env = m2FloatEnvEnter();
+    m2Result result = CreateWorldWorker(def, worldOut);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE void DestroyWorldWorker(m2World* world)
+{
     if (world == NULL)
     {
         return;
     }
+    // The frees are host code, and nothing may change a world being
+    // destroyed: its writers refuse from here on.
+    m2EnterHostCode(world);
+    m2Allocator allocator = world->allocator;
     m2StateFree(world);
-    m2Free(world);
-    s_worlds[worldId.index1 - 1] = NULL;
+    m2Free(&allocator, world, sizeof(m2World));
 }
 
-bool m2World_IsValid(m2WorldId worldId)
+void m2DestroyWorld(m2World* world)
 {
-    return m2GetWorld(worldId) != NULL;
+    uint64_t env = m2FloatEnvEnter();
+    DestroyWorldWorker(world);
+    m2FloatEnvLeave(env);
 }
 
 // Opens a fresh event window: clears the public buffers, then flushes the
@@ -350,18 +326,7 @@ static void MoveProxies(m2World* world)
         {
             continue;
         }
-        for (int32_t s = world->bodies.bodyShapeHead[i]; s != -1; s = world->shapes.shapeNext[s])
-        {
-            m2Aabb tight = m2ShapeTightAabb(world, s);
-            int32_t tree = m2ShapeTreeIndex(world, s);
-            if (!m2Aabb_Contains(
-                    world->broadphase.treeNodes[tree][world->broadphase.proxyIds[s]].aabb, tight))
-            {
-                m2TreeMove(&world->broadphase.trees[tree], world->broadphase.treeNodes[tree],
-                           world->broadphase.proxyIds[s], m2Fatten(tight));
-                m2PushMoved(world, s);
-            }
-        }
+        m2RefitBodyProxies(world, i);
     }
 }
 
@@ -415,11 +380,7 @@ static void AgeParticles(m2World* world, float dt)
         world->particles.particleLifetime[i] -= dt;
         if (world->particles.particleLifetime[i] <= 0.0f)
         {
-            m2ParticleId dying = {i + 1, world->idWorld, world->particles.particleGenerations[i]};
-            uint8_t journalWas = world->recorder.journalActive;
-            world->recorder.journalActive = 0; // derived death is never recorded
-            m2DestroyParticle(dying);
-            world->recorder.journalActive = journalWas;
+            m2DestroyParticleInternal(world, i); // derived death is never recorded
         }
     }
 }
@@ -463,10 +424,15 @@ static void RecordProfile(m2World* world, const uint64_t marks[6])
         (float)((double)(marks[3] - marks[2]) * 1.0e-6 + (double)(marks[5] - marks[4]) * 1.0e-6);
 }
 
-void m2World_Step(m2WorldId worldId, float dt, int32_t substepCount)
+static void StepWorld(m2World* world, float dt, int32_t substepCount);
+
+static M2_NOINLINE void WorldStepWorker(m2World* world, float dt, int32_t substepCount)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || !m2FiniteF(dt) || !(dt > 0.0f) || substepCount < 1)
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    if (!m2ValidTimeStep(dt) || substepCount < 1 || substepCount > M2_MAX_SUBSTEPS)
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -479,6 +445,23 @@ void m2World_Step(m2WorldId worldId, float dt, int32_t substepCount)
         marker.substepCount = substepCount;
         m2JournalRecord(world, m2_opStep, &marker, (int32_t)sizeof(marker));
     }
+    // The task hooks run host code inside the step: until it returns, the
+    // world's writers refuse.
+    m2EnterHostCode(world);
+    StepWorld(world, dt, substepCount);
+    m2LeaveHostCode(world);
+}
+
+void m2World_Step(m2World* world, float dt, int32_t substepCount)
+{
+    uint64_t env = m2FloatEnvEnter();
+    WorldStepWorker(world, dt, substepCount);
+    m2FloatEnvLeave(env);
+}
+
+// The step itself, after the arguments are checked and the step recorded.
+static void StepWorld(m2World* world, float dt, int32_t substepCount)
+{
     OpenEventWindow(world);
 
     // Wall-clock diagnostics only; never fed back into simulation.
@@ -533,7 +516,7 @@ void m2World_Step(m2WorldId worldId, float dt, int32_t substepCount)
     m2UpdateSleep(world, dt);
 #ifdef MAUL2D_VALIDATE
     // The validate build walks the invariants after every step.
-    M2_ASSERT(m2World_Validate(worldId));
+    M2_ASSERT(m2World_Validate(world));
 #endif
     AgeSleepStreaks(world);
     uint64_t tEnd = m2TimeNowNs();
@@ -544,16 +527,14 @@ void m2World_Step(m2WorldId worldId, float dt, int32_t substepCount)
     world->stepCount += 1;
 }
 
-uint64_t m2World_GetStepCount(m2WorldId worldId)
+uint64_t m2World_GetStepCount(const m2World* world)
 {
-    m2World* world = m2GetWorld(worldId);
     return world != NULL ? world->stepCount : 0;
 }
 
-m2MemoryUsage m2World_GetMemoryUsage(m2WorldId worldId)
+m2MemoryUsage m2World_GetMemoryUsage(const m2World* world)
 {
     m2MemoryUsage usage = {0};
-    m2World* world = m2GetWorld(worldId);
     if (world != NULL)
     {
         usage.persistentBytes = world->memoryBytes + (int64_t)sizeof(m2World);
@@ -561,9 +542,12 @@ m2MemoryUsage m2World_GetMemoryUsage(m2WorldId worldId)
     return usage;
 }
 
-void m2World_EnableSleeping(m2WorldId worldId, bool flag)
+static M2_NOINLINE void WorldEnableSleepingWorker(m2World* world, bool flag)
 {
-    m2World* world = m2GetWorld(worldId);
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
     if (world == NULL)
     {
         return;
@@ -595,15 +579,20 @@ void m2World_EnableSleeping(m2WorldId worldId, bool flag)
     }
 }
 
-bool m2World_IsSleepingEnabled(m2WorldId worldId)
+void m2World_EnableSleeping(m2World* world, bool flag)
 {
-    m2World* world = m2GetWorld(worldId);
+    uint64_t env = m2FloatEnvEnter();
+    WorldEnableSleepingWorker(world, flag);
+    m2FloatEnvLeave(env);
+}
+
+bool m2World_IsSleepingEnabled(const m2World* world)
+{
     return world != NULL && world->sleepEnabled != 0;
 }
 
-m2Profile m2World_GetProfile(m2WorldId worldId)
+static M2_NOINLINE m2Profile WorldGetProfileWorker(const m2World* world)
 {
-    m2World* world = m2GetWorld(worldId);
     if (world == NULL)
     {
         m2Profile zero = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
@@ -612,9 +601,16 @@ m2Profile m2World_GetProfile(m2WorldId worldId)
     return world->profile;
 }
 
-double m2World_GetKineticEnergy(m2WorldId worldId)
+m2Profile m2World_GetProfile(const m2World* world)
 {
-    m2World* world = m2GetWorld(worldId);
+    uint64_t env = m2FloatEnvEnter();
+    m2Profile result = WorldGetProfileWorker(world);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE double WorldGetKineticEnergyWorker(const m2World* world)
+{
     if (world == NULL)
     {
         return 0.0;
@@ -639,10 +635,21 @@ double m2World_GetKineticEnergy(m2WorldId worldId)
     return energy;
 }
 
-void m2World_SetGravity(m2WorldId worldId, m2Vec2 gravity)
+double m2World_GetKineticEnergy(const m2World* world)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || !m2FiniteVec2(gravity))
+    uint64_t env = m2FloatEnvEnter();
+    double result = WorldGetKineticEnergyWorker(world);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE void WorldSetGravityWorker(m2World* world, m2Vec2 gravity)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    if (world == NULL || !m2ValidAcceleration(gravity))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -672,16 +679,33 @@ void m2World_SetGravity(m2WorldId worldId, m2Vec2 gravity)
     }
 }
 
-m2Vec2 m2World_GetGravity(m2WorldId worldId)
+void m2World_SetGravity(m2World* world, m2Vec2 gravity)
 {
-    m2World* world = m2GetWorld(worldId);
+    uint64_t env = m2FloatEnvEnter();
+    WorldSetGravityWorker(world, gravity);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE m2Vec2 WorldGetGravityWorker(const m2World* world)
+{
     return world != NULL ? world->gravity : (m2Vec2){0.0f, 0.0f};
 }
 
-void m2World_SetWind(m2WorldId worldId, m2Vec2 velocity, float linearDrag)
+m2Vec2 m2World_GetGravity(const m2World* world)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL || !m2FiniteF(linearDrag) || linearDrag < 0.0f || !m2FiniteVec2(velocity))
+    uint64_t env = m2FloatEnvEnter();
+    m2Vec2 result = WorldGetGravityWorker(world);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+static M2_NOINLINE void WorldSetWindWorker(m2World* world, m2Vec2 velocity, float linearDrag)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    if (world == NULL || !m2ValidRate(linearDrag) || !m2ValidVelocity(velocity))
     {
         m2Refuse(world, m2_errorInvalid);
         return;
@@ -708,24 +732,37 @@ void m2World_SetWind(m2WorldId worldId, m2Vec2 velocity, float linearDrag)
     // integration; a settled pile stays settled until roused otherwise.
 }
 
-void m2World_GetWind(m2WorldId worldId, m2Vec2* velocity, float* linearDrag)
+void m2World_SetWind(m2World* world, m2Vec2 velocity, float linearDrag)
 {
-    m2World* world = m2GetWorld(worldId);
-    if (velocity != NULL)
+    uint64_t env = m2FloatEnvEnter();
+    WorldSetWindWorker(world, velocity, linearDrag);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void WorldGetWindWorker(const m2World* world, m2Vec2* velocityOut,
+                                           float* linearDragOut)
+{
+    if (velocityOut != NULL)
     {
-        *velocity = world != NULL ? world->windVelocity : (m2Vec2){0.0f, 0.0f};
+        *velocityOut = world != NULL ? world->windVelocity : (m2Vec2){0.0f, 0.0f};
     }
-    if (linearDrag != NULL)
+    if (linearDragOut != NULL)
     {
-        *linearDrag = world != NULL ? world->windLinearDrag : 0.0f;
+        *linearDragOut = world != NULL ? world->windLinearDrag : 0.0f;
     }
 }
 
-m2Counters m2World_GetCounters(m2WorldId worldId)
+void m2World_GetWind(const m2World* world, m2Vec2* velocityOut, float* linearDragOut)
+{
+    uint64_t env = m2FloatEnvEnter();
+    WorldGetWindWorker(world, velocityOut, linearDragOut);
+    m2FloatEnvLeave(env);
+}
+
+m2Counters m2World_GetCounters(const m2World* world)
 {
     m2Counters counters;
     memset(&counters, 0, sizeof(counters));
-    m2World* world = m2GetWorld(worldId);
     if (world == NULL)
     {
         return counters;
@@ -764,9 +801,9 @@ m2Counters m2World_GetCounters(m2WorldId worldId)
     return counters;
 }
 
-int32_t m2World_GetBodies(m2WorldId worldId, m2BodyId* ids, int32_t capacity)
+static M2_NOINLINE int32_t WorldGetBodiesWorker(const m2World* world, m2BodyId* ids,
+                                                int32_t capacity)
 {
-    m2World* world = m2GetWorld(worldId);
     if (world == NULL)
     {
         return 0;
@@ -780,7 +817,7 @@ int32_t m2World_GetBodies(m2WorldId worldId, m2BodyId* ids, int32_t capacity)
         }
         if (ids != NULL && total < capacity)
         {
-            m2BodyId id = {i + 1, world->idWorld, world->bodies.generations[i]};
+            m2BodyId id = {(uint32_t)(i + 1), world->bodies.generations[i]};
             ids[total] = id;
         }
         total += 1;
@@ -788,9 +825,16 @@ int32_t m2World_GetBodies(m2WorldId worldId, m2BodyId* ids, int32_t capacity)
     return total;
 }
 
-int32_t m2World_GetJoints(m2WorldId worldId, m2JointId* ids, int32_t capacity)
+int32_t m2World_GetBodies(const m2World* world, m2BodyId* ids, int32_t capacity)
 {
-    m2World* world = m2GetWorld(worldId);
+    uint64_t env = m2FloatEnvEnter();
+    int32_t result = WorldGetBodiesWorker(world, ids, capacity);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+int32_t m2World_GetJoints(const m2World* world, m2JointId* ids, int32_t capacity)
+{
     if (world == NULL)
     {
         return 0;
@@ -804,7 +848,7 @@ int32_t m2World_GetJoints(m2WorldId worldId, m2JointId* ids, int32_t capacity)
         }
         if (ids != NULL && total < capacity)
         {
-            m2JointId id = {i + 1, world->idWorld, world->joints.jointGenerations[i]};
+            m2JointId id = {(uint32_t)(i + 1), world->joints.jointGenerations[i]};
             ids[total] = id;
         }
         total += 1;
@@ -812,9 +856,8 @@ int32_t m2World_GetJoints(m2WorldId worldId, m2JointId* ids, int32_t capacity)
     return total;
 }
 
-int32_t m2World_GetChains(m2WorldId worldId, m2ChainId* ids, int32_t capacity)
+int32_t m2World_GetChains(const m2World* world, m2ChainId* ids, int32_t capacity)
 {
-    m2World* world = m2GetWorld(worldId);
     if (world == NULL)
     {
         return 0;
@@ -828,124 +871,10 @@ int32_t m2World_GetChains(m2WorldId worldId, m2ChainId* ids, int32_t capacity)
         }
         if (ids != NULL && total < capacity)
         {
-            m2ChainId id = {i + 1, world->idWorld, world->chains.chainGenerations[i]};
+            m2ChainId id = {(uint32_t)(i + 1), world->chains.chainGenerations[i]};
             ids[total] = id;
         }
         total += 1;
     }
     return total;
-}
-
-// Asserts in debug builds and fails the walk in release builds.
-#define M2_CHECK_INVARIANT(cond)                                                                   \
-    do                                                                                             \
-    {                                                                                              \
-        if (!(cond))                                                                               \
-        {                                                                                          \
-            M2_ASSERT(false);                                                                      \
-            return false;                                                                          \
-        }                                                                                          \
-    } while (0)
-
-static bool ValidBodies(const m2World* world)
-{
-    for (int32_t i = 0; i < world->bodies.maxBodyIndex; ++i)
-    {
-        if (world->bodies.alive[i] == 0)
-        {
-            continue;
-        }
-        m2Transform xf = world->bodies.transforms[i];
-        M2_CHECK_INVARIANT(m2FinitePos2(xf.p));
-        M2_CHECK_INVARIANT(m2FiniteF(xf.q.c) && m2FiniteF(xf.q.s));
-        m2Vec2 v = world->bodies.linearVelocities[i];
-        M2_CHECK_INVARIANT(m2FiniteVec2(v));
-        M2_CHECK_INVARIANT(m2FiniteF(world->bodies.angularVelocities[i]));
-        M2_CHECK_INVARIANT(world->bodies.types[i] <= 2);
-    }
-    return true;
-}
-
-// Shapes and joints point at live bodies; contact pairs stay in key order.
-static bool ValidLinks(const m2World* world)
-{
-    for (int32_t i = 0; i < world->shapes.maxShapeIndex; ++i)
-    {
-        if (world->shapes.shapeAlive[i] == 0)
-        {
-            continue;
-        }
-        int32_t body = world->shapes.shapeBody[i];
-        M2_CHECK_INVARIANT(body >= 0 && body < world->bodies.bodyCapacity &&
-                           world->bodies.alive[body] != 0);
-    }
-    for (int32_t i = 0; i < world->joints.maxJointIndex; ++i)
-    {
-        if (world->joints.jointAlive[i] == 0)
-        {
-            continue;
-        }
-        M2_CHECK_INVARIANT(world->joints.jointType[i] <= 10);
-        int32_t a = world->joints.jointBodyA[i];
-        int32_t b = world->joints.jointBodyB[i];
-        M2_CHECK_INVARIANT(a >= 0 && a < world->bodies.bodyCapacity && world->bodies.alive[a] != 0);
-        M2_CHECK_INVARIANT(b >= 0 && b < world->bodies.bodyCapacity && world->bodies.alive[b] != 0);
-    }
-    for (int32_t i = 1; i < world->contacts.pairCount; ++i)
-    {
-        // The canonical ordering law, checked where it lives.
-        M2_CHECK_INVARIANT(world->contacts.pairKeys[i - 1] < world->contacts.pairKeys[i]);
-    }
-    return true;
-}
-
-static bool ValidParticles(const m2World* world)
-{
-    if (world->particles.particleCapacity == 0)
-    {
-        return true;
-    }
-    int32_t alive = 0;
-    for (int32_t i = 0; i < world->particles.maxParticleIndex; ++i)
-    {
-        if (world->particles.particleAlive[i] == 0)
-        {
-            continue;
-        }
-        alive += 1;
-        m2Pos2 p = world->particles.particlePositions[i];
-        M2_CHECK_INVARIANT(m2FinitePos2(p));
-        m2Vec2 v = world->particles.particleVelocities[i];
-        M2_CHECK_INVARIANT(m2FiniteVec2(v));
-    }
-    M2_CHECK_INVARIANT(alive == world->particles.particleCount);
-    for (int32_t k = 0; k < world->particles.particleSpringCount; ++k)
-    {
-        M2_CHECK_INVARIANT(
-            world->particles.particleAlive[world->particles.particleSpringA[k]] != 0 &&
-            world->particles.particleAlive[world->particles.particleSpringB[k]] != 0);
-    }
-    for (int32_t k = 0; k < world->particles.particleTriadCount; ++k)
-    {
-        M2_CHECK_INVARIANT(
-            world->particles.particleAlive[world->particles.particleTriadA[k]] != 0 &&
-            world->particles.particleAlive[world->particles.particleTriadB[k]] != 0 &&
-            world->particles.particleAlive[world->particles.particleTriadC[k]] != 0);
-    }
-    return true;
-}
-
-#undef M2_CHECK_INVARIANT
-
-// The invariant walk: everything a healthy world must be able to
-// say about itself, checked loudly. Pure reader.
-bool m2World_Validate(m2WorldId worldId)
-{
-    m2World* world = m2GetWorld(worldId);
-    if (world == NULL)
-    {
-        m2Refuse(world, m2_errorInvalid);
-        return false;
-    }
-    return ValidBodies(world) && ValidLinks(world) && ValidParticles(world);
 }
