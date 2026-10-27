@@ -19,7 +19,7 @@ root="$PWD"
 # native build and the web one may run at once, configured by different
 # trees, so each takes half; trees waiting on the same build's lock use no
 # processor.
-jobs=$(("${JOBS:-8}" / 2))
+jobs=$((${JOBS:-8} / 2))
 [ "$jobs" -ge 1 ] || jobs=1
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
