@@ -53,10 +53,9 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kHeadsetEyes.name,
                                        view::kHeadsetHands.name};
 
-/// The most looks a split preview draws beside its own. A device
-/// drawing four region views at once stalled on lavapipe (its cause not
-/// yet found; three draw), so a preview splits at most three ways.
-constexpr std::size_t kMostOthers = 2;
+/// The most looks a split preview draws beside its own: a preview
+/// splits at most four ways, its window's quarters.
+constexpr std::size_t kMostOthers = 3;
 
 /// Draws one client's mirrored World in 3D each frame through its player's
 /// camera: the extract stage in `presentation_extract`, the queue stage in

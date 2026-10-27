@@ -118,11 +118,11 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     const auto kFrame = readSessionRecord(R"({"kind":"authoring.frame","id":8,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kFrame.has_value() && kFrame->verb == SessionVerb::Frame && kFrame->scene == "b.scene");
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.frame","id":8})", id).has_value());
-    // A preview split one, two, or three ways.
-    const auto kSplit = readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":3})", id);
-    RAWFRAME_EXPECT(kSplit.has_value() && kSplit->verb == SessionVerb::Split && kSplit->views == 3);
+    // A preview split one to four ways.
+    const auto kSplit = readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":4})", id);
+    RAWFRAME_EXPECT(kSplit.has_value() && kSplit->verb == SessionVerb::Split && kSplit->views == 4);
     RAWFRAME_EXPECT(
-        !readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":4})", id).has_value());
+        !readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":5})", id).has_value());
     // A source's import settings read and set by its path; settings
     // that are no object refused.
     const auto kSettings =

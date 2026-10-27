@@ -29,6 +29,15 @@ namespace rawframe::render {
 
 namespace {
 
+/// The passes one frame may declare, and the bytes its commands may take,
+/// on the device: every view a frame draws (a preview split four ways,
+/// a headset's eyes, the render textures) records its whole scene's
+/// passes and commands into the one frame. Plaza split four ways takes
+/// more than Maul RHI's defaults of 256 passes and 1 MiB, and at most 288
+/// and 1.5 MiB; a scene with more draws takes more commands.
+constexpr std::uint32_t kFramePasses = 512;
+constexpr std::uint32_t kFrameCommandBytes = std::uint32_t{4} << 20U;
+
 std::unexpected<result::Error> refuse(result::ErrorClass errorClass, RenderError error, std::string_view why) {
     return std::unexpected<result::Error>{result::fail(errorClass, kRenderDomain, code(error), why).error()};
 }
@@ -442,6 +451,8 @@ struct Device::State {
         def.features.timestampQuery = features.timestampQuery;
         def.deviceLimits.frameUploadBytes = kFrameUploadBytes;
         def.deviceLimits.readbackBytes = kReadbackBytes;
+        def.deviceLimits.framePasses = kFramePasses;
+        def.deviceLimits.frameCommandBytes = kFrameCommandBytes;
         constexpr std::string_view kLabel = "rawframe.render";
         def.label = kLabel.data();
         def.labelLength = kLabel.size();
