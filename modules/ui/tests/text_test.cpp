@@ -1,9 +1,9 @@
-// Text in a UI tree (D384), in Ahem, whose glyphs are boxes an em wide with
+// Text in a UI tree, in Ahem, whose glyphs are boxes an em wide with
 // an ascent of 0.8 em and a descent of 0.2: a node sized by its line, lines
 // wrapped to a width, glyph runs drawn on the baseline in the text's color,
 // a node's text changed and cleared, bytes that are not a font refused, a
 // removed font's text refused, a removed subtree's text gone with it, and
-// glyphs rendered into the tree's atlas (D398).
+// glyphs rendered into the tree's atlas.
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -150,7 +150,7 @@ RAWFRAME_TEST(ARemovedSubtreesTextGoesWithIt) {
 
 RAWFRAME_TEST(GlyphsAreRenderedIntoTheAtlasOnceAndPlacedOnDevicePixels) {
     const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
-    // An atlas Maul UI cannot cut into plots is refused (D404).
+    // An atlas Maul UI cannot cut into plots is refused.
     RAWFRAME_EXPECT(!Tree::create(16, 4, 32).has_value() && !Tree::create(16, 4, 66).has_value());
     // Room for few glyphs: 64 pixels square, sixteen plots of 16, each
     // taking one ten-pixel image inside its gutter.
@@ -217,7 +217,7 @@ RAWFRAME_TEST(GlyphsAreRenderedIntoTheAtlasOnceAndPlacedOnDevicePixels) {
 }
 
 RAWFRAME_TEST(LargeRunsAreDrawnFromDistanceFieldsScaledToTheirSize) {
-    // ADR-0049's MSDF path (D667): a run of 24 device pixels or more takes
+    // The MSDF path: a run of 24 device pixels or more takes
     // its glyphs' fields, rendered once at 32 pixels an em with four of
     // spread, scaled to its size; a smaller run keeps coverage at its own.
     const std::string kAhem = test::readFile(RAWFRAME_UI_FONTS "Ahem.ttf");
@@ -274,7 +274,7 @@ RAWFRAME_TEST(LargeRunsAreDrawnFromDistanceFieldsScaledToTheirSize) {
 }
 
 RAWFRAME_TEST(AColorGlyphIsDrawnInItsFontsColors) {
-    // ADR-0049's color glyphs (D669): RawframeColor.ttf's A, COLR version 0
+    // The color glyphs: RawframeColor.ttf's A, COLR version 0
     // layers over its palette (an em box of red, its right half of
     // half-transparent blue), is rendered into the color atlas at its size,
     // as an sRGB texture holds premultiplied color; its B, with no color,

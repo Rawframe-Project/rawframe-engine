@@ -1,6 +1,6 @@
-// Ranges (SPEC-0030's UiRangeValue and UiDragValue, D621): Maul UI's value
+// Ranges (UiRangeValue and UiDragValue): Maul UI's value
 // ranges, and the pointer's events that move them; and popups placed
-// beside their anchors (UiPopup, D623).
+// beside their anchors (UiPopup).
 
 #include "rawframe/ui/tree.h"
 #include "tree_state.h"

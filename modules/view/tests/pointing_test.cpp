@@ -1,4 +1,4 @@
-// A finger is the UI's pointer while it touches (D628): the first finger
+// A finger is the UI's pointer while it touches: the first finger
 // down is where the pointer is until it lifts, so the UI sees a press let go
 // where the finger left it; a second finger presses but moves nothing; a
 // lifted or cancelled finger leaves the window, a cancelled one before its

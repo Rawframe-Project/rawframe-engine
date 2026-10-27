@@ -76,7 +76,7 @@ muiRole roleOf(Role role) noexcept {
 result::Status Tree::setRole(Node node, Role role) {
     RAWFRAME_TRY(
         checked(muiNode_SetAccessRole(state_->context, idOf(node), roleOf(role)), "a node's role was refused"));
-    // What can be checked says whether it is, from its states (D622).
+    // What can be checked says whether it is, from its states.
     const bool kCheckable = role == Role::CheckBox || role == Role::Switch || role == Role::RadioButton;
     return checked(muiNode_SetAccessFlags(state_->context, idOf(node), kCheckable ? mui_accessCheckable : 0),
                    "a node's flags were refused");
@@ -90,10 +90,10 @@ result::Status Tree::setName(Node node, std::string_view name) {
 namespace {
 
 /// A node's text as assistive technology reads it, its text block's: a
-/// label's words, a field's typed text (D571), with the block's lines and
+/// label's words, a field's typed text, with the block's lines and
 /// words as Maul UI reads them. A field reads as being edited, its
 /// selection as its editor told it (else the caret at its end) and a
-/// placeholder as no text, so that a screen reader may type into it (D613).
+/// placeholder as no text, so that a screen reader may type into it.
 bool readText(void* user, muiNodeId node, std::uint64_t, const muiRect* shown, muiAccessContent* contentOut) {
     auto* state = static_cast<Tree::State*>(user);
     const Text* kText = state->textOf(node);
@@ -144,7 +144,7 @@ struct Access::State {
     /// The copy the platform reads: the AT-SPI adapter's own, or one held
     /// here where there is none.
     muiAccessTree* copy = nullptr;
-    /// What screen readers asked since last taken (D572).
+    /// What screen readers asked since last taken.
     std::vector<AccessRequest> requests;
 #if RAWFRAME_UI_ATSPI
     muiAtspiApp* app = nullptr;
@@ -233,9 +233,9 @@ struct Access::State {
 
 namespace {
 
-/// What a client asked for (D572): a press, a focus, or a field's edit
-/// (D613) kept for the UI's owner, whose input decides what they do; a
-/// scroll, and a range stepped or set (D621), done by the tree, as a drag
+/// What a client asked for: a press, a focus, or a field's edit
+/// kept for the UI's owner, whose input decides what they do; a
+/// scroll, and a range stepped or set, done by the tree, as a drag
 /// of the range is.
 bool act(Access::State& state, const muiAccessRequest& request) {
     const muiNodeId kId = muiNodeIdOfAccess(request.target);

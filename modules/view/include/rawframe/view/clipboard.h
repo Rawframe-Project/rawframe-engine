@@ -1,6 +1,6 @@
 #pragma once
 
-// The platform's clipboard for an editor (D999): text it puts there, and
+// The platform's clipboard for an editor: text it puts there, and
 // text it asks for, answered a frame or more later (the web's browser may
 // ask the user first). The window host lends one as
 // `rawframe.view.clipboard`; a host with no window lends none, and a read

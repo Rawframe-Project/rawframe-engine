@@ -1,6 +1,6 @@
 #pragma once
 
-// Editing a node's text (SPEC-0030's UiTextEdit, D426): the one editing
+// Editing a node's text (UiTextEdit): the one editing
 // implementation over a tree's text, holding its caret and selection,
 // applying typed text and editing keys to them, showing an input method's
 // composition inline, and telling where the platform's candidate window
@@ -74,7 +74,7 @@ public:
     /// collapsed there unless `extend`.
     [[nodiscard]] result::Status pointAt(float x, float y, bool extend);
     /// The selection from `anchor` to `focus`, bytes into the text, the
-    /// caret at `focus`: a screen reader's (D613). Refused for an offset
+    /// caret at `focus`: a screen reader's. Refused for an offset
     /// past the text or inside a code point; a composition ends first.
     [[nodiscard]] result::Status select(std::uint32_t anchor, std::uint32_t focus);
     /// The input method's composition at the caret, in place of the
@@ -99,8 +99,7 @@ public:
 private:
     /// The selection replaced by `text` as typed, the caret after it.
     [[nodiscard]] result::Status replaceSelection(std::string_view text);
-    /// The selection told to the tree, which assistive technology reads
-    /// (D613).
+    /// The selection told to the tree, which assistive technology reads.
     void tell() noexcept;
     [[nodiscard]] result::Status moveTo(TextPosition to, bool extend);
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// Catalogs (ADR-0050, SPEC-0033): string tables and their translations
+// Catalogs: string tables and their translations
 // checked together, then asked for messages key by key.
 //
 // Building one checks what needs more than one document: each
@@ -53,7 +53,7 @@ struct StaleEntry {
 
 #if !RAWFRAME_SHIPPING
 /// How much of a table one authored translation covers: a development
-/// view (SPEC-0033), absent from shipping builds. Pseudo-localized
+/// view, absent from shipping builds. Pseudo-localized
 /// translations cover every key and are not counted.
 struct Coverage {
     base::Bits128 table;
@@ -68,7 +68,7 @@ struct Coverage {
 };
 #endif
 
-/// SPEC-0033's named limits for catalogs.
+/// The named limits for catalogs.
 struct CatalogLimits {
     std::size_t maximumTables = 256;
     std::size_t maximumLocales = 64;
@@ -86,7 +86,7 @@ public:
                                                        const CatalogLimits& limits = {});
 
 #if !RAWFRAME_SHIPPING
-    /// Development only (SPEC-0033): `build`, with pseudo-localized
+    /// Development only: `build`, with pseudo-localized
     /// translations beside the authored ones (pseudo.h). Their locales are
     /// private-use tags (`en-XA`, `ar-XB`) that no authored document may
     /// name, so nothing else can put one in a catalog.

@@ -1,13 +1,12 @@
 #pragma once
 
-// What a client's UI takes of its local players' pointers (ADR-0034,
-// SPEC-0029, D421): the UI is the topmost routing node, so a press it takes
+// What a client's UI takes of its local players' pointers: the UI is the topmost routing node, so a press it takes
 // is never a game action's. A client host lends one as
 // `rawframe.view.ui_pointing`, as it lends the players' views: the UI tells
 // it how to answer while it runs, and each player's input asks it as a
 // press begins, its sample function reading what the press landed on. The
 // host tells it where the mouse is over the window, and the presentation
-// asks what lies under it, for a present system to light (D422).
+// asks what lies under it, for a present system to light.
 
 #include "rawframe/composition/participant.h"
 
@@ -44,7 +43,7 @@ public:
         return answer_ ? answer_(x, y, true) : std::nullopt;
     }
 
-    /// What the UI does as a press goes down at `x`, `y` (D426): a text
+    /// What the UI does as a press goes down at `x`, `y`: a text
     /// field there takes the keyboard, one elsewhere lets it go.
     using Pressed = std::function<void(float x, float y)>;
 
@@ -53,11 +52,11 @@ public:
     void onPress(Pressed pressed) noexcept {
         pressed_ = std::move(pressed);
     }
-    /// The keys held as a press went down (D787): Control (or Command) and
+    /// The keys held as a press went down: Control (or Command) and
     /// Shift, which an editor takes as adding to a selection or extending
     /// it;
     /// and whether it is the secondary button's (the right), which an
-    /// editor opens its context menu for (D973).
+    /// editor opens its context menu for.
     struct Held {
         bool control = false;
         bool shift = false;
@@ -83,7 +82,7 @@ public:
         return held_;
     }
 
-    /// What the UI does as a press is let go (D431): the node it went down
+    /// What the UI does as a press is let go: the node it went down
     /// on is no longer pressed.
     using Released = std::function<void()>;
     void onRelease(Released released) noexcept {
@@ -95,7 +94,7 @@ public:
             released_();
         }
     }
-    /// What the UI does as a wheel turns (D441): `x`, `y` where the mouse
+    /// What the UI does as a wheel turns: `x`, `y` where the mouse
     /// is, logical pixels from the window's top left, and `deltaX`,
     /// `deltaY` detents, positive y away from the user.
     using Wheeled = std::function<void(float x, float y, float deltaX, float deltaY)>;
@@ -127,8 +126,8 @@ public:
         Up,
         Cancelled
     };
-    /// The host's side: finger `finger` touched the window at `x`, `y`
-    /// (D628). The first finger down is the pointer until it lifts, as a
+    /// The host's side: finger `finger` touched the window at `x`, `y`.
+    /// The first finger down is the pointer until it lifts, as a
     /// mouse is with its button held: it is where the finger is, so a
     /// range drags and a press let go over the node it went down on clicks
     /// it, and it is off the window once the finger lifts or the touch is
@@ -180,7 +179,7 @@ public:
         return pointed_ ? std::optional{pointer_} : std::nullopt;
     }
 
-    /// What the pointer moved a range to (D621): the value the range whose
+    /// What the pointer moved a range to: the value the range whose
     /// press code is `press` holds in the first local player's view, whose
     /// mouse it is; none for no such range.
     using Valued = std::function<std::optional<float>(std::int64_t press)>;

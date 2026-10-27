@@ -88,11 +88,11 @@ public:
         if (context.has(view::kUiNavigation.name)) {
             RAWFRAME_TRY_ASSIGN(settings.navigation, context.capability(view::kUiNavigation));
         }
-        // The locale a player chooses while playing (D539).
+        // The locale a player chooses while playing.
         if (context.has(world_localization::kGameText.name)) {
             RAWFRAME_TRY_ASSIGN(settings.text, context.capability(world_localization::kGameText));
         }
-        // How the lent devices pair to the local players (D363).
+        // How the lent devices pair to the local players.
         if (const auto kPairing = configuration.text("input.pairing")) {
             settings.pairing = input::pairingPolicyNamed(*kPairing);
             if (!settings.pairing.has_value()) {
@@ -134,7 +134,7 @@ private:
 constexpr std::string_view kFeltNeeds[] = {kPlayerHaptics.name};
 constexpr std::string_view kFeltMayUse[] = {world_replication::kClientWorlds.name};
 
-/// The process's own player feels its effects (D251): each presentation
+/// The process's own player feels its effects: each presentation
 /// frame, the effects its client delivered since the last are felt as the
 /// game says. An effect taken back after it was felt runs its course, as
 /// its sound does.

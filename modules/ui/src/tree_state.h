@@ -55,7 +55,7 @@ inline muiNodeId idOf(Node node) noexcept {
 /// `look` as Maul UI's visual values, every part of it.
 [[nodiscard]] muiVisualStyle visualOf(const Look& look) noexcept;
 
-/// The visual properties `parts` name (D431).
+/// The visual properties `parts` name.
 [[nodiscard]] muiPropertyMask maskOf(LookParts parts) noexcept;
 
 /// A node's text: its block in the text service, and the node, whose
@@ -63,10 +63,10 @@ inline muiNodeId idOf(Node node) noexcept {
 struct Text {
     muiNodeId node{};
     muiTextBlockId block{};
-    /// Made with the node, which Maul UI's editing finds by its key (D426):
+    /// Made with the node, which Maul UI's editing finds by its key:
     /// it lasts as long as the node.
     bool editable = false;
-    /// How assistive technology reads an editable node (D613): its
+    /// How assistive technology reads an editable node: its
     /// selection as its editor last told it, the caret at the second (none
     /// told: the caret at the end), and whether its text is a placeholder,
     /// read as none.
@@ -91,23 +91,23 @@ struct Tree::State {
     /// By the editable node's slot.
     std::unordered_map<std::uint32_t, Owner> owners;
     /// The transition specs each style class made, by its key: gone with
-    /// it, so a sheet made again does not fill the context's (D634).
+    /// it, so a sheet made again does not fill the context's.
     std::unordered_map<std::uint64_t, std::vector<muiTransitionId>> transitions;
     /// The atlas's coverage as the draw list hands it over: the one page
-    /// of Maul UI's atlas, copied where it changed (D404).
+    /// of Maul UI's atlas, copied where it changed.
     GlyphAtlas atlas;
     muiGlyphAtlas* glyphs = nullptr;
     std::vector<muiAtlasUpdate> updates;
-    /// The field atlas as the draw list hands it over (D667), and Maul
+    /// The field atlas as the draw list hands it over, and Maul
     /// UI's of four channels it is copied from.
     FieldAtlas fields{.pixelSize = kFieldSize, .spread = kFieldSpread};
     muiGlyphAtlas* fieldGlyphs = nullptr;
-    /// The color atlas likewise (D669).
+    /// The color atlas likewise.
     ColorAtlas colors;
     muiGlyphAtlas* colorGlyphs = nullptr;
 
-    /// A field's em in its pixels, and how far it reaches past the outline
-    /// (D667): about the size of large UI text, and four pixels, so a run
+    /// A field's em in its pixels, and how far it reaches past the outline:
+    /// about the size of large UI text, and four pixels, so a run
     /// a little smaller still has a pixel and more of field to smooth its
     /// edges.
     static constexpr float kFieldSize = 32;
@@ -143,15 +143,15 @@ struct Tree::State {
     }
 
     /// Each glyph of `list` given its image from Maul UI's atlas, which
-    /// renders and packs it the first time (D404). A draw is the atlas's
+    /// renders and packs it the first time. A draw is the atlas's
     /// frame: room is made by emptying the plot least recently drawn, never
     /// one this list uses, and a glyph is left out when there is none, or
     /// when it cannot be rendered or is larger than a plot.
     /// Each glyph of `list` given its image from Maul UI's atlases, which
-    /// render and pack it the first time (D404): a run `kFieldsFrom` device
-    /// pixels and larger its distance fields, scaled to its size (D667), a
+    /// render and pack it the first time: a run `kFieldsFrom` device
+    /// pixels and larger its distance fields, scaled to its size, a
     /// smaller one its coverage at its size; and a glyph its font colors,
-    /// at any size, its color image at its size (D669). A draw is the
+    /// at any size, its color image at its size. A draw is the
     /// atlases' frame:
     /// room is made by emptying the plot least recently drawn, never one
     /// this list uses, and a glyph is left out when there is none, or when

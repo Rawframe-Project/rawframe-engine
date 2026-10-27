@@ -1,4 +1,4 @@
-// A touch screen's virtual controls (D387): a touch that begins in a half
+// A touch screen's virtual controls: a touch that begins in a half
 // holds its button and tilts its stick by its way from where it began, a
 // full tilt at the radius; a second touch in a held half takes nothing; the
 // stick rests and the button lets go when the touch ends; `pointer` follows
@@ -122,8 +122,8 @@ RAWFRAME_TEST(UntilTheWidthIsToldEveryTouchIsTheLeftHalfs) {
 }
 
 RAWFRAME_TEST(ATouchOnTheUiIsTheUisAsAClickIs) {
-    // The UI as the topmost routing node takes a touch as it takes a click
-    // (D421, D588): one beginning over it is asked of it at the touch's
+    // The UI as the topmost routing node takes a touch as it takes a click:
+    // one beginning over it is asked of it at the touch's
     // place, and the half's button it would hold is no action's.
     Rig rig;
     std::vector<std::pair<float, float>> asked;
@@ -144,7 +144,7 @@ RAWFRAME_TEST(ATouchOnTheUiIsTheUisAsAClickIs) {
 
 RAWFRAME_TEST(ATouchToldWithTheFocusLossIsStillTheUis) {
     // A slow client reads a touch and the loss of focus after it in one
-    // batch (D594): the touch came while the window had focus, so the UI
+    // batch: the touch came while the window had focus, so the UI
     // is asked of it, and only then is everything let go.
     Rig rig;
     std::vector<std::pair<float, float>> asked;

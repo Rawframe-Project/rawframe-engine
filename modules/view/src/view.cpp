@@ -121,7 +121,7 @@ worldToPoint(const Perspective& view, ViewSize size, const std::array<double, 3>
         return std::unexpected{Failure::NotFinite};
     }
     const auto [kRight, kUp, kForward] = axesOf(view.yaw, view.pitch);
-    // Relative to the eye in doubles first, as the scene draws (ADR-0046).
+    // Relative to the eye in doubles first, as the scene draws.
     const Vector kFrom = {static_cast<float>(world[0] - view.eye[0]),
                           static_cast<float>(world[1] - view.eye[1]),
                           static_cast<float>(world[2] - view.eye[2])};

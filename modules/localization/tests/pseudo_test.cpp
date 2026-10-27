@@ -1,4 +1,4 @@
-// Pseudo-localization (SPEC-0033): text changed as asked, and nothing else
+// Pseudo-localization: text changed as asked, and nothing else
 // of a message changed at all.
 
 #include "rawframe/localization/catalog.h"

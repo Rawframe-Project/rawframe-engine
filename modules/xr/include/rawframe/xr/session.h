@@ -1,24 +1,23 @@
 #pragma once
 
 // A session on a runtime's head-mounted system, bound to the render
-// module's one device (ADR-0081, D591). The runtime's session states are
-// SPEC-0025's surface lifecycle in the runtime's words (ADR-0081, section
-// 2): the session is begun when the runtime says it is ready and ended
+// module's one device. The runtime's session states are the surface
+// lifecycle in the runtime's words: the session is begun when the runtime says it is ready and ended
 // when it says it is stopping. Each view has a swapchain, whose images the
-// runtime owns and the device adopts as textures to draw into (D592).
+// runtime owns and the device adopts as textures to draw into.
 // While the session runs, each presentation frame is waited for as the
 // runtime paces it, begun, its views located and their images acquired;
 // the frame's picture is placed into them; and the frame is ended, its
 // views submitted as a projection layer. Waiting blocks, so a session is
 // driven only from the presentation path, never from an executor the
 // simulation, replication, or the network depend on, and the display time
-// it predicts never enters the World or a record (ADR-0081, section 3).
-// The session reads both hands' controllers through actions of its own
-// (D596): each hand's select and menu buttons and its grip and aim poses,
-// and its haptic output (D600), suggested for the simple controller every
-// runtime binds (`khr/simple_controller`, ADR-0081's floor) and bound to
+// it predicts never enters the World or a record.
+// The session reads both hands' controllers through actions of its own:
+// each hand's select and menu buttons and its grip and aim poses,
+// and its haptic output, suggested for the simple controller every
+// runtime binds (`khr/simple_controller`, the floor) and bound to
 // whatever controller the runtime has, by its own binding. A session may show a
-// panel too, the UI apart from the world (D597): its own swapchain, its
+// panel too, the UI apart from the world: its own swapchain, its
 // image acquired with the views' and submitted as a quad layer over them.
 // Main thread only; the runtime and the device outlive it.
 
@@ -91,7 +90,7 @@ struct Hand {
 };
 
 /// A panel the session shows before the eyes, the UI apart from the
-/// world (D597): an image of `width` by `height` pixels, drawn with clear
+/// world: an image of `width` by `height` pixels, drawn with clear
 /// where nothing is, shown as a quad `meters` wide, upright, `distance`
 /// meters ahead of where the head was when the session began. A side of
 /// nought shows none.
@@ -102,7 +101,7 @@ struct PanelSettings {
     float distance = 1.5F;
 };
 
-/// Where `aim` points on `panel` as a session shows it (D598): the panel's
+/// Where `aim` points on `panel` as a session shows it: the panel's
 /// pixels from its top left, where the aim's forward ray (its -Z) meets the
 /// panel inside it; none where the aim is not located, points away, or
 /// misses it.
@@ -130,7 +129,7 @@ struct SessionFrame {
     /// neither active (the runtime keeps the input for itself).
     std::array<Hand, 2> hands;
     /// The left hand's joints, then the right's, where the system tracks
-    /// hands (D663), read with the controllers: neither tracked otherwise.
+    /// hands, read with the controllers: neither tracked otherwise.
     std::array<input::HandJoints, 2> joints;
 };
 
@@ -148,12 +147,12 @@ struct SessionStatistics {
     /// in which a hand's grip was located.
     std::uint64_t framesHandsRead = 0;
     std::uint64_t framesHandLocated = 0;
-    /// Frames whose hands were read in which a hand was tracked (D663).
+    /// Frames whose hands were read in which a hand was tracked.
     std::uint64_t framesHandTracked = 0;
-    /// Vibrations the runtime took (D600).
+    /// Vibrations the runtime took.
     std::uint64_t hapticsApplied = 0;
     /// Controllers' interaction profiles the runtime took the hands'
-    /// bindings for, of the five suggested (D659).
+    /// bindings for, of the five suggested.
     std::uint64_t profilesTaken = 0;
 };
 
@@ -181,7 +180,7 @@ public:
     /// The format and size of each view's images.
     [[nodiscard]] const std::vector<ViewSize>& images() const noexcept;
     /// Felt on hand `hand` (0 left, 1 right) while the session runs, through
-    /// its controller's haptic output as the runtime binds it (D600):
+    /// its controller's haptic output as the runtime binds it:
     /// `amplitude` 0 to 1, `frequency` in hertz (0 the runtime's own), for
     /// `milliseconds`; a later one replaces it.
     [[nodiscard]] result::Status
@@ -194,8 +193,7 @@ public:
 
     [[nodiscard]] SessionState state() const noexcept;
     /// The interaction profile the runtime presents each hand's controller
-    /// as, the left hand's first (ADR-0081 section 5's device identity,
-    /// D680): its path, such as `/interaction_profiles/valve/index_controller`,
+    /// as, the left hand's first: its path, such as `/interaction_profiles/valve/index_controller`,
     /// read again as the runtime says it changed; empty where it binds no
     /// controller. It may be one the runtime emulates for another.
     [[nodiscard]] const std::array<std::string, 2>& profiles() const noexcept;

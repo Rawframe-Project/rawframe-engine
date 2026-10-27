@@ -1,6 +1,6 @@
 #pragma once
 
-// An editor's asking to show its window once it has drawn into it (D942):
+// An editor's asking to show its window once it has drawn into it:
 // a host told `window.shown_when_asked` makes its window hidden and lends
 // one as `rawframe.view.window_showing`, showing the window the frame after
 // it is asked, so a program with nothing to draw with never stands as a

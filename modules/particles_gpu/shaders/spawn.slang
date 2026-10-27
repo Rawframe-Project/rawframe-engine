@@ -1,5 +1,5 @@
-// The particles' births (ADR-0053's GPU simulation, D353), in Slang
-// (ADR-0026, D475), from which the SPIR-V and the WGSL are compiled.
+// The particles' births, in Slang,
+// from which the SPIR-V and the WGSL are compiled.
 //
 // Compute entry "spawn": each invocation one particle an emitter spawns
 // this frame, written into its slot of the emitter's ring in the pool.
@@ -12,7 +12,7 @@
 // written here. Compute entry "clear" leaves each slot of a ring starting
 // anew without a particle.
 
-// The emitter (D352): its anchor relative to the eye; where it spawns
+// The emitter: its anchor relative to the eye; where it spawns
 // relative to its anchor, and the sphere's radius; its way, and the
 // cosine of the cone's half angle; its particles' speed, life, drag, and
 // variation; their acceleration, and when on the particle clock the frame
@@ -21,7 +21,7 @@
 // pool, its size, where this spawn starts in it, and how many it spawns;
 // how many of them are steady, its seed, its material's place, and its
 // flipbook's columns and rows, sixteen bits each; and the velocity its
-// particles inherit (D359).
+// particles inherit.
 struct Emitter
 {
     float4 anchor;

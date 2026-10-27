@@ -1,6 +1,6 @@
 #pragma once
 
-// Plural categories (ADR-0050, SPEC-0033): CLDR's cardinal and ordinal
+// Plural categories: CLDR's cardinal and ordinal
 // rules, compiled ahead of time into code by tools/generate_cldr.py, so no
 // rule text is read or evaluated at run time. A category is chosen from a
 // number as it is written, not as it is worth: `1` and `1.0` are different

@@ -7,7 +7,7 @@
 
 namespace rawframe::window {
 
-/// The domain of every Error this module creates (SPEC-0025).
+/// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kWindowDomain{base::parseBits128Hex("6d278535781b04ae97ab405f8a845fab").value};
 
 enum class WindowError : std::uint32_t {

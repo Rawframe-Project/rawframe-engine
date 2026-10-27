@@ -1,4 +1,4 @@
-// A `ui.styles` document (D431): read with its looks, the parts each sets,
+// A `ui.styles` document: read with its looks, the parts each sets,
 // and its transitions; made into a tree's classes that draw as it says;
 // and refused, naming the field, where it is not canonical or out of range.
 
@@ -99,7 +99,7 @@ RAWFRAME_TEST(AStyleSheetIsReadAsWritten) {
     RAWFRAME_EXPECT(kButton.transitions[1].second.kind == Transition::Kind::Spring &&
                     kButton.transitions[1].second.frequency == 4 && kButton.transitions[1].second.dampingRatio == 1);
     RAWFRAME_EXPECT(kSheetRead.styles[1].looks[4].look.fill == 0x80808080);
-    // A checked look (D622), by Variant's place.
+    // A checked look, by Variant's place.
     RAWFRAME_EXPECT(kSheetRead.styles[1].looks[static_cast<std::size_t>(Variant::Checked)].look.fill == 0x0000FFFF);
 }
 

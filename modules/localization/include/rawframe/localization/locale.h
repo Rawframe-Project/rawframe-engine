@@ -1,6 +1,6 @@
 #pragma once
 
-// Locales (ADR-0050, SPEC-0033): a BCP 47 subset, `language[-Script][-REGION]`,
+// Locales: a BCP 47 subset, `language[-Script][-REGION]`,
 // a language of two or three lowercase letters, a script of four in title
 // case, and a region of two uppercase letters or three digits (`es-419`).
 // Variants, extensions, and private use are refused. Documents write tags
@@ -18,7 +18,7 @@
 //
 // Documents name locales as authors write them, `pt-BR` more often than
 // `pt-Latn-BR`, so each maximal step also offers its shorter forms that
-// maximize to it (D142): `pt-Latn-BR` offers `pt-BR`, and `pt-Latn` offers
+// maximize to it: `pt-Latn-BR` offers `pt-BR`, and `pt-Latn` offers
 // `pt`, since `pt` is written in Latin, while `sr-Latn` never offers `sr`,
 // which is Cyrillic. The chain holds each tag once, first where it came.
 //
@@ -47,12 +47,12 @@ struct Locale {
     friend auto operator<=>(const Locale&, const Locale&) = default;
 };
 
-/// SPEC-0033's named limit for fallback chains.
+/// The named limit for fallback chains.
 struct ChainLimits {
     std::size_t maximumLocales = 16;
 };
 
-/// A tag as a document writes it: SPEC-0033's grammar in canonical case.
+/// A tag as a document writes it: the grammar in canonical case.
 /// Refuses (`LocaleInvalid`) anything else, aliases included as written.
 [[nodiscard]] result::Result<Locale> parseLocale(std::string_view tag);
 

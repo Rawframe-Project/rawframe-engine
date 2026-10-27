@@ -1,14 +1,14 @@
-// A runtime's head-mounted system and a session on it (D591, D592): the
+// A runtime's head-mounted system and a session on it: the
 // render module's device made by the runtime, the session begun when the
 // runtime says ready, and, while it runs, each frame's views located, the
 // frame's picture placed into their images, and the views submitted; the
 // session ended when asked. While it has the input focus, both hands'
-// controllers are read and located (D596), and a panel is shown over the
-// views, a quad layer (D597); an aim points at the panel where its ray
-// meets it (D598); and each hand's controller is felt (D600). The loader's
-// environment overrides are never trusted (D654). Tracked hands' joints
-// are read where the runtime tracks hands, and none where it does not
-// (D663). Run under
+// controllers are read and located, and a panel is shown over the
+// views, a quad layer; an aim points at the panel where its ray
+// meets it; and each hand's controller is felt. The loader's
+// environment overrides are never trusted. Tracked hands' joints
+// are read where the runtime tracks hands, and none where it does not.
+// Run under
 // tools/xr_run.sh, which starts Monado's service headless (its null
 // compositor, simulated headset, and simulated simple controllers) on
 // lavapipe and names its manifest in RAWFRAME_XR_RUNTIME, the tests' own
@@ -115,7 +115,7 @@ RAWFRAME_TEST(TheRuntimesHeadMountedSystemHasStereoViews) {
 RAWFRAME_TEST(TheLoadersEnvironmentOverridesAreNeverTrusted) {
     // A runtime, API layers, and an enabled layer, each named by a variable
     // whoever starts the process may set: all removed before the loader
-    // runs, and said (D654). The layer named does not exist, so an instance
+    // runs, and said. The layer named does not exist, so an instance
     // made proves it was not enabled.
     setVariable("XR_RUNTIME_JSON", "/nowhere/runtime.json");
     setVariable("XR_API_LAYER_PATH", "/nowhere");
@@ -150,7 +150,7 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
         return;
     }
     RAWFRAME_EXPECT(kDevice->vulkan().has_value());
-    // A panel (D597), placed with the views and shown over them.
+    // A panel, placed with the views and shown over them.
     auto made = xr::Session::create(*kRuntime, *kDevice, {.width = 160, .height = 90});
     RAWFRAME_EXPECT(made.has_value());
     if (!made.has_value()) {
@@ -203,7 +203,7 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
             drawn = kMade.has_value() && *kMade;
         }
         RAWFRAME_EXPECT(session.end(drawn).has_value());
-        // Both hands felt once while focused (D600); there is no third.
+        // Both hands felt once while focused; there is no third.
         if (session.state() == xr::SessionState::Focused && session.statistics().hapticsApplied == 0) {
             RAWFRAME_EXPECT(session.vibrate(0, 0.5F, 0, 100).has_value());
             RAWFRAME_EXPECT(session.vibrate(1, 1, 160, 50).has_value());
@@ -236,7 +236,7 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
     RAWFRAME_EXPECT(session.state() == xr::SessionState::Exiting);
     RAWFRAME_EXPECT(kTotals.framesLocated >= 30);
     RAWFRAME_EXPECT(kTotals.framesSubmitted >= 30);
-    // Monado knows every controller suggested (D659).
+    // Monado knows every controller suggested.
     RAWFRAME_EXPECT(kTotals.profilesTaken == 5);
     RAWFRAME_EXPECT(handsHeld >= 30 && kTotals.framesHandLocated >= 30);
     RAWFRAME_EXPECT(kTotals.hapticsApplied == 2);
@@ -248,11 +248,11 @@ RAWFRAME_TEST(ASessionShowsPicturesOnTheDeviceItsRuntimeMadeAndEndsWhenAsked) {
 }
 
 RAWFRAME_TEST(TrackedHandsJointsAreReadApartFromTheControllers) {
-    // ADR-0081's tracked source (D663). Under Monado's remote driver
+    // The tracked source. Under Monado's remote driver
     // (tools/xr_run.sh --hands tests/hands.py, RAWFRAME_XR_HANDS set) the
     // right hand is tracked, open, its joints about its controller's grip,
     // and the left is not; under the simulated controllers no hand is
-    // tracked (D601), and none is read.
+    // tracked, and none is read.
     const auto kRuntime = opened();
     if (kRuntime == nullptr) {
         return;
@@ -316,7 +316,7 @@ RAWFRAME_TEST(TrackedHandsJointsAreReadApartFromTheControllers) {
 }
 
 RAWFRAME_TEST(AnAimPointsAtThePanelWhereItsRayMeetsIt) {
-    // A 1.6 m panel of 320 by 180 pixels, 1.5 m ahead (D598).
+    // A 1.6 m panel of 320 by 180 pixels, 1.5 m ahead.
     const xr::PanelSettings kPanel{.width = 320, .height = 180, .meters = 1.6F, .distance = 1.5F};
     const auto kNear = [](std::optional<std::array<float, 2>> point, float x, float y) {
         return point.has_value() && std::abs((*point)[0] - x) < 1e-2F && std::abs((*point)[1] - y) < 1e-2F;

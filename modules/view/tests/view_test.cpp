@@ -1,7 +1,7 @@
-// A view's geometry (ADR-0052, D366): the eye's axes, the perspective and
-// orthographic verbs each the other's inverse, an eye aimed at a point
-// (D432), every failure one of the closed set, and the view modes by
-// their names (D794), as the overlays are (D798).
+// A view's geometry: the eye's axes, the perspective and
+// orthographic verbs each the other's inverse, an eye aimed at a point,
+// every failure one of the closed set, and the view modes by
+// their names, as the overlays are.
 
 #include "rawframe/test/test.h"
 #include "rawframe/view/dropping.h"
@@ -126,7 +126,7 @@ RAWFRAME_TEST(OverlaysGoByTheirNames) {
 }
 
 // Files dropped on a window held for an editor, oldest first, the oldest
-// let go past the most held (D802).
+// let go past the most held.
 RAWFRAME_TEST(DroppedFilesAreTakenOldestFirst) {
     view::FilesDropped dropped;
     RAWFRAME_EXPECT(!dropped.take().has_value());

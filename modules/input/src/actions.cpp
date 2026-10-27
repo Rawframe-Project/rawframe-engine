@@ -189,7 +189,7 @@ readBinding(const Value& value, const Action& action, const std::string& path, c
                                                                        : shapeOf(binding.controls[0]);
     const bool kComposite = binding.composite != Composite::None;
     // A pose is made only of a pose control, and a pose control makes
-    // nothing else (D596).
+    // nothing else.
     const bool kSuits =
         kComposite
             ? (kShape == ControlShape::Axis1 ? action.type == ValueType::Axis1D : action.type == ValueType::Axis2D)
@@ -423,7 +423,7 @@ result::Result<HapticOutput> readHaptic(const Value& value, const std::string& p
         RAWFRAME_TRY_ASSIGN(binding.slot, readSlot(kBinding));
         RAWFRAME_TRY_ASSIGN(binding.device, readDeviceClass(kBinding));
         // Felt through a gamepad's grips' motors, or a headset's
-        // controllers, both hands (D600).
+        // controllers, both hands.
         if (binding.device != DeviceClass::Gamepad && binding.device != DeviceClass::Controller) {
             return invalid(kBinding.pathOf("device"), "a haptic output is felt on a gamepad or a controller");
         }

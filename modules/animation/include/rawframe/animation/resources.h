@@ -1,6 +1,6 @@
 #pragma once
 
-// The animation documents as content (ADR-0013, the `.rfanim` family): a
+// The animation documents as content (the `.rfanim` family): a
 // resource type for each kind, each with one representation, the
 // document's text in its one form, which the runtime reads as it would the
 // source.

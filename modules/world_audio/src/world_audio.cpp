@@ -75,7 +75,7 @@ struct WorldAudio::State {
     }
 
     /// Where an entity is and which way is its right, from its pose; a 3D
-    /// pose moved and turned by a headset's `head` in it (D677).
+    /// pose moved and turned by a headset's `head` in it.
     [[nodiscard]] std::optional<audio::Listener> placeOf(const world::World& world,
                                                          world::EntityHandle entity,
                                                          const std::optional<HeadPose>& head = std::nullopt) const {

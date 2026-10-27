@@ -1,4 +1,4 @@
-// Additive layers (SPEC-0035, D137): clips of differences from a declared
+// Additive layers: clips of differences from a declared
 // basis, added onto a base pose by weight, and poses and differences never
 // mixed.
 

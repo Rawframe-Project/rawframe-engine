@@ -7,7 +7,7 @@
 
 namespace rawframe::particles_gpu {
 
-/// The domain of every Error this module creates (ADR-0053's simulation).
+/// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kParticlesGpuDomain{
     base::parseBits128Hex("1609b4daafab4c0485baeaf6e477067c").value};
 

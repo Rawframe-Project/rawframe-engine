@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# The hands a tracked-source test reads (D663): Monado's remote driver
+# The hands a tracked-source test reads: Monado's remote driver
 # (tools/xr_run.sh --hands) told that its right controller's hand is
 # tracked, open (every finger's curl nought), where the driver holds the
 # controller; its left hand is not tracked. The hub sends its first and

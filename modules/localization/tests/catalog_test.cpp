@@ -1,4 +1,4 @@
-// Catalogs (SPEC-0033): tables and translations checked together, stale
+// Catalogs: tables and translations checked together, stale
 // entries and (in development) coverage reported, and keys resolved along
 // the fallback chain and formatted in the locale that served them.
 

@@ -17,7 +17,7 @@ namespace rawframe::audio {
 
 namespace {
 
-/// The least and most a role's volume is (D625).
+/// The least and most a role's volume is.
 constexpr float kQuietestRole = -80;
 constexpr float kLoudestRole = 12;
 

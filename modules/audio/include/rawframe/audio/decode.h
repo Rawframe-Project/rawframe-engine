@@ -1,6 +1,6 @@
 #pragma once
 
-// Decoding the cooked forms a client reads into clips (ADR-0058): 16-bit PCM
+// Decoding the cooked forms a client reads into clips: 16-bit PCM
 // WAVE, the short-form tier, and cooked Opus, the lossy tier; import tooling
 // writes both. Every decoder is bounded and refuses what it does not fully
 // understand.

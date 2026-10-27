@@ -1,4 +1,4 @@
-// Trails and beams in a view's accounting (D354, D357): a trail leaves a
+// Trails and beams in a view's accounting: a trail leaves a
 // point each time its pose has gone its spacing, runs from its pose through
 // them narrowing over their life, and lets go of the dead; a beam follows
 // its bent curve in its segments, its texture repeated along its length;

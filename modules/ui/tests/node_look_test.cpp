@@ -1,4 +1,4 @@
-// How a node's fields lay out and look (D376, D619): sizes automatic at
+// How a node's fields lay out and look: sizes automatic at
 // nought, a parent's AUTO stretching, a popup's margin taken as its gap, a
 // number past its constants refused, and the parts a styled node sets.
 

@@ -1,4 +1,4 @@
-// Animation graphs: one canonical text on SPEC-0028's grammar, unknown
+// Animation graphs: one canonical text on the grammar, unknown
 // node types kept whole, a semantic hash blind to ids and drawings, and
 // every rule held against hostile documents.
 

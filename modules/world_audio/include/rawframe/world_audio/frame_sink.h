@@ -1,7 +1,7 @@
 #pragma once
 
-// Where a host that owns no audio thread takes what a World sounds like
-// (D259): a page, whose browser plays sound from its own thread and can call
+// Where a host that owns no audio thread takes what a World sounds like:
+// a page, whose browser plays sound from its own thread and can call
 // into the client only from the page's. The host lends one; the world audio
 // player renders into it once a frame, as much as the frame's time holds and
 // the sink has room for, and the host hands it on to the device it has.

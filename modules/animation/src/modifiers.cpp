@@ -1,4 +1,4 @@
-// A graph's modifier stages (SPEC-0035, D138) as its document holds them.
+// A graph's modifier stages as its document holds them.
 
 #include "graph_parts.h"
 #include "text.h"

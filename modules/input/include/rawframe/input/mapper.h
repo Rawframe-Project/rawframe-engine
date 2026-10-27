@@ -1,6 +1,6 @@
 #pragma once
 
-// The semantic input layer's runtime (ADR-0037, SPEC-0029): control events
+// The semantic input layer's runtime: control events
 // from paired devices become per-player action state, routed through the
 // contexts each player has active, with press and release edges accounted
 // once to the simulation tick and once to the frame.
@@ -36,7 +36,7 @@ struct PlayerSlot {
 /// released (nought), an axis at `x`, a stick at `x` and `y` (up and right
 /// positive, each within minus one and one), or relative motion by `x` and
 /// `y` since the last report.
-/// A pose (ADR-0081's fourth value, D596): a place in the headset's local
+/// A pose: a place in the headset's local
 /// space (meters, +Y up, its origin where the head was when its session
 /// began) and a turn, a unit quaternion (x, y, z, w); whether the runtime
 /// knows it (`located`), and whether it tracks it now rather than infers
@@ -74,7 +74,7 @@ struct Edge {
     std::uint32_t ordinal = 0;
 };
 
-/// A haptic output asked for (D251): its amplitude from nought to one, its
+/// A haptic output asked for: its amplitude from nought to one, its
 /// frequency in hertz (nought leaves it to the device), and how long.
 /// Asking again before it ends replaces it: the latest wins.
 struct Haptic {
@@ -89,7 +89,7 @@ struct HapticCommand {
     Haptic haptic;
 };
 
-/// SPEC-0029's named limit points for the runtime.
+/// The named limit points for the runtime.
 struct MapperLimits {
     std::size_t players = 1;
     std::size_t maximumDevices = 16;
@@ -106,11 +106,11 @@ struct MapperStatistics {
     /// Times a player's controls were all let go: asked for (focus lost,
     /// the platform's records not fitting) or after a drop.
     std::uint64_t releases = 0;
-    /// Presses the UI took (D421), and actions turned on.
+    /// Presses the UI took, and actions turned on.
     std::uint64_t uiTaken = 0;
     std::uint64_t actionPresses = 0;
     /// Events from paired devices, by device class (its value an index):
-    /// which kinds of device a player has used (D559).
+    /// which kinds of device a player has used.
     std::array<std::uint64_t, 5> events{};
 };
 
@@ -141,15 +141,15 @@ public:
 
     /// While a text field has focus, keyboard controls reach no action of a
     /// context gated by text editing; an action they held is released. A
-    /// key that goes down meanwhile is the field's until it is let go
-    /// (D430). Events submitted before are applied first, as the gate was:
+    /// key that goes down meanwhile is the field's until it is let go.
+    /// Events submitted before are applied first, as the gate was:
     /// a feed's own record places it among them.
     void setTextEditing(bool editing);
-    /// The UI as the topmost routing node (SPEC-0029, D421): as a mouse
+    /// The UI as the topmost routing node: as a mouse
     /// button or a touch control goes down, `takes` is asked whether the
     /// UI takes the press at the player's pointer on that device, in
     /// logical pixels of the window; as a controller's select goes down,
-    /// at its hand's pointer on the headset's panel (D598). A press it takes is the UI's alone:
+    /// at its hand's pointer on the headset's panel. A press it takes is the UI's alone:
     /// no action sees it held, nor its release. Never asked while the
     /// device has told no pointer. Empty (the default) takes nothing.
     using PointerTaker = std::function<bool(PlayerSlot player, float x, float y)>;

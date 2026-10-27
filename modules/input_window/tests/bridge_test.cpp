@@ -1,10 +1,10 @@
 // A window's raw input reaching actions as a player's would: keys by HID
 // usage, mouse buttons, the wheel, and captured motion; a gamepad's two
 // stick axes combined and turned up positive; the cursor's place as the
-// mouse's pointer (D367); focus loss letting go of everything; a gamepad
+// mouse's pointer; focus loss letting go of everything; a gamepad
 // that goes letting go of what it held; a haptic output felt through a
-// gamepad's motors (D251); touches as the touch screen's halves, split by
-// the window's width (D387).
+// gamepad's motors; touches as the touch screen's halves, split by
+// the window's width.
 
 #include "rawframe/input/mapper.h"
 #include "rawframe/input_window/bridge.h"
@@ -179,8 +179,8 @@ RAWFRAME_TEST(TheCursorsPlaceIsThePointerAndStaysWhereItWasLastTold) {
 
 RAWFRAME_TEST(TheCursorsMotionIsAStreamApartFromTheDevices) {
     // The window system gives a pointer's own motion only while it is
-    // captured; the cursor's motion over the window is `motion` (D521), up
-    // positive, summed over a tick, and the two never mix (SPEC-0025).
+    // captured; the cursor's motion over the window is `motion`, up
+    // positive, summed over a tick, and the two never mix.
     Rig rig;
     window::Event moved = record(window::EventKind::CursorMoved);
     moved.pointer.position = {.x = 600, .y = 300};
@@ -262,7 +262,7 @@ public:
         }
         // A command for a device of the bridge's that has no motors (the
         // keyboard), and one for a device not its own, a headset's
-        // controllers, felt by their own output (D600).
+        // controllers, felt by their own output.
         rig.feed.feel({.device = DeviceId{1}, .haptic = {.milliseconds = 10}});
         rig.feed.feel({.device = DeviceId{99}, .haptic = {.milliseconds = 10}});
         rig.bridge.feel(windows);

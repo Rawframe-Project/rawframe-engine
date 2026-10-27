@@ -1,4 +1,4 @@
-# Localization (ADR-0050, SPEC-0033): locales and their fallback, plural
+# Localization: locales and their fallback, plural
 # categories, numbers, MessageFormat 2.0 messages, and the string table
 # documents with their catalogs, from CLDR data compiled ahead of
 # time. Presentation only: a
@@ -6,7 +6,7 @@
 set(rawframe_localization_development "")
 set(rawframe_localization_development_tests "")
 if(NOT RAWFRAME_CONFIGURATION STREQUAL "shipping")
-    # Pseudo-localization never ships (SPEC-0033).
+    # Pseudo-localization never ships.
     set(rawframe_localization_development src/pseudo.cpp)
     set(rawframe_localization_development_tests tests/pseudo_test.cpp)
 endif()

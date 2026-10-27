@@ -1,7 +1,7 @@
 #pragma once
 
-// A game's style classes as a document (SPEC-0030, D431): a `ui.styles`
-// document under SPEC-0028's canonical JSON profile, as the game's actions
+// A game's style classes as a document: a `ui.styles`
+// document under the canonical JSON profile, as the game's actions
 // and strings are, read and made into a tree's classes. Each class has a
 // 16-digit identity a node names it by, a name, a look for its base and
 // each state it sets one for (only the parts given), and transitions.
@@ -45,7 +45,7 @@
 
 namespace rawframe::ui {
 
-/// A class's fields in its document's order (D636).
+/// A class's fields in its document's order.
 inline constexpr std::array<std::string_view, 9> kStyleFields = {
     "styleId", "name", "base", "checked", "focused", "hovered", "pressed", "disabled", "transitions"};
 /// Each variant's look's field, by Variant.

@@ -1,4 +1,4 @@
-// Blend spaces (SPEC-0035, D135): points on a line or a plane as the graph
+// Blend spaces: points on a line or a plane as the graph
 // document holds them, a declared triangulation checked where it is read,
 // and weights shared by where the position is among the points.
 

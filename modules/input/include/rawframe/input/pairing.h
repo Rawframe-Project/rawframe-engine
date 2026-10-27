@@ -1,7 +1,7 @@
 #pragma once
 
-// Which local player each of a client's devices plays (SPEC-0029's
-// explicit pairing table, D363): a device is paired as it connects, by the
+// Which local player each of a client's devices plays (the explicit
+// pairing table): a device is paired as it connects, by the
 // client's policy, and let go as it goes. Device identity is never player
 // identity: a player is a slot, and its devices are whichever the table
 // holds for it.

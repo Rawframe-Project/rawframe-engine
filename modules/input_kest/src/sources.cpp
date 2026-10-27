@@ -82,7 +82,7 @@ struct ReadY {
     }
 };
 
-/// A pose action's place's third axis, and its turn's parts (D596).
+/// A pose action's place's third axis, and its turn's parts.
 struct ReadZ {
     void operator()(kest::DoorCall& call,
                     const input::Mapper& mapper,
@@ -109,7 +109,7 @@ struct ReadTracked {
 };
 
 /// Whether the player sees the game on a headset now: its eyes told this
-/// frame (D603).
+/// frame.
 void headsetDoor(kest::DoorCall& call, void* context) noexcept {
     const auto& doors = *static_cast<const InputDoorContext*>(context);
     call.answerBoolean(doors.headset != nullptr && !doors.headset->eyes().empty());
@@ -236,7 +236,7 @@ public:
             break;
         case input::ControlShape::Pose: {
             // A hand somewhere before the chest, turned a little, now and
-            // then not located (D596).
+            // then not located.
             const float kTurn = kSigned() * 0.3F;
             event.pose = input::Pose{.position = {kSigned() * 0.4F,
                                                   1.0F + (random_.nextFloat() * 0.5F),
@@ -282,7 +282,7 @@ struct Shared {
     const view::UiPointing* pointing = nullptr;
     view::UiTyping* typing = nullptr;
     /// The UI's navigation, and the first local player's actions with the
-    /// engine's navigation actions added, where they are (D430).
+    /// engine's navigation actions added, where they are.
     const view::UiNavigation* navigation = nullptr;
     const view::HeadsetEyes* headset = nullptr;
     const input::TrackedHands* hands = nullptr;
@@ -290,13 +290,13 @@ struct Shared {
     world_localization::GameText* text = nullptr;
     input::Navigation navigationActions;
     diagnostics::Emitter emitter;
-    /// The game's commands the sample program lays out (D425).
+    /// The game's commands the sample program lays out.
     std::vector<world_kest::CommandKind> commands;
     /// Each effect kind's haptic output and how it is felt, by kind.
     std::vector<std::optional<std::pair<std::size_t, input::Haptic>>> felt;
 };
 
-/// The lent devices shared out among the local players (D363): the
+/// The lent devices shared out among the local players: the
 /// client's feed routed, as any player's source next ticks, into each
 /// player's own by the pairing table, made with as many players as have
 /// sources then.
@@ -358,7 +358,7 @@ public:
                          std::shared_ptr<Routing> routing = nullptr,
                          input::Feed* feed = nullptr,
                          std::size_t player = 0) {
-        // The first local player navigates the UI (D430); bots and other
+        // The first local player navigates the UI; bots and other
         // players have the game's actions alone.
         const bool kNavigates = !seed.has_value() && player == 0 && shared.navigable.has_value();
         RAWFRAME_TRY_ASSIGN(mapper_,
@@ -417,7 +417,7 @@ public:
             commands_.kinds.push_back(std::move(kind));
         }
         RAWFRAME_TRY(addCommandDoors(table, commands_));
-        // The UI as the topmost routing node (D421): a press it takes is the
+        // The UI as the topmost routing node: a press it takes is the
         // sample's to read, never an action's.
         if (const view::UiPointing* pointing = seed.has_value() ? nullptr : shared.pointing) {
             mapper_->setPointerTaker([this, pointing](input::PlayerSlot /*slot*/, float x, float y) {
@@ -445,7 +445,7 @@ public:
         ui_.pressed = 0;
         commands_.sent.clear();
         // A field's text given, one a tick, and the keyboard's actions gated
-        // while a field holds focus (SPEC-0029, D426).
+        // while a field holds focus.
         ui_.submitted = 0;
         typedOf({}, ui_.typed);
         if (submissions_ != nullptr) {
@@ -462,7 +462,7 @@ public:
             hand_->act(*mapper_);
         } else {
             routing_->route();
-            // The host places the text gate among the keys (D430); here it
+            // The host places the text gate among the keys; here it
             // only ends as the UI is now.
             feed_->deliver(*mapper_, {});
             if (typing_ != nullptr) {
@@ -475,7 +475,7 @@ public:
             navigate();
         }
         // A node a screen reader pressed is the sample's press as
-        // navigation's is, unless one came first (D572).
+        // navigation's is, unless one came first.
         if (const std::optional<std::int64_t> kCode =
                 navigation_ != nullptr ? navigation_->spoken() : std::optional<std::int64_t>{};
             kCode.has_value() && ui_.pressed == 0) {
@@ -485,7 +485,7 @@ public:
         // The sample starts from the input it made the tick before, nought
         // at first: a value it keeps there, as a view's heading, is whole in
         // every command, so a command the server holds over for a late one
-        // repeats it rather than losing a turn (D525).
+        // repeats it rather than losing a turn.
         RAWFRAME_TRY_ASSIGN(const kest::Value kLent, machine_->lend(input.data(), 1, element_, input.size()));
         std::ranges::fill(frame_, kest::Value{});
         frame_[0] = kLent;
@@ -500,7 +500,7 @@ public:
 
     /// The navigation actions pressed this tick, to the UI in their order:
     /// a node activated is the sample's press, unless a pointer's came
-    /// first (D430).
+    /// first.
     void navigate() {
         constexpr std::array<view::NavigationMove, 6> kMoves = {view::NavigationMove::Up,
                                                                 view::NavigationMove::Down,
@@ -541,7 +541,7 @@ public:
 
 private:
     /// Says the first time each kind of device gives this player an event:
-    /// what a device's log shows when its touches, say, never arrive (D559).
+    /// what a device's log shows when its touches, say, never arrive.
     void sayWhatIsSeen() {
         const input::MapperStatistics& kMapped = mapper_->statistics();
         for (std::size_t kind = 0; kind < seen_.size(); ++kind) {
@@ -567,7 +567,7 @@ private:
     TextDoorContext text_;
     bool local_ = false;
     std::size_t player_ = 0;
-    /// The device classes said to be seen, by index (D559).
+    /// The device classes said to be seen, by index.
     std::array<bool, 4> seen_{};
     diagnostics::Emitter emitter_;
     view::UiTyping* typing_ = nullptr;
@@ -688,7 +688,7 @@ result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* con
                                       .takes = kActionTakes,
                                       .gives = kAxisGives,
                                       .safeForUntrusted = true}));
-    // A pose action (D596): `Input.on` while located, `Input.x`, `Input.y`,
+    // A pose action: `Input.on` while located, `Input.x`, `Input.y`,
     // and `Input.z` its place, `Input.turnX` to `Input.turnW` its turn, and
     // `Input.tracked` whether the runtime tracks it now.
     RAWFRAME_TRY(doors.add(kest::Door{.name = "Input.z",

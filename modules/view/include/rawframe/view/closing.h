@@ -1,7 +1,7 @@
 #pragma once
 
-// An editor's asking to close its window, as its File menu's Quit does
-// (D923): the window host lends one as `rawframe.view.window_closing` and
+// An editor's asking to close its window, as its File menu's Quit does:
+// the window host lends one as `rawframe.view.window_closing` and
 // closes the window, as a press on its close button does, the next frame;
 // a host with no window lends none.
 

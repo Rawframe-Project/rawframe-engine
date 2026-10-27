@@ -46,7 +46,7 @@ namespace rawframe::window::testing {
 [[nodiscard]] result::Status moveGamepad(Windows& windows, GamepadId gamepad, GamepadAxis axis, float value);
 
 /// Connects a monitor of `facts` at once, the primary one, which windows
-/// made from now on show on (D365); changes a connected one's facts.
+/// made from now on show on; changes a connected one's facts.
 [[nodiscard]] result::Result<MonitorId> addMonitor(Windows& windows, const DisplayFacts& facts);
 [[nodiscard]] result::Status changeMonitor(Windows& windows, MonitorId monitor, const DisplayFacts& facts);
 

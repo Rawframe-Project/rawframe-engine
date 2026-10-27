@@ -1,6 +1,6 @@
 #pragma once
 
-// Sound reaching a device (ADR-0038's device I/O provider): an output opens
+// Sound reaching a device (the device I/O provider): an output opens
 // a device at its own rate, and its real-time thread renders a mixer made at
 // that rate into every buffer the device asks for. The provider stays behind
 // this header; nothing of it appears here. Client only.
@@ -22,7 +22,7 @@ enum class OutputBackend : std::uint8_t {
     Null,
 };
 
-/// The output's profile values (ADR-0038: never constants in code).
+/// The output's profile values (never constants in code).
 struct OutputSettings {
     OutputBackend backend = OutputBackend::Default;
     /// Frames a second; nought for the device's own, so the mixer renders at

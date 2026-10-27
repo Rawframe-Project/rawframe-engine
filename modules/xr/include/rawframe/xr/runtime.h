@@ -1,19 +1,19 @@
 #pragma once
 
-// An OpenXR runtime's head-mounted system (ADR-0081's XR admission, D591).
+// An OpenXR runtime's head-mounted system.
 // The XR module is a presentation producer beside the window module, never
-// a window (ADR-0081, section 2): the runtime owns the images a headset
+// a window: the runtime owns the images a headset
 // shows and paces their frames. The runtime is the one the system has
 // made active (Windows' registry, Linux's active_runtime.json), or the
 // manifest a trusted configuration names; the loader's own environment
 // overrides (XR_RUNTIME_JSON, XR_API_LAYER_PATH, XR_ENABLE_API_LAYERS),
 // which would let whoever sets a variable choose the native code it loads,
-// are removed before it runs, in every build (ADR-0081 section 7, D654). Its
+// are removed before it runs, in every build. Its
 // system is a head-mounted display with stereo views, drawn through
 // Vulkan (XR_KHR_vulkan_enable2), whose instance and device the runtime
 // makes for the render module's one device: a runtime is the device's
 // `render::VulkanMaker`. Client only: no dedicated server reaches this
-// module (ADR-0081, scenario 3). Main thread only.
+// module (scenario 3). Main thread only.
 
 #include "rawframe/render/device.h"
 #include "rawframe/result/result.h"
@@ -52,10 +52,10 @@ struct SystemDescription {
     bool orientationTracking = false;
     bool positionTracking = false;
     /// The system tracks hands, their joints read apart from the actions
-    /// (XR_EXT_hand_tracking, D663).
+    /// (XR_EXT_hand_tracking).
     bool handTracking = false;
     /// The loader's environment overrides that were set and removed before
-    /// it ran, comma-separated; empty where none was (D654).
+    /// it ran, comma-separated; empty where none was.
     std::string overridesIgnored;
 };
 

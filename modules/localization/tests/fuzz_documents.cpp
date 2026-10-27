@@ -1,5 +1,5 @@
 // Coverage-guided fuzzing of the text a game's Build carries for its
-// players (D243): string tables, translations, the messages they hold, and
+// players: string tables, translations, the messages they hold, and
 // locale tags. The tables are read in their canonical bytes only, so what
 // reads writes back to the very same text.
 

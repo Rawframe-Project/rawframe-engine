@@ -1,4 +1,4 @@
-// The local players' views (D367): a view placed in the window by its
+// The local players' views: a view placed in the window by its
 // region and the window's logical size, a player without one having none,
 // the scene's and the canvas's views kept apart, and a window without size
 // giving views that every verb refuses.

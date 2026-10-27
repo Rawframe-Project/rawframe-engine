@@ -1,4 +1,4 @@
-// The game's styles made again as an author edits them (D634): a node takes
+// The game's styles made again as an author edits them: a node takes
 // its class's new look, a class the sheet no longer has leaves its node
 // unstyled, and one coming back styles it again.
 

@@ -1,4 +1,4 @@
-// Catalogs (SPEC-0033): tables and translations checked together, and keys
+// Catalogs: tables and translations checked together, and keys
 // resolved along the fallback chain.
 
 #include "rawframe/localization/catalog.h"

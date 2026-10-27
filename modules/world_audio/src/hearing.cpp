@@ -81,7 +81,7 @@ std::string emitterCuesOf(const WorldAudioStatistics& heard) {
 /// game's sounds on a mixer at a rate, the listener bound to the player.
 struct Hearing {
     world_replication::ClientWorlds* clients = nullptr;
-    /// A headset's eyes, whose head turns the listener (D677).
+    /// A headset's eyes, whose head turns the listener.
     const view::HeadsetEyes* eyes = nullptr;
     std::uint64_t client = 0;
     std::unique_ptr<audio::Mixer> mixer;
@@ -92,7 +92,7 @@ struct Hearing {
     std::unique_ptr<audio::Sounds> sounds;
     std::size_t master = 0;
     WorldAudioSettings settings;
-    /// Each effect kind's sound, by kind; nought for none (D220).
+    /// Each effect kind's sound, by kind; nought for none.
     std::vector<std::uint64_t> effectSounds;
     std::vector<world_replication::EffectEvent> effects;
     /// How many of the client's effect events this hearing has read.
@@ -110,8 +110,8 @@ struct Hearing {
     bool failed = false;
     std::uint64_t tick = 0;
     diagnostics::Emitter emitter;
-    /// The player's volumes, as the client's present systems set them
-    /// (D625), and the revision last given to the mixer; none without a
+    /// The player's volumes, as the client's present systems set them,
+    /// and the revision last given to the mixer; none without a
     /// presentation.
     const world_kest::PresentedVolumes* volumes = nullptr;
     std::uint64_t volumesSeen = 0;
@@ -293,7 +293,7 @@ struct Hearing {
                 heard->playOnce(*kView.world, effectSounds[event.effect.kind], kView.owned);
             }
         }
-        // A headset's head: between its eyes, turned as they are (D677).
+        // A headset's head: between its eyes, turned as they are.
         std::optional<HeadPose> head;
         if (eyes != nullptr && eyes->eyes().size() >= 2) {
             const view::HeadsetEye& kLeft = eyes->eyes()[0];
@@ -428,7 +428,7 @@ public:
                                                       .error()
                                                       .withContext("value", std::string{*kPlay})};
         }
-        // A game that declares no mixer plays on in silence (D397): a player
+        // A game that declares no mixer plays on in silence: a player
         // may be set to play sound whatever game it is given, as an export's
         // is.
         if (context.has(world_kest::kGameFiles.name)) {
@@ -439,7 +439,7 @@ public:
             }
         }
         if (*kPlay == "sink") {
-            // The host plays what the frames render (D259): a page.
+            // The host plays what the frames render: a page.
             if (!context.has(kFrameSink.name)) {
                 return std::unexpected<result::Error>{refuse(result::ErrorClass::FailedPrecondition,
                                                              WorldAudioError::NoAudio,
@@ -492,7 +492,7 @@ public:
             return;
         }
         if (suspended_) {
-            // The World runs on unheard (D565): its mix is rendered here
+            // The World runs on unheard: its mix is rendered here
             // and let go, so what it plays ends as it would have, and no
             // command waits in the mixer's queue to sound all at once when
             // the program comes back.
@@ -575,8 +575,8 @@ public:
     }
 
 private:
-    /// The platform suspended the program, or it runs again (D565): a
-    /// device's output stops, as SPEC-0025's `suspended` asks of all that
+    /// The platform suspended the program, or it runs again: a
+    /// device's output stops, as the `suspended` asks of all that
     /// reaches a person, and starts again on `resumed`; a sink is no longer
     /// written to until then.
     void suspend(bool suspended) noexcept {
