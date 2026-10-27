@@ -34,6 +34,7 @@ add_library(rawframe_maul3d_vendor STATIC
     src/joint_fixed.c
     src/joint_gear.c
     src/joint_generic.c
+    src/joint_lever.c
     src/joint_motor.c
     src/joint_parallel.c
     src/joint_params.c
@@ -72,7 +73,9 @@ add_library(rawframe_maul3d_vendor STATIC
     src/snapshot_bounds.c
     src/snapshot.c
     src/snapshot_links.c
+    src/snapshot_mass.c
     src/snapshot_values.c
+    src/snapshot_walk.c
     src/softbody.c
     src/softbody_cull.c
     src/softbody_pairs.c

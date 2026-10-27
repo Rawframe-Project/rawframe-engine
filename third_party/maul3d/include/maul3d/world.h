@@ -118,7 +118,10 @@ extern "C"
     /// library's SIMD backend (m3_errorUnsupported), the def's cookie must
     /// be valid (m3_errorInvalid), its version must be M3_ABI_VERSION
     /// (m3_errorVersion), and the rest of the def must hold
-    /// (m3_errorInvalid); the allocator may refuse (m3_errorCapacity).
+    /// (m3_errorInvalid). A def whose world could snapshot to more than
+    /// M3_MAX_SNAPSHOT_BYTES, with every mesh and hull slot's content at
+    /// its largest, is refused with m3_errorCapacity before anything is
+    /// allocated; the allocator may refuse too (m3_errorCapacity).
     /// *worldOut is null on any failure.
     M3_NODISCARD M3_API m3Result m3CreateWorld(const m3WorldDef* def, m3World** worldOut);
     /// Destroys a world and everything it owns; ids it issued mean nothing
@@ -261,15 +264,16 @@ extern "C"
     /// tree, the contact pairs, shared content and its reference counts,
     /// and the records of characters, vehicles, soft bodies and joints),
     /// and any value past the limit its create or setter keeps (the
-    /// guide's "Magnitude limits"). Positions are bounded at 1e18 m
-    /// rather than 1e15: a create or teleport keeps a body within 1e15 m,
-    /// but the step may carry it further over a long run, holding every
-    /// body and soft particle within 1e18 m. Mass, center, inertia and
+    /// guide's "Magnitude limits"), positions included: creates place
+    /// every body and soft particle within 1e15 m and the step holds it
+    /// there. Replay and restore take a shape's geometry only in the form
+    /// its create leaves it. Mass, center, inertia and
     /// extents are not stored; restore rebuilds them from each body's
     /// type and shapes. A world restore accepts steps, queries and
     /// snapshots like one the API built.
-    /// Snapshot writes m3World_SnapshotSize bytes and sets
-    /// *bytesOut; a smaller buffer returns m3_errorCapacity.
+    /// Snapshot writes m3World_SnapshotSize bytes, never more than
+    /// M3_MAX_SNAPSHOT_BYTES, and sets *bytesOut; a smaller buffer
+    /// returns m3_errorCapacity.
     M3_API int32_t m3World_SnapshotSize(const m3World* world);
     M3_NODISCARD M3_API m3Result m3World_Snapshot(const m3World* world, void* buffer,
                                                   int32_t capacity, int32_t* bytesOut);

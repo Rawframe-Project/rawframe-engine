@@ -18,6 +18,11 @@
 #include <math.h>
 #include <string.h>
 
+// A particle clamps against at most this many voxel boxes or mesh
+// triangles of one shape per substep: the first in ascending order. Each
+// gather's buffer holds every entry its tree can return.
+#define SOFT_GATHER_CAP 32
+
 // Closest point on segment ab to p. The parameter is clamped before the
 // division, so the point is a convex combination of a and b, and a
 // zero-length segment gives a.
@@ -140,6 +145,9 @@ static void SoftProject(m3World* world, int32_t k, m3Vec3 n, m3real depth, m3rea
     world->softBodies.softPos[k].x += (double)(depth * n.x);
     world->softBodies.softPos[k].y += (double)(depth * n.y);
     world->softBodies.softPos[k].z += (double)(depth * n.z);
+    // Within the position limit after every move, so the next substep's
+    // velocity and every particle difference stay finite.
+    world->softBodies.softPos[k] = m3HoldPosition(world->softBodies.softPos[k]);
     // Two-way: a particle pushed out of a dynamic body
     // pushes back, the wheel-reaction pattern: the projection is a
     // velocity change of depth over h on the particle's mass,
@@ -178,6 +186,7 @@ static void SoftProject(m3World* world, int32_t k, m3Vec3 n, m3real depth, m3rea
     world->softBodies.softPos[k].x -= (double)(tang.x * scale);
     world->softBodies.softPos[k].y -= (double)(tang.y * scale);
     world->softBodies.softPos[k].z -= (double)(tang.z * scale);
+    world->softBodies.softPos[k] = m3HoldPosition(world->softBodies.softPos[k]);
 }
 
 // One particle against one shape, in the shape body's local frame. xf is
@@ -305,13 +314,14 @@ static void SoftCollideParticle(m3World* world, int32_t k, int32_t shape, uint8_
             return;
         }
         // Near the surface: clamp against the merged boxes the BVH
-        // hands back around the particle.
+        // hands back around the particle, the first SOFT_GATHER_CAP in
+        // ascending box order.
         const m3VoxelSurface* surface = &world->voxels.voxelSurface[vslot];
         m3Vec3 qlo = {lp.x - radius, lp.y - radius, lp.z - radius};
         m3Vec3 qhi = {lp.x + radius, lp.y + radius, lp.z + radius};
-        uint16_t boxes[32];
-        int32_t nb = m3MeshBvhGather(&surface->bvh, qlo, qhi, boxes);
-        nb = nb > 32 ? 32 : nb;
+        uint16_t boxes[M3_VOXEL_MAX_BOXES];
+        int32_t nb = m3MeshBvhGather(&surface->bvh, qlo, qhi, boxes, M3_COUNT_OF(boxes));
+        nb = nb > SOFT_GATHER_CAP ? SOFT_GATHER_CAP : nb;
         for (int32_t b = 0; b < nb; ++b)
         {
             m3Vec3 blo;
@@ -370,9 +380,10 @@ static void SoftCollideParticle(m3World* world, int32_t k, int32_t shape, uint8_
         const m3MeshBvh* bvh = &world->meshes.meshBvh[world->shapes.shapeMeshIndex[shape]];
         m3Vec3 qlo = {lp.x - radius, lp.y - radius, lp.z - radius};
         m3Vec3 qhi = {lp.x + radius, lp.y + radius, lp.z + radius};
-        uint16_t tris[32];
-        int32_t nt = m3MeshBvhGather(bvh, qlo, qhi, tris);
-        nt = nt > 32 ? 32 : nt;
+        // The first SOFT_GATHER_CAP triangles in ascending order.
+        uint16_t tris[M3_MESH_MAX_TRIS];
+        int32_t nt = m3MeshBvhGather(bvh, qlo, qhi, tris, M3_COUNT_OF(tris));
+        nt = nt > SOFT_GATHER_CAP ? SOFT_GATHER_CAP : nt;
         for (int32_t t = 0; t < nt; ++t)
         {
             int32_t tri = (int32_t)tris[t];
@@ -542,8 +553,8 @@ static m3real SoftSurfaceVolume6(m3World* world, int32_t slot, m3Vec3* grads, m3
 }
 
 // The soft pass: XPBD small steps over the full shape set.
-// Every particle within M3_REACH_LIMIT once the substep has placed it, an
-// anchored one included.
+// Every particle within M3_POSITION_LIMIT once the substep has placed it,
+// an anchored one included.
 static void HoldParticles(m3World* world)
 {
     for (int32_t slot = 0; slot < world->softBodies.softPool.maxIndex; ++slot)
@@ -555,9 +566,10 @@ static void HoldParticles(m3World* world)
         int32_t base = slot * M3_SOFTBODY_MAX_PARTICLES;
         for (int32_t i = 0; i < world->softBodies.softParticleCount[slot]; ++i)
         {
-            world->softBodies.softPos[base + i] = m3HoldReach(world->softBodies.softPos[base + i]);
+            world->softBodies.softPos[base + i] =
+                m3HoldPosition(world->softBodies.softPos[base + i]);
             world->softBodies.softPrev[base + i] =
-                m3HoldReach(world->softBodies.softPrev[base + i]);
+                m3HoldPosition(world->softBodies.softPrev[base + i]);
         }
     }
 }
