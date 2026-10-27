@@ -1,4 +1,3 @@
-# Paths the documentation check skips, one a line: vendored code, and the
-# areas whose source comments still cite records of the old documentation.
-# Each comment cleanup removes its area's line; the list ends with third_party.
+# Paths the documentation check skips, one a line: vendored code alone,
+# which follows its upstream's own documentation.
 third_party
