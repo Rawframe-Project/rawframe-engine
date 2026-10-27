@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0037's collision document (§7), one per game and the same for 2D and
+// The collision document, one per game and the same for 2D and
 // 3D physics: collision classes, each a durable identity and a name, the
 // rule between each pair of them, and the rule for every pair not listed.
 
@@ -11,7 +11,7 @@
 
 namespace rawframe::physics {
 
-/// What happens where two collision classes meet (SPEC-0037's closed rule
+/// What happens where two collision classes meet (the closed rule
 /// vocabulary): they push each other, overlap and are told, or pass through
 /// unaware.
 enum class CollisionRule : std::uint8_t {

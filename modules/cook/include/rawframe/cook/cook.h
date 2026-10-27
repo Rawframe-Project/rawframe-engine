@@ -1,8 +1,8 @@
 #pragma once
 
-// Cooking (ADR-0024): authored sources, each identified by its `.rfmeta`
+// Cooking: authored sources, each identified by its `.rfmeta`
 // sidecar, turned by registered importers into immutable content-addressed
-// artifacts, a SPEC-0008 content manifest naming them, and a receipt that
+// artifacts, a content manifest naming them, and a receipt that
 // proves the cook. Import tooling only: nothing here enters a client or a
 // server.
 
@@ -26,7 +26,7 @@
 
 namespace rawframe::cook {
 
-/// A subasset an importer finds in a source and cooks (ADR-0024, D314):
+/// A subasset an importer finds in a source and cooks:
 /// its key, which the source's sidecar maps to the resource it becomes.
 struct Subasset {
     std::string key;
@@ -39,8 +39,8 @@ struct Subasset {
 
 /// What an importer makes of one source: the source's own resource, its
 /// subassets in key order, and what it reports of the cook, written into
-/// the receipt beside the source: counts by name, as SPEC-0026's variant
-/// report (D319), in the importer's order.
+/// the receipt beside the source: counts by name, as the variant
+/// report, in the importer's order.
 struct Artifact {
     content::ResourceTypeId type;
     content::RepresentationId representation;
@@ -55,7 +55,7 @@ struct Artifact {
 /// named relative to the source's directory, and the files a directory
 /// holds. Every read is recorded with a digest of what it saw; a cached
 /// artifact is reused only while every read would see the same again
-/// (ADR-0024: the key is every input, and these are inputs the importer
+/// (the key is every input, and these are inputs the importer
 /// found). Nothing outside the sources is read, and a read is the same bytes
 /// every time it is asked, so the two cooks of one source see one input.
 class Reads {
@@ -119,7 +119,7 @@ private:
 };
 
 /// A setting an importer takes at the top of a sidecar's `settings`, as an
-/// editor shows it (D800): its name, its kind, what it is when omitted (as
+/// editor shows it: its name, its kind, what it is when omitted (as
 /// text: `true`, `srgb`, `0`), and, for a text, the values it may be. A
 /// setting at its fallback is omitted from the sidecar: the importer
 /// refuses it written out.
@@ -139,7 +139,7 @@ struct SettingField {
 /// cooks. Selection is by the sidecar's `importer`, never by extension.
 struct Importer {
     std::string_view identity;
-    /// The settings an editor offers (D800); none for an importer that
+    /// The settings an editor offers; none for an importer that
     /// takes none, and a setting not here (a texture's environment) is
     /// kept as the sidecar has it.
     std::span<const SettingField> fields;
@@ -149,11 +149,11 @@ struct Importer {
     /// Cooks the source's bytes under normalized settings, reading anything
     /// else it needs through `reads`. Must give the same bytes for the same
     /// inputs: every cook is done twice and compared. It may hold what it
-    /// runs besides this tool (D484).
+    /// runs besides this tool.
     std::function<result::Result<Artifact>(std::span<const std::byte> source, std::string_view settings, Reads& reads)>
         cook;
     /// The digest of the tools the importer runs besides this one, in its
-    /// key (ADR-0024: tool identity is always in the key); nought for none.
+    /// key (tool identity is always in the key); nought for none.
     base::Sha256Digest tools{};
 };
 
@@ -180,19 +180,19 @@ struct CookRequest {
     base::Sha256Digest toolchain{};
     /// The target profile the artifacts are for.
     std::string target = "any";
-    /// SPEC-0026's `variants_per_package`: the most material variants the
-    /// artifacts' reports may count together (D319).
+    /// The `variants_per_package`: the most material variants the
+    /// artifacts' reports may count together.
     std::int64_t maximumVariants = 4096;
     /// Told each source before it is cooked, and asked whether to go on:
-    /// false stops the cook there, publishing nothing, as a failure would
-    /// (SPEC-0040's long-running operations, D502). None cooks every source.
+    /// false stops the cook there, publishing nothing, as a failure would.
+    /// None cooks every source.
     std::function<bool(const CookStep&)> step;
 };
 
 struct CookReport {
     std::size_t cooked = 0;
     std::size_t reused = 0;
-    /// The material variants the artifacts' reports count (D319).
+    /// The material variants the artifacts' reports count.
     std::int64_t variants = 0;
     /// Every failure, in source order; any at all publishes nothing.
     std::vector<result::Error> failures;
@@ -221,12 +221,12 @@ struct MapReport {
 
 /// Gives each subasset an importer finds in a source, and the source's
 /// sidecar does not map, an identity from `fresh`, and writes each sidecar
-/// that gained one (ADR-0024: identity is given by authoring tooling, never
+/// that gained one (identity is given by authoring tooling, never
 /// by a cook). A key already mapped keeps its identity, and one the source
 /// no longer has stays. A source that does not cook for another reason is a
 /// failure, and its sidecar is left as it was. With `only`, a source's
 /// path under the sources, that source alone is mapped: an import maps
-/// what it brought, not every source again (D536). Errors are the
+/// what it brought, not every source again. Errors are the
 /// request's own (an unreadable sources directory).
 [[nodiscard]] result::Result<MapReport> mapSubassets(const std::filesystem::path& sources,
                                                      std::span<const Importer> importers,

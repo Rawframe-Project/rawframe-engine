@@ -31,7 +31,7 @@ struct Entry {
     std::optional<execution::AsyncHandle<content::VerifiedContent>> reading;
     std::optional<execution::AsyncHandle<DecodedForm>> decoding;
     DecodedForm form;
-    /// Sticky for this resource and revision (SPEC-0027).
+    /// Sticky for this resource and revision.
     std::optional<result::Error> failure;
     /// The last tick the form was read through a handle.
     mutable std::uint64_t lastUse = 0;
@@ -461,7 +461,7 @@ void AssetSet::release(RequesterId id) noexcept {
 
 void AssetSet::cancel(RequesterId id) noexcept {
     // No notification is pending for anyone here, so cancelling and
-    // releasing end the same way; they stay two verbs, as SPEC-0027 has it.
+    // releasing end the same way; they stay two verbs all the same.
     release(id);
 }
 

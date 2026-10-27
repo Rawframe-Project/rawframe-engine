@@ -47,7 +47,7 @@ constexpr std::string_view kBotsMaybe[] = {
 
 class ServerParticipant final : public composition::Participant, public ReplicationTraffic {
 public:
-    /// What it has sent and taken, for a tool to watch (D807); nothing
+    /// What it has sent and taken, for a tool to watch; nothing
     /// before it starts.
     ServerReplicationStatistics totals() const noexcept override {
         return server_ != nullptr ? server_->statistics() : ServerReplicationStatistics{};
@@ -101,8 +101,7 @@ public:
                                                         .tickRateSeconds = simulation_->rate().seconds,
                                                         .lanes = lanesOf(*plan)}));
         // State at most so many times a second, every tick by default; the
-        // period is the whole number of ticks that keeps under the rate
-        // (D222).
+        // period is the whole number of ticks that keeps under the rate.
         const world::TickRate kRate = simulation_->rate();
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kStateRate,
                             context.configuration().unsignedInteger("replication.state_rate", 0));
@@ -111,7 +110,7 @@ public:
             return missing("replication.state_rate is at most the World's tick rate");
         }
         const std::uint64_t kPeriod = kStateRate == 0 ? 1 : (kTicksPerSecond + kStateRate - 1) / kStateRate;
-        // SPEC-0013's steady egress objective by default; the budget is per
+        // The steady egress objective by default; the budget is per
         // publish, so it follows the World's rate and the period.
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kEgress,
                             context.configuration().unsignedInteger("replication.egress_bytes_per_second", 65'536));
@@ -120,7 +119,7 @@ public:
         RAWFRAME_TRY_ASSIGN(const bool kCapture,
                             captureAsked(context.configuration(), "replication.divergence_capture"));
         // Every entity to every viewer, whatever the game's interest, where
-        // the World is an editor's (D913): what is edited is far from any
+        // the World is an editor's: what is edited is far from any
         // player.
         RAWFRAME_TRY_ASSIGN(const bool kInterest, context.configuration().truth("replication.interest", true));
         if (kPerPublish < 64) {
@@ -178,20 +177,20 @@ public:
         for (const PostedMessage& message : posted_) {
             server_->post(message);
         }
-        // What the players asked for, for the game's next tick (D425).
+        // What the players asked for, for the game's next tick.
         commands_.clear();
         server_->takeCommands(commands_);
         if (!commands_.empty()) {
             plan_->deliverCommands(commands_);
         }
-        // Sessions the game ended, after what it sent them (ADR-0073).
+        // Sessions the game ended, after what it sent them.
         ended_.clear();
         plan_->takeTerminations(ended_);
         for (const PostedTermination& ended : ended_) {
             static_cast<void>(server_->terminate(
                 *simulation_->world(), ended.player, {.reason = network::TerminationReason::Game, .note = ended.note}));
         }
-        // A detection for operators and the game, never a response (SPEC-0041).
+        // A detection for operators and the game, never a response.
         for (const Divergence& divergence : server_->takeDivergences()) {
             emitter_.log(diagnostics::Severity::Warning,
                          kDivergence,
@@ -217,14 +216,14 @@ public:
         admitting_.clear();
         // Host phases run once the Host is active, so admission closed here
         // means it drains: the players hear so, each once, those admitted
-        // by a tick since among them (D585).
+        // by a tick since among them.
         if (!context_->admitting()) {
             server_->noticeStopping();
         }
         context_->reportConnections(server_->connections());
         mostConnections_ = std::max(mostConnections_, server_->connections());
         // Its memory walks every connection's mappings: twice a second at
-        // 120 iterations (D216).
+        // 120 iterations.
         if (frame.iteration % 60 == 0) {
             context_->reportMemory(server_->heldBytes());
         }
@@ -275,7 +274,7 @@ public:
 
 private:
     /// Gameplay admission is open only while the Host is active: before,
-    /// and once it drains, a hello is refused as unavailable (SPEC-0012).
+    /// and once it drains, a hello is refused as unavailable.
     /// While it is open, the game's own rule has the last word.
     static std::optional<network::Reject> admitWhileActive(const network::Hello& hello, void* context) noexcept {
         auto* self = static_cast<ServerParticipant*>(context);
@@ -340,7 +339,7 @@ std::string hexOf(std::span<const std::byte> bytes) {
     return made;
 }
 
-/// SPEC-0041's two-sided capture is a development capability (D275): a
+/// The two-sided capture is a development capability: a
 /// shipping build refuses the key that asks for it.
 result::Result<bool> captureAsked(const composition::Configuration& configuration, std::string_view key) {
     const auto kAsked = configuration.text(key);
@@ -360,17 +359,16 @@ result::Result<bool> captureAsked(const composition::Configuration& configuratio
 network::SessionProfile sessionProfile(std::size_t sessions) {
     return network::SessionProfile{.maximumSessions = sessions,
                                    .maximumPreAdmissionBytes = 4096,
-                                   // SPEC-0013's ingress queued per connection
-                                   // (D226).
+                                   // The ingress queued per connection.
                                    .maximumControlBuffer = std::size_t{256} << 10U,
                                    .maximumFramePayload = 4096,
                                    .maximumDatagramPayload = 1100,
                                    .admissionTimeout = execution::MonotonicDuration::fromSeconds(5)};
 }
 
-/// The event lanes both sides declare: the engine's (D267), the game's when
-/// it sends messages (D266), its bound checked when the game loaded, and
-/// its command lane when it has commands, bound by the largest (D425).
+/// The event lanes both sides declare: the engine's, the game's when
+/// it sends messages, its bound checked when the game loaded, and
+/// its command lane when it has commands, bound by the largest.
 std::vector<network::EventLaneDeclaration> lanesOf(const ReplicationPlan& plan) {
     std::vector<network::EventLaneDeclaration> lanes = {engineLane()};
     if (plan.messageRecord() != 0) {
@@ -388,13 +386,13 @@ network::ProviderProfile providerProfile(std::size_t connections) {
                                     .maximumStreamSend = 1024,
                                     .maximumDatagram = 1200,
                                     .maximumQueuedEvents = 8192,
-                                    // SPEC-0013's ingress queued per connection (D239).
+                                    // The ingress queued per connection.
                                     .maximumQueuedBytes = std::size_t{256} << 10U};
 }
 
 /// What peers must agree on: the protocol, the game, its replicated
 /// components, and the package revision, which is the CompositionId when
-/// the Runtime's content is a Composition (SPEC-0010's package fingerprint)
+/// the Runtime's content is a Composition
 /// and zero otherwise.
 result::Result<network::Compatibility> compatibilityOf(composition::ParticipantContext& context,
                                                        const ReplicationPlan& plan) {

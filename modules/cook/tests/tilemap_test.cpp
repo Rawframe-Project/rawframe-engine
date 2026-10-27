@@ -1,4 +1,4 @@
-// The tilemap importer (D858): a tilemap document cooked into a resource
+// The tilemap importer: a tilemap document cooked into a resource
 // of its own, its text as written; one that does not read, or whose
 // sidecar gives it settings, refused.
 

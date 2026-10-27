@@ -1,4 +1,4 @@
-// Grading tables (D344): a `.cube` file decodes into a volume whose texel
+// Grading tables: a `.cube` file decodes into a volume whose texel
 // at red, green, and blue is the table's entry there, red fastest; titles,
 // comments, a nought-to-one domain, and Windows line ends are taken; a
 // one-dimensional table, another domain, a missing or surplus entry, a

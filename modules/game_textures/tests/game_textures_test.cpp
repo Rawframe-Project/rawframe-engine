@@ -3,7 +3,7 @@
 // once, one the content does not hold is refused, and a recooked texture is
 // seen at its new revision, or its old one kept when the new one is broken;
 // and textures asked for one by one are read on their first asking, one the
-// game does not declare said once (D378).
+// game does not declare said once.
 
 #include "rawframe/game_textures/asked.h"
 #include "rawframe/game_textures/game_textures.h"

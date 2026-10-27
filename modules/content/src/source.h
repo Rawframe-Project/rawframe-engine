@@ -1,7 +1,7 @@
 #pragma once
 
 // A source's reading, inside the module: exactly `length` bytes of a
-// locator, or the typed error SPEC-0008 names, and a Build's files and their
+// locator, or a typed error, and a Build's files and their
 // ceilings.
 
 #include "rawframe/content/build_manifest.h"
@@ -20,8 +20,7 @@ struct ContentSource::Implementation {
 };
 
 /// A chunk's content from its blob in `blobs`, the blob verified before it
-/// is used and the content after (SPEC-0021's verification order, steps 2
-/// and 3); refused (`DigestMismatch`, or the read's or the frame's own
+/// is used and the content after; refused (`DigestMismatch`, or the read's or the frame's own
 /// refusal) otherwise. Blocks.
 [[nodiscard]] result::Result<std::vector<std::byte>> readChunk(const ContentSource::Implementation& blobs,
                                                                const BuildChunk& chunk);

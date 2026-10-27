@@ -169,7 +169,7 @@ RAWFRAME_TEST(TheContractOverQuic) {
     }));
     const Event* heard = find(serverEvents, EventKind::StreamBytes);
     RAWFRAME_EXPECT(heard != nullptr && heard->stream.value == 0 && heard->bytes == bytesOf("hello"));
-    // What the peer acknowledged is no longer pending on the stream (D276).
+    // What the peer acknowledged is no longer pending on the stream.
     RAWFRAME_EXPECT(pumpUntil({{client.get(), &clientEvents}}, [&] {
         return client->pendingBytes(*kConnection, *kStream) == 0;
     }));
@@ -208,8 +208,7 @@ RAWFRAME_TEST(TheContractOverQuic) {
 
 RAWFRAME_TEST(APortAnotherServerHoldsIsRefused) {
     // A second server on a port one already holds is refused, not given a
-    // share of it, which would let a client's handshake reach either
-    // (D470).
+    // share of it, which would let a client's handshake reach either.
     Pair first;
     Pair second;
     auto held = *first.server->provider(kProfile);
@@ -270,7 +269,7 @@ RAWFRAME_TEST(AFullListenerRefuses) {
     RAWFRAME_EXPECT(gone != nullptr && gone->reason == CloseReason::PeerGone);
 }
 
-// A listener speaks one application protocol, its ALPN (D408): a game's
+// A listener speaks one application protocol, its ALPN: a game's
 // client cannot reach a tooling listener, and a tooling client can.
 RAWFRAME_TEST(AnotherApplicationIsRefused) {
     Pair pair;
@@ -298,7 +297,7 @@ RAWFRAME_TEST(AnotherApplicationIsRefused) {
     RAWFRAME_EXPECT(!pair.server->provider(nameless).has_value());
 }
 
-// SPEC-0013's egress queued ceilings (D239): what one provider has handed
+// The egress queued ceilings: what one provider has handed
 // MsQuic and MsQuic has not yet released is held across its connections as
 // well as per connection. Past the aggregate a datagram is lost and a stream
 // send closes its connection, since a reliable stream cannot lose bytes.
@@ -401,12 +400,12 @@ RAWFRAME_TEST(SessionsAdmitOverQuic) {
     }
 }
 
-// Where the tests run without Python, on an Android device (D561), no
+// Where the tests run without Python, on an Android device, no
 // browser is played.
 #if defined(RAWFRAME_WEBTRANSPORT_CLIENT)
 RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
     // aioquic, an independent HTTP/3 and WebTransport implementation, plays
-    // the browser (D172): it opens a session, sends on a stream and as a
+    // the browser: it opens a session, sends on a stream and as a
     // datagram, and the owner answers each way, as on any connection.
     const auto kIdentity = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
     auto network = QuicNetwork::create(QuicSettings{.certificate = kIdentity, .webTransport = true});
@@ -437,7 +436,7 @@ RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
     bool answeredDatagram = false;
     // The server answers for as long as the browser plays: Python and
     // aioquic may take seconds to start on a busy runner, and a server that
-    // stopped first left the browser unanswered (Windows, D690).
+    // stopped first left the browser unanswered (Windows).
     const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{60};
     while (std::chrono::steady_clock::now() < kDeadline && !browserDone && !(answeredStream && answeredDatagram)) {
         events.clear();
@@ -466,7 +465,7 @@ RAWFRAME_TEST(ABrowserReachesTheServerOverWebTransport) {
 }
 #endif
 
-// A server's identity renewed while it listens (D419): a connection made
+// A server's identity renewed while it listens: a connection made
 // before keeps going, a client pinned to the new identity is accepted, and
 // one pinned to the old is not.
 RAWFRAME_TEST(ARenewedIdentityServesNewConnectionsAndKeepsOldOnes) {

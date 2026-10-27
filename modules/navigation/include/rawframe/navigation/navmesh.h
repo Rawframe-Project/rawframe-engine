@@ -1,6 +1,6 @@
 #pragma once
 
-// Navigation (ADR-0056 as amended by D126, D399): a navmesh for one agent,
+// Navigation: a navmesh for one agent,
 // baked from triangle geometry by Maul Nav, headlessly and tile by tile,
 // the same bytes on every platform for the same geometry and settings; and
 // paths over its committed tiles, found the same way everywhere. A navmesh
@@ -22,7 +22,7 @@ namespace rawframe::navigation {
 /// A point in the World, in meters.
 using Point = std::array<double, 3>;
 
-/// The agent a navmesh is for (ADR-0056's typed profile): its radius,
+/// The agent a navmesh is for: its radius,
 /// which walkable ground keeps from walls; its height, which it needs free
 /// above the ground; the highest ledge it steps up or down; and the
 /// steepest slope it walks, in degrees.

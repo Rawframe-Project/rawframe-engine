@@ -1,13 +1,13 @@
 #pragma once
 
-// The runtime's end of the tooling protocol (ADR-0032 section 4, D408): the
+// The runtime's end of the tooling protocol: the
 // one protocol through which an authoring client, a test driver, or an
 // agent speaks to a running Runtime. It runs on a provider of its own whose
 // application protocol is `rawframe-tooling-v1`, never on a game's lanes.
 //
 // A client opens one bidirectional stream and sends records on it, one a
 // line, each the compact form of a strict JSON object, as an authoring
-// session does (D407); the server replies on the same stream, a line for
+// session does; the server replies on the same stream, a line for
 // each. The first record is the hello, naming the protocol version and the
 // endpoint's token:
 //
@@ -17,7 +17,7 @@
 // A wrong token or version, or anything else first, is answered with an
 // error record and the connection closed; so is a connection silent past
 // the hello's deadline. Every client the token admits holds the endpoint's
-// grants: `inspect`, which reads and never changes, and `view` (D432), which
+// grants: `inspect`, which reads and never changes, and `view`, which
 // moves a preview's camera and nothing else.
 //
 //   {"kind":"tooling.status","id":2}
@@ -36,7 +36,7 @@
 //   {"kind":"tooling.end","id":6}
 //     answer: {"kind":"tooling.ended"}, and the server closes.
 //
-// An entity is named `slot:generation` (D409). `entities` lists the living
+// An entity is named `slot:generation`. `entities` lists the living
 // in slot order, at most `limit` (1 to 256, 64 by default) after the one
 // `after` names, holding the component named if one is; `more` says whether
 // another page follows. `read_entity` shows each component's fields by name
@@ -76,12 +76,12 @@ inline constexpr std::uint32_t kToolingProtocolVersion = 1;
 struct ToolingGrants {
     /// Read the World and the Runtime; change nothing.
     bool inspect = false;
-    /// Move a preview's camera (D432).
+    /// Move a preview's camera.
     bool view = false;
     /// Debug the game's scripts: breakpoints, a stopped game's frames, and
-    /// carrying on (D460).
+    /// carrying on.
     bool debug = false;
-    /// Pause the World, let it run, and step it (D806).
+    /// Pause the World, let it run, and step it.
     bool run = false;
 };
 
@@ -89,7 +89,7 @@ struct ToolingSettings {
     /// The secret a hello must name, at least 32 bytes.
     std::string token;
     ToolingGrants grants;
-    /// A record's bytes, either way (a limit point of SPEC-0040's kind).
+    /// A record's bytes, either way.
     std::size_t maximumRecord = std::size_t{1} << 20U;
     /// How long a connection may go without a hello that admits it.
     execution::MonotonicDuration helloWithin = execution::MonotonicDuration::fromSeconds(5);
@@ -99,16 +99,16 @@ struct ToolingSettings {
     /// Where `tooling.look` goes, where the Runtime shows a preview; it
     /// outlives the server.
     Previewer* previewer = nullptr;
-    /// What a ray meets, for `tooling.pick` (D456), if the composition can
+    /// What a ray meets, for `tooling.pick`, if the composition can
     /// say; it outlives the server.
     const world_runtime::Picking* picking = nullptr;
-    /// The game's scripts debugged (D460), if the composition can; it
+    /// The game's scripts debugged, if the composition can; it
     /// outlives the server.
     world_runtime::Debugging* debugging = nullptr;
-    /// The World paused and stepped (D806), where the run grant is given
+    /// The World paused and stepped, where the run grant is given
     /// and the composition has one; it outlives the server.
     world_runtime::Simulation* simulation = nullptr;
-    /// A replication server's traffic (D807), where the composition has
+    /// A replication server's traffic, where the composition has
     /// one; it outlives the server.
     const world_replication::ReplicationTraffic* traffic = nullptr;
 };
@@ -131,7 +131,7 @@ public:
     /// while there is no World) as it is between ticks, `tick` the next to
     /// run, and closes connections past their hello's deadline.
     void serve(const world::World* world, world::TickIndex tick, execution::MonotonicInstant now);
-    /// The same while the game is stopped at a breakpoint (D460): only
+    /// The same while the game is stopped at a breakpoint: only
     /// debug verbs are answered, the World being in the middle of a tick.
     /// Whether to carry on: a client said so, or no admitted client is left
     /// to.

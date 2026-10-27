@@ -1,6 +1,6 @@
 #pragma once
 
-// A window's input as data (D790): the presses, the pointer, the wheel,
+// A window's input as data: the presses, the pointer, the wheel,
 // and the keys an author gives a preview an editor shows in its own
 // viewport. The editor's window host hands over what lands on the
 // viewport; `tooling.input` carries it to the preview's Runtime, whose

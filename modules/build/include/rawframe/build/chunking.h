@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0021's chunking function: FastCDC with normalized chunking over one
+// The chunking function: FastCDC with normalized chunking over one
 // resource's bytes, its gear table and masks fixed by the container
 // generation. A pure function of the bytes: the same bytes always cut the
 // same way, and state never crosses from one resource to the next.

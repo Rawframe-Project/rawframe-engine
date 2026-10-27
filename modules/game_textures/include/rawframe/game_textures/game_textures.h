@@ -1,11 +1,11 @@
 #pragma once
 
-// A game's textures read by resource identity (ADR-0025, D255): each
+// A game's textures read by resource identity: each
 // texture asked of the content store once, decoded into its levels on a CPU
 // worker, and held while this lives, so nothing a device draws from is
 // evicted under it. A texture recooked while this lives follows the store's
-// reload to its new revision (D262). The canvas's sprites and the scene's
-// materials both draw from it (D306); the upload to a device is
+// reload to its new revision. The canvas's sprites and the scene's
+// materials both draw from it; the upload to a device is
 // `rawframe.render`'s.
 
 #include "rawframe/assets/assets.h"

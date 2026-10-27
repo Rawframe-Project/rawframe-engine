@@ -12,7 +12,7 @@ namespace rawframe::content {
 
 namespace {
 
-/// SPEC-0023's ceiling on a key set's record.
+/// The ceiling on a key set's record.
 constexpr std::uint64_t kMaximumKeySet = 16 * 1024;
 
 std::unexpected<result::Error> unavailable(std::string_view why) {

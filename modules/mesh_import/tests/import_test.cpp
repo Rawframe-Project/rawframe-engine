@@ -392,7 +392,7 @@ RAWFRAME_TEST(DamagedSourcesAreRefusedWithoutACrash) {
 
 namespace {
 
-/// A leg (D508): a mesh node placed five meters along x, skinned to a hip
+/// A leg: a mesh node placed five meters along x, skinned to a hip
 /// and a knee under an armature, the skin listing the knee first. The
 /// buffer: three positions, three vertices' joints as bytes, their weights
 /// (the first split two to two, the third naming a joint past the skin with

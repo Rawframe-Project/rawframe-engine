@@ -1,4 +1,4 @@
-// Files a host holds (D167): found by their paths, listed under a
+// Files a host holds: found by their paths, listed under a
 // directory relative to it, and refused when a path is not one.
 
 #include "rawframe/composition/held_files.h"

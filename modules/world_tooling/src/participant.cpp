@@ -25,7 +25,7 @@ constexpr EventIdentity kListening{"tooling", "listening"};
 constexpr EventIdentity kSummary{"tooling", "summary"};
 
 // A client has no simulation of its own, and a preview's endpoint reads no
-// World (D432).
+// World.
 constexpr std::string_view kMaybe[] = {world_runtime::kSimulation.name,
                                        network::kTransport.name,
                                        world_runtime::kComponentFields.name,
@@ -82,7 +82,7 @@ public:
         }
         ToolingSettings settings = std::move(settings_);
         RAWFRAME_TRY_ASSIGN(settings.token, tokenFrom(std::string{*kTokenFile}));
-        // Grants are words apart by spaces: inspect, and view (D432).
+        // Grants are words apart by spaces: inspect, and view.
         const std::string kGrants{context.configuration().text("tooling.grants").value_or("inspect")};
         std::size_t at = 0;
         while (at < kGrants.size()) {
@@ -138,7 +138,7 @@ public:
         }
         RAWFRAME_TRY(provider_->listen(network::Endpoint{endpoint_}));
         // A stopped game is served from inside its tick until a debugger
-        // says to carry on (D460).
+        // says to carry on.
         if (debugging_ != nullptr) {
             // A Host asked to stop carries on, so it can drain.
             debugging_->whileStopped([this] {
@@ -212,7 +212,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         // where it waits unselected, has little shutdown budget to spare.
         // It closes its QUIC connections as replication does, a debugger
         // still connected among them, so it has replication's budget: 20
-        // milliseconds overran under the thread sanitizer (D489).
+        // milliseconds overran under the thread sanitizer.
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(100)},
         .observabilityIdentity = "tooling.endpoint",
         .budgetOwner = "network",

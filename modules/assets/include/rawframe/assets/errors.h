@@ -10,7 +10,7 @@ namespace rawframe::assets {
 /// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kAssetsDomain{base::parseBits128Hex("0708a347c742361fdb4c4cb45bb19125").value};
 
-/// SPEC-0027's closed failure conditions.
+/// The closed failure conditions.
 enum class AssetError : std::uint32_t {
     DecodeFailed = 1,
     DependencyMissing = 2,

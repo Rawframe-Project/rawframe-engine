@@ -1,7 +1,7 @@
 #pragma once
 
-// Replication payloads, generation 1 (SPEC-0010 mapping protocol, SPEC-0041
-// input window and state header). Mapping frames ride the control stream;
+// Replication payloads, generation 1: the mapping protocol, the input window
+// and the state header. Mapping frames ride the control stream;
 // state and input ride their datagram lanes. Every decoder is exact.
 
 #include "rawframe/network/wire.h"
@@ -16,7 +16,7 @@
 namespace rawframe::world_replication {
 
 /// Entities one connection may have mapped at once unless its game asks
-/// for more, and the most a game may ask for (D742).
+/// for more, and the most a game may ask for.
 inline constexpr std::size_t kMappedByDefault = 4096;
 inline constexpr std::size_t kMostMapped = std::size_t{1} << 16U;
 
@@ -60,7 +60,7 @@ struct StateHeader {
     std::uint64_t consumedInputTick = 0;
     /// Every value of the client's player at `serverTick` is either here or
     /// one the client holds, so its player's state there is known whole,
-    /// even with no record of the player here (D249, D274).
+    /// even with no record of the player here.
     bool playerWhole = false;
     std::uint64_t recordCount = 0;
 };
@@ -79,10 +79,10 @@ struct StateRecordHead {
 [[nodiscard]] result::Result<StateRecordHead> decodeStateRecordHead(network::Reader& reader,
                                                                     std::size_t componentCount);
 
-/// SPEC-0041's pace signal: how far ahead of consumption this connection's
-/// newest input stood at the least since the last signal (D317), how far
+/// The pace signal: how far ahead of consumption this connection's
+/// newest input stood at the least since the last signal, how far
 /// the server wants it, and the farthest a command may lead before it waits
-/// past SPEC-0013's input age and is dropped as stale (D323).
+/// past the input age and is dropped as stale.
 struct Pace {
     std::int64_t measuredLead = 0;
     std::uint64_t targetLead = 0;
@@ -100,7 +100,7 @@ inline constexpr std::uint64_t kMaximumPaceLead = 1U << 16U;
 inline constexpr std::size_t kMaximumInputWindow = 16;
 inline constexpr std::size_t kMaximumInputCommand = 256;
 
-/// SPEC-0041's input window: the newest input tick, the commands for the
+/// The input window: the newest input tick, the commands for the
 /// consecutive ticks ending there, oldest first, and the state the client
 /// has applied.
 struct InputWindow {
@@ -110,7 +110,7 @@ struct InputWindow {
     std::vector<std::span<const std::byte>> commands;
 };
 
-/// Which state datagrams a client received (SPEC-0010's highest sequence and
+/// Which state datagrams a client received (the highest sequence and
 /// selective bitmap): the newest sequence, and a bit for each of the 64
 /// before it, bit i for `latest - 1 - i`. It chooses what the server sends
 /// next and is not reliability: a lost acknowledgement costs only a resend.
@@ -122,7 +122,7 @@ struct StateAck {
 [[nodiscard]] result::Status encodeStateAck(network::Writer& writer, const StateAck& ack);
 [[nodiscard]] result::Result<StateAck> decodeStateAck(std::span<const std::byte> payload);
 
-/// SPEC-0041's PerceptionContext: the moment a client showed when it gave a
+/// The PerceptionContext: the moment a client showed when it gave a
 /// command, as the server tick of the older of the two states it showed
 /// between and 65536ths of the way to the next. Follows the command's own
 /// bytes in its entry, for a game whose input is perceived.
@@ -138,7 +138,7 @@ inline constexpr std::size_t kMaximumPerceptionBytes = 10;
 /// Everything in `bytes` must be the context.
 [[nodiscard]] result::Result<PerceptionContext> decodePerception(std::span<const std::byte> bytes);
 
-/// A claimed moment as the server keeps it (SPEC-0041's perception_skew_max),
+/// A claimed moment as the server keeps it (perception_skew_max),
 /// and whether it was moved.
 struct KeptPerception {
     PerceptionContext moment;
@@ -156,7 +156,7 @@ struct KeptPerception {
 [[nodiscard]] KeptPerception
 keepPerception(PerceptionContext claimed, std::uint64_t arrived, double skew, std::optional<double>& lag) noexcept;
 
-/// SPEC-0041's checksum record: a client's hash of its whole predicted scope
+/// The checksum record: a client's hash of its whole predicted scope
 /// at a confirmed server tick (checksum.h), and the fingerprint of the scope
 /// it hashed.
 struct ChecksumRecord {

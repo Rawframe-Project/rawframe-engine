@@ -1,4 +1,4 @@
-# Composition (SPEC-0005, ADR-0068, SPEC-0049 as amended by D16): participant
+# Composition: participant
 # declarations, registrars, plan validation, and the participant lifecycle.
 rawframe_module(NAME composition
     SOURCES

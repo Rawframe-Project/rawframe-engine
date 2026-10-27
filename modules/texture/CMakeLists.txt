@@ -1,4 +1,4 @@
-# The cooked texture (ADR-0058, ADR-0047, D253): levels in a form the GPU
+# The cooked texture: levels in a form the GPU
 # takes as they are, in a KTX 2.0 container, written by import tooling and
 # read by the runtime. No renderer in it.
 rawframe_module(NAME texture

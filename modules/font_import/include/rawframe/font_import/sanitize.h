@@ -1,6 +1,6 @@
 #pragma once
 
-// Font import (ADR-0049, ADR-0078, D385): a TrueType or OpenType font or
+// Font import: a TrueType or OpenType font or
 // collection, from anyone, rebuilt by the OpenType Sanitizer before any of
 // it may reach the runtime's FreeType and HarfBuzz: every table OTS knows is
 // parsed, checked, and written afresh, and every table it does not know is

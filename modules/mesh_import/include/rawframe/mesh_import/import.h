@@ -1,6 +1,6 @@
 #pragma once
 
-// Importing meshes (ADR-0058): glTF 2.0, as `.gltf` with embedded or sibling
+// Importing meshes: glTF 2.0, as `.gltf` with embedded or sibling
 // buffers or as `.glb`, cooked into the runtime's mesh. Import tooling only:
 // the parser here is trusted with an author's own files and never links
 // into a client or a server.
@@ -13,7 +13,7 @@
 //   and lines are refused.
 // - POSITION, and NORMAL and TEXCOORD_0 when every primitive has them;
 //   either missing anywhere is dropped everywhere. Sparse accessors.
-// - Each primitive's material (D314), glTF's metallic-roughness: the base
+// - Each primitive's material, glTF's metallic-roughness: the base
 //   color's factor and texture, the alpha mode and cutoff, the metallic and
 //   roughness factors and texture, occlusion from that texture's red (or
 //   from its own texture when there is none) at strength one, the emissive
@@ -28,7 +28,7 @@
 //   KHR_materials_emissive_strength, and KHR_texture_transform. Any other
 //   required extension is refused by name.
 // - Skins and morph targets are ignored: the rest pose is cooked.
-// - Units and axes are glTF's, which are Rawframe's (ADR-0046): nothing is
+// - Units and axes are glTF's, which are Rawframe's: nothing is
 //   converted.
 
 #include "rawframe/material/material.h"
@@ -49,7 +49,7 @@ namespace rawframe::mesh_import {
 /// alive until the import returns.
 using ReadFile = std::function<result::Result<std::span<const std::byte>>(std::string_view path)>;
 
-/// The identity the game knows a subasset by, by its key (D314): given by
+/// The identity the game knows a subasset by, by its key: given by
 /// whoever authors the source's sidecar, never nought.
 using Identify = std::function<result::Result<std::uint64_t>(std::string_view key)>;
 

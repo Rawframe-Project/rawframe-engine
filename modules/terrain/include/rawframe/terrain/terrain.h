@@ -1,6 +1,6 @@
 #pragma once
 
-// A terrain document (SPEC-0051's terrain row, D853): a ground's heights on
+// A terrain document: a ground's heights on
 // a grid and the layer each of its cells is painted with, as text. Made
 // into one mesh that a scene draws and a static body collides with (a
 // `rawframe.physics3d.body` of shape Mesh), each layer a part drawn with its
@@ -113,7 +113,7 @@ std::size_t paint(Terrain& terrain, const Brush& brush, std::uint8_t layer);
 
 /// The ground's height in meters at `x` `z` from the terrain's origin, on
 /// the two triangles of the cell there that its mesh is made of, so what
-/// stands there stands on what is drawn and collided with (D862); none off
+/// stands there stands on what is drawn and collided with; none off
 /// the grid.
 [[nodiscard]] std::optional<double> heightAt(const Terrain& terrain, double x, double z) noexcept;
 

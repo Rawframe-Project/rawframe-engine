@@ -1,4 +1,4 @@
-# Decoded assets (ADR-0025, ADR-0045, SPEC-0027): handles, readiness,
+# Decoded assets: handles, readiness,
 # coalesced requests, residency and budgets over verified content. Headless;
 # never a render or presentation edge.
 rawframe_module(NAME assets

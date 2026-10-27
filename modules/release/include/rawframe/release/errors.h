@@ -7,7 +7,7 @@
 
 namespace rawframe::release {
 
-/// The domain of every Error this module creates: SPEC-0020's typed
+/// The domain of every Error this module creates: the typed
 /// rejections of release records, channel pointers, and update checks.
 inline constexpr result::ErrorDomain kReleaseDomain{base::parseBits128Hex("740a12f872c52b3e43194839df8a7930").value};
 

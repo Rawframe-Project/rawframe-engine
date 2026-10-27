@@ -1,4 +1,4 @@
-// The server's book of a connection's checksums (D204): the ticks it keeps,
+// The server's book of a connection's checksums: the ticks it keeps,
 // the verdicts it gives, and a flood held to the rate limit before any work.
 
 #include "../src/checksums.h"

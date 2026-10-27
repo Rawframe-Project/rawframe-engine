@@ -1,6 +1,6 @@
 #pragma once
 
-// A library (SPEC-0021 storage, SPEC-0038): the Builds one machine holds.
+// A library: the Builds one machine holds.
 // Each Build's manifest and signature are under `builds/<root>/`, named by
 // its root hash's 64 hexadecimal digits; the blobs of every Build are in one
 // content-addressed store, `sha256/<2>/<62>`, so a blob two Builds share is
@@ -47,7 +47,7 @@ inline constexpr std::string_view kBuildSignatureName = "build.manifest.sig";
 [[nodiscard]] std::string keysPathOf(std::string_view publisher);
 /// `compositions/` and the CompositionId's 64 hexadecimal digits.
 [[nodiscard]] std::string compositionPathOf(const base::Sha256Digest& composition);
-/// SPEC-0020's records a mirror serves (D424): `releases/` and a Release's
+/// The records a mirror serves: `releases/` and a Release's
 /// 64 hexadecimal digits, and `channels/<publisher>/<name>/<channel>`, a
 /// subject's channel pointer. Each signature is beside its record, under
 /// the same name with `.sig`; a library keeps the sequence of the pointer
@@ -60,10 +60,10 @@ inline constexpr std::string_view kSequenceSuffix = ".sequence";
 inline constexpr std::string_view kInstalledName = "installed";
 inline constexpr std::string_view kStagingName = "staging";
 
-/// What the installed pointer says (SPEC-0038, D245): the Composition the
+/// What the installed pointer says: the Composition the
 /// library has active, if any, and those retained for rollback, newest
 /// first. A launcher writes it; a Runtime reads from it which Composition
-/// it plays (D434).
+/// it plays.
 struct Installed {
     std::optional<base::Sha256Digest> active;
     std::vector<base::Sha256Digest> retained;
@@ -109,15 +109,15 @@ public:
     [[nodiscard]] result::Result<BuildContent> build(const base::Sha256Digest& root,
                                                      const signature::PublisherKeySet& publisher) const;
 
-    /// What heal finds (SPEC-0038): every blob of `manifest`'s Build that the
-    /// store lacks or that does not verify as SPEC-0021's order verifies it,
+    /// What heal finds: every blob of `manifest`'s Build that the
+    /// store lacks or that does not verify as the order verifies it,
     /// once each, in the manifest's order; none when every resource reads.
     /// A Build whose chunks all verify but do not make a resource is the
     /// publisher's fault, not the store's, and is refused (`DigestMismatch`).
     /// Blocks, and reads every blob.
     [[nodiscard]] result::Result<std::vector<ContentDigest>> damaged(const BuildManifest& manifest) const;
 
-    /// The record of the Composition the library has active (D434): its
+    /// The record of the Composition the library has active: its
     /// installed pointer read, and the record it names under
     /// `compositions/`, which must be the Composition the pointer names
     /// (`DigestMismatch`). Refused (`SourceUnavailable`) where the library

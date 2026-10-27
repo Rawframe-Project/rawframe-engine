@@ -1,6 +1,6 @@
 #pragma once
 
-// Compiler and architecture detection, and the debugger-break primitive
+// Compiler and architecture detection, and the debugger-break primitive.
 // A detection macro lands when a facility needs it.
 //
 // Everything here is a macro because the answers are used in `#if` and because

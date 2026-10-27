@@ -35,7 +35,7 @@ inline constexpr std::uint64_t kSolids = kCharacterQuery - 1;
 
 class CollisionFilters {
 public:
-    /// Checks the document (SPEC-0037 §15, 2 and 3): identities not nought
+    /// Checks the document: identities not nought
     /// and names not empty, neither declared twice, rules naming declared
     /// classes, no pair ruled twice, at most kMaximumCollisionClasses.
     [[nodiscard]] static result::Result<CollisionFilters> make(const CollisionDocument& document);

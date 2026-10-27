@@ -2,7 +2,7 @@
 
 // The World's components field by field, by name, from whoever defines them
 // (a game, through its program's layouts), so a reader that knows none of
-// them, the tooling endpoint (D409), can show a value as its fields rather
+// them, the tooling endpoint, can show a value as its fields rather
 // than its bytes. Read on the Host thread between ticks.
 
 #include "rawframe/composition/participant.h"

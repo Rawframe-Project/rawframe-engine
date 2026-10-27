@@ -1,6 +1,6 @@
 #pragma once
 
-// A Build (ADR-0023, SPEC-0021) from a cook's output (ADR-0024): the
+// A Build from a cook's output: the
 // receipt is the only proof accepted, every artifact is checked against the
 // receipt and the manifest it names, each resource is chunked and stored
 // by digest, and the BuildManifest names the Build by the hash of its
@@ -20,7 +20,7 @@
 
 namespace rawframe::build {
 
-/// What a Build is of: ADR-0023's Build dimensions.
+/// What a Build is of: the Build dimensions.
 struct BuildIdentity {
     /// `publisher/name`, each segment `[a-z0-9]([a-z0-9-]*[a-z0-9])?`.
     std::string subject;
@@ -33,7 +33,7 @@ struct BuildIdentity {
     std::string architecture;
     /// `client` or `server`.
     std::string side;
-    /// `build.debug`, `build.development`, or `build.shipping` (SPEC-0003).
+    /// `build.debug`, `build.development`, or `build.shipping`.
     std::string configuration;
     /// A profile token.
     std::string profile;

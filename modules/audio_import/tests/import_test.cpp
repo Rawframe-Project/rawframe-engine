@@ -1,4 +1,4 @@
-// Sound import against SPEC-0036's ingest list: each admitted form known by
+// Sound import against the ingest list: each admitted form known by
 // its signature, decoded at its own rate and channels to the tone it holds,
 // refused past its limits or when it cannot be read, and cooked into a WAVE
 // the runtime reads back. The fixtures are a quarter second of 440 Hz at
@@ -132,7 +132,7 @@ RAWFRAME_TEST(ACookedSoundReadsBack) {
 }
 
 RAWFRAME_TEST(DamagedSourcesNeverDecodeOutOfBounds) {
-    // Import is trusted with an author's own files (ADR-0058), but a damaged
+    // Import is trusted with an author's own files, but a damaged
     // file must still be refused or decoded, never read past its end;
     // AddressSanitizer watches this in the full check.
     std::mt19937 random{0x1d3a};

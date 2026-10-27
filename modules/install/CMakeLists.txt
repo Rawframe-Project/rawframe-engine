@@ -1,4 +1,4 @@
-# Installing and updating Builds in a library (SPEC-0038): chunk-difference
+# Installing and updating Builds in a library: chunk-difference
 # updates planned against what the store holds, fetched from any origin and
 # verified, applied by one pointer write, rolled back, healed, and
 # collected. Launcher and packaging tooling; never part of a client or a

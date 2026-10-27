@@ -7,10 +7,10 @@
 namespace rawframe::world_tooling {
 
 /// Contributes `rawframe.tooling.endpoint`, a World-scoped participant that
-/// serves the tooling protocol (server.h, D408) on a provider of its own
+/// serves the tooling protocol (server.h) on a provider of its own
 /// from the composition's transport. A composition selects it with its
 /// endpoint; without one it does nothing. A dedicated server's reads its
-/// World; a client's moves its preview camera (D432).
+/// World; a client's moves its preview camera.
 ///
 ///   tooling.endpoint         where to listen; without it, nothing
 ///   tooling.token_file       the secret a client's hello names, at least

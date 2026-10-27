@@ -1,4 +1,4 @@
-// Navmeshes (D399): a floor with a wall baked for an agent, a path around
+// Navmeshes: a floor with a wall baked for an agent, a path around
 // the wall's end, the same bytes from the same geometry, the wall removed
 // by baking its tiles again and the path then straight, an island the
 // path cannot reach, a point off the navmesh, and settings Maul Nav
@@ -78,8 +78,8 @@ RAWFRAME_TEST(APathGoesAroundAWallAndStraightOnceItIsGone) {
 
     // The same geometry gives the same bytes, here and on every platform.
     // Maul Nav 0.6.0 and after record the version that baked a tile, which
-    // moved it from 0x1747c8991ba56575 (D532), and 1.0.1 from
-    // 0x48e453cbd71c3687 (D608).
+    // moved it from 0x1747c8991ba56575, and 1.0.1 from
+    // 0x48e453cbd71c3687.
     RAWFRAME_EXPECT(navmesh.fingerprint() == 0x211c7b39bb1f2e04ULL);
     auto again = Navmesh::create({});
     RAWFRAME_EXPECT(again.has_value() && (*again)->bake(kWalled, kLot).has_value());
@@ -115,7 +115,7 @@ RAWFRAME_TEST(AnIslandIsReachedOnlyPartWayAndAPointOffTheNavmeshNotAtAll) {
     const auto kNotFinite = navmesh.path({NAN, 0, 0}, {2, 0, 2});
     RAWFRAME_EXPECT(!kNotFinite.has_value() && kNotFinite.error().code() == code(NavigationError::Invalid));
     // Finite but far past what Maul Nav's floats hold, or too small to
-    // tell from nought: a program may pass any of them (D116's classes).
+    // tell from nought: a program may pass any of them.
     for (const double kHostile : {1e300, -1e300, 4e38, -4e38, 1e-300, -0.0}) {
         for (std::size_t axis = 0; axis < 3; ++axis) {
             Point at{2, 0, 2};

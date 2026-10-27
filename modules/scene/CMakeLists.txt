@@ -1,4 +1,4 @@
-# Authored scenes (ADR-0048, D92): a world's starting entities as a
+# Authored scenes: a world's starting entities as a
 # canonical text document, read and written in one form. Engine-neutral:
 # the game checks components and fields when it spawns one.
 rawframe_module(NAME scene

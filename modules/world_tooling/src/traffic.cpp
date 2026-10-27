@@ -47,7 +47,7 @@ std::optional<std::string> answerTraffic(std::string_view kind,
     made.add("inputsStale", kCount(kTotals.inputsStale));
     made.add("inputsRefused", kCount(kTotals.inputsRefused));
     made.add("messagesSent", kCount(kTotals.messagesSent));
-    // Each connection counted alone (D840), the first few hundred: what a
+    // Each connection counted alone, the first few hundred: what a
     // tool shows of a crowded server.
     Value each = Value::array();
     for (const world_replication::ConnectionTraffic& kConnection : settings.traffic->perConnection()) {

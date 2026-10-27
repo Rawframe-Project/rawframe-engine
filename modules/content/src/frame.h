@@ -1,6 +1,6 @@
 #pragma once
 
-// A Build chunk's Zstandard blob decompressed as SPEC-0021 bounds it, inside
+// A Build chunk's Zstandard blob decompressed within its bounds, inside
 // the module: no Zstandard type leaves it.
 
 #include "rawframe/result/result.h"

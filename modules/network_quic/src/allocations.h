@@ -1,7 +1,7 @@
 #pragma once
 
-// What MsQuic holds on the heap (SPEC-0013's network/provider memory,
-// D234): its allocations are counted where the linker routes them
+// What MsQuic holds on the heap, counted toward the network's memory:
+// its allocations are counted where the linker routes them
 // (`--wrap`), so the vendored library is not changed. Only where the
 // build wraps them; elsewhere nothing is counted.
 

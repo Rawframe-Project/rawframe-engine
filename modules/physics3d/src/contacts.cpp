@@ -1,5 +1,5 @@
 // The contact report: each body's Contact3D filled from a step's event
-// streams and what touches it now (moved out of physics.cpp, STD-0001).
+// streams and what touches it now (moved out of physics.cpp).
 #include "contacts.h"
 
 #include <algorithm>

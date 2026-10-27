@@ -1,6 +1,6 @@
 #pragma once
 
-// The tooling endpoint's run verbs (D806): the World paused, let run again,
+// The tooling endpoint's run verbs: the World paused, let run again,
 // and stepped tick by tick, each the run grant's, on the Runtime's
 // simulation.
 

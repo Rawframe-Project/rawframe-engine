@@ -1,7 +1,7 @@
 #pragma once
 
-// The authoritative side of replication (SPEC-0010 authority and tick model,
-// SPEC-0041 input consumption). Each admitted connection gets a player entity;
+// The authoritative side of replication: authority, the tick model, and
+// input consumption. Each admitted connection gets a player entity;
 // its input window is decoded outside the tick and consumed exactly once per
 // input tick in `apply_inputs`; committed state is read in `replication` and
 // sent as self-sufficient state datagrams for entities whose mapping the
@@ -32,7 +32,7 @@ struct ReplicationTable {
     std::vector<ComponentCodec> components;
 };
 
-/// Spatial interest (SPEC-0010; SPEC-0041's owned-entity invariant). A
+/// Spatial interest. A
 /// connection's own player is always in its interest, before any other rule
 /// or bound. Another entity with the position component enters when it lies
 /// within `radius` of the player and leaves beyond `leaveRadius`, so one at
@@ -49,7 +49,7 @@ struct InterestSettings {
     double leaveRadius = 0;
 };
 
-/// A district of a large world streamed as one (ADR-0048, D870): under
+/// A district of a large world streamed as one: under
 /// spatial interest its entities enter a connection's interest together,
 /// while the connection's player is within the entering radius of any of
 /// them, and stay while one is within the leaving radius; a persistent one
@@ -82,7 +82,7 @@ struct ServerReplicationSettings {
     /// Each command carries the moment its client saw, which is written
     /// into the player's Perception (perception.h), a player component.
     bool perception = false;
-    /// SPEC-0041's perception_skew_max: ticks a claimed moment may lie from
+    /// The perception_skew_max: ticks a claimed moment may lie from
     /// the lag the server measures for its connection (the smoothed lag of
     /// earlier claims behind their arrival) before it is clamped.
     double perceptionSkew = 6;
@@ -98,17 +98,17 @@ struct ServerReplicationSettings {
     /// Ticks the last command is held for when the next has not arrived,
     /// before the input goes neutral (zero).
     std::uint32_t inputHoldLast = 4;
-    /// SPEC-0013's replaceable input age: a command that waited longer than
+    /// The replaceable input age: a command that waited longer than
     /// this for its tick is dropped when the tick comes, and the tick is
-    /// played as if it had not arrived (D232).
+    /// played as if it had not arrived.
     std::uint64_t inputMaximumAgeMilliseconds = 100;
     /// How many ticks ahead of consumption input should arrive, and how
     /// often each connection is told how far ahead its input stood at the
-    /// least (D317).
+    /// least.
     std::uint64_t targetInputLead = 2;
     std::uint64_t paceInterval = 10;
     /// Ticks from one publish of state to a connection to its next:
-    /// SPEC-0013's current-state production cadence (D222). Connections are
+    /// The current-state production cadence. Connections are
     /// spread across a period's ticks, so each tick publishes to about a
     /// period's share of them. One publishes to every connection every
     /// tick.
@@ -116,8 +116,8 @@ struct ServerReplicationSettings {
     /// State bytes one connection is sent per publish, datagram framing
     /// included and the transport's own not. When more has changed than
     /// fits, what has waited longest goes first and the rest waits; the
-    /// connection's own player always goes first. The default is SPEC-0013's
-    /// 64 KiB/s at 60 publishes a second.
+    /// connection's own player always goes first. The default is 64 KiB/s
+    /// at 60 publishes a second.
     std::size_t stateBytesPerPublish = 1092;
     /// Ticks after which a value sent and not acknowledged is sent again,
     /// though it has not changed.
@@ -129,20 +129,20 @@ struct ServerReplicationSettings {
     /// replicated: the scope a client's checksum records are of. None takes
     /// no checksum records.
     std::vector<schema::ComponentTypeId> predicted;
-    /// SPEC-0041's checksum_rate_max: records looked at per connection per
+    /// The checksum_rate_max: records looked at per connection per
     /// second; the rest are dropped unread.
     std::uint32_t checksumsPerSecond = 8;
-    /// SPEC-0041's development capture (D275): each published tick's
+    /// The development capture: each published tick's
     /// predicted scope is kept with its checksum, and a divergence carries
     /// the server's side of it. Never in a shipping build.
     bool captureDivergences = false;
-    /// SPEC-0013's input ceilings per connection a second: payload bytes on
+    /// The input ceilings per connection a second: payload bytes on
     /// the input lane, and input windows, at most one a tick by default
-    /// (nought). What passes either is dropped unread (D225).
+    /// (nought). What passes either is dropped unread.
     std::size_t inputBytesPerSecond = 65'536;
     std::uint64_t inputWindowsPerSecond = 0;
     /// Each of the game's commands' exact size, by its place among them; a
-    /// record of another kind or size strikes its connection (D425). None
+    /// record of another kind or size strikes its connection. None
     /// for a game without commands.
     std::vector<std::size_t> commandSizes;
     /// Commands one connection may send a tick: a sample's eight in each of
@@ -150,14 +150,14 @@ struct ServerReplicationSettings {
     /// them each is dropped unread and counted.
     std::size_t commandsPerTick = 32;
     /// Replicated components sent only to the connection whose player holds
-    /// them, never to another (D673; SPEC-0010's visibility, held by the
+    /// them, never to another (the visibility, held by the
     /// replication projection): a player's input, a tracked pose in it,
     /// reaches no other client unless the game makes something of it that
-    /// replicates (ADR-0081's pose visibility, off unless the server says).
+    /// replicates (the pose visibility, off unless the server says).
     std::vector<schema::ComponentTypeId> own;
 };
 
-/// SPEC-0041's `prediction_divergence`: a connection's checksum of its
+/// The `prediction_divergence`: a connection's checksum of its
 /// predicted scope at a tick the server published was not the server's.
 struct Divergence {
     network::ConnectionId connection;
@@ -176,11 +176,11 @@ struct ServerReplicationStatistics {
     /// Their payload bytes, all connections together.
     std::uint64_t stateBytes = 0;
     /// State records sent, and values left out because the client held
-    /// them, counted where its values were looked at (D744).
+    /// them, counted where its values were looked at.
     std::uint64_t recordsSent = 0;
     std::uint64_t recordsHeld = 0;
     /// Values looked at to decide whether to send them: what changed, and
-    /// what a client was not yet known to hold (D744).
+    /// what a client was not yet known to hold.
     std::uint64_t valuesLookedAt = 0;
     /// Left for a later tick by the per-connection byte budget.
     std::uint64_t recordsDeferred = 0;
@@ -188,13 +188,13 @@ struct ServerReplicationStatistics {
     /// Mappings retired because the entity left a connection's interest.
     std::uint64_t interestLeft = 0;
     /// Input windows read, and their payload bytes, all connections
-    /// together (D655).
+    /// together.
     std::uint64_t inputWindows = 0;
     std::uint64_t inputBytes = 0;
     std::uint64_t inputsConsumed = 0;
     std::uint64_t inputsHeld = 0;
     std::uint64_t inputsNeutral = 0;
-    /// Commands dropped for waiting too long for their tick (D232).
+    /// Commands dropped for waiting too long for their tick.
     std::uint64_t inputsStale = 0;
     std::uint64_t inputsRefused = 0;
     /// Claimed moments moved to within the skew.
@@ -206,24 +206,23 @@ struct ServerReplicationStatistics {
     std::uint64_t checksumsUnverifiable = 0;
     std::uint64_t checksumsDiverged = 0;
     std::uint64_t checksumsLimited = 0;
-    /// Malformed payloads struck against their connections (D223).
+    /// Malformed payloads struck against their connections.
     std::uint64_t strikes = 0;
-    /// Input-lane records dropped unread past SPEC-0013's input ceilings
-    /// (D225).
+    /// Input-lane records dropped unread past the input ceilings.
     std::uint64_t inputsLimited = 0;
     /// Game messages sent on the game's lane, and those whose player was
-    /// not connected (D266).
+    /// not connected.
     std::uint64_t messagesSent = 0;
     std::uint64_t messagesUndelivered = 0;
-    /// Sessions ended by the game or an operator (D267).
+    /// Sessions ended by the game or an operator.
     std::uint64_t terminated = 0;
     /// Players' commands taken for the game's systems, and those dropped
-    /// past `commandsPerTick` (D425).
+    /// past `commandsPerTick`.
     std::uint64_t commandsTaken = 0;
     std::uint64_t commandsLimited = 0;
 };
 
-/// One connection's replication so far (D840), for a tool's profile: the
+/// One connection's replication so far, for a tool's profile: the
 /// server's totals, counted for it alone, and what it holds now.
 struct ConnectionTraffic {
     network::ConnectionId connection;
@@ -267,21 +266,20 @@ public:
 
     /// The World was replaced (a checkpoint restore): every connection's
     /// entities and mappings named the old one, so every connection is
-    /// closed and its players reconnect into the new World (SPEC-0010: a
+    /// closed and its players reconnect into the new World (a
     /// remap is a new epoch, never a partial one).
     void forgetWorld() noexcept;
 
     [[nodiscard]] ServerReplicationStatistics statistics() const noexcept;
     /// Bytes it holds for its connections and its publishing, at the
     /// capacity each table has grown to, counting a node-based container's
-    /// entries by their size: SPEC-0013's replication attribution (D216).
+    /// entries by their size: the replication attribution.
     [[nodiscard]] std::size_t heldBytes() const noexcept;
     /// Admitted connections, each with its player.
     [[nodiscard]] std::size_t connections() const noexcept;
-    /// Tells every admitted connection the server is stopping (SPEC-0012's
-    /// stopping notice): one `graceful_close` each, once. Play goes on.
+    /// Tells every admitted connection the server is stopping: one `graceful_close` each, once. Play goes on.
     /// Asked again, it tells only those not told yet: a connection whose
-    /// admission a tick took in after the first asking (D585).
+    /// admission a tick took in after the first asking.
     void noticeStopping() noexcept;
     /// Whether a connection is playing as `identity` now.
     [[nodiscard]] bool playing(world_runtime::PlayerIdentity identity) const noexcept;
@@ -292,19 +290,19 @@ public:
     /// the sessions must declare; after the tick that sent it, never during
     /// one. None goes to a player not connected.
     void post(const PostedMessage& message) noexcept;
-    /// Ends the session of the player whose entity `player` is (ADR-0073):
+    /// Ends the session of the player whose entity `player` is:
     /// its termination goes on the engine's lane, the connection is held
     /// only for that to arrive, and the player leaves the World at once, as
     /// if it had gone. False for a player not connected.
     bool terminate(world::World& world, world::EntityHandle player, const network::Termination& termination) noexcept;
     /// Appends the commands players sent since last asked, checked, in the
-    /// order they arrived, each for the tick the pump that took it was at
-    /// (D425). On the Host thread between ticks.
+    /// order they arrived, each for the tick the pump that took it was at.
+    /// On the Host thread between ticks.
     void takeCommands(std::vector<ReceivedCommand>& into);
     /// The player entity of an admitted connection, or the null handle.
     [[nodiscard]] world::EntityHandle player(network::ConnectionId connection) const noexcept;
     /// Divergences found since last asked, the oldest first, at most 64; a
-    /// detection, never a response (SPEC-0041).
+    /// detection, never a response.
     [[nodiscard]] std::vector<Divergence> takeDivergences();
     /// Each admitted connection's replication so far, in connection order.
     [[nodiscard]] std::vector<ConnectionTraffic> connectionTraffic() const;

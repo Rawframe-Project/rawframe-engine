@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of what a browser sends a server (D242): HTTP/3's
+// Coverage-guided fuzzing of what a browser sends a server: HTTP/3's
 // streams and frames, the request that opens a WebTransport session, its
 // QPACK field section and Huffman strings, and session datagrams. The input
 // is read as a run of deliveries, each on one of the streams a client may

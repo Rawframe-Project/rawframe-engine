@@ -1,7 +1,7 @@
 #pragma once
 
-// SPEC-0021's CompositionRecord: the one exact playable closure a process
-// runs (ADR-0023), a Game Build and the exact Packages and Mods beside it,
+// The CompositionRecord: the one exact playable closure a process
+// runs, a Game Build and the exact Packages and Mods beside it,
 // each named by its Build root hash, under one profile. Its identity is the
 // SHA-256 of its canonical bytes. It carries no signature: its trust is its
 // hash and the publisher signatures of the Builds it names.
@@ -34,8 +34,7 @@ struct CompositionRecord {
     std::int64_t createdAt = 0;
 };
 
-/// The most mods one Composition names: SPEC-0042's
-/// `mods_per_composition_max` (D195).
+/// The most mods one Composition names: `mods_per_composition_max`.
 inline constexpr std::size_t kMaximumCompositionMods = 256;
 
 /// A record's ceiling in bytes.

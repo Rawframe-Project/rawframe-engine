@@ -1,8 +1,7 @@
-// Coverage-guided fuzzing of a Radiance picture as the importer decodes it
-// (D321): a file from anyone meets the run-length reader through the
+// Coverage-guided fuzzing of a Radiance picture as the importer decodes it:
+// a file from anyone meets the run-length reader through the
 // limits, and what decodes cooks into a cube its own reader takes back
-// exactly, and encodes to Radiance again decoding to the same light
-// (D326).
+// exactly, and encodes to Radiance again decoding to the same light.
 
 #include "rawframe/texture/texture.h"
 #include "rawframe/texture_import/import.h"

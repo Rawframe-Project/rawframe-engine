@@ -178,7 +178,7 @@ public:
         Link& mine = side_.links[kMine.value];
         mine.connector = true;
         // A listener of another application protocol refuses it, as a QUIC
-        // handshake with no common ALPN fails (D408).
+        // handshake with no common ALPN fails.
         if (openLinks(server) >= server.profile.maximumConnections ||
             server.profile.application != side_.profile.application) {
             mine.open = false;

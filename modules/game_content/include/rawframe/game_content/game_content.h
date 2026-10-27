@@ -40,13 +40,13 @@ public:
     /// generation. A family admits before it asks for anything. Refused
     /// when the process has no cooked content.
     [[nodiscard]] virtual result::Status admit(std::span<const content::AdmittedRepresentation> representations) = 0;
-    /// The CompositionId of the Composition this content is, if it is one
-    /// (SPEC-0021): what peers must agree on before play (ADR-0023).
+    /// The CompositionId of the Composition this content is, if it is one:
+    /// what peers must agree on before play.
     [[nodiscard]] virtual const std::optional<base::Sha256Digest>& compositionId() const noexcept = 0;
     /// The Composition's Game Build, if this content is one.
     [[nodiscard]] virtual const ComposedBuild* composedGame() const noexcept = 0;
     /// Its Mods, in the record's subject order; none if it is not one.
-    /// Whether the game takes them is the game's to decide (SPEC-0042, D179).
+    /// Whether the game takes them is the game's to decide.
     [[nodiscard]] virtual std::span<const ComposedBuild> composedMods() const noexcept = 0;
 };
 

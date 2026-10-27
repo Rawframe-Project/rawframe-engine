@@ -1,4 +1,4 @@
-// Texture import (D253): each admitted source format decodes to the texels
+// Texture import: each admitted source format decodes to the texels
 // it holds; other formats, broken files, and sides past the limit are
 // refused; levels halve in linear light weighted by alpha; BC7 keeps the
 // image close and cooks to the same bytes every time.
@@ -103,7 +103,7 @@ RAWFRAME_TEST(OtherFormatsBrokenFilesAndLargeSidesAreRefused) {
     RAWFRAME_EXPECT(refusedWith(decodeImage({}), texture::TextureError::BadSource));
     const std::string kText = "not an image at all";
     RAWFRAME_EXPECT(refusedWith(decodeImage(std::as_bytes(std::span{kText})), texture::TextureError::BadSource));
-    // GIF is a format Wuffs knows and ADR-0058 does not admit.
+    // GIF is a format Wuffs knows and the engine does not admit.
     const std::string kGif = std::string{"GIF89a"} + std::string(20, '\0');
     RAWFRAME_EXPECT(refusedWith(decodeImage(std::as_bytes(std::span{kGif})), texture::TextureError::BadSource));
     // A PNG cut short is refused, not taken as far as it goes.

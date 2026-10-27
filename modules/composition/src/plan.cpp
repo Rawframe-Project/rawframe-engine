@@ -139,7 +139,7 @@ result::Result<Plan> compose(const CompositionRequest& request, std::vector<Prob
     detail::Collector collector{.collected = {}, .problems = &problems};
 
     // Registrars run in ascending module-ID order whatever order the host
-    // listed them in, so the order carries no meaning (ADR-0068).
+    // listed them in, so the order carries no meaning.
     std::vector<const RegistrarEntry*> entries;
     for (const RegistrarEntry& entry : request.registrars) {
         entries.push_back(&entry);

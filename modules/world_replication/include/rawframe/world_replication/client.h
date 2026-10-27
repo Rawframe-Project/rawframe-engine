@@ -1,7 +1,7 @@
 #pragma once
 
 // The receiving side of replication: a client World that mirrors what the
-// server replicates, and the client's input sent as SPEC-0041 windows. Mapped
+// server replicates, and the client's input sent as input windows. Mapped
 // entities are made and removed between local ticks, as the server declares
 // and retires them; a state datagram is decoded whole and staged before any
 // of it is applied, and a value older than the one already applied is not.
@@ -42,7 +42,7 @@ struct ClientReplicationSettings {
     /// Showing remote entities between states; none shows each state as
     /// it arrives.
     std::optional<InterpolationSettings> interpolation;
-    /// Where the game's messages go (D266), when it sends any; the sessions
+    /// Where the game's messages go, when it sends any; the sessions
     /// must declare its lane. Outlives the client.
     MessageSink* messages = nullptr;
 };
@@ -58,12 +58,12 @@ struct ClientReplicationStatistics {
     std::uint64_t datagramsRefused = 0;
     std::uint64_t inputWindowsSent = 0;
     /// Input samples left unlabelled to bring input that arrives far early
-    /// back toward the target lead (D317).
+    /// back toward the target lead.
     std::uint64_t samplesHeldBack = 0;
     std::uint64_t acknowledgementsSent = 0;
-    /// Game messages received (D266).
+    /// Game messages received.
     std::uint64_t messagesReceived = 0;
-    /// The player's commands sent on the game's command lane (D425).
+    /// The player's commands sent on the game's command lane.
     std::uint64_t commandsSent = 0;
 };
 
@@ -76,7 +76,7 @@ public:
     ~ReplicationClient();
 
     /// Asks `endpoint` to admit this client; asked again after a refusal,
-    /// the refusal is forgotten (D379).
+    /// the refusal is forgotten.
     [[nodiscard]] result::Status connect(const network::Endpoint& endpoint, const network::Hello& hello);
 
     /// Between local ticks: drains the session and applies what arrived.
@@ -89,7 +89,7 @@ public:
     [[nodiscard]] std::optional<network::RejectReason> rejection() const noexcept;
     /// Whether the server said it is stopping.
     [[nodiscard]] bool serverStopping() const noexcept;
-    /// Why the server ended this session, if it did (ADR-0073).
+    /// Why the server ended this session, if it did.
     [[nodiscard]] const std::optional<network::Termination>& termination() const noexcept;
     /// Whether the session is over, admitted or not.
     [[nodiscard]] bool ended() const noexcept;
@@ -100,7 +100,7 @@ public:
 
     /// The tick the next input sampled is for.
     [[nodiscard]] std::uint64_t nextInputTick() const noexcept;
-    /// No input is sampled for the ticks before `tick` (D678): a client
+    /// No input is sampled for the ticks before `tick`: a client
     /// that knows its next command would reach the server after the tick it
     /// is for leaves those ticks out, and the server holds its last command
     /// over them. A tick at or before the next changes nothing.
@@ -112,21 +112,21 @@ public:
     [[nodiscard]] result::Status submitInput(std::span<const std::byte> value);
     /// The input for the next input tick, labelled and predicted, not sent:
     /// a frame covering many ticks samples each and sends one window for
-    /// them (D522).
+    /// them.
     [[nodiscard]] result::Status sampleInput(std::span<const std::byte> value);
     /// Every command not yet consumed, at most `kMaximumInputWindow`, in
     /// one input window; nothing when none waits.
     [[nodiscard]] result::Status sendInputWindow();
     /// One of the player's commands, on the game's command lane, which the
     /// sessions must declare; in the order sent, after the input it was
-    /// sampled with (D425).
+    /// sampled with.
     [[nodiscard]] result::Status sendCommand(const PostedCommand& command);
 
     [[nodiscard]] ClientReplicationStatistics statistics() const noexcept;
     /// All zero without prediction.
     [[nodiscard]] PredictionStatistics predictionStatistics() const noexcept;
     /// With `captureChecksums`, the latest checksum records sent, oldest
-    /// first (D275); else none.
+    /// first; else none.
     [[nodiscard]] std::vector<ChecksumCapture> checksumCaptures() const;
     /// The server tick remote entities are shown at, fractional; none
     /// without interpolation or before the first state.

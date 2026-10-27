@@ -22,7 +22,7 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Replication
     return result::fail(errorClass, kReplicationDomain, code(error), why);
 }
 
-/// SPEC-0041's client time dilation (D317): input more than `kLeadSlack`
+/// The client time dilation: input more than `kLeadSlack`
 /// ticks ahead of the target lead is brought back by leaving one sample in
 /// `kDilationSamples` unlabelled (`client_dilation_max`, a fifth).
 constexpr std::int64_t kLeadSlack = 2;
@@ -106,8 +106,7 @@ struct ReplicationClient::State {
     std::uint64_t holdBack = 0;
     std::uint64_t sinceHeld = 0;
     /// Whether the next pace measured mostly before the last jump ahead;
-    /// and the lead the last signal measured, or the one a jump made
-    /// (D323).
+    /// and the lead the last signal measured, or the one a jump made.
     bool jumped = false;
     std::optional<std::int64_t> lastLead;
     std::map<std::uint64_t, std::vector<std::byte>> unconsumed;
@@ -206,11 +205,11 @@ struct ReplicationClient::State {
     /// The server says how early this client's input arrives; a client that
     /// is late labels its next commands further ahead at once, and one far
     /// early, as a client is that stalled, was paced ahead, and made up what
-    /// it owed, leaves samples unlabelled, one in five, until it is not
-    /// (D317). A client late after a stall is making up the ticks it owed,
+    /// it owed, leaves samples unlabelled, one in five, until it is not.
+    /// A client late after a stall is making up the ticks it owed,
     /// over a frame or a few, and a jump for that left it as far early once
     /// it had, a burst's commands waiting past their age and dropped, for
-    /// as long as the fifths took (D323): so a client jumps only for a
+    /// as long as the fifths took: so a client jumps only for a
     /// lateness two signals in a row find, the second no less late, and
     /// not while it shrinks as the owed ticks are made up; and then never
     /// past the greatest lead less the target, lateness left over being
@@ -238,7 +237,7 @@ struct ReplicationClient::State {
             // Late: at once on admission, with no signal before; else only
             // when the signal before was late too and this one no less, as
             // it is while the ticks owed are made up. The server leaves out
-            // what it measured while a client was silent (D323).
+            // what it measured while a client was silent.
             if (!kBefore.has_value() || (*kBefore < kTarget && kPace->measuredLead <= *kBefore)) {
                 const std::int64_t kRoom =
                     std::max<std::int64_t>(static_cast<std::int64_t>(kPace->greatestLead) - kTarget, 1);
@@ -380,9 +379,9 @@ struct ReplicationClient::State {
     /// Hands the server's values for the player's predicted components, as
     /// staged from this datagram, to the prediction, and shows its result.
     /// With `whole`, the server says the player's values not here are the
-    /// ones this client holds, so a state without them still confirms
-    /// (D249), and a confirmation is of the whole state, the only kind a
-    /// checksum is sent for (D274).
+    /// ones this client holds, so a state without them still confirms,
+    /// and a confirmation is of the whole state, the only kind a
+    /// checksum is sent for.
     void reconcile(std::uint64_t consumed, std::uint64_t tick, bool whole) {
         std::vector<std::span<const std::byte>> values(prediction->count());
         bool any = false;
@@ -404,9 +403,8 @@ struct ReplicationClient::State {
         }
     }
 
-    /// SPEC-0041's checksum record of the whole predicted scope at the
-    /// confirmed server tick `tick`, each value in its codec's wire form
-    /// (D204).
+    /// The checksum record of the whole predicted scope at the
+    /// confirmed server tick `tick`, each value in its codec's wire form.
     void sendChecksum(std::uint64_t tick) {
         const auto& kConfirmed = prediction->confirmed();
         std::vector<std::byte> wire;
@@ -598,7 +596,7 @@ result::Status ReplicationClient::connect(const network::Endpoint& endpoint, con
     RAWFRAME_TRY_ASSIGN(const network::ConnectionId kConnection, state_->sessions->connect(endpoint, hello));
     state_->connection = kConnection;
     // Asked again, a refusal before is no longer the answer, nor an attempt
-    // that ended unanswered (D541).
+    // that ended unanswered.
     state_->rejection.reset();
     state_->ended = false;
     return {};
@@ -744,7 +742,7 @@ result::Status ReplicationClient::sampleInput(std::span<const std::byte> value) 
     // Commands the server consumed are done.
     state.unconsumed.erase(state.unconsumed.begin(), state.unconsumed.upper_bound(state.consumedInputTick));
     // Far early: this sample is left unlabelled and unpredicted, so the
-    // input's lead shrinks by a tick; the window goes out as ever (D317).
+    // input's lead shrinks by a tick; the window goes out as ever.
     if (state.holdBack > 0 && state.sinceHeld + 1 >= kDilationSamples) {
         --state.holdBack;
         state.sinceHeld = 0;

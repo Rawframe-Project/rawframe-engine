@@ -1,4 +1,4 @@
-// Manifests and the catalog against SPEC-0008's conformance list: identities
+// Manifests and the catalog against the conformance list: identities
 // that are not interchangeable, manifests read in any order and refused at
 // the right field, locators that cannot escape or collide, a catalog that
 // admits no duplicate and no unadmitted representation, and a fingerprint of
@@ -234,8 +234,8 @@ RAWFRAME_TEST(TheFingerprintIsOfMeaningNotPlace) {
 
 RAWFRAME_TEST(HostileManifestsAndCompositionsReadOnlyAsTheyWrite) {
     // A Build's manifest is signed by its publisher, a mod's by someone the
-    // game does not trust, and a Composition names Builds a client fetches
-    // (D190): seeded mutations of each. A manifest read in any order writes
+    // game does not trust, and a Composition names Builds a client fetches:
+    // seeded mutations of each. A manifest read in any order writes
     // its canonical form, which reads back to the same entries; a
     // Composition is canonical and writes back to its very bytes.
     const std::vector<ManifestEntry> kEntries = {entry(2, "sounds/theme.rfopus"), entry(1, "sounds/shot.rfopus")};

@@ -32,7 +32,7 @@ result::Result<std::string> normalize(const Value* settings) {
 }
 
 /// The mesh, and each material its primitives draw with and each image
-/// those sample as a subasset (D314); the game knows a subasset by the first
+/// those sample as a subasset; the game knows a subasset by the first
 /// half of the resource its sidecar maps it to.
 result::Result<Artifact> cookMesh(std::span<const std::byte> source, std::string_view settings, Reads& reads) {
     const mesh_import::ReadFile kRead = [&reads](std::string_view path) {
@@ -77,7 +77,7 @@ result::Result<Artifact> cookMesh(std::span<const std::byte> source, std::string
                      .bytes = std::move(texels)});
     }
     std::ranges::sort(made.subassets, {}, &Subasset::key);
-    // Each material a variant, the same at every quality (D319).
+    // Each material a variant, the same at every quality.
     if (!kImported.materials.empty()) {
         made.report = {{"variants", static_cast<std::int64_t>(kImported.materials.size())}};
     }

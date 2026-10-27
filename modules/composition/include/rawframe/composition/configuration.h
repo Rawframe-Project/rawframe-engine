@@ -18,7 +18,7 @@ inline constexpr std::size_t kMaximumConfigurationEntries = 256;
 inline constexpr std::size_t kMaximumConfigurationKeyBytes = 64;
 inline constexpr std::size_t kMaximumConfigurationValueBytes = 1024;
 
-/// A Runtime's immutable configuration snapshot (SPEC-0005 Runtime): text
+/// A Runtime's immutable configuration snapshot: text
 /// values under dotted lower_snake_case keys, owned by the host and read by
 /// participants through their context. Nothing reads the environment.
 class Configuration {
@@ -28,8 +28,8 @@ public:
     /// past the bounds, all as `invalid_argument`.
     [[nodiscard]] static result::Result<Configuration> parse(std::string_view text);
     /// The same, read from a file in `base`, the directory its relative
-    /// paths are under (SPEC-0012: where a process is started from never
-    /// changes what its configuration names, D188).
+    /// paths are under (where a process is started from never
+    /// changes what its configuration names).
     [[nodiscard]] static result::Result<Configuration> parse(std::string_view text, std::string_view base);
 
     [[nodiscard]] std::optional<std::string_view> text(std::string_view key) const;
@@ -44,7 +44,7 @@ public:
     [[nodiscard]] result::Result<std::uint64_t> unsignedInteger(std::string_view key, std::uint64_t fallback) const;
 
     /// The value as true or false: absent gives `fallback`, and anything
-    /// but `true` or `false` is `invalid_argument` (D467).
+    /// but `true` or `false` is `invalid_argument`.
     [[nodiscard]] result::Result<bool> truth(std::string_view key, bool fallback) const;
 
     [[nodiscard]] std::size_t size() const noexcept {
@@ -53,8 +53,8 @@ public:
 
     /// Every key nothing has asked for, in key order: after a Runtime has
     /// started, a key no participant reads is one this process does not
-    /// know, most often a typing mistake, which SPEC-0012 refuses rather than
-    /// ignores (D187).
+    /// know, most often a typing mistake, which is refused rather than
+    /// ignored.
     [[nodiscard]] std::vector<std::string_view> unread() const;
 
 private:

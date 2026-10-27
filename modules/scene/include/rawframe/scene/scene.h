@@ -1,6 +1,6 @@
 #pragma once
 
-// Authored scenes (ADR-0048; the field-level grammar is D92): a world's
+// Authored scenes: a world's
 // starting entities as a document people and tools write and review as
 // text. One canonical form, so an unedited load and save is byte for byte
 // the same:
@@ -25,7 +25,7 @@
 //     ]
 //   }
 //
-// Each entity has a `SourceEntityId` (SPEC-0006: a UUID in canonical
+// Each entity has a `SourceEntityId` (a UUID in canonical
 // lowercase text, unique in the document, never derived from its name or
 // place) and optionally a name for people. Its components are named as the
 // game names them, in name order, each with the fields that differ from
@@ -37,7 +37,7 @@
 // found rather than read as something else. Entities keep the order they
 // were authored in.
 //
-// A scene may also instance other scenes (D96), after its entities:
+// A scene may also instance other scenes, after its entities:
 //
 //     "instances": [
 //       {
@@ -66,14 +66,14 @@
 // adds a component the source's entity lacks, with its non-default fields;
 // `remove: true` removes one it has. An entry of an entity and
 // `remove: true` alone removes the entity itself, and is its only entry;
-// nothing left may name it (D120). Children are entities attached to their
+// nothing left may name it. Children are entities attached to their
 // parent, so adding a child is an entity of this scene attached to one of
 // the instance's, and moving one is setting its attachment's parent. What the source holds is checked when
 // the instance is resolved. The member is left out when there are no
 // instances, and a reference, here or in an override, may name any entity
 // this scene holds. `schema` covers the components the overrides name too.
 //
-// An instance may be a district of a large world (ADR-0048, D870), streamed
+// An instance may be a district of a large world, streamed
 // as a unit: `"streaming": "atomic"` after its overrides sends a client all
 // of its entities together, while the client's player is near any of them,
 // and `"streaming": "persistent"` sends them to every client always. The
@@ -93,7 +93,7 @@
 
 namespace rawframe::scene {
 
-/// The resource type of a scene (D95), and its one representation: the
+/// The resource type of a scene, and its one representation: the
 /// document's text in its one form.
 inline constexpr base::Bits128 kSceneType = base::parseBits128Hex("afe08759c97c18977fcf1a5f4f320b2b").value;
 inline constexpr std::string_view kSceneRepresentation = "rawframe.scene";
@@ -114,8 +114,8 @@ struct FieldValue {
         /// The truth value `false`: only in an override's `set`, where a
         /// default is a change.
         False,
-        /// A case of an enum, by its name (`caseName`), a Kest identifier
-        /// (D270). Which cases a field has is its program's to say.
+        /// A case of an enum, by its name (`caseName`), a Kest identifier.
+        /// Which cases a field has is its program's to say.
         Case,
     };
 
@@ -189,7 +189,7 @@ struct IdentityMapping {
     friend bool operator==(const IdentityMapping&, const IdentityMapping&) = default;
 };
 
-/// How an instance's entities reach clients (D870).
+/// How an instance's entities reach clients.
 enum class Streaming : std::uint8_t {
     /// Each by itself, as the game's interest says.
     Each,

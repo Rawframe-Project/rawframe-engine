@@ -1,15 +1,15 @@
 #pragma once
 
-// What every process entry does around one Host (ADR-0017): read
-// `--config <file>`, whose relative paths are under the file's own directory
-// (D188), bridge SIGINT and SIGTERM (console control events on Windows, D237)
+// What every process entry does around one Host: read
+// `--config <file>`, whose relative paths are under the file's own directory,
+// bridge SIGINT and SIGTERM (console control events on Windows)
 // to an orderly stop, write NDJSON diagnostics to standard output, and return
-// the Host's exit code (D184).
+// the Host's exit code.
 // Launch failures happen before diagnostics exist, so they go to standard
 // error as plain text and exit with 64, or 65 for a configuration that does
 // not parse. A process that sleeps between
 // iterations and reads its configuration from a file: only where there are
-// both threads and files; a browser drives a Host itself (D168).
+// both threads and files; a browser drives a Host itself.
 
 #include "rawframe/base/platform.h"
 #include "rawframe/composition/declaration.h"
@@ -37,24 +37,24 @@ struct ProcessEntry {
     /// The program's shutdown budget when its configuration names none.
     std::uint32_t defaultShutdownBudgetMs = 5000;
     /// Configuration lines, one a line, each taken where the file names
-    /// none of its key (D920): an application opened with no file, as a
+    /// none of its key: an application opened with no file, as a
     /// double-click opens it, still has what it needs.
     std::string_view defaults;
     /// The key a lone path argument sets, as a file opened with the program
-    /// is passed to it (D920); empty for none.
+    /// is passed to it; empty for none.
     std::string_view fileKey;
 };
 
 [[nodiscard]] int hostMain(int argc, char** argv, const ProcessEntry& entry);
 
 /// Bridges this process's stop requests to `stopRequested`: what `hostMain`
-/// does, and a tool that stops in order without a Host does too (the cook,
-/// D502). Installing it again changes nothing.
+/// does, and a tool that stops in order without a Host does too (the
+/// cook). Installing it again changes nothing.
 void installStopBridge();
 
 /// Lets this process's stop requests fall once it has stopped, its
-/// parent's going among them (D646): what `hostMain` does after its Host
-/// ends (D820).
+/// parent's going among them: what `hostMain` does after its Host
+/// ends.
 void settleStopBridge();
 
 /// Whether a stop has been requested of this process since its bridge was

@@ -1,7 +1,6 @@
 #pragma once
 
-// An in-process network for tests and single-process play (SPEC-0010
-// loopback). Providers made from one LoopbackNetwork reach each other's
+// An in-process network for tests and single-process play. Providers made from one LoopbackNetwork reach each other's
 // listeners by name. Every byte is copied at send and owned by the receiver's
 // queue; nothing is shared between peers. Delivery follows the network's
 // clock and seeded conditions, so a run with one seed and one sequence of

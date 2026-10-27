@@ -172,7 +172,7 @@ RAWFRAME_TEST(HostIterationsRunTheTicksThePacerOwes) {
 }
 
 RAWFRAME_TEST(AWorldBehindTooLongIsOverloaded) {
-    // SPEC-0012's sustained tick debt (D186): more than a second behind is
+    // The sustained tick debt: more than a second behind is
     // degraded; caught up, healthy again; behind for `world.overload_ms`,
     // overloaded, and it stays so.
     const auto kPlan = plan();
@@ -237,7 +237,7 @@ struct Debts final : diagnostics::Sink {
 
 RAWFRAME_TEST(AWorldBehindSaysItsDebtOnceASecond) {
     // A machine that cannot keep up is behind every iteration: its debt is
-    // said at most once a second, not once an iteration (D950), and nought
+    // said at most once a second, not once an iteration, and nought
     // once when it has caught up.
     const auto kPlan = plan();
     RAWFRAME_EXPECT(kPlan.has_value());
@@ -296,7 +296,7 @@ RAWFRAME_TEST(AWorldBehindSaysItsDebtOnceASecond) {
 }
 
 RAWFRAME_TEST(TimeAWorldStoodStillForIsNotOwed) {
-    // A debugger's breakpoint holds a tick for two seconds (D492): excused,
+    // A debugger's breakpoint holds a tick for two seconds: excused,
     // the World owes nothing for it, so it neither runs ahead to catch up
     // nor reports itself behind; the same two seconds unexcused are owed.
     const auto kPlan = plan();
@@ -334,7 +334,7 @@ RAWFRAME_TEST(TimeAWorldStoodStillForIsNotOwed) {
 }
 
 RAWFRAME_TEST(APausedWorldRunsOnlyItsStepsAndDoesNotHurryAfter) {
-    // Paused for two seconds (D806): no tick runs but the three stepped,
+    // Paused for two seconds: no tick runs but the three stepped,
     // one an iteration at this catch-up, and nothing is owed for the time
     // it stood, so once let run it runs a tick a tenth of a second.
     const auto kPlan = plan();
@@ -385,7 +385,7 @@ RAWFRAME_TEST(APausedWorldRunsOnlyItsStepsAndDoesNotHurryAfter) {
 }
 
 RAWFRAME_TEST(SpecThresholdsDegradeAndOverloadAWorldSooner) {
-    // SPEC-0013's canonical thresholds (D212): 100 ms behind is degraded,
+    // The canonical thresholds: 100 ms behind is degraded,
     // and 500 ms behind is overloaded at once, however briefly.
     const auto kPlan = plan();
     RAWFRAME_EXPECT(kPlan.has_value());

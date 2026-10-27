@@ -1,11 +1,11 @@
 #pragma once
 
-// A sequence document (SPEC-0051's sequence row, D869): a timeline of keys,
+// A sequence document: a timeline of keys,
 // as text. Each track is one entity the game casts in it; a `play` key
 // starts that entity on one of the game's animators, by the identity its
 // `animator` line gives it, and an `event` key fires one of the
 // sequence's events for the game to read. How an entity moves between
-// keys is its animator's clips (ADR-0039's one play pathway): a sequence
+// keys is its animator's clips: a sequence
 // holds no values of its own.
 //
 //     sequence 1
@@ -35,7 +35,7 @@
 
 namespace rawframe::sequence {
 
-/// The resource a sequence is cooked into (D869): its text, checked, as it
+/// The resource a sequence is cooked into: its text, checked, as it
 /// was written, which a game reads as `parseSequence` reads it.
 inline constexpr base::Bits128 kSequenceType = base::parseBits128Hex("ad38f30cac629148c98553ed28b0a8b6").value;
 inline constexpr std::string_view kSequenceRepresentation = "rawframe.sequence.text";

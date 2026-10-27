@@ -1,6 +1,6 @@
 #pragma once
 
-// A library a machine installs into and updates (SPEC-0038). An update is a
+// A library a machine installs into and updates. An update is a
 // chunk difference: the target Builds' manifests are read and verified, the
 // blobs the store lacks are fetched from an origin and verified, every
 // target is verified whole (blobs already held reverified before they are
@@ -32,7 +32,7 @@
 
 namespace rawframe::install {
 
-/// SPEC-0038's named limit points; values are the product's, these are
+/// The named limit points; values are the product's, these are
 /// generation 1's.
 struct InstallLimits {
     /// Compositions retained for rollback behind the active one (at least 1).
@@ -49,9 +49,9 @@ struct UpdateReport {
     std::size_t healed = 0;
 };
 
-/// What following a channel did (D424): the Release it installed, the
+/// What following a channel did: the Release it installed, the
 /// pointer's sequence kept, and the update; or, `current`, nothing, the
-/// pointer being the sequence already followed (D434), when only
+/// pointer being the sequence already followed, when only
 /// `release` and `sequence` are the pointer's.
 struct Followed {
     std::string version;
@@ -87,7 +87,7 @@ public:
     /// made active, the one active before retained for rollback.
     [[nodiscard]] result::Result<UpdateReport> update(std::string_view record, Origin& origin);
 
-    /// SPEC-0020's update check, then the update (D424): `subject`'s pointer
+    /// The update check, then the update: `subject`'s pointer
     /// for `channel` and the Release it names fetched from `origin` with
     /// their signatures, each verified against the key set pinned in the
     /// library for the subject's publisher (a key it does not list,
@@ -95,7 +95,7 @@ public:
     /// pointer past the sequence the library last followed
     /// (`SequenceRegression`), a lower Release under a higher sequence
     /// being a rollback, and the very sequence followed last current, with
-    /// nothing fetched or changed (D434); the Release's Composition fetched by its digest and
+    /// nothing fetched or changed; the Release's Composition fetched by its digest and
     /// checked against the artifact's size and digest; then installed as
     /// `update` installs it. The sequence is kept once the update is done,
     /// so a refused or stopped follow can be retried.

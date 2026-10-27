@@ -1,9 +1,9 @@
-// Environments (D321): a Radiance picture decodes alike from flat and
+// Environments: a Radiance picture decodes alike from flat and
 // run-length scanlines, and broken or other pictures are refused; its cube
 // looks each way the picture does, holds a uniform sky at every level, and
 // its rougher levels spread the light without adding or losing any. A
 // picture of light encodes to Radiance and decodes back within RGBE's
-// precision (D326), and a point of a picture shows the direction the cube
+// precision, and a point of a picture shows the direction the cube
 // samples it from.
 
 #include "rawframe/test/test.h"

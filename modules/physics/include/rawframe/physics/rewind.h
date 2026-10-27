@@ -1,6 +1,6 @@
 #pragma once
 
-// What a physics query cast back in time (SPEC-0041's rewind query) takes,
+// What a physics query cast back in time takes,
 // in either dimension: the moment, and which bodies are taken back to it.
 
 #include "rawframe/world/entity.h"
@@ -11,9 +11,9 @@
 
 namespace rawframe::physics {
 
-/// SPEC-0041's compensation_history_memory_max: the bytes one physics World
+/// The compensation_history_memory_max: the bytes one physics World
 /// may keep of poses for casting back in time, at its body capacity times its
-/// history ticks (D208).
+/// history ticks.
 inline constexpr std::size_t kMaximumCompensationHistoryBytes = std::size_t{64} << 20U;
 
 /// The bytes a history of `ticks` poses of `poseBytes` each for `bodies`
@@ -23,7 +23,7 @@ compensationHistoryBytes(std::uint32_t bodies, std::uint32_t ticks, std::size_t 
     return std::size_t{bodies} * ticks * poseBytes;
 }
 
-/// Which bodies a query cast back in time takes back, and how far (SPEC-0041's
+/// Which bodies a query cast back in time takes back, and how far (the
 /// victim gate); one it gives no tick is tried where it is now.
 class RewindGate {
 public:

@@ -4,7 +4,7 @@
 
 namespace rawframe::physics {
 
-/// SPEC-0037's closed motion vocabulary, the same in both dimensions. Sleep
+/// The closed motion vocabulary, the same in both dimensions. Sleep
 /// is a state a body is in, never a fourth motion.
 enum class Motion : std::uint8_t {
     Static = 0,

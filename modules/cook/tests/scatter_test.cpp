@@ -1,4 +1,4 @@
-// The scatter importer (D863): a scatter document cooked into its
+// The scatter importer: a scatter document cooked into its
 // placements, standing on the terrain it names, which is one of its inputs:
 // the ground shaped again cooks the copies again. A scatter whose terrain
 // is not there, or whose sidecar gives it settings, refused.
