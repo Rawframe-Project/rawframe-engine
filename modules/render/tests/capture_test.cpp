@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <thread>
 #include <vector>
@@ -38,7 +39,9 @@ RAWFRAME_TEST(AStreamWrittenInPlaceIsReadOnePictureAtATimeWhole) {
     // A reader without a pause beside a writer: each picture it
     // takes whole, every pixel the one its sequence wrote, the sequences
     // rising; and a picture past the file's room put in a larger file the
-    // reader follows.
+    // reader follows. The writer waits for the reader to take one of the
+    // first file's pictures before it writes the larger ones, so however
+    // the two threads are scheduled the reader takes one from each file.
     const std::filesystem::path kDirectory = test::scratchDirectory("picture_stream");
     std::filesystem::create_directories(kDirectory);
     const std::filesystem::path kPath = kDirectory / "picture";
@@ -47,43 +50,49 @@ RAWFRAME_TEST(AStreamWrittenInPlaceIsReadOnePictureAtATimeWhole) {
     RAWFRAME_EXPECT(!reader.next().has_value());
     std::atomic<bool> writing{true};
     std::atomic<int> failed{0};
+    std::atomic<int> taken{0};
     std::thread written{[&] {
         for (std::uint32_t each = 1; each <= 400; ++each) {
             // Larger after the first half: a second file, put in its place.
             const std::uint32_t kSide = each <= 200 ? 256 : 640;
+            // A reader that never takes one fails the test in seconds, not at
+            // the check's timeout.
+            const auto kGiveUp = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+            while (each == 201 && taken.load() == 0 && std::chrono::steady_clock::now() < kGiveUp) {
+                std::this_thread::yield();
+            }
             const std::vector<std::byte> kPixels(std::size_t{kSide} * kSide * 4, static_cast<std::byte>(each % 251));
             failed += writer.write(kSide, kSide, kPixels) ? 0 : 1;
         }
         writing = false;
     }};
-    int taken = 0;
     int torn = 0;
     std::uint64_t last = 0;
     std::uint32_t widest = 0;
-    while (writing.load() || taken == 0) {
-        const std::optional<render::StreamedPicture> kRead = reader.next();
-        if (!kRead.has_value()) {
-            continue;
-        }
+    const auto kTake = [&](const render::StreamedPicture& read) {
         ++taken;
-        const auto kOwn = static_cast<std::byte>(kRead->sequence % 251);
-        torn += kRead->sequence <= last || std::ranges::any_of(kRead->pixels,
-                                                               [kOwn](std::byte pixel) {
-                                                                   return pixel != kOwn;
-                                                               })
+        const auto kOwn = static_cast<std::byte>(read.sequence % 251);
+        torn += read.sequence <= last || std::ranges::any_of(read.pixels,
+                                                             [kOwn](std::byte pixel) {
+                                                                 return pixel != kOwn;
+                                                             })
                     ? 1
                     : 0;
-        last = kRead->sequence;
-        widest = std::max(widest, kRead->width);
+        last = read.sequence;
+        widest = std::max(widest, read.width);
+    };
+    while (writing.load()) {
+        if (const std::optional<render::StreamedPicture> kRead = reader.next(); kRead.has_value()) {
+            kTake(*kRead);
+        }
     }
     written.join();
-    // And the last one, once the writer is done.
+    // And the last one, once the writer is done, unless it was taken.
     if (const std::optional<render::StreamedPicture> kRead = reader.next(); kRead.has_value()) {
-        last = kRead->sequence;
-        widest = std::max(widest, kRead->width);
+        kTake(*kRead);
     }
     RAWFRAME_EXPECT(failed.load() == 0 && writer.written() == 400);
-    RAWFRAME_EXPECT(taken > 1 && torn == 0);
+    RAWFRAME_EXPECT(taken.load() > 1 && torn == 0);
     RAWFRAME_EXPECT(last == 400 && widest == 640);
     RAWFRAME_EXPECT(!std::filesystem::exists(kDirectory / "picture.writing"));
     std::filesystem::remove_all(kDirectory);
