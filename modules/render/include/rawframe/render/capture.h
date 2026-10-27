@@ -1,6 +1,6 @@
 #pragma once
 
-// A frame's pixels as a file an image tool opens (D284): what a drawing
+// A frame's pixels as a file an image tool opens: what a drawing
 // participant writes when asked to capture what it drew, for eyes and
 // tools, never on a frame's path.
 
@@ -27,7 +27,7 @@ namespace rawframe::render {
 [[nodiscard]] std::vector<std::byte>
 tgaOf(std::span<const std::byte> pixels, std::uint32_t width, std::uint32_t height);
 
-/// A picture streamed to another process (D789): what `render.stream`
+/// A picture streamed to another process: what `render.stream`
 /// writes each picture read back as, and an editor reads to show it.
 struct StreamedPicture {
     /// Counts up from one with each picture written.
@@ -49,7 +49,7 @@ struct StreamedPicture {
 
 #if RAWFRAME_FILE_SYSTEM
 
-/// Pictures streamed through one file written in place (D967), as
+/// Pictures streamed through one file written in place, as
 /// `render.stream` streams them: made once at a capacity and mapped by its
 /// writer and its reader, so a picture costs neither a file made, moved, and
 /// closed nor one read, which Windows' real-time protection scanned each

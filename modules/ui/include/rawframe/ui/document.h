@@ -1,10 +1,9 @@
 #pragma once
 
-// A game's UI document (SPEC-0030, D619): its UI nodes as a tree, each a
+// A game's UI document: its UI nodes as a tree, each a
 // node component the game declares, with what it starts as and which typed
-// words it shows. A `ui.document` under SPEC-0028's canonical JSON profile,
-// as the game's styles are (D431): SPEC-0030's Luau-literal document is
-// suspended under ADR-0084, and this is its generation one for Kest.
+// words it shows. A `ui.document` under the canonical JSON profile,
+// as the game's styles are.
 //
 //   {
 //     "kind": "ui.document",
@@ -26,10 +25,10 @@
 //     ]
 //   }
 //
-// A node names its `component`, once in a document; SPEC-0030's `ref` is
+// A node names its `component`, once in a document; the `ref` is
 // that name, the address the game's present systems write the node by.
 // `shows` names a `rawframe.ui.Typed` component whose words it shows in
-// place of its label (D427). Then any of `rawframe.ui.Node`'s fields, in
+// place of its label. Then any of `rawframe.ui.Node`'s fields, in
 // its order, at their defaults omitted: numbers as they are; colors
 // `#rrggbbaa`; identities (`image`, `text`, `font`, `style`) 16 lowercase
 // hexadecimal digits; `absolute`, `clip`, `thumb`, `checked`, `disabled`,
@@ -150,11 +149,11 @@ struct DocumentLimits {
     std::size_t maximumNameLength = 128;
 };
 
-/// A UI document's fields in its order (D641).
+/// A UI document's fields in its order.
 inline constexpr std::array<std::string_view, 3> kUiDocumentFields = {"kind", "formatVersion", "nodes"};
 
 /// A node's members in the order a document writes them: `component`,
-/// `shows`, `rawframe.ui.Node`'s fields, and last `children` (D641).
+/// `shows`, `rawframe.ui.Node`'s fields, and last `children`.
 [[nodiscard]] std::span<const std::string_view> nodeMembers() noexcept;
 
 /// Reads a `ui.document` of format version 1: canonical bytes, the version,

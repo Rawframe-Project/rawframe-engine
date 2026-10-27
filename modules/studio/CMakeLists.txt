@@ -1,4 +1,4 @@
-# Studio's shell (ADR-0032, D435): a session on a game held in Studio's own
+# Studio's shell: a session on a game held in Studio's own
 # process, shown as a UI of its own. Toolchain only; no client or server
 # closure contains it.
 rawframe_module(NAME studio
@@ -6,7 +6,7 @@ rawframe_module(NAME studio
     DEPS authoring_session blockout scatter sequence scene schema terrain tilemap animation world_tooling render material font_import process view ui texture document composition execution diagnostics result base
 )
 # Studio's own fonts (IBM Plex Sans and Mono, SIL Open Font License 1.1,
-# fonts/IBMPlex-LICENSE.txt; D915), and its icons (tools/make_studio_icons.py).
+# fonts/IBMPlex-LICENSE.txt), and its icons (tools/make_studio_icons.py).
 rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/fonts/IBMPlexSans-Regular.ttf"
                        HEADER studio_font.h SYMBOL kStudioFont)
 rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/fonts/IBMPlexSans-SemiBold.ttf"
@@ -16,14 +16,14 @@ rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/
 rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/icons/icons.rgba"
                        HEADER studio_icons.h SYMBOL kStudioIcons)
 # Studio's own icon as its window shows it, 32, 64, and 256 pixels square,
-# RGBA (the logo kit's app icon; D920).
+# RGBA (the logo kit's app icon).
 rawframe_embedded_file(TARGET rawframe_studio FILE "${CMAKE_CURRENT_SOURCE_DIR}/icons/app_icon.rgba"
                        HEADER studio_app_icon.h SYMBOL kStudioAppIcon)
 
 rawframe_module_tests(NAME studio SOURCES tests/records_test.cpp tests/console_test.cpp tests/hierarchy_test.cpp tests/hints_test.cpp tests/preferences_test.cpp tests/version_control_test.cpp)
 if(TARGET rawframe_studio_tests AND TARGET rawframe_process_child)
     # A program that ends at once on every system, for a played game whose
-    # server ends as it starts (D501): the process tests' child, given an
+    # server ends as it starts: the process tests' child, given an
     # argument it does not know.
     rawframe_test_program(rawframe_child rawframe_process_child)
     target_compile_definitions(rawframe_studio_tests PRIVATE

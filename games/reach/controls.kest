@@ -1,9 +1,9 @@
 module controls
 
-// What a player's hands do (D656): where each is, in meters in its seat's
+// What a player's hands do: where each is, in meters in its seat's
 // frame (x to the right, y up from the floor, -z ahead toward the table),
-// and how hard it grips, nought to one. A headset's controllers give both
-// (ADR-0081's pose actions); a flat player's keys move one hand.
+// and how hard it grips, nought to one. A headset's controllers give both;
+// a flat player's keys move one hand.
 struct Hands {
     leftX: f32
     leftY: f32

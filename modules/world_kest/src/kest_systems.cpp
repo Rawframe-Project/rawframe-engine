@@ -25,7 +25,7 @@ template <typename Column> bool carriesData(const Column& column) noexcept {
 }
 
 /// What a system takes: the count, then one lent array per data column;
-/// then for each scan a count, its values, and their entities (D747).
+/// then for each scan a count, its values, and their entities.
 std::vector<kest::Argument> systemArguments(std::size_t data, std::size_t scans) {
     std::vector<kest::Argument> takes(1 + data + (3 * scans), kest::Argument{.slot = kest::Slot::I32, .lent = true});
     takes[0].lent = false;
@@ -72,7 +72,7 @@ struct KestSystems::Declared {
     std::vector<std::string> before;
     std::vector<std::string> randomStreams;
     std::vector<schema::ComponentTypeId> lookups;
-    /// Each scanned component and its Kest type (D747).
+    /// Each scanned component and its Kest type.
     std::vector<std::pair<schema::ComponentTypeId, std::string>> scans;
     std::vector<std::string_view> afterViews;
     std::vector<std::string_view> beforeViews;
@@ -89,7 +89,7 @@ public:
         /// Which of the chunk's columns, or -1 for its entities.
         int chunkColumn;
     };
-    /// A component read whole (D747): its holders, its Kest type and shape,
+    /// A component read whole: its holders, its Kest type and shape,
     /// and this run's copy of their values and entities.
     struct Scan {
         world::ColumnQuery holders;
@@ -200,7 +200,7 @@ private:
                               "a scanned component has more holders than a Kest count can say");
             }
         }
-        // SPEC-0013's journal per tick, counted across the machine's
+        // The journal per tick, counted across the machine's
         // systems before any is copied.
         if (doorway_->journalTick != context.tick.value) {
             doorway_->journalTick = context.tick.value;
@@ -247,7 +247,7 @@ private:
     [[nodiscard]] result::Status
     keep(world::SystemContext& context, std::size_t commandsBefore, result::Status called) noexcept {
         RAWFRAME_TRY(std::move(called));
-        // SPEC-0013's journal operations per tick, across the machine's
+        // The journal operations per tick, across the machine's
         // systems: past it, this run's commands and writes are discarded.
         const std::size_t kRecorded = context.commands.size() - commandsBefore;
         if (kRecorded > doorway_->operationLimit - doorway_->operations) {
@@ -500,7 +500,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                                       .takes = kPrefabParameter,
                                       .gives = kEntityParameter}));
     // The tick the running system simulates, the server's or the one a
-    // client predicts (D684): nothing a program may not know.
+    // client predicts: nothing a program may not know.
     RAWFRAME_TRY(doors.add(kest::Door{.name = "World.tick",
                                       .function = &tickDoor,
                                       .context = doorway.get(),
@@ -515,7 +515,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         .name = "Random.unit", .function = &unitDoor, .context = doorway.get(), .takes = kStream, .gives = kF64}));
     for (Doorway::Component& component : doorway->components) {
         // A Kest type two components share has no doors: which of them an
-        // insert would add is not the program's to say (D260).
+        // insert would add is not the program's to say.
         if (std::ranges::count(doorway->components, component.kestType, &Doorway::Component::kestType) > 1) {
             continue;
         }
@@ -527,7 +527,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
         RAWFRAME_TRY(doors.add(kest::Door{
             .name = component.removeName, .function = &removeDoor, .context = &component, .takes = kEntityParameter}));
         // A lookup only reads a component the running system declared, of
-        // a live entity, within its size (D391).
+        // a live entity, within its size.
         component.getGives[0] = kest::Parameter{kest::Slot::Value, component.kestType};
         RAWFRAME_TRY(doors.add(kest::Door{.name = component.getName,
                                           .function = &getDoor,

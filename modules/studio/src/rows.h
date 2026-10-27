@@ -1,6 +1,6 @@
 #pragma once
 
-// What Studio's rows and buttons ask of the session (D435): an edited
+// What Studio's rows and buttons ask of the session: an edited
 // field and what it is, a button's operation, and a named command.
 
 #include "rawframe/ui/tree.h"
@@ -23,73 +23,70 @@ struct FieldRow {
         View,
         /// The scene an instance placed in the chosen scene is of.
         Instance,
-        /// The path of a new scene (D449).
+        /// The path of a new scene.
         NewScene,
-        /// What the entity column shows of the scene (D473).
+        /// What the entity column shows of the scene.
         Find,
         /// A part of a style class's look: `component` its variant, `field`
-        /// the part (D637); with no variant, the class's transitions
-        /// (D639).
+        /// the part; with no variant, the class's transitions.
         Part,
-        /// A field of a UI document's node (D643).
+        /// A field of a UI document's node.
         NodeField,
-        /// A material instance's override of its base's input or switch
-        /// (D722).
+        /// A material instance's override of its base's input or switch.
         Override,
-        /// A material graph's node's param, `field` its name (D730).
+        /// A material graph's node's param, `field` its name.
         GraphParam,
-        /// A material graph's node's input, `field` its name (D730).
+        /// A material graph's node's input, `field` its name.
         GraphInput,
-        /// The command palette's search (D777).
+        /// The command palette's search.
         Palette,
         /// A pose's turn about an axis in degrees, `field` x, y, or z, its
-        /// quaternion set whole (D915).
+        /// quaternion set whole.
         Turn,
-        /// The start screen's new game's name, and a game to open (D781).
+        /// The start screen's new game's name, and a game to open.
         NewGame,
         OpenGame,
         /// A command's keys, `field` its name, and the editor's command, in
-        /// the Preferences dialog (D782).
+        /// the Preferences dialog.
         Shortcut,
         Editor,
-        /// A chosen source's import setting, `field` its name (D800).
+        /// A chosen source's import setting, `field` its name.
         ImportSetting,
         /// A new folder's name in Assets, and the name the target of Assets
-        /// is renamed to (D929).
+        /// is renamed to.
         NewFolder,
         RenameFile,
         /// A sequence key's time, track, animator, or event name, `field`
-        /// its place among the keys, `kind` which (D931).
+        /// its place among the keys, `kind` which.
         SequenceKey,
         /// A data document's value, `field` its path, `kind` "string" for
-        /// text or "json" (D812).
+        /// text or "json".
         DataValue,
         /// A line of the game's description, `field` its place, `kind` the
-        /// word it begins with (D818).
+        /// word it begins with.
         SettingLine,
         /// A line to put in the game's description, `field` the place it
-        /// goes before (D818).
+        /// goes before.
         NewSetting,
         /// What follows a word of the chosen blockout solid's line, `field`
-        /// the word, or `line` for the whole line (D850).
+        /// the word, or `line` for the whole line.
         SolidWord,
-        /// A solid's line to put in a blockout, `field` its place (D850).
+        /// A solid's line to put in a blockout, `field` its place.
         NewSolid,
-        /// The terrain brush's tool, radius, or amount, `field` which (D856).
+        /// The terrain brush's tool, radius, or amount, `field` which.
         BrushSetting,
-        /// The tile a tilemap's block pressed paints (D861).
+        /// The tile a tilemap's block pressed paints.
         TileSetting,
-        /// The message a commit of the game's changes is made with (D871).
+        /// The message a commit of the game's changes is made with.
         CommitMessage,
-        /// The Export dialog's output, title, or address, `field` which
-        /// (D872).
+        /// The Export dialog's output, title, or address, `field` which.
         ExportSetting,
-        /// The Assets search, what the grid's names hold (D916).
+        /// The Assets search, what the grid's names hold.
         AssetSearch,
-        /// The Console's filter, what its lines shown hold (D923).
+        /// The Console's filter, what its lines shown hold.
         ConsoleSearch,
         /// The start screen's search of the games opened last, or a path
-        /// to open, and the new game's folder (D918).
+        /// to open, and the new game's folder.
         GameSearch,
         GameFolder
     };
@@ -98,9 +95,9 @@ struct FieldRow {
     std::string component;
     std::string field;
     std::string kind;
-    /// The catalog's field, its hints with it (D784).
+    /// The catalog's field, its hints with it.
     Catalog::Field type{};
-    /// The words a field shows while empty, read as nothing typed (D916).
+    /// The words a field shows while empty, read as nothing typed.
     std::string hint;
 };
 
@@ -116,19 +113,19 @@ struct ActionButton {
     std::string done;
     /// The scene's operation, naming no entity: a component's remark.
     bool whole = false;
-    /// A node of `component` made, not an operation: a UI node (D672), or
-    /// a material graph's node of that type (D731).
+    /// A node of `component` made, not an operation: a UI node, or
+    /// a material graph's node of that type.
     bool makesNode = false;
     /// An output of the chosen graph node, `field` its name: the input
     /// field pressed next, on this node or one chosen first, takes a
-    /// connection from it (D733).
+    /// connection from it.
     bool connects = false;
     /// The game's document `opens` opened in its place: a material
-    /// instance's base (D927).
+    /// instance's base.
     std::string opens;
 };
 
-/// A named action (SPEC-0051 Part 1, D777): its menu's row, its palette
+/// A named action: its menu's row, its palette
 /// entry, and its chords do it as its button's press does.
 struct Command {
     std::string name;

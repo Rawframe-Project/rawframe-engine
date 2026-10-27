@@ -1,7 +1,7 @@
 #pragma once
 
-// A headset's eyes as the scene draws them (ADR-0052's third target kind,
-// the XR view pair; ADR-0081, D595): each eye's place and turn in the
+// A headset's eyes as the scene draws them (the third target kind,
+// the XR view pair): each eye's place and turn in the
 // headset's local space (meters, +Y up, its origin where the head was when
 // the session began), the angles of its field of view from its axis, as a
 // headset's lenses make them (left and down negative), and the size of the
@@ -10,7 +10,7 @@
 // frame's display time, and lends them as `rawframe.view.headset_eyes`;
 // the scene draws the first local player's view once for each, the
 // player's camera the play space's origin and heading. Presentation data
-// only: never the World's, nor a record's (ADR-0081, section 3).
+// only: never the World's, nor a record's.
 
 #include "rawframe/composition/participant.h"
 
@@ -58,7 +58,7 @@ private:
 
 inline constexpr composition::Capability<HeadsetEyes> kHeadsetEyes{"rawframe.view.headset_eyes"};
 
-/// Where a hand is at the frame's display time (D676), in the eyes' local
+/// Where a hand is at the frame's display time, in the eyes' local
 /// space: its controller's grip where one is located, else its tracked
 /// palm; none where neither is.
 struct HeadsetHand {
@@ -68,8 +68,7 @@ struct HeadsetHand {
 };
 
 /// The hands as the scene draws a model held in them each frame
-/// (`rawframe.model.Tracked`, ADR-0081 section 4's pose resolved at
-/// presentation time), told with the eyes and lent as
+/// (`rawframe.model.Tracked`, its pose resolved at presentation time), told with the eyes and lent as
 /// `rawframe.view.headset_hands`. Presentation data only, as the eyes are.
 class HeadsetHands {
 public:
@@ -93,14 +92,14 @@ private:
 
 inline constexpr composition::Capability<HeadsetHands> kHeadsetHands{"rawframe.view.headset_hands"};
 
-/// Whether a headset the client shows on shows the person nothing now
-/// (D679): its session made and neither visible nor focused, as when it is
-/// taken off, or before the runtime first shows it. SPEC-0025's
-/// `suspending` in the runtime's words (ADR-0081, section 2): the program
+/// Whether a headset the client shows on shows the person nothing now:
+/// its session made and neither visible nor focused, as when it is
+/// taken off, or before the runtime first shows it: `suspending` in the
+/// runtime's words. The program
 /// that runs the Host lends it as `rawframe.view.headset_away`, the XR
 /// module tells it as its session's state changes, and the program counts
 /// its frames suspended while it is, as it does from the platform's
-/// `suspending` until `resumed` (D565). Main thread only.
+/// `suspending` until `resumed`. Main thread only.
 class HeadsetAway {
 public:
     HeadsetAway() = default;

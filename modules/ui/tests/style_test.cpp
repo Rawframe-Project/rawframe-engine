@@ -1,7 +1,7 @@
-// Style classes over Maul UI's (D431): a class's base look, the variants a
+// Style classes over Maul UI's: a class's base look, the variants a
 // node's states pick, the later class winning, the parts a node sets
 // itself winning over every class, and a timed transition moving a fill
-// between two frames' times, its spec gone with its class (D634).
+// between two frames' times, its spec gone with its class.
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/tree.h"

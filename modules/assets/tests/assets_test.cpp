@@ -1,4 +1,4 @@
-// Decoded assets against SPEC-0027: requests that coalesce into one load
+// Decoded assets: requests that coalesce into one load
 // with their own readiness, forms evicted in a deterministic order when the
 // budget needs room and never while wanted, handles that fail typed once
 // stale while forms shared before stay whole, sticky failures, deadlines

@@ -476,7 +476,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"document", "operations"}),
                                annotationsOf(false, true)));
     }
-    // Several scenes changed as one, and what is chosen in one (D889).
+    // Several scenes changed as one, and what is chosen in one.
     {
         Value operation = Value::object();
         operation.add("type", text("object"));
@@ -540,7 +540,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"source", "as"}),
                                annotationsOf(false, false)));
     }
-    // The game's files moved, removed, and its folders made (D929).
+    // The game's files moved, removed, and its folders made.
     {
         Value properties = Value::object();
         properties.add("from", property("string", false, "The file's or folder's path under the game's directory."));
@@ -569,7 +569,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"folder"}),
                                annotationsOf(false, false)));
     }
-    // The played game paused, let run, and stepped (D806).
+    // The played game paused, let run, and stepped.
     {
         Value properties = Value::object();
         properties.add("scene", property("string", false, "The scene previewed while the game plays."));
@@ -593,7 +593,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene", "ticks"}),
                                annotationsOf(false, false)));
     }
-    // The played game's World as its server holds it (D808).
+    // The played game's World as its server holds it.
     {
         Value properties = Value::object();
         properties.add("scene", property("string", false, "The scene previewed while the game plays."));
@@ -616,8 +616,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene", "entity"}),
                                annotationsOf(true, false)));
     }
-    // The played game's server's traffic (D807), each connection's too
-    // (D840).
+    // The played game's server's traffic, each connection's too.
     {
         Value properties = Value::object();
         properties.add("scene", property("string", false, "The scene previewed while the game plays."));
@@ -628,7 +627,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene"}),
                                annotationsOf(true, false)));
     }
-    // What a ray meets in the played game's World (D989), where something
+    // What a ray meets in the played game's World, where something
     // dropped there rests.
     {
         Value properties = Value::object();
@@ -651,7 +650,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene", "origin", "toward"}),
                                annotationsOf(true, false)));
     }
-    // What the played game's World's last ticks took (D838).
+    // What the played game's World's last ticks took.
     {
         Value properties = Value::object();
         properties.add("scene", property("string", false, "The scene previewed while the game plays."));
@@ -659,7 +658,7 @@ void McpBridge::State::addSessionTools() {
                        property("string",
                                 false,
                                 "A .rfprofile path under the game's directory to keep the profile in, as a capture "
-                                "Studio opens read-only (D844)."));
+                                "Studio opens read-only."));
         tools.push_back(toolOf("game_profile",
                                "What the played game's server's last ticks took, in microseconds: each tick, and "
                                "each system's total and longest over them; kept as a capture file when one is "
@@ -667,7 +666,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene"}),
                                annotationsOf(false, false)));
     }
-    // What the preview's last frame held, and a capture of it (D842).
+    // What the preview's last frame held, and a capture of it.
     {
         Value properties = Value::object();
         properties.add("scene", property("string", false, "The scene previewed."));
@@ -684,7 +683,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene"}),
                                annotationsOf(false, false)));
     }
-    // The game's Studio extensions, and one of their commands run (D874).
+    // The game's Studio extensions, and one of their commands run.
     tools.push_back(toolOf("extensions_list",
                            "The game's Studio extensions (Kest programs under extensions/), each with its "
                            "commands, the capabilities its doors are of, and why it offers nothing where it does "
@@ -745,7 +744,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"scene", "extension", "panel"}),
                                annotationsOf(true, false)));
     }
-    // What a source uses and what uses it, by the last cook (D803).
+    // What a source uses and what uses it, by the last cook.
     {
         Value properties = Value::object();
         properties.add("asset", property("string", false, "The source's path under the game's directory."));
@@ -756,7 +755,7 @@ void McpBridge::State::addSessionTools() {
                                annotationsOf(true, false)));
     }
     // A texture's, a mesh's, or a material's thumbnail from the session's last
-    // cook (D801, D899, D900).
+    // cook.
     {
         Value properties = Value::object();
         properties.add(
@@ -771,7 +770,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"asset", "size"}),
                                annotationsOf(true, false)));
     }
-    // A mesh's box from the session's last cook (D989).
+    // A mesh's box from the session's last cook.
     {
         Value properties = Value::object();
         properties.add("asset", property("string", false, "The mesh's path under the game's directory."));
@@ -781,7 +780,7 @@ void McpBridge::State::addSessionTools() {
                                schemaOf(std::move(properties), {"asset"}),
                                annotationsOf(true, false)));
     }
-    // A source's import settings, read and set (D800).
+    // A source's import settings, read and set.
     {
         Value properties = Value::object();
         properties.add("asset", property("string", false, "The source's path under the game's directory."));

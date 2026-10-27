@@ -72,14 +72,14 @@ ui::Layout ShellParticipant::dockLayout(float height) {
 
 result::Result<ui::Node> ShellParticipant::column(ui::Node parent, std::string_view heading, float width) {
     RAWFRAME_TRY_ASSIGN(const ui::Node kColumn, box(parent, columnLayout(width), kPanel));
-    // A column scrolls what does not fit (D441), so its rows keep their
+    // A column scrolls what does not fit, so its rows keep their
     // heights rather than shrinking to fit.
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kHeading,
         box(kColumn, ui::Layout{.height = ui::pixels(22), .alignItems = ui::Align::Center, .shrink = 0}, 0));
     RAWFRAME_TRY_ASSIGN(const ui::Node kTitle, box(kHeading, ui::Layout{}, 0));
     RAWFRAME_TRY(words(kTitle, heading, kQuiet, 13));
-    // Read as a list that scrolls, by its heading (D575).
+    // Read as a list that scrolls, by its heading.
     RAWFRAME_TRY(tree_->setRole(kColumn, ui::Role::ScrollView));
     RAWFRAME_TRY(tree_->setName(kColumn, heading));
     return kColumn;
@@ -166,7 +166,7 @@ result::Result<ui::Node> ShellParticipant::entityRow(ui::Node column,
     RAWFRAME_TRY_ASSIGN(const ui::Node kLabel, box(kRowNode, ui::Layout{.shrink = 1}, 0));
     RAWFRAME_TRY(words(kLabel, label, ink, look::kBodySize));
     RAWFRAME_TRY(tree_->setInteraction(kLabel, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
-    // What it is, quieter, after its name (D923).
+    // What it is, quieter, after its name.
     if (!quiet.empty()) {
         RAWFRAME_TRY_ASSIGN(const ui::Node kQuietLabel, box(kRowNode, ui::Layout{.shrink = 1}, 0));
         RAWFRAME_TRY(monoWords(kQuietLabel, quiet, look::kFaintInk, look::kSmallSize));
@@ -194,7 +194,7 @@ result::Status ShellParticipant::build() {
     held_.buttonParts.clear();
     held_.commandButtons.clear();
     // The title row: the mark, the menus, what is open in the middle, the
-    // palette's field at its end (D915).
+    // palette's field at its end.
     RAWFRAME_TRY_ASSIGN(const ui::Node kTitleRow, titleRow(root_));
     RAWFRAME_TRY_ASSIGN(const ui::Node kStart, box(kTitleRow, ui::Layout{.alignItems = ui::Align::Center}, 0));
     RAWFRAME_TRY(box(kTitleRow, ui::Layout{.grow = 1}, 0));
@@ -205,7 +205,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(box(kTitleRow, ui::Layout{.grow = 1}, 0));
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearchAt,
                         box(kTitleRow, ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0}, 0));
-    // The others at a host joined, each in their color (D884).
+    // The others at a host joined, each in their color.
     held_.avatars.clear();
     held_.avatarsNode = ui::Node{};
     if (held_.joined != nullptr) {
@@ -216,7 +216,7 @@ result::Status ShellParticipant::build() {
     }
     held_.searchAt = kSearchAt;
     // The toolbar: tools and snapping, Cook and Play, history and layout;
-    // the start screen has neither it nor the status bar (D918).
+    // the start screen has neither it nor the status bar.
     if (gameOpen()) {
         RAWFRAME_TRY(toolbar(root_));
     }
@@ -248,13 +248,13 @@ result::Status ShellParticipant::build() {
         box(kMain,
             ui::Layout{.height = ui::pixels(0), .minHeight = ui::pixels(0), .direction = ui::Direction::Row, .grow = 3},
             kBackground));
-    // What a button stands for that the frame does not draw (D915): kept
+    // What a button stands for that the frame does not draw: kept
     // apart from the window, so the menus, the keys, and the palette still
     // find what it does.
     RAWFRAME_TRY_ASSIGN(held_.shelf, box(std::nullopt, ui::Layout{}, 0));
-    // The docks at the sizes the author left them (D779), each with a
+    // The docks at the sizes the author left them, each with a
     // splitter on its inner edge in place of the gap it had.
-    // The left dock: its tabs, Hierarchy, Layers, and World (D788, D870),
+    // The left dock: its tabs, Hierarchy, Layers, and World,
     // then the one shown.
     RAWFRAME_TRY_ASSIGN(leftDock_, box(kUpper, leftLayout(preferences_.hierarchyWidth), look::kPanelFill));
     RAWFRAME_TRY(tree_->setLook(leftDock_, ui::Look{.fill = look::kPanelFill}));
@@ -265,9 +265,9 @@ result::Status ShellParticipant::build() {
     worldBackTab_ = ui::Node{};
     RAWFRAME_TRY(box(kLeftTabs, ui::Layout{.grow = 1}, 0));
     // The Hierarchy's own switch, the played World in place of the
-    // document's (D808), and New, as the design's plus.
+    // document's, and New, as the design's plus.
     RAWFRAME_TRY_ASSIGN(live_.button, textButton(kLeftTabs, std::nullopt, "Live", ButtonKind::Quiet));
-    // The plus opens the New menu (D917); New itself, an empty entity, is
+    // The plus opens the New menu; New itself, an empty entity, is
     // on the shelf.
     held_.newMenu = ui::Node{};
     if (catalog_.offers("scene.create_entity")) {
@@ -287,8 +287,8 @@ result::Status ShellParticipant::build() {
     if (catalog_.offers("scene.destroy_entity")) {
         RAWFRAME_TRY_ASSIGN(deleteNode_, button(held_.shelf, "Delete"));
     }
-    // The chosen entity copied whole (D458), its operations the catalog's,
-    // and moved to another scene, made there and deleted here (D498).
+    // The chosen entity copied whole, its operations the catalog's,
+    // and moved to another scene, made there and deleted here.
     if (catalog_.offers("scene.create_entity") && catalog_.offers("scene.add_component") &&
         catalog_.offers("scene.set_field")) {
         RAWFRAME_TRY_ASSIGN(duplicateNode_, button(held_.shelf, "Duplicate"));
@@ -297,14 +297,14 @@ result::Status ShellParticipant::build() {
         }
     }
     // An instance's entity: one it removed taken back, or the whole
-    // instance removed (D450).
+    // instance removed.
     if (catalog_.offers("scene.restore_entity")) {
         RAWFRAME_TRY_ASSIGN(restoreNode_, button(held_.shelf, "Restore"));
     }
     if (catalog_.offers("scene.remove_instance")) {
         RAWFRAME_TRY_ASSIGN(uninstanceNode_, button(held_.shelf, "Remove instance"));
     }
-    // The chosen entity's place among the scene's own (D451).
+    // The chosen entity's place among the scene's own.
     if (catalog_.offers("scene.move_entity")) {
         RAWFRAME_TRY_ASSIGN(upNode_, button(held_.shelf, "Up"));
         RAWFRAME_TRY_ASSIGN(downNode_, button(held_.shelf, "Down"));
@@ -321,7 +321,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(tree_->setName(centerColumn_, "Documents"));
     RAWFRAME_TRY_ASSIGN(tabsRow_, tabStrip(centerColumn_));
     RAWFRAME_TRY(tree_->setLook(tabsRow_, ui::Look{.fill = look::kBarFill, .borderColor = look::kLine}));
-    // The mode palette on the viewport's left edge (SPEC-0051, D910), over
+    // The mode palette on the viewport's left edge, over
     // it, its buttons the new tree's.
     held_.modeButtons.clear();
     RAWFRAME_TRY_ASSIGN(
@@ -341,7 +341,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(splitter(kMain, Edge::Dock));
     RAWFRAME_TRY_ASSIGN(bottomDock_, box(kMain, dockLayout(preferences_.dockHeight), look::kPanelFill));
     RAWFRAME_TRY(tree_->setLook(bottomDock_, ui::Look{.fill = look::kPanelFill}));
-    // Each panel by the name the surface table places it under (D873).
+    // Each panel by the name the surface table places it under.
     constexpr auto kBottom = [](std::string_view name) consteval {
         return placed(name, SurfaceKind::Panel, "Bottom");
     };
@@ -366,8 +366,8 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY(makeChanges());
     RAWFRAME_TRY_ASSIGN(held_.curvesColumn, pane("Curves"));
     RAWFRAME_TRY(makeExtensionPanels());
-    // The panes the author docked on the right are not under the scene
-    // (D980); the first still there shows.
+    // The panes the author docked on the right are not under the scene;
+    // the first still there shows.
     dockShown_ = readRightPanes();
     RAWFRAME_TRY(tree_->attach(bottomDock_, paneNode(dockShown_)));
     showDock(dockShown_);
@@ -385,8 +385,7 @@ result::Status ShellParticipant::build() {
     RAWFRAME_TRY_ASSIGN(docking_.rightTabs, tabStrip(held_.rightDock));
     RAWFRAME_TRY_ASSIGN(held_.inspectorTab, tab(docking_.rightTabs, "Inspector", true));
     RAWFRAME_TRY_ASSIGN(held_.sceneSettingsTab, tab(docking_.rightTabs, "Scene settings"));
-    // The Environment panel is the Scene settings tab, as the design's
-    // (D921).
+    // The Environment panel is the Scene settings tab, as the design's.
     environmentTab_ = held_.sceneSettingsTab;
     held_.sceneSettingsShown = false;
     RAWFRAME_TRY_ASSIGN(componentsColumn_,
@@ -414,7 +413,7 @@ void ShellParticipant::showTabs(std::optional<std::size_t> opened) {
     });
     clear(tabRows_);
     for (const std::string& kPath : openDocuments_) {
-        // As the design's document tabs (D915): the open one lit, its top
+        // As the design's document tabs: the open one lit, its top
         // the accent, each with its kind's icon.
         const bool kOn = kPath == scene_;
         auto tab = box(tabsRow_,
@@ -449,7 +448,7 @@ void ShellParticipant::showTabs(std::optional<std::size_t> opened) {
 }
 
 result::Status ShellParticipant::showBroken(ui::Node body) {
-    // As the design's state that never leaves Studio blank (D923): what
+    // As the design's state that never leaves Studio blank: what
     // broke, where, the lines around it, and what to do next, in a column
     // in the middle.
     RAWFRAME_TRY_ASSIGN(const ui::Node kBroken,
@@ -563,7 +562,7 @@ result::Status ShellParticipant::showBroken(ui::Node body) {
     RAWFRAME_TRY_ASSIGN(
         const ui::Node kTools,
         box(kColumn, ui::Layout{.alignItems = ui::Align::Center, .gap = 8, .shrink = 0, .padding = {0, 0, 4, 0}}, 0));
-    // Only the game's own files are the author's to open (D453).
+    // Only the game's own files are the author's to open.
     if (diagnostic_.has_value() && diagnostic_->file.starts_with("game/") && !editor_.empty()) {
         RAWFRAME_TRY_ASSIGN(openNode_, textButton(kTools, std::nullopt, "Open in editor", ButtonKind::Primary));
     }
@@ -577,7 +576,7 @@ result::Status ShellParticipant::showScenes() {
     clear(sceneRows_);
     newScene_.reset();
     // The browser's heading and folders first, then the documents it
-    // shows (D799), one left out holding no card, then the other sources.
+    // shows, one left out holding no card, then the other sources.
     RAWFRAME_TRY(showBrowser());
     RAWFRAME_TRY(showDocuments());
     RAWFRAME_TRY(showSources());
@@ -588,7 +587,7 @@ result::Status ShellParticipant::showScenes() {
 result::Result<ui::Node>
 ShellParticipant::row(ui::Node column, std::string_view text, std::uint32_t color, std::uint32_t fill, bool pressed) {
     RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode, box(column, ui::Layout{.shrink = 0, .padding = {8, 8, 4, 3}}, fill));
-    // A row as the design's: clear until chosen, its words a row's (D915).
+    // A row as the design's: clear until chosen, its words a row's.
     const std::uint32_t kInk = color == kText ? look::kRowInk : color;
     RAWFRAME_TRY(pressed ? pressWords(kRowNode, text, kInk, look::kBodySize)
                          : words(kRowNode, text, kInk, look::kBodySize));
@@ -604,15 +603,15 @@ void ShellParticipant::clear(std::vector<ui::Node>& rows) {
 
 void ShellParticipant::showScene(std::size_t at) {
     // A view's number being typed is kept: the camera's rows are not made
-    // again (D925).
+    // again.
     if (!editing_.has_value() || editing_->role != FieldRow::Role::View) {
         endEdit();
     }
     fields_.clear();
     const bool kChanged = scene_ != scenes_[at];
     if (kChanged) {
-        // What was chosen was the other scene's (D787), and a source chosen
-        // in Assets gives the Inspector up to it (D916).
+        // What was chosen was the other scene's, and a source chosen
+        // in Assets gives the Inspector up to it.
         selected_.clear();
         browser_.chosen.clear();
         for (const auto& [kCard, kPath] : browser_.sourceRows) {
@@ -630,20 +629,20 @@ void ShellParticipant::showScene(std::size_t at) {
     }
     scene_ = scenes_[at];
     sceneAt_ = at;
-    // A document opened is what Assets' Rename and Delete act on (D929).
+    // A document opened is what Assets' Rename and Delete act on.
     if (kChanged) {
         browser_.target = scene_;
-        // A 2D game's scene settles on the 2D view (D933).
+        // A 2D game's scene settles on the 2D view.
         held_.flatPending = at < listed_.size() && listed_[at] == Listed::Scene;
     }
     showTabs(at);
     showTitle();
-    // The mode it is in, lit in the palette (D910).
+    // The mode it is in, lit in the palette.
     showModes();
     if (kChanged) {
         // A scene's view is the session's, unknown here until it says,
         // and its search starts empty. A style sheet has neither, nor a
-        // preview (D637).
+        // preview.
         view_.reset();
         find_.clear();
         static_cast<void>(tree_->scrollTo(entitiesColumn_, 0, 0));
@@ -684,11 +683,11 @@ void ShellParticipant::showScene(std::size_t at) {
     components_ = 0;
     findField_.reset();
     held_.timelineScale = 0;
-    // The Curves tab follows the open document: none but a clip's (D927).
+    // The Curves tab follows the open document: none but a clip's.
     if (paneShown(Dock::Curves) && !chosen(Listed::Data)) {
         showCurves();
     }
-    // The played game's World in place of the document's (D808).
+    // The played game's World in place of the document's.
     if (live_.on) {
         showLive();
         return;
@@ -741,10 +740,10 @@ void ShellParticipant::showScene(std::size_t at) {
         showSequence();
         return;
     }
-    // Over the scene's entities, the search that chooses them (D473), then
+    // Over the scene's entities, the search that chooses them, then
     // the scene an instance placed in it is of: at the Hierarchy's top,
-    // where a long scene does not scroll them away (D776).
-    // As the design's filter (D916): a well with the magnifier, then the
+    // where a long scene does not scroll them away.
+    // As the design's filter: a well with the magnifier, then the
     // instance's, each its hint until typed into.
     if (catalog_.offers("scene.find_entities")) {
         auto line = searchWell(entitiesColumn_, "find", "Filter entities", find_, 0, Icon::Search);
@@ -785,7 +784,7 @@ void ShellParticipant::showScene(std::size_t at) {
     if (listed == nullptr || listed->kind() != Value::Kind::Array) {
         return;
     }
-    // Shown as a tree, each entity under the one it follows (D785).
+    // Shown as a tree, each entity under the one it follows.
     std::vector<const Value*> items;
     std::vector<std::string> ids;
     std::vector<std::string> parents;
@@ -814,7 +813,7 @@ void ShellParticipant::showScene(std::size_t at) {
         std::string label = name != nullptr && name->text() != nullptr ? *name->text() : std::string{};
         if (label.empty() && brought != nullptr) {
             // Named by the scene it is placed from and which placing, as
-            // `platform 2` (D927), else by its instance's place.
+            // `platform 2`, else by its instance's place.
             const Value* instance = brought->find("instance");
             const Value* from = brought->find("scene");
             const auto kSource = from != nullptr && from->text() != nullptr
@@ -828,14 +827,14 @@ void ShellParticipant::showScene(std::size_t at) {
         if (kRemoved) {
             label += "  (removed)";
         }
-        // Who else has it chosen, and who holds it, at a host joined (D884).
+        // Who else has it chosen, and who holds it, at a host joined.
         label += presenceMarks(*id->text());
-        // A tree row (D915): an instance's entities are its scene's, in the
+        // A tree row: an instance's entities are its scene's, in the
         // prefab's color.
         const std::size_t kPlace = static_cast<std::size_t>(&kLine - lines.data());
         const bool kParent = kPlace + 1 < lines.size() && lines[kPlace + 1].depth > kLine.depth;
         // Its icon by what its name says it is, as an editor's outliner
-        // tells a light from a mesh (D923).
+        // tells a light from a mesh.
         std::string lower = label;
         std::ranges::transform(lower, lower.begin(), [](char letter) {
             return static_cast<char>(std::tolower(static_cast<unsigned char>(letter)));
@@ -867,7 +866,7 @@ void ShellParticipant::showScene(std::size_t at) {
         entityLayers_.push_back(layer != nullptr ? static_cast<std::uint32_t>(layer->integer().value_or(0)) : 0);
         entities_.push_back(*id->text());
         // An instance's entity with no name of its own is named as its row
-        // is, so the Inspector's head says it (D933).
+        // is, so the Inspector's head says it.
         names_.push_back(name != nullptr && name->text() != nullptr && !name->text()->empty() ? *name->text()
                          : brought != nullptr                                                 ? label
                                                                                               : std::string{});
@@ -876,7 +875,7 @@ void ShellParticipant::showScene(std::size_t at) {
         const Value* place = each.find("place");
         places_.push_back(place != nullptr ? place->integer() : std::nullopt);
     }
-    // An empty scene says so, as the design's (D923).
+    // An empty scene says so, as the design's.
     if (lines.empty()) {
         if (auto note = box(entitiesColumn_, ui::Layout{.shrink = 0, .padding = {12, 12, 8, 8}}, 0); note.has_value()) {
             sceneFieldRows_.push_back(*note);
@@ -981,7 +980,7 @@ void ShellParticipant::showEntity(std::size_t at) {
     }
     if (chosen(Listed::Sequence)) {
         // The Add track row adds one; a track's row or the events' is only
-        // shown (D931).
+        // shown.
         if (entities_[at] == "track") {
             addSequenceTrack();
         }
@@ -996,8 +995,7 @@ void ShellParticipant::showEntity(std::size_t at) {
         static_cast<void>(tree_->scrollTo(componentsColumn_, 0, 0));
     }
     entity_ = entities_[at];
-    // One entity shown is the one chosen, so an edit reaches no other
-    // (D787).
+    // One entity shown is the one chosen, so an edit reaches no other.
     selected_ = {entity_};
     for (std::size_t each = 0; each < entityRows_.size(); ++each) {
         static_cast<void>(
@@ -1006,18 +1004,18 @@ void ShellParticipant::showEntity(std::size_t at) {
     clear(componentRows_);
     actions_.clear();
     components_ = 0;
-    // Chosen in the session, so undo and redo keep it (D417).
+    // Chosen in the session, so undo and redo keep it.
     static_cast<void>(ask(selectRecord(next(), scene_, selected_)));
-    // And marked in its preview, where it stands (D464).
+    // And marked in its preview, where it stands.
     markChosen();
-    // The Inspector's head (D915): the entity's icon and its name, the
+    // The Inspector's head: the entity's icon and its name, the
     // scene's own entity named here, an instance's its source's.
     if (auto head = inspectorHead(names_[at], brought_[at], catalog_.offers("scene.rename_entity") && !brought_[at]);
         head.has_value() && head->has_value()) {
         fields_.push_back(FieldRow{.value = **head, .role = FieldRow::Role::Name, .field = "name"});
     }
     // An instance's entity says where its values come from, and opens its
-    // source to edit it, as an editor's prefab does (D927).
+    // source to edit it, as an editor's prefab does.
     if (const auto kFrom = held_.broughtFrom.find(entity_); brought_[at] && kFrom != held_.broughtFrom.end()) {
         const auto kSource = std::ranges::find(browser_.sources, kFrom->second, &ListedSource::id);
         const std::string kPath = kSource != browser_.sources.end() ? kSource->path : std::string{};
@@ -1070,7 +1068,7 @@ void ShellParticipant::showEntity(std::size_t at) {
         ++components_;
         const std::vector<FieldShown> kFieldsShown =
             groupedFields(kComponent, fieldsShown(catalog_.component(kComponent), each.find("fields")));
-        // Runs of axes shown as one row of colored X, Y, and Z (D915).
+        // Runs of axes shown as one row of colored X, Y, and Z.
         std::size_t skip = 0;
         for (std::size_t place = 0; place < kFieldsShown.size(); ++place) {
             if (skip > 0) {
@@ -1097,9 +1095,9 @@ void ShellParticipant::showEntity(std::size_t at) {
                     text = names_[static_cast<std::size_t>(kAt - entities_.begin())];
                 }
             }
-            // A labelled number by its label and a color as #RRGGBBAA
-            // (D784); else a number naming a declared asset shows the
-            // asset (D455).
+            // A labelled number by its label and a color as #RRGGBBAA;
+            // else a number naming a declared asset shows the
+            // asset.
             const Catalog::Field kType = kEach.type.value_or(Catalog::Field{.name = kEach.name, .kind = kEach.kind});
             if (kType.color || !kType.labels.empty()) {
                 text = shownAs(kType, text);
@@ -1108,14 +1106,14 @@ void ShellParticipant::showEntity(std::size_t at) {
                     text = assetShown(*held);
                 }
             }
-            // Unset, its default shown quiet (D915): nought, false, or its
+            // Unset, its default shown quiet: nought, false, or its
             // first case.
             if (!kEach.text.has_value()) {
                 text = !kType.cases.empty()    ? kType.cases.front()
                        : kEach.kind == "truth" ? std::string{"false"}
                        : kEach.kind == "real" || kEach.kind == "signed" || kEach.kind == "unsigned" ? std::string{"0"}
                                                                                                     : std::string{};
-                // A labelled number's default by its label (D916).
+                // A labelled number's default by its label.
                 if (!kType.labels.empty()) {
                     text = shownAs(kType, text);
                 }
@@ -1126,7 +1124,7 @@ void ShellParticipant::showEntity(std::size_t at) {
             }
             componentRows_.push_back(line->first);
             // A truth checked in its box, a field of a few values chosen
-            // from its list (D916).
+            // from its list.
             if (kEach.kind == "truth") {
                 asCheckbox(line->second, text == "true");
             } else if (!kType.cases.empty() || !kType.labels.empty()) {
@@ -1164,7 +1162,7 @@ void ShellParticipant::showEntity(std::size_t at) {
         }
     }
     showSections(kRead);
-    // As the design's Add component (D916): pressed, the catalog's
+    // As the design's Add component: pressed, the catalog's
     // components listed under it, narrowed as a name is typed.
     if (catalog_.offers("scene.add_component")) {
         auto line = searchWell(componentsColumn_, "add", "Add component", "", 0, Icon::Plus);
@@ -1188,7 +1186,7 @@ void ShellParticipant::showEntity(std::size_t at) {
 
 result::Status
 ShellParticipant::componentHeading(std::string_view name, const std::string& component, bool brought, bool stale) {
-    // As the design's section (D915): a line above, the chevron, the
+    // As the design's section: a line above, the chevron, the
     // component's own name strong, its full name quiet in the fixed face,
     // and its buttons at its end.
     RAWFRAME_TRY_ASSIGN(const ui::Node kHeading,
@@ -1211,7 +1209,7 @@ ShellParticipant::componentHeading(std::string_view name, const std::string& com
     // The heading's buttons together at its end.
     RAWFRAME_TRY_ASSIGN(const ui::Node kActions, box(kHeading, ui::Layout{.alignItems = ui::Align::Center}, 0));
     // A component the scene was authored against another layout of is
-    // carried over to the catalog's, for every entity of the scene (D452).
+    // carried over to the catalog's, for every entity of the scene.
     if (stale && catalog_.offers("scene.remark_component")) {
         RAWFRAME_TRY(action(kActions,
                             "Update",
@@ -1240,7 +1238,7 @@ result::Status ShellParticipant::action(ui::Node row, std::string_view text, Act
 
 result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::fieldRow(
     std::string_view name, std::string_view value, std::optional<ui::Node> column, bool set, std::string_view shown) {
-    // As the design's property row (D915): a label of 116 pixels, then the
+    // As the design's property row: a label of 116 pixels, then the
     // field's well.
     RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
                         box(column.value_or(componentsColumn_),
@@ -1253,7 +1251,7 @@ result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::fieldRow(
     RAWFRAME_TRY_ASSIGN(const ui::Node kName, box(kLine, ui::Layout{.width = ui::pixels(116), .shrink = 0}, 0));
     // A field the scene sets reads brighter than one at its default.
     // Its label as words, apart from the field's own name a screen reader
-    // reads (D925).
+    // reads.
     RAWFRAME_TRY(words(kName,
                        shown.empty() ? prettyField(name) : std::string{shown},
                        set ? look::kSoftInk : look::kLabelInk,
@@ -1268,7 +1266,7 @@ result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::fieldRow(
     RAWFRAME_TRY(tree_->setLook(kValue, ui::Look{.fill = look::kWellFill, .borderColor = look::kEdge, .radius = 4}));
     RAWFRAME_TRY(tree_->attach(kLine, kValue));
     RAWFRAME_TRY(words(kValue, value, set ? kText : look::kFaintInk, look::kBodySize));
-    // Read as a field named by its name, its text its value (D575).
+    // Read as a field named by its name, its text its value.
     RAWFRAME_TRY(tree_->setRole(kValue, ui::Role::TextInput));
     RAWFRAME_TRY(tree_->setName(kValue, name));
     return std::pair{kLine, kValue};
@@ -1279,7 +1277,7 @@ void ShellParticipant::showView() {
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
     forgetUiPreview();
-    // The view's numbers under Scene settings (D915, D925): the viewport's
+    // The view's numbers under Scene settings: the viewport's
     // camera is flown, framed, and bookmarked, and these follow it. Made
     // once, so a scene shown again while one is typed into keeps it.
     if (viewFields_.empty() || !tree_->contains(viewFields_.front().value)) {
@@ -1314,7 +1312,7 @@ void ShellParticipant::showHistoryList() {
     }
     for (const HistoryEntry& entry : historyOf(ask(historyRecord(next(), scene_)))) {
         // An entry that takes another back says so, and one another author
-        // made says whose it is (ADR-0085).
+        // made says whose it is.
         std::string text =
             entry.kind == "undo" || entry.kind == "redo" ? entry.kind + ": " + entry.summary : entry.summary;
         if (!entry.author.empty()) {
@@ -1352,7 +1350,7 @@ result::Status ShellParticipant::showHistory() {
 
 void ShellParticipant::say(std::string text) {
     // Logged as it changes: a game that ended is said again every half
-    // second, and was logged as often (D495).
+    // second, and was logged as often.
     const bool kChanged = text != status_;
     status_ = std::move(text);
     static_cast<void>(words(statusNode_, status_, look::kLabelInk, look::kLabelSize));

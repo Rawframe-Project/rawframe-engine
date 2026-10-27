@@ -28,7 +28,7 @@ struct Held {
     /// it comes to rest itself, so the node sees no press it did not see
     /// begin.
     bool swallowed = false;
-    /// A key that went down while a text field took the keyboard (D430):
+    /// A key that went down while a text field took the keyboard:
     /// the field's until it is let go, so no gated action sees it, even
     /// after the field gives the keyboard back.
     bool typed = false;
@@ -366,7 +366,7 @@ struct Mapper::State {
     }
 
     /// Every control of the player's devices at rest. The pointer is a
-    /// place, not something held: it stays where it was last told (D367).
+    /// place, not something held: it stays where it was last told.
     void releasePlayer(std::uint8_t slot) {
         ++statistics.releases;
         for (auto& [kKey, value] : held) {
@@ -380,7 +380,7 @@ struct Mapper::State {
 
     /// Whether the UI takes a press of `event`'s control at its device's
     /// pointer: a mouse button or a touch control going down, or a
-    /// controller's select at its hand's pointer on the panel (D598).
+    /// controller's select at its hand's pointer on the panel.
     [[nodiscard]] bool takenByUi(std::uint8_t slot, const ControlEvent& event) const {
         if (!pointerTaker || shapeOf(event.control) != ControlShape::Digital || event.x == 0) {
             return false;
@@ -622,7 +622,7 @@ void Mapper::setTextEditing(bool editing) {
     if (state.textEditing == editing) {
         return;
     }
-    // What was submitted before is applied as the gate was (D430).
+    // What was submitted before is applied as the gate was.
     state.update();
     state.textEditing = editing;
     for (std::size_t slot = 0; slot < state.players.size(); ++slot) {
@@ -638,7 +638,7 @@ void Mapper::releaseAll() {
     State& state = *state_;
     // What came before the loss came while the window had focus: applied,
     // then let go. Cleared instead, a touch down that the window told in
-    // the same records as the loss was never the UI's (D594).
+    // the same records as the loss was never the UI's.
     for (std::size_t slot = 0; slot < state.players.size(); ++slot) {
         state.drain(static_cast<std::uint8_t>(slot));
         state.releasePlayer(static_cast<std::uint8_t>(slot));

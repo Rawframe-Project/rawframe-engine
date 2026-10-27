@@ -3,10 +3,10 @@ module sample
 // A client's input for a walker (plaza.game's `sample` line): the stick,
 // made each tick from its player's actions (plaza.actions). The view turns
 // with the mouse while its right button is held, and with the arrow keys
-// or the right stick (D521). Its heading is kept in the stick, which the
-// sample builds on tick to tick (D525), and the walker runs along it: up
+// or the right stick. Its heading is kept in the stick, which the
+// sample builds on tick to tick, and the walker runs along it: up
 // runs the way the view looks along the ground. A headset's right hand
-// holds the walker's lamp (D599).
+// holds the walker's lamp.
 
 import controls
 import rawframe.input
@@ -50,13 +50,13 @@ fn sample(into: [controls.Stick]) {
     into[0].runX = aside * (0.0 - forwardZ) + ahead * forwardX
     into[0].runZ = aside * forwardX + ahead * forwardZ
     // A jump held now, or pressed in this tick at all, as the mouse's
-    // button (D527).
+    // button.
     into[0].jump = 0.0
     if input.on(JUMP) || input.pressed(JUMP) {
         into[0].jump = 1.0
     }
-    // The right hand's place while a headset's controller is located
-    // (D599); the lamp hangs at the walker's side otherwise.
+    // The right hand's place while a headset's controller is located;
+    // the lamp hangs at the walker's side otherwise.
     into[0].holding = 0.0
     if input.on(HAND) {
         into[0].holding = 1.0

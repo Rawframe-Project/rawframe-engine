@@ -1,4 +1,4 @@
-// Document deltas (SPEC-0040): every kind applied forward then backward
+// Document deltas: every kind applied forward then backward
 // gives the scene back byte for byte, a delta lands only on the slot it was
 // made against, the schema's marks follow the components used, and a
 // journal is read in its one canonical form or refused whole.

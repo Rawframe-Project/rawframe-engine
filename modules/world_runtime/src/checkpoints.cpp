@@ -85,8 +85,7 @@ result::Status writeArtifact(const std::string& path, std::span<const std::byte>
 }
 
 /// One capture past its safe point: sealed on the CPU executor, then
-/// written on the blocking-I/O executor, one capture at a time (SPEC-0013's
-/// one active encoder task, D227). The Host thread moves it on between
+/// written on the blocking-I/O executor, one capture at a time. The Host thread moves it on between
 /// ticks; a task only fills in its own step's result.
 struct Flight {
     enum class Step : std::uint8_t {
@@ -211,13 +210,13 @@ private:
                       diagnostics::field("entities", kFacts.entities),
                       diagnostics::field("rows", kFacts.rows),
                       diagnostics::field("digest", std::string_view{hex(kFacts.digest)}),
-                      // SPEC-0013's restore deadline (D215).
+                      // The restore deadline.
                       diagnostics::field("restoreMs", (clock_->now() - kStart).nanoseconds / 1'000'000)});
         return {};
     }
 
     /// Stages the World at its safe point, the only part that holds it,
-    /// and hands the rest to the executors (D227).
+    /// and hands the rest to the executors.
     result::Status capture() {
         const execution::MonotonicInstant kStart = clock_->now();
         const world::TickIndex kTick = simulation_->tick();
@@ -282,10 +281,10 @@ private:
                          {diagnostics::field("tick", flight_->tick),
                           diagnostics::field("bytes", kSealed.bytes.size()),
                           diagnostics::field("digest", std::string_view{hex(kSealed.digest)}),
-                          // SPEC-0013's safe-point pause: how long the World
-                          // was held for the capture (D227).
+                          // The safe-point pause: how long the World
+                          // was held for the capture.
                           diagnostics::field("pauseUs", flight_->pauseMicroseconds),
-                          // SPEC-0013's capture deadline, the write included (D215).
+                          // The capture deadline, the write included.
                           diagnostics::field("captureMs", (clock_->now() - flight_->start).nanoseconds / 1'000'000)});
             flight_.reset();
             return;
@@ -351,7 +350,7 @@ void registerCheckpoints(composition::ParticipantRegistrar& registrar) noexcept 
         .scope = composition::LifetimeScope::World,
         .requiredCapabilities = kNeeds,
         .optionalCapabilities = kMaybe,
-        // One task at a time on each: the seal, then the write (D227).
+        // One task at a time on each: the seal, then the write.
         .executor = {.cpu = true, .blockingIo = true, .quota = {.maximumPendingTasks = 1}},
         // Stopping finishes a capture under way: milliseconds for the
         // canonical crowd, within the budget with room to spare.

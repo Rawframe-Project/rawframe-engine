@@ -2,13 +2,13 @@
 
 // The scene's view as Studio moves it: typed into its fields, framed on
 // what is chosen, seen in 2D or out of it, and kept in or taken from a
-// bookmark, each through the session's view records (D471, D792, D793,
-// D796).
+// bookmark, each through the session's view records.
+//
 
 namespace rawframe::studio {
 
 void ShellParticipant::setView(const std::string& part, const std::string& text) {
-    // The snap is Studio's alone: no record (D471).
+    // The snap is Studio's alone: no record.
     if (part == "snap") {
         if (const std::optional<Snap> kSnap = snapOf(text); kSnap.has_value()) {
             snap_ = *kSnap;
@@ -41,8 +41,7 @@ void ShellParticipant::setView(const std::string& part, const std::string& text)
 }
 
 void ShellParticipant::frameChosen(bool quiet) {
-    // With nothing chosen, the whole scene, as the session frames it
-    // (D933).
+    // With nothing chosen, the whole scene, as the session frames it.
     if (scene_.empty()) {
         say("open a scene to frame it");
         return;
@@ -87,7 +86,7 @@ void ShellParticipant::seeIn2D(bool flat) {
     }
     showViewText();
     showViewBar();
-    // The toolbar's 3D and 2D lit as the view now is (D933).
+    // The toolbar's 3D and 2D lit as the view now is.
     showToolbar();
 }
 

@@ -13,18 +13,18 @@ namespace rawframe::studio {
 namespace {
 
 /// Studio's content modes, each the kind of document it opens and its
-/// name as the surface table gives it (D910).
+/// name as the surface table gives it.
 constexpr std::array<std::pair<std::string_view, Listed>, 4> kContentModes = {{{"Blockout", Listed::Blockout},
                                                                                {"Terrain", Listed::Terrain},
                                                                                {"Tiles", Listed::Tilemap},
                                                                                {"Scatter", Listed::Scatter}}};
 
 /// The mode Transform is: the scene's own editing, picks choosing and drags
-/// moving (D457).
+/// moving.
 constexpr std::string_view kTransform = placed("Transform", SurfaceKind::ViewportMode, "Mode palette");
 
 /// How many modes the extensions may add, as the Extensions menu offers
-/// them (D877).
+/// them.
 constexpr std::size_t kModesLeft =
     8 - static_cast<std::size_t>(std::ranges::count(kSurfaces, SurfaceKind::ViewportMode, &Surface::kind));
 
@@ -41,8 +41,8 @@ void ShellParticipant::showModes() {
         return;
     }
     // Over a scene's viewport, and over the document a content mode
-    // opened, so another mode or Transform is a press away (D925); any
-    // other document has no modes (D922).
+    // opened, so another mode or Transform is a press away; any
+    // other document has no modes.
     const bool kContentShown = std::ranges::any_of(kContentModes, [this](const auto& mode) {
         return chosen(mode.second);
     });
@@ -86,7 +86,7 @@ void ShellParticipant::showModes() {
         // quiet: choosing it says so.
         const auto kContent = std::ranges::find(kContentModes, kMode, &std::pair<std::string_view, Listed>::first);
         const bool kHas = kContent == kContentModes.end() || std::ranges::contains(listed_, kContent->second);
-        // Each by its icon (D915), an extension's its puzzle piece.
+        // Each by its icon, an extension's its puzzle piece.
         const Icon kIcon = kMode == "Transform"  ? Icon::Move
                            : kMode == "Blockout" ? Icon::Blockout
                            : kMode == "Terrain"  ? Icon::Terrain

@@ -1,8 +1,8 @@
-// A UI tree as assistive technology reads it (D571): a root's subtree given
+// A UI tree as assistive technology reads it: a root's subtree given
 // to a copy of the tree, its nodes' roles and names as their owner set
 // them, a name changed and a node removed reaching the copy with the next
 // update, and nothing given for a root no access reads; and a checkable
-// node's checked state read from its states (D622).
+// node's checked state read from its states.
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/access.h"
@@ -90,7 +90,7 @@ RAWFRAME_TEST(AnAccessIsRefusedWhatItCannotTake) {
         RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().code() == code(UiError::Unavailable));
     }
     // Android's, UI Automation's, AppKit's, UIKit's, and the page's need
-    // what the tree lies in (D576, D579, D588, D612), and are refused without
+    // what the tree lies in, and are refused without
     // it where they are built; a copy is no platform's root.
     for (const AccessPlatform kPlatform : {AccessPlatform::Android,
                                            AccessPlatform::Uia,
@@ -155,7 +155,7 @@ RAWFRAME_TEST(AScreenReadersPressesAndFocusesAreKeptForTheOwner) {
     RAWFRAME_EXPECT((kTaken == std::vector<AccessRequest>{{.kind = AccessRequest::Kind::Focus, .node = kQuit},
                                                           {.kind = AccessRequest::Kind::Press, .node = kPlay}}));
     RAWFRAME_EXPECT(seat.takeRequests().empty());
-    // A field's edits keep their ranges and text (D613).
+    // A field's edits keep their ranges and text.
     const AccessRequest kSelect{.kind = AccessRequest::Kind::Select, .node = kPlay, .anchor = 4, .focus = 1};
     const AccessRequest kReplace{
         .kind = AccessRequest::Kind::Replace, .node = kPlay, .anchor = 3, .focus = 1, .text = "\xC3\xA9t\xC3\xA9"};

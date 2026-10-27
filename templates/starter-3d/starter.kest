@@ -1,11 +1,11 @@
 module starter
 
-// The starter game (D780): each player a box it moves about a ground with
+// The starter game: each player a box it moves about a ground with
 // its stick, the server moving it and keeping it on the ground; a client
 // draws each box and the ground where they are, seen from above the
 // ground's near edge. A new game made from it starts here.
 //
-// And its scene's parts (D917): every body a part drawn as its shape, in
+// And its scene's parts: every body a part drawn as its shape, in
 // its paint where it has one, every lamp a light where its pose is, and a
 // sun over all of it, so what an author places in an editor shows.
 
@@ -33,13 +33,13 @@ struct Ground {
     side: f32
 }
 
-// A part's paint: its color, and its material where it names one (D917).
+// A part's paint: its color, and its material where it names one.
 struct Paint {
     color: u32
     material: u64
 }
 
-// A mesh the scene keeps (D981): the game's mesh drawn at the entity's
+// A mesh the scene keeps: the game's mesh drawn at the entity's
 // pose, in its own materials, or in `material` where it names one.
 struct Prop {
     mesh: u64

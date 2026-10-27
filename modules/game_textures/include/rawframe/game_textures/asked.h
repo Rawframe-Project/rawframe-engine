@@ -1,10 +1,8 @@
 #pragma once
 
-// A game's textures read one by one as they are first asked for (D322,
-// D378): a picture a World names (the sky's, a decal's) or an image a UI
-// shows, each read alone, so a game's other textures are never read for
-// one. What the game does not declare, or what cannot be asked for, has
-// none; the asker hears why once.
+// A game's textures read one by one as they are first asked for: a picture a World names (the sky's, a decal's) or an
+// image a UI shows, each read alone, so a game's other textures are never read for one. What the game does not declare,
+// or what cannot be asked for, has none; the asker hears why once.
 
 #include "rawframe/game_textures/game_textures.h"
 

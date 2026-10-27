@@ -1,6 +1,6 @@
 #pragma once
 
-// The tooling endpoint's profile verb (D838): what the World's last ticks
+// The tooling endpoint's profile verb: what the World's last ticks
 // took, each tick and each system, the inspect grant's, for a profiler.
 
 #include "rawframe/document/json.h"

@@ -235,7 +235,7 @@ std::string AuthoredUi::summaryAt(std::size_t entry) const {
     std::size_t more = journal.size() - 1;
     if (journal.size() > 1 && !kFirst.after.has_value() && !journal[1].before.has_value() &&
         !kFirst.path.back().key.empty() && kFirst.path.back().id == journal[1].path.back().id) {
-        // Taken out and put back elsewhere: a move (D644).
+        // Taken out and put back elsewhere: a move.
         made = "move node " + kFirst.path.back().id;
         --more;
     } else if (!kFirst.path.back().key.empty()) {

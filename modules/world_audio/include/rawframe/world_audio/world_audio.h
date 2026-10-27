@@ -1,6 +1,6 @@
 #pragma once
 
-// A World heard (ADR-0038): entities with `rawframe.sound` emitters play
+// A World heard: entities with `rawframe.sound` emitters play
 // their declared sounds from where their poses put them, heard by the one
 // active listener. Client only; a server carries the same components as
 // plain values and links none of this.
@@ -49,7 +49,7 @@ inline constexpr std::uint32_t kMaximumCuesPerUpdate = 4;
 
 struct WorldAudioSettings {
     /// The game's emitter components, at least one: a replicated one the
-    /// server sets, and a client's own that its present systems set (D272),
+    /// server sets, and a client's own that its present systems set,
     /// each heard apart, so one entity may hold several.
     std::vector<schema::ComponentTypeId> emitters;
     /// Its listener component; a game whose clients bind their listener to
@@ -71,14 +71,14 @@ struct WorldAudioStatistics {
     std::uint64_t loopingCues = 0;
     /// Plays the Sounds refused (a full concurrency set, no voice).
     std::uint64_t refused = 0;
-    /// Sounds played once by `playOnce`, a predicted effect's (D220).
+    /// Sounds played once by `playOnce`, a predicted effect's.
     std::uint64_t once = 0;
-    /// Sounds started playing on while an emitter is `playing` (D629).
+    /// Sounds started playing on while an emitter is `playing`.
     std::uint64_t continuous = 0;
 };
 
-/// A headset's head in its local space, for the frame's display time
-/// (ADR-0081 section 4, D677): where it is and how it is turned (a unit
+/// A headset's head in its local space, for the frame's display time:
+/// where it is and how it is turned (a unit
 /// quaternion, x, y, z, w). Presentation data only.
 struct HeadPose {
     std::array<float, 3> position{};
@@ -94,7 +94,7 @@ public:
     WorldAudio& operator=(const WorldAudio&) = delete;
     ~WorldAudio();
 
-    /// Binds the listener to an entity explicitly (SPEC-0036's typed
+    /// Binds the listener to an entity explicitly (the typed
     /// binding): a networked client hears from its own player, which only it
     /// knows. While bound, `Listener` components are not read; an entity
     /// that is gone, or has no pose, hears from nowhere.
@@ -103,11 +103,11 @@ public:
     /// Once a frame, on the owner's thread: the listener, every emitter's
     /// continuous sound and new cues, what despawned, then the Sounds.
     /// Where a headset shows, its `head` moves and turns a listener of a 3D
-    /// pose, that pose the play space (D677).
+    /// pose, that pose the play space.
     void update(world::World& world, float seconds, const std::optional<HeadPose>& head = std::nullopt);
 
     /// Plays the declared sound `sound` once from where `from` is, or where
-    /// the listener is when it has no pose: a predicted effect heard (D220).
+    /// the listener is when it has no pose: a predicted effect heard.
     /// Before the frame's `update`, which moves the Sounds on. A sound the
     /// game does not declare counts as unknown.
     void playOnce(const world::World& world, std::uint64_t sound, world::EntityHandle from);

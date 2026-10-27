@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of the UI documents a game or a mod carries
-// (D619): read, every node a component named once, each after the node it
+// Coverage-guided fuzzing of the UI documents a game or a mod carries:
+// read, every node a component named once, each after the node it
 // is inside.
 
 #include "rawframe/ui/document.h"

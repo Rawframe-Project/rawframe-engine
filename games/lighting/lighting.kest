@@ -1,6 +1,6 @@
 module lighting
 
-// Lighting Test (D749): the fixture's program. The server turns each
+// Lighting Test: the fixture's program. The server turns each
 // player's view as it asks; a client dresses the wall, the ground, and the
 // glowing block, and lights them.
 

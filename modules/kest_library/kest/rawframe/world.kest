@@ -1,12 +1,12 @@
 module rawframe.world
 
-// The engine's side of a Kest-scripted World (D22). A game's `kest.project`
+// The engine's side of a Kest-scripted World. A game's `kest.project`
 // names this directory as a source, and its systems import this module.
 
 // An entity of the World a system runs in. The engine makes every one: the
 // fields are this module's own, so a program holds, passes, and stores one
-// but never reads or forges the numbers inside. SPEC-0006 hands a runtime
-// handle to no script as a number.
+// but never reads or forges the numbers inside: no script holds a runtime
+// handle as a number.
 struct Entity {
     own slot: u32
     own generation: u32
@@ -24,7 +24,7 @@ fn create() -> Entity {
 }
 
 // The tick the running system simulates: the World's on a server, and on a
-// client the tick it predicts, run again as often as it is (D684). Time a
+// client the tick it predicts, run again as often as it is. Time a
 // system makes of it, such as a wave's phase, is the same wherever the
 // tick is simulated, where a count kept in a component lags on a client.
 fn tick() -> u64 {
@@ -37,7 +37,7 @@ fn destroy(entity: Entity) {
     World.destroy(entity)
 }
 
-// An entity's persistent identity (SPEC-0006), which it keeps from one World
+// An entity's persistent identity, which it keeps from one World
 // to the next through saves. The engine names it: a program asks for one and
 // never reads or forges the numbers.
 struct Persistent {
@@ -47,7 +47,7 @@ struct Persistent {
 
 extern fn Persistent.insert(entity: Entity, value: Persistent)
 
-// The layer an entity's scene put it on (D788), which an editor shows,
+// The layer an entity's scene put it on, which an editor shows,
 // hides, locks, and chooses together; nought for none. The game's
 // `field rawframe.world.layer layer labels ...` line names the layers.
 struct Layer {

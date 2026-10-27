@@ -1,6 +1,6 @@
 #pragma once
 
-// 2D physics in the World (ADR-0028, SPEC-0037) through Maul2D, whose types
+// 2D physics in the World through Maul2D, whose types
 // stay behind this module. One physics world per World, stepped once per
 // tick by one system in the simulation phase, `rawframe.physics2d.step`:
 //
@@ -47,7 +47,7 @@
 namespace rawframe::physics2d {
 
 /// A tilemap bodies may be made of: the identity a Tiles2D names it by, and
-/// its tiles (D859).
+/// its tiles.
 struct BodyTilemap {
     std::uint64_t id = 0;
     std::shared_ptr<const tilemap::Tilemap> map;
@@ -63,8 +63,8 @@ struct Physics2DSettings {
     std::uint32_t shapeCapacity = 4096;
     std::uint32_t jointCapacity = 1024;
     bool sleeping = true;
-    /// Ticks of every body's pose kept for casting back in time
-    /// (SPEC-0041's compensation window); nought keeps none.
+    /// Ticks of every body's pose kept for casting back in time;
+    /// nought keeps none.
     std::uint32_t historyTicks = 64;
     /// Every tilemap a body may be made of, each identity once.
     std::vector<BodyTilemap> tilemaps;
@@ -107,7 +107,7 @@ struct Physics2DStatistics {
 inline constexpr std::string_view kStepSystem = "rawframe.physics2d.step";
 
 /// Questions about where bodies are, answered from the last step: what
-/// gameplay sees between steps (SPEC-0037 queries against committed state).
+/// gameplay sees between steps.
 /// Only from the World's thread, between steps or from a system.
 class Physics2DQueries {
 public:
@@ -122,8 +122,8 @@ public:
     /// for physics::kEveryClass.
     [[nodiscard]] virtual RayHit2D
     castRay(double originX, double originY, float towardX, float towardY, std::uint64_t among) const noexcept = 0;
-    /// The same ray against every body where it was at an earlier moment
-    /// (SPEC-0041 lag compensation). The moment is clamped into the kept
+    /// The same ray against every body where it was at an earlier moment.
+    /// The moment is clamped into the kept
     /// history, and never past the last step; a body without a trail back
     /// to it is tried where it is and its hit marked discontinuous, and one
     /// the moment's gate keeps is tried where it is. Nothing moves.
@@ -135,7 +135,7 @@ public:
                                              std::uint64_t among) const noexcept = 0;
     /// A circle of `radius` swept from the origin along `toward`: the first
     /// body it meets, as a ray's answer; one it starts inside is met
-    /// `inside`, at its start, with no normal (SPEC-0037 §9's start_solid).
+    /// `inside`, at its start, with no normal (start_solid).
     [[nodiscard]] virtual RayHit2D castCircle(double originX,
                                               double originY,
                                               float radius,

@@ -30,7 +30,7 @@ const MUSIC: u64 = 0x8998b3d2073c4a8a
 // What a runner looks like (runners.game's `texture` line): a sheet of six
 // cells in a row, standing, four strides, and in the air.
 const RUNNER_LOOK: u64 = 0xeddbc014cab63eb2
-// The runners' look's material (D356).
+// The runners' look's material.
 const RUNNER_GLOW: u64 = 0xea61c563796c6e4b
 const CELL: f32 = 0.16666667
 
@@ -52,7 +52,7 @@ struct Hit {
     shots: i32
 }
 
-// What a runner's player is told when it was hit (D266): how many times,
+// What a runner's player is told when it was hit: how many times,
 // all told.
 struct Hurt {
     taken: i32
@@ -64,7 +64,7 @@ extern fn Hit.insert(entity: world.Entity, value: Hit)
 extern fn Hit.remove(entity: world.Entity)
 
 // What a hit costs the runner it met: one taken, unless a mod provides the
-// penalty service (D199).
+// penalty service.
 struct Penalty {
     taken: i32
 }
@@ -92,7 +92,7 @@ fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], chara
     }
 }
 
-// Where a runner is drawn (D260): as its capsule is, over the level, its
+// Where a runner is drawn: as its capsule is, over the level, its
 // sheet's frame stepped by its animator, facing the way it last ran, the
 // region mirrored to face left.
 fn dress(count: i32, sticks: [controls.Stick], looks: [canvas.Sprite], animators: [animation.Animator]) {
@@ -117,9 +117,9 @@ fn dress(count: i32, sticks: [controls.Stick], looks: [canvas.Sprite], animators
 
 extern fn ReceivedCount.hurt() -> i32
 
-// What a client sees of its own runner (D261): 12 meters of the level,
+// What a client sees of its own runner: 12 meters of the level,
 // a meter and a half above it, easing toward two meters ahead of the way
-// it runs. A hit the server tells of (D266) drops the view half a meter,
+// it runs. A hit the server tells of drops the view half a meter,
 // and it eases back.
 fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
     let i = 0
@@ -134,11 +134,11 @@ fn frame(count: i32, sticks: [controls.Stick], views: [canvas.Camera]) {
     }
 }
 
-// The player's HUD (D376), as runners.ui lays it out and starts its look
-// (D619): a dark panel centered above the bottom of its view, a target
+// The player's HUD, as runners.ui lays it out and starts its look:
+// a dark panel centered above the bottom of its view, a target
 // beside a green meter of the hits its runner landed over a red one of
 // those it took, a tenth of the meters' width for each hit, starting again
-// at ten; after them, its score in words, "3 points" (D386).
+// at ten; after them, its score in words, "3 points".
 fn gauge(count: i32, scores: [Score], landed: [ui.Node], taken: [ui.Node], points: [ui.Node]) {
     let i = 0
     while i < count {
@@ -149,7 +149,7 @@ fn gauge(count: i32, scores: [Score], landed: [ui.Node], taken: [ui.Node], point
     }
 }
 
-// The volume sliders' press codes (D625, D629), by which the present
+// The volume sliders' press codes, by which the present
 // systems read the values the player slid them to.
 const LOUDNESS: i64 = 1
 const TUNE: i64 = 2
@@ -168,7 +168,7 @@ fn slid(press: i64, role: u32) -> f32 {
     return (decibels + 40.0) / 40.0
 }
 
-// The effects' volume at the top right of the view (D625), its dial at
+// The effects' volume at the top right of the view, its dial at
 // the value's share of it.
 fn loudness(count: i32, tracks: [ui.Node], dials: [ui.Node]) {
     let share = slid(LOUDNESS, sound.EFFECTS)
@@ -181,7 +181,7 @@ fn loudness(count: i32, tracks: [ui.Node], dials: [ui.Node]) {
     }
 }
 
-// The music's volume under it (D629), and the music, played on from the
+// The music's volume under it, and the music, played on from the
 // player's own emitter.
 fn tune(count: i32, tracks: [ui.Node], pegs: [ui.Node], players: [sound.Emitter]) {
     let share = slid(TUNE, sound.MUSIC)
@@ -196,7 +196,7 @@ fn tune(count: i32, tracks: [ui.Node], pegs: [ui.Node], players: [sound.Emitter]
     }
 }
 
-// A hit runner's wince (D272): its player's emitter, the client's own and
+// A hit runner's wince: its player's emitter, the client's own and
 // carried by no server, cued once for each hit told this tick.
 fn wince(count: i32, emitters: [sound.Emitter]) {
     let i = 0
@@ -207,10 +207,10 @@ fn wince(count: i32, emitters: [sound.Emitter]) {
     }
 }
 
-// A runner's trail and its sparks (D357): a pale streak a third of a second
+// A runner's trail and its sparks: a pale streak a third of a second
 // long behind it as it runs, and ten warm sparks up and about each time its
 // shot sounds, falling as they fade, carried along by most of the runner's
-// own speed (D359).
+// own speed.
 fn glint(count: i32, shots: [sound.Emitter], dusts: [model.Trail], sparks: [model.ParticleEmitter]) {
     let i = 0
     while i < count {
@@ -227,7 +227,7 @@ fn glint(count: i32, shots: [sound.Emitter], dusts: [model.Trail], sparks: [mode
 
 // Six meters a second either way; on ground, a jump when asked, and in the
 // air, a fall that quickens to twenty meters a second.
-// A jump's presentation effect (runners.game's `effect` line, D219).
+// A jump's presentation effect (runners.game's `effect` line).
 extern fn Effects.jump(entity: world.Entity)
 
 fn run(count: i32, sticks: [controls.Stick], characters: [physics2d.Character2D], velocities: [physics2d.Velocity2D],
@@ -255,7 +255,7 @@ fn run(count: i32, sticks: [controls.Stick], characters: [physics2d.Character2D]
 // A shot every third of a second while firing: from the runner's side it
 // faces, thirty meters out, at the other runners where its player saw them;
 // each one cues the runner's shot sound. A player pointing at a World point
-// shoots along the line to it, from the side it lies on (D368).
+// shoots along the line to it, from the side it lies on.
 fn shoot(count: i32, sticks: [controls.Stick], poses: [physics2d.Pose2D], seen: [replication.Perception], scores: [Score],
          emitters: [sound.Emitter]) {
     let i = 0

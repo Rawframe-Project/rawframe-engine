@@ -1,6 +1,6 @@
 #pragma once
 
-// Animation graphs (SPEC-0035's `animation.graph`, on SPEC-0028's graph
+// Animation graphs (`animation.graph`, on the graph
 // document grammar): the one animation authority, a DAG of nodes driven by
 // typed parameters, in one canonical form (arrays of numbers shown here on
 // one line, where the form has one a line):
@@ -74,14 +74,14 @@
 //                        blended by `position` (a `[x, y]`, or a `vec2`
 //                        parameter; default `[0, 0]`) within the first
 //                        triangle holding it, or at the nearest point of
-//                        the nearest triangle when none does (D135)
+//                        the nearest triangle when none does
 //   `rawframe/additive@1`
 //                        its input `base`, with each other input, a layer
 //                        of differences (an additive clip, or nodes of
 //                        them), added on in name order by its entry in
-//                        `weights` (default 1), not normalized (D137)
+//                        `weights` (default 1), not normalized
 //
-// A blend or a blend space may declare `phaseSync` (D136): its inputs that
+// A blend or a blend space may declare `phaseSync`: its inputs that
 // are clip nodes play at one phase, a leader's, `weight_leader` taking the
 // one weighed most (the first of equals) and `declared_leader` the input
 // its `leader` names, which must be a clip node. A follower moves as far
@@ -109,7 +109,7 @@
 // A 2D blend space's triangles each name three of its points in name order,
 // are in order, and have area; no two overlap, and every point is in one.
 //
-// A graph may declare `modifiers` (D138): SPEC-0035's procedural stages,
+// A graph may declare `modifiers`: the procedural stages,
 // which are not nodes but run in their written order on the pose the graph
 // made, each `{"type": t, "params": {...}}`:
 //
@@ -212,7 +212,7 @@ enum class PhaseLeader : std::uint8_t {
     Declared,
 };
 
-/// SPEC-0035's declared phase synchronization.
+/// The declared phase synchronization.
 struct PhaseSync {
     PhaseLeader leader = PhaseLeader::Weight;
     /// A declared leader's input, by name; empty for a weighed one.
@@ -236,7 +236,7 @@ struct BlendNode {
     friend bool operator==(const BlendNode&, const BlendNode&) = default;
 };
 
-/// SPEC-0035's mask node: `inside` where the mask weighs a bone, `outside`
+/// The mask node: `inside` where the mask weighs a bone, `outside`
 /// elsewhere, blended by the bone's weight.
 struct MaskNode {
     base::Bits128 mask;
@@ -246,7 +246,7 @@ struct MaskNode {
     friend bool operator==(const MaskNode&, const MaskNode&) = default;
 };
 
-/// SPEC-0035's `additive`: layers of differences added onto a base pose.
+/// The `additive`: layers of differences added onto a base pose.
 struct AdditiveNode {
     Connection base;
     /// In name order, none named `base`; each weighed as a blend's input is.
@@ -264,7 +264,7 @@ struct BlendSpacePoint {
     friend bool operator==(const BlendSpacePoint&, const BlendSpacePoint&) = default;
 };
 
-/// SPEC-0035's `blend_space_1d`: inputs on a line, weighed by `position`.
+/// The `blend_space_1d`: inputs on a line, weighed by `position`.
 struct BlendSpace1DNode {
     Scalar position = 0.0;
     /// In name order.
@@ -274,7 +274,7 @@ struct BlendSpace1DNode {
     friend bool operator==(const BlendSpace1DNode&, const BlendSpace1DNode&) = default;
 };
 
-/// SPEC-0035's `blend_space_2d`: inputs on a plane with a declared
+/// The `blend_space_2d`: inputs on a plane with a declared
 /// triangulation, weighed by `position`.
 struct BlendSpace2DNode {
     Point position = std::array<double, 2>{};
@@ -425,7 +425,7 @@ struct LookAt {
     friend bool operator==(const LookAt&, const LookAt&) = default;
 };
 
-/// SPEC-0035's modifier stage: run on the graph's pose, by its weight
+/// The modifier stage: run on the graph's pose, by its weight
 /// (from nought, none of its turn, to one, all of it), where its relevance
 /// says.
 struct Modifier {
@@ -447,7 +447,7 @@ struct Graph {
     friend bool operator==(const Graph&, const Graph&) = default;
 };
 
-/// SPEC-0028's and SPEC-0035's named limit points for graphs; past one is
+/// The and the named limit points for graphs; past one is
 /// `OverLimit`.
 struct GraphLimits {
     std::size_t maximumNodes = 1024;
@@ -479,7 +479,7 @@ struct GraphLimits {
 /// Every mask the graph's mask nodes name, each once, in identity order.
 [[nodiscard]] std::vector<base::Bits128> masksOf(const Graph& graph);
 
-/// SPEC-0028's semantic hash: a Merkle digest from the output down, blind
+/// The semantic hash: a Merkle digest from the output down, blind
 /// to node ids, node order, nodes the output does not reach, and
 /// presentation. Refuses (`GraphInvalid`) a graph with a quarantined node.
 [[nodiscard]] result::Result<base::Sha256Digest> semanticHash(const Graph& graph);

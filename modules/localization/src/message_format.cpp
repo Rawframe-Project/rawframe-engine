@@ -1,4 +1,4 @@
-// Formatting messages of SPEC-0033's MessageFormat 2.0 subset: selection,
+// Formatting messages of the MessageFormat 2.0 subset: selection,
 // then the chosen pattern with its placeholders written.
 
 #include "message_parts.h"

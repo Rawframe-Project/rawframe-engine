@@ -1,6 +1,6 @@
 #pragma once
 
-// The engine's navigation actions (SPEC-0029, SPEC-0030, D430): how a
+// The engine's navigation actions: how a
 // player moves focus through a UI without a pointer, from the keyboard and
 // the gamepad, declared by the engine, not each game. They are a context of
 // their own above every context a game declares, so while the UI holds

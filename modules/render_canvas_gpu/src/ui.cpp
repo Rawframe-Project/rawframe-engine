@@ -66,10 +66,10 @@ constexpr std::size_t kShadowFloats = 20;
 constexpr std::size_t kGradientFloats = 24;
 constexpr std::size_t kGlyphFloats = 16;
 /// The glyph atlas among the textures held, by an id no image's key is,
-/// and the field atlas (D667).
+/// and the field atlas.
 constexpr std::uint64_t kAtlasId = ~std::uint64_t{0};
 constexpr std::uint64_t kFieldsId = ~std::uint64_t{1};
-/// And the color atlas (D669).
+/// And the color atlas.
 constexpr std::uint64_t kColorsId = ~std::uint64_t{2};
 /// The UI's share of a frame's uploads, for its images.
 constexpr std::uint64_t kImageUploadBytes = render::kUiImageUploadBytes;
@@ -188,9 +188,9 @@ std::array<float, kShadowFloats> shadowBlockOf(const ui::Shadow& shadow, float s
 
 /// `list`'s glyphs in the shader's layout and the picture's pixels, each
 /// with its run's color and clip; a glyph with no image is an empty quad.
-/// A glyph drawn from its field (D667) also carries how many of the
+/// A glyph drawn from its field also carries how many of the
 /// picture's pixels a field's spread spans as drawn, and the field atlas's
-/// side; a color glyph (D669), that it is one.
+/// side; a color glyph, that it is one.
 std::vector<float> glyphsOf(const ui::DrawList& list) {
     std::vector<float> glyphs(list.glyphs.size() * kGlyphFloats, 0);
     const ui::FieldAtlas* kFields = list.fields;
@@ -273,9 +273,9 @@ struct UiRenderer::State {
     ImageSource images;
     /// What the open frame declared, until it is recorded and ends.
     bool declared = false;
-    /// Whether the frame declared draws on the target's panel (D597).
+    /// Whether the frame declared draws on the target's panel.
     bool onPanel = false;
-    /// The window whose aside it draws in, if any (D988).
+    /// The window whose aside it draws in, if any.
     std::optional<std::uint64_t> aimed;
     std::vector<float> blocks;
     std::vector<float> clips;
@@ -288,11 +288,11 @@ struct UiRenderer::State {
     std::shared_ptr<const texture::Texture> atlas;
     std::uint64_t atlasRevision = 0;
     bool atlasHeld = false;
-    /// The field atlas likewise (D667).
+    /// The field atlas likewise.
     std::shared_ptr<const texture::Texture> fields;
     std::uint64_t fieldsRevision = 0;
     bool fieldsHeld = false;
-    /// The color atlas likewise (D669).
+    /// The color atlas likewise.
     std::shared_ptr<const texture::Texture> colors;
     std::uint64_t colorsRevision = 0;
     bool colorsHeld = false;
@@ -439,9 +439,9 @@ struct UiRenderer::State {
             colorsHeld = held->choose(kColorsId, colors);
         }
         // Then the images, after the text's atlases: a picture streamed
-        // every frame (an editor's viewport, D789) would else spend the
+        // every frame (an editor's viewport) would else spend the
         // frame's uploads before a changed atlas, whose words would wait
-        // for as long as the picture streams (D915).
+        // for as long as the picture streams.
         imageBlocks.clear();
         imageTextures.clear();
         for (const ui::Image& kImage : list->images) {
@@ -525,8 +525,8 @@ struct UiRenderer::State {
         if (glyphBlocks.empty()) {
             glyphBlocks.assign(kGlyphFloats, 0);
         }
-        // In its window's aside where it is aimed at one (D988), on the
-        // target's panel where it shows the UI apart (D597), else over the
+        // In its window's aside where it is aimed at one, on the
+        // target's panel where it shows the UI apart, else over the
         // picture.
         const auto kAside = aimed.has_value() ? std::ranges::find(open.asides, *aimed, &render::Frame::Aside::window)
                                               : open.asides.end();
@@ -673,7 +673,7 @@ struct UiRenderer::State {
                 const std::span<const ui::Glyph> kGlyphs =
                     kWhole ? std::span{list->glyphs}.subspan(kRun.first, kRun.count) : std::span<const ui::Glyph>{};
                 // Its glyphs with an image, of coverage or a field, and in
-                // color (D669): a draw each from its atlas, once both are
+                // color: a draw each from its atlas, once both are
                 // held.
                 const auto kDrawn = [](bool color) {
                     return [color](const ui::Glyph& glyph) {

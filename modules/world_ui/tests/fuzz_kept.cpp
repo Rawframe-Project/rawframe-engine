@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the player's kept settings (D626), a file a
+// Coverage-guided fuzzing of the player's kept settings, a file a
 // player may edit: read, at most as many values as are kept, each finite,
 // and what is read written and read again the same.
 

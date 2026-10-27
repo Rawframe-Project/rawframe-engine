@@ -99,7 +99,7 @@ std::optional<std::string> LineClient::ask(std::string_view record) {
 std::optional<std::string> LineClient::ask(std::string_view record, std::chrono::milliseconds within) {
     // Each question numbered afresh, and only the reply with its number
     // taken: one that came after its asker stopped waiting is left behind,
-    // not read as the next question's answer (D467).
+    // not read as the next question's answer.
     const auto kParsed = document::parse(record);
     const bool kNumbered = kParsed.has_value() && kParsed->kind() == document::Value::Kind::Object;
     const std::int64_t kId = ++asked_;

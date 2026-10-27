@@ -1,5 +1,5 @@
 // Plan construction: registrar behaviour, deterministic order, and every
-// SPEC-0005 validation failure, all found before anything is constructed.
+// validation failure, all found before anything is constructed.
 
 #include "fixtures.h"
 #include "rawframe/test/test.h"

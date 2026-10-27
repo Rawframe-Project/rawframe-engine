@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of a source image as the importer decodes it
-// (D253): a file from anyone meets Wuffs's decoders through the limits, and
+// Coverage-guided fuzzing of a source image as the importer decodes it:
+// a file from anyone meets Wuffs's decoders through the limits, and
 // what decodes cooks into a texture its own reader takes back exactly.
 
 #include "rawframe/texture/texture.h"

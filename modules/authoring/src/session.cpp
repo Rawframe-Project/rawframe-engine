@@ -27,7 +27,7 @@ const std::string* textOf(const Value* value) {
     return value != nullptr && value->kind() == Value::Kind::String ? value->text() : nullptr;
 }
 
-// A UI node's component, as a claim or a presence names it (D886).
+// A UI node's component, as a claim or a presence names it.
 const std::string* componentOf(const Value* value) {
     const std::string* text = textOf(value);
     return text != nullptr && !text->empty() && text->size() <= 256 ? text : nullptr;
@@ -223,7 +223,7 @@ std::optional<std::array<double, 3>> pointIn(const Value* point) {
 /// Whether `path` is absolute in POSIX's form (`/a`) or Windows' (`C:/a`,
 /// `C:\a`). Never a network share (`\\server\share`, `//server/share`):
 /// Windows answers one by authenticating to the server, which would hand
-/// the user's credentials to whoever a record names (D503).
+/// the user's credentials to whoever a record names.
 bool absolute(std::string_view path) {
     const bool kDrive = path.size() >= 3 && std::isalpha(static_cast<unsigned char>(path[0])) != 0 && path[1] == ':' &&
                         (path[2] == '/' || path[2] == '\\');
@@ -301,8 +301,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     const Value* scene = parsed->find("scene");
     const Value* expects = parsed->find("expects");
     const Value* dry = parsed->find("dryRun");
-    // A verb's own members it may leave out: run's paused (D806), and the
-    // live entities' page (D808).
+    // A verb's own members it may leave out: run's paused, and the
+    // live entities' page.
     std::size_t leftOutable = 0;
     if (record.verb == SessionVerb::Run) {
         leftOutable = parsed->find("paused") != nullptr ? 1 : 0;
@@ -323,8 +323,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     } else if (record.verb == SessionVerb::Apply) {
         leftOutable = parsed->find("amends") != nullptr ? 1 : 0;
     }
-    // A change's author, where the verb makes one (D879), and the author
-    // whose presence or claim it is, where it is one (D880).
+    // A change's author, where the verb makes one, and the author
+    // whose presence or claim it is, where it is one.
     const bool kOwned = record.verb == SessionVerb::Present || record.verb == SessionVerb::Claim ||
                         record.verb == SessionVerb::Release || record.verb == SessionVerb::Leave;
     if (kOwned && parsed->find("author") == nullptr) {
@@ -413,7 +413,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::MeshBounds:
     case SessionVerb::SetImportSettings: {
         // A source by its path under the game's directory, which the
-        // session finds among those it lists (D800).
+        // session finds among those it lists.
         const std::string* kAsset = textOf(parsed->find("asset"));
         if (kAsset == nullptr || kAsset->empty() || kAsset->size() > 1024) {
             return malformed("import settings name an asset by its path under the game's directory");
@@ -431,8 +431,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     case SessionVerb::MoveFile:
     case SessionVerb::RemoveFile:
     case SessionVerb::MakeFolder: {
-        // Paths under the game's directory, the session's to check there
-        // (D929).
+        // Paths under the game's directory, the session's to check there.
         const auto kPath = [&parsed](const char* member) {
             const std::string* kText = textOf(parsed->find(member));
             return kText != nullptr && !kText->empty() && kText->size() <= 1024 ? kText : nullptr;
@@ -541,7 +540,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
         RAWFRAME_TRY_ASSIGN(record.queries, readQueries(document::writeCompact(*kQueries)));
     } else if (record.verb == SessionVerb::ExtensionSection) {
-        // A section is of a component and filled for one entity (D875).
+        // A section is of a component and filled for one entity.
         const std::string* kExtension = textOf(parsed->find("extension"));
         const std::string* kComponent = textOf(parsed->find("component"));
         const std::string* kEntity = textOf(parsed->find("entity"));
@@ -584,7 +583,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
     } else if (record.verb == SessionVerb::Select || record.verb == SessionVerb::Extension ||
                record.verb == SessionVerb::ExtensionPanel) {
         // An extension's command is run on the entities chosen, as select
-        // names them (D874), its extension and command by their names; the
+        // names them, its extension and command by their names; the
         // session finds them among the game's.
         if (record.verb == SessionVerb::Extension || record.verb == SessionVerb::ExtensionPanel) {
             const std::string* kExtension = textOf(parsed->find("extension"));
@@ -596,7 +595,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             }
             record.extension = *kExtension;
             record.command = *kCommand;
-            // A mode's command runs at a point of the scene (D877).
+            // A mode's command runs at a point of the scene.
             if (const Value* kPoint = parsed->find("point"); kPoint != nullptr) {
                 record.mark = pointIn(kPoint);
                 if (!record.mark.has_value()) {
@@ -617,8 +616,8 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             record.entities.push_back(kId.value);
         }
     } else if (record.verb == SessionVerb::Claim || record.verb == SessionVerb::Release) {
-        // An entity of the document, or null for the whole of it (D880);
-        // or, in a UI document, a node by its component (D886).
+        // An entity of the document, or null for the whole of it;
+        // or, in a UI document, a node by its component.
         if (const Value* kNode = parsed->find("node"); kNode != nullptr) {
             const std::string* kComponent = componentOf(kNode);
             if (kComponent == nullptr) {
@@ -638,8 +637,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         }
     } else if (record.verb == SessionVerb::Present) {
         // What the author has chosen in the document, entities or, in a
-        // UI document, nodes (D886), and where they look, null for nowhere
-        // (D880).
+        // UI document, nodes, and where they look, null for nowhere.
         const Value* kNodes = parsed->find("nodes");
         const Value* kChosen = kNodes != nullptr ? kNodes : parsed->find("entities");
         const Value* kView = parsed->find("view");
@@ -670,7 +668,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
             return malformed("view holds an eye and a target of three numbers each and a fieldOfView");
         }
     } else if (record.verb == SessionVerb::Profile) {
-        // A profile kept as a capture too (D844), its place the session's
+        // A profile kept as a capture too, its place the session's
         // to judge.
         const Value* kCapture = parsed->find("capture");
         if (kCapture != nullptr && (textOf(kCapture) == nullptr || !kCapture->text()->ends_with(".rfprofile"))) {
@@ -711,7 +709,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         record.views = static_cast<std::uint8_t>(*kCount);
     } else if (record.verb == SessionVerb::Bookmark) {
         // A slot of one to nine, and the view kept there or null to
-        // clear it (D796).
+        // clear it.
         const Value* kSlot = parsed->find("slot");
         const std::optional<std::int64_t> kNumber = kSlot != nullptr ? kSlot->integer() : std::nullopt;
         const Value* kView = parsed->find("view");
@@ -791,7 +789,7 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         record.toward = *kToward;
     } else if (record.verb == SessionVerb::Mark) {
         // A point of three finite numbers, or null for none; its handles
-        // by name, each name's place its bits (D974).
+        // by name, each name's place its bits.
         if (const Value* kHandles = parsed->find("handles"); kHandles != nullptr) {
             constexpr std::array<std::string_view, 4> kNames = {"none", "axes", "ring", "all"};
             const auto kNamed =
@@ -814,12 +812,12 @@ result::Result<SessionRecord> readSessionRecord(std::string_view line, document:
         if (kPreview != nullptr && kPreview->isNull()) {
             return record;
         }
-        // The server a pick asks (D456) is optional: its endpoint and pin file
+        // The server a pick asks is optional: its endpoint and pin file
         // together, the token the preview's.
         const Value* kServer =
             kPreview != nullptr && kPreview->kind() == Value::Kind::Object ? kPreview->find("server") : nullptr;
         // And `observe`: the game seen through its own camera, as it plays,
-        // the scene's view never handed it (D923).
+        // the scene's view never handed it.
         const Value* kObserve =
             kPreview != nullptr && kPreview->kind() == Value::Kind::Object ? kPreview->find("observe") : nullptr;
         const bool kObject =

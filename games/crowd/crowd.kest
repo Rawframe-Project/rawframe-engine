@@ -1,6 +1,6 @@
 module crowd
 
-// SPEC-0013's canonical workload (crowd.game): a field of entities, some
+// The canonical workload (crowd.game): a field of entities, some
 // walking, and players steering through it.
 
 import rawframe.random

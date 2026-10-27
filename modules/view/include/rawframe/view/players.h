@@ -1,6 +1,6 @@
 #pragma once
 
-// The views the process's local players see (ADR-0052, D367): each one's
+// The views the process's local players see: each one's
 // region of its window and its cameras' geometry, as the presentation last
 // derived them from declared state (the camera on the player's entity, the
 // game's layout), and the window's size in logical pixels as its program
@@ -53,7 +53,7 @@ public:
         return window_;
     }
     /// The program's side, once a frame: what of the window the platform
-    /// covers, which the UI lays out inside (SPEC-0030's root input, D589).
+    /// covers, which the UI lays out inside.
     void safeArea(ViewInsets insets) noexcept {
         safeArea_ = insets;
     }

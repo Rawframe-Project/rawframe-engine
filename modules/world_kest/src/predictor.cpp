@@ -126,15 +126,13 @@ public:
         if (dimensions_ != 0) {
             RAWFRAME_TRY(addPhysicsDoors(doors, dimensions_, &doorContext_));
         }
-        // A client bakes no navmesh: its prediction is told there is no way
-        // (D400).
+        // A client bakes no navmesh: its prediction is told there is no way.
         if (game.navigation.has_value()) {
             RAWFRAME_TRY(addNavigationDoors(doors, nullptr));
         }
-        // Nor does it measure splines: a predicted follower finds none
-        // (D868).
+        // Nor does it measure splines: a predicted follower finds none.
         RAWFRAME_TRY(addSplineDoors(doors, nullptr));
-        // Nor sequences: a predicted reader finds no event (D869).
+        // Nor sequences: a predicted reader finds no event.
         RAWFRAME_TRY(addSequenceDoors(doors, nullptr));
         RAWFRAME_TRY_ASSIGN(systems_,
                             KestSystems::create(KestSystemsSettings{.program = settings.program,
@@ -231,7 +229,7 @@ public:
         effects_->clear();
         RAWFRAME_TRY(set(registry_->descriptor(input_).id, input));
         // A system that fails leaves the tick to the server's correction.
-        // Run as the tick it predicts, resimulated or not (D685).
+        // Run as the tick it predicts, resimulated or not.
         world::TickIndex running = tick;
         RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, schedule_->runTick(*world_, running, rate_));
         if (!kReport.failures.empty()) {
@@ -289,7 +287,7 @@ private:
     std::vector<KestComponent> components_;
     std::vector<Declared> declared_;
     std::unique_ptr<ModServices> services_;
-    /// What each step's predicted systems emitted (D219).
+    /// What each step's predicted systems emitted.
     std::unique_ptr<EffectDoors> effects_;
     std::unique_ptr<MessageDoors> messages_;
     std::unique_ptr<CommandDoors> commands_;

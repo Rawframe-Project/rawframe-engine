@@ -1,4 +1,4 @@
-// Modifier stages (SPEC-0035, D138): two-bone IK and look-at on the pose a
+// Modifier stages: two-bone IK and look-at on the pose a
 // graph made, solved from square roots and the four arithmetic operations
 // alone, so every machine turns the same bones the same way.
 

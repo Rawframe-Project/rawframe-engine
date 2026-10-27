@@ -1,4 +1,4 @@
-// SPEC-0020's records (D424): a ReleaseRecord and a ChannelPointer read
+// The records: a ReleaseRecord and a ChannelPointer read
 // and written byte for byte, every rejection the specification lists
 // refused as malformed, and the update check: a pointer naming exactly its
 // record accepted, a rollback (an older Release under a higher sequence)

@@ -81,7 +81,7 @@ RAWFRAME_TEST(ACookedGameRoundTripsInOneForm) {
 }
 
 RAWFRAME_TEST(ACookedGamesTilemapsAreWrittenOnlyWhereItHasAny) {
-    // A game without one keeps the bytes it had (D858).
+    // A game without one keeps the bytes it had.
     const auto kWithout = writeCookedGame(sample());
     RAWFRAME_EXPECT(kWithout.has_value() && kWithout->find("tilemaps") == std::string::npos);
     CookedGame tiled = sample();

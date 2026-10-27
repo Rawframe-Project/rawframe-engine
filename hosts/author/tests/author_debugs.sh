@@ -75,7 +75,8 @@ grep -q '"id":3,"error":{"code":"stopped"' "$work/replies"
 # A line on: stopped again at the stroll's next line.
 grep -q '"id":21,"error":{"code":"malformed"' "$work/replies"
 grep -q '"id":22,"answer":{"kind":"debug.stepped"}' "$work/replies"
-grep -q '"id":23,"answer":{"kind":"debug.status","stopped":true,"stops":2,"frames":\[{"function":"plaza.stroll","file":"[^"]*plaza.kest","line":255,' "$work/replies"
+first=$(grep -o '"id":2,"answer":{"kind":"debug.status","stopped":true,"stops":[0-9]*,"frames":\[{"function":"plaza.stroll","file":"[^"]*","line":[0-9]*' "$work/replies" | grep -o '[0-9]*$')
+grep -q '"id":23,"answer":{"kind":"debug.status","stopped":true,"stops":2,"frames":\[{"function":"plaza.stroll","file":"[^"]*plaza.kest","line":'"$((first + 1))"',' "$work/replies"
 grep -q '"id":4,"answer":{"kind":"debug.broken","found":0,"lines":\[\]}' "$work/replies"
 grep -q '"id":5,"answer":{"kind":"debug.continued"}' "$work/replies"
 grep -q '"id":6,"answer":{"kind":"debug.status","stopped":false,"stops":2,"frames":\[\]}' "$work/replies"

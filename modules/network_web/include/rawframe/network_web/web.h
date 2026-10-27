@@ -1,6 +1,6 @@
 #pragma once
 
-// The browser's transport (ADR-0084 decision 3, D170): WebTransport over
+// The browser's transport: WebTransport over
 // HTTP/3, which is QUIC, reached through the page. The engine cannot open a
 // WebTransport session from WebAssembly; the page's JavaScript can. So
 // every provider operation here is a call out to the page (the

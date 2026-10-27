@@ -1,9 +1,9 @@
 #pragma once
 
-// What the UI participant reads of a game (D376, D619): its node components
-// and which is inside which, the typed words each shows (D427), what its UI
-// document starts each presentation component as, its fonts (D386), and its
-// style classes (D431), every layout checked against the engine's.
+// What the UI participant reads of a game: its node components
+// and which is inside which, the typed words each shows, what its UI
+// document starts each presentation component as, its fonts, and its
+// style classes, every layout checked against the engine's.
 
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
@@ -17,13 +17,13 @@
 
 namespace rawframe::world_ui {
 
-/// What a node component starts as, as the UI document says (D619).
+/// What a node component starts as, as the UI document says.
 struct Start {
     schema::ComponentTypeId component;
     ui::NodeFields fields;
 };
 
-/// What a game's UI document says (D619): each node component's parent, the
+/// What a game's UI document says: each node component's parent, the
 /// typed words each shows (as long as the nodes, or empty for none), and
 /// what each presentation component starts as.
 struct UiDocument {

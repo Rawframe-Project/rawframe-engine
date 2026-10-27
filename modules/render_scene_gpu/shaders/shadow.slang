@@ -1,13 +1,13 @@
-// The sun's shadow map (D289), in Slang (ADR-0026, D475): a caster's
+// The sun's shadow map, in Slang: a caster's
 // vertex placed by its instance's model rows relative to the eye, then
-// seen through one cascade's square, reversed-Z (ADR-0051): depth one
-// toward the sun. A masked caster (D310) casts no shadow where the
+// seen through one cascade's square, reversed-Z: depth one
+// toward the sun. A masked caster casts no shadow where the
 // opacity its material gives falls below its alpha cutoff, as the scene's
-// cut takes it from the view (D487): the material linked as the scene's
-// is, the blob's or a material's own program (D488), with its bindings.
+// cut takes it from the view: the material linked as the scene's
+// is, the blob's or a material's own program, with its bindings.
 // A caster whose material moves its vertices is moved as the scene moves
-// it (D691), its normal, color, and coordinates read for that. A caster
-// that blends casts as much shadow as it covers (D726): it is cut where a
+// it, its normal, color, and coordinates read for that. A caster
+// that blends casts as much shadow as it covers: it is cut where a
 // fixed noise over the map passes what it lets through, its opacity's
 // remainder and what it transmits, which the shadows' filter spreads into
 // a partial shadow.
@@ -16,9 +16,9 @@ import material;
 extern struct Material : IMaterial;
 
 // The square's view, and the frame's eye in the World's axes and time,
-// now and the frame before (D691); and the frame's view and its view and
+// now and the frame before; and the frame's view and its view and
 // projection, unjittered, which a material's transform reads as the
-// scene's does, so a caster moves as its model is drawn (D714).
+// scene's does, so a caster moves as its model is drawn.
 struct Cascade
 {
     float4x4 viewProjection;
@@ -114,8 +114,8 @@ Cut vsCut(Caster caster)
 void cut(Cut cut, bool front: SV_IsFrontFace)
 {
     // A caster carries no normal: the material's opacity is read facing
-    // the sun and seen along that normal (D696), its front the face the
-    // sun sees (D705), its model the World's axes at the eye (D714), the
+    // the sun and seen along that normal, its front the face the
+    // sun sees, its model the World's axes at the eye, the
     // coordinates' derivatives taken before anything branches.
     Point point;
     point.uv = cut.uv;
@@ -141,7 +141,7 @@ void cut(Cut cut, bool front: SV_IsFrontFace)
     const float noise = frac(52.9829189 * frac(dot(cut.position.xy, float2(0.06711056, 0.00583715))));
     // Every input read whatever the material reads, as the scene's are: an
     // input left unread is dropped from the entry, and D3D12 refuses a
-    // pixel shader whose inputs are not its vertex shader's outputs (D418).
+    // pixel shader whose inputs are not its vertex shader's outputs.
     const bool unreadable = isnan(cut.color.x + float(cut.material) + cut.uv.x);
     if (evaluated.opacity < states.z || noise >= covers || unreadable)
     {

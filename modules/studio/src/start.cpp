@@ -86,7 +86,7 @@ result::Status ShellParticipant::showStart(ui::Node body) {
     newGameField_.reset();
     openGameField_.reset();
     gameFolderField_.reset();
-    // As the design's start (D918): the games opened last on the left,
+    // As the design's start: the games opened last on the left,
     // a new game from a template on the right.
     RAWFRAME_TRY_ASSIGN(const ui::Node kStart,
                         box(body, ui::Layout{.direction = ui::Direction::Row, .grow = 1}, look::kWindowFill));
@@ -328,7 +328,7 @@ void ShellParticipant::showRecent() {
                             0);
             tile.has_value()) {
             static_cast<void>(tree_->setInteraction(*tile, ui::Interaction{.hits = ui::Interaction::Hits::Nothing}));
-            // Its picture where Studio kept one (D927), else its mark.
+            // Its picture where Studio kept one, else its mark.
             const std::uint64_t kKey = thumbnailKey("game:" + kDescription.lexically_normal().generic_string());
             if (!browser_.pictures.contains(kKey)) {
                 if (const auto kPath = gamePicturePath(kDescription); kPath.has_value()) {
@@ -373,7 +373,7 @@ void ShellParticipant::showRecent() {
         }
         recentRows_.emplace_back(*line, kDescription);
     }
-    // The sample games beside Studio, which its package brings (D920),
+    // The sample games beside Studio, which its package brings,
     // those not among the games opened.
     std::error_code beside;
     const std::filesystem::path kSamples =
@@ -501,7 +501,7 @@ void ShellParticipant::askDialog(view::FileDialogs::Kind kind, std::string title
 
 void ShellParticipant::takeDialogs() {
     // A paste's text, typed into the field it was asked for while that
-    // field still holds the keyboard, as typing is (D999).
+    // field still holds the keyboard, as typing is.
     while (std::optional<view::Clipboard::Read> read =
                held_.clipboard != nullptr ? held_.clipboard->take() : std::nullopt) {
         if (read->ticket != held_.pasteTicket || read->unsupported || edit_ == nullptr ||
@@ -556,7 +556,7 @@ void ShellParticipant::openFolder(const std::filesystem::path& folder) {
 }
 
 void ShellParticipant::closeGame() {
-    // Back to the start screen (D923): the game played stopped, its
+    // Back to the start screen: the game played stopped, its
     // session let go, nothing of it left chosen.
     if (playing_.has_value()) {
         stopPlaying();
@@ -593,8 +593,8 @@ void ShellParticipant::chooseGame(const std::filesystem::path& description) {
     if (gameOpen() && held_.joined == nullptr) {
         closeGame();
     }
-    // Each game opens on its first scene and cooks once (D912, D918), and
-    // keeps a picture of itself once (D927).
+    // Each game opens on its first scene and cooks once, and
+    // keeps a picture of itself once.
     held_.gamePictured = false;
     editOpened_ = false;
     editCooked_ = false;
@@ -625,12 +625,12 @@ void ShellParticipant::makeGame(const std::string& name) {
 
 void ShellParticipant::rebuild() {
     endEdit();
-    // The panes shown apart go back with the tree they were in (D988).
+    // The panes shown apart go back with the tree they were in.
     closeAsides();
     // The dialogs went with the tree they were in.
     dialog_.reset();
     held_.exportDialog.reset();
-    // The window's access goes with the tree it read (D575).
+    // The window's access goes with the tree it read.
     if (seat_ != nullptr) {
         seat_->leave();
     }

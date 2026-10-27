@@ -1,6 +1,6 @@
 #pragma once
 
-// A glTF's materials made Rawframe materials (D314), for the importer: each
+// A glTF's materials made Rawframe materials, for the importer: each
 // material and image made once, when a primitive first draws with it.
 
 #include "rawframe/mesh_import/import.h"

@@ -40,7 +40,7 @@ std::filesystem::path objectOf(const std::filesystem::path& cooked, const conten
 /// without end.
 constexpr std::size_t kMostDrawn = 1024;
 /// How long a run may draw: lavapipe makes the scene's pipelines on the
-/// CPU, slowly on a loaded machine (D476); past it, the run is stopped.
+/// CPU, slowly on a loaded machine; past it, the run is stopped.
 constexpr auto kDrawing = std::chrono::minutes{5};
 
 std::string hexOf(const base::Bits128& id) {
@@ -49,7 +49,7 @@ std::string hexOf(const base::Bits128& id) {
     return {digits.begin(), digits.end()};
 }
 
-/// The tool's plan for the cook into `cooked` (D900): every mesh and every
+/// The tool's plan for the cook into `cooked`: every mesh and every
 /// surface material, up to `kMostDrawn`, then every material again as a
 /// base an instance may read, and every texture the game's description
 /// names by the identity its materials sample it by.
@@ -124,7 +124,7 @@ result::Result<Value> thumbnailOf(const std::filesystem::path& game,
                        result::ErrorClass::NotFound,
                        "no source with a sidecar is at that path under the game's directory");
     }
-    // A mesh's and a material's are drawn (D899, D900).
+    // A mesh's and a material's are drawn.
     const bool kDrawn = kSource->importer == "rawframe.mesh" || kSource->importer == "rawframe.material";
     if (kSource->importer != "rawframe.texture" && !kDrawn) {
         return refused(authoring::AuthoringError::UnsupportedOperation,

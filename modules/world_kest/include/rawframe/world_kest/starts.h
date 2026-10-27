@@ -1,8 +1,8 @@
 #pragma once
 
 // What a presentation component starts as when presentation attaches it to
-// an entity, where a document the presentation does not read says so
-// (D619): a client's UI document starts its node components, and the
+// an entity, where a document the presentation does not read says so:
+// a client's UI document starts its node components, and the
 // game's present systems write only what changes. The client's UI
 // provides it (`rawframe.world_ui`); without it, or for a component it
 // does not start, a component starts at nought. A document edited while

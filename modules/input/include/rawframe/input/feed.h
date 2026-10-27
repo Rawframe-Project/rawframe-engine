@@ -5,7 +5,7 @@
 // held control was let go. A client host writes it from its platform's
 // records between Host iterations; a player's input source delivers it to
 // its mapper at the player's tick. The other way, what the client asks its
-// devices to feel waits for the host to take it (D251). Nothing here knows
+// devices to feel waits for the host to take it. Nothing here knows
 // a window system.
 
 #include "rawframe/input/controls.h"
@@ -32,7 +32,7 @@ public:
     void submit(const ControlEvent& event);
     /// Focus was lost, or the platform lost input: let go of everything.
     void releaseAll();
-    /// A text field took the keyboard, or gave it back (D430), in order
+    /// A text field took the keyboard, or gave it back, in order
     /// with the keys around it: the mapper gates or ungates the keyboard
     /// after the events before it, before those after.
     void textEditing(bool editing);
@@ -43,7 +43,7 @@ public:
     /// and its events count as unpaired there.
     void deliver(Mapper& mapper, PlayerSlot player);
     /// Moves every record, in order, into the feed of the local player it
-    /// is for (D363): a device connecting to the one `pairing` gives it,
+    /// is for: a device connecting to the one `pairing` gives it,
     /// its events and its going to that one, and a release of everything
     /// to all. A device left unpaired goes nowhere, its events counted.
     /// Empties the feed; `players` has one feed a player, null for a player
@@ -56,8 +56,8 @@ public:
     void feel(const HapticCommand& command);
     /// The haptic commands waiting for `devices`, oldest first, into
     /// `into`, cleared first; none of theirs wait after. Each output takes
-    /// its own devices' (a window's gamepads, a headset's controllers,
-    /// D600); those of a device no one takes are replaced as it is felt
+    /// its own devices' (a window's gamepads, a headset's controllers);
+    /// those of a device no one takes are replaced as it is felt
     /// again, and dropped past `kMostFelt` devices.
     void takeFelt(std::vector<HapticCommand>& into, std::span<const DeviceId> devices);
 

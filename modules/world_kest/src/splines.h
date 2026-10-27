@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's splines (SPEC-0051's spline row, D868): entities of the game's
+// A game's splines: entities of the game's
 // components of `rawframe.spline.Point`'s type, each naming its spline's
 // entity and its place among the spline's points and standing where its
 // physics pose puts it, measured into paths by a system before the

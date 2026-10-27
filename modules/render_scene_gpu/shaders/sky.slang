@@ -1,8 +1,8 @@
-// The sky behind the scene's models (D293), in Slang (ADR-0026, D475): one
+// The sky behind the scene's models, in Slang: one
 // triangle covering the target at the far end of reversed-Z depth, so it
 // lands only where no model's depth lies. Its light in candela per square
 // meter times the exposure the device holds, which a metered camera moves
-// from frame to frame; and no motion. With the sky's picture (D322), its
+// from frame to frame; and no motion. With the sky's picture, its
 // light the way each point looks, and how far that way moved on the target
 // since the frame before, for the temporal pass.
 
@@ -13,9 +13,9 @@ struct Sky
     // looks, the jittered view's inverse; and the view unjittered and the
     // frame before's.
     float4 environment;
-    // The ground's light below the horizon (D304), for the sky drawn
-    // without a picture (D914); w is 1 where it is drawn graded, an
-    // editor's view (D925).
+    // The ground's light below the horizon, for the sky drawn
+    // without a picture; w is 1 where it is drawn graded, an
+    // editor's view.
     float4 ground;
     float4x4 toDirection;
     float4x4 unjittered;
@@ -33,8 +33,7 @@ struct Exposure
 [[vk::binding(2, 0)]] TextureCube environmentTexture;
 [[vk::binding(3, 0)]] SamplerState environmentSampler;
 
-// Where on the target each point is, in clip space, for the sky's picture
-// (D322).
+// Where on the target each point is, in clip space, for the sky's picture.
 struct Corner
 {
     float4 position : SV_Position;
@@ -71,7 +70,7 @@ Written fs(Corner corner)
     }
     else if (sky.environment.w < 0.5)
     {
-        // Without a picture, a clear day's (D914): paler and brighter at
+        // Without a picture, a clear day's: paler and brighter at
         // the horizon, deeper overhead, and the ground's light below it,
         // as the sky the models are lit by would look.
         const float grey = dot(sky.light.rgb, float3(0.2126, 0.7152, 0.0722));

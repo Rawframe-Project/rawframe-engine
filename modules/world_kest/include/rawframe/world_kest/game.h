@@ -1,6 +1,6 @@
 #pragma once
 
-// A Kest-scripted game as the engine loads it (D21). Kest types give each
+// A Kest-scripted game as the engine loads it. Kest types give each
 // component its fields and widths; this text gives what Kest cannot say yet:
 // stable identity, which functions are systems, and what the World starts
 // with. It is parsed, never executed:
@@ -35,23 +35,23 @@
 // when it gave the command being run, for lag-compensated queries such as
 // physics2d.castRayAt. `predict` lists the
 // player's components a client predicts, and a system marked `predicted` runs
-// on predicting clients too, over the player alone (SPEC-0041); it may write
+// on predicting clients too, over the player alone; it may write
 // no replicated component that is not predicted and draw from no World
 // stream, whose state a client does not have. An `effect <name> predicted`
 // or `effect <name> confirmed_only` line, optionally followed by `sound <16
 // hex digits>` naming a declared sound, declares a presentation effect,
 // which one predicted system with `emits <name>` emits through
-// `Effects.<name>(entity)`; a predicting client delivers it once (D219), a
+// `Effects.<name>(entity)`; a predicting client delivers it once, a
 // server keeps nothing of it. `nearby` lists replicated
 // components of other entities a predicting client puts beside its player,
 // as last heard, whenever it simulates again, so the player's steps meet
-// them (D39): a game with physics lists the three body components. It
+// them: a game with physics lists the three body components. It
 // changes what a client predicts, never what it compares. `interpolate`
 // lists the
 // replicated components a client shows other entities' values of between
 // the states it receives, a little in the past, rather than as each arrives.
 // `own` lists replicated components sent only to the connection whose
-// player holds them, never to another's (D673): a player's input, whose
+// player holds them, never to another's: a player's input, whose
 // tracked pose then reaches no other client but as what the game makes of
 // it. An `interest` line makes what each connection is sent spatial: an entity
 // whose component's coordinate fields lie within the radius of the player's
@@ -73,7 +73,7 @@
 // (rawframe.admission says its shape and answers); a game without one
 // admits every client the engine does. It needs `replicate`.
 //
-// A `physics2d` line gives the World 2D physics (D33): the game gains the
+// A `physics2d` line gives the World 2D physics: the game gains the
 // engine's physics components, named `rawframe.physics2d.body`, `.pose`,
 // `.velocity`, `.impulse`, and `.contact`, whose Kest types are
 // rawframe.physics2d's, and a step in the simulation phase,
@@ -82,13 +82,13 @@
 //
 //   physics2d gravity 0 -10 substeps 4
 //
-// A `physics3d` line does the same in three dimensions (D44), with
+// A `physics3d` line does the same in three dimensions, with
 // `rawframe.physics3d` components and step, three numbers of gravity, and
 // y up. A game has one physics line at most.
 //
 //   physics3d gravity 0 -9.8 0
 //
-// `collision` lines are SPEC-0037's collision document: classes, each a name
+// `collision` lines are the collision document: classes, each a name
 // and a durable identity of sixteen hex digits; rules between two classes,
 // `collide`, `trigger`, or `ignore`; and the rule for every pair not ruled
 // (`collide` unless said). A body's `collisionClass` in a spawn line may be
@@ -99,7 +99,7 @@
 //   collision rule player coin trigger
 //   collision default collide
 //
-// An `animator` line gives entities a graph to play (D124): the game gains
+// An `animator` line gives entities a graph to play: the game gains
 // the engine's `rawframe.animation.animator` component (rawframe.animation's
 // Animator), whose `graph` names the animator by its identity, or in a spawn
 // line by its graph file. The graph is a document beside the description;
@@ -109,8 +109,8 @@
 // same name for each of the graph's parameters, set them every step: a
 // `float` from an f32, an `int` from a u32, a `bool` from a bool, and a
 // `vec2` from `<name>.x` and `<name>.y`. `subset` names a mask document
-// whose bones, with every bone above them, are all a dedicated server poses
-// (SPEC-0035), so its hitboxes cost only what they read:
+// whose bones, with every bone above them, are all a dedicated server poses,
+// so its hitboxes cost only what they read:
 //
 //   animator 51f0c0de00000001 walker.rfanim parameters game.gait
 //   animator 51f0c0de00000002 archer.rfanim subset 5d0a7e3c91b24f68a0c3e7d1942b6f85
@@ -121,8 +121,8 @@
 //
 //   entity game.target who
 //
-// A `ui` line names the game's UI document (D619), which puts UI nodes
-// inside others (D376), starts them, and has them show typed words; a
+// A `ui` line names the game's UI document, which puts UI nodes
+// inside others, starts them, and has them show typed words; a
 // client's UI reads it:
 //
 //   ui game.ui
@@ -150,9 +150,9 @@ namespace rawframe::world_kest {
 inline constexpr std::size_t kMaximumGameLines = 4096;
 /// The most entities one spawn line may create.
 inline constexpr std::uint32_t kMaximumSpawnCount = 1U << 20U;
-/// SPEC-0042's `extension_points_per_game_max` (D195).
+/// The `extension_points_per_game_max`.
 inline constexpr std::size_t kMaximumExtensionPoints = 64;
-/// SPEC-0042's `mod_api_surface_bytes_max` (D195): the bytes of the words
+/// The `mod_api_surface_bytes_max`: the bytes of the words
 /// of a game's Mod API lines, a space after each.
 inline constexpr std::size_t kMaximumModApiSurfaceBytes = 16 * 1024;
 
@@ -178,32 +178,32 @@ struct GameSystem {
     std::vector<std::string> before;
     /// World random streams, drawn from by place through `rawframe.random`.
     std::vector<std::string> randomStreams;
-    /// Components it reads on any entity, from `lookup <component>` pairs
-    /// (D391): never one it writes.
+    /// Components it reads on any entity, from `lookup <component>` pairs:
+    /// never one it writes.
     std::vector<std::string> lookups;
     /// Components whose every holder it reads whole, from `scan
-    /// <component>` pairs (D747): each lent after its columns as a count,
+    /// <component>` pairs: each lent after its columns as a count,
     /// the values, and their entities, in World order, as the run began.
     std::vector<std::string> scans;
     /// Runs on predicting clients too, over the player alone.
     bool predicted = false;
-    /// The effects it emits, from `emits <name>` pairs (D219); only a
+    /// The effects it emits, from `emits <name>` pairs; only a
     /// predicted system emits, and each effect has one emitter.
     std::vector<std::string> emits;
 };
 
-/// Presentation state (D260), from a `presentation <component>... on
+/// Presentation state, from a `presentation <component>... on
 /// <component>` line: components a client that draws attaches, zeroed, to
 /// each entity it mirrors that has the `on` component, and that only its
 /// `present` systems write. Never replicated, predicted, or on a server.
-/// `on player` attaches them to the client's own player alone (D261).
+/// `on player` attaches them to the client's own player alone.
 struct GamePresentation {
     std::vector<std::string> components;
     /// Nothing for `on player`.
     std::optional<std::string> on;
 };
 
-/// What the player feels of an effect (D251), from a trailing `felt
+/// What the player feels of an effect, from a trailing `felt
 /// <haptic> <amplitude> <hertz> <milliseconds>`: the haptic output of the
 /// game's action set, its amplitude above nought and at most one, its
 /// frequency from nought (the device's own) to 1000 hertz, and 1 to 5000
@@ -215,7 +215,7 @@ struct GameFelt {
     std::uint32_t milliseconds = 0;
 };
 
-/// A presentation effect predicted systems emit (SPEC-0041, D219), from an
+/// A presentation effect predicted systems emit, from an
 /// `effect <name> predicted|confirmed_only` line: a program emits it with
 /// `Effects.<name>(entity)`, and a predicting client delivers it once.
 struct GameEffect {
@@ -230,7 +230,7 @@ struct GameEffect {
 /// Effect kinds a game declares at most.
 inline constexpr std::size_t kMaximumEffects = 64;
 
-/// A guaranteed message (D266), from a `message <lower_snake name> <Kest
+/// A guaranteed message, from a `message <lower_snake name> <Kest
 /// type>` line: a value of the type a server system sends one player
 /// through `Messages.<name>(to, value)`, which arrives on the game's event
 /// lane after the tick commits, and which the player's present systems read
@@ -244,7 +244,7 @@ struct GameMessage {
 /// Messages a game declares at most.
 inline constexpr std::size_t kMaximumMessages = 64;
 
-/// A player's command (D425), from a `command <lower_snake name> <Kest
+/// A player's command, from a `command <lower_snake name> <Kest
 /// type>` line: a value of the type a client's sample function sends
 /// through `Commands.<name>(value)`, which arrives at the server on the
 /// game's command lane and which the server's systems read on the next tick
@@ -298,7 +298,7 @@ struct GamePhysics {
 };
 
 /// From a `navigation [radius <m>] [height <m>] [step <m>] [slope <degrees>]
-/// [cell <m>]` line (D400), which needs a `physics3d` line: one navmesh for
+/// [cell <m>]` line, which needs a `physics3d` line: one navmesh for
 /// one agent, baked on the server from the static bodies, each value the
 /// agent's or a cell's side on the ground.
 struct GameNavigation {
@@ -309,7 +309,7 @@ struct GameNavigation {
     double cell = 0.2;
 };
 
-/// SPEC-0037's collision document, by line.
+/// The collision document, by line.
 struct GameCollision {
     std::vector<GameCollisionClass> classes;
     std::vector<GameCollisionRule> rules;
@@ -330,7 +330,7 @@ struct GameEntityField {
     std::string field;
 };
 
-/// What is said of a number field for its authors (D783), by a game's
+/// What is said of a number field for its authors, by a game's
 /// `field` line or the engine of its own types' fields: the least and most
 /// it should take, its unit, whether it is a color (0xRRGGBBAA), and names
 /// for some of its values. Hints only, which an editor shows and an agent
@@ -345,12 +345,12 @@ struct GameFieldHint {
     bool color = false;
     std::vector<std::pair<std::int64_t, std::string>> labels;
     /// The kind of the game's asset the field holds by its identity
-    /// (`texture`, `mesh`, `material`, `sound`, `font`, `prefab`, `label`;
-    /// D786), empty for none.
+    /// (`texture`, `mesh`, `material`, `sound`, `font`, `prefab`, `label`),
+    /// empty for none.
     std::string asset;
 };
 
-/// How a client makes its input from a player's controls (ADR-0037): an
+/// How a client makes its input from a player's controls: an
 /// `input.actions` document, and a Kest program whose function `entry` fills
 /// the input component from committed actions. Paths are beside the
 /// description. Clients read them; a server never opens either.
@@ -360,7 +360,7 @@ struct GameControls {
     std::string entry;
 };
 
-/// A declared sound, by the identity emitters name it by (ADR-0038).
+/// A declared sound, by the identity emitters name it by.
 struct GameSound {
     std::uint64_t id = 0;
     /// Its `audio.sound` document, beside the description.
@@ -375,30 +375,30 @@ struct GameAudio {
 };
 
 /// A scene a program may spawn at run time with `Scene.spawn`, by the
-/// identity it is declared with (D98).
+/// identity it is declared with.
 struct GamePrefab {
     std::uint64_t id = 0;
     /// Its scene document, beside the description.
     std::string path;
 };
 
-/// A mesh a body may be made of (D112), by the identity a
+/// A mesh a body may be made of, by the identity a
 /// `rawframe.physics3d.mesh` names it by.
 struct GameMesh {
     std::uint64_t id = 0;
     /// Its source beside the description, which the cook makes a mesh
-    /// resource (`rawframe.mesh`, or `rawframe.blockout` from a blockout,
-    /// D848); a process reads the resource.
+    /// resource (`rawframe.mesh`, or `rawframe.blockout` from a blockout);
+    /// a process reads the resource.
     std::string path;
 };
 
 /// Whether `importer` makes the mesh resource a game's `mesh` line names:
-/// a glTF's, a blockout's (D848), or a terrain's (D854).
+/// a glTF's, a blockout's, or a terrain's.
 [[nodiscard]] constexpr bool makesMeshes(std::string_view importer) noexcept {
     return importer == "rawframe.mesh" || importer == "rawframe.blockout" || importer == "rawframe.terrain";
 }
 
-/// A picture a `rawframe.canvas.Sprite` shows (D254), by the identity the
+/// A picture a `rawframe.canvas.Sprite` shows, by the identity the
 /// sprite names it by. Its source beside the description is an image the
 /// cook makes a texture resource of (`rawframe.texture`).
 struct GameTexture {
@@ -406,16 +406,16 @@ struct GameTexture {
     std::string path;
 };
 
-/// A level's tiles a `rawframe.canvas.Tilemap` draws (D858), by the
+/// A level's tiles a `rawframe.canvas.Tilemap` draws, by the
 /// identity the component names it by. Its source beside the description is
-/// a tilemap document (D857) the cook keeps as a resource
+/// a tilemap document the cook keeps as a resource
 /// (`rawframe.tilemap`).
 struct GameTilemap {
     std::uint64_t id = 0;
     std::string path;
 };
 
-/// A timeline a `rawframe.sequence.Player` plays (D869), by the identity
+/// A timeline a `rawframe.sequence.Player` plays, by the identity
 /// the player names it by. Its source beside the description is a sequence
 /// document the cook keeps as a resource (`rawframe.sequence`).
 struct GameSequence {
@@ -423,7 +423,7 @@ struct GameSequence {
     std::string path;
 };
 
-/// A font UI text is shown in (D386), by the identity a `rawframe.ui.Node`'s
+/// A font UI text is shown in, by the identity a `rawframe.ui.Node`'s
 /// `font` names it by. Its source beside the description is a TrueType or
 /// OpenType font the cook rebuilds through its sanitizer (`rawframe.font`).
 struct GameFont {
@@ -431,9 +431,9 @@ struct GameFont {
     std::string path;
 };
 
-/// Words a `rawframe.ui.Node` shows (D386), by the identity its `text` names
+/// Words a `rawframe.ui.Node` shows, by the identity its `text` names
 /// them by: a key of a string table a `text` line names, and the names of
-/// the arguments its message may read, at most two (D647), which the node's
+/// the arguments its message may read, at most two, which the node's
 /// `textValue` and `textSecond` give.
 struct GameLabel {
     std::uint64_t id = 0;
@@ -442,14 +442,14 @@ struct GameLabel {
     std::vector<std::string> arguments;
 };
 
-/// When a render texture's view is drawn (ADR-0052's closed set): every
+/// When a render texture's view is drawn: every
 /// frame, or when its view asks, by a new `request`.
 enum class RenderTextureUpdate : std::uint8_t {
     EveryFrame,
     OnDemand
 };
 
-/// A render texture (ADR-0052, D361), by the identity a material names it
+/// A render texture, by the identity a material names it
 /// by as it would a texture: a picture `width` by `height` pixels that a
 /// `rawframe.model.View` draws a camera's view into as `update` has it,
 /// nothing cooked.
@@ -460,13 +460,13 @@ struct GameRenderTexture {
     RenderTextureUpdate update = RenderTextureUpdate::EveryFrame;
 };
 
-/// ADR-0052's limit points for render textures, profile values: the most
+/// The limit points for render textures, profile values: the most
 /// a game declares, and the most pixels a side.
 inline constexpr std::size_t kMaximumRenderTextures = 8;
 inline constexpr std::uint32_t kMaximumRenderTextureSide = 4096;
 
-/// A local player's region of the window (ADR-0052's normalized rect,
-/// D362): its left and top edges and its width and height, each a fraction
+/// A local player's region of the window:
+/// its left and top edges and its width and height, each a fraction
 /// of the window's from nought to one, inside it.
 struct GameRegion {
     float x = 0;
@@ -483,12 +483,12 @@ struct RegionPixels {
     std::uint32_t height = 0;
 };
 
-/// `region` in pixels of a window `width` by `height` (ADR-0052's declared
-/// rounding, D362): each edge at the nearest pixel, so regions sharing an
+/// `region` in pixels of a window `width` by `height` (the declared
+/// rounding): each edge at the nearest pixel, so regions sharing an
 /// edge tile the window exactly; a region too small for a pixel has none.
 [[nodiscard]] RegionPixels pixelsOf(const GameRegion& region, std::uint32_t width, std::uint32_t height) noexcept;
 
-/// ADR-0052's `constrained` aspect policy (D369): each local player's view
+/// The `constrained` aspect policy: each local player's view
 /// is the largest rectangle of `width` by `height`'s shape centered in its
 /// region, the rest of the region bars (letterbox or pillarbox) of the
 /// declared color, 8-bit sRGB. Without one a view fills its region
@@ -504,7 +504,7 @@ struct GameAspect {
 /// smaller by a pixel where they cannot be equal).
 [[nodiscard]] RegionPixels constrainedTo(const RegionPixels& region, const GameAspect& aspect) noexcept;
 
-/// A split-screen layout (ADR-0052, D362): the regions `players` local
+/// A split-screen layout: the regions `players` local
 /// players see the game in, in the players' order, each composed over
 /// those before it.
 struct GameLayout {
@@ -512,7 +512,7 @@ struct GameLayout {
     std::vector<GameRegion> regions;
 };
 
-/// A surface material a `rawframe.model.Model` names (D303), by the
+/// A surface material a `rawframe.model.Model` names, by the
 /// identity the model names it by. Its source beside the description is a
 /// material document the cook compiles (`rawframe.material`).
 struct GameMaterial {
@@ -520,7 +520,7 @@ struct GameMaterial {
     std::string path;
 };
 
-/// An animator (ADR-0039, D124): a graph an entity's
+/// An animator: a graph an entity's
 /// `rawframe.animation.animator` plays by the identity its line gives it.
 struct GameAnimator {
     std::uint64_t id = 0;
@@ -531,18 +531,18 @@ struct GameAnimator {
     /// for each by its name; none for a graph that plays on its defaults.
     std::string parameters;
     /// The mask whose bones, and every bone above them, a dedicated server
-    /// poses (SPEC-0035); none for all of them.
+    /// poses; none for all of them.
     std::optional<base::Bits128> subset;
 };
 
-/// A save document (ADR-0057): its name and the components it keeps of the
+/// A save document: its name and the components it keeps of the
 /// game's persistent entities.
 struct GameSave {
     std::string document;
     std::vector<std::string> components;
 };
 
-/// Who may mod a game (ADR-0023): no one, the mods the game approves by
+/// Who may mod a game: no one, the mods the game approves by
 /// subject, or any correctly signed one meeting its Mod API.
 enum class ModPolicy : std::uint8_t {
     Closed,
@@ -550,22 +550,22 @@ enum class ModPolicy : std::uint8_t {
     Open,
 };
 
-/// One extension point of a game's Mod API (SPEC-0042). A `data` point,
+/// One extension point of a game's Mod API. A `data` point,
 /// from `extension <name> data <component> multi|exclusive [required]`,
-/// takes declarative values of one component, never executed (D177). An
+/// takes declarative values of one component, never executed. An
 /// `event` point, from `extension <name> event <component> after <system>
 /// [write <component>]... multi|exclusive [required]`, takes handlers: Kest
 /// functions of a mod's own untrusted machine, run as systems right after
 /// the game's system, over the entities holding the event's component, which
-/// they read, and the components the point lets them write (D181). A
+/// they read, and the components the point lets them write. A
 /// `service` point, from `extension <name> service <component> exclusive
 /// [required]`, takes one provider: a Kest function of a mod's machine that
 /// the game calls through the door `Mods.<name>(value: T) -> T`, T the
-/// component's type, and that rewrites the value it is lent (D199). A
+/// component's type, and that rewrites the value it is lent. A
 /// `replacement` point, from `extension <name> replacement <system>
 /// exclusive [required]`, lets one mod run its own function in place of a
 /// game system's, over the same columns in the same place of the schedule,
-/// on the mod's machine; a predicted system is never replaceable (D200).
+/// on the mod's machine; a predicted system is never replaceable.
 struct GameExtensionPoint {
     enum class Kind : std::uint8_t {
         Data,
@@ -588,13 +588,13 @@ struct GameExtensionPoint {
     bool exclusive = false;
     /// For an exclusive point, from a `prefer <point> <publisher/name>...`
     /// line: when several mods claim it, the first of these that does keeps
-    /// it, and the others' claims on it are set aside (D202).
+    /// it, and the others' claims on it are set aside.
     std::vector<std::string> preferred;
     /// At least one contribution, or the Composition is invalid.
     bool required = false;
 };
 
-/// A game's Mod API surface (SPEC-0042, D177): its policy from a `mods
+/// A game's Mod API surface: its policy from a `mods
 /// closed|curated|open` line (closed without one), its namespace and
 /// version from a `modapi <namespace> <version>` line, the mods a curated
 /// game approves from `approve <publisher/name>` lines, and its points.
@@ -610,7 +610,7 @@ struct GameDescription {
     std::string program;
     std::vector<GameComponent> components;
     std::vector<GameSystem> systems;
-    /// Systems of `present <identity> <entry> <pairs>` lines (D260): run by
+    /// Systems of `present <identity> <entry> <pairs>` lines: run by
     /// a client that draws over the World it mirrors, once a game tick, in
     /// line order, writing only presentation components.
     std::vector<GameSystem> presented;
@@ -624,7 +624,7 @@ struct GameDescription {
     std::vector<std::string> scenes;
     /// Scatter documents (rawframe/scatter/scatter.h) whose copies of a
     /// prefab the World starts with, each placed, from `scatter <file>`
-    /// lines (D864).
+    /// lines.
     std::vector<std::string> scatters;
     /// Scenes a program spawns at run time, from `prefab <16 hex digits>
     /// <file>` lines.
@@ -633,20 +633,20 @@ struct GameDescription {
     std::vector<GameMesh> meshes;
     /// From `texture <16 hex digits> <file>` lines.
     std::vector<GameTexture> textures;
-    /// From `tilemap <16 hex digits> <file>` lines (D858).
+    /// From `tilemap <16 hex digits> <file>` lines.
     std::vector<GameTilemap> tilemaps;
-    /// From `sequence <16 hex digits> <file>` lines (D869).
+    /// From `sequence <16 hex digits> <file>` lines.
     std::vector<GameSequence> sequences;
     /// From `rendertexture <16 hex digits> <width> <height> [every_frame |
-    /// on_demand]` lines (D361).
+    /// on_demand]` lines.
     std::vector<GameRenderTexture> renderTextures;
     /// From `material <16 hex digits> <file>` lines.
     std::vector<GameMaterial> materials;
-    /// From `layout <players> (<x> <y> <width> <height>)...` lines (D362),
+    /// From `layout <players> (<x> <y> <width> <height>)...` lines,
     /// one a count of players from two.
     std::vector<GameLayout> layouts;
-    /// From an `aspect <width> <height> [<red> <green> <blue>]` line
-    /// (D369): every local player's view constrained to the shape, between
+    /// From an `aspect <width> <height> [<red> <green> <blue>]` line:
+    /// every local player's view constrained to the shape, between
     /// bars of the color (black unless named); none fills.
     std::optional<GameAspect> aspect;
     /// From `animator <16 hex digits> <graph file> [parameters <component>]
@@ -668,15 +668,15 @@ struct GameDescription {
     /// Components shown between states on every entity but the player's.
     std::vector<std::string> interpolated;
     /// Replicated components sent only to the connection whose player
-    /// holds them (`own`, D673): a player's input, say, whose tracked pose
-    /// no other client then sees (ADR-0081).
+    /// holds them (`own`): a player's input, say, whose tracked pose
+    /// no other client then sees.
     std::vector<std::string> own;
     std::vector<GameEntityField> entityFields;
-    /// The `field` lines, in line order (D783).
+    /// The `field` lines, in line order.
     std::vector<GameFieldHint> fieldHints;
     std::optional<GameInterest> interest;
     /// Entities one connection may hold at once, from a `mapped <count>`
-    /// line (D742): a game whose every client sees all of a large World,
+    /// line: a game whose every client sees all of a large World,
     /// as Quarry's land, asks for more than the default 4,096.
     std::size_t mapped = world_replication::kMappedByDefault;
     std::optional<GamePhysics> physics;
@@ -688,18 +688,18 @@ struct GameDescription {
     /// From a `mixer <file>` line and `sound <16 hex digits> <file>` lines,
     /// which need it.
     std::optional<GameAudio> audio;
-    /// String tables and translations (SPEC-0033) a client's text comes
+    /// String tables and translations a client's text comes
     /// from, from `text <file>` lines, each a document the cook makes a
     /// resource of (`rawframe.text`); a process reads the resources by
-    /// identity, and a dedicated server not at all (D147).
+    /// identity, and a dedicated server not at all.
     std::vector<std::string> texts;
     /// From `font <16 hex digits> <file>` lines.
     std::vector<GameFont> fonts;
-    /// The `ui.styles` document a client's UI classes come from (D431),
+    /// The `ui.styles` document a client's UI classes come from,
     /// from a `styles <file>` line; empty for none.
     std::string styles;
     /// The `ui.document` that nests a client's UI nodes, starts them, and
-    /// says which words they show (D619), from a `ui <file>` line; empty
+    /// says which words they show, from a `ui <file>` line; empty
     /// for none.
     std::string ui;
     /// From `label <16 hex digits> <table> <key> [<argument>]` lines, each
@@ -708,7 +708,7 @@ struct GameDescription {
     /// The project's default locale, from a `locale <tag>` line; empty for
     /// each table's source locale. A client checks the tag.
     std::string locale;
-    /// Who may mod the game and where (SPEC-0042).
+    /// Who may mod the game and where.
     GameModApi mods;
     /// The program's admission rule, from an `admission <function>` line;
     /// empty admits every client the engine does.
@@ -727,13 +727,13 @@ struct GameDescription {
 /// and more than kMaximumGameLines lines.
 [[nodiscard]] result::Result<GameDescription> parseGame(std::string_view text);
 
-/// What authors are told of `component`'s fields (D783): the engine's hints
+/// What authors are told of `component`'s fields: the engine's hints
 /// for the engine type it is of, then the game's `field` lines for it, a
 /// line for a field in place of the engine's.
 [[nodiscard]] std::vector<GameFieldHint> fieldHintsOf(const GameDescription& game, const GameComponent& component);
 
 /// The path, as the description names its files, of the file `named` that
-/// the document at `document` names beside itself (D864): `named` from the
+/// the document at `document` names beside itself: `named` from the
 /// document's directory, `.` and `..` taken away.
 [[nodiscard]] std::string pathBeside(std::string_view document, std::string_view named);
 
@@ -747,9 +747,9 @@ struct GameDescription {
 /// `rawframe.animation.animator`'s `graph`, a texture's file as the
 /// `texture` of a component of `rawframe.canvas.Sprite`'s type, and a
 /// tilemap's file as a `rawframe.physics2d.tiles`'s `tilemap` or that of a
-/// component of `rawframe.canvas.Tilemap`'s type (D859), and a sequence's
+/// component of `rawframe.canvas.Tilemap`'s type, and a sequence's
 /// file as the `sequence` of a component of `rawframe.sequence.Player`'s
-/// type (D869). Anything else as written.
+/// type. Anything else as written.
 [[nodiscard]] std::string
 spawnValue(const GameDescription& game, std::string_view component, const GameFieldValue& value);
 

@@ -127,8 +127,7 @@ result::Result<bool> inputsIn(const graph::Node& node, Surface& into) {
         }
         if (kGroup != nullptr) {
             // A feature group's number, from nought to one, an angle, or a
-            // distance; its color; or its flag; never at its default
-            // (D716, D717, D720).
+            // distance; its color; or its flag; never at its default.
             const Value& kGiven = inputs->items()[at];
             bool fits = false;
             if (kGroup->kind == GroupKind::Flag) {
@@ -169,7 +168,7 @@ result::Result<bool> inputsIn(const graph::Node& node, Surface& into) {
 }
 
 /// A map of a mesh's first coordinates: what folding `multiply` and `add`
-/// with literals down to a `uv` node gives (SPEC-0026's `tile_and_offset`).
+/// with literals down to a `uv` node gives (the `tile_and_offset`).
 struct Affine {
     std::array<double, 2> scale{1, 1};
     std::array<double, 2> offset{0, 0};
@@ -341,7 +340,7 @@ graph::Document documentOf(const Material& made, graph::NodeId node) {
             : std::pair<graph::NodeId, graph::NodeId>{};
     const graph::NodeId kEmission = kTextures.emission.id != 0 ? kPlace(kTextures.emission, false).first : 0;
     static_cast<void>(kUnused);
-    // The normal texture through its `normal_map` (D313).
+    // The normal texture through its `normal_map`.
     graph::NodeId normalMap = 0;
     if (kTextures.normal.id != 0) {
         const graph::NodeId kSampler = kPlace(kTextures.normal, false).first;
@@ -495,8 +494,7 @@ result::Status validateSurface(const graph::Document& document, const graph::Lim
 }
 
 result::Status admitted(const graph::Document& material, Trust trust) {
-    // Structurally unavailable to an untrusted package, not merely hidden
-    // (SPEC-0026, D718).
+    // Structurally unavailable to an untrusted package, not merely hidden.
     if (trust == Trust::Untrusted && std::ranges::any_of(material.nodes, [](const graph::Node& node) {
             const Value* kType = node.record.find("type");
             return kType != nullptr && kType->text() != nullptr && *kType->text() == kInlineSlangType;
@@ -552,7 +550,7 @@ Value atQuality(const graph::Document& surface, const Value& value, Quality qual
     return chosen;
 }
 
-/// The document as it is at `quality` (D318): every input a quality switch
+/// The document as it is at `quality`: every input a quality switch
 /// feeds given what the switch gives there, and a surface input that comes
 /// to its default left out.
 graph::Document atQuality(const graph::Document& surface, Quality quality) {
@@ -599,10 +597,9 @@ result::Result<Material> compiled(const graph::Document& document) {
     if (std::ranges::any_of(kGiven.names(), [](const std::string& name) {
             return groupInputNamed(name) != nullptr;
         })) {
-        return unsupported("a material whose coat, anisotropy, or transmission is active is a program material "
-                           "(D716, D717, D720)");
+        return unsupported("a material whose coat, anisotropy, or transmission is active is a program material");
     }
-    // Generation 1 (D312): the base, packed, and emission textures, one
+    // Generation 1: the base, packed, and emission textures, one
     // sampler each, each input fed directly or times a factor.
     enum Slot : std::uint8_t {
         Base,
@@ -619,10 +616,10 @@ result::Result<Material> compiled(const graph::Document& document) {
         }
         const std::string& kName = kInputs.names()[at];
         if (kName == "position_offset") {
-            return unsupported("a material that moves its vertices is a program material (D691)");
+            return unsupported("a material that moves its vertices is a program material");
         }
         if (kName == "geometry_normal") {
-            // A normal texture through `normal_map` (D313).
+            // A normal texture through `normal_map`.
             const graph::Node& kNode = *nodeOf(surface, kFrom->node);
             if (typeOf(kNode) != kNormalMapType) {
                 return unsupported("a geometry normal is a normal texture through normal_map in generation 1");
@@ -681,7 +678,7 @@ result::Result<Material> compiled(const graph::Document& document) {
         }
         RAWFRAME_TRY_ASSIGN(const Sampling kSampling, sampleIn(surface, *nodeOf(surface, *samplers[kSlot])));
         if (kSampling.input.has_value()) {
-            return unsupported("a texture an interface input gives is sampled by a program material (D710)");
+            return unsupported("a texture an interface input gives is sampled by a program material");
         }
         SampledTexture& texture = *kTexture;
         texture = kSampling.texture;

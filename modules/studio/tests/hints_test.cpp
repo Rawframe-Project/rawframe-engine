@@ -1,4 +1,4 @@
-// A field's typed control (D784): a labelled number shown by its label and
+// A field's typed control: a labelled number shown by its label and
 // typed back as its number, a color as #RRGGBBAA, a range said and a value
 // past it told, and the values a field is chosen from.
 
@@ -57,8 +57,8 @@ RAWFRAME_TEST(AnAssetFieldIsChosenFromItsKindsAssets) {
     RAWFRAME_EXPECT(typedAs(kTexture, "brick.png") == "brick.png");
 }
 
-// A turn shown in degrees and typed back sets the same quaternion
-// (D915): each axis alone, and all three together, read back as typed.
+// A turn shown in degrees and typed back sets the same quaternion:
+// each axis alone, and all three together, read back as typed.
 RAWFRAME_TEST(ATurnInDegreesReadsBackAsTyped) {
     for (const std::array<double, 3> kTyped : {std::array<double, 3>{0, 90, 0},
                                                std::array<double, 3>{30, 0, 0},

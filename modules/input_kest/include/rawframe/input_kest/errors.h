@@ -22,7 +22,7 @@ enum class InputKestError : std::uint32_t {
     /// The host lends no devices, or their player already has a source.
     NoDevices = 4,
     /// An effect is felt by a haptic output the game's action set does not
-    /// declare (D251).
+    /// declare.
     UnknownHaptic = 5,
 };
 

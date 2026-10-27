@@ -39,7 +39,7 @@ bool ShellParticipant::pressCapture(ui::Node node) {
         return true;
     }
     // Kept under the game's directory, a capture a tool opens as Studio
-    // does: the frame's (D842) or the profile's (D844).
+    // does: the frame's or the profile's.
     std::string path;
     if (node == held_.frameCapture) {
         path = "captures/frame-" + std::to_string(held_.frameCaptures + 1) + ".rfframe";
@@ -59,7 +59,7 @@ bool ShellParticipant::pressCapture(ui::Node node) {
         say("kept the profile in " + path);
     }
     // Listed among the documents, before the game's settings, where a
-    // start lists it, so it opens read only (D843).
+    // start lists it, so it opens read only.
     if (std::ranges::find(scenes_, path) == scenes_.end()) {
         const auto kSettings = std::ranges::find(listed_, Listed::Settings);
         const auto kAt = kSettings - listed_.begin();
@@ -101,7 +101,7 @@ void ShellParticipant::readFrame(double seconds, std::string_view capture) {
         kLine("the preview: " + answeredOf(kReply).message, kQuiet);
         return;
     }
-    // A game that draws no scene (a 2D game's canvas, D901) has no
+    // A game that draws no scene (a 2D game's canvas) has no
     // figures, its passes timed all the same.
     if (kFigures->items().empty()) {
         kLine("no scene drawn: the canvas's and the UI's passes only", kQuiet);
@@ -137,8 +137,7 @@ void ShellParticipant::readFrame(double seconds, std::string_view capture) {
         }
         kLine("samples " + kOf("samples") + "; effects " + (effects.empty() ? std::string{"none"} : effects), kQuiet);
     }
-    // The GPU's time for each pass it timed, where the device times them
-    // (D894).
+    // The GPU's time for each pass it timed, where the device times them.
     std::size_t timed = 0;
     if (const Value* kPasses = kAnswer->find("passes"); kPasses != nullptr && kPasses->kind() == Value::Kind::Array) {
         std::string line;

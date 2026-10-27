@@ -1,6 +1,6 @@
 #pragma once
 
-// Read operations (SPEC-0040): what a scene holds, answered by identity and
+// Read operations: what a scene holds, answered by identity and
 // typed through the component catalog, so a tool or an agent computes its
 // next request from the answer without parsing the document. A query
 // stages nothing, enters no history, and names no generation: its answer
@@ -43,11 +43,11 @@ struct EntityEntry {
     std::optional<Brought> brought;
     /// An instance's entity its patch removes.
     bool removed = false;
-    /// The entity a scene's own entity follows (D785): the `parent` of its
+    /// The entity a scene's own entity follows: the `parent` of its
     /// attachment, `rawframe.physics2d.attach` or `rawframe.physics3d.attach`,
     /// the scene's one parenting; none without one.
     std::optional<base::Bits128> parent;
-    /// The layer a scene's own entity is put on (D788), its
+    /// The layer a scene's own entity is put on, its
     /// `rawframe.world.layer` component's; nought for none.
     std::uint32_t layer = 0;
 
@@ -78,7 +78,7 @@ struct ComponentReading {
     std::optional<scene::Override::Kind> patch;
     /// Whether the scene was authored against another layout of the
     /// component than the catalog's (its recorded mark is not the
-    /// catalog's), so `scene.remark_component` would carry it over (D452).
+    /// catalog's), so `scene.remark_component` would carry it over.
     bool stale = false;
     /// The values the scene gives, in name order: a field at its default
     /// is not given, except in a `set` entry.

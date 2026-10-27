@@ -22,7 +22,7 @@ std::unexpected<result::Error> refuse(std::string_view why) {
 
 } // namespace
 
-/// What the game's UI document `text` says (D619): which node is inside
+/// What the game's UI document `text` says: which node is inside
 /// which, which typed words each shows, and what each presentation
 /// component starts as.
 result::Result<UiDocument>
@@ -61,7 +61,7 @@ documentOf(const world_kest::GameDescription& game, const kest::Program& program
                 std::ranges::find(names, document->nodes[*kNode.parent].component) - names.begin());
         }
         if (!kNode.shows.empty()) {
-            // What nodes show of typed words (D427): rawframe.ui.Typed's
+            // What nodes show of typed words: rawframe.ui.Typed's
             // length, then its bytes, each laid out a byte.
             const auto kTyped = program.layout("rawframe.ui.Typed");
             if (!kTyped.has_value() || kTyped->size != sizeof(Typed) || kTyped->fields.size() < 2 ||
@@ -192,7 +192,7 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
     for (const world_kest::GameFont& kFont : kGame.fonts) {
         settings.fonts.push_back(kFont.id);
     }
-    // The game's style classes (D431).
+    // The game's style classes.
     if (!kGame.styles.empty()) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kText, files.document(kGame.styles));
         auto styles = ui::readStyles(kText);

@@ -1,4 +1,4 @@
-// Lines a scene shows (D464): each a ribbon of two points about the eye,
+// Lines a scene shows: each a ribbon of two points about the eye,
 // on the material after the frame's own, or the one after it drawn over
 // everything; a width of the view made meters where each end is; the
 // unsound left out, and none once none are shown.
@@ -15,7 +15,7 @@ using namespace rawframe::render_scene::test_rig;
 
 RAWFRAME_TEST(LinesShownAreRibbonsAboutTheEye) {
     Rig rig;
-    // Two lines (D464), and one that is not sound; far out, as an eye there
+    // Two lines, and one that is not sound; far out, as an eye there
     // sees them.
     const std::array<SceneLine, 3> kLines = {
         SceneLine{.from = {1e7, 1, -1e7 - 2}, .to = {1e7 + 1, 1, -1e7 - 2}, .color = {1, 0, 0, 1}, .width = 0.05F},

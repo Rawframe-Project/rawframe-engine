@@ -29,13 +29,13 @@ constexpr diagnostics::EventIdentity kUiFailed{"ui", "ui_drawing_failed"};
 constexpr std::string_view kMaybe[] = {render::kFrames.name, render_canvas::kCanvasFrames.name};
 constexpr std::string_view kMaybeUi[] = {render::kFrames.name, ui::kUiFrames.name, view::kPreviewCamera.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
-/// The canvas's place in a frame: after the scene (SPEC-0024); the UI's,
+/// The canvas's place in a frame: after the scene; the UI's,
 /// over everything, the scene's post processes over the composed picture
-/// too (D376).
+/// too.
 constexpr std::uint32_t kOrder = 1;
 constexpr std::uint32_t kUiOrder = 3;
 
-/// Records the canvas's frames into the frames `render` makes (D285): in
+/// Records the canvas's frames into the frames `render` makes: in
 /// each `present` that plans a frame, the view takes the frame's size and
 /// the frame the canvas queued is prepared for it.
 class DrawingParticipant final : public composition::Participant {
@@ -80,7 +80,7 @@ public:
             renderer_ = std::move(*made);
             frames_->join(*renderer_, kOrder);
             // In split-screen, a renderer for each other local player's
-            // region (D364), each drawing after those before it.
+            // region, each drawing after those before it.
             for (std::size_t other = 1; other < canvas_->regionFrames().size(); ++other) {
                 auto another = CanvasRenderer::create(*device);
                 if (!another.has_value()) {
@@ -126,7 +126,7 @@ public:
             return;
         }
         RendererStatistics statistics;
-        // The other local players' frames drawn (D364).
+        // The other local players' frames drawn.
         std::uint64_t playerFrames = 0;
         for (const std::unique_ptr<CanvasRenderer>& other : others_) {
             playerFrames += other->statistics().frames;
@@ -161,14 +161,14 @@ private:
     render_canvas::CanvasFrames* canvas_ = nullptr;
     TextureSource textures_;
     std::unique_ptr<CanvasRenderer> renderer_;
-    /// In split-screen, the other local players' renderers (D364); the
+    /// In split-screen, the other local players' renderers; the
     /// first player's is `renderer_`.
     std::vector<std::unique_ptr<CanvasRenderer>> others_;
     bool failed_ = false;
     diagnostics::Emitter emitter_;
 };
 
-/// Records the UI's draw list into the frames `render` makes (D376), over
+/// Records the UI's draw list into the frames `render` makes, over
 /// everything else: in each `present` that plans a frame, the UI takes the
 /// frame's size and what it drew is prepared for it.
 class UiDrawingParticipant final : public composition::Participant {
@@ -180,7 +180,7 @@ public:
         RAWFRAME_TRY_ASSIGN(frames_, context.capability(render::kFrames));
         RAWFRAME_TRY_ASSIGN(ui_, context.capability(ui::kUiFrames));
         // An editor's preview, where a client shows one: its view leaves the
-        // game's UI out unless it asks for it (D933).
+        // game's UI out unless it asks for it.
         if (context.has(view::kPreviewCamera.name)) {
             RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
         }
@@ -219,8 +219,8 @@ public:
         if (!kPlanned.has_value()) {
             return;
         }
-        // Laid out on the headset's panel where it shows the UI apart
-        // (D597), else over the picture.
+        // Laid out on the headset's panel where it shows the UI apart,
+        // else over the picture.
         const auto kPanel = frames_->plannedPanel();
         const auto kSize = kPanel.value_or(*kPlanned);
         ui_->resize(kSize.first, kSize.second, kPanel.has_value());
@@ -278,15 +278,14 @@ private:
         std::uint64_t revision = 0;
         std::vector<std::shared_ptr<const texture::Texture>> images;
     };
-    /// A window beside the one shown, its renderer and what it last drew
-    /// (D988).
+    /// A window beside the one shown, its renderer and what it last drew.
     struct Aside {
         std::unique_ptr<UiRenderer> renderer;
         Seen seen;
     };
 
     /// Each window beside the shown one, where an editor shows a panel
-    /// apart (D988): laid out to its size and drawn by its own renderer,
+    /// apart: laid out to its size and drawn by its own renderer,
     /// joined as it first shows and left as it closes.
     void prepareAsides(const ImageSource& images) {
         const std::span<const render::FrameTarget::Aside> kPlanned = frames_->plannedAsides();
@@ -321,7 +320,7 @@ private:
         }
     }
 
-    /// Whether `drawn` draws what the last list prepared did (D494): the
+    /// Whether `drawn` draws what the last list prepared did: the
     /// same commands, glyphs from the same atlas revision, and the same
     /// images held for its keys. Kept as the last, whichever.
     bool same(Seen& seen, const ui::DrawList* drawn) {
@@ -333,7 +332,7 @@ private:
         }
         const std::uint64_t kRevision = drawn != nullptr && drawn->atlas != nullptr ? drawn->atlas->revision : 0;
         // No UI drawn after none is the same frame too, as an editor's
-        // view leaving the UI out draws one (D952).
+        // view leaving the UI out draws one.
         const bool kSame = drawn == nullptr ? seen.drewNone
                                             : seen.last.has_value() && *drawn == *seen.last &&
                                                   kRevision == seen.revision && images == seen.images;

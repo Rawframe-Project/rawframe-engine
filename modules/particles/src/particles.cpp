@@ -109,7 +109,7 @@ void Particles::spawn(Frame& frame,
         held = held || kWanted > limits.maximumParticlesPerEmitter;
         const auto kCapacity =
             static_cast<std::uint32_t>(std::min(kWanted, static_cast<double>(limits.maximumParticlesPerEmitter)));
-        // What its particles inherit of its velocity (D359): where it was
+        // What its particles inherit of its velocity: where it was
         // drawn the frame before to where it is, held to the limit point;
         // nothing where it was not drawn then.
         Vector inherited{};

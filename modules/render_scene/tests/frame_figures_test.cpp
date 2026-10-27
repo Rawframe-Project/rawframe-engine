@@ -1,5 +1,5 @@
-// What a frame the scene drew holds, as an editor's preview is told
-// (D842): a run of draws sharing a mesh and a material is one step with
+// What a frame the scene drew holds, as an editor's preview is told:
+// a run of draws sharing a mesh and a material is one step with
 // its instances, the translucent after the opaque, and the figures say
 // what was drawn and which effects ran.
 

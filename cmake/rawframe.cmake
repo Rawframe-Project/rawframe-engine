@@ -1,7 +1,7 @@
 # Build policy shared by every module: language, warnings, determinism,
 # configurations, sanitizers, and the module helper.
 
-# The three configurations (ADR-0006). Each fixes the assertion level that
+# The three configurations. Each fixes the assertion level that
 # rawframe/base/assert.h reads: full in debug and development, contract-only in
 # shipping, where RAWFRAME_ASSERT is removed and RAWFRAME_CHECK stays.
 set(RAWFRAME_CONFIGURATION "development" CACHE STRING "debug, development, or shipping")
@@ -17,7 +17,7 @@ else()
 endif()
 
 # The C math library, a library of its own on POSIX and part of the C
-# runtime on Windows (D237).
+# runtime on Windows.
 if(WIN32)
     set(RAWFRAME_MATH_LIBRARY "")
 else()
@@ -25,7 +25,7 @@ else()
 endif()
 
 # What runs a test written as a shell script: the script itself where the
-# system reads its first line, Git's bash on Windows (D237).
+# system reads its first line, Git's bash on Windows.
 if(WIN32)
     find_program(RAWFRAME_BASH NAMES bash REQUIRED)
     set(RAWFRAME_SHELL "${RAWFRAME_BASH}")
@@ -52,7 +52,7 @@ target_compile_definitions(rawframe_policy INTERFACE
     # 1 in shipping, where development-only surfaces refuse to compile.
     RAWFRAME_SHIPPING=${RAWFRAME_SHIPPING}
     RAWFRAME_CONFIGURATION_NAME="${RAWFRAME_CONFIGURATION}")
-# On Windows (D237): windows.h without its min and max macros, which break
+# On Windows: windows.h without its min and max macros, which break
 # std::min and std::max, and without the rarely used half of its headers; the
 # standard C library's functions without MSVC's deprecation of them in favour
 # of its own _s variants; and MSVC's library without its vectorized find,
@@ -63,12 +63,12 @@ if(WIN32)
 endif()
 
 if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    # clang-cl (D237): MSVC's library and linker, Clang's warnings as on
+    # clang-cl: MSVC's library and linker, Clang's warnings as on
     # Linux, and contraction turned off the way Clang spells it.
     target_compile_options(rawframe_policy INTERFACE
         /W4 /WX /Zc:__cplusplus /utf-8
-        /GR-            # no RTTI (ADR-0008)
-        /EHs-c-         # no exceptions (ADR-0008)
+        /GR-            # no RTTI
+        /EHs-c-         # no exceptions
         -Wpedantic -Wshadow -Wno-missing-field-initializers
         # Precise floating point is its default; /fp:precise would be
         # overridden by the contraction option.
@@ -94,8 +94,8 @@ if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 elseif(MSVC)
     target_compile_options(rawframe_policy INTERFACE
         /W4 /WX /permissive- /Zc:__cplusplus /utf-8
-        /GR-            # no RTTI (ADR-0008)
-        /EHs-c-         # no exceptions (ADR-0008)
+        /GR-            # no RTTI
+        /EHs-c-         # no exceptions
         /fp:precise /fp:contract-  # no floating-point contraction: deterministic simulation
     )
     target_compile_definitions(rawframe_policy INTERFACE _HAS_EXCEPTIONS=0)
@@ -115,7 +115,7 @@ else()
         # GCC 14's optimizer warns of these inside the standard library (an
         # optional in a variant, a vector grown after reserve) where nothing
         # is wrong; -Wuninitialized, which is certain, stays, and Clang and
-        # the sanitizers check the rest (D247).
+        # the sanitizers check the rest.
         target_compile_options(rawframe_policy INTERFACE -Wno-maybe-uninitialized -Wno-free-nonheap-object)
     endif()
     if(RAWFRAME_SANITIZE STREQUAL "address")
@@ -123,10 +123,10 @@ else()
         # The debug configuration and its assertions, optimized as far as
         # AddressSanitizer itself advises (-O1): unoptimized, the tree's
         # tests took forty times their development time, the check's long
-        # pole (D329).
+        # pole.
         target_compile_options(rawframe_policy INTERFACE -O1)
         # Coverage for the fuzz targets' guidance inside every module they
-        # reach, not only their own files (D242).
+        # reach, not only their own files.
         if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
             target_compile_options(rawframe_policy INTERFACE -fsanitize=fuzzer-no-link)
         endif()
@@ -142,7 +142,7 @@ endif()
 
 # Gives a target options spelled as GCC and Clang spell them, the way its
 # compiler reads them: as they are, or through /clang: under clang-cl, whose
-# own -Wall means every warning (D237). MSVC's own compiler reads neither
+# own -Wall means every warning. MSVC's own compiler reads neither
 # and gets none.
 #
 #   rawframe_gnu_options(target PRIVATE -ffp-contract=off -Wall)
@@ -186,7 +186,7 @@ function(rawframe_module)
     endforeach()
 endfunction()
 
-# Gives a Windows program UTF-8 as its code page (D956): its arguments, its
+# Gives a Windows program UTF-8 as its code page: its arguments, its
 # environment, and every narrow path it opens are UTF-8, as they are on every
 # other system and as process::Child already reads them, so a game kept under
 # a folder named in Turkish or Japanese is found. Windows 10 1903 and later;
@@ -201,7 +201,7 @@ endfunction()
 
 # Declares a host: a process entry under hosts/<name>, checked against
 # tools/modules.txt like a module. Nothing may depend on a host. LIBRARY makes
-# it a shared library a platform loads and starts (Android's activity, D551)
+# it a shared library a platform loads and starts (Android's activity)
 # in place of an executable.
 #
 #   rawframe_host(NAME dedicated_server OUTPUT rawframe-server SOURCES src/main.cpp DEPS host)
@@ -243,15 +243,15 @@ function(rawframe_module_tests)
     target_link_libraries(${target} PRIVATE rawframe::${arg_NAME} rawframe::test)
     add_test(NAME ${arg_NAME} COMMAND ${target})
     # A thread build's suppressions are every test's (tools/thread.tsan,
-    # the root CMakeLists.txt, D428).
+    # the root CMakeLists.txt).
     if(RAWFRAME_SANITIZE MATCHES "address")
-        # Other libraries' leaks: ALSA's configuration (D401), an OpenXR
-        # runtime's bindings (D596).
+        # Other libraries' leaks: ALSA's configuration, an OpenXR
+        # runtime's bindings.
         set_tests_properties(${arg_NAME} PROPERTIES ENVIRONMENT
                              "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tools/libraries.lsan")
     endif()
     # On the web, Maul RHI's page side for Node's run of a test that holds
-    # the device (tools/wasi_run.mjs, D282).
+    # the device (tools/wasi_run.mjs).
     if(TARGET maul-rhi)
         get_target_property(rawframe_rhi_glue maul-rhi MAUL_RHI_WEB_GLUE)
         if(rawframe_rhi_glue)
@@ -262,7 +262,7 @@ endfunction()
 
 # Where a test reads the engine's files and finds the programs it starts: the
 # source and build trees, or, for a tree whose tests run on another machine,
-# where tools/android_tests.sh puts them there (D561).
+# where tools/android_tests.sh puts them there.
 set(RAWFRAME_TEST_FILES "${PROJECT_SOURCE_DIR}" CACHE PATH "The source tree's files, as a test reads them")
 set(RAWFRAME_TEST_PROGRAMS "" CACHE PATH "The directory of the programs a test starts; empty for the build tree")
 
@@ -277,8 +277,8 @@ function(rawframe_test_program out target)
     endif()
 endfunction()
 
-# Declares a coverage-guided fuzz target for one module's hostile input
-# (D242): libFuzzer's, built in the address sanitizer tree with Clang, the
+# Declares a coverage-guided fuzz target for one module's hostile input:
+# libFuzzer's, built in the address sanitizer tree with Clang, the
 # one tree where the fuzzer and the sanitizers it needs both are. The check
 # runs it for a fixed number of inputs from a fixed seed, so a run is the
 # same run each time; a longer search runs nightly.
@@ -322,16 +322,16 @@ function(rawframe_module_fuzz)
     add_test(NAME ${arg_NAME}_fuzz_${arg_TARGET}
              COMMAND ${target} -seed=1 -runs=${arg_RUNS} -max_len=${arg_MAX_LEN} ${seed_inputs})
 endfunction()
-set(RAWFRAME_FUZZ_RUNS 50000 CACHE STRING "Inputs each fuzz target tries in the check (D242)")
+set(RAWFRAME_FUZZ_RUNS 50000 CACHE STRING "Inputs each fuzz target tries in the check")
 
-# Embeds a module's shader containers (D416): of each NAME, the container
+# Embeds a module's shader containers: of each NAME, the container
 # tools/gen_shaders.py wrote for the build's driver,
 # src/generated/NAME<RAWFRAME_SHADER_SUFFIX>.mrsc, becomes the array
 # k<Name>Container in generated/NAME_container.h under the module's build
 # directory, written again only when the container changes.
 #
 #   rawframe_shader_containers(TARGET rawframe_render NAMES display)
-# A file's bytes in the program (D435): `HEADER`, under the target's
+# A file's bytes in the program: `HEADER`, under the target's
 # generated directory, holds `SYMBOL`, an array of them, remade when the
 # file changes.
 #

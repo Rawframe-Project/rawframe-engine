@@ -245,7 +245,7 @@ int reencodes(std::span<const std::byte> seed, Decode decode, Encode encode, int
 } // namespace
 
 RAWFRAME_TEST(HostilePeerPayloadsReadOnlyAsTheyWrite) {
-    // What a peer sends is hostile input (ADR-0084, D189): each payload a
+    // What a peer sends is hostile input: each payload a
     // server reads from a client, and each a client reads from a server,
     // mutated, and whatever a decoder accepts writes back to the very same
     // bytes, so no payload has two readings and no bound is passed.
@@ -315,7 +315,7 @@ RAWFRAME_TEST(HostilePeerPayloadsReadOnlyAsTheyWrite) {
 }
 
 RAWFRAME_TEST(TheChecksumIsPinned) {
-    // Golden vectors (D203), computed apart from this code: a change to the
+    // Golden vectors, computed apart from this code: a change to the
     // algorithm is a new identity, never a quiet change to these.
     constexpr std::array<schema::ComponentTypeId, 2> kScope = {
         schema::ComponentTypeId::fromText("6b05cdb4-0683-437a-aaac-7ad990b2ddb4"),

@@ -1,7 +1,7 @@
 #pragma once
 
-// Windows beside the one shown, where an editor shows a panel apart
-// (D988): the editor asks for one by a key of its own, and the window
+// Windows beside the one shown, where an editor shows a panel apart:
+// the editor asks for one by a key of its own, and the window
 // host opens it, tells which window it is (`window::WindowId`'s value, as
 // `ui::UiFrames::Aside` names it), and gathers what its pointer does there
 // and when it is closed. Its keys reach the editor as the window's typing
@@ -31,7 +31,7 @@ public:
         float width = 0;
         float height = 0;
         /// Where on the desktop, its top left in logical pixels; none for
-        /// where the platform puts it (D994).
+        /// where the platform puts it.
         std::optional<std::array<float, 2>> place;
     };
     /// What happened in an aside, its pointer at `x`, `y` in its logical
@@ -45,7 +45,7 @@ public:
             Wheeled,
             Left,
             /// The window moved or changed size: `x`, `y` its place on the
-            /// desktop, `width`, `height` its logical size (D994).
+            /// desktop, `width`, `height` its logical size.
             Placed,
             Closed
         };
@@ -56,7 +56,7 @@ public:
         float x = 0;
         float y = 0;
         /// The same point from the top left of the window the editor shows
-        /// itself in, by the two windows' places on the desktop (D992): a
+        /// itself in, by the two windows' places on the desktop: a
         /// press there let go over that window is let go there.
         float mainX = 0;
         float mainY = 0;

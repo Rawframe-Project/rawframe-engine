@@ -1,6 +1,6 @@
 module rawframe.studio
 
-// Studio extensions (SPEC-0051 Part 7, D874): a Kest program under a game's
+// Studio extensions: a Kest program under a game's
 // `extensions/` directory, run by the authoring session as untrusted code
 // with these doors and no others, so opening a game never runs its code
 // with the tool's authority. An extension offers commands; a command

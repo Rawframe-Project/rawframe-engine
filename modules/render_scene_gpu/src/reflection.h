@@ -12,7 +12,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// What the reflections' pass reads (std140, D331): the jittered view's
+/// What the reflections' pass reads (std140): the jittered view's
 /// inverse, from clip space to the eye-relative World; the view itself;
 /// the frame before's view taking this frame's places; the distance
 /// followed and the near plane.
@@ -24,7 +24,7 @@ struct ReflectionBlock {
 };
 static_assert(sizeof(ReflectionBlock) == 208, "the reflections' shader reads its block as 208 bytes");
 
-/// ADR-0051's screen-space reflections (D331), when the view asks and the
+/// The screen-space reflections, when the view asks and the
 /// temporal pass holds a picture before: from the prepass's depth and
 /// surfaces, a pass follows each smooth point's reflection through the
 /// depth and takes what the picture before saw where it meets something,
@@ -59,7 +59,7 @@ public:
     /// Its pass recorded.
     result::Status record(const Pipelines& pipelines);
 
-    /// What times its passes on the GPU (D894).
+    /// What times its passes on the GPU.
     void timeBy(const PassTimer& timer) noexcept {
         timer_ = &timer;
     }

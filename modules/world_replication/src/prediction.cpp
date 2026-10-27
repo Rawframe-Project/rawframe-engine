@@ -54,7 +54,7 @@ void Prediction::advance(std::uint64_t through) {
         const std::uint64_t kTick = predictedTick_ + 1;
         // The command labelled `kTick` is the one the server's World takes
         // in the run it numbers `kTick - 1`: a label names the tick a run
-        // completes, a run is numbered by the ticks before it (D685).
+        // completes, a run is numbered by the ticks before it.
         if (!settings_.predictor->step(commandFor(kTick), world::TickIndex{kTick - 1}).has_value()) {
             ++statistics_.failedSteps;
             return;
@@ -218,7 +218,7 @@ bool Prediction::authoritative(std::uint64_t consumed, std::span<const std::span
     history_.clear();
     predictedTick_ = consumed;
     // What was predicted through `consumed` is past: the server's state
-    // there differs, so what waited on it is not confirmed (D219).
+    // there differs, so what waited on it is not confirmed.
     settle(consumed, false);
     ++pass_;
     const std::uint64_t kBefore = statistics_.predictedTicks;

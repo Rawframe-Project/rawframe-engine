@@ -1,4 +1,4 @@
-# 2D physics in the World (ADR-0028, SPEC-0037) through Maul2D: the physics
+# 2D physics in the World through Maul2D: the physics
 # components, the step system, and the participant that adds them for a game
 # with physics. Maul2D is linked privately, so no header above this module
 # can include it.

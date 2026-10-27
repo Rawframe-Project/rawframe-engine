@@ -1,4 +1,4 @@
-// The scene's lighting model (D299, D716, D717, D724): a point's surface as
+// The scene's lighting model: a point's surface as
 // the BRDF takes it, and what it reflects and lets through of the light
 // arriving from one way. A module the scene imports, not a container of
 // its own.
@@ -11,9 +11,9 @@ public static const float kPi = 3.14159265;
 // color less what metal takes), what it reflects head on (a dielectric's
 // by its index of refraction and specular color, or a metal's base color),
 // and its roughness; the coat over it, its weight, nought for none, its
-// roughness, and its normal (D716); and its anisotropy, nought for none,
+// roughness, and its normal; and its anisotropy, nought for none,
 // and the directions across the surface its roughness stretches along and
-// stays across (D717).
+// stays across.
 public struct Surface
 {
     public float3 diffuse;
@@ -25,15 +25,15 @@ public struct Surface
     public float anisotropy;
     public float3 along;
     public float3 across;
-    // What a transmitting model lets through (D720), and the color it is
-    // tinted as it passes, its base's and its volume's (D724).
+    // What a transmitting model lets through, and the color it is
+    // tinted as it passes, its base's and its volume's.
     public float transmission;
     public float3 tint;
     public float ior;
 }
 
 // What a coat reflects head on: a dielectric's of index 1.6, OpenPBR's
-// coat's, which SPEC-0026 fixes (D716).
+// coat's.
 public static const float kCoatHeadOn = 0.0532544;
 
 // GGX's distribution about `normal` at `roughness` times Smith's
@@ -98,7 +98,7 @@ public float3 beneath(Surface surface, float3 normal, float3 toEye, float3 towar
 // BRDF, the diffuse color's Lambert under Schlick's Fresnel, and GGX with
 // Smith's height-correlated visibility; under a coat, as
 // KHR_materials_clearcoat layers it, what the coat lets through of that
-// and the coat's own lobe, each by the coat's Fresnel (D716).
+// and the coat's own lobe, each by the coat's Fresnel.
 public float3 reflected(Surface surface, float3 normal, float3 toEye, float3 toward)
 {
     const float3 under = beneath(surface, normal, toEye, toward);
@@ -115,7 +115,7 @@ public float3 reflected(Surface surface, float3 normal, float3 toEye, float3 tow
 }
 
 // Of the light arriving from `toward` behind a transmitting surface, per
-// unit of illuminance, what passes through it toward the eye (D724), as
+// unit of illuminance, what passes through it toward the eye, as
 // KHR_materials_transmission's sample renderer has it: the way to the
 // light mirrored through the surface's plane, GGX's lobe about the normal
 // at the roughness its index of refraction spreads, by what the Fresnel

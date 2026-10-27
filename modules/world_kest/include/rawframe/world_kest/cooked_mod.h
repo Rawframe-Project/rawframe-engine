@@ -1,8 +1,8 @@
 #pragma once
 
-// A mod's description cooked (D178): its text, each scene it contributes
+// A mod's description cooked: its text, each scene it contributes
 // as the resource it is, and the program its handlers are in as an entry of
-// its Kest sources resource (D181), in one record, so a process reads the
+// its Kest sources resource, in one record, so a process reads the
 // mod from its Build and opens no path.
 //
 //   {"formatVersion": 2, "kind": "mod.description",

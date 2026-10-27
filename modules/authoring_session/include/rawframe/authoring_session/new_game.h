@@ -1,6 +1,6 @@
 #pragma once
 
-// A new game made from a template (SPEC-0051's new-project command, D780):
+// A new game made from a template:
 // what `rawframe-author new` and Studio's start screen both do, so a game
 // begun either way is the same game.
 
@@ -29,8 +29,8 @@ struct NewGame {
 /// files copied, the description and the Kest project named after the new
 /// directory, and every identity the template's sidecars and component
 /// lines mint made fresh throughout its text files, so a game, a mod, and
-/// another game made from one template never share one in a composition
-/// (ADR-0023, SPEC-0008). Nothing is left at `directory` when it fails.
+/// another game made from one template never share one in a composition.
+/// Nothing is left at `directory` when it fails.
 [[nodiscard]] result::Result<NewGame> newGame(const std::filesystem::path& from,
                                               const std::filesystem::path& directory);
 

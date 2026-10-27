@@ -1,4 +1,4 @@
-// Scatter documents (D862): read and written back as read; placed alike
+// Scatter documents: read and written back as read; placed alike
 // from the same seed and otherwise from another, every copy within its
 // area and its spacing from every other; stood on a terrain's ground and
 // kept to its painted layer; and what is not a scatter refused by its line.

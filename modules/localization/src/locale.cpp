@@ -28,7 +28,7 @@ bool digit(char each) {
     return each >= '0' && each <= '9';
 }
 
-/// The subtags of a tag in SPEC-0033's grammar and canonical case; none
+/// The subtags of a tag in the grammar and canonical case; none
 /// for any other text.
 std::optional<Locale> split(std::string_view tag) {
     std::vector<std::string_view> parts;

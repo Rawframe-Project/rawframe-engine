@@ -119,7 +119,7 @@ result::Result<std::vector<SetAsideClaim>> checkMods(const GameDescription& game
         }
         // The game's own order settles an exclusive point: the first mod it
         // prefers that makes one claim keeps it, and every other mod's claims
-        // on it are set aside (D202).
+        // on it are set aside.
         if (point.exclusive && count > 1) {
             const auto kKeeps = [&](const std::string& subject) {
                 const auto kMod = std::ranges::find(mods, subject, &ComposedMod::subject);

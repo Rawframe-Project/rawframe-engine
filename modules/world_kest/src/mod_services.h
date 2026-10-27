@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's service points (SPEC-0042, D199): for each, the door
+// A game's service points: for each, the door
 // `Mods.<point>(value: T) -> T` the game's program calls, T the point's
 // component type, and the one mod provider that answers it. The value is
 // copied, lent to the provider as `values: [T]`, and what it left in

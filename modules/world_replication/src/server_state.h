@@ -25,7 +25,7 @@ namespace rawframe::world_replication {
 
 /// State datagrams remembered per connection for acknowledgement, at most:
 /// those an acknowledgement can no longer reach are forgotten as soon as a
-/// newer one arrives (D217), so this bounds only a connection that stops
+/// newer one arrives, so this bounds only a connection that stops
 /// acknowledging. One not acknowledged by the time it leaves was lost, as
 /// far as the server is concerned, and its values go again.
 inline constexpr std::size_t kSentWindow = 256;
@@ -40,8 +40,8 @@ inline constexpr std::uint64_t kOwnedPriority = std::uint64_t{1} << 40U;
 /// Ticks of retired mappings the victim gate remembers: the most a physics
 /// history keeps.
 inline constexpr std::uint64_t kInterestKept = 1024;
-/// SPEC-0013's tombstones per connection: retired mappings remembered at
-/// most, the oldest forgotten past them (D226).
+/// The tombstones per connection: retired mappings remembered at
+/// most, the oldest forgotten past them.
 inline constexpr std::size_t kMaximumTombstones = 16'384;
 /// No place in a table by slot.
 inline constexpr std::size_t kNowhere = SIZE_MAX;
@@ -71,12 +71,12 @@ struct ReplicationServer::State {
     std::vector<std::unique_ptr<world::System>> systems;
     std::vector<schema::ComponentRuntimeId> inputWrites;
     /// Each predicted component's replication table index, in the game's
-    /// order, and the fingerprint of that scope (D204).
+    /// order, and the fingerprint of that scope.
     std::vector<std::size_t> predicted;
     std::uint64_t scope = 0;
     std::vector<Divergence> divergences;
     std::vector<std::span<const std::byte>> scopeValues;
-    /// Players' commands checked and not yet taken by the game (D425), and
+    /// Players' commands checked and not yet taken by the game, and
     /// each one's connection: one gone by then is no one's to act on.
     std::vector<ReceivedCommand> commands;
     std::vector<std::uint64_t> commandConnections;
@@ -99,7 +99,7 @@ struct ReplicationServer::State {
     std::vector<std::size_t> valuesAt;
     std::vector<std::size_t> filling;
     std::vector<std::byte> encoded;
-    /// The publish before's values, to find which changed (D744); the
+    /// The publish before's values, to find which changed; the
     /// publishes counted; and for each of the last few, the entities with
     /// a value that changed or appeared in it, or that names entities, in
     /// entity order. A connection looks at those and at what it was not
@@ -110,7 +110,7 @@ struct ReplicationServer::State {
     struct Changed {
         std::uint64_t publish = 0;
         std::vector<world::EntityHandle> entities;
-        /// The entities that appeared and that were gone in it (D745).
+        /// The entities that appeared and that were gone in it.
         std::vector<world::EntityHandle> appeared;
         std::vector<world::EntityHandle> gone;
     };
@@ -127,8 +127,7 @@ struct ReplicationServer::State {
     std::vector<std::byte> named;
     /// Whether each table component's codec names entities, known once.
     std::vector<std::uint8_t> naming;
-    /// Whether each table component goes to its holder's connection alone
-    /// (D673).
+    /// Whether each table component goes to its holder's connection alone.
     std::vector<std::uint8_t> ownOnly;
     /// Every positioned entity, when interest is spatial, and where each is
     /// in it by slot.
@@ -148,8 +147,8 @@ struct ReplicationServer::State {
     std::vector<PresentEntity> entities;
     /// Where each slot's entity is in `entities`, or nowhere.
     std::vector<std::size_t> entityAt;
-    /// Positioned entities by interest cell, when interest is spatial
-    /// (D209): cells as wide as the entering radius, so everything a viewer
+    /// Positioned entities by interest cell, when interest is spatial:
+    /// cells as wide as the entering radius, so everything a viewer
     /// may enter is in the cells around its own. Cells are hashed into
     /// buckets; `bucketed` holds indices into `entities`, bucket by bucket
     /// and in entity order within one, and `bucketAt` where each bucket
@@ -161,7 +160,7 @@ struct ReplicationServer::State {
     /// Indices into `entities` of those without a position: in every
     /// connection's interest.
     std::vector<std::size_t> unplaced;
-    /// The district each entity is of, by slot, or kNowhere (D870).
+    /// The district each entity is of, by slot, or kNowhere.
     std::vector<std::size_t> unitAt;
     /// One connection's entities that may enter, by bucket, and those that
     /// do.
@@ -189,8 +188,7 @@ struct ReplicationServer::State {
 
     void onFrame(world::World& world, Peer& peer, const network::SessionEvent& event);
 
-    /// A strike against a peer whose payload was malformed (SPEC-0013,
-    /// D223); the one that strikes it out leaves it gone.
+    /// A strike against a peer whose payload was malformed; the one that strikes it out leaves it gone.
     void strike(Peer& peer);
 
     /// A connection that ended or was closed: its player leaves the World.
@@ -201,7 +199,7 @@ struct ReplicationServer::State {
     void onInput(Peer& peer, const network::SessionEvent& event);
 
     void applyInputs(world::World& world);
-    /// SPEC-0013's input age at the peer's tick rate (D232): the server
+    /// The input age at the peer's tick rate: the server
     /// ticks a command may wait from its arrival, rounded up.
     [[nodiscard]] std::uint64_t maximumAgeTicks(const Peer& peer) const noexcept;
 
@@ -212,8 +210,8 @@ struct ReplicationServer::State {
 
     void publish(world::World& world, world::TickIndex tick);
 
-    /// Keeps which entities' values changed since the publish before
-    /// (D744), and which appeared and were gone (D745), as `changed`'s
+    /// Keeps which entities' values changed since the publish before,
+    /// and which appeared and were gone, as `changed`'s
     /// newest.
     void noteChanges();
 
@@ -229,7 +227,7 @@ struct ReplicationServer::State {
 
     /// Which districts are in a connection's interest whose player is at
     /// `viewer`: a persistent one always, another while its player is near
-    /// any of its entities (D870).
+    /// any of its entities.
     void unitsFor(Peer& peer, const std::array<double, 3>* viewer);
 
     /// The district `entity` is of, or kNowhere.
@@ -253,7 +251,7 @@ struct ReplicationServer::State {
 
     void sendPace(Peer& peer);
 
-    /// SPEC-0041's checksum record (D204): looked at only within the rate
+    /// The checksum record: looked at only within the rate
     /// limit, checked against the server's own checksum at its tick, and a
     /// mismatch recorded and counted, never acted on.
     void onChecksum(Peer& peer, const network::SessionEvent& event);

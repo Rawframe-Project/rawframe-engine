@@ -28,10 +28,10 @@ std::string lowered(std::string_view text) {
 }
 
 /// The menus in the menu bar's order, none named as a command is, so a
-/// screen reader's "Play" is the button (D777).
+/// screen reader's "Play" is the button.
 constexpr std::string_view kMenus[] = {"File", "Edit", "Entity", "Game", "Extensions", "View", "Window", "Help"};
 
-/// The Help menu's commands (D930): the keys each command has, and what
+/// The Help menu's commands: the keys each command has, and what
 /// Studio is, how its viewport is flown, and what it found beside it, each
 /// a page of the preferences, as nothing there is configuration.
 constexpr std::string_view kShortcuts = "Keyboard shortcuts";
@@ -43,59 +43,59 @@ constexpr std::string_view kPalette = placed("Command palette", SurfaceKind::Com
 
 /// Studio's preferences, a dialog of its own with no button.
 constexpr std::string_view kPreferences = placed("Preferences", SurfaceKind::Dialog, "Window menu");
-/// The layouts' commands (D911): each its name and " layout", and the
+/// The layouts' commands: each its name and " layout", and the
 /// docks saved as the author's next.
 constexpr std::string_view kLayoutSuffix = " layout";
 constexpr std::string_view kSaveLayout = "Save layout";
 
-/// How many viewport modes the extensions may add: SPEC-0051's eight, less
-/// Studio's own in the surface table (D877).
+/// How many viewport modes the extensions may add: the eight, less
+/// Studio's own in the surface table.
 constexpr std::size_t kModesLeft =
     8 - static_cast<std::size_t>(std::ranges::count(kSurfaces, SurfaceKind::ViewportMode, &Surface::kind));
 
-/// The game exported, a dialog of its own with no button (D872).
+/// The game exported, a dialog of its own with no button.
 constexpr std::string_view kExport = placed("Export", SurfaceKind::Dialog, "File menu");
 
-/// The view turned on what is chosen (D792), with no button: the key,
+/// The view turned on what is chosen, with no button: the key,
 /// the menu, or the palette.
 constexpr std::string_view kFrame = "Frame chosen";
 
-/// The chosen entity claimed at a host joined, and let go (D884).
+/// The chosen entity claimed at a host joined, and let go.
 constexpr std::string_view kClaim = "Claim chosen";
 constexpr std::string_view kRelease = "Release chosen";
 
 /// The view seen in 2D, straight down at a 2D game's plane, or out of it
-/// again (D793); no buttons either.
+/// again; no buttons either.
 constexpr std::string_view kFlat = "2D view";
 constexpr std::string_view kTilted = "3D view";
 
-/// The device a play's first client is tried as (D809): this machine,
+/// The device a play's first client is tried as: this machine,
 /// or a window of a phone's or a small tablet's size, the mouse a finger.
 constexpr std::array<std::pair<std::string_view, std::array<std::uint32_t, 2>>, 3> kDevices = {
     {{"As this machine", {0, 0}}, {"As a phone", {360, 640}}, {"As a tablet", {960, 600}}}};
 
-/// How many players a play has, each a client (D804).
+/// How many players a play has, each a client.
 constexpr std::array<std::pair<std::string_view, std::uint32_t>, 4> kPlayers = {
     {{"One player", 1}, {"Two players", 2}, {"Three players", 3}, {"Four players", 4}}};
 
-/// What the preview draws over its scene, each toggled (D798), by the
+/// What the preview draws over its scene, each toggled, by the
 /// renderer's name.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kOverlays = {
     {{"Show grid", "grid"}, {"Show colliders", "colliders"}, {"Show lights", "lights"}, {"Show game UI", "ui"}}};
 
-/// The preview split one, two, or three ways (D797).
+/// The preview split one, two, or three ways.
 constexpr std::array<std::pair<std::string_view, std::uint8_t>, 3> kSplits = {
     {{"One view", 1}, {"Two views", 2}, {"Three views", 3}}};
 
-/// A bookmark's commands, each followed by its slot (D796).
+/// A bookmark's commands, each followed by its slot.
 constexpr std::string_view kGoTo = "Go to bookmark ";
 constexpr std::string_view kKeep = "Set bookmark ";
 
-/// How the preview draws (D794), each by the renderer's name for it.
+/// How the preview draws, each by the renderer's name for it.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 3> kModes = {
     {{"Lit", "lit"}, {"Unlit", "unlit"}, {"Normals", "normals"}}};
 
-/// The File menu's commands in its order, each with its key (D923).
+/// The File menu's commands in its order, each with its key.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 7> kFileCommands = {{
     {"New game", ""},
     {"Open game", "Ctrl+O"},
@@ -108,7 +108,7 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 7> kFileComm
 
 /// The commands a menu draws a line above, each beginning a group of its
 /// own as an editor's menus do.
-/// The Extensions menu's own commands, after the extensions' (D938).
+/// The Extensions menu's own commands, after the extensions'.
 constexpr std::string_view kManageExtensions = "Manage extensions";
 constexpr std::string_view kReloadExtensions = "Reload extensions";
 
@@ -132,15 +132,14 @@ constexpr std::string_view kPaletteHint = "Search commands, assets, entities    
 result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node> searchAt) {
     commands_.clear();
     menus_.clear();
-    // A command's keys are its own unless the preferences give it others
-    // (D782).
+    // A command's keys are its own unless the preferences give it others.
     const auto kKeys = [&](std::string_view name, std::vector<std::string> keys) {
         defaultKeys_[std::string{name}] = keys;
         const auto kGiven = preferences_.keys.find(name);
         return kGiven != preferences_.keys.end() ? kGiven->second : keys;
     };
     // Only what a button does now: an operation the catalog does not offer
-    // has no button, and so no command (D777).
+    // has no button, and so no command.
     const auto kOffer =
         [&](std::string_view name, std::string_view menu, std::vector<std::string> keys, ui::Node button) {
             if (tree_->contains(button)) {
@@ -156,18 +155,18 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     kOffer("Duplicate", "Edit", {"Ctrl+D"}, duplicateNode_);
     kOffer("Delete", "Edit", {"Delete"}, deleteNode_);
     // The chosen entity's name, or a file's chosen in Assets, as a large
-    // editor's F2 renames (D998).
+    // editor's F2 renames.
     if (catalog_.offers("scene.rename_entity") || tree_->contains(browser_.rename)) {
         commands_.push_back(Command{.name = "Rename", .menu = "Edit", .keys = kKeys("Rename", {"F2"})});
     }
     // The chosen entities copied, and pasted as new ones into the scene
-    // open, this one or another (D999).
+    // open, this one or another.
     if (catalog_.offers("scene.create_entity")) {
         commands_.push_back(Command{.name = "Copy", .menu = "Edit", .keys = kKeys("Copy", {"Ctrl+C"})});
         commands_.push_back(Command{.name = "Paste", .menu = "Edit", .keys = kKeys("Paste", {"Ctrl+V"})});
     }
     kOffer("New", "Entity", {"Ctrl+Shift+N"}, newNode_);
-    // The parts the game can be given (D917), in the Entity menu and under
+    // The parts the game can be given, in the Entity menu and under
     // the Hierarchy's plus.
     if (tree_->contains(newNode_)) {
         for (const std::string& kName : partCommands()) {
@@ -180,7 +179,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     kOffer("Up", "Entity", {}, upNode_);
     kOffer("Down", "Entity", {}, downNode_);
     kOffer("Play", "Game", {"F5"}, playNode_);
-    // The viewport's tools by their keys, as the toolbar names them (D930);
+    // The viewport's tools by their keys, as the toolbar names them;
     // while a press flies the view the keys are the flight's.
     for (const auto& [kName, kKey, kAt] :
          {std::tuple<std::string_view, std::string_view, std::size_t>{"Select tool", "Q", 0},
@@ -236,11 +235,11 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     }
     commands_.push_back(Command{.name = std::string{kSaveLayout}, .menu = "Window", .keys = kKeys(kSaveLayout, {})});
     // The pane under the scene, or the one whose tab's context menu was
-    // opened, shown apart (D988), where the host opens windows.
+    // opened, shown apart, where the host opens windows.
     if (docking_.windows != nullptr) {
         commands_.push_back(Command{.name = std::string{kOpenApart}, .menu = "Window", .keys = kKeys(kOpenApart, {})});
     }
-    // The File menu as an editor's (D923): a game made, opened, and
+    // The File menu as an editor's: a game made, opened, and
     // closed, what is saved, files brought in and the game sent out, and
     // Studio quit.
     for (const auto& [kName, kKey] : kFileCommands) {
@@ -255,7 +254,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
                 kKeys(kName, kKey.empty() ? std::vector<std::string>{} : std::vector<std::string>{std::string{kKey}})});
     }
     commands_.push_back(Command{.name = std::string{kFrame}, .menu = "View", .keys = kKeys(kFrame, {"F"})});
-    // At a host joined, the chosen entity claimed and let go (D884).
+    // At a host joined, the chosen entity claimed and let go.
     if (held_.joined != nullptr) {
         commands_.push_back(Command{.name = std::string{kClaim}, .menu = "Edit", .keys = kKeys(kClaim, {})});
         commands_.push_back(Command{.name = std::string{kRelease}, .menu = "Edit", .keys = kKeys(kRelease, {})});
@@ -280,7 +279,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     for (const auto& [kName, kViews] : kSplits) {
         commands_.push_back(Command{.name = std::string{kName}, .menu = "View", .keys = kKeys(kName, {})});
     }
-    // The scene's nine bookmarks (D796), on Control and a digit, kept with
+    // The scene's nine bookmarks, on Control and a digit, kept with
     // Shift too: the keys and the palette, in no menu.
     for (char slot = '1'; slot <= '9'; ++slot) {
         const std::string kGo = std::string{kGoTo} + slot;
@@ -290,9 +289,9 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     }
     // Each command the game's extensions offer, in their menu, by its own
     // name, after all of Studio's: one named as a command Studio has, or
-    // as another extension's, is not offered (D874). Then each mode, as
-    // its name and "mode", while SPEC-0051's eight modes have room after
-    // Studio's own (D877).
+    // as another extension's, is not offered. Then each mode, as
+    // its name and "mode", while the eight modes have room after
+    // Studio's own.
     std::size_t modesLeft = kModesLeft;
     for (const ListedExtension& kExtension : extensions_) {
         const auto kOffered = [&](const std::string& name) {
@@ -313,7 +312,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
             }
         }
     }
-    // Then, as the design's Extensions menu (D938), the game's extensions
+    // Then, as the design's Extensions menu, the game's extensions
     // in the preferences, and read again from its extensions/ folder.
     if (gameOpen()) {
         commands_.push_back(Command{
@@ -322,7 +321,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
                                     .menu = "Extensions",
                                     .keys = kKeys(kReloadExtensions, {"Ctrl+Alt+R"})});
     }
-    // The palette's field, as a field named "commands" is read (D575).
+    // The palette's field, as a field named "commands" is read.
     RAWFRAME_TRY_ASSIGN(const ui::Node kSearch, tree_->addEditable(++keys_));
     RAWFRAME_TRY(tree_->setLayout(kSearch,
                                   ui::Layout{.width = ui::pixels(300),
@@ -334,7 +333,7 @@ result::Status ShellParticipant::showMenus(ui::Node bar, std::optional<ui::Node>
     RAWFRAME_TRY(tree_->setLook(kSearch, ui::Look{.fill = look::kBarFill, .borderColor = look::kEdge, .radius = 4}));
     RAWFRAME_TRY(tree_->attach(searchAt.value_or(bar), kSearch));
     RAWFRAME_TRY(words(kSearch, kPaletteHint, look::kFaintInk, look::kLabelSize));
-    // Its magnifier, drawn over its start (D915).
+    // Its magnifier, drawn over its start.
     RAWFRAME_TRY_ASSIGN(const ui::Node kGlass, icon(kSearch, Icon::Search, look::kFaintInk, 14));
     RAWFRAME_TRY(tree_->setLayout(kGlass,
                                   ui::Layout{.width = ui::pixels(14),
@@ -544,7 +543,7 @@ void ShellParticipant::runChord(std::string_view chord) {
 }
 
 bool ShellParticipant::commandOn(std::string_view name) const {
-    // What a pill's row stands for that is on now (D916).
+    // What a pill's row stands for that is on now.
     if (const auto kOverlay = std::ranges::find(kOverlays, name, &std::pair<std::string_view, std::string_view>::first);
         kOverlay != kOverlays.end()) {
         return std::ranges::contains(shown_.overlays, std::string{kOverlay->second});
@@ -562,7 +561,7 @@ bool ShellParticipant::commandOn(std::string_view name) const {
 
 result::Result<ui::Node>
 ShellParticipant::menuLine(ui::Node popup, const Command& command, bool lit, std::optional<bool> checked) {
-    // A line as the design's menus (D923): its name, and its key at the
+    // A line as the design's menus: its name, and its key at the
     // end in the fixed-width face; lit where it is on, or the first match.
     RAWFRAME_TRY_ASSIGN(const ui::Node kLine,
                         box(popup,
@@ -573,7 +572,7 @@ ShellParticipant::menuLine(ui::Node popup, const Command& command, bool lit, std
                                        .padding = {10, 10, 0, 0}},
                             0));
     RAWFRAME_TRY(tree_->setLook(kLine, ui::Look{.fill = lit ? kChosen : 0U, .radius = 4}));
-    // A checkbox first where it says what is on (D927).
+    // A checkbox first where it says what is on.
     if (checked.has_value()) {
         RAWFRAME_TRY_ASSIGN(const ui::Node kCheck,
                             box(kLine,
@@ -640,11 +639,11 @@ void ShellParticipant::showMenu(std::size_t at) {
     static_cast<void>(tree_->setName(*popup, menus_[at].second));
     popup_ = *popup;
     menuOpen_ = at;
-    // The layout chooser lists the Window menu's layouts (D911).
+    // The layout chooser lists the Window menu's layouts.
     const bool kChooser = menus_[at].second == kLayoutChooser;
     for (std::size_t each = 0; each < commands_.size(); ++each) {
         const Command& kCommand = commands_[each];
-        // A viewport's pill lists its own commands (D916).
+        // A viewport's pill lists its own commands.
         const bool kPill = isPill(menus_[at].second);
         if (kPill      ? !pillLists(menus_[at].second, kCommand.name)
             : kChooser ? kCommand.menu != "Window" || !kCommand.name.ends_with(kLayoutSuffix)
@@ -659,7 +658,7 @@ void ShellParticipant::showMenu(std::size_t at) {
             }
         }
         // The Show pill's rows each a checkbox, as the design's overlays
-        // menu (D927); the other pills' row that is on lit.
+        // menu; the other pills' row that is on lit.
         const bool kChecked = menus_[at].second == "Show";
         auto line = menuLine(*popup,
                              kCommand,
@@ -699,11 +698,11 @@ void ShellParticipant::showMatches(std::string_view typed) {
     static_cast<void>(tree_->setName(*popup, "matches"));
     popup_ = *popup;
     // `>` narrows to commands and `@` to the scene's entities, as the
-    // design's palette says at its foot (D937).
+    // design's palette says at its foot.
     const bool kCommandsOnly = typed.starts_with('>');
     const bool kEntitiesOnly = typed.starts_with('@');
     const std::string kWanted = lowered(kCommandsOnly || kEntitiesOnly ? typed.substr(1) : typed);
-    // As the design's palette (D927): the commands, then with words typed
+    // As the design's palette: the commands, then with words typed
     // the open scene's entities and the game's assets they name, each
     // under its heading.
     const std::size_t kMostCommands = kWanted.empty() ? 12 : 7;
@@ -895,7 +894,7 @@ void ShellParticipant::closePopup() {
 
 void ShellParticipant::showChoices(const FieldRow& edited, const std::vector<std::string>& choices) {
     closePopup();
-    // Under the field, in the pane apart it is in if it is (D990).
+    // Under the field, in the pane apart it is in if it is.
     const TornPane* kApart = pressedApart(docking_);
     auto popup = box(kApart != nullptr ? kApart->root : root_,
                      ui::Layout{.width = ui::pixels(200),

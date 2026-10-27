@@ -1,4 +1,4 @@
-// The ambient occlusion on lavapipe (D327): under a sky's light alone, the
+// The ambient occlusion on lavapipe: under a sky's light alone, the
 // floor at the foot of a block takes less of it with the occlusion than
 // without, the floor far from anything as much, and the block's face well
 // above the floor too.
@@ -67,7 +67,7 @@ RAWFRAME_TEST(TheFloorAtABlocksFootIsDarkerWithAmbientOcclusion) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // Each frame's light, read back (D326), so the occlusion is measured
+    // Each frame's light, read back, so the occlusion is measured
     // in linear light.
     const auto kLit = [&](bool occluded) {
         (*made)->capture();
@@ -76,7 +76,7 @@ RAWFRAME_TEST(TheFloorAtABlocksFootIsDarkerWithAmbientOcclusion) {
         return std::pair{kPixels, (*made)->captured()};
     };
     const auto [kPlain, kPlainLight] = kLit(false);
-    // The occlusion's pipelines asked for and made first (D337).
+    // The occlusion's pipelines asked for and made first.
     static_cast<void>(
         drawnWith(**framer, **made, yard(true), kMeshes, &render_scene_gpu::RendererStatistics::framesOccluded));
     const auto [kOccluded, kOccludedLight] = kLit(true);

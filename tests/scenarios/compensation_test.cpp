@@ -1,4 +1,4 @@
-// Lag compensation end to end (SPEC-0041): a client over a slow, jittery
+// Lag compensation end to end: a client over a slow, jittery
 // network aims at where it sees a moving target, which is where the target
 // was a while ago. Each command carries the moment the client saw, and the
 // server casts the shot back to that moment. Cast now, the same shots miss.

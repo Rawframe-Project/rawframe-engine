@@ -1,4 +1,4 @@
-// Studio's asset browser (D799): the game's sources narrowed to a folder
+// Studio's asset browser: the game's sources narrowed to a folder
 // and a kind, each with its cook state, from `authoring.assets`.
 
 #include "browser.h"
@@ -22,8 +22,8 @@ namespace rawframe::studio {
 
 namespace {
 
-/// The largest `wide` by `tall` box a picture fills at its own proportions
-/// (D970): a square thumbnail drawn into a card's wider tile was stretched.
+/// The largest `wide` by `tall` box a picture fills at its own proportions:
+/// a square thumbnail drawn into a card's wider tile was stretched.
 std::array<float, 2> fitted(const texture::Texture* picture, float wide, float tall) {
     if (picture == nullptr || picture->levels.empty() || picture->levels[0].width == 0 ||
         picture->levels[0].height == 0) {
@@ -159,7 +159,7 @@ void ShellParticipant::listSources() {
 }
 
 result::Status ShellParticipant::makeAssets() {
-    // As the design's Assets (D916): a heading with the folder shown, the
+    // As the design's Assets: a heading with the folder shown, the
     // kinds, the search, the views, and Import; then the folders' column
     // beside the grid of cards.
     RAWFRAME_TRY_ASSIGN(scenesColumn_,
@@ -185,7 +185,7 @@ result::Status ShellParticipant::makeAssets() {
     RAWFRAME_TRY_ASSIGN(browser_.tools,
                         box(kHeading, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
     // The kinds on a row of their own under it, the whole width theirs,
-    // scrolled sideways where they are still more (D925).
+    // scrolled sideways where they are still more.
     RAWFRAME_TRY_ASSIGN(browser_.chips,
                         box(scenesColumn_,
                             ui::Layout{.height = ui::pixels(34),
@@ -235,7 +235,7 @@ result::Status ShellParticipant::makeAssets() {
 
 result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::searchWell(
     ui::Node parent, std::string_view name, std::string_view hint, std::string_view value, float width, Icon which) {
-    // The design's search (D916): a well with the magnifier, its words the
+    // The design's search: a well with the magnifier, its words the
     // hint until something is typed.
     RAWFRAME_TRY_ASSIGN(const ui::Node kWell,
                         box(parent,
@@ -259,7 +259,7 @@ result::Result<std::pair<ui::Node, ui::Node>> ShellParticipant::searchWell(
     return std::pair{kWell, kValue};
 }
 
-/// The icon a source of `kind` is drawn with, and its ink (D916).
+/// The icon a source of `kind` is drawn with, and its ink.
 std::pair<Icon, std::uint32_t> kindIcon(std::string_view kind) {
     constexpr std::array<std::tuple<std::string_view, Icon, std::uint32_t>, 13> kIcons = {{
         {"animation", Icon::Animation, 0xB48CFFFFU},
@@ -417,7 +417,7 @@ result::Result<ui::Node> ShellParticipant::assetCard(const AssetCard& card) {
     RAWFRAME_TRY_ASSIGN(const ui::Node kName,
                         box(kCard, ui::Layout{.width = ui::pixels(kWide), .shrink = 0, .padding = {1, 0, 0, 0}}, 0));
     // Its file's name under its tile, the folder the tree's, kept within
-    // the tile; named whole for assistive technology (D929).
+    // the tile; named whole for assistive technology.
     RAWFRAME_TRY(tree_->setLook(kName, ui::Look{.clip = true}));
     RAWFRAME_TRY(words(kName, card.name.substr(card.name.rfind('/') + 1), look::kRowInk, look::kLabelSize));
     RAWFRAME_TRY_ASSIGN(const ui::Node kWhat,
@@ -462,12 +462,12 @@ result::Status ShellParticipant::showBrowser() {
         }
     }
     // Every folder, those with nothing in them too, and those a folder is
-    // in (D929).
+    // in.
     for (const std::string& kFolder : browser_.folderList) {
         folders.try_emplace(kFolder, 0);
     }
     for (const std::string& kScene : scenes_) {
-        // A document with no sidecar counts in its folder too (D929).
+        // A document with no sidecar counts in its folder too.
         if (browser_.find(kScene) == nullptr) {
             ++every;
             if (const std::size_t kSlash = kScene.rfind('/'); kSlash != std::string::npos) {
@@ -511,7 +511,7 @@ result::Status ShellParticipant::showBrowser() {
         RAWFRAME_TRY_ASSIGN(const ui::Node kControl, kChip(kindLabel(kKind), browser_.kind == kKind));
         browser_.kindRows.emplace_back(kControl, kKind);
     }
-    // The views, a list or cards (D801's sizes), then Import.
+    // The views, a list or cards, then Import.
     for (const auto& [kWhich, kName, kSize] :
          {std::tuple<Icon, std::string_view, std::uint32_t>{Icon::List, "List", 0},
           std::tuple<Icon, std::string_view, std::uint32_t>{Icon::TilesView, "Thumbnails", 128}}) {
@@ -521,7 +521,7 @@ result::Status ShellParticipant::showBrowser() {
     }
     RAWFRAME_TRY_ASSIGN(browser_.import, kHeld(textButton(browser_.tools, Icon::Import, "Import")));
     // A folder made, and the file or folder last pressed renamed or
-    // deleted, as an editor's browser does (D929); a name being typed in
+    // deleted, as an editor's browser does; a name being typed in
     // the field in their place, and a deletion asked waiting to be sure.
     if (browser_.typing != AssetBrowser::Typing::None) {
         const bool kFolder = browser_.typing == AssetBrowser::Typing::Folder;
@@ -554,7 +554,7 @@ result::Status ShellParticipant::showBrowser() {
     }
     // A new scene is the session's own verb, not an operation the catalog
     // lists, so it is always offered. A file's absolute path typed there
-    // imports it instead (D505).
+    // imports it instead.
     RAWFRAME_TRY_ASSIGN(const auto kNew,
                         searchWell(browser_.tools, "new scene or import", "New scene", "", 150, Icon::Plus));
     browser_.boxes.push_back(kNew.first);
@@ -591,14 +591,14 @@ result::Status ShellParticipant::showBrowser() {
         RAWFRAME_TRY(tree_->setName(kRowNode, name.empty() ? text : name));
         return kRowNode;
     };
-    // The game's own row, where a card let go goes to its root (D929).
+    // The game's own row, where a card let go goes to its root.
     RAWFRAME_TRY_ASSIGN(browser_.rootRow,
                         kFolderRow(description_.stem().string(), Icon::ChevronDown, std::nullopt, 6, false));
     RAWFRAME_TRY_ASSIGN(const ui::Node kEvery,
                         kFolderRow("Everything", Icon::Layers, every, 20, !browser_.folder.has_value()));
     browser_.folderRows.emplace_back(kEvery, std::string{});
     // Each folder under the one it is in, by its own name, named whole for
-    // assistive technology (D929).
+    // assistive technology.
     for (const auto& [kFolder, kCount] : folders) {
         const auto kDepth = static_cast<float>(std::ranges::count(kFolder, '/'));
         RAWFRAME_TRY_ASSIGN(const ui::Node kRowNode,
@@ -657,7 +657,7 @@ result::Status ShellParticipant::showDocuments() {
                                                 .chosen = each == sceneAt_ && !scene_.empty()}));
         sceneRows_.push_back(kCard);
     }
-    // The game's Kest scripts, each opened in the author's editor (D919).
+    // The game's Kest scripts, each opened in the author's editor.
     browser_.scriptRows.clear();
     if (browser_.folder.has_value() || (browser_.kind.has_value() && *browser_.kind != "kest")) {
         return {};
@@ -709,12 +709,12 @@ result::Status ShellParticipant::showSources() {
 
 bool ShellParticipant::pressBrowser(ui::Node node) {
     // The chosen source cooked again, its settings as the sidecar now has
-    // them (D800): the game's cook, which reuses every other source.
+    // them: the game's cook, which reuses every other source.
     if (node == browser_.references && browser_.references != ui::Node{}) {
         showReferences();
         return true;
     }
-    // A source listed among the references chosen, as in the list (D803).
+    // A source listed among the references chosen, as in the list.
     if (const auto kListed = std::ranges::find(browser_.referenceRows, node, &std::pair<ui::Node, std::string>::first);
         kListed != browser_.referenceRows.end()) {
         browser_.chosen = kListed->second;
@@ -724,14 +724,14 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         showReferences();
         return true;
     }
-    // A script opens in the author's editor (D919).
+    // A script opens in the author's editor.
     if (const auto kScript = std::ranges::find(browser_.scriptRows, node, &std::pair<ui::Node, std::string>::first);
         kScript != browser_.scriptRows.end()) {
         browser_.target = kScript->second;
         openEditor(Diagnostic{.file = "game/" + kScript->second, .line = 1, .column = 1});
         return true;
     }
-    // The search, typed into as the grid narrows (D916).
+    // The search, typed into as the grid narrows.
     if (node == browser_.searchValue && browser_.searchValue != ui::Node{}) {
         beginEdit(FieldRow{
             .value = browser_.searchValue, .role = FieldRow::Role::AssetSearch, .field = "search", .hint = "Search"});
@@ -741,7 +741,7 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         importAsked();
         return true;
     }
-    // Assets' file operations (D929).
+    // Assets' file operations.
     if (node == browser_.newFolder && node != ui::Node{}) {
         beginFolder();
         return true;
@@ -783,7 +783,7 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
         return true;
     }
     if (kNarrow(browser_.kindRows, browser_.kind) || kNarrow(browser_.folderRows, browser_.folder)) {
-        // A folder pressed is what Rename and Delete act on (D929).
+        // A folder pressed is what Rename and Delete act on.
         if (std::ranges::contains(browser_.folderRows, node, &std::pair<ui::Node, std::string>::first)) {
             browser_.target = browser_.folder.value_or(std::string{});
         }
@@ -796,8 +796,8 @@ bool ShellParticipant::pressBrowser(ui::Node node) {
     if (kSource == browser_.sourceRows.end()) {
         return false;
     }
-    // Held, it may be dragged onto a folder (D929), a field, or the scene
-    // (D975): chosen as it is let go unless it was dragged, so the
+    // Held, it may be dragged onto a folder, a field, or the scene:
+    // chosen as it is let go unless it was dragged, so the
     // Inspector a drag ends on still shows what it showed.
     if (pointerPress_) {
         browser_.held = kSource->second;
@@ -840,7 +840,7 @@ void ShellParticipant::showImportSettings() {
         }
         return made;
     };
-    // As the design's (D916): its picture or its kind's icon, its name and
+    // As the design's: its picture or its kind's icon, its name and
     // kind, how the cooks left it, then its importer's settings, what uses
     // it, and Reimport.
     const ListedSource* kSource = browser_.find(browser_.chosen);
@@ -965,7 +965,7 @@ void ShellParticipant::showImportSettings() {
                                    .kind = *kType->text(),
                                    .type = std::move(type)});
     }
-    // What uses it, each pressed to choose it (D803).
+    // What uses it, each pressed to choose it.
     const auto kReferences = document::parse(ask(assetReferencesRecord(next(), browser_.chosen)));
     const Value* kFound = kReferences.has_value() ? kReferences->find("answer") : nullptr;
     const Value* kUsedBy = kFound != nullptr ? kFound->find("usedBy") : nullptr;
@@ -990,8 +990,7 @@ void ShellParticipant::showImportSettings() {
         if (auto made = textButton(*buttons, std::nullopt, "Reimport", ButtonKind::Primary); made.has_value()) {
             browser_.reimport = *made;
         }
-        // Everything that uses it, in the center (D803), beside Reimport
-        // (D925).
+        // Everything that uses it, in the center, beside Reimport.
         if (auto made = textButton(*buttons, std::nullopt, "References", ButtonKind::Normal); made.has_value()) {
             browser_.references = *made;
         }
@@ -1084,9 +1083,9 @@ bool ShellParticipant::importFile(const std::string& path, const std::string& as
 }
 
 void ShellParticipant::importAsked() {
-    // The files to bring in, from the platform's dialog (D918); where it
+    // The files to bring in, from the platform's dialog; where it
     // has none, typed as a path into the new scene's field or dropped on
-    // the window (D802, D505).
+    // the window.
     if (dialogs_ != nullptr) {
         askDialog(view::FileDialogs::Kind::OpenMany, "Import into the game", "import");
         return;
@@ -1140,7 +1139,7 @@ void ShellParticipant::showReferences() {
     viewFields_.clear();
     clear(held_.cameraRows);
     // As the design's lists: a heading with its count, then each source
-    // with its kind's mark, pressed to choose it and see its own (D925).
+    // with its kind's mark, pressed to choose it and see its own.
     const auto kSection = [&](std::string_view title, const Value* listed) {
         const std::size_t kCount = listed != nullptr ? listed->items().size() : 0;
         if (auto header =

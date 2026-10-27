@@ -13,7 +13,7 @@ struct StaticField {
 };
 
 // RFC 9204 Appendix A, checked entry by entry against an independent
-// encoder when written (D172).
+// encoder when written.
 constexpr std::array<StaticField, 99> kStaticTable = {
     StaticField{":authority", ""},
     StaticField{":path", "/"},
@@ -116,7 +116,7 @@ constexpr std::array<StaticField, 99> kStaticTable = {
     StaticField{"x-frame-options", "sameorigin"}};
 
 // RFC 7541 Appendix B as a canonical code, checked canonical and against the
-// RFC's examples when written (D172).
+// RFC's examples when written.
 // kCountByLength[n]: how many codes are n bits long.
 constexpr std::array<std::uint16_t, 31> kCountByLength = {0, 0, 0, 0, 0, 10, 26, 32, 6,  0, 5,  3,  2,  6, 2, 3,
                                                           0, 0, 0, 3, 8, 13, 26, 29, 12, 4, 15, 19, 29, 0, 4};

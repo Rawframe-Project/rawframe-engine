@@ -1,13 +1,13 @@
 #pragma once
 
-// A game as a process reads it (D89): its description, the documents the
+// A game as a process reads it: its description, the documents the
 // description names, and its Kest files, from which each program it names
-// compiles with the engine's own library (D86). One owner reads them, once
+// compiles with the engine's own library. One owner reads them, once
 // for the Runtime, and every part of the process that plays, hears, or
 // controls the game takes them from it rather than opening paths itself.
 // They come from a directory in development, or from the Runtime's content
-// as the cook made them (D88, D90), and are the same game either way.
-// Directories exist only where there are files (RAWFRAME_FILE_SYSTEM, D159):
+// as the cook made them, and are the same game either way.
+// Directories exist only where there are files (RAWFRAME_FILE_SYSTEM):
 // a web client reads its game from content.
 
 #include "rawframe/animation/resources.h"
@@ -43,14 +43,14 @@
 namespace rawframe::world_kest {
 
 /// A string table or translation a `text` line names, by the resource it
-/// is (D147).
+/// is.
 struct GameText {
     std::string path;
     base::Bits128 document{};
 };
 
 /// A texture a `texture` line names, by the identity the line gives it and
-/// the resource it is (D255); or one a mesh's source holds (D314).
+/// the resource it is; or one a mesh's source holds.
 struct GameTextureResource {
     std::uint64_t id = 0;
     std::string path;
@@ -58,8 +58,8 @@ struct GameTextureResource {
 };
 
 /// A tilemap a `tilemap` line names, by the identity the line gives it and
-/// the resource it is (D858), and its tiles, read cooked where the game
-/// reads its meshes and null where it does not (D859).
+/// the resource it is, and its tiles, read cooked where the game
+/// reads its meshes and null where it does not.
 struct GameTilemapResource {
     std::uint64_t id = 0;
     std::string path;
@@ -68,7 +68,7 @@ struct GameTilemapResource {
 };
 
 /// A sequence a `sequence` line names, by the identity the line gives it
-/// and the resource it is, and its keys (D869): read from its source in
+/// and the resource it is, and its keys: read from its source in
 /// development and cooked from content, the same text either way.
 struct GameSequenceResource {
     std::uint64_t id = 0;
@@ -77,7 +77,7 @@ struct GameSequenceResource {
     std::shared_ptr<const sequence::Sequence> timeline;
 };
 
-/// A scatter a `scatter` line names (D864) and its copies' placements:
+/// A scatter a `scatter` line names and its copies' placements:
 /// computed from its sources in development, its terrain read beside it,
 /// and read as cooked from content, so both place them alike.
 struct GameScatterResource {
@@ -86,7 +86,7 @@ struct GameScatterResource {
 };
 
 /// A font a `font` line names, by the identity the line gives it and the
-/// resource it is (D386).
+/// resource it is.
 struct GameFontResource {
     std::uint64_t id = 0;
     std::string path;
@@ -94,7 +94,7 @@ struct GameFontResource {
 };
 
 /// A material a `material` line names, by the identity the line gives it
-/// and the resource it is (D303); or one a mesh's source holds (D314).
+/// and the resource it is; or one a mesh's source holds.
 struct GameMaterialResource {
     std::uint64_t id = 0;
     std::string path;
@@ -104,7 +104,7 @@ struct GameMaterialResource {
     bool subasset = false;
 };
 
-/// A subasset a game reaches through a mesh line (D314): the mesh's
+/// A subasset a game reaches through a mesh line: the mesh's
 /// sidecar maps each `material/` and `texture/` key to a resource, and the
 /// game knows it by the resource's first half and by its path, the mesh's,
 /// `#`, and its key.
@@ -113,7 +113,7 @@ struct GameMaterialResource {
     return resource.high;
 }
 
-/// A scene a mod contributes to one of the game's points (D179): the mod's
+/// A scene a mod contributes to one of the game's points: the mod's
 /// subject, the point, the scene's text, and its resource identity.
 struct GameModScene {
     std::string mod;
@@ -122,7 +122,7 @@ struct GameModScene {
     base::Bits128 identity{};
 };
 
-/// The program a taken mod's handlers are in (D181): the mod's subject, the
+/// The program a taken mod's handlers are in: the mod's subject, the
 /// entry among its own Kest sources, those sources, and the event points it
 /// handles with which functions.
 struct GameModProgram {
@@ -134,7 +134,7 @@ struct GameModProgram {
     std::vector<ModReplacement> replacements;
 };
 
-/// Whether a game read from its sources reads its meshes (D433): cooked,
+/// Whether a game read from its sources reads its meshes: cooked,
 /// from the Runtime's content, as a Runtime must; or named only, each found
 /// by its sidecar and none read, for a tool that edits the game's scenes and
 /// draws or collides with nothing, so `meshes()` is empty.
@@ -155,7 +155,7 @@ public:
     /// names it, and its Kest files every `.kest` file under that
     /// directory. Programs compile from the
     /// files as they are when asked, so a changed file is seen. Each mesh
-    /// is the resource its sidecar names, read from `content` (D112): the
+    /// is the resource its sidecar names, read from `content`: the
     /// runtime decodes no source format, so a game with meshes needs its
     /// sources cooked. Each animator's graph is read beside it too, and the
     /// clips and masks it names and their skeletons by the sidecars under
@@ -172,13 +172,13 @@ public:
     [[nodiscard]] static result::Result<GameFiles> fromHeld(std::string_view description,
                                                             std::vector<std::pair<std::string, std::string>> files,
                                                             game_content::GameContent* content = nullptr);
-    /// The game whose cooked description is `description` in `content`
-    /// (D88): its documents from the description's record, each scene from
-    /// the scene resource it names (D95), each mesh from the mesh resource
-    /// it names (D112), each animator's graph from the graph resource it
+    /// The game whose cooked description is `description` in `content`:
+    /// its documents from the description's record, each scene from
+    /// the scene resource it names, each mesh from the mesh resource
+    /// it names, each animator's graph from the graph resource it
     /// names, the clips, masks, and skeletons below it by their
     /// identities, and each program's files from the Kest sources resource
-    /// it names (D87).
+    /// it names.
     /// Admits their representations, and waits for each read. Refused when
     /// a read fails, a record does not read, or the description uses a
     /// name the record does not answer.
@@ -195,8 +195,8 @@ public:
         return description_;
     }
     /// Replicates each entity's layer too, as an editor's preview asks of
-    /// both its server and its client so the client hides a layer
-    /// (D791); a game that replicates nothing is left as it is.
+    /// both its server and its client so the client hides a layer;
+    /// a game that replicates nothing is left as it is.
     void replicateLayers() {
         if (!description_.replicated.empty() &&
             !std::ranges::contains(description_.replicated, std::string{world::Layer::kComponentName})) {
@@ -212,7 +212,7 @@ public:
     /// That scene's resource identity: the resource read from content, or
     /// in development the identity its sidecar gives, if it has one.
     [[nodiscard]] std::optional<base::Bits128> sceneIdentity(std::string_view name) const;
-    /// The scene of resource identity `scene` that an instance names (D96),
+    /// The scene of resource identity `scene` that an instance names,
     /// its text: one of the scenes the game's scenes instance, however far
     /// down, all read when the files were. Refused (`unreadable_file`) for
     /// any other.
@@ -237,17 +237,17 @@ public:
     /// development the identity its sidecar gives, which must name
     /// `rawframe.tilemap`, and from content the one the record names; each
     /// read and checked where meshes are, so the server's bodies and the
-    /// client's tiles are one map (D858, D859).
+    /// client's tiles are one map.
     [[nodiscard]] const std::vector<GameTilemapResource>& tilemaps() const noexcept {
         return tilemaps_;
     }
     /// Every sequence the description names, read, in the order of its
-    /// lines (D869).
+    /// lines.
     [[nodiscard]] const std::vector<GameSequenceResource>& sequences() const noexcept {
         return sequences_;
     }
     /// Every scatter the description names, placed, in the order of its
-    /// lines (D864).
+    /// lines.
     [[nodiscard]] const std::vector<GameScatterResource>& scatters() const noexcept {
         return scatters_;
     }
@@ -280,14 +280,13 @@ public:
     /// (`unreadable_file`) for any other.
     [[nodiscard]] result::Result<std::string_view> animationDocument(base::Bits128 id) const;
     /// The scenes the Composition's mods contribute, once the game has taken
-    /// them under its policy (SPEC-0042, D179): in the record's mod order,
+    /// them under its policy: in the record's mod order,
     /// each mod's in the order of its lines. None for a game not read from a
     /// Composition, whose required points its own scenes must fill.
     [[nodiscard]] const std::vector<GameModScene>& modScenes() const noexcept {
         return modScenes_;
     }
-    /// The claims of taken mods that the game's `prefer` lines set aside
-    /// (D202).
+    /// The claims of taken mods that the game's `prefer` lines set aside.
     [[nodiscard]] const std::vector<SetAsideClaim>& setAside() const noexcept {
         return setAside_;
     }

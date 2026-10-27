@@ -1,6 +1,6 @@
 module rawframe.sequence
 
-// Sequences (SPEC-0051's sequence row, D869): timelines a game plays, each
+// Sequences: timelines a game plays, each
 // a document its `sequence` line names, of tracks and keys. A game declares
 // components of these types. A play key starts one of the game's animators
 // on each entity cast in the key's track, and an event key fires one of the

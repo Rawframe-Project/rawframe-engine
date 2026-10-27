@@ -1,11 +1,11 @@
 #pragma once
 
-// Presence and claims (ADR-0085 sections 3 and 5, D880): who is in a
+// Presence and claims: who is in a
 // session, what each has chosen and where each is looking, and what each
 // has claimed. They are the session's own records, never in a document or
 // its history, and gone when the author leaves. A claim is soft: a whole
 // document, an entity in a scene, or a node in a UI document and what it
-// holds (D886), held by one author, so that a change another author's
+// holds, held by one author, so that a change another author's
 // record asks of it is refused until it is released.
 
 #include "rawframe/authoring/authored_scene.h"
@@ -60,7 +60,7 @@ struct Claim {
 [[nodiscard]] std::vector<std::string> entitiesOf(const authoring::Journal& journal);
 /// The nodes a UI document's journal changes, by their components, each
 /// once: every node a slot's path passes through, and every node in one
-/// that comes or goes whole (D886).
+/// that comes or goes whole.
 [[nodiscard]] std::vector<std::string> nodesOf(std::span<const authoring::JsonDelta> journal);
 
 class Presences {

@@ -43,7 +43,7 @@ result::Status ScenePictures::read(composition::ParticipantContext& context,
         if (texture->id == 0) {
             continue;
         }
-        // A render texture is drawn, not read (D361).
+        // A render texture is drawn, not read.
         if (std::ranges::contains(
                 files.description().renderTextures, texture->id, &world_kest::GameRenderTexture::id)) {
             continue;

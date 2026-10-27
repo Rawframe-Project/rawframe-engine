@@ -1,4 +1,4 @@
-# Windows and raw input (SPEC-0025) over Maul Window, private to this
+# Windows and raw input over Maul Window, private to this
 # module. Client only: the dedicated server links none of it, and a
 # platform Maul Window does not serve yet has no window module at all.
 if(NOT TARGET maul-window)

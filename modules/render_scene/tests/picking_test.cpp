@@ -1,4 +1,4 @@
-// Picking agrees with drawing (ADR-0052, D366): where the view's geometry
+// Picking agrees with drawing: where the view's geometry
 // says a World point shows is where the scene's matrices put it.
 
 #include "rawframe/render_scene/scene.h"

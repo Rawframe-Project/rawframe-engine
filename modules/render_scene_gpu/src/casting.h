@@ -40,10 +40,10 @@ struct Casting {
 
 /// A shadow pass recorded: each square drawn from its view, its solid
 /// casters in their runs, then its masked ones cut by their material's
-/// texture (D310).
+/// texture.
 result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square> squares);
 
-/// A frame's shadow maps (D289, D292): the sun's, its cascades' squares
+/// A frame's shadow maps: the sun's, its cascades' squares
 /// two by two, and the punctual lights' atlas, with the view each square
 /// is drawn from, the squares as the lit shaders read them, and the two
 /// passes drawing their casters.
@@ -76,7 +76,7 @@ public:
     [[nodiscard]] mrhiResourceId squares() const noexcept;
     [[nodiscard]] std::uint64_t squareBytes() const noexcept;
 
-    /// What times its passes on the GPU (D894).
+    /// What times its passes on the GPU.
     void timeBy(const PassTimer& timer) noexcept {
         timer_ = &timer;
     }

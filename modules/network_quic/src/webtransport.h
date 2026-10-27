@@ -1,6 +1,6 @@
 #pragma once
 
-// The server side of WebTransport over HTTP/3 (ADR-0084 decision 3, D172):
+// The server side of WebTransport over HTTP/3:
 // what one QUIC connection that negotiated `h3` carries, turned into one
 // Rawframe connection. Pure: it reads the bytes MsQuic delivered and says
 // what to send and what the owner hears; quic.cpp moves the bytes.

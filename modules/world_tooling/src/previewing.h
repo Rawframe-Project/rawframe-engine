@@ -1,6 +1,6 @@
 #pragma once
 
-// The tooling endpoint's preview verbs (D432 to D798): looking, marking,
+// The tooling endpoint's preview verbs: looking, marking,
 // hiding layers, overlays, and view modes, each the view grant's, answered
 // by the preview the Runtime lends.
 

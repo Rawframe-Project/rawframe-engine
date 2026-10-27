@@ -1,4 +1,4 @@
-// The Hierarchy's tree (D785): children under their parents in the list's
+// The Hierarchy's tree: children under their parents in the list's
 // order, an unknown parent or a cycle shown as roots, every entity once,
 // and a parent that would be its own descendant found.
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's input made the way ADR-0037 says a client makes it: controls into
+// A game's input as a client makes it: controls into
 // the game's action set, committed per tick, and the game's Kest sample
 // function turning committed actions into its input component. Client only.
 
@@ -35,8 +35,8 @@
 namespace rawframe::input_kest {
 
 /// What the `Input.*` doors read: one player's committed actions, and the
-/// headset the player wears, if any (the first local player's, D603), and
-/// the hands it tracks (D663).
+/// headset the player wears, if any (the first local player's), and
+/// the hands it tracks.
 struct InputDoorContext {
     const input::Mapper* mapper = nullptr;
     input::PlayerSlot player;
@@ -45,17 +45,13 @@ struct InputDoorContext {
 };
 
 /// Adds `Input.on`, `Input.pressed`, `Input.released`, `Input.x`, and
-/// `Input.y`, and a pose's reads (D596). Each takes an action's identity
+/// `Input.y`, and a pose's reads. Each takes an action's identity
 /// and refuses one the set does not have. And `Input.headset`, whether the
-/// player sees the game on a headset now (ADR-0081's typed XR presence,
-/// D603): a sample writes it into the game's input, so a server knows each
-/// tick who plays in XR and takes its own stance. And `Input.handTracked`
-/// and `Input.joint`, a tracked hand's joints (ADR-0081's tracked source,
-/// D663), read while the sample runs, apart from every action: untracked,
-/// and every joint unlocated, for a player who wears no headset or whose
-/// runtime tracks no hand. They read and change nothing else, so each is
-/// safe for untrusted code. `context` outlives every machine started with
-/// the table.
+/// player sees the game on a headset now (the typed XR presence): a sample writes it into the game's input, so a server
+/// knows each tick who plays in XR and takes its own stance. And `Input.handTracked` and `Input.joint`, a tracked
+/// hand's joints (the tracked source), read while the sample runs, apart from every action: untracked, and every joint
+/// unlocated, for a player who wears no headset or whose runtime tracks no hand. They read and change nothing else, so
+/// each is safe for untrusted code. `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addInputDoors(kest::DoorTable& doors, const InputDoorContext* context);
 
 /// What the `View.*` doors read: the local players' views, and whose.
@@ -64,7 +60,7 @@ struct ViewDoorContext {
     std::size_t player = 0;
 };
 
-/// Adds the doors `rawframe.view` asks for (ADR-0052, D367):
+/// Adds the doors `rawframe.view` asks for:
 /// `View.scenePlace` and `View.canvasPlace`, where the player's view is in
 /// its window; `View.pointToRay` and `View.worldToPoint` through its scene
 /// camera; `View.pointToWorld2D` and `View.world2DToPoint` through its
@@ -76,7 +72,7 @@ struct ViewDoorContext {
 
 /// What the `Commands.*` doors keep: for each of the game's commands the
 /// sample program lays out, its door, and what one sample call sent, at
-/// most world_kest::kMaximumCommandsPerTick (D425).
+/// most world_kest::kMaximumCommandsPerTick.
 struct CommandDoorContext {
     struct Kind {
         CommandDoorContext* owner = nullptr;
@@ -94,10 +90,10 @@ struct CommandDoorContext {
 [[nodiscard]] result::Status addCommandDoors(kest::DoorTable& doors, CommandDoorContext& context);
 
 /// What the `UI.*` doors read: the press code the player's press since the
-/// last tick landed on, the first of them, nought for none (D421); the
+/// last tick landed on, the first of them, nought for none; the
 /// field whose text the player gave since, and that text as `ui.Typed`
-/// lays it out (D426); what lies under the mouse (D422), none for a
-/// player whose mouse it is not; and the UI's navigation (D430), none for
+/// lays it out; what lies under the mouse, none for a
+/// player whose mouse it is not; and the UI's navigation, none for
 /// a player whose UI it is not.
 struct UiDoorContext {
     std::int64_t pressed = 0;
@@ -107,15 +103,15 @@ struct UiDoorContext {
     const view::UiNavigation* navigation = nullptr;
 };
 
-/// Adds `UI.pressed`, `UI.submitted`, `UI.typed`, `UI.hovered`, `UI.value`
-/// (D621), `UI.navigate`, and `UI.navigating`. They read nothing else and
+/// Adds `UI.pressed`, `UI.submitted`, `UI.typed`, `UI.hovered`, `UI.value`,
+/// `UI.navigate`, and `UI.navigating`. They read nothing else and
 /// change only where the player's own UI holds focus, so they are safe for
 /// untrusted code.
 /// `context` outlives every machine started with the table.
 [[nodiscard]] result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context);
 
 /// What the `Text.*` doors reach: the game's text, none for a bot or where
-/// the host lends none (D539), and whose locale they read and choose.
+/// the host lends none, and whose locale they read and choose.
 struct TextDoorContext {
     world_localization::GameText* text = nullptr;
     std::size_t player = 0;
@@ -123,7 +119,7 @@ struct TextDoorContext {
 
 /// Adds `Text.offered`, `Text.chosen`, and `Text.choose`: how many locales
 /// a player may choose among while playing, which the player asks for, and
-/// asking for another by its place (ADR-0050's locale as per-player
+/// asking for another by its place (the locale as per-player
 /// presentation state). They reach only the client's own words, so they are safe for
 /// untrusted code. `context` outlives every machine started with the
 /// table.
@@ -137,11 +133,11 @@ void typedOf(std::string_view text, std::array<std::byte, 256>& into) noexcept;
 /// its window reported between two ticks.
 inline constexpr composition::Capability<input::Feed> kFeed{"rawframe.input.feed"};
 
-/// The hands the headset's runtime tracks (D663), lent by the XR module
+/// The hands the headset's runtime tracks, lent by the XR module
 /// where a headset is worn: the first local player's.
 inline constexpr composition::Capability<input::TrackedHands> kTrackedHands{"rawframe.input.tracked_hands"};
 
-/// What the process's own player feels (D251): an effect the game says is
+/// What the process's own player feels: an effect the game says is
 /// felt, through the devices its host lends. Provided with the input
 /// sources, which hold the player's pairing.
 class PlayerHaptics {
@@ -173,30 +169,30 @@ struct SourceSettings {
     /// The player's devices, or null where the host lends none; outlives
     /// the sources.
     input::Feed* feed = nullptr;
-    /// How they are paired to the local players as they connect (D363):
+    /// How they are paired to the local players as they connect:
     /// merged for one, keyboard first for more, unless named.
     std::optional<input::PairingPolicy> pairing;
-    /// The local players' views (D367), or null where the host lends
+    /// The local players' views, or null where the host lends
     /// none; outlives the sources.
     const view::PlayerViews* views = nullptr;
-    /// What the UI takes of the pointer (D421), or null where the host
+    /// What the UI takes of the pointer, or null where the host
     /// lends nothing; outlives the sources.
     const view::UiPointing* pointing = nullptr;
-    /// The UI's text fields (D426), or null where the host lends none: the
+    /// The UI's text fields, or null where the host lends none: the
     /// first local player takes what they give, and every player's keyboard
     /// actions are gated while one holds focus; outlives the sources.
     view::UiTyping* typing = nullptr;
-    /// The UI's navigation (D430), or null where the host lends none: the
+    /// The UI's navigation, or null where the host lends none: the
     /// first local player's mapper has the engine's navigation actions,
     /// theirs while the UI holds focus; outlives the sources.
     const view::UiNavigation* navigation = nullptr;
-    /// The headset's eyes (D595), or null where no headset is drawn for:
-    /// the first local player wears it (D603); outlives the sources.
+    /// The headset's eyes, or null where no headset is drawn for:
+    /// the first local player wears it; outlives the sources.
     const view::HeadsetEyes* headset = nullptr;
-    /// The hands the headset tracks (D663), or null where none is worn:
+    /// The hands the headset tracks, or null where none is worn:
     /// the first local player's; outlives the sources.
     const input::TrackedHands* hands = nullptr;
-    /// The game's text (D539), or null where the host lends none: the
+    /// The game's text, or null where the host lends none: the
     /// local players choose its locale; outlives the sources.
     world_localization::GameText* text = nullptr;
     /// Where a local player's source says, as it ends, what its devices

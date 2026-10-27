@@ -1,6 +1,6 @@
 #pragma once
 
-// Meshes as Maul3D takes them (D112): private to the module, as Maul3D is.
+// Meshes as Maul3D takes them: private to the module, as Maul3D is.
 
 #include "rawframe/mesh/mesh.h"
 

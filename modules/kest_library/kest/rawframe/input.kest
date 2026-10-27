@@ -1,7 +1,7 @@
 module rawframe.input
 
-// A player's actions as its client committed them for the tick being sampled
-// (SPEC-0029), named by each action's identity in the game's action set.
+// A player's actions as its client committed them for the tick being sampled,
+// named by each action's identity in the game's action set.
 // Only a game's sample program reads them, and only on a client: the server
 // has no actions, only the input they became.
 
@@ -45,7 +45,7 @@ extern fn Input.turnZ(action: u64) -> f32
 extern fn Input.turnW(action: u64) -> f32
 extern fn Input.tracked(action: u64) -> bool
 
-// A pose action (a controller's grip or aim, D596) is on while the runtime
+// A pose action (a controller's grip or aim) is on while the runtime
 // knows where it is; `x` and `y` give its place's first two axes, and these
 // its third, in meters in the headset's play space (+Y up, the origin where
 // the head was when its session began).
@@ -77,14 +77,14 @@ fn tracked(action: u64) -> bool {
 
 extern fn Input.headset() -> bool
 
-// Whether the player sees the game on a headset now (D603): written into
+// Whether the player sees the game on a headset now: written into
 // the game's input, a server knows each tick who plays in XR, and takes its
-// own stance; the engine takes none (ADR-0081).
+// own stance; the engine takes none.
 fn headset() -> bool {
     return Input.headset()
 }
 
-// A joint of a tracked hand (ADR-0081's tracked source, D663): where it is,
+// A joint of a tracked hand: where it is,
 // in meters in the headset's play space as a pose action's place is, its
 // turn, a unit quaternion's parts, and its radius in meters. Not `located`
 // where the runtime does not know where it is.
@@ -133,9 +133,9 @@ fn joint(hand: u32, index: u32) -> Joint {
 extern fn UI.pressed() -> i64
 
 // The `press` of the UI node the player's press landed on during the tick,
-// the first if more than one, or nought for none (rawframe.ui, D421): a
+// the first if more than one, or nought for none (rawframe.ui): a
 // press the UI took, which no action saw, or the node the player activated
-// by navigation (D430).
+// by navigation.
 fn uiPressed() -> i64 {
     return UI.pressed()
 }
@@ -144,7 +144,7 @@ extern fn UI.submitted() -> i64
 extern fn UI.typed() -> ui.Typed
 
 // The `press` of the text field whose text the player gave during the tick
-// by Enter, or nought for none (rawframe.ui, D426).
+// by Enter, or nought for none (rawframe.ui).
 fn uiSubmitted() -> i64 {
     return UI.submitted()
 }
@@ -157,7 +157,7 @@ fn uiTyped() -> ui.Typed {
 extern fn UI.navigate() -> bool
 extern fn UI.navigating() -> bool
 
-// The player's UI navigated without a pointer from the next tick (D430):
+// The player's UI navigated without a pointer from the next tick:
 // focus on the first node that takes presses or text of its view, in
 // reading order, unless one holds it. The engine's navigation actions (the
 // arrow keys and the d-pad, Tab and the shoulders, Enter, Space, and the
@@ -177,7 +177,7 @@ extern fn Text.offered() -> u32
 extern fn Text.chosen() -> u32
 extern fn Text.choose(index: u32) -> bool
 
-// How many locales the player may choose among while playing (D539): the
+// How many locales the player may choose among while playing: the
 // game's default first, then each its translations are in, by tag. Nought
 // for a bot, or a game without text.
 fn locales() -> u32 {
@@ -192,7 +192,7 @@ fn locale() -> u32 {
 
 // The player's words given in the locale at `index` of them from now on,
 // the labels in their view formatted again; false for none such. Each
-// local player has their own; the others keep theirs (D548).
+// local player has their own; the others keep theirs.
 fn chooseLocale(index: u32) -> bool {
     return Text.choose(index)
 }

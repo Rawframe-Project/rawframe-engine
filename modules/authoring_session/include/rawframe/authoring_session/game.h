@@ -33,7 +33,7 @@ result::Result<authoring::ComponentCatalog> catalogOf(const world_kest::GameFile
 /// A slot of an outcome: its deltas, or the one error record.
 document::Value slotValue(const result::Result<authoring::Committed>& outcome);
 
-/// The assets a game declares by line (D455): each by its kind, its
+/// The assets a game declares by line: each by its kind, its
 /// identity as 16 hex digits (what a component's field holds, as an
 /// unsigned number), and its name, a file beside the description or a
 /// label's table and key, in line order within each kind.
@@ -47,11 +47,11 @@ std::optional<base::Bits128> sidecarIdentity(const std::filesystem::path& source
 std::vector<std::pair<base::Bits128, std::filesystem::path>> scenesBeside(const std::filesystem::path& game);
 
 /// Every file of `extension` (`.styles`, `.ui`) under the game
-/// description's directory, in path order (D637, D643).
+/// description's directory, in path order.
 std::vector<std::filesystem::path> filesBeside(const std::filesystem::path& game, std::string_view extension);
 
-/// A source under a game description's directory as its sidecar names it
-/// (D799): its path from that directory, with forward slashes, its
+/// A source under a game description's directory as its sidecar names it:
+/// its path from that directory, with forward slashes, its
 /// importer, and the resource it becomes, as hexadecimal digits.
 struct SourceListed {
     std::string path;

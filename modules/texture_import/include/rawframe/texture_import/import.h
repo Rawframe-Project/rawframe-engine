@@ -1,11 +1,11 @@
 #pragma once
 
-// Texture import (ADR-0058, D253): a PNG, JPEG, BMP, or TGA source decoded
+// Texture import: a PNG, JPEG, BMP, or TGA source decoded
 // by Wuffs, which is memory-safe by construction, then cooked into the
 // runtime's texture: its levels made by halving in linear light, and
-// block-compressed to BC7 unless kept exact. An environment (D321) is a
+// block-compressed to BC7 unless kept exact. An environment is a
 // Radiance picture, cooked into a cube whose levels are its light as ever
-// rougher surfaces reflect it, and a grading table (D344) a `.cube` file,
+// rougher surfaces reflect it, and a grading table a `.cube` file,
 // cooked into a volume. Import tooling only; no client or server closure
 // may depend on it.
 
@@ -69,15 +69,15 @@ struct LightImage {
 [[nodiscard]] result::Result<LightImage> decodeRadiance(std::span<const std::byte> source,
                                                         const DecodeLimits& limits = {});
 
-/// A picture of light as a Radiance file (D326): RGBE texels, each
+/// A picture of light as a Radiance file: RGBE texels, each
 /// scanline run-length encoded where its width allows (8 to 32767), flat
 /// otherwise; rows top first. Light below nought, and not a number, is
 /// black; past what RGBE holds, the most it does.
 [[nodiscard]] std::vector<std::byte> encodeRadiance(const LightImage& image);
 
 /// The direction the point (`u` across, `v` down, each from 0 to 1) of an
-/// equirectangular picture shows, as `cookEnvironment` reads the picture
-/// (D326): a unit vector.
+/// equirectangular picture shows, as `cookEnvironment` reads the picture:
+/// a unit vector.
 [[nodiscard]] std::array<double, 3> pictureDirection(double u, double v) noexcept;
 
 /// How an environment is cooked. A cube's face is `side` texels square, a
@@ -107,7 +107,7 @@ struct GradingLimits {
     std::uint32_t maximumSide = 65;
 };
 
-/// A grading table (D344): a `.cube` file, Adobe's and Resolve's 3D table
+/// A grading table: a `.cube` file, Adobe's and Resolve's 3D table
 /// of colors, as a volume of RGBA16F (alpha one) whose texel at x, y, and
 /// slice z is the entry for red x, green y, and blue z of its side. Lines
 /// are a title, the size (`LUT_3D_SIZE`), a domain of nought to one, an

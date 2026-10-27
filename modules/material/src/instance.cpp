@@ -69,7 +69,7 @@ result::Result<InstanceValues> instanceValues(const graph::Document& base, const
     RAWFRAME_TRY_ASSIGN(const std::vector<surface_graph::StaticSwitch> kSwitches,
                         surface_graph::switchesOf(surface_graph::Graph{base}));
     for (std::size_t at = 0; at < overrides.names().size(); ++at) {
-        // A switch's override is its variant's (`switchedVariant`, D719).
+        // A switch's override is its variant's (`switchedVariant`).
         if (std::ranges::find(kSwitches, std::string_view{overrides.names()[at]}, &surface_graph::StaticSwitch::name) !=
             kSwitches.end()) {
             continue;

@@ -1,4 +1,4 @@
-// Style classes (SPEC-0030, D431): Maul UI's classes, their variants'
+// Style classes: Maul UI's classes, their variants'
 // looks and transitions, and a node's classes and states.
 
 #include "rawframe/ui/tree.h"

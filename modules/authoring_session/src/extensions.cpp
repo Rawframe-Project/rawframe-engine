@@ -488,7 +488,7 @@ result::Result<authoring::Request> runExtension(const std::filesystem::path& gam
                                        result::ErrorClass::NotFound,
                                        "the extension offers no command or mode of that name")};
     }
-    // A mode runs where the author clicked (D877).
+    // A mode runs where the author clicked.
     if (kCommand == kNamed.commands.end() && !point.has_value()) {
         return std::unexpected{refused(authoring::AuthoringError::ValidationFailed,
                                        result::ErrorClass::InvalidArgument,

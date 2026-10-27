@@ -1,4 +1,4 @@
-// What a confirmation confirms (D274): a state that carries only some of the
+// What a confirmation confirms: a state that carries only some of the
 // player's values confirms those alone, unless the server says it is whole,
 // when a value it leaves out is the one last heard and a prediction that
 // strayed from it is rolled back, not taken for the server's.
@@ -107,7 +107,7 @@ RAWFRAME_TEST(AWholeStateComparesWhatItLeavesOut) {
 }
 
 RAWFRAME_TEST(EachStepRunsAsTheServerNumbersItsTick) {
-    // D685: the command labelled L is taken in the server's run numbered
+    // The command labelled L is taken in the server's run numbered
     // L - 1, so the predictor is told that, resimulating too.
     Run run{false};
     RAWFRAME_EXPECT((run.predictor.ticks == std::vector<std::uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}));

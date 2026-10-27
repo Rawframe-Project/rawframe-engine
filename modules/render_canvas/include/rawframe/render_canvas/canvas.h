@@ -1,12 +1,12 @@
 #pragma once
 
-// The 2D canvas's CPU half (SPEC-0024's canvas contract): entities with
+// The 2D canvas's CPU half: entities with
 // `rawframe.canvas` sprites, copied out of a World where their poses put
 // them, then culled against a camera, put in draw order, and batched by
 // texture into quads a device draws; and the particle emitters, trails,
 // and beams of `rawframe.model` where their 2D poses put them, accounted
-// for the view as the scene's are (ADR-0053's one grammar for 2D and 3D,
-// D357). Client only; a server carries the same components as plain values
+// for the view as the scene's are (the one grammar for 2D and 3D).
+// Client only; a server carries the same components as plain values
 // and links none of this.
 
 #include "rawframe/kest/program.h"
@@ -48,11 +48,11 @@ struct Sprite {
     /// is one), the region the first.
     std::uint32_t frame = 0;
     std::uint32_t columns = 0;
-    /// A game's canvas material, nought for none (D356).
+    /// A game's canvas material, nought for none.
     std::uint64_t material = 0;
 };
 
-/// `rawframe.canvas.Tilemap` as C++ reads it (D858): a game's tilemap by
+/// `rawframe.canvas.Tilemap` as C++ reads it: a game's tilemap by
 /// identity, drawn from its top-left on the pose.
 struct TilemapPlaced {
     std::uint64_t tilemap = 0;
@@ -60,7 +60,7 @@ struct TilemapPlaced {
     std::int32_t layer = 0;
 };
 
-/// `rawframe.canvas.Camera` as C++ reads it (D261): a client's view,
+/// `rawframe.canvas.Camera` as C++ reads it: a client's view,
 /// `height` meters tall, centered `offsetX`, `offsetY` meters from its
 /// player's pose.
 struct Camera {
@@ -86,7 +86,7 @@ struct SpriteInstance {
 
 /// Generation 1's view: orthographic, `height` meters tall around (`x`,
 /// `y`), `aspect` times as wide; and the seconds since the frame before,
-/// which move the particle clock (D357).
+/// which move the particle clock.
 struct CanvasCamera {
     double x = 0;
     double y = 0;
@@ -95,13 +95,13 @@ struct CanvasCamera {
     float elapsed = 0;
 };
 
-/// `camera` seeing as an editor's preview looks (D793): around where its
+/// `camera` seeing as an editor's preview looks: around where its
 /// eye is over the canvas's plane, as tall as a perspective from there
 /// sees the plane at the middle of its view, the aspect and clock as they
 /// were. A 2D view looks straight down at the plane from its eye.
 [[nodiscard]] CanvasCamera previewedCamera(const view::Perspective& look, CanvasCamera camera) noexcept;
 
-/// A camera's view geometry for picking (ADR-0052, D366): the World point
+/// A camera's view geometry for picking: the World point
 /// at the view's middle and how many meters it sees from top to bottom;
 /// the view's size is the caller's.
 [[nodiscard]] view::Orthographic orthographicOf(const CanvasCamera& camera) noexcept;
@@ -116,7 +116,7 @@ struct CanvasVertex {
     std::uint32_t color = 0;
 };
 
-/// A line an editor's preview draws over the canvas (D891): from one point
+/// A line an editor's preview draws over the canvas: from one point
 /// of its plane to another, in meters, and its color, 0xRRGGBBAA.
 struct CanvasLine {
     std::array<double, 2> from{};
@@ -126,7 +126,7 @@ struct CanvasLine {
 /// The most lines a canvas draws, as a scene draws at most this many.
 inline constexpr std::size_t kMostCanvasLines = 1024;
 
-/// The grid an editor's 2D view shows over the canvas (D933): a line a
+/// The grid an editor's 2D view shows over the canvas: a line a
 /// meter, brighter every ten, ten meters a line where the view is taller
 /// than sixty, out past what the view sees; faint, so what is drawn reads
 /// through it, the X axis red and the Y axis green where they pass, within
@@ -145,13 +145,13 @@ struct CanvasDraw {
 
 /// What the queue stage builds: four vertices and six indices a quad, in
 /// draw order, and the draws that cover them. Drawing the draws in order is
-/// drawing each sprite in order (SPEC-0024's order-equivalent batching).
+/// drawing each sprite in order.
 struct CanvasFrame {
     std::vector<CanvasVertex> vertices;
     std::vector<std::uint32_t> indices;
     std::vector<CanvasDraw> draws;
     /// The game's canvas materials the draws name by place, the first none:
-    /// white, over what is behind (D356).
+    /// white, over what is behind.
     std::span<const material::CanvasMaterial> materials;
     /// This frame's sprites drawn, and those not: outside the view, drawing
     /// nothing (alpha nought, or texture nought without a material),
@@ -166,10 +166,10 @@ struct CanvasFrame {
     std::size_t unknownTextures = 0;
     std::size_t unknownMaterials = 0;
     std::size_t overLimit = 0;
-    /// The lines drawn over every sprite (D891).
+    /// The lines drawn over every sprite.
     std::size_t lines = 0;
     /// The particle emitters, trails, and beams that reach the view, and
-    /// what they spawn and leave out (D357), a material named by its place
+    /// what they spawn and leave out, a material named by its place
     /// among the frame's materials and drawn over every sprite; and the
     /// view's half width and half height, meters, nought where it sees
     /// nothing.
@@ -177,13 +177,13 @@ struct CanvasFrame {
     std::array<float, 2> extent{};
 };
 
-/// SPEC-0024's limit points for the canvas: the sprites one frame queues,
+/// The limit points for the canvas: the sprites one frame queues,
 /// and its `recorded_commands_per_frame`, the draws. Sprites past either are
 /// left out from the last in draw order, counted as over the limit.
 struct CanvasLimits {
     std::size_t maximumSprites = 16384;
     std::size_t maximumDraws = 1024;
-    /// ADR-0053's particle, trail, and beam limit points (D357).
+    /// The particle, trail, and beam limit points.
     rawframe::particles::Limits particles;
 };
 
@@ -194,15 +194,15 @@ struct CanvasSettings {
     /// The textures the game declares, by identity.
     std::vector<std::uint64_t> textures;
     /// The game's canvas materials, by the identities its `material` lines
-    /// give them (D356); one it declares but a client could not read is
+    /// give them; one it declares but a client could not read is
     /// given as none.
     std::vector<std::pair<std::uint64_t, material::CanvasMaterial>> materials;
-    /// The game's particle emitter, trail, and beam components (D357).
+    /// The game's particle emitter, trail, and beam components.
     std::vector<schema::ComponentTypeId> emitters;
     std::vector<schema::ComponentTypeId> trails;
     std::vector<schema::ComponentTypeId> beams;
     /// The game's components of `rawframe.canvas.Tilemap`'s type, and its
-    /// tilemaps by the identities its `tilemap` lines give them (D858).
+    /// tilemaps by the identities its `tilemap` lines give them.
     std::vector<schema::ComponentTypeId> tilemapComponents;
     std::vector<std::pair<std::uint64_t, tilemap::Tilemap>> tilemaps;
     CanvasLimits limits;
@@ -225,19 +225,19 @@ public:
 
     /// The queue stage, in `present`: the extracted sprites seen through
     /// `camera`, drawn in the order of their layers, then of their entities,
-    /// then of their components; and the particles' frame (D357).
+    /// then of their components; and the particles' frame.
     const CanvasFrame& queue(const CanvasCamera& camera);
 
     [[nodiscard]] std::span<const SpriteInstance> extracted() const noexcept;
 
     /// The lines drawn over every sprite from the next queue on, in place
-    /// of those before, at most kMostCanvasLines (D891): an editor's
+    /// of those before, at most kMostCanvasLines: an editor's
     /// preview's paths. Each is a quad a two hundredth of the view's height
     /// wide.
     void showLines(std::vector<CanvasLine> lines);
 
     /// The layers whose sprites are left out from the next extract on, as
-    /// an editor's preview hides them (D791, D793): a sprite whose entity's
+    /// an editor's preview hides them: a sprite whose entity's
     /// `rawframe.world.layer` is one of them. None leaves nothing out.
     void hideLayers(const std::vector<std::uint32_t>& layers);
     /// How many sprites were left out so, summed over the extracts.
@@ -251,7 +251,7 @@ private:
 
 /// A game's canvas, declared: its sprite components, its textures, its
 /// camera component, if it has one, and its particle emitter, trail, and
-/// beam components (D357).
+/// beam components.
 struct GameCanvas {
     std::vector<schema::ComponentTypeId> sprites;
     std::vector<std::uint64_t> textures;

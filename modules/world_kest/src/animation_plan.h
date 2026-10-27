@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's animators as the World plays them (D124): each graph compiled
+// A game's animators as the World plays them: each graph compiled
 // against the clips it names and their one skeleton, and its parameters
 // bound, by name, to the fields of the component its line names.
 

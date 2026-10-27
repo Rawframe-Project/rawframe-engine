@@ -1,6 +1,6 @@
 #pragma once
 
-// What moment a player saw (SPEC-0041's PerceptionContext), where the
+// What moment a player saw (PerceptionContext), where the
 // World's systems can read it. For a game whose input is perceived, the
 // server writes it into the player's entity with each command it applies:
 // the server tick of the older of the two states the client showed between,
@@ -8,7 +8,7 @@
 // neutral one has none (tick nought). The server clamps each claim to within
 // a skew of the lag it measures for the connection, and names the connection
 // seeing, so a lag-compensated query rewinds only what that connection was
-// sent (SPEC-0041's victim gate).
+// sent.
 
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/entity.h"

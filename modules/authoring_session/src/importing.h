@@ -1,6 +1,6 @@
 #pragma once
 
-// An asset imported into a session's game (SPEC-0040's import, D503): a
+// An asset imported into a session's game: a
 // file from outside copied under the game's directory with what it names
 // beside it (a glTF's buffers and images), a sidecar giving it a new
 // resource identity and the importer its kind cooks with, and a line in
@@ -28,7 +28,7 @@ struct Imported {
     content::ResourceId resource;
     /// Its path under the game's directory, as its line names it.
     std::string path;
-    /// Whether its subassets were mapped by the cook tool (D316), for a
+    /// Whether its subassets were mapped by the cook tool, for a
     /// source that holds any.
     bool mapped = false;
 };

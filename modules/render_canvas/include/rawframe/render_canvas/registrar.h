@@ -8,7 +8,7 @@ namespace rawframe::render_canvas {
 
 /// Contributes the World-scoped participant `rawframe.render_canvas.canvas`,
 /// which draws one client's mirrored World as its player sees it: in
-/// `presentation_extract` it copies the World's sprites out (SPEC-0024's
+/// `presentation_extract` it copies the World's sprites out (the
 /// `extract` stage), and in `present` it queues them into a frame through a
 /// camera following the player (the `queue` stage). It logs a summary when
 /// the World stops. A game without a sprite component, or a process without

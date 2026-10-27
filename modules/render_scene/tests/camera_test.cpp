@@ -1,7 +1,7 @@
-// A camera's effects made sound before a frame uses them: its metering
-// (D293, D345), grade and tonemapper (D294, D295), screen-space
+// A camera's effects made sound before a frame uses them: its metering,
+// grade and tonemapper, screen-space
 // reflections, motion blur, depth of field, contact shadows, bloom, and
-// ambient occlusion, and its post processes in its order (D349).
+// ambient occlusion, and its post processes in its order.
 
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/test/test.h"
@@ -19,7 +19,7 @@ RAWFRAME_TEST(AMeteredCameraIsMadeSound) {
     Rig rig;
     SceneCamera camera{.fovY = 1, .near = 0.1F, .aspect = 1};
     RAWFRAME_EXPECT(!rig.frame(camera).metering.enabled);
-    // A negative rate, fractions and a middle's weight past one (D345), and
+    // A negative rate, fractions and a middle's weight past one, and
     // a long pause: stopped, clamped, and cut to a quarter second; the first metered frame goes
     // at once to what it measures, the next at the rates, and one after
     // the eye cuts away at once again.
@@ -57,7 +57,7 @@ RAWFRAME_TEST(ACamerasGradeAndTonemapperAreMadeSound) {
     // Neutral: the balance is the identity, and the rest passes light on.
     const SceneGrading kNeutral = gradingOf(Grading{});
     RAWFRAME_EXPECT(kNeutral.enabled && kNeutral.table == 0);
-    // A grading table passes through to be looked up (D344).
+    // A grading table passes through to be looked up.
     RAWFRAME_EXPECT(gradingOf(Grading{.table = 0x7a}).table == 0x7a);
     for (std::size_t at = 0; at < 9; ++at) {
         RAWFRAME_EXPECT(near(kNeutral.balance[at], at % 4 == 0 ? 1.0F : 0.0F, 2e-3F));
@@ -99,7 +99,7 @@ RAWFRAME_TEST(ACamerasGradeAndTonemapperAreMadeSound) {
     camera.grading = Grading{.slopeR = 2};
     const SceneGrading kGraded = rig.frame(camera).grading;
     RAWFRAME_EXPECT(kGraded.enabled && kGraded.slope[0] == 2);
-    // The camera's tonemapper, AgX for a number outside the set (D295).
+    // The camera's tonemapper, AgX for a number outside the set.
     RAWFRAME_EXPECT(rig.frame(camera).tonemapper == Tonemapper::Agx);
     camera.tonemapper = 1;
     RAWFRAME_EXPECT(rig.frame(camera).tonemapper == Tonemapper::PbrNeutral);
@@ -186,7 +186,7 @@ RAWFRAME_TEST(ACamerasAmbientOcclusionIsMadeSound) {
 }
 
 RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
-    // The game's two post processes, a warm one and a fade (D349).
+    // The game's two post processes, a warm one and a fade.
     material::PostProcess warm{.insertion = material::Insertion::BeforeTonemap, .scene = {1, 0.9F, 0.8F}};
     warm.constant[3] = 1;
     const material::PostProcess kFade{.constant = {0, 0, 0, 1}};
@@ -222,7 +222,7 @@ RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
                         kFrame.postProcesses[1].blob[5] == 0.9F);
         RAWFRAME_EXPECT(kFrame.postProcesses[2].blob == material::blobOf(kFade));
     }
-    // Read again (D760): the warmth made cooler and moved past the
+    // Read again: the warmth made cooler and moved past the
     // tonemapper, the fade gone; the frames from the next run the new
     // warmth, and the fade is left out as unknown.
     material::PostProcess cool = warm;
@@ -241,7 +241,7 @@ RAWFRAME_TEST(ACamerasPostProcessesRunInItsOrder) {
 
 RAWFRAME_TEST(AFixedCameraStaysPutWhereverItsPlayerIs) {
     // A following camera is placed from its entity's pose; a fixed one
-    // (D520) is its offsets in the World, whatever the pose, or none.
+    // is its offsets in the World, whatever the pose, or none.
     const physics3d::Pose3D kPose{.x = 7, .y = 1, .z = -3};
     Camera camera{.offsetX = 0, .offsetY = 42, .offsetZ = 36};
     RAWFRAME_EXPECT((eyeOf(camera, &kPose) == std::array<double, 3>{7, 43, 33}));
@@ -252,7 +252,7 @@ RAWFRAME_TEST(AFixedCameraStaysPutWhereverItsPlayerIs) {
 }
 
 RAWFRAME_TEST(AHeadsetsEyeSeesFromItsPoseInThePlaySpace) {
-    // The player's camera is the play space's origin and heading (D595): a
+    // The player's camera is the play space's origin and heading: a
     // quarter turn, so the headset's forward (-Z) looks along -X, and its
     // place is turned with it; the camera's pitch is not the head's.
     const SceneCamera kPlayer{.eye = {10, 2, 5}, .yaw = std::numbers::pi_v<float> / 2, .pitch = -0.4F, .fovY = 1};
@@ -284,7 +284,7 @@ RAWFRAME_TEST(AHeadsetsEyeSeesFromItsPoseInThePlaySpace) {
 }
 
 RAWFRAME_TEST(AnEyesNarrowerSideOverhangsItsImage) {
-    // A lens that sees farther to the left than to the right (D595): the
+    // A lens that sees farther to the left than to the right: the
     // picture is drawn as wide to the right as to the left, its left edge
     // on the image's and its right past it; the vertical as wide as the
     // image.

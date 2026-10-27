@@ -28,7 +28,7 @@ inline constexpr std::size_t kTableSlots = 29;
 struct Drawing {
     const Pipelines* pipelines = nullptr;
     const DeviceMeshes* held = nullptr;
-    /// The posed models' vertices, which their runs read (D508).
+    /// The posed models' vertices, which their runs read.
     const DeviceSkinning* skinning = nullptr;
     const render::DeviceTextures* textures = nullptr;
     mrhiResourceId instances{};
@@ -36,9 +36,9 @@ struct Drawing {
     std::array<mrhiBinding, kTableSlots> table{};
 };
 
-/// A frame's models' passes (D284, D343): the prepass's depth, and each
-/// point's surface beside it when a screen-space effect reads them (D327,
-/// D331); the lit pass's light and motion over that depth, the sky where
+/// A frame's models' passes: the prepass's depth, and each
+/// point's surface beside it when a screen-space effect reads them;
+/// the lit pass's light and motion over that depth, the sky where
 /// none lies; and, multisampled, each target's many-sample twin, resolved
 /// as its pass ends, the depth by a pass of its own.
 class ModelPasses {
@@ -47,8 +47,8 @@ public:
 
     /// The targets declared for a frame of `width` by `height`, taking
     /// `samples` a pixel, with surfaces when `surfaced`, and the copy of
-    /// what the opaque models made when one of its models `transmits`
-    /// (D720), halved into its levels when `blurred` (D723).
+    /// what the opaque models made when one of its models `transmits`,
+    /// halved into its levels when `blurred`.
     result::Status declare(
         std::uint32_t width, std::uint32_t height, std::uint32_t samples, bool surfaced, bool transmits, bool blurred);
 
@@ -56,17 +56,17 @@ public:
     result::Status addPrepass(const std::vector<mrhiAccess>& reads);
     /// The lit pass, reading `reads`; where a model transmits, split in two
     /// about the copy of what the opaque models made, which the second,
-    /// the translucent models', reads (D720).
+    /// the translucent models', reads.
     result::Status addLitPass(const std::vector<mrhiAccess>& reads);
 
-    /// The prepass recorded, the masked runs cut (D310), and the depth
+    /// The prepass recorded, the masked runs cut, and the depth
     /// resolved unless nothing reads it.
     result::Status recordPrepass(const Drawing& with);
     /// The lit pass recorded: the opaque runs, the masked, the sky with
-    /// `sky`'s table, then the translucent over them (D305), those that
-    /// transmit reading the copy made between (D720) and its levels, each
-    /// halved from the one before by the bloom's halving (D723); by the
-    /// twins that lay decals when `decaled` (D339).
+    /// `sky`'s table, then the translucent over them, those that
+    /// transmit reading the copy made between and its levels, each
+    /// halved from the one before by the bloom's halving; by the
+    /// twins that lay decals when `decaled`.
     result::Status recordLit(const Drawing& with, bool decaled, std::span<const mrhiBinding> sky);
 
     [[nodiscard]] mrhiResourceId scene() const noexcept;
@@ -76,7 +76,7 @@ public:
     [[nodiscard]] std::uint32_t samples() const noexcept;
     [[nodiscard]] bool surfaced() const noexcept;
 
-    /// What times its passes on the GPU (D894).
+    /// What times its passes on the GPU.
     void timeBy(const PassTimer& timer) noexcept {
         timer_ = &timer;
     }
@@ -92,7 +92,7 @@ private:
     /// Runs of models drawn in `pass` by `single`'s pipeline, or by
     /// `many`'s when multisampled, with `table`; `shaded`, a run whose
     /// material has its own program by that program's twin, once it is
-    /// made (D485, D487).
+    /// made.
     result::Status drawRuns(const Drawing& with,
                             std::span<mrhiBinding> table,
                             mrhiPassId pass,
@@ -117,7 +117,7 @@ private:
     mrhiPassId prepass_{};
     mrhiPassId resolve_{};
     mrhiPassId lit_{};
-    /// Where a model transmits (D720): the copy of what the opaque models
+    /// Where a model transmits: the copy of what the opaque models
     /// made, the pass copying it, and the translucent models' pass after.
     bool transmits_ = false;
     std::uint32_t width_ = 0;
@@ -126,7 +126,7 @@ private:
     mrhiPassId copying_{};
     mrhiPassId glass_{};
     /// The copy's levels, the first its own size, and the passes halving
-    /// each into the next, which a rough model reads blurred (D723).
+    /// each into the next, which a rough model reads blurred.
     std::uint32_t behindLevels_ = 1;
     std::vector<mrhiPassId> halving_;
 };

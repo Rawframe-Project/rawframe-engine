@@ -48,7 +48,7 @@ spawnsAsScene(const GameDescription& game, const kest::Program& program, const s
             }
             scene::SceneComponent component{.name = part.component, .fields = {}};
             for (const GameFieldValue& field : part.fields) {
-                // An enum's case by its name, none at the first (D270).
+                // An enum's case by its name, none at the first.
                 const auto kPiece = std::ranges::find(kLayout.fields, field.field, &kest::Field::name);
                 if (kPiece != kLayout.fields.end() && kPiece->kind == kest::FieldKind::Tag) {
                     const auto kCase = std::ranges::find(kPiece->cases, field.value);

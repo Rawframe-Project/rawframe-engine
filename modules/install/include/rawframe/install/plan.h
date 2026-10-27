@@ -1,6 +1,6 @@
 #pragma once
 
-// An UpdatePlan (SPEC-0038): exactly the blobs an update needs that the
+// An UpdatePlan: exactly the blobs an update needs that the
 // library's store lacks, a pure function of the target Builds' manifests and
 // the store's inventory. Identical inputs make byte-identical canonical
 // records. A plan names digests only, never a path, and is never an
@@ -41,7 +41,7 @@ struct UpdatePlan {
     [[nodiscard]] std::uint64_t bytes() const noexcept;
 };
 
-/// SPEC-0038's ceiling on a plan's canonical record.
+/// The ceiling on a plan's canonical record.
 inline constexpr std::size_t kMaximumPlanRecord = std::size_t{64} * 1024 * 1024;
 
 /// Every blob `targets` name that `inventory` lacks.

@@ -39,7 +39,7 @@ std::string metersText(double value) {
 } // namespace
 
 void ShellParticipant::showTerrain() {
-    // A terrain is its lines (D855): its layers as rows, the brush in the
+    // A terrain is its lines: its layers as rows, the brush in the
     // Inspector, and its ground drawn from above in the center, a block
     // pressed stroking the brush there through the session.
     const std::optional<Value> kRead = read(scene_, "lines.read");

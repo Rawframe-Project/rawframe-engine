@@ -8,7 +8,7 @@
 
 namespace rawframe::studio {
 
-/// Contributes `rawframe.studio.shell` (ADR-0032, D435), a World-scoped
+/// Contributes `rawframe.studio.shell`, a World-scoped
 /// participant of Studio's own composition: it holds an authoring session
 /// on a game in its process, speaking only the session's records, and
 /// shows it as a UI of its own, laid out and drawn in each
@@ -16,7 +16,7 @@ namespace rawframe::studio {
 /// render_canvas_gpu to draw: a header, and a column for the scenes beside
 /// the game and the chosen scene's view, the chosen scene's entities, and
 /// the chosen entity's components. A preview, when configured, is the
-/// chosen scene's (D433, D440). It logs `studio_summary` when it stops.
+/// chosen scene's. It logs `studio_summary` when it stops.
 ///
 ///   studio.game                 the game description the session reads
 ///                               (required)
@@ -28,7 +28,7 @@ namespace rawframe::studio {
 ///   studio.preview.token_file   its token file
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
-/// Studio's own icon for its window (D920): the app icon square at each of
+/// Studio's own icon for its window: the app icon square at each of
 /// `kAppIconSides` pixels, RGBA, one after another, held for the program's
 /// life.
 inline constexpr std::array<std::uint32_t, 3> kAppIconSides = {32, 64, 256};

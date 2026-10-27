@@ -80,7 +80,7 @@ struct Physics3D::State {
     std::unique_ptr<world::System> system;
     std::unique_ptr<world::System> mirrorSystem;
     std::vector<Row> rows;
-    /// Changes whenever a static body is made or removed (D400).
+    /// Changes whenever a static body is made or removed.
     std::uint64_t staticRevision = 0;
 
     ~State() {
@@ -410,7 +410,7 @@ struct Physics3D::State {
     }
 
     /// The bodies made to follow their entities while the World is edited
-    /// and nothing steps (kMirrorSystem, D927): where the step ran this
+    /// and nothing steps (kMirrorSystem): where the step ran this
     /// tick, nothing more.
     void mirror(world::World& world, world::TickIndex tick) {
         if (stepped && lastTick == tick.value) {

@@ -1,4 +1,4 @@
-// Phase sync (SPEC-0035, D136): a blend's or blend space's clip inputs
+// Phase sync: a blend's or blend space's clip inputs
 // play at one phase, a leader's, weighed or declared, and followers fire
 // the events they cross on the way.
 

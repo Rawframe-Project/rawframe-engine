@@ -1,6 +1,6 @@
 #pragma once
 
-// Where an update's Builds come from (SPEC-0038): any infrastructure that
+// Where an update's Builds come from: any infrastructure that
 // serves a Build's manifest and signature by its root, and a blob by its
 // digest. Nothing an origin serves is trusted: a manifest is read only once
 // a pinned key set verifies its signature, and a blob only once it hashes to
@@ -36,7 +36,7 @@ public:
                                                                       std::uint64_t ceiling) = 0;
     /// A record the origin serves at `path`, a library path its owner names
     /// (`content::releasePathOf`, `channelPathOf`, `compositionPathOf`, and
-    /// their signatures), at most `ceiling` bytes (D424). Blocks.
+    /// their signatures), at most `ceiling` bytes. Blocks.
     [[nodiscard]] virtual result::Result<std::vector<std::byte>> record(std::string_view path,
                                                                         std::uint64_t ceiling) = 0;
 };

@@ -1,6 +1,6 @@
 #pragma once
 
-// What the UI's tests share (D376): a registry of a HUD, a meter, a row,
+// What the UI's tests share: a registry of a HUD, a meter, a row,
 // and typed words; a World with a player whose view the UI lays out; and
 // the HUD's panel and meter.
 

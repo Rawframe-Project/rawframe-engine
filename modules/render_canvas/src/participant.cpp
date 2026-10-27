@@ -62,8 +62,7 @@ bool otherType(const result::Error& error) {
            error.code() == content::code(content::ContentError::ResourceTypeMismatch);
 }
 
-/// A canvas material's cooked bytes, read and waited for, and decoded
-/// (D356).
+/// A canvas material's cooked bytes, read and waited for, and decoded.
 result::Result<material::CanvasMaterial> readCanvasMaterial(content::ContentStore& store, base::Bits128 id) {
     RAWFRAME_TRY_ASSIGN(
         execution::AsyncHandle<content::VerifiedContent> read,
@@ -119,12 +118,12 @@ public:
             RAWFRAME_TRY_ASSIGN(const std::uint64_t kClient, configuration.unsignedInteger("canvas.client", 0));
             client_ = static_cast<std::size_t>(kClient);
         } else if (context.has(view::kPlayerViews.name)) {
-            // The local players' views, told where the host lends them
-            // (D367); a canvas of a client named by configuration is no
+            // The local players' views, told where the host lends them;
+            // a canvas of a client named by configuration is no
             // player's.
             RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
         }
-        // A preview's camera, where an authoring client sets one (D793).
+        // A preview's camera, where an authoring client sets one.
         if (!client_.has_value() && context.has(view::kPreviewCamera.name)) {
             RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
         }
@@ -137,7 +136,7 @@ public:
                                                                "canvas.width and canvas.height are 1 to 65536 pixels")
                                                       .error()};
         }
-        // Split-screen (D364): the process's local players, each in its
+        // Split-screen: the process's local players, each in its
         // region by the game's layout for their count, the first in the
         // first, as the scene's are.
         if (const std::size_t kPlayers = clients_->localPlayers(); kPlayers > 1) {
@@ -159,7 +158,7 @@ public:
             }
             regionFrames_.resize(regions_.size());
         }
-        // A constrained aspect (D369): one player's view is placed in the
+        // A constrained aspect: one player's view is placed in the
         // window as a split-screen player's is in its region.
         aspect_ = files->description().aspect;
         if (aspect_.has_value() && regions_.empty()) {
@@ -177,13 +176,13 @@ public:
                                    .beams = std::move(game->beams),
                                    .tilemapComponents = std::move(game->tilemaps)};
         // The game's tilemaps as its files read them, the maps its bodies
-        // are made of (D858, D859).
+        // are made of.
         for (const world_kest::GameTilemapResource& each : files->tilemaps()) {
             if (each.map != nullptr) {
                 settings_.tilemaps.emplace_back(each.id, *each.map);
             }
         }
-        // The game's canvas materials from its cooked content (D356): one
+        // The game's canvas materials from its cooked content: one
         // of another domain is another renderer's; one that cannot be read,
         // or with no cooked content to read it from, is drawn as none, and
         // one that cannot be read is said so when the canvas starts.
@@ -300,7 +299,7 @@ public:
         } else if (phase == composition::HostPhase::Present && extracted_) {
             extracted_ = false;
             // The seconds since the frame before, on the Host's timeline,
-            // for the particle clock (D357): nought for the first.
+            // for the particle clock: nought for the first.
             camera_.elapsed =
                 presented_.has_value() ? static_cast<float>((frame.now - *presented_).nanoseconds) / 1e9F : 0.0F;
             presented_ = frame.now;
@@ -434,8 +433,8 @@ private:
         }
         canvas_->hideLayers(preview_ != nullptr ? preview_->hidden() : std::vector<std::uint32_t>{});
         // The paths the previewed scene's splines make, cyan lines in the
-        // canvas's plane (D891), and what each author has chosen, a
-        // rectangle about each in their color (D907).
+        // canvas's plane, and what each author has chosen, a
+        // rectangle about each in their color.
         bool linesChanged = false;
         if (preview_ != nullptr && preview_->pathsShown() != pathsSeen_) {
             pathsSeen_ = preview_->pathsShown();
@@ -485,7 +484,7 @@ private:
             camera_ = previewedCamera(*preview_->looking(), camera_);
             ++previewed_;
         }
-        // The grid an editor's 2D view shows (D933), about where it looks,
+        // The grid an editor's 2D view shows, about where it looks,
         // made again only where the view moved.
         const bool kGrid = preview_ != nullptr && preview_->looking().has_value() &&
                            (preview_->overlays() & static_cast<std::uint8_t>(view::Overlay::Grid)) != 0;
@@ -529,7 +528,7 @@ private:
         return found;
     }
 
-    /// The other local players' Worlds (D364), each extracted into its own
+    /// The other local players' Worlds, each extracted into its own
     /// canvas and its camera read from its player.
     void extractPlayers() {
         for (LocalPlayer& each : localPlayers_) {
@@ -554,7 +553,7 @@ private:
     }
 
     /// Each local player's region placed in the window as it is now, the
-    /// first's camera given its aspect, the others' frames queued (D364).
+    /// first's camera given its aspect, the others' frames queued.
     void presentPlayers(execution::MonotonicInstant now) {
         for (std::size_t at = 0; at < regions_.size(); ++at) {
             const world_kest::RegionPixels kWhole = world_kest::pixelsOf(regions_[at], width_, height_);
@@ -582,7 +581,7 @@ private:
         }
     }
 
-    /// Each local player's view as this frame derived it (D367), as the
+    /// Each local player's view as this frame derived it, as the
     /// scene tells its own.
     void tellViews() {
         if (views_ == nullptr) {
@@ -612,14 +611,14 @@ private:
 
     world_replication::ClientWorlds* clients_ = nullptr;
     std::optional<std::size_t> client_;
-    /// The local players' views, told each frame (D367).
+    /// The local players' views, told each frame.
     view::PlayerViews* views_ = nullptr;
     view::PreviewCamera* preview_ = nullptr;
     CanvasSettings settings_;
     CanvasCamera camera_;
     std::optional<execution::MonotonicInstant> presented_;
     std::optional<schema::ComponentTypeId> cameraComponent_;
-    /// Split-screen (D364): the layout's regions, the local players after
+    /// Split-screen: the layout's regions, the local players after
     /// the first (whose are `canvas_` and `camera_`), each region's frame,
     /// and the frames queued for the others.
     struct LocalPlayer {
@@ -631,7 +630,7 @@ private:
     };
     std::vector<world_kest::GameRegion> regions_;
     /// The game's constrained aspect, each region's view centered between
-    /// bars (D369); none fills.
+    /// bars; none fills.
     std::optional<world_kest::GameAspect> aspect_;
     std::vector<LocalPlayer> localPlayers_;
     std::vector<CanvasRegion> regionFrames_;
@@ -653,7 +652,7 @@ private:
     std::uint64_t animated_ = 0;
     std::uint64_t culled_ = 0;
     std::uint64_t previewed_ = 0;
-    /// The preview's paths last seen, and how many it drew (D891).
+    /// The preview's paths last seen, and how many it drew.
     std::uint64_t pathsSeen_ = 0;
     std::uint64_t pathsDrawn_ = 0;
     std::vector<CanvasLine> pathLines_;
@@ -668,7 +667,7 @@ private:
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownTextures_ = 0;
     std::uint64_t unknownMaterials_ = 0;
-    /// The particles' frames, summed (D360).
+    /// The particles' frames, summed.
     rawframe::particles::Tally particles_;
     std::vector<std::pair<std::string, std::string>> unreadMaterials_;
     std::uint64_t overLimit_ = 0;

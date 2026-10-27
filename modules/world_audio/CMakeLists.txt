@@ -1,4 +1,4 @@
-# A World heard (ADR-0038): `rawframe.sound`'s emitter and listener
+# A World heard: `rawframe.sound`'s emitter and listener
 # components played through the audio module. Client only: the dedicated
 # server carries the components as plain values and links none of this.
 rawframe_module(NAME world_audio

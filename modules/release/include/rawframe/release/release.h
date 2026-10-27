@@ -1,13 +1,13 @@
 #pragma once
 
-// SPEC-0020's release records: an immutable ReleaseRecord binding one
+// The release records: an immutable ReleaseRecord binding one
 // Release to its artifacts' exact digests, and a ChannelPointer saying which
 // Release a channel of a subject points at now. Both are canonical records,
-// closed schemas, signed detached under SPEC-0019's regime by the subject's
+// closed schemas, signed detached under the regime by the subject's
 // publisher. A Release's identity is the SHA-256 of its record's exact
 // bytes: no name or channel is ever the authority for one. A pointer whose
 // sequence is not past the one a client holds is a replay; a higher one
-// naming an older Release is a rollback, and accepted (D424).
+// naming an older Release is a rollback, and accepted.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/result/result.h"
@@ -21,7 +21,7 @@
 namespace rawframe::release {
 
 /// The media type of a Release's artifact that is a CompositionRecord: its
-/// digest the CompositionId, which a launcher installs (D424).
+/// digest the CompositionId, which a launcher installs.
 inline constexpr std::string_view kCompositionMediaType = "application/vnd.rawframe.composition";
 
 /// One artifact of a Release: for which platform, of what media type, and
@@ -34,7 +34,7 @@ struct Artifact {
 };
 
 struct ReleaseRecord {
-    /// `publisher/name`, ADR-0023's grammar.
+    /// `publisher/name`, the grammar.
     std::string subject;
     /// Semantic Versioning 2.0.0, 1 to 64 bytes.
     std::string version;
@@ -78,7 +78,7 @@ struct ChannelPointer {
 /// A Release's identity: SHA-256 of its record's exact bytes.
 [[nodiscard]] base::Sha256Digest releaseIdOf(std::string_view recordText) noexcept;
 
-/// SPEC-0020's update check over records already verified as signed: the
+/// The update check over records already verified as signed: the
 /// pointer is of `subject` and `channel` (`UnknownSubject`), names exactly
 /// `recordText` (`DigestMismatch`), whose record is of the same subject,
 /// and comes after the sequence held, if any (`SequenceRegression`).

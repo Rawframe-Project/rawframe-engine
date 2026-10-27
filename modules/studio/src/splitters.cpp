@@ -34,24 +34,24 @@ void ShellParticipant::followSplitter() {
     // may come only after the release, never having seen the last of the
     // drag.
     const bool kReleased = std::exchange(released_, false);
-    // An entity row let go after a drag reparents it (D785).
+    // An entity row let go after a drag reparents it.
     if (kReleased && heldEntity_.has_value()) {
         dropEntity();
     }
-    // And an asset's card onto a folder moves it there (D929).
+    // And an asset's card onto a folder moves it there.
     if (kReleased && browser_.held.has_value()) {
         dropAsset();
     }
-    // And a graph's output onto an input wires them (D977).
+    // And a graph's output onto an input wires them.
     if (kReleased && held_.wiring.has_value()) {
         dropWire();
     }
     // And a graph's card dragged follows the pointer, placed where it is
-    // let go (D982).
+    // let go.
     if (held_.cardHeld.has_value()) {
         followCard(kReleased);
     }
-    // And a bottom pane's tab onto the other dock docks it there (D980).
+    // And a bottom pane's tab onto the other dock docks it there.
     if (kReleased && docking_.held.has_value()) {
         dropTab();
     }

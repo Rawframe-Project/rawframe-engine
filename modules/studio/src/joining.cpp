@@ -13,7 +13,7 @@
 namespace rawframe::studio {
 
 std::string ShellParticipant::answerLine(const std::string& line) {
-    // A host joined answers as a session held here does (D883); one that
+    // A host joined answers as a session held here does; one that
     // closed refuses, and Studio says so once (hearHost).
     bool ended = false;
     if (held_.joined != nullptr) {
@@ -44,7 +44,7 @@ void ShellParticipant::hearHost() {
             {diagnostics::field("author", held_.joinedAs), diagnostics::field("endpoint", held_.joinEndpoint)});
     }
     // What the author has open and chosen, said to the host as it changes,
-    // so the others see it (ADR-0085 section 5).
+    // so the others see it.
     std::string presenting = scene_;
     for (const std::string& kPicked : selected_) {
         presenting += " " + kPicked;
@@ -55,7 +55,7 @@ void ShellParticipant::hearHost() {
         present.add("kind", Value::string("authoring.present"));
         present.add("id", Value::integer(next()));
         present.add("scene", Value::string(scene_));
-        // A scene's entities or a UI document's nodes (D886); another
+        // A scene's entities or a UI document's nodes; another
         // document's rows are not presence.
         Value picked = Value::array();
         if (chosen(Listed::Scene) || chosen(Listed::Ui)) {
@@ -68,7 +68,7 @@ void ShellParticipant::hearHost() {
         static_cast<void>(ask(present));
     }
     for (const std::string& kLine : held_.joined->poll()) {
-        // A cook's progress and reply, as a session's own (D885).
+        // A cook's progress and reply, as a session's own.
         hearCookLine(kLine);
         const auto kParsed = document::parse(kLine);
         const Value* kKind = kParsed.has_value() ? kParsed->find("kind") : nullptr;
@@ -96,7 +96,7 @@ void ShellParticipant::hearHost() {
             }
         } else if (*kKind->text() == "authoring.presence") {
             // Who is there, what each has chosen, and what each holds:
-            // the title bar and the Hierarchy say so (D884).
+            // the title bar and the Hierarchy say so.
             held_.collaborators.clear();
             const Value* kAuthors = kParsed->find("authors");
             for (const Value& kEach : kAuthors != nullptr ? kAuthors->items() : std::span<const Value>{}) {
@@ -117,7 +117,7 @@ void ShellParticipant::hearHost() {
                 if (const Value* kClaims = kEach.find("claims"); kClaims != nullptr) {
                     for (const Value& kClaim : kClaims->items()) {
                         // An entity's id or a UI node's component, the
-                        // whole document where neither is named (D886).
+                        // whole document where neither is named.
                         const Value* kDocument = kClaim.find("document");
                         const Value* kPart =
                             kClaim.find("node") != nullptr ? kClaim.find("node") : kClaim.find("entity");
@@ -210,7 +210,7 @@ void ShellParticipant::showCollaborators() {
     if (held_.avatarsNode == ui::Node{}) {
         return;
     }
-    // As the design's Together screen (D935): how many are here, then each
+    // As the design's Together screen: how many are here, then each
     // author's initials in their color, this one's first, each pressed for
     // who is in the session and what each is doing.
     std::vector<std::string> authors = {held_.joinedAs};

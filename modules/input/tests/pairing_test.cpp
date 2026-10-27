@@ -1,4 +1,4 @@
-// The pairing table (SPEC-0029, D363): devices paired to local players as
+// The pairing table: devices paired to local players as
 // they connect, by policy, and a client's feed routed to each player's.
 
 #include "rawframe/input/feed.h"

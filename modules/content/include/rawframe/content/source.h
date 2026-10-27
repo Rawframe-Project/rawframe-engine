@@ -1,15 +1,14 @@
 #pragma once
 
-// Where content bytes come from (SPEC-0008): a source reads a validated
+// Where content bytes come from: a source reads a validated
 // locator's exact bytes and nothing else. Generation 1 has three, all built
 // here and nowhere else: a memory source, a directory source confined to
-// its root, and a Build (SPEC-0021) read chunk by chunk in its verification
+// its root, and a Build read chunk by chunk in its verification
 // order, whose files are in a directory or held in memory. There is no
 // public way to add another kind.
 //
 // Directories exist only where there are files (RAWFRAME_FILE_SYSTEM): a
-// web client holds in memory what it fetched, a Build's files among them
-// (D162).
+// web client holds in memory what it fetched, a Build's files among them.
 
 #include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
@@ -57,7 +56,7 @@ public:
     /// read of them (the signature module's typed refusals), and its
     /// subject must be that publisher's (`UnknownKey`). It must be the Build
     /// whose identity section hashes to `expectedRoot` (`DigestMismatch`); a
-    /// manifest that is not a canonical SPEC-0021
+    /// manifest that is not a canonical
     /// record, lists a resource twice, or whose chunk lists do not cover
     /// their resources exactly is refused (`ManifestInvalid`,
     /// `DuplicateResource`). Its entries are located by their resource's
@@ -83,7 +82,7 @@ public:
 private:
     friend class ContentStore;
     friend class Library;
-    /// SPEC-0021's verification order over a Build's files, wherever they
+    /// The verification order over a Build's files, wherever they
     /// are held.
     [[nodiscard]] static result::Result<BuildContent> openBuild(std::shared_ptr<const Implementation> files,
                                                                 std::span<const std::byte> manifest,

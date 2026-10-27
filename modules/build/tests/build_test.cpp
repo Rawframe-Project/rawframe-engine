@@ -1,4 +1,4 @@
-// Packing a Build from a cook's output (SPEC-0021, ADR-0024): only a
+// Packing a Build from a cook's output: only a
 // zero-failure receipt that names the manifest beside it is proof, every
 // artifact must be what both say, blobs are stored by digest and reused,
 // the BuildManifest is a canonical record, and the root hash is the

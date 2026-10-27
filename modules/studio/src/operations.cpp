@@ -1,4 +1,4 @@
-// The records of a session's operations on the game's files (D502, D503):
+// The records of a session's operations on the game's files:
 // cooking it, stopping a cook, and importing a file, and what the session
 // says of them.
 

@@ -1,14 +1,13 @@
 #pragma once
 
-// A window system's raw input as a player's devices (SPEC-0025 into
-// SPEC-0029): keys by their HID usage, mouse buttons, the wheel, a
+// A window system's raw input as a player's devices: keys by their HID usage, mouse buttons, the wheel, a
 // captured pointer's motion, the cursor's place and its motion over the
-// window (D521), and mapped gamepads become control events of their
+// window, and mapped gamepads become control events of their
 // devices in the feed; losing focus or input lets go of everything.
 // The window reports sticks one axis at a time, down positive; the feed
 // gets both axes of a stick together, up positive, as the mapper reads
-// them. Touches become a touch screen's virtual controls (D387). The other way, what the feed asks a gamepad to feel
-// runs its motors (D251).
+// them. Touches become a touch screen's virtual controls. The other way, what the feed asks a gamepad to feel
+// runs its motors.
 
 #include "rawframe/input/feed.h"
 #include "rawframe/input/touch.h"

@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's own admission rule (ADR-0043): a function of the game's program,
+// A game's own admission rule: a function of the game's program,
 // named by an `admission` line, asked about each client the engine would
 // admit. rawframe.admission, the engine's Kest module, says its shape and
 // what it answers.

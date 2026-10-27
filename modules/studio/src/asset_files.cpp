@@ -260,7 +260,7 @@ void ShellParticipant::dropAsset() {
         return;
     }
     // Let go inside a pane apart, onto what is there: a folder in the
-    // Assets apart (D992).
+    // Assets apart.
     const auto kApart = docking_.releasedApart.has_value()
                             ? std::ranges::find(docking_.torn, docking_.releasedApart->first, &TornPane::key)
                             : docking_.torn.end();
@@ -310,8 +310,8 @@ bool ShellParticipant::placeDropped(const std::string& held, const std::array<fl
                       diagnostics::field("onto", onto),
                       diagnostics::field("placed", browser_.placed)});
     };
-    // Onto a field that holds an asset of its kind (D786), that asset, as
-    // typing its name there gives it (D975).
+    // Onto a field that holds an asset of its kind, that asset, as
+    // typing its name there gives it.
     for (const FieldRow& kTaking : fields_) {
         if (kTaking.role != FieldRow::Role::Field || kTaking.type.asset.empty() || !kInside(kTaking.value)) {
             continue;
@@ -330,9 +330,9 @@ bool ShellParticipant::placeDropped(const std::string& held, const std::array<fl
         return true;
     }
     // Onto the Hierarchy or the viewport, a scene is placed in the scene
-    // shown as an instance of it (D975), as the instance well does.
+    // shown as an instance of it, as the instance well does.
     if (!scene_.empty() && (kInside(entitiesColumn_) || kInside(centerColumn_))) {
-        // A mesh, an entity of the game's component that holds one (D981).
+        // A mesh, an entity of the game's component that holds one.
         if (const auto kMesh = std::ranges::find_if(assets_,
                                                     [&held](const Asset& each) {
                                                         return each.name == held && each.kind == "mesh";
@@ -380,8 +380,7 @@ void ShellParticipant::placeMesh(const Asset& mesh, std::optional<std::array<flo
     };
     const Catalog::Component* kPose = kNamed("rawframe.physics3d.pose");
     // Else, as Plaza places its crates and its mound, a static body made of
-    // the mesh's triangles, which a game that draws its bodies draws
-    // (D987).
+    // the mesh's triangles, which a game that draws its bodies draws.
     const Catalog::Component* kBody = kNamed("rawframe.physics3d.body");
     const Catalog::Component* kVelocity = kNamed("rawframe.physics3d.velocity");
     if (holder == nullptr && kBody != nullptr && kVelocity != nullptr) {
@@ -430,7 +429,7 @@ void ShellParticipant::placeMesh(const Asset& mesh, std::optional<std::array<flo
     }
     // Resting on what the pointer's ray meets in the edit view, else where
     // the view looks, on the ground; its lowest point there, where the
-    // last cook says where that is (D989).
+    // last cook says where that is.
     std::array<double, 3> placed = restingAt(at);
     if (const std::optional<double> kLowest = lowestOf(mesh.name); kLowest.has_value()) {
         placed[1] -= *kLowest;

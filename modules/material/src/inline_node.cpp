@@ -42,7 +42,7 @@ result::Result<std::vector<Pin>> pinsOf(const Value* pins, std::size_t most, boo
     return made;
 }
 
-/// An inline node's body, held to one function's (D718).
+/// An inline node's body, held to one function's.
 result::Status bodyChecked(std::string_view body) {
     if (body.empty() || body.size() > 4096 || !std::ranges::all_of(body, [](char letter) {
             return (letter >= ' ' && letter <= '~' && letter != '#' && letter != '"' && letter != '\\' &&

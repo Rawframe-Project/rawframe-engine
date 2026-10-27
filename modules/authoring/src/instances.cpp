@@ -1,5 +1,5 @@
-// Whole instances added and removed (D156), and streamed as districts
-// (D870). Adding one is SPEC-0006's two passes: the source resolved and its
+// Whole instances added and removed, and streamed as districts.
+// Adding one is the two passes: the source resolved and its
 // entities enumerated, then each given its id here; there are no values to
 // remap, since an instance's entities are its source's until its patch says
 // otherwise.

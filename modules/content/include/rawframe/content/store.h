@@ -1,6 +1,6 @@
 #pragma once
 
-// The content store (SPEC-0008): a Runtime's one catalog generation, its
+// The content store: a Runtime's one catalog generation, its
 // sources, and reads that return bytes only once they are exactly what the
 // catalog says. Reads run on the blocking-I/O executor; nothing here reads
 // synchronously, logs, or decodes.

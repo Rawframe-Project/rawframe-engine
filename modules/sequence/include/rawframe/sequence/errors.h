@@ -7,7 +7,7 @@
 
 namespace rawframe::sequence {
 
-/// The domain of every Error the sequence format creates (D869).
+/// The domain of every Error the sequence format creates.
 inline constexpr result::ErrorDomain kSequenceDomain{base::parseBits128Hex("91ad8f7d6411db09055fce326a632379").value};
 
 /// Codes within kSequenceDomain.

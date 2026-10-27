@@ -1,13 +1,10 @@
 #pragma once
 
 // What a client's UI takes of its local player's keyboard and input method
-// (SPEC-0030's text edit and IME contract, SPEC-0029's text-edit gate,
-// D426). A client host lends one as `rawframe.view.ui_typing`: the UI says
-// while a text field holds focus and where its caret is, the host then
-// hands it what is typed, the editing keys, and the input method's
-// composition, and asks the platform for text input with the caret as the
-// candidate window's anchor; each player's input gates its keyboard
-// actions meanwhile.
+// (the text edit and IME contract, the text-edit gate). A client host lends one as `rawframe.view.ui_typing`: the UI
+// says while a text field holds focus and where its caret is, the host then hands it what is typed, the editing keys,
+// and the input method's composition, and asks the platform for text input with the caret as the candidate window's
+// anchor; each player's input gates its keyboard actions meanwhile.
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/ui/text_edit.h"
@@ -26,7 +23,7 @@ namespace rawframe::view {
 /// The keys a field takes while it holds focus: those that edit, Enter
 /// (`Submit`: a line break in a field of lines, else the field's text
 /// given), Escape (`Dismiss`: focus let go), and Tab (`Next`: focus to the
-/// next field, the one before with `extend`, D429).
+/// next field, the one before with `extend`).
 enum class TypingKey : std::uint8_t {
     Backspace,
     Delete,
@@ -59,8 +56,7 @@ struct TypingSpan {
 /// One thing typed: text typed or committed, a key with Shift (`extend`)
 /// and Control or Option (`word`), the input method's composition, its
 /// caret bytes into it (-1 hidden), empty text ending it, or a chord, a
-/// shortcut no field takes, named in `text` as "Ctrl+Shift+Z" or "F5"
-/// (D777).
+/// shortcut no field takes, named in `text` as "Ctrl+Shift+Z" or "F5".
 struct Typing {
     enum class Kind : std::uint8_t {
         Text,
@@ -121,7 +117,7 @@ public:
     }
     /// The host's side: `typing` to the field that holds focus; nothing
     /// while none does, but a chord, which the UI takes whether or not a
-    /// field holds focus (D777).
+    /// field holds focus.
     void type(const Typing& typing) const {
         if (editing() || (typing.kind == Typing::Kind::Chord && take_)) {
             take_(typing);
@@ -154,7 +150,7 @@ private:
 inline constexpr composition::Capability<UiTyping> kUiTyping{"rawframe.view.ui_typing"};
 
 /// `typing` done to `edit`, the one way a UI turns what the host hands it
-/// into editing (D426, D436): text typed, the input method's composition,
+/// into editing: text typed, the input method's composition,
 /// and the editing keys with their modifiers. The keys a field's owner
 /// decides on, Enter, Escape, and Tab, are returned for it, not done.
 [[nodiscard]] std::optional<TypingKey> edit(ui::TextEdit& edit, const Typing& typing);

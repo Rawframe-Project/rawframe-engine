@@ -58,7 +58,7 @@ std::optional<std::vector<std::byte>> readFile(const std::filesystem::path& path
 
 /// Written beside its place and renamed into it, so a reader sees all of it
 /// or none. What is at the part's place first, one a crash left or a link
-/// the directory came with, is taken away, never written through (D847);
+/// the directory came with, is taken away, never written through;
 /// not flushed, since a cook's output is made again from its sources.
 bool writeAtomically(const std::filesystem::path& path, std::span<const std::byte> bytes) {
     std::error_code error;
@@ -146,7 +146,7 @@ struct Planned {
     std::map<std::string, content::ResourceId, std::less<>> subassets;
 };
 
-/// The cook key: every input the artifact depends on (ADR-0024), and the
+/// The cook key: every input the artifact depends on, and the
 /// tool that made it.
 base::Sha256Digest keyOf(const CookRequest& request, const Planned& planned) {
     base::Sha256 key;
@@ -207,7 +207,7 @@ std::optional<std::pair<content::ResourceTypeId, content::RepresentationId>> kin
     return std::pair{content::ResourceTypeId{kType.value}, *kRepresentation};
 }
 
-/// An importer's report as a cache record or a receipt writes it (D319).
+/// An importer's report as a cache record or a receipt writes it.
 Value valueOf(std::span<const std::pair<std::string, std::int64_t>> report) {
     Value made = Value::object();
     for (const auto& [kName, kCount] : report) {
@@ -619,7 +619,7 @@ result::Result<CookReport> cookSources(const CookRequest& request) {
         input.add("reused", Value::boolean(kReused));
         inputs.push(std::move(input));
     }
-    // SPEC-0026's variants_per_package, across every material cooked.
+    // The variants_per_package, across every material cooked.
     if (report.variants > request.maximumVariants) {
         report.failures.push_back(failure(CookError::OverLimit, "more material variants than the package's ceiling", "")
                                       .withContext("variants", std::to_string(report.variants)));

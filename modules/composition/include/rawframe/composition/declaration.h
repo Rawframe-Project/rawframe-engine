@@ -13,7 +13,7 @@
 
 namespace rawframe::composition {
 
-/// Who owns a participant, from longest lived to shortest (SPEC-0005). A
+/// Who owns a participant, from longest lived to shortest. A
 /// participant may depend only on participants that live at least as long.
 enum class LifetimeScope : std::uint8_t {
     Host,
@@ -68,7 +68,7 @@ struct ExecutorRequirement {
 struct LifecyclePolicy {
     /// How long `quiesce` plus `stop` may take. Required and positive: a
     /// participant with no shutdown contract is refused. Budgets nest inside the
-    /// composition's (SPEC-0048).
+    /// composition's.
     execution::MonotonicDuration stopBudget;
 };
 
@@ -83,8 +83,8 @@ using ParticipantOwner = std::unique_ptr<Participant>;
 /// plan execution, never during registration.
 using FactoryFunction = result::Result<ParticipantOwner> (*)(ParticipantContext& context) noexcept;
 
-/// One participant as a registrar declares it. Members follow SPEC-0005's
-/// required declaration list in its order (SPEC-0049). Everything is borrowed
+/// One participant as a registrar declares it. Members are the
+/// declaration's required parts, in order. Everything is borrowed
 /// for the duration of `submit`, which copies it.
 struct ParticipantDeclaration {
     std::string_view identity;
@@ -93,7 +93,7 @@ struct ParticipantDeclaration {
     std::span<const std::string_view> providedCapabilities;
     std::span<const std::string_view> requiredCapabilities;
     /// Used when present and otherwise absent; resolved during planning, never
-    /// looked up later (SPEC-0005 optional capability use).
+    /// looked up later.
     std::span<const std::string_view> optionalCapabilities;
     std::span<const std::string_view> requiredParticipants;
     EligibilityMask eligibility;

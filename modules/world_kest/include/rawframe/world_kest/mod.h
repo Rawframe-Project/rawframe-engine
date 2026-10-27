@@ -1,11 +1,11 @@
 #pragma once
 
-// A mod's description (SPEC-0042's contribution declaration, D177): the one
+// A mod's description: the one
 // game it targets, the Mod API versions it was written against, and what it
 // contributes to that game's extension points. A `data` contribution is a
 // scene whose every entity holds the point's component and nothing else, so
 // the values a mod adds are read, checked, and migrated as a game's own
-// scenes are (ADR-0048).
+// scenes are.
 //
 //   target <publisher/name>
 //   modapi <constraint>...        >=2 <4, =3, or 3 alone
@@ -17,7 +17,7 @@
 //
 // A mod with handlers, providers, or replacements names one program, compiled from the Kest sources of
 // the `kest.project` beside it and run on a machine of its own under Kest's
-// untrusted profile (D181).
+// untrusted profile.
 
 #include "rawframe/result/result.h"
 #include "rawframe/world_kest/game.h"
@@ -58,7 +58,7 @@ struct ModHandler {
 };
 
 /// A function of a mod's program that answers a service point's calls: it
-/// takes `values: [T]` and rewrites `values[0]` (D199).
+/// takes `values: [T]` and rewrites `values[0]`.
 struct ModProvider {
     /// The service point's name in the target's Mod API namespace.
     std::string point;
@@ -66,7 +66,7 @@ struct ModProvider {
 };
 
 /// A function of a mod's program that runs in place of the game system a
-/// replacement point names: it takes the system's columns (D200).
+/// replacement point names: it takes the system's columns.
 struct ModReplacement {
     std::string point;
     std::string function;
@@ -88,7 +88,7 @@ struct ModDescription {
 /// The most lines a mod description may have.
 inline constexpr std::size_t kMaximumModLines = 1024;
 
-// SPEC-0042's named limit points, valued here (D195). A point the engine
+// The named limit points, valued here. A point the engine
 // does not build yet (capability grants, mod migrations) has no value, and
 // no mod can use it.
 
@@ -122,13 +122,13 @@ struct ComposedMod {
 };
 
 /// A mod's claims on an exclusive point a game's `prefer` line gave to
-/// another mod (D202): taken no further.
+/// another mod: taken no further.
 struct SetAsideClaim {
     std::string mod;
     std::string point;
 };
 
-/// SPEC-0042's Composition-build validation (D179): whether the game
+/// The Composition-build validation: whether the game
 /// `game`, of subject `gameSubject`, takes `mods`, whose own scenes hold the
 /// components `gameHolds`. Refused (`invalid_argument`, `ModRefused`) for:
 /// - any mod of a closed game, or one a curated game does not approve;

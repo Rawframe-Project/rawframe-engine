@@ -1,8 +1,8 @@
-// The UI's drawing (SPEC-0032), in Slang (ADR-0026, D475), from which the
-// SPIR-V and the WGSL are compiled: boxes (D375), images (D378), shadows
-// (D381), and glyphs (D398), from coverage or distance fields (D667) or in
-// their fonts' colors (D669), each one quad an instance, in the picture's pixels from its top left, y down,
-// inside every clip above it (D377); premultiplied, in linear light.
+// The UI's drawing, in Slang, from which the
+// SPIR-V and the WGSL are compiled: boxes, images, shadows,
+// and glyphs, from coverage or distance fields or in
+// their fonts' colors, each one quad an instance, in the picture's pixels from its top left, y down,
+// inside every clip above it; premultiplied, in linear light.
 //
 // An instance is numbered as Vulkan and WebGPU number it, its draw's first
 // instance included (SV_VulkanInstanceID): each draw starts at its run's
@@ -185,7 +185,7 @@ float4 premultipliedOklab(float4 color)
     return float4(toOklab(color.rgb / color.a) * color.a, color.a);
 }
 
-// Gradient `index` at `pixel` of the box `rect` (D382): premultiplied,
+// Gradient `index` at `pixel` of the box `rect`: premultiplied,
 // linear, its stops mixed in Oklab.
 float4 ramp(uint index, float2 pixel, float4 rect)
 {
@@ -421,7 +421,7 @@ float4 shadowFs(Corner corner) : SV_Target0
     return clipped(shadows[shadow].color * value, pixel, int(flags.y));
 }
 
-// A glyph's quad, of coverage or a field; a color glyph (`clip.w`, D669)
+// A glyph's quad, of coverage or a field; a color glyph (`clip.w`)
 // is drawn by `colorVs` and is no quad here.
 [shader("vertex")]
 Corner glyphVs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
@@ -429,7 +429,7 @@ Corner glyphVs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanc
     return cornerOf(glyphs[instance].clip.w > 0.5 ? float4(0.0) : glyphs[instance].rect, vertex, instance);
 }
 
-// A color glyph's quad (D669); any other is no quad here.
+// A color glyph's quad; any other is no quad here.
 [shader("vertex")]
 Corner colorVs(uint vertex : SV_VulkanVertexID, uint instance : SV_VulkanInstanceID)
 {
@@ -466,7 +466,7 @@ float4 glyphFs(Corner corner) : SV_Target0
     return clipped(glyphs[glyph].color * covered, pixel, int(glyphs[glyph].clip.x));
 }
 
-// The glyph's coverage from its multi-channel distance field (D667), scaled
+// The glyph's coverage from its multi-channel distance field, scaled
 // over its image and sampled between texels: the median of red, green, and
 // blue is the distance to the outline, 128 / 255 on it and 128 / 255 of a
 // spread for each of the field's pixels inside; `clip.y` is the picture's

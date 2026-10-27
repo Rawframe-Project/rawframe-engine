@@ -4,7 +4,7 @@ sends on a two-way stream and as a datagram, and waits for the server's
 answers on that stream, on a one-way stream of the server's, and as a
 datagram. Prints `webtransport: answered` and exits 0 when all three came.
 It also asks of the server's certificate what a browser pinning it by hash
-asks (D250): a P-256 key, at most 14 days of validity, and extensions.
+asks: a P-256 key, at most 14 days of validity, and extensions.
 
 usage: webtransport_client.py <port>
 """

@@ -1,4 +1,4 @@
-// SPEC-0020's update check as a library follows a channel (D424): every
+// The update check as a library follows a channel: every
 // record verified before it is read, the sequence the library holds kept
 // only once the Composition it names is installed.
 
@@ -19,10 +19,10 @@ namespace rawframe::install {
 
 namespace {
 
-/// SPEC-0020's ceiling on its records; an envelope is far smaller.
+/// The ceiling on its records; an envelope is far smaller.
 constexpr std::uint64_t kMaximumRecord = std::uint64_t{64} << 10U;
 constexpr std::uint64_t kMaximumEnvelope = 1024;
-/// SPEC-0021's ceiling on a CompositionRecord.
+/// The ceiling on a CompositionRecord.
 constexpr std::uint64_t kMaximumComposition = std::uint64_t{1} << 20U;
 constexpr std::uint64_t kMaximumSequence = 32;
 
@@ -75,7 +75,7 @@ result::Result<Followed> Installation::follow(std::string_view subject, release:
         held = value;
     }
     // The pointer the library already follows offers nothing new: a launcher
-    // that follows before every play is up to date, not replayed (D434).
+    // that follows before every play is up to date, not replayed.
     // Nothing is installed or kept, so this is as safe as a refusal.
     if (held == kPointer.sequence) {
         return Followed{.release = kPointer.release, .sequence = kPointer.sequence, .current = true};

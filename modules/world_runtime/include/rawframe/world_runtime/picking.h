@@ -1,6 +1,6 @@
 #pragma once
 
-// Which entity a ray meets, and where an author wrote it (D456): the first
+// Which entity a ray meets, and where an author wrote it: the first
 // body along the ray, from whoever owns the World's bodies and knows which
 // authored scene each entity came from (a game, through its physics and the
 // scenes it follows), so a reader that knows neither, the tooling endpoint,
@@ -42,7 +42,7 @@ public:
                                                      const std::array<double, 3>& toward) const noexcept = 0;
     /// Where `entity` was authored, as a pick tells it, with no ray: the
     /// scene's path and the entity's id in it, none for an entity made
-    /// while the World runs (D996).
+    /// while the World runs.
     [[nodiscard]] virtual std::optional<std::pair<std::string, base::Bits128>>
     authoredAt(world::EntityHandle entity) const noexcept = 0;
 };

@@ -1,9 +1,9 @@
 #pragma once
 
-// A scene's bookmarks (D796): up to nine views kept in the scene's editor
+// A scene's bookmarks: up to nine views kept in the scene's editor
 // state, a text file beside it (`<scene>.editor`) that the cook passes by,
 // having no sidecar, and that a version control system keeps like any
-// other document. Editor state, never the scene's data (ADR-0066).
+// other document. Editor state, never the scene's data.
 
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/document/json.h"

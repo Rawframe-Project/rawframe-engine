@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of an authored scene (D242), which a mod's Build
+// Coverage-guided fuzzing of an authored scene, which a mod's Build
 // can hold. The reader is exact: a scene it accepts writes back to the very
 // same text.
 

@@ -1,6 +1,6 @@
 // The Phase 1 shape in one process: a server World running a Kest game,
 // replicated over loopback to 64 headless bot clients that each steer their
-// own player, with the server's tick time measured against SPEC-0013's
+// own player, with the server's tick time measured against the tick
 // budget (p50 5 ms, p95 8.33 ms, p99 12.5 ms at 60 Hz). Under a sanitizer,
 // which checks every access, 16 bots walk the same paths.
 

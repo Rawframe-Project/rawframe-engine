@@ -273,7 +273,7 @@ RAWFRAME_TEST(AnInstanceKeepsEveryRuleOfItsForm) {
 }
 
 RAWFRAME_TEST(HostileScenesReadOnlyAsTheyWrite) {
-    // A mod's scene is an untrusted author's text (D183): seeded mutations of
+    // A mod's scene is an untrusted author's text: seeded mutations of
     // a real one, and whatever the reader accepts writes back to the very
     // same bytes, so there is no second reading of any scene.
     const auto kSeed = writeScene(sample());
@@ -299,7 +299,7 @@ RAWFRAME_TEST(HostileScenesReadOnlyAsTheyWrite) {
 }
 
 RAWFRAME_TEST(ACaseIsWrittenByItsName) {
-    // D270: an enum's case, by its name; an id and a name never meet, since
+    // An enum's case, by its name; an id and a name never meet, since
     // an id has dashes.
     Scene scene = sample();
     scene.entities[0].components[0].fields.insert(

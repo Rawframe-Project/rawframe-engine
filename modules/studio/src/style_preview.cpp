@@ -13,7 +13,7 @@ constexpr std::array<std::string_view, 6> kVariantNames = {
     "base", "focused", "hovered", "pressed", "disabled", "checked"};
 
 /// `under` with the parts `over` sets taken from `over`'s look, as a node
-/// in that variant shows its class (D431).
+/// in that variant shows its class.
 ui::Look overlaid(ui::Look under, const ui::StyleLook& over) {
     const auto kSets = [&](ui::LookPart part) {
         return (over.parts & static_cast<ui::LookParts>(part)) != 0;

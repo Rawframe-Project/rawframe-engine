@@ -1,6 +1,6 @@
 #pragma once
 
-// A chunk compressed as SPEC-0021's canonical packing does, inside the
+// A chunk compressed as the canonical packing does, inside the
 // module: no Zstandard type leaves it.
 
 #include <cstddef>

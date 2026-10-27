@@ -1,4 +1,4 @@
-// Plaza's lamps (D599): a walker joined is given a lamp, an entity of its
+// Plaza's lamps: a walker joined is given a lamp, an entity of its
 // own, which hangs at its right side, turned as its view is, and moves to
 // its player's right hand while a headset's controller holds it: the
 // hand's place from where the head began, turned with the view, set at the
@@ -60,7 +60,7 @@ struct Lamp {
     world::EntityHandle walker;
 };
 
-/// Plaza's files, held as a host holds what it fetched (D167), with its
+/// Plaza's files, held as a host holds what it fetched, with its
 /// meshes and their bodies left out: meshes are read cooked, and lamps
 /// need none.
 const composition::HeldFiles& plazaFiles() {

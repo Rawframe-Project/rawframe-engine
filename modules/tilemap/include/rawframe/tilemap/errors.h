@@ -7,7 +7,7 @@
 
 namespace rawframe::tilemap {
 
-/// The domain of every Error the tilemap format creates (D857).
+/// The domain of every Error the tilemap format creates.
 inline constexpr result::ErrorDomain kTilemapDomain{base::parseBits128Hex("ef24b84f8980944b4889d586e34c24eb").value};
 
 /// Codes within kTilemapDomain.

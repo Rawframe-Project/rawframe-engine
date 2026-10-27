@@ -1,6 +1,6 @@
 #pragma once
 
-// Files dropped on a window from outside (D802), as its host gathers them:
+// Files dropped on a window from outside, as its host gathers them:
 // where, in the window's logical pixels, and their paths, which are inert
 // text that grant nothing. An editor takes them; a game's window gathers
 // them too and nothing takes them, the oldest let go past a few.

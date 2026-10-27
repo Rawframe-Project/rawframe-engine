@@ -1,6 +1,6 @@
 #pragma once
 
-// Where a game Studio plays can be debugged from (D462): Studio plays each
+// Where a game Studio plays can be debugged from: Studio plays each
 // game in a directory of its own, named by the game, and writes there the
 // tooling endpoint a debugger attaches to; `rawframe-debug`, given the game,
 // reads it. Neither knows the other's ports.

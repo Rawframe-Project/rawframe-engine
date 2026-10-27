@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's sequences (SPEC-0051's sequence row, D869): entities of the
+// A game's sequences: entities of the
 // game's components of `rawframe.sequence.Player`'s type, each playing one
 // of the game's sequences, moved on by a system before the simulation
 // phase, so `rawframe.animation.step` plays what it started that tick. A

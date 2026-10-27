@@ -1,4 +1,4 @@
-// The sequence importer (D869): a sequence document cooked into a resource
+// The sequence importer: a sequence document cooked into a resource
 // of its own, its text as written; one that does not read, or whose
 // sidecar gives it settings, refused.
 

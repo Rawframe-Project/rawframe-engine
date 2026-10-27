@@ -19,7 +19,7 @@ result::Result<std::shared_ptr<const kest::Program>> refuse(std::string_view why
 
 // Read as text, never by the host's path rules, so a path is plain or not
 // the same way everywhere: on Windows `/x` is not absolute and `\` and `:`
-// separate (D237).
+// separate.
 bool plainGamePath(std::string_view path) {
     if (path.empty() || path == "kest.project" || path.find_first_of("\\:") != std::string_view::npos) {
         return false;

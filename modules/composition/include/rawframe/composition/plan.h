@@ -119,7 +119,7 @@ private:
 };
 
 /// Runs every registrar once, in ascending module-ID order, and validates the
-/// result under SPEC-0005 before anything is constructed. On any problem,
+/// result before anything is constructed. On any problem,
 /// `problems` lists them all and the Error summarizes.
 [[nodiscard]] result::Result<Plan> compose(const CompositionRequest& request, std::vector<Problem>& problems);
 

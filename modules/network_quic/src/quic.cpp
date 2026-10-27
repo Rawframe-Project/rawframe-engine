@@ -53,7 +53,7 @@ std::unexpected<result::Error> fail(result::ErrorClass errorClass, QuicError err
     return result::fail(errorClass, kQuicDomain, code(error), why);
 }
 
-/// Whether another socket holds `address`'s port (D470). MsQuic shares a
+/// Whether another socket holds `address`'s port. MsQuic shares a
 /// server's port across its partitions (SO_REUSEPORT), so a second server
 /// of the same user binds one already held with no error, and the system
 /// then splits the datagrams sent to it between the two: a client's
@@ -95,7 +95,7 @@ bool portHeld(const QUIC_ADDR& address) noexcept {
 }
 
 /// Whether a provider's listener also takes browsers: only a game's, where
-/// the network accepts them (D408).
+/// the network accepts them.
 bool browsersOn(const QuicSettings& settings, const network::ProviderProfile& profile) noexcept {
     return settings.webTransport && profile.application == network::kGameApplication;
 }
@@ -133,8 +133,8 @@ struct QuicNetwork::State {
     QuicSettings settings;
     /// The server identity as MsQuic loads it; empty without a certificate.
     std::vector<std::byte> pkcs12;
-    /// The providers' cores, so a renewed identity reaches every listener
-    /// (D419); each provider adds its own and takes it away as it goes.
+    /// The providers' cores, so a renewed identity reaches every listener;
+    /// each provider adds its own and takes it away as it goes.
     std::mutex coresMutex;
     std::vector<Core*> cores;
 
@@ -465,8 +465,8 @@ private:
 
 namespace {
 
-/// Keeps MsQuic's threads to `processors` of those this process may run on
-/// (D214). MsQuic takes this only before its library is in use, so a process
+/// Keeps MsQuic's threads to `processors` of those this process may run on.
+/// MsQuic takes this only before its library is in use, so a process
 /// with a network already open keeps the first one's choice.
 void spreadAcross(const QUIC_API_TABLE& api, std::uint32_t processors) noexcept {
     const std::size_t kWanted = processors != 0 ? processors : execution::effectiveParallelism();
@@ -623,7 +623,7 @@ result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const n
     }
     if (state_->settings.pin.has_value()) {
         // Validation is ours: the certificate must be the pinned one, and
-        // nothing about who signed it matters (D27).
+        // nothing about who signed it matters.
         QUIC_CREDENTIAL_CONFIG credential{};
         credential.Type = QUIC_CREDENTIAL_TYPE_NONE;
         credential.Flags = QUIC_CREDENTIAL_FLAG_CLIENT | QUIC_CREDENTIAL_FLAG_NO_CERTIFICATE_VALIDATION |
@@ -650,7 +650,7 @@ result::Result<std::unique_ptr<network::Provider>> QuicNetwork::provider(const n
 /// the libc calls MsQuic makes. MsQuic hands a socket's teardown, and a
 /// refused connection's (its CID lookup, its datagram lock, its packet
 /// keys' cipher state), from one of its threads to another through epoll,
-/// which the sanitizer cannot see as synchronisation (D335). No stack of
+/// which the sanitizer cannot see as synchronisation. No stack of
 /// ours is in these reports.
 extern "C" const char* __tsan_default_suppressions() {
     return "race:CxPlatSocketContextUninitializeComplete\n"

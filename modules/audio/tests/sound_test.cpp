@@ -1,4 +1,4 @@
-// Sound declarations: SPEC-0036's `audio.sound` documents read against a
+// Sound declarations: the `audio.sound` documents read against a
 // layout, every rule refused at its field, and the falloff presets as the
 // curves they name.
 

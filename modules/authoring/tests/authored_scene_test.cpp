@@ -1,4 +1,4 @@
-// Transactions and history (ADR-0065): all or nothing, bound to a
+// Transactions and history: all or nothing, bound to a
 // generation, one entry a transaction, undo and redo exact, the clean place
 // kept, and the history bounded without ever claiming a false clean.
 
@@ -202,7 +202,7 @@ RAWFRAME_TEST(ACoalescingTransactionKeepsFirstBeforeAndLastAfter) {
 }
 
 RAWFRAME_TEST(AnAmendingTransactionFoldsIntoItsAuthorsLatestEntry) {
-    // D976: a drag shown as it goes is one step, its first before and its
+    // A drag shown as it goes is one step, its first before and its
     // last after, however many commits it took.
     const auto kScene = opened();
     const auto kAmend = [&](std::string_view from, std::string_view to) {
@@ -227,7 +227,7 @@ RAWFRAME_TEST(AnAmendingTransactionFoldsIntoItsAuthorsLatestEntry) {
 }
 
 RAWFRAME_TEST(AmendingNeverGrowsAnEntryPastAJournalsLimits) {
-    // D976: an amended entry stays within a transaction's journal limits;
+    // An amended entry stays within a transaction's journal limits;
     // a change that would take it past them is an entry of its own, and
     // the history's own limits hold as they do for an append.
     const auto kScene = opened({.maximumJournalDeltas = 1});
@@ -324,7 +324,7 @@ RAWFRAME_TEST(TheViewIsKeptBesideTheDocumentAndPutBackByUndo) {
 }
 
 RAWFRAME_TEST(EachAuthorHasTheirOwnSelectionAndView) {
-    // ADR-0085 section 5, D887: authors 1 and 2 choose and look apart; an
+    // Authors 1 and 2 choose and look apart; an
     // author new to the scene has neither, and an entity another destroyed
     // has left an author's selection when they come back.
     std::unique_ptr<AuthoredScene> scene = opened();
@@ -367,7 +367,7 @@ RAWFRAME_TEST(ASelectionPastItsLimitIsRefused) {
 }
 
 RAWFRAME_TEST(DocumentsCommittedTogetherAreAllOrNothingWithTheirOwnHistories) {
-    // SPEC-0040's multi-document transaction (D497): both kept, each one
+    // The multi-document transaction: both kept, each one
     // entry in its own history, undo in one taking back only its part.
     const auto kLevel = opened();
     auto other = AuthoredScene::open(base::Bits128{8, 8}, levelText());
@@ -423,7 +423,7 @@ RAWFRAME_TEST(DocumentsCommittedTogetherAreAllOrNothingWithTheirOwnHistories) {
 }
 
 RAWFRAME_TEST(EachAuthorUndoesTheirOwnChangesOnly) {
-    // ADR-0085, D879: authors 1 and 2 change a scene in turn; each undo
+    // Authors 1 and 2 change a scene in turn; each undo
     // takes back its own author's latest change, even past another's, as
     // an entry of its own, and never another's.
     const auto kScene = opened();

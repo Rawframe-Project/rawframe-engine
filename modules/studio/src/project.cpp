@@ -25,7 +25,7 @@ std::string restOf(const std::string& line) {
 }
 
 std::string sectionName(std::string_view word) {
-    // A section of the game description by what it holds (D922).
+    // A section of the game description by what it holds.
     constexpr std::array<std::pair<std::string_view, std::string_view>, 24> kNames = {{
         {"program", "Program"},
         {"physics3d", "Physics"},
@@ -102,7 +102,7 @@ void ShellParticipant::showSettings() {
     for (std::size_t each = 0; each < sections.size() && entityRows_.size() < EditorsHeld::kMostRows; ++each) {
         const std::size_t kCount = held_.settings[each].size();
         const std::string kLabel = kCount > 1 ? sections[each] + " (" + std::to_string(kCount) + ")" : sections[each];
-        // As the design's sections (D922): its plain name, its count at the
+        // As the design's sections: its plain name, its count at the
         // row's end; the row still named by its word, as before.
         auto added = box(entitiesColumn_,
                          ui::Layout{.height = ui::pixels(26),
@@ -139,8 +139,7 @@ void ShellParticipant::showSettings() {
 
 void ShellParticipant::showSettingsPage(const std::vector<std::string>& sections) {
     // The center: every section's lines as the game description has them,
-    // under its plain name, each section pressed to edit in the Inspector
-    // (D922).
+    // under its plain name, each section pressed to edit in the Inspector.
     held_.settingsHeadings.clear();
     auto page = box(centerColumn_,
                     ui::Layout{.height = ui::pixels(0),

@@ -36,7 +36,7 @@ void clusterProbes(SceneFrame& frame,
         const Vector kCenter = {static_cast<float>(each.position[0] - camera.eye[0]),
                                 static_cast<float>(each.position[1] - camera.eye[1]),
                                 static_cast<float>(each.position[2] - camera.eye[2])};
-        // Its box grown by a tenth, across which it fades out (D340).
+        // Its box grown by a tenth, across which it fades out.
         const float kRadius = 1.1F * std::sqrt((kProbe.halfX * kProbe.halfX) + (kProbe.halfY * kProbe.halfY) +
                                                (kProbe.halfZ * kProbe.halfZ));
         if (!view.sees || outsideView(axes, view, kCenter, kRadius)) {

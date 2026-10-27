@@ -64,9 +64,9 @@ const std::array<EngineHint, 65> kEngineHints{{
     {.type = "rawframe.physics3d.Body3D", .field = "motion", .labels = kMotions},
     {.type = "rawframe.physics3d.Body3D", .field = "shape", .labels = kShapes3d},
     {.type = "rawframe.physics3d.Body3D", .field = "friction", .least = 0.0, .most = 1.0},
-    // The game's mesh a body of shape mesh is made of (D987).
+    // The game's mesh a body of shape mesh is made of.
     {.type = "rawframe.physics3d.Mesh3D", .field = "mesh", .asset = "mesh"},
-    // An emitter's, a trail's, and a beam's (D831): what each field is
+    // An emitter's, a trail's, and a beam's: what each field is
     // measured in, as model.kest says it, and its colors and material.
     {.type = "rawframe.model.ParticleEmitter", .field = "material", .asset = "material"},
     {.type = "rawframe.model.ParticleEmitter", .field = "colorStart", .color = true},

@@ -1,10 +1,10 @@
 #pragma once
 
-// A game's predicted Kest systems over one entity, for a predicting client
-// (SPEC-0041): its own World holding only the player, its own machine, and
+// A game's predicted Kest systems over one entity, for a predicting client:
+// its own World holding only the player, its own machine, and
 // the same program the server runs. A game with physics, of either
 // dimension, also steps the player's body there, among the level's static
-// bodies (D36).
+// bodies.
 
 #include "rawframe/kest/machine.h"
 #include "rawframe/kest/program.h"

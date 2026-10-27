@@ -1,7 +1,7 @@
 #pragma once
 
 // A window's input handed between window hosts through the tooling
-// protocol (D790), so an editor shows a game in its own viewport and the
+// protocol, so an editor shows a game in its own viewport and the
 // game is played there. An editor's window host lends a `Forwarding` as
 // `rawframe.tooling.forwarding`: the editor says over which area of its
 // window it shows the game, and the host gives it what lands there in
@@ -43,12 +43,12 @@ public:
     }
 
     /// The editor's side: the parts of the area it draws its own controls
-    /// over, which keep what lands on them (D916), each as the area is.
+    /// over, which keep what lands on them, each as the area is.
     void exceptOver(std::vector<std::array<float, 4>> holes) {
         holes_ = std::move(holes);
     }
     /// The editor's side: whether the keys are handed over only while a
-    /// press handed over is held (D916), as an editor's viewport flies its
+    /// press handed over is held, as an editor's viewport flies its
     /// camera with them while a button is down and keeps them otherwise.
     void keysWhileHeld(bool held) noexcept {
         keysWhileHeld_ = held;

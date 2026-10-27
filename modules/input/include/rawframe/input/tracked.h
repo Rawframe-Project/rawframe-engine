@@ -1,6 +1,6 @@
 #pragma once
 
-// A tracked source (ADR-0081 section 4, D663): a hand's joints as a runtime
+// A tracked source: a hand's joints as a runtime
 // that tracks hands located them, never an action value, never bound, and
 // never a second authority beside the mapper. Its shape is fixed: both
 // hands, each OpenXR's 26 joints in its order (the palm, the wrist, then

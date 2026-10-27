@@ -40,7 +40,7 @@ std::optional<authoring::FieldKind> kindOf(rawframe::kest::FieldKind kind) {
         return authoring::FieldKind::Truth;
     case K::Tag:
         return authoring::FieldKind::Case;
-    // A case's data is the game's to set, not a scene's (D271).
+    // A case's data is the game's to set, not a scene's.
     case K::Payload:
     case K::Other:
         return std::nullopt;
@@ -110,7 +110,7 @@ result::Result<authoring::ComponentCatalog> catalogOf(const rawframe::world_kest
                     .cases = *kKind == authoring::FieldKind::Case ? field.cases : std::vector<std::string>{}});
             }
         }
-        // What the engine and the game say of its fields (D783), each to a
+        // What the engine and the game say of its fields, each to a
         // number field it has: a color is an unsigned whole number, and
         // labels name whole numbers.
         for (rawframe::world_kest::GameFieldHint& hint : rawframe::world_kest::fieldHintsOf(game, component)) {

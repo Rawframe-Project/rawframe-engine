@@ -1,6 +1,6 @@
 #pragma once
 
-// The content catalog (SPEC-0008): every selected manifest combined into one
+// The content catalog: every selected manifest combined into one
 // immutable lookup of resources, each bound to the source that holds its
 // bytes, with a fingerprint of what it means and nothing of where it lives.
 

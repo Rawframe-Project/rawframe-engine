@@ -1,4 +1,4 @@
-# An authoring session over a game's directory (ADR-0032, SPEC-0040, D407):
+# An authoring session over a game's directory:
 # records in, replies out, the scenes it opens kept with their histories,
 # and a preview's tooling link. Toolchain only: rawframe-author and Studio
 # hold one; no client or server closure contains it.

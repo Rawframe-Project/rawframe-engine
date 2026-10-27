@@ -1,7 +1,7 @@
 #pragma once
 
-// A field's typed control (D784): what the game and the engine tell its
-// authors of it (D783), as `authoring.describe` gives it, made into what
+// A field's typed control: what the game and the engine tell its
+// authors of it, as `authoring.describe` gives it, made into what
 // the Inspector shows and back into what an author types.
 
 #include "rawframe/document/json.h"
@@ -46,17 +46,17 @@ void readHints(const document::Value& field, Catalog::Field& into);
 
 /// A field's name as words, its first capital ("fixedRotation" reads
 /// "Fixed rotation"), and a component's by its own last part, a pose the
-/// entity's transform (D915).
+/// entity's transform.
 [[nodiscard]] std::string prettyField(std::string_view name);
 [[nodiscard]] std::string prettyComponent(std::string_view name);
 
-/// A turn as the Inspector shows it (D915): degrees about X, Y, and Z,
+/// A turn as the Inspector shows it: degrees about X, Y, and Z,
 /// applied Z first, then X, then Y (yaw over pitch over roll), from a unit
 /// quaternion (x, y, z, w), and back.
 [[nodiscard]] std::array<double, 3> degreesOf(const std::array<double, 4>& quaternion) noexcept;
 [[nodiscard]] std::array<double, 4> quaternionOf(const std::array<double, 3>& degrees) noexcept;
 
-/// The game's assets an asset field is chosen from (D786): none, then each
+/// The game's assets an asset field is chosen from: none, then each
 /// of its kind by name; nothing for a field that holds no asset.
 [[nodiscard]] std::vector<std::string> assetChoices(const Catalog::Field& type, std::span<const Asset> assets);
 

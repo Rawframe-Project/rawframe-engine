@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0012's host lifecycle and health. The Host owns one HostLifecycle and
+// The host lifecycle and health. The Host owns one HostLifecycle and
 // alone moves it; participants read it through their context (admission is
 // open only while active) and report the evidence the Host reads back: the
 // connections they still serve, which end a drain early, and their health.
@@ -37,7 +37,7 @@ enum class Health : std::uint8_t {
 [[nodiscard]] std::string_view describe(HostState state) noexcept;
 [[nodiscard]] std::string_view describe(Health health) noexcept;
 
-/// Whether SPEC-0012 allows `from -> to`.
+/// Whether the lifecycle allows `from -> to`.
 [[nodiscard]] bool allowed(HostState from, HostState to) noexcept;
 
 class HostLifecycle {
@@ -47,9 +47,8 @@ public:
         return state_.load(std::memory_order_acquire);
     }
 
-    /// Gameplay admission: open only while active and not degraded
-    /// (SPEC-0012 lets degraded close it; SPEC-0013's canonical profile
-    /// does, D212), so it reopens once the Host is healthy again.
+    /// Gameplay admission: open only while active and not degraded,
+    /// so it reopens once the Host is healthy again.
     [[nodiscard]] bool admitting() const noexcept {
         return state() == HostState::Active && !degraded_.load(std::memory_order_acquire);
     }

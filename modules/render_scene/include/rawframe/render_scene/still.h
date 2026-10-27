@@ -1,9 +1,8 @@
 #pragma once
 
-// Whether a view's frames draw the same picture (D952), so a device that
+// Whether a view's frames draw the same picture, so a device that
 // draws on its processor does not draw an editor's idle view sixty times a
-// second: what the frames that join a picture say when they are unchanged
-// (D494).
+// second: what the frames that join a picture say when they are unchanged.
 
 #include "rawframe/render_scene/scene.h"
 
@@ -28,10 +27,10 @@ public:
     /// one frame before counting, as many as a temporal resolve gathers
     /// where the frame resolves one, and three seconds of adaptation where
     /// its exposure adapts to what it sees, by the metering's own steps, so
-    /// a device slow to draw stands as soon (D979).
+    /// a device slow to draw stands as soon.
     [[nodiscard]] bool still(const SceneFrame& frame);
     /// Whether what moves with time alone is left out of every frame, as an
-    /// editor's edited World is shown as its documents say (D979): its
+    /// editor's edited World is shown as its documents say: its
     /// emitters' particles, its skinned poses, which play on the client
     /// while the documents stand, and its exposure's adapting, which is not
     /// waited for.
@@ -47,7 +46,7 @@ public:
 private:
     std::optional<SceneFrame> last_;
     std::uint64_t stood_ = 0;
-    /// The seconds of adaptation it has stood for (D979).
+    /// The seconds of adaptation it has stood for.
     double stoodSeconds_ = 0;
     bool timeHeld_ = false;
 };

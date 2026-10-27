@@ -82,7 +82,7 @@ std::string_view trimmed(std::string_view text) noexcept {
     return text.substr(kFirst, text.find_last_not_of(kSpace) - kFirst + 1);
 }
 
-/// A self-signed identity's renewal (D419): how long after the first
+/// A self-signed identity's renewal: how long after the first
 /// iteration, and for how many days each new one lives.
 struct Renewal {
     execution::MonotonicDuration after;
@@ -101,8 +101,8 @@ public:
           renewal_(renewal), conditions_(conditions), clock_(&clock) {
     }
 
-    /// Each provider over the conditions set, as a slower link would be
-    /// (D805): a game played on one machine as it would be over the world.
+    /// Each provider over the conditions set, as a slower link would be:
+    /// a game played on one machine as it would be over the world.
     result::Result<std::unique_ptr<network::Provider>> provider(const network::ProviderProfile& profile) override {
         RAWFRAME_TRY_ASSIGN(std::unique_ptr<network::Provider> made, network_->provider(profile));
         // The game's connections only: a tool's endpoint (an editor's
@@ -136,10 +136,10 @@ public:
         return {};
     }
 
-    /// MsQuic's heap, twice a second at 120 iterations (D234). On the first
+    /// MsQuic's heap, twice a second at 120 iterations. On the first
     /// iteration, the fingerprint file: every participant has started, so
     /// whatever listens through this transport is listening, and a launcher
-    /// that waits for the file can start its client (D395).
+    /// that waits for the file can start its client.
     void runHostPhase(composition::HostPhase, const composition::HostFrame& frame) noexcept override {
         if (context_ == nullptr) {
             return;
@@ -165,7 +165,7 @@ private:
     /// The fingerprint file, whole or not at all. Unwritten, it is tried
     /// again twice a second and its error logged once: on Windows the
     /// rename fails while another process, a virus scanner among them,
-    /// holds the old file open (D585).
+    /// holds the old file open.
     void writeFingerprint() {
         if (!fingerprintFile_.has_value() || !identity_.has_value()) {
             return;
@@ -218,7 +218,7 @@ private:
     bool unwritten_ = false;
     std::optional<Renewal> renewal_;
     std::optional<execution::MonotonicInstant> renewAt_;
-    /// The conditions each provider is made under (D805), and the clock
+    /// The conditions each provider is made under, and the clock
     /// they hold by.
     network::LinkConditions conditions_;
     const execution::MonotonicSource* clock_ = nullptr;

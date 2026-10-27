@@ -1,14 +1,14 @@
 #pragma once
 
-// The camera a preview shows the World through (D432): an authoring
+// The camera a preview shows the World through: an authoring
 // client looks at a running game from where its author looks at the scene,
 // in place of the first local player's own camera, which still says how
 // the picture is exposed and graded. A client host lends one as
 // `rawframe.view.preview_camera`; its tooling endpoint sets it, and the
 // scene renderer reads it each frame. A press in the window while it looks
-// is kept as the ray it makes, which the tooling endpoint tells the author
-// (D456), so what they clicked can be found. The scene renderer tells it
-// what each frame it drew holds (D842).
+// is kept as the ray it makes, which the tooling endpoint tells the author,
+// so what they clicked can be found. The scene renderer tells it
+// what each frame it drew holds.
 
 #include "rawframe/composition/participant.h"
 #include "rawframe/view/flight.h"
@@ -30,12 +30,12 @@
 namespace rawframe::view {
 
 /// The ring a mark is drawn with about its point on the level plane, its
-/// turn's handle (D467): its radius in meters, past the axes' meter, and
+/// turn's handle: its radius in meters, past the axes' meter, and
 /// the pieces it is drawn in.
 inline constexpr double kMarkRingRadius = 1.25;
 inline constexpr std::size_t kMarkRingPieces = 48;
 
-/// How a preview's scene is drawn (D794): lit as the game is, its
+/// How a preview's scene is drawn: lit as the game is, its
 /// surfaces' own colors unlit, or their normals as colors. Named by
 /// `viewModeNamed`'s names, which are what a tool sends.
 enum class ViewMode : std::uint8_t {
@@ -48,17 +48,17 @@ enum class ViewMode : std::uint8_t {
 /// another.
 [[nodiscard]] std::optional<ViewMode> viewModeNamed(std::string_view name) noexcept;
 
-/// Where view `at` of a preview split `count` ways lies in its window
-/// (D797): one fills it, two stand side by side, three are its left half
+/// Where view `at` of a preview split `count` ways lies in its window:
+/// one fills it, two stand side by side, three are its left half
 /// and the right half's top and bottom, four its quarters from the top
 /// left across. The first is where the preview's own look is drawn,
 /// picked in, and moved.
 [[nodiscard]] Region previewRegion(std::size_t count, std::size_t at) noexcept;
 
-/// What a preview draws over its scene (D798), a bit each: each body's
-/// collider, each light's reach, the ground's grid an editor shows (D914),
-/// and the game's own UI, which an editor's view leaves out unless asked
-/// (D933). Named by `overlayNamed`'s names, which are what a tool sends.
+/// What a preview draws over its scene, a bit each: each body's
+/// collider, each light's reach, the ground's grid an editor shows,
+/// and the game's own UI, which an editor's view leaves out unless asked.
+/// Named by `overlayNamed`'s names, which are what a tool sends.
 enum class Overlay : std::uint8_t {
     Colliders = 1,
     Lights = 2,
@@ -70,14 +70,14 @@ enum class Overlay : std::uint8_t {
 /// for another.
 [[nodiscard]] std::optional<Overlay> overlayNamed(std::string_view name) noexcept;
 
-/// One figure of the frame a preview last drew (D842): what the scene
+/// One figure of the frame a preview last drew: what the scene
 /// renderer counted, by a name it owns ("draws", "lights_culled").
 struct FrameFigure {
     std::string_view name;
     std::int64_t value = 0;
 };
 
-/// One step of the frame a preview last drew (D842): a pass by the name
+/// One step of the frame a preview last drew: a pass by the name
 /// the scene renderer owns ("opaque", "shadow_cascade"), and what it drew
 /// there: a mesh by its identity, a material by its place among the
 /// frame's, and how many instances, in the order they were drawn.
@@ -90,14 +90,14 @@ struct FrameStep {
 
 /// A pass of the frame a preview last drew, by the scene renderer's name
 /// for it, and the nanoseconds the GPU took from its start to its end, all
-/// of that name together (D894).
+/// of that name together.
 struct PassTiming {
     std::string pass;
     std::uint64_t nanoseconds = 0;
 };
 
-/// What one author has chosen, outlined in the preview in their color
-/// (D907): the color, red, green, and blue from nought to one, and a box
+/// What one author has chosen, outlined in the preview in their color:
+/// the color, red, green, and blue from nought to one, and a box
 /// about each chosen thing, its center and then half its sides along x, y,
 /// and z, in World meters.
 struct Outline {
@@ -109,11 +109,11 @@ struct Outline {
 /// frame says how many it left out.
 inline constexpr std::size_t kMostFrameSteps = 4096;
 
-/// A mark's handles a preview draws (D974), a bit each.
+/// A mark's handles a preview draws, a bit each.
 inline constexpr std::uint8_t kMarkAxes = 1;
 inline constexpr std::uint8_t kMarkRing = 2;
 
-/// A part of a mark: none, an axis (X, Y, Z), or the ring (D468).
+/// A part of a mark: none, an axis (X, Y, Z), or the ring.
 enum class MarkPart : std::uint8_t {
     None,
     X,
@@ -136,7 +136,7 @@ public:
     [[nodiscard]] const std::optional<Perspective>& looking() const noexcept {
         return view_;
     }
-    /// Steered as an editor's viewport camera is (D913): what the input
+    /// Steered as an editor's viewport camera is: what the input
     /// asks gathered until the next `fly`, which moves the view it looks
     /// through. Counted, with the view as flown, so an editor tells where
     /// it was flown to.
@@ -173,11 +173,11 @@ public:
     [[nodiscard]] const Flight& flight() const noexcept {
         return flight_;
     }
-    /// A point the preview marks, where an author chose something (D464),
+    /// A point the preview marks, where an author chose something,
     /// drawn as three axes there; none for none. Counted, so a reader tells
     /// a new mark.
     /// Its `handles` drawn, a bit each, 1 the axes and 2 the ring, as
-    /// the author's tool moves or turns (D974).
+    /// the author's tool moves or turns.
     void mark(const std::optional<std::array<double, 3>>& at,
               MarkPart lit = MarkPart::None,
               std::uint8_t handles = kMarkAxes | kMarkRing) noexcept {
@@ -189,8 +189,7 @@ public:
     [[nodiscard]] std::uint8_t handles() const noexcept {
         return handles_;
     }
-    /// The part of the mark drawn lit, the handle the pointer is over
-    /// (D468).
+    /// The part of the mark drawn lit, the handle the pointer is over.
     [[nodiscard]] MarkPart lit() const noexcept {
         return lit_;
     }
@@ -202,7 +201,7 @@ public:
     }
 
     /// The paths the previewed scene's splines make, each its points in
-    /// order, drawn over the scene while it looks (D891); counted, so a
+    /// order, drawn over the scene while it looks; counted, so a
     /// reader tells new ones.
     void showPaths(std::vector<std::vector<std::array<double, 3>>> paths) {
         paths_ = std::move(paths);
@@ -215,8 +214,8 @@ public:
         return pathsShown_;
     }
 
-    /// What each author has chosen, outlined over the scene while it looks
-    /// (D907), in place of what was; counted, so a reader tells new ones.
+    /// What each author has chosen, outlined over the scene while it looks,
+    /// in place of what was; counted, so a reader tells new ones.
     void showOutlines(std::vector<Outline> outlines) {
         outlines_ = std::move(outlines);
         ++outlinesShown_;
@@ -228,7 +227,7 @@ public:
         return outlinesShown_;
     }
 
-    /// The layers whose entities the preview leaves out (D791), as
+    /// The layers whose entities the preview leaves out, as
     /// `rawframe.world.layer` numbers them; none hides nothing.
     void hide(std::vector<std::uint32_t> layers) {
         hidden_ = std::move(layers);
@@ -239,7 +238,7 @@ public:
 
     /// The looks the preview's window is split to show beside its own,
     /// as many as it allows, drawn in `previewRegion`'s places after the
-    /// first (D797); none shows the one look in the whole window.
+    /// first; none shows the one look in the whole window.
     void split(std::vector<Perspective> others) {
         others_ = std::move(others);
         if (others_.size() + 1 > views_) {
@@ -247,7 +246,7 @@ public:
         }
     }
     /// The views its window may be split into, its host's to allow before
-    /// the renderer starts, which places their regions then (D797): one,
+    /// the renderer starts, which places their regions then: one,
     /// none split, unless the window's settings say more.
     void allow(std::size_t views) noexcept {
         views_ = std::max<std::size_t>(views, 1);
@@ -255,7 +254,7 @@ public:
     [[nodiscard]] std::size_t views() const noexcept {
         return views_;
     }
-    /// Whether it shows an editor's edited World (D912, D979), whose
+    /// Whether it shows an editor's edited World, whose
     /// picture stands while only time moves it: an emitter's particles, a
     /// post process, a program material's time. Its host's to say before
     /// the renderer starts.
@@ -269,7 +268,7 @@ public:
         return others_;
     }
 
-    /// What the preview draws over its scene while it looks (D798), as
+    /// What the preview draws over its scene while it looks, as
     /// `Overlay` bits.
     void overlay(std::uint8_t overlays) noexcept {
         overlays_ = overlays;
@@ -278,7 +277,7 @@ public:
         return overlays_;
     }
 
-    /// How the preview's scene is drawn while it looks (D794).
+    /// How the preview's scene is drawn while it looks.
     void show(ViewMode mode) noexcept {
         mode_ = mode;
     }
@@ -287,7 +286,7 @@ public:
     }
 
     /// Where the pointer is while the preview looks, as its ray, none once
-    /// it left the window (D468): the handle under it is drawn lit.
+    /// it left the window: the handle under it is drawn lit.
     void pointed(const std::optional<Ray>& ray) noexcept {
         pointing_ = ray;
     }
@@ -298,7 +297,7 @@ public:
     /// The wheel turned while the preview looks, detents toward the user
     /// positive, and the pointer carried with the right button held, in
     /// pixels: each kept as a total from the start, so a reader tells what
-    /// moved since it last read (D469).
+    /// moved since it last read.
     void wheeled(double detents) noexcept {
         wheel_ += detents;
     }
@@ -312,7 +311,7 @@ public:
     [[nodiscard]] const std::array<double, 2>& orbit() const noexcept {
         return orbit_;
     }
-    /// The same with Shift held, freelook's (D472): a drag turns the view
+    /// The same with Shift held, freelook's: a drag turns the view
     /// about its eye, the wheel flies along it. Totals likewise.
     void looked(double x, double y) noexcept {
         look_[0] += x;
@@ -330,7 +329,7 @@ public:
 
     /// A press in the window while the preview looks, as its ray.
     /// `modifiers` are the window's modifier bits held with the press: a
-    /// drag with Shift moves height, with Control turns (D463).
+    /// drag with Shift moves height, with Control turns.
     void clicked(const Ray& ray, std::uint16_t modifiers = 0) noexcept {
         lastClick_ = ray;
         clickModifiers_ = modifiers;
@@ -348,7 +347,7 @@ public:
         return lastClick_;
     }
     /// The press let go while the preview looks, as the ray where it was
-    /// let go (D457): with the press's, a drag.
+    /// let go: with the press's, a drag.
     void released(const Ray& ray) noexcept {
         lastRelease_ = ray;
         releases_ = clicks_;
@@ -362,7 +361,7 @@ public:
     }
 
     /// The scene renderer's description of the frame it last drew from
-    /// this preview (D842): its figures and its steps, at most
+    /// this preview: its figures and its steps, at most
     /// `kMostFrameSteps`, each in its order; and how many frames it has
     /// described, none before the first.
     void described(std::span<const FrameFigure> figures, std::span<const FrameStep> steps) {
@@ -381,7 +380,7 @@ public:
         return described_;
     }
     /// Whether an editor has asked what the preview's frames hold, from
-    /// which on their passes are timed on the GPU (D894); asking is a
+    /// which on their passes are timed on the GPU; asking is a
     /// reader's, so a reader of the frames that changes nothing else may.
     void askTimes() const noexcept {
         timesAsked_ = true;
@@ -389,7 +388,7 @@ public:
     [[nodiscard]] bool timesAsked() const noexcept {
         return timesAsked_;
     }
-    /// The passes of the last frame the GPU timed, in their order (D894);
+    /// The passes of the last frame the GPU timed, in their order;
     /// none where the device times none.
     void passesTimed(std::vector<PassTiming> passes) {
         timings_ = std::move(passes);

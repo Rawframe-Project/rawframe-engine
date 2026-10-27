@@ -1,4 +1,4 @@
-// Modifier stages (SPEC-0035, D138): two-bone IK and look-at declared on a
+// Modifier stages: two-bone IK and look-at declared on a
 // graph, run in order on its pose, by weight and relevance.
 
 #include "rawframe/animation/errors.h"

@@ -1,4 +1,4 @@
-# Cooking (ADR-0024): sidecar-identified sources through registered
+# Cooking: sidecar-identified sources through registered
 # importers into content-addressed artifacts, a content manifest, and a
 # receipt. Import tooling only; no client or server closure may depend on it.
 rawframe_module(NAME cook

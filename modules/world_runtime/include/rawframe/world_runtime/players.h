@@ -2,9 +2,9 @@
 
 // Players as the World hears of them: an entity made for a connection when
 // it is admitted and gone when it leaves, and the durable identity it plays
-// under. On a server that asks no platform (ADR-0043), that identity is the
+// under. On a server that asks no platform, that identity is the
 // session the client asked for, which the game's admission rule vetted
-// against the client's ticket (D103); a client that asks for no session
+// against the client's ticket; a client that asks for no session
 // plays without one. Whoever owns players (replication) tells a
 // PlayerPresence, if the composition has one, between ticks on the Host
 // thread, while the World's structure is unlocked.

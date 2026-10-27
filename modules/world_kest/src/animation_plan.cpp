@@ -95,7 +95,7 @@ animatorSettings(const GameFiles& files, std::span<const kest::TypeLayout> layou
         }
         clips.push_back(animation::NamedClip{.id = kClip, .clip = std::make_shared<const animation::Clip>(*clip)});
     }
-    // A graph of property clips alone (D139) poses no bone.
+    // A graph of property clips alone poses no bone.
     result::Result<animation::Skeleton> skeleton = animation::Skeleton{};
     if (skeletonId.has_value()) {
         RAWFRAME_TRY_ASSIGN(const std::string_view kSkeletonText, files.animationDocument(*skeletonId));

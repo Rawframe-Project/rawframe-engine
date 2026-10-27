@@ -72,9 +72,9 @@ SceneGrading gradingOf(const std::optional<Grading>& asked) noexcept {
                       .saturation = std::max(kGrade.saturation, 0.0F),
                       .contrast = std::max(kGrade.contrast, 0.0F),
                       .table = kGrade.table};
-    // The white the temperature and tint name, moved from D65 along the
-    // daylight locus (warmer lowers its x less than cooler raises it), and
-    // the light scaled in LMS by D65's white over it.
+    // The white the temperature and tint name, moved from CIE's standard
+    // daylight white along the daylight locus (warmer lowers its x less than
+    // cooler raises it), and the light scaled in LMS by that white over it.
     const float kTemperature = std::clamp(kGrade.temperature, -1.5F, 1.5F);
     const float kTint = std::clamp(kGrade.tint, -1.5F, 1.5F);
     const float kX = 0.31271F - (kTemperature * (kTemperature < 0 ? 0.1F : 0.05F));

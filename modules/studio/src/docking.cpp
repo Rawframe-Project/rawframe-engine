@@ -77,7 +77,7 @@ bool ShellParticipant::dockedRight(Dock pane) const {
 bool ShellParticipant::paneShown(Dock pane) const {
     // In the bottom dock, or the right one where it is docked there, so a
     // pane docked on the right follows what it shows as it does below.
-    // Or apart, in a window of its own (D988).
+    // Or apart, in a window of its own.
     return dockShown_ == pane || docking_.shown == pane ||
            std::ranges::contains(docking_.torn, dockOwner(pane), &TornPane::pane);
 }
@@ -101,15 +101,15 @@ ShellParticipant::Dock ShellParticipant::readRightPanes() {
 }
 
 void ShellParticipant::showDock(Dock pane) {
-    // The Environment is the right dock's Scene settings (D921).
+    // The Environment is the right dock's Scene settings.
     if (pane == Dock::Environment) {
         showRight(true);
         return;
     }
     if (std::ranges::contains(docking_.torn, dockOwner(pane), &TornPane::pane)) {
-        // Shown apart, where it stays (D988).
+        // Shown apart, where it stays.
     } else if (dockedRight(pane)) {
-        // Docked on the right, beside the Inspector (D980).
+        // Docked on the right, beside the Inspector.
         if (tree_->contains(held_.rightDock)) {
             showInRight(paneNode(pane));
             docking_.shown = pane;
@@ -135,7 +135,7 @@ void ShellParticipant::showDock(Dock pane) {
 
 void ShellParticipant::showRight(bool sceneSettings) {
     // The right dock's two tabs: the Inspector, or the scene's settings,
-    // the Environment panel (D921).
+    // the Environment panel.
     if (tree_->contains(held_.rightDock)) {
         showInRight(sceneSettings ? held_.environmentColumn : componentsColumn_);
     }
@@ -167,7 +167,7 @@ void ShellParticipant::arrangeTabs() {
     for (const Dock kPane : kMovablePanes) {
         static_cast<void>(tree_->detach(tabNode(kPane)));
     }
-    // A pane shown apart has its window's own title (D988).
+    // A pane shown apart has its window's own title.
     for (const Dock kPane : kMovablePanes) {
         if (!std::ranges::contains(docking_.torn, kPane, &TornPane::pane)) {
             static_cast<void>(
@@ -254,7 +254,7 @@ void ShellParticipant::dropTab() {
         dockPane(*kHeld, false);
     } else if ((*kPointer)[0] < 0 || (*kPointer)[1] < 0 || (*kPointer)[0] >= static_cast<float>(width_) / scale_ ||
                (*kPointer)[1] >= static_cast<float>(height_) / scale_) {
-        // Let go outside the window: shown apart in one of its own (D988).
+        // Let go outside the window: shown apart in one of its own.
         tearOut(*kHeld);
     }
 }

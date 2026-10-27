@@ -11,7 +11,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// What the depth of field's passes read (std140, D336): the circle of
+/// What the depth of field's passes read (std140): the circle of
 /// confusion's radius in pixels for a point infinitely far, the focus and
 /// the near plane in meters, and the longest radius in pixels.
 struct LensBlock {
@@ -19,7 +19,7 @@ struct LensBlock {
 };
 static_assert(sizeof(LensBlock) == 16, "the depth of field's shaders read their block as 16 bytes");
 
-/// ADR-0051's depth of field (D336), the post chain's third stage, when the
+/// The depth of field, the post chain's third stage, when the
 /// view asks: a thin lens of the view's field on a full-frame sensor. One
 /// pass halves the light beside each texel's circle of confusion, another
 /// gathers Gustafsson's golden-angle bokeh at half size, and a third

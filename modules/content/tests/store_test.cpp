@@ -1,4 +1,4 @@
-// The store against SPEC-0008's read algorithm: bytes returned only when
+// The store against the read algorithm: bytes returned only when
 // exactly the declared length and digest, typed and pinned refusals before
 // any input or output, memory and directory sources alike, a directory
 // source no link can lead out of, reads that finish in the generation they
@@ -291,7 +291,7 @@ struct TestPublisher {
     }
 };
 
-/// A Build on disk as SPEC-0021 lays it out: resource 1 "bang" in one raw
+/// A Build on disk as it is laid out: resource 1 "bang" in one raw
 /// chunk, resource 2 "abcdefgh" in two ("abcd", "efgh"). `chunksOf2`
 /// overrides resource 2's chunk texts in the manifest, `codec` every
 /// chunk's codec.

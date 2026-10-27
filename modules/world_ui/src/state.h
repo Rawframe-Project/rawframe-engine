@@ -21,7 +21,7 @@
 
 namespace rawframe::world_ui {
 
-/// What a node's range was last given from its fields (D621), and its
+/// What a node's range was last given from its fields, and its
 /// thumb: the value the player moves stays until the node's own changes.
 struct RangeGiven {
     std::uint32_t axis = 0;
@@ -33,7 +33,7 @@ struct RangeGiven {
     friend bool operator==(const RangeGiven&, const RangeGiven&) = default;
 };
 
-/// The popup a node was last made (D623): its side, its gap, and the node
+/// The popup a node was last made: its side, its gap, and the node
 /// it is placed beside, by its key.
 struct PopupGiven {
     std::uint32_t side = 0;
@@ -47,20 +47,20 @@ struct PopupGiven {
 struct Entry {
     std::optional<ui::Node> node;
     ui::NodeFields value;
-    /// The words it shows, as last read (D427).
+    /// The words it shows, as last read.
     Typed words;
     bool seen = false;
-    /// Its node was made a text field (D426), and shows its label as the
-    /// field's placeholder now, not what was typed (D428).
+    /// Its node was made a text field, and shows its label as the
+    /// field's placeholder now, not what was typed.
     bool editable = false;
     bool placeholder = false;
-    /// The states its node was last given (D431).
+    /// The states its node was last given.
     ui::States states;
     /// The local player whose view it is in, whose locale its words are in.
     std::size_t player = 0;
-    /// The range its node was last given (D621): none for no range.
+    /// The range its node was last given: none for no range.
     std::optional<RangeGiven> ranged;
-    /// A checkable node's `checked` as it last read (D622), none for one
+    /// A checkable node's `checked` as it last read, none for one
     /// not checkable; and whether it is checked now, which the player's
     /// presses change until `checked` itself does.
     std::optional<std::uint32_t> checkGiven;
@@ -74,7 +74,7 @@ struct Entry {
     std::uint32_t component = 0;
 };
 
-/// The node holding focus (D430): a text field given the keyboard, its
+/// The node holding focus: a text field given the keyboard, its
 /// editing, or any node reached by navigation, ringed while it holds it.
 struct Focus {
     Entry* entry = nullptr;
@@ -130,17 +130,17 @@ struct WorldUi::State {
     std::optional<Focus> focus;
     std::optional<view::UiTyping::Caret> caret;
     std::vector<view::Submitted> submitted;
-    /// The game's classes by identity (D431); where the mouse is; and the
+    /// The game's classes by identity; where the mouse is; and the
     /// node a press went down on, until it is let go.
     std::unordered_map<std::uint64_t, ui::Style> classes;
     std::optional<std::array<float, 2>> pointer;
     Entry* pressed = nullptr;
     /// A press went down on a range and is held: the pointer's moves drag
-    /// it until it is let go (D621). The thumb inside each range, by the
+    /// it until it is let go. The thumb inside each range, by the
     /// range's node, as the last frame nested them.
     bool ranging = false;
     std::unordered_map<std::uint64_t, ui::Node> thumbs;
-    /// Each node component's kept value (D626), by its index.
+    /// Each node component's kept value, by its index.
     std::vector<std::optional<float>> kept;
 
     /// Focus taken from the node holding it: its ring goes, and a field
@@ -157,32 +157,32 @@ struct WorldUi::State {
 
     /// Each range given its fields where they or its thumb changed, the
     /// value the player moved kept unless its own changed; a node no
-    /// longer a range cleared (D621).
+    /// longer a range cleared.
     void giveRanges();
 
     /// Each popup placed beside the node it is inside where its side, gap,
-    /// or parent changed; a node no longer one cleared (D623).
+    /// or parent changed; a node no longer one cleared.
     void givePopups();
 
-    /// The value `entry` starts as if it is kept and one is (D626).
+    /// The value `entry` starts as if it is kept and one is.
     [[nodiscard]] std::optional<float> keptFor(const Entry& entry);
 
     /// Each kept node's value in the first local player's view noted, a
-    /// change counted (D626).
+    /// change counted.
     void noteKept();
 
-    /// `entry` checked or unchecked as a press does it (D622): a box or a
+    /// `entry` checked or unchecked as a press does it: a box or a
     /// switch turned over, a radio checked and the radios beside it
     /// unchecked.
     void toggle(Entry& entry);
 
-    /// The pointer's event given to the ranges under it (D621), counted
+    /// The pointer's event given to the ranges under it, counted
     /// where one took it.
     void point(ui::PointerEvent::Action action, float x, float y, bool holding);
 
     /// Each node given the states it is in now, where they changed: hovered
     /// under the mouse as the last layout placed it, pressed while a press
-    /// on it is held, focused while it holds focus (D431).
+    /// on it is held, focused while it holds focus.
     void giveStates();
 
     /// A field done with the keyboard, by Enter or Escape: focus stays on
@@ -216,7 +216,7 @@ struct WorldUi::State {
     /// alone or every node it can reach; whether it moved. Next and the
     /// one before go round; a direction goes to the nearest node that way,
     /// or nowhere. A field reached by Tab, `fields`, takes the keyboard
-    /// with its text all selected (D429).
+    /// with its text all selected.
     bool moveFocus(view::NavigationMove move, bool fields);
 
     /// `entry`'s node gone, its children first made roots so they live on.
@@ -227,13 +227,13 @@ struct WorldUi::State {
     bool give(Entry& entry, world::EntityHandle entity, const ui::NodeFields& value);
 
     /// A text field shows what was typed into it in its text look, never a
-    /// label (D426); empty and without the keyboard, its label's words as
-    /// its placeholder, at half its text's alpha (D428). Whether the tree
+    /// label; empty and without the keyboard, its label's words as
+    /// its placeholder, at half its text's alpha. Whether the tree
     /// took it.
     bool giveFieldLook(Entry& entry);
 
     /// `value`'s words given to `node`, or none, the typed `shown` in place
-    /// of its label (D427); whether the tree took them.
+    /// of its label; whether the tree took them.
     bool giveWords(ui::Node node,
                    const ui::NodeFields& value,
                    std::size_t player,

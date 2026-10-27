@@ -72,8 +72,8 @@ struct Platform {
 [[nodiscard]] mwinOutcome toMaul(Outcome outcome) noexcept;
 
 /// The engine's record for one of Maul Window's, with its text and a
-/// drop's paths copied out; nothing for a record past SPEC-0025's
-/// vocabularies (D248), which the stream skips.
+/// drop's paths copied out; nothing for a record past the window
+/// vocabularies, which the stream skips.
 [[nodiscard]] std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& record);
 
 /// Maul Window's record for a report the test platform takes; Invalid for

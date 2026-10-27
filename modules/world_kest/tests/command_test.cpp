@@ -1,4 +1,4 @@
-// A player's commands at the server's doors (D425): each is readable by the
+// A player's commands at the server's doors: each is readable by the
 // systems of the first tick at or after the one it was delivered for, and
 // of that tick only, with the player who sent it; an index past the count
 // fails the run; elsewhere none is read. A command type holding an entity,

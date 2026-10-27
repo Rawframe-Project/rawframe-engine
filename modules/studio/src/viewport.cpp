@@ -15,7 +15,7 @@ void ShellParticipant::followPicture() {
         return;
     }
     // The newest picture the client streamed, whole, through the one file
-    // it writes in place, mapped here (D967): neither a file read nor one
+    // it writes in place, mapped here: neither a file read nor one
     // scanned a picture at a time.
     const std::filesystem::path kPath = playing_->picture();
     if (!inViewport_.stream.has_value() || inViewport_.streamed != kPath) {
@@ -32,7 +32,7 @@ void ShellParticipant::followPicture() {
         return;
     }
     // Shown opaque: a camera's picture, whatever its device left in its
-    // alpha (Direct3D 12's software adapter leaves nought, D923).
+    // alpha (Direct3D 12's software adapter leaves nought).
     for (std::size_t at = 3; at < read->pixels.size(); at += 4) {
         read->pixels[at] = std::byte{0xFF};
     }
@@ -43,13 +43,13 @@ void ShellParticipant::followPicture() {
     inViewport_.picture = std::make_shared<const texture::Texture>(std::move(made));
     ++inViewport_.picturesShown;
     // Kept once an opening, a few pictures in, as the start screen's tile
-    // for the game (D927).
+    // for the game.
     if (!held_.gamePictured && inViewport_.picturesShown >= 12) {
         held_.gamePictured = true;
         keepGamePicture(*inViewport_.picture);
     }
     // The game's first picture: it plays now, which the status line says
-    // until something else is said (D923).
+    // until something else is said.
     if (kFirst && !playing_->edited()) {
         say("playing " + description_.stem().string());
     }
@@ -58,7 +58,7 @@ void ShellParticipant::followPicture() {
 void ShellParticipant::showViewport() {
     showPrefabBar();
     // Under the view's fields, the rest of the center: the played game's
-    // pictures while it plays here (D789).
+    // pictures while it plays here.
     auto made = box(centerColumn_,
                     ui::Layout{.height = ui::pixels(0), .minHeight = ui::pixels(0), .grow = 1, .shrink = 1},
                     kBackground);
@@ -70,8 +70,8 @@ void ShellParticipant::showViewport() {
     static_cast<void>(tree_->setLook(viewport_, ui::Look{.fill = 0x0B0D10FFU, .image = kViewportImage}));
     static_cast<void>(tree_->setName(viewport_, "Viewport"));
     showViewBar();
-    // What is drawn over it last, so it lies on top (D915), under the
-    // prefab bar where there is one (D932).
+    // What is drawn over it last, so it lies on top, under the
+    // prefab bar where there is one.
     if (tree_->contains(held_.modePalette)) {
         static_cast<void>(
             tree_->setLayout(held_.modePalette,
@@ -88,7 +88,7 @@ void ShellParticipant::showViewport() {
 }
 
 void ShellParticipant::showPrefabBar() {
-    // A scene other scenes place is a prefab's source (D932): over its
+    // A scene other scenes place is a prefab's source: over its
     // view, the way back to the scene it was opened from, and how far an
     // edit here reaches, as the design's Prefab screen.
     held_.prefabBack = ui::Node{};
@@ -174,10 +174,10 @@ bool ShellParticipant::pressPrefabBar(ui::Node node) {
 namespace {
 
 /// The narrowest viewport, in the tree's pixels, its pills, split, axes,
-/// and flight hint are shown over (D978).
+/// and flight hint are shown over.
 constexpr float kNarrowViewport = 480;
 
-/// A pill's menu by its name, and the commands it lists (D916).
+/// A pill's menu by its name, and the commands it lists.
 constexpr std::string_view kProjectionPill = "Projection";
 constexpr std::string_view kDrawPill = "Draw mode";
 constexpr std::string_view kShowPill = "Show";
@@ -277,7 +277,7 @@ void ShellParticipant::showViewBar() {
         menus_.emplace_back(*made, std::string{menu});
     };
     // While the game plays, not edited, it is the game's: only who has
-    // its input, as the design's (D916).
+    // its input, as the design's.
     if (playing_.has_value() && !playing_->edited()) {
         // Nothing of Studio's over the game's own top corners, where its
         // HUD is likely to be: no mode palette, and the label below.
@@ -306,7 +306,7 @@ void ShellParticipant::showViewBar() {
         static_cast<void>(tree_->attach(centerColumn_, held_.modePalette));
     }
     // A viewport too narrow for them leaves its overlays out, the View
-    // menu doing what they do (D978); shown again once it is wide enough.
+    // menu doing what they do; shown again once it is wide enough.
     if (!held_.viewBarWide) {
         return;
     }
@@ -409,7 +409,7 @@ void ShellParticipant::showViewBar() {
 
 void ShellParticipant::showAxes() {
     // Each axis as the view sees it: right along the disc's width, up
-    // along its height (D916).
+    // along its height.
     const auto kVector = [this](std::string_view name) -> std::optional<std::array<double, 3>> {
         const Value* kPart = view_.has_value() ? view_->find(name) : nullptr;
         if (kPart == nullptr || kPart->items().size() != 3) {
@@ -459,7 +459,7 @@ void ShellParticipant::showAxes() {
 }
 
 void ShellParticipant::showViewportNote() {
-    // What the viewport shows while it has no picture (D922): the cook
+    // What the viewport shows while it has no picture: the cook
     // the edit view waits for, the game starting, or that it stopped.
     std::string note;
     if (tree_->contains(viewport_) && (inViewport_.picture == nullptr || !playing_.has_value())) {
@@ -468,12 +468,12 @@ void ShellParticipant::showViewportNote() {
                : playing_.has_value() || held_.editStopped   ? "The game stopped. The Console says why."
                : scene_.empty() ? "This game makes its world in Kest. Press Play to run it here."
                // Joined, the scene is the host's, which Play shows as cooked
-               // there (D905, D935); the edit view plays only this author's
+               // there; the edit view plays only this author's
                // own files.
                : held_.joined != nullptr ? "The scene is the host's: Play shows it as the host cooks it."
                                          : "";
     }
-    // An empty scene's first steps, over its view (D923).
+    // An empty scene's first steps, over its view.
     if (note.empty() && tree_->contains(viewport_) && chosen(Listed::Scene) && entities_.empty() && !live_.on &&
         !(playing_.has_value() && !playing_->edited())) {
         note = "empty";
@@ -561,7 +561,7 @@ void ShellParticipant::showEmptyScene() {
 
 void ShellParticipant::forwardInput() {
     // The viewport's overlays follow its width across the narrowest it
-    // shows them at (D978).
+    // shows them at.
     if (tree_->contains(viewport_) && (tree_->placedRectOf(viewport_).width >= kNarrowViewport) != held_.viewBarWide) {
         showViewBar();
     }
@@ -570,11 +570,11 @@ void ShellParticipant::forwardInput() {
     }
     // While the game plays in the viewport and shows there, its area is
     // the game's; else the window host acts on all of it. A menu, popup,
-    // or dialog open over it takes what lands on it (D797: the View
+    // or dialog open over it takes what lands on it (the View
     // menu's lower rows lie over the viewport).
     // Nor while Studio holds what a press took elsewhere, so it is let go
     // over the viewport for Studio: an asset dropped there, an entity, a
-    // tab, a card, a wire, or an edge (D984).
+    // tab, a card, a wire, or an edge.
     const bool kStudioHolds = browser_.held.has_value() || heldEntity_.has_value() || docking_.held.has_value() ||
                               held_.cardHeld.has_value() || held_.wiring.has_value() || resizing_.has_value();
     const bool kPlaysHere = playing_.has_value() && play_.has_value() && play_->viewport.has_value() &&
@@ -588,7 +588,7 @@ void ShellParticipant::forwardInput() {
     }
     // Only what shows of it: the viewport keeps its least height where
     // the center is shorter, running on under the dock, whose tabs a press
-    // there is for (D901).
+    // there is for.
     const ui::Rect kAt = tree_->placedRectOf(viewport_);
     const ui::Rect kCenter = tree_->placedRectOf(centerColumn_);
     const float kTop = std::max(kAt.y, kCenter.y);
@@ -596,12 +596,12 @@ void ShellParticipant::forwardInput() {
     const float kBottom = std::min(kAt.y + kAt.height, kCenter.y + kCenter.height);
     const float kRight = std::min(kAt.x + kAt.width, kCenter.x + kCenter.width);
     // In the pointer's pixels, which the tree's are not at an interface
-    // scale of the author's (D966).
+    // scale of the author's.
     const float kPer = laidOutPerPointer();
     inViewport_.forwarding->forwardOver(std::array<float, 4>{
         kLeft / kPer, kTop / kPer, std::max(0.0F, kRight - kLeft) / kPer, std::max(0.0F, kBottom - kTop) / kPer});
     // Studio's own controls over it keep their presses, and while it is
-    // edited the keys are Studio's but while a press there flies (D916).
+    // edited the keys are Studio's but while a press there flies.
     std::vector<std::array<float, 4>> holes;
     std::vector<ui::Node> over{held_.modePalette, held_.axisGizmo, held_.viewportNote};
     for (const auto& [kPill, kMenu] : held_.viewPills) {
@@ -617,8 +617,8 @@ void ShellParticipant::forwardInput() {
     inViewport_.forwarding->keysWhileHeld(playing_->edited());
     std::vector<world_tooling::WindowInput> events = inViewport_.forwarding->take();
     // A right press let go where it went down opens the viewport's context
-    // menu there, as the large editors do (D973); one that moved flew the
-    // view (D469). Only while the scene is edited there: a game played
+    // menu there, as the large editors do; one that moved flew the
+    // view. Only while the scene is edited there: a game played
     // keeps its right button.
     using Input = world_tooling::WindowInput;
     std::optional<std::array<float, 2>> contextAt;
@@ -638,7 +638,7 @@ void ShellParticipant::forwardInput() {
         }
     }
     // At the picture's pixels, fewer than the viewport's where it would
-    // pass the UI's uploads (D927) or the viewport grew since it started.
+    // pass the UI's uploads or the viewport grew since it started.
     if (kAt.width > 0 && kAt.height > 0) {
         const float kAcross = static_cast<float>(inViewport_.picture->levels[0].width) * kPer / kAt.width;
         const float kDown = static_cast<float>(inViewport_.picture->levels[0].height) * kPer / kAt.height;

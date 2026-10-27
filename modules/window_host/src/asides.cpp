@@ -1,4 +1,4 @@
-// An editor's windows beside the one shown (D988): opened and closed as it
+// An editor's windows beside the one shown: opened and closed as it
 // asks, and what happens in each told to it by its key.
 
 #include "rawframe/window_host/window_host.h"

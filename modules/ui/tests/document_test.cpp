@@ -1,4 +1,4 @@
-// A `ui.document` (D619): read as a tree of node components, each with the
+// A `ui.document`: read as a tree of node components, each with the
 // fields it starts as and the words it shows; and refused, naming the
 // field, where it is not canonical, out of range, or past its limits.
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// The components 3D physics reads and writes (SPEC-0037), as physics2d's are
+// The components 3D physics reads and writes, as physics2d's are
 // for 2D: an entity with a Body3D, a Pose3D, and a Velocity3D has a body in
 // the physics world; gameplay reads the committed pose and velocity, and
 // changes the body by writing them, which the next step takes as a teleport
@@ -8,8 +8,7 @@
 // which the next step applies once and clears; or, for a kinematic body, by
 // setting a Target3D, which the next step moves it to. A body whose
 // entity also has a Contact3D is told after each step what it touches and
-// what overlaps it. Meters, seconds, kilograms, and radians; y is up
-// (ADR-0046).
+// what overlaps it. Meters, seconds, kilograms, and radians; y is up.
 //
 // Layouts are fixed and plain, so a script declares the same structs (the
 // Kest ones are rawframe.physics3d's) and each field table below says what
@@ -118,7 +117,7 @@ struct Impulse3D {
     float angularZ = 0;
 };
 
-/// Where a kinematic body is to be after the next step (SPEC-0037's
+/// Where a kinematic body is to be after the next step (its
 /// kinematic target): the step chooses the velocities that carry it there,
 /// so what it meets on the way is pushed, never jumped over as a teleport
 /// would. Applied once while `set`, which the step clears; a body that is
@@ -185,7 +184,7 @@ struct RayHit3D {
     float fraction = 0;
 };
 
-/// SPEC-0037's character controller in three dimensions, as physics2d's
+/// The character controller in three dimensions, as physics2d's
 /// Character2D in two: an entity with a Body3D (kinematic, an upright
 /// capsule) and a Character3D is moved by trace and slide. Gameplay writes
 /// the Velocity3D it wants this tick, gravity and all; the step moves the
@@ -223,7 +222,7 @@ struct Mesh3D {
     std::uint64_t mesh = 0;
 };
 
-/// SPEC-0037's joint (section 10): an entity with a Joint3D holds two
+/// The joint: an entity with a Joint3D holds two
 /// bodies' entities together, per axis of the joint's frame. The frame sits
 /// at each body's anchor, its z along the body's axis (all noughts is +z),
 /// and each of its three linear and three angular axes is locked, free, or
@@ -287,7 +286,7 @@ struct Joint3D {
     bool broken = false;
 };
 
-/// A typed relation (SPEC-0006): an entity with an Attach3D and a Pose3D
+/// A typed relation: an entity with an Attach3D and a Pose3D
 /// and no body follows `parent`, whose Pose3D it takes at the offset here,
 /// in the parent's frame, after every step. A rotation of all noughts is
 /// taken as none. Attachments chain, parents before children; one whose

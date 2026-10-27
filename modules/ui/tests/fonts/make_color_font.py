@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Writes RawframeColor.ttf (D669): the smallest valid color font the
+# Writes RawframeColor.ttf: the smallest valid color font the
 # engine's tests need, one the cook's sanitizer takes whole. 1000 units per
 # em, ascent 800 and descent 200; an A of COLR version 0 layers over one
 # CPAL palette (an em box of entry 0, red; its right half of entry 1, blue

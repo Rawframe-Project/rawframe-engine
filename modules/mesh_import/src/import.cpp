@@ -217,7 +217,7 @@ struct Gathered {
     bool uvs = true;
 };
 
-/// A skin's joints as the mesh's (D508): each names the bone the skeleton
+/// A skin's joints as the mesh's: each names the bone the skeleton
 /// imported from the same skin has, with the skin's inverse bind, or none.
 result::Result<std::vector<mesh::Joint>> jointsOf(const cgltf_skin& skin, const ImportLimits& limits) {
     if (skin.joints_count == 0) {
@@ -434,7 +434,7 @@ result::Result<Imported> importGltf(std::span<const std::byte> source,
     }
     std::size_t visits = 0;
     // The skin the first node with a mesh follows, which every other
-    // follows too, or none (D508).
+    // follows too, or none.
     std::optional<const cgltf_skin*> skin;
     while (!pending.empty()) {
         const cgltf_node* kNode = pending.back();

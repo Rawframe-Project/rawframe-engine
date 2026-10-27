@@ -1,6 +1,6 @@
 #pragma once
 
-// Authoring on the wire (SPEC-0040): a request document naming operations,
+// Authoring on the wire: a request document naming operations,
 // the discovery document publishing every operation whole, and the one
 // error record every failure is written as. All three are strict JSON under
 // the authored-document profile, so a tool or an agent can build a valid
@@ -17,7 +17,7 @@
 //     ]
 //   }
 //
-// `batch` is `atomic` (SPEC-0040's AtomicBatch), `continue_per_item`, or
+// `batch` is `atomic` (AtomicBatch), `continue_per_item`, or
 // `halt_remaining` (its IndependentBatch). An optional `expects` names the
 // document's generation the request was computed against. Each operation
 // holds exactly the inputs its declaration lists: entities and components
@@ -78,7 +78,7 @@ struct Request {
 /// layout mark, and fields with their kinds.
 [[nodiscard]] std::string writeDiscovery(const ComponentCatalog* catalog = nullptr);
 
-/// SPEC-0040's error code of an authoring error, `validation_failed` and
+/// The error code of an authoring error, `validation_failed` and
 /// the rest; `internal` for any other domain's.
 [[nodiscard]] std::string_view codeName(const result::Error& error) noexcept;
 

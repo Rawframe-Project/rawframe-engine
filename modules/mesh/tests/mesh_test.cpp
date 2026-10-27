@@ -47,7 +47,7 @@ Mesh quad() {
                           {.firstIndex = 3, .indexCount = 3, .material = 0x8c41d7e2a95b4f03ULL}}};
 }
 
-/// The quad skinned to two joints (D508): its left edge follows the first,
+/// The quad skinned to two joints: its left edge follows the first,
 /// its right the second, and its middle would be shared were there one.
 Mesh skinned() {
     Mesh mesh = quad();

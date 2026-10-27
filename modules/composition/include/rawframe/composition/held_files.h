@@ -3,7 +3,7 @@
 // Files a host holds in memory by their paths: what a web client fetched,
 // where there is no file system (RAWFRAME_FILE_SYSTEM), or what a test
 // holds. A host that holds files hands them to its Composition, and a path
-// the configuration names is then read from them, never from a disk (D167).
+// the configuration names is then read from them, never from a disk.
 
 #include "rawframe/result/result.h"
 

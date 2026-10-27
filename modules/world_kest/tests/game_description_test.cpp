@@ -57,7 +57,7 @@ RAWFRAME_TEST(AGameDescriptionParses) {
     }
     RAWFRAME_EXPECT(game->program == "movers.kest");
     // The two declared, then the engine's persistent identity and layer,
-    // which any entity may carry (D788).
+    // which any entity may carry.
     RAWFRAME_EXPECT(game->components.size() == 4 && game->components[1].kestType == "Velocity" &&
                     game->components[2].name == "rawframe.world.persistent" &&
                     game->components[3].name == "rawframe.world.layer");
@@ -91,7 +91,7 @@ RAWFRAME_TEST(PredictionIsDeclaredByLine) {
     RAWFRAME_EXPECT(refusedAt("program p.kest\npredict\n", WorldKestError::BadGameLine, "2"));
     RAWFRAME_EXPECT(refusedAt("program p.kest\ninterpolate\n", WorldKestError::BadGameLine, "2"));
     RAWFRAME_EXPECT(refusedAt("program p.kest\nown\n", WorldKestError::BadGameLine, "2"));
-    // Kept to its holder only where it replicates (D673).
+    // Kept to its holder only where it replicates.
     const std::array<std::string, 1> kOwn = {"a.position"};
     const auto kUnreplicated = replicatedAmong(*game, kOwn, "kept");
     RAWFRAME_EXPECT(!kUnreplicated.has_value() && kUnreplicated.error().description() == "kept");
@@ -184,7 +184,7 @@ RAWFRAME_TEST(ScansAreDeclaredByLine) {
     RAWFRAME_EXPECT(kGame.has_value() && kGame->systems.size() == 1 &&
                     (kGame->systems[0].scans == std::vector<std::string>{"a.position"}));
     // Not what it writes, nor in a predicted system, nor an undeclared
-    // component (D747).
+    // component.
     RAWFRAME_EXPECT(refusedAt(std::string{kHead} + "system a.shift simulation shift write a.position scan a.position\n",
                               WorldKestError::BadGameLine,
                               "4"));
@@ -206,7 +206,7 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     }
     RAWFRAME_EXPECT(game->physics->dimensions == 2 && game->physics->gravityX == 0.5F &&
                     game->physics->gravityY == -9.8F && game->physics->substeps == 8);
-    // The engine's ten components (Tiles2D the tenth, D859), under their
+    // The engine's ten components (Tiles2D the tenth), under their
     // engine names, and its persistent identity and layer.
     RAWFRAME_EXPECT(game->components.size() == 12 && game->components[0].name == "rawframe.physics2d.body" &&
                     game->components[1].kestType == "Pose2D");
@@ -266,7 +266,7 @@ RAWFRAME_TEST(TexturesAreDeclaredByLine) {
                                           "texture 0000000000000000 runner.png\n",
                                           "texture 00000000000000b1 a.png\ntexture 00000000000000b1 b.png\n",
                                           "texture 00000000000000b1 a.png\ntexture 00000000000000b2 a.png\n",
-                                          // A client's view is a presentation component (D261).
+                                          // A client's view is a presentation component.
                                           "camera 12\n"}) {
         const std::string kText = kHead + std::string{kLines};
         RAWFRAME_EXPECT(refusedAt(kText, WorldKestError::BadGameLine, "3") ||
@@ -284,7 +284,7 @@ RAWFRAME_TEST(FontsAndLabelsAreDeclaredByLine) {
                     kGame->labels[0].arguments.empty() && kGame->labels[1].id == 0xA2 &&
                     kGame->labels[1].table == "hud.strings" && kGame->labels[1].key == "hud.score" &&
                     kGame->labels[1].arguments == std::vector<std::string>{"points"});
-    // Two arguments at most, each its own name (D647).
+    // Two arguments at most, each its own name.
     RAWFRAME_EXPECT(kGame.has_value() && kGame->labels[2].arguments == (std::vector<std::string>{"coins", "goal"}));
     for (const std::string_view kLines :
          {"font 00000000000000f1\n",
@@ -318,7 +318,7 @@ RAWFRAME_TEST(RenderTexturesAreDeclaredByLine) {
                     kAsked->renderTextures[0].update == world_kest::RenderTextureUpdate::OnDemand &&
                     kAsked->renderTextures[1].update == world_kest::RenderTextureUpdate::EveryFrame);
     // Its identity is no other texture's; each side 1 to 4096 pixels; its
-    // update one of the two (D361).
+    // update one of the two.
     for (const std::string_view kLines : {"rendertexture 00000000000000d1 256\n",
                                           "rendertexture 0000000000000000 256 128\n",
                                           "rendertexture 00000000000000d1 0 128\n",
@@ -343,7 +343,7 @@ RAWFRAME_TEST(SplitScreenLayoutsAreDeclaredByLine) {
                     kGame->layouts[0].regions.size() == 2 && kGame->layouts[0].regions[1].x == 0.5F &&
                     kGame->layouts[0].regions[1].width == 0.5F && kGame->layouts[1].players == 3 &&
                     kGame->layouts[1].regions[2].y == 0.5F);
-    // Two to four players (D362), a region each, inside the window, a
+    // Two to four players, a region each, inside the window, a
     // count laid out once.
     for (const std::string_view kLines : {"layout 1 0 0 1 1\n",
                                           "layout 5 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1 0 0 1 1\n",
@@ -369,7 +369,7 @@ RAWFRAME_TEST(AConstrainedAspectIsDeclaredByLine) {
                     kColored->aspect->bars == (std::array<std::uint8_t, 3>{32, 0, 255}));
     const auto kFilled = parseGame(kHead);
     RAWFRAME_EXPECT(kFilled.has_value() && !kFilled->aspect.has_value());
-    // Two whole numbers from one, once (D369).
+    // Two whole numbers from one, once.
     for (const std::string_view kLines : {"aspect 16\n",
                                           "aspect 16 0\n",
                                           "aspect 16.5 9\n",
@@ -388,7 +388,7 @@ RAWFRAME_TEST(AGameNamesOneUiDocument) {
                               "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f91 g.hud Node\n";
     const auto kGame = parseGame(kHead + "ui g.ui\n");
     RAWFRAME_EXPECT(kGame.has_value() && kGame->ui == "g.ui");
-    // One document, which nests the nodes (D619): the lines that did are
+    // One document, which nests the nodes: the lines that did are
     // gone.
     for (const std::string_view kLines :
          {"ui\n", "ui g.ui\nui h.ui\n", "ui g.bar in g.hud\n", "ui g.bar shows g.sign\n"}) {
@@ -433,7 +433,7 @@ RAWFRAME_TEST(AGameReadsItsMeshesCooked) {
     // runtime decodes no glTF.
     const auto kUncooked = world_kest::GameFiles::fromDirectory(kDirectory / "g.game");
     RAWFRAME_EXPECT(!kUncooked.has_value() && kUncooked.error().code() == code(WorldKestError::UnreadableFile));
-    // A tool that reads none names it, found by its sidecar (D433).
+    // A tool that reads none names it, found by its sidecar.
     const auto kNamed =
         world_kest::GameFiles::fromDirectory(kDirectory / "g.game", nullptr, world_kest::MeshReading::Named);
     RAWFRAME_EXPECT(kNamed.has_value() && kNamed->description().meshes.size() == 1 && kNamed->meshes().empty());

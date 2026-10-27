@@ -31,12 +31,12 @@ enum class CookError : std::uint32_t {
     /// A name a source uses that resolves to nothing, or to what does not
     /// do: a program that does not compile, a document that does not read.
     BadReference = 9,
-    /// A subasset a source's sidecar maps to no resource (D314).
+    /// A subasset a source's sidecar maps to no resource.
     UnmappedSubasset = 10,
-    /// More material variants than the request's ceiling allows (D319).
+    /// More material variants than the request's ceiling allows.
     OverLimit = 11,
     /// A tool an importer runs besides the cook: absent, or failing, its
-    /// output in the error (D484).
+    /// output in the error.
     ToolFailed = 12,
 };
 

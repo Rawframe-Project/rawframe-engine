@@ -1,6 +1,6 @@
 module rawframe.spline
 
-// Splines (SPEC-0051's spline row, D868): smooth paths a scene holds as
+// Splines: smooth paths a scene holds as
 // entities, which a game's followers move along. A game declares
 // components of these types; a spline is an entity, its points are
 // entities that name it, each standing where its pose puts it (the game's

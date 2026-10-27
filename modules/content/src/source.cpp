@@ -92,8 +92,7 @@ private:
 
 } // namespace
 
-// The stored blob verified before it is used, then the content it holds
-// (SPEC-0021's verification order, steps 2 and 3).
+// The stored blob verified before it is used, then the content it holds.
 result::Result<std::vector<std::byte>> readChunk(const ContentSource::Implementation& blobs, const BuildChunk& chunk) {
     RAWFRAME_TRY_ASSIGN(std::vector<std::byte> blob, blobs.read(blobPathOf(chunk.blob), chunk.blobSize));
     if (!sameDigest(ContentDigest::of(blob), chunk.blob)) {

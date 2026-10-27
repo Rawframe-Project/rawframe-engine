@@ -9,7 +9,7 @@ namespace {
 /// A temporal resolve's frames: its jitter's sequence (temporalJitter).
 constexpr std::uint64_t kTemporalFrames = 8;
 /// An adapting exposure's: three seconds of its adaptation, however many
-/// frames a device takes to give them (D979): sixty a second at most a
+/// frames a device takes to give them: sixty a second at most a
 /// quarter of a second each, as the metering steps.
 constexpr double kMeteringSeconds = 3;
 
@@ -38,7 +38,7 @@ bool Stillness::still(const SceneFrame& frame) {
         last_->metering.snap = frame.metering.snap;
         last_->particles.clock = frame.particles.clock;
         // An edited World's emitters and skinned poses are time's too: they
-        // play on the client while the documents stand (D979).
+        // play on the client while the documents stand.
         if (timeHeld_) {
             last_->particles = frame.particles;
             last_->palette = frame.palette;

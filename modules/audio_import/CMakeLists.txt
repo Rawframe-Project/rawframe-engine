@@ -1,4 +1,4 @@
-# Sound import (ADR-0058, SPEC-0036): WAVE, Ogg Vorbis, and MP3 sources
+# Sound import: WAVE, Ogg Vorbis, and MP3 sources
 # decoded and cooked into the runtime's form. Import tooling only; no client
 # or server closure may depend on it, and the source decoders it holds are
 # trusted only with an author's own files.

@@ -12,7 +12,7 @@ namespace rawframe::composition {
 
 class ParticipantContext;
 
-/// The Host schedule's phases, in order (SPEC-0005 Host schedule). A
+/// The Host schedule's phases, in order. A
 /// composition may leave a phase without providers; a dedicated server has no
 /// presentation phases at all. Nothing may reorder them.
 enum class HostPhase : std::uint8_t {
@@ -38,9 +38,9 @@ struct HostFrame {
     std::uint64_t iteration = 0;
     /// Sampled once per iteration, in `advance_clocks`.
     execution::MonotonicInstant now;
-    /// The platform suspended the program (SPEC-0025's `suspending` until
-    /// `resumed`, D565), or the headset it shows on shows the person
-    /// nothing (D679): it runs on, but nothing reaches a person, neither
+    /// The platform suspended the program (the `suspending` until
+    /// `resumed`), or the headset it shows on shows the person
+    /// nothing: it runs on, but nothing reaches a person, neither
     /// pictures nor sound.
     bool suspended = false;
 };
@@ -77,7 +77,7 @@ struct LentCapability {
     CapabilityObject object;
 };
 
-/// Whether the Host was asked to stop (D460), for a participant that waits
+/// Whether the Host was asked to stop, for a participant that waits
 /// inside a phase, where the Host cannot drain: a game stopped at a
 /// breakpoint. The Host lends it to every composition.
 class StopRequest {
@@ -95,7 +95,7 @@ private:
 inline constexpr Capability<StopRequest> kStopRequest{"rawframe.host.stop_request"};
 
 /// A runtime participant: a service or system that composition constructs,
-/// starts, quiesces, stops, and destroys (SPEC-0005 service lifecycle).
+/// starts, quiesces, stops, and destroys.
 /// Construction happens in its factory and must not start work; running
 /// begins only when `start` succeeds.
 class Participant {

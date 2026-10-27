@@ -1,10 +1,10 @@
 // Stalls played: an owner builds a stall, raises it a level with another
 // press, and up to the highest level and no further; another owner pressing
-// on that stall raises nothing (D391). Customers come to the stall, are
+// on that stall raises nothing. Customers come to the stall, are
 // served, and what they pay reaches its owner, no customer staying past its
-// patience (D392). An owner reaching the goal wins the round, and the lot
-// starts afresh (D394). Customers walk round a wall of stalls to the one
-// behind it, never through a stall (D400). The test moves the owners' hands
+// patience. An owner reaching the goal wins the round, and the lot
+// starts afresh. Customers walk round a wall of stalls to the one
+// behind it, never through a stall. The test moves the owners' hands
 // between ticks, as their clients' input would.
 
 #include "game_harness.h"
@@ -294,7 +294,7 @@ RAWFRAME_TEST(CustomersFindTheirWayRoundTheStallsInIt) {
     }
     // For forty seconds no customer steps inside a stall, and the corner
     // stall, behind the wall, serves some; a customer walking faces where
-    // it walks, but for the turns it is making (D512).
+    // it walks, but for the turns it is making.
     const auto kPoseKey = *world.registry().find(physics3d::Pose3D::kComponentTypeId);
     const auto kVelocityKey = *world.registry().find(physics3d::Velocity3D::kComponentTypeId);
     std::uint64_t inside = 0;
@@ -337,7 +337,7 @@ RAWFRAME_TEST(CustomersStepAsideForEachOtherAtTheirStall) {
     }
     // Every customer comes for the one stall's front, from along the south
     // edge, so their ways close in on each other there; each is an agent the
-    // engine steers round the others (D411), and no two of their bodies,
+    // engine steers round the others, and no two of their bodies,
     // 0.35 meters round, ever overlap much.
     world::World& world = *simulation->world();
     played.run(1);

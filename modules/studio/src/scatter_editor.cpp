@@ -39,7 +39,7 @@ std::string beside(const std::string& document, const std::string& named) {
 } // namespace
 
 void ShellParticipant::showScatter() {
-    // A scatter is its lines (D865): each a field of the Inspector, its
+    // A scatter is its lines: each a field of the Inspector, its
     // copies drawn over its area in the center as the engine places them,
     // and a row that draws them again from the next seed.
     const std::optional<Value> kRead = read(scene_, "lines.read");
@@ -138,7 +138,7 @@ void ShellParticipant::showScatterLines() {
         componentRows_.push_back(*heading);
     }
     // Each line but the first a field by its word, holding what follows it;
-    // an empty field takes the line away, as a setting's does (D818).
+    // an empty field takes the line away, as a setting's does.
     for (std::size_t at = 1; at < held_.scatterLines.size(); ++at) {
         const std::string kWord = wordOf(held_.scatterLines[at]);
         if (kWord.empty()) {

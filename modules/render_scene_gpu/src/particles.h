@@ -1,7 +1,7 @@
 #pragma once
 
 // The scene's particles, trails, and beams as the shared device half draws
-// them (D357): the view, and the scene's materials, as its shaders read
+// them: the view, and the scene's materials, as its shaders read
 // them.
 
 #include "blocks.h"
@@ -19,13 +19,13 @@ namespace rawframe::render_scene_gpu {
 [[nodiscard]] particles_gpu::ViewBlock particleViewOf(const render_scene::SceneFrame& frame,
                                                       const FrameBlock& block) noexcept;
 
-/// Each material's blob as the particles draw it, unlit (D353): its base
+/// Each material's blob as the particles draw it, unlit: its base
 /// color, times its base texture's color where that multiplies it; its
 /// opacity, times its texture's alpha where that multiplies it, which then
 /// shapes it; and its emission, times its emission texture's color where
 /// that multiplies it. Its textures (`textures`, by place) as `held` holds
 /// them this frame, white for none and for one not held, sampled as
-/// `pipelines` sample a material's. Then the lines' two (D464), white and
+/// `pipelines` sample a material's. Then the lines' two, white and
 /// untextured, at the places after the frame's materials: the second drawn
 /// over everything.
 [[nodiscard]] std::vector<particles_gpu::Material>

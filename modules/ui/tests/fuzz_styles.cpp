@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of the style documents a game or a mod carries
-// (D431): read, and when read, made into a tree's classes, which must take
+// Coverage-guided fuzzing of the style documents a game or a mod carries:
+// read, and when read, made into a tree's classes, which must take
 // every value the reader let through.
 
 #include "rawframe/ui/styles.h"

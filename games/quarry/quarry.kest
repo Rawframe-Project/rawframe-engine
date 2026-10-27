@@ -1,13 +1,13 @@
 module quarry
 
-// Quarry (D735): a land of blocks drawn from the World's seed, which players
+// Quarry: a land of blocks drawn from the World's seed, which players
 // dig and build on. Each block is an entity of its own at a whole place on a
 // grid of one meter; the land is made a few columns a tick, so no tick holds
 // more than a system's commands, and a player digs the top block of the
 // column it aims at, or places one on it, once in a while. A machine stands
-// on the land (D737): a lever a player throws powers a lamp through wire,
+// on the land: a lever a player throws powers a lamp through wire,
 // and a wire dug cuts it; players place wire, lamps, and levers as they
-// place brick (D739), building machines of their own.
+// place brick, building machines of their own.
 
 import controls
 import rawframe.model
@@ -63,13 +63,13 @@ struct Block {
     kind: u8
 }
 
-// A machine's part, on its block alone (D737), so power looks at the parts
+// A machine's part, on its block alone, so power looks at the parts
 // and not the land: a lever thrown, and wire and a lamp powered, are `on`.
 struct Part {
     on: bool
 }
 
-// What the land's maker asks of a mod providing its ground (D740): a
+// What the land's maker asks of a mod providing its ground: a
 // column, the seed, and the ground's height there as the land draws it;
 // what is left in `height` is the column's ground, kept from one block to
 // CEILING less one.
@@ -129,7 +129,7 @@ fn height(x: u32, z: u32, seed: u32) -> u32 {
 }
 
 // A column's ground: as the land draws it, or as a mod providing the
-// ground point leaves it (D740), kept from one block to below the ceiling.
+// ground point leaves it, kept from one block to below the ceiling.
 fn shaped(x: u32, z: u32, seed: u32) -> u32 {
     let top = Mods.ground(Ground(x, z, seed, height(x, z, seed))).height
     if top < u32(1) {
@@ -202,7 +202,7 @@ fn generate(count: i32, terrains: [Terrain], entities: [world.Entity]) {
     }
 }
 
-// What a tool places (D739): brick, wire, a lamp, or a lever.
+// What a tool places: brick, wire, a lamp, or a lever.
 fn chosen(build: f32) -> u8 {
     if build < 0.5 {
         return BRICK
@@ -351,7 +351,7 @@ fn frame(count: i32, views: [model.Camera]) {
     }
 }
 
-// Power, each tick (D737), looking at the machines' parts alone: from
+// Power, each tick, looking at the machines' parts alone: from
 // every lever thrown, along wire, between
 // machine parts in neighboring columns whatever their heights, to the
 // lamps it reaches; a part neither powered nor thrown is off. A column's

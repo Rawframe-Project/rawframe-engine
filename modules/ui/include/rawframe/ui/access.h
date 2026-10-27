@@ -1,7 +1,7 @@
 #pragma once
 
-// A UI tree as assistive technology reads it (ADR-0034, SPEC-0030's push
-// tree, D571): from a root's subtree Maul UI builds updates of the nodes
+// A UI tree as assistive technology reads it (the push
+// tree): from a root's subtree Maul UI builds updates of the nodes
 // that changed, each whole, the focus with every one, and they are handed
 // to the platform's adapter, AT-SPI's on Linux, or to a copy of the tree
 // where no adapter is built. Nothing is built for a root until an access is
@@ -28,21 +28,21 @@ enum class AccessPlatform : std::uint8_t {
     /// AT-SPI's accessibility bus (Linux): the address AT_SPI_BUS_ADDRESS
     /// names, else the one the session bus gives.
     Atspi,
-    /// Android's accessibility framework (D576): a node provider for the
+    /// Android's accessibility framework: a node provider for the
     /// view `AccessSettings::host` names, which the window gives as its
     /// root.
     Android,
-    /// UI Automation (Windows, D579): providers for the window
+    /// UI Automation (Windows): providers for the window
     /// `AccessSettings::host` names, the root's answering the window's
     /// WM_GETOBJECT.
     Uia,
-    /// NSAccessibility (macOS, D579): elements under the view
+    /// NSAccessibility (macOS): elements under the view
     /// `AccessSettings::host` names, the root its child.
     AppKit,
-    /// UIAccessibility (iOS, D588): elements under the view
+    /// UIAccessibility (iOS): elements under the view
     /// `AccessSettings::host` names, the root its container.
     UiKit,
-    /// The page's elements (the web, D612): one per shown node in the
+    /// The page's elements (the web): one per shown node in the
     /// element over the canvas `AccessSettings::selector` names, which the
     /// browser gives its clients. None are built until a screen reader's
     /// user presses the hidden button the adapter puts there first.
@@ -73,10 +73,10 @@ struct AccessSettings {
     std::string selector;
 };
 
-/// What a screen reader asked of a node (D572), for the UI's owner to do as
+/// What a screen reader asked of a node, for the UI's owner to do as
 /// its own input would: a press, as a pointer's or navigation's, and focus,
 /// as navigation's; in a field, its selection set and a range of its text
-/// replaced, as typing does (D613): a browser's screen reader types into the
+/// replaced, as typing does: a browser's screen reader types into the
 /// page's own field, which hands each edit on. Scrolls the tree does itself.
 struct AccessRequest {
     enum class Kind : std::uint8_t {
@@ -124,14 +124,13 @@ public:
     /// Maul UI writes it: what a screen reader reads.
     [[nodiscard]] std::string written() const;
 
-    /// The node the platform was last told holds focus, none for the root
-    /// (D573).
+    /// The node the platform was last told holds focus, none for the root.
     [[nodiscard]] std::optional<Node> focused() const;
 
     /// The root the window hands the platform's clients, where the
     /// platform takes one, which lives while the access does: Android's
-    /// node provider (D576), UI Automation's root provider, AppKit's root
-    /// element (D579); none for AT-SPI and a copy.
+    /// node provider, UI Automation's root provider, AppKit's root
+    /// element; none for AT-SPI and a copy.
     [[nodiscard]] void* root() const noexcept;
 
     /// What screen readers asked since last taken, oldest first.
@@ -149,7 +148,7 @@ private:
     std::unique_ptr<State> state_;
 };
 
-/// Where a window's UI is read for assistive technology (D571): the program
+/// Where a window's UI is read for assistive technology: the program
 /// that runs the window lends it to its Host as `rawframe.ui.access`, the
 /// participant whose tree is the window's UI seats its tree there, and the
 /// program opens it when the platform is to be told and updates it each
@@ -168,8 +167,8 @@ public:
     /// The UI's side, before its tree goes: no longer read.
     void leave() noexcept;
     /// The UI's side: each of the tree's pixels is `factor` of the
-    /// window's logical ones, as an editor's own interface scale makes it
-    /// (D966); the program's scale is told the platform times it.
+    /// window's logical ones, as an editor's own interface scale makes it;
+    /// the program's scale is told the platform times it.
     [[nodiscard]] result::Status setTreeScale(float factor);
 
     /// The program's side: the window is read with `settings` from the time

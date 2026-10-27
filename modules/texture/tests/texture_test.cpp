@@ -1,5 +1,5 @@
-// The cooked texture (D253): each format round trips through KTX 2.0 with
-// its levels, a cube with its faces and a volume with its slices (D344),
+// The cooked texture: each format round trips through KTX 2.0 with
+// its levels, a cube with its faces and a volume with its slices,
 // the descriptor is Khronos's for the format, and a texture that breaks a
 // rule, or bytes that are not exactly what the writer makes, are refused
 // before anything past the limits is allocated.
@@ -76,7 +76,7 @@ RAWFRAME_TEST(EveryFormatRoundTripsWithItsLevels) {
 RAWFRAME_TEST(TheContainerIsKhronossForEachFormat) {
     // The Vulkan format, then the descriptor's color model, primaries, and
     // transfer, and for sRGB RGBA8 the alpha sample marked linear; R8's one
-    // channel (D398) still on four bytes' alignment.
+    // channel still on four bytes' alignment.
     struct Case {
         Format format;
         std::uint32_t vulkan;
@@ -158,7 +158,7 @@ RAWFRAME_TEST(BytesNotExactlyAsWrittenAreRefused) {
 }
 
 RAWFRAME_TEST(AHalfFloatCubeRoundTripsWithItsSixFaces) {
-    // An environment (D320): RGBA16F, six square faces a level.
+    // An environment: RGBA16F, six square faces a level.
     Texture cube = chain(Format::Rgba16Float, 8, 8);
     cube.faces = 6;
     for (Level& level : cube.levels) {
@@ -200,7 +200,7 @@ RAWFRAME_TEST(AHalfFloatCubeRoundTripsWithItsSixFaces) {
 }
 
 RAWFRAME_TEST(AVolumeRoundTripsWithItsSlices) {
-    // A grading table (D344): RGBA16F, four slices of four by four.
+    // A grading table: RGBA16F, four slices of four by four.
     Texture volume = chain(Format::Rgba16Float, 4, 4, 1);
     volume.depth = 4;
     const std::vector<std::byte> kSlice = volume.levels[0].bytes;

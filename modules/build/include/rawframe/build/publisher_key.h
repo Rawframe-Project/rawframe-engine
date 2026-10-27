@@ -1,9 +1,8 @@
 #pragma once
 
-// A publisher's signing key, as packaging tooling holds it (SPEC-0021,
-// SPEC-0023): an Ed25519 seed under a key identity, kept in a file of its
+// A publisher's signing key, as packaging tooling holds it: an Ed25519 seed under a key identity, kept in a file of its
 // own that never leaves the publisher, and the publisher key set that lists
-// it. With the platform deferred (ADR-0084) the key set is made here and
+// it. With the platform deferred the key set is made here and
 // pinned by whoever verifies, as a standalone export pins its key material.
 
 #include "rawframe/result/result.h"
@@ -23,7 +22,7 @@ struct PublisherKey {
     std::array<std::byte, 32> seed{};
 };
 
-/// A fresh key for `publisher` (an ADR-0023 publisher segment), its seed
+/// A fresh key for `publisher` (a publisher segment), its seed
 /// and key identity from the operating system's secure source.
 [[nodiscard]] result::Result<PublisherKey> generatePublisherKey(std::string_view publisher);
 

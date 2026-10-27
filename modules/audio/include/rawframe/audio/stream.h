@@ -1,6 +1,6 @@
 #pragma once
 
-// Streaming cooked Opus (ADR-0038): a long sound kept encoded in memory and
+// Streaming cooked Opus: a long sound kept encoded in memory and
 // decoded a little ahead of where it plays, on an executor's worker, into a
 // bounded ring the mix thread reads. The mix thread never decodes and never
 // waits: a ring run dry is silence, counted.

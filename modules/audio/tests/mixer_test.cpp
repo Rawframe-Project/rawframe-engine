@@ -1,4 +1,4 @@
-// The mixer against ADR-0038's validation list: levels, pans, and faders as
+// The mixer against the validation list: levels, pans, and faders as
 // declared, faders and stops that never step, sends before and after the
 // fader, a filter and a delay doing what they say, finite voices, and a mix
 // thread rendering while the owner plays and stops (ThreadSanitizer runs

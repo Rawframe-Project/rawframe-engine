@@ -7,12 +7,11 @@
 
 namespace rawframe::content {
 
-/// The domain of every Error this module creates (SPEC-0008's content error
-/// domain). A manifest the document profile refuses is refused in
+/// The domain of every Error this module creates. A manifest the document profile refuses is refused in
 /// `rawframe.document`'s domain.
 inline constexpr result::ErrorDomain kContentDomain{base::parseBits128Hex("3131d7054967dc7f6731a2284291560b").value};
 
-/// SPEC-0008's stable codes within kContentDomain.
+/// The stable codes within kContentDomain.
 enum class ContentError : std::uint32_t {
     ManifestInvalid = 1,
     UnsupportedManifestVersion = 2,

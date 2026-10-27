@@ -1,5 +1,4 @@
-// A frame's picture shown on a window's surface (D280), in Slang (ADR-0026,
-// D475), from which the SPIR-V and the WGSL are compiled.
+// A frame's picture shown on a window's surface, in Slang, from which the SPIR-V and the WGSL are compiled.
 
 [[vk::binding(0, 0)]] Texture2D picture;
 [[vk::binding(1, 0)]] SamplerState pictureSampler;

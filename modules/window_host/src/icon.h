@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's own window icon (D951), as its export writes it: a texture
+// A game's own window icon, as its export writes it: a texture
 // (rawframe.texture) whose square levels become the icon's images.
 
 #include "rawframe/composition/held_files.h"

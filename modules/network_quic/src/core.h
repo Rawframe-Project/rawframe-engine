@@ -17,7 +17,7 @@
 #include <map>
 #include <memory>
 #include <optional>
-// The global execution configuration (D214) is a preview feature of the
+// The global execution configuration is a preview feature of the
 // MsQuic this engine pins; the library takes it whatever the header shows.
 #define QUIC_API_ENABLE_PREVIEW_FEATURES 1
 #include <msquic.h>
@@ -34,7 +34,7 @@ constexpr QUIC_UINT62 kGoneCode = 2;
 // The transport error a server sends when its listener refuses (RFC 9000).
 constexpr QUIC_UINT62 kConnectionRefusedError = 0x2;
 
-// A browser's connection: HTTP/3, carrying WebTransport (D172).
+// A browser's connection: HTTP/3, carrying WebTransport.
 constexpr std::string_view kH3Alpn = "h3";
 // The streams an HTTP/3 peer opens besides its WebTransport ones: its
 // control stream and QPACK's two.
@@ -50,7 +50,7 @@ struct Stream {
     HQUIC handle = nullptr;
     std::uint64_t id = 0;
     /// The owner's bytes handed to MsQuic on it and not yet released, which
-    /// MsQuic does once the peer acknowledges them (D276).
+    /// MsQuic does once the peer acknowledges them.
     std::size_t sendingBytes = 0;
 };
 
@@ -120,7 +120,7 @@ struct Core {
     std::deque<network::Event> inbound;
     network::ProviderStatistics statistics;
     /// Across every connection: bytes of events waiting, and bytes handed to
-    /// MsQuic and not yet released (D239).
+    /// MsQuic and not yet released.
     std::size_t queuedBytesInAll = 0;
     std::size_t sendingBytesInAll = 0;
 

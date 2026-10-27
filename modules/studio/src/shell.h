@@ -1,6 +1,6 @@
 #pragma once
 
-// Studio's shell (D435): a participant holding an authoring session on a
+// Studio's shell: a participant holding an authoring session on a
 // game in its own process and showing it as a UI of its own. What its
 // parts share: Studio's colors, and the shell itself (the rows and buttons
 // it acts on are rows.h's), whose lifecycle is participant.cpp's, its panels
@@ -59,22 +59,22 @@
 namespace rawframe::studio {
 
 /// An author's color, the same wherever they are shown and in every
-/// collaborator's Studio (D884): red, green, blue, and opacity.
+/// collaborator's Studio: red, green, blue, and opacity.
 [[nodiscard]] std::uint32_t authorColorOf(std::string_view author);
 
 /// A graph node's name as the canvas and the Hierarchy show it, its type's
 /// short name in words (`value_noise_2d` is "Value noise 2d"), and its
-/// kind's dot color (canvas.cpp, D923).
+/// kind's dot color (canvas.cpp).
 [[nodiscard]] std::string graphNodeLabel(const Value& node);
 [[nodiscard]] std::uint32_t graphNodeDot(const Value& node);
 
 inline constexpr diagnostics::EventIdentity kSummary{"studio", "studio_summary"};
 inline constexpr diagnostics::EventIdentity kLayout{"studio", "studio_layout"};
-/// A context menu opened (D973): the part it is for and its rows.
+/// A context menu opened: the part it is for and its rows.
 inline constexpr diagnostics::EventIdentity kContextMenu{"studio", "studio_context"};
-/// A layout chosen or saved (D911): its name and the bottom dock's tab.
+/// A layout chosen or saved: its name and the bottom dock's tab.
 inline constexpr diagnostics::EventIdentity kLayoutChosen{"studio", "studio_layout_chosen"};
-/// A bottom panel docked on the right or back under the scene (D980).
+/// A bottom panel docked on the right or back under the scene.
 inline constexpr diagnostics::EventIdentity kDocked{"studio", "studio_docked"};
 /// The toolbar's layout chooser, by the words on it and the menu it opens.
 inline constexpr std::string_view kLayoutChooser = "Layouts";
@@ -84,58 +84,58 @@ inline constexpr diagnostics::EventIdentity kViewported{"studio", "studio_viewpo
 inline constexpr diagnostics::EventIdentity kBrowsed{"studio", "studio_assets"};
 inline constexpr diagnostics::EventIdentity kFilesChanged{"studio", "studio_files"};
 inline constexpr diagnostics::EventIdentity kPlayedRecord{"studio", "studio_played"};
-/// The image key the viewport's picture is drawn under (D789).
+/// The image key the viewport's picture is drawn under.
 inline constexpr std::uint64_t kViewportImage = 0x5649455750ULL;
 /// The palette's found rows by their codes, past every command's place: an
-/// entity's place from the first, an asset's from the second (D927).
+/// entity's place from the first, an asset's from the second.
 inline constexpr std::size_t kFoundEntity = std::size_t{1} << 20U;
 inline constexpr std::size_t kFoundAsset = std::size_t{2} << 20U;
 inline constexpr diagnostics::EventIdentity kShown{"studio", "studio_shown"};
-/// Studio's window read by assistive technology (D575), or why not.
+/// Studio's window read by assistive technology, or why not.
 inline constexpr diagnostics::EventIdentity kAccessible{"studio", "studio_accessibility_ready"};
 inline constexpr diagnostics::EventIdentity kInaccessible{"studio", "studio_accessibility_unavailable"};
 inline constexpr diagnostics::EventIdentity kPreviewing{"studio", "studio_previewing"};
-/// The preview shows where the chosen entity stands (D464), so its handles
-/// can be grabbed (D466).
+/// The preview shows where the chosen entity stands, so its handles
+/// can be grabbed.
 inline constexpr diagnostics::EventIdentity kMarked{"studio", "studio_marked"};
-/// What each author has chosen outlined in the preview, in their color
-/// (D907): how many authors' outlines it drew.
+/// What each author has chosen outlined in the preview, in their color:
+/// how many authors' outlines it drew.
 inline constexpr diagnostics::EventIdentity kOutlined{"studio", "studio_outlined"};
 inline constexpr diagnostics::EventIdentity kNetworkRead{"studio", "studio_network"};
-/// A part of the mark lit under the pointer, as the session says (D504).
+/// A part of the mark lit under the pointer, as the session says.
 inline constexpr diagnostics::EventIdentity kLit{"studio", "studio_lit"};
-/// A game asked to stop has ended, its server and its client both (D504).
+/// A game asked to stop has ended, its server and its client both.
 inline constexpr diagnostics::EventIdentity kGameEnded{"studio", "studio_game_ended"};
 /// At a host joined, the cook this author made there brought here to be
-/// played (D905): the files read over, those already here, and the bytes.
+/// played: the files read over, those already here, and the bytes.
 inline constexpr diagnostics::EventIdentity kCookBrought{"studio", "studio_cook_brought"};
-/// A drag in the played game committed to the chosen scene (D457, D463,
-/// D466, D467): how, and what it moved.
+/// A drag in the played game committed to the chosen scene:
+/// how, and what it moved.
 inline constexpr diagnostics::EventIdentity kDragged{"studio", "studio_dragged"};
 inline constexpr diagnostics::EventIdentity kBoxed{"studio", "studio_boxed"};
 inline constexpr diagnostics::EventIdentity kAssetPlaced{"studio", "studio_asset_placed"};
-/// The view moved in the played game (D469): how far its eye is from its
-/// target now, and where each is (D472).
+/// The view moved in the played game: how far its eye is from its
+/// target now, and where each is.
 inline constexpr diagnostics::EventIdentity kViewMoved{"studio", "studio_view_moved"};
-/// The entity column shows what a search found (D473): how many, and the
+/// The entity column shows what a search found: how many, and the
 /// name and component searched for.
 inline constexpr diagnostics::EventIdentity kSearched{"studio", "studio_searched"};
 /// Each status the status line shows, as it shows it: what a test waits on
-/// before it stops Studio, however slowly frames come (D489).
+/// before it stops Studio, however slowly frames come.
 inline constexpr diagnostics::EventIdentity kSaid{"studio", "studio_said"};
 
-/// Studio's colors, 0xRRGGBBAA, the design's (theme.h, D915): the window
+/// Studio's colors, 0xRRGGBBAA, the design's (theme.h): the window
 /// behind everything, a panel, a row, and the header.
 inline constexpr std::uint32_t kBackground = look::kWindowFill;
 inline constexpr std::uint32_t kPanel = look::kPanelFill;
-/// A row is clear until chosen (D915); a button is raised (button()).
+/// A row is clear until chosen; a button is raised (button()).
 inline constexpr std::uint32_t kRow = 0x00000000U;
 inline constexpr std::uint32_t kChosen = look::kSelected;
 /// How far a press moves, in the tree's pixels, before it is a drag
 /// rather than a click: a row, a card, or a graph's port.
 inline constexpr float kDragAfter = 6;
-/// A menu's card: raised over the window, edged, with a shadow (D923); the
-/// menus' and the context menu's (D973).
+/// A menu's card: raised over the window, edged, with a shadow; the
+/// menus' and the context menu's.
 inline constexpr ui::Look kMenuLook{.fill = 0x1E2026FFU,
                                     .borderColor = look::kRaisedEdge,
                                     .radius = 7,
@@ -145,11 +145,11 @@ inline constexpr std::uint32_t kEditing = 0x0B0C0FFFU;
 inline constexpr std::uint32_t kHeaderFill = look::kBarFill;
 inline constexpr std::uint32_t kText = look::kInk;
 inline constexpr std::uint32_t kQuiet = look::kLabelInk;
-/// Words that warn: a chord two commands share (D782).
+/// Words that warn: a chord two commands share.
 inline constexpr std::uint32_t kWarning = look::kWarn;
 
 /// The shell: a session on the game, and the UI that shows it.
-/// The icon a source of `kind` is drawn with, and its ink (D916).
+/// The icon a source of `kind` is drawn with, and its ink.
 [[nodiscard]] std::pair<Icon, std::uint32_t> kindIcon(std::string_view kind);
 
 class ShellParticipant final : public composition::Participant, public ui::UiFrames {
@@ -169,7 +169,7 @@ private:
     /// A box of `color` as `layout` places it under `parent`, if any.
     result::Result<ui::Node> box(std::optional<ui::Node> parent, const ui::Layout& layout, std::uint32_t color);
 
-    /// The frame's parts as the design draws them (frame.cpp, D915): an
+    /// The frame's parts as the design draws them (frame.cpp): an
     /// icon button, lit while `on`; a button with words and an icon; a
     /// button relabeled in place; a separator; a tab and its strip; the
     /// title row with the mark.
@@ -188,7 +188,7 @@ private:
     result::Result<ui::Node> dockColumn(ui::Node parent, std::string_view name);
     /// The title row's middle: the game, and the document open.
     void showTitle();
-    /// A Hierarchy row as the design's (D915): indented `depth` steps, a
+    /// A Hierarchy row as the design's: indented `depth` steps, a
     /// chevron where it has children, its kind's icon, and its name.
     result::Result<ui::Node> entityRow(ui::Node column,
                                        std::string_view label,
@@ -198,7 +198,7 @@ private:
                                        std::uint32_t iconInk,
                                        std::uint32_t ink,
                                        std::string_view quiet = {});
-    /// The toolbar under the title row and the status bar (D915).
+    /// The toolbar under the title row and the status bar.
     result::Status toolbar(ui::Node root);
     result::Status statusBar(ui::Node root);
     /// The toolbar's lit buttons as Studio's state has them now.
@@ -207,8 +207,8 @@ private:
     /// a command's button, done; whether it was one.
     bool pressFrame(ui::Node node);
 
-    /// An icon `side` pixels square under `parent`, tinted `color`
-    /// (D915); it takes no presses of its own.
+    /// An icon `side` pixels square under `parent`, tinted `color`;
+    /// it takes no presses of its own.
     result::Result<ui::Node> icon(ui::Node parent, Icon which, std::uint32_t color, float side = 16);
     /// Words in Studio's strong weight, and in its fixed-width face.
     result::Status strongWords(ui::Node node, std::string_view text, std::uint32_t color, float size = look::kBodySize);
@@ -219,30 +219,30 @@ private:
     result::Status wrappedWords(ui::Node node, std::string_view text, std::uint32_t color, float size = 15);
     /// A column under `parent` headed `heading`, its row's width or `width`.
     result::Result<ui::Node> column(ui::Node parent, std::string_view heading, float width = 0);
-    /// The played game's newest picture, when it plays in the viewport (D789).
+    /// The played game's newest picture, when it plays in the viewport.
     void followPicture();
     /// The viewport, under the view's fields, showing that picture.
     void showViewport();
     /// Over a prefab source's view, the way back and how far an edit
-    /// reaches (D932), and its back link pressed.
+    /// reaches, and its back link pressed.
     void showPrefabBar();
-    /// A 2D game's scene opened put on the 2D view, framed whole (D933).
+    /// A 2D game's scene opened put on the 2D view, framed whole.
     void settleFlat();
     bool pressPrefabBar(ui::Node node);
-    /// An author's initials in their color, `size` across (D935); what the
+    /// An author's initials in their color, `size` across; what the
     /// presence says another is doing; and the session's card opened from
     /// the title bar's avatars.
     result::Result<ui::Node> avatar(ui::Node parent, std::string_view author, float size);
     [[nodiscard]] std::string doingOf(const Collaborating& other) const;
     bool pressSession(ui::Node node);
 
-    /// The viewport's input and area handed to the game played there (D790).
+    /// The viewport's input and area handed to the game played there.
     void forwardInput();
 
-    /// The left dock's layout, `width` wide (D788).
+    /// The left dock's layout, `width` wide.
     static ui::Layout leftLayout(float width);
 
-    /// A left dock column headed `heading`, `tab` showing `other` (D788).
+    /// A left dock column headed `heading`, `tab` showing `other`.
     result::Result<ui::Node> tabbedColumn(ui::Node parent,
                                           std::string_view heading,
                                           std::string_view other,
@@ -250,8 +250,8 @@ private:
                                           std::string_view extra = {},
                                           ui::Node* extraButton = nullptr);
 
-    /// What the left dock shows: the Hierarchy, the Layers (D788), or the
-    /// World, the scene's districts (D870).
+    /// What the left dock shows: the Hierarchy, the Layers, or the
+    /// World, the scene's districts.
     enum class Left : std::uint8_t {
         Hierarchy,
         Layers,
@@ -260,12 +260,12 @@ private:
     void showLeft(Left shown);
 
     /// The World: each instance of the scene, how it reaches clients as a
-    /// district, pressed to stream it the next way (D870).
+    /// district, pressed to stream it the next way.
     void showWorld();
     /// A press on the World's rows; whether it was.
     bool pressWorld(ui::Node node);
 
-    /// The Layers: each layer, how many are on it, its choosing and lock (D788).
+    /// The Layers: each layer, how many are on it, its choosing and lock.
     void showLayers();
 
     /// A press on the left dock's tabs or the Layers' rows; whether it was.
@@ -274,14 +274,14 @@ private:
     /// `layer`'s name, as the game's field line names it, else its number.
     [[nodiscard]] std::string layerName(std::uint32_t layer) const;
 
-    /// Tells the preview of the scene shown the layers hidden (D791), the
-    /// view mode (D794), and how many views it shows (D797).
+    /// Tells the preview of the scene shown the layers hidden, the
+    /// view mode, and how many views it shows.
     void tellHidden();
     void tellViewMode();
     void tellSplit();
-    /// Tells the preview what it draws over its scene (D798).
+    /// Tells the preview what it draws over its scene.
     void tellOverlays();
-    /// The asset browser (D799): sources asked again, its controls, its rows.
+    /// The asset browser: sources asked again, its controls, its rows.
     void listSources();
     result::Status showBrowser();
     result::Status makeAssets();
@@ -295,7 +295,7 @@ private:
     void askDialog(view::FileDialogs::Kind kind, std::string title, std::string forWhat);
     void takeDialogs();
     void openFolder(const std::filesystem::path& folder);
-    /// The game open closed, the start screen shown (D923).
+    /// The game open closed, the start screen shown.
     void closeGame();
     void asCheckbox(ui::Node value, bool on);
     void asChooser(ui::Node line);
@@ -310,21 +310,21 @@ private:
     [[nodiscard]] bool commandOn(std::string_view name) const;
     [[nodiscard]] std::vector<std::string> partCommands() const;
     [[nodiscard]] const Catalog::Component* lampComponent() const;
-    /// The game's scene-kept particle emitter, if it has one (D934).
+    /// The game's scene-kept particle emitter, if it has one.
     [[nodiscard]] const Catalog::Component* emitterComponent() const;
     void createPart(std::string_view command);
     [[nodiscard]] std::vector<std::string> addChoices(std::string_view typed) const;
     result::Status showSources();
     bool pressBrowser(ui::Node node);
-    /// The chosen source's import settings, one set, and a recook (D800).
+    /// The chosen source's import settings, one set, and a recook.
     void showImportSettings();
-    /// Imports `path` (absolute) as `as` in the game's directory, saying how (D505).
+    /// Imports `path` (absolute) as `as` in the game's directory, saying how.
     bool importFile(const std::string& path, const std::string& as);
-    /// Each file dropped on the window imported into its folder (D802).
+    /// Each file dropped on the window imported into its folder.
     void takeDrops();
-    /// The chosen source's references in the center, read only (D803).
+    /// The chosen source's references in the center, read only.
     void showReferences();
-    /// `source`'s thumbnail from the last cook, made once; or none (D801).
+    /// `source`'s thumbnail from the last cook, made once; or none.
     std::shared_ptr<const texture::Texture> thumbnailOf(const ListedSource& source);
     void setImportSetting(const FieldRow& row, const std::string& text);
 
@@ -337,7 +337,7 @@ private:
     /// The bottom dock's layout: `height` pixels, or nought for its share.
     [[nodiscard]] static ui::Layout dockLayout(float height);
 
-    /// The docks' edges a pointer drags (D779).
+    /// The docks' edges a pointer drags.
     enum class Edge : std::uint8_t {
         Hierarchy,
         Inspector,
@@ -360,10 +360,10 @@ private:
     result::Result<ui::Node> button(ui::Node parent, std::string_view text);
 
     /// `text` on `node`, something to press, which it names for assistive
-    /// technology (D575).
+    /// technology.
     result::Status pressWords(ui::Node node, std::string_view text, std::uint32_t color, float size);
 
-    /// The window as SPEC-0051 plans it (D776): the toolbar; the Hierarchy
+    /// The window as Studio lays it out: the toolbar; the Hierarchy
     /// on the left, the center with the open documents' tabs over the
     /// active one's view, and the Assets and History under both; the
     /// Inspector on the right the body's height; the status bar.
@@ -371,12 +371,12 @@ private:
 
     using Dock = studio::Dock;
     /// The bottom dock showing `pane`, or the right one when the author
-    /// docked it there (D980).
+    /// docked it there.
     void showDock(Dock pane);
     /// A pane's tab and column, whether it moves, is docked on the right,
-    /// and shows in either dock (D985); it docked there or back, as a held tab is let go; the right
+    /// and shows in either dock; it docked there or back, as a held tab is let go; the right
     /// dock showing a column; the tabs in their strips and lit; and the
-    /// panes the preferences dock on the right, with the first left (D980).
+    /// panes the preferences dock on the right, with the first left.
     [[nodiscard]] ui::Node tabNode(Dock pane) const;
     [[nodiscard]] ui::Node paneNode(Dock pane) const;
     [[nodiscard]] static bool movable(Dock pane);
@@ -389,13 +389,13 @@ private:
     void lightTabs();
     [[nodiscard]] Dock readRightPanes();
     /// A pane shown apart in a window of its own; what those windows did followed, each
-    /// laid out and drawn; all closed, as the tree is made again (D988); those kept opened again (D994).
+    /// laid out and drawn; all closed, as the tree is made again; those kept opened again.
     void tearOut(Dock pane);
     void followAsides(double seconds);
     void closeAsides();
     void reopenAsides();
-    /// The six layouts Studio ships and the author's own (SPEC-0051 Part
-    /// 3, D911), and one put in place: the docks' sizes kept as the
+    /// The six layouts Studio ships and the author's own, and one put in
+    /// place: the docks' sizes kept as the
     /// preferences, the bottom dock's tab shown; and the docks as they are
     /// saved as the author's next.
     [[nodiscard]] std::vector<Layout> layouts() const;
@@ -408,7 +408,7 @@ private:
     /// A line added to the Console, the oldest let go past its bound.
     void addConsoleLine(ConsoleLine line);
 
-    /// The played game's logs read as they grow, twice a second (D778).
+    /// The played game's logs read as they grow, twice a second.
     void readLogs(double seconds);
 
     /// The Console's pane, made once: its filters over its list.
@@ -418,10 +418,10 @@ private:
     /// them in its list, newest last.
     void showConsole();
     /// The status bar's figures: the Console's errors and warnings, each
-    /// pressed to show it, and the cook's state (D923).
+    /// pressed to show it, and the cook's state.
     void showFigures(double seconds);
 
-    /// The commands the window's buttons do (D777), then a button in `bar`
+    /// The commands the window's buttons do, then a button in `bar`
     /// for each menu that has any, and the palette's field after them.
     /// The menus in `bar`, and the palette's field at `searchAt`, else
     /// after them.
@@ -435,7 +435,7 @@ private:
 
     /// The menu at `at` in a popup under its button, or closed if it is
     /// the one open.
-    /// A menu's line for `command`, lit where `lit` (D923).
+    /// A menu's line for `command`, lit where `lit`.
     result::Result<ui::Node>
     menuLine(ui::Node popup, const Command& command, bool lit, std::optional<bool> checked = std::nullopt);
     void showMenu(std::size_t at);
@@ -451,7 +451,7 @@ private:
     /// The palette's field given the keyboard, emptied, its matches all.
     void openPalette();
     /// What the palette found, by its code: an entity at kFoundEntity and
-    /// on, an asset at kFoundAsset and on (D927).
+    /// on, an asset at kFoundAsset and on.
     void runFound(std::size_t code);
 
     /// The palette's field let go, if it held the keyboard, reading its hint.
@@ -459,7 +459,7 @@ private:
 
     /// The open menu or matches closed, if any is.
     void closePopup();
-    /// A context menu (D973) at `x`, `y`, the tree's pixels, for the part
+    /// A context menu at `x`, `y`, the tree's pixels, for the part
     /// of the window a secondary press met there: its rows the commands and
     /// buttons of that part, each doing what its own does.
     void showContext(float x, float y);
@@ -474,7 +474,7 @@ private:
     void showTabs(std::optional<std::size_t> opened = std::nullopt);
 
     /// A row of `text` under `column`, its height fixed; one to press read
-    /// as a button (D575).
+    /// as a button.
     result::Result<ui::Node>
     row(ui::Node column, std::string_view text, std::uint32_t color, std::uint32_t fill = kRow, bool pressed = false);
 
@@ -483,22 +483,22 @@ private:
     /// One record to the session, counted; its reply; the next record's id.
     std::string ask(const Value& record);
     /// One record line answered by the session Studio holds, or the host it
-    /// joined (D882).
+    /// joined.
     std::string answerLine(const std::string& line);
     /// Whether a game is open, in a session of Studio's own or a host's.
     [[nodiscard]] bool gameOpen() const noexcept;
     /// What the session previews the played game by: the open scene, or
-    /// the game's description where its Kest makes its world (D928).
+    /// the game's description where its Kest makes its world.
     [[nodiscard]] std::string previewedName() const;
     /// What the joined host said unasked, acted on, and what Studio has
     /// open and chosen said to it as it changes.
     void hearHost();
-    /// The others at the host in the title bar, each in their color (D884).
+    /// The others at the host in the title bar, each in their color.
     void showCollaborators();
     /// What a Hierarchy row of `entity` says of the others: who has it
     /// chosen, and who holds it; empty where no one does.
     [[nodiscard]] std::string presenceMarks(const std::string& entity) const;
-    /// The chosen entity claimed at the host, or let go (D884).
+    /// The chosen entity claimed at the host, or let go.
     void claimChosen(bool claim);
     std::int64_t next() const noexcept;
 
@@ -513,7 +513,7 @@ private:
     /// move to.
     bool beforePress();
 
-    /// A press on `node`, a pointer's or a screen reader's (D575): a scene
+    /// A press on `node`, a pointer's or a screen reader's: a scene
     /// row shows its entities, an entity row chooses it and shows its
     /// components, a field takes the keyboard, and a button does its
     /// operation.
@@ -522,7 +522,7 @@ private:
     void showScene(std::size_t at);
 
     /// The chosen scene's entities as the session lists them, or as the
-    /// typed search finds them (D473).
+    /// typed search finds them.
     std::optional<Value> entitiesShown();
 
     void showEntity(std::size_t at);
@@ -540,7 +540,7 @@ private:
                                                            std::optional<ui::Node> column = std::nullopt,
                                                            bool set = true,
                                                            std::string_view shown = {});
-    /// The Inspector as the design draws it (inspector.cpp, D915): its head,
+    /// The Inspector as the design draws it (inspector.cpp): its head,
     /// the entity's icon and its name, the name's field where it may be
     /// renamed; a run of axes at `place` (how many, nought for none); and
     /// those axes as one row of colored fields.
@@ -550,7 +550,7 @@ private:
     vectorRow(const std::string& component, std::string_view componentName, std::span<const FieldShown> axes);
     /// A component's fields in the order its Inspector groups them, and
     /// over the field at `place` the group it begins and a color ramp
-    /// (an emitter's, D934).
+    /// (an emitter's).
     [[nodiscard]] std::vector<FieldShown> groupedFields(const std::string& component,
                                                         std::vector<FieldShown> fields) const;
     void fieldGroupRow(const std::string& component, std::span<const FieldShown> fields, std::size_t place);
@@ -575,11 +575,11 @@ private:
     /// The scene's view with `part` as `text` says, set by the session
     /// (`authoring.view`), which hands it to a live preview.
     void setView(const std::string& part, const std::string& text);
-    /// The view turned on what is chosen, by the session (D792).
+    /// The view turned on what is chosen, by the session.
     void frameChosen(bool quiet = false);
-    /// The view seen in 2D or out of it (D793).
+    /// The view seen in 2D or out of it.
     void seeIn2D(bool flat);
-    /// The scene's bookmark `slot` gone to, or kept from the view (D796).
+    /// The scene's bookmark `slot` gone to, or kept from the view.
     void bookmark(std::uint8_t slot, bool go);
 
     /// `operation` with the chosen entity as its target.
@@ -590,12 +590,12 @@ private:
     /// that cannot be what the row asks is refused before it is asked.
     void apply(const FieldRow& row, const std::string& text);
 
-    /// A new entity at the end of the scene's own, its identity minted
-    /// (D438), chosen once made.
+    /// A new entity at the end of the scene's own, its identity minted,
+    /// chosen once made.
     void create();
 
     /// Copies the chosen entity as a new one named after it, its components
-    /// and values with it, in one transaction (D458); or keeps and pastes them (D999).
+    /// and values with it, in one transaction; or keeps and pastes them.
     void duplicate();
     void copyOrPaste(bool paste);
     /// The operations that make `entity`, named `called`, with each of the
@@ -604,7 +604,7 @@ private:
     copyOf(const Value& components, const std::string& entity, const std::string& called);
     /// Moves the chosen entity, its id and components, to the scene listed
     /// at `sceneAt`: made there and deleted here in one transaction over
-    /// both scenes (D498).
+    /// both scenes.
     void moveTo(std::size_t sceneAt);
 
     /// Moves the chosen entity one place earlier (`by` -1) or later (+1)
@@ -613,25 +613,25 @@ private:
 
     /// Places in the chosen scene an instance of the scene `text` names.
     void place(const std::string& text);
-    /// A mesh dropped in the scene, over the viewport at `at`: an entity drawing it (D981, D989).
+    /// A mesh dropped in the scene, over the viewport at `at`: an entity drawing it.
     void placeMesh(const Asset& mesh, std::optional<std::array<float, 2>> at = std::nullopt);
-    /// Where a drop at `at` over the viewport rests, and a mesh's lowest point by the last cook (D989).
+    /// Where a drop at `at` over the viewport rests, and a mesh's lowest point by the last cook.
     [[nodiscard]] std::array<double, 3> restingAt(std::optional<std::array<float, 2>> at);
     [[nodiscard]] std::optional<double> lowestOf(const std::string& asset);
 
     /// Makes a new scene at the path `text` gives, `.scene` added if it
     /// has none, and chooses it; or, for a file's absolute path, imports
-    /// the file as one of the game's assets (D505).
+    /// the file as one of the game's assets.
     void makeScene(std::string text);
 
     /// Greets the session and reads what it offers and the game's scenes;
-    /// false, with `broken_` set, when the game does not read (D453).
+    /// false, with `broken_` set, when the game does not read.
     bool openGame();
     /// The documents Studio opens, read from the game's directory as it
     /// is: its scenes, then each kind it edits, then its description.
     void listDocuments();
 
-    /// Assets' file operations (D929): a folder's name and the target's
+    /// Assets' file operations: a folder's name and the target's
     /// new one begun in the heading's field and taken from it; the target
     /// moved, removed once confirmed, or kept; a card let go on a folder;
     /// the lists read again after any, the open document followed.
@@ -647,15 +647,15 @@ private:
     void refreshFiles(const std::string& from, const std::string& to);
     void dropAsset();
     /// A graph's output held on the canvas and let go on another node's
-    /// input, wired to it as the Inspector's connection is (D733, D977).
+    /// input, wired to it as the Inspector's connection is.
     void dropWire();
     /// An asset dragged from Assets and let go at `at` placed where it
-    /// landed (D975): onto a field that takes an asset, that asset; onto
+    /// landed: onto a field that takes an asset, that asset; onto
     /// the Hierarchy or the viewport, a scene's instance. Whether it landed
     /// somewhere it is placed.
     bool placeDropped(const std::string& held, const std::array<float, 2>& at);
     /// A source's card chosen: its import settings in the Inspector, and
-    /// what Assets' buttons act on (D800, D929).
+    /// what Assets' buttons act on.
     void chooseSource(const std::string& path);
     void logFiles(std::string_view verb, std::string_view from, std::string_view to, std::size_t named);
 
@@ -664,20 +664,20 @@ private:
 
     /// Studio on `description`, its scenes under `root`: a session over it,
     /// where it plays and cooks, and the game kept first among those opened
-    /// last (D781).
+    /// last.
     void settle(const std::filesystem::path& description, const std::filesystem::path& root);
 
-    /// The start screen, while Studio has no game (D781): the games opened
+    /// The start screen, while Studio has no game: the games opened
     /// last, a new one from a template, and one to open by its path.
     result::Status showStart(ui::Node body);
 
-    /// The Preferences dialog over the center (D782): the editor a file is
+    /// The Preferences dialog over the center: the editor a file is
     /// opened in, then each command's keys, a chord two commands share
     /// said under both; closed again if open.
     void openPreferences();
     void closePreferences();
 
-    /// An entity row pressed (D787): with Control held, added to the
+    /// An entity row pressed: with Control held, added to the
     /// selection or taken from it; with Shift, the rows from the last one
     /// chosen to it; else it alone.
     void chooseEntity(std::size_t at);
@@ -686,16 +686,16 @@ private:
     /// `entities_`) the one pressed last: the components they all have,
     /// each field's value where they agree, empty where they differ.
     void showSelection(std::size_t at);
-    /// The Select tool's box (D974): every entity standing inside the box
+    /// The Select tool's box: every entity standing inside the box
     /// a press drew across the view, from the way its ray went down to the
     /// way it came up, chosen. Whether it was a box, not a click.
     bool chooseBoxed(const std::array<std::array<double, 3>, 2>& box);
 
     /// `operation`, done to the entity chosen, or to each of several as one
-    /// step (D787).
+    /// step.
     void commitChosen(Value operation, const std::string& done);
 
-    /// An entity row let go after a drag (D785): onto another entity, it
+    /// An entity row let go after a drag: onto another entity, it
     /// follows that one; onto the Hierarchy below its entities, none.
     void dropEntity();
 
@@ -705,7 +705,7 @@ private:
     /// would follow its own follower, or a game with no attachment.
     void reparent(std::size_t entity, std::optional<std::size_t> parent);
 
-    /// The values `row`'s field is chosen from, in a list under it (D784).
+    /// The values `row`'s field is chosen from, in a list under it.
     void showChoices(const FieldRow& row, const std::vector<std::string>& choices);
 
     /// A press in the Preferences dialog, taken whole; false for a press
@@ -719,7 +719,7 @@ private:
     /// The editor's command from the text typed; the setting's or the
     /// default for none.
     void setEditor(const std::string& text);
-    /// Studio drawn at `percent`, or at the screen's scale for nought (D966).
+    /// Studio drawn at `percent`, or at the screen's scale for nought.
     void setInterfaceScale(int percent);
 
     /// A press on the start screen: a template chosen, a game opened, or a
@@ -731,7 +731,7 @@ private:
     void chooseGame(const std::filesystem::path& description);
 
     /// A new game named `name` from the chosen template, where new games
-    /// go, by the same function as `rawframe-author new` (D780), and chosen.
+    /// go, by the same function as `rawframe-author new`, and chosen.
     void makeGame(const std::string& name);
 
     /// The tree built again, as the game or Studio's state now is, and
@@ -742,8 +742,8 @@ private:
     /// it names a file.
     void keepPreferences();
 
-    /// The chosen scene's history in the bottom dock's History (D454,
-    /// D776): each entry a row, the undone quiet.
+    /// The chosen scene's history in the bottom dock's History:
+    /// each entry a row, the undone quiet.
     void showHistoryList();
 
     /// Undoes or redoes until the history's entry `entry` is the last one
@@ -760,10 +760,10 @@ private:
     /// `why` in the header, nothing asked, the entity shown as it stands.
     void refuse(const std::string& why);
 
-    /// Whether the chosen document is of `kind`: a style sheet (D637), a UI
-    /// document (D643), a material (D722) or a graph (D730), a data document
-    /// (D812), the game's own description (D818), or a frame's capture,
-    /// read only (D843).
+    /// Whether the chosen document is of `kind`: a style sheet, a UI
+    /// document, a material or a graph, a data document,
+    /// the game's own description, or a frame's capture,
+    /// read only.
     [[nodiscard]] bool chosen(Listed kind) const noexcept {
         return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] == kind;
     }
@@ -771,42 +771,42 @@ private:
         return !scene_.empty() && sceneAt_ < listed_.size() && listed_[sceneAt_] != Listed::Scene;
     }
     /// What a document's row and tab say: its path, or "Project settings"
-    /// for the game's description (D818).
+    /// for the game's description.
     [[nodiscard]] std::string documentLabel(const std::string& path) const;
     /// The game's settings in the entity column, its lines grouped by the
     /// word they begin with (`lines.read`); a group's lines each a field;
     /// a line set, taken away, or put in through `lines.set` and
-    /// `lines.insert` (D818).
+    /// `lines.insert`.
     void showSettings();
     void showSettingsGroup(std::size_t at);
-    /// A blockout's solids as rows, and the chosen one's words (D850).
+    /// A blockout's solids as rows, and the chosen one's words.
     void showBlockout();
     void showPlan();
     void showBlockoutSolid(std::size_t at);
     void dropSolid(std::size_t at, std::array<float, 2> moved);
     void dropKey(std::size_t at, float moved);
-    /// A terrain's layers as rows, its brush, and its map (D856).
+    /// A terrain's layers as rows, its brush, and its map.
     void showTerrain();
     void showBrush();
     void showTerrainLayer(std::size_t at);
     void setBrush(const FieldRow& row, const std::string& text);
     bool pressMap(ui::Node node);
-    /// A tilemap's tiles as rows, the tile painted, and its grid (D861).
+    /// A tilemap's tiles as rows, the tile painted, and its grid.
     void showTilemap();
     void showTilePaint();
     void showTileRow(std::size_t at);
     void setTilePaint(const std::string& text);
     bool pressTiles(ui::Node node);
-    /// A scatter's lines as fields, its copies drawn, and a reseed (D866).
+    /// A scatter's lines as fields, its copies drawn, and a reseed.
     void showScatter();
     void showScatterLines();
     void reseedScatter();
     /// A sequence's lines as fields, its tracks and keys along its
-    /// duration, and a row that adds a track (D869).
+    /// duration, and a row that adds a track.
     void showSequence();
     void showSequenceLines();
     void addSequenceTrack();
-    /// The timeline's parts (D931): its Inspector, the game's animators by
+    /// The timeline's parts: its Inspector, the game's animators by
     /// identity and name, a key's line, a key put in its place in time, a
     /// key's field set, its presses, the playhead's place, and the
     /// playhead moved on while it plays.
@@ -821,7 +821,7 @@ private:
     [[nodiscard]] ui::Layout playheadAt(double time) const;
     void runSequence(double seconds);
     void setSolid(const FieldRow& row, const std::string& text);
-    /// A frame's capture (D843): its figures and its steps in the entity
+    /// A frame's capture: its figures and its steps in the entity
     /// column, the one chosen in the Inspector, nothing to edit.
     void showCapture();
     void showCaptureEntry(std::size_t at);
@@ -829,31 +829,31 @@ private:
     void putSettingLine(const FieldRow& row, const std::string& text);
     /// The chosen data document's objects and keyed items in the entity
     /// column, read whole (`data.read`); one of them, its values each a
-    /// field; and a value set through `data.set` (D812).
+    /// field; and a value set through `data.set`.
     void showData();
     /// The data document's keyed lists as tables in the center, a row each,
-    /// pressed to choose it (D923).
+    /// pressed to choose it.
     void showDataTables();
     /// An input actions document as the design's Data screen draws it: a
     /// table for each context, each action's kind and what each device
-    /// presses for it as chips (D927).
+    /// presses for it as chips.
     void showActionTables();
     /// A strings document as the design's Strings screen draws it: each
     /// key, its source text, and each translation's beside it, a missing
-    /// one marked (D927).
+    /// one marked.
     void showStringTables();
-    /// A graph's nodes laid out by the wires into them or where `drawn` puts them (D819, D982), `prefix`
+    /// A graph's nodes laid out by the wires into them or where `drawn` puts them, `prefix`
     /// what each node id is among the rows' entities; a node pressed is its row pressed, its card dragged.
     void showCanvas(const Value& nodes, const std::string& prefix, const Value* drawn = nullptr);
     void followCard(bool released);
-    /// A clip's lanes (D827), a UI document laid out (D832): parts as rows.
+    /// A clip's lanes, a UI document laid out: parts as rows.
     void showTimeline(const Value& clip);
     /// The clip's transport and ruler pressed, and its playhead moved on
-    /// while it plays (D939).
+    /// while it plays.
     bool pressClip(ui::Node node);
     void runClip(double seconds);
     void showUiPreview(const Value& document);
-    /// What a UI node's text, font, image, or style identity names (D941):
+    /// What a UI node's text, font, image, or style identity names:
     /// a label's message from its strings table, an asset's file, a class's
     /// name; and a label's message alone, its arguments as `{name}`.
     [[nodiscard]] std::string uiNamed(std::string_view member, std::string_view value);
@@ -876,7 +876,7 @@ private:
     /// a color is typed as `#rrggbbaa`.
     void setPart(const FieldRow& row, const std::string& text);
     /// The chosen UI document's nodes in the entity column, each indented
-    /// by how deep it stands, read whole (`ui.read_document`, D643).
+    /// by how deep it stands, read whole (`ui.read_document`).
     void showUi();
     /// The node at `at`: `shows` and every field of `rawframe.ui.Node`, each
     /// a field showing what the document sets.
@@ -885,28 +885,27 @@ private:
     /// as a part's is.
     void setNodeField(const FieldRow& row, const std::string& text);
     /// The chosen node moved one place earlier (`by` -1) or later (+1)
-    /// among its siblings (`ui.move_node`, D644).
+    /// among its siblings (`ui.move_node`).
     void moveNode(int by);
     /// The chosen node moved into `parent`, or to the document's top where
-    /// there is none, last there (`ui.move_node`, D671).
+    /// there is none, last there (`ui.move_node`).
     void moveNodeInto(const std::optional<std::string>& parent);
-    /// The form New shows with a UI document chosen (D672): a row for each
+    /// The form New shows with a UI document chosen: a row for each
     /// of the game's node components the document does not hold, pressed
     /// to make a node of it at the document's top (`ui.create_node`).
     void showNodeForm();
 
-    /// The node types a material graph may hold, each a button making one
-    /// (D731).
+    /// The node types a material graph may hold, each a button making one.
     void showGraphForm();
     /// The chosen material instance's base's inputs, then its switches, in
     /// the entity column, read with the instance from the session
-    /// (`materials.read_instance`, D722); those it overrides brighter.
+    /// (`materials.read_instance`); those it overrides brighter.
     void showMaterial();
     /// The input or switch at `at` chosen, its field in the Inspector
     /// taking the keys.
     void showInput(std::size_t at);
     /// In the center, what the instance is, its preview, and its base to
-    /// open; in the Inspector, every parameter as a field (D927).
+    /// open; in the Inspector, every parameter as a field.
     void showInstanceCard();
     void showInstanceSheet();
     /// `text` set as the chosen input's override (`materials.set_override`),
@@ -914,13 +913,13 @@ private:
     void setOverride(const std::string& input, const std::string& text);
     /// The chosen material graph's nodes in the entity column, each by its
     /// identity's first eight digits and its type, read whole from the
-    /// session (`materials.read_graph`, D730).
+    /// session (`materials.read_graph`).
     void showGraph();
     /// The node at `at`: its params, then its inputs, each a field showing
     /// what the graph holds, a connection as its JSON.
     void showGraphNode(std::size_t at);
     /// The chosen graph node's input `row` connected from `from`'s node and
-    /// output (D733).
+    /// output.
     void connectGraphInput(const FieldRow& row, const std::pair<std::string, std::string>& from);
     /// `text` set as the chosen node's param or input `row` names
     /// (`materials.set_node_param`, `materials.set_node_input`), typed as a
@@ -932,28 +931,28 @@ private:
     /// chosen if it stands.
     void commit(Value operation, const std::string& done, const std::optional<std::string>& choose);
     /// The same with several operations, one transaction, one history
-    /// entry (ADR-0065).
+    /// entry.
     void commitAll(std::vector<Value> operations,
                    const std::string& done,
                    const std::optional<std::string>& choose,
                    bool amends = false);
 
-    /// Moves the chosen scene's entity a drag carried (D457): its 3D
+    /// Moves the chosen scene's entity a drag carried: its 3D
     /// pose's x and z, in one transaction.
     /// Live, a step of a drag still held, shown as it goes and folded into
-    /// one change with the rest and its release (D976).
+    /// one change with the rest and its release.
     void moveDragged(const Moved& moved, bool live = false);
 
     /// The pose of an entity of the chosen scene, its 3D pose's fields by
     /// name, each at nought where the scene leaves it at its default; none
-    /// for an entity with no such pose (D457, D464).
+    /// for an entity with no such pose.
     std::optional<std::map<std::string, double, std::less<>>> poseOf(const std::string& source);
 
     /// Has the preview mark where the chosen entity stands, or nothing for
-    /// none or one with no pose (D464).
+    /// none or one with no pose.
     void markChosen();
     /// What this author and each other at the scene have chosen outlined
-    /// in its preview, each in their color, when any of it changed (D907).
+    /// in its preview, each in their color, when any of it changed.
     void outlineChosen();
 
     /// The chosen scene listed again, `entity` chosen if it stands, the
@@ -972,34 +971,34 @@ private:
 
     /// The game played to preview it: its server and client started, the
     /// client attached as the chosen scene's preview once it says who it is.
-    /// `edited`, played to be edited, shown in the viewport (D912).
+    /// `edited`, played to be edited, shown in the viewport.
     void startPlaying(bool edited = false);
-    /// The open scene shown in the viewport while nothing plays (D912):
+    /// The open scene shown in the viewport while nothing plays:
     /// once cooked, the game played edited; Play asked while it shows
     /// starts once it has stopped.
     void keepEditing();
     /// At a host joined, the cook this author made there brought into the
-    /// play directory (D905); whether it came.
+    /// play directory; whether it came.
     bool bringCooked();
-    /// The played game's World paused or let run, or stepped a tick (D806).
+    /// The played game's World paused or let run, or stepped a tick.
     void runPlayed(bool step);
     /// The Network panel made, a link button pressed, the server's traffic
-    /// read once a second while it is shown, and its lines (D807).
+    /// read once a second while it is shown, and its lines.
     result::Status makeNetwork();
-    /// The environment panel: the scene's sun, sky, probes, and passes (D834).
+    /// The environment panel: the scene's sun, sky, probes, and passes.
     result::Status makeEnvironment();
     void showEnvironment();
     bool pressEnvironment(ui::Node node);
-    /// The Profiler (D838) and the Frame tab (D842): the played game's
+    /// The Profiler and the Frame tab: the played game's
     /// server's last ticks and its preview's last frame, read once a second
-    /// while shown; each keeps a capture when its button is pressed (D844).
+    /// while shown; each keeps a capture when its button is pressed.
     result::Status makeProfiler();
     void readProfiler(double seconds);
     void showProfiler(const std::optional<Value>& profile);
     result::Status makeFrame();
     void readFrame(double seconds, std::string_view capture = {});
     bool pressCapture(ui::Node node);
-    /// The Changes tab (D871): git run in the game's directory, one at a
+    /// The Changes tab: git run in the game's directory, one at a
     /// time in order, each heard when it ends; the branch, the game's
     /// changes, a file's diff, and a commit of them all.
     result::Status makeChanges();
@@ -1011,34 +1010,34 @@ private:
     bool pressChanges(ui::Node node);
     void commitChanges(const std::string& message);
     /// An extension's command run on the chosen entities through the
-    /// session, as `authoring.extension` runs it headless (D874).
+    /// session, as `authoring.extension` runs it headless.
     void runExtensionCommand(const std::string& command);
-    /// An extension's viewport mode switched on, or off again (D877), and
+    /// An extension's viewport mode switched on, or off again, and
     /// run where a pick in the viewport met the scene.
     void switchExtensionMode(const std::string& mode);
     /// The mode palette's buttons, the mode in use lit: Studio's own modes
-    /// as the surface table places them, then the extensions' (D910).
+    /// as the surface table places them, then the extensions'.
     void showModes();
-    /// A viewport mode chosen (D910): Transform, the scene's own editing; a
+    /// A viewport mode chosen: Transform, the scene's own editing; a
     /// content mode, its document opened in the center, the scene it left
     /// kept for Transform; an extension's, switched on or off.
     void chooseMode(const std::string& mode);
     void runExtensionMode(const std::array<double, 3>& point, const std::optional<std::string>& picked);
     /// The Inspector's sections the game's extensions offer for the
-    /// entity shown, of the components `read` lists it with (D875).
+    /// entity shown, of the components `read` lists it with.
     void showSections(const std::optional<Value>& read);
-    /// The Extension panels tab (D878): each extension's panels filled for
+    /// The Extension panels tab: each extension's panels filled for
     /// the entities chosen, headed by their names.
     result::Status makeExtensionPanels();
     void showExtensionPanels();
     /// Studio's own directory, made the first time a tool needs it.
     std::optional<std::filesystem::path> ownDirectory();
     /// Where a game's picture is kept for the start screen, beside the
-    /// preferences: none without them (D927).
+    /// preferences: none without them.
     [[nodiscard]] std::optional<std::filesystem::path> gamePicturePath(const std::filesystem::path& description) const;
     /// The viewport's `picture` made small and kept as the open game's.
     void keepGamePicture(const texture::Texture& picture);
-    /// The Export dialog (D872), from the File menu: a target (desktop,
+    /// The Export dialog, from the File menu: a target (desktop,
     /// web, Android, iOS), the output directory, the title, and for a
     /// phone the address it reaches the server by; the export run as
     /// `rawframe-export` and heard when it ends. Opened again closes it.
@@ -1049,7 +1048,7 @@ private:
     void startExport();
     void pollExport();
     /// The browser shown again while the session draws meshes' thumbnails,
-    /// twice a second, so they appear as they are drawn (D899).
+    /// twice a second, so they appear as they are drawn.
     void pollThumbnails(double seconds);
     /// The directory the chosen target exports to, the default beside the
     /// game's.
@@ -1057,7 +1056,7 @@ private:
     bool pressNetwork(ui::Node node);
     void readNetwork(double seconds);
     void showNetwork(const std::vector<std::string>& lines);
-    /// The live World (D808): switched on or off, listed in the Hierarchy,
+    /// The live World: switched on or off, listed in the Hierarchy,
     /// an entity of it shown and read again, and a press on its rows.
     void switchLive();
     void showLive();
@@ -1066,12 +1065,12 @@ private:
     bool pressLive(ui::Node node);
     /// The Mixer tab's pane, and its strips: the game's mixer document's
     /// buses, the master first, each its volume on a fader and its
-    /// effects; a strip pressed opens the document at its bus (D927).
+    /// effects; a strip pressed opens the document at its bus.
     result::Status makeMixer();
     void showMixer();
     bool pressMixer(ui::Node node);
     /// The Curves tab: the open clip's tracks, each its values over the
-    /// clip as the engine samples them (D927).
+    /// clip as the engine samples them.
     void showCurves();
     /// A clip's bones by its skeleton's names for them, where the skeleton
     /// is a document of the game's.
@@ -1081,18 +1080,18 @@ private:
     void stopPlaying();
 
     /// The game cooked into its play directory, its content then what
-    /// Play reads (D502); or, while it cooks, asked to stop.
+    /// Play reads; or, while it cooks, asked to stop.
     void cookOrStop();
 
     /// What the session says of a running cook, shown as it says it.
     void hearCook();
     /// One line the session or a host joined said unasked, acted on where
-    /// it is the running cook's (D885).
+    /// it is the running cook's.
     void hearCookLine(const std::string& line);
 
     /// A material changed while a game plays from Studio's cook: cooked
     /// again, or once the running cook ends, so the game, following its
-    /// content, draws it (D734).
+    /// content, draws it.
     void recookPlayed();
 
     /// While the game plays and no preview is live, its client attached as
@@ -1101,7 +1100,7 @@ private:
     void attachPlayed(double seconds);
 
     /// Selects what the author last clicked in the preview, if it is new
-    /// and the chosen scene brought it (D456); asked four times a second.
+    /// and the chosen scene brought it; asked four times a second.
     void pollPicks(double seconds);
 
     /// Attaches the chosen scene's preview to `preview_`, saying how it
@@ -1119,20 +1118,20 @@ private:
     const ui::DrawList* drawn_ = nullptr;
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
-    /// Device pixels a logical one, as the window's platform scales it
-    /// (D963): Studio is laid out in logical pixels, where pointers are.
+    /// Device pixels a logical one, as the window's platform scales it:
+    /// Studio is laid out in logical pixels, where pointers are.
     float scale_ = 1;
     /// Device pixels a pointer's logical one, as the platform scales the
-    /// window; scale_ too unless the author chose another (D966).
+    /// window; scale_ too unless the author chose another.
     float systemScale_ = 1;
     /// The window's logical pixels a pixel of the tree, as assistive
-    /// technology was last told it (D966).
+    /// technology was last told it.
     float seatScale_ = 1;
     const view::PlayerViews* views_ = nullptr;
     /// The tree laid out in logical pixels, the frame's size over the scale.
     result::Status layOutNow(double seconds);
     /// Where the pointer is in the tree's pixels, which the platform's are
-    /// not at an interface scale of the author's (D966).
+    /// not at an interface scale of the author's.
     [[nodiscard]] std::optional<std::array<float, 2>> pointerLaidOut() const;
     /// The tree's pixels a pointer's logical one.
     [[nodiscard]] float laidOutPerPointer() const noexcept {
@@ -1143,7 +1142,7 @@ private:
     /// Why the game does not read, while it does not; and where.
     std::optional<std::string> broken_;
     std::optional<Diagnostic> diagnostic_;
-    /// The author's editor, as `studio.editor` gives it (D453).
+    /// The author's editor, as `studio.editor` gives it.
     std::string editor_;
     std::vector<process::Child> editors_;
     std::vector<ui::Node> historyRows_;
@@ -1155,7 +1154,7 @@ private:
     std::optional<ui::Node> popup_;
     std::optional<std::size_t> menuOpen_;
     std::vector<std::pair<ui::Node, std::size_t>> popupRows_;
-    /// A context menu's rows that press a button, each with it (D973).
+    /// A context menu's rows that press a button, each with it.
     std::vector<std::pair<ui::Node, ui::Node>> contextRows_;
     std::optional<FieldRow> palette_;
     /// The bottom dock, its tabs, and its panes: one attached at a time.
@@ -1164,11 +1163,11 @@ private:
     ui::Node historyTab_{};
     ui::Node historyColumn_{};
     Dock dockShown_ = Dock::Assets;
-    /// The panes docked on the right (D980).
+    /// The panes docked on the right.
     Docking docking_;
     /// The splitters by edge, the one held with where the pointer was and
     /// the size then, and the sizes preferred, kept in `preferencesFile_`
-    /// when Studio has one (`studio.preferences`, D779).
+    /// when Studio has one (`studio.preferences`).
     std::array<ui::Node, 3> splitters_{};
     struct Resizing {
         Edge edge = Edge::Hierarchy;
@@ -1177,14 +1176,14 @@ private:
     };
     std::optional<Resizing> resizing_;
     std::array<float, 2> pressedAt_{};
-    /// The entity row pressed, until the press is let go (D785).
+    /// The entity row pressed, until the press is let go.
     std::optional<std::size_t> heldEntity_;
-    /// The entities chosen, a Shift press's start, edits to many (D787).
+    /// The entities chosen, a Shift press's start, edits to many.
     std::vector<std::string> selected_;
     std::optional<std::size_t> anchor_;
     std::uint64_t together_ = 0;
     bool pointerPress_ = false;
-    /// A press let go, and where (D833).
+    /// A press let go, and where.
     bool released_ = false;
     std::optional<std::array<float, 2>> releasedAt_;
     Preferences preferences_;
@@ -1195,7 +1194,7 @@ private:
     /// The Console's pane: its filters over the list of its lines, which
     /// alone scrolls, so the filters stay in sight.
     ui::Node consoleColumn_{};
-    /// The Network panel (D807).
+    /// The Network panel.
     ui::Node networkColumn_{};
     ui::Node environmentTab_{};
     ui::Node profilerTab_{};
@@ -1208,7 +1207,7 @@ private:
     double nextLogRead_ = 0;
     /// Its rows with the lines they show, and its filters: the sources
     /// shown, by `ConsoleLine::Source`, and the levels, by
-    /// `ConsoleLine::Level` (D923); its chips, numbered by source then
+    /// `ConsoleLine::Level`; its chips, numbered by source then
     /// level; what is typed in its filter; when its first line was said.
     std::vector<std::pair<ui::Node, std::size_t>> consoleRows_;
     std::array<bool, 3> consoleSources_{true, true, true};
@@ -1239,11 +1238,11 @@ private:
     std::optional<Value> sheet_;
     EditorsHeld held_;
     /// The node types a material graph may hold, each with its params and
-    /// inputs, read once a graph is first shown (D732).
+    /// inputs, read once a graph is first shown.
     std::optional<Value> nodeTypes_;
-    /// The assets the game declares, read as it opens (D455).
+    /// The assets the game declares, read as it opens.
     std::vector<Asset> assets_;
-    /// The game's Studio extensions as the session lists them (D874).
+    /// The game's Studio extensions as the session lists them.
     std::vector<ListedExtension> extensions_;
     /// Each scene's identity, from its sidecar, as 32 hex digits.
     std::vector<std::string> sceneSources_;
@@ -1257,7 +1256,7 @@ private:
     std::vector<bool> brought_;
     /// Whether each brought entity is one its instance removed.
     std::vector<bool> removed_;
-    /// Each listed entity's parent, empty for none, beside `entities_` (D785).
+    /// Each listed entity's parent, empty for none, beside `entities_`.
     std::vector<std::string> parents_;
     /// Each of the scene's own entities' place among them; none for one an
     /// instance brought.
@@ -1270,11 +1269,11 @@ private:
     ui::Node duplicateNode_{};
     ui::Node moveNode_{};
     /// Move to was pressed: the next press on a scene's row moves the
-    /// chosen entity there, and any other lets it go (D498).
+    /// chosen entity there, and any other lets it go.
     bool moving_ = false;
     /// An output was pressed, its node's identity and its name: choosing a
     /// node keeps it, an input field pressed takes a connection from it,
-    /// and any other press lets it go (D733).
+    /// and any other press lets it go.
     std::optional<std::pair<std::string, std::string>> connecting_;
     ui::Node downNode_{};
     std::vector<ActionButton> actions_;
@@ -1282,7 +1281,7 @@ private:
     view::UiTyping* typing_ = nullptr;
     view::FilesDropped* dropped_ = nullptr;
     /// Where the window is read for assistive technology, if its program
-    /// lends one (D575).
+    /// lends one.
     ui::AccessSeat* seat_ = nullptr;
     std::vector<view::Typing> typed_;
     std::unique_ptr<ui::TextEdit> edit_;
@@ -1294,21 +1293,21 @@ private:
     std::vector<ui::Node> viewRows_;
     std::vector<FieldRow> viewFields_;
     std::uint64_t viewsSet_ = 0;
-    /// Views moved in the played game (D469).
+    /// Views moved in the played game.
     std::uint64_t viewsMoved_ = 0;
-    /// What drags in the played game snap to, and how many snapped (D471).
+    /// What drags in the played game snap to, and how many snapped.
     Snap snap_;
     std::uint64_t snapped_ = 0;
     /// The entity search as typed, the field it is typed in, and how many
-    /// searches the session answered (D473).
+    /// searches the session answered.
     std::string find_;
     std::optional<FieldRow> findField_;
     std::uint64_t searched_ = 0;
     std::optional<PlaySettings> play_;
     /// Where a game plays as Studio's settings name it; empty for each
-    /// game's own (D462).
+    /// game's own.
     std::filesystem::path playDirectory_;
-    /// The start screen's (D781): the templates' directory and where new
+    /// The start screen's: the templates' directory and where new
     /// games go, the templates found and the chosen one, the games opened
     /// last as rows, and its fields.
     std::filesystem::path templates_;
@@ -1317,10 +1316,10 @@ private:
     std::size_t templateAt_ = 0;
     std::vector<std::pair<ui::Node, std::filesystem::path>> recentRows_;
     std::optional<FieldRow> newGameField_;
-    /// The Changes tab's commit message (D871).
+    /// The Changes tab's commit message.
     std::optional<FieldRow> commitField_;
     std::optional<FieldRow> openGameField_;
-    /// The start screen's parts (D918): the list of games and what its
+    /// The start screen's parts: the list of games and what its
     /// search narrows them to, Open a folder, the new game's folder and
     /// its "...", and Create and open.
     ui::Node recentList_{};
@@ -1329,10 +1328,10 @@ private:
     ui::Node openFolderNode_{};
     ui::Node chooseFolderNode_{};
     ui::Node createNode_{};
-    /// The file dialogs the window shows (D918), each asked by its ticket
+    /// The file dialogs the window shows, each asked by its ticket
     /// and what its answer is for.
     view::FileDialogs* dialogs_ = nullptr;
-    /// Where Quit asks the window to close (D923); none without a window.
+    /// Where Quit asks the window to close; none without a window.
     view::WindowClosing* closing_ = nullptr;
     view::WindowShowing* showing_ = nullptr;
     render::DeviceHolder* deviceHolder_ = nullptr;
@@ -1342,9 +1341,9 @@ private:
     std::uint64_t made_ = 0;
     /// The Preferences dialog while open, its fields, and its Close; each
     /// command's own keys, and the editor's command as Studio's settings
-    /// give it (D782).
+    /// give it.
     std::optional<ui::Node> dialog_;
-    /// A field's list of values while open, and the field (D784).
+    /// A field's list of values while open, and the field.
     std::vector<std::pair<ui::Node, std::string>> choiceRows_;
     std::optional<FieldRow> choosing_;
     std::vector<FieldRow> shortcutFields_;
@@ -1355,36 +1354,36 @@ private:
     std::uint64_t rebound_ = 0;
     std::optional<Play> playing_;
     std::optional<Play> stopping_;
-    /// The viewport shows the scene being edited (D912), unless
+    /// The viewport shows the scene being edited, unless
     /// `studio.edit_view` is false; Play pressed while it shows, to start
     /// once it stopped; whether the first cook for it was asked.
     bool editView_ = true;
     bool playAsked_ = false;
     /// Whether the game asked for was cooked first, where its content
-    /// was behind (D923).
+    /// was behind.
     bool playCooked_ = false;
     [[nodiscard]] bool cookBehind() const;
     bool editCooked_ = false;
     bool editOpened_ = false;
     ui::Node playNode_{};
     std::uint64_t played_ = 0;
-    /// The mark's part last said lit (D504).
+    /// The mark's part last said lit.
     std::string lit_;
     /// The cook tool, where the game's content and the cook's cache go,
-    /// and the running cook's id, if any (D502).
+    /// and the running cook's id, if any.
     std::filesystem::path cookTool_;
-    /// The tool that draws a mesh's thumbnail (D899).
+    /// The tool that draws a mesh's thumbnail.
     std::filesystem::path thumbnailTool_;
-    /// `rawframe-export`, whose directory holds the tools it runs (D872).
+    /// `rawframe-export`, whose directory holds the tools it runs.
     std::filesystem::path exportTool_;
     std::filesystem::path cookAt_;
     ui::Node cookNode_{};
     std::optional<std::int64_t> cooking_;
-    /// A material changed during a cook: cooked again once it ends (D734).
+    /// A material changed during a cook: cooked again once it ends.
     bool recook_ = false;
     double nextAttach_ = 0;
     double nextPick_ = 0;
-    /// A drag shown as it goes (D976): what it moves, its pose when it
+    /// A drag shown as it goes: what it moves, its pose when it
     /// began, the steps applied, and when the next may be.
     struct LiveDrag {
         std::string source;
@@ -1396,21 +1395,21 @@ private:
     std::uint64_t liveSteps_ = 0;
     std::uint64_t picked_ = 0;
     /// The outlines last asked of the preview, written, and how many times
-    /// it drew new ones (D907).
+    /// it drew new ones.
     std::string outlined_;
     std::uint64_t outlinesShown_ = 0;
     std::uint64_t dragged_ = 0;
-    /// Of those, raised and turned (D463).
+    /// Of those, raised and turned.
     std::uint64_t raised_ = 0;
     std::uint64_t turned_ = 0;
-    /// The marks the preview showed (D464).
+    /// The marks the preview showed.
     std::uint64_t marked_ = 0;
     std::vector<std::array<float, 4>> wheels_;
     std::uint64_t wheeled_ = 0;
     /// Whether a press was acted on, or keys taken before one, since the
     /// tree was last laid out: the next press is hit against it laid out
     /// again, so input read in one frame each finds what came before it
-    /// brought (D486, D489).
+    /// brought.
     bool pressedSinceLayout_ = false;
     std::chrono::steady_clock::time_point began_ = std::chrono::steady_clock::now();
     std::size_t entityAt_ = 0;
@@ -1430,7 +1429,7 @@ private:
     ui::Node componentsColumn_{};
     /// The left dock, its Layers in place of the Hierarchy, each heading's
     /// press for the other, the Layers' rows with what they do, and the
-    /// layers locked (D788).
+    /// layers locked.
     ui::Node leftDock_{};
     ui::Node layersColumn_{};
     ui::Node layersTab_{};
@@ -1438,7 +1437,7 @@ private:
     Left leftShown_ = Left::Hierarchy;
     /// The World's column, its heading's press back to the Hierarchy, the
     /// Layers' press for it, its rows, and each district's press with the
-    /// entity its instance is named by and how it is streamed (D870).
+    /// entity its instance is named by and how it is streamed.
     ui::Node worldColumn_{};
     ui::Node worldTab_{};
     ui::Node worldBackTab_{};
@@ -1470,11 +1469,11 @@ private:
     std::uint64_t lockRefused_ = 0;
     /// The viewport, whether Studio plays a game in it, and the picture it
     /// shows: when its file was written, its sequence, and how many were
-    /// shown (D789).
+    /// shown.
     ui::Node viewport_{};
     PlayedViewport inViewport_;
-    /// How many players a play has (D804), and the device its first is
-    /// tried as (D809).
+    /// How many players a play has, and the device its first is
+    /// tried as.
     std::uint32_t players_ = 1;
     std::optional<std::array<std::uint32_t, 2>> device_;
     std::vector<ui::Node> sceneRows_;
@@ -1486,7 +1485,7 @@ private:
     std::uint64_t components_ = 0;
     std::string title_;
     ui::Font font_{};
-    /// The strong weight and the fixed-width face beside it (D915), and
+    /// The strong weight and the fixed-width face beside it, and
     /// the icons, each a texture handed by its image key.
     ui::Font strongFont_{};
     ui::Font monoFont_{};

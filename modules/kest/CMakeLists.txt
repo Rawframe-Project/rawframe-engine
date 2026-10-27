@@ -1,4 +1,4 @@
-# The engine's side of Kest (ADR-0084): compiled programs, the doors the engine
+# The engine's side of Kest: compiled programs, the doors the engine
 # binds, and machines with finite limits. Kest's C API is linked privately, so
 # no header above this module can include it.
 rawframe_module(NAME kest

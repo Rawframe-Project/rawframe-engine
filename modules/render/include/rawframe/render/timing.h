@@ -1,6 +1,6 @@
 #pragma once
 
-// A pass of a frame timed on the GPU (D894, D901): the one way a recorder,
+// A pass of a frame timed on the GPU: the one way a recorder,
 // the scene's or the canvas's, names a pass it adds to the frame's
 // timestamps.
 
@@ -9,7 +9,7 @@
 #include <string_view>
 
 // Maul RHI's own; only the rendering cluster includes its headers and so
-// can use one (ADR-0045).
+// can use one.
 struct mrhiPassDef;
 
 namespace rawframe::render {

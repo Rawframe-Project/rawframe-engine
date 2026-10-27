@@ -24,7 +24,7 @@ namespace rawframe::world_audio {
 ///   audio.play             `device`; `null` for a device that plays nothing;
 ///                          or `sink`, where the host lends a FrameSink
 ///                          (frame_sink.h) and plays what each frame renders
-///                          into it, as a page does (D259)
+///                          into it, as a page does
 ///   audio.play_period      the device's buffer in frames (256)
 ///   audio.client           which of the process's clients to hear (0)
 ///

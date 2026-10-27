@@ -1,4 +1,4 @@
-// A probe's picture baked from six faces (D326): each direction of the
+// A probe's picture baked from six faces: each direction of the
 // picture is taken from the face that looks its way, and within a face
 // from the pixel the face's own view and projection put it at.
 

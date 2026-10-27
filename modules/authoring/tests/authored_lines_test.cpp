@@ -1,4 +1,4 @@
-// A line document authored (D817): a line set, put in, and taken away by
+// A line document authored: a line set, put in, and taken away by
 // its place, the lines no change names (a comment among them) kept as they
 // stand, a change its reader refuses kept nowhere, stale and missing places
 // refused, and the history stepped back to the very text and forward.

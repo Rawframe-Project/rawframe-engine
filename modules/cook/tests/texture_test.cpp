@@ -1,5 +1,5 @@
 // Images, Radiance pictures, and grading tables cooked into textures as
-// their sidecars' settings say (D253, D321, D344): a grading table into a
+// their sidecars' settings say: a grading table into a
 // volume, refused with other settings or for a file that is not one.
 
 #include "fixture.h"

@@ -1,6 +1,6 @@
 #pragma once
 
-// How a component's value crosses the wire (SPEC-0010, SPEC-0006): field by
+// How a component's value crosses the wire: field by
 // field, each at its declared width in network byte order, never as a native
 // struct dump. A component's codec is fixed for the admitted replication
 // table, so a value's wire size is known before it is read.

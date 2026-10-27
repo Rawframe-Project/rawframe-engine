@@ -1,4 +1,4 @@
-# Animation (ADR-0039, SPEC-0035): skeletons, clips, and graphs as canonical
+# Animation: skeletons, clips, and graphs as canonical
 # text documents, and their deterministic evaluation into poses and events. No
 # renderer in it, so a server evaluates what gameplay declares relevant.
 rawframe_module(NAME animation

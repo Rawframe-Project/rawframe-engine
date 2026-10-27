@@ -1,4 +1,4 @@
-// The scene's GPU half (D284) on lavapipe: a frame the queue stage built
+// The scene's GPU half on lavapipe: a frame the queue stage built
 // drawn into a target and read back. A box ahead is drawn where the view
 // puts it, over the sky; a nearer model hides a farther one whatever their
 // order (the depth prepass, reversed-Z); the sun lights what faces it; a
@@ -9,11 +9,11 @@
 // finds the exposure the scene's light asks for; a camera's grade
 // brightens, warms, and greys the picture as asked; its tonemapper keeps
 // middle grey where AgX puts it, and AgX stays within its distance of
-// Blender's (D580); and,
+// Blender's; and,
 // antialiased over time, an edge's texels blend what the jittered frames
 // saw of it, and a moving box leaves no ghost where it was. Skips where no
 // adapter answers, unless RAWFRAME_REQUIRE_GPU is set. Frames are made by
-// `render`'s framer (D285), as the frame participant makes them.
+// `render`'s framer, as the frame participant makes them.
 
 #include "fixture.h"
 #include "rawframe/render/device.h"
@@ -37,7 +37,7 @@ namespace {
 
 constexpr std::uint64_t kMissing = 9;
 
-/// A dark room's frame (D292): a white floor two meters below the eye, a
+/// A dark room's frame: a white floor two meters below the eye, a
 /// half-meter box standing on it eight ahead, and a light to its right
 /// casting its shadow left: a spot three meters up shining down, or a lamp
 /// at the eye's height; one cluster holding it, and its squares of a small
@@ -166,7 +166,7 @@ RAWFRAME_TEST(AnEmptySceneIsTheSky) {
     if (!made.has_value() || !framer.has_value()) {
         return;
     }
-    // Undithered, the sky is one color; dithered (D332), each channel
+    // Undithered, the sky is one color; dithered, each channel
     // takes the two eight-bit steps about it somewhere, and never another.
     render_scene::SceneFrame plain = looking();
     plain.dither = false;
@@ -333,8 +333,7 @@ RAWFRAME_TEST(LampsSharingAClusterEachLightWithTheirOwnColor) {
     }
     // The dark floor, a red lamp three meters left and a blue one three
     // right, a meter above it and eight ahead, both in the one cluster:
-    // Direct3D 12 once lit each lamp's place with the next one's color
-    // (D765).
+    // Direct3D 12 once lit each lamp's place with the next one's color.
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
     frame.lights.ground = {0, 0, 0};
@@ -641,7 +640,7 @@ RAWFRAME_TEST(EveryTonemapperKeepsMiddleGrey) {
                 kLinear,
                 kBrightAgx,
                 kBrightLinear);
-    // 0.1865 linear is 120 in sRGB (D580).
+    // 0.1865 linear is 120 in sRGB.
     RAWFRAME_EXPECT(std::abs(kAgx - 120) <= 2 && std::abs(kNeutral - kAgx) <= 2 && std::abs(kLinear - kAgx) <= 2);
     RAWFRAME_EXPECT(kBrightLinear == 255 && kBrightAgx < 250 && kBrightAgx > kAgx);
 }
@@ -723,8 +722,8 @@ RAWFRAME_TEST(PbrNeutralMeetsItsConformanceVectors) {
         return render_scene::engineMesh(id);
     };
     // A sky exposed so the operator is fed its light unchanged: the
-    // exposure's factor undoes the normalization's 1.25836 (ADR-0047,
-    // D295).
+    // exposure's factor undoes the normalization's 1.25836.
+    //
     SceneFrame frame = looking();
     frame.lights.sun = {0, 0, 0};
     frame.lights.ground = {0, 0, 0};
@@ -793,9 +792,9 @@ RAWFRAME_TEST(AgxStaysWithinItsDistanceOfBlender) {
     frame.tonemapper = render_scene::Tonemapper::Agx;
     frame.exposure = std::log2(1.0F / 1.2F);
     // Blender's AgX view on its sRGB display, measured from its
-    // colour-management configuration through OpenColorIO (D566): each
+    // colour-management configuration through OpenColorIO: each
     // input in linear Rec.709, the 8-bit sRGB Blender shows, and how far
-    // this formulation is allowed from it (D580), its own distance and
+    // this formulation is allowed from it, its own distance and
     // two for the device's rounding. Greys and natural colours are close;
     // saturated ones are as far as the Rec.2020 formulation is from
     // Blender's E-Gamut one.
@@ -853,7 +852,7 @@ RAWFRAME_TEST(TheLitModelReflectsTheSunAndTheSky) {
         return render_scene::engineMesh(id);
     };
     // A black ball four meters ahead under the default sun and sky: with
-    // no diffuse light at all, what shows is reflected (D299). Where its
+    // no diffuse light at all, what shows is reflected. Where its
     // normal halves the way to the sun and to the eye, the sun's highlight;
     // at its rim, seen at a grazing angle, the sky more than head on.
     SceneFrame frame = looking();
@@ -895,7 +894,7 @@ RAWFRAME_TEST(TheGroundLightsWhatFacesDown) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // A white ball under the default sun and sky (D304): its underside is
+    // A white ball under the default sun and sky: its underside is
     // lit by what the ground gives back, and its top is not.
     SceneFrame frame = looking();
     frame.shadows.count = 0;

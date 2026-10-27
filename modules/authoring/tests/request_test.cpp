@@ -1,5 +1,5 @@
-// Authoring on the wire (SPEC-0040): requests read exactly as declared, a
-// style sheet's operation among them (D636), discovery complete enough to
+// Authoring on the wire: requests read exactly as declared, a
+// style sheet's operation among them, discovery complete enough to
 // build any call from, and one error record.
 
 #include "rawframe/authoring/request.h"
@@ -104,7 +104,7 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
     RAWFRAME_EXPECT(std::get<AddInstance>(kRead->operations[17]).scene ==
                         base::parseBits128Hex("8d1a709be7c6f665a9d32c2c07e122c3").value &&
                     std::holds_alternative<RemoveInstance>(kRead->operations[18]));
-    // A style sheet's part (D636): its value as the document holds it, or
+    // A style sheet's part: its value as the document holds it, or
     // null to unset; the class by 16 hex digits.
     const auto& kHovered = std::get<SetStylePart>(kRead->operations[19]);
     RAWFRAME_EXPECT(kHovered.style == 0x85ecf7b643b63d65 && kHovered.variant == "hovered" && kHovered.part == "fill" &&
@@ -115,7 +115,7 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
     RAWFRAME_EXPECT(std::get<RemoveStyleClass>(kRead->operations[22]).style == 0x85ecf7b643b63d65 &&
                     std::get<RenameStyleClass>(kRead->operations[23]).name == "knob" &&
                     !std::get<SetStyleTransitions>(kRead->operations[24]).value.has_value());
-    // A UI document's (D641), its node by its component's name.
+    // A UI document's, its node by its component's name.
     RAWFRAME_EXPECT(std::get<SetUiField>(kRead->operations[25]).field == "fill" &&
                     std::get<CreateUiNode>(kRead->operations[26]).parent == "game.hud" &&
                     std::get<CreateUiNode>(kRead->operations[26]).place == 0 &&
@@ -123,28 +123,28 @@ RAWFRAME_TEST(ARequestReadsEveryOperation) {
                     std::get<RemoveUiNode>(kRead->operations[28]).node == "game.hud" &&
                     !std::get<MoveUiNode>(kRead->operations[29]).parent.has_value() &&
                     std::get<MoveUiNode>(kRead->operations[29]).place == 1);
-    // A material instance's (D721): its value as the instance holds it,
+    // A material instance's: its value as the instance holds it,
     // or null to unset.
     const auto& kTint = std::get<SetMaterialOverride>(kRead->operations[30]);
     RAWFRAME_EXPECT(kTint.input == "tint" && kTint.value.has_value() && kTint.value->items().size() == 3 &&
                     !std::get<SetMaterialOverride>(kRead->operations[31]).value.has_value());
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "materials.set_override", "input": "tint"})")),
                                 AuthoringError::ValidationFailed));
-    // A material graph's (D728): its node by 16 hex digits.
+    // A material graph's: its node by 16 hex digits.
     const auto& kInput = std::get<SetMaterialNodeInput>(kRead->operations[32]);
     RAWFRAME_EXPECT(kInput.node == 0x2f00000000000042 && kInput.input == "base_color" && kInput.value.has_value() &&
                     kInput.value->find("output") != nullptr);
     RAWFRAME_EXPECT(!std::get<SetMaterialNodeParam>(kRead->operations[33]).value.has_value() &&
                     std::get<CreateMaterialNode>(kRead->operations[34]).type == "rawframe/uv@1" &&
                     std::get<RemoveMaterialNode>(kRead->operations[35]).node == 0x2f00000000000043);
-    // A material graph's interface (D729).
+    // A material graph's interface.
     RAWFRAME_EXPECT(std::get<SetMaterialInterfaceInput>(kRead->operations[36]).input == "gloss" &&
                     std::get<SetMaterialInterfaceInput>(kRead->operations[36]).value.has_value() &&
                     std::get<SetMaterialSwitch>(kRead->operations[37]).name == "wet" &&
                     !std::get<SetMaterialSwitch>(kRead->operations[37]).value.has_value());
     RAWFRAME_EXPECT(refusedWith(readRequest(request(R"({"operation": "materials.remove_node", "node": "2f0000"})")),
                                 AuthoringError::ValidationFailed));
-    // A node's place on the canvas (D982): two finite numbers.
+    // A node's place on the canvas: two finite numbers.
     const auto kPlaced = readRequest(
         request(R"({"operation": "materials.place_node", "node": "2f00000000000043", "x": 12, "y": -3.5})"));
     RAWFRAME_EXPECT(kPlaced.has_value() &&

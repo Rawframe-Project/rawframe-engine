@@ -14,7 +14,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// A post process as its shader reads it (D350): its material's form, its
+/// A post process as its shader reads it: its material's form, its
 /// texture's map, and its weight.
 struct PostBlock {
     std::array<float, material::kPostProcessBlobFloats> form{};
@@ -22,7 +22,7 @@ struct PostBlock {
 };
 static_assert(sizeof(PostBlock) == 96, "a post process's shader reads its block as 96 bytes");
 
-/// A frame's post processes (ADR-0051, D348 to D351), each a pass over the
+/// A frame's post processes, each a pass over the
 /// chain's picture at its material's insertion point, in the camera's
 /// order there: after the temporal slot and before the tonemapper over
 /// scene-linear light, after the tonemapper and over the scene's output

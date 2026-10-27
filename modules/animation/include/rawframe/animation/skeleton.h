@@ -1,8 +1,8 @@
 #pragma once
 
-// Skeletons (SPEC-0035): an ordered bone hierarchy, each bone with a stable
+// Skeletons: an ordered bone hierarchy, each bone with a stable
 // target identity and a bind pose, as a document people and tools review
-// as text. One canonical form (SPEC-0028's authored-document profile; its
+// as text. One canonical form (the authored-document profile; its
 // arrays of numbers shown here on one line, where the form has one a line):
 //
 //   {
@@ -25,7 +25,7 @@
 //     ]
 //   }
 //
-// A skeleton may declare its root motion source (SPEC-0035), the root's
+// A skeleton may declare its root motion source, the root's
 // channels a graph takes out of the pose and gives the World as a delta
 // instead, after the bones:
 //
@@ -40,7 +40,7 @@
 //
 // The first bone is the one root and every other names a parent before it,
 // so the order is the hierarchy's and nothing sorts it at runtime. A bind
-// pose is in ADR-0046's units: meters, and a unit quaternion (x, y, z, w).
+// pose is in the units: meters, and a unit quaternion (x, y, z, w).
 // A target is 32 lowercase hex digits, unique in the skeleton; its name is
 // for people and diagnostics, never looked up at runtime. The skeleton's
 // own identity is the resource identity of its document.
@@ -60,7 +60,7 @@
 
 namespace rawframe::animation {
 
-/// A bone's place in its skeleton's order (SPEC-0035's skeleton space).
+/// A bone's place in its skeleton's order.
 struct BoneIndex {
     std::uint32_t value = 0;
 
@@ -92,7 +92,7 @@ enum class Axis : std::uint8_t {
     Z,
 };
 
-/// SPEC-0035's one root-motion source: the root bone's channels that move
+/// The one root-motion source: the root bone's channels that move
 /// the character rather than the pose.
 struct RootMotionSource {
     /// Which of the root's translation axes are taken.
@@ -114,13 +114,13 @@ struct Skeleton {
     friend bool operator==(const Skeleton&, const Skeleton&) = default;
 };
 
-/// SPEC-0035's named limit point for skeletons; past it is `OverLimit`.
+/// The named limit point for skeletons; past it is `OverLimit`.
 struct SkeletonLimits {
     std::size_t maximumBones = 1024;
 };
 
 /// A target's identity, derived once, at import, from the authoring name
-/// path from the root to the bone (SPEC-0035). A skeleton keeps it through
+/// path from the root to the bone. A skeleton keeps it through
 /// a later rename; nothing derives it again at runtime.
 [[nodiscard]] base::Bits128 targetIdOf(std::span<const std::string_view> namePath);
 

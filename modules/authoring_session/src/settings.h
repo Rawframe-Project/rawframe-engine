@@ -1,6 +1,6 @@
 #pragma once
 
-// A source's import settings in a session (D800): read from its sidecar
+// A source's import settings in a session: read from its sidecar
 // with the settings its importer offers, and set through that importer,
 // which accepts them or says why not, before the sidecar is written.
 

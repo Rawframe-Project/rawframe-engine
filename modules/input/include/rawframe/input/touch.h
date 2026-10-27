@@ -1,7 +1,6 @@
 #pragma once
 
-// A touch screen as virtual controls (D387), the model ADR-0037 left open:
-// a window split down the middle, each half a floating stick and a button.
+// A touch screen as virtual controls: a window split down the middle, each half a floating stick and a button.
 // A touch that begins in a half takes it while no other holds it: the
 // half's button is held, and its stick is the touch's way from where it
 // began, a full tilt at kStickRadius pixels, up positive as a gamepad's; the

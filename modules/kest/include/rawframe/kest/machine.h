@@ -18,7 +18,7 @@
 
 namespace rawframe::kest {
 
-/// Who wrote the code a machine runs (ADR-0084). Untrusted code is offered
+/// Who wrote the code a machine runs. Untrusted code is offered
 /// only doors marked safe for it and runs under Kest's untrusted profile:
 /// only what the verifier proved, with its heap and fuel ceilings.
 enum class Trust : std::uint8_t {
@@ -26,7 +26,7 @@ enum class Trust : std::uint8_t {
     Untrusted
 };
 
-/// Every machine has finite limits (ADR-0014): heap and fuel are required.
+/// Every machine has finite limits: heap and fuel are required.
 /// Stack slots and call depth default to the least the program provably needs
 /// for one call in, or refuse the start when Kest cannot prove one.
 struct MachineLimits {
@@ -59,7 +59,7 @@ struct Argument {
     bool lent = false;
 };
 
-/// A line of a program's source (D630): its file, matched against the path
+/// A line of a program's source: its file, matched against the path
 /// the build read it by, either being the other's end after a `/`, and its
 /// line, counted from one.
 struct SourceLine {
@@ -68,7 +68,7 @@ struct SourceLine {
     friend bool operator==(const SourceLine&, const SourceLine&) = default;
 };
 
-/// How a stopped machine steps (D632): to the next line wherever it is
+/// How a stopped machine steps: to the next line wherever it is
 /// (`Into`), the next in this body or one it returns to (`Over`), or the
 /// line it returns to (`Out`).
 enum class Step : std::uint8_t {
@@ -85,10 +85,10 @@ struct Breaks {
     std::vector<bool> lines;
 };
 
-/// One frame of a stopped machine (D460): the function it is in, as it was
-/// written; where it stands (D630), its file as the build read it and the
+/// One frame of a stopped machine: the function it is in, as it was
+/// written; where it stands, its file as the build read it and the
 /// line, none where Kest cannot say; and every local its body named, each
-/// as text (D631): `(not written yet)` where the body has not written it on
+/// as text: `(not written yet)` where the body has not written it on
 /// every path to here, text quoted where it is proved one piece of text,
 /// numbers and truths by value, and nothing read as an address.
 struct StoppedFrame {
@@ -98,7 +98,7 @@ struct StoppedFrame {
 };
 
 /// One running program with its own stack and heap. Thread-affine: one thread
-/// calls it at a time, and only `cancel` may come from another (SPEC-0005).
+/// calls it at a time, and only `cancel` may come from another.
 class Machine {
 public:
     struct State;
@@ -115,7 +115,7 @@ public:
     /// Refuses (`EntryShapeMismatch`) an entry that does not take exactly
     /// `takes`. The frame's width alone does not say this: a lent array's
     /// handle in a number's slot is a number, and whether it fits the slot
-    /// depends on the target's pointers (D167).
+    /// depends on the target's pointers.
     [[nodiscard]] result::Status checkArguments(Entry entry, std::span<const Argument> takes);
     /// Refuses (`EntryShapeMismatch`) an entry that does not answer `gives`,
     /// or answers something when `gives` is absent.
@@ -143,17 +143,17 @@ public:
     /// the next one, answers `cancelled`. Safe from any thread.
     void cancel(execution::CancelReason reason) noexcept;
 
-    /// Debugging (ADR-0066's debugger bridge, D460). Breaks at the start of
+    /// Debugging. Breaks at the start of
     /// each function named as written, with its module (`game.tick`) or
     /// without it, and at the first instruction from each line given in
-    /// every body that has one (D630), and at no other: the program's
+    /// every body that has one, and at no other: the program's
     /// breakpoints before are taken out. Between calls, or while stopped
     /// (from the handler). Answers nothing broken while another machine
     /// stands on the program, which would run into them on whatever thread
     /// it runs.
     ///
     /// A breakpoint is written into the program. One the machine stops at
-    /// is stepped past (D630): taken out, a breakpoint of the machine's own
+    /// is stepped past: taken out, a breakpoint of the machine's own
     /// written at the instruction after it, and the first written again
     /// once the machine stops there, unseen; where the instruction jumps
     /// instead, at its next stop, or as the call ends. The breakpoints go
@@ -164,7 +164,7 @@ public:
     /// machine is stopped in the middle of the call: `stack` reads it, and
     /// nothing else may be asked of it.
     void whenStopped(std::function<void()> handler);
-    /// From the handler (D632): once it returns, the call carries on only
+    /// From the handler: once it returns, the call carries on only
     /// to the next line as `how` says, and stops there, the handler told
     /// again. A breakpoint asked for met on the way stops it there instead;
     /// a call that ends on the way ends the step. Nothing while not stopped.

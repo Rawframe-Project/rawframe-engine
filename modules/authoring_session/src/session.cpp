@@ -61,7 +61,7 @@ namespace {
 
 using document::Value;
 
-/// The most authors a session's records name besides its own (D879).
+/// The most authors a session's records name besides its own.
 constexpr std::size_t kMostAuthors = 1024;
 
 /// A scene a session holds open: the document with its history, and the
@@ -71,7 +71,7 @@ struct OpenScene {
     std::string onDisk;
 };
 
-/// An authoring session (D407): the game read once, its scenes opened as
+/// An authoring session: the game read once, its scenes opened as
 /// records name them and kept open with their histories, each change
 /// written to its file as it commits.
 class Held {
@@ -121,7 +121,7 @@ public:
         }
         auto answered = handle(*record);
         clean_ = clean_ && answered.has_value() && !failed_;
-        // A cook started answers when it ends (D502).
+        // A cook started answers when it ends.
         if (answered.has_value() && answered->isNull()) {
             return last;
         }
@@ -183,7 +183,7 @@ private:
             return rawframe::document::parse(authoring::writeDiscovery(&*catalog_));
         case authoring::SessionVerb::End: {
             // The preview let go as the session ends, its camera given back
-            // while it still runs (D433, D968), not only once the session
+            // while it still runs, not only once the session
             // goes.
             preview_.letGo();
             Value made = Value::object();
@@ -218,7 +218,7 @@ private:
         }
         case authoring::SessionVerb::Import: {
             // The game read again, so what it declares now names the new
-            // asset (D503).
+            // asset.
             RAWFRAME_TRY_ASSIGN(const Imported kMade, importAsset(game_, record.source, record.as, cook_));
             catalog_.reset();
             RAWFRAME_TRY(load());
@@ -227,7 +227,7 @@ private:
         case authoring::SessionVerb::MoveFile:
         case authoring::SessionVerb::RemoveFile: {
             // What was open of it let go, and the game read again, so it
-            // declares the file where it is now (D929).
+            // declares the file where it is now.
             const bool kRemoved = record.verb == authoring::SessionVerb::RemoveFile;
             RAWFRAME_TRY_ASSIGN(const FilesChanged kChanged,
                                 kRemoved ? removeFile(game_, record.asset) : moveFile(game_, record.asset, record.as));
@@ -249,7 +249,7 @@ private:
         case authoring::SessionVerb::AssetReferences:
             return assetReferencesOf(game_, record.asset, cooking_.lastCooked(), scenesNaming(record.asset));
         case authoring::SessionVerb::CookedFile:
-            // A cook's output read back, so it is played elsewhere (D905).
+            // A cook's output read back, so it is played elsewhere.
             return cookedFileOf(cooking_.wrote(), cooking_.writing(), record.output, record.file, record.offset);
         case authoring::SessionVerb::Cancel: {
             Value made = Value::object();
@@ -306,8 +306,8 @@ private:
             return preview_.overlaid(record);
         case authoring::SessionVerb::Outline: {
             // Each author's choice outlined in the preview, from the scene
-            // held here (D907); the boxes answered, so a preview held
-            // elsewhere draws them too (D906).
+            // held here; the boxes answered, so a preview held
+            // elsewhere draws them too.
             bool reopened = false;
             RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
             Value outlines = outlinesOf(open->document->scene(), record.outlines);
@@ -331,7 +331,7 @@ private:
             made.add("kind", Value::string("authoring.assets"));
             made.add("assets", assets_);
             made.add("sources", sourcesValue());
-            // Every folder, those with nothing in them too (D929).
+            // Every folder, those with nothing in them too.
             Value folders = Value::array();
             for (const std::string& kFolder : foldersBeside(game_)) {
                 folders.push(Value::string(kFolder));
@@ -344,7 +344,7 @@ private:
             authoring::AuthoringError::Internal, result::ErrorClass::Internal, "a session record went unhandled")};
     }
 
-    /// Every source the game's directory holds as it stands (D799), each
+    /// Every source the game's directory holds as it stands, each
     /// with its folder, importer, identity, and how this session's cooks
     /// left it: `cooked`, `failed` with the cook's words, or `unknown`.
     Value sourcesValue() const {
@@ -389,7 +389,7 @@ private:
         }
         beside_ = scenesBeside(game_);
         assets_ = assetsOf(files->description());
-        // The documents whose references the session keeps (D642).
+        // The documents whose references the session keeps.
         for (const auto& [kNamed, kAt] : {std::pair{&files->description().ui, &gameDocuments_.ui},
                                           std::pair{&files->description().styles, &gameDocuments_.styles}}) {
             if (!kNamed->empty()) {
@@ -441,8 +441,7 @@ private:
 
     /// An answer kept in the capture file `capture` names, a file of
     /// `extension` under the root, when it names one: the answer itself,
-    /// so a capture opens as it was read (a frame's D842, a profile's
-    /// D844).
+    /// so a capture opens as it was read.
     result::Result<Value> captured(Value made, const std::string& capture, std::string_view extension) {
         if (capture.empty()) {
             return made;
@@ -501,7 +500,7 @@ private:
         };
     }
 
-    /// A scene's history (D454): each entry, oldest first, summed up, with
+    /// A scene's history: each entry, oldest first, summed up, with
     /// how many deltas it holds and whether it is applied (undoable) or
     /// undone (redoable). A read: nothing staged, nothing written.
     result::Result<Value> historyOf(const authoring::SessionRecord& record) {
@@ -540,7 +539,7 @@ private:
         return made;
     }
 
-    /// A new scene (D449): empty, beside a sidecar giving it a fresh
+    /// A new scene: empty, beside a sidecar giving it a fresh
     /// resource identity, at a path under the root in a directory that is
     /// there, where neither is. A new document, so no history holds it; the
     /// scenes an instance may name gain it.
@@ -604,7 +603,7 @@ private:
     }
 
     /// The game's extensions, each with its commands, what its doors are
-    /// of, and why it offers nothing where it does not (D874).
+    /// of, and why it offers nothing where it does not.
     Value extensionsListed() const {
         Value extensions = Value::array();
         for (const GameExtension& kExtension : readExtensions(game_.parent_path())) {
@@ -647,8 +646,7 @@ private:
     }
 
     /// An extension's command run on the scene's chosen entities: what it
-    /// staged applied as one atomic request, answered as apply answers
-    /// (D874).
+    /// staged applied as one atomic request, answered as apply answers.
     result::Result<Value> extensionRun(const authoring::SessionRecord& record) {
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -665,8 +663,8 @@ private:
         return applied(applying);
     }
 
-    /// An extension's Inspector section filled for one entity (D875), or
-    /// its panel for the entities chosen (D878): its rows, the scene left
+    /// An extension's Inspector section filled for one entity, or
+    /// its panel for the entities chosen: its rows, the scene left
     /// as it was.
     result::Result<Value> extensionRows(const authoring::SessionRecord& record) {
         bool reopened = false;
@@ -710,7 +708,7 @@ private:
             return materials_.applied(record, failed_);
         }
         if (sheets_.names(record.scene) || uis_.names(record.scene)) {
-            // A node names a class the sheet has (D642).
+            // A node names a class the sheet has.
             RAWFRAME_TRY(referencesKept(
                 gameDocuments_, std::filesystem::weakly_canonical(root_ / record.scene), record.request));
             if (sheets_.names(record.scene)) {
@@ -732,7 +730,7 @@ private:
                                        .withContext("document", kBefore)};
         }
         // A dry run runs on a copy, so it answers as the request would be
-        // kept, by the same code (D650).
+        // kept, by the same code.
         std::unique_ptr<authoring::AuthoredScene> copy;
         if (record.dryRun) {
             RAWFRAME_TRY_ASSIGN(copy, authoring::AuthoredScene::open(document.identity(), document.text()));
@@ -770,13 +768,12 @@ private:
             return ranDry(outcomeOf(document, false, reopened, std::move(results), skipped), copy->text());
         }
         RAWFRAME_TRY_ASSIGN(const bool kWritten, save(record.scene, *open));
-        // A spline's points moved, its path drawn again where it previews
-        // (D891).
+        // A spline's points moved, its path drawn again where it previews.
         (void)forward(record.scene, *open);
         return outcomeOf(*open->document, kWritten, reopened, std::move(results), skipped);
     }
 
-    /// SPEC-0040's multi-document transaction (D497): every part's scene
+    /// The multi-document transaction: every part's scene
     /// open and as its request expects, its operations staged in its own
     /// transaction, all kept or none; then each scene changed is written,
     /// and each answers its outcome, in the parts' order.
@@ -838,9 +835,9 @@ private:
         return made;
     }
 
-    /// `frame` (D792): the view turned on what is chosen, as `view` sets
+    /// `frame`: the view turned on what is chosen, as `view` sets
     /// it, or with nothing chosen on the whole scene, as an editor first
-    /// shows one (D913); refused while none of it stands anywhere.
+    /// shows one; refused while none of it stands anywhere.
     result::Result<Value> framed(const authoring::SessionRecord& record) {
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -874,7 +871,7 @@ private:
         return made;
     }
 
-    /// `bookmark` (D796): a view kept in a slot of the scene's editor
+    /// `bookmark`: a view kept in a slot of the scene's editor
     /// state, or the slot cleared; the scene's bookmarks after.
     result::Result<Value> bookmarked(const authoring::SessionRecord& record) {
         bool reopened = false;
@@ -896,7 +893,7 @@ private:
         return bookmarksReply(marks);
     }
 
-    /// `bookmarks` (D796): the scene's, in slot order.
+    /// `bookmarks`: the scene's, in slot order.
     result::Result<Value> bookmarksOf(const authoring::SessionRecord& record) {
         bool reopened = false;
         RAWFRAME_TRY(sceneOf(record.scene, reopened));
@@ -912,14 +909,13 @@ private:
         return made;
     }
 
-    /// `preview` (D433): a running Runtime's tooling endpoint, granted
+    /// `preview`: a running Runtime's tooling endpoint, granted
     /// `view`, shows the scene from its view from now on, each view the
     /// scene is told or stepped back or forth to handed it by `tooling.look`;
     /// a null preview lets it go. One preview at a time.
     result::Result<Value> previewed(const authoring::SessionRecord& record) {
         // A game whose world its Kest makes, no scene to show, is
-        // previewed by its description: its server's doors, no view
-        // (D928).
+        // previewed by its description: its server's doors, no view.
         std::error_code error;
         if (std::filesystem::equivalent(root_ / record.scene, game_, error)) {
             RAWFRAME_TRY(preview_.open(record));
@@ -962,7 +958,7 @@ private:
         return preview_.forward(name, open.document->view(), pathsOf(open.document->scene(), *catalog_));
     }
 
-    /// `select`: the scene's selection, in place of what was (D417).
+    /// `select`: the scene's selection, in place of what was.
     result::Result<Value> selected(const authoring::SessionRecord& record) {
         bool reopened = false;
         RAWFRAME_TRY_ASSIGN(OpenScene * open, sceneOf(record.scene, reopened));
@@ -1026,13 +1022,13 @@ private:
         }
         if (sheets_.names(record.scene) || uis_.names(record.scene)) {
             // A step that would leave a node naming a class the sheet no
-            // longer has is stepped back and refused (D642).
+            // longer has is stepped back and refused.
             const auto kStep = [this](const authoring::SessionRecord& asked, bool back) {
                 return sheets_.names(asked.scene) ? sheets_.stepped(asked, back, failed_, authors_)
                                                   : uis_.stepped(asked, back, failed_, authors_);
             };
             // A step changes what its entry changed, so another's claim on
-            // one of those nodes refuses it as it refuses a change (D886).
+            // one of those nodes refuses it as it refuses a change.
             if (uis_.names(record.scene)) {
                 RAWFRAME_TRY_ASSIGN(const authoring::AuthoredUi* kUi, uis_.held(record.scene));
                 if (const auto kTarget = kUi->stepTarget(undo); kTarget.has_value()) {
@@ -1069,7 +1065,7 @@ private:
                                        .withContext("document", kBefore)};
         }
         // A step changes what its entry changed, so another's claim on one
-        // of those entities refuses it as it refuses a change (D880).
+        // of those entities refuses it as it refuses a change.
         if (const auto kTarget = document.stepTarget(undo); kTarget.has_value()) {
             RAWFRAME_TRY(touchedUnclaimed(record.author, record.scene, entitiesOf(document.journalAt(*kTarget))));
         }
@@ -1090,32 +1086,31 @@ private:
     Value assets_ = Value::array();
     std::map<std::string, OpenScene> scenes_;
     bool greeted_ = false;
-    /// The preview, and what it shows and is pressed in (D433, D456).
+    /// The preview, and what it shows and is pressed in.
     Preview preview_;
     /// Whether the last record's operations, queries, or step failed in a
     /// slot of its answer, and whether every record so far succeeded.
     bool failed_ = false;
     bool clean_ = true;
     /// The cook tool, and the session's long-running operation, if one
-    /// runs (D502).
+    /// runs.
     std::filesystem::path cook_;
     Cooking cooking_;
-    /// The thumbnail tool, and the cook whose meshes it last drew (D899).
+    /// The thumbnail tool, and the cook whose meshes it last drew.
     MeshPictures meshPictures_;
-    /// The engine's importers, which describe and check a source's settings
-    /// (D800); materials need no toolchain for that.
+    /// The engine's importers, which describe and check a source's settings;
+    /// materials need no toolchain for that.
     std::vector<cook::Importer> importers_ = cook::engineImporters();
-    /// The style sheets, UI documents, and material instances records name
-    /// (D636, D641, D721).
+    /// The style sheets, UI documents, and material instances records name.
     Documents<authoring::AuthoredStyles> sheets_;
     Documents<authoring::AuthoredUi> uis_;
     Documents<authoring::AuthoredMaterial> materials_;
-    /// Each data kind's documents (D811), in `dataKinds()`'s order.
+    /// Each data kind's documents, in `dataKinds()`'s order.
     std::vector<Documents<authoring::AuthoredData>> data_;
-    /// The game's descriptions, its settings, as line documents (D817).
+    /// The game's descriptions, its settings, as line documents.
     Documents<authoring::AuthoredLines> games_;
-    /// Its blockouts (D849), terrains (D855), tilemaps (D860), scatters
-    /// (D865), and sequences (D869), line documents too, a terrain's brush
+    /// Its blockouts, terrains, tilemaps, scatters,
+    /// and sequences, line documents too, a terrain's brush
     /// strokes and a tilemap's painted tiles made lines by their kinds.
     Documents<authoring::AuthoredLines> blockouts_;
     Documents<authoring::AuthoredLines> terrains_;
@@ -1123,15 +1118,15 @@ private:
     Documents<authoring::AuthoredLines> scatters_;
     Documents<authoring::AuthoredLines> sequences_;
     /// The authors records have named, each by its place, the first the
-    /// session's own (ADR-0085, D879), and the one the current record names.
+    /// session's own, and the one the current record names.
     std::vector<std::string> authors_{std::string{}};
     std::uint32_t author_ = 0;
-    /// Who is present and what each has claimed (D880).
+    /// Who is present and what each has claimed.
     Presences presences_;
 
     /// The scenes beside the game whose entities hold the asset at `asset`,
     /// by the identity the game's line gives it, in a field hinted to hold
-    /// an asset (D786), their own or an instance's override (D892): what a
+    /// an asset, their own or an instance's override: what a
     /// cook's reads leave out, since the game's description resolves the
     /// identity. Each a path under the game's directory.
     std::vector<std::string> scenesNaming(std::string_view asset) const {
@@ -1186,7 +1181,7 @@ private:
         return naming;
     }
 
-    /// Refuses a change to a document another author holds whole (D880).
+    /// Refuses a change to a document another author holds whole.
     result::Status unclaimed(const std::string& author, const std::string& name) const {
         const auto kKey = documentKey(root_, name);
         return kKey.has_value() ? presences_.unclaimed(author, *kKey) : result::Status{};
@@ -1235,7 +1230,7 @@ private:
     }
 
     /// Refuses a request touching a node another author holds in the UI
-    /// document, what it touches found as a scene's entities are (D886).
+    /// document, what it touches found as a scene's entities are.
     result::Status
     nodesUnclaimed(const std::string& author, const std::string& name, const authoring::Request& request) {
         const auto kKey = documentKey(root_, name);

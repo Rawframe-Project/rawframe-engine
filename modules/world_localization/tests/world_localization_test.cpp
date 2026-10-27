@@ -45,7 +45,7 @@ RAWFRAME_TEST(AKeyIsFormattedInTheAskedLocaleOrItsFallback) {
 }
 
 RAWFRAME_TEST(APlayerChoosesAmongTheOfferedLocalesWhilePlaying) {
-    // D539: the default first, then the translations' locales; choosing one
+    // The default first, then the translations' locales; choosing one
     // moves the revision once, and what is formatted follows.
     StringTable table{.sourceLocale = *parseLocale("en"), .entries = {}};
     table.entries["menu.play"] = SourceEntry{.message = "Play", .description = {}};
@@ -67,7 +67,7 @@ RAWFRAME_TEST(APlayerChoosesAmongTheOfferedLocalesWhilePlaying) {
     RAWFRAME_EXPECT(!text.choose(0, 2) && text.chosen(0) == 1);
     RAWFRAME_EXPECT(text.choose(0, 0) && text.revision() == 2);
     RAWFRAME_EXPECT(text.format(0, "hud.strings", "menu.play", {}) == "Play");
-    // Each local player has their own (ADR-0050): the second choosing
+    // Each local player has their own: the second choosing
     // Turkish leaves the first in English, and a third keeps the one
     // configured.
     RAWFRAME_EXPECT(text.choose(1, 1) && text.revision() == 3 && text.chosen(1) == 1 && text.chosen(0) == 0);
@@ -77,7 +77,7 @@ RAWFRAME_TEST(APlayerChoosesAmongTheOfferedLocalesWhilePlaying) {
 }
 
 RAWFRAME_TEST(DisplayKeysModeShowsEveryKeyAsItsToken) {
-    // SPEC-0033's development-only display-keys mode (D540): the key itself,
+    // The development-only display-keys mode: the key itself,
     // whatever the locale, the table, or the key's presence.
     world_localization::GameText text = game("tr");
     RAWFRAME_EXPECT(text.format(0, "hud.strings", "menu.play", {}) == "Oyna");

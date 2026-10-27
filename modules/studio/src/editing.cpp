@@ -10,7 +10,7 @@
 namespace rawframe::studio {
 
 std::string ShellParticipant::ask(const Value& record) {
-    // On the start screen there is no game to ask of (D781).
+    // On the start screen there is no game to ask of.
     if (!gameOpen()) {
         return {};
     }
@@ -29,7 +29,7 @@ ShellParticipant::read(const std::string& scene, std::string_view operation, std
 
 void ShellParticipant::pressAt(float x, float y) {
     // A release no frame has taken yet is the last press's, taken before
-    // this one is (D833).
+    // this one is.
     if (released_) {
         followSplitter();
     }
@@ -41,7 +41,7 @@ void ShellParticipant::pressAt(float x, float y) {
     browser_.held.reset();
     // A secondary press chooses the row or card it met, as a primary one
     // does, and presses nothing else; then the context menu for where it
-    // is opens there (D973).
+    // is opens there.
     if (pointing_ != nullptr && pointing_->held().secondary) {
         if (kHit.has_value() && kHit->node.has_value() && choosable(*kHit->node)) {
             pressOn(*kHit->node, kMoving);
@@ -69,7 +69,7 @@ bool ShellParticipant::choosable(ui::Node node) const {
 
 bool ShellParticipant::beforePress() {
     // Keys read before the press are taken before it, in the order they
-    // came (D489): a field's text submitted, and the history row it adds,
+    // came: a field's text submitted, and the history row it adds,
     // are there for the press that follows them in one frame.
     if (!typed_.empty()) {
         for (const view::Typing& kTyping : typed_) {
@@ -79,29 +79,29 @@ bool ShellParticipant::beforePress() {
         pressedSinceLayout_ = true;
     }
     // A press read in one frame with one before it is hit against what that
-    // one brought, as a wheel is (D479, D486): selecting a row brings its
+    // one brought, as a wheel is: selecting a row brings its
     // components, which the next press may be on.
     if (pressedSinceLayout_) {
         const double kSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began_).count() + 1;
         static_cast<void>(layOutNow(kSeconds));
     }
     pressedSinceLayout_ = true;
-    // Move to waits for this press alone (D498).
+    // Move to waits for this press alone.
     return std::exchange(moving_, false);
 }
 
 void ShellParticipant::pressOn(ui::Node node, bool moving) {
-    // The toolbar's own (D915).
+    // The toolbar's own.
     if (pressFrame(node)) {
         return;
     }
-    // A graph's node on the canvas stands for its row (D819), as does a
-    // blockout's footprint, which a drag then moves (D852), and a mark on a
-    // clip's timeline, moved in time by a drag (D890).
+    // A graph's node on the canvas stands for its row, as does a
+    // blockout's footprint, which a drag then moves, and a mark on a
+    // clip's timeline, moved in time by a drag.
     held_.planPressed = false;
-    // An output's port held, to be let go on an input it wires (D977).
+    // An output's port held, to be let go on an input it wires.
     held_.wiring.reset();
-    // A bottom pane's tab held, to be let go over the other dock (D980).
+    // A bottom pane's tab held, to be let go over the other dock.
     docking_.held.reset();
     if (const auto kOutput = std::ranges::find(held_.canvasOutputs, node, &EditorsHeld::CanvasPort::line);
         pointerPress_ && kOutput != held_.canvasOutputs.end() && kOutput->entity < entities_.size()) {
@@ -110,8 +110,8 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     held_.cardHeld.reset();
     if (const std::optional<std::size_t> kStands = canvasEntityOf(node);
         kStands.has_value() && *kStands < entityRows_.size()) {
-        // A graph's card held, to be dragged where the author puts it
-        // (D982); an output's port held wires instead.
+        // A graph's card held, to be dragged where the author puts it;
+        // an output's port held wires instead.
         const auto kCard = std::ranges::find(held_.canvasCards, *kStands, &EditorsHeld::CanvasCard::entity);
         if (pointerPress_ && chosen(Listed::Graph) && !held_.wiring.has_value() && kCard != held_.canvasCards.end()) {
             held_.cardHeld = *kCard;
@@ -119,28 +119,28 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         node = entityRows_[*kStands];
         held_.planPressed = chosen(Listed::Blockout) || held_.timelineScale > 0;
     }
-    // An output pressed waits for the input to connect (D733).
+    // An output pressed waits for the input to connect.
     const std::optional<std::pair<std::string, std::string>> kConnecting = std::exchange(connecting_, std::nullopt);
-    // The start screen's own presses (D781).
+    // The start screen's own presses.
     if (!gameOpen()) {
         pressStart(node);
         return;
     }
-    // The Preferences and Export dialogs' own (D782, D872).
+    // The Preferences and Export dialogs' own.
     if (pressPreferences(node) || pressExport(node)) {
         return;
     }
-    // The left dock's tabs and the Layers' rows (D788), a terrain's map
-    // (D856), and a tilemap's grid (D861).
+    // The left dock's tabs and the Layers' rows, a terrain's map,
+    // and a tilemap's grid.
     if (pressLayers(node) || pressBrowser(node) || pressMap(node) || pressTiles(node)) {
         return;
     }
-    // A document's tab is pressed as its row in Assets is (D776).
+    // A document's tab is pressed as its row in Assets is.
     if (const auto kTab = std::ranges::find(tabRows_, node); kTab != tabRows_.end()) {
         const auto kListed =
             std::ranges::find(scenes_, openDocuments_[static_cast<std::size_t>(kTab - tabRows_.begin())]);
         const auto kAt = static_cast<std::size_t>(kListed - scenes_.begin());
-        // Its row may be left out of the browser's list (D799).
+        // Its row may be left out of the browser's list.
         if (kAt < sceneRows_.size() && sceneRows_[kAt] == ui::Node{}) {
             showScene(kAt);
             return;
@@ -149,7 +149,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             node = sceneRows_[kAt];
         }
     }
-    // A field's value chosen from its list (D784).
+    // A field's value chosen from its list.
     if (const auto kChoice = std::ranges::find(choiceRows_, node, &std::pair<ui::Node, std::string>::first);
         kChoice != choiceRows_.end() && choosing_.has_value()) {
         const FieldRow kChosenField = *choosing_;
@@ -161,7 +161,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     }
     // A menu's or the matches' row does its command, a menu's button opens
     // its menu, the palette's field takes the keyboard, and any other press
-    // closes what is open (D777).
+    // closes what is open.
     if (pressContext(node)) {
         return;
     }
@@ -191,7 +191,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         return;
     }
     closePalette();
-    // A splitter held follows the pointer till it is let go (D779).
+    // A splitter held follows the pointer till it is let go.
     // From where it was pressed, not where the pointer is by now.
     if (const auto kEdge = std::ranges::find(splitters_, node); kEdge != splitters_.end()) {
         const auto kWhich = static_cast<Edge>(kEdge - splitters_.begin());
@@ -205,21 +205,20 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         return;
     }
     // The row is the node pressed or the one its words are on.
-    // At a host joined the cook runs on the host's machine, with its tool
-    // (D885).
+    // At a host joined the cook runs on the host's machine, with its tool.
     if ((!cookTool_.empty() || held_.joined != nullptr) && node == cookNode_) {
         endEdit();
         cookOrStop();
     } else if (const auto kMode = std::ranges::find(held_.modeButtons, node, &std::pair<ui::Node, std::string>::first);
                kMode != held_.modeButtons.end()) {
-        // A viewport mode chosen in the palette (D910).
+        // A viewport mode chosen in the palette.
         endEdit();
         const std::string kChosenMode = kMode->second;
         chooseMode(kChosenMode);
     } else if (play_.has_value() && node == playNode_) {
         endEdit();
         if (playing_.has_value() && playing_->edited()) {
-            // The edited game makes way for the played one (D912).
+            // The edited game makes way for the played one.
             stopPlaying();
             playAsked_ = true;
         } else if (playing_.has_value()) {
@@ -245,7 +244,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (const auto kStart =
                    std::ranges::find(held_.sceneStartButtons, node, &std::pair<ui::Node, std::string>::first);
                kStart != held_.sceneStartButtons.end()) {
-        // An empty scene's first steps (D923).
+        // An empty scene's first steps.
         const std::string kCommand = kStart->second;
         if (kCommand == "Import") {
             importAsked();
@@ -280,8 +279,8 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         return;
     } else if (const auto kFilter = std::ranges::find(consoleFilters_, node, &std::pair<ui::Node, int>::first);
                kFilter != consoleFilters_.end()) {
-        // A source's chip shows or hides its lines (D778), and a level's
-        // its level's (D923).
+        // A source's chip shows or hides its lines, and a level's
+        // its level's.
         auto& shown = kFilter->second < 3 ? consoleSources_[static_cast<std::size_t>(kFilter->second)]
                                           : consoleLevels_[static_cast<std::size_t>(kFilter->second - 3)];
         shown = !shown;
@@ -290,7 +289,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         beginEdit(FieldRow{
             .value = consoleSearchValue_, .role = FieldRow::Role::ConsoleSearch, .field = "filter", .hint = "Filter"});
     } else if (std::ranges::contains(held_.figureButtons, node)) {
-        // A figure in the status bar shows the Console (D923).
+        // A figure in the status bar shows the Console.
         showDock(Dock::Console);
     } else if (node == consoleClear_ && consoleClear_ != ui::Node{}) {
         console_.clear();
@@ -307,7 +306,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         endEdit();
         step(node == undoNode_ ? "authoring.undo" : "authoring.redo");
     } else if (chosen(Listed::Sheet) && node == newNode_) {
-        // A sheet's class is made and deleted as an entity is (D638).
+        // A sheet's class is made and deleted as an entity is.
         endEdit();
         const std::string kStyle = mintedHexIdentity();
         Value operation = Value::object();
@@ -324,22 +323,21 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         commit(std::move(operation), "class deleted", std::nullopt);
     } else if (chosen(Listed::Ui) && node == newNode_) {
         // Of a component the game declares a node, not one the document
-        // holds (D672).
+        // holds.
         showNodeForm();
     } else if (chosen(Listed::Graph) && node == newNode_) {
-        // Of a type the material module lists, with a fresh identity
-        // (D731).
+        // Of a type the material module lists, with a fresh identity.
         showGraphForm();
     } else if (chosen(Listed::Graph) && node == deleteNode_ && !entity_.empty()) {
         // A node another reads is refused by the session: the graph would
-        // not read (D728).
+        // not read.
         endEdit();
         Value operation = Value::object();
         operation.add("operation", Value::string("materials.remove_node"));
         operation.add("node", Value::string(entity_));
         commit(std::move(operation), "node deleted", std::nullopt);
     } else if (chosen(Listed::Ui) && node == deleteNode_ && !entity_.empty()) {
-        // A node is removed with what is inside it (D643).
+        // A node is removed with what is inside it.
         endEdit();
         Value operation = Value::object();
         operation.add("operation", Value::string("ui.remove_node"));
@@ -349,14 +347,14 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         endEdit();
         moveNode(node == upNode_ ? -1 : 1);
     } else if (chosen(Listed::Ui) && node == moveNode_ && !entity_.empty()) {
-        // Into the node pressed next, or to the document's top (D671).
+        // Into the node pressed next, or to the document's top.
         endEdit();
         moving_ = true;
         say("choose the node to move it into, or the document for its top");
     } else if (documentChosen() &&
                (node == newNode_ || node == deleteNode_ || node == duplicateNode_ || node == moveNode_ ||
                 node == upNode_ || node == downNode_ || node == restoreNode_ || node == uninstanceNode_)) {
-        // The rest are an entity's (D637).
+        // The rest are an entity's.
         endEdit();
         ++refused_;
         say(chosen(Listed::Sheet)   ? "not done to a style class"
@@ -367,7 +365,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         endEdit();
         create();
     } else if (node == deleteNode_ && !entity_.empty() && selected_.size() > 1) {
-        // Every entity chosen, as one step (D787).
+        // Every entity chosen, as one step.
         endEdit();
         std::vector<Value> operations;
         for (const std::string& kEach : selected_) {
@@ -383,7 +381,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (node == deleteNode_ && !entity_.empty()) {
         endEdit();
         // An entity an instance brought is removed through its patch, so
-        // Restore takes it back (D154, D450).
+        // Restore takes it back.
         const bool kBrought = entityAt_ < brought_.size() && brought_[entityAt_];
         commit(operationOn("scene.destroy_entity"),
                kBrought ? "removed from its instance" : "entity deleted",
@@ -415,8 +413,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         const ActionButton kAsked = *kAction;
         if (!kAsked.opens.empty()) {
             if (const auto kOpened = std::ranges::find(scenes_, kAsked.opens); kOpened != scenes_.end()) {
-                // The scene it was opened from, the prefab bar's way back
-                // (D932).
+                // The scene it was opened from, the prefab bar's way back.
                 held_.prefabFrom = scene_;
                 showScene(static_cast<std::size_t>(kOpened - scenes_.begin()));
             } else {
@@ -461,7 +458,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         stepTo(static_cast<std::size_t>(kEntry - entryRows_.begin()));
     } else if (const auto kScene = std::ranges::find(sceneRows_, node); kScene != sceneRows_.end()) {
         // What Assets' Rename and Delete act on, and held to be dragged
-        // onto a folder (D929).
+        // onto a folder.
         if (const auto kAt = static_cast<std::size_t>(kScene - sceneRows_.begin()); kAt < scenes_.size()) {
             browser_.target = scenes_[kAt];
             if (pointerPress_) {
@@ -476,7 +473,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
         } else if (moving) {
             moveTo(static_cast<std::size_t>(kScene - sceneRows_.begin()));
         } else if (pointerPress_) {
-            // Opened as it is let go, so a drag places it instead (D975).
+            // Opened as it is let go, so a drag places it instead.
             browser_.opening = static_cast<std::size_t>(kScene - sceneRows_.begin());
         } else {
             showScene(static_cast<std::size_t>(kScene - sceneRows_.begin()));
@@ -484,14 +481,14 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
     } else if (pressLive(node) || pressMixer(node) || pressSequence(node) || pressClip(node) || pressPrefabBar(node)) {
         return;
     } else if (const auto kEntity = std::ranges::find(entityRows_, node); kEntity != entityRows_.end()) {
-        // Held, it may be dragged onto another (D785).
+        // Held, it may be dragged onto another.
         if (pointerPress_) {
             heldEntity_ = static_cast<std::size_t>(kEntity - entityRows_.begin());
         }
         if (moving && chosen(Listed::Ui)) {
             moveNodeInto(entities_[static_cast<std::size_t>(kEntity - entityRows_.begin())]);
         } else if (!documentChosen()) {
-            // A scene's entities are chosen one or several at a time (D787).
+            // A scene's entities are chosen one or several at a time.
             chooseEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
         } else {
             showEntity(static_cast<std::size_t>(kEntity - entityRows_.begin()));
@@ -508,7 +505,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
             showChoices(kAdding, addChoices({}));
         } else if ((kFieldAt->role == FieldRow::Role::Field || kFieldAt->role == FieldRow::Role::ImportSetting) &&
                    kFieldAt->kind == "truth") {
-            // A truth's box toggles it (D916).
+            // A truth's box toggles it.
             const FieldRow kToggled = *kFieldAt;
             endEdit();
             apply(kToggled, tree_->textOf(kToggled.value) == "true" ? "false" : "true");
@@ -518,7 +515,7 @@ void ShellParticipant::pressOn(ui::Node node, bool moving) {
                    (kFieldAt->role == FieldRow::Role::Field || kFieldAt->role == FieldRow::Role::ImportSetting) &&
                    !kChoices.empty()) {
             // A field of a few values is chosen from its list, or typed
-            // still, as a name always was (D455, D784).
+            // still, as a name always was.
             beginEdit(*kFieldAt);
             showChoices(*kFieldAt, kChoices);
         } else {
@@ -543,7 +540,7 @@ void ShellParticipant::beginEdit(const FieldRow& row) {
     endEdit();
     editing_ = row;
     // A field showing its hint is empty once begun, so what is put in it,
-    // typed or inserted by a screen reader, is all it holds (D925).
+    // typed or inserted by a screen reader, is all it holds.
     if (!row.hint.empty() && tree_->textOf(row.value) == row.hint) {
         static_cast<void>(words(row.value, "", kText, look::kBodySize));
     }
@@ -591,10 +588,10 @@ void ShellParticipant::endEdit() {
 
 void ShellParticipant::take(const view::Typing& typing) {
     // A shortcut does its command whether or not a field holds the
-    // keyboard (D777).
+    // keyboard.
     if (typing.kind == view::Typing::Kind::Chord && typing.text == "Escape") {
-        // What is open over the frame closed, as an editor's Escape does
-        // (D942): a menu, the export dialog, the preferences.
+        // What is open over the frame closed, as an editor's Escape does:
+        // a menu, the export dialog, the preferences.
         const bool kOpen = popup_.has_value() || held_.exportDialog.has_value() || dialog_.has_value();
         closePopup();
         closeExport();
@@ -605,7 +602,7 @@ void ShellParticipant::take(const view::Typing& typing) {
         return;
     }
     // A field that holds the keyboard copies, cuts, and pastes its text
-    // through the platform's clipboard, as a text field does (D999).
+    // through the platform's clipboard, as a text field does.
     if (typing.kind == view::Typing::Kind::Chord && edit_ != nullptr && editing_.has_value() &&
         (typing.text == "Ctrl+C" || typing.text == "Ctrl+X" || typing.text == "Ctrl+V")) {
         const ui::TextRange kPicked = edit_->selection();
@@ -639,7 +636,7 @@ void ShellParticipant::take(const view::Typing& typing) {
         return;
     }
     // Add component's list narrows as a name is typed, and Enter adds the
-    // first it lists (D916).
+    // first it lists.
     if (editing_->role == FieldRow::Role::Add && kLeft != view::TypingKey::Dismiss) {
         std::string typed{tree_->textOf(editing_->value)};
         if (typed == editing_->hint) {
@@ -660,7 +657,7 @@ void ShellParticipant::take(const view::Typing& typing) {
         return;
     }
     // The start screen's search narrows the games as it is typed, and
-    // Enter opens a path typed there (D918).
+    // Enter opens a path typed there.
     if (editing_->role == FieldRow::Role::GameSearch) {
         std::string typed{tree_->textOf(editing_->value)};
         if (typed == editing_->hint) {
@@ -693,7 +690,7 @@ void ShellParticipant::take(const view::Typing& typing) {
         }
         return;
     }
-    // The Console's filter narrows its lines as it is typed (D923).
+    // The Console's filter narrows its lines as it is typed.
     if (editing_->role == FieldRow::Role::ConsoleSearch) {
         std::string typed{tree_->textOf(editing_->value)};
         if (typed == editing_->hint) {
@@ -717,7 +714,7 @@ void ShellParticipant::take(const view::Typing& typing) {
         showConsole();
         return;
     }
-    // The Assets search narrows the grid as it is typed (D916).
+    // The Assets search narrows the grid as it is typed.
     if (editing_->role == FieldRow::Role::AssetSearch) {
         std::string typed{tree_->textOf(editing_->value)};
         if (typed == editing_->hint) {
@@ -741,14 +738,14 @@ void ShellParticipant::take(const view::Typing& typing) {
         static_cast<void>(showScenes());
         return;
     }
-    // Typing given or dismissed closes the list it was beside (D784).
+    // Typing given or dismissed closes the list it was beside.
     if ((kLeft == view::TypingKey::Submit || kLeft == view::TypingKey::Dismiss) && choosing_.has_value()) {
         closePopup();
     }
     if (kLeft == view::TypingKey::Submit) {
         const FieldRow kEdited = *editing_;
         std::string typed{tree_->textOf(kEdited.value)};
-        // A field left showing its hint holds nothing (D916).
+        // A field left showing its hint holds nothing.
         if (!kEdited.hint.empty() && typed == kEdited.hint) {
             typed.clear();
         }
@@ -863,7 +860,7 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         setGraphMember(row, text);
         return;
     }
-    // An entity on a locked layer is not edited (D788).
+    // An entity on a locked layer is not edited.
     if (row.role == FieldRow::Role::Field || row.role == FieldRow::Role::Name || row.role == FieldRow::Role::Turn) {
         for (const std::string& kEach : selected_.empty() ? std::vector<std::string>{entity_} : selected_) {
             if (const std::optional<std::string> kLayer = lockedOf(kEach); kLayer.has_value()) {
@@ -882,7 +879,7 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         commit(std::move(operation), "renamed " + text, entity_);
         return;
     }
-    // A turn typed in degrees sets the pose's quaternion whole (D915).
+    // A turn typed in degrees sets the pose's quaternion whole.
     if (row.role == FieldRow::Role::Turn) {
         char* end = nullptr;
         const double kDegrees = std::strtod(text.c_str(), &end);
@@ -890,7 +887,7 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
             refuse("turn " + row.field + ": degrees");
             return;
         }
-        // A 2D pose's angle is its cosine and sine (D933).
+        // A 2D pose's angle is its cosine and sine.
         if (row.field == "angle") {
             const double kRadians = kDegrees * std::numbers::pi / 180.0;
             std::vector<Value> operations;
@@ -970,7 +967,7 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
             done = row.field + " set to " + text;
         }
     } else {
-        // A label or a color typed as the number it stands for (D784).
+        // A label or a color typed as the number it stands for.
         const std::string kTyped = typedAs(row.type, text);
         std::optional<Value> kValue = typedValue(row.kind, kTyped);
         // An unsigned field takes an asset by its name, as its identity.
@@ -992,13 +989,13 @@ void ShellParticipant::apply(const FieldRow& row, const std::string& text) {
         operation.add("field", Value::string(row.field));
         operation.add("value", *kValue);
         done = row.field + " set to " + text;
-        // Past its range is said, not stopped (D783).
+        // Past its range is said, not stopped.
         if (pastRange(row.type, kTyped)) {
             done += ", past " + hintText(row.type);
         }
     }
-    // A field set or a reference given is done to every entity chosen
-    // (D787); the rest is the one entity's.
+    // A field set or a reference given is done to every entity chosen;
+    // the rest is the one entity's.
     if (row.role == FieldRow::Role::Field) {
         commitChosen(std::move(operation), done);
         return;
@@ -1017,7 +1014,7 @@ void ShellParticipant::create() {
 
 namespace {
 
-/// A part the New menu makes (D917): its command, its name, its body's
+/// A part the New menu makes: its command, its name, its body's
 /// shape (none for a lamp or an empty), and its half sizes.
 struct PartKind {
     std::string_view command;
@@ -1069,7 +1066,7 @@ const Catalog::Component* ShellParticipant::lampComponent() const {
 }
 
 const Catalog::Component* ShellParticipant::emitterComponent() const {
-    // The game's particles kept in its scenes (D934).
+    // The game's particles kept in its scenes.
     const auto kFound = std::ranges::find_if(catalog_.components, [](const Catalog::Component& each) {
         return each.type == "rawframe.model.ParticleEmitter" && !each.presented;
     });
@@ -1118,7 +1115,7 @@ void ShellParticipant::createPart(std::string_view command) {
     Value created = kOperation("scene.create_entity");
     created.add("name", Value::string(std::string{kPart->name}));
     operations.push_back(std::move(created));
-    // Where the view looks, standing on what is there (D989).
+    // Where the view looks, standing on what is there.
     std::array<double, 3> at = restingAt(std::nullopt);
     at[1] += kPart->shape.has_value()     ? kPart->half[1]
              : kPart->name == "lamp"      ? 2.5
@@ -1166,7 +1163,7 @@ void ShellParticipant::createPart(std::string_view command) {
             kSet(*kLamp, "color", kWhole(0xFFE2B8FFU));
         }
     }
-    // A fountain of soft white sparks fading to blue, to change from (D934).
+    // A fountain of soft white sparks fading to blue, to change from.
     if (const Catalog::Component* kEmitter = emitterComponent(); kPart->name == "particles" && kEmitter != nullptr) {
         kAdd(*kEmitter);
         for (const auto& [kName, kNumber] : {std::pair<std::string_view, double>{"rate", 60},
@@ -1184,7 +1181,7 @@ void ShellParticipant::createPart(std::string_view command) {
         kSet(*kEmitter, "colorEnd", kWhole(0x5B9BFF00U));
     }
     // The first thing in a scene framed at once, where the view stood far
-    // off over nothing (D923).
+    // off over nothing.
     const bool kFirst = entities_.empty();
     commitAll(std::move(operations), std::string{kPart->name} + " made", kIdentity);
     if (kFirst && !entity_.empty()) {
@@ -1207,7 +1204,7 @@ void ShellParticipant::openEditor(const Diagnostic& at) {
     auto program = programOnPath(kWords.front(), kPath != nullptr ? kPath : "");
     std::vector<std::string> arguments(kWords.begin() + 1, kWords.end());
     // Where the editor named is not there, the file opens as the system
-    // opens it (D919).
+    // opens it.
     if (!program.has_value()) {
 #if defined(_WIN32)
         constexpr std::string_view kOpener = "explorer.exe";
@@ -1226,7 +1223,7 @@ void ShellParticipant::openEditor(const Diagnostic& at) {
     const auto& kProgram = program;
     const std::vector<std::string>& kArguments = arguments;
     // A batch file's arguments are parsed again by cmd.exe: a file name
-    // holding what it acts on would run as a command (D453a).
+    // holding what it acts on would run as a command.
     if (isBatch(*kProgram) && !std::ranges::all_of(kArguments, batchSafe)) {
         say("the editor is a batch file and the file's path holds characters it would run; name the editor's own "
             "program in studio.editor");
@@ -1262,7 +1259,7 @@ void ShellParticipant::moveTo(std::size_t sceneAt) {
         return;
     }
     // Its own id kept: made in the other scene and deleted from this one,
-    // both or neither (D497). A reference it holds to an entity left here
+    // both or neither. A reference it holds to an entity left here
     // names nothing there, and refuses the whole.
     const std::string kName = entityAt_ < names_.size() ? names_[entityAt_] : std::string{};
     std::vector<Value> gone;
@@ -1315,7 +1312,7 @@ void ShellParticipant::place(const std::string& text) {
 
 void ShellParticipant::makeScene(std::string text) {
     // A file named by its absolute path is imported, beside the game's own
-    // files under its own name (D505).
+    // files under its own name.
     if (std::filesystem::path{text}.is_absolute()) {
         static_cast<void>(importFile(text, std::filesystem::path{text}.filename().generic_string()));
         static_cast<void>(showScenes());

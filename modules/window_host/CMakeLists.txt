@@ -1,5 +1,5 @@
 # A Host driven from a window's frames, with the window's raw input lent
-# as the player's devices (D250): what a desktop client and a page run.
+# as the player's devices: what a desktop client and a page run.
 # Only where there are windows.
 if(NOT TARGET rawframe_input_window)
     return()

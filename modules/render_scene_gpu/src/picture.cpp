@@ -183,8 +183,8 @@ namespace {
 
 /// The picture's shader drawn in `pass` with `pipeline`: the light
 /// `light`, the grade `block`, the bloom's `spread` (the light where there
-/// is none, which the shader does not read then, D328), and the grading
-/// table, a volume (D344).
+/// is none, which the shader does not read then), and the grading
+/// table, a volume.
 result::Status drawPicture(mrhiDevice* native,
                            mrhiPassId pass,
                            mrhiGraphicsPipelineId pipeline,

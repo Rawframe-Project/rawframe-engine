@@ -1,4 +1,4 @@
-# A client's input the way ADR-0037 makes it for a Kest-scripted game: the
+# A client's input for a Kest-scripted game: the
 # game's action set and mapper, the `Input.*` and `View.*` doors its sample
 # program reads, and input sources for bots with a hand on the controls. Client only: the
 # dedicated server links none of it.

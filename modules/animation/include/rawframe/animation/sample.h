@@ -1,6 +1,6 @@
 #pragma once
 
-// Evaluation (SPEC-0035): a clip bound to a skeleton, sampled into a pose
+// Evaluation: a clip bound to a skeleton, sampled into a pose
 // at a time, and a playhead advanced with the events it crosses. Pure and
 // deterministic: the same clip, time, and advance give the same pose and
 // events on every machine, with no platform trigonometry in them.
@@ -99,7 +99,7 @@ struct Advance {
 
 /// Moves a playhead at `time` by `delta` seconds (backwards when negative)
 /// and appends each event crossed, in the order crossed, at most
-/// `maximumCrossings` of them (SPEC-0035's window semantics). Forwards, an
+/// `maximumCrossings` of them. Forwards, an
 /// event fires once for each time the playhead passes it in (from, to];
 /// backwards, in [to, from). A looping clip wraps as often as `delta` says;
 /// a clamped one stops at its ends. Moving a playhead any other way is a

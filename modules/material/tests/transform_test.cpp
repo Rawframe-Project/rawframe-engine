@@ -1,4 +1,4 @@
-// The transform node (D714): a point, a vector, or a normal taken between
+// The transform node: a point, a vector, or a normal taken between
 // the model's, the World's, the eye's, the tangent frame's, and the clip's
 // spaces, through the World's axes, in either stage, and what it refuses.
 
@@ -106,7 +106,7 @@ RAWFRAME_TEST(ATransformSaysItsSpacesAndItsKind) {
 RAWFRAME_TEST(AGraphColoredByItsSpacesIsWrittenAsTheSlangTheScenesTestsDraw) {
     // spaced.material is red by how far its point lies from its model's
     // middle along the model's z, green by how squarely its normal faces
-    // the eye (D714); the scene's tests draw what it is written as,
+    // the eye; the scene's tests draw what it is written as,
     // spaced_graph.slang, word for word.
     const std::string_view kDocument{reinterpret_cast<const char*>(kSpacedMaterial.data()), kSpacedMaterial.size()};
     const auto kRead = readMaterial(kDocument);

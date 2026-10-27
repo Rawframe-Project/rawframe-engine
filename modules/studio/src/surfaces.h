@@ -1,13 +1,12 @@
 #pragma once
 
-// Studio's surfaces in one table (SPEC-0051's conformance, D873): each one
-// built, by its name, its kind (Part 1), its place (Part 2), and the
-// headless path it stands on (Part 5), "none needed" where the contract
-// says so. Studio names its docks' panels and its dialogs through
+// Studio's surfaces in one table: each one
+// built, by its name, its kind, its place, and the headless path it
+// stands on, "none needed" where the table says so. Studio names its docks' panels and its dialogs through
 // `placed`, so one the table does not place there does not compile, and
-// the repository check (tools/check_repo.py) refuses a kind not in Part 1,
+// the repository check (tools/check_repo.py) refuses an unknown kind,
 // a budget passed, or a headless path left empty. A surface not yet where
-// the contract puts it says where it goes in `until`.
+// the table puts it says where it goes in `until`.
 
 #include <array>
 #include <cstdint>
@@ -61,7 +60,7 @@ inline constexpr auto kSurfaces = std::to_array<Surface>({
      "Right",
      "environment components in the scene",
      "the right dock's Scene settings"},
-    // The Profiler's Frame view is the GPU half of its timeline (D928).
+    // The Profiler's Frame view is the GPU half of its timeline.
     {"Profiler",
      SurfaceKind::Panel,
      "Bottom",
@@ -81,7 +80,7 @@ inline constexpr auto kSurfaces = std::to_array<Surface>({
     {"Graphs", SurfaceKind::DocumentEditor, "Center", "the graph document", ""},
     {"Frame capture", SurfaceKind::DocumentEditor, "Center", "the capture file", ""},
     {"Sequences", SurfaceKind::DocumentEditor, "Center", "the sequence document", ""},
-    // Viewport modes, in the mode palette on the center's left edge (D910).
+    // Viewport modes, in the mode palette on the center's left edge.
     {"Transform", SurfaceKind::ViewportMode, "Mode palette", "scene.set_field", ""},
     {"Blockout", SurfaceKind::ViewportMode, "Mode palette", "the blockout document", ""},
     {"Terrain", SurfaceKind::ViewportMode, "Mode palette", "terrain.brush; the terrain document", ""},

@@ -23,7 +23,7 @@ std::unexpected<result::Error> refuse(std::string_view why) {
         result::fail(result::ErrorClass::InvalidArgument, kWorldUiDomain, code(WorldUiError::BadNodes), why).error()};
 }
 
-/// `node`'s part in what presses hit (D421); none for a number past its
+/// `node`'s part in what presses hit; none for a number past its
 /// constants. Nought passes presses through to its children and past them.
 std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcept {
     if (node.hit > 2 || node.layer > 3 || node.edit > 3 || node.range > 2 || node.thumb > 1 || node.check > 3 ||
@@ -32,15 +32,15 @@ std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcep
     }
     constexpr std::array<ui::Interaction::Hits, 3> kHits = {
         ui::Interaction::Hits::Children, ui::Interaction::Hits::Itself, ui::Interaction::Hits::Nothing};
-    // A text field takes the presses that land on it (D426), unless it is
-    // left out with its children, as a range and its thumb do, which drag
-    // (D621), and a checkable node (D622). A node that scrolls is hit, so
+    // A text field takes the presses that land on it, unless it is
+    // left out with its children, as a range and its thumb do, which drag,
+    // and a checkable node. A node that scrolls is hit, so
     // a wheel over it finds it, and passes on the presses it leaves, as its
-    // hit of nought says (D444).
+    // hit of nought says.
     const bool kField = (node.edit != 0 || node.range != 0 || node.thumb != 0 || node.check != 0) && node.hit != 2;
     const bool kScrolls = node.scroll != 0 && node.hit == 0;
     // What navigation reaches, a field and a node that takes presses, holds
-    // focus as navigation gives it (D573).
+    // focus as navigation gives it.
     return ui::Interaction{.hits = kField || kScrolls ? ui::Interaction::Hits::Itself : kHits[node.hit],
                            .passThrough = node.hit == 0 && !kField,
                            .layer = static_cast<ui::Interaction::Layer>(node.layer),
@@ -48,7 +48,7 @@ std::optional<ui::Interaction> interactionOf(const ui::NodeFields& node) noexcep
                            .drags = node.range != 0 && node.disabled == 0};
 }
 
-/// What `node` is to assistive technology, from what it does (D571): a
+/// What `node` is to assistive technology, from what it does: a
 /// field, something to press, a modal layer, a view that scrolls, an image
 /// without words. A node with words and none of these is read as a label by
 /// its words; one with neither only lays out others.
@@ -93,8 +93,8 @@ std::uint64_t keyOf(world::EntityHandle entity) noexcept {
     return (std::uint64_t{entity.slot} << 32U) | entity.generation;
 }
 
-/// The ring a node holding focus shows in place of its outer shadow
-/// (D430), until a style's focused variant says otherwise.
+/// The ring a node holding focus shows in place of its outer shadow,
+/// until a style's focused variant says otherwise.
 constexpr ui::ShadowLook kFocusRing{.color = 0xFFD24AFF, .spread = 2};
 
 /// The words `typed` holds; none when it holds none or says more than it
@@ -164,13 +164,12 @@ void WorldUi::State::drop(Entry& entry) {
 
 bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::NodeFields& value) {
     entry.value = value;
-    // What the player checked stays until the node's own `checked` changes
-    // (D622).
+    // What the player checked stays until the node's own `checked` changes.
     if (value.check == 0) {
         entry.checkGiven.reset();
         entry.checkedNow = false;
     } else if (entry.checkGiven != value.checked) {
-        // A kept node starts as kept (D626).
+        // A kept node starts as kept.
         const std::optional<float> kKept =
             entry.checkGiven.has_value() ? std::nullopt : (entry.value.kept != 0 ? keptFor(entry) : std::nullopt);
         entry.checkGiven = value.checked;
@@ -199,7 +198,7 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::No
     } else {
         ++statistics.changed;
     }
-    // Its class (D431), none for nought or one the game's styles lack.
+    // Its class, none for nought or one the game's styles lack.
     const auto kClass = value.style != 0 ? classes.find(value.style) : classes.end();
     if (value.style != 0 && kClass == classes.end()) {
         ++statistics.stylesUnknown;
@@ -253,7 +252,7 @@ void WorldUi::State::giveRanges() {
                     value = kHeld->value;
                 }
             } else if (!entry.ranged.has_value() && kValue.kept != 0) {
-                // A kept node starts as kept (D626).
+                // A kept node starts as kept.
                 value = keptFor(entry).value_or(value);
             }
             const float kSpan = wanted.maximum - wanted.minimum;
@@ -325,7 +324,7 @@ bool WorldUi::State::giveFieldLook(Entry& entry) {
         look.color = (look.color & 0xFFFFFF00U) | (kAlpha / 2);
     }
     // A screen reader reads the placeholder as no text and the label's
-    // words as the field's name, saying what it is for (D613).
+    // words as the field's name, saying what it is for.
     return tree->setText(*entry.node, text, look).has_value() &&
            tree->setPlaceholder(*entry.node, entry.placeholder).has_value() &&
            tree->setName(*entry.node, words.value_or(std::string{})).has_value();
@@ -362,9 +361,9 @@ bool WorldUi::State::giveWords(ui::Node node,
         words = settings.words ? settings.words(player, value.text, {value.textValue, value.textSecond}) : std::nullopt;
         ++(words.has_value() ? statistics.texts : statistics.textsUnknown);
     }
-    // Something to press is read by its words, which name it (D571); a
+    // Something to press is read by its words, which name it; a
     // slider and a checkable node are named by their words and show them
-    // nowhere, a thumb or a look showing their value (D621, D622).
+    // nowhere, a thumb or a look showing their value.
     const ui::Role kRole = roleOf(value);
     const bool kNamedOnly = value.range != 0 || value.check != 0;
     if ((kRole == ui::Role::Button || kNamedOnly) && !tree->setName(node, words.value_or(std::string{})).has_value()) {
@@ -434,7 +433,7 @@ void WorldUi::State::mirror(ViewState& view) {
                 entry.seen = true;
                 entry.component = component;
                 entry.player = static_cast<std::size_t>(&view - views.data());
-                // Its words, read where it shows any (D427).
+                // Its words, read where it shows any.
                 Typed words;
                 if (view.shows[component].has_value()) {
                     if (const void* kHeld = view.world->getErased(chunk.entities[row], *view.shows[component])) {
@@ -574,7 +573,7 @@ result::Result<std::unique_ptr<WorldUi>> WorldUi::create(UiSettings settings) {
     RAWFRAME_TRY_ASSIGN(state->window, state->tree->add(0));
     RAWFRAME_TRY(state->tree->setLayout(state->window, {.width = ui::share(1), .height = ui::share(1)}));
     RAWFRAME_TRY(state->tree->setInteraction(state->window, kThrough));
-    // The game's classes, made once (D431).
+    // The game's classes, made once.
     RAWFRAME_TRY_ASSIGN(const std::vector<ui::Style> kMade, ui::addStyles(*state->tree, settings.styles));
     for (std::size_t at = 0; at < kMade.size(); ++at) {
         state->classes.emplace(settings.styles.styles[at].id, kMade[at]);
@@ -637,7 +636,7 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
     RAWFRAME_TRY(state.tree->layOut(state.window, width, height, seconds));
     RAWFRAME_TRY(state.tree->draw(state.window, scale, state.drawn));
     // The field holding the keyboard: its caret and selection drawn over
-    // the tree, and where the caret is told for the input method (D426).
+    // the tree, and where the caret is told for the input method.
     if (state.focus.has_value() && state.focus->edit != nullptr) {
         static_cast<void>(state.focus->edit->decorate(state.window, state.drawn));
     }

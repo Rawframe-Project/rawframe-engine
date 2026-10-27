@@ -15,7 +15,7 @@ struct FreeContext {
 };
 
 // Packer generation 2's parameters, pinned with the Zstandard revision: a
-// change to either is a new generation (SPEC-0021). Level 12 trades a
+// change to either is a new generation. Level 12 trades a
 // little size for packing at tens of megabytes a second; a 4 MiB window
 // holds any chunk whole; the content size is always written, and neither a
 // checksum (the digests are the checks) nor a dictionary identity.

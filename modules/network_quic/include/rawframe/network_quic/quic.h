@@ -1,9 +1,9 @@
 #pragma once
 
-// The QUIC provider (SPEC-0010, ADR-0015): the provider contract over MsQuic
+// The QUIC provider: the provider contract over MsQuic
 // with TLS 1.3 from OpenSSL. One reliable stream per contract stream, QUIC
-// datagrams for datagrams, the provider's application protocol as its ALPN
-// (D408), and no 0-RTT: nothing a peer sends is accepted before the
+// datagrams for datagrams, the provider's application protocol as its ALPN,
+// and no 0-RTT: nothing a peer sends is accepted before the
 // handshake completes. MsQuic is private to this module; nothing above it
 // sees a QUIC type.
 //
@@ -32,21 +32,21 @@ struct QuicSettings {
     execution::MonotonicDuration keepAlive = execution::MonotonicDuration::fromSeconds(2);
     /// A server also accepts browsers: HTTP/3 connections (ALPN `h3`) that
     /// open one WebTransport session, each then a connection like any
-    /// other, its bytes those inside the session (D172).
+    /// other, its bytes those inside the session.
     bool webTransport = false;
     /// Processors MsQuic's threads, and the buffers each keeps, spread
     /// across; nought for the process's effective parallelism, which counts
-    /// a container's CPU quota as MsQuic does not (D214). Set by the first
+    /// a container's CPU quota as MsQuic does not. Set by the first
     /// network a process opens; while one is open, others share its choice.
     std::uint32_t processors = 0;
     /// Bytes handed to MsQuic and not yet released by it, per connection and
-    /// across one provider's connections: SPEC-0013's egress queued ceilings
-    /// (D239). A datagram past either is dropped; a stream send past either
+    /// across one provider's connections: the egress queued ceilings.
+    /// A datagram past either is dropped; a stream send past either
     /// closes its connection, since a reliable stream cannot lose bytes.
     std::size_t maximumSendingBytes = std::size_t{512} << 10U;
     std::size_t maximumSendingBytesInAll = std::size_t{32} << 20U;
     /// Bytes of events waiting for the Runtime across one provider's
-    /// connections, SPEC-0013's aggregate ingress ceiling (D239); per
+    /// connections, the aggregate ingress ceiling; per
     /// connection it is the provider profile's. An event past it is treated
     /// as one past its connection's queue.
     std::size_t maximumQueuedBytesInAll = std::size_t{16} << 20U;
@@ -69,7 +69,7 @@ public:
     /// provider is one Runtime's; MsQuic's own threads feed its queue.
     [[nodiscard]] result::Result<std::unique_ptr<network::Provider>> provider(const network::ProviderProfile& profile);
 
-    /// Gives every listening provider a new identity (D419): connections made
+    /// Gives every listening provider a new identity: connections made
     /// from now on are presented `certificate`, while those made before keep
     /// theirs. Refuses (`BadCertificate`) a certificate MsQuic cannot read,
     /// changing nothing then.

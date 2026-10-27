@@ -257,7 +257,7 @@ void hasDoor(kest::DoorCall& call, void* context) noexcept {
     }
 }
 
-// The entities holding a looked-up component, in World order (D393): no
+// The entities holding a looked-up component, in World order: no
 // structure changes during a run, so a count and the places below it name
 // the same entities until the run ends.
 void countDoor(kest::DoorCall& call, void* context) noexcept {

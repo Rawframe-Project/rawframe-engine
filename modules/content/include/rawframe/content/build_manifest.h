@@ -1,9 +1,9 @@
 #pragma once
 
-// A Build's manifest (SPEC-0021) as the first step of its verification order
+// A Build's manifest as the first step of its verification order
 // reads it: its exact bytes signed by the publisher before a byte of them is
 // parsed, then the Build it names, then its resources, each with the chunks
-// that make it. Opening a Build and updating a library (SPEC-0038) both read
+// that make it. Opening a Build and updating a library both read
 // a manifest through this one reader.
 
 #include "rawframe/base/sha256.h"
@@ -20,12 +20,12 @@
 
 namespace rawframe::content {
 
-/// SPEC-0021's hard ceiling on a Build manifest, and a signature envelope's
+/// The hard ceiling on a Build manifest, and a signature envelope's
 /// own.
 inline constexpr std::size_t kMaximumBuildManifest = std::size_t{64} * 1024 * 1024;
 inline constexpr std::size_t kMaximumBuildSignature = 1024;
 
-/// SPEC-0021's chunk, as the manifest lists it: a `raw` blob is its
+/// The chunk, as the manifest lists it: a `raw` blob is its
 /// content, a `zstd` blob one Zstandard frame of it.
 struct BuildChunk {
     ContentDigest content;
@@ -52,7 +52,7 @@ struct BuildManifest {
 /// lists that is not revoked (the signature module's typed refusals), of a
 /// Build of that publisher's (`UnknownKey`) whose identity section hashes to
 /// `expectedRoot` (`DigestMismatch`). Refused (`ManifestInvalid`,
-/// `DuplicateResource`) when it is not a canonical SPEC-0021 record within
+/// `DuplicateResource`) when it is not a canonical record within
 /// its ceilings, lists a resource twice, or has chunk lists that do not
 /// cover their resources exactly.
 [[nodiscard]] result::Result<BuildManifest> readBuildManifest(std::span<const std::byte> manifest,

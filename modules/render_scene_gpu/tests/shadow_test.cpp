@@ -1,7 +1,7 @@
-// The shadow filters on lavapipe (D330): on a coarse map, the soft class
+// The shadow filters on lavapipe: on a coarse map, the soft class
 // draws a shadow's edge through more shades than the hardware's blend of
 // four, the shadow as dark within and the floor as lit without; and the
-// top class (D347) draws it as sharp as the soft class near its caster
+// top class draws it as sharp as the soft class near its caster
 // and wider away from it.
 
 #include "fixture.h"

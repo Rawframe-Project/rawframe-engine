@@ -7,7 +7,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// The domain of every Error this module creates (SPEC-0024's scene).
+/// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kSceneGpuDomain{base::parseBits128Hex("4189bab432dfa0c7b29b738323e217ee").value};
 
 enum class SceneGpuError : std::uint32_t {

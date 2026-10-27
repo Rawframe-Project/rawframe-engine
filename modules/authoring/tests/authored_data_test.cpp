@@ -1,8 +1,8 @@
-// A data document authored (D811): a value set at a path through an item
+// A data document authored: a value set at a path through an item
 // known by its key, a new item and a new member kept last in the order the
 // document holds, a change its reader refuses kept nowhere, and the history
 // stepped back; and an item known by nothing named by its place, only ever
-// set (D827).
+// set.
 
 #include "rawframe/authoring/authored_data.h"
 #include "rawframe/authoring/errors.h"

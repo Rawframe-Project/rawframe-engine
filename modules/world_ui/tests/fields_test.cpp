@@ -1,9 +1,9 @@
-// A text field (D426): it takes the keyboard by a press, shows what is
+// A text field: it takes the keyboard by a press, shows what is
 // typed with its caret, and gives its text by Enter; a screen reader types
-// into it as typing does (D613); a node shows the words of a component of
-// typed words in place of its label while it holds any (D427); an empty
-// field without the keyboard shows its label as its placeholder (D428); and
-// Tab moves the keyboard between a view's fields (D429).
+// into it as typing does; a node shows the words of a component of
+// typed words in place of its label while it holds any; an empty
+// field without the keyboard shows its label as its placeholder; and
+// Tab moves the keyboard between a view's fields.
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"

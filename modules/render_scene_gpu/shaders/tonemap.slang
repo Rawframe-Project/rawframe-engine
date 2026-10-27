@@ -1,13 +1,13 @@
-// The scene's picture (D284), in Slang (ADR-0026, D475): the pre-exposed
+// The scene's picture, in Slang: the pre-exposed
 // scene-linear light of the texel under it, mixed with the bloom's spread
-// light as the camera asks (D328), graded as the camera asks (D294,
-// ADR-0051: white balance, ASC CDL, saturation, contrast about middle
-// grey, then its grading table, D344), then mapped for display by the
-// camera's tonemapper (D295, ADR-0047's closed set: AgX, the default;
+// light as the camera asks, graded as the camera asks
+// (white balance, ASC CDL, saturation, contrast about middle
+// grey, then its grading table), then mapped for display by the
+// camera's tonemapper (the closed set: AgX, the default;
 // Khronos PBR Neutral; linear), each keeping middle grey where AgX puts
 // it, in linear light for the sRGB picture to encode, dithered by under
-// one step of that encoding (D332). AgX as Troy Sobotka made it, in
-// Blender's Rec.2020 formulation as Filament and three.js write it (D580):
+// one step of that encoding. AgX as Troy Sobotka made it, in
+// Blender's Rec.2020 formulation as Filament and three.js write it:
 // Blender's inset, Filament's outset, Benjamin Wrensch's curve, and the
 // 2.4 power Blender's formation is encoded in.
 
@@ -23,22 +23,21 @@ struct Grade
     float4 offset;
     float4 power;
     float4 tonemapper;
-    // The bloom's share, and one over its chain's levels (D328).
+    // The bloom's share, and one over its chain's levels.
     float4 bloom;
-    // One where the picture is dithered (D332); one where its colors are
-    // looked up in the grading table (D344); one where it is graded only,
-    // its light written for the post processes before the tonemapper
-    // (D350).
+    // One where the picture is dithered; one where its colors are
+    // looked up in the grading table; one where it is graded only,
+    // its light written for the post processes before the tonemapper.
     float4 display;
 }
 
 [[vk::binding(0, 0)]] Texture2D scene;
 [[vk::binding(1, 0)]] ConstantBuffer<Grade> grade;
-// The bloom's spread light, summed over its chain's levels (D328), at a
+// The bloom's spread light, summed over its chain's levels, at a
 // quarter of the target's sides.
 [[vk::binding(2, 0)]] Texture2D bloom;
 [[vk::binding(3, 0)]] SamplerState blended;
-// The grading table (D344): a volume of colors, red along x, green along
+// The grading table: a volume of colors, red along x, green along
 // y, blue along its slices, each axis the ACEScct curve's encoding.
 [[vk::binding(4, 0)]] Texture3D table;
 
@@ -122,7 +121,7 @@ float3 decoded(float3 encoding)
     return lerp(encoding / 12.92, pow((encoding + 0.055) / 1.055, float3(2.4)), step(float3(0.04045), encoding));
 }
 
-// ADR-0051's debanding: the picture is kept in eight bits, sRGB-encoded,
+// The debanding: the picture is kept in eight bits, sRGB-encoded,
 // where a smooth gradient falls into bands a step apart. Under a step of
 // noise in that encoding, fixed to the pixel, breaks them (Gjøl's
 // screen-space dither, as Bevy's).
@@ -176,7 +175,7 @@ float4 fs(Screen screen) : SV_Target0
     {
         light = tabled(light);
     }
-    // Graded only, for the post processes before the tonemapper (D350).
+    // Graded only, for the post processes before the tonemapper.
     if (grade.display.z > 0.5)
     {
         return float4(light, 1.0);

@@ -1,4 +1,4 @@
-// Scrolling (D441): a column that scrolls holds rows reaching past it (rows
+// Scrolling: a column that scrolls holds rows reaching past it (rows
 // that do not shrink, as a flex item does by default to fit). A wheel turned
 // over it takes the turn and moves the rows, eased over the next layouts and
 // drawn where they moved to, cut at its edges; points hit the row now under

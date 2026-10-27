@@ -23,7 +23,7 @@ namespace rawframe::world_replication {
 ///   replication.interest             false sends every entity to every
 ///                                    connection, whatever the game's
 ///                                    interest, as an editor's World does
-///                                    (D913) (true)
+///                                     (true)
 ///
 /// `rawframe.replication.bots` plays headless clients against a server,
 /// each with its own mirror World, steering its player at random:
@@ -38,7 +38,7 @@ namespace rawframe::world_replication {
 ///   bots.interpolate  show remote entities between states when the game
 ///                     declares interpolation (true)
 ///   bots.retries      how often a bot refused as unavailable asks again,
-///                     at most 1000 (10, D379)
+///                     at most 1000 (10)
 ///   bots.retry_ms     how long after such a refusal it asks (1000)
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 

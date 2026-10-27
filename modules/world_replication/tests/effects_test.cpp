@@ -1,4 +1,4 @@
-// SPEC-0041's effect ledger (D219): a predicted effect reaches presentation
+// The effect ledger: a predicted effect reaches presentation
 // once however often resimulation emits it, one a resimulation no longer
 // emits is cancelled once, and a confirmed-only effect waits for the
 // server's state to confirm its tick.

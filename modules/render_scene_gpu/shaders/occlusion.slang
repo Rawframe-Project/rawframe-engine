@@ -1,7 +1,7 @@
-// The scene's ambient occlusion (ADR-0051, D327), in Slang (ADR-0026,
-// D475), found at half the target's size, each texel for the point at its
+// The scene's ambient occlusion, in Slang,
+// found at half the target's size, each texel for the point at its
 // top left, then blurred. Both read only where their fragment is, so the
-// vertex half passes nothing on (D418).
+// vertex half passes nothing on.
 
 import screen;
 

@@ -1,4 +1,4 @@
-// Material instances (D709): an instance document read in its canonical
+// Material instances: an instance document read in its canonical
 // form, its overrides made into its base's parameters, typed against the
 // base's interface and never repeating a default, and its cooked bytes read
 // back as they were written.
@@ -79,7 +79,7 @@ RAWFRAME_TEST(AnInstanceIsReadInItsCanonicalForm) {
     }
     RAWFRAME_EXPECT(
         kRefusedWith(Value::integer(1), Value::string("surface"), Value::string("a.rfmaterial"), Value::object()));
-    // Seventeen: eight inputs and eight switches at most (D719).
+    // Seventeen: eight inputs and eight switches at most.
     std::vector<std::pair<std::string, Value>> seventeen;
     for (const char kLetter : std::string_view{"abcdefghijklmnopq"}) {
         seventeen.emplace_back(std::string{kLetter}, Value::real(1));
@@ -116,7 +116,7 @@ RAWFRAME_TEST(ACookedInstanceReadsBackAsItWasWritten) {
     const std::vector<std::byte> kBytes = encodeInstance(made);
     const auto kRead = decodeInstance(kBytes);
     RAWFRAME_EXPECT(kRead.has_value() && *kRead == made);
-    // Every prefix, a byte more, format 1 (before texture overrides, D710),
+    // Every prefix, a byte more, format 1 (before texture overrides),
     // no base, a number not finite.
     for (std::size_t length = 0; length < kBytes.size(); ++length) {
         RAWFRAME_EXPECT(refusedWith(decodeInstance(std::span{kBytes}.first(length)), MaterialError::Invalid));
@@ -136,7 +136,7 @@ RAWFRAME_TEST(ACookedInstanceReadsBackAsItWasWritten) {
 }
 
 RAWFRAME_TEST(AnInstanceChangesATextureInputsTexture) {
-    // D710: a base sampling its stone texture input once through its own
+    // A base sampling its stone texture input once through its own
     // slot and the same texture fixed at another; an instance's stone is
     // another texture at the input's slot alone.
     graph::Document base = surfaceOf(

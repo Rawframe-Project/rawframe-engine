@@ -1,6 +1,6 @@
 #pragma once
 
-// What a link does to traffic (D805), the one description loopback's
+// What a link does to traffic, the one description loopback's
 // network and any provider wrapped in conditions share: one-way latency,
 // jitter, loss, and duplication, seeded so a run delivers the same way
 // again. Streams keep their order and lose nothing; datagrams may be

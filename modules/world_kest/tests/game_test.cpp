@@ -621,7 +621,7 @@ RAWFRAME_TEST(ARunnerHitIsToldSo) {
 }
 
 RAWFRAME_TEST(ARunnerShootsAtThePointItsPlayerPointsAt) {
-    // A pointed World point wins over the stick (D368): aimed left but
+    // A pointed World point wins over the stick: aimed left but
     // pointing at the mark, every shot after the first meets it; aimed
     // right but pointing high above it, none does.
     const auto kAtMark =
@@ -647,9 +647,7 @@ void rewrite(const std::filesystem::path& path, std::string_view text, int step)
 
 RAWFRAME_TEST(AChangedProgramReloadsBetweenTicks) {
     std::error_code error;
-    const std::filesystem::path kDirectory =
-        std::filesystem::temp_directory_path(error) /
-        ("rawframe-reload-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    const std::filesystem::path kDirectory = test::scratchDirectory("reload");
     std::filesystem::remove_all(kDirectory, error);
     std::filesystem::create_directories(kDirectory, error);
     const std::string kSource = readText(std::filesystem::path{RAWFRAME_WORLD_KEST_GAMES} / "movers.kest");
@@ -874,7 +872,7 @@ RAWFRAME_TEST(CheckpointsCarryEntityReferences) {
 }
 
 RAWFRAME_TEST(AWaitingBodyLivesInAComponent) {
-    // D268: a guard's round is a body that waits a tick at a time, where it
+    // A guard's round is a body that waits a tick at a time, where it
     // waits a tag among its fields; it replicates, and a checkpoint taken
     // mid-round restores it waiting where it was.
     struct Guard {

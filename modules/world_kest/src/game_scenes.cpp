@@ -26,7 +26,7 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, WorldKestEr
 }
 
 /// Writes `text` as a value of `field` at `into`: a number, a truth, or, for
-/// an enum's tag, one of its cases by name (D269). False when it does not
+/// an enum's tag, one of its cases by name. False when it does not
 /// parse or does not fit.
 bool writeField(const kest::Field& field, std::string_view text, std::byte* into) {
     const kest::FieldKind kind = field.kind;
@@ -157,7 +157,7 @@ GameScenes::sceneSpawns(const GameFiles& files, std::string_view sceneText, cons
         const std::size_t kIndex = static_cast<std::size_t>(kComponent - game_.components.begin());
         if (layouts_[kIndex].mark != mark.mark) {
             // The mark the game's layout has, as a scene writes it, so an
-            // author writing one by hand learns it (D738).
+            // author writing one by hand learns it.
             std::array<char, 16> digits{};
             const auto [kEnd, kError] =
                 std::to_chars(digits.data(), digits.data() + digits.size(), layouts_[kIndex].mark, 16);
@@ -186,7 +186,7 @@ GameScenes::sceneSpawns(const GameFiles& files, std::string_view sceneText, cons
                     made.references.push_back(std::move(reference));
                     continue;
                 }
-                // A case goes by its name, as a spawn line writes one (D270).
+                // A case goes by its name, as a spawn line writes one.
                 part.fields.push_back(
                     GameFieldValue{.field = field.name,
                                    .value = field.value.kind == scene::FieldValue::Kind::True   ? std::string{"true"}
@@ -199,7 +199,7 @@ GameScenes::sceneSpawns(const GameFiles& files, std::string_view sceneText, cons
         made.ids.push_back(entity.id);
     }
     // Each instance streamed as a district: the entities it brings, by the
-    // ids it gives them, that are still there once resolved (D870).
+    // ids it gives them, that are still there once resolved.
     for (const scene::SceneInstance& instance : authored->instances) {
         if (instance.streaming == scene::Streaming::Each) {
             continue;

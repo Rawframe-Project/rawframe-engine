@@ -1,12 +1,12 @@
 #pragma once
 
-// The Kest library every game compiles against (ADR-0084, D86): Kest's `std`
+// The Kest library every game compiles against: Kest's `std`
 // at the vendored revision, and the engine's own Kest modules
 // (`rawframe.world`, `rawframe.physics2d`, `rawframe.input`,
 // `rawframe.sound`, ...), whose doors other modules implement. It is part of
 // the engine and embedded in it when the engine is built, so a game's program
 // is its own files and nothing else, and it compiles against exactly the
-// library the running engine binds (ADR-0014: compiled under the pinned
+// library the running engine binds (compiled under the pinned
 // toolchain, never loaded from a path).
 //
 // A game's files are handed under `game/`, beside a project whose sources are
@@ -34,8 +34,8 @@ inline constexpr std::string_view kEngineModules = "engine/modules/";
 /// Where it is handed a game's files.
 inline constexpr std::string_view kGame = "game/";
 
-/// The resource type of a game's Kest files, all of them as one resource
-/// (D87), and its one representation: a canonical record
+/// The resource type of a game's Kest files, all of them as one resource,
+/// and its one representation: a canonical record
 /// `{kind: "kest.sources", formatVersion: 1, files: [{path, text}]}`, files
 /// in path order, each path plain as `compile` requires.
 inline constexpr base::Bits128 kGameSourcesType = base::parseBits128Hex("49be428d0ae12ec9b0f817b7c1e0e956").value;

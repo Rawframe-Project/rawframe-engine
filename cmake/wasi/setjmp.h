@@ -1,6 +1,6 @@
 #pragma once
 
-// setjmp and longjmp for wasm32-wasi (D383), which wasi-libc as packaged
+// setjmp and longjmp for wasm32-wasi, which wasi-libc as packaged
 // lacks: Clang's -wasm-enable-sjlj lowers each call through WebAssembly's
 // exception handling into the runtime in setjmp.c. The buffer is the shape
 // that runtime and the lowering agree on. Only code built with the lowering

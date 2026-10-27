@@ -1,6 +1,6 @@
 #pragma once
 
-// Particles, trails, and beams on a client (ADR-0053, D352, D354, D357):
+// Particles, trails, and beams on a client:
 // the component triad as C++ reads it, and what each view's frame draws of
 // them: which emitters reach the view and what each spawns on the particle
 // clock, and the ribbons trails and beams make. The scene and the canvas
@@ -27,7 +27,7 @@ namespace rawframe::particles {
 
 using Vector = std::array<float, 3>;
 
-/// `rawframe.model.ParticleEmitter` as C++ reads it (D352).
+/// `rawframe.model.ParticleEmitter` as C++ reads it.
 struct ParticleEmitter {
     std::uint64_t material = 0;
     float rate = 0;
@@ -53,7 +53,7 @@ struct ParticleEmitter {
     float streak = 0;
 };
 
-/// `rawframe.model.Trail` as C++ reads it (D354).
+/// `rawframe.model.Trail` as C++ reads it.
 struct Trail {
     std::uint64_t material = 0;
     float lifetime = 0;
@@ -64,7 +64,7 @@ struct Trail {
     std::uint32_t colorEnd = 0xFFFFFFFF;
 };
 
-/// `rawframe.model.Beam` as C++ reads it (D354).
+/// `rawframe.model.Beam` as C++ reads it.
 struct Beam {
     std::uint64_t material = 0;
     float toX = 0;
@@ -113,12 +113,12 @@ template <typename Ribbon> struct RibbonInstance {
 using TrailInstance = RibbonInstance<Trail>;
 using BeamInstance = RibbonInstance<Beam>;
 
-/// The seconds the particle clock runs before it wraps to nought (D352):
+/// The seconds the particle clock runs before it wraps to nought:
 /// far past any particle's life, and short enough that a float keeps a
 /// twentieth of a millisecond.
 inline constexpr float kClockPeriod = 4096;
 
-/// An emitter a frame draws (ADR-0053, D352), its particles moving in
+/// An emitter a frame draws, its particles moving in
 /// closed form from their births: its identity across frames (its entity
 /// and component), its material's place among the view's materials; its
 /// anchor relative to the eye, where it spawns now relative to its anchor,
@@ -131,11 +131,10 @@ inline constexpr float kClockPeriod = 4096;
 /// ring of particles: its size, where this frame's spawn starts in it, how
 /// many it spawns, the first `steady` born one `step` apart from `born` on
 /// the particle clock and the rest (its bursts) at its now; its seed; how
-/// many times its ring has started anew, which a device's ring follows
-/// (D353); the velocity its particles inherit from it (meters a second);
-/// its flipbook's columns and rows, one each for none (D359); and the
-/// seconds of each particle's past drawn as its streak, nought for none
-/// (D360).
+/// many times its ring has started anew, which a device's ring follows;
+/// the velocity its particles inherit from it (meters a second);
+/// its flipbook's columns and rows, one each for none; and the
+/// seconds of each particle's past drawn as its streak, nought for none.
 struct EmitterDraw {
     std::uint64_t key = 0;
     std::uint32_t material = 0;
@@ -169,7 +168,7 @@ struct EmitterDraw {
     friend bool operator==(const EmitterDraw&, const EmitterDraw&) = default;
 };
 
-/// A point of a ribbon a frame draws (D354): where it is relative to the
+/// A point of a ribbon a frame draws: where it is relative to the
 /// eye, how wide it is there (meters), its color and alpha there (linear),
 /// and its texture's coordinate along the ribbon.
 struct RibbonPoint {
@@ -181,7 +180,7 @@ struct RibbonPoint {
     friend bool operator==(const RibbonPoint&, const RibbonPoint&) = default;
 };
 
-/// A ribbon a frame draws, a trail's or a beam's (D354): its material's
+/// A ribbon a frame draws, a trail's or a beam's: its material's
 /// place among the view's materials, and its points among the frame's, at
 /// least two.
 struct Ribbon {
@@ -192,12 +191,12 @@ struct Ribbon {
     friend bool operator==(const Ribbon&, const Ribbon&) = default;
 };
 
-/// ADR-0053's limit points (D352, D354), profile values: the emitters a
+/// The limit points, profile values: the emitters a
 /// view draws, the particles an emitter holds alive, the particles it
 /// spawns a second, and the seconds one lives (a trail's points' too); the
 /// trails and beams a view draws, the points a trail keeps, and the
 /// segments a beam is cut into; and the speed a particle inherits of its
-/// emitter's, meters a second (D359), past which a teleport would fling
+/// emitter's, meters a second, past which a teleport would fling
 /// them.
 struct Limits {
     std::size_t maximumEmitters = 64;
@@ -235,13 +234,13 @@ struct Frame {
 };
 
 /// What a view's frames drew and left out of the triad, summed for its
-/// host's summary (D360): emitters and ribbons drawn, and what `Frame`
+/// host's summary: emitters and ribbons drawn, and what `Frame`
 /// counts left out and held.
 class Tally {
 public:
     /// Adds `frame`'s counts. A frame that leaves out or holds any is told
     /// on `emitter` (`particles_held`, a warning the identity's rate limit
-    /// thins): ADR-0053's limit points are a typed event, never a silent
+    /// thins): the limit points are a typed event, never a silent
     /// drop.
     void add(const Frame& frame, const diagnostics::Emitter& emitter) noexcept;
 
@@ -266,7 +265,7 @@ struct Viewer {
     std::function<bool(const Vector& center, float radius)> sees;
 };
 
-/// One view's particles from frame to frame (D352, D354): the particle
+/// One view's particles from frame to frame: the particle
 /// clock, which the Host's timeline moves, and what each emitter and trail
 /// keeps on the client, dropped once it is gone.
 class Particles {
@@ -292,8 +291,8 @@ private:
     /// What an emitter keeps: its anchor in the World, the bursts it has
     /// seen, the particles it owes (a fraction), its ring's size and where
     /// its next spawn starts in it, the frame it was last drawn in, how
-    /// many times its ring has started anew (D353), and where it was when
-    /// last drawn (D359).
+    /// many times its ring has started anew, and where it was when
+    /// last drawn.
     struct EmitterHistory {
         std::array<double, 3> anchor{};
         std::array<double, 3> position{};

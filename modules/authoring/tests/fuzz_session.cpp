@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of an authoring session's records (D407), seeded
+// Coverage-guided fuzzing of an authoring session's records, seeded
 // with one record of the verbs that carry documents. Whatever a line holds,
 // it is read or refused, and its reply is one line naming the id read.
 

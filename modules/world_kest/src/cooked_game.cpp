@@ -101,7 +101,7 @@ const std::string* textOf(const Value& object, std::size_t members, std::string_
         return nullptr;
     }
     const Value* member = object.find(name);
-    // A string's: a number's text is not one (D668).
+    // A string's: a number's text is not one.
     return member == nullptr || member->kind() != Value::Kind::String ? nullptr : member->text();
 }
 
@@ -315,10 +315,10 @@ result::Result<CookedGame> readCookedGame(std::string_view bytes) {
     const Value* textures = parsed->find("textures");
     const Value* materials = parsed->find("materials");
     const Value* fonts = parsed->find("fonts");
-    // Tilemaps (D858) and scatters (D864) where a game has any.
+    // Tilemaps and scatters where a game has any.
     const Value* tilemaps = parsed->find("tilemaps");
     const Value* scatters = parsed->find("scatters");
-    // Sequences (D869) the same.
+    // Sequences the same.
     const Value* sequences = parsed->find("sequences");
     const std::string* text =
         textOf(*parsed, 12 + (tilemaps != nullptr ? 1 : 0) + (scatters != nullptr ? 1 : 0), "text");

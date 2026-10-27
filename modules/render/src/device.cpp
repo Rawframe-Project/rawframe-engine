@@ -17,7 +17,7 @@
 #include <variant>
 #include <vulkan/vulkan_core.h>
 
-// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file (D237).
+// WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file.
 #if defined(_WIN32)
 #include <windows.h>
 #elif defined(__unix__) || defined(__APPLE__)
@@ -53,7 +53,7 @@ enum class Phase : std::uint8_t {
 };
 
 /// The system's Vulkan loader, opened for a device whose Vulkan objects an
-/// OpenXR runtime makes (D591): its `vkGetInstanceProcAddr` is what the
+/// OpenXR runtime makes: its `vkGetInstanceProcAddr` is what the
 /// runtime makes them through, and what ends them.
 class VulkanLoader {
 public:
@@ -101,8 +101,7 @@ private:
 
 /// The system's Vulkan devices, each its name and the Vulkan it offers
 /// ("name 1.1.128"), apart by commas: what a machine has when Maul RHI
-/// lists no adapter, which it does for any below Vulkan 1.3 (mrhi-0003,
-/// D769). Empty where there is no loader or no device.
+/// lists no adapter, which it does for any below Vulkan 1.3. Empty where there is no loader or no device.
 std::string vulkanDevicesSeen() {
     VulkanLoader loader;
     if (!loader.open()) {
@@ -280,13 +279,13 @@ struct Held {
     PresentPolicy used = PresentPolicy::Vsync;
     mrhiFormat format = mrhi_formatNone;
     /// The output modes the surface offers, its display's facts when they
-    /// were read, and its HDR capability record (D365).
+    /// were read, and its HDR capability record.
     std::array<bool, kOutputModes> offered{};
     std::optional<window::DisplayFacts> facts;
     OutputRecord output;
 };
 
-/// The output modes a surface's colors offer (ADR-0047's three).
+/// The output modes a surface's colors offer.
 std::array<bool, kOutputModes> offeredBy(const mrhiSurfaceCaps& caps) noexcept {
     std::array<bool, kOutputModes> offered{};
     for (std::uint32_t at = 0; at < caps.colorCount; ++at) {
@@ -304,7 +303,7 @@ std::array<bool, kOutputModes> offeredBy(const mrhiSurfaceCaps& caps) noexcept {
     return offered;
 }
 
-/// The modes the display pass draws: SDR only in generation 1 (D365).
+/// The modes the display pass draws: SDR only in generation 1.
 constexpr std::array<OutputMode, 1> kDrawn = {OutputMode::SdrSrgb};
 
 } // namespace
@@ -690,7 +689,7 @@ Device::prepare(std::uint64_t surface, const window::SurfaceState& window, Prese
     const bool kFits = held.configured && !held.outOfDate && held.asked == policy &&
                        held.size.width == window.pixelSize.width && held.size.height == window.pixelSize.height;
     // What the surface offers, read again when it is configured and when
-    // its display's facts change (D365).
+    // its display's facts change.
     mrhiSurfaceCaps caps{};
     if (!kFits || held.facts != window.display) {
         if (const mrhiResult kRead = mrhiGetSurfaceCaps(state.instance, held.id, state.chosen, &caps);

@@ -1,6 +1,6 @@
 #pragma once
 
-// String tables and their translations (ADR-0050, SPEC-0033): the two
+// String tables and their translations: the two
 // authored document kinds, each read in its one canonical form.
 //
 //   {
@@ -28,8 +28,8 @@
 //     }
 //   }
 //
-// A table's resource identity is its sidecar's, as every resource's is
-// (D69); the document does not write it again (D144). A translation names
+// A table's resource identity is its sidecar's, as every resource's is;
+// the document does not write it again. A translation names
 // its table by that identity, 32 lowercase hex digits. Keys are
 // dot-separated machine segments, `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`,
 // in byte order; a description is present only when it says something.
@@ -53,14 +53,14 @@
 
 namespace rawframe::localization {
 
-/// The resource types of the two kinds (D144), and their one
+/// The resource types of the two kinds, and their one
 /// representation each: the document's text in its one form.
 inline constexpr base::Bits128 kStringsType = base::parseBits128Hex("749e2ba7d0067a4db2348b183fc4d55f").value;
 inline constexpr std::string_view kStringsRepresentation = "rawframe.text.strings";
 inline constexpr base::Bits128 kTranslationsType = base::parseBits128Hex("4530b8b3c0311816d2a65a512c4f7070").value;
 inline constexpr std::string_view kTranslationsRepresentation = "rawframe.text.translations";
 
-/// SPEC-0033's named limits for tables and their documents.
+/// The named limits for tables and their documents.
 struct TableLimits {
     std::size_t maximumKeys = 16384;
     std::size_t maximumKeyBytes = 128;

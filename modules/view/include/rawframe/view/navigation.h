@@ -1,6 +1,6 @@
 #pragma once
 
-// How a client's UI is navigated without a pointer (SPEC-0030, D430): a
+// How a client's UI is navigated without a pointer: a
 // local player's navigation actions, from a gamepad or keys, move focus
 // between the nodes that take presses and the text fields of their view,
 // activate the one focused, and leave. A client host lends one as
@@ -46,10 +46,10 @@ public:
         /// Whether a node holds focus.
         std::function<bool()> focused;
         /// Whether navigation reaches any node: one that takes presses or
-        /// a text field, so a key may enter it (D476).
+        /// a text field, so a key may enter it.
         std::function<bool()> reachable;
         /// The press code of a node a screen reader pressed since last
-        /// asked, taken once (D572); none for none.
+        /// asked, taken once; none for none.
         std::function<std::optional<std::int64_t>()> spoken;
     };
 

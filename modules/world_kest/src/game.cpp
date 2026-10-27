@@ -87,7 +87,7 @@ std::optional<world::Access> accessNamed(std::string_view name) noexcept {
 
 /// Whether a system writes a component it looks up or scans: its own
 /// writes are journaled until its run ends, so the lookup would read what
-/// was there before them (D391, D747).
+/// was there before them.
 bool writesALookup(const GameSystem& system) {
     return std::ranges::any_of(system.columns, [&system](const GameColumn& column) {
         return column.access == world::Access::Write && (std::ranges::contains(system.lookups, column.component) ||
@@ -831,15 +831,15 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     if (!haveProgram) {
         return badLine(number, WorldKestError::BadGameLine, "a game names exactly one program");
     }
-    // Any entity may carry a persistent identity (SPEC-0006), from a scene,
+    // Any entity may carry a persistent identity, from a scene,
     // a spawn line, or `world.persist`.
     game.components.push_back(GameComponent{.id = world::Persistent::kComponentTypeId,
                                             .name = std::string{world::Persistent::kComponentName},
                                             .kestType = "Persistent"});
-    // And be put on a layer, which an editor groups it by (D788).
+    // And be put on a layer, which an editor groups it by.
     game.components.push_back(GameComponent{
         .id = world::Layer::kComponentTypeId, .name = std::string{world::Layer::kComponentName}, .kestType = "Layer"});
-    // A game that navigates has agents to steer round each other (D411).
+    // A game that navigates has agents to steer round each other.
     if (game.navigation.has_value()) {
         game.components.push_back(GameComponent{.id = NavigationAgent::kComponentTypeId,
                                                 .name = std::string{NavigationAgent::kComponentName},
@@ -901,14 +901,14 @@ result::Result<GameDescription> parseGame(std::string_view text) {
     if (mixerLine != 0) {
         game.audio = std::move(audio);
     }
-    // An effect's sound is one the game declares (D220).
+    // An effect's sound is one the game declares.
     for (const GameEffect& effect : game.effects) {
         if (effect.sound != 0 &&
             (!game.audio.has_value() || !std::ranges::contains(game.audio->sounds, effect.sound, &GameSound::id))) {
             return badLine(number, WorldKestError::UnknownName, "an effect's sound is one the game declares");
         }
     }
-    // Each effect has one emitter, a predicted system (D219).
+    // Each effect has one emitter, a predicted system.
     std::vector<std::string_view> emitted;
     for (const GameSystem& system : game.systems) {
         for (const std::string& effect : system.emits) {
@@ -921,7 +921,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             emitted.push_back(effect);
         }
     }
-    // Presentation state is a client's alone (D260): no server carries,
+    // Presentation state is a client's alone: no server carries,
     // sends, predicts, or runs a system over it, and only present systems
     // write it.
     std::vector<std::string_view> presentational;
@@ -953,7 +953,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
         }
     }
-    // A label's table is one the game's text comes from (D386).
+    // A label's table is one the game's text comes from.
     for (std::size_t at = 0; at < game.labels.size(); ++at) {
         if (!std::ranges::contains(game.texts, game.labels[at].table)) {
             return badLine(labelLines[at], WorldKestError::UnknownName, "a label's table is one a text line names");
@@ -1012,8 +1012,7 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
             return std::to_string(kMesh->id);
         }
     }
-    // A tilemap by its file, for a tiles body and for a canvas's tiles
-    // (D859).
+    // A tilemap by its file, for a tiles body and for a canvas's tiles.
     if (value.field == "tilemap") {
         const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
         const auto kTilemap = std::ranges::find(game.tilemaps, value.value, &GameTilemap::path);
@@ -1023,7 +1022,7 @@ std::string spawnValue(const GameDescription& game, std::string_view component, 
             return std::to_string(kTilemap->id);
         }
     }
-    // A sequence by its file, for a player of it (D869).
+    // A sequence by its file, for a player of it.
     if (value.field == "sequence") {
         const auto kComponent = std::ranges::find(game.components, component, &GameComponent::name);
         const auto kSequence = std::ranges::find(game.sequences, value.value, &GameSequence::path);

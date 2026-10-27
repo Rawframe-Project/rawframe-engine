@@ -1,6 +1,6 @@
 #pragma once
 
-// The scene's light captured for a tool (D326): a frame drawn in place of
+// The scene's light captured for a tool: a frame drawn in place of
 // the one the scene queued, and its light read back before the tonemapper.
 
 #include "rawframe/composition/participant.h"

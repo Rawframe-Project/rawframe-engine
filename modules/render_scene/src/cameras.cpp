@@ -22,7 +22,7 @@ GameCameras::GameCameras(const GameScene& game)
 bool GameCameras::read(world::World& world, world::EntityHandle entity, SceneCamera& camera) const {
     Camera view = kDefaultCamera;
     bool found = false;
-    // The first of the game's camera components the entity has (D361: a
+    // The first of the game's camera components the entity has (a
     // player's and its views' may differ).
     for (const schema::ComponentTypeId kComponent : cameras_) {
         if (const auto kCamera = world.registry().find(kComponent)) {
@@ -58,7 +58,7 @@ bool GameCameras::read(world::World& world, world::EntityHandle entity, SceneCam
     kRead(bloom_, camera.bloom);
     kRead(occlusion_, camera.occlusion);
     kRead(autoExposure_, camera.metering);
-    // Its post processes, in the game's order (D349).
+    // Its post processes, in the game's order.
     camera.postProcesses.clear();
     for (const schema::ComponentTypeId kComponent : postProcesses_) {
         if (const auto kProcess = world.registry().find(kComponent)) {

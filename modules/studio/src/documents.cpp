@@ -1,20 +1,20 @@
 // A game's JSON documents in Studio, listed after its scenes and followed
-// by a played game (D634). A style sheet (D637): its classes in the entity
-// column, made with New, deleted with Delete, and named in the name field
-// (D638), and a chosen class's looks as fields, each part set through the
-// session's `styles.set_part` (D636), then its transitions as one (D639).
-// A UI document (D643): its nodes in the entity column, indented by how
+// by a played game. A style sheet: its classes in the entity
+// column, made with New, deleted with Delete, and named in the name field,
+// and a chosen class's looks as fields, each part set through the
+// session's `styles.set_part`, then its transitions as one.
+// A UI document: its nodes in the entity column, indented by how
 // deep each stands, deleted with Delete, and a chosen node's fields, each
-// set through `ui.set_field` (D641), Up and Down moving it among its
-// siblings (D644), and Move to moving it into the node pressed next, or to
-// the document's top where the document's row is (D671). New offers the
+// set through `ui.set_field`, Up and Down moving it among its
+// siblings, and Move to moving it into the node pressed next, or to
+// the document's top where the document's row is. New offers the
 // game's node components the document does not hold, one made at its top
-// as its row is pressed (D672). A material instance (D722): its base's
+// as its row is pressed. A material instance: its base's
 // inputs and switches in the entity column, and a chosen one's type,
 // default, and override, the override set through
-// `materials.set_override` (D721). A material graph (D730): its nodes in
+// `materials.set_override`. A material graph: its nodes in
 // the entity column, a chosen one's params and inputs as fields, each set
-// through `materials.set_node_param` or `materials.set_node_input` (D728),
+// through `materials.set_node_param` or `materials.set_node_input`,
 // and Delete removing it.
 
 #include "hints.h"
@@ -133,7 +133,7 @@ void ShellParticipant::showClass(std::size_t at) {
     if (chosen == nullptr) {
         return;
     }
-    // Its name first, as an entity's is (D638).
+    // Its name first, as an entity's is.
     auto named = fieldRow("name", names_[at]);
     if (!named.has_value()) {
         return;
@@ -164,7 +164,7 @@ void ShellParticipant::showClass(std::size_t at) {
                                        .field = std::string{kPart}});
         }
     }
-    // Last, its transitions, all of them as one field (D639).
+    // Last, its transitions, all of them as one field.
     auto heading = row(componentsColumn_, "transitions", kQuiet, kPanel);
     if (!heading.has_value()) {
         return;
@@ -212,9 +212,8 @@ void ShellParticipant::showUi() {
             if (component == nullptr || component->text() == nullptr) {
                 continue;
             }
-            // Who else has it chosen, or holds it, when joined (D886); a
-            // tree row as the design's, what the node is after its name
-            // (D923).
+            // Who else has it chosen, or holds it, when joined; a
+            // tree row as the design's, what the node is after its name.
             const Value* kChildren = each.find("children");
             const bool kParent = kChildren != nullptr && !kChildren->items().empty();
             const std::string_view kKind = each.find("text") != nullptr    ? "text"
@@ -278,7 +277,7 @@ void ShellParticipant::showNode(std::size_t at) {
         return;
     }
     // Its name, then every field a node has in the document's order: those
-    // it sets first, then the rest (D923).
+    // it sets first, then the rest.
     if (auto head =
             box(componentsColumn_,
                 ui::Layout{.direction = ui::Direction::Column, .gap = 3, .shrink = 0, .padding = {12, 12, 10, 8}},
@@ -327,7 +326,7 @@ void ShellParticipant::showNode(std::size_t at) {
                 return;
             }
             componentRows_.push_back(line->first);
-            // What an identity names, under its field (D941).
+            // What an identity names, under its field.
             if (const std::string kNamed = held != nullptr && (kMember == "text" || kMember == "font" ||
                                                                kMember == "image" || kMember == "style")
                                                ? uiNamed(kMember, partText(*held))
@@ -460,7 +459,7 @@ void ShellParticipant::showMaterial() {
         const Value* held = interface != nullptr ? interface->find(kKind) : nullptr;
         for (const std::string& kName : held != nullptr ? held->names() : std::span<const std::string>{}) {
             const bool kSet = overrides != nullptr && overrides->find(kName) != nullptr;
-            // As a graph's rows (D923): a dot of its kind, a texture's or a
+            // As a graph's rows: a dot of its kind, a texture's or a
             // value's, then its name, those set brighter.
             const Value* declared = held->find(kName);
             const Value* type = declared != nullptr ? declared->find("type") : nullptr;
@@ -513,8 +512,7 @@ void ShellParticipant::showInstanceCard() {
     const Value* base = instance != nullptr ? instance->find("base") : nullptr;
     const std::string kBase = base != nullptr && base->text() != nullptr ? *base->text() : std::string{};
     // In the center, where a graph's canvas is: what the instance is, its
-    // look on a sphere as the last cook drew it, and its base to open
-    // (D927).
+    // look on a sphere as the last cook drew it, and its base to open.
     auto middle = box(centerColumn_,
                       ui::Layout{.height = ui::pixels(0),
                                  .direction = ui::Direction::Column,
@@ -585,7 +583,7 @@ void ShellParticipant::showInstanceSheet() {
     const Value* instance = sheet_.has_value() ? sheet_->find("instance") : nullptr;
     const Value* overrides = instance != nullptr ? instance->find("overrides") : nullptr;
     const Value* base = instance != nullptr ? instance->find("base") : nullptr;
-    // As the design's Inspector (D923): the instance's name and what it
+    // As the design's Inspector: the instance's name and what it
     // is, then every parameter at once, a field each: an override set, or
     // its base's default shown faint.
     if (auto head =
@@ -679,7 +677,7 @@ void ShellParticipant::showGraph() {
         const std::string& kId = nodes->names()[at];
         const Value* type = nodes->items()[at].find("type");
         const std::string kType = type != nullptr && type->text() != nullptr ? *type->text() : std::string{};
-        // As the design's (D923): its kind's dot and its name in words.
+        // As the design's: its kind's dot and its name in words.
         auto added = box(entitiesColumn_,
                          ui::Layout{.height = ui::pixels(look::kRowHeight),
                                     .alignItems = ui::Align::Center,
@@ -712,7 +710,7 @@ void ShellParticipant::showGraph() {
         showCanvas(*nodes, "", sheet_->find("presentation"));
     }
     // The material as its last cook drew it, on a sphere, in the canvas's
-    // corner as the design's preview (D923).
+    // corner as the design's preview.
     const auto kSource = std::ranges::find(browser_.sources, scene_, &ListedSource::path);
     const std::shared_ptr<const texture::Texture> kPicture =
         kSource != browser_.sources.end() ? thumbnailOf(*kSource) : nullptr;
@@ -787,7 +785,7 @@ void ShellParticipant::showGraphNode(std::size_t at) {
     }
     // Its params, then its inputs, each under a heading: those its type's
     // signature names and those the graph holds, in name order, an absent
-    // one an unset field (D732).
+    // one an unset field.
     const Value* types = nodeTypes_.has_value() ? nodeTypes_->find("types") : nullptr;
     const Value* signature = nullptr;
     for (const Value& kType : types != nullptr ? types->items() : std::span<const Value>{}) {
@@ -796,9 +794,9 @@ void ShellParticipant::showGraphNode(std::size_t at) {
             signature = &kType;
         }
     }
-    // As the design's (D923): the node's name and what it is, then its
+    // As the design's: the node's name and what it is, then its
     // params and inputs under headings, a wired input saying what it is
-    // wired from, then its outputs, each pressed to connect it (D733).
+    // wired from, then its outputs, each pressed to connect it.
     const auto kSection = [this](std::string_view title, std::string_view quiet) {
         auto heading = box(componentsColumn_,
                            ui::Layout{.alignItems = ui::Align::Center,

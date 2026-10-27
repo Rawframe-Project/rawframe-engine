@@ -1,6 +1,6 @@
 #pragma once
 
-// A user's rebinding (SPEC-0029's `input.overrides` document): a delta over
+// A user's rebinding (the `input.overrides` document): a delta over
 // an action set's default bindings, keyed by action identity, device
 // class, and slot, that never changes the set it overrides. Resetting to
 // the defaults is deleting entries.

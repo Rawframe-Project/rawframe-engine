@@ -207,7 +207,7 @@ result::Result<TypeLayout> Program::layout(std::string_view type) const {
     const std::string kName{type};
     const KestLayout* found = nullptr;
     if (kest_build_layout(state_->build, kName.c_str(), &found) != 1 || found == nullptr) {
-        // Named, so what asked for it is found (D921).
+        // Named, so what asked for it is found.
         return std::unexpected<result::Error>{result::fail(result::ErrorClass::NotFound,
                                                            kKestDomain,
                                                            code(KestError::UnknownType),

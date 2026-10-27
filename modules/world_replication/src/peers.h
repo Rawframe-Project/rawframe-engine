@@ -35,7 +35,7 @@ namespace rawframe::world_replication {
 
 /// A value's wire bytes, held in place when small, as most components are:
 /// every connection compares each of its values every tick, and a value on
-/// the heap was a cache miss each time (D211).
+/// the heap was a cache miss each time.
 class HeldBytes {
 public:
     [[nodiscard]] std::span<const std::byte> bytes() const noexcept {
@@ -90,7 +90,7 @@ struct Mapping {
 
 /// A connection's mappings by entity, in entity order. A sorted vector, not
 /// a map: every tick walks them all twice, and a map's scattered nodes made
-/// that walk most of a connection's cost (D211).
+/// that walk most of a connection's cost.
 class Mappings {
 public:
     using Entry = std::pair<world::EntityHandle, Mapping>;
@@ -211,7 +211,7 @@ struct Waiting {
 };
 
 /// What one connection sent on the input lane in the current second, held
-/// to SPEC-0013's input ceilings before any work on a record (D225).
+/// to the input ceilings before any work on a record.
 struct InputAllowance {
     std::uint64_t second = 0;
     std::uint64_t windows = 0;
@@ -259,14 +259,14 @@ struct Peer {
     Mappings mapped;
     /// The publish its values were last looked at in, and the mapped
     /// entities not all of whose values it was then known to hold: what
-    /// its next publish looks at, with what changed since (D744).
+    /// its next publish looks at, with what changed since.
     std::optional<std::uint64_t> lookedAt;
     std::vector<world::EntityHandle> unsettled;
     /// Whether the bound on mappings left an entity undeclared at its last
-    /// turn: its next looks at every entity again (D745).
+    /// turn: its next looks at every entity again.
     bool bounded = false;
     /// Which of the game's districts are in its interest, by their place,
-    /// as of the districts' version (D870).
+    /// as of the districts' version.
     std::vector<bool> unitsIn;
     std::uint64_t unitsVersion = 0;
     std::map<std::uint32_t, world::EntityHandle> byNetEntity;
@@ -279,30 +279,30 @@ struct Peer {
     std::uint64_t stateSequence = 0;
     std::deque<SentState> sent;
     /// The newest command's tick heard, and how far ahead of the tick being
-    /// consumed it stood at the least since the last pace (D317): what a
+    /// consumed it stood at the least since the last pace: what a
     /// client whose commands come in bursts is late by just before the next.
     std::uint64_t newestHeard = 0;
     std::optional<std::int64_t> leastLead;
     bool heardInput = false;
     /// The server tick its last input window arrived in, and the least lead
     /// since, counted only once the next window comes within a command's
-    /// age (D323): a client unheard for longer is stalled or cut off, and is
+    /// age: a client unheard for longer is stalled or cut off, and is
     /// not paced for it.
     std::uint64_t heardAt = 0;
     std::optional<std::int64_t> pendingLead;
     ChecksumBook checksums;
     InputAllowance allowance;
     /// The tick its last command arrived before, and how many it has sent
-    /// for that tick (D425).
+    /// for that tick.
     std::uint64_t commandsTick = 0;
     std::size_t commandsThisTick = 0;
     /// Closed by this side, for breaking the protocol or striking out: to
-    /// be forgotten once its event is handled (D223).
+    /// be forgotten once its event is handled.
     bool gone = false;
-    /// Told the server is stopping (D585).
+    /// Told the server is stopping.
     bool toldStopping = false;
     /// What its connection was sent and sent, as the server's totals count
-    /// them, for a tool's profile (D840).
+    /// them, for a tool's profile.
     std::uint64_t stateDatagrams = 0;
     std::uint64_t stateBytes = 0;
     std::uint64_t recordsSent = 0;

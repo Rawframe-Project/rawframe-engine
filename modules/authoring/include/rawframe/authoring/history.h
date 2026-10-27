@@ -1,13 +1,13 @@
 #pragma once
 
-// One document's history (ADR-0065, SPEC-0040), whatever kind the document
-// is (D636): its entries oldest first, those before `undoable()` applied
+// One document's history, whatever kind the document
+// is: its entries oldest first, those before `undoable()` applied
 // and the rest redoable, where the saved document stands among them, and
 // eviction by the named limits, redo first, then oldest. An entry is
 // whatever its document's kind keeps of a transaction; it says what it
 // weighs as `bytes`.
 //
-// Each entry has an author (ADR-0085, D879), nought for the session's own,
+// Each entry has an author, nought for the session's own,
 // and undo is per author: an author's undo takes back that author's latest
 // change. Where it is the history's last applied entry, the history steps
 // back as one author's always has, its redo kept; where another author's
@@ -24,7 +24,7 @@
 
 namespace rawframe::authoring {
 
-/// SPEC-0040's and ADR-0065's named limits for one document.
+/// The and the named limits for one document.
 struct HistoryLimits {
     std::size_t maximumEntries = 256;
     std::size_t maximumBytes = std::size_t{64} * 1024 * 1024;
@@ -34,7 +34,7 @@ struct HistoryLimits {
     std::size_t maximumSelection = 65536;
 };
 
-/// What an entry is (D879): a change committed, an author's change taken
+/// What an entry is: a change committed, an author's change taken
 /// back after another's came, or such an undo taken back again.
 enum class EntryKind : std::uint8_t {
     Change,
@@ -143,7 +143,7 @@ public:
         clean_ = applied_;
     }
 
-    /// The newest entry, which a change may amend (D976), where it is
+    /// The newest entry, which a change may amend, where it is
     /// `author`'s change, applied, with nothing to redo after it and not
     /// taken back; none otherwise.
     [[nodiscard]] const Entry* amendable(std::uint32_t author) const noexcept {

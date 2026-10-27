@@ -243,8 +243,8 @@ RAWFRAME_TEST(AHostRunsItsIterationsAndStopsInOrder) {
 
 RAWFRAME_TEST(FramesSayWhileThePlatformSuspendsTheProgram) {
     // A program its platform suspends runs on, its frames saying so from
-    // the iteration after `suspending` until the one after `resumed`
-    // (D565): what reaches a person stops for that long.
+    // the iteration after `suspending` until the one after `resumed`:
+    // what reaches a person stops for that long.
     reset();
     std::string log;
     std::atomic<bool> suspended{false};
@@ -264,7 +264,7 @@ RAWFRAME_TEST(FramesSayWhileThePlatformSuspendsTheProgram) {
 }
 
 RAWFRAME_TEST(TheHostAttributesMemoryToItsParticipants) {
-    // SPEC-0013's memory attribution (D216): sampled once a second, logged
+    // The memory attribution: sampled once a second, logged
     // at stop, what each participant said it holds and what is left over.
     reset();
     std::string log;
@@ -326,7 +326,7 @@ RAWFRAME_TEST(AStalledExecutorIsDegradedThenUnhealthy) {
     // The one worker is held, and the task behind it waits: nothing
     // finishes. The observer lets the worker go once the Host is unhealthy.
     // Degraded from half the stall limit: a second, so a Host's thread kept
-    // off the processor by a loaded machine still looks in that half (D489).
+    // off the processor by a loaded machine still looks in that half.
     const auto kExit =
         run("host.iteration_rate = 1000\nhost.cpu_workers = 1\nhost.stall_ms = 2000\nhost.maximum_iterations = 100000",
             log);
@@ -394,7 +394,7 @@ RAWFRAME_TEST(AStopRequestEndsAnUnboundedRun) {
 
 RAWFRAME_TEST(AnOverloadedReportEndsTheRunAsAControlledOverload) {
     // Drained and stopped in order as any unhealthy run, but a retry may
-    // help, so its reason and code say so (D186).
+    // help, so its reason and code say so.
     reset();
     std::string log;
     counts.unhealthyAt = 3;
@@ -407,7 +407,7 @@ RAWFRAME_TEST(AnOverloadedReportEndsTheRunAsAControlledOverload) {
 
 RAWFRAME_TEST(AKeyNothingReadsRefusesTheStart) {
     // A setting of no participant here, most often a typing mistake, is
-    // refused rather than ignored, and what started is rolled back (D187).
+    // refused rather than ignored, and what started is rolled back.
     reset();
     std::string log;
     RAWFRAME_EXPECT(run("host.maximum_iterations = 2\nhost.iteration_rat = 1000", log) ==
@@ -420,7 +420,7 @@ RAWFRAME_TEST(AKeyNothingReadsRefusesTheStart) {
 
 RAWFRAME_TEST(AStopPastItsBudgetEndsTheRunAsATimeout) {
     // A participant that takes 60 ms to stop, under a 20 ms shutdown budget:
-    // the run ends in order, and says the stop outlived it (D185).
+    // the run ends in order, and says the stop outlived it.
     reset();
     std::string log;
     counts.stopMilliseconds = 60;
@@ -439,7 +439,7 @@ RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {
     std::string log;
     RAWFRAME_EXPECT(run("host.iteration_rate = 0", log) == host::HostExit::InvalidLaunchDescriptor);
     RAWFRAME_EXPECT(mentions(log, "\"code\":\"bad_configuration\"") && mentions(log, "host.iteration_rate"));
-    // Why, once, with the process's exit code (SPEC-0012, D184).
+    // Why, once, with the process's exit code.
     RAWFRAME_EXPECT(mentions(log, "\"code\":\"not_started\"") &&
                     mentions(log, "\"exit\":\"invalid_launch_descriptor\",\"exitCode\":65"));
     RAWFRAME_EXPECT(movesThrough(log, {"starting", "failed"}) && !mentions(log, "\"state\":\"preparing\""));
@@ -449,8 +449,7 @@ RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {
 
     // A supervisor's grace too short for the drain, the shutdown budget, and
     // the executors' budgets (2 + 5 + 6 seconds) and a tenth of it. A normal
-    // stop, the drain and the shutdown budget, is within SPEC-0013's 8 s
-    // (D230).
+    // stop, the drain and the shutdown budget, is within the 8 s.
     log.clear();
     RAWFRAME_EXPECT(run("host.supervisor_grace_ms = 14000\nhost.maximum_iterations = 1", log) ==
                     host::HostExit::InvalidLaunchDescriptor);
@@ -474,7 +473,7 @@ RAWFRAME_TEST(StartupFailuresAreReportedAndNothingRuns) {
 #endif
 
 RAWFRAME_TEST(AHostIsDrivenAnIterationAtATime) {
-    // As a browser's event loop drives it (D168): one iteration a call, no
+    // As a browser's event loop drives it: one iteration a call, no
     // sleeping, and a stop wherever the caller ends it.
     reset();
     std::string log;
@@ -515,7 +514,7 @@ RAWFRAME_TEST(AHostIsDrivenAnIterationAtATime) {
 }
 
 RAWFRAME_TEST(EachExitReasonHasItsPortableCategory) {
-    // SPEC-0012's table: a supervisor retries what may pass and fixes what
+    // The table: a supervisor retries what may pass and fixes what
     // will not.
     RAWFRAME_EXPECT(
         host::exitCode(host::HostExit::Stopped) == 0 && host::exitCode(host::HostExit::InvalidInvocation) == 64 &&

@@ -27,15 +27,15 @@ constexpr std::string_view kMaybe[] = {
     render::kFrames.name, render_scene::kSceneFrames.name, view::kPreviewCamera.name};
 constexpr std::string_view kProvided[] = {kSceneCaptures.name};
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
-/// The scene's place in a frame: first (SPEC-0024); and its post
-/// processes over the composed picture's, after the canvas (D351).
+/// The scene's place in a frame: first; and its post
+/// processes over the composed picture's, after the canvas.
 constexpr std::uint32_t kOrder = 0;
 constexpr std::uint32_t kComposedOrder = 2;
 
-/// Records the scene's frames into the frames `render` makes (D285): in
+/// Records the scene's frames into the frames `render` makes: in
 /// each `present` that plans a frame, the view takes the frame's size and
 /// the frame the scene queued is prepared for it, or the frame a tool asks
-/// to capture (D326).
+/// to capture.
 class DrawingParticipant final : public composition::Participant, public SceneCaptures {
 public:
     result::Status load(composition::ParticipantContext& context) {
@@ -44,7 +44,7 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(frames_, context.capability(render::kFrames));
         RAWFRAME_TRY_ASSIGN(scene_, context.capability(render_scene::kSceneFrames));
-        // An editor's preview, whose frames' passes are timed (D894).
+        // An editor's preview, whose frames' passes are timed.
         if (context.has(view::kPreviewCamera.name)) {
             RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
         }
@@ -67,8 +67,8 @@ public:
             return;
         }
         // Once an editor asked what the preview's frames hold, their passes
-        // are timed, and it is told the last times, each name's together
-        // (D894): the canvas's too, in a game with no scene to draw (D901).
+        // are timed, and it is told the last times, each name's together:
+        // the canvas's too, in a game with no scene to draw.
         if (preview_ != nullptr) {
             const bool kAsked = preview_->timesAsked();
             frames_->timePasses(kAsked);
@@ -111,7 +111,7 @@ public:
             }
             renderer_ = std::move(*made);
             // The render textures' views first, so the scene samples what
-            // they drew in the same frame (D361).
+            // they drew in the same frame.
             for (const render_scene::TextureFrame& kTexture : scene_->textureFrames()) {
                 auto view = TextureView::create(*device, *renderer_, kTexture.id, kTexture.width, kTexture.height);
                 if (!view.has_value()) {
@@ -130,7 +130,7 @@ public:
                 scene_->missed(kTexture.id);
             }
             // In split-screen, each local player's view, in the players'
-            // order, after the render textures (D362).
+            // order, after the render textures.
             for (const render_scene::RegionFrame& kRegion : scene_->regionFrames()) {
                 auto view = TextureView::create(*device, *renderer_, 0, scaled(kRegion.width), scaled(kRegion.height));
                 if (!view.has_value()) {
@@ -147,7 +147,7 @@ public:
             frames_->join(*renderer_, kOrder);
             frames_->join(renderer_->composed(), kComposedOrder);
         }
-        // The render scale follows how the frames keep up (D533).
+        // The render scale follows how the frames keep up.
         if (const render::FramePace kPace = frames_->pace(); kPace.done != paced_) {
             paced_ = kPace.done;
             scene_->paced(kPace.atLeast, kPace.atMost, kPace.budget);
@@ -167,7 +167,7 @@ public:
             }
         } else {
             // In split-screen the players' views draw the scene, as a
-            // split preview's do (D797).
+            // split preview's do.
             const std::span<const render_scene::RegionFrame> kPlaced = scene_->regionFrames();
             const bool kInRegions = std::ranges::any_of(kPlaced, [](const render_scene::RegionFrame& each) {
                 return each.width != 0 && each.height != 0;
@@ -175,7 +175,7 @@ public:
             renderer_->prepare(kInRegions ? nullptr : scene_->queued(), meshes_, textures_, viewPointers_);
         }
         const std::span<const render_scene::TextureFrame> kTextures = scene_->textureFrames();
-        // An editor's edited World stands while time alone moves it (D979).
+        // An editor's edited World stands while time alone moves it.
         const bool kTimeHeld = preview_ != nullptr && preview_->edited();
         textureStillness_.resize(views_.size());
         for (std::size_t at = 0; at < views_.size(); ++at) {
@@ -185,7 +185,7 @@ public:
                 scene_->missed(views_[at]->id());
             }
             // A render texture's picture that has stood is not drawn again,
-            // as the scene's is not, nor one given nothing new (D952, D979).
+            // as the scene's is not, nor one given nothing new.
             textureStillness_[at].holdTime(kTimeHeld);
             if (!views_[at]->missed() && (kFrame == nullptr || textureStillness_[at].still(*kFrame))) {
                 views_[at]->stands();
@@ -219,7 +219,7 @@ public:
                                                                    .height = kRegion.height,
                                                                    .bars = scene_->bars()}}
                                          : std::nullopt);
-            // A region not shown draws nothing, the same as before (D952).
+            // A region not shown draws nothing, the same as before.
             if (kShown) {
                 frames_->ready(*regions_[at]);
             } else {
@@ -227,10 +227,10 @@ public:
             }
         }
         prepareEyes();
-        // A picture that has stood (D952) is not drawn again, where the
+        // A picture that has stood is not drawn again, where the
         // scene is drawn alone: no capture, shown split (a preview keeps
         // its regions' views made while it shows one), or eye; its render
-        // textures' views judged each as it is (D979).
+        // textures' views judged each as it is.
         const render_scene::SceneFrame* kQueued = scene_->queued();
         stillness_.holdTime(kTimeHeld);
         const bool kSplit = std::ranges::any_of(scene_->regionFrames(), [](const render_scene::RegionFrame& each) {
@@ -245,7 +245,7 @@ public:
         frames_->ready(renderer_->composed());
     }
 
-    /// A headset's eyes (D595): each eye's view drawn apart, at its own
+    /// A headset's eyes: each eye's view drawn apart, at its own
     /// size, and laid over its image of the frame's target.
     void prepareEyes() noexcept {
         const std::span<const render_scene::EyeFrame> kEyes = scene_->eyeFrames();
@@ -290,14 +290,14 @@ public:
         }
     }
 
-    /// A local player's region side in the pixels its view is drawn at
-    /// (D373): its render scale's share, at least one.
+    /// A local player's region side in the pixels its view is drawn at:
+    /// its render scale's share, at least one.
     [[nodiscard]] std::uint32_t scaled(std::uint32_t side) const noexcept {
         return std::max(1U, static_cast<std::uint32_t>(std::lround(static_cast<float>(side) * scene_->renderScale())));
     }
 
     /// The render textures' frames queued in an iteration no frame draws,
-    /// once the device draws, told as missed (D361).
+    /// once the device draws, told as missed.
     void dropViews() noexcept {
         if (scene_ == nullptr) {
             return;
@@ -342,7 +342,7 @@ public:
             return;
         }
         RendererStatistics statistics;
-        // In split-screen, the first player's view's (D362).
+        // In split-screen, the first player's view's.
         const bool kSplit = !regions_.empty();
         std::uint64_t regionFrames = 0;
         for (const std::unique_ptr<TextureView>& region : regions_) {
@@ -355,7 +355,7 @@ public:
             frames_->leave(*region);
         }
         regions_.clear();
-        // A headset's eyes' (D595), apart: the summary is at its fields'
+        // A headset's eyes', apart: the summary is at its fields'
         // limit.
         std::uint64_t eyeFrames = 0;
         for (const std::unique_ptr<TextureView>& eye : eyes_) {
@@ -429,23 +429,23 @@ private:
     MeshSource meshes_;
     TextureSource textures_;
     std::unique_ptr<SceneRenderer> renderer_;
-    /// The render textures' views (D361), drawn before the scene.
+    /// The render textures' views, drawn before the scene.
     std::vector<std::unique_ptr<TextureView>> views_;
     std::vector<TextureView*> viewPointers_;
-    /// In split-screen, the local players' views (D362), drawn after them.
+    /// In split-screen, the local players' views, drawn after them.
     std::vector<std::unique_ptr<TextureView>> regions_;
-    /// A headset's eyes' views (D595).
+    /// A headset's eyes' views.
     std::vector<std::unique_ptr<TextureView>> eyes_;
-    /// Whether the scene's picture has stood (D952).
+    /// Whether the scene's picture has stood.
     render_scene::Stillness stillness_;
-    /// And each render texture's view's (D979).
+    /// And each render texture's view's.
     std::vector<render_scene::Stillness> textureStillness_;
     /// The frame a tool asked to capture, and whether the renderer was
     /// asked to read it.
     std::optional<render_scene::SceneFrame> capturing_;
     bool asked_ = false;
     bool failed_ = false;
-    /// The frames done the scene was told of (D533).
+    /// The frames done the scene was told of.
     std::uint64_t paced_ = 0;
     diagnostics::Emitter emitter_;
 };

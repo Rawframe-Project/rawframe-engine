@@ -1,10 +1,10 @@
-// A UI tree over Maul UI (D374): a row of two fixed boxes and a growing one
+// A UI tree over Maul UI: a row of two fixed boxes and a growing one
 // laid out in their parent's padding box, a column's share of its parent,
 // an automatic root fitting its content, an absolute node placed by its
 // anchor point and a detached one a root again, keys kept, values out of
 // range refused, a removed subtree's nodes stale, a tree's looks drawn as
-// SPEC-0032's boxes in paint order, and points hitting the topmost node
-// that takes part (D421): through containers, pass-through panels, and
+// the boxes in paint order, and points hitting the topmost node
+// that takes part: through containers, pass-through panels, and
 // past a modal layer.
 
 #include "rawframe/test/test.h"

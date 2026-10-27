@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0026's core parameters of a Surface (D301): each one's name, shape,
+// The core parameters of a Surface: each one's name, shape,
 // range, default, and place, in name order (as a node's inputs are) and in
 // the contract's order (as cooked bytes are).
 
@@ -26,7 +26,7 @@ struct Parameter {
 
 /// In name order, as a node's inputs are.
 extern const std::array<Parameter, 10> kParameters;
-/// In the contract's order (SPEC-0026's table), as cooked bytes are.
+/// In the contract's order, as cooked bytes are.
 extern const std::array<Parameter, 10> kContractOrder;
 
 /// The parameter named `name`; none for another name.
@@ -34,7 +34,7 @@ extern const std::array<Parameter, 10> kContractOrder;
 
 /// What a feature group's input is: a number from nought to one, an angle
 /// in radians, a normal, a distance in meters above nought, a color whose
-/// default is white, or a flag whose default is false (D720).
+/// default is white, or a flag whose default is false.
 enum class GroupKind : std::uint8_t {
     Unit,
     Angle,
@@ -44,7 +44,7 @@ enum class GroupKind : std::uint8_t {
     Flag
 };
 
-/// A feature group's input (SPEC-0026's Surface contract, D716): its name
+/// A feature group's input: its name
 /// and kind; a number nought by default, a normal connected or left out
 /// for the mesh's own. The group is active where any of its inputs is
 /// given, which only a program material carries; the blob holds none.
@@ -53,9 +53,9 @@ struct GroupInput {
     GroupKind kind;
 };
 
-/// The coat's (`KHR_materials_clearcoat`'s, D716), the anisotropy's
-/// (`KHR_materials_anisotropy`'s, D717), and the transmission's
-/// (`KHR_materials_transmission`'s and `KHR_materials_volume`'s, D720), in
+/// The coat's (`KHR_materials_clearcoat`'s), the anisotropy's
+/// (`KHR_materials_anisotropy`'s), and the transmission's
+/// (`KHR_materials_transmission`'s and `KHR_materials_volume`'s), in
 /// name order.
 inline constexpr std::array<GroupInput, 10> kGroupInputs = {{{"coat_normal", GroupKind::Normal},
                                                              {"coat_roughness", GroupKind::Unit},

@@ -1,4 +1,4 @@
-# The canvas's GPU half (SPEC-0024's canvas, D278) over the one device, apart
+# The canvas's GPU half over the one device, apart
 # from the CPU half because Maul RHI is not on every client yet. Client
 # only: the dedicated server links none of it, and a platform Maul RHI is
 # not built for has no module at all.
