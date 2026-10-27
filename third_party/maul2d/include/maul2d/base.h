@@ -61,7 +61,7 @@ extern "C"
 #define M2_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define M2_VERSION_MINOR 4
+#define M2_VERSION_MINOR 5
 // x-release-please-end
 // x-release-please-start-patch
 #define M2_VERSION_PATCH 0
@@ -186,6 +186,13 @@ extern "C"
 // default is 4; the cap keeps one call, or one record of an untrusted
 // tape, from running without bound.
 #define M2_MAX_SUBSTEPS 64
+
+// The largest snapshot in bytes, about 1 GiB. Snapshot and journal sizes
+// are int32_t byte counts, and a journal holds its 40-byte header, the
+// snapshot it starts from and the record of a restore of a snapshot of the
+// same size (5 bytes before it): (INT32_MAX - 45) / 2. m2CreateWorld
+// refuses a def whose world would snapshot to more.
+#define M2_MAX_SNAPSHOT_BYTES 1073741801
 
 // The largest magnitude of a body-local length, in meters: shape
 // coordinates and radii, the points of polygons, hulls, outlines and
