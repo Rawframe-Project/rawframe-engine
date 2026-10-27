@@ -373,17 +373,20 @@ struct Framer::State {
         if (const mrhiResult kCompiled = mrhiCompileFrame(native); kCompiled != mrhi_success) {
             return drop(recorders, failed("the frame could not be compiled", kCompiled).error());
         }
-        if (clearing.has_value() &&
-            (mrhiBeginPass(native, *clearing) != mrhi_success || mrhiEndPass(native, *clearing) != mrhi_success)) {
-            return drop(recorders, failed("the picture could not be cleared", mrhi_errorState).error());
+        if (mrhiResult outcome = mrhi_success;
+            clearing.has_value() && ((outcome = mrhiBeginPass(native, *clearing)) != mrhi_success ||
+                                     (outcome = mrhiEndPass(native, *clearing)) != mrhi_success)) {
+            return drop(recorders, failed("the picture could not be cleared", outcome).error());
         }
-        if (panelClearing.has_value() && (mrhiBeginPass(native, *panelClearing) != mrhi_success ||
-                                          mrhiEndPass(native, *panelClearing) != mrhi_success)) {
-            return drop(recorders, failed("the panel could not be cleared", mrhi_errorState).error());
+        if (mrhiResult outcome = mrhi_success;
+            panelClearing.has_value() && ((outcome = mrhiBeginPass(native, *panelClearing)) != mrhi_success ||
+                                          (outcome = mrhiEndPass(native, *panelClearing)) != mrhi_success)) {
+            return drop(recorders, failed("the panel could not be cleared", outcome).error());
         }
         for (const mrhiPassId kCleared : asidesClearing) {
-            if (mrhiBeginPass(native, kCleared) != mrhi_success || mrhiEndPass(native, kCleared) != mrhi_success) {
-                return drop(recorders, failed("an aside could not be cleared", mrhi_errorState).error());
+            if (mrhiResult outcome = mrhi_success; (outcome = mrhiBeginPass(native, kCleared)) != mrhi_success ||
+                                                   (outcome = mrhiEndPass(native, kCleared)) != mrhi_success) {
+                return drop(recorders, failed("an aside could not be cleared", outcome).error());
             }
         }
         for (FrameRecorder* recorder : recorders) {
@@ -410,13 +413,15 @@ struct Framer::State {
         if (times.has_value()) {
             const auto kCount = static_cast<std::uint32_t>(2 * open.timed.size());
             mrhiRequestId request{};
-            if (mrhiBeginPass(native, *resolving) != mrhi_success ||
-                mrhiResolveQueries(native, *resolving, *timestamps, 0, kCount, *times, 0) != mrhi_success ||
-                mrhiEndPass(native, *resolving) != mrhi_success ||
-                mrhiBeginPass(native, *timesReading) != mrhi_success ||
-                mrhiReadBuffer(native, *timesReading, *times, 0, std::uint64_t{kCount} * 8, &request) != mrhi_success ||
-                mrhiEndPass(native, *timesReading) != mrhi_success) {
-                return drop(recorders, failed("the passes' times could not be read back", mrhi_errorState).error());
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiBeginPass(native, *resolving)) != mrhi_success ||
+                (outcome = mrhiResolveQueries(native, *resolving, *timestamps, 0, kCount, *times, 0)) != mrhi_success ||
+                (outcome = mrhiEndPass(native, *resolving)) != mrhi_success ||
+                (outcome = mrhiBeginPass(native, *timesReading)) != mrhi_success ||
+                (outcome = mrhiReadBuffer(native, *timesReading, *times, 0, std::uint64_t{kCount} * 8, &request)) !=
+                    mrhi_success ||
+                (outcome = mrhiEndPass(native, *timesReading)) != mrhi_success) {
+                return drop(recorders, failed("the passes' times could not be read back", outcome).error());
             }
             timesRead = request;
             timesNamed = open.timed;
@@ -427,10 +432,11 @@ struct Framer::State {
             const mrhiTextureCopy kSource{.resource = picture};
             const mrhiExtent3d kExtent{.width = target.width, .height = target.height, .depthOrLayers = 1};
             mrhiRequestId request{};
-            if (mrhiBeginPass(native, *reading) != mrhi_success ||
-                mrhiReadTexture(native, *reading, &kSource, &kExtent, &request) != mrhi_success ||
-                mrhiEndPass(native, *reading) != mrhi_success) {
-                return drop(recorders, failed("the picture could not be read back", mrhi_errorState).error());
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiBeginPass(native, *reading)) != mrhi_success ||
+                (outcome = mrhiReadTexture(native, *reading, &kSource, &kExtent, &request)) != mrhi_success ||
+                (outcome = mrhiEndPass(native, *reading)) != mrhi_success) {
+                return drop(recorders, failed("the picture could not be read back", outcome).error());
             }
             readback = request;
             readbackBytes = std::size_t{target.width} * target.height * 4;

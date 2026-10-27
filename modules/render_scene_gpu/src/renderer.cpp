@@ -331,8 +331,8 @@ struct SceneRenderer::State {
         if (now.draws || now.casters) {
             mrhiBufferDef def = mrhiDefaultBufferDef();
             def.size = now.placed.instances.size() * sizeof(float);
-            if (mrhiDeclareBuffer(native, &def, &now.instances) != mrhi_success) {
-                return failed("the frame's placements could not be declared", mrhi_errorCapacity);
+            if (const mrhiResult kOutcome = mrhiDeclareBuffer(native, &def, &now.instances); kOutcome != mrhi_success) {
+                return failed("the frame's placements could not be declared", kOutcome);
             }
         }
         now.width = open.width;
@@ -355,13 +355,15 @@ struct SceneRenderer::State {
                            .previous = now.block.previous};
         mrhiBufferDef skyDef = mrhiDefaultBufferDef();
         skyDef.size = sizeof(SkyBlock);
-        if (mrhiDeclareBuffer(native, &skyDef, &now.skyResource) != mrhi_success) {
-            return failed("the sky's light could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native, &skyDef, &now.skyResource);
+            kOutcome != mrhi_success) {
+            return failed("the sky's light could not be declared", kOutcome);
         }
         mrhiBufferDef blockDef = mrhiDefaultBufferDef();
         blockDef.size = sizeof(FrameBlock);
-        if (mrhiDeclareBuffer(native, &blockDef, &now.blockResource) != mrhi_success) {
-            return failed("the frame's view could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native, &blockDef, &now.blockResource);
+            kOutcome != mrhi_success) {
+            return failed("the frame's view could not be declared", kOutcome);
         }
         now.materials = frame->materials.empty() ? std::vector{render_scene::noMaterial()} : frame->materials;
         for (const auto& [kBytes, kMade] :
@@ -371,8 +373,8 @@ struct SceneRenderer::State {
               std::pair{now.indices.size() * sizeof(std::uint32_t), &now.indicesResource}}) {
             mrhiBufferDef def = mrhiDefaultBufferDef();
             def.size = kBytes;
-            if (mrhiDeclareBuffer(native, &def, kMade) != mrhi_success) {
-                return failed("the frame's lights could not be declared", mrhi_errorCapacity);
+            if (const mrhiResult kOutcome = mrhiDeclareBuffer(native, &def, kMade); kOutcome != mrhi_success) {
+                return failed("the frame's lights could not be declared", kOutcome);
             }
         }
         // The upload pass writes what the drawing reads.
@@ -687,42 +689,50 @@ struct SceneRenderer::State {
             return {};
         }
         const Declared& now = *declared;
-        if (mrhiBeginPass(native, now.upload) != mrhi_success ||
-            mrhiWriteBuffer(native, now.upload, now.blockResource, 0, &now.block, sizeof(FrameBlock)) != mrhi_success ||
-            ((now.draws || now.casters) &&
-             mrhiWriteBuffer(native,
-                             now.upload,
-                             now.instances,
-                             0,
-                             now.placed.instances.data(),
-                             now.placed.instances.size() * sizeof(float)) != mrhi_success)) {
-            return failed("the frame's placements could not be written", mrhi_errorCapacity);
-        }
-        if (mrhiWriteBuffer(
-                native, now.upload, now.lightsResource, 0, now.lights.data(), now.lights.size() * sizeof(LightBlock)) !=
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiBeginPass(native, now.upload)) != mrhi_success ||
+            (outcome = mrhiWriteBuffer(native, now.upload, now.blockResource, 0, &now.block, sizeof(FrameBlock))) !=
                 mrhi_success ||
-            mrhiWriteBuffer(native,
-                            now.upload,
-                            now.materialsResource,
-                            0,
-                            now.materials.data(),
-                            now.materials.size() * sizeof(render_scene::MaterialBlob)) != mrhi_success ||
-            mrhiWriteBuffer(native,
-                            now.upload,
-                            now.rangesResource,
-                            0,
-                            now.ranges.data(),
-                            now.ranges.size() * sizeof(std::uint32_t)) != mrhi_success ||
-            mrhiWriteBuffer(native,
-                            now.upload,
-                            now.indicesResource,
-                            0,
-                            now.indices.data(),
-                            now.indices.size() * sizeof(std::uint32_t)) != mrhi_success) {
-            return failed("the frame's lights could not be written", mrhi_errorCapacity);
+            ((now.draws || now.casters) &&
+             (outcome = mrhiWriteBuffer(native,
+                                        now.upload,
+                                        now.instances,
+                                        0,
+                                        now.placed.instances.data(),
+                                        now.placed.instances.size() * sizeof(float))) != mrhi_success)) {
+            return failed("the frame's placements could not be written", outcome);
         }
-        if (mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock)) != mrhi_success) {
-            return failed("the sky's light could not be written", mrhi_errorCapacity);
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiWriteBuffer(native,
+                                       now.upload,
+                                       now.lightsResource,
+                                       0,
+                                       now.lights.data(),
+                                       now.lights.size() * sizeof(LightBlock))) != mrhi_success ||
+            (outcome = mrhiWriteBuffer(native,
+                                       now.upload,
+                                       now.materialsResource,
+                                       0,
+                                       now.materials.data(),
+                                       now.materials.size() * sizeof(render_scene::MaterialBlob))) != mrhi_success ||
+            (outcome = mrhiWriteBuffer(native,
+                                       now.upload,
+                                       now.rangesResource,
+                                       0,
+                                       now.ranges.data(),
+                                       now.ranges.size() * sizeof(std::uint32_t))) != mrhi_success ||
+            (outcome = mrhiWriteBuffer(native,
+                                       now.upload,
+                                       now.indicesResource,
+                                       0,
+                                       now.indices.data(),
+                                       now.indices.size() * sizeof(std::uint32_t))) != mrhi_success) {
+            return failed("the frame's lights could not be written", outcome);
+        }
+        if (const mrhiResult kOutcome =
+                mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock));
+            kOutcome != mrhi_success) {
+            return failed("the sky's light could not be written", kOutcome);
         }
         RAWFRAME_TRY(picture->write(now.upload));
         RAWFRAME_TRY(metering->write(now.upload));
@@ -739,8 +749,8 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(held->write(now.upload));
         RAWFRAME_TRY(skinning->write(now.upload));
         RAWFRAME_TRY(textures->write(render::requestKey(now.upload.index1, now.upload.generation)));
-        if (mrhiEndPass(native, now.upload) != mrhi_success) {
-            return failed("the upload pass could not end", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiEndPass(native, now.upload); kOutcome != mrhi_success) {
+            return failed("the upload pass could not end", kOutcome);
         }
         RAWFRAME_TRY(decalAtlas->record(*pipelines));
         RAWFRAME_TRY(probeAtlas->record(*pipelines));

@@ -79,8 +79,8 @@ result::Status TemporalPass::declare(const render_scene::SceneFrame& frame,
     }
     mrhiBufferDef def = mrhiDefaultBufferDef();
     def.size = sizeof(TemporalBlock);
-    if (mrhiDeclareBuffer(native_, &def, &state_) != mrhi_success) {
-        return failed("the temporal pass's state could not be declared", mrhi_errorCapacity);
+    if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, &state_); kOutcome != mrhi_success) {
+        return failed("the temporal pass's state could not be declared", kOutcome);
     }
     writes.push_back(wholeOf(state_, mrhi_accessCopyDestination));
     return {};
@@ -124,8 +124,10 @@ result::Status TemporalPass::addPass(mrhiResourceId scene, mrhiResourceId motion
 }
 
 result::Status TemporalPass::write(mrhiPassId upload) {
-    if (enabled_ && mrhiWriteBuffer(native_, upload, state_, 0, &block_, sizeof(TemporalBlock)) != mrhi_success) {
-        return failed("the temporal pass's state could not be written", mrhi_errorCapacity);
+    if (mrhiResult outcome = mrhi_success;
+        enabled_ &&
+        (outcome = mrhiWriteBuffer(native_, upload, state_, 0, &block_, sizeof(TemporalBlock))) != mrhi_success) {
+        return failed("the temporal pass's state could not be written", outcome);
     }
     return {};
 }
@@ -139,11 +141,13 @@ result::Status TemporalPass::record(const Pipelines& pipelines, mrhiResourceId s
                                                   textureAt(2, motion),
                                                   samplerAt(3, pipelines.filteredSampler),
                                                   bufferAt(4, state_, sizeof(TemporalBlock))};
-    if (mrhiBeginPass(native_, pass_) != mrhi_success ||
-        mrhiSetGraphicsPipeline(native_, pass_, pipelines.temporal.pipeline) != mrhi_success ||
-        mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-        mrhiDraw(native_, pass_, 3, 1, 0, 0) != mrhi_success || mrhiEndPass(native_, pass_) != mrhi_success) {
-        return failed("the temporal pass could not be drawn", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native_, pass_)) != mrhi_success ||
+        (outcome = mrhiSetGraphicsPipeline(native_, pass_, pipelines.temporal.pipeline)) != mrhi_success ||
+        (outcome = mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+        (outcome = mrhiDraw(native_, pass_, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiEndPass(native_, pass_)) != mrhi_success) {
+        return failed("the temporal pass could not be drawn", outcome);
     }
     return {};
 }

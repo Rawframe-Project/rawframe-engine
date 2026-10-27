@@ -21,12 +21,14 @@
 #include "rawframe/render_scene_gpu/renderer.h"
 #include "rawframe/test/test.h"
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <string>
 
 using namespace rawframe;
 using render_scene::SceneDraw;
@@ -153,6 +155,47 @@ RAWFRAME_TEST(TheSceneDrawsItsModelsInDepth) {
         RAWFRAME_EXPECT(kDarkRed + 10 < kRed && kDarkRed > kDarkGreen);
     }
     RAWFRAME_EXPECT(renderer.statistics().meshesUploaded == 1 && asked == kAsked);
+}
+
+RAWFRAME_TEST(AFrameOutOfCommandSpaceIsRefusedWithMaulRhisOwnOutcome) {
+    // Frames of one 4 KiB chunk of commands: the scene's passes take more,
+    // and the frame is refused with the capacity error Maul RHI answered,
+    // which says what ran out, never a state error the renderer chose.
+    const auto kDevice = opened({.allowSoftware = true, .frameCommandBytes = 4096});
+    if (kDevice == nullptr) {
+        return;
+    }
+    auto made = render_scene_gpu::SceneRenderer::create(*kDevice);
+    auto framer = render::Framer::create(*kDevice);
+    RAWFRAME_EXPECT(made.has_value() && framer.has_value());
+    if (!made.has_value() || !framer.has_value()) {
+        return;
+    }
+    const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
+        return render_scene::engineMesh(id);
+    };
+    SceneFrame frame = looking();
+    frame.draws = {box(5, 0.5F, {1, 0, 0, 1}), box(8, 3, {0, 1, 0, 1})};
+    const std::array<render::FrameRecorder*, 1> kRecorders = {made->get()};
+    std::optional<result::Error> refused;
+    for (int attempt = 0; attempt < 1000 && !refused.has_value(); ++attempt) {
+        (**made).prepare(&frame, kMeshes);
+        RAWFRAME_EXPECT((*framer)->finish(kFrameWait).has_value());
+        if (auto kMade = (*framer)->make(kRecorders, {.width = kSide, .height = kSide}); !kMade.has_value()) {
+            refused = std::move(kMade).error();
+        }
+    }
+    RAWFRAME_EXPECT(refused.has_value());
+    if (refused.has_value()) {
+        std::string outcome;
+        for (const auto& kField : refused->context()) {
+            if (kField.key == "outcome") {
+                outcome = kField.value;
+            }
+        }
+        std::printf("refused: %s, outcome %s\n", std::string{refused->description()}.c_str(), outcome.c_str());
+        RAWFRAME_EXPECT(outcome == "mrhi_errorCapacity");
+    }
 }
 
 RAWFRAME_TEST(AnEmptySceneIsTheSky) {

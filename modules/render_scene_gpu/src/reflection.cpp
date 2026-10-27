@@ -47,8 +47,8 @@ result::Status ReflectionPass::declare(const render_scene::SceneFrame& frame,
     }
     mrhiBufferDef blockDef = mrhiDefaultBufferDef();
     blockDef.size = sizeof(ReflectionBlock);
-    if (mrhiDeclareBuffer(native_, &blockDef, &blockResource_) != mrhi_success) {
-        return failed("the reflections' view could not be declared", mrhi_errorCapacity);
+    if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &blockDef, &blockResource_); kOutcome != mrhi_success) {
+        return failed("the reflections' view could not be declared", kOutcome);
     }
     writes.push_back(wholeOf(blockResource_, mrhi_accessCopyDestination));
     return {};
@@ -95,9 +95,10 @@ result::Status ReflectionPass::addPasses(mrhiResourceId depth, mrhiResourceId su
 }
 
 result::Status ReflectionPass::write(mrhiPassId upload) {
-    if (enabled_ &&
-        mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(ReflectionBlock)) != mrhi_success) {
-        return failed("the reflections' view could not be written", mrhi_errorCapacity);
+    if (mrhiResult outcome = mrhi_success;
+        enabled_ && (outcome = mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(ReflectionBlock))) !=
+                        mrhi_success) {
+        return failed("the reflections' view could not be written", outcome);
     }
     return {};
 }
@@ -111,11 +112,13 @@ result::Status ReflectionPass::record(const Pipelines& pipelines) {
                                                   textureAt(2, before_),
                                                   samplerAt(3, pipelines.filteredSampler),
                                                   bufferAt(4, blockResource_, sizeof(ReflectionBlock))};
-    if (mrhiBeginPass(native_, pass_) != mrhi_success ||
-        mrhiSetGraphicsPipeline(native_, pass_, pipelines.march.pipeline) != mrhi_success ||
-        mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-        mrhiDraw(native_, pass_, 3, 1, 0, 0) != mrhi_success || mrhiEndPass(native_, pass_) != mrhi_success) {
-        return failed("the reflections could not be drawn", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native_, pass_)) != mrhi_success ||
+        (outcome = mrhiSetGraphicsPipeline(native_, pass_, pipelines.march.pipeline)) != mrhi_success ||
+        (outcome = mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+        (outcome = mrhiDraw(native_, pass_, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiEndPass(native_, pass_)) != mrhi_success) {
+        return failed("the reflections could not be drawn", outcome);
     }
     return {};
 }

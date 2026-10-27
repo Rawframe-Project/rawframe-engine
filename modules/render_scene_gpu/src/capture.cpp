@@ -55,10 +55,11 @@ result::Status LightCapturing::record(mrhiResourceId scene) {
     const mrhiTextureCopy kSource{.resource = scene};
     const mrhiExtent3d kExtent{.width = frameWidth_, .height = frameHeight_, .depthOrLayers = 1};
     mrhiRequestId request{};
-    if (mrhiBeginPass(native, *pass_) != mrhi_success ||
-        mrhiReadTexture(native, *pass_, &kSource, &kExtent, &request) != mrhi_success ||
-        mrhiEndPass(native, *pass_) != mrhi_success) {
-        return failed("the light could not be read back", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native, *pass_)) != mrhi_success ||
+        (outcome = mrhiReadTexture(native, *pass_, &kSource, &kExtent, &request)) != mrhi_success ||
+        (outcome = mrhiEndPass(native, *pass_)) != mrhi_success) {
+        return failed("the light could not be read back", outcome);
     }
     reading_ = request;
     return {};

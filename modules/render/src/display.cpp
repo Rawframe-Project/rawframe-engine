@@ -281,8 +281,8 @@ result::Status Display::record(std::uint64_t pass) {
                     .viewFormat = mrhi_formatNone,
                     .range = {},
                     .sampler = state.sampler}};
-    if (mrhiBeginPass(state.native, kPending.pass) != mrhi_success) {
-        return failed("the display pass could not be recorded", mrhi_errorState);
+    if (const mrhiResult kOutcome = mrhiBeginPass(state.native, kPending.pass); kOutcome != mrhi_success) {
+        return failed("the display pass could not be recorded", kOutcome);
     }
     if (kPending.rectangle.has_value() && kPending.viewport.has_value()) {
         const auto& [kLeft, kTop, kWide, kHigh] = *kPending.viewport;
@@ -290,16 +290,19 @@ result::Status Display::record(std::uint64_t pass) {
             .x = kLeft, .y = kTop, .width = kWide, .height = kHigh, .minDepth = 0, .maxDepth = 1};
         const auto& [kX, kY, kWidth, kHeight] = *kPending.rectangle;
         const mrhiScissorRect kScissor{.x = kX, .y = kY, .width = kWidth, .height = kHeight};
-        if (mrhiSetViewport(state.native, kPending.pass, &kViewport) != mrhi_success ||
-            mrhiSetScissor(state.native, kPending.pass, &kScissor) != mrhi_success) {
-            return failed("a scaled placement's rectangle could not be set", mrhi_errorState);
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiSetViewport(state.native, kPending.pass, &kViewport)) != mrhi_success ||
+            (outcome = mrhiSetScissor(state.native, kPending.pass, &kScissor)) != mrhi_success) {
+            return failed("a scaled placement's rectangle could not be set", outcome);
         }
     }
-    if (mrhiSetGraphicsPipeline(state.native, kPending.pass, kPending.pipeline) != mrhi_success ||
-        mrhiSetBindings(state.native, kPending.pass, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-        mrhiDraw(state.native, kPending.pass, 3, 1, 0, 0) != mrhi_success ||
-        mrhiEndPass(state.native, kPending.pass) != mrhi_success) {
-        return failed("the display pass could not be recorded", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiSetGraphicsPipeline(state.native, kPending.pass, kPending.pipeline)) != mrhi_success ||
+        (outcome = mrhiSetBindings(state.native, kPending.pass, 0, kBindings.data(), kBindings.size())) !=
+            mrhi_success ||
+        (outcome = mrhiDraw(state.native, kPending.pass, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiEndPass(state.native, kPending.pass)) != mrhi_success) {
+        return failed("the display pass could not be recorded", outcome);
     }
     return {};
 }

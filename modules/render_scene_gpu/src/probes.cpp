@@ -100,8 +100,8 @@ result::Status ProbeAtlas::declare(const render_scene::SceneFrame& frame,
     }
     mrhiBufferDef def = mrhiDefaultBufferDef();
     def.size = blocks_.size() * sizeof(ProbeBlock);
-    if (mrhiDeclareBuffer(native_, &def, &blocksResource_) != mrhi_success) {
-        return failed("the reflection probes could not be declared", mrhi_errorCapacity);
+    if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, &blocksResource_); kOutcome != mrhi_success) {
+        return failed("the reflection probes could not be declared", kOutcome);
     }
     writes.push_back(wholeOf(blocksResource_, mrhi_accessCopyDestination));
     return {};
@@ -148,8 +148,9 @@ result::Status ProbeAtlas::addPasses() {
 }
 
 result::Status ProbeAtlas::write(mrhiPassId upload) {
-    if (mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blockBytes()) != mrhi_success) {
-        return failed("the reflection probes could not be written", mrhi_errorCapacity);
+    if (const mrhiResult kOutcome = mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blockBytes());
+        kOutcome != mrhi_success) {
+        return failed("the reflection probes could not be written", kOutcome);
     }
     return {};
 }
@@ -162,11 +163,13 @@ result::Status ProbeAtlas::record(const Pipelines& pipelines) {
         // The face and the mip each pass draws, as its first instance.
         for (std::uint32_t at = 0; at < kFill.passes.size(); ++at) {
             const mrhiPassId kPass = kFill.passes[at];
-            if (mrhiBeginPass(native_, kPass) != mrhi_success ||
-                mrhiSetGraphicsPipeline(native_, kPass, pipelines.probeFill.pipeline) != mrhi_success ||
-                mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-                mrhiDraw(native_, kPass, 3, 1, 0, at) != mrhi_success || mrhiEndPass(native_, kPass) != mrhi_success) {
-                return failed("a reflection probe's picture could not be drawn into the atlas", mrhi_errorState);
+            if (mrhiResult outcome = mrhi_success;
+                (outcome = mrhiBeginPass(native_, kPass)) != mrhi_success ||
+                (outcome = mrhiSetGraphicsPipeline(native_, kPass, pipelines.probeFill.pipeline)) != mrhi_success ||
+                (outcome = mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+                (outcome = mrhiDraw(native_, kPass, 3, 1, 0, at)) != mrhi_success ||
+                (outcome = mrhiEndPass(native_, kPass)) != mrhi_success) {
+                return failed("a reflection probe's picture could not be drawn into the atlas", outcome);
             }
         }
     }

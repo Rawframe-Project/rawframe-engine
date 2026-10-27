@@ -551,14 +551,15 @@ struct UiRenderer::State {
         gradientsDef.size = gradients.size() * sizeof(float);
         mrhiBufferDef glyphsDef = mrhiDefaultBufferDef();
         glyphsDef.size = glyphBlocks.size() * sizeof(float);
-        if (mrhiDeclareBuffer(native, &viewDef, &viewResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &boxesDef, &boxesResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &clipsDef, &clipsResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &imagesDef, &imagesResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &shadowsDef, &shadowsResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &gradientsDef, &gradientsResource) != mrhi_success ||
-            mrhiDeclareBuffer(native, &glyphsDef, &glyphsResource) != mrhi_success) {
-            return failed("the UI's boxes could not be declared", mrhi_errorCapacity);
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiDeclareBuffer(native, &viewDef, &viewResource)) != mrhi_success ||
+            (outcome = mrhiDeclareBuffer(native, &boxesDef, &boxesResource)) != mrhi_success ||
+            (outcome = mrhiDeclareBuffer(native, &clipsDef, &clipsResource)) != mrhi_success ||
+            (outcome = mrhiDeclareBuffer(native, &imagesDef, &imagesResource)) != mrhi_success ||
+            (outcome = mrhiDeclareBuffer(native, &shadowsDef, &shadowsResource)) != mrhi_success ||
+            (outcome = mrhiDeclareBuffer(native, &gradientsDef, &gradientsResource)) != mrhi_success ||
+            (outcome = mrhiDeclareBuffer(native, &glyphsDef, &glyphsResource)) != mrhi_success) {
+            return failed("the UI's boxes could not be declared", outcome);
         }
         std::vector<mrhiAccess> writes = {wholeOf(viewResource, mrhi_accessCopyDestination),
                                           wholeOf(boxesResource, mrhi_accessCopyDestination),
@@ -633,31 +634,33 @@ struct UiRenderer::State {
         if (!declared) {
             return {};
         }
-        if (mrhiBeginPass(native, upload) != mrhi_success ||
-            mrhiWriteBuffer(native, upload, viewResource, 0, view.data(), sizeof(view)) != mrhi_success ||
-            mrhiWriteBuffer(native, upload, boxesResource, 0, blocks.data(), blocks.size() * sizeof(float)) !=
+        if (mrhiResult outcome = mrhi_success;
+            (outcome = mrhiBeginPass(native, upload)) != mrhi_success ||
+            (outcome = mrhiWriteBuffer(native, upload, viewResource, 0, view.data(), sizeof(view))) != mrhi_success ||
+            (outcome = mrhiWriteBuffer(
+                 native, upload, boxesResource, 0, blocks.data(), blocks.size() * sizeof(float))) != mrhi_success ||
+            (outcome = mrhiWriteBuffer(native, upload, clipsResource, 0, clips.data(), clips.size() * sizeof(float))) !=
                 mrhi_success ||
-            mrhiWriteBuffer(native, upload, clipsResource, 0, clips.data(), clips.size() * sizeof(float)) !=
+            (outcome = mrhiWriteBuffer(
+                 native, upload, imagesResource, 0, imageBlocks.data(), imageBlocks.size() * sizeof(float))) !=
                 mrhi_success ||
-            mrhiWriteBuffer(
-                native, upload, imagesResource, 0, imageBlocks.data(), imageBlocks.size() * sizeof(float)) !=
+            (outcome = mrhiWriteBuffer(
+                 native, upload, shadowsResource, 0, shadowBlocks.data(), shadowBlocks.size() * sizeof(float))) !=
                 mrhi_success ||
-            mrhiWriteBuffer(
-                native, upload, shadowsResource, 0, shadowBlocks.data(), shadowBlocks.size() * sizeof(float)) !=
+            (outcome = mrhiWriteBuffer(
+                 native, upload, gradientsResource, 0, gradients.data(), gradients.size() * sizeof(float))) !=
                 mrhi_success ||
-            mrhiWriteBuffer(native, upload, gradientsResource, 0, gradients.data(), gradients.size() * sizeof(float)) !=
-                mrhi_success ||
-            mrhiWriteBuffer(
-                native, upload, glyphsResource, 0, glyphBlocks.data(), glyphBlocks.size() * sizeof(float)) !=
+            (outcome = mrhiWriteBuffer(
+                 native, upload, glyphsResource, 0, glyphBlocks.data(), glyphBlocks.size() * sizeof(float))) !=
                 mrhi_success) {
-            return failed("the UI's boxes could not be written", mrhi_errorCapacity);
+            return failed("the UI's boxes could not be written", outcome);
         }
         RAWFRAME_TRY(held->write(render::requestKey(upload.index1, upload.generation)));
-        if (mrhiEndPass(native, upload) != mrhi_success) {
-            return failed("the UI's boxes could not be written", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiEndPass(native, upload); kOutcome != mrhi_success) {
+            return failed("the UI's boxes could not be written", kOutcome);
         }
-        if (mrhiBeginPass(native, drawing) != mrhi_success) {
-            return failed("the UI could not be drawn", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiBeginPass(native, drawing); kOutcome != mrhi_success) {
+            return failed("the UI could not be drawn", kOutcome);
         }
         // In paint order: each run of boxes, and each of shadows, one
         // instanced draw; each image drawn alone with its texture; each run
@@ -686,16 +689,23 @@ struct UiRenderer::State {
                 if (!kHeld) {
                     ++statistics.glyphRunsWaiting;
                 } else if (kWhole) {
+                    // The first of its calls that fails, its result kept.
                     const auto kDraw = [&](std::size_t pipeline, const std::array<mrhiBinding, 9>& kBindings) {
-                        return mrhiSetGraphicsPipeline(native, drawing, pipelines.at(pipeline)) == mrhi_success &&
-                               mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) ==
-                                   mrhi_success &&
-                               mrhiDraw(native, drawing, 6, kRun.count, 0, kRun.first) == mrhi_success;
+                        mrhiResult outcome = mrhi_success;
+                        static_cast<void>(
+                            (outcome = mrhiSetGraphicsPipeline(native, drawing, pipelines.at(pipeline))) !=
+                                mrhi_success ||
+                            (outcome = mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
+                                mrhi_success ||
+                            (outcome = mrhiDraw(native, drawing, 6, kRun.count, 0, kRun.first)) != mrhi_success);
+                        return outcome;
                     };
-                    if ((kPlain &&
-                         !kDraw(kRun.field ? 4 : 3, kRun.field ? bindings(kFieldsId, true) : bindings(kAtlasId))) ||
-                        (kColored && !kDraw(5, bindings(kColorsId)))) {
-                        return failed("the UI's glyphs could not be drawn", mrhi_errorState);
+                    if (mrhiResult outcome = mrhi_success;
+                        (kPlain && (outcome = kDraw(kRun.field ? 4 : 3,
+                                                    kRun.field ? bindings(kFieldsId, true) : bindings(kAtlasId))) !=
+                                       mrhi_success) ||
+                        (kColored && (outcome = kDraw(5, bindings(kColorsId))) != mrhi_success)) {
+                        return failed("the UI's glyphs could not be drawn", outcome);
                     }
                     ++statistics.glyphRuns;
                     statistics.glyphs += kRun.count;
@@ -714,10 +724,12 @@ struct UiRenderer::State {
                 const auto kCount = static_cast<std::uint32_t>(end - at);
                 const std::array<mrhiBinding, 9> kBindings = bindings(0);
                 const bool kBoxes = kCommand.kind == ui::DrawCommand::Kind::Box;
-                if (mrhiSetGraphicsPipeline(native, drawing, pipelines[kBoxes ? 0 : 2]) != mrhi_success ||
-                    mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-                    mrhiDraw(native, drawing, 6, kCount, 0, kCommand.index) != mrhi_success) {
-                    return failed("the UI's boxes could not be drawn", mrhi_errorState);
+                if (mrhiResult outcome = mrhi_success;
+                    (outcome = mrhiSetGraphicsPipeline(native, drawing, pipelines[kBoxes ? 0 : 2])) != mrhi_success ||
+                    (outcome = mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
+                        mrhi_success ||
+                    (outcome = mrhiDraw(native, drawing, 6, kCount, 0, kCommand.index)) != mrhi_success) {
+                    return failed("the UI's boxes could not be drawn", outcome);
                 }
                 (kBoxes ? boxes : statistics.shadows) += kCount;
                 at = end;
@@ -726,16 +738,18 @@ struct UiRenderer::State {
             const std::uint64_t kTexture = imageTextures.at(kCommand.index);
             if (kTexture != 0) {
                 const std::array<mrhiBinding, 9> kBindings = bindings(kTexture);
-                if (mrhiSetGraphicsPipeline(native, drawing, pipelines[1]) != mrhi_success ||
-                    mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-                    mrhiDraw(native, drawing, 6, 1, 0, kCommand.index) != mrhi_success) {
-                    return failed("a UI image could not be drawn", mrhi_errorState);
+                if (mrhiResult outcome = mrhi_success;
+                    (outcome = mrhiSetGraphicsPipeline(native, drawing, pipelines[1])) != mrhi_success ||
+                    (outcome = mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
+                        mrhi_success ||
+                    (outcome = mrhiDraw(native, drawing, 6, 1, 0, kCommand.index)) != mrhi_success) {
+                    return failed("a UI image could not be drawn", outcome);
                 }
             }
             ++at;
         }
-        if (mrhiEndPass(native, drawing) != mrhi_success) {
-            return failed("the UI could not be drawn", mrhi_errorState);
+        if (const mrhiResult kOutcome = mrhiEndPass(native, drawing); kOutcome != mrhi_success) {
+            return failed("the UI could not be drawn", kOutcome);
         }
         ++statistics.frames;
         statistics.framesOnPanel += onPanel ? 1U : 0U;

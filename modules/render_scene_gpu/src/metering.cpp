@@ -65,8 +65,8 @@ result::Status Metering::declare(const render_scene::SceneFrame& frame, std::vec
          {std::pair{sizeof(kEmpty), &histogram_}, std::pair{sizeof(MeterBlock), &meterResource_}}) {
         mrhiBufferDef def = mrhiDefaultBufferDef();
         def.size = kBytes;
-        if (mrhiDeclareBuffer(native_, &def, kMade) != mrhi_success) {
-            return failed("the metering could not be declared", mrhi_errorCapacity);
+        if (const mrhiResult kOutcome = mrhiDeclareBuffer(native_, &def, kMade); kOutcome != mrhi_success) {
+            return failed("the metering could not be declared", kOutcome);
         }
         writes.push_back(wholeOf(*kMade, mrhi_accessCopyDestination));
     }
@@ -110,13 +110,17 @@ result::Status Metering::addPasses(mrhiResourceId scene) {
 }
 
 result::Status Metering::write(mrhiPassId upload) {
-    if (writes_ && mrhiWriteBuffer(native_, upload, exposure_, 0, &start_, sizeof(ExposureBlock)) != mrhi_success) {
-        return failed("the exposure could not be written", mrhi_errorCapacity);
+    if (mrhiResult outcome = mrhi_success;
+        writes_ &&
+        (outcome = mrhiWriteBuffer(native_, upload, exposure_, 0, &start_, sizeof(ExposureBlock))) != mrhi_success) {
+        return failed("the exposure could not be written", outcome);
     }
-    if (metered_ &&
-        (mrhiWriteBuffer(native_, upload, histogram_, 0, kEmpty.data(), sizeof(kEmpty)) != mrhi_success ||
-         mrhiWriteBuffer(native_, upload, meterResource_, 0, &meter_, sizeof(MeterBlock)) != mrhi_success)) {
-        return failed("the metering could not be written", mrhi_errorCapacity);
+    if (mrhiResult outcome = mrhi_success;
+        metered_ &&
+        ((outcome = mrhiWriteBuffer(native_, upload, histogram_, 0, kEmpty.data(), sizeof(kEmpty))) != mrhi_success ||
+         (outcome = mrhiWriteBuffer(native_, upload, meterResource_, 0, &meter_, sizeof(MeterBlock))) !=
+             mrhi_success)) {
+        return failed("the metering could not be written", outcome);
     }
     return {};
 }
@@ -133,19 +137,21 @@ Metering::record(const Pipelines& pipelines, mrhiResourceId scene, std::uint32_t
     // Every fourth texel each way: a workgroup of 16 by 16 covers 64 by 64.
     const std::uint32_t kAcross = (width + 63) / 64;
     const std::uint32_t kDown = (height + 63) / 64;
-    if (mrhiBeginPass(native_, histogramPass_) != mrhi_success ||
-        mrhiSetComputePipeline(native_, histogramPass_, pipelines.histogram.compute) != mrhi_success ||
-        mrhiSetBindings(native_, histogramPass_, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-        mrhiDispatch(native_, histogramPass_, kAcross, kDown, 1) != mrhi_success ||
-        mrhiEndPass(native_, histogramPass_) != mrhi_success) {
-        return failed("the metering's histogram could not be recorded", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native_, histogramPass_)) != mrhi_success ||
+        (outcome = mrhiSetComputePipeline(native_, histogramPass_, pipelines.histogram.compute)) != mrhi_success ||
+        (outcome = mrhiSetBindings(native_, histogramPass_, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+        (outcome = mrhiDispatch(native_, histogramPass_, kAcross, kDown, 1)) != mrhi_success ||
+        (outcome = mrhiEndPass(native_, histogramPass_)) != mrhi_success) {
+        return failed("the metering's histogram could not be recorded", outcome);
     }
-    if (mrhiBeginPass(native_, adaptPass_) != mrhi_success ||
-        mrhiSetComputePipeline(native_, adaptPass_, pipelines.adapt.compute) != mrhi_success ||
-        mrhiSetBindings(native_, adaptPass_, 0, kBindings.data(), kBindings.size()) != mrhi_success ||
-        mrhiDispatch(native_, adaptPass_, 1, 1, 1) != mrhi_success ||
-        mrhiEndPass(native_, adaptPass_) != mrhi_success) {
-        return failed("the metering's adaptation could not be recorded", mrhi_errorState);
+    if (mrhiResult outcome = mrhi_success;
+        (outcome = mrhiBeginPass(native_, adaptPass_)) != mrhi_success ||
+        (outcome = mrhiSetComputePipeline(native_, adaptPass_, pipelines.adapt.compute)) != mrhi_success ||
+        (outcome = mrhiSetBindings(native_, adaptPass_, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+        (outcome = mrhiDispatch(native_, adaptPass_, 1, 1, 1)) != mrhi_success ||
+        (outcome = mrhiEndPass(native_, adaptPass_)) != mrhi_success) {
+        return failed("the metering's adaptation could not be recorded", outcome);
     }
     return {};
 }
