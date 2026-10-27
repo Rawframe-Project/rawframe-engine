@@ -2,6 +2,25 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.0.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.0.1...v0.0.1) (2026-10-27)
+
+
+### Added
+
+* **render:** report what frames take of each device limit ([#37](https://github.com/Rawframe-Project/rawframe-engine/issues/37)) ([fa5f13f](https://github.com/Rawframe-Project/rawframe-engine/commit/fa5f13fc525fa20a04e8f01100863596841b6222))
+
+
+### Fixed
+
+* **render:** give a frame room for a preview split four ways ([#26](https://github.com/Rawframe-Project/rawframe-engine/issues/26)) ([3c80345](https://github.com/Rawframe-Project/rawframe-engine/commit/3c80345965fdfcae4ab3cfe959cb5f2fbac620b2)), closes [#20](https://github.com/Rawframe-Project/rawframe-engine/issues/20)
+* **render:** make a split-screen view when its region is first placed ([#28](https://github.com/Rawframe-Project/rawframe-engine/issues/28)) ([bbc67c4](https://github.com/Rawframe-Project/rawframe-engine/commit/bbc67c46434aadc95694c201ffb3f4b15248a25f)), closes [#21](https://github.com/Rawframe-Project/rawframe-engine/issues/21)
+* **render:** report the outcome Maul RHI gave when a frame fails ([#27](https://github.com/Rawframe-Project/rawframe-engine/issues/27)) ([debfc9f](https://github.com/Rawframe-Project/rawframe-engine/commit/debfc9f945382479257bbacb8ca5e2f5dc21efb3)), closes [#25](https://github.com/Rawframe-Project/rawframe-engine/issues/25)
+
+
+### Chores
+
+* move the repository to the organization standard ([#3](https://github.com/Rawframe-Project/rawframe-engine/issues/3)) ([057e8fc](https://github.com/Rawframe-Project/rawframe-engine/commit/057e8fc6b841025aac0afc9b64d5c00e3a54b0d0)), closes [#2](https://github.com/Rawframe-Project/rawframe-engine/issues/2)
+
 ## 0.0.1
 
 The first release.
