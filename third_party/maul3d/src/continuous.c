@@ -101,7 +101,7 @@ static void SweepVoxels(Sweeper* sw, int32_t shape, int32_t body)
     m3Vec3 hi;
     SweptBoxIn(sw, body, &lo, &hi);
     uint16_t gather[M3_MESH_MAX_TRIS];
-    int32_t count = m3MeshBvhGather(&surface->bvh, lo, hi, gather);
+    int32_t count = m3MeshBvhGather(&surface->bvh, lo, hi, gather, M3_COUNT_OF(gather));
     for (int32_t g = 0; g < count && g < 64; ++g)
     {
         m3Vec3 blo;
@@ -135,7 +135,7 @@ static void SweepMesh(Sweeper* sw, int32_t shape, int32_t body)
     SweptBoxIn(sw, body, &lo, &hi);
     uint16_t gather[M3_MESH_MAX_TRIS];
     int32_t count = m3MeshBvhGather(&world->meshes.meshBvh[world->shapes.shapeMeshIndex[shape]], lo,
-                                    hi, gather);
+                                    hi, gather, M3_COUNT_OF(gather));
     int32_t budget = 64;
     for (int32_t g = 0; g < count && budget > 0; ++g)
     {
@@ -349,7 +349,7 @@ void m3SolveContinuousPhase(m3World* world, const m3Pos3* com0, const m3Quat* ro
             world->bodies.transforms[i].p.x = sw.base.x + xf.p.x;
             world->bodies.transforms[i].p.y = sw.base.y + xf.p.y;
             world->bodies.transforms[i].p.z = sw.base.z + xf.p.z;
-            world->bodies.transforms[i].p = m3HoldReach(world->bodies.transforms[i].p);
+            world->bodies.transforms[i].p = m3HoldPosition(world->bodies.transforms[i].p);
         }
     }
 }

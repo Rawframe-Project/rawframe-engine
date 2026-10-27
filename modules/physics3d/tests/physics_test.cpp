@@ -358,6 +358,10 @@ RAWFRAME_TEST(SettingsAndDocumentsAreChecked) {
     // A history past 64 MiB: every body's pose kept for 1024 ticks.
     RAWFRAME_EXPECT(!Physics3D::create({.historyTicks = 1024}).has_value());
     RAWFRAME_EXPECT(Physics3D::create({.bodyCapacity = 1024, .historyTicks = 1024}).has_value());
+    // Each capacity within 2^20, but more shapes than one world can
+    // snapshot: refused as settings, not as a process out of room.
+    const auto kHuge = Physics3D::create({.shapeCapacity = 1U << 20U});
+    RAWFRAME_EXPECT(!kHuge.has_value() && kHuge.error().code() == code(Physics3DError::InvalidSettings));
     const auto kBad = Physics3D::create({.collision = {.classes = {{0x1, "one"}, {0x1, "again"}}}});
     RAWFRAME_EXPECT(!kBad.has_value() && kBad.error().code() == physics::code(physics::PhysicsError::InvalidDocument));
 }

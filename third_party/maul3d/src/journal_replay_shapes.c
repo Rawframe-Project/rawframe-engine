@@ -10,6 +10,7 @@
 #include "quickhull.h"
 #include "shape.h"
 #include "shape_state.h"
+#include "snapshot_walk.h"
 #include "voxel.h"
 #include "world_internal.h"
 
@@ -279,7 +280,8 @@ bool m3ReplayDestroyShape(m3World* world, const m3ReplayRecord* r)
     }
     memcpy(&id, payload, sizeof(id));
     int32_t index = m3ShapeSlot(world, id);
-    if (index < 0 || m3CharacterOwnsBody(world, world->shapes.shapeBody[index]))
+    if (index < 0 || m3CharacterOwnsBody(world, world->shapes.shapeBody[index]) ||
+        !m3ShapeRemovalFits(world, index))
     {
         return false;
     }
@@ -368,7 +370,8 @@ bool m3ReplayCreateHeightFieldGrid(m3World* world, const m3ReplayRecord* r)
     const uint8_t* sampleBytes = (const uint8_t*)payload + sizeof(head);
     float mn;
     float mx;
-    if (!m3HeightFieldSamplesValid(head.nx, head.nz, head.cellSize, sampleBytes, &mn, &mx))
+    if (!m3HeightFieldSamplesValid(head.nx, head.nz, head.cellSize, sampleBytes, &mn, &mx) ||
+        !m3SnapshotTakesHeightField(world, head.nx, head.nz))
     {
         return false;
     }
