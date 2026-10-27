@@ -76,7 +76,7 @@ std::optional<AttachRecord> attachIn(const std::filesystem::path& directory, std
 #if !defined(_WIN32)
     // Windows keeps the user's temporary directory to the user by its ACL,
     // and std::filesystem reports every permission bit set there, so the
-    // bits say nothing of it (D501).
+    // bits say nothing of it.
     using std::filesystem::perms;
     if ((kStatus.permissions() & (perms::group_all | perms::others_all)) != perms::none) {
         why = "the play directory is open to others, so not trusted";

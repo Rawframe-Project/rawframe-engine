@@ -120,8 +120,7 @@ std::optional<ConsoleLine> consoleLineOf(std::string_view record, ConsoleLine::S
             }
         }
         // Else its first few short values, each by its field's name, so a
-        // line says what happened, as `state draining, reason stopped`
-        // (D927).
+        // line says what happened, as `state draining, reason stopped`.
         std::string values;
         for (std::size_t each = 0; !said && each < fields->names().size() && each < 4; ++each) {
             const Value& kValue = fields->items()[each];

@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0041's effect emission surface (D219): a door `Effects.<name>` for
+// The effect emission surface: a door `Effects.<name>` for
 // each effect a game declares, taking the entity the effect is about. A
 // server's doors keep nothing; a predictor's keep what one step emitted,
 // each identified by its kind, its one emitting system, and its place among

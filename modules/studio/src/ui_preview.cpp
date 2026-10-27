@@ -149,7 +149,7 @@ void ShellParticipant::showUiPreview(const Value& document) {
     if (!screen.has_value()) {
         return;
     }
-    // As the design's UI screen (D941): the screen raised over the pane,
+    // As the design's UI screen: the screen raised over the pane,
     // and what draws it said under it.
     static_cast<void>(tree_->setLook(*screen,
                                      ui::Look{.fill = kScreenFill,
@@ -183,7 +183,7 @@ void ShellParticipant::showUiPreview(const Value& document) {
         ui::Look look = ui::lookOf(kNode.fields);
         look.image = 0;
         // A styled node sets only what it gives itself, its class the rest,
-        // as the game's tree has it (D431).
+        // as the game's tree has it.
         const auto kClass = kNode.fields.style != 0 ? classes.find(kNode.fields.style) : classes.end();
         if (kClass != classes.end()) {
             static_cast<void>(tree_->setClasses(*node, std::span{&kClass->second, 1}));
@@ -193,7 +193,7 @@ void ShellParticipant::showUiPreview(const Value& document) {
         if (kNode.fields.text != 0 || !kNode.shows.empty()) {
             const float kSize = kNode.fields.textSize > 0 ? kNode.fields.textSize : 14;
             const std::uint32_t kColor = kNode.fields.textColor != 0 ? kNode.fields.textColor : kText;
-            // Its label's message where the game's strings say one (D941).
+            // Its label's message where the game's strings say one.
             const std::string kMessage = kNode.fields.text != 0 ? labelMessage(kNode.fields.text) : std::string{};
             static_cast<void>(words(*node,
                                     !kNode.shows.empty() ? kNode.shows

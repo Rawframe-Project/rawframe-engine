@@ -70,16 +70,16 @@ void ShellParticipant::showEnvironment() {
         kWords("Open a scene to see what lights it and how it looks.", look::kLabelInk, look::kBodySize, false);
         return;
     }
-    // As the design's Scene settings (D921): the scene, then each of the
+    // As the design's Scene settings: the scene, then each of the
     // game's components that light it or set its look, with the entities
-    // holding it, each pressed to choose it, or offered to add (D834).
+    // holding it, each pressed to choose it, or offered to add.
     kWords(documentLabel(scene_), look::kInk, 14, true);
     kWords("environment of this scene", look::kFaintInk, look::kLabelSize, false);
     std::size_t shown = 0;
     std::size_t held = 0;
     for (const Catalog::Component& kComponent : catalog_.components) {
         const std::optional<std::string_view> kType = environmentOf(kComponent.type);
-        // One a client makes as it draws is never in a scene (D919).
+        // One a client makes as it draws is never in a scene.
         if (!kType.has_value() || kComponent.presented) {
             continue;
         }

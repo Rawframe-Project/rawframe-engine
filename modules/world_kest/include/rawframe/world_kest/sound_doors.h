@@ -1,7 +1,7 @@
 #pragma once
 
 // The door rawframe.sound's Kest module asks for: the player's volume for
-// a bus role, which a client's present systems set (D625). Every table a
+// a bus role, which a client's present systems set. Every table a
 // program importing rawframe.sound may run against offers it, the
 // simulations' and the sample's doing nothing.
 

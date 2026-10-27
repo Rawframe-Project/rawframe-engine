@@ -1,4 +1,4 @@
-# The ledges level (D859): sixty meters by twelve, its top-left where the
+# The ledges level: sixty meters by twelve, its top-left where the
 # level's body is posed. Tile 0 is ground and 1 brick, both solid; 2 is
 # grass, drawn and passed through.
 tilemap 1

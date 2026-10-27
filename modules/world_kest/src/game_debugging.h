@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's Kest debugged (D460): the functions an author breaks at, written
+// A game's Kest debugged: the functions an author breaks at, written
 // into the program the game's systems run and again into each it reloads
 // to, and a stop served by whoever debugs it until told to carry on.
 
@@ -22,7 +22,7 @@ public:
     /// reload: the breakpoints asked for are written into its program.
     void attach(kest::Machine& machine) noexcept;
     /// Whom each stop is told to, with how long it stood by `clock`: the
-    /// World, which owes no ticks for it (D492).
+    /// World, which owes no ticks for it.
     void tellStood(const execution::MonotonicSource& clock,
                    std::function<void(execution::MonotonicDuration)> stood) noexcept;
 

@@ -1,12 +1,12 @@
-// A material instance open for authoring (D721): an override set, changed,
+// A material instance open for authoring: an override set, changed,
 // and unset, each change one entry that undo and redo walk exactly back to
 // the bytes before, overrides kept in name order, a batch one entry or
 // nothing, the last override not unset, and the instance read whole. A
-// material graph open for authoring (D728): a node's input and param set
+// material graph open for authoring: a node's input and param set
 // and unset, a node made and removed, one another node reads refused, the
 // graph in its canonical form after each, each kind refusing the other's
-// operations, and the node types a graph may hold listed (D731). Its interface's inputs and switches declared and
-// dropped (D729), one named as a node's identity would be, which is
+// operations, and the node types a graph may hold listed. Its interface's inputs and switches declared and
+// dropped, one named as a node's identity would be, which is
 // ordered by where it is, not by its name.
 
 #include "rawframe/authoring/authored_material.h"
@@ -54,7 +54,7 @@ set(AuthoredMaterial& material, std::uint64_t generation, std::string_view input
     return material.change(generation, kOne);
 }
 
-/// tinted.material (D708): its tint parameter, node 41, as its surface's
+/// tinted.material: its tint parameter, node 41, as its surface's
 /// base color, node 42.
 constexpr std::string_view kTinted = R"({
   "formatVersion": 1,
@@ -223,7 +223,7 @@ RAWFRAME_TEST(AMaterialGraphsNodesChangeAndUndoExactly) {
     const auto kRead = answer(material, ReadMaterialGraph{});
     RAWFRAME_EXPECT(kRead.has_value() && document::write(*kRead->find("graph")) == kTinted);
     RAWFRAME_EXPECT(refusedWith(answer(material, ReadMaterialInstance{}), AuthoringError::ValidationFailed));
-    // The node types it may hold, as the material module lists them (D731).
+    // The node types it may hold, as the material module lists them.
     const auto kTypes = answer(material, ListMaterialNodeTypes{});
     RAWFRAME_EXPECT(kTypes.has_value() && kTypes->find("types") != nullptr && !kTypes->find("types")->items().empty() &&
                     *kTypes->find("types")->items().front().find("type")->text() == "rawframe/surface@1");
@@ -238,7 +238,7 @@ RAWFRAME_TEST(AMaterialGraphsNodesChangeAndUndoExactly) {
 }
 
 RAWFRAME_TEST(ANodeIsPlacedInThePresentationAndGoesWithIt) {
-    // D982: where a node is drawn, kept after the graph in whole pixels,
+    // Where a node is drawn, kept after the graph in whole pixels,
     // refused for a node the graph has not, and removed with its node.
     auto opened = AuthoredMaterial::open(kDocument, kTinted);
     RAWFRAME_EXPECT(opened.has_value());

@@ -1,4 +1,4 @@
-// A game bringing a textured model whole (D314): the plaza cooked, its
+// A game bringing a textured model whole: the plaza cooked, its
 // crate's glTF made a mesh, its materials, and its texture, and the game
 // read from its cooked description and from its sources both know each
 // subasset by its resource's first half, under the crate's path.
@@ -96,8 +96,8 @@ RAWFRAME_TEST(AGameKnowsItsMeshesSubassetsCookedOrNot) {
                 // The crate's planks and iron, the mound's grass, and the
                 // planks' texture, beside the materials and textures the
                 // game's lines name, the sky's picture and the hall's among
-                // them (D322, D326), the warmth, a post process (D350), and
-                // the monitor's screen (D361); the render texture it shines
+                // them, the warmth, a post process, and
+                // the monitor's screen; the render texture it shines
                 // with is drawn, not read.
                 for (const std::string_view kSubasset : {"4fa8f5945fc4b1ae crate.gltf#material/Iron subasset",
                                                          "ea67406491ff8d5d crate.gltf#material/Planks subasset",

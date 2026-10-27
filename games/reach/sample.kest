@@ -6,9 +6,9 @@ module sample
 // seated: the head begins at a seated eye's height above the floor, so a
 // hand's height is the eye's and the controller's below or above it. A
 // flat player reaches with the right hand by keys (ahead, back, aside, up,
-// and down), which the sample builds on tick to tick (D525), and takes with
-// the mouse's left button or the space bar. A hand the headset tracks
-// (D664), held without a controller, is where its palm is, and a hand grips
+// and down), which the sample builds on tick to tick, and takes with
+// the mouse's left button or the space bar. A hand the headset tracks,
+// held without a controller, is where its palm is, and a hand grips
 // as its fingers close, a controller in it or none.
 
 import controls

@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the cooked records a Build holds (D242): a
+// Coverage-guided fuzzing of the cooked records a Build holds: a
 // cooked game and a cooked mod. Both readers are exact: a record either
 // accepts writes back to the very same bytes.
 

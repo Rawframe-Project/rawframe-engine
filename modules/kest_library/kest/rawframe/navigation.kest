@@ -1,6 +1,6 @@
 module rawframe.navigation
 
-// Navigation (ADR-0056, D400): the way across a game's navmesh, which a
+// Navigation: the way across a game's navmesh, which a
 // game with a `navigation` line has, baked on the server from its static
 // bodies for the agent the line names. Meters; y is up.
 
@@ -18,7 +18,7 @@ struct Step {
     found: bool
 }
 
-// An agent (D411), `rawframe.navigation.agent`, on an entity with a 3D pose
+// An agent, `rawframe.navigation.agent`, on an entity with a 3D pose
 // and velocity: the velocity a game's system sets (before
 // rawframe.navigation.avoid) is where it would go, and the engine makes it
 // the nearest that keeps clear of the other agents, at most maxSpeed.

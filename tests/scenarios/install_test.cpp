@@ -1,4 +1,4 @@
-// Installing and updating Builds (SPEC-0038): a publisher packs two versions
+// Installing and updating Builds: a publisher packs two versions
 // of a game into a mirror, and a player's library installs the first and
 // updates to the second. The update fetches only what the store lacks, ends
 // byte for byte where a fresh install of the second ends, survives being
@@ -451,7 +451,7 @@ RAWFRAME_TEST(RollbackMovesThePointerAndCollectKeepsWhatItNeeds) {
     RAWFRAME_EXPECT(kWhole.has_value() && kWhole->fetched == 0);
 }
 
-// What a Runtime plays from a library named alone (D434): the record of the
+// What a Runtime plays from a library named alone: the record of the
 // Composition its pointer names active, following updates and rollbacks;
 // none without a pointer, and refused when the kept record is not the one
 // named.
@@ -482,7 +482,7 @@ RAWFRAME_TEST(ALibraryAloneNamesItsActiveComposition) {
                     kChanged.error().code() == content::code(content::ContentError::DigestMismatch));
 }
 
-// SPEC-0038's golden plans: the golden Build of SPEC-0021's corpus (D82)
+// The golden plans: the golden Build of the corpus
 // planned against no store and against one holding its first resource and
 // the first chunk of its second, byte for byte. A change is a new plan
 // generation, never a silent one; RAWFRAME_WRITE_GOLDEN=1 rewrites them.

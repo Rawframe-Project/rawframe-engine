@@ -63,7 +63,7 @@ bool sets(std::string_view text, std::string_view key) {
 }
 
 /// `text` without its lines setting any of `keys`: settings a viewport's
-/// play owns (D789), which a game's own client settings may set too.
+/// play owns, which a game's own client settings may set too.
 std::string without(std::string_view text, std::initializer_list<std::string_view> keys) {
     std::string kept;
     std::size_t at = 0;
@@ -114,7 +114,7 @@ result::Status privateDirectory(const std::filesystem::path& path) {
         return failed("the play directory is not a directory of its own");
     }
 #if !defined(_WIN32)
-    // Made by another user first, it is theirs: never written into (D462).
+    // Made by another user first, it is theirs: never written into.
     struct stat held{};
     if (::lstat(path.c_str(), &held) != 0 || held.st_uid != ::getuid()) {
         return failed("the play directory is another user's");
@@ -179,9 +179,9 @@ result::Status Play::launch() {
     // Three ports below every system's range for outgoing connections
     // (Linux takes 32768 and up, Windows 49152 and up), so no socket of
     // another process holds one by chance: the server's, the client's
-    // endpoint after it, and the server's endpoint, for picking (D456).
+    // endpoint after it, and the server's endpoint, for picking.
     // Below 30000, where the tests' tools/free_port.py draws, so the two
-    // never meet; a port taken all the same is refused (D470) and the game
+    // never meet; a port taken all the same is refused and the game
     // launched again on others.
     const auto kServerPort = static_cast<std::uint16_t>(20000 + (device() % 2500) * 4);
     const auto kEndpointPort = static_cast<std::uint16_t>(kServerPort + 1);
@@ -196,8 +196,7 @@ result::Status Play::launch() {
     }
     const std::string kGame = settings_.game.string();
     const std::string kPort = std::to_string(kServerPort);
-    // The content Studio cooked, for a program whose settings name none
-    // (D502).
+    // The content Studio cooked, for a program whose settings name none.
     const auto kWithContent = [this](std::string given) {
         std::error_code error;
         if (!settings_.content.empty() && !sets(given, "content.root") &&
@@ -212,12 +211,12 @@ result::Status Play::launch() {
                                     {{"host.iteration_rate", "120"},
                                      {"world.tick_rate", "60"},
                                      // Its scenes followed once a second: an edit Studio
-                                     // applies writes a scene, which the World then takes
-                                     // (D410, D446), as ADR-0032 has a live edit go.
-                                     // Edited, ten times a second (D912).
+                                     // applies writes a scene, which the World then takes,
+                                     // as a live edit goes.
+                                     // Edited, ten times a second.
                                      {"kest.reload_every", settings_.edited ? "12" : "60"},
                                      // Kept running on a machine too busy to keep up,
-                                     // as its client is (D924).
+                                     // as its client is.
                                      {"world.overload_ms", "0"}},
                                     {{"kest.game", kGame},
                                      {"network.quic.self_signed", "true"},
@@ -225,19 +224,19 @@ result::Status Play::launch() {
                                      {"replication.endpoint", "127.0.0.1:" + kPort},
                                      {"tooling.endpoint", "127.0.0.1:" + std::to_string(kServerEndpointPort)},
                                      {"tooling.token_file", (kAt / "token").string()},
-                                     // Picked from (D456) and debugged (D460).
+                                     // Picked from and debugged.
                                      {"tooling.grants", "inspect debug run"},
                                      // Layers replicated, so the client hides
-                                     // one (D791); the client is told so too.
+                                     // one; the client is told so too.
                                      {"kest.replicate_layers", "true"}}) +
                              (settings_.edited ? "world.edited = true\nreplication.interest = false\n"
                                                  "replication.egress_bytes_per_second = 67108864\n"
                                                : "")));
-    // Played in Studio's viewport (D789, D790): its window kept hidden at
+    // Played in Studio's viewport: its window kept hidden at
     // the viewport's size, so a point there is the same point here, and
     // each picture streamed; those settings Studio's, not the game's.
     std::string given = contents(settings_.clientSettings) + settings_.link;
-    // As a phone or a tablet (D809): its size in a window of its own, and
+    // As a phone or a tablet: its size in a window of its own, and
     // the mouse its finger, whatever the game's settings say of either.
     if (settings_.device.has_value()) {
         given = without(given, {"window.width", "window.height", "input.touch_from_mouse"}) +
@@ -264,15 +263,14 @@ result::Status Play::launch() {
         viewported = "window.visible = false\nwindow.width = " + kWidth + "\nwindow.height = " + kHeight +
                      "\nrender.offscreen = true\nrender.read_every = 1\nrender.width = " + kWidth +
                      "\nrender.height = " + kHeight + "\nrender.stream = " + (kAt / "picture").string() +
-                     // Split three ways at most, in the viewport only (D797).
+                     // Split three ways at most, in the viewport only.
                      "\npreview.views = 3\n" +
-                     // Edited, its camera flown as an editor's (D913).
-                     // and its picture still while time alone moves it
-                     // (D979).
+                     // Edited, its camera flown as an editor's.
+                     // and its picture still while time alone moves it.
                      (settings_.edited ? "preview.flight = true\npreview.edited = true\n" : "") +
                      // At most sixty pictures a second, a display's: each one
                      // is read back and written whole to the stream, which a
-                     // device that keeps up did at its host's 120 (D947).
+                     // device that keeps up did at its host's 120.
                      "render.frame_rate = 60\n";
     }
     RAWFRAME_TRY(written(kAt / "client.conf",
@@ -286,14 +284,14 @@ result::Status Play::launch() {
                                      {"render.device", "any"},
                                      // Its styles and UI document followed twice a
                                      // second, an edited one given to the UI as it
-                                     // plays (D634, D761).
+                                     // plays.
                                      {"ui.reload_every", "60"},
                                      // And its content, a material Studio cooks
-                                     // again drawn as it plays (D734).
+                                     // again drawn as it plays.
                                      {"content.reload_every", "60"},
                                      // Kept running however far behind a slow
                                      // device leaves it: an author's preview, not
-                                     // a player's game (D923).
+                                     // a player's game.
                                      {"world.overload_ms", "0"}},
                                     {{"kest.game", kGame},
                                      {"network.quic.pin_file", (kAt / "server.fingerprint").string()},
@@ -307,7 +305,7 @@ result::Status Play::launch() {
                              viewported));
     endpointPort_ = kEndpointPort;
     serverEndpointPort_ = kServerEndpointPort;
-    // The other players (D804): clients as the first, each in a window of
+    // The other players: clients as the first, each in a window of
     // its own set down and right of the last, with no tooling endpoint and
     // nothing of the viewport's.
     const std::string kOthersGiven = settings_.link + without(contents(settings_.clientSettings),
@@ -338,7 +336,7 @@ result::Status Play::launch() {
                                          {"window.x", std::to_string(40 * player)},
                                          {"window.y", std::to_string(30 * player)}})));
     }
-    // Where a debugger attaches, for rawframe-debug given the game (D462).
+    // Where a debugger attaches, for rawframe-debug given the game.
     RAWFRAME_TRY(written(kAt / authoring_session::kAttachFile,
                          authoring_session::attachText(authoring_session::AttachRecord{
                              .endpoint = "127.0.0.1:" + std::to_string(kServerEndpointPort),

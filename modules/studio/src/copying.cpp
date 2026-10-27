@@ -1,4 +1,4 @@
-// Entities made again from others (D458, D999): the chosen one duplicated
+// Entities made again from others: the chosen one duplicated
 // beside itself, and the chosen ones copied, then pasted as new entities
 // into whichever scene is open, each with its components and the values
 // the scene gives them.

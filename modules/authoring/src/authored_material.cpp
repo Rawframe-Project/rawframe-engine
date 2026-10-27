@@ -30,7 +30,7 @@ constexpr std::array<std::string_view, 3> kNodeFields = {"type", "params", "inpu
 constexpr std::array<std::string_view, 4> kStatesFields = {"shading", "blend", "alpha_cutoff", "double_sided"};
 
 /// The instance's objects' members in order: the root's, and its overrides
-/// by name (D721).
+/// by name.
 std::span<const std::string_view> instanceOrderOf(std::span<const JsonStep> at) noexcept {
     if (at.empty()) {
         return kInstanceFields;
@@ -38,8 +38,8 @@ std::span<const std::string_view> instanceOrderOf(std::span<const JsonStep> at) 
     return {};
 }
 
-/// The graph's objects' members in order, as its canonical writer puts them
-/// (SPEC-0028, D728), by where they are (D729): the root's, the interface's,
+/// The graph's objects' members in order, as its canonical writer puts them,
+/// by where they are: the root's, the interface's,
 /// the states', and a node's in `graph`; the graph's nodes, a node's params
 /// and inputs, the interface's inputs and switches, and the presentation by
 /// name, which for nodes is their ids' order.
@@ -190,7 +190,7 @@ result::Result<std::vector<JsonDelta>> deltasOf(const Value& staged, bool graph,
         if (!kHas(place->node)) {
             return kUnknown();
         }
-        // Its drawing, keyed by it (SPEC-0028): whole pixels, within a
+        // Its drawing, keyed by it: whole pixels, within a
         // canvas a million each way.
         static constexpr double kFarthest = 1e6;
         const auto kPixel = [](double at) {
@@ -205,7 +205,7 @@ result::Result<std::vector<JsonDelta>> deltasOf(const Value& staged, bool graph,
         if (!kHas(remove->node)) {
             return kUnknown();
         }
-        // Its drawing goes with it, keyed by it (SPEC-0028).
+        // Its drawing goes with it, keyed by it.
         std::vector made{setting(staged, {step("graph"), step(hexOf(remove->node))}, std::nullopt)};
         if (slotAt(staged, JsonPath{step("presentation"), step(hexOf(remove->node))}).has_value()) {
             // The section with its last, as a graph never drawn has none.

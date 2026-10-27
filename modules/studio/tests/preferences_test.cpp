@@ -1,4 +1,4 @@
-// Studio's preferences (D779): the docks' sizes kept in a document of
+// Studio's preferences: the docks' sizes kept in a document of
 // Studio's own, read back as written, held inside what the window shows,
 // and a document that is not one left for the defaults.
 
@@ -29,7 +29,7 @@ RAWFRAME_TEST(PreferencesAreHeldInsideTheWindow) {
 }
 
 RAWFRAME_TEST(AnInterfaceScaleIsKeptAmongTheChoices) {
-    // As chosen (D966), and one not offered the screen's.
+    // As chosen, and one not offered the screen's.
     const Preferences kLarger{.interfaceScale = 175};
     const auto kRead = preferencesOf(writtenPreferences(kLarger));
     RAWFRAME_EXPECT(kRead.has_value() && kRead->interfaceScale == 175);
@@ -109,7 +109,7 @@ RAWFRAME_TEST(SavedLayoutsAreKeptAsWritten) {
 }
 
 RAWFRAME_TEST(PanelsApartAreKeptWithTheirWindows) {
-    // D994: by their tabs' names, each window's size and, where told, place.
+    // By their tabs' names, each window's size and, where told, place.
     const Preferences kKept{
         .apartPanels = {ApartPanel{.name = "Assets", .width = 640, .height = 900, .place = {{-1200, 40}}},
                         ApartPanel{.name = "Console", .width = 720, .height = 480}}};
@@ -130,7 +130,7 @@ RAWFRAME_TEST(PanelsApartAreKeptWithTheirWindows) {
 }
 
 RAWFRAME_TEST(PanelsDockedOnTheRightAreKeptAsWritten) {
-    // D980: by their tabs' names, once each.
+    // By their tabs' names, once each.
     const Preferences kKept{.rightPanels = {"Console", "Profiler"}};
     const auto kRead = preferencesOf(writtenPreferences(kKept));
     RAWFRAME_EXPECT(kRead.has_value() && kRead->rightPanels == kKept.rightPanels);

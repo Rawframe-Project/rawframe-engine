@@ -1,7 +1,7 @@
 #pragma once
 
-// A game's files moved, removed, and its folders made, under its directory
-// (D929): what an editor's asset browser does to them, as the session's
+// A game's files moved, removed, and its folders made, under its directory:
+// what an editor's asset browser does to them, as the session's
 // verbs, so a tool or an agent does the same without Studio. A source
 // moves with its sidecar, which keeps its resource identity, so what the
 // cook made of it is still found by what uses it; the game's description

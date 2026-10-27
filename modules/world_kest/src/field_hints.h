@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's `field` lines (D783): what its authors are told of a number
+// A game's `field` lines: what its authors are told of a number
 // field, beside the engine's own hints for its types' fields.
 
 #include "rawframe/world_kest/game.h"

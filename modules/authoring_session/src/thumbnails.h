@@ -1,9 +1,9 @@
 #pragma once
 
-// A source's thumbnail from the session's last cook (D801): the cooked
+// A source's thumbnail from the session's last cook: the cooked
 // object that holds it and the first of its levels no larger than asked,
 // which a browser shows as it is and an agent reads as a file. A mesh's and
-// a surface material's are drawn by the thumbnail tool (D899, D900) beside
+// a surface material's are drawn by the thumbnail tool beside
 // the cook, every one of it at the first asking, and kept there as
 // textures.
 
@@ -25,7 +25,7 @@ namespace rawframe::authoring_session {
 /// its manifest, which is not drawn again whether or not it could be, and
 /// the run drawing it, if it runs. By its manifest, not its directory: a
 /// cook again into the same directory is another cook, its edited
-/// material's picture never drawn while the directory was the mark (D972).
+/// material's picture never drawn while the directory was the mark.
 struct MeshPictures {
     std::filesystem::path tool;
     std::optional<std::string> drawn;
@@ -37,7 +37,7 @@ struct MeshPictures {
 /// directory, from the cook into `cooked`: the path of the texture that
 /// holds it (the cooked object for a texture, the drawn picture for a mesh
 /// or a material), the level, and its size. A mesh's or a material's is
-/// drawn by the tool beside the session, never on its thread (D899): while
+/// drawn by the tool beside the session, never on its thread: while
 /// it draws, the answer is `unsupported_operation` of class `unavailable`,
 /// to be asked again. Refused for a path that is no source
 /// (`target_not_found`), a source that is no picture
@@ -52,7 +52,7 @@ struct MeshPictures {
                                                           std::uint32_t size,
                                                           MeshPictures& meshes);
 
-/// `mesh_bounds` (D989): the mesh source at `asset`'s box, its least and
+/// `mesh_bounds`: the mesh source at `asset`'s box, its least and
 /// most corner in its own space, as the last cook into `cooked` made it;
 /// refused for a source that is not a mesh (`unsupported_operation`), and
 /// a game this session has not cooked or a cook that holds no such source

@@ -1,6 +1,6 @@
 #pragma once
 
-// A shared authoring session (ADR-0085 sections 2 and 6, D881): one
+// A shared authoring session: one
 // session several collaborators speak to over QUIC, on a provider whose
 // application protocol is `rawframe-authoring-v1`, the host ordering every
 // record as it arrives. A collaborator opens one bidirectional stream and
@@ -18,7 +18,7 @@
 // played game), and `claim` (claim, release). A record its token does not
 // grant is refused. A collaborator's cook names its output and cache by
 // plain names, which the host puts under its cooking directory, in the
-// collaborator's own (D885). A record is the token holder's: its author is the
+// collaborator's own. A record is the token holder's: its author is the
 // token's name, set by the host, and one naming another is refused, so no
 // collaborator acts as another. `end` ends the collaborator's connection,
 // never the session, and a connection's end lets go of its presence and
@@ -76,7 +76,7 @@ inline constexpr std::size_t kMostCollaborators = 256;
 
 /// A tokens file: a line each, `<token> <name> <grant>...`, a token of 32
 /// to 256 printable bytes, a plain name (1 to 64 letters, digits, `.`,
-/// `_`, and `-`, not starting with `.`, D885), and one or more of the
+/// `_`, and `-`, not starting with `.`), and one or more of the
 /// grants above; blank lines and lines starting `#` pass.
 /// Refuses (`ValidationFailed`, naming the line) anything else, a token or
 /// a name given twice, and more than `kMostCollaborators`.

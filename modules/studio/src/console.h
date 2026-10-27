@@ -1,6 +1,6 @@
 #pragma once
 
-// Studio's Console (D778, SPEC-0051 Part 5): what Studio said and what the
+// Studio's Console: what Studio said and what the
 // game it plays logs, read from the NDJSON files its server and client
 // write as they grow. Presentation only: the logs are the headless path.
 
@@ -44,7 +44,7 @@ struct ConsoleLine {
 [[nodiscard]] std::optional<ConsoleLine> consoleLineOf(std::string_view record, ConsoleLine::Source source);
 
 /// The first place in the game's own files `text` names, as
-/// `game/<path>:<line>:<column>`, if it names one (D453: only those are the
+/// `game/<path>:<line>:<column>`, if it names one (only those are the
 /// author's to open).
 [[nodiscard]] std::optional<Diagnostic> gamePlaceIn(std::string_view text);
 

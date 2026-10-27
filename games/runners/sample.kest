@@ -4,8 +4,8 @@ module sample
 // made each tick from its player's actions (runners.actions). While the aim
 // is not pushed, the runner aims where the mouse points: the pointer's
 // place in the window less the canvas view's, picked through its camera
-// onto the level's plane (D368). L changes the language its words are in
-// (D539). On a touch screen (D558) the left half's stick runs, and pushed
+// onto the level's plane. L changes the language its words are in.
+// On a touch screen the left half's stick runs, and pushed
 // well up jumps; the right half's aims, and holding it fires.
 
 import controls
@@ -34,13 +34,13 @@ fn level(on: bool) -> f32 {
 
 fn sample(into: [controls.Stick]) {
     // L gives the HUD's words in the game's next locale, round to the
-    // first (D539): English, then Turkish.
+    // first: English, then Turkish.
     if input.pressed(LANGUAGE) && input.locales() > u32(0) {
         input.chooseLocale((input.locale() + u32(1)) % input.locales())
     }
     into[0].run = math.clamp(input.x(RUN) + input.x(MOVE), -1.0, 1.0)
     // A button held now, or pressed in this tick at all: a slow frame reads
-    // a quick tap, press to release, as one tick (D527).
+    // a quick tap, press to release, as one tick.
     into[0].jump = level(input.on(JUMP) || input.pressed(JUMP) || input.y(MOVE) > MOVE_JUMP)
     into[0].aimX = input.x(AIM)
     into[0].aimY = input.y(AIM)

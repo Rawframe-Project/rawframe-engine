@@ -1,5 +1,5 @@
-// A split-screen layout's regions in a window's pixels (D362), and a
-// region constrained to an aspect between its bars (D369): what a game's
+// A split-screen layout's regions in a window's pixels, and a
+// region constrained to an aspect between its bars: what a game's
 // `layout` and `aspect` lines mean on a client's screen.
 
 #include "rawframe/world_kest/game.h"

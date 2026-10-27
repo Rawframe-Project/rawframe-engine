@@ -1,6 +1,6 @@
 #pragma once
 
-// The handlers of a game's taken mods (SPEC-0042 event points, D181).
+// The handlers of a game's taken mods.
 
 #include "rawframe/kest/machine.h"
 #include "rawframe/kest/program.h"
@@ -20,12 +20,12 @@ namespace rawframe::world_kest {
 /// system of it that runs right after the point's game system, over the
 /// entities holding the event's component, which it reads, and the
 /// components the point lets it write, in that order; each provider a
-/// function of it taking `values: [T]` (D199). Refused (`ModRefused`, naming
+/// function of it taking `values: [T]`. Refused (`ModRefused`, naming
 /// the mod) for a program that does not compile, a handler that is not a
 /// function of it taking those columns, a provider not shaped so, or a Kest
 /// type of a component shaped otherwise than the game's own (`layouts`, in
 /// the order of `game.components`). Their runs are timed in `timing`, if
-/// any, with the game's own (D210).
+/// any, with the game's own.
 [[nodiscard]] result::Result<std::vector<std::unique_ptr<KestSystems>>>
 modHandlers(const GameDescription& game,
             std::span<const kest::TypeLayout> layouts,

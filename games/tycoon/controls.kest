@@ -16,26 +16,26 @@ struct Hand {
     build: f32
 }
 
-// The purse's press code (D421), which `ui.hovered()` names under the mouse
+// The purse's press code, which `ui.hovered()` names under the mouse
 // and a client's sample reads a press of.
 const PURSE: i64 = 1
 
-// What an owner's player asks for by pressing its purse (D425): its stalls'
+// What an owner's player asks for by pressing its purse: its stalls'
 // takings collected at once. A command carries a value; this one says
 // nothing more than that it was asked.
 struct Collect {
     asked: u32
 }
 
-// The sign field's press code (D426): the field an owner's player writes
+// The sign field's press code: the field an owner's player writes
 // its stall's sign in, given to the server when the player presses Enter.
 const SIGN: i64 = 2
 
-// The zoom slider's press code (D621), by which a present system reads the
+// The zoom slider's press code, by which a present system reads the
 // value the player slid it to.
 const ZOOM: i64 = 3
 
-// The top view switch's press code (D622), by which a present system reads
+// The top view switch's press code, by which a present system reads
 // whether the player turned it on.
 const TOP: i64 = 4
 

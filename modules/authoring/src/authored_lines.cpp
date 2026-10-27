@@ -73,7 +73,7 @@ result::Result<Committed> AuthoredLines::change(std::uint64_t generation, std::s
     std::vector<std::string> lines = lines_;
     std::size_t deltas = 0;
     // Its operations that changed something: one a line, or a brush's
-    // stroke of many lines (D855).
+    // stroke of many lines.
     std::size_t changes = 0;
     std::string summary;
     for (std::size_t at = 0; at < operations.size(); ++at) {
@@ -83,7 +83,7 @@ result::Result<Committed> AuthoredLines::change(std::uint64_t generation, std::s
         const auto* set = std::get_if<SetLine>(&operations[at]);
         const auto* put = std::get_if<InsertLine>(&operations[at]);
         if (set == nullptr && put == nullptr && rewrites_ != nullptr) {
-            // Its kind's own, made the lines it leaves (D855); each line
+            // Its kind's own, made the lines it leaves; each line
             // that differs a delta.
             auto after = rewrites_(lines, operations[at]);
             if (!after.has_value()) {

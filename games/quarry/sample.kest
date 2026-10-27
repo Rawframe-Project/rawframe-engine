@@ -2,10 +2,10 @@ module sample
 
 // A client's input for Quarry (quarry.game's `sample` line): its player's
 // tool, made each tick from its actions (quarry.actions). The aim moves
-// across the land while held, built on tick to tick (D525), up away from
-// the eye; the tool digs, places, or throws a lever (D737) while its key or
+// across the land while held, built on tick to tick, up away from
+// the eye; the tool digs, places, or throws a lever while its key or
 // button is held, and each press of choose turns what it places from brick
-// to wire, a lamp, a lever, and brick again (D739).
+// to wire, a lamp, a lever, and brick again.
 
 import controls
 import rawframe.input

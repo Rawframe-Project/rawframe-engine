@@ -1,6 +1,6 @@
 #pragma once
 
-// A session's long-running operation (SPEC-0040, D502): the game's
+// A session's long-running operation: the game's
 // directory cooked by the cook tool, run as a child process so a source
 // that brings an importer down brings down only the cook. What it says as
 // it goes becomes progress records; how it ends, the operation's outcome:
@@ -19,11 +19,11 @@
 
 namespace rawframe::authoring_session {
 
-/// SPEC-0040's limit point for a session's asynchronous operations in
+/// The limit point for a session's asynchronous operations in
 /// flight: one cook at a time.
 inline constexpr std::size_t kMaximumSessionOperations = 1;
 
-/// A source as the session's cooks left it (D799): cooking now, cooked,
+/// A source as the session's cooks left it: cooking now, cooked,
 /// or failed with the cook's words.
 struct SourceCooked {
     enum class State : std::uint8_t {
@@ -73,19 +73,19 @@ public:
     }
 
     /// Each source a cook in this session reached, by its path under the
-    /// sources, as the latest left it (D799); one it never reached is not
+    /// sources, as the latest left it; one it never reached is not
     /// here.
     [[nodiscard]] const std::map<std::string, SourceCooked, std::less<>>& sources() const noexcept {
         return sources_;
     }
 
-    /// Where the last cook that ended cooked put its content (D801), if
+    /// Where the last cook that ended cooked put its content, if
     /// one has.
     [[nodiscard]] const std::optional<std::filesystem::path>& lastCooked() const noexcept {
         return lastCooked_;
     }
     /// Every output a cook in this session wrote whole, as its system
-    /// finds it, which may be read back (D905); and the one a cook writes
+    /// finds it, which may be read back; and the one a cook writes
     /// now, if one does.
     [[nodiscard]] const std::vector<std::filesystem::path>& wrote() const noexcept {
         return wrote_;

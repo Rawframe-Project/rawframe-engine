@@ -1,6 +1,6 @@
 #pragma once
 
-// Studio's asset browser (D799): every source the game's directory holds,
+// Studio's asset browser: every source the game's directory holds,
 // as the session lists it (`authoring.assets`' sources), narrowed to a
 // folder and a kind, each with how the session's cooks left it. Scenes and
 // the documents Studio edits open from it as before; another source is
@@ -29,7 +29,7 @@ struct ListedSource {
     std::string importer;
     std::string cook;
     std::string problem;
-    /// Its resource identity, as a document names it (D827).
+    /// Its resource identity, as a document names it.
     std::string id;
 };
 
@@ -38,14 +38,14 @@ struct ListedSource {
 [[nodiscard]] std::vector<ListedSource> sourcesOf(std::string_view reply);
 
 /// The folders an `authoring.assets` answer lists, those with nothing in
-/// them too (D929).
+/// them too.
 [[nodiscard]] std::vector<std::string> foldersOf(std::string_view reply);
 
 /// The kind an importer makes, as the browser filters by it: its name after
 /// `rawframe.`.
 [[nodiscard]] std::string kindOf(std::string_view importer);
 
-/// The image key a source's thumbnail is shown by (D801): its path's,
+/// The image key a source's thumbnail is shown by: its path's,
 /// apart from Studio's other images.
 [[nodiscard]] std::uint64_t thumbnailKey(std::string_view path) noexcept;
 
@@ -53,7 +53,7 @@ struct ListedSource {
 /// kind itself for one it does not name.
 [[nodiscard]] std::string kindLabel(std::string_view kind);
 
-/// A card in the Assets grid (D916): its name, the kind it is drawn as,
+/// A card in the Assets grid: its name, the kind it is drawn as,
 /// what it says it is, its picture's image key (nought for the kind's
 /// icon), the dot's color where its cook is behind (nought for none), and
 /// whether it failed and is chosen.
@@ -68,7 +68,7 @@ struct AssetCard {
 };
 
 /// Whether the file name at the end of `path` holds `search`, any case;
-/// every name holds an empty one (D916).
+/// every name holds an empty one.
 [[nodiscard]] bool named(std::string_view path, std::string_view search);
 
 struct AssetBrowser {
@@ -83,10 +83,10 @@ struct AssetBrowser {
     std::vector<std::pair<ui::Node, std::string>> kindRows;
     std::vector<std::pair<ui::Node, std::string>> folderRows;
     std::vector<std::pair<ui::Node, std::string>> sourceRows;
-    /// The game's scripts' cards, each by its path in the game (D919).
+    /// The game's scripts' cards, each by its path in the game.
     std::vector<std::pair<ui::Node, std::string>> scriptRows;
     std::vector<ui::Node> boxes;
-    /// The pane as the design draws it (D916): its heading's parts, the
+    /// The pane as the design draws it: its heading's parts, the
     /// folders' column, and the cards' grid, kept while the game is open
     /// so the grid keeps its scroll and the search its typing; what is in
     /// them is made again, as `boxes`.
@@ -101,9 +101,9 @@ struct AssetBrowser {
     /// The heading's Import, which asks for the files to bring in.
     ui::Node import{};
     /// The Inspector's Reimport for the chosen source, and how many times
-    /// its settings were set and refused (D800).
+    /// its settings were set and refused.
     ui::Node reimport{};
-    /// The thumbnails' size, none, small, or large (D801), its controls,
+    /// The thumbnails' size, none, small, or large, its controls,
     /// and each texture's picture by the image key its row shows, made from
     /// the last cook, and how many were made.
     std::uint32_t thumbnail = 128;
@@ -111,13 +111,12 @@ struct AssetBrowser {
     std::map<std::uint64_t, std::shared_ptr<const texture::Texture>> pictures;
     std::uint64_t thumbnailsMade = 0;
     /// Whether the session said meshes' thumbnails are being drawn, and
-    /// when the browser last asked again (D899).
+    /// when the browser last asked again.
     bool drawing = false;
     double drawingAsked = 0;
-    /// Files dropped on the window, and those imported (D802).
+    /// Files dropped on the window, and those imported.
     /// The Inspector's References, the center's rows of what the chosen
-    /// source uses and what uses it, and how many times they were shown
-    /// (D803).
+    /// source uses and what uses it, and how many times they were shown.
     ui::Node references{};
     std::vector<std::pair<ui::Node, std::string>> referenceRows;
     std::vector<ui::Node> referenceBoxes;
@@ -129,7 +128,7 @@ struct AssetBrowser {
     /// How many times a source was chosen, and the folder and kind narrowed.
     std::uint64_t chosenCount = 0;
     std::uint64_t narrowed = 0;
-    /// Every folder the session lists (D929); what New folder, Rename and
+    /// Every folder the session lists; what New folder, Rename and
     /// Delete act on, the card or folder last pressed, by its path under
     /// the game's directory; the heading's controls for them; the name
     /// being typed, a new folder's or the target's, in its field; the
@@ -154,7 +153,7 @@ struct AssetBrowser {
     std::optional<std::string> held;
     ui::Node rootRow{};
     /// A scene's row pressed, opened as it is let go unless it was dragged
-    /// to be placed (D975); and how many assets a drag placed.
+    /// to be placed; and how many assets a drag placed.
     std::optional<std::size_t> opening;
     bool choosing = false;
     std::uint64_t placed = 0;

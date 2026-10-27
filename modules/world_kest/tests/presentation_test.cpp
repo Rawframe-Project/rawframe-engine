@@ -1,9 +1,9 @@
-// A client's presentation of the World it mirrors (D260): each presentation
+// A client's presentation of the World it mirrors: each presentation
 // component attached to the entities that have its `on` component, or to
-// the client's own player alone (D261), the present systems run over the
-// mirror in line order, telling the client's own player from others
-// (D390), a refused one changing nothing, and a new mirror bound afresh;
-// and a component started as a document says (D619), and started again in
+// the client's own player alone, the present systems run over the
+// mirror in line order, telling the client's own player from others,
+// a refused one changing nothing, and a new mirror bound afresh;
+// and a component started as a document says, and started again in
 // the fields an edit changed; and a program reloaded as the game plays.
 
 #include "../src/presentation.h"

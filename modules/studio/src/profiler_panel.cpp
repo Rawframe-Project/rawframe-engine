@@ -23,7 +23,7 @@ std::string milliseconds(std::int64_t microseconds) {
 
 result::Status ShellParticipant::makeProfiler() {
     RAWFRAME_TRY_ASSIGN(held_.profilerColumn, pane("Profiler"));
-    // The GPU's half: what the preview's frames hold (D928).
+    // The GPU's half: what the preview's frames hold.
     RAWFRAME_TRY_ASSIGN(const ui::Node kHead,
                         box(held_.profilerColumn, ui::Layout{.gap = 6, .shrink = 0, .padding = {8, 8, 6, 0}}, 0));
     RAWFRAME_TRY_ASSIGN(held_.frameTab, button(kHead, "Frame"));
@@ -95,8 +95,8 @@ void ShellParticipant::showProfiler(const std::optional<Value>& profile) {
     // The systems that took longest over those ticks, each its mean and
     // its longest.
     std::vector<std::pair<std::int64_t, std::string>> systems;
-    // The game's own systems, each its own schedule entry by its identity
-    // (D841): those the engine does not name.
+    // The game's own systems, each its own schedule entry by its identity:
+    // those the engine does not name.
     std::size_t gameSystems = 0;
     for (const Value& kSystem :
          kSystems != nullptr && kSystems->kind() == Value::Kind::Array ? kSystems->items() : std::span<const Value>{}) {

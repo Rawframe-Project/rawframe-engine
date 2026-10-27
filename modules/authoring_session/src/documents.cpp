@@ -49,12 +49,12 @@ Value outcomeOf(const Authored& authored, bool written, bool reopened, Value res
 
 /// What an answer holds besides the document's own: nothing, but for a
 /// material instance its base's interface, `null` where the base does not
-/// read as a material, which says what each override may be (D721).
+/// read as a material, which says what each override may be.
 template <class Authored>
 void addTo(Value& /*answer*/, const Authored& /*authored*/, const std::filesystem::path& /*root*/) {
 }
 void addTo(Value& answer, const authoring::AuthoredMaterial& material, const std::filesystem::path& root) {
-    // A graph is its own interface's holder (D728).
+    // A graph is its own interface's holder.
     if (material.graph()) {
         return;
     }
@@ -183,7 +183,7 @@ result::Result<Value> Documents<Authored>::applied(const authoring::SessionRecor
                                    .withContext("document", kBefore)};
     }
     // A dry run runs on a copy, so it answers as the request would be kept,
-    // by the same code (D650).
+    // by the same code.
     std::unique_ptr<Authored> copy;
     if (record.dryRun) {
         RAWFRAME_TRY_ASSIGN(copy, made(authored.identity(), authored.text()));
@@ -272,7 +272,7 @@ result::Result<Value> Documents<Authored>::history(const authoring::SessionRecor
     const Authored& authored = *open->document;
     Value entries = Value::array();
     for (std::size_t at = 0; at < authored.undoable() + authored.redoable(); ++at) {
-        // A line document's entry counts the lines it changed (D817).
+        // A line document's entry counts the lines it changed.
         std::size_t deltas = 0;
         if constexpr (std::is_same_v<Authored, authoring::AuthoredLines>) {
             deltas = authored.deltasAt(at);

@@ -1,4 +1,4 @@
-// A player's commands (D425) from the client World to the server's over
+// A player's commands from the client World to the server's over
 // loopback: taken with the player and tick, bounded a tick, struck when
 // misshapen, and dropped with a player gone before they are taken.
 
@@ -8,7 +8,7 @@ using namespace rawframe;
 using namespace rawframe::scenario;
 
 RAWFRAME_TEST(APlayersCommandsReachTheServerCheckedAndBounded) {
-    // D425: a command of a kind the game declares, at its exact size, is
+    // A command of a kind the game declares, at its exact size, is
     // taken with its player and the tick it arrived before; past the
     // commands one connection may have waiting each is dropped unread; one
     // of another kind or size strikes the connection; one whose player is
@@ -70,7 +70,7 @@ RAWFRAME_TEST(APlayersCommandsReachTheServerCheckedAndBounded) {
 }
 
 RAWFRAME_TEST(MisshapenCommandsStrikeAPlayerOutOfTheWorld) {
-    // D425 with D223: the eighth misshapen command closes the connection
+    // The eighth misshapen command closes the connection
     // and takes its player out of the World, as misshapen input does.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}, {.commandSizes = {4}}};
     for (int step = 0; step < 30; ++step) {

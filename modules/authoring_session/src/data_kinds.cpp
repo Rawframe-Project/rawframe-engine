@@ -24,7 +24,7 @@ namespace {
 
 /// What `read` makes of a document, or what its reader refused and
 /// where, said to whoever asked as a document of the kind `called` that
-/// does not read (`ValidationFailed`), as a style sheet's is (D636).
+/// does not read (`ValidationFailed`), as a style sheet's is.
 template <class Read> result::Status readsAs(std::string_view called, Read read) {
     auto made = read();
     if (made.has_value()) {
@@ -63,7 +63,7 @@ result::Status readsTranslations(std::string_view text) {
         return localization::readTranslations(text);
     });
 }
-/// An animation document is a graph, a clip, or a skeleton (D827), as its
+/// An animation document is a graph, a clip, or a skeleton, as its
 /// kind says.
 result::Status readsAnimation(std::string_view text) {
     const auto kParsed = document::parse(text);

@@ -1,6 +1,6 @@
 #pragma once
 
-// The session's records as Studio speaks them (D435): what it asks, built
+// The session's records as Studio speaks them: what it asks, built
 // as any client builds them, and what it is answered, read as any client
 // reads them. Studio keeps no document of its own: a panel shows what an
 // answer says.
@@ -44,7 +44,7 @@ struct Outcome {
     /// The scene's view after it, when the answer says (null for none).
     std::optional<Value> view;
     /// What is chosen after it, when the answer says: what an undo or a
-    /// redo put back (D417, D997).
+    /// redo put back.
     std::optional<std::vector<std::string>> selection;
 };
 
@@ -59,19 +59,19 @@ struct Answered {
     std::string message;
     std::optional<Value> view;
     bool previewing = false;
-    /// A new scene's identity, as 32 hex digits (D449).
+    /// A new scene's identity, as 32 hex digits.
     std::string resource;
 };
 
 [[nodiscard]] Answered answeredOf(std::string_view reply);
 
-/// One entry of a scene's history (D454): what it did, and whether it is
+/// One entry of a scene's history: what it did, and whether it is
 /// applied (undoable) or undone (redoable).
 struct HistoryEntry {
     std::string summary;
     bool applied = false;
     /// Who made it, where its record named an author, and whether it takes
-    /// another entry back, `undo` or `redo`, or is a `change` (D879).
+    /// another entry back, `undo` or `redo`, or is a `change`.
     std::string author;
     std::string kind;
 };
@@ -81,7 +81,7 @@ struct HistoryEntry {
 [[nodiscard]] Value historyRecord(std::int64_t id, std::string_view scene);
 [[nodiscard]] std::vector<HistoryEntry> historyOf(std::string_view reply);
 
-/// An asset the game declares (D455): its kind, the identity a field
+/// An asset the game declares: its kind, the identity a field
 /// holds it by, and its name.
 struct Asset {
     std::string kind;
@@ -93,24 +93,23 @@ struct Asset {
 /// or an entry out of shape.
 [[nodiscard]] Value assetsRecord(std::int64_t id);
 /// `authoring.import_settings` of the source at `asset`, and
-/// `authoring.set_import_settings` giving it `settings` (D800).
+/// `authoring.set_import_settings` giving it `settings`.
 [[nodiscard]] Value importSettingsRecord(std::int64_t id, std::string_view asset);
-/// `authoring.thumbnail` of the source at `asset`, `size` pixels at most
-/// (D801).
+/// `authoring.thumbnail` of the source at `asset`, `size` pixels at most.
 [[nodiscard]] Value thumbnailRecord(std::int64_t id, std::string_view asset, std::uint32_t size);
 /// `authoring.run` of the previewed `scene`, pausing or not; and
-/// `authoring.step`, `ticks` of its paused World (D806).
+/// `authoring.step`, `ticks` of its paused World.
 [[nodiscard]] Value runRecord(std::int64_t id, std::string_view scene, bool paused);
 [[nodiscard]] Value stepRecord(std::int64_t id, std::string_view scene, std::uint32_t ticks);
-/// `authoring.traffic` of the previewed `scene`'s server (D807).
+/// `authoring.traffic` of the previewed `scene`'s server.
 [[nodiscard]] Value trafficRecord(std::int64_t id, std::string_view scene);
-/// `authoring.profile` of the previewed `scene`'s server (D838), kept in
-/// `capture` (a .rfprofile path under the game) when one is given (D844).
+/// `authoring.profile` of the previewed `scene`'s server, kept in
+/// `capture` (a .rfprofile path under the game) when one is given.
 [[nodiscard]] Value profileRecord(std::int64_t id, std::string_view scene, std::string_view capture = {});
-/// `authoring.drawn_frame` of the previewed `scene` (D842), kept in
+/// `authoring.drawn_frame` of the previewed `scene`, kept in
 /// `capture` (a .rfframe path under the game) when one is given.
 [[nodiscard]] Value drawnFrameRecord(std::int64_t id, std::string_view scene, std::string_view capture);
-/// `authoring.asset_references` of the source at `asset` (D803).
+/// `authoring.asset_references` of the source at `asset`.
 [[nodiscard]] Value assetReferencesRecord(std::int64_t id, std::string_view asset);
 [[nodiscard]] Value setImportSettingsRecord(std::int64_t id, std::string_view asset, Value settings);
 [[nodiscard]] std::vector<Asset> assetsOf(std::string_view reply);
@@ -127,29 +126,29 @@ struct Asset {
 /// How Studio shows `asset` in a field.
 [[nodiscard]] std::string assetShown(const Asset& asset);
 
-/// `authoring.pick` for `scene` (D456), and what its answer says the
+/// `authoring.pick` for `scene`, and what its answer says the
 /// author's newest click met in the scene: its id there; none for no new
 /// click, or one that met nothing `scene` brings.
 [[nodiscard]] Value pickRecord(std::int64_t id, std::string_view scene);
 
-/// `authoring.import` (D503): the file at `source` made one of the game's
+/// `authoring.import`: the file at `source` made one of the game's
 /// assets at `as` under its directory; and what the answer says it made,
 /// as Studio says it: its kind and its path, or empty for a refusal.
 [[nodiscard]] Value importRecord(std::int64_t id, std::string_view source, std::string_view as);
 /// A file or folder of the game's moved, one removed, and a folder made,
-/// each by its path under the game's directory (D929).
+/// each by its path under the game's directory.
 [[nodiscard]] Value moveFileRecord(std::int64_t id, std::string_view from, std::string_view to);
 [[nodiscard]] Value removeFileRecord(std::int64_t id, std::string_view path);
 [[nodiscard]] Value makeFolderRecord(std::int64_t id, std::string_view folder);
 [[nodiscard]] std::string importedIn(std::string_view reply);
 
-/// `authoring.cook` (D502): the game cooked into `output`, reusing what
+/// `authoring.cook`: the game cooked into `output`, reusing what
 /// `cache` holds; and `authoring.cancel` for the cook given `operation`.
 [[nodiscard]] Value
 cookRecord(std::int64_t id, const std::filesystem::path& output, const std::filesystem::path& cache);
 [[nodiscard]] Value cancelRecord(std::int64_t id, std::int64_t operation);
 
-/// What the session said unasked of a cook (D502): how far it is, or how
+/// What the session said unasked of a cook: how far it is, or how
 /// it ended; `None` for any other line.
 struct Heard {
     enum class Kind : std::uint8_t {
@@ -172,35 +171,34 @@ struct Heard {
 
 [[nodiscard]] Heard heardOf(std::string_view line);
 
-/// `authoring.mark` for `scene` (D464): the point its preview marks, or
-/// none, and its handles by name (D974).
+/// `authoring.mark` for `scene`: the point its preview marks, or
+/// none, and its handles by name.
 [[nodiscard]] Value markRecord(std::int64_t id,
                                std::string_view scene,
                                const std::optional<std::array<double, 3>>& at,
                                std::string_view handles = "all");
-/// `authoring.preview_input` (D790): what landed on the viewport, for the
+/// `authoring.preview_input`: what landed on the viewport, for the
 /// game played there.
 [[nodiscard]] Value previewInputRecord(std::int64_t id, std::string_view scene, Value events);
-/// `authoring.hide_layers` (D791): the layers the preview leaves out.
+/// `authoring.hide_layers`: the layers the preview leaves out.
 [[nodiscard]] Value hideLayersRecord(std::int64_t id, std::string_view scene, const std::vector<std::uint32_t>& layers);
 [[nodiscard]] std::optional<std::string> pickedIn(std::string_view reply, std::string_view scene);
-/// Where the ray of a pick met what it picked, if it met something
-/// (D877).
+/// Where the ray of a pick met what it picked, if it met something.
 [[nodiscard]] std::optional<std::array<double, 3>> pickedPointIn(std::string_view reply);
 /// The ways a press's ray went where it went down and where it was let
-/// go, as a pick's answer gives them once it is let go (D974); none
+/// go, as a pick's answer gives them once it is let go; none
 /// before.
 [[nodiscard]] std::optional<std::array<std::array<double, 3>, 2>> boxIn(std::string_view reply);
 
 /// The part of the preview's mark a pick's answer says the pointer has
-/// lit (D468): x, y, z, or ring; empty for none.
+/// lit: x, y, z, or ring; empty for none.
 [[nodiscard]] std::string litIn(std::string_view reply);
 
-/// An entity the author dragged in the preview (D457): its id in the scene,
+/// An entity the author dragged in the preview: its id in the scene,
 /// and how: carried across the level plane, in metres along x and z;
 /// raised or lowered, along y, with Shift; or turned about its own place
 /// with Control, from where it was pressed to where it was let go on the
-/// level plane (D463).
+/// level plane.
 struct Moved {
     enum class How : std::uint8_t {
         Move,
@@ -218,16 +216,16 @@ struct Moved {
 
 /// What `authoring.pick`'s answer says was dragged in `scene`; none for no
 /// drag, or one of another scene's entity.
-/// Under `key`, `dragging`, where a drag still held would move it (D976).
+/// Under `key`, `dragging`, where a drag still held would move it.
 [[nodiscard]] std::optional<Moved>
 movedIn(std::string_view reply, std::string_view scene, std::string_view key = "moved");
 
 /// The view `authoring.pick`'s answer says the played game moved the
-/// scene's to by its wheel or a drag with the right button (D469); none
+/// scene's to by its wheel or a drag with the right button; none
 /// where nothing moved.
 [[nodiscard]] std::optional<Value> viewedIn(std::string_view reply);
 
-/// An entity search as typed (D473): its words a name the entities' hold,
+/// An entity search as typed: its words a name the entities' hold,
 /// and a `has:` word the component they hold, by any name `componentNamed`
 /// takes; sugar over `scene.find_entities`'s typed inputs.
 struct Search {
@@ -242,9 +240,9 @@ struct Search {
 [[nodiscard]] Value
 findRecord(std::int64_t id, std::string_view scene, std::string_view named, std::string_view having);
 
-/// What a drag in the played game snaps to (D471): a place to whole steps
+/// What a drag in the played game snaps to: a place to whole steps
 /// of `move` meters, a turn to whole steps of `turn` degrees; nought for
-/// none. Studio's own, never the scene's (ADR-0066).
+/// none. Studio's own, never the scene's.
 struct Snap {
     double move = 0;
     double turn = 0;
@@ -260,20 +258,20 @@ struct Snap {
 /// `value` to the nearest whole step of `step`, or as it is for none.
 [[nodiscard]] double snapped(double value, double step) noexcept;
 
-/// `authoring.create_scene` for `scene` (D449).
+/// `authoring.create_scene` for `scene`.
 [[nodiscard]] Value createSceneRecord(std::int64_t id, std::string_view scene);
 
-/// A running Runtime's tooling endpoint to preview a scene in (D433).
+/// A running Runtime's tooling endpoint to preview a scene in.
 struct Preview {
     std::string endpoint;
     std::string pinFile;
     std::string tokenFile;
-    /// The previewed game's server, for picking (D456): its tooling
+    /// The previewed game's server, for picking: its tooling
     /// endpoint and fingerprint file, the token the preview's; empty for
     /// none.
     std::string serverEndpoint;
     std::string serverPinFile;
-    /// Only observed as it plays, its own camera kept (D923).
+    /// Only observed as it plays, its own camera kept.
     bool observe = false;
 };
 
@@ -300,31 +298,31 @@ readRecord(std::int64_t id, std::string_view scene, std::string_view operation, 
 [[nodiscard]] Value applyRecord(std::int64_t id, std::string_view scene, Value operation);
 /// The same with several operations, applied together or not at all.
 [[nodiscard]] Value applyRecord(std::int64_t id, std::string_view scene, std::vector<Value> operations);
-/// And one whose change folds into the author's latest (D976).
+/// And one whose change folds into the author's latest.
 [[nodiscard]] Value amendRecord(std::int64_t id, std::string_view scene, std::vector<Value> operations);
-/// `authoring.apply_together` (D497): each scene's operations, atomic, all
+/// `authoring.apply_together`: each scene's operations, atomic, all
 /// kept or none.
 [[nodiscard]] Value togetherRecord(std::int64_t id, std::vector<std::pair<std::string, std::vector<Value>>> parts);
 /// `authoring.select` of `entities` in `scene`.
 [[nodiscard]] Value selectRecord(std::int64_t id, std::string_view scene, const std::vector<std::string>& entities);
-/// `view` (an `authoring.view` record's) seen in 2D or not (D793): in 2D
+/// `view` (an `authoring.view` record's) seen in 2D or not: in 2D
 /// its eye straight over its target along +Z, as far as it was from it;
 /// else from above and behind the target as far; none for a view that
 /// does not read.
 [[nodiscard]] std::optional<Value> flatView(const std::optional<Value>& view, bool flat);
-/// `authoring.overlays` of `scene` (D798): what its preview draws over it.
+/// `authoring.overlays` of `scene`: what its preview draws over it.
 [[nodiscard]] Value overlaysRecord(std::int64_t id, std::string_view scene, const std::vector<std::string>& overlays);
-/// `authoring.split` of `scene` (D797): its preview in `views` views.
+/// `authoring.split` of `scene`: its preview in `views` views.
 [[nodiscard]] Value splitRecord(std::int64_t id, std::string_view scene, std::uint8_t views);
-/// `authoring.bookmark` of `scene` (D796): `view` kept in `slot`.
+/// `authoring.bookmark` of `scene`: `view` kept in `slot`.
 [[nodiscard]] Value bookmarkRecord(std::int64_t id, std::string_view scene, std::uint8_t slot, const Value& view);
 /// `authoring.bookmarks` of `scene`.
 [[nodiscard]] Value bookmarksRecord(std::int64_t id, std::string_view scene);
 /// Bookmark `slot`'s view in an `authoring.bookmarks` reply, if it has one.
 [[nodiscard]] std::optional<Value> bookmarkIn(std::string_view reply, std::uint8_t slot);
-/// `authoring.view_mode` of `scene` (D794): its preview drawn in `mode`.
+/// `authoring.view_mode` of `scene`: its preview drawn in `mode`.
 [[nodiscard]] Value viewModeRecord(std::int64_t id, std::string_view scene, std::string_view mode);
-/// `authoring.frame` of `scene` (D792): its view turned on what is chosen.
+/// `authoring.frame` of `scene`: its view turned on what is chosen.
 [[nodiscard]] Value frameRecord(std::int64_t id, std::string_view scene);
 /// `authoring.undo` or `authoring.redo` (`kind`) of `scene`.
 [[nodiscard]] Value stepRecord(std::int64_t id, std::string_view kind, std::string_view scene);
@@ -338,7 +336,7 @@ struct Catalog {
         /// empty where the catalog has none.
         std::string kind;
         /// A case field's cases, and what the game and the engine tell its
-        /// authors of a number field (D783): the least and most it should
+        /// authors of a number field: the least and most it should
         /// take, its unit, whether it is a color, and names for some of its
         /// values (see hints.h).
         std::vector<std::string> cases;
@@ -347,7 +345,7 @@ struct Catalog {
         std::string unit;
         bool color = false;
         std::vector<std::pair<std::int64_t, std::string>> labels;
-        /// The kind of asset it holds by identity, empty for none (D786).
+        /// The kind of asset it holds by identity, empty for none.
         std::string asset;
     };
     struct Component {
@@ -355,12 +353,11 @@ struct Catalog {
         std::string name;
         /// Its fields in the catalog's order.
         std::vector<Field> fields;
-        /// Of `rawframe.ui.Node`: a UI document's node may be made of it
-        /// (D672).
+        /// Of `rawframe.ui.Node`: a UI document's node may be made of it.
         bool uiNode = false;
-        /// The Kest type the game declares it of (D834).
+        /// The Kest type the game declares it of.
         std::string type;
-        /// Made only by a client that draws (D919): never added to a scene.
+        /// Made only by a client that draws: never added to a scene.
         bool presented = false;
     };
     std::vector<std::string> operations;
@@ -379,7 +376,7 @@ struct FieldShown {
     std::string name;
     std::string kind;
     std::optional<std::string> text;
-    /// The catalog's field, where it knows it (D784).
+    /// The catalog's field, where it knows it.
     std::optional<Catalog::Field> type;
 };
 
@@ -405,14 +402,14 @@ componentNamed(const Catalog& catalog, std::string_view text, std::string& why);
 /// The scene's entity `text` names, of `ids` and their `names` in the
 /// same order: by its whole name, by the start of its identity (four
 /// characters at least), or by the start of its name, when one alone
-/// matches; else none, and `why` says so (D447).
+/// matches; else none, and `why` says so.
 [[nodiscard]] std::optional<std::string> entityNamed(std::span<const std::string> ids,
                                                      std::span<const std::string> names,
                                                      std::string_view text,
                                                      std::string& why);
 
 /// Where a game's program does not compile, as the session's refusal of
-/// hello says it (`file:line:column: message`, D453).
+/// hello says it (`file:line:column: message`).
 struct Diagnostic {
     std::string file;
     std::int64_t line = 0;
@@ -426,7 +423,7 @@ struct Diagnostic {
 
 /// The program and arguments that open `file` at a diagnostic's line and
 /// column in the author's editor: `command` split at its spaces, each
-/// `{file}`, `{line}`, and `{column}` in it written in (ADR-0066's
+/// `{file}`, `{line}`, and `{column}` in it written in (an
 /// open-at-line hand-off). None for an empty command.
 [[nodiscard]] std::vector<std::string>
 editorCommand(std::string_view command, const std::string& file, std::int64_t line, std::int64_t column);
@@ -439,7 +436,7 @@ editorCommand(std::string_view command, const std::string& file, std::int64_t li
 /// The file `file` (`game/<path>`) names in the game whose description is
 /// in `directory`, resolved through any links, or none when it is not
 /// there: a path that climbs out, is absolute, or reaches outside through
-/// a link is not one of the game's files (D453, D778).
+/// a link is not one of the game's files.
 [[nodiscard]] std::optional<std::filesystem::path> gameFile(const std::filesystem::path& directory,
                                                             std::string_view file);
 
@@ -451,21 +448,21 @@ editorCommand(std::string_view command, const std::string& file, std::int64_t li
 /// digits, and `space _ - . : / \ + , = @ # ~ { } [ ] '` alone, nothing
 /// cmd.exe acts on (`& | < > ^ % ! " ( )`), no control and no non-ASCII
 /// byte, so a game's file name cannot run a command through the editor's
-/// launcher (D453a).
+/// launcher.
 [[nodiscard]] bool batchSafe(std::string_view word);
 
 /// Where a scene view looks (`target`), on the half meter across the
-/// ground: where a part made or a mesh dropped stands (D981).
+/// ground: where a part made or a mesh dropped stands.
 [[nodiscard]] std::array<double, 3> viewTarget(const Value* view);
 /// A new identity, a random version 4 UUID in its text form: a new entity's
-/// is the client's to choose (D438), and an identity is data, not
+/// is the client's to choose, and an identity is data, not
 /// simulation, so nothing needs it repeated.
 [[nodiscard]] std::string mintedIdentity();
-/// A fresh 16 hex digit identity, a style class's (D638) or a material
-/// graph node's (D731), from the system's random device, never all nought.
+/// A fresh 16 hex digit identity, a style class's or a material
+/// graph node's, from the system's random device, never all nought.
 [[nodiscard]] std::string mintedHexIdentity();
 
-/// A document version control sees changed (D871): its state as `git
+/// A document version control sees changed: its state as `git
 /// status --porcelain` writes it, two letters (`M ` staged, ` M` not, `??`
 /// new, `D ` gone), and its path under the game's directory.
 struct ChangedFile {
@@ -482,17 +479,17 @@ struct ChangedFile {
 /// its new name. Lines of another form, and files elsewhere, are left out.
 [[nodiscard]] std::vector<ChangedFile> changedFiles(std::string_view porcelain, std::string_view prefix);
 
-/// One of the game's Studio extensions as the session lists them (D874):
+/// One of the game's Studio extensions as the session lists them:
 /// its path, its commands' names, the capabilities its doors are of, and
 /// why it offers nothing, where it does not.
 struct ListedExtension {
     std::string path;
     std::vector<std::string> commands;
-    /// The components its Inspector sections are of (D875), and its
-    /// viewport modes (D877).
+    /// The components its Inspector sections are of, and its
+    /// viewport modes.
     std::vector<std::string> sections;
     std::vector<std::string> modes;
-    /// Its panels, shown in the Extension panels tab (D878).
+    /// Its panels, shown in the Extension panels tab.
     std::vector<std::string> panels;
     std::vector<std::string> capabilities;
     std::string refused;
@@ -508,7 +505,7 @@ struct ListedExtension {
 /// `authoring.extension`: the command `command` of the extension at
 /// `extension` run on `entities` of `scene`.
 /// `authoring.extension_section`: the rows the extension at `extension`
-/// shows in its section of `component` for `entity` of `scene` (D875),
+/// shows in its section of `component` for `entity` of `scene`,
 /// and the rows its answer holds, each a label and a value.
 [[nodiscard]] Value extensionSectionRecord(std::int64_t id,
                                            std::string_view scene,
@@ -517,7 +514,7 @@ struct ListedExtension {
                                            std::string_view entity);
 [[nodiscard]] std::vector<std::pair<std::string, double>> sectionRowsOf(std::string_view reply);
 /// `authoring.extension_panel`: the rows the extension at `extension`
-/// shows in its panel `panel` for `entities` of `scene` (D878), read by
+/// shows in its panel `panel` for `entities` of `scene`, read by
 /// `sectionRowsOf`.
 [[nodiscard]] Value extensionPanelRecord(std::int64_t id,
                                          std::string_view scene,

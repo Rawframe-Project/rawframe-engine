@@ -1,7 +1,7 @@
 #pragma once
 
 // The Hierarchy and the Inspector switched to the played game's World as
-// its server holds it (D808): its living entities listed, and the one
+// its server holds it: its living entities listed, and the one
 // chosen read field by field, again twice a second, read only.
 
 #include "rawframe/ui/tree.h"
@@ -28,9 +28,9 @@ struct LiveShown {
     std::uint64_t listed = 0;
     std::uint64_t reads = 0;
     std::uint64_t components = 0;
-    /// Its values shown by name, not as numbers, when last read (D995).
+    /// Its values shown by name, not as numbers, when last read.
     std::uint64_t named = 0;
-    /// The rows last listed named as the open scene names them (D996).
+    /// The rows last listed named as the open scene names them.
     std::uint64_t rowsNamed = 0;
 };
 

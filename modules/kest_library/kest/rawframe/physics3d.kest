@@ -1,6 +1,6 @@
 module rawframe.physics3d
 
-// The components of 3D physics (SPEC-0037, D44), as the engine lays them out:
+// The components of 3D physics, as the engine lays them out:
 // a game with a `physics3d` line has them, and a program that reads or
 // writes them imports this module. An entity with a Body3D, a Pose3D, and a
 // Velocity3D has a body. Systems before `rawframe.physics3d.step` push bodies
@@ -295,8 +295,8 @@ fn castRay(originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32,
 extern fn Physics3D.castRayAt(originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32,
                               towardZ: f32, seen: replication.Perception) -> RayHit3D
 
-// The same ray against every body where it was at the moment a player saw
-// (SPEC-0041 lag compensation), taking back only what the player was sent.
+// The same ray against every body where it was at the moment a player saw,
+// taking back only what the player was sent.
 fn castRayAt(originX: f64, originY: f64, originZ: f64, towardX: f32, towardY: f32, towardZ: f32,
              seen: replication.Perception) -> RayHit3D {
     return Physics3D.castRayAt(originX, originY, originZ, towardX, towardY, towardZ, seen)

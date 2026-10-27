@@ -1,9 +1,9 @@
-// Gale's ships (D681): a player joined is given a ship that floats on the
+// Gale's ships: a player joined is given a ship that floats on the
 // rolling sea at its draft, upright, rides out a list it is given, sails
 // ahead at its throttle and turns at its rudder, and sinks from the World
-// when its player goes, its player's own entity (D685); a second player's
+// when its player goes, its player's own entity; a second player's
 // ship is launched beside the first. A ship's broadside holes the ship beside it until it founders,
-// sinks, and its player is given another (D683). The test makes the
+// sinks, and its player is given another. The test makes the
 // players as admission would and sets their helms between ticks, as their
 // clients' input would.
 
@@ -139,7 +139,7 @@ const std::array<composition::RegistrarEntry, 5> kGalePresented = {
     composition::RegistrarEntry{"test_plan", &registerPlanWatcher, world_runtime::kScopes}};
 
 /// A player as admission makes one: its player's components, zeroed; it
-/// is its own ship (D685).
+/// is its own ship.
 world::EntityHandle joined(world::World& world) {
     const auto kMade = world.create();
     RAWFRAME_EXPECT(kMade.has_value());
@@ -234,7 +234,7 @@ RAWFRAME_TEST(AShipFloatsSailsAndTurnsAtItsHelm) {
 }
 
 RAWFRAME_TEST(AShipSailedAtAnIslandRunsAgainstItsShoreAndGoesNoFurther) {
-    // D693: the first island stands 160 meters before the row's first
+    // The first island stands 160 meters before the row's first
     // place. Full ahead, the first ship reaches its shore and is turned
     // aside by the rock, never inside it, and floats on.
     PlayedGale played;
@@ -282,7 +282,7 @@ RAWFRAME_TEST(ABroadsideHolesAShipUntilItFoundersAndItsPlayerSailsAgain) {
     }
     RAWFRAME_EXPECT(valueOf<Ship>(world, kHoled, kShipId)->hull == 0);
     RAWFRAME_EXPECT(valueOf<Guns>(world, kFiring, kGunsId)->hits == 5);
-    // Each broadside counted, which other clients hear it by (D687).
+    // Each broadside counted, which other clients hear it by.
     RAWFRAME_EXPECT(valueOf<Ship>(world, kFiring, kShipId)->volleys >= 5);
     valueOf<Helm>(world, kGunner, kHelmId)->starboard = false;
     // It floods and goes down.
@@ -297,10 +297,10 @@ RAWFRAME_TEST(ABroadsideHolesAShipUntilItFoundersAndItsPlayerSailsAgain) {
 }
 
 RAWFRAME_TEST(AClientHearsAnotherShipsBroadsidesAndSeesItsHoles) {
-    // D687: presented for one player, the other's broadsides are cued from
+    // Presented for one player, the other's broadsides are cued from
     // its ship as the server counts them, its own ship silent (its
     // broadsides are its predicted effect), and a holed hull is darker;
-    // each ship's wake and smoke (D692).
+    // each ship's wake and smoke.
     PlayedGale played{kGalePresented};
     RAWFRAME_EXPECT(played.started() && presentationPlan != nullptr);
     if (!played.started() || presentationPlan == nullptr) {
@@ -338,8 +338,7 @@ RAWFRAME_TEST(AClientHearsAnotherShipsBroadsidesAndSeesItsHoles) {
     const std::uint32_t kHoled = valueOf<Model>(world, kListener, kLookId)->color;
     RAWFRAME_EXPECT((kHoled >> 24U) < (kWhole >> 24U));
     RAWFRAME_EXPECT(valueOf<Model>(world, kGunner, kLookId)->color == kWhole);
-    // Every ship leaves a wake; the gunner's smoke bursts at each volley
-    // (D692).
+    // Every ship leaves a wake; the gunner's smoke bursts at each volley.
     for (const world::EntityHandle kShip : {kGunner, kListener}) {
         const Trail* const kWake = valueOf<Trail>(world, kShip, kWakeId);
         RAWFRAME_EXPECT(kWake != nullptr && kWake->lifetime > 0 && kWake->widthEnd > kWake->widthStart);
@@ -351,7 +350,7 @@ RAWFRAME_TEST(AClientHearsAnotherShipsBroadsidesAndSeesItsHoles) {
 }
 
 RAWFRAME_TEST(TheFirstShipToTenHitsWinsTheRoundAndEveryShipSailsAgain) {
-    // D689: a round ends at a ship's tenth hit; every tally is cleared and
+    // A round ends at a ship's tenth hit; every tally is cleared and
     // every ship launched again, whole, at the next places in the row.
     PlayedGale played;
     RAWFRAME_EXPECT(played.started());

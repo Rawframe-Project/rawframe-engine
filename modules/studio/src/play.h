@@ -1,6 +1,6 @@
 #pragma once
 
-// A game Studio plays to preview it (D445): a dedicated server for the
+// A game Studio plays to preview it: a dedicated server for the
 // game, and a client whose player joins it from a window of its own and
 // serves a tooling endpoint with the view grant, on this machine. Studio
 // starts them, attaches the client's endpoint as the chosen scene's
@@ -36,31 +36,31 @@ struct PlaySettings {
     std::filesystem::path clientSettings;
     /// Where their settings, logs, token, and identities go, made afresh.
     std::filesystem::path directory;
-    /// The game's content as Studio cooked it (D502): each program's
+    /// The game's content as Studio cooked it: each program's
     /// `content.root` where its settings name none, once it holds a
     /// manifest.
     std::filesystem::path content;
-    /// The viewport's size in pixels, to play in it (D789): the client's
+    /// The viewport's size in pixels, to play in it: the client's
     /// window kept hidden, its pictures drawn at this size and streamed to
     /// `picture()`; none to play in the client's own window.
     std::optional<std::array<std::uint32_t, 2>> viewport;
-    /// The players, each a client of its own (D804): the first as above,
+    /// The players, each a client of its own: the first as above,
     /// each other in a window of its own beside it, its log
     /// `client-<n>.log`; one to four.
     std::uint32_t players = 1;
     /// The link conditions each client is given, settings lines, empty for
-    /// none (D807).
+    /// none.
     std::string link;
-    /// The device the first client is tried as (D809): its window's size,
+    /// The device the first client is tried as: its window's size,
     /// the mouse played as a finger; none for this machine as it is.
     std::optional<std::array<std::uint32_t, 2>> device;
-    /// Played to be edited (D912): the server's World edited, so it shows
+    /// Played to be edited: the server's World edited, so it shows
     /// the documents and nothing plays, and follows them often.
     bool edited = false;
 };
 
 /// Makes `path` a directory of this user's alone, or refuses one that is
-/// another's or a link (D462): where Studio plays a game and cooks it.
+/// another's or a link: where Studio plays a game and cooks it.
 [[nodiscard]] result::Status privateDirectory(const std::filesystem::path& path);
 
 /// Settings: `given` as they are, then each of `defaults` the given do not
@@ -93,7 +93,7 @@ public:
     [[nodiscard]] std::size_t others() const noexcept {
         return others_.size();
     }
-    /// Whether it is played to be edited (D912), not played.
+    /// Whether it is played to be edited, not played.
     [[nodiscard]] bool edited() const noexcept {
         return settings_.edited;
     }
@@ -105,17 +105,16 @@ public:
     void stop() noexcept;
     /// Whether every process it started has ended, or ends by `until`:
     /// as Studio ends, a process asked to stop is given a moment to end as
-    /// a Host does, its records written, before dropping it kills it
-    /// (D952).
+    /// a Host does, its records written, before dropping it kills it.
     bool ended(std::chrono::steady_clock::time_point until) noexcept;
 
     /// Where the client streams its pictures when it plays in the
-    /// viewport (D789).
+    /// viewport.
     [[nodiscard]] std::filesystem::path picture() const {
         return directory_ / "picture";
     }
     /// Where its server and client write their logs, server.log and
-    /// client.log, which Studio's Console reads (D778).
+    /// client.log, which Studio's Console reads.
     [[nodiscard]] const std::filesystem::path& directory() const noexcept {
         return directory_;
     }
@@ -125,7 +124,7 @@ private:
     /// settings naming them, and starts the server, letting go of whatever
     /// a launch before left.
     result::Status launch();
-    /// The other players' clients, once the first's player is in (D804).
+    /// The other players' clients, once the first's player is in.
     void startOthers();
 
     Play() = default;

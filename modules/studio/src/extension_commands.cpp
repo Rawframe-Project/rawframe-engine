@@ -15,7 +15,7 @@ void ShellParticipant::runExtensionCommand(const std::string& command) {
     }
     // The command as `authoring.extension` runs it headless: on the
     // entities chosen, what it staged one step of the scene's history,
-    // undone as any other (D874).
+    // undone as any other.
     std::vector<std::string> chosen = selected_;
     if (chosen.empty() && !entity_.empty()) {
         chosen.push_back(entity_);
@@ -53,7 +53,7 @@ void ShellParticipant::switchExtensionMode(const std::string& mode) {
 
 void ShellParticipant::runExtensionMode(const std::array<double, 3>& point, const std::optional<std::string>& picked) {
     // The mode as `authoring.extension` runs it headless with a point:
-    // what it staged one step of the scene's history (D877).
+    // what it staged one step of the scene's history.
     const auto& [kPath, kMode] = *held_.extensionMode;
     std::vector<std::string> chosen;
     if (picked.has_value()) {

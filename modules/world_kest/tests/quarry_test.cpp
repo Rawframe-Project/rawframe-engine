@@ -1,12 +1,12 @@
-// Quarry's land (D735): made a few columns a tick from the World's seed,
+// Quarry's land: made a few columns a tick from the World's seed,
 // every column's ground two to ten blocks deep, stone under earth under
 // grass; the same seed draws the same land, another seed another; and a
 // player digs the top block of the column its tool aims at, or places
 // brick on it, then rests. The test makes the player as admission would and
 // sets its tool between ticks, as its client's input would. A machine
-// stands on the land (D737): a lever thrown lights the lamp at the end of
+// stands on the land: a lever thrown lights the lamp at the end of
 // its wire, and a wire dug puts it out; players place wire and lamps
-// that carry and take its power (D739).
+// that carry and take its power.
 
 #include "game_harness.h"
 #include "rawframe/test/test.h"
@@ -137,7 +137,7 @@ RAWFRAME_TEST(QuarrysLandIsDrawnFromTheWorldsSeed) {
         bool layered = true;
         for (const auto& [kAt, kColumn] : kColumns) {
             blocks += kColumn.size();
-            // The machine's part stands on its column's ground (D737): a
+            // The machine's part stands on its column's ground: a
             // lever, wire, then a lamp, along the fifth row.
             auto ground = kColumn;
             const bool kMachine = kAt.second == 4 && kAt.first >= 4 && kAt.first <= 10;
@@ -269,7 +269,7 @@ RAWFRAME_TEST(AThrownLeverLightsTheLampThroughItsWire) {
     *kTool = Tool{.x = aimAt(7), .z = aimAt(4), .place = 1};
     played.run(32);
     RAWFRAME_EXPECT(kTopOf(7, 4).kind == kBrick && !kTopOf(10, 4).on);
-    // Wire placed on the brick (D739): the circuit is whole again, whatever
+    // Wire placed on the brick: the circuit is whole again, whatever
     // the heights, and the lamp lit.
     *kTool = Tool{.x = aimAt(7), .z = aimAt(4), .place = 1, .build = 1};
     played.run(32);

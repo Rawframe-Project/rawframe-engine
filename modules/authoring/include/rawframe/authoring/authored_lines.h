@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's line document open for authoring (D817): a game description,
+// A game's line document open for authoring: a game description,
 // whose settings are lines of words its own module reads (world_kest's
 // `parseGame`), comments and blank lines among them. It is kept as its
 // lines; a change sets, takes away, or puts in whole lines by their place
@@ -28,7 +28,7 @@
 namespace rawframe::authoring {
 
 /// The lines a line document's kind makes of an operation of its own, as a
-/// terrain's brush stroke (D855); refused as it refuses.
+/// terrain's brush stroke; refused as it refuses.
 using LineRewriter = result::Result<std::vector<std::string>> (*)(std::span<const std::string> lines,
                                                                   const Operation& operation);
 
@@ -62,7 +62,7 @@ public:
     /// Its lines, each ended by a line feed, as it is written.
     [[nodiscard]] std::string text() const;
 
-    /// SPEC-0040's AtomicBatch over the document: each `lines.set` or
+    /// The AtomicBatch over the document: each `lines.set` or
     /// `lines.insert` in order against `generation`, a place counted in the
     /// lines as the operations before it left them, one entry in the
     /// history together. Any refused keeps nothing, naming its `index`:
@@ -72,7 +72,7 @@ public:
     /// them, and (`LimitExceeded`) more than a batch's operations.
     [[nodiscard]] result::Result<Committed> change(std::uint64_t generation, std::span<const Operation> operations);
 
-    /// Who changes, undoes, or redoes next (D879). A line document keeps
+    /// Who changes, undoes, or redoes next. A line document keeps
     /// whole lines before and after: an author's change another author's
     /// came after is refused, the change in its way named.
     void setAuthor(std::uint32_t author) noexcept {
@@ -108,7 +108,7 @@ public:
     }
     /// What the history's entry at `entry` does, as `set line 12` and how
     /// many more.
-    /// Who made the history's entry at `entry`, and what it is (D879).
+    /// Who made the history's entry at `entry`, and what it is.
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return history_.authorshipAt(entry);
     }

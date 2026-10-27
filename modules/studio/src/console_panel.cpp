@@ -93,7 +93,7 @@ result::Status ShellParticipant::makeConsole() {
         box(std::nullopt, ui::Layout{.minHeight = ui::pixels(0), .direction = ui::Direction::Column, .grow = 1}, 0));
     RAWFRAME_TRY(tree_->setRole(consoleColumn_, ui::Role::Group));
     RAWFRAME_TRY(tree_->setName(consoleColumn_, "Console"));
-    // As the design's Console (D923): the levels and the sources as chips,
+    // As the design's Console: the levels and the sources as chips,
     // each lit while it lets lines through, a filter, and Clear.
     RAWFRAME_TRY_ASSIGN(const ui::Node kBar,
                         box(consoleColumn_,
@@ -175,7 +175,7 @@ void ShellParticipant::showConsole() {
         ++levels[static_cast<std::size_t>(kLine.level)];
         ++sources[static_cast<std::size_t>(kLine.source)];
     }
-    // Each read by its filter's name alone, its count only shown (D925).
+    // Each read by its filter's name alone, its count only shown.
     const auto kChip = [this](std::string text, std::string_view name, bool on, int each) {
         auto made = box(
             consoleChips_,
@@ -270,7 +270,7 @@ void ShellParticipant::showConsole() {
             }
         }
         // What was said wraps in the room left, never over where it was
-        // said, as the Console docked narrow on the right (D980) is.
+        // said, as the Console docked narrow on the right is.
         const auto kCell = [&](float width, std::string_view text, std::uint32_t ink, bool mono) {
             auto cell = box(*line,
                             ui::Layout{.width = width > 0 ? ui::pixels(width) : ui::pixels(0),

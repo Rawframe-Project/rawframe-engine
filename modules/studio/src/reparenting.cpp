@@ -8,7 +8,7 @@ namespace rawframe::studio {
 
 namespace {
 
-/// The game's attachment, the one parenting there is (D785): the 3D one
+/// The game's attachment, the one parenting there is: the 3D one
 /// where a game has it, else the 2D one.
 constexpr std::string_view kAttachments[] = {"rawframe.physics3d.attach", "rawframe.physics2d.attach"};
 
@@ -19,14 +19,14 @@ void ShellParticipant::dropEntity() {
     if (!kHeld.has_value() || *kHeld >= entities_.size() || pointing_ == nullptr) {
         return;
     }
-    // Where it was let go, not where the pointer is now (D833).
+    // Where it was let go, not where the pointer is now.
     const std::optional<std::array<float, 2>> kPointer = releasedAt_.has_value() ? releasedAt_ : pointerLaidOut();
     if (!kPointer.has_value() ||
         std::hypot((*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]) < kDragAfter) {
         return;
     }
     // A clip's items have no parents: a mark dragged along its timeline
-    // moves its key, event, or marker in time (D890).
+    // moves its key, event, or marker in time.
     if (held_.timelineScale > 0) {
         if (std::exchange(held_.planPressed, false)) {
             dropKey(*kHeld, (*kPointer)[0] - pressedAt_[0]);
@@ -34,7 +34,7 @@ void ShellParticipant::dropEntity() {
         return;
     }
     // A blockout's solids have no parents: a footprint dragged in its plan
-    // moves its solid (D852), and a row dragged does nothing.
+    // moves its solid, and a row dragged does nothing.
     if (chosen(Listed::Blockout)) {
         if (std::exchange(held_.planPressed, false)) {
             dropSolid(*kHeld, {(*kPointer)[0] - pressedAt_[0], (*kPointer)[1] - pressedAt_[1]});

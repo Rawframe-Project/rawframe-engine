@@ -1,9 +1,9 @@
-# Stalls' levels (D391) and customers (D392), driven by a test (world_kest's
+# Stalls' levels and customers, driven by a test (world_kest's
 # stalls_test): two owners, there from the start, whose hands the test
 # moves. The first builds on the lot's corner plot and raises its stall; the
 # second, pressing on the first's stall, raises nothing. Customers come
 # through the gate to the one stall and pay its owner. An owner reaching the
-# goal wins the round (D394).
+# goal wins the round.
 program tycoon.kest
 physics3d gravity 0 -10 0
 navigation radius 0.35 height 1.8 step 0.3 slope 30 cell 0.2
@@ -28,7 +28,7 @@ system tycoon.serve simulation serve read tycoon.stall write tycoon.till read ra
 system tycoon.earn simulation earn write tycoon.owner entities lookup tycoon.stall lookup tycoon.till after tycoon.tend after tycoon.serve
 system tycoon.judge simulation judge write tycoon.round lookup tycoon.owner lookup tycoon.stall lookup tycoon.customer after tycoon.earn
 message won Won
-# The program reads its players' collect command (D425).
+# The program reads its players' collect command.
 command collect controls.Collect
 command sign controls.Sign
 spawn 1 rawframe.physics3d.body motion=0 shape=1 width=24 height=0.5 depth=24 rawframe.physics3d.pose y=-0.5 rawframe.physics3d.velocity

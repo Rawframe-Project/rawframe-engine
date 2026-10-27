@@ -1,8 +1,8 @@
 #pragma once
 
-// A game's data document open for authoring (D811): an action map, a
+// A game's data document open for authoring: an action map, a
 // mixer, a string table or its translations, or an animation graph or
-// clip, each canonical JSON its own module reads. A JsonDocument (D640)
+// clip, each canonical JSON its own module reads. A JsonDocument
 // whose members keep the order they stand in, a new one last, and whose
 // every change is read by the kind's own reader before it is kept, so a
 // document never holds what its game would refuse. Its operation is
@@ -65,7 +65,7 @@ public:
         return document_.text();
     }
 
-    /// SPEC-0040's AtomicBatch over the document: each `data.set` in order
+    /// The AtomicBatch over the document: each `data.set` in order
     /// against `generation`, one entry in the history together. Any refused
     /// keeps nothing, naming its `index`: (`TargetStale`) another
     /// generation, (`TargetNotFound`) a path through an item the document
@@ -74,7 +74,7 @@ public:
     /// and (`LimitExceeded`) more than a batch's operations.
     [[nodiscard]] result::Result<Committed> change(std::uint64_t generation, std::span<const Operation> operations);
 
-    /// Who changes, undoes, or redoes next (D879).
+    /// Who changes, undoes, or redoes next.
     void setAuthor(std::uint32_t author) noexcept {
         document_.setAuthor(author);
     }
@@ -103,7 +103,7 @@ public:
     [[nodiscard]] std::size_t redoable() const noexcept {
         return document_.redoable();
     }
-    /// Who made the history's entry at `entry`, and what it is (D879).
+    /// Who made the history's entry at `entry`, and what it is.
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return document_.authorshipAt(entry);
     }

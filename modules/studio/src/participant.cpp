@@ -101,7 +101,7 @@ std::string pngOf(std::span<const std::uint8_t> pixels, std::uint32_t side) {
 }
 
 /// Studio in the desktop's applications, with its icon, the first time a
-/// packaged Studio runs (D920): a package is Studio beside its templates.
+/// packaged Studio runs: a package is Studio beside its templates.
 void offerToDesktop() {
     const char* const kHome = std::getenv("HOME");
     std::error_code error;
@@ -141,7 +141,7 @@ void offerToDesktop() {
 
 result::Status ShellParticipant::load(composition::ParticipantContext& context) {
     const composition::Configuration& configuration = context.configuration();
-    // Without a game, Studio starts on its start screen (D781).
+    // Without a game, Studio starts on its start screen.
     const auto kGame = configuration.path("studio.game");
     const auto kEndpoint = configuration.text("studio.preview.endpoint");
     const auto kPin = configuration.path("studio.preview.pin_file");
@@ -155,8 +155,8 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     if (kEndpoint.has_value()) {
         preview_ = Preview{std::string{*kEndpoint}, std::string{*kPin}, std::string{*kToken}};
     }
-    // A shared session's host joined in place of a session of Studio's own
-    // (D882); the game is the author's own copy, as each collaborator has.
+    // A shared session's host joined in place of a session of Studio's own;
+    // the game is the author's own copy, as each collaborator has.
     const auto kJoin = configuration.text("studio.join.endpoint");
     const auto kJoinPin = configuration.path("studio.join.pin_file");
     const auto kJoinToken = configuration.path("studio.join.token_file");
@@ -171,14 +171,14 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         held_.joinPin = std::string{*kJoinPin};
         held_.joinToken = std::string{*kJoinToken};
     }
-    // A game Studio plays itself to preview it (D445).
+    // A game Studio plays itself to preview it.
     const auto kConfiguredServer = configuration.path("studio.play.server");
     const auto kConfiguredClient = configuration.path("studio.play.client");
     if (kConfiguredServer.has_value() != kConfiguredClient.has_value()) {
         return misconfigured("playing needs studio.play.server and studio.play.client together");
     }
     // Named, or beside Studio, where its package puts them, so Studio
-    // opened by itself plays (D912).
+    // opened by itself plays.
     std::optional<std::string> kPlayServer;
     std::optional<std::string> kPlayClient;
     if (kConfiguredServer.has_value()) {
@@ -191,7 +191,7 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         kPlayClient = kBesideClient.string();
     }
     // Where it plays and cooks, playing or not: a Studio that cannot play
-    // still cooks there (D950).
+    // still cooks there.
     playDirectory_ = std::string{configuration.path("studio.play.directory").value_or("")};
     if (kPlayServer.has_value()) {
         play_ =
@@ -199,28 +199,28 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
                          .client = *kPlayClient,
                          .serverSettings = std::string{configuration.path("studio.play.server_settings").value_or("")},
                          .clientSettings = std::string{configuration.path("studio.play.client_settings").value_or("")}};
-        // Played in the viewport, or in the client's own window (D789),
-        // the viewport by default now its input reaches the game (D790).
+        // Played in the viewport, or in the client's own window,
+        // the viewport by default now its input reaches the game.
         RAWFRAME_TRY_ASSIGN(inViewport_.inViewport, configuration.truth("studio.play_in_viewport", true));
     }
-    // The scene being edited shown in the viewport, played edited (D912).
+    // The scene being edited shown in the viewport, played edited.
     RAWFRAME_TRY_ASSIGN(editView_, configuration.truth("studio.edit_view", true));
     // The cook tool: named, or beside Studio, where an export puts it; the
-    // content goes where the game plays (D502).
+    // content goes where the game plays.
     cookTool_ = std::string{configuration.path("studio.cook").value_or(process::besideSelf("rawframe-cook").string())};
-    // And the tool that draws a mesh's thumbnail (D899), the same way.
+    // And the tool that draws a mesh's thumbnail, the same way.
     thumbnailTool_ = std::string{
         configuration.path("studio.thumbnail").value_or(process::besideSelf("rawframe-thumbnail").string())};
     exportTool_ =
         std::string{configuration.path("studio.export").value_or(process::besideSelf("rawframe-export").string())};
     // The templates a new game is made from, and where new games go:
-    // named, or beside Studio, where its package puts them (D781).
+    // named, or beside Studio, where its package puts them.
 #if defined(__linux__) && !defined(__ANDROID__)
     offerToDesktop();
 #endif
     // The templates are a folder beside Studio's program; new games go to
     // the author's own "Rawframe Games" folder, as an installed Studio's
-    // own folder may not be written (D918).
+    // own folder may not be written.
     std::error_code beside;
     const std::filesystem::path kHere = std::filesystem::canonical(process::ownExecutable(), beside).parent_path();
     templates_ = std::string{configuration.path("studio.templates").value_or((kHere / "templates").string())};
@@ -229,9 +229,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         kHome != nullptr ? std::filesystem::path{kHome} / "Rawframe Games" : kHere / "games";
     projects_ = std::string{configuration.path("studio.projects").value_or(kGames.string())};
     // Studio's own preferences, the docks' sizes and the games opened last,
-    // where `studio.preferences` keeps them (D779); a file that does not
+    // where `studio.preferences` keeps them; a file that does not
     // read leaves the defaults.
-    // Unnamed, the author's own settings folder keeps them (D920), so an
+    // Unnamed, the author's own settings folder keeps them, so an
     // application opened by a double-click remembers the games opened.
     std::optional<std::filesystem::path> kept;
     if (const auto kNamed = configuration.path("studio.preferences"); kNamed.has_value()) {
@@ -257,9 +257,9 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
         }
     }
     // VS Code by default; any editor that opens a file at a line by its
-    // arguments (ADR-0066, D453).
+    // arguments.
     configuredEditor_ = std::string{configuration.text("studio.editor").value_or("code --goto {file}:{line}:{column}")};
-    // The author's own choice in the preferences comes first (D782).
+    // The author's own choice in the preferences comes first.
     editor_ = preferences_.editor.empty() ? configuredEditor_ : preferences_.editor;
     title_ = "Rawframe Studio";
     if (kGame.has_value()) {
@@ -270,37 +270,37 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     if (context.has(view::kUiPointing.name)) {
         RAWFRAME_TRY_ASSIGN(pointing_, context.capability(view::kUiPointing));
     }
-    // The window's logical size, which the scale is read from (D963).
+    // The window's logical size, which the scale is read from.
     if (context.has(view::kPlayerViews.name)) {
         RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
     }
-    // What lands on the viewport, for the game played there (D790).
+    // What lands on the viewport, for the game played there.
     if (context.has(world_tooling::kForwarding.name)) {
         RAWFRAME_TRY_ASSIGN(inViewport_.forwarding, context.capability(world_tooling::kForwarding));
     }
     if (context.has(view::kUiTyping.name)) {
         RAWFRAME_TRY_ASSIGN(typing_, context.capability(view::kUiTyping));
     }
-    // Files dropped on the window from outside (D802).
+    // Files dropped on the window from outside.
     if (context.has(view::kFilesDropped.name)) {
         RAWFRAME_TRY_ASSIGN(dropped_, context.capability(view::kFilesDropped));
     }
-    // The platform's file dialogs (D918).
+    // The platform's file dialogs.
     if (context.has(view::kWindowClosing.name)) {
         RAWFRAME_TRY_ASSIGN(closing_, context.capability(view::kWindowClosing));
     }
     if (context.has(view::kWindowShowing.name)) {
         RAWFRAME_TRY_ASSIGN(showing_, context.capability(view::kWindowShowing));
     }
-    // Windows beside its own, for a pane shown apart (D988).
+    // Windows beside its own, for a pane shown apart.
     if (context.has(view::kWindowAsides.name)) {
         RAWFRAME_TRY_ASSIGN(docking_.windows, context.capability(view::kWindowAsides));
     }
-    // The device Studio draws with, to know when there is none (D927).
+    // The device Studio draws with, to know when there is none.
     if (context.has(render::kDevice.name)) {
         RAWFRAME_TRY_ASSIGN(deviceHolder_, context.capability(render::kDevice));
     }
-    // The platform's clipboard, for fields' text (D999).
+    // The platform's clipboard, for fields' text.
     if (context.has(view::kClipboard.name)) {
         RAWFRAME_TRY_ASSIGN(held_.clipboard, context.capability(view::kClipboard));
     }
@@ -312,7 +312,7 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     }
     RAWFRAME_TRY_ASSIGN(tree_, ui::Tree::create());
     // Studio's own fonts, embedded, sanitized as the cook sanitizes a
-    // game's (ADR-0049), never an unchecked font in the tree.
+    // game's, never an unchecked font in the tree.
     const auto kAdded = [this](std::span<const std::byte> bytes) -> result::Result<ui::Font> {
         RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kSanitized, font_import::sanitize(bytes));
         return tree_->addFont(kSanitized);
@@ -321,7 +321,7 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
     RAWFRAME_TRY_ASSIGN(strongFont_, kAdded(std::as_bytes(std::span{kStudioStrongFont})));
     RAWFRAME_TRY_ASSIGN(monoFont_, kAdded(std::as_bytes(std::span{kStudioMonoFont})));
     RAWFRAME_TRY(tree_->setDefaultFont(font_));
-    // Its icons, one texture each (D915).
+    // Its icons, one texture each.
     constexpr std::size_t kIconBytes = std::size_t{kIconSide} * kIconSide * 4;
     static_assert(sizeof(kStudioIcons) == kIconBytes * kIconCount, "the icons are as icons.h names them");
     icons_.clear();
@@ -338,7 +338,7 @@ result::Status ShellParticipant::load(composition::ParticipantContext& context) 
 void ShellParticipant::settle(const std::filesystem::path& description, const std::filesystem::path& root) {
     std::error_code error;
     // The game's own play directory, where a debugger given the game finds
-    // it (D462), unless the settings name one.
+    // it, unless the settings name one.
     cookAt_ = playDirectory_.empty() ? authoring_session::playDirectoryOf(description) : playDirectory_;
     if (play_.has_value()) {
         play_->game = std::filesystem::absolute(description, error);
@@ -376,7 +376,7 @@ bool ShellParticipant::openGame() {
         welcome = held_.welcome;
     } else if (!held_.joinEndpoint.empty()) {
         // The host's welcome is the session's: the link says hello with
-        // the token (D882).
+        // the token.
         held_.joined = authoring_session::JoinedSession::open(
             held_.joinEndpoint, held_.joinPin.c_str(), held_.joinToken.c_str(), welcome);
         if (held_.joined == nullptr) {
@@ -409,14 +409,14 @@ bool ShellParticipant::openGame() {
     }
     broken_.reset();
     diagnostic_.reset();
-    // What the session offers decides what Studio offers (ADR-0032).
+    // What the session offers decides what Studio offers.
     catalog_ = catalogOf(answerLine(R"({"kind":"authoring.describe","id":2})"));
     ++records_;
-    // The assets fields pick from, and the browser's sources (D799).
+    // The assets fields pick from, and the browser's sources.
     const std::string kAssets = ask(assetsRecord(next()));
     assets_ = assetsOf(kAssets);
     browser_.sources = sourcesOf(kAssets);
-    // The game's extensions, their commands Studio's own (D874).
+    // The game's extensions, their commands Studio's own.
     extensions_ = extensionsOf(ask(extensionsRecord(next())));
     browser_.folderList = foldersOf(kAssets);
     listDocuments();
@@ -442,12 +442,12 @@ void ShellParticipant::listDocuments() {
         listed_.push_back(Listed::Scene);
     }
     // The game's style sheets after its scenes, then its UI documents,
-    // edited as they are (D637, D643), then its materials, instances
-    // (D722) and graphs (D730), each a kind of its own, then its data
-    // documents, edited value by value (D812), then its blockouts, edited
-    // solid by solid (D850), terrains, brushed (D856), tilemaps, painted
-    // (D861), scatters and sequences, line by line (D866, D869), then its
-    // frames' captures, read only (D843).
+    // edited as they are, then its materials, instances
+    // and graphs, each a kind of its own, then its data
+    // documents, edited value by value, then its blockouts, edited
+    // solid by solid, terrains, brushed, tilemaps, painted,
+    // scatters and sequences, line by line, then its
+    // frames' captures, read only.
     for (const auto& [kKind, kExtension] : {std::pair{Listed::Sheet, ".styles"},
                                             std::pair{Listed::Ui, ".ui"},
                                             std::pair{Listed::Material, ".rfmaterial"},
@@ -472,7 +472,7 @@ void ShellParticipant::listDocuments() {
             listed_.push_back(kGraph ? Listed::Graph : kKind);
         }
     }
-    // Last, the game's own description, its settings (D818), where it is
+    // Last, the game's own description, its settings, where it is
     // among the documents.
     std::error_code error;
     const std::string kSettings = std::filesystem::relative(description_, sceneRoot_, error).generic_string();
@@ -485,10 +485,10 @@ void ShellParticipant::listDocuments() {
 
 result::Status ShellParticipant::start(composition::ParticipantContext& context) noexcept {
     emitter_ = context.emitter();
-    // As the panels kept apart open, said (D994).
+    // As the panels kept apart open, said.
     reopenAsides();
     // The window where assistive technology reads it, when its program
-    // asked for it (D575); a machine whose platform cannot be reached is
+    // asked for it; a machine whose platform cannot be reached is
     // shown unread.
     if (seat_ != nullptr) {
         if (const result::Status kSeated = seat_->seat(*tree_, root_); !kSeated.has_value()) {
@@ -501,7 +501,7 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
         }
     }
     // A press is acted on as the window's records come, so the keys
-    // that follow it find the keyboard where it put it (D426): a field
+    // that follow it find the keyboard where it put it: a field
     // clicked takes what is typed next, however slowly frames come.
     if (pointing_ != nullptr) {
         pointing_->onPress([this](float x, float y) {
@@ -512,7 +512,7 @@ result::Status ShellParticipant::start(composition::ParticipantContext& context)
         pointing_->onWheel([this](float x, float y, float deltaX, float deltaY) {
             wheels_.push_back({x * laidOutPerPointer(), y * laidOutPerPointer(), deltaX, deltaY});
         });
-        // A splitter held is let go with the press (D779).
+        // A splitter held is let go with the press.
         // Where it was let go is read as it is told: a loaded Studio's next
         // frame may come after the pointer has gone on to the next press.
         pointing_->onRelease([this] {
@@ -533,7 +533,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     drawn_ = nullptr;
     // No device, so not a word of Studio can be drawn: the device said why
     // in the platform's box (render.unavailable_says), and Studio closes
-    // rather than stand as an empty window (D927).
+    // rather than stand as an empty window.
     if (deviceHolder_ != nullptr && !deviceFailed_) {
         if (const std::optional<std::string> kWhy = deviceHolder_->failure(); kWhy.has_value()) {
             deviceFailed_ = true;
@@ -546,10 +546,10 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
             }
         }
     }
-    // A screen reader's press is a pointer's on the node it names (D575);
+    // A screen reader's press is a pointer's on the node it names;
     // Studio moves no focus of its own, so one it asks for is not taken. Its
     // edit of a field is typing into it, the field begun as a press begins
-    // it, and given by Enter as typing's is (D613).
+    // it, and given by Enter as typing's is.
     if (seat_ != nullptr) {
         for (const ui::AccessRequest& kRequest : seat_->takeRequests()) {
             if (!tree_->contains(kRequest.node) || kRequest.kind == ui::AccessRequest::Kind::Focus) {
@@ -605,7 +605,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
     // A press is acted on as the window's records come and may have
     // changed what a column holds; the wheel is turned over it laid out,
     // so a click and a turn read in one frame scroll what the click
-    // brought, not only what was shown before it (D479).
+    // brought, not only what was shown before it.
     if (!wheels_.empty() && !layOutNow(kSeconds).has_value()) {
         return;
     }
@@ -628,7 +628,7 @@ void ShellParticipant::runHostPhase(composition::HostPhase, const composition::H
             emitter_.log(diagnostics::Severity::Info, kShown, "Studio is shown");
         }
         // Its window shown once there is a device to draw it with, never
-        // a blank one (D942).
+        // a blank one.
         if (showing_ != nullptr && !deviceFailed_ &&
             (deviceHolder_ == nullptr || !deviceHolder_->failure().has_value())) {
             showing_->ask();
@@ -647,14 +647,14 @@ void ShellParticipant::stop() noexcept {
     }
     // A splitter dragged as Studio ends is let go where it stands, its
     // sizes kept: a loaded Studio could end before the frame that read
-    // the release (D830).
+    // the release.
     releaseSplitter();
-    // The panes apart's places and sizes as they end (D994).
+    // The panes apart's places and sizes as they end.
     if (!docking_.torn.empty()) {
         keepPreferences();
     }
     // Git and an export ended, and the directory their output went to
-    // taken away (D871, D872).
+    // taken away.
     held_.git.stop();
     held_.exporting.reset();
     if (!held_.own.empty()) {
@@ -665,10 +665,10 @@ void ShellParticipant::stop() noexcept {
         typing_->focus(std::nullopt);
         typing_->answer({});
     }
-    // Ending lets a preview go, the player's camera given back (D433):
+    // Ending lets a preview go, the player's camera given back:
     // before what it played is asked to stop, while its server still
     // answers the links' last records, which waited out their bounds once
-    // it was stopping (D968). A host joined is told the author leaves as
+    // it was stopping. A host joined is told the author leaves as
     // its link goes.
     bool ended = false;
     if (session_ != nullptr) {
@@ -679,7 +679,7 @@ void ShellParticipant::stop() noexcept {
         playing_->stop();
     }
     // What it played given a second from now together to end as a Host
-    // does, its summaries written, before dropping it kills it (D952).
+    // does, its summaries written, before dropping it kills it.
     const auto kUntil = std::chrono::steady_clock::now() + std::chrono::seconds{1};
     for (std::optional<Play>* each : {&playing_, &stopping_}) {
         if (each->has_value() && !(*each)->ended(kUntil)) {
@@ -721,8 +721,8 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("framesDrawn", framesDrawn_),
                   diagnostics::field("boxes", static_cast<std::uint64_t>(list_.boxes.size())),
                   diagnostics::field("glyphs", static_cast<std::uint64_t>(list_.glyphs.size()))});
-    // Apart from the summary, which holds as many fields as a record may
-    // (D361): how the docks were left (D779).
+    // Apart from the summary, which holds as many fields as a record may:
+    // how the docks were left.
     emitter_.log(diagnostics::Severity::Info,
                  kLayout,
                  "how Studio's docks were left",
@@ -731,7 +731,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("inspectorWidth", static_cast<std::int64_t>(preferences_.inspectorWidth)),
                   diagnostics::field("dockHeight", static_cast<std::int64_t>(preferences_.dockHeight))});
     // How many entities were chosen at the end, and the edits made to
-    // several at once (D787).
+    // several at once.
     emitter_.log(diagnostics::Severity::Info,
                  kSelection,
                  "what Studio's selection was",
@@ -741,7 +741,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("locks", locks_),
                   diagnostics::field("lockRefused", lockRefused_),
                   diagnostics::field("hiddenTold", shown_.layersHidden)});
-    // What the viewport showed (D789), and how it drew (D794).
+    // What the viewport showed, and how it drew.
     emitter_.log(
         diagnostics::Severity::Info,
         kViewported,
@@ -764,7 +764,7 @@ void ShellParticipant::stop() noexcept {
          diagnostics::field("overlaysShown", shown_.overlaysShown),
          diagnostics::field("readMs", inViewport_.readMicroseconds / 1000),
          diagnostics::field("slowestReadMs", inViewport_.slowestReadMicroseconds / 1000)});
-    // How the game was played: its players (D804).
+    // How the game was played: its players.
     emitter_.log(diagnostics::Severity::Info,
                  kPlayedRecord,
                  "how Studio played the game",
@@ -786,7 +786,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("liveComponents", live_.components),
                   diagnostics::field("liveNamed", live_.named),
                   diagnostics::field("liveRowsNamed", live_.rowsNamed)});
-    // And what the asset browser showed (D799).
+    // And what the asset browser showed.
     emitter_.log(diagnostics::Severity::Info,
                  kBrowsed,
                  "what Studio's asset browser showed",
@@ -805,7 +805,7 @@ void ShellParticipant::stop() noexcept {
                   diagnostics::field("moved", browser_.moved),
                   diagnostics::field("removed", browser_.removed),
                   diagnostics::field("foldersMade", browser_.foldersMade)});
-    // And what the start screen did (D781): the games made from templates,
+    // And what the start screen did: the games made from templates,
     // the game Studio ended on, if any, and the games kept as opened last.
     emitter_.log(diagnostics::Severity::Info,
                  kStartScreen,
@@ -825,12 +825,12 @@ composition::CapabilityObject ShellParticipant::provide(std::string_view capabil
 result::Status ShellParticipant::layOutNow(double seconds) {
     // As the platform scales the window: a 4K screen at 150% is laid out at
     // two thirds of its pixels and drawn at one and a half each, so words
-    // are as large as the system's and a press is where it is drawn
-    // (D963). The window's logical width as the host last told it.
+    // are as large as the system's and a press is where it is drawn.
+    // The window's logical width as the host last told it.
     if (views_ != nullptr && views_->window().width > 0) {
         systemScale_ = std::clamp(static_cast<float>(width_) / views_->window().width, 0.5F, 4.0F);
     }
-    // Or as the author chose (D966): a pointer is the platform's, so it is
+    // Or as the author chose: a pointer is the platform's, so it is
     // carried into the tree's pixels as it comes.
     scale_ = preferences_.interfaceScale > 0 ? static_cast<float>(preferences_.interfaceScale) / 100 : systemScale_;
     // A screen reader's boxes are where it is drawn, and a test's presses
@@ -864,15 +864,15 @@ void ShellParticipant::resize(std::uint32_t width, std::uint32_t height, bool /*
 }
 
 std::shared_ptr<const texture::Texture> ShellParticipant::image(std::uint64_t id) const {
-    // An icon (D915).
+    // An icon.
     if (id >= look::kIconImageBase && id < look::kIconImageBase + icons_.size()) {
         return icons_[id - look::kIconImageBase];
     }
-    // The played game's picture, in the viewport (D789).
+    // The played game's picture, in the viewport.
     if (id == kViewportImage) {
         return inViewport_.picture;
     }
-    // A source's thumbnail in the browser (D801).
+    // A source's thumbnail in the browser.
     const auto kPicture = browser_.pictures.find(id);
     return kPicture != browser_.pictures.end() ? kPicture->second : nullptr;
 }
@@ -900,8 +900,8 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
-        // Its links' last records wait a moment each (D947), and what it
-        // played is given a second meanwhile to end (D952).
+        // Its links' last records wait a moment each, and what it
+        // played is given a second meanwhile to end.
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(4000)},
         .observabilityIdentity = "studio.shell",
         .budgetOwner = "ui",

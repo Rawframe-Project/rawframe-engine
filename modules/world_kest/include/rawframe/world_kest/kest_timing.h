@@ -1,8 +1,8 @@
 #pragma once
 
 // Wall time Kest systems spend in each World tick, over every machine that
-// shares one timing: a game's own and each mod's (SPEC-0013's aggregate
-// script time per World tick, D210). It only measures: nothing it records
+// shares one timing: a game's own and each mod's (the aggregate
+// script time per World tick). It only measures: nothing it records
 // changes what a system does or when.
 
 #include "rawframe/execution/time.h"

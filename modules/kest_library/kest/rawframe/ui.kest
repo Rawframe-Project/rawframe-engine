@@ -1,10 +1,10 @@
 module rawframe.ui
 
-// The UI as World data (ADR-0034, SPEC-0030, D376): a UI element is an
+// The UI as World data: a UI element is an
 // entity's component of this type, a node of its client's UI tree. A game
 // declares components of it, usually presentation components its present
 // systems write (`presentation <node>... on player` for a player's HUD),
-// and its UI document (`ui <file>`, D619) puts each node inside another:
+// and its UI document (`ui <file>`) puts each node inside another:
 // the parent is that component on the same entity, or else on the
 // client's player. The document also starts each presentation component
 // as it says, so a present system writes only what changes. A node inside
@@ -12,7 +12,7 @@ module rawframe.ui
 // those of one view drawn in `order` (then by entity) over the scene and
 // the canvas. Logical pixels, y down.
 //
-// Sizes are SPEC-0030's Scale+Offset: a share of the parent's content box
+// Sizes are the Scale+Offset: a share of the parent's content box
 // plus pixels; a size of nought and nought is automatic, fitting what the
 // node holds. A node lays its children out in a row or a column (`direction`)
 // with `gap` pixels between them, along the row by `justify`, across it by
@@ -26,31 +26,31 @@ module rawframe.ui
 //
 // It shows a rounded box: `fill` and `borderColor`, 0xRRGGBBAA, sRGB (an
 // alpha of nought draws nothing), corners of `radius` pixels, and with
-// `clip` its children are cut to it. Over its fill it may show an `image`
-// (D378), a texture by the identity the game's `texture` line gives it,
+// `clip` its children are cut to it. Over its fill it may show an `image`,
+// a texture by the identity the game's `texture` line gives it,
 // stretched over the box, or in nine slices whose corners keep
 // `imageSlice` of the texture's pixels each way at a pixel each, tinted by
 // `imageTint` (nought draws it as it is). Under it the box may cast a
-// shadow (D381), as CSS's box-shadow: `shadowColor` (nought casts none),
+// shadow, as CSS's box-shadow: `shadowColor` (nought casts none),
 // `shadowX` and `shadowY` pixels off, blurred over `shadowBlur` pixels. Over
-// its fill it may paint a gradient (D382) from `gradientFrom` to
+// its fill it may paint a gradient from `gradientFrom` to
 // `gradientTo` (0xRRGGBBAA): LINEAR along `gradientAngle` degrees clockwise
 // from toward the top, as CSS's linear-gradient, or RADIAL out from its
 // center to its farthest corner.
 //
-// It may show words (D386): `text` names a label by the identity the game's
+// It may show words: `text` names a label by the identity the game's
 // `label` line gives it, a key of one of its string tables in the player's
 // locale, whose arguments, if its message reads them, are `textValue` and
-// `textSecond`, in the order the label line names them (D647). The
+// `textSecond`, in the order the label line names them. The
 // words are in `font`, a font by the identity a `font` line gives it (nought
 // for the game's first), `textSize` pixels to the em (nought for 16), of
 // `textColor` (0xRRGGBBAA), their lines at the start, center, or end
 // (`textAlign`), wrapped to the node's width unless NO_WRAP. A node with
 // words is sized by them unless its size says otherwise, and lays out no
-// children of its own, which would leave it no size (D623): words and
+// children of its own, which would leave it no size: words and
 // other nodes sit side by side inside a node that holds both.
 //
-// A press of the mouse or a touch (D421) is the UI's where it lands on a
+// A press of the mouse or a touch is the UI's where it lands on a
 // node whose `hit` is HIT_SELF, and then no game action sees it, nor its
 // release; the sample function reads that node's `press` through
 // `input.uiPressed()`. A node's `hit` of nought passes presses on to its
@@ -61,7 +61,7 @@ module rawframe.ui
 // presentation attaches it without a document, is empty, draws nothing,
 // and passes every press on.
 //
-// A node whose `edit` is not NO_EDIT is a text field (D426): a press on it
+// A node whose `edit` is not NO_EDIT is a text field: a press on it
 // gives it the keyboard, the caret where the press landed, and a press
 // anywhere else takes it away, as Escape does. It shows what is typed into
 // it, in its text look, not its label; at most `editLimit` bytes (nought
@@ -70,22 +70,22 @@ module rawframe.ui
 // `input.uiTyped()`) and lets the keyboard go; in an EDIT_MESSAGE field it
 // gives the text, empties the field, and keeps the keyboard; in EDIT_LINES
 // it types a line break. While a field holds the keyboard, the keys type
-// and reach no action of a context gated by text editing (SPEC-0029).
+// and reach no action of a context gated by text editing.
 //
 // A node's `style` names a class of the game's styles document (the
-// `styles` line, D431) by its identity, nought for none: the class gives
+// `styles` line) by its identity, nought for none: the class gives
 // the node every part of its look the node leaves at nought (its fill,
 // border color, radius, clip, image tint, shadow, gradient), as it is now:
 // hovered under the mouse, pressed while a press on it is held, focused
 // while it holds focus, each moving as the class's transitions say. An
-// unstyled node holding focus is ringed (D430).
+// unstyled node holding focus is ringed.
 //
 // A node whose `scroll` is not NO_SCROLL scrolls its children along those
-// axes (D444): it clips them to its padding box, may be smaller than they
+// axes: it clips them to its padding box, may be smaller than they
 // are, and a wheel turned over it moves them, easing, while it can move
 // that way; children that should keep their sizes set `shrink` to nought.
 //
-// A node whose `range` is not NO_RANGE is a slider (D621): its value lies
+// A node whose `range` is not NO_RANGE is a slider: its value lies
 // from `rangeMinimum` to `rangeMaximum` on whole `rangeStep`s from the
 // minimum (nought for any value), the minimum at its start, or at its
 // bottom if vertical. A press on it moves the value a tenth of its span
@@ -100,7 +100,7 @@ module rawframe.ui
 // thumb `absolute` at `xScale` and `anchorX` both the value's share of
 // the range lies on the track as the drag expects.
 //
-// A node whose `check` is not NO_CHECK is checked and unchecked (D622): a
+// A node whose `check` is not NO_CHECK is checked and unchecked: a
 // CHECKBOX or a SWITCH by each press on it (a screen reader's, or
 // navigation's activation, too), a RADIO checked by a press and unchecked
 // as another RADIO beside it, under the same parent, is checked. It
@@ -111,7 +111,7 @@ module rawframe.ui
 // button. A checkable node and a slider are named to assistive technology
 // by their label's words, which they do not draw.
 //
-// A node whose `popup` is not NO_POPUP is placed beside its parent (D623),
+// A node whose `popup` is not NO_POPUP is placed beside its parent,
 // as a tooltip or a menu is: on that side, centered along it, `margin`
 // pixels away, flipped to the other side where the view leaves no room,
 // and taking no room inside its parent; usually an OVERLAY `layer`, drawn
@@ -119,14 +119,14 @@ module rawframe.ui
 // `ui.hovered()` is its parent's press, and empties it otherwise. A popup
 // with words and nothing to press reads as a tooltip.
 //
-// A node whose `disabled` is one takes nothing (D624): a press on it is
+// A node whose `disabled` is one takes nothing: a press on it is
 // the UI's and reaches no game action, but gives no press code, focuses
 // no field, checks nothing, and moves no slider; navigation passes it by.
 // Its style class's `disabled` look shows it, over every other state's,
 // and assistive technology reads it as disabled.
 //
 // A slider or a checkable node whose `kept` is one is the player's
-// setting (D626): what the player makes it is kept on their machine,
+// setting: what the player makes it is kept on their machine,
 // under its component's name, where the client keeps the player's
 // settings (`ui.kept`), and it starts as kept on the next run, as if the
 // player had moved it there; `ui.value(press)` reads it. A client
@@ -276,7 +276,7 @@ const EDIT_LINES: u32 = 3
 // What a player typed into a field: `length` bytes of UTF-8 in `bytes`.
 // As a component on a node's entity that the UI document has the node
 // show (`shows`), the node shows its words in its text look, in place of
-// its label, while it holds any (D427): a sign, a name, a line of chat.
+// its label, while it holds any: a sign, a name, a line of chat.
 struct Typed {
     length: u32
     bytes: [u8; 252]
@@ -286,7 +286,7 @@ extern fn UI.hovered() -> i64
 extern fn UI.value(press: i64) -> f32
 
 // The `press` of the UI node under the client's mouse, where a press would
-// land, or nought for none (D422): a present system lights it. Nought in
+// land, or nought for none: a present system lights it. Nought in
 // every simulation, on a server and in a client's prediction, and for any
 // local player but the first, whose mouse it is.
 fn hovered() -> i64 {
@@ -294,8 +294,8 @@ fn hovered() -> i64 {
 }
 
 // The value of the slider whose `press` is `press` in the client's view,
-// as the player moved it (D621), or one if the checkable node whose
-// `press` it is is checked (D622); nought for neither, and in every
+// as the player moved it, or one if the checkable node whose
+// `press` it is is checked; nought for neither, and in every
 // simulation.
 fn value(press: i64) -> f32 {
     return UI.value(press)

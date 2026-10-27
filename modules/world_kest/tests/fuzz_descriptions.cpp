@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the descriptions a Build carries (D242): a
+// Coverage-guided fuzzing of the descriptions a Build carries: a
 // game's description and a mod's, both read as text at load. Neither has a
 // writer, so the search looks for what breaks the readers themselves; the
 // seeds are every sample game's and mod's.

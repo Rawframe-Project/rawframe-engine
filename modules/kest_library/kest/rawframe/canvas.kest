@@ -1,6 +1,6 @@
 module rawframe.canvas
 
-// 2D pictures as World data (SPEC-0024's canvas, D254): what an entity
+// 2D pictures as World data: what an entity
 // shows, drawn where its pose (rawframe.physics2d's Pose2D) puts it. A game
 // declares a component of this type; clients draw it, and a server carries
 // it as it carries any other value, with no drawing of its own.
@@ -18,9 +18,9 @@ module rawframe.canvas
 // counts cells along a row of `columns` (nought is one), then down the
 // next, so frame 5 of a sheet four wide is the second row's second cell. A
 // region mirrored (`u0` past `u1`) moves along the sheet as it is.
-// An animator's discrete track (D139) steps it, a flipbook.
+// An animator's discrete track steps it, a flipbook.
 //
-// A `material` (D356) names a game's canvas material by the identity its
+// A `material` names a game's canvas material by the identity its
 // `material` line gives it (nought for none): its color multiplies the
 // sprite's, its texture sampled across the region; its emission is added;
 // and it blends as it says. With one, texture nought draws white.
@@ -41,7 +41,7 @@ struct Sprite {
     material: u64
 }
 
-// A level's tiles (D858): the game's tilemap by the identity its `tilemap`
+// A level's tiles: the game's tilemap by the identity its `tilemap`
 // line gives it, its top-left corner on the pose, unturned, each tile a
 // cell of its tileset's sheet `cell` meters on a side; `color` multiplies
 // them and they draw at `layer`, as a sprite's do.
@@ -51,7 +51,7 @@ struct Tilemap {
     layer: i32
 }
 
-// A client's view of the World (ADR-0052's camera, D261), on the client's
+// A client's view of the World, on the client's
 // own player: a presentation component (`presentation <camera> on
 // player`) its present systems place. The view is centered `offsetX`,
 // `offsetY` meters from the player's pose and `height` meters tall; its

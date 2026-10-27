@@ -1,4 +1,4 @@
-// Studio's Console (D778): a log record read as a line, and a place it
+// Studio's Console: a log record read as a line, and a place it
 // names in the game's own files opened only when it is one of them, however
 // a record a played game wrote names it.
 
@@ -30,7 +30,7 @@ RAWFRAME_TEST(ARecordIsALineWithItsLevelAndPlace) {
     }
     RAWFRAME_EXPECT(kLine->at->file == "game/scripts/move.kest");
     RAWFRAME_EXPECT(kLine->at->line == 12 && kLine->at->column == 3);
-    // A record saying no error, its short values instead (D927).
+    // A record saying no error, its short values instead.
     const auto kSaid = consoleLineOf(R"({"kind":"log","severity":"info","code":"lifecycle","message":"host lifecycle",)"
                                      R"("fields":{"state":"draining","iterations":12,"reason":"stopped"}})",
                                      ConsoleLine::Source::Server);

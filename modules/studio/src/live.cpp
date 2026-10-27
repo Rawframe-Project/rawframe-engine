@@ -78,7 +78,7 @@ std::string liveValue(std::string_view field, const Value& value) {
 }
 
 /// A field's value as the edited Inspector shows it, where the catalog
-/// types it (D995): a labelled number or a case by its name, a color by
+/// types it: a labelled number or a case by its name, a color by
 /// its hex, an asset held by identity by the asset; else as `liveValue`.
 std::string
 shownLive(const Catalog::Component* type, std::string_view field, const Value& value, std::span<const Asset> assets) {
@@ -110,7 +110,7 @@ void ShellParticipant::switchLive() {
     live_.chosen.clear();
     static_cast<void>(tree_->setLook(live_.button, ui::Look{.fill = live_.on ? kChosen : kRow, .radius = 4}));
     // The chosen scene shown again, its Hierarchy and Inspector the live
-    // World's or its own; with none, the World's alone (D928).
+    // World's or its own; with none, the World's alone.
     if (scene_.empty()) {
         clear(entityRows_);
         clear(componentRows_);
@@ -141,7 +141,7 @@ void ShellParticipant::showLive() {
         say("live: " + answeredOf(kReply).message);
         return;
     }
-    // Each named as the scene it was authored in names it (D996), each
+    // Each named as the scene it was authored in names it, each
     // scene read once.
     std::map<std::string, std::string, std::less<>> authored;
     std::vector<std::string> scenesRead;
@@ -167,7 +167,7 @@ void ShellParticipant::showLive() {
         if (kEntity == nullptr || kEntity->text() == nullptr || kEntity->kind() != Value::Kind::String) {
             continue;
         }
-        // As the scene's rows are (D923): its kind's icon, what it holds
+        // As the scene's rows are: its kind's icon, what it holds
         // by the components' short names, and its id on the server.
         std::vector<std::string> names;
         for (const Value& kComponent : kComponents != nullptr ? kComponents->items() : std::span<const Value>{}) {
@@ -265,7 +265,7 @@ void ShellParticipant::readLive(double seconds) {
         }
         return;
     }
-    // As the Inspector shows an entity (D923), read only: its id and that
+    // As the Inspector shows an entity, read only: its id and that
     // it is the server's, then each component's fields, numbers rounded.
     if (auto heading =
             box(componentsColumn_,
@@ -307,7 +307,7 @@ void ShellParticipant::readLive(double seconds) {
         }
         const Value* kFields = kComponent.find("fields");
         // Its type as the catalog tells it, so a value reads as the edited
-        // Inspector shows it (D995).
+        // Inspector shows it.
         const auto kType = std::ranges::find_if(catalog_.components, [&](const Catalog::Component& each) {
             return each.name == *kName->text() || each.id == *kName->text();
         });

@@ -13,7 +13,7 @@ namespace rawframe::studio {
 namespace {
 
 /// A bottom-dock tab by the name the surface table places there, so a
-/// layout names no dock Part 2 does not (SPEC-0051's conformance 3, D911).
+/// layout names no dock the table does not.
 consteval std::string_view bottom(std::string_view name) {
     return placed(name, SurfaceKind::Panel, "Bottom");
 }
@@ -47,7 +47,7 @@ std::optional<ShellParticipant::Dock> ShellParticipant::dockOf(std::string_view 
 }
 
 std::vector<Layout> ShellParticipant::layouts() const {
-    // Studio's six (SPEC-0051 Part 3): the scene's docks as they open; an
+    // Studio's six: the scene's docks as they open; an
     // animation's with its history beside the timeline; materials' with a
     // wide Inspector for their parameters; a UI's with the Hierarchy and
     // the Inspector wide for its nodes; a network test's with the Network
@@ -81,8 +81,7 @@ void ShellParticipant::chooseLayout(const Layout& layout) {
         showDock(*kPane);
     }
     ++held_.layoutsChosen;
-    // The tab shown, by the name Part 2 places it under (SPEC-0051's
-    // conformance 3).
+    // The tab shown, by the name the surface table places it under.
     emitter_.log(diagnostics::Severity::Info,
                  kLayoutChosen,
                  "a layout of the docks put in place",

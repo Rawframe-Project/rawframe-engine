@@ -1,6 +1,6 @@
 module rawframe.physics2d
 
-// The components of 2D physics (SPEC-0037, D33), as the engine lays them out:
+// The components of 2D physics, as the engine lays them out:
 // a game with a `physics2d` line has them, and a program that reads or
 // writes them imports this module. An entity with a Body2D, a Pose2D, and a
 // Velocity2D has a body. Systems before `rawframe.physics2d.step` push bodies
@@ -244,8 +244,8 @@ fn castRay(originX: f64, originY: f64, towardX: f32, towardY: f32) -> RayHit2D {
 extern fn Physics2D.castRayAt(originX: f64, originY: f64, towardX: f32, towardY: f32,
                               seen: replication.Perception) -> RayHit2D
 
-// The same ray against every body where it was at the moment a player saw
-// (SPEC-0041 lag compensation): what the player shot at, not where it has
+// The same ray against every body where it was at the moment a player saw:
+// what the player shot at, not where it has
 // gone since. The moment is clamped into the kept history.
 fn castRayAt(originX: f64, originY: f64, towardX: f32, towardY: f32, seen: replication.Perception) -> RayHit2D {
     return Physics2D.castRayAt(originX, originY, towardX, towardY, seen)

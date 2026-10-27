@@ -1,4 +1,4 @@
-// An authoring session's records (D407): each verb's envelope read exactly,
+// An authoring session's records: each verb's envelope read exactly,
 // the request and query documents inside read as on the command line, and
 // replies one compact line naming the client's id.
 
@@ -35,7 +35,7 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     RAWFRAME_EXPECT(kApply.has_value() && kApply->verb == SessionVerb::Apply && kApply->scene == "level.scene");
     RAWFRAME_EXPECT(kApply.has_value() && kApply->request.operations.size() == 1 && id.integer() == 2);
     RAWFRAME_EXPECT(kApply.has_value() && !kApply->dryRun);
-    // A dry run is told so, true or false (D650).
+    // A dry run is told so, true or false.
     const auto kDry = readSessionRecord(R"({"kind":"authoring.apply","scene":"level.scene","dryRun":true,"request":)" +
                                             std::string{kRequest} + "}",
                                         id);
@@ -44,7 +44,7 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
                                             std::string{kRequest} + "}",
                                         id);
     RAWFRAME_EXPECT(kWet.has_value() && !kWet->dryRun);
-    // A drag's step amends its author's latest change (D976), told so by a
+    // A drag's step amends its author's latest change, told so by a
     // truth; nothing else amends.
     const auto kAmends = readSessionRecord(
         R"({"kind":"authoring.apply","scene":"level.scene","amends":true,"request":)" + std::string{kRequest} + "}",
@@ -76,7 +76,7 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     // A mark is a point of three numbers, or null, and nothing else.
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.mark","scene":"b.scene","at":[1,2]})", id).has_value());
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.mark","scene":"b.scene"})", id).has_value());
-    // Its handles by name, all unless named (D974).
+    // Its handles by name, all unless named.
     RAWFRAME_EXPECT(kMark.has_value() && kMark->handles == 3);
     const auto kRing =
         readSessionRecord(R"({"kind":"authoring.mark","id":14,"scene":"b.scene","at":null,"handles":"ring"})", id);
@@ -86,7 +86,7 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
              .has_value());
     const auto kPick = readSessionRecord(R"({"kind":"authoring.pick","id":10,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kPick.has_value() && kPick->verb == SessionVerb::Pick && kPick->scene == "b.scene");
-    // A cast is a ray of three numbers each way, and its scene (D989); a
+    // A cast is a ray of three numbers each way, and its scene; a
     // mesh's bounds name the mesh.
     const auto kCast = readSessionRecord(
         R"({"kind":"authoring.cast","id":15,"scene":"b.scene","origin":[0,50,1],"toward":[0,-1050,0]})", id);
@@ -114,16 +114,16 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
              .has_value());
     const auto kHistory = readSessionRecord(R"({"kind":"authoring.history","id":7,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kHistory.has_value() && kHistory->verb == SessionVerb::History && kHistory->scene == "b.scene");
-    // Framing what is chosen names only its scene (D792).
+    // Framing what is chosen names only its scene.
     const auto kFrame = readSessionRecord(R"({"kind":"authoring.frame","id":8,"scene":"b.scene"})", id);
     RAWFRAME_EXPECT(kFrame.has_value() && kFrame->verb == SessionVerb::Frame && kFrame->scene == "b.scene");
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.frame","id":8})", id).has_value());
-    // A preview split one, two, or three ways (D797).
+    // A preview split one, two, or three ways.
     const auto kSplit = readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":3})", id);
     RAWFRAME_EXPECT(kSplit.has_value() && kSplit->verb == SessionVerb::Split && kSplit->views == 3);
     RAWFRAME_EXPECT(
         !readSessionRecord(R"({"kind":"authoring.split","id":10,"scene":"b.scene","views":4})", id).has_value());
-    // A source's import settings read and set by its path (D800); settings
+    // A source's import settings read and set by its path; settings
     // that are no object refused.
     const auto kSettings =
         readSessionRecord(R"({"kind":"authoring.import_settings","id":12,"asset":"paving.png"})", id);
@@ -136,13 +136,13 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     RAWFRAME_EXPECT(
         !readSessionRecord(R"({"kind":"authoring.set_import_settings","id":13,"asset":"paving.png","settings":[]})", id)
              .has_value());
-    // A thumbnail of 16 to 256 pixels (D801).
+    // A thumbnail of 16 to 256 pixels.
     const auto kThumbnail =
         readSessionRecord(R"({"kind":"authoring.thumbnail","id":14,"asset":"paving.png","size":64})", id);
     RAWFRAME_EXPECT(kThumbnail.has_value() && kThumbnail->verb == SessionVerb::Thumbnail && kThumbnail->size == 64);
     RAWFRAME_EXPECT(
         !readSessionRecord(R"({"kind":"authoring.thumbnail","id":14,"asset":"paving.png","size":8})", id).has_value());
-    // The previewed game paused and stepped (D806), bounded.
+    // The previewed game paused and stepped, bounded.
     const auto kRun = readSessionRecord(R"({"kind":"authoring.run","id":16,"scene":"gate.scene","paused":true})", id);
     RAWFRAME_EXPECT(kRun.has_value() && kRun->verb == SessionVerb::Run && kRun->paused == std::optional<bool>{true});
     const auto kAsked = readSessionRecord(R"({"kind":"authoring.run","id":17,"scene":"gate.scene"})", id);
@@ -153,26 +153,26 @@ RAWFRAME_TEST(EachVerbsRecordIsReadWithItsMembers) {
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.run","id":20,"scene":"gate.scene","paused":1})", id));
     const auto kTraffic = readSessionRecord(R"({"kind":"authoring.traffic","id":21,"scene":"gate.scene"})", id);
     RAWFRAME_EXPECT(kTraffic.has_value() && kTraffic->verb == SessionVerb::Traffic);
-    // The live World's verbs (D808): shapes only.
+    // The live World's verbs: shapes only.
     const auto kLive = readSessionRecord(
         R"({"kind":"authoring.live_entities","id":22,"scene":"gate.scene","after":"4:1","limit":16})", id);
     RAWFRAME_EXPECT(kLive.has_value() && kLive->verb == SessionVerb::LiveEntities &&
                     kLive->query.find("limit") != nullptr);
     RAWFRAME_EXPECT(
         !readSessionRecord(R"({"kind":"authoring.live_entity","id":23,"scene":"gate.scene","entity":7})", id));
-    // A source's references by its path (D803).
+    // A source's references by its path.
     const auto kReferences =
         readSessionRecord(R"({"kind":"authoring.asset_references","id":15,"asset":"crate.png"})", id);
     RAWFRAME_EXPECT(kReferences.has_value() && kReferences->verb == SessionVerb::AssetReferences &&
                     kReferences->asset == "crate.png");
-    // Overlays by their names, bounded only (D798).
+    // Overlays by their names, bounded only.
     const auto kOverlays =
         readSessionRecord(R"({"kind":"authoring.overlays","id":11,"scene":"b.scene","overlays":["colliders"]})", id);
     RAWFRAME_EXPECT(kOverlays.has_value() && kOverlays->verb == SessionVerb::Overlays &&
                     kOverlays->overlays == std::vector<std::string>{"colliders"});
     RAWFRAME_EXPECT(!readSessionRecord(R"({"kind":"authoring.overlays","id":11,"scene":"b.scene","overlays":[""]})", id)
                          .has_value());
-    // A view mode by its name, bounded only (D794).
+    // A view mode by its name, bounded only.
     const auto kMode =
         readSessionRecord(R"({"kind":"authoring.view_mode","id":9,"scene":"b.scene","mode":"unlit"})", id);
     RAWFRAME_EXPECT(kMode.has_value() && kMode->verb == SessionVerb::ViewMode && kMode->mode == "unlit");
@@ -269,7 +269,7 @@ RAWFRAME_TEST(ARecordOutOfItsFormIsRefusedNamingItsId) {
 }
 
 RAWFRAME_TEST(ApplyTogetherReadsTwoOrMoreScenesEachOnce) {
-    // SPEC-0040's multi-document transaction on the wire (D497).
+    // The multi-document transaction on the wire.
     document::Value id;
     const std::string kPart = R"({"scene":"level.scene","request":)" + std::string{kRequest} + "}";
     const std::string kOther = R"({"scene":"hall.scene","request":)" + std::string{kRequest} + "}";
@@ -299,7 +299,7 @@ RAWFRAME_TEST(ApplyTogetherReadsTwoOrMoreScenesEachOnce) {
 }
 
 RAWFRAME_TEST(ACookNamesWhereItCooksToAndACancelItsOperation) {
-    // SPEC-0040's long-running operation on the wire (D502).
+    // The long-running operation on the wire.
     document::Value id;
     const auto kCook =
         readSessionRecord(R"({"kind":"authoring.cook","id":"c","output":"/g/content","cache":"C:\\cache"})", id);
@@ -322,7 +322,7 @@ RAWFRAME_TEST(ACookNamesWhereItCooksToAndACancelItsOperation) {
                     kCancel->operation.text() != nullptr && *kCancel->operation.text() == "c");
     RAWFRAME_EXPECT(refusedWith(readSessionRecord(R"({"kind":"authoring.cancel","operation":null})", id),
                                 AuthoringError::ValidationFailed));
-    // A cook's file read back (D905): an absolute output, a file, and an
+    // A cook's file read back: an absolute output, a file, and an
     // offset; the session judges the rest.
     const auto kPiece = readSessionRecord(
         R"({"kind":"authoring.cooked_file","id":3,"output":"/content","file":"objects/ab","offset":4})", id);
@@ -340,7 +340,7 @@ RAWFRAME_TEST(ACookNamesWhereItCooksToAndACancelItsOperation) {
 }
 
 RAWFRAME_TEST(AnImportNamesItsSourceAndWhereItGoes) {
-    // D503: a file from outside made one of the game's assets.
+    // A file from outside made one of the game's assets.
     document::Value id;
     const auto kImport =
         readSessionRecord(R"({"kind":"authoring.import","id":7,"source":"/art/bark.png","as":"art/bark.png"})", id);

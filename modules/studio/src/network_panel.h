@@ -1,8 +1,8 @@
 #pragma once
 
-// Studio's Network panel (D807): the link the next play's clients run
+// Studio's Network panel: the link the next play's clients run
 // over, and the played game's server's traffic, read once a second and
-// shown as rates, the whole and each connection's (D840).
+// shown as rates, the whole and each connection's.
 
 #include "rawframe/ui/tree.h"
 
@@ -16,7 +16,7 @@
 namespace rawframe::studio {
 
 /// A link the clients a play starts run over: the conditions QUIC gives
-/// them, by its settings (D805).
+/// them, by its settings.
 struct LinkChoice {
     std::string_view name;
     std::uint32_t latencyMs = 0;

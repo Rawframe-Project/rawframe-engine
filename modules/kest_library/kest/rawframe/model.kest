@@ -1,6 +1,6 @@
 module rawframe.model
 
-// 3D pictures as World data (SPEC-0024's scene, D283): what an entity
+// 3D pictures as World data: what an entity
 // shows, drawn where its pose (rawframe.physics3d's Pose3D) puts it, lit
 // by the sun and the sky. A game declares components of these types;
 // clients draw them, and a server carries them as it carries any other
@@ -10,13 +10,13 @@ module rawframe.model
 // `mesh` line gives it, or one of the engine's own below, scaled by
 // `scaleX`, `scaleY`, and `scaleZ` along the pose's own axes, and turned
 // as the pose turns. `material` is the game's surface material of the
-// identity its `material` line gives it (D303), or nought for none: a
+// identity its `material` line gives it, or nought for none: a
 // plain surface, OpenPBR's but for a white base color. `color`, 0xRRGGBBAA
 // in sRGB, tints the material's base color, so without one it is the base
 // color; an alpha of nought, a scale of nought, or mesh nought draws
 // nothing. `lift` raises the mesh that many meters along the pose's own
 // up, or lowers it below nought: where a mesh's origin is not the body's
-// middle, as a figure's feet below a body's middle (D514).
+// middle, as a figure's feet below a body's middle.
 struct Model {
     mesh: u64
     scaleX: f32
@@ -27,12 +27,12 @@ struct Model {
     lift: f32
 }
 
-// Where an entity's models are drawn in place of its pose (D665), while
+// Where an entity's models are drawn in place of its pose, while
 // `placed`: at `x`, `y`, and `z` in the World, turned as the pose turns,
 // `lift` still along its up. A client's present system places it, once a
 // tick: a player's own hands drawn where the player holds them now rather
 // than where the server last put them, a round trip behind, and what they
-// hold with them (ADR-0081's local reconstruction). A presentation
+// hold with them. A presentation
 // component only: the World's pose, which the server decides, is
 // untouched.
 struct Placed {
@@ -42,13 +42,13 @@ struct Placed {
     z: f64
 }
 
-// Where an entity's models are drawn each frame a headset shows (D676):
+// Where an entity's models are drawn each frame a headset shows:
 // where its `hand` is for the frame's display time (LEFT_HAND or
 // RIGHT_HAND; nought for none), moved by `x`, `y`, and `z` in the World,
 // turned as the pose turns. A hand is where its controller is held, else
 // its tracked palm, in the play space the player's camera places. Where
 // the hand is not located that frame, or no headset shows, the model is
-// drawn as its Placed or its pose says. ADR-0081's pose resolved at
+// drawn as its Placed or its pose says. The pose resolved at
 // presentation time: a player's own hands, and what they hold, follow
 // every frame between the ticks their input makes. Presentation only.
 struct Tracked {
@@ -69,27 +69,27 @@ const RIGHT_HAND: u32 = 2
 // of radius one whose two centers are one above and below its center (a
 // scale along its axis stretches its caps too); and a flat square of half
 // sides one facing up, its side cut in 128, which a material moving its
-// vertices bends (water, cloth; D691).
+// vertices bends (water, cloth).
 const BOX: u64 = 0x3ff8cd61f01cf46b
 const SPHERE: u64 = 0x2c6b82d75f7be712
 const CYLINDER: u64 = 0xaee26a717a3a62a0
 const CAPSULE: u64 = 0x63ed148327123836
 const GRID: u64 = 0x69141af91800441e
 
-// A client's view of the 3D World (ADR-0052's camera), on the client's
+// A client's view of the 3D World, on the client's
 // own player: a presentation component (`presentation <camera> on
 // player`) its present systems place. The eye is `offsetX`, `offsetY`,
 // and `offsetZ` meters from the player's pose, in the World's axes, or
 // from the World's origin where `anchor` is FIXED (a view that stays put
 // wherever the player is: placed back from the pose, it would lurch for a
-// frame as the pose moves between ticks, D520), and
+// frame as the pose moves between ticks), and
 // looks along `yaw` radians about +Y (nought looks along -Z, a quarter
 // turn along -X) and `pitch` radians above the ground's plane. `fovY` is
 // the vertical field of view in radians (a wider window sees more,
 // Hor+), and `near` the nearest distance drawn, in meters; the far one is
-// unbounded. `exposure` is the camera's EV100 (ADR-0047): 15 for a sunny
-// day, lower for dimmer scenes. `tonemapper` maps its light for display
-// (ADR-0047's closed set): AGX (nought, the default), PBR_NEUTRAL for
+// unbounded. `exposure` is the camera's EV100: 15 for a sunny
+// day, lower for dimmer scenes. `tonemapper` maps its light for display:
+// AGX (nought, the default), PBR_NEUTRAL for
 // colours reproduced as authored, or LINEAR for measuring; each keeps
 // middle grey where AgX puts it, and another value is AgX. A camera with a
 // field of view not above nought draws nothing. Without one, a client's
@@ -107,7 +107,7 @@ struct Camera {
     anchor: u32
 }
 
-// A view (ADR-0052, D361), on an entity with a camera: what the camera
+// A view, on an entity with a camera: what the camera
 // sees from the entity's pose drawn into the game's render texture
 // `target` (a `rendertexture` line's identity), which a material samples
 // as it would any texture, a frame behind at most. A render texture drawn
@@ -123,25 +123,25 @@ struct View {
     request: u32
 }
 
-// The tonemappers a camera may map its light with (ADR-0047).
+// The tonemappers a camera may map its light with.
 const AGX: u32 = 0
 const PBR_NEUTRAL: u32 = 1
 const LINEAR: u32 = 2
 
-// Where a camera's offsets are from (D520): its entity's pose (FOLLOW,
+// Where a camera's offsets are from: its entity's pose (FOLLOW,
 // nought, the default) or the World's origin (FIXED).
 const FOLLOW: u32 = 0
 const FIXED: u32 = 1
 
-// A camera's grading (ADR-0051, ADR-0047), on the same entity as its
+// A camera's grading, on the same entity as its
 // camera: the scene's light, before it is mapped for display, balanced to
 // a white `temperature` warmer (above nought) or cooler and `tint` more
 // magenta (above nought) or green, about minus one to one; then each
 // channel times its `slope`, plus its `offset`, to the power of its
 // `power` (ASC CDL); then `saturation` (one keeps it, nought is grey) and
 // `contrast` about middle grey (one keeps it); then, with a `table` (a
-// game texture cooked from a `.cube` file), each color looked up in it
-// (D344), the table's coordinates the ACEScct curve's encoding of the
+// game texture cooked from a `.cube` file), each color looked up in it,
+// the table's coordinates the ACEScct curve's encoding of the
 // light as the exposure leaves it. One with a power not above nought
 // grades nothing: a grade not yet set is all nought.
 struct Grading {
@@ -161,7 +161,7 @@ struct Grading {
     table: u64
 }
 
-// A camera's screen-space ambient occlusion (ADR-0051, D327), on the same
+// A camera's screen-space ambient occlusion, on the same
 // entity as its camera: the light a point takes from all around (the sky's
 // and the ground's, its picture's, a reflection probe's) less where the
 // surfaces within `radius` meters of it hide what is above it, the hiding
@@ -173,7 +173,7 @@ struct AmbientOcclusion {
     intensity: f32
 }
 
-// A camera's bloom (ADR-0051, D328), on the same entity as its camera: the
+// A camera's bloom, on the same entity as its camera: the
 // scene's light spread wide around where it is, as a lens and an eye
 // spread it, before the grade and the tonemapper; `intensity` of it (a
 // fraction, nought to one) mixed with the light as it is. An intensity
@@ -182,7 +182,7 @@ struct Bloom {
     intensity: f32
 }
 
-// A camera's screen-space reflections (ADR-0051, D331), on the same entity
+// A camera's screen-space reflections, on the same entity
 // as its camera: a smooth surface reflects what the view saw the frame
 // before where its reflection meets it, within `distance` meters, in
 // place of the sky's picture or a probe's, fading as the surface roughens
@@ -193,7 +193,7 @@ struct ScreenSpaceReflections {
     distance: f32
 }
 
-// A camera's motion blur (ADR-0051, D334), on the same entity as its
+// A camera's motion blur, on the same entity as its
 // camera: what moves across the view is smeared along its motion as a
 // camera's shutter open for `shutter` of each frame's time would smear it
 // (a half is a 180 degree shutter), what stands in front kept sharp over
@@ -203,7 +203,7 @@ struct MotionBlur {
     shutter: f32
 }
 
-// A camera's depth of field (ADR-0051, D336), on the same entity as its
+// A camera's depth of field, on the same entity as its
 // camera: what lies `focus` meters ahead is sharp, and what lies nearer
 // or farther blurs into discs as a lens of the camera's field of view
 // on a full-frame sensor, opened to the f-number `aperture`, would blur
@@ -214,7 +214,7 @@ struct DepthOfField {
     aperture: f32
 }
 
-// A camera's contact shadows (ADR-0051, D338), on the same entity as its
+// A camera's contact shadows, on the same entity as its
 // camera: where something the view sees stands within `length` meters of
 // a point toward the sun, the point is shaded from the sun, so the small
 // shadows where things touch, which the shadow maps are too coarse to
@@ -223,7 +223,7 @@ struct ContactShadows {
     length: f32
 }
 
-// A camera's exposure metered from what it sees (ADR-0051, ADR-0047), on
+// A camera's exposure metered from what it sees, on
 // the same entity as its camera, whose `exposure` it starts from: the
 // frame's light measured in a histogram of its luminance, the darkest
 // `low` and the brightest past `high` of its pixels (fractions, nought to
@@ -232,7 +232,7 @@ struct ContactShadows {
 // EV a second when the picture must brighten and `darken` when it must
 // darken; at once when the metering starts or the eye cuts away. The
 // middle of the picture counts more by `centered` (nought to one): at one,
-// a pixel in the middle counts sixteen times one in a corner (D345). One
+// a pixel in the middle counts sixteen times one in a corner. One
 // whose maximum is not above its minimum meters nothing. Without one, the
 // camera's `exposure` holds.
 struct AutoExposure {
@@ -246,13 +246,13 @@ struct AutoExposure {
     centered: f32
 }
 
-// The sun (ADR-0051's directional light), on any entity: light arriving
+// The sun, on any entity: light arriving
 // along the direction (`directionX`, `directionY`, `directionZ`), the way
 // it travels, `illuminance` lux on a surface facing it (about 100,000 at
 // noon), in `color` (0xRRGGBBAA, sRGB; alpha unused). `angle` is the
 // angle its disc spans, in radians (the Sun's is 0.0093, half a degree; at
 // most 0.35), which widens its shadows away from their casters where the
-// view's shadows harden at contact (D347); nought is a point. A game
+// view's shadows harden at contact; nought is a point. A game
 // declares at most one sun; without one, a sun at noon, the Sun's size,
 // lights the World.
 struct Sun {
@@ -264,14 +264,14 @@ struct Sun {
     angle: f32
 }
 
-// The sky's light, arriving from above the horizon (ADR-0051's ambient
+// The sky's light, arriving from above the horizon (the ambient
 // term): `luminance` candela per square meter (about 5,000 on a clear
 // day), in `color`. From below it comes what the ground gives back of the
-// sun's light and the sky's (D304): `ground` is its albedo, 0xRRGGBBAA in
+// sun's light and the sky's: `ground` is its albedo, 0xRRGGBBAA in
 // sRGB (alpha unused), and nought gives nothing back. A game declares at
 // most one; without one, a clear day's: 5,000 in a clear blue
 // (0x8FB8EBFF) over a ground giving back a fifth (0x7C7C7CFF). An
-// `environment` is a picture of the sky all around (D322): the game texture
+// `environment` is a picture of the sky all around: the game texture
 // a Radiance picture cooked as an environment is (its identity, as a
 // material names a texture), seen behind everything and lighting and
 // reflected by every surface, its light times `luminance` in `color`; the
@@ -284,10 +284,10 @@ struct Sky {
     environment: u64
 }
 
-// A reflection probe (ADR-0051, D325), on any entity, at its pose: a box
+// A reflection probe, on any entity, at its pose: a box
 // `halfX`, `halfY`, and `halfZ` meters from its middle to its sides along
 // the World's axes, and what is seen from its middle, `environment`, a
-// game texture cooked as an environment (D321), its light times
+// game texture cooked as an environment, its light times
 // `intensity` in candela per square meter. A model whose middle is in its
 // box reflects it, each reflection projected onto the box, in place of
 // the sky's picture; where boxes overlap, the higher `priority` wins, then
@@ -301,7 +301,7 @@ struct ReflectionProbe {
     environment: u64
 }
 
-// A decal (ADR-0051, D339), on any entity, at its pose: a box `halfX`,
+// A decal, on any entity, at its pose: a box `halfX`,
 // `halfY`, and `halfZ` meters from its middle to its sides along the
 // entity's axes, which lays `texture`, a game texture, over the surfaces
 // within it, seen along its -Z as a projector would throw it: the
@@ -310,7 +310,7 @@ struct ReflectionProbe {
 // covering what is under it, lit as that surface is. Where it covers, a
 // `normal` texture (glTF's tangent space, green up the texture) bends the
 // surface's normal, and a `roughness` above nought (at most one) is the
-// surface's (D342); a normal of nought, or a roughness of nought, leaves
+// surface's; a normal of nought, or a roughness of nought, leaves
 // the surface's. Where decals overlap, a later entity's lies over an
 // earlier's. Sides of nought, or no texture, are no decal.
 struct Decal {
@@ -323,7 +323,7 @@ struct Decal {
     roughness: f32
 }
 
-// A point light (ADR-0051), on any entity, at its pose: `lumens` of
+// A point light, on any entity, at its pose: `lumens` of
 // luminous power spread evenly (a lumen over 4π is a candela), reaching
 // `range` meters, where it has faded to nought, in `color` (0xRRGGBBAA,
 // sRGB; alpha unused). Lumens or a range of nought light nothing. With
@@ -336,9 +336,9 @@ struct PointLight {
     shadows: bool
 }
 
-// A spot light (ADR-0051), on any entity, at its pose, shining along the
+// A spot light, on any entity, at its pose, shining along the
 // pose's -Z (nought turn shines along -Z, as a camera looks): `lumens` as
-// if all of them lay in its cone (a lumen over π is a candela, ADR-0051's
+// if all of them lay in its cone (a lumen over π is a candela, a
 // documented approximation), full within `inner` radians of its axis and
 // fading to nought at `outer`, reaching `range` meters, in `color`; with
 // `shadows`, shadowed as a point light is.
@@ -351,9 +351,9 @@ struct SpotLight {
     shadows: bool
 }
 
-// A post process (ADR-0051's typed component in a camera's stack, D349),
+// A post process (the typed component in a camera's stack),
 // on the client's own player, as its camera is: the game's post-process
-// material (SPEC-0026's `post_process` domain, D348) of the identity its
+// material (the `post_process` domain) of the identity its
 // `material` line gives it (nought for none), run at its material's
 // insertion point, `weight` of the way (nought to one: nought runs
 // nothing, so a fade is a weight that moves). A game may declare several,
@@ -364,13 +364,13 @@ struct PostProcess {
     weight: f32
 }
 
-// A particle emitter (ADR-0053, D352), on any entity, at its pose:
+// A particle emitter, on any entity, at its pose:
 // particles drawn as quads facing the eye, of the game's surface material
 // of the identity its `material` line gives it (nought for none: white),
 // its base color and texture times their color, its emission added,
 // unlit, laid over what is behind by their alpha, each a soft disc unless
-// the texture's alpha shapes it, and faded where it meets what is behind
-// (D353). `rate` a second, each living `lifetime` seconds, leaving at
+// the texture's alpha shapes it, and faded where it meets what is behind.
+// `rate` a second, each living `lifetime` seconds, leaving at
 // `speed` meters a second along the pose's +Y, within `spread` radians of
 // it (pi: every way), from within `radius` meters of the pose; `sizeStart`
 // meters across at birth and `sizeEnd` at death; `colorStart` and
@@ -383,15 +383,15 @@ struct PostProcess {
 // velocity at its birth, so a moving emitter's particles keep up with it.
 // With `columns` and `rows` above one, its material's texture is a
 // flipbook of that many cells, left to right and top to bottom, a
-// particle stepping through them over its life (D359). With `streak`
+// particle stepping through them over its life. With `streak`
 // above nought, each particle is drawn instead as a streak through where it
 // was over its last `streak` seconds, its size across at its head
-// narrowing to nothing behind (D360). Cosmetic: each
+// narrowing to nothing behind. Cosmetic: each
 // client draws its own particles, and nothing in the World sees them. On
 // an entity with a 2D pose, the canvas draws the
 // emitter, its trails, and its beams in its plane, over its sprites, each
-// of the game's canvas material of that identity and blending as it says
-// (D357); the pose's up is the way it emits.
+// of the game's canvas material of that identity and blending as it says;
+// the pose's up is the way it emits.
 struct ParticleEmitter {
     material: u64
     rate: f32
@@ -417,7 +417,7 @@ struct ParticleEmitter {
     streak: f32
 }
 
-// A trail (ADR-0053, D354), on any entity: a ribbon left behind its pose
+// A trail, on any entity: a ribbon left behind its pose
 // as it moves, facing the eye, drawn as an emitter's particles are, of the
 // game's surface material of the identity `material` gives it (nought:
 // white). A point is left each time the pose has gone `spacing` meters
@@ -437,7 +437,7 @@ struct Trail {
     colorEnd: u32
 }
 
-// A beam (ADR-0053, D354), on any entity: a ribbon from its pose to its
+// A beam, on any entity: a ribbon from its pose to its
 // far end `to` meters away (World axes), facing the eye, its middle bent
 // `bend` meters (World axes) on a quadratic curve cut into `segments`
 // pieces (nought: one), drawn as an emitter's particles are, of the game's
@@ -492,11 +492,11 @@ fn channel(linear: f32) -> u32 {
     return u32((1.055 * fifth - 0.055) * 255.0 + 0.5)
 }
 
-// The color of a light at a color temperature (ADR-0051's Kelvin input,
+// The color of a light at a color temperature (the Kelvin input,
 // which derives a color and is never kept beside one): 0xRRGGBBFF in sRGB,
 // for a light's `color`. A black body at `temperature` on Kim et al.'s fit of
 // the Planckian locus, 1,667 to 25,000 K (outside, its nearer end), seen in
-// linear Rec. 709 against one at 6,500 K, so 6,500 is white (D65), lower is
+// linear Rec. 709 against one at 6,500 K, so 6,500 is white (CIE daylight), lower is
 // warmer, higher is bluer; its brightest channel full, as a light's
 // intensity is its lumens alone.
 fn kelvin(temperature: f32) -> u32 {

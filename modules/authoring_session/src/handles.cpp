@@ -163,7 +163,7 @@ document::Value markRecord(const std::optional<Point>& at, std::uint8_t lit, std
     if (!partName(lit).empty()) {
         mark.add("lit", document::Value::string(std::string{partName(lit)}));
     }
-    // All by default, as a Runtime from before D974 shows them.
+    // All by default, as an older Runtime shows them.
     if ((handles & kAllHandles) != kAllHandles) {
         mark.add("handles", document::Value::string(std::string{handlesName(handles)}));
     }

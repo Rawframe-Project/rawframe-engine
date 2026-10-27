@@ -1,4 +1,4 @@
-# WebAssembly without threads (ADR-0084's web readiness): wasm32-wasi from
+# WebAssembly without threads: wasm32-wasi from
 # Clang, wasi-libc, and libc++ for wasm32. What builds here builds for a
 # browser's main thread too; the browser toolchain itself arrives with the
 # web client. Tests run under Node's WASI through tools/wasi_run.mjs.
@@ -12,7 +12,7 @@ set(CMAKE_C_COMPILER_TARGET wasm32-wasi)
 set(CMAKE_CXX_COMPILER_TARGET wasm32-wasi)
 set(CMAKE_CROSSCOMPILING_EMULATOR node;--no-warnings;${CMAKE_CURRENT_LIST_DIR}/../tools/wasi_run.mjs)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-# setjmp.h, which wasi-libc as packaged lacks (cmake/wasi, D383): found
+# setjmp.h, which wasi-libc as packaged lacks (cmake/wasi): found
 # after every other include directory, by FreeType alone.
 set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_LIST_DIR}/wasi)
 set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_LIST_DIR}/wasi)

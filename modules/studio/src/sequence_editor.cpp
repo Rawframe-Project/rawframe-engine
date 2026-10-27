@@ -11,7 +11,7 @@ namespace rawframe::studio {
 
 namespace {
 
-/// The timeline as the design's (D931): the tracks' names in a column,
+/// The timeline as the design's: the tracks' names in a column,
 /// their lanes beside it along the sequence's length, a ruler above.
 constexpr float kNamesWide = 200;
 constexpr float kLaneTall = 40;
@@ -117,8 +117,8 @@ ui::Layout ShellParticipant::playheadAt(double time) const {
 }
 
 void ShellParticipant::showSequence() {
-    // A sequence is its lines (D869), drawn as the design's timeline
-    // (D931): its tracks in the Hierarchy, their keys along lanes under a
+    // A sequence is its lines, drawn as the design's timeline:
+    // its tracks in the Hierarchy, their keys along lanes under a
     // ruler with the playhead, the transport over them, and the key chosen
     // and the sequence's length in the Inspector.
     const std::optional<Value> kRead = read(scene_, "lines.read");

@@ -224,7 +224,7 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{AddInstance{.scene = kScene.value, .instance = *kInstance}};
     }
     if (kIndex == kIndexOf<StreamInstance>) {
-        // A district's streaming (D870), by its word.
+        // A district's streaming, by its word.
         const std::string* streaming = textOf(value.find("streaming"));
         if (!kEntity.has_value() || streaming == nullptr ||
             (*streaming != "each" && *streaming != "atomic" && *streaming != "persistent")) {
@@ -236,7 +236,7 @@ result::Result<Operation> operationOf(const Value& value) {
                                                                               : scene::Streaming::Persistent}};
     }
     if (kIndex == kIndexOf<PaintTiles>) {
-        // Tiles painted on a tilemap (D860), whole numbers checked by its
+        // Tiles painted on a tilemap, whole numbers checked by its
         // kind.
         const auto kNumber = [&value](std::string_view name) {
             const Value* kGiven = value.find(name);
@@ -255,7 +255,7 @@ result::Result<Operation> operationOf(const Value& value) {
             PaintTiles{.column = *kColumn, .row = *kRow, .width = *kWidth, .height = *kHeight, .tile = *kTile}};
     }
     if (kIndex == kIndexOf<BrushTerrain>) {
-        // A brush's stroke on a terrain (D855), its numbers any JSON number.
+        // A brush's stroke on a terrain, its numbers any JSON number.
         const std::string* tool = textOf(value.find("tool"));
         const auto kNumber = [&value](std::string_view name) {
             const Value* kGiven = value.find(name);
@@ -271,7 +271,7 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{BrushTerrain{.tool = *tool, .x = *kX, .z = *kZ, .radius = *kRadius, .amount = *kAmount}};
     }
     if (kIndex == kIndexOf<SetLine> || kIndex == kIndexOf<InsertLine>) {
-        // A line document's line by its place (D817), set, taken away, or
+        // A line document's line by its place, set, taken away, or
         // put in.
         const std::optional<std::size_t> kLine = placeOf(value.find("line"));
         const Value& given = *value.find("text");
@@ -286,7 +286,7 @@ result::Result<Operation> operationOf(const Value& value) {
                                  .text = lineText != nullptr ? std::optional<std::string>{*lineText} : std::nullopt}};
     }
     if (kIndex == kIndexOf<SetDataValue>) {
-        // A data document's value at a path (D811), read where it is kept.
+        // A data document's value at a path, read where it is kept.
         const std::string* path = textOf(value.find("path"));
         const Value& given = *value.find("value");
         if (path == nullptr) {
@@ -296,7 +296,7 @@ result::Result<Operation> operationOf(const Value& value) {
             SetDataValue{.path = *path, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
     }
     if (kIndex == kIndexOf<SetMaterialInterfaceInput> || kIndex == kIndexOf<SetMaterialSwitch>) {
-        // A material graph's interface input or switch, by its name (D729).
+        // A material graph's interface input or switch, by its name.
         const std::string* named =
             textOf(value.find(kIndex == kIndexOf<SetMaterialInterfaceInput> ? "input" : "switch"));
         const Value& given = *value.find("value");
@@ -310,7 +310,7 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{SetMaterialSwitch{.name = *named, .value = kGiven}};
     }
     if (kIndex >= kIndexOf<SetMaterialNodeInput>) {
-        // A material graph's node, by its 16 hex digits (D728).
+        // A material graph's node, by its 16 hex digits.
         const std::string* node = textOf(value.find("node"));
         const std::optional<std::uint64_t> kNode =
             node != nullptr && node->size() == 16 ? base::parseHex64(*node) : std::nullopt;
@@ -337,7 +337,7 @@ result::Result<Operation> operationOf(const Value& value) {
             return Operation{CreateMaterialNode{.node = *kNode, .type = *type}};
         }
         if (kIndex == kIndexOf<PlaceMaterialNode>) {
-            // Any finite JSON number, a place on the canvas (D982).
+            // Any finite JSON number, a place on the canvas.
             const Value* kX = value.find("x");
             const Value* kY = value.find("y");
             const std::optional<double> kAtX = kX != nullptr ? kX->real() : std::nullopt;
@@ -350,7 +350,7 @@ result::Result<Operation> operationOf(const Value& value) {
         return Operation{RemoveMaterialNode{.node = *kNode}};
     }
     if (kIndex == kIndexOf<SetMaterialOverride>) {
-        // A material instance's override, by its input's name (D721).
+        // A material instance's override, by its input's name.
         const std::string* input = textOf(value.find("input"));
         const Value& given = *value.find("value");
         if (input == nullptr) {
@@ -360,7 +360,7 @@ result::Result<Operation> operationOf(const Value& value) {
             SetMaterialOverride{.input = *input, .value = given.isNull() ? std::nullopt : std::optional<Value>{given}}};
     }
     if (kIndex >= kIndexOf<SetUiField>) {
-        // A UI document's node, by its component's name (D641).
+        // A UI document's node, by its component's name.
         const std::string* node = textOf(value.find("node"));
         if (node == nullptr) {
             return kBad();
@@ -746,7 +746,7 @@ std::string writeDiscovery(const ComponentCatalog* catalog) {
                     }
                     each.add("cases", std::move(cases));
                 }
-                // The hints an editor shows and an agent reads (D783).
+                // The hints an editor shows and an agent reads.
                 if (field.least.has_value()) {
                     each.add("least", Value::real(*field.least));
                 }

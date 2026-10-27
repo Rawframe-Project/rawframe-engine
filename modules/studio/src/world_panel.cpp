@@ -61,7 +61,7 @@ void ShellParticipant::showWorld() {
     for (const scene::SceneInstance& kInstance : kScene->instances) {
         districts += kInstance.streaming == scene::Streaming::Each ? 0 : 1;
     }
-    // As the design's World screen (D936): the scene and how many it
+    // As the design's World screen: the scene and how many it
     // places, then each instance a row of its mode's color, its name, its
     // mode as a chip pressed for the next, and its entities; the row
     // pressed chooses it.

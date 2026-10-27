@@ -165,14 +165,14 @@ std::vector<std::string> Cooking::poll(bool& failed) {
     std::vector<std::string> lines;
     for (std::size_t at = partial_.find('\n'); at != std::string::npos; at = partial_.find('\n')) {
         // A line without its end: on Windows the tool's text output ends
-        // each in a carriage return too, which named no source (D828).
+        // each in a carriage return too, which named no source.
         lines.push_back(partial_.substr(0, at > 0 && partial_[at - 1] == '\r' ? at - 1 : at));
         partial_.erase(0, at + 1);
     }
     for (const std::string& kLine : lines) {
         if (std::optional<std::string> progress = progressOf(id_, kLine)) {
             // The source it reached, as `cooking <n>/<count> <source>` names
-            // it (D799).
+            // it.
             const std::size_t kSpace = kLine.find(' ', std::string_view{"cooking "}.size());
             if (kSpace != std::string::npos) {
                 sources_[kLine.substr(kSpace + 1)] = SourceCooked{};
@@ -197,7 +197,7 @@ std::vector<std::string> Cooking::poll(bool& failed) {
         return said;
     }
     // Its last words read; it has ended. Whatever it reached and did not
-    // fail on cooked, unless it was stopped (D799).
+    // fail on cooked, unless it was stopped.
     child_.reset();
     const bool kStopped = !stopping_.empty() && *kExit != 0;
     for (auto at = sources_.begin(); at != sources_.end();) {

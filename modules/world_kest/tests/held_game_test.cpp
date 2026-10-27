@@ -1,4 +1,4 @@
-// A game read from files held in memory (D166): the same game as from its
+// A game read from files held in memory: the same game as from its
 // directory, a scene instanced through a sidecar in a subdirectory, and a
 // file that is not held or is too large. Runs in the web build too.
 

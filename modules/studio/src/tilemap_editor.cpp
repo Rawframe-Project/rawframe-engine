@@ -30,7 +30,7 @@ std::string tileText(int tile) {
 } // namespace
 
 void ShellParticipant::showTilemap() {
-    // A tilemap is its lines (D860): its sheet's tiles as rows, the tile
+    // A tilemap is its lines: its sheet's tiles as rows, the tile
     // painted in the Inspector, and its grid drawn in the center, a block
     // pressed painting the tile there through the session.
     const std::optional<Value> kRead = read(scene_, "lines.read");

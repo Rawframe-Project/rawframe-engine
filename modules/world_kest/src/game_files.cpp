@@ -183,7 +183,7 @@ std::unexpected<result::Error> invalid(std::string_view why, std::string_view na
             .withContext("name", name)};
 }
 
-/// Adds a mesh's material and texture subassets (D314), by their keys and
+/// Adds a mesh's material and texture subassets, by their keys and
 /// resources; false when one's identity is a material's or texture's the
 /// game already has.
 bool addSubassets(std::string_view mesh,
@@ -688,7 +688,7 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
         }
         game.texts_.push_back(GameText{.path = text, .document = (*kSidecarRead)->id.value});
     }
-    // Each tilemap, by the resource its sidecar names (D858).
+    // Each tilemap, by the resource its sidecar names.
     for (const GameTilemap& tilemap : game.description_.tilemaps) {
         const auto kSidecarText = reader.read(tilemap.path + std::string{content::kSidecarSuffix});
         const auto kSidecarRead =
@@ -704,7 +704,7 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
         RAWFRAME_TRY(game.readTilemaps(content));
     }
     // Each sequence, by the resource its sidecar names, read from its
-    // source (D869).
+    // source.
     for (const GameSequence& each : game.description_.sequences) {
         const auto kSidecarText = reader.read(each.path + std::string{content::kSidecarSuffix});
         const auto kSidecarRead =
@@ -725,7 +725,7 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
                                  .timeline = std::make_shared<const sequence::Sequence>(std::move(*read))});
     }
     // Each scatter placed from its text and the terrain it names, beside
-    // it, as the cook places it (D864).
+    // it, as the cook places it.
     for (const std::string& path : game.description_.scatters) {
         RAWFRAME_TRY_ASSIGN(const std::string kText, reader.read(path));
         auto read = scatter::parseScatter(kText);
@@ -772,7 +772,7 @@ result::Result<GameFiles> GameFiles::fromReader(std::string_view description,
         game.fonts_.push_back(GameFontResource{.id = font.id, .path = font.path, .font = (*kSidecarRead)->id.value});
     }
     // Each material, by the resource its sidecar names: a surface, a post
-    // process (D348), or a canvas material (D355).
+    // process, or a canvas material.
     for (const GameMaterial& material : game.description_.materials) {
         const auto kSidecarText = reader.read(material.path + std::string{content::kSidecarSuffix});
         const auto kSidecarRead =
@@ -934,7 +934,7 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
             GameTilemapResource{.id = tilemap.id, .path = tilemap.path, .tilemap = kTilemap->tilemap});
     }
     RAWFRAME_TRY(game.readTilemaps(&content));
-    // Each sequence as cooked (D869).
+    // Each sequence as cooked.
     if (!game.description_.sequences.empty()) {
         const content::ResourceTypeId kSequenceType{sequence::kSequenceType};
         const std::array<content::AdmittedRepresentation, 1> kSequenceAdmitted = {content::AdmittedRepresentation{
@@ -963,7 +963,7 @@ result::Result<GameFiles> GameFiles::fromContent(game_content::GameContent& cont
                                  .sequence = kSequence->sequence,
                                  .timeline = std::make_shared<const sequence::Sequence>(std::move(*read))});
     }
-    // Each scatter's placements as cooked (D864).
+    // Each scatter's placements as cooked.
     if (!game.description_.scatters.empty()) {
         const content::ResourceTypeId kPlacedType{scatter::kPlacedType};
         const std::array<content::AdmittedRepresentation, 1> kPlacedAdmitted = {content::AdmittedRepresentation{

@@ -46,13 +46,13 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
     // of admission, and from then on every tick consumes a real command.
     RAWFRAME_EXPECT(scenario.server->statistics().inputsConsumed > 40);
     // Props that never move are sent until acknowledged, then left out,
-    // and not looked at again (D744): in the last twenty ticks only the
+    // and not looked at again: in the last twenty ticks only the
     // moving player was sent, and only the player's two values looked at.
     RAWFRAME_EXPECT(scenario.server->statistics().recordsHeld >= 3);
     const std::uint64_t kSentSince = scenario.server->statistics().recordsSent - kSentBefore;
     RAWFRAME_EXPECT(kSentSince >= 10 && kSentSince <= 20);
     RAWFRAME_EXPECT(scenario.server->statistics().valuesLookedAt - kLookedBefore <= 40);
-    // Its one connection, counted alone, is the whole (D840): its player,
+    // Its one connection, counted alone, is the whole: its player,
     // the four entities it is told of, and every record and window.
     const auto kEach = scenario.server->connectionTraffic();
     const auto kTotals = scenario.server->statistics();
@@ -71,7 +71,7 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
 
     // One made later enters, and one made as another is destroyed, in its
     // slot, takes its place: what a connection holds follows what came and
-    // went since its last turn (D745).
+    // went since its last turn.
     const world::EntityHandle kLater = *scenario.serverWorld.create();
     RAWFRAME_EXPECT(scenario.serverWorld.insert(kLater, kPosition, Position{40, 0}).has_value());
     RAWFRAME_EXPECT(scenario.serverWorld.destroy(props[2]).has_value());
@@ -106,7 +106,7 @@ RAWFRAME_TEST(AClientMirrorsTheServerAndDrivesItsPlayer) {
 }
 
 RAWFRAME_TEST(AComponentKeptToItsHolderReachesNoOtherConnection) {
-    // D673 (ADR-0081's pose visibility): the input is replicated, so the
+    // The input is replicated, so the
     // client hears its own; kept to its holder, another entity's is never
     // sent, though the entity and its other values are, where without
     // `own` it is.
@@ -142,8 +142,8 @@ RAWFRAME_TEST(AComponentKeptToItsHolderReachesNoOtherConnection) {
 }
 
 RAWFRAME_TEST(AConnectionAdmittedAfterTheStoppingNoticeIsToldToo) {
-    // SPEC-0012's stopping notice, asked for each iteration a server drains
-    // (D585): a connection a tick admits after the first asking hears it
+    // The stopping notice, asked for each iteration a server drains:
+    // a connection a tick admits after the first asking hears it
     // from the next, and play goes on.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
     scenario.server->noticeStopping();
@@ -160,7 +160,7 @@ RAWFRAME_TEST(AConnectionAdmittedAfterTheStoppingNoticeIsToldToo) {
 }
 
 RAWFRAME_TEST(ATerminatedPlayerIsToldWhyAndLeaves) {
-    // ADR-0073 (D267): the reason arrives on the engine's lane, the player
+    // The reason arrives on the engine's lane, the player
     // leaves the server's World at once, and the client ends its session.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
     for (int step = 0; step < 30; ++step) {
@@ -262,7 +262,7 @@ RAWFRAME_TEST(ReplicationHoldsThroughLossAndReordering) {
     // Redundant input windows survive a quarter of datagrams lost.
     const auto kServer = scenario.server->statistics();
     RAWFRAME_EXPECT(kServer.inputsConsumed > kServer.inputsNeutral);
-    // Every window read is counted with its bytes (D655).
+    // Every window read is counted with its bytes.
     RAWFRAME_EXPECT(kServer.inputWindows > 0 && kServer.inputBytes >= kServer.inputWindows);
     RAWFRAME_EXPECT(scenario.client->statistics().recordsStale > 0 || scenario.client->statistics().stateDatagrams > 0);
 }
@@ -311,7 +311,7 @@ RAWFRAME_TEST(APredictingClientRunsAheadAndIsConfirmed) {
     // On a clean network only admission and the first pace adjustments
     // mispredict: the server held or went neutral on ticks the client had
     // not labelled yet. Each such tick is told as it happens, even while
-    // the player stands still there (D249), so a few, not one.
+    // the player stands still there, so a few, not one.
     RAWFRAME_EXPECT(kStatistics.rollbacks <= 6);
     // The player is shown where its own input has taken it, ahead of the
     // server, which has not consumed the newest commands yet.
@@ -330,7 +330,7 @@ RAWFRAME_TEST(APredictingClientRunsAheadAndIsConfirmed) {
 RAWFRAME_TEST(AnIdlePlayerIsConfirmedAndMovesAtOnce) {
     // A player standing still changes nothing the server would send, yet
     // its predictions are confirmed all along, so none waits for a full
-    // window when it starts to move (D249).
+    // window when it starts to move.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(40)}, {.predicting = true}};
     for (int step = 0; step < 200; ++step) {
         scenario.step(Steer{});
@@ -345,8 +345,8 @@ RAWFRAME_TEST(AnIdlePlayerIsConfirmedAndMovesAtOnce) {
 }
 
 RAWFRAME_TEST(StateGoesOutOnceAPeriodAndPredictionHolds) {
-    // SPEC-0013's 20 Hz current-state production at 60 ticks a second
-    // (D222): a state datagram every third tick, and a predicting client
+    // The 20 Hz current-state production at 60 ticks a second:
+    // a state datagram every third tick, and a predicting client
     // confirmed as often and agreeing exactly once input is idle.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(40)}, {.statePeriod = 3, .predicting = true}};
     const auto kPosition = *scenario.schema->key<Position>();
@@ -366,7 +366,7 @@ RAWFRAME_TEST(StateGoesOutOnceAPeriodAndPredictionHolds) {
 }
 
 RAWFRAME_TEST(AClientSendingMalformedInputStrikesOut) {
-    // SPEC-0013's strikes (D223): malformed input windows are refused, and
+    // The strikes: malformed input windows are refused, and
     // the eighth within ten seconds closes the connection and takes its
     // player out of the World.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
@@ -404,7 +404,7 @@ RAWFRAME_TEST(AClientSendingMalformedInputStrikesOut) {
 }
 
 RAWFRAME_TEST(AFloodOfInputIsDroppedUnreadPastTheCeilings) {
-    // SPEC-0013's input ceilings (D225): at most one input window a tick,
+    // The input ceilings: at most one input window a tick,
     // and 64 KiB, are looked at in a second; what passes them is dropped
     // unread. The floods here are of an earlier epoch, late rather than
     // malformed, so nothing strikes the connection out.
@@ -440,7 +440,7 @@ RAWFRAME_TEST(AFloodOfInputIsDroppedUnreadPastTheCeilings) {
 }
 
 RAWFRAME_TEST(InputThatWaitedTooLongIsDroppedNotPlayedLate) {
-    // SPEC-0013's replaceable input age (D232): commands sent 15 to 30 ticks
+    // The replaceable input age: commands sent 15 to 30 ticks
     // ahead wait longer than 100 ms for their ticks, so each is dropped when
     // its tick comes and the tick plays as if it had not arrived. Paced
     // input, two ticks ahead, is never stale.
@@ -480,14 +480,14 @@ RAWFRAME_TEST(InputThatWaitedTooLongIsDroppedNotPlayedLate) {
 }
 
 RAWFRAME_TEST(InputPacedFromBurstsAndStallsComesBackOnTime) {
-    // A browser page's client (D317): it samples four ticks' input at once
+    // A browser page's client: it samples four ticks' input at once
     // each frame, and once it stalls a third of a second and then samples
     // what it owes at once. The server paces by the least lead since its
     // last signal, so bursts arrive on time. It leaves out what it measured
     // while the client was silent past a command's age, and the client
     // jumps only for a lateness two signals in a row find, the second no
     // less: one making up a stall is not paced ahead for it, and is on time
-    // once it has, not early (D323).
+    // once it has, not early.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
     for (int step = 0; step < 30; ++step) {
         scenario.step(Steer{});
@@ -652,7 +652,7 @@ struct Districts final : world_replication::StreamedUnits {
 RAWFRAME_TEST(ADistrictIsSentWholeWhileItsPlayerIsNearAnyOfIt) {
     // A district of three props, one far from the others, sent all together
     // or not at all; a persistent one sent always, however far; and props of
-    // no district sent one by one (D870).
+    // no district sent one by one.
     Districts districts;
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)},
                       {.interest = world_replication::InterestSettings{.position = Position::kComponentTypeId,
@@ -700,7 +700,7 @@ RAWFRAME_TEST(ADistrictIsSentWholeWhileItsPlayerIsNearAnyOfIt) {
 
 RAWFRAME_TEST(WhatIsAcknowledgedIsForgottenAsPlayGoesOn) {
     // A state datagram an acknowledgement can no longer reach is forgotten
-    // once a newer acknowledgement arrives (D217), so what the server holds
+    // once a newer acknowledgement arrives, so what the server holds
     // for a connection that keeps acknowledging stays flat.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};
     for (int step = 0; step < 100; ++step) {
@@ -718,7 +718,7 @@ RAWFRAME_TEST(InterestCellsMissNothingWithinReach) {
     // A field of props a meter and a quarter apart and a player put down
     // on cell edges and between them (cells are 10.1 wide): the client
     // mirrors exactly what is within the radius, as though every prop were
-    // measured (D209).
+    // measured.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)},
                       {.stateBytesPerPublish = 8192,
                        .interest = world_replication::InterestSettings{
@@ -860,7 +860,7 @@ RAWFRAME_TEST(RemoteEntitiesAreShownBetweenStates) {
 }
 
 RAWFRAME_TEST(AnAttemptEndedUnansweredIsAskedAgainFromNothing) {
-    // D541: a client whose hello the server did not hear in its admission
+    // A client whose hello the server did not hear in its admission
     // time ends unanswered, no refusal; asked again, it is not ended, and
     // is admitted.
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)}};

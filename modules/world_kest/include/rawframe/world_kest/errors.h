@@ -29,11 +29,10 @@ enum class WorldKestError : std::uint32_t {
     UnreadableFile = 7,
     /// A cooked game description that is not one.
     CookedGameInvalid = 8,
-    /// A mod the game does not take (SPEC-0042, D179); the context names
+    /// A mod the game does not take; the context names
     /// the mod, the point, or every claimant.
     ModRefused = 9,
-    /// A tick's systems would journal more than they may (SPEC-0013's
-    /// mutation journal, D229).
+    /// A tick's systems would journal more than they may.
     JournalExhausted = 10,
 };
 

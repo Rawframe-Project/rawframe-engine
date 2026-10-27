@@ -1,19 +1,19 @@
 #pragma once
 
-// Authoring operations (SPEC-0040): the closed, typed, semantic verbs that
+// Authoring operations: the closed, typed, semantic verbs that
 // are the only public way to change an authored scene, each decomposing
 // into deltas (delta.h) staged in a transaction (authored_scene.h).
 //
 // Operations address what they change by identity: an entity by its
 // SourceEntityId, a component by its ComponentTypeId, and a field by its
 // name in that component's layout, which is a field's identity in a
-// Kest-declared schema (D151). A component's type id resolves to the name
+// Kest-declared schema. A component's type id resolves to the name
 // and layout mark the scene document keys it by through a
 // `ComponentCatalog`, the schema authority a caller builds from a game;
 // no request addresses by a name the document happens to use.
 //
-// An entity an instance brings (D96) is addressed the same way, and the
-// same verbs change it through the instance's patch (D154): a field set on
+// An entity an instance brings is addressed the same way, and the
+// same verbs change it through the instance's patch: a field set on
 // it is a `set` entry, a component added or removed an `add` or `remove`
 // entry, and destroying it its removal. Its name and place are its source
 // scene's. The revert verbs drop what the patch does, so the source's
@@ -21,9 +21,9 @@
 // the instance is resolved, not here.
 //
 // Every request names the generation it was computed against. Validation
-// runs in SPEC-0040's order, addressing, staleness, schema and meaning,
+// runs in the order, addressing, staleness, schema and meaning,
 // limits, and only then stages; `DryRun` runs exactly that validation and
-// stages nothing. A failure is one of SPEC-0040's classes
+// stages nothing. A failure is one of the classes
 // (`AuthoringError`), with the failing operation as the `operation`
 // context.
 
@@ -47,7 +47,7 @@
 
 namespace rawframe::authoring {
 
-/// The most operations one batch holds (SPEC-0040's named limit).
+/// The most operations one batch holds.
 inline constexpr std::size_t kMaximumBatchOperations = 4096;
 
 /// The surface's generation: its operations, their inputs, and its error
@@ -60,7 +60,7 @@ enum class FieldKind : std::uint8_t {
     Real,
     Truth,
     Reference,
-    /// One of an enum's cases, by name (D271).
+    /// One of an enum's cases, by name.
     Case,
 };
 
@@ -70,7 +70,7 @@ struct FieldSchema {
     /// A case field's cases in the order of their numbers; the first is its
     /// default. Empty for every other kind.
     std::vector<std::string> cases;
-    /// What a number field's authors are told (D783): the least and most it
+    /// What a number field's authors are told: the least and most it
     /// should take, its unit, whether it is a color (0xRRGGBBAA), and names
     /// for some of its values. Hints: an operation may set any value.
     std::optional<double> least;
@@ -79,7 +79,7 @@ struct FieldSchema {
     bool color = false;
     std::vector<std::pair<std::int64_t, std::string>> labels;
     /// The kind of the game's asset an unsigned field holds by its
-    /// identity, empty for none (D786).
+    /// identity, empty for none.
     std::string asset;
 };
 
@@ -90,19 +90,18 @@ struct ComponentSchema {
     std::string name;
     std::uint64_t mark = 0;
     std::vector<FieldSchema> fields;
-    /// Of `rawframe.ui.Node`: a node of the game's UI document may be it
-    /// (D672).
+    /// Of `rawframe.ui.Node`: a node of the game's UI document may be it.
     bool uiNode = false;
     /// Of `rawframe.spline.Spline` or `rawframe.spline.Point`: a spline's
-    /// path or a point on it, whose curve a preview draws (D891).
+    /// path or a point on it, whose curve a preview draws.
     bool splinePath = false;
     bool splinePoint = false;
     /// Made by a client that draws, from its `presentation` lines, and
     /// never on a server: a scene holding one draws nothing of it, so an
-    /// editor offers none to add (D919).
+    /// editor offers none to add.
     bool presented = false;
     /// The Kest type the game declares it of, as its line names it, so a
-    /// tool finds a game's sun or sky by the engine's type (D834).
+    /// tool finds a game's sun or sky by the engine's type.
     std::string type;
 };
 
@@ -185,7 +184,7 @@ struct SetReference {
 };
 
 /// Records the component's current layout mark in place of the one the
-/// scene was authored against (ADR-0067, D153), when every field the scene
+/// scene was authored against, when every field the scene
 /// gives it still exists by name and each value fits the field's kind now.
 /// Otherwise refuses (`ValidationFailed`) naming the fields that do not
 /// carry over as `residual`: nothing is dropped or reinterpreted silently.
@@ -211,7 +210,7 @@ struct RestoreEntity {
 };
 
 /// Instances the scene of resource identity `scene` after the scene's
-/// instances, in SPEC-0006's two passes: every entity the source holds once
+/// instances, in the two passes: every entity the source holds once
 /// resolved is given an id (`instanceEntityId`) from `instance`, a fresh
 /// identity the caller makes as it makes an entity's, and the entity's id
 /// in the source. So one request always makes the same ids, and two
@@ -225,14 +224,14 @@ struct RemoveInstance {
     base::Bits128 entity{};
 };
 /// Sets how the instance that brings `entity` reaches clients, as a
-/// district of a large world (D870): each entity by itself, all together,
+/// district of a large world: each entity by itself, all together,
 /// or all always.
 struct StreamInstance {
     base::Bits128 entity{};
     scene::Streaming streaming = scene::Streaming::Each;
 };
 
-/// One part of one variant's look of one class of a style sheet (D636),
+/// One part of one variant's look of one class of a style sheet,
 /// set to its value as the styles document holds it, or unset for none: a
 /// `ui.styles` document's operation, refused by a scene.
 struct SetStylePart {
@@ -241,7 +240,7 @@ struct SetStylePart {
     std::string part;
     std::optional<document::Value> value;
 };
-/// A new class at `place` among the sheet's, or after them all (D638):
+/// A new class at `place` among the sheet's, or after them all:
 /// `style` its identity, fresh, as the caller makes one (16 hex digits,
 /// not all nought), and `name` its name; it sets no look yet.
 struct CreateStyleClass {
@@ -259,14 +258,14 @@ struct RenameStyleClass {
     std::string name;
 };
 /// A class's transitions, all of them, as the styles document holds them
-/// (an array), or none for no transitions (D639).
+/// (an array), or none for no transitions.
 struct SetStyleTransitions {
     std::uint64_t style = 0;
     std::optional<document::Value> value;
 };
 /// One field of the UI document's node `node` (its component's name), as
 /// the document holds it, or none for its default: `shows`, or any of
-/// `rawframe.ui.Node`'s fields (D641).
+/// `rawframe.ui.Node`'s fields.
 struct SetUiField {
     std::string node;
     std::string field;
@@ -284,14 +283,14 @@ struct RemoveUiNode {
     std::string node;
 };
 /// A node, with what is inside it, moved to `parent`, or among the roots
-/// for none, at `place` among its new siblings or after them (D644).
+/// for none, at `place` among its new siblings or after them.
 struct MoveUiNode {
     std::string node;
     std::optional<std::string> parent;
     std::optional<std::size_t> place;
 };
 
-/// One override of a material instance (D709, D721): its base's
+/// One override of a material instance: its base's
 /// interface input or static switch `input`, set to `value` as the
 /// instance document holds it, or unset for its base's default.
 struct SetMaterialOverride {
@@ -299,7 +298,7 @@ struct SetMaterialOverride {
     std::optional<document::Value> value;
 };
 
-/// One input of a material graph's node (D728): `input` of node `node`
+/// One input of a material graph's node: `input` of node `node`
 /// given `value` as the graph holds it, a literal or a connection
 /// (`{"node": ..., "output": ...}`), or unset for its default.
 struct SetMaterialNodeInput {
@@ -307,39 +306,39 @@ struct SetMaterialNodeInput {
     std::string input;
     std::optional<document::Value> value;
 };
-/// One param of a material graph's node (D728), set or unset.
+/// One param of a material graph's node, set or unset.
 struct SetMaterialNodeParam {
     std::uint64_t node = 0;
     std::string param;
     std::optional<document::Value> value;
 };
-/// A node made in a material graph (D728), of `type`, its params and
+/// A node made in a material graph, of `type`, its params and
 /// inputs at their defaults, `node` a fresh identity the caller mints.
 struct CreateMaterialNode {
     std::uint64_t node = 0;
     std::string type;
 };
-/// A node removed from a material graph, with its drawing (D728); refused
+/// A node removed from a material graph, with its drawing; refused
 /// while another node reads it, as the graph then does not read.
 struct RemoveMaterialNode {
     std::uint64_t node = 0;
 };
-/// Where a material graph's node is drawn (D982): its place on an editor's
-/// canvas, kept in the document's presentation (SPEC-0028), which never
+/// Where a material graph's node is drawn: its place on an editor's
+/// canvas, kept in the document's presentation, which never
 /// means anything to the material.
 struct PlaceMaterialNode {
     std::uint64_t node = 0;
     double x = 0;
     double y = 0;
 };
-/// One input of a material graph's interface (D729): `input` declared as
+/// One input of a material graph's interface: `input` declared as
 /// `value` holds it (`{"default": ..., "type": ...}`), or no longer
 /// declared.
 struct SetMaterialInterfaceInput {
     std::string input;
     std::optional<document::Value> value;
 };
-/// One static switch of a material graph's interface (D729): `name`
+/// One static switch of a material graph's interface: `name`
 /// declared as `value` holds it (`{"default": true}`), or no longer
 /// declared.
 struct SetMaterialSwitch {
@@ -348,10 +347,10 @@ struct SetMaterialSwitch {
 };
 
 /// The id an instantiation named `instance` gives the source's entity
-/// `source`: a version 8 UUID from their SHA-256 (D156).
+/// `source`: a version 8 UUID from their SHA-256.
 [[nodiscard]] base::Bits128 instanceEntityId(base::Bits128 instance, base::Bits128 source) noexcept;
 
-/// A data document's value at `path` (D811), or none to take it away: an
+/// A data document's value at `path`, or none to take it away: an
 /// action map's, a mixer's, a string table's or its translations', or an
 /// animation graph's or clip's, read by its kind's reader before it is
 /// kept.
@@ -360,7 +359,7 @@ struct SetDataValue {
     std::optional<document::Value> value;
 };
 
-/// A line document's line at `line`, from nought (D817), set to `text`,
+/// A line document's line at `line`, from nought, set to `text`,
 /// or taken away for none: a game description's, read by its game's
 /// reader before it is kept.
 struct SetLine {
@@ -368,13 +367,13 @@ struct SetLine {
     std::optional<std::string> text;
 };
 /// `text` put in a line document before its line at `line`, or after its
-/// last for one past it (D817).
+/// last for one past it.
 struct InsertLine {
     std::size_t line = 0;
     std::string text;
 };
 
-/// A brush's stroke on a terrain (D855): `tool` raise, lower, smooth, or
+/// A brush's stroke on a terrain: `tool` raise, lower, smooth, or
 /// paint, its middle at `x` `z` in meters, reaching `radius`; `amount` the
 /// meters a raise or a lower moves the middle, a smooth's strength from
 /// nought to one, or the layer a paint puts. The terrain's kind makes it
@@ -387,7 +386,7 @@ struct BrushTerrain {
     double amount = 0;
 };
 
-/// Tiles painted on a tilemap (D860): `tile`, or nought less one for none,
+/// Tiles painted on a tilemap: `tile`, or nought less one for none,
 /// in the cells of the rectangle from `column` and `row`, `width` by
 /// `height`, counted from the map's top-left. The tilemap's kind makes it
 /// the lines it changes.
@@ -437,16 +436,15 @@ using Operation = std::variant<CreateEntity,
                                BrushTerrain,
                                PaintTiles>;
 
-/// Whether `operation` changes a scene, rather than a style sheet (D636), a
-/// UI document (D641), or a material instance (D721), which follow the
+/// Whether `operation` changes a scene, rather than a style sheet, a
+/// UI document, or a material instance, which follow the
 /// scene's in `Operation`.
 [[nodiscard]] constexpr bool changesScene(const Operation& operation) noexcept {
     return operation.index() < std::variant_size_v<Operation> - 21;
 }
 
-/// SPEC-0040's read operations (queries.h answers them): every entity the
-/// scene holds, one entity whole, and the entities a typed search finds
-/// (ADR-0066's hierarchy search, D473).
+/// The read operations (queries.h answers them): every entity the
+/// scene holds, one entity whole, and the entities a typed search finds.
 struct ListEntities {};
 struct ReadEntity {
     base::Bits128 entity{};
@@ -458,21 +456,21 @@ struct FindEntities {
     std::optional<schema::ComponentTypeId> having;
 };
 
-/// A style sheet's document whole (D636), as a `ui.styles` document holds
+/// A style sheet's document whole, as a `ui.styles` document holds
 /// it: a style sheet's query, refused by a scene.
 struct ReadSheet {};
-/// A UI document whole (D641), as it holds itself: a UI document's query.
+/// A UI document whole, as it holds itself: a UI document's query.
 struct ReadUiDocument {};
-/// A material instance whole (D721): its base and its overrides.
+/// A material instance whole: its base and its overrides.
 struct ReadMaterialInstance {};
-/// A material graph read whole (D728).
+/// A material graph read whole.
 struct ReadMaterialGraph {};
 /// The node types a material graph may hold and each one's params and
-/// inputs (D731, D732), as the material module lists them.
+/// inputs, as the material module lists them.
 struct ListMaterialNodeTypes {};
-/// A data document read whole (D811).
+/// A data document read whole.
 struct ReadData {};
-/// A line document's lines (D817).
+/// A line document's lines.
 struct ReadLines {};
 
 using Query = std::variant<ListEntities,
@@ -486,7 +484,7 @@ using Query = std::variant<ListEntities,
                            ReadData,
                            ReadLines>;
 
-/// SPEC-0040's history classes: every operation that changes a scene is
+/// The history classes: every operation that changes a scene is
 /// `Undoable`, and every query `ReadOnly`.
 enum class HistoryClass : std::uint8_t {
     Undoable,
@@ -510,15 +508,15 @@ enum class InputType : std::uint8_t {
     Identity,
     /// A component that may be left out.
     OptionalComponent,
-    /// A style class's identity, as 16 hex digits (D636).
+    /// A style class's identity, as 16 hex digits.
     Style,
-    /// A value as a JSON document holds it, or null for none (D636).
+    /// A value as a JSON document holds it, or null for none.
     DocumentValue,
-    /// Text that may be null (D641).
+    /// Text that may be null.
     OptionalText,
-    /// A graph node's identity, as 16 hex digits (D728).
+    /// A graph node's identity, as 16 hex digits.
     GraphNode,
-    /// A number (D855).
+    /// A number.
     Number,
 };
 
@@ -527,7 +525,7 @@ struct InputDeclaration {
     InputType type = InputType::Entity;
 };
 
-/// What discovery publishes of one operation (SPEC-0040): its stable name,
+/// What discovery publishes of one operation: its stable name,
 /// the surface generation that brought it, its history class, what it
 /// targets, and its inputs.
 struct OperationDeclaration {
@@ -568,9 +566,9 @@ enum class Mode : std::uint8_t {
                                    const ComponentCatalog& catalog,
                                    const scene::SceneSource* sources = nullptr);
 
-/// SPEC-0040's AtomicBatch: every operation in order in one transaction;
+/// The AtomicBatch: every operation in order in one transaction;
 /// any failure keeps nothing. Its entry folds into the author's latest as
-/// `coalescing` says (D976).
+/// `coalescing` says.
 [[nodiscard]] result::Result<Committed> executeAtomic(AuthoredScene& scene,
                                                       std::uint64_t generation,
                                                       std::span<const Operation> operations,
@@ -586,7 +584,7 @@ struct DocumentPart {
     std::span<const Operation> operations;
 };
 
-/// SPEC-0040's AtomicBatch over several documents, one transaction (D497):
+/// The AtomicBatch over several documents, one transaction:
 /// each part's operations staged in order in its document's transaction,
 /// then all committed together (`commitTogether`). Any failure keeps
 /// nothing in any document and names the part (`part`) and, below it, the
@@ -600,7 +598,7 @@ enum class OnFailure : std::uint8_t {
     HaltRemaining,
 };
 
-/// SPEC-0040's IndependentBatch: each operation its own transaction
+/// The IndependentBatch: each operation its own transaction
 /// against the generation the one before it left, each with its own
 /// outcome; halting reports how many were skipped.
 struct IndependentOutcome {

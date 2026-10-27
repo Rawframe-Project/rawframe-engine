@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <span>
 
-// The window's frame as the screen design draws it (D915): the title and
+// The window's frame as the screen design draws it: the title and
 // menu row, the toolbar, the docks' tab strips, and the status bar, from
 // the design's parts: icon buttons, buttons, separators, and tabs.
 
@@ -91,7 +91,7 @@ void ShellParticipant::relabel(ui::Node button, std::string_view text, std::opti
     }
     ButtonParts& parts = kFound->second;
     const bool kPrimary = parts.kind == ButtonKind::Primary;
-    // A primary button that stops is drawn red, as the design's Stop (D916).
+    // A primary button that stops is drawn red, as the design's Stop.
     const bool kStops = kPrimary && which == Icon::Stop;
     if (kPrimary) {
         static_cast<void>(tree_->setLook(button,
@@ -227,7 +227,7 @@ result::Status ShellParticipant::toolbar(ui::Node root) {
         RAWFRAME_TRY(separator(kBar));
         RAWFRAME_TRY_ASSIGN(held_.worldButton,
                             textButton(kBar, Icon::World, held_.local ? "Local" : "World", ButtonKind::Quiet));
-        // Read as what it switches, not as the World tab (D925).
+        // Read as what it switches, not as the World tab.
         RAWFRAME_TRY(tree_->setName(held_.worldButton, held_.local ? "Handles: Local" : "Handles: World"));
         RAWFRAME_TRY(separator(kBar));
         // The snaps, a press stepping each through its values.
@@ -241,10 +241,9 @@ result::Status ShellParticipant::toolbar(ui::Node root) {
         RAWFRAME_TRY_ASSIGN(held_.twoD, textButton(kBar, std::nullopt, "2D", ButtonKind::Quiet));
     }
     RAWFRAME_TRY(box(kBar, ui::Layout{.grow = 1}, 0));
-    // Cook and Play in the middle, Play the accent's (D915). The start
-    // screen has no game to cook, play, or undo in (D781); a host joined
-    // cooks on its own machine (D885), its cook brought here to be played
-    // (D905).
+    // Cook and Play in the middle, Play the accent's. The start
+    // screen has no game to cook, play, or undo in; a host joined
+    // cooks on its own machine, its cook brought here to be played.
     if (!gameOpen()) {
         menus_.clear();
     } else if (!cookTool_.empty() || held_.joined != nullptr) {
@@ -283,7 +282,7 @@ result::Status ShellParticipant::toolbar(ui::Node root) {
         RAWFRAME_TRY(showHistory());
         RAWFRAME_TRY(separator(kBar));
     }
-    // The layout chooser (SPEC-0051 Part 1, D911), the layouts' commands
+    // The layout chooser, the layouts' commands
     // under it.
     held_.layoutChooser = ui::Node{};
     if (gameOpen()) {
@@ -334,7 +333,7 @@ result::Status ShellParticipant::statusBar(ui::Node root) {
     RAWFRAME_TRY_ASSIGN(statusNode_, box(kBar, ui::Layout{}, 0));
     RAWFRAME_TRY(box(kBar, ui::Layout{.grow = 1}, 0));
     RAWFRAME_TRY_ASSIGN(held_.statusFigures, box(kBar, ui::Layout{.alignItems = ui::Align::Center, .gap = 14}, 0));
-    // Joined to a host, where (D935).
+    // Joined to a host, where.
     if (held_.joined != nullptr) {
         RAWFRAME_TRY_ASSIGN(const ui::Node kJoinedAt,
                             box(kBar, ui::Layout{.alignItems = ui::Align::Center, .gap = 6, .shrink = 0}, 0));
@@ -346,7 +345,7 @@ result::Status ShellParticipant::statusBar(ui::Node root) {
         RAWFRAME_TRY(words(kWhere, "Joined " + held_.joinEndpoint + " as " + held_.joinedAs, look::kLabelInk, 12));
     }
     // Then, at its end, the game's branch, where it is under version
-    // control (D871).
+    // control.
     RAWFRAME_TRY_ASSIGN(held_.branchNode, box(kBar, ui::Layout{}, 0));
     return {};
 }
@@ -359,7 +358,7 @@ bool ShellParticipant::pressFrame(ui::Node node) {
         endEdit();
         held_.tool = static_cast<std::uint8_t>(kTool - held_.tools.begin());
         showToolbar();
-        // The mark shows the new tool's handles (D974).
+        // The mark shows the new tool's handles.
         markChosen();
         constexpr std::array<std::string_view, 4> kToolNames = {"select", "move", "rotate", "scale"};
         say(std::string{kToolNames[held_.tool]} + " tool");

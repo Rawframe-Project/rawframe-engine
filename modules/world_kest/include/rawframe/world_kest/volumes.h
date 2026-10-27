@@ -1,8 +1,8 @@
 #pragma once
 
 // The player's volumes, by the role of the mixer's bus each binds to, as
-// a client's present systems set them with `sound.volume(role, decibels)`
-// (SPEC-0036's user-volume surface, D625): in decibels on top of each
+// a client's present systems set them with `sound.volume(role, decibels)`:
+// in decibels on top of each
 // bus's own, the roles in `audio::Role`'s order, nought for none. The
 // presentation provides it; what plays the client's sound reads it each
 // frame. A dedicated server has none.

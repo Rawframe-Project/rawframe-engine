@@ -7,7 +7,7 @@ foreach(scenario compensation game_subassets game_tilemaps install kest_bots rep
     target_link_libraries(rawframe_scenario_${scenario}_tests PRIVATE
         rawframe_policy rawframe::world_kest rawframe::physics2d rawframe::world_replication rawframe::network_loopback
         rawframe::build rawframe::install rawframe::cook rawframe::game_content rawframe::test)
-    # The install scenario reads SPEC-0021's golden Build and pins the plans
+    # The install scenario reads the golden Build and pins the plans
     # made of it.
     target_compile_definitions(rawframe_scenario_${scenario}_tests PRIVATE
         RAWFRAME_BUILD_GOLDEN="${RAWFRAME_TEST_FILES}/modules/build/tests/golden/"

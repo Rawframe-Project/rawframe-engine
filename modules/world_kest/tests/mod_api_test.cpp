@@ -1,7 +1,7 @@
-// A game's Mod API surface (SPEC-0042, D177): its policy, namespace and
+// A game's Mod API surface: its policy, namespace and
 // version, the mods a curated game approves, and its data points; and each
 // way a description gets them wrong; and a mod's description cooked with its
-// scenes (D178); and SPEC-0042's validation of a Composition's mods (D179).
+// scenes; and the validation of a Composition's mods.
 
 #include "rawframe/content/composition_record.h"
 #include "rawframe/test/mutations.h"
@@ -413,7 +413,7 @@ RAWFRAME_TEST(AGamesPreferenceSettlesAnExclusivePoint) {
 }
 
 RAWFRAME_TEST(EveryLimitPointHoldsAtItsValue) {
-    // SPEC-0042's named limit points (D195): at the value read, one past it
+    // The named limit points: at the value read, one past it
     // refused.
     const auto kPoints = [](std::size_t count) {
         std::string text = kBase + "mods open\nmodapi raid 1\n";
@@ -477,7 +477,7 @@ RAWFRAME_TEST(EveryLimitPointHoldsAtItsValue) {
 }
 
 RAWFRAME_TEST(HostileModDescriptionsAreReadOrRefusedNeverHalfRead) {
-    // A mod description is an untrusted author's text (SPEC-0042, D183):
+    // A mod description is an untrusted author's text:
     // whatever parses keeps every rule a description has, and a game checks
     // it without harm.
     const std::string kSeed = "# A mod.\ntarget acme/raid\nmodapi >=2 <4\ncontribute spawned wave.scene\n"

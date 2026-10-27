@@ -1,4 +1,4 @@
-// A context menu (D973), as the large editors open one where a secondary
+// A context menu, as the large editors open one where a secondary
 // press lands: the Hierarchy's making and editing of entities, the Assets'
 // files, a material graph's nodes. Every row is a command or button that
 // is already there, so a context menu does nothing a menu or a button does
@@ -47,7 +47,7 @@ void ShellParticipant::showContext(float x, float y) {
         }
     };
     // What the press met, in the window it was in: a pane apart holds only
-    // its own (D990).
+    // its own.
     const TornPane* kApart = pressedApart(docking_);
     const auto kMet = [&](ui::Node node) {
         return tree_->contains(node) && tree_->placeOf(kApart != nullptr ? kApart->root : root_, node).has_value() &&
@@ -56,7 +56,7 @@ void ShellParticipant::showContext(float x, float y) {
     const bool kInHierarchy = kMet(entitiesColumn_);
     const bool kInAssets = kMet(scenesColumn_);
     const bool kInCenter = kMet(centerColumn_);
-    // A dock's tab: its pane shown apart, in a window of its own (D988).
+    // A dock's tab: its pane shown apart, in a window of its own.
     const auto kTab = std::ranges::find_if(kMovablePanes, [&](Dock pane) {
         return kMet(tabNode(pane));
     });
@@ -65,18 +65,18 @@ void ShellParticipant::showContext(float x, float y) {
         docking_.contextPane = *kTab;
         kCommand(kOpenApart);
     } else if (kInAssets) {
-        // Its files, as the Assets' own buttons do them (D929).
+        // Its files, as the Assets' own buttons do them.
         kButton("Import files", browser_.import);
         kButton("New folder", browser_.newFolder);
         kButton("Rename", browser_.rename);
         kButton("Delete", browser_.remove);
     } else if (chosen(Listed::Graph) && (kInHierarchy || kInCenter)) {
-        // A material graph's nodes (D728): a node made, and the one chosen
+        // A material graph's nodes: a node made, and the one chosen
         // removed.
         kButton("New node", newNode_);
         kButton("Delete node", deleteNode_);
     } else if (kInHierarchy || kInCenter) {
-        // The parts a scene is given (D917), then what is done to the
+        // The parts a scene is given, then what is done to the
         // entity chosen.
         for (const std::string& kPart : partCommands()) {
             kCommand(kPart);
@@ -104,7 +104,7 @@ void ShellParticipant::showContext(float x, float y) {
         "a context menu opened",
         {diagnostics::field("part", kPart), diagnostics::field("rows", static_cast<std::uint64_t>(rows.size()))});
     // Inside the window, turned back from its right and bottom edges: the
-    // pane apart's where the press was there (D990).
+    // pane apart's where the press was there.
     const float kWide = static_cast<float>(kApart != nullptr ? kApart->width : width_) / scale_;
     const float kTall = static_cast<float>(kApart != nullptr ? kApart->height : height_) / scale_;
     const float kHigh = static_cast<float>(rows.size()) * kContextRow + 10;

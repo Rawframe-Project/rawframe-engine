@@ -109,7 +109,7 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, KestError e
     return result::fail(errorClass, kKestDomain, code(error), description);
 }
 
-/// Whether two paths name one file (D630): the same, or either the other's
+/// Whether two paths name one file: the same, or either the other's
 /// end after a separator, a backslash read as `/`.
 bool sameFile(std::string_view built, std::string_view asked) {
     std::string named{built};
@@ -123,12 +123,12 @@ bool sameFile(std::string_view built, std::string_view asked) {
     return !given.empty() && (named == given || kEndsWith(named, given) || kEndsWith(given, named));
 }
 
-/// The most bytes of a text local said (D631).
+/// The most bytes of a text local said.
 constexpr std::uint32_t kMostTextSaid = 200;
 
 /// What a stopped frame's slot holds, as text: numbers and truths by value,
 /// text by its bytes where Kest proves it one piece of text, and nothing
-/// read as an address (D460, D631). Asked with the breakpoints out.
+/// read as an address. Asked with the breakpoints out.
 std::string saidOf(const KestRuntime* runtime,
                    std::uint32_t frame,
                    std::uint16_t slot,
@@ -181,14 +181,14 @@ struct Machine::State {
 
     std::function<void()> whenStopped;
     std::uint64_t stops = 0;
-    /// Whether this machine wrote the program's breakpoints (D460).
+    /// Whether this machine wrote the program's breakpoints.
     bool breaking = false;
     /// The machine's own breakpoints, written to carry on from a stop and
     /// taken out at the next: at the instruction after it, which steps past
-    /// a breakpoint (D630), and at the first instruction of every line a
-    /// step may stop at (D632).
+    /// a breakpoint, and at the first instruction of every line a
+    /// step may stop at.
     std::vector<Program::State::Written> temporary;
-    /// A step asked for from the handler (D632): how, and where the machine
+    /// A step asked for from the handler: how, and where the machine
     /// stood, its body, line, and depth.
     struct Stepping {
         Step how = Step::Over;
@@ -251,7 +251,7 @@ struct Machine::State {
         built().write(runtime, temporary.back(), true);
     }
 
-    /// Where the machine stands: its body, line, and depth (D632).
+    /// Where the machine stands: its body, line, and depth.
     [[nodiscard]] Stepping standing(Step how) const {
         const std::int32_t kIn = kest_stopped_in(runtime);
         showCompiled(true);
@@ -264,8 +264,8 @@ struct Machine::State {
     /// A stop: the machine's own breakpoints taken out and those asked for
     /// written again; whether anyone is told of it. A stop at a breakpoint
     /// asked for is told, and ends a step; one at the machine's own is told
-    /// only where it ends the step asked for (D632), and is otherwise a step
-    /// past a breakpoint or a move of a step not yet done (D630).
+    /// only where it ends the step asked for, and is otherwise a step
+    /// past a breakpoint or a move of a step not yet done.
     bool arrive() {
         const std::int64_t kAt = kest_stopped(runtime);
         const std::int32_t kIn = kest_stopped_in(runtime);
@@ -313,10 +313,10 @@ struct Machine::State {
 
     /// Carrying on from a stop: a breakpoint asked for where it stands taken
     /// out, and one of the machine's own written at the instruction after
-    /// it, which writes it again as the machine stops there (D630); while a
+    /// it, which writes it again as the machine stops there; while a
     /// step is asked for, at the instruction after it whatever stands there,
     /// and at the first instruction of every line of each body the step may
-    /// stop in: every body for one into, else those of the frames (D632).
+    /// stop in: every body for one into, else those of the frames.
     void carryOn() {
         const std::int64_t kAt = kest_stopped(runtime);
         const std::int32_t kIn = kest_stopped_in(runtime);
@@ -353,8 +353,7 @@ struct Machine::State {
     }
 
     /// Every byte a breakpoint is written over put back (`compiled`), or
-    /// written again: Kest walks a body from its start, as it was compiled
-    /// (D630).
+    /// written again: Kest walks a body from its start, as it was compiled.
     void showCompiled(bool compiled) const {
         for (const Program::State::Written& one : built().written) {
             if (!one.out) {
@@ -490,7 +489,7 @@ result::Result<std::unique_ptr<Machine>> Machine::start(std::shared_ptr<const Pr
         }
     }
     // A machine keeps its own copy of what was bound, so the host goes now.
-    // Untrusted code runs only what Kest's verifier proved (ADR-0084).
+    // Untrusted code runs only what Kest's verifier proved.
     state->runtime = trust == Trust::Untrusted ? kest_start_untrusted(kBuild, kHost, &kestLimits)
                                                : kest_start(kBuild, kHost, &kestLimits);
     kest_host_free(kHost);
@@ -569,9 +568,9 @@ execution::TaskOutcome<void> Machine::call(Entry entry, std::span<Value> frame, 
     }
     KestValue* const kFrame = frame.empty() ? nullptr : reinterpret_cast<KestValue*>(frame.data());
     bool went = kest_call(state_->runtime, entry.index, kFrame, static_cast<std::uint32_t>(frame.size()));
-    // Stopped at a breakpoint (D460): the handler sees it, and the call
-    // carries on from it, stepping past it (D630) or a line as the handler
-    // asked (D632); a stop that is only a move of either carries on unseen.
+    // Stopped at a breakpoint: the handler sees it, and the call
+    // carries on from it, stepping past it or a line as the handler
+    // asked; a stop that is only a move of either carries on unseen.
     while (!went && kest_stopped(state_->runtime) >= 0) {
         if (state_->arrive()) {
             ++state_->stops;
@@ -642,7 +641,7 @@ Breaks Machine::breakAt(std::span<const std::string> functions, std::span<const 
     Breaks breaks;
     breaks.lines.assign(lines.size(), false);
     // Only into a program no other machine stands on: another, perhaps on
-    // another thread, would run into them (Kest's D1077).
+    // another thread, would run into them.
     if (state.built().machines.load(std::memory_order_acquire) != 1) {
         return breaks;
     }
@@ -678,7 +677,7 @@ Breaks Machine::breakAt(std::span<const std::string> functions, std::span<const 
             ++breaks.functions;
         }
         // A line, at the first instruction from it in each body of its file
-        // that has one (D630).
+        // that has one.
         const char* const kSource = kest_entry_source(state.runtime, index);
         if (lines.empty() || kSource == nullptr) {
             continue;
@@ -740,11 +739,11 @@ std::vector<StoppedFrame> Machine::stack() const {
         StoppedFrame& made = frames.emplace_back();
         const char* const kWrote = kest_entry_wrote(state_->runtime, kest_frame_in(kRuntime, kFrame));
         made.function = kWrote != nullptr ? kWrote : "?";
-        // Where it stands (D630), its body read as compiled, as the proof
+        // Where it stands, its body read as compiled, as the proof
         // below is too.
         state_->showCompiled(true);
         made.at = state_->lineOf(kest_frame_in(kRuntime, kFrame), kest_frame_ip(kRuntime, kFrame));
-        // Every slot the body named (D631), each said only as Kest's proof
+        // Every slot the body named, each said only as Kest's proof
         // of the body allows: one not written on every path to where the
         // frame stands holds what the stack held, an address among it, and
         // is said as not written; text is said where it is proved one piece

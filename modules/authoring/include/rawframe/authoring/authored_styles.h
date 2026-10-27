@@ -1,9 +1,9 @@
 #pragma once
 
-// A game's style sheet open for authoring (D636): a `ui.styles` document
-// (rawframe/ui/styles.h), a JsonDocument (D640) whose slots are a class
-// (`styles` by `styleId`), whole at its place (D638); its `name`; its
-// `transitions` (D639); and one part of one variant's look (`hovered`,
+// A game's style sheet open for authoring: a `ui.styles` document
+// (rawframe/ui/styles.h), a JsonDocument whose slots are a class
+// (`styles` by `styleId`), whole at its place; its `name`; its
+// `transitions`; and one part of one variant's look (`hovered`,
 // `fill` say). Its operations are `styles.set_part`, `styles.create_class`,
 // `styles.remove_class`, `styles.rename_class`, and
 // `styles.set_transitions`, in operations.h.
@@ -62,7 +62,7 @@ public:
         return document_.text();
     }
 
-    /// SPEC-0040's AtomicBatch over the sheet: each change in order against
+    /// The AtomicBatch over the sheet: each change in order against
     /// `generation`, one entry in the history together, none where every
     /// slot already holds its value. Any refused keeps nothing, naming its
     /// `index`: (`TargetStale`) another generation, (`TargetNotFound`) a
@@ -73,7 +73,7 @@ public:
     /// operations.
     [[nodiscard]] result::Result<Committed> change(std::uint64_t generation, std::span<const Operation> operations);
 
-    /// Who changes, undoes, or redoes next (D879).
+    /// Who changes, undoes, or redoes next.
     void setAuthor(std::uint32_t author) noexcept {
         document_.setAuthor(author);
     }
@@ -98,7 +98,7 @@ public:
     [[nodiscard]] std::size_t redoable() const noexcept {
         return document_.redoable();
     }
-    /// Who made the history's entry at `entry`, and what it is (D879).
+    /// Who made the history's entry at `entry`, and what it is.
     [[nodiscard]] const Authorship& authorshipAt(std::size_t entry) const noexcept {
         return document_.authorshipAt(entry);
     }
@@ -106,7 +106,7 @@ public:
         return document_.journalAt(entry);
     }
     /// What the history's entry at `entry` does, in a line an author reads
-    /// in a history, as a scene's (D454, D638): its first delta, as `set
+    /// in a history, as a scene's: its first delta, as `set
     /// hovered.fill`, and how many more there are.
     [[nodiscard]] std::string summaryAt(std::size_t entry) const;
 

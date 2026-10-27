@@ -1,7 +1,7 @@
 #pragma once
 
 // What a cook wrote, brought from the session that cooked it into a
-// directory here (D905): so a collaborator plays what a shared session's
+// directory here: so a collaborator plays what a shared session's
 // host cooked on its own machine, through records alone, as Studio joined
 // and `rawframe-author copy-cooked` do.
 

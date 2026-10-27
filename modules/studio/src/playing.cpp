@@ -18,8 +18,8 @@ namespace {
 
 /// The picture a game streams into a viewport of `at`: its size, made
 /// smaller where its pixels would pass the UI's share of a frame's uploads
-/// and so never show (D927); drawn stretched over the viewport.
-/// A rectangle of the layout in the window's device pixels (D963): the
+/// and so never show; drawn stretched over the viewport.
+/// A rectangle of the layout in the window's device pixels: the
 /// viewport's picture is drawn at those, as sharp as the screen.
 ui::Rect devicePixels(ui::Rect at, float scale) {
     return ui::Rect{.x = at.x * scale, .y = at.y * scale, .width = at.width * scale, .height = at.height * scale};
@@ -42,7 +42,7 @@ std::array<std::uint32_t, 2> streamedSize(const ui::Rect& at) {
 }
 
 /// Whether a game's description makes it a 2D one: its physics the 2D
-/// engine's, none of the 3D's (D927).
+/// engine's, none of the 3D's.
 bool flatGame(const std::filesystem::path& description) {
     const std::string kText = authoring_session::readFile(description).value_or("");
     const auto kSays = [&kText](std::string_view word) {
@@ -61,7 +61,7 @@ bool flatGame(const std::filesystem::path& description) {
 
 void ShellParticipant::settleFlat() {
     // A 2D game's scene opens on the 2D view, as an editor opens a 2D
-    // project (D927), each scene it opens framed whole (D933).
+    // project, each scene it opens framed whole.
     if (!std::exchange(held_.flatPending, false) || !chosen(Listed::Scene) || !flatGame(description_)) {
         return;
     }
@@ -78,8 +78,8 @@ void ShellParticipant::keepEditing() {
         return;
     }
     // Play asked for cooks first where the content is behind, as an
-    // editor builds before it runs (D923); joined, it plays what this
-    // author cooked at the host (D905, D925).
+    // editor builds before it runs; joined, it plays what this
+    // author cooked at the host.
     if (playAsked_) {
         if (cooking_.has_value()) {
             return;
@@ -97,14 +97,14 @@ void ShellParticipant::keepEditing() {
         return;
     }
     // A game opened opens on its first scene, as an editor opens a
-    // project on its main one (D912).
+    // project on its main one.
     if (scene_.empty() && !std::exchange(editOpened_, true)) {
         if (const auto kFirst = std::ranges::find(listed_, Listed::Scene);
             kFirst != listed_.end() && static_cast<std::size_t>(kFirst - listed_.begin()) < scenes_.size()) {
             showScene(static_cast<std::size_t>(kFirst - listed_.begin()));
         } else if (!documentChosen()) {
             // A game with no scene, its world made in Kest, still has its
-            // viewport, where Play shows it (D923).
+            // viewport, where Play shows it.
             clear(viewRows_);
             showViewport();
         }
@@ -114,7 +114,7 @@ void ShellParticipant::keepEditing() {
     }
     // Cooked once on opening where it is behind, as an editor imports what
     // it opens: the scene's view, the Assets' thumbnails and a material's
-    // preview are drawn from the cook (D927).
+    // preview are drawn from the cook.
     if (!editCooked_ && cookBehind()) {
         editCooked_ = true;
         cookOrStop();
@@ -149,24 +149,23 @@ void ShellParticipant::startPlaying(bool edited) {
         say("the last game is still stopping");
         return;
     }
-    // At a host joined, what this author cooked there is played here
-    // (D905).
+    // At a host joined, what this author cooked there is played here.
     if (held_.joined != nullptr && !bringCooked()) {
         return;
     }
     if (edited) {
         held_.meshesPreviewed = static_cast<std::size_t>(std::ranges::count(assets_, "mesh", &Asset::kind));
     }
-    // In the viewport at its size, where one is shown (D789), unless it is
-    // tried as a device, in a window of the device's size (D809).
+    // In the viewport at its size, where one is shown, unless it is
+    // tried as a device, in a window of the device's size.
     play_->viewport.reset();
     play_->device = device_;
     if (inViewport_.inViewport && !device_.has_value()) {
         play_->viewport = streamedSize(
             devicePixels(tree_->contains(viewport_) ? tree_->placedRectOf(viewport_) : ui::Rect{}, scale_));
     }
-    // With the players chosen, each a client (D804); edited, one, in the
-    // viewport (D912).
+    // With the players chosen, each a client; edited, one, in the
+    // viewport.
     play_->players = edited ? 1 : players_;
     play_->edited = edited;
     if (edited && !play_->viewport.has_value()) {
@@ -180,8 +179,7 @@ void ShellParticipant::startPlaying(bool edited) {
     }
     playing_.emplace(std::move(*started));
     ++played_;
-    // Its logs read into the Console as they grow, each from its start
-    // (D778).
+    // Its logs read into the Console as they grow, each from its start.
     tails_.clear();
     tails_.emplace_back(playing_->directory() / "server.log", ConsoleLine::Source::Server);
     tails_.emplace_back(playing_->directory() / "client.log", ConsoleLine::Source::Client);
@@ -200,7 +198,7 @@ bool ShellParticipant::bringCooked() {
         say(std::string{kMade.error().description()});
         return false;
     }
-    // By the plain name Studio cooks under at a host (D885), each piece
+    // By the plain name Studio cooks under at a host, each piece
     // asked as any record is.
     const auto kCopied = authoring_session::copyCooked(
         [this](Value record) {
@@ -266,7 +264,7 @@ void ShellParticipant::stopPlaying() {
     playing_->stop();
     stopping_ = std::move(playing_);
     playing_.reset();
-    // The scene's own entities again in the Hierarchy (D923).
+    // The scene's own entities again in the Hierarchy.
     if (live_.on) {
         switchLive();
     }
@@ -285,10 +283,10 @@ void ShellParticipant::cookOrStop() {
     std::string refused;
     if (held_.joined != nullptr) {
         // At a host joined, into the host's cooking directory, by plain
-        // names it keeps in this author's own (D885).
+        // names it keeps in this author's own.
         refused = ask(cookRecord(kId, "content", "cook-cache"));
     } else {
-        // Into the game's play directory, its owner's alone (D462).
+        // Into the game's play directory, its owner's alone.
         if (const result::Status kMade = privateDirectory(cookAt_); !kMade.has_value()) {
             say(std::string{kMade.error().description()});
             return;
@@ -341,13 +339,12 @@ void ShellParticipant::hearCookLine(const std::string& line) {
     }
     cooking_.reset();
     relabel(cookNode_, "Cook");
-    // Each source as the cook left it (D799), its thumbnail from this cook
-    // (D801).
+    // Each source as the cook left it, its thumbnail from this cook.
     listSources();
     browser_.pictures.clear();
     static_cast<void>(showScenes());
     // A mesh imported or removed since the edit view started is drawn
-    // once it starts again (D981).
+    // once it starts again.
     if (kHeard.kind == Heard::Kind::Cooked && playing_.has_value() && playing_->edited() &&
         static_cast<std::size_t>(std::ranges::count(assets_, "mesh", &Asset::kind)) != held_.meshesPreviewed) {
         stopPlaying();
@@ -372,7 +369,7 @@ void ShellParticipant::recookPlayed() {
 
 void ShellParticipant::attachPlayed(double seconds) {
     // Said, so what closes Studio after a game waits for the game's own
-    // stop, its records written, rather than ending it mid-stop (D504).
+    // stop, its records written, rather than ending it mid-stop.
     if (stopping_.has_value() && stopping_->ended()) {
         stopping_.reset();
         emitter_.log(diagnostics::Severity::Info, kGameEnded, "the stopped game has ended");
@@ -382,7 +379,7 @@ void ShellParticipant::attachPlayed(double seconds) {
     }
     // A preview by configuration whose game did not answer, loaded or not
     // yet started, is tried again now and then; each try may wait for its
-    // reply, so not often (D453b).
+    // reply, so not often.
     if (!playing_.has_value()) {
         if (preview_.has_value() && !scene_.empty()) {
             nextAttach_ = seconds + 2;
@@ -402,15 +399,15 @@ void ShellParticipant::attachPlayed(double seconds) {
         return;
     }
     // At a host joined, the preview is held beside the link to it, the
-    // game playing here (D906).
+    // game playing here.
     const std::optional<Preview> kPreview = playing_->preview();
     if (!kPreview.has_value()) {
         return;
     }
     preview_ = kPreview;
     // A game played, not edited, shows its own camera, as a game window
-    // does (D916): observed, so the Hierarchy lists its World live
-    // (D923); only the edited one is the editor's view.
+    // does: observed, so the Hierarchy lists its World live;
+    // only the edited one is the editor's view.
     preview_->observe = editView_ && !playing_->edited();
     attachPreview();
 }
@@ -420,11 +417,11 @@ void ShellParticipant::pollPicks(double seconds) {
         seconds < nextPick_) {
         return;
     }
-    // Often, as nothing waits for the preview's answer (D969).
+    // Often, as nothing waits for the preview's answer.
     nextPick_ = seconds + 0.05;
     const std::string kReply = ask(pickRecord(next(), scene_));
     // Said once each time another part is lit, so what waits on a hover
-    // waits for it (D504).
+    // waits for it.
     if (std::string lit = litIn(kReply); lit != lit_) {
         lit_ = std::move(lit);
         if (!lit_.empty()) {
@@ -436,18 +433,18 @@ void ShellParticipant::pollPicks(double seconds) {
     }
     const std::optional<std::string> kSource = pickedIn(kReply, scene_);
     const std::optional<Moved> kMoved = movedIn(kReply, scene_);
-    // The Select tool's drag draws a box, choosing what stands in it
-    // (D974); its press chose what it met, as a click does, until then.
+    // The Select tool's drag draws a box, choosing what stands in it;
+    // its press chose what it met, as a click does, until then.
     const std::optional<std::array<std::array<double, 3>, 2>> kBox = boxIn(kReply);
     const bool kBoxChose = held_.tool == 0 && kBox.has_value() && chooseBoxed(*kBox);
     // With an extension's mode on, a click that met the scene runs it
-    // there, on what it met, instead of choosing that (D877).
+    // there, on what it met, instead of choosing that.
     const std::optional<std::array<double, 3>> kPoint = pickedPointIn(kReply);
     if (held_.extensionMode.has_value() && kPoint.has_value()) {
         runExtensionMode(*kPoint, kSource);
     } else if (kSource.has_value() && !kBoxChose) {
         if (const std::optional<std::string> kLayer = lockedOf(*kSource); kLayer.has_value()) {
-            // Not picked in the viewport, nor moved there (D788).
+            // Not picked in the viewport, nor moved there.
             ++lockRefused_;
             say(*kLayer + " is locked");
         } else if (const auto kAt = std::ranges::find(entities_, *kSource); kAt != entities_.end()) {
@@ -463,12 +460,11 @@ void ShellParticipant::pollPicks(double seconds) {
     } else if (const std::optional<Moved> kDragging = movedIn(kReply, scene_, "dragging");
                kDragging.has_value() && seconds >= nextLiveStep_ && !lockedOf(kDragging->source).has_value()) {
         // A drag shown as it goes, ten steps a second, as the edit view
-        // follows the scene (D912, D976).
+        // follows the scene.
         nextLiveStep_ = seconds + 0.1;
         moveDragged(*kDragging, true);
     }
-    // The view moved in the played game, shown in the view's fields
-    // (D469).
+    // The view moved in the played game, shown in the view's fields.
     if (auto viewed = viewedIn(kReply); viewed.has_value()) {
         view_ = std::move(viewed);
         ++viewsMoved_;
@@ -483,7 +479,7 @@ void ShellParticipant::pollPicks(double seconds) {
                 distance += kApart * kApart;
             }
         }
-        // Where the eye and the target are now too (D472).
+        // Where the eye and the target are now too.
         const auto kAt = [](const Value* point, std::size_t axis) {
             return point != nullptr && point->items().size() == 3 ? point->items()[axis].real().value_or(0) : 0.0;
         };
@@ -536,7 +532,7 @@ void ShellParticipant::markChosen() {
             at = std::array<double, 3>{kPose->at("x"), kPose->at("y"), kPose->at("z")};
         }
     }
-    // Its handles the tool's (D974): Move's axes, Rotate's ring, none for
+    // Its handles the tool's: Move's axes, Rotate's ring, none for
     // Select, which only chooses, or Scale, which has none of its own.
     constexpr std::array<std::string_view, 4> kHandles = {"none", "axes", "ring", "none"};
     const std::string kReply = ask(markRecord(next(), scene_, at, kHandles[held_.tool % kHandles.size()]));
@@ -605,7 +601,7 @@ void ShellParticipant::outlineChosen() {
 
 void ShellParticipant::scaleDragged(const Moved& moved, std::map<std::string, double, std::less<>>& pose) {
     // Sized by how far the drag went to the view's right (or up, by the
-    // height handle): a meter doubles it, a meter back halves it (D922).
+    // height handle): a meter doubles it, a meter back halves it.
     std::array<double, 2> right{1, 0};
     if (view_.has_value()) {
         const Value* kEye = view_->find("eye");
@@ -663,7 +659,7 @@ void ShellParticipant::scaleDragged(const Moved& moved, std::map<std::string, do
 }
 
 void ShellParticipant::moveDragged(const Moved& moved, bool live) {
-    // A drag shown as it goes moved it from where it began (D976).
+    // A drag shown as it goes moved it from where it began.
     const bool kGoing = liveDrag_.has_value() && liveDrag_->source == moved.source;
     const bool kAmends = kGoing && liveDrag_->steps > 0;
     // A press let go where it went down is a click, not a drag, unless the
@@ -688,11 +684,11 @@ void ShellParticipant::moveDragged(const Moved& moved, bool live) {
     std::vector<std::pair<std::string, double>> changed;
     std::string done;
     // A place moved is snapped to the grid where it moved, a turn to
-    // whole steps (D471).
+    // whole steps.
     const auto kPlaced = [this](double was, double by) {
         return by != 0 ? snapped(was + by, snap_.move) : was;
     };
-    // The toolbar's tool says what a drag does (D922): Select only
+    // The toolbar's tool says what a drag does: Select only
     // chooses, Rotate turns whatever was grabbed, Scale sizes the body.
     if (held_.tool == 0 || (live && held_.tool == 3)) {
         return;
@@ -776,7 +772,7 @@ void ShellParticipant::attachPreview() {
         view_ = kAttached.view;
     }
     // Edited, it is seen through the editor's camera, on the whole scene
-    // where the scene keeps no view of its own (D913).
+    // where the scene keeps no view of its own.
     if (previewing_ && playing_.has_value() && playing_->edited() && !view_.has_value()) {
         Answered framed = answeredOf(ask(frameRecord(next(), scene_)));
         // Nothing in it stands anywhere: from above the ground's middle.
@@ -798,7 +794,7 @@ void ShellParticipant::attachPreview() {
             view_ = framed.view;
         }
     }
-    // With the ground's grid, as an editor's viewport has it (D914).
+    // With the ground's grid, as an editor's viewport has it.
     if (previewing_ && playing_.has_value() && playing_->edited() && !std::exchange(held_.gridShown, true) &&
         std::ranges::find(shown_.overlays, "grid") == shown_.overlays.end()) {
         shown_.overlays.insert(shown_.overlays.begin(), "grid");
@@ -809,7 +805,7 @@ void ShellParticipant::attachPreview() {
         say(kAttached.done ? (previewing_ ? "previewing " + previewedName() : "no preview") : kAttached.message);
     }
     // A game played lists its World live in the Hierarchy, as an
-    // editor's play mode does (D923).
+    // editor's play mode does.
     if (previewing_ && preview_->observe && !live_.on) {
         switchLive();
     }
@@ -819,19 +815,19 @@ void ShellParticipant::attachPreview() {
                      "a scene's preview is live in a running game",
                      {diagnostics::field("scene", std::string_view{scene_})});
         markChosen();
-        // And without the layers hidden before it was attached (D791).
+        // And without the layers hidden before it was attached.
         if (!shown_.hiddenLayers.empty()) {
             tellHidden();
         }
-        // And drawn as it was asked to be (D794).
+        // And drawn as it was asked to be.
         if (shown_.viewMode != "lit") {
             tellViewMode();
         }
-        // And split as it was (D797).
+        // And split as it was.
         if (shown_.views != 1) {
             tellSplit();
         }
-        // And with its overlays (D798).
+        // And with its overlays.
         if (!shown_.overlays.empty()) {
             tellOverlays();
         }

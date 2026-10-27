@@ -1,8 +1,8 @@
-# Reach (D656), the small VR game: players sit round a table and pick up,
+# Reach, the small VR game: players sit round a table and pick up,
 # hand over, and throw the blocks on it with their hands, Maul3D bodies all,
 # the server deciding. A headset's controllers are a player's hands; a flat
-# player reaches with one. VR and flat players share the one World
-# (ADR-0081's cross-play), and the game is Palmshift's class among the
+# player reaches with one. VR and flat players share the one World,
+# and the game is Palmshift's class among the
 # constitution's reference games: hands, low-latency input and physics, and
 # a small 3D World.
 program reach.kest
@@ -20,10 +20,10 @@ component ea827a4e-3a16-42dc-b120-eb28ea24c609 reach.block Block
 component 84064735-82e5-4725-90d0-39e682d09191 reach.grip Grip
 component a65063a9-817e-4430-acf5-f083fad0a263 reach.table Table
 # A block's knock, cued by the server as it strikes something, heard by
-# clients from where the block is (D660).
+# clients from where the block is.
 component a0fd2692-1aa3-4429-bca5-5f8b4e743eff reach.knock rawframe.sound.Emitter
 # What a client draws, where it looks from, and where it draws its own
-# hands (D665), each frame a headset's hands where they are then (D676);
+# hands, each frame a headset's hands where they are then;
 # no server carries any.
 component 5a30e0bb-bf22-49df-b00a-22b24f0980ee reach.look rawframe.model.Model
 component f0992124-ca0d-469d-8379-bfc5880526c8 reach.view rawframe.model.Camera
@@ -58,11 +58,11 @@ entity reach.hand player held
 player reach.hands reach.seat
 input reach.hands
 # The hands' input, a headset's tracked poses in it, goes to its own
-# player's client alone (D673, ADR-0081): the others see the hands the
+# player's client alone: the others see the hands the
 # server moves, never the poses.
 own reach.hands
 # A client predicts its own hands' input, so it presents where its player
-# holds them now (D665); nothing else of the World is predicted.
+# holds them now; nothing else of the World is predicted.
 predict reach.hands
 # A client makes its hands from its player's actions (reach.actions) with
 # sample.kest: a headset's controllers, or keys and the mouse; bots press
@@ -84,10 +84,10 @@ present reach.dress dress read rawframe.physics3d.body write reach.look
 presentation reach.view on player
 present reach.frame frame read reach.seat write reach.view
 # The client's own hands, and a block one holds, drawn where its player
-# holds them now (D665).
+# holds them now.
 presentation reach.placed on rawframe.physics3d.body
 present reach.place placeOwn read rawframe.physics3d.body write reach.placed entities lookup reach.hand lookup reach.block lookup reach.hands lookup reach.seat lookup rawframe.physics3d.pose
 # And, where a headset shows, where its hands are each frame between the
-# ticks (D676).
+# ticks.
 presentation reach.tracked on rawframe.physics3d.body
 present reach.follow followOwn read rawframe.physics3d.body write reach.tracked entities lookup reach.hand lookup reach.block lookup rawframe.physics3d.pose

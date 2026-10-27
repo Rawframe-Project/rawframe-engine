@@ -1,6 +1,6 @@
-// A UI document open for authoring (D641): a node's field set and unset
+// A UI document open for authoring: a node's field set and unset
 // wherever the node stands, nodes made inside others and removed with what
-// is inside them, moved with what is inside them (D644), each batch one
+// is inside them, moved with what is inside them, each batch one
 // entry undone exactly, what the document's reader refuses refused with
 // the document as it was, and the document read whole.
 

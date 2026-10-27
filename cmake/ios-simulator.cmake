@@ -1,5 +1,5 @@
-# The iOS simulator on 64-bit ARM (D583, D584): LLVM 20's clang, as macOS
-# builds with (D236), against LLVM 20's libc++ built for the simulator by
+# The iOS simulator on 64-bit ARM: LLVM 20's clang, as macOS
+# builds with, against LLVM 20's libc++ built for the simulator by
 # tools/build_libcxx_ios.sh into RAWFRAME_IOS_LIBCXX, linked statically, at
 # iOS 16.3, where a double's std::to_chars begins. RAWFRAME_LLVM names the
 # LLVM prefix, Homebrew's llvm@20 unless set. Run on macOS with Xcode.

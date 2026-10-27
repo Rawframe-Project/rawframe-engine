@@ -1,6 +1,6 @@
 #pragma once
 
-// A player's commands as doors (D425): for each command a game declares,
+// A player's commands as doors: for each command a game declares,
 // `CommandCount.<name>() -> i32` says how many the tick's systems may read,
 // `Command.<name>(index: i32) -> T` reads one, and `CommandFrom.<name>(index:
 // i32) -> Entity` names the player who sent it. A server's doors read what

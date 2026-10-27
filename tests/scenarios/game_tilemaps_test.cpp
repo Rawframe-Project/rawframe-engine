@@ -1,5 +1,5 @@
-// A game whose level is a tilemap (D859) strewn with a scatter's crates
-// (D864): the ledges game cooked, and the game read from its cooked
+// A game whose level is a tilemap strewn with a scatter's crates:
+// the ledges game cooked, and the game read from its cooked
 // description and from its sources both hold the level's tiles, parsed
 // once from the cooked text, the crates placed alike, and the same digest,
 // so a server's bodies and a client's tiles are one map. A game read from

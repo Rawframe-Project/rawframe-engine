@@ -1,10 +1,9 @@
 #pragma once
 
-// A scene's view moved as an editor's viewport is (D469): the wheel brings
+// A scene's view moved as an editor's viewport is: the wheel brings
 // the eye nearer its target or farther, and a drag with the right button
-// carries it round the target; with Shift, freelook's (D472), the drag
-// turns the view about its eye and the wheel flies it along. Editor state, never the scene's data
-// (ADR-0066).
+// carries it round the target; with Shift, freelook's, the drag
+// turns the view about its eye and the wheel flies it along. Editor state, never the scene's data.
 
 #include "rawframe/authoring/authored_scene.h"
 #include "rawframe/authoring/operations.h"
@@ -27,7 +26,7 @@ namespace rawframe::authoring_session {
 [[nodiscard]] authoring::SceneView
 movedView(const authoring::SceneView& view, double detents, double across, double up) noexcept;
 
-/// `view` turned about its eye, freelook's (D472): its target carried
+/// `view` turned about its eye, freelook's: its target carried
 /// round the eye `across` pixels about the upright and `up` pixels over it
 /// (down looking down), a pixel a two hundredth of a radian, its height
 /// held short of straight over or under; the eye where it was.
@@ -38,7 +37,7 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// the eye's distance from the target.
 [[nodiscard]] authoring::SceneView flownView(const authoring::SceneView& view, double detents) noexcept;
 
-/// `view` turned on `points` (D792): its target their middle, its eye
+/// `view` turned on `points`: its target their middle, its eye
 /// back along the way it looked from (from above and behind for a view
 /// with none) and far enough that a ball a meter wider than they spread
 /// fills its field of view, held between three meters and ten
@@ -51,7 +50,7 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// patch sets or adds it; none for one without, or not in the scene.
 [[nodiscard]] std::optional<std::array<double, 3>> standingOf(const scene::Scene& scene, base::Bits128 entity);
 
-/// Half the sides of a box about what `entity` of `scene` fills (D907),
+/// Half the sides of a box about what `entity` of `scene` fills,
 /// from its 3D or 2D body by its fields' names: a sphere's or a circle's
 /// radius every way, a box's half sides, a capsule's or a cylinder's
 /// radius across and its half height (a capsule's with its ends) along y;
@@ -59,12 +58,12 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// instance's, a mesh's, a tilemap's), a 2D one at nought depth.
 [[nodiscard]] std::array<double, 3> halfOf(const scene::Scene& scene, base::Bits128 entity);
 
-/// `outline`'s answer for `scene` (D907): for each author's outline its
+/// `outline`'s answer for `scene`: for each author's outline its
 /// color and a box about each entity of theirs that stands somewhere, at
 /// its pose, `halfOf` it; boxes as `tooling.outlines` takes them.
 [[nodiscard]] document::Value outlinesOf(const scene::Scene& scene, std::span<const authoring::SessionOutline> asked);
 
-/// The paths `scene`'s splines make (D891), as `catalog` says which of its
+/// The paths `scene`'s splines make, as `catalog` says which of its
 /// components are a spline and a point on one: each spline's own points,
 /// ordered by their index, then their id, standing where their poses put
 /// them, walked as the game walks them; at most 64 paths and 4,096 points in all, a spline with fewer
@@ -73,7 +72,7 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 [[nodiscard]] std::vector<std::vector<std::array<double, 3>>> pathsOf(const scene::Scene& scene,
                                                                       const authoring::ComponentCatalog& catalog);
 
-/// Whether `view` is a 2D one (D793): its eye straight over its target
+/// Whether `view` is a 2D one: its eye straight over its target
 /// along +Z, looking down at the plane a 2D game draws in.
 [[nodiscard]] bool flat(const authoring::SceneView& view) noexcept;
 
@@ -81,7 +80,7 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// plane, as a drag moves it, eye and target together.
 [[nodiscard]] authoring::SceneView pannedView(const authoring::SceneView& view, double across, double up) noexcept;
 
-/// The views a preview split `views` ways shows beside `view` (D797):
+/// The views a preview split `views` ways shows beside `view`:
 /// from straight over its target, then before it along +Z, each as far
 /// from it as `view`'s eye and as wide; none for one.
 [[nodiscard]] std::vector<authoring::SceneView> othersOf(const authoring::SceneView& view, std::size_t views);
@@ -89,8 +88,8 @@ movedView(const authoring::SceneView& view, double detents, double across, doubl
 /// `view` as a record gives it: its eye, target, and field of view.
 [[nodiscard]] document::Value viewValue(const authoring::SceneView& view);
 
-/// What a preview's wheel and drags with the right button came to (D469,
-/// D472): as totals `tooling.clicked` answers, or their change since a
+/// What a preview's wheel and drags with the right button came to:
+/// as totals `tooling.clicked` answers, or their change since a
 /// reading.
 struct ViewMotion {
     double wheel = 0;

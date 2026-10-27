@@ -1,5 +1,5 @@
-// The paths a scene's splines make, as a preview is told them (D891), and
-// the boxes an outline draws about what an author chose (D907).
+// The paths a scene's splines make, as a preview is told them, and
+// the boxes an outline draws about what an author chose.
 
 #include "../src/viewing.h"
 #include "rawframe/spline/spline.h"

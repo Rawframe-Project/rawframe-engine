@@ -79,7 +79,7 @@ result::Result<JsonPath> dataPathOf(std::string_view text) {
                     return kBad();
                 }
             } else {
-                // An item by its place from nought, as `keys[2]` (D827).
+                // An item by its place from nought, as `keys[2]`.
                 std::size_t place = 0;
                 const auto [kStop, kError] = std::from_chars(kInside.data(), kInside.data() + kInside.size(), place);
                 if (kInside.empty() || kInside.size() > 9 || kError != std::errc{} ||

@@ -17,7 +17,7 @@ std::unexpected<result::Error> badLine(std::size_t line, WorldKestError error, s
             .withContext("line", std::to_string(line))};
 }
 
-/// SPEC-0042's grammar for a namespace and a point's name:
+/// The grammar for a namespace and a point's name:
 /// `[a-z][a-z0-9_]{0,63}`.
 bool validName(std::string_view name) noexcept {
     return !name.empty() && name.size() <= 64 && name.front() >= 'a' && name.front() <= 'z' &&
@@ -79,8 +79,8 @@ readModLine(std::span<const std::string_view> words, std::size_t line, GameDescr
     }
     if (kKeyword == "prefer") {
         // `prefer <point> <publisher/name>...`: which mod keeps an exclusive
-        // point several claim, in the game's order (SPEC-0042 question 6,
-        // D202).
+        // point several claim, in the game's order.
+        //
         std::vector<std::string> subjects;
         bool valid = words.size() >= 3 && validName(words[1]) &&
                      !std::ranges::contains(lines.preferences, words[1], &ModLines::Preference::point);

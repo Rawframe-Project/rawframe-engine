@@ -1,6 +1,6 @@
 #pragma once
 
-// Studio extensions (SPEC-0051 Part 7, ADR-0032 section 6, D874): Kest
+// Studio extensions: Kest
 // programs under a game's `extensions/` directory, each compiled against
 // the Kest library and run as untrusted code with `rawframe.studio`'s doors
 // and no others, under a heap and fuel ceiling, so opening a game never
@@ -40,7 +40,7 @@ struct ExtensionCommand {
     std::string function;
 };
 
-/// An Inspector section an extension offers (D875): the component it is
+/// An Inspector section an extension offers: the component it is
 /// shown on, by the name the scene records it by, and its function.
 struct ExtensionSection {
     std::string component;
@@ -60,10 +60,9 @@ struct GameExtension {
     std::string path;
     std::vector<ExtensionCommand> commands;
     std::vector<ExtensionSection> sections;
-    /// Its viewport modes, each a name and a function as a command is
-    /// (D877).
+    /// Its viewport modes, each a name and a function as a command is.
     std::vector<ExtensionCommand> modes;
-    /// Its panels, each a name and a function (D878).
+    /// Its panels, each a name and a function.
     std::vector<ExtensionCommand> panels;
     std::vector<std::string> capabilities;
     std::string refused;
@@ -99,7 +98,7 @@ struct GameExtension {
                                                                  const authoring::ComponentCatalog& catalog);
 
 /// The rows the extension at `path` shows in its panel `panel` for
-/// `chosen` (entities of `scene`), staging nothing (D878). Refuses as
+/// `chosen` (entities of `scene`), staging nothing. Refuses as
 /// `runSection` does, and (`TargetNotFound`) a panel it does not offer.
 [[nodiscard]] result::Result<std::vector<SectionRow>> runPanel(const std::filesystem::path& gameDirectory,
                                                                std::string_view path,

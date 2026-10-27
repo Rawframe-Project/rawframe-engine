@@ -1,6 +1,6 @@
-# The sample tile game (D859): players are balls rolling about a level made
+# The sample tile game: players are balls rolling about a level made
 # of a tilemap, its solid tiles one static body stepped on the server, among
-# crates a scatter strews (D864). Each
+# crates a scatter strews. Each
 # client is sent what is within 40 meters of its ball, sees it between
 # states, and predicts its own ball among the level. The level is read from
 # the game's cooked content, so the game plays from content.
@@ -12,11 +12,11 @@ collision rule ball ball ignore
 
 tilemap 8f5c1d2e3a4b6079 level.tilemap
 
-# Crates strewn over it by a scatter of the crate prefab (D864).
+# Crates strewn over it by a scatter of the crate prefab.
 prefab 0f5f3b7f7d1ab49c crate.scene
 scatter crates.scatter
 
-# A lift riding a closed spline (D868): the path, its four points, and the
+# A lift riding a closed spline: the path, its four points, and the
 # lift that follows it, in lift.scene.
 component f1dfa5a1-6e2f-48b0-a454-11c26d2582b8 ledges.path rawframe.spline.Spline
 component 1cb26c19-6c66-4fb1-8148-9cd5d0ebb588 ledges.point rawframe.spline.Point

@@ -207,7 +207,7 @@ private:
 };
 
 /// The test games' files, held under `game/` as a host holds what it
-/// fetched (D167), so that a game is played where there are no files.
+/// fetched, so that a game is played where there are no files.
 inline const composition::HeldFiles& heldGames() {
     static const composition::HeldFiles kHeld = [] {
         std::vector<composition::HeldFiles::File> files;
@@ -242,7 +242,7 @@ inline std::string readText(const std::string& path) {
 }
 
 #if defined(_WIN32)
-// A path is text only on POSIX; Windows' is wide (D237).
+// A path is text only on POSIX; Windows' is wide.
 inline void writeText(const std::filesystem::path& path, std::string_view text) {
     writeText(path.string(), text);
 }

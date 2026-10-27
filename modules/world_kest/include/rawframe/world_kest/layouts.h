@@ -1,11 +1,11 @@
 #pragma once
 
-// A game's components as the World lays them out (D94): a type of the
+// A game's components as the World lays them out: a type of the
 // program's own as the program lays it out, with Kest's mark; a component
 // the engine owns (its physics components, a player's Perception, the
 // persistent identity) as the engine lays it out, with a mark the engine
 // derives from that layout, the same whether or not the program names the
-// type. The mark is what a scene records it was authored against (D92).
+// type. The mark is what a scene records it was authored against.
 
 #include "rawframe/kest/program.h"
 #include "rawframe/result/result.h"
@@ -66,8 +66,8 @@ componentLayout(const GameDescription& game, const kest::Program& program, const
 /// may not, for it names one World only.
 [[nodiscard]] bool holdsEntity(const kest::TypeLayout& layout);
 
-/// Each of the game's components field by field for a reader of the World
-/// (D409), from `layouts` in the components' order: an entity field whole,
+/// Each of the game's components field by field for a reader of the World,
+/// from `layouts` in the components' order: an entity field whole,
 /// an enum by its cases, a field of no plain kind left out.
 [[nodiscard]] std::vector<world_runtime::ComponentFieldSet>
 componentFieldSets(const GameDescription& game, std::span<const kest::TypeLayout> layouts);

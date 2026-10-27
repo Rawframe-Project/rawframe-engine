@@ -1,6 +1,6 @@
 #pragma once
 
-// A cook's output read back a piece at a time (D905): its manifest, or a
+// A cook's output read back a piece at a time: its manifest, or a
 // file the manifest locates, so what was cooked on one machine is played on
 // another, as a collaborator plays what a shared session's host cooked.
 
@@ -27,7 +27,7 @@ inline constexpr std::size_t kCookedPiece = std::size_t{192} * 1024;
 /// size. Only an output one of this session's cooks wrote (`cooked`), and
 /// not while one cooks into it, is read: refused otherwise
 /// (`target_not_found`, `unsupported_operation` of class `unavailable`).
-/// The file is `content.manifest` or a locator (SPEC-0008), a regular file
+/// The file is `content.manifest` or a locator, a regular file
 /// under the output (`validation_failed`, `target_not_found`); an offset
 /// past its end is refused too (`validation_failed`).
 [[nodiscard]] result::Result<document::Value> cookedFileOf(std::span<const std::filesystem::path> cooked,

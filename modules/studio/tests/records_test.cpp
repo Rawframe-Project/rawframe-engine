@@ -1,4 +1,4 @@
-// Studio's records (D435, D439): a component found by what an author types,
+// Studio's records: a component found by what an author types,
 // a field's text made a value of its kind or refused, an outcome read, and
 // a minted identity in the form the session reads.
 
@@ -416,7 +416,7 @@ RAWFRAME_TEST(APlayedGamesFilesAreItsOwnersAlone) {
     RAWFRAME_EXPECT(kept == "kept");
     RAWFRAME_EXPECT(std::filesystem::is_regular_file(std::filesystem::symlink_status(kDirectory / "token")));
     // Windows keeps it to its owner by its ACL, which no permission bit
-    // shows (D501).
+    // shows.
 #if !defined(_WIN32)
     RAWFRAME_EXPECT(std::filesystem::status(kDirectory).permissions() == std::filesystem::perms::owner_all);
 #endif
@@ -431,7 +431,7 @@ RAWFRAME_TEST(APlayedGamesFilesAreItsOwnersAlone) {
 }
 
 RAWFRAME_TEST(ACookIsAskedForAndHeardUntilItEnds) {
-    // D502: what Studio asks of a session's cook, and what it hears.
+    // What Studio asks of a session's cook, and what it hears.
     const std::string kCook = document::writeCompact(cookRecord(4, "/p/content", "/p/cook-cache"));
     RAWFRAME_EXPECT(kCook == R"({"kind":"authoring.cook","id":4,"output":"/p/content","cache":"/p/cook-cache"})");
     RAWFRAME_EXPECT(document::writeCompact(cancelRecord(5, 4)) ==
@@ -456,7 +456,7 @@ RAWFRAME_TEST(ACookIsAskedForAndHeardUntilItEnds) {
 }
 
 RAWFRAME_TEST(AnImportIsAskedForAndWhatItMadeSaid) {
-    // D505: a file Studio imports, and how it says what it made.
+    // A file Studio imports, and how it says what it made.
     RAWFRAME_EXPECT(document::writeCompact(importRecord(3, "/art/bark.png", "bark.png")) ==
                     R"({"kind":"authoring.import","id":3,"source":"/art/bark.png","as":"bark.png"})");
     RAWFRAME_EXPECT(importedIn(R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.imported",)"
@@ -466,7 +466,7 @@ RAWFRAME_TEST(AnImportIsAskedForAndWhatItMadeSaid) {
 }
 
 RAWFRAME_TEST(VersionControlsChangesAreTheGamesFiles) {
-    // D871: git's status from the repository's top, read as the game's
+    // Git's status from the repository's top, read as the game's
     // own files, a rename by its new name, the rest left out.
     const std::string_view kPorcelain = " M games/runners/level.scene\n"
                                         "?? games/runners/new.scene\n"
@@ -482,7 +482,7 @@ RAWFRAME_TEST(VersionControlsChangesAreTheGamesFiles) {
 }
 
 RAWFRAME_TEST(ExtensionsAreReadAsTheSessionListsThem) {
-    // D874: each extension's commands and capabilities, one refused with
+    // Each extension's commands and capabilities, one refused with
     // why, and an entry out of shape left out.
     const std::string_view kReply =
         R"({"kind":"authoring.reply","id":3,"answer":{"kind":"authoring.extensions","extensions":[)"

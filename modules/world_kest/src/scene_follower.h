@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's scenes followed into a running World (D410): ADR-0032's live
+// A game's scenes followed into a running World: the live
 // World is a projection of the documents, so an edit to a scene, by an
 // authoring session or an editor, reaches the World by the document. Each
 // scene's entities are known by their id in it, with the entity spawned for
@@ -69,7 +69,7 @@ public:
     /// Each followed scene's path, in order.
     [[nodiscard]] std::vector<std::string> paths() const;
     /// The scene `entity` came from and its id there, if a followed scene
-    /// brought it (D456).
+    /// brought it.
     [[nodiscard]] std::optional<std::pair<std::string, base::Bits128>> sourceOf(world::EntityHandle entity) const;
 
     /// Applies to `world` what changed in each scene whose text `texts`

@@ -2,17 +2,6 @@
 # areas whose source comments still cite records of the old documentation.
 # Each comment cleanup removes its area's line; the list ends with third_party.
 third_party
-cmake
-CMakeLists.txt
-games/crowd
-games/gale
-games/ledges
-games/lighting
-games/plaza
-games/quarry
-games/reach
-games/runners
-games/tycoon
 hosts/android_client
 hosts/animation_tool
 hosts/arena
@@ -34,13 +23,4 @@ hosts/web_client
 launcher/http
 launcher/install
 launcher/play
-modules/authoring
-modules/authoring_session
-modules/kest
-modules/kest_library
-modules/studio
-modules/world_kest
-templates
-tests/harness
-tests/scenarios
 tools

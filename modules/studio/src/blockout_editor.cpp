@@ -39,8 +39,8 @@ std::vector<std::string> wordsOf(const std::string& line) {
     return words;
 }
 
-/// A solid's line as Studio shows it (D850): whether it cuts, its shape,
-/// its name, and the words after each word the format reads (D846).
+/// A solid's line as Studio shows it: whether it cuts, its shape,
+/// its name, and the words after each word the format reads.
 struct SolidLine {
     bool cut = false;
     std::string shape;
@@ -107,7 +107,7 @@ std::string lineOf(const SolidLine& solid) {
 } // namespace
 
 void ShellParticipant::showBlockout() {
-    // A blockout is its lines (D849), each solid a row by its name, a line
+    // A blockout is its lines, each solid a row by its name, a line
     // typed above them put in as a solid after the last.
     const std::optional<Value> kRead = read(scene_, "lines.read");
     const Value* kLines = kRead.has_value() ? kRead->find("lines") : nullptr;
@@ -158,7 +158,7 @@ void ShellParticipant::showPlan() {
     held_.canvasParts.clear();
     held_.canvasBoxes.clear();
     // The solids as the blockout module reads them, each where it stands
-    // seen from above (D851), +X to the right and +Z down; a document that
+    // seen from above, +X to the right and +Z down; a document that
     // does not read draws no plan.
     std::string text;
     for (const std::string& kLine : held_.blockoutLines) {
@@ -290,7 +290,7 @@ void ShellParticipant::showBlockoutSolid(std::size_t at) {
 
 void ShellParticipant::dropSolid(std::size_t at, std::array<float, 2> moved) {
     // Its footprint carried across the plan moves the solid as far, at the
-    // plan's scale, on a quarter-meter grid; its height stays (D852).
+    // plan's scale, on a quarter-meter grid; its height stays.
     if (at >= entities_.size()) {
         return;
     }

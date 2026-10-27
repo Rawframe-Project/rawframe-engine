@@ -13,12 +13,12 @@ import std.math
 
 // The walkers' collision class (plaza.game).
 const WALKER: u64 = 0x5f23859a6c00ebba
-// The strollers' skinned figure (D508).
+// The strollers' skinned figure.
 const FIGURE: u64 = 0x6b27dc9178d0e4dd
 // A walker's figure, the strollers' at 0.78 as tall as its 1.6 meter
 // capsule, its feet lowered to the capsule's foot: 0.8 below the body's
-// middle, where the figure's middle is 1.4 times its scale above its feet
-// (D514); and the walkers' animator (D513).
+// middle, where the figure's middle is 1.4 times its scale above its feet;
+// and the walkers' animator.
 const WALKER_SCALE: f32 = 0.78
 const WALKER_LIFT: f32 = -0.292
 const WALKER_GAIT: u64 = 0x2b9f6c04e7d1a835
@@ -27,21 +27,21 @@ const WALKER_GAIT: u64 = 0x2b9f6c04e7d1a835
 const BRASS: u64 = 0x6d2c9bd611d50fdf
 const MARBLE: u64 = 0xe4443f63fe935232
 const PAVING: u64 = 0xb6b2fb38f649a30b
-// A post process's (D350).
+// A post process's.
 const WARMTH: u64 = 0x8d099ac296f9483e
-// The monitor's screen's (D361).
+// The monitor's screen's.
 const MONITOR: u64 = 0xa09d6b8277396fcd
 
-// The render texture the monitor's lens draws into (D361).
+// The render texture the monitor's lens draws into.
 const LENSED: u64 = 0xf18de9a0974d265b
 
-// The sky's picture plaza.game's `texture` line names (D322).
+// The sky's picture plaza.game's `texture` line names.
 const SKY: u64 = 0xa97797a3a58f6d7a
 
-// The plaza's picture from its middle, the `texture` line's (D326).
+// The plaza's picture from its middle, the `texture` line's.
 const HALL: u64 = 0xac452b5e41f745bf
 
-// A walker's lamp (D599): an entity of its own, which follows its walker,
+// A walker's lamp: an entity of its own, which follows its walker,
 // at its side, or in its player's right hand where a headset's controller
 // holds it.
 struct Lamp {
@@ -56,8 +56,7 @@ extern fn Pose3D.get(entity: world.Entity) -> physics3d.Pose3D
 
 // A player's entity arrives with its components zeroed: here it becomes a
 // walker standing somewhere on the plaza, free to turn toward where it
-// goes, its figure played where it is drawn (D513), and its lamp is lit
-// (D599).
+// goes, its figure played where it is drawn, and its lamp is lit.
 fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], characters: [physics3d.Character3D],
         animators: [animation.Animator], entities: [world.Entity]) {
     let i = 0
@@ -77,7 +76,7 @@ fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], chara
     }
 }
 
-// Where each lamp is (D599): in its player's right hand while a headset's
+// Where each lamp is: in its player's right hand while a headset's
 // controller holds it, the hand's place from where the head began turned
 // with the view and set at the walker's head, 0.6 meters above its middle;
 // else hanging at its right side. A lamp whose walker is gone goes out.
@@ -118,8 +117,8 @@ fn walk(count: i32, sticks: [controls.Stick], characters: [physics3d.Character3D
         velocities[i].x = sticks[i].runX * 5.0
         velocities[i].z = sticks[i].runZ * 5.0
         // Its figure's pace, in the figure's own meters a second, and its
-        // body turned toward where it goes, as Stalls' customers are (D512,
-        // D513): by how far across its way it faces, a half turn's worth
+        // body turned toward where it goes, as Stalls' customers are:
+        // by how far across its way it faces, a half turn's worth
         // when it faces away.
         let speed = math.sqrt(f64(velocities[i].x) * f64(velocities[i].x) + f64(velocities[i].z) * f64(velocities[i].z))
         let pace = math.min(speed / f64(WALKER_SCALE), 4.0)
@@ -197,7 +196,7 @@ enum Stride {
 // nought), and where it is in its round: the pace it waits in, and the
 // ticks left of it.
 // How fast a walker goes, in its figure's own meters a second, at most
-// the run's four (D513).
+// the run's four.
 struct Gait {
     pace: f64
 }
@@ -243,10 +242,10 @@ fn stride(s: Stroller) -> Stroller resumes s.at {
     return s
 }
 
-// Strollers walk by root motion (D134): each step's move, turned from the
+// Strollers walk by root motion: each step's move, turned from the
 // stroller's own frame as it was by the facing the step turned from, is
 // where its pose goes, turned as it now faces (the pose is its body's
-// middle, 1.4 meters up, so a client draws it there, D288). Four seconds
+// middle, 1.4 meters up, so a client draws it there). Four seconds
 // each it idles, walks, and runs, and its head is told where the plaza's
 // middle is from where it now stands and faces.
 fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], poses: [physics3d.Pose3D],
@@ -268,7 +267,7 @@ fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], po
         strollers[i] = stride(strollers[i])
         // The middle at head height, turned into its frame by its facing now:
         // the frame's origin is the body's middle, where the stroller's pose
-        // is, and its head half a meter above it (D508).
+        // is, and its head half a meter above it.
         let fc = m.facingW * m.facingW - m.facingY * m.facingY
         let fs = 2.0 * m.facingY * m.facingW
         let wx = 0.0 - poses[i].x
@@ -291,9 +290,9 @@ fn stroll(count: i32, strollers: [Stroller], motions: [animation.RootMotion], po
     }
 }
 
-// What a client draws of a body (D283): the engine's mesh of its shape at
+// What a client draws of a body: the engine's mesh of its shape at
 // its size, or, for one made of the game's triangles, that mesh as it is,
-// in its own materials (D314); the others in a color for what it is:
+// in its own materials; the others in a color for what it is:
 // walkers blue figures, what moves by itself steel, what is pushed about wood,
 // the floor paving (its slabs a texture), pillars stone, and the rest
 // sandstone. A capsule's mesh is stretched to the capsule's height, its
@@ -327,7 +326,7 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
         if b.motion == physics3d.DYNAMIC {
             look.color = 0x8B5A2BFF
         }
-        // A walker (D513): a blue figure, as tall as its capsule.
+        // A walker: a blue figure, as tall as its capsule.
         if b.collisionClass == WALKER {
             look = model.Model(FIGURE, WALKER_SCALE, WALKER_SCALE, WALKER_SCALE, 0x3A7BD5FF, u64(0), WALKER_LIFT)
         }
@@ -345,9 +344,9 @@ fn dressMesh(count: i32, meshes: [physics3d.Mesh3D], looks: [model.Model]) {
     }
 }
 
-// What a client sees of its own walker (D283): from eight meters behind
+// What a client sees of its own walker: from eight meters behind
 // and four above, looking a little down, along the heading its player
-// keeps in its stick (D521, D525).
+// keeps in its stick.
 fn frame(count: i32, sticks: [controls.Stick], views: [model.Camera]) {
     let i = 0
     while i < count {
@@ -364,11 +363,11 @@ fn frame(count: i32, sticks: [controls.Stick], views: [model.Camera]) {
     }
 }
 
-// How a client's eye meets the light (D293): metered from what the walker
+// How a client's eye meets the light: metered from what the walker
 // sees, between EV100 5 and 17, brightening at three stops a second and
 // darkening at one, the darkest tenth and the brightest tenth of the
 // picture left out, a stop brighter than the average: the plaza's pale
-// paving fills most of the view; every pixel counted alike (D345).
+// paving fills most of the view; every pixel counted alike.
 fn meter(count: i32, sticks: [controls.Stick], meters: [model.AutoExposure]) {
     let i = 0
     while i < count {
@@ -377,7 +376,7 @@ fn meter(count: i32, sticks: [controls.Stick], meters: [model.AutoExposure]) {
     }
 }
 
-// A walker's view a little warmer than the day (D350): the picture times
+// A walker's view a little warmer than the day: the picture times
 // a faint amber before the tonemapper, wholly.
 fn warm(count: i32, sticks: [controls.Stick], warmths: [model.PostProcess]) {
     let i = 0
@@ -387,7 +386,7 @@ fn warm(count: i32, sticks: [controls.Stick], warmths: [model.PostProcess]) {
     }
 }
 
-// A walker's view darkened where things meet (D327): what is hidden
+// A walker's view darkened where things meet: what is hidden
 // within 0.8 meters of a point, taken as found.
 fn hide(count: i32, sticks: [controls.Stick], hidden: [model.AmbientOcclusion]) {
     let i = 0
@@ -397,7 +396,7 @@ fn hide(count: i32, sticks: [controls.Stick], hidden: [model.AmbientOcclusion]) 
     }
 }
 
-// The sky a client sees and is lit by (D322): the clear day's picture,
+// The sky a client sees and is lit by: the clear day's picture,
 // the sun's own disc left out, its sky averaging 5,000 candela per square
 // meter as the default sky does, its ground the picture's.
 fn sky(count: i32, sticks: [controls.Stick], skies: [model.Sky]) {
@@ -408,9 +407,9 @@ fn sky(count: i32, sticks: [controls.Stick], skies: [model.Sky]) {
     }
 }
 
-// What a client draws of a stroller (D288): a brass (D303) figure, 2.05
+// What a client draws of a stroller: a brass figure, 2.05
 // meters from its feet to the top of its head, skinned to its rig, so it
-// walks as the stroller's replicated animator poses it there (D258, D508).
+// walks as the stroller's replicated animator poses it there.
 fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
     let i = 0
     while i < count {
@@ -419,7 +418,7 @@ fn figure(count: i32, strollers: [Stroller], figures: [model.Model]) {
     }
 }
 
-// What a client sees of a lamp (D599): a small warm glass ball, lit from
+// What a client sees of a lamp: a small warm glass ball, lit from
 // inside by 300 lumens at 2,700 K reaching five meters; it casts no
 // shadows, being in the ball.
 fn lampLook(count: i32, lamps: [Lamp], looks: [model.Model]) {
@@ -439,7 +438,7 @@ fn lampLight(count: i32, lamps: [Lamp], lights: [model.PointLight]) {
     }
 }
 
-// What a stroller carries (D290): a warm lantern of 400 lumens at 3,450 K,
+// What a stroller carries: a warm lantern of 400 lumens at 3,450 K,
 // reaching six meters, where its pose stands; faint by day, it shows once
 // the plaza's light falls. It casts no shadows: it hangs inside its figure.
 fn lantern(count: i32, strollers: [Stroller], lanterns: [model.PointLight]) {
@@ -451,12 +450,12 @@ fn lantern(count: i32, strollers: [Stroller], lanterns: [model.PointLight]) {
     }
 }
 
-// A spring in the plaza (D353): how fast its jet leaves, meters a second.
+// A spring in the plaza: how fast its jet leaves, meters a second.
 struct Spring {
     speed: f32
 }
 
-// What a client sees of a spring (D353): a jet of three hundred drops a
+// What a client sees of a spring: a jet of three hundred drops a
 // second, a pale blue white fading out as they fall, leaving within 0.12
 // radians of straight up from within a tenth of a meter and falling back
 // under gravity, slowed a little by the air, each living a second and a
@@ -471,7 +470,7 @@ fn fountain(count: i32, springs: [Spring], fountains: [model.ParticleEmitter]) {
     }
 }
 
-// What a stroller leaves behind it (D354): a faint warm trace at its
+// What a stroller leaves behind it: a faint warm trace at its
 // middle, a point every quarter meter, each lasting two seconds, a tenth
 // of a meter wide narrowing to nothing and fading out.
 fn trace(count: i32, strollers: [Stroller], trails: [model.Trail]) {
@@ -483,14 +482,14 @@ fn trace(count: i32, strollers: [Stroller], trails: [model.Trail]) {
 }
 
 // Where the plaza's reflection probe's box reaches from its middle, in
-// meters (D325).
+// meters.
 struct Hall {
     halfX: f32
     halfY: f32
     halfZ: f32
 }
 
-// What a client reflects in the plaza (D325): the picture baked from the
+// What a client reflects in the plaza: the picture baked from the
 // hall's middle, projected onto its box, in its own light.
 fn probe(count: i32, halls: [Hall], probes: [model.ReflectionProbe]) {
     let i = 0
@@ -500,13 +499,13 @@ fn probe(count: i32, halls: [Hall], probes: [model.ReflectionProbe]) {
     }
 }
 
-// A monitor's screen, in meters from its middle to its sides (D361).
+// A monitor's screen, in meters from its middle to its sides.
 struct Monitor {
     width: f32
     height: f32
 }
 
-// What a client sees of a monitor (D361): a thin box its screen's size,
+// What a client sees of a monitor: a thin box its screen's size,
 // shining with what its lens sees.
 fn screen(count: i32, monitors: [Monitor], screens: [model.Model]) {
     let i = 0

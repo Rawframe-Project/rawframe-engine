@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of an authoring journal read from disk (D242),
+// Coverage-guided fuzzing of an authoring journal read from disk,
 // seeded with one delta of every kind. The reader is exact: a journal it
 // accepts writes back to the very same bytes.
 

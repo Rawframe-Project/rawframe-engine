@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's navigation (ADR-0056, D400): one navmesh for the agent its
+// A game's navigation: one navmesh for the agent its
 // navigation line names, baked on the server from the static bodies'
 // triangles (rawframe.physics3d's static geometry) by a system after the
 // physics steps, and baked again over the ground a change of them touches;
@@ -34,12 +34,12 @@ namespace rawframe::world_kest {
 /// The system that bakes, after the physics steps.
 inline constexpr std::string_view kNavigationBakeSystem = "rawframe.navigation.bake";
 
-/// The system that steers agents round each other (D411), before the 3D
+/// The system that steers agents round each other, before the 3D
 /// physics step: a game's own system that sets their velocities runs
 /// before it.
 inline constexpr std::string_view kNavigationAvoidSystem = "rawframe.navigation.avoid";
 
-/// An agent (D411), `rawframe.navigation.Agent` in Kest, on an entity with a
+/// An agent, `rawframe.navigation.Agent` in Kest, on an entity with a
 /// 3D pose and velocity: the velocity a game's systems write is where the
 /// agent would go, and the avoid system makes it the nearest velocity that
 /// keeps clear of the other agents, ORCA's. `velocityX` and `velocityZ` are
@@ -97,8 +97,7 @@ public:
     /// The navmesh, once a bake made it; null before.
     [[nodiscard]] navigation::Navmesh* navmesh() noexcept;
 
-    /// Steers every agent round the others for one step of `seconds`
-    /// (D411).
+    /// Steers every agent round the others for one step of `seconds`.
     [[nodiscard]] result::Status avoid(world::World& world, double seconds);
 
     [[nodiscard]] GameNavmeshStatistics statistics() const noexcept;

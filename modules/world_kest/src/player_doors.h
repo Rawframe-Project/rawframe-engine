@@ -1,7 +1,7 @@
 #pragma once
 
 // The door rawframe.replication's Kest module asks for: which player the
-// machine running a system shows (D390).
+// machine running a system shows.
 
 #include "rawframe/kest/doors.h"
 #include "rawframe/world/entity.h"

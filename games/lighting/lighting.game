@@ -1,4 +1,4 @@
-# Lighting Test (D749), the constitution's lighting fixture: a validation
+# Lighting Test, the constitution's lighting fixture: a validation
 # environment, not a game of its own. Twelve balls in a wall, metalness
 # rising by row (nought, a half, one) and roughness by column (0.1, 0.35,
 # 0.65, 0.95), on a grey ground; lit by a low sun and a clear sky's
@@ -21,7 +21,7 @@ component 59f72ebd-5d5b-493b-b7a6-24aa57f3c47a lighting.sky rawframe.model.Sky
 component c9074f00-14e5-4740-a22f-2f75b2a7eae8 lighting.probe rawframe.model.ReflectionProbe
 component 47d1fd99-a484-4c1e-bbfc-e12c2ad9855a lighting.point rawframe.model.PointLight
 component 47de00b7-57d3-402b-bb1f-26e34ea07e4c lighting.spot rawframe.model.SpotLight
-# The view's own light work (D756): what hides the light from all around,
+# The view's own light work: what hides the light from all around,
 # the glow spread round bright light, smooth surfaces reflecting what the
 # view saw, and small shadows where things touch.
 component 67ca0422-9c21-40e5-bc10-083deaeff406 lighting.occlusion rawframe.model.AmbientOcclusion
@@ -44,7 +44,7 @@ material 3bc888d32b42e30d ball_23.rfmaterial
 material b1faca30a6eba272 ground.rfmaterial
 material c4b487438a7e40f9 glow.rfmaterial
 texture 20a6d84f88dc45e0 sky.hdr
-# What the wall's middle sees all around (D326): baked by rawframe-bake
+# What the wall's middle sees all around: baked by rawframe-bake
 # from the probe's middle, and reflected by the balls.
 texture eea5f06e0bd7a9af hall.hdr
 

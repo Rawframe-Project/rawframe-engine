@@ -23,7 +23,7 @@ std::string shown(const Value& value) {
             return *kOnly.text();
         }
         // A whole number written whole, as an author reads it (100000, not
-        // 1e+05; D921); the rest as JSON writes them, exact.
+        // 1e+05); the rest as JSON writes them, exact.
         if (kOnly.kind() == Value::Kind::Number && kOnly.real().has_value()) {
             const double kNumber = *kOnly.real();
             if (kNumber == std::floor(kNumber) && std::abs(kNumber) < 1e15) {
@@ -48,7 +48,7 @@ std::optional<Value> typedValue(std::string_view kind, std::string_view text) {
         return made;
     }
     // A whole number is all its digits, signed or not, in its range: what
-    // is not is no number, so an asset's name can be tried (D455).
+    // is not is no number, so an asset's name can be tried.
     if (kind == "signed" || kind == "unsigned") {
         bool whole = false;
         if (kind == "signed") {

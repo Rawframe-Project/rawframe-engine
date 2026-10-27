@@ -1,8 +1,8 @@
 #pragma once
 
-// What Studio keeps of how its author arranged it (D779, SPEC-0051 Part 3):
-// the docks' sizes, the games it opened last (D781), and each command's
-// keys and the editor it opens a file in (D782), in a document of Studio's
+// What Studio keeps of how its author arranged it:
+// the docks' sizes, the games it opened last, and each command's
+// keys and the editor it opens a file in, in a document of Studio's
 // own, never the game's, which an author may write by hand as well. A file
 // that does not read leaves Studio as it starts.
 
@@ -15,7 +15,7 @@
 
 namespace rawframe::studio {
 
-/// An arrangement of Studio's docks (SPEC-0051 Part 3, D911): the left
+/// An arrangement of Studio's docks: the left
 /// dock's and the Inspector's widths, the bottom dock's height (nought for
 /// its share), and the bottom dock's tab shown, by its name. Never a mode
 /// or a second editor.
@@ -30,16 +30,16 @@ struct Layout {
 };
 
 /// The interface scales an author may choose in place of the screen's, in
-/// percent (D966), as an editor's own scaling does over the desktop's.
+/// percent, as an editor's own scaling does over the desktop's.
 inline constexpr std::array<int, 7> kInterfaceScales = {100, 125, 150, 175, 200, 250, 300};
 
-/// The most panels docked on the right (D980): every bottom one but one.
+/// The most panels docked on the right: every bottom one but one.
 inline constexpr std::size_t kMostRightPanels = 12;
 
-/// The most panels kept apart, each in a window of its own (D994).
+/// The most panels kept apart, each in a window of its own.
 inline constexpr std::size_t kMostApartPanels = 8;
 
-/// A panel the author showed apart, in a window of its own (D994): its
+/// A panel the author showed apart, in a window of its own: its
 /// tab's name, the window's logical size, and its place on the desktop as
 /// the platform last told it, none where it told none (Wayland places a
 /// program's windows itself).
@@ -69,15 +69,15 @@ struct Preferences {
     /// The command that opens a file at a line (`studio.editor`'s form);
     /// empty for the setting's or the default.
     std::string editor;
-    /// The layouts the author saved (D911), at most kMostSavedLayouts.
+    /// The layouts the author saved, at most kMostSavedLayouts.
     std::vector<Layout> layouts;
     /// How large Studio draws, in percent: one of kInterfaceScales, or
-    /// nought to follow the screen's scale (D966).
+    /// nought to follow the screen's scale.
     int interfaceScale = 0;
     /// The bottom dock's panels the author docked on the right, beside the
-    /// Inspector, by their tabs' names (D980), at most kMostRightPanels.
+    /// Inspector, by their tabs' names, at most kMostRightPanels.
     std::vector<std::string> rightPanels;
-    /// The panels shown apart as Studio last ended, opened so again (D994),
+    /// The panels shown apart as Studio last ended, opened so again,
     /// at most kMostApartPanels.
     std::vector<ApartPanel> apartPanels;
 
@@ -102,7 +102,7 @@ inline constexpr std::size_t kRecentGames = 8;
 /// Whether `text` is a chord a shortcut can be: `Ctrl+`, `Shift+`, and
 /// `Alt+`, each at most once and in that order, then F1 to F12 but F11
 /// (which the window keeps), a capital letter or a digit with Ctrl, or
-/// Delete alone, as the window names what is pressed (D777).
+/// Delete alone, as the window names what is pressed.
 [[nodiscard]] bool isChord(std::string_view text) noexcept;
 
 /// The chords `text` lists, separated by commas and spaces, or none when

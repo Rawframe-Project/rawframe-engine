@@ -12,7 +12,7 @@ inline constexpr result::ErrorDomain kStudioDomain{base::parseBits128Hex("918a45
 
 enum class StudioError : std::uint32_t {
     /// A game to preview could not be played: its directory or files could
-    /// not be written (D445).
+    /// not be written.
     PlayFailed = 1,
 };
 

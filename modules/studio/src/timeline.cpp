@@ -165,7 +165,7 @@ void ShellParticipant::showTimeline(const Value& clip) {
     }
     const float kLanesTall = kRuler + kLane * static_cast<float>(lanes.size());
     const float kTall = kLanesTall + (curved.has_value() ? kCurve + kMargin : 0) + kMargin;
-    // As the design's Animation screen (D939): over the lanes, the
+    // As the design's Animation screen: over the lanes, the
     // transport: to the start, play and pause, where the playhead is of
     // the clip's length and what it holds, and whether it loops.
     held_.clipLength = kLength;
@@ -473,7 +473,7 @@ void ShellParticipant::showCurves() {
     }
     // Each track a row: its bone and channel, then its values over the
     // clip as the engine samples them, each value a line of dots between
-    // the least and the most it reaches, x y z w in their colors (D927).
+    // the least and the most it reaches, x y z w in their colors.
     const std::span<const Value> kTracks = itemsOf(*sheet_, "tracks");
     constexpr float kRowTall = 54;
     constexpr std::size_t kAcross = 120;

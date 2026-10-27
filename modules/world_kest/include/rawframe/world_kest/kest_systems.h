@@ -1,6 +1,6 @@
 #pragma once
 
-// World systems written in Kest (ADR-0084, SPEC-0005 systems). A Kest system is
+// World systems written in Kest. A Kest system is
 // a function of a program taking the row count and one array per data column:
 //
 //   fn integrate(count: i32, positions: [Position], velocities: [Velocity])
@@ -50,17 +50,17 @@ struct KestColumn {
 /// A component programs may add and take away through the doors
 /// `<kestType>.insert(entity: Entity, value: <kestType>)` and
 /// `<kestType>.remove(entity: Entity)`, recorded in the running system's
-/// command buffer, and look up where a system declares it (D391). It must be plain data shaped like its Kest type. A
-/// Kest type two components share has no such doors (D260).
+/// command buffer, and look up where a system declares it. It must be plain data shaped like its Kest type. A
+/// Kest type two components share has no such doors.
 struct KestComponent {
     schema::ComponentTypeId component;
     std::string_view kestType;
     /// Where its value holds entities: an inserted value naming an entity
-    /// the same run creates names the entity the barrier creates (D97).
+    /// the same run creates names the entity the barrier creates.
     std::span<const std::size_t> entityFields;
 };
 
-/// A component a system reads whole (D747): every holder's value and
+/// A component a system reads whole: every holder's value and
 /// entity, lent after its columns.
 struct KestScan {
     schema::ComponentTypeId component;
@@ -80,19 +80,19 @@ struct KestSystemDeclaration {
     std::span<const std::string_view> randomStreams;
     /// Components the system reads on any entity through
     /// `<kestType>.get(entity: Entity) -> <kestType>` and
-    /// `<kestType>.has(entity: Entity) -> bool` (D391), and whose holders it
+    /// `<kestType>.has(entity: Entity) -> bool`, and whose holders it
     /// counts and names in World order through `<kestType>.count() -> i32`
-    /// and `<kestType>.entity(index: i32) -> Entity` (D393), ordered as
+    /// and `<kestType>.entity(index: i32) -> Entity`, ordered as
     /// reads; never one it writes. Another run's doors refuse them.
     std::span<const schema::ComponentTypeId> lookups;
-    /// Components whose every holder it reads at once (D747): after its
+    /// Components whose every holder it reads at once: after its
     /// columns' arrays, for each, `count: i32`, `values: [<kestType>]`, and
     /// `entities: [world.Entity]`, in World order as the run began, the
     /// same each call of the run; ordered as reads, never one it writes.
     std::span<const KestScan> scans;
 };
 
-/// A scene a program spawns whole with `Scene.spawn(prefab: u64)` (D98):
+/// A scene a program spawns whole with `Scene.spawn(prefab: u64)`:
 /// its entities, each as the values of its components, and where a value
 /// names another of the prefab's entities.
 struct KestPrefab {
@@ -115,14 +115,14 @@ struct KestPrefab {
     std::vector<Entity> entities;
 };
 
-/// SPEC-0013's mutation journal per Domain and tick: the columns a
-/// machine's systems copy to write in one tick, together (D229).
+/// The mutation journal per Domain and tick: the columns a
+/// machine's systems copy to write in one tick, together.
 inline constexpr std::size_t kMaximumJournalBytes = std::size_t{4} << 20U;
-/// SPEC-0013's journal operations per Domain and tick: the structural
-/// commands a machine's systems record in one tick, together (D240).
+/// The journal operations per Domain and tick: the structural
+/// commands a machine's systems record in one tick, together.
 inline constexpr std::size_t kMaximumJournalOperations = 65'536;
 
-/// What doors stage beside a system's commands (D266): kept only when the
+/// What doors stage beside a system's commands: kept only when the
 /// run that staged it succeeds, as its commands and writes are.
 class KestStaging {
 public:
@@ -148,7 +148,7 @@ struct KestSystemsSettings {
     std::span<const KestPrefab> prefabs;
     /// One budget per system per tick, spent across its archetypes.
     kest::MachineLimits limits;
-    /// Untrusted for a mod's program (D181): only doors marked safe for it
+    /// Untrusted for a mod's program: only doors marked safe for it
     /// bind, under Kest's untrusted profile.
     kest::Trust trust = kest::Trust::Trusted;
     std::span<const KestSystemDeclaration> systems;

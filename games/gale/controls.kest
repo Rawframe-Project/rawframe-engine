@@ -1,9 +1,9 @@
 module controls
 
-// What a player asks of its ship (D681): its throttle, from half astern
+// What a player asks of its ship: its throttle, from half astern
 // (-0.5) to full ahead (1), where its player last set it, and its rudder,
 // from hard to port (-1) to hard to starboard (1); and whether it fires its
-// guns to port or to starboard (D683).
+// guns to port or to starboard.
 struct Helm {
     throttle: f32
     rudder: f32

@@ -29,7 +29,7 @@ namespace rawframe::world_kest {
 [[nodiscard]] physics::CollisionDocument collisionDocumentOf(const GameDescription& game);
 
 /// The 2D physics the game describes: its world and its collision document,
-/// over those of its tilemaps that were read (D859).
+/// over those of its tilemaps that were read.
 [[nodiscard]] physics2d::Physics2DSettings physics2dSettingsOf(const GameDescription& game,
                                                                const std::vector<GameTilemapResource>& tilemaps);
 
@@ -45,7 +45,7 @@ namespace rawframe::world_kest {
 interestOf(const GameDescription& game, std::span<const kest::TypeLayout> layouts);
 
 /// The identities of `names`, each a component the game replicates: its
-/// interpolated components, or those kept to their holder (D673), `why`
+/// interpolated components, or those kept to their holder, `why`
 /// the refusal of one it does not replicate.
 [[nodiscard]] result::Result<std::vector<schema::ComponentTypeId>>
 replicatedAmong(const GameDescription& game, std::span<const std::string> names, std::string_view why);
@@ -61,7 +61,7 @@ struct PredictionPlan {
     std::vector<SpawnValues> level;
 };
 
-/// What a client predicts, checked against SPEC-0041's rules: only the
+/// What a client predicts, checked against the rules: only the
 /// player's replicated components, with input to predict from, by systems
 /// that write no other replicated component and draw from no World stream.
 /// Empty for a game that predicts nothing. `table` is what replicates.

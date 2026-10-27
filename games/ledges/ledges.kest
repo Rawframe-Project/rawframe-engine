@@ -54,7 +54,7 @@ struct Ride {
 // Meters a second along its path.
 const LIFT_SPEED: f64 = 2.0
 
-// A lift rides its spline (D868): each tick a little further along it, its
+// A lift rides its spline: each tick a little further along it, its
 // kinematic body carried there by the physics step, pushing what it meets.
 fn lift(count: i32, rides: [Ride], targets: [physics2d.Target2D]) {
     let i = 0

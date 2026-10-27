@@ -1,9 +1,9 @@
 module rawframe.view
 
-// The player's view (ADR-0052): where a game's sample program turns a point
+// The player's view: where a game's sample program turns a point
 // of the view, such as the mouse's pointer, into a ray into the World or a
 // point on the canvas's plane, and a World point into where it shows. View
-// points are logical pixels from the view's top left, y down (ADR-0046);
+// points are logical pixels from the view's top left, y down;
 // the pointer is the window's, so the view's `place` says where the view
 // is in the window: the pointer less its left and top is the view's point.
 // The view is the one the player's client last showed, through the

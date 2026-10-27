@@ -1,8 +1,8 @@
-// A pane shown apart (D988): the author tears a dock's pane out into a
+// A pane shown apart: the author tears a dock's pane out into a
 // window of its own, as a large editor's panels are, its tab's context
 // menu's "Open panel in a window" or its tab dragged out of the window. It
 // shows there until that window is closed, then goes back to its dock. Its
-// window's place and size are kept, and it opens so again (D994).
+// window's place and size are kept, and it opens so again.
 
 #include "shell.h"
 
@@ -91,10 +91,10 @@ void ShellParticipant::followAsides(double seconds) {
         case Kind::Pressed: {
             // Pressed where it lands in the pane, as in the window; a
             // secondary press chooses the row it met and opens the context
-            // menu there, in the pane's window (D990).
+            // menu there, in the pane's window.
             // A primary press holds what it met as one in Studio's window
             // does, an asset's card to be let go over the scene there,
-            // where it is in that window (D992).
+            // where it is in that window.
             if (released_) {
                 followSplitter();
             }
@@ -151,7 +151,7 @@ void ShellParticipant::followAsides(double seconds) {
         }
         case Kind::Released:
             // Let go inside the pane apart, there; else where it is over
-            // Studio's window (D992).
+            // Studio's window.
             released_ = true;
             docking_.releasedApart.reset();
             if (kX >= 0 && kY >= 0 && kX < static_cast<float>(kTorn->width) / scale_ &&
@@ -197,7 +197,7 @@ void ShellParticipant::closeAsides() {
 }
 
 void ShellParticipant::reopenAsides() {
-    // The panels shown apart as Studio last ended open so again (D994).
+    // The panels shown apart as Studio last ended open so again.
     for (const ApartPanel& kApart : std::vector<ApartPanel>{preferences_.apartPanels}) {
         if (const std::optional<Dock> kPane = dockOf(kApart.name); kPane.has_value()) {
             tearOut(*kPane);

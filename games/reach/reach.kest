@@ -1,6 +1,6 @@
 module reach
 
-// Reach (D656): players sit round a table and take its blocks in their
+// Reach: players sit round a table and take its blocks in their
 // hands. Each hand is a kinematic ball of its own, moved to where its
 // player holds it; one that grips near a free block takes it, welded to the
 // hand by a joint, so the block moves as the hand does and flies on when
@@ -173,7 +173,7 @@ fn reach(count: i32, hands: [Hand], targets: [physics3d.Target3D], entities: [wo
             let seat = Seat.get(player)
             let at = place(seat, hands[i].side, Hands.get(player))
             targets[i] = physics3d.Target3D(at.x, at.y, at.z, 0.0, 0.0, 0.0, 0.0, true)
-            // Where its player hears from (D660): a seated eye, facing the
+            // Where its player hears from: a seated eye, facing the
             // table, given once its seat is.
             if seat.placed && !Pose3D.has(player) {
                 Pose3D.insert(player, physics3d.Pose3D(seat.x, f64(1.2), seat.z, 0.0,
@@ -306,8 +306,8 @@ fn dress(count: i32, bodies: [physics3d.Body3D], looks: [model.Model]) {
     }
 }
 
-// A client draws its own player's hands where the player holds them now
-// (D665), from its own input, not where the server last put them, a round
+// A client draws its own player's hands where the player holds them now,
+// from its own input, not where the server last put them, a round
 // trip and the interpolation behind; and a block one of them holds with
 // it, as far from the hand as the server keeps it. Every other body is
 // drawn where it is.
@@ -338,7 +338,7 @@ fn placeOwn(count: i32, bodies: [physics3d.Body3D], placed: [model.Placed], enti
 }
 
 // A headset player's own hands drawn each frame where the headset has them
-// then (D676), and a block one holds as far from it as the server keeps
+// then, and a block one holds as far from it as the server keeps
 // it; the engine draws them where they are placed for frames whose hand
 // is not located, and for a flat player always.
 fn followOwn(count: i32, bodies: [physics3d.Body3D], tracked: [model.Tracked], entities: [world.Entity]) {
@@ -368,7 +368,7 @@ fn followOwn(count: i32, bodies: [physics3d.Body3D], tracked: [model.Tracked], e
 
 // A client's view from its seat: a seated eye's height above the floor,
 // looking toward the table's middle and down at it. A headset's eyes are
-// placed from here, its play space (D595).
+// placed from here, its play space.
 fn frame(count: i32, seats: [Seat], views: [model.Camera]) {
     let i = 0
     while i < count {

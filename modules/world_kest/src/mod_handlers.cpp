@@ -68,7 +68,7 @@ result::Result<std::vector<std::unique_ptr<KestSystems>>> modHandlers(const Game
             RAWFRAME_TRY(kSameShape(kPoint->accepts));
         }
         // Each replacement takes the game system's place: its identity, phase,
-        // columns, order, and streams, with the mod's function (D200).
+        // columns, order, and streams, with the mod's function.
         std::vector<const GameSystem*> replaced;
         for (const ModReplacement& replacement : mod.replacements) {
             const auto kPoint = std::ranges::find(game.mods.points, replacement.point, &GameExtensionPoint::name);
@@ -134,7 +134,7 @@ result::Result<std::vector<std::unique_ptr<KestSystems>>> modHandlers(const Game
         }
         // Each provider takes `values: [T]`, the point's type shaped as the
         // game's (checked above), and answers nothing: it rewrites
-        // `values[0]` (D199).
+        // `values[0]`.
         for (const ModProvider& provider : mod.providers) {
             kest::Machine& machine = (*systems)->machine();
             const std::array<kest::Argument, 1> kTakes = {kest::Argument{.slot = kest::Slot::I64, .lent = true}};

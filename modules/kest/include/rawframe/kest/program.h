@@ -1,6 +1,6 @@
 #pragma once
 
-// A compiled Kest program (ADR-0084). Kest's own C API stays behind this
+// A compiled Kest program. Kest's own C API stays behind this
 // module's headers; nothing above it includes kest.h.
 
 #include "rawframe/result/result.h"
@@ -41,7 +41,7 @@ struct CompileSettings {
 /// writes a failed start's report into the build.
 /// What one scalar of a laid-out type is. `Tag` is an enum's case, a
 /// four-byte whole number the machine checks names a case wherever it reads
-/// one (D268); `Payload` is what a case carries, which only its tag says the
+/// one; `Payload` is what a case carries, which only its tag says the
 /// kind of. `Other` covers what the engine does not read field by field
 /// yet: flags, handles, text.
 enum class FieldKind : std::uint8_t {
@@ -80,7 +80,7 @@ struct TypeLayout {
     std::uint64_t mark = 0;
     /// Every scalar, in memory order. A type with a `Payload` among them is
     /// read by its tags, never piece by piece; one whose enums carry nothing
-    /// is pieces like any other, its tags among them (D268).
+    /// is pieces like any other, its tags among them.
     std::vector<Field> fields;
 };
 
