@@ -467,7 +467,7 @@ void registerFinder(composition::ParticipantRegistrar& registrar) noexcept {
 } // namespace
 
 RAWFRAME_TEST(AHostHoldsItsCompositionAsItFetchedIt) {
-    // The record and the library among the files the host holds (D167),
+    // The record and the library among the files the host holds,
     // named by the configuration as a disk's would be.
     const HeldGame kGame;
     std::vector<composition::HeldFiles::File> files;

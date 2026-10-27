@@ -26,9 +26,9 @@ public:
 
     /// Fills `input` (the input component's bytes) for the client's tick
     /// `tick`. It holds the input made for the tick before, nought before
-    /// the first, which a source may build on (D525).
+    /// the first, which a source may build on.
     [[nodiscard]] virtual result::Status next(std::uint64_t tick, std::span<std::byte> input) = 0;
-    /// Appends the commands the last `next` sent (D425), in order; none by
+    /// Appends the commands the last `next` sent, in order; none by
     /// default.
     virtual void takeCommands(std::vector<PostedCommand>& into) {
         static_cast<void>(into);
@@ -46,7 +46,7 @@ public:
     /// A source for a bot, whose hand is seeded by `seed`. Refuses
     /// (`NotFound`) for a game that declares no input mapping.
     [[nodiscard]] virtual result::Result<std::unique_ptr<InputSource>> botSource(std::uint64_t seed) = 0;
-    /// The source of the process's local player `player` (D363): the
+    /// The source of the process's local player `player`: the
     /// devices its host lends that are paired to it. Refuses (`NotFound`)
     /// for a game that declares no input mapping or a host that lends no
     /// devices, (`InvalidArgument`) a player past `kMaximumLocalPlayers`,

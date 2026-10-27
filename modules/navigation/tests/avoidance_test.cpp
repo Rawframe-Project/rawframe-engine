@@ -1,4 +1,4 @@
-// Avoidance (D411): agents steering round each other by ORCA, the same
+// Avoidance: agents steering round each other by ORCA, the same
 // velocities in any order, and settings and agents out of range refused.
 
 #include "rawframe/navigation/avoidance.h"

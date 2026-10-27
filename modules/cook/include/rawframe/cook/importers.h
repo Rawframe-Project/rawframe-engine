@@ -1,6 +1,6 @@
 #pragma once
 
-// The engine's importers in one list (D800): what the cook tool cooks
+// The engine's importers in one list: what the cook tool cooks
 // with, and what an authoring session describes and checks settings by.
 
 #include "rawframe/cook/cook.h"

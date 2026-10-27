@@ -1,6 +1,6 @@
 #pragma once
 
-// The lines a scene shows (D464): kept only when sound, and drawn as
+// The lines a scene shows: kept only when sound, and drawn as
 // ribbons with the frame's beams.
 
 #include "rawframe/render_scene/scene.h"

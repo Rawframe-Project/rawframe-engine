@@ -1,4 +1,4 @@
-// What an author does in a preview an editor shows (D790): events read
+// What an author does in a preview an editor shows: events read
 // whole and written back the same, and hostile ones refused whole.
 
 #include "rawframe/document/json.h"

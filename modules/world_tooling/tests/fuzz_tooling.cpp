@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the tooling endpoint's records (D408, D675):
+// Coverage-guided fuzzing of the tooling endpoint's records:
 // the bytes arrive as one stream on a connection that has not said hello,
 // and again after a hello that admits it, so both the refusals before
 // admission and every verb after it read them, split into lines as they

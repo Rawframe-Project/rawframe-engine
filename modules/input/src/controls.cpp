@@ -134,8 +134,8 @@ constexpr std::array<std::uint16_t, kKeys.size()> kKeyUsages = {
 };
 
 // `delta` is the device's own motion, given while the pointer is captured;
-// `motion` the cursor's over the window, in logical pixels (D521): two
-// streams SPEC-0025 keeps apart.
+// `motion` the cursor's over the window, in logical pixels: two
+// streams kept apart.
 constexpr std::array<std::string_view, 10> kMouse = {
     "left",
     "right",

@@ -1,8 +1,8 @@
 #pragma once
 
-// A window's native handles for one surface generation: SPEC-0025's handle
-// bundle, the one opaque typed seam from the windows to the device
-// (ADR-0033). Pointers the device side hands its GPU layer unread; nothing
+// A window's native handles for one surface generation: the handle
+// bundle, the one opaque typed seam from the windows to the device.
+// Pointers the device side hands its GPU layer unread; nothing
 // here names a window system's or a graphics API's types.
 
 #include <cstdint>
@@ -32,7 +32,7 @@ struct XcbHandles {
 /// An Android window: its `ANativeWindow*`, the `ANativeActivity*` it
 /// belongs to, through which the program reaches Java, and the global
 /// reference to the activity's `android.view.View`, which hosts the
-/// accessibility root (D576). All three change with the activity.
+/// accessibility root. All three change with the activity.
 struct AndroidHandles {
     void* window = nullptr;
     void* activity = nullptr;
@@ -46,7 +46,7 @@ struct AppleHandles {
 };
 
 /// A web page's canvas, by its CSS selector, and the element over it that a
-/// program's accessibility elements are built in, by its (D612).
+/// program's accessibility elements are built in, by its.
 struct CanvasHandles {
     std::string selector;
     std::string accessibility;

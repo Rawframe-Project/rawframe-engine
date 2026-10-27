@@ -15,7 +15,7 @@ enum class FontImportError : std::uint32_t {
     /// Bytes that are not a TrueType or OpenType font or collection, or one
     /// the sanitizer refuses.
     BadFont = 1,
-    /// A web font: WOFF and WOFF 2.0 are not taken (ADR-0049).
+    /// A web font: WOFF and WOFF 2.0 are not taken.
     Unsupported = 2,
     /// A font past the limit.
     OverLimit = 3,

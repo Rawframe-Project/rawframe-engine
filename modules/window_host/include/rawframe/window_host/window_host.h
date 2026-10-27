@@ -1,14 +1,14 @@
 #pragma once
 
-// A Host driven from a window's frames (D249, D250): the process's one
+// A Host driven from a window's frames: the process's one
 // window, whose raw input the Host's participants get as the player's
 // devices (`rawframe.input.feed`), and each frame every Host iteration due,
-// then what they asked the player's gamepads to feel (D251). The window's
-// surface is lent too (`rawframe.window.surfaces`, D280), read in each
+// then what they asked the player's gamepads to feel. The window's
+// surface is lent too (`rawframe.window.surfaces`), read in each
 // frame before the Host runs, for the device to present to; and the local
-// players' views (`rawframe.view.player_views`, D367), told the window's
+// players' views (`rawframe.view.player_views`), told the window's
 // size each frame, for the presentation to write and the sample to read,
-// and what the UI takes of the pointer (`rawframe.view.ui_pointing`, D421),
+// and what the UI takes of the pointer (`rawframe.view.ui_pointing`),
 // which the UI answers and each player's input asks as a press begins.
 // The window system owns the loop on every platform, so a desktop client
 // and a page run the same program: `window::run` returns when it stops on
@@ -17,7 +17,7 @@
 //   window.width, window.height   the window's size, logical pixels
 //                                 (1280 by 720)
 //   window.x, window.y            its place on the screen, either naming it;
-//                                 where the system places it otherwise (D445)
+//                                 where the system places it otherwise
 
 #include "rawframe/host/host.h"
 #include "rawframe/input/feed.h"
@@ -53,19 +53,19 @@ namespace rawframe::window_host {
 struct WindowHostSettings {
     std::string title = "Rawframe";
     /// What else the host lends its participants beside the player's
-    /// devices (a page's sound, D259), each outliving the WindowHost.
+    /// devices (a page's sound), each outliving the WindowHost.
     std::vector<composition::LentCapability> lent;
     /// The camera an authoring preview looks through, if the host shows
-    /// one: a left press while it looks is kept as the ray it makes
-    /// (D456). It outlives the WindowHost.
+    /// one: a left press while it looks is kept as the ray it makes.
+    /// It outlives the WindowHost.
     view::PreviewCamera* preview = nullptr;
     /// Input to act on as the window's, before the window's own, if the
-    /// host shows a preview an editor plays in its viewport (D790). It
+    /// host shows a preview an editor plays in its viewport. It
     /// outlives the WindowHost.
     world_tooling::Injection* injection = nullptr;
-    /// The window's icon, its images' pixels outliving the WindowHost
-    /// (D920); none for the platform's own. A configuration's
-    /// `window.icon` is shown instead (D951).
+    /// The window's icon, its images' pixels outliving the WindowHost;
+    /// none for the platform's own. A configuration's
+    /// `window.icon` is shown instead.
     std::vector<window::IconImage> icon;
 };
 
@@ -87,14 +87,13 @@ public:
 private:
     window::FrameOutcome end();
     /// Asks the platform for text input, at the caret, while a UI field
-    /// holds focus, and to stop when none does (D426).
+    /// holds focus, and to stop when none does.
     void followTextInput(window::Windows& windows);
-    /// Tells a preview the wheel and the right button's drags (D469).
+    /// Tells a preview the wheel and the right button's drags.
     void moveView(const window::Event& event);
     /// The UI's readers told what changed, the window's scale and, on X11,
-    /// its place first (D571); on Android, Windows, and macOS, read once a
-    /// client asks, for each view, its root handed to the window (D576,
-    /// D579).
+    /// its place first; on Android, Windows, and macOS, read once a
+    /// client asks, for each view, its root handed to the window.
     void followAccess(window::Windows& windows);
 
     host::HostRequest request_;
@@ -103,8 +102,8 @@ private:
     window::Surfaces surfaces_;
     view::PlayerViews views_;
     view::UiPointing pointing_;
-    /// What lands on the area an editor shows a game over, handed to it
-    /// (D790): whether the press held was handed over, and whether the
+    /// What lands on the area an editor shows a game over, handed to it:
+    /// whether the press held was handed over, and whether the
     /// pointer is over the area.
     world_tooling::Forwarding forwarding_;
     /// An editor's input to act on as the window's, oldest first.
@@ -116,18 +115,18 @@ private:
     /// Whether `event` was handed over, in place of acted on.
     bool forwarded(const window::Event& event);
     /// The ray from the preview's look through window point (`x`, `y`),
-    /// in its region of a split window (D797); none outside it.
+    /// in its region of a split window; none outside it.
     [[nodiscard]] std::optional<view::Ray> previewRay(float x, float y) const;
     view::UiTyping typing_;
     view::UiNavigation navigation_;
-    /// Where the window's UI is read for assistive technology (D571), and
+    /// Where the window's UI is read for assistive technology, and
     /// the scale and place it was last told.
     ui::AccessSeat access_;
     float accessScale_ = 1;
     std::optional<std::array<std::int32_t, 2>> accessPlace_;
     /// Whether `ui.accessibility` lets the UI be read, whether a client
     /// asked for the window's tree, the platform and the view the access
-    /// was made for, and the root last handed to the window (D576, D579).
+    /// was made for, and the root last handed to the window.
     bool accessible_ = true;
     bool accessAsked_ = false;
     ui::AccessPlatform accessPlatform_ = ui::AccessPlatform::Copy;
@@ -136,25 +135,25 @@ private:
     /// Whether the feed was last told a field takes text.
     bool toldEditing_ = false;
     /// Whether a key ended a frame's reading and the players' input has
-    /// not read it yet: the events after it wait until it has (D506).
+    /// not read it yet: the events after it wait until it has.
     bool awaitingRead_ = false;
     /// Iterations run while it waited, so a game whose input reads nothing
     /// does not hold its events for ever.
     int iterationsAwaited_ = 0;
     /// Whether the players' gamepads play: `input.gamepads`, true unless
-    /// told false (D467).
+    /// told false.
     bool gamepads_ = true;
     /// Whether the mouse is played as a finger, `input.touch_from_mouse`,
-    /// and whether that finger touches (D809).
+    /// and whether that finger touches.
     bool touchFromMouse_ = false;
     bool fingerDown_ = false;
     /// `event` made a finger's where the mouse plays one; whether it is
     /// still acted on, a touch screen having no hover or other buttons.
     bool asFinger(window::Event& event) noexcept;
     /// Where the pointer was while the right button is held in a preview,
-    /// so its moves orbit the preview's view (D469); none while it is not.
+    /// so its moves orbit the preview's view; none while it is not.
     std::optional<std::array<float, 2>> orbiting_;
-    /// Flown as an editor's viewport camera (D913), where `preview.flight`
+    /// Flown as an editor's viewport camera, where `preview.flight`
     /// says so: the input is the preview's, the game hears none of it.
     /// Where the pointer was while the right button turns, the middle
     /// pans, or Alt and the left orbit; when it was last flown.
@@ -166,23 +165,23 @@ private:
     /// What the input asks of a flown preview's view; whether it took it.
     bool fly(const window::Event& event);
     /// The modifiers last told while a preview looks, for the wheel's
-    /// records, which name none (D472).
+    /// records, which name none.
     std::uint16_t modifiers_ = 0;
     /// The caret the platform was last asked for text input at, none while
     /// it was not asked.
     std::optional<view::UiTyping::Caret> textInput_;
     window::WindowId window_;
-    /// From the platform's `suspending` until its `resumed` (D565), and
-    /// while a headset shows the person nothing (D679).
+    /// From the platform's `suspending` until its `resumed`, and
+    /// while a headset shows the person nothing.
     bool platformSuspended_ = false;
     view::HeadsetAway away_;
-    /// Files dropped on the window, held for an editor (D802).
+    /// Files dropped on the window, held for an editor.
     view::FilesDropped dropped_;
-    /// An editor's file dialogs (D918): asked, shown over the window, and
+    /// An editor's file dialogs: asked, shown over the window, and
     /// each request's ticket until it completes.
     view::FileDialogs dialogs_;
     view::WindowClosing closing_;
-    /// An editor's windows beside this one (D988): each key and window
+    /// An editor's windows beside this one: each key and window
     /// open, and each closed, its surface let go, until an iteration has
     /// run since and it is destroyed.
     view::WindowAsides asides_;
@@ -194,19 +193,19 @@ private:
     /// Whether `event` was an aside's and taken as one: its pointer's and
     /// its closing; its keys are the window's typing.
     bool aside(const window::Windows& windows, const window::Event& event);
-    /// An editor's clipboard (D999): what it writes put there, and each
+    /// An editor's clipboard: what it writes put there, and each
     /// read's request kept with its ticket until it completes.
     view::Clipboard clipboard_;
     std::vector<std::pair<window::RequestId, std::uint64_t>> clipboardReads_;
     void followClipboard(window::Windows& windows);
     /// Whether `event` completed a clipboard read, answered to the editor.
     bool clipboardRead(const window::Windows& windows, const window::Event& event);
-    /// Lent where the window waits hidden until asked (D942).
+    /// Lent where the window waits hidden until asked.
     view::WindowShowing showing_;
     bool showWhenAsked_ = false;
     window::Mode shownMode_ = window::Mode::Windowed;
     std::vector<std::pair<window::RequestId, std::uint64_t>> dialogsShown_;
-    /// The pixels of the icon `window.icon` names (D951).
+    /// The pixels of the icon `window.icon` names.
     std::vector<std::vector<std::uint8_t>> iconPixels_;
     /// Either, as the Host's frames tell its participants.
     std::atomic<bool> suspended_{false};

@@ -13,7 +13,7 @@ namespace rawframe::window {
 namespace {
 
 /// The engine's kinds and Maul Window's, one row each. A Maul Window type
-/// with no row is outside SPEC-0025's vocabularies (D248).
+/// with no row is outside the vocabularies.
 constexpr auto kKinds = std::to_array<std::pair<EventKind, mwinEventType>>({
     {EventKind::WindowCreated, mwin_eventWindowCreated},
     {EventKind::CloseRequested, mwin_eventCloseRequested},

@@ -27,7 +27,7 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
             continue;
         }
         // The cascade's square, then the material's bindings, as the
-        // material module puts them (D488).
+        // material module puts them.
         const mrhiResourceId kWhite = resourceOf(with.textures->resource(0));
         std::array<mrhiBinding, 10> binding = {bufferAt(0, kSquare.view, sizeof(CasterBlock)),
                                                bufferAt(9, with.materials, with.materialsBytes),
@@ -50,7 +50,7 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
                 return failed("the casters could not be set up", mrhi_errorState);
             }
             // A caster whose material moves its vertices is moved by its
-            // program, once its pipeline is made (D691); it samples no
+            // program, once its pipeline is made; it samples no
             // texture there, so the table stays.
             for (const Run& run : kSquare.casters->solid) {
                 mrhiGraphicsPipelineId wanted = pipelines.casting.pipeline;
@@ -79,7 +79,7 @@ result::Status cast(const Casting& with, mrhiPassId pass, std::span<const Square
             return failed("the masked casters could not be set up", mrhi_errorState);
         }
         // A caster whose material has its own program is cut by it, once
-        // its pipeline is made (D488); the table set again after a switch.
+        // its pipeline is made; the table set again after a switch.
         std::optional<render_scene::SceneTextures> bound;
         for (const Run& run : kSquare.casters->masked) {
             mrhiGraphicsPipelineId wanted = pipelines.cutCasting.pipeline;

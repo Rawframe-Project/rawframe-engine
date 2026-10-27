@@ -1,6 +1,6 @@
 #pragma once
 
-// Skinned models' palettes (D508): for each joint of a skinned mesh, the
+// Skinned models' palettes: for each joint of a skinned mesh, the
 // matrix taking its vertices from the mesh's bind space to its entity's
 // model space as the entity's pose has it, the joint's bone posed after
 // its inverse bind.
@@ -23,7 +23,7 @@ namespace rawframe::render_scene {
 
 /// Puts a posed model's palette `now` among the frame's `palette`, and
 /// after it `before`, the frame before's, where it holds as many joints,
-/// naming both on `draw` (D508, D510); false, putting nothing, past `room`
+/// naming both on `draw`; false, putting nothing, past `room`
 /// matrices.
 bool paletteInto(std::span<const Matrix> now,
                  std::span<const Matrix> before,

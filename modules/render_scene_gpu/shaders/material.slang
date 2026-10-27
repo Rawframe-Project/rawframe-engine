@@ -1,12 +1,12 @@
-// What a material is to the scene's shading (ADR-0031, SPEC-0026, D482):
+// What a material is to the scene's shading:
 // where it is evaluated, what it gives, and the interface a material
 // meets, with the bindings every material may read. The scene declares
 // its material `extern` and is linked with one module that exports it:
 // the blob's (blob_material.slang), the engine's own, or a material
-// compiled for a game (D481).
+// compiled for a game.
 module material;
 
-// Every material's blob (D303), nine vectors each: the base color and
+// Every material's blob, nine vectors each: the base color and
 // metalness; the specular color times its weight, and the roughness; the
 // emission in nits, and the index of refraction; the opacity, the
 // occlusion, the alpha cutoff, and its flags: one when unlit, two when its
@@ -14,12 +14,12 @@ module material;
 // multiplies the opacity, eight when the emission texture's color
 // multiplies the emission, sixteen when the normal texture bends the
 // normal; the base, packed, emission, and normal textures' scale and
-// offset (D311); the packed texture's channels for the metalness, the
-// roughness, and the occlusion, and the normal's scale (D312, D313).
+// offset; the packed texture's channels for the metalness, the
+// roughness, and the occlusion, and the normal's scale.
 [[vk::binding(9, 0)]] public StructuredBuffer<float4> materials;
-// The texture the draw's material samples, and how (D309): white for one
-// sampling none. The packed and the emission textures (D312), and the
-// normal texture (D313).
+// The texture the draw's material samples, and how: white for one
+// sampling none. The packed and the emission textures, and the
+// normal texture.
 [[vk::binding(10, 0)]] public Texture2D baseTexture;
 [[vk::binding(11, 0)]] public SamplerState baseSampler;
 [[vk::binding(12, 0)]] public Texture2D packedTexture;
@@ -30,8 +30,7 @@ module material;
 [[vk::binding(17, 0)]] public SamplerState normalSampler;
 
 // The first vector of material `material`'s blob, held to the blobs there
-// are: nine vectors of its blob, then eight of its interface inputs' values
-// (D708).
+// are: nine vectors of its blob, then eight of its interface inputs' values.
 public uint blobOf(uint material)
 {
     uint count;
@@ -47,7 +46,7 @@ public float channelOf(float4 texel, float channel)
     return channel < 0.5 ? 1.0 : channel < 1.5 ? texel.r : channel < 2.5 ? texel.g : channel < 3.5 ? texel.b : texel.a;
 }
 
-// The spaces a material's transform reads (D714): the eye in the World's
+// The spaces a material's transform reads: the eye in the World's
 // axes; the model's rows, which place a point of the model's own relative
 // to the eye; the view, which turns the World's axes to the eye's (x to
 // its right, y up, z toward it); and the view and projection, unjittered,
@@ -64,7 +63,7 @@ public struct Spaces
 
 // How a transform takes what it is given: a point, placed by every part of
 // a space; a vector, turned and scaled but never moved; or a normal, kept
-// across the surface it is normal to and made a unit again (D714).
+// across the surface it is normal to and made a unit again.
 public static const uint kPoint = 0u;
 public static const uint kVector = 1u;
 public static const uint kNormal = 2u;
@@ -155,10 +154,10 @@ public float4 toClip(Spaces spaces, float3 value)
 // derivatives across the pixel, taken before anything branches; the
 // surface's normal, normalized, and its tangent with the bitangent's sign;
 // the model's color; the draw's material among the frame's; the point in
-// the World's axes, and the presented World's time in seconds (D691), its
-// whole seconds and the fraction left (D702); the way to the eye from it,
-// a unit vector (D696); whether the face drawn is its front (D705); and
-// the spaces a transform reads (D714).
+// the World's axes, and the presented World's time in seconds, its
+// whole seconds and the fraction left; the way to the eye from it,
+// a unit vector; whether the face drawn is its front; and
+// the spaces a transform reads.
 public struct Point
 {
     public float2 uv;
@@ -175,13 +174,13 @@ public struct Point
     public Spaces spaces;
 }
 
-// Where a material moves a vertex (SPEC-0026's position offset, D691): the
+// Where a material moves a vertex: the
 // vertex placed by its model in the World's axes, its normal there, its
 // texture coordinates, the model's color, the presented World's time in
-// seconds, now or the frame before, its whole seconds and the fraction left
-// (D702), the way to the eye, a unit vector (D696), the draw's material
-// among the frame's, whose parameters it reads (D708), and the spaces a
-// transform reads (D714).
+// seconds, now or the frame before, its whole seconds and the fraction left,
+// the way to the eye, a unit vector, the draw's material
+// among the frame's, whose parameters it reads, and the spaces a
+// transform reads.
 public struct Placed
 {
     public float3 position;
@@ -194,18 +193,18 @@ public struct Placed
     public Spaces spaces;
 }
 
-// What a material gives the lit shading model (ADR-0031's Surface, D299):
+// What a material gives the lit shading model:
 // the base color, the model's color applied; the metalness; the specular
 // color times its weight; the roughness; the emission in nits; the index of
 // refraction; the opacity, the model's alpha applied; the occlusion; the
 // normal, bent as the material bends it; the coat's weight, its roughness,
-// and its normal (KHR_materials_clearcoat, D716), a weight of nought for
+// and its normal (KHR_materials_clearcoat), a weight of nought for
 // none; the anisotropy's strength, nought for none, and its rotation in
-// radians from the tangent toward the bitangent (KHR_materials_anisotropy,
-// D717); the transmission's weight, nought for none, the color its volume
+// radians from the tangent toward the bitangent (KHR_materials_anisotropy);
+// the transmission's weight, nought for none, the color its volume
 // tints toward and the depth it reaches there, its thickness, and whether
-// it is thin walled (KHR_materials_transmission and KHR_materials_volume,
-// D720); and whether it stands unlit.
+// it is thin walled (KHR_materials_transmission and KHR_materials_volume);
+// and whether it stands unlit.
 public struct Evaluated
 {
     public float3 color;

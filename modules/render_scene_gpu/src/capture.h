@@ -10,7 +10,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// A frame's light read back from its scene target (D326), when asked: a
+/// A frame's light read back from its scene target, when asked: a
 /// pass after the models' copies the target out, and once the device has
 /// finished the frame its half floats are taken, divided by the exposure
 /// the frame was drawn at. A frame not submitted keeps the ask for the

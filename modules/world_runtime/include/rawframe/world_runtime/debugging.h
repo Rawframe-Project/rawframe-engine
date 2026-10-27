@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's scripts debugged (ADR-0066's debugger bridge, D460): breakpoints
+// A game's scripts debugged: breakpoints
 // at functions of the running program, and a stopped game's frames, from
 // whoever runs the program (a game, through its Kest machine), so a reader
 // that does not, the tooling endpoint, can serve a debugger. A stop is the
@@ -19,7 +19,7 @@
 
 namespace rawframe::world_runtime {
 
-/// A line of a game's Kest source (D630): its file, the path the build
+/// A line of a game's Kest source: its file, the path the build
 /// read it by or any end of that path after a separator, and its line,
 /// counted from one.
 struct DebugLine {
@@ -27,7 +27,7 @@ struct DebugLine {
     std::uint32_t line = 0;
 };
 
-/// How a stopped game steps (D632): to the next line wherever it is
+/// How a stopped game steps: to the next line wherever it is
 /// (`Into`), the next in this function or one it returns to (`Over`), or
 /// the line it returns to (`Out`).
 enum class DebugStep : std::uint8_t {
@@ -44,7 +44,7 @@ struct DebugBroken {
 };
 
 /// One frame of a stopped game: the function it is in, as written with its
-/// module; the line it stands at (D630), none where Kest cannot say; and
+/// module; the line it stands at, none where Kest cannot say; and
 /// its named locals, each as text.
 struct DebugFrame {
     std::string function;
@@ -59,8 +59,8 @@ public:
     Debugging& operator=(const Debugging&) = delete;
     virtual ~Debugging() = default;
 
-    /// Breaks at the start of each function named and at each line given
-    /// (D630), from now on and in every program the game reloads to, and at
+    /// Breaks at the start of each function named and at each line given,
+    /// from now on and in every program the game reloads to, and at
     /// no other; between ticks or while stopped. A breakpoint stopped at is
     /// stepped past, so it stops the game again as it comes round.
     [[nodiscard]] virtual DebugBroken breakAt(std::vector<std::string> functions,
@@ -69,7 +69,7 @@ public:
     /// milliseconds apart, until it answers true: carry on. None carries on
     /// at once.
     virtual void whileStopped(std::function<bool()> serve) noexcept = 0;
-    /// While stopped, from what serves the stop (D632): once it answers
+    /// While stopped, from what serves the stop: once it answers
     /// carry on, the game runs only to the next line as `how` says and
     /// stops again; a breakpoint met on the way stops it there instead, and
     /// a function that ends on the way ends the step. False while not

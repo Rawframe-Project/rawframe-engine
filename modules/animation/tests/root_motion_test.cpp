@@ -1,4 +1,4 @@
-// Root motion (SPEC-0035, D134): an advance says how its clips moved the
+// Root motion: an advance says how its clips moved the
 // character, across wraps and blends, in the character's own frame, and
 // the pose is drawn with that motion taken out.
 

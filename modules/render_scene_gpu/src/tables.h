@@ -17,18 +17,18 @@ namespace rawframe::render_scene_gpu {
 [[nodiscard]] mrhiBinding bufferAt(std::uint32_t slot, mrhiResourceId resource, std::uint64_t bytes) noexcept;
 [[nodiscard]] mrhiBinding textureAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
 [[nodiscard]] mrhiBinding depthAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
-/// A cube's six faces and every level, seen as a cube (D322).
+/// A cube's six faces and every level, seen as a cube.
 [[nodiscard]] mrhiBinding cubeAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
-/// Every layer and mip of a 2D array (D339).
+/// Every layer and mip of a 2D array.
 [[nodiscard]] mrhiBinding arrayAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
-/// Every cube and mip of a cube array, or a cube's seen as one (D340).
+/// Every cube and mip of a cube array, or a cube's seen as one.
 [[nodiscard]] mrhiBinding cubesAt(std::uint32_t slot, mrhiResourceId resource) noexcept;
 [[nodiscard]] mrhiBinding samplerAt(std::uint32_t slot, mrhiSamplerId sampler) noexcept;
 
 /// A resource of the open frame from the key `render` names it by.
 [[nodiscard]] mrhiResourceId resourceOf(std::uint64_t key) noexcept;
 
-/// A material's texture and its sampler into two slots of a table (D309):
+/// A material's texture and its sampler into two slots of a table:
 /// the texture held this frame, or white for none and for one not held.
 void bindTexture(const render::DeviceTextures& textures,
                  const Pipelines& pipelines,

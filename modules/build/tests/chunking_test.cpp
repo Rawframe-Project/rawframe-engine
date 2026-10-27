@@ -1,4 +1,4 @@
-// SPEC-0021 chunking: the gear table as fixed, chunks within their bounds
+// Chunking: the gear table as fixed, chunks within their bounds
 // that cover the bytes exactly, the same bytes cut the same way, and an
 // edit early in a resource leaving later cuts where they were.
 

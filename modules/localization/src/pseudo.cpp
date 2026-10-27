@@ -1,4 +1,4 @@
-// Pseudo-localization (SPEC-0033): only a message's text is changed, found
+// Pseudo-localization: only a message's text is changed, found
 // by the message reader itself.
 
 #include "rawframe/localization/pseudo.h"
@@ -50,8 +50,8 @@ void transform(std::string_view run, bool accents, std::string& made, std::size_
 } // namespace
 
 double expansionFor(std::size_t characters) noexcept {
-    // RESEARCH-0058's IBM table, each band's lower bound; the table skips
-    // 51 to 70, which takes the band past it (D145).
+    // IBM's text expansion table, each band's lower bound; the table skips
+    // 51 to 70, which takes the band past it.
     if (characters <= 10) {
         return 2.0;
     }

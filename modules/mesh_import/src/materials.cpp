@@ -12,7 +12,7 @@ namespace {
 
 using mesh::MeshError;
 
-/// The luminance of glTF's emissive one (D314): glTF gives emission no
+/// The luminance of glTF's emissive one: glTF gives emission no
 /// unit, and Rawframe's is nits.
 constexpr float kEmissionNits = 1000.0F;
 

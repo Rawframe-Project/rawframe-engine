@@ -70,7 +70,7 @@ public:
         }
         settings_ = DeviceSettings{.allowSoftware = *kWanted == "any"};
         RAWFRAME_TRY_ASSIGN(says_, context.configuration().truth("render.unavailable_says", false));
-        // A headset's runtime makes the device where one answered (D593).
+        // A headset's runtime makes the device where one answered.
         if (context.has(kHeadset.name)) {
             RAWFRAME_TRY_ASSIGN(Headset * headset, context.capability(kHeadset));
             if (headset->present()) {
@@ -94,7 +94,7 @@ public:
                         .error()};
             }
         }
-        // ADR-0047's output mode asked of every window (D365): SDR unless
+        // The output mode asked of every window: SDR unless
         // named; one that cannot be used falls back to SDR, said so.
         if (const auto kOutput = context.configuration().text("render.output")) {
             const auto kMode = outputModeNamed(*kOutput);
@@ -184,7 +184,7 @@ public:
             reconfigured_ += prepared->reconfigured ? 1U : 0U;
             notDrawable_ += prepared->drawable ? 0U : 1U;
             if (prepared->reconfigured && prepared->policy != policy_ && used_ != prepared->policy) {
-                // Once per change, as SPEC-0024 asks.
+                // Once per change.
                 emitter_.log(diagnostics::Severity::Warning,
                              kSubstituted,
                              "the present policy asked for is not offered: another of its chain is used",
@@ -203,7 +203,7 @@ public:
     }
 
 private:
-    /// A window's HDR capability record told at each revision (D365), and
+    /// A window's HDR capability record told at each revision, and
     /// the mode asked for, when another is used, said so.
     void told(const OutputRecord& record) noexcept {
         emitter_.log(diagnostics::Severity::Info,
@@ -234,7 +234,7 @@ private:
     };
 
     /// A run with windows that never asked for the device, said with what
-    /// its first window had (D586): a client that showed nothing says why.
+    /// its first window had: a client that showed nothing says why.
     void unasked() noexcept {
         if (windows_ == nullptr || requested_ || !settings_.has_value()) {
             return;
@@ -304,8 +304,8 @@ private:
         if (!lostSeen_ && device_->lost()) {
             lostSeen_ = true;
             emitter_.log(diagnostics::Severity::Error, kLost, "the device was lost: nothing more is drawn", {});
-            // SPEC-0024: a lost device is the presentation's end, and the
-            // Host's policy a client's exit (D538).
+            // A lost device is the presentation's end, and the Host's policy
+            // a client's exit.
             if (context_ != nullptr) {
                 context_->reportHealth(composition::Health::Unhealthy, "device_lost");
             }
@@ -362,7 +362,7 @@ private:
     }
 
     /// Why, and the system's Vulkan devices when the device layer listed
-    /// none, which a device below its floor says (D769).
+    /// none, which a device below its floor says.
     void unavailable(const result::Error& error) noexcept {
         std::string_view seen;
         for (const result::ContextField& each : error.context()) {
@@ -375,7 +375,7 @@ private:
                       diagnostics::field("vulkanDevices", std::string{seen})});
         failure_ = std::string{error.description()} +
                    (seen.empty() ? std::string{} : " (the system's Vulkan devices: " + std::string{seen} + ")");
-        // Said where nothing else can be (D927): the device a program draws
+        // Said where nothing else can be: the device a program draws
         // its every word with is the one missing.
         if (says_ && !said_) {
             said_ = true;

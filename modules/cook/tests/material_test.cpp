@@ -1,4 +1,4 @@
-// Materials cooked (D301, D318, D348, D355): a surface material into its
+// Materials cooked: a surface material into its
 // compiled form, its qualities its variants, and a post process and a
 // canvas material into their folded forms.
 
@@ -32,8 +32,8 @@ using namespace rawframe::cook;
 using namespace rawframe::cook_fixture;
 
 RAWFRAME_TEST(AMaterialsQualitiesAreItsVariants) {
-    // Plaza's paving, a plain grey at the low quality (D318): two variants,
-    // the second the quality axis's (D319).
+    // Plaza's paving, a plain grey at the low quality: two variants,
+    // the second the quality axis's.
     const Project kProject;
     fs::copy_file(fs::path{RAWFRAME_SAMPLE_GAMES} / "plaza" / "paving.rfmaterial",
                   kProject.sources / "paving.rfmaterial");
@@ -49,7 +49,7 @@ RAWFRAME_TEST(AMaterialsQualitiesAreItsVariants) {
 }
 
 RAWFRAME_TEST(APostProcessCooksIntoItsFoldedForm) {
-    // Plaza's warmth (D348): the picture tinted before the tonemapper.
+    // Plaza's warmth: the picture tinted before the tonemapper.
     const Project kProject;
     fs::copy_file(fs::path{RAWFRAME_SAMPLE_GAMES} / "plaza" / "warmth.rfmaterial",
                   kProject.sources / "warmth.rfmaterial");
@@ -82,7 +82,7 @@ RAWFRAME_TEST(APostProcessCooksIntoItsFoldedForm) {
 }
 
 RAWFRAME_TEST(ACanvasMaterialCooksIntoItsFoldedForm) {
-    // A sheet's texture tinted red and added, glowing faintly (D355).
+    // A sheet's texture tinted red and added, glowing faintly.
     const Project kProject;
     fs::copy_file(fs::path{RAWFRAME_MATERIAL_SEEDS} / "glowing.canvas", kProject.sources / "glow.rfmaterial");
     writeText(kProject.sources / "glow.rfmaterial.rfmeta",
@@ -143,7 +143,7 @@ RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {
         }
     }
     RAWFRAME_EXPECT(found);
-    // SPEC-0026's variant report (D319): one variant, from no axis, in the
+    // The variant report: one variant, from no axis, in the
     // receipt beside its source and for the package; from the cache too.
     const auto kReported = [&kProject] {
         const std::string kReceipt = readText(kProject.output / "cook.receipt");
@@ -176,7 +176,7 @@ RAWFRAME_TEST(ASurfaceMaterialCooksIntoItsCompiledForm) {
 
 namespace {
 
-/// The shader toolchain as the check gives it (D484): a Python on the path
+/// The shader toolchain as the check gives it: a Python on the path
 /// and the pinned Slang compiler named; none where either is missing.
 std::optional<ShaderTools> shaderTools() {
     const char* kSlangc = std::getenv("RAWFRAME_SLANGC");
@@ -201,34 +201,34 @@ std::optional<ShaderTools> shaderTools() {
 } // namespace
 
 RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
-    // A texture's color faded by its own alpha, its roughness that alpha
-    // (D483): no blob says it, so it is a program material (D484).
+    // A texture's color faded by its own alpha, its roughness that alpha:
+    // no blob says it, so it is a program material.
     const Project kProject;
     fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "faded.material", kProject.sources / "faded.rfmaterial");
     writeText(kProject.sources / "faded.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c3", "", "rawframe.material"));
-    // And one lifting its vertices with time (D691), which says it moves.
+    // And one lifting its vertices with time, which says it moves.
     fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "rising.material", kProject.sources / "rising.rfmaterial");
     writeText(kProject.sources / "rising.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c4", "", "rawframe.material"));
-    // And one using every math node of SPEC-0026's core (D694), which the
+    // And one using every math node of the core, which the
     // toolchain builds for every backend.
     fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "arithmetic.material", kProject.sources / "arithmetic.rfmaterial");
     writeText(kProject.sources / "arithmetic.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c5", "", "rawframe.material"));
-    // And one whose color is its tint parameter's (D708), its default
+    // And one whose color is its tint parameter's, its default
     // carried by its program.
     fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "tinted.material", kProject.sources / "tinted.rfmaterial");
     writeText(kProject.sources / "tinted.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c6", "", "rawframe.material"));
-    // And an instance of it, red (D709): no program of its own, so it cooks
+    // And an instance of it, red: no program of its own, so it cooks
     // with or without the toolchain, to its base's identity and its tint.
     writeText(kProject.sources / "reddened.rfmaterial",
               "{\n  \"formatVersion\": 1,\n  \"kind\": \"surface\",\n  \"base\": \"tinted.rfmaterial\",\n"
               "  \"overrides\": {\n    \"tint\": [\n      1,\n      0,\n      0\n    ]\n  }\n}\n");
     writeText(kProject.sources / "reddened.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c7", "", "rawframe.material"));
-    // And a clear glass, which transmits (D720).
+    // And a clear glass, which transmits.
     fs::copy_file(fs::path{RAWFRAME_SURFACE_SEEDS} / "glass.material", kProject.sources / "glass.rfmaterial");
     writeText(kProject.sources / "glass.rfmaterial.rfmeta",
               sidecar("000000000000000000000000000000c8", "", "rawframe.material"));
@@ -292,7 +292,7 @@ RAWFRAME_TEST(AGraphTheBlobCannotFoldCooksWithItsOwnProgram) {
 }
 
 RAWFRAME_TEST(AnInstanceCooksOnlyAgainstABaseItFits) {
-    // D709: an instance's base is read where it names it, so a base that is
+    // An instance's base is read where it names it, so a base that is
     // not there, an override the base has no input for, and an instance of
     // an instance are each refused, and the rest cook.
     const Project kProject;
@@ -335,7 +335,7 @@ RAWFRAME_TEST(AnInstanceCooksOnlyAgainstABaseItFits) {
 }
 
 RAWFRAME_TEST(AnInstanceSwitchingItsBaseCooksItsOwnProgram) {
-    // D719: soaked.material is sandy unless its wet switch is on, when its
+    // soaked.material is sandy unless its wet switch is on, when its
     // tint shows. An instance turning it on draws a variant of its own, a
     // program with the instance's tint; one changing the tint alone shares
     // its base's program.

@@ -1,6 +1,6 @@
 #pragma once
 
-// The part of QPACK (RFC 9204) a WebTransport server needs (D172): decoding
+// The part of QPACK (RFC 9204) a WebTransport server needs: decoding
 // a request's field section that refers to nothing dynamic, since this side
 // announces no dynamic table, with literals plain or Huffman-coded (RFC 7541
 // Appendix B); and encoding a response's status.

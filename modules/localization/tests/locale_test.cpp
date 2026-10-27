@@ -1,4 +1,4 @@
-// Locales (SPEC-0033): the tag grammar in canonical case, intake from what
+// Locales: the tag grammar in canonical case, intake from what
 // players and platforms give, likely subtags, and the fallback chain's
 // normative proof cases.
 

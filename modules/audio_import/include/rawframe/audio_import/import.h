@@ -1,6 +1,6 @@
 #pragma once
 
-// Importing sounds (ADR-0058, SPEC-0036's closed ingest list): WAVE, Ogg
+// Importing sounds: WAVE, Ogg
 // Vorbis, and MP3 sources decoded into clips and cooked into the form the
 // runtime reads. Import tooling only: the source decoders here are trusted
 // with an author's own files and never link into a client or a server.

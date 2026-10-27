@@ -1,8 +1,8 @@
-# Audio (ADR-0038, SPEC-0036): the mixer layout, the mixer rendering into
-# buffers, and the output rendering it to a device through Maul Audio
-# (D401). Client only: the dedicated server links none of it. Maul Audio and
+# Audio: the mixer layout, the mixer rendering into
+# buffers, and the output rendering it to a device through Maul Audio.
+# Client only: the dedicated server links none of it. Maul Audio and
 # libopus are linked privately, so no header above this module can include
-# them. On the web the page plays a client's sound (D259): its output
+# them. On the web the page plays a client's sound: its output
 # refuses to open.
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(rawframe_audio_output src/output_none.cpp)

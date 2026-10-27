@@ -1,4 +1,4 @@
-// The canvas's sprites (D278, D356, D475), in Slang (ADR-0026), from which
+// The canvas's sprites, in Slang, from which
 // the SPIR-V and the WGSL are compiled.
 //
 // Vertex entry "vs": a quad's corner as the queue stage made it, in clip
@@ -13,7 +13,7 @@
 // behind is scaled by its color as far as it covers, the emission left
 // out.
 
-// The material (D355): its color, and what multiplies its texture's; its
+// The material: its color, and what multiplies its texture's; its
 // emission, and whether it multiplies (its fourth); what multiplies its
 // texture's color in its emission; and its texture's scale and offset.
 struct Material
@@ -38,7 +38,7 @@ struct Corner
     [[vk::location(1)]] float4 color;
 }
 
-// The color's channels are written in sRGB (ADR-0047): blending happens in
+// The color's channels are written in sRGB: blending happens in
 // linear light, so they are decoded here.
 float3 linearOf(float3 encoded)
 {

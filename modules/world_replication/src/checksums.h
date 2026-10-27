@@ -1,7 +1,7 @@
 #pragma once
 
 // What the replication server keeps to check one connection's checksum
-// records (SPEC-0041, D204): its own checksum of the connection's predicted
+// records: its own checksum of the connection's predicted
 // scope at each of the latest ticks it published, and how many records the
 // connection sent in the current second. Private to the server.
 
@@ -25,7 +25,7 @@ public:
     }
 
     /// What was hashed at `tick`, each value's wire form, for a
-    /// development capture (D275): kept only when asked for.
+    /// development capture: kept only when asked for.
     void keepScope(std::uint64_t tick, std::span<const std::span<const std::byte>> values) {
         std::vector<std::vector<std::byte>>& scope = scopes_[static_cast<std::size_t>(tick % kKept)];
         scope.resize(values.size());
@@ -48,7 +48,7 @@ public:
 
     /// Whether one more record may be looked at, at `tick`: at most
     /// `perSecond` in each second of `ticksPerSecond` ticks, counted before
-    /// any work on the record (SPEC-0041's checksum_rate_max).
+    /// any work on the record (checksum_rate_max).
     [[nodiscard]] bool admit(std::uint64_t tick, std::uint64_t ticksPerSecond, std::uint32_t perSecond) noexcept {
         const std::uint64_t kSecond = tick / (ticksPerSecond == 0 ? 1 : ticksPerSecond);
         if (kSecond != second_) {

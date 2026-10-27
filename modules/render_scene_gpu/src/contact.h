@@ -12,7 +12,7 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// What the contact shadows' pass reads (std140, D338): the jittered
+/// What the contact shadows' pass reads (std140): the jittered
 /// view's inverse, from clip space to the eye-relative World, and the view
 /// itself; the direction toward the sun; the length and the near plane.
 struct ContactBlock {
@@ -23,7 +23,7 @@ struct ContactBlock {
 };
 static_assert(sizeof(ContactBlock) == 160, "the contact shadows' shader reads its block as 160 bytes");
 
-/// ADR-0051's screen-space contact shadows (D338), when the view asks: a
+/// The screen-space contact shadows, when the view asks: a
 /// pass after the prepass follows each point toward the sun through the
 /// prepass's depth, and the lit pass shades the sun's light by what it
 /// found. Its target is the frame's own.

@@ -1,11 +1,11 @@
-# Resources and verified content (ADR-0013, SPEC-0008): typed identity,
+# Resources and verified content: typed identity,
 # manifests, the catalog, and bytes read and verified before anyone sees
 # them. Headless; no decoded assets, importers, or cookers here.
 rawframe_module(NAME content
     SOURCES src/build_manifest.cpp src/catalog.cpp src/composition_record.cpp src/frame.cpp src/identity.cpp src/library.cpp src/manifest.cpp src/product.cpp src/sidecar.cpp src/directory.cpp src/source.cpp src/store.cpp
     DEPS signature document execution result base
 )
-# Zstandard's decoder, for Build chunks (SPEC-0021), linked privately so no
+# Zstandard's decoder, for Build chunks, linked privately so no
 # header above this module can include it.
 target_link_libraries(rawframe_content PRIVATE rawframe_zstd_decompress)
 

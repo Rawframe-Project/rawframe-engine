@@ -3,7 +3,7 @@
 // A server's TLS identity and the fingerprint a client pins it by. Rawframe
 // does not ask a certificate authority who a game server is: an operator
 // hands clients the SHA-256 of the server's certificate, and a client accepts
-// that certificate and no other (D27).
+// that certificate and no other.
 
 #include "rawframe/base/sha256.h"
 #include "rawframe/result/result.h"

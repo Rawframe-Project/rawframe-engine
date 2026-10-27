@@ -1,6 +1,6 @@
 #pragma once
 
-// The platform's file dialogs for an editor (D918): what it asks, shown by
+// The platform's file dialogs for an editor: what it asks, shown by
 // the window host over its window, and what the user chose, answered a
 // frame or more later while the window goes on drawing. The window host
 // lends one as `rawframe.view.file_dialogs`; a host with no window lends

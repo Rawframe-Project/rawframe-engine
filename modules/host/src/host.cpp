@@ -109,20 +109,19 @@ struct Settings {
     std::size_t ioWorkers = execution::kDefaultBlockingIoWorkers;
     execution::MonotonicDuration shutdownBudget = execution::MonotonicDuration::fromSeconds(5);
     /// Two seconds, so a normal shutdown, the drain and the composition's
-    /// stop, stays within SPEC-0013's 8 s at their defaults (D230).
+    /// stop, stays within the 8 s at their defaults.
     execution::MonotonicDuration drain = execution::MonotonicDuration::fromSeconds(2);
     execution::MonotonicDuration stall = execution::MonotonicDuration::fromSeconds(10);
     std::optional<execution::MonotonicDuration> supervisorGrace;
     Severity minimumSeverity = Severity::Info;
-    /// Development builds only (D678): how long each iteration waits after
+    /// Development builds only: how long each iteration waits after
     /// its Worlds ran and before it presents, as a slow frame's drawing
     /// holds a client, so a test plays one whose frames are long inside
     /// them; nought for none.
     execution::MonotonicDuration drawing{};
 };
 
-/// The longest a normal stop can take: the drain and the composition's stop
-/// (SPEC-0013's aggregate normal shutdown, D230).
+/// The longest a normal stop can take: the drain and the composition's stop.
 execution::MonotonicDuration normalShutdownBound(const Settings& settings) noexcept {
     return settings.drain + settings.shutdownBudget;
 }
@@ -187,7 +186,7 @@ readSettings(const composition::Configuration& configuration, Settings& settings
         settings.supervisorGrace = execution::MonotonicDuration::fromMilliseconds(static_cast<std::int64_t>(*kGrace));
     }
     if (settings.supervisorGrace) {
-        // SPEC-0012: every shutdown phase together stays under the grace a
+        // Every shutdown phase together stays under the grace a
         // supervisor gives, with a margin of a tenth of it, at least a second.
         const execution::MonotonicDuration kMargin =
             std::max(execution::MonotonicDuration::fromSeconds(1),
@@ -206,7 +205,7 @@ readSettings(const composition::Configuration& configuration, Settings& settings
     return std::nullopt;
 }
 
-/// SPEC-0012's executor progress evidence: work waits or runs while no task
+/// The executor progress evidence: work waits or runs while no task
 /// finishes. A long task alone is a stall too; nothing a Host runs should
 /// hold a worker for seconds.
 class StallWatch {
@@ -250,8 +249,7 @@ struct Host::State {
                                        .targetRole = roleName(given.role),
                                        .session = ""},
                // A local log is operator-owned, so it may hold personal data;
-               // a sink leaving the machine would declare a lower clearance
-               // (ADR-0063).
+               // a sink leaving the machine would declare a lower clearance.
                diagnostics::Sensitivity::Personal,
                kLogBufferBytes),
           badKey(readSettings(configuration, settings, given.defaultShutdownBudgetMs)), sinks{&sink},
@@ -278,7 +276,7 @@ struct Host::State {
         }
     }
 
-    /// SPEC-0012's lifecycle, each move logged. Participants read it through
+    /// The lifecycle, each move logged. Participants read it through
     /// their context; only the Host's caller moves it.
     void enter(composition::HostState to, std::string_view reason) noexcept {
         const composition::HostState kFrom = lifecycle.state();
@@ -300,7 +298,7 @@ struct Host::State {
         cpu->stop();
     }
 
-    /// The one record of why a refused start ends the run (SPEC-0012).
+    /// The one record of why a refused start ends the run.
     void logExit(HostExit reason) noexcept {
         emitter.log(Severity::Critical,
                     kNotStarted,
@@ -344,8 +342,7 @@ struct Host::State {
         root.emplace(clock);
 
         std::vector<composition::Problem> problems;
-        // What the caller lends, and whether the Host was asked to stop
-        // (D460).
+        // What the caller lends, and whether the Host was asked to stop.
         lentAll.assign(request.lent.begin(), request.lent.end());
         lentAll.push_back(
             composition::LentCapability{composition::kStopRequest.name, composition::provideAs(stopRequest)});
@@ -411,7 +408,7 @@ struct Host::State {
             return false;
         }
         // Every key is some participant's, or the Host's: one nothing read is
-        // not a setting of this process (SPEC-0012, D187).
+        // not a setting of this process.
         if (const std::vector<std::string_view> kUnknown = configuration.unread(); !kUnknown.empty()) {
             for (const std::string_view kKey : kUnknown) {
                 emitter.log(Severity::Critical,
@@ -435,8 +432,8 @@ struct Host::State {
                      diagnostics::field("cpuWorkers", cpu->workerCount()),
                      diagnostics::field("shutdownBoundMs", shutdownBound(settings).nanoseconds / 1'000'000),
                      diagnostics::field("normalShutdownBoundMs", normalShutdownBound(settings).nanoseconds / 1'000'000),
-                     // SPEC-0013's fresh ready memory (D211) and start time,
-                     // and processor time so far (D213); nought where the
+                     // The fresh ready memory and start time,
+                     // and processor time so far; nought where the
                      // platform does not say.
                      diagnostics::field("residentBytes", base::residentBytes().value_or(0)),
                      diagnostics::field("readyMs", (clock.now() - born).nanoseconds / 1'000'000),
@@ -511,7 +508,7 @@ struct Host::State {
         return true;
     }
 
-    /// SPEC-0013's memory attribution (D216), once a second while running:
+    /// The memory attribution, once a second while running:
     /// what each participant says it holds, and what the process holds, the
     /// last seen and the most.
     void sampleMemory() {
@@ -546,7 +543,7 @@ struct Host::State {
                          diagnostics::field("peakBytes", each.peak)});
         }
         const std::uint64_t kUnattributed = resident > attributed + fileBacked ? resident - attributed - fileBacked : 0;
-        // The unattributed remainder split by the allocator's count (D233):
+        // The unattributed remainder split by the allocator's count:
         // heap no participant claims (MsQuic's pools, diagnostics, the
         // Host's own), the allocator's free space, and what lies outside
         // the heap (stacks, static data). The allocator counts pages it has
@@ -640,8 +637,8 @@ struct Host::State {
                      diagnostics::field("exit", describe(exit)),
                      diagnostics::field("exitCode", static_cast<std::uint64_t>(exitCode(exit))),
                      diagnostics::field("shutdownMs", (clock.now() - drainStart).nanoseconds / 1'000'000),
-                     // The most the run held at once (D211), and how long it
-                     // ran and the processor time it took (D213).
+                     // The most the run held at once, and how long it
+                     // ran and the processor time it took.
                      diagnostics::field("peakResidentBytes", base::peakResidentBytes().value_or(0)),
                      diagnostics::field("runMs", (clock.now() - born).nanoseconds / 1'000'000),
                      diagnostics::field("cpuMs", base::cpuNanoseconds().value_or(0) / 1'000'000)});

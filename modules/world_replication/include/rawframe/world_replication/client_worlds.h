@@ -18,7 +18,7 @@
 namespace rawframe::world_replication {
 
 /// A predicted effect as presentation hears of it: delivered, or taken back
-/// by a resimulation that no longer emits it (D219).
+/// by a resimulation that no longer emits it.
 struct EffectEvent {
     PredictedEffect effect;
     bool cancelled = false;
@@ -28,10 +28,10 @@ struct ClientView {
     world::World* world = nullptr;
     /// The client's own player, or null before admission.
     world::EntityHandle owned;
-    /// The World's time as it is shown, on the simulation timeline
-    /// (ADR-0010): the server tick its remote entities are shown at, or the
+    /// The World's time as it is shown, on the simulation timeline:
+    /// the server tick its remote entities are shown at, or the
     /// newest heard without interpolation, over the tick rate, in seconds;
-    /// none before admission (D691).
+    /// none before admission.
     std::optional<double> seconds;
 };
 
@@ -56,7 +56,7 @@ public:
         into.clear();
         return seen;
     }
-    /// Client `index`'s game messages (D266) after the first `seen`, oldest
+    /// Client `index`'s game messages after the first `seen`, oldest
     /// first, as `readEffects` reads effects. None by default.
     virtual std::uint64_t
     readMessages(std::size_t index, std::uint64_t seen, std::vector<ReceivedMessage>& into) noexcept {
@@ -69,8 +69,8 @@ public:
     [[nodiscard]] virtual std::optional<std::size_t> playerClient() const noexcept {
         return std::nullopt;
     }
-    /// How many of the first clients are the process's local players
-    /// (ADR-0052, D362), presented and shown, split-screen past one, in the
+    /// How many of the first clients are the process's local players,
+    /// presented and shown, split-screen past one, in the
     /// clients' order; the first is `playerClient` when there is one.
     [[nodiscard]] virtual std::size_t localPlayers() const noexcept {
         return 1;
@@ -79,8 +79,8 @@ public:
 
 inline constexpr composition::Capability<ClientWorlds> kClientWorlds{"rawframe.replication.client_worlds"};
 
-/// ADR-0052's limit point on the local players a process shows, a profile
-/// value (D362).
+/// The limit point on the local players a process shows, a profile
+/// value.
 inline constexpr std::size_t kMaximumLocalPlayers = 4;
 
 } // namespace rawframe::world_replication

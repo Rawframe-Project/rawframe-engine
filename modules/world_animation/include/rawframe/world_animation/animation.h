@@ -1,6 +1,6 @@
 #pragma once
 
-// Animation in the World (ADR-0039, SPEC-0035): one graph instance for each
+// Animation in the World: one graph instance for each
 // entity with an Animator, played once per tick by one system in the
 // simulation phase, `rawframe.animation.step`, in entity order:
 //
@@ -11,16 +11,16 @@
 //   2. each instance takes its Animator's transition request, if it has
 //      one, and its parameters from the fields of the game's
 //      component its animator binds them to, as the last barrier committed
-//      them (SPEC-0035's parameter write; a value not of the parameter's
+//      them (the parameter write; a value not of the parameter's
 //      type is refused and counted, and the last one kept);
-//   3. it advances by the tick (SPEC-0035's parameter and state phase),
+//   3. it advances by the tick,
 //      and its Animator's `events` is written with the events it fired;
 //   4. it is posed, and the pose kept in model space for the game's
-//      queries until the next step; the fields its clips animate (D139)
+//      queries until the next step; the fields its clips animate
 //      are written onto the entity's components that have them.
 //
-// A dedicated server plays only animators whose relevance is `Simulation`
-// (SPEC-0035's typed server subset); the rest have no instance there.
+// A dedicated server plays only animators whose relevance is `Simulation`;
+// the rest have no instance there.
 // Gameplay systems that set parameters run before the step; those that
 // read poses or events, after. The same components give the same bits on
 // every machine.
@@ -72,7 +72,7 @@ struct AnimatorSettings {
     /// Beside the graph's properties, each once.
     std::vector<PropertyField> properties;
     /// What a dedicated server poses: a byte for each bone of the graph's
-    /// skeleton, nonzero for a bone it poses (SPEC-0035), the rest left at
+    /// skeleton, nonzero for a bone it poses, the rest left at
     /// their bind; empty for every bone. A client poses them all.
     std::vector<std::uint8_t> subset;
 };
@@ -128,7 +128,7 @@ public:
     /// in its skeleton's order, or null for an entity not played here.
     [[nodiscard]] virtual const animation::Pose* pose(world::EntityHandle entity) const noexcept = 0;
     /// Each bone of the entity's pose by its target identity, in the same
-    /// order, which a skinned mesh's joints name (D508); none for an entity
+    /// order, which a skinned mesh's joints name; none for an entity
     /// not played here.
     [[nodiscard]] virtual std::span<const base::Bits128> bones(world::EntityHandle entity) const noexcept = 0;
     /// The events the entity's graph fired in the last step, in order.
@@ -154,7 +154,7 @@ public:
     [[nodiscard]] result::Status declareSystems(const schema::SchemaRegistry& registry,
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;
     /// Readies it for a World of `registry` that no schedule steps, such as
-    /// a client's mirror of a server's World (D258), refused as
+    /// a client's mirror of a server's World, refused as
     /// `declareSystems` refuses.
     [[nodiscard]] result::Status bind(const schema::SchemaRegistry& registry) noexcept;
     /// One step of `world`, whose registry it was bound to, `rate`'s tick
@@ -192,7 +192,7 @@ public:
     [[nodiscard]] virtual const std::optional<AnimationSettings>& animation() const noexcept = 0;
     /// Whether the game runs in this process's World: false for a process
     /// that plays it on a server elsewhere, which animates only the World
-    /// it mirrors (D258).
+    /// it mirrors.
     [[nodiscard]] virtual bool simulated() const noexcept {
         return true;
     }
@@ -203,8 +203,8 @@ public:
 
 inline constexpr composition::Capability<AnimationPlan> kAnimationPlan{"rawframe.animation.plan"};
 
-/// The animation a process plays its local players' Worlds with (D258),
-/// for what draws them (D508). Only from the thread that runs the host's
+/// The animation a process plays its local players' Worlds with,
+/// for what draws them. Only from the thread that runs the host's
 /// phases.
 class PresentedPoses {
 public:

@@ -2,10 +2,10 @@
 
 // A game's cooked content as a process's content: a cook's output directory,
 // its `content.manifest` read into catalogs that hold what the process
-// admits, or a Composition (SPEC-0021) whose Builds are read in their
+// admits, or a Composition whose Builds are read in their
 // verification order, from a library directory or from a library's files
 // held in memory, as a web client holds what it fetched. Directories exist
-// only where there are files (RAWFRAME_FILE_SYSTEM, D159).
+// only where there are files (RAWFRAME_FILE_SYSTEM).
 
 #include "rawframe/base/platform.h"
 #include "rawframe/content/library.h"
@@ -51,13 +51,13 @@ public:
                                                                              const execution::MonotonicSource& clock,
                                                                              std::optional<std::filesystem::path> root);
 
-    /// The Composition whose canonical record is `record` (SPEC-0021): its
+    /// The Composition whose canonical record is `record`: its
     /// Game Build and Packages, each read from the library at `library`
     /// (`content::Library`) and verified against the key set pinned there
     /// for its publisher, and each the subject and version the record names
     /// (`ManifestInvalid`). Its Mods
     /// are read the same way after its Packages; whether the game takes them
-    /// is the game's to decide (D179). A resource two of them hold is refused
+    /// is the game's to decide. A resource two of them hold is refused
     /// as a catalog refuses it. Builds never change, so `refresh` finds
     /// nothing to publish.
     [[nodiscard]] static result::Result<std::unique_ptr<CookedContent>>

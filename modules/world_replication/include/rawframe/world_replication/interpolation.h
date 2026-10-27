@@ -1,6 +1,6 @@
 #pragma once
 
-// Snapshot interpolation (ADR-0054, SPEC-0041): a client shows remote
+// Snapshot interpolation: a client shows remote
 // entities as they were a little in the past, between two states it has
 // received, rather than jumping to each state as it arrives. The moment shown
 // is a fixed number of ticks behind the newest tick the server is estimated

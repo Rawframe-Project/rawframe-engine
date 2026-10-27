@@ -18,7 +18,7 @@ enum class RenderSceneError : std::uint32_t {
     /// One of its `rawframe.model` components is not laid out as that
     /// module lays it out, or it declares two of a kind there is one of.
     BadComponents = 2,
-    /// A material's cooked content could not be read (D303).
+    /// A material's cooked content could not be read.
     MaterialUnreadable = 3,
 };
 

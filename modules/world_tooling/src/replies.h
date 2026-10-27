@@ -30,7 +30,7 @@ namespace rawframe::world_tooling {
 
 /// What `tooling.look` asks: an eye looking at a target with a field of
 /// view in degrees (1 to 179), or none to give the player's camera back;
-/// nothing, with `refusal` said, for a record out of form (D432).
+/// nothing, with `refusal` said, for a record out of form.
 [[nodiscard]] std::optional<std::optional<Look>> lookOf(const document::Value& record, std::string& refusal);
 
 } // namespace rawframe::world_tooling

@@ -1,4 +1,4 @@
-// What holds focus and the pointer (D426, D429, D430, D431): presses and
+// What holds focus and the pointer: presses and
 // the mouse, text typed into a field, Tab between fields, and navigation
 // without a pointer.
 
@@ -56,7 +56,7 @@ void WorldUi::State::letGo(bool shown) {
     Entry* holding = focus.has_value() ? focus->entry : nullptr;
     focus.reset();
     caret.reset();
-    // A screen reader follows focus (D573).
+    // A screen reader follows focus.
     if (holding != nullptr) {
         static_cast<void>(tree->focus(std::nullopt, false));
     }
@@ -168,7 +168,7 @@ std::vector<WorldUi::State::Reachable> WorldUi::State::reachable(bool fields) {
         bool holds = false;
         for (auto& [kKey, entry] : view.entries) {
             holds = holds || (focus.has_value() && &entry == focus->entry);
-            // A disabled node is passed by (D624).
+            // A disabled node is passed by.
             if (!entry.node.has_value() || entry.value.disabled != 0 ||
                 !(entry.editable || (!fields && entry.value.press != 0))) {
                 continue;
@@ -238,7 +238,7 @@ std::optional<std::int64_t> WorldUi::press(float x, float y) const {
     for (const ViewState& kView : state.views) {
         for (const auto& [kKey, kEntry] : kView.entries) {
             if (kEntry.node == kHit->node) {
-                // A disabled node blocks and says nothing (D624).
+                // A disabled node blocks and says nothing.
                 return kEntry.value.disabled != 0 ? 0 : kEntry.value.press;
             }
         }
@@ -259,7 +259,7 @@ void WorldUi::pressAt(float x, float y) {
     State& state = *state_;
     const auto kHit = state.tree->hit(state.window, x, y);
     Entry* entry = kHit.has_value() && kHit->node.has_value() ? state.entryOf(*kHit->node) : nullptr;
-    // A disabled node takes it and does nothing with it (D624), nor does
+    // A disabled node takes it and does nothing with it, nor does
     // the thumb of a disabled range.
     const auto kDisabled = [&state](const Entry& pressed) {
         if (pressed.value.disabled != 0) {
@@ -284,7 +284,7 @@ void WorldUi::pressAt(float x, float y) {
     }
     state.pressed = entry;
     // A range, or its thumb, takes the press: paged toward it, then
-    // dragged as the pointer moves until it is let go (D621).
+    // dragged as the pointer moves until it is let go.
     if (entry != nullptr && (entry->value.range != 0 || entry->value.thumb != 0)) {
         state.letGo();
         state.ranging = true;
@@ -302,7 +302,7 @@ void WorldUi::pressAt(float x, float y) {
 
 void WorldUi::release() {
     State& state = *state_;
-    // A checkable node let go of where it was pressed is clicked (D622).
+    // A checkable node let go of where it was pressed is clicked.
     if (state.pressed != nullptr && state.pressed->value.check != 0 && state.pressed->node.has_value() &&
         state.pointer.has_value()) {
         const auto kHit = state.tree->hit(state.window, (*state.pointer)[0], (*state.pointer)[1]);
@@ -380,7 +380,7 @@ std::optional<float> WorldUi::valueOf(std::size_t player, std::int64_t press) co
         if (kEntry.value.press != press) {
             continue;
         }
-        // A checkable node's: one checked, nought not (D622).
+        // A checkable node's: one checked, nought not.
         if (kEntry.value.check != 0) {
             return kEntry.checkedNow ? 1.0F : 0.0F;
         }
@@ -399,7 +399,7 @@ std::optional<float> WorldUi::valueOf(std::size_t player, std::int64_t press) co
 
 void WorldUi::type(const view::Typing& typing) {
     State& state = *state_;
-    // A chord is a tool's shortcut (D777); a game's field takes none.
+    // A chord is a tool's shortcut; a game's field takes none.
     if (!state.focus.has_value() || state.focus->edit == nullptr || typing.kind == view::Typing::Kind::Chord) {
         return;
     }
@@ -456,7 +456,7 @@ std::size_t WorldUi::reachable() {
 bool WorldUi::navigate(view::NavigationMove move) {
     State& state = *state_;
     // A slider holding focus takes the moves along its axis, a step toward
-    // each, as ARIA's slider does; the others move focus on (D621).
+    // each, as ARIA's slider does; the others move focus on.
     if (state.focus.has_value() && state.focus->entry->node.has_value() && state.focus->entry->value.range != 0 &&
         state.focus->entry->value.disabled == 0) {
         using Move = view::NavigationMove;

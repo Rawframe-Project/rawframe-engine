@@ -1,6 +1,6 @@
 #pragma once
 
-// The Rawframe application wire protocol, generation 1 (SPEC-0010): QUIC
+// The Rawframe application wire protocol, generation 1: QUIC
 // variable-length integers, stream prefaces, stream frames, and datagram
 // records. Readers never allocate and never read past their input; what they
 // return borrows from it. Every value has exactly one accepted spelling.
@@ -106,7 +106,7 @@ struct StreamPreface {
 };
 
 /// The one critical frame of an event-lane stream: `event_record`, whose
-/// payload is a message type (a varint) and the record's body (D265).
+/// payload is a message type (a varint) and the record's body.
 inline constexpr std::uint64_t kEventRecordFrame = 0;
 
 [[nodiscard]] result::Result<StreamPreface> readPreface(Reader& reader);

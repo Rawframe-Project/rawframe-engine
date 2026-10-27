@@ -17,7 +17,7 @@ namespace rawframe::render_scene_gpu {
 
 /// A mesh held on the device: the mesh it was made from, and whether its
 /// vertices and indices are there yet; a skinned one's influences too,
-/// and its vertices read by skinning as well as by drawing (D508).
+/// and its vertices read by skinning as well as by drawing.
 struct HeldMesh {
     std::shared_ptr<const mesh::Mesh> source;
     mrhiBufferId vertices{};
@@ -34,13 +34,13 @@ struct FrameMesh {
 };
 
 /// Vertices a draw reads in its mesh's place: a buffer of the frame's, from
-/// a byte on (D508).
+/// a byte on.
 struct VerticesAt {
     mrhiResourceId buffer{};
     std::uint64_t offset = 0;
 };
 
-/// The meshes held on the device (D284): each made once from the mesh the
+/// The meshes held on the device: each made once from the mesh the
 /// first draw naming it gives, its vertices and indices uploaded within the
 /// frame's budget; one that would pass the budget waits for a later frame.
 class DeviceMeshes {
@@ -70,10 +70,10 @@ public:
     /// A chosen mesh's buffers in the open frame, once imported.
     [[nodiscard]] const FrameMesh& frameMeshOf(const HeldMesh& mesh) const;
     /// Sets a chosen mesh's vertices and indices to draw from in `pass`;
-    /// `posed`'s vertices in place of its own, where it is skinned (D508).
+    /// `posed`'s vertices in place of its own, where it is skinned.
     result::Status bind(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> posed = std::nullopt) const;
     /// Sets where a pass's draws of `mesh` read their vertices as they were
-    /// the frame before, which the scene's models are drawn with (D510):
+    /// the frame before, which the scene's models are drawn with:
     /// `before` where its model was posed then, its own otherwise.
     result::Status bindBefore(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> before) const;
 

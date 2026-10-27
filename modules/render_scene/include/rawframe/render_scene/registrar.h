@@ -8,7 +8,7 @@ namespace rawframe::render_scene {
 
 /// Contributes the World-scoped participant `rawframe.render_scene.scene`,
 /// which draws one client's mirrored World in 3D as its player sees it: in
-/// `presentation_extract` it copies the World's models out (SPEC-0024's
+/// `presentation_extract` it copies the World's models out (the
 /// `extract` stage), and in `present` it queues them into a frame through
 /// the player's camera (the `queue` stage). It logs a summary when the
 /// World stops. A game without a model component, or a process without

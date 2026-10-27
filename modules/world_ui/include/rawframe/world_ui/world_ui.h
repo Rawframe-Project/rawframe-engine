@@ -1,9 +1,9 @@
 #pragma once
 
-// The UI as World data (ADR-0034, D376): every `rawframe.ui.Node` component
+// The UI as World data: every `rawframe.ui.Node` component
 // of the World a local player's client mirrors is a node of one UI tree,
 // keyed by its entity, nested by the game's UI document, and laid out in the
-// player's view. What it draws is SPEC-0032's draw-command list, for the
+// player's view. What it draws is the draw-command list, for the
 // device to draw over the scene and the canvas. Client only: a dedicated
 // server carries the components as values and links none of this.
 
@@ -31,7 +31,7 @@
 
 namespace rawframe::world_ui {
 
-/// A text field's most bytes: what `rawframe.ui.Typed` holds (D426).
+/// A text field's most bytes: what `rawframe.ui.Typed` holds.
 inline constexpr std::uint32_t kMostTypedBytes = 252;
 
 /// `rawframe.ui.Typed` as Kest lays it out: its length, then its bytes.
@@ -41,30 +41,30 @@ struct Typed {
 };
 
 /// The words of label `label` with `values` as its arguments, a node's
-/// `textValue` and `textSecond` (D647), in the locale of local player
+/// `textValue` and `textSecond`, in the locale of local player
 /// `player`, whose view shows them; none for a label the game does not
-/// have, or whose words cannot be made (D386).
+/// have, or whose words cannot be made.
 using Words = std::function<std::optional<std::string>(
     std::size_t player, std::uint64_t label, std::array<std::int64_t, 2> values)>;
 
 /// The game's node components, in declaration order, and the one each is
-/// inside by its UI document (D619), an index of them; none for a root of
+/// inside by its UI document, an index of them; none for a root of
 /// its view.
 /// The game's fonts by the identities its `font` lines give, in their order,
 /// the first the one a node's nought names, and where its labels' words come
-/// from (D386).
+/// from.
 struct UiSettings {
     std::vector<schema::ComponentTypeId> nodes;
     std::vector<std::optional<std::size_t>> parents;
-    /// Each node's words (D427): a component of `rawframe.ui.Typed` on its
+    /// Each node's words: a component of `rawframe.ui.Typed` on its
     /// entity, as the UI document says (`shows`); none for a node that
     /// shows only its label. As long as `nodes`, or empty for none at all.
     std::vector<std::optional<schema::ComponentTypeId>> shows;
     std::vector<std::uint64_t> fonts;
     Words words;
-    /// The game's style classes (D431), which nodes name by identity.
+    /// The game's style classes, which nodes name by identity.
     ui::StyleSheet styles;
-    /// Each node's value kept from a run before (D626), which its kept
+    /// Each node's value kept from a run before, which its kept
     /// nodes start as; as long as `nodes`, or empty for none at all.
     std::vector<std::optional<float>> kept;
     /// The most nodes held at once, every view's together; a node past them
@@ -85,8 +85,8 @@ struct UiView {
 };
 
 /// `view` drawn in from each edge it shares with a `window` the platform
-/// covers by `safe`, so the UI lays out where it is seen and touched
-/// (SPEC-0030's safe-area root input, D589); an edge inside the window,
+/// covers by `safe`, so the UI lays out where it is seen and touched;
+/// an edge inside the window,
 /// between two players' views, stays where it is.
 [[nodiscard]] UiView insideSafeArea(UiView view, view::ViewSize window, view::ViewInsets safe) noexcept;
 
@@ -102,35 +102,32 @@ struct UiStatistics {
     std::uint64_t leftOut = 0;
     /// The most nodes a frame held.
     std::uint64_t mostNodes = 0;
-    /// Words given to nodes, and labels that had none (D386).
+    /// Words given to nodes, and labels that had none.
     std::uint64_t texts = 0;
     std::uint64_t textsUnknown = 0;
-    /// Words given to nodes from a component of typed words (D427).
+    /// Words given to nodes from a component of typed words.
     std::uint64_t typedShown = 0;
     /// Text fields given the keyboard, what was typed into them (each text,
-    /// key, and composition), and their texts given by Enter (D426).
+    /// key, and composition), and their texts given by Enter.
     std::uint64_t focused = 0;
     std::uint64_t typed = 0;
     std::uint64_t submitted = 0;
-    /// Wheel turns a scrolling node took (D444).
+    /// Wheel turns a scrolling node took.
     std::uint64_t wheeled = 0;
-    /// Nodes naming a class the game's styles do not have (D431).
+    /// Nodes naming a class the game's styles do not have.
     std::uint64_t stylesUnknown = 0;
-    /// Moves of focus by navigation, and nodes it activated (D430).
+    /// Moves of focus by navigation, and nodes it activated.
     std::uint64_t navigated = 0;
     std::uint64_t activated = 0;
-    /// Presses, moves, and releases of the pointer a range took (D621).
+    /// Presses, moves, and releases of the pointer a range took.
     std::uint64_t ranged = 0;
-    /// Checkable nodes checked or unchecked by the player (D622).
+    /// Checkable nodes checked or unchecked by the player.
     std::uint64_t toggled = 0;
-    /// The game's style classes made again as their document changed
-    /// (D634).
+    /// The game's style classes made again as their document changed.
     std::uint64_t restyled = 0;
-    /// The nodes nested and given words again as the UI document changed
-    /// (D619).
+    /// The nodes nested and given words again as the UI document changed.
     std::uint64_t rearranged = 0;
-    /// Changes to the values of kept nodes, and kept nodes started as kept
-    /// (D626).
+    /// Changes to the values of kept nodes, and kept nodes started as kept.
     std::uint64_t kept = 0;
     std::uint64_t keptGiven = 0;
 };
@@ -161,10 +158,10 @@ public:
     /// take.
     [[nodiscard]] result::Status addFont(std::uint64_t id, std::span<const std::byte> bytes);
 
-    /// The nodes that show the game's words are given them again (D539):
+    /// The nodes that show the game's words are given them again:
     /// the locale they are formatted in changed.
     void reword();
-    /// The game's style classes made again from `styles` (D634), as an
+    /// The game's style classes made again from `styles`, as an
     /// author edits them while the game plays: every node given its class
     /// anew, one the sheet no longer has leaving its node unstyled. Refused
     /// where the tree takes no class of the sheet: the nodes are unstyled
@@ -172,7 +169,7 @@ public:
     [[nodiscard]] result::Status restyle(ui::StyleSheet styles);
     /// Each node component's parent and the typed words it shows taken
     /// from `parents` and `shows`, as the settings hold them, as an author
-    /// edits the UI document while the game plays (D619): every view's
+    /// edits the UI document while the game plays: every view's
     /// nodes nested and given their words anew from its next frame.
     /// Refused, changing nothing, for a parent out of range or words that
     /// are not a rawframe.ui.Typed component in a view's World.
@@ -180,43 +177,43 @@ public:
                                            std::vector<std::optional<schema::ComponentTypeId>> shows);
 
     /// The window's UI, every view's, seated where assistive technology
-    /// reads it (D571); what its access answered, if one was made.
+    /// reads it; what its access answered, if one was made.
     [[nodiscard]] result::Status seatIn(ui::AccessSeat& seat);
-    /// What a screen reader asked of a node navigation reaches (D572):
+    /// What a screen reader asked of a node navigation reaches:
     /// focus moved to it as navigation moves it; a press focuses and
     /// activates it as navigation's activation does, its press code, none
     /// for a field, which takes the keyboard. A field's selection set or
-    /// its text replaced gives it the keyboard and edits it as typing does
-    /// (D613). Nothing for another node.
+    /// its text replaced gives it the keyboard and edits it as typing does.
+    /// Nothing for another node.
     std::optional<std::int64_t> ask(const ui::AccessRequest& request);
 
     /// What a press at `x`, `y`, logical pixels of the window, lands on as
-    /// the last update laid the UI out (D421): none when it passes through to
+    /// the last update laid the UI out: none when it passes through to
     /// the game, else the press code of the node it lands on.
     [[nodiscard]] std::optional<std::int64_t> press(float x, float y) const;
 
-    /// A press went down at `x`, `y` (D426): on a text field it gives the
+    /// A press went down at `x`, `y`: on a text field it gives the
     /// field the keyboard, the caret where it landed; anywhere else it
     /// takes the keyboard from the field that held it. The caret is placed
     /// at once, by the last layout.
     void pressAt(float x, float y);
-    /// A wheel turned at `x`, `y` by `deltaX`, `deltaY` detents (D444):
+    /// A wheel turned at `x`, `y` by `deltaX`, `deltaY` detents:
     /// the scrolling node under it moves its children a step, eased over
     /// the frames that follow.
     void wheelAt(float x, float y, float deltaX, float deltaY);
-    /// The press let go: the node it went down on is no longer pressed
-    /// (D431), and a range it went down on lets the pointer go (D621).
+    /// The press let go: the node it went down on is no longer pressed,
+    /// and a range it went down on lets the pointer go.
     void release();
     /// Where the mouse is over the window, none off it: the node a press
-    /// there would land on is hovered (D431), and a range a press went down
-    /// on is dragged there (D621).
+    /// there would land on is hovered, and a range a press went down
+    /// on is dragged there.
     void hoverAt(std::optional<std::array<float, 2>> pointer);
     /// The value of the range whose press code is `press` in local player
-    /// `player`'s view, as the player moved it (D621), or of the checkable
-    /// node's, one checked and nought not (D622); none for no such node.
+    /// `player`'s view, as the player moved it, or of the checkable
+    /// node's, one checked and nought not; none for no such node.
     [[nodiscard]] std::optional<float> valueOf(std::size_t player, std::int64_t press) const;
     /// Each node component's value as its kept node in the first local
-    /// player's view holds it (D626), a range's value or one for checked;
+    /// player's view holds it, a range's value or one for checked;
     /// as the settings' `kept` until such a node appears. As long as the
     /// settings' nodes; `statistics().kept` counts its changes.
     [[nodiscard]] std::span<const std::optional<float>> kept() const noexcept;
@@ -229,7 +226,7 @@ public:
     /// The fields' texts given by Enter since last asked, oldest first.
     [[nodiscard]] std::vector<view::Submitted> takeSubmitted();
 
-    /// Navigation without a pointer (SPEC-0030, D430), among the nodes
+    /// Navigation without a pointer, among the nodes
     /// that take presses and the text fields of a view, in one view: focus
     /// to the first in reading order of the first view with any, unless a
     /// node holds it; whether one holds it after.

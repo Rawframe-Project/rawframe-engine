@@ -2,7 +2,7 @@
 
 // The textures a frame's materials sample by identity, beyond the
 // renderer's own and the sky's and probes' pictures: what its emitters and
-// ribbons (D353, D354), post processes (D350), decals (D339, D342), and
+// ribbons, post processes, decals, and
 // draws name, in that order, which is the order they are chosen in within
 // the frame's upload budget.
 

@@ -19,7 +19,6 @@ namespace rawframe::base {
 
 /// The C heap as its allocator counts it: bytes handed out and not yet
 /// freed, and bytes it holds free for later, its overhead.
-///
 struct HeapUsage {
     std::uint64_t inUseBytes = 0;
     std::uint64_t freeBytes = 0;

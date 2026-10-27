@@ -1,4 +1,4 @@
-// Streams against ADR-0038: a cooked Opus sound played from a bounded ring
+// Streams: a cooked Opus sound played from a bounded ring
 // sounds exactly as the same sound decoded whole; a ring run dry is silence,
 // counted, and loses nothing; a looping stream joins its end to its start
 // without a seam; and an executor's worker keeps the ring filled while the

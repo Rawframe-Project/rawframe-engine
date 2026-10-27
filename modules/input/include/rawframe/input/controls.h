@@ -1,9 +1,9 @@
 #pragma once
 
-// The physical controls bindings name (SPEC-0029's binding grammar): keys by
+// The physical controls bindings name: keys by
 // where they are on the keyboard, mouse buttons, wheel, and motion, the
-// standard gamepad by location, and a touch screen's virtual controls
-// (D387). Every control has one name and one shape.
+// standard gamepad by location, and a touch screen's virtual controls.
+// Every control has one name and one shape.
 
 #include <compare>
 #include <cstdint>
@@ -12,8 +12,8 @@
 
 namespace rawframe::input {
 
-/// SPEC-0029's closed generation-1 set, a touch screen (D387), the class
-/// ADR-0037 left open, and a headset's hand controllers (ADR-0081, D596):
+/// The closed generation-1 set, a touch screen, and a headset's hand
+/// controllers:
 /// both hands one device, as the XR runtime presents them through the
 /// interaction profile it chose, the simple controller's controls the
 /// floor every profile gives.
@@ -25,8 +25,7 @@ enum class DeviceClass : std::uint8_t {
     Controller
 };
 
-/// What a control reports: on or off, one axis, two, or a pose (ADR-0081's
-/// fourth value, D596).
+/// What a control reports: on or off, one axis, two, or a pose.
 enum class ControlShape : std::uint8_t {
     Digital,
     Axis1,
@@ -51,17 +50,17 @@ struct Control {
 /// `ArrowUp` is `arrow_up`, `ShiftLeft` is `shift_left`), so a binding means
 /// the same place on every layout. Mouse controls: `left`, `right`,
 /// `middle`, `back`, `forward`, `wheel_x`, `wheel_y`, `delta`, and
-/// `pointer` (D367), the cursor's place over the window. Gamepad
-/// controls are SPEC-0029's standard locations. Touch controls (D387):
+/// `pointer`, the cursor's place over the window. Gamepad
+/// controls are the standard locations. Touch controls:
 /// `stick_left` and `stick_right`, a stick under a touch that began in that
 /// half of the window, and `left` and `right`, held while that touch is;
-/// and `pointer`, the newest touch's place. Controller controls (D596), the
+/// and `pointer`, the newest touch's place. Controller controls, the
 /// simple controller's, each hand's: `select_left`, `select_right`,
 /// `menu_left`, and `menu_right`, digital; and `grip_left`, `grip_right`,
 /// `aim_left`, and `aim_right`, poses: where the hand holds the controller,
 /// and where it points from; and `pointer_left` and `pointer_right`, where
 /// each hand's aim meets the headset's panel, in its pixels, far outside
-/// it while the aim misses it (D598).
+/// it while the aim misses it.
 [[nodiscard]] std::optional<Control> controlNamed(DeviceClass device, std::string_view name) noexcept;
 [[nodiscard]] std::string_view nameOf(Control control) noexcept;
 /// The key at a USB HID keyboard usage (page 7), the number a window system
@@ -74,8 +73,8 @@ struct Control {
 [[nodiscard]] bool relative(Control control) noexcept;
 /// Whether a control reports a place rather than a deflection: the mouse's
 /// and the touch screen's `pointer`, over the window in logical pixels from
-/// its top left, y down (ADR-0046's screen space, D367), and a controller's
-/// `pointer_left` and `pointer_right`, over a headset's panel (D598). Its
+/// its top left, y down, and a controller's
+/// `pointer_left` and `pointer_right`, over a headset's panel. Its
 /// value is the place, neither clamped nor dead-zoned, and it stays where it
 /// was last told.
 [[nodiscard]] bool positional(Control control) noexcept;

@@ -1,4 +1,4 @@
-# OpenXR's systems and sessions (ADR-0081's XR admission, D591): the XR
+# OpenXR's systems and sessions: the XR
 # module, a presentation producer beside the window module, over Khronos's
 # loader. Client only: the dedicated server links none of it. Built where
 # the loader is (Linux and Windows) and the render module is.
@@ -15,7 +15,7 @@ target_include_directories(rawframe_xr SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_
 # where none is, the tests find no runtime and skip.
 find_program(RAWFRAME_MONADO_SERVICE monado-service)
 # Monado's manifest, which the headset tests' configurations name as
-# `xr.runtime` (D654), and the line that names it.
+# `xr.runtime`, and the line that names it.
 find_file(RAWFRAME_MONADO_MANIFEST openxr_monado.json PATHS /usr/share/openxr/1 /usr/local/share/openxr/1 NO_DEFAULT_PATH)
 if(RAWFRAME_MONADO_MANIFEST)
     set(RAWFRAME_TEST_XR_RUNTIME "xr.runtime = ${RAWFRAME_MONADO_MANIFEST}" CACHE INTERNAL "")
@@ -26,7 +26,7 @@ if(RAWFRAME_MONADO_SERVICE AND NOT WIN32 AND RAWFRAME_BUILD_TESTS)
     add_executable(rawframe_xr_tests tests/session_test.cpp)
     target_link_libraries(rawframe_xr_tests PRIVATE rawframe::xr rawframe::test)
     add_test(NAME xr COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xr_run.sh $<TARGET_FILE:rawframe_xr_tests>)
-    # Hands tracked (D663): the tracked-source test again, under Monado's
+    # Hands tracked: the tracked-source test again, under Monado's
     # remote driver, whose right hand tests/hands.py says is tracked.
     add_test(NAME xr_tracked_hands
              COMMAND ${RAWFRAME_SHELL} ${PROJECT_SOURCE_DIR}/tools/xr_run.sh --hands ${CMAKE_CURRENT_SOURCE_DIR}/tests/hands.py

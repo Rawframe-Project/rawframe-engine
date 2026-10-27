@@ -1,8 +1,8 @@
-// Skinned models (D508): a skinned mesh whose entity was played is drawn
+// Skinned models: a skinned mesh whose entity was played is drawn
 // with a palette, each joint its bone as posed after its inverse bind, the
 // bone found by its target whatever the skeleton's order; one not played,
 // or whose skeleton lacks a joint's bone, is drawn as its mesh was bound;
-// a posed model carries the frame before's palette for its motion (D510);
+// a posed model carries the frame before's palette for its motion;
 // and the frame's palette has a limit.
 
 #include "rawframe/render_scene/scene.h"

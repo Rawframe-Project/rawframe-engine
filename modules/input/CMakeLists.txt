@@ -1,4 +1,4 @@
-# Semantic input (ADR-0037, SPEC-0029): action sets, and the mapping from
+# Semantic input: action sets, and the mapping from
 # device controls to per-player action state. Client only: the dedicated
 # server links none of it.
 rawframe_module(NAME input

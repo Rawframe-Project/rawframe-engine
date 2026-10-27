@@ -18,27 +18,27 @@ namespace rawframe::render_scene_gpu {
 
 struct Run {
     const HeldMesh* mesh = nullptr;
-    /// The mesh's indices it draws (D314).
+    /// The mesh's indices it draws.
     std::uint32_t firstIndex = 0;
     std::uint32_t indexCount = 0;
     std::uint32_t first = 0;
     std::uint32_t count = 0;
     render_scene::SceneTextures texture;
-    /// Its material's own program, which draws it (D485, D487), and cuts
-    /// it as a masked caster (D488); none for the engine's own, and for
+    /// Its material's own program, which draws it, and cuts
+    /// it as a masked caster; none for the engine's own, and for
     /// the solid casters.
     const material::ProgramMaterial* program = nullptr;
     /// A posed model's first joint matrix among the frame's, and how many;
-    /// none for one drawn as bound (D508). Each posed model is a run.
+    /// none for one drawn as bound. Each posed model is a run.
     std::uint32_t palette = 0;
     std::uint32_t joints = 0;
-    /// Its first joint matrix the frame before (D510).
+    /// Its first joint matrix the frame before.
     std::uint32_t previousPalette = 0;
 };
 using Runs = std::vector<Run>;
 
 /// A shadow square's casters: the solid by mesh, the masked by mesh and
-/// texture, cut (D310).
+/// texture, cut.
 struct Casters {
     Runs solid;
     Runs masked;
@@ -50,11 +50,11 @@ struct Casters {
 
 struct Placed {
     std::vector<float> instances;
-    /// The opaque draws', the translucent draws' (D305), then each of the
-    /// sun's cascades' casters' (D298), then each square of the punctual
-    /// shadows' atlas's (D292).
+    /// The opaque draws', the translucent draws', then each of the
+    /// sun's cascades' casters', then each square of the punctual
+    /// shadows' atlas's.
     Runs runs;
-    /// The masked draws', cut in the depth prepass (D310).
+    /// The masked draws', cut in the depth prepass.
     Runs maskedRuns;
     Runs translucentRuns;
     std::array<Casters, 4> cascadeRuns;

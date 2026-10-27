@@ -1,6 +1,6 @@
 #pragma once
 
-// Application admission payloads, generation 1 (SPEC-0010 admission): what a
+// Application admission payloads, generation 1: what a
 // client proves in `protocol_hello`, what a server grants in
 // `protocol_accept`, and why it says no in `protocol_reject`. Decoding is
 // exact: every field present, every length within its bound, nothing after
@@ -19,7 +19,7 @@
 
 namespace rawframe::network {
 
-/// Control stream frame types (SPEC-0010 critical frame registry).
+/// Control stream frame types.
 enum class ControlFrame : std::uint64_t {
     ProtocolHello = 0,
     ProtocolAccept = 2,
@@ -114,7 +114,7 @@ enum class RejectReason : std::uint64_t {
     TicketInvalid = 7,
     Capacity = 8,
     Malformed = 9,
-    /// The server is not admitting: not yet active, or draining (SPEC-0012).
+    /// The server is not admitting: not yet active, or draining.
     Unavailable = 10,
 };
 

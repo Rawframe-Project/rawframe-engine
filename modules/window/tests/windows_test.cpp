@@ -1,10 +1,10 @@
-// SPEC-0025's contract tests, on the headless test platform: the two-phase
+// The contract tests, on the headless test platform: the two-phase
 // close with a refusal, requests answered after the notifications they
 // caused and superseded when replaced, stale ids refused, input reset on
 // focus loss, raw input and drops carried whole, gamepads about no window,
 // a program whose start fails, and the seam's window side: a surface
 // generation's handles given once, none while the surface is lost, and its
-// display's facts as the platform tells them (D365).
+// display's facts as the platform tells them.
 
 #include "rawframe/test/test.h"
 #include "rawframe/window/errors.h"
@@ -368,7 +368,7 @@ RAWFRAME_TEST(EachSurfaceGenerationsHandlesAreGivenOnce) {
 RAWFRAME_TEST(AWindowsDisplayFactsAreReadAsThePlatformTellsThem) {
     // A window made on a monitor that says nothing of HDR reads no facts;
     // once its facts change, they are what the window's display reads, and
-    // what the device side's surface state carries (D365).
+    // what the device side's surface state carries.
     Surfaces surfaces;
     MonitorId monitor;
     WindowId shown;

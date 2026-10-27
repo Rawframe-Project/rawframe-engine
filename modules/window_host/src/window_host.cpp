@@ -28,8 +28,8 @@ namespace rawframe::window_host {
 
 namespace {
 
-/// The accessibility an Apple system's view takes: UIKit's on iOS (D588),
-/// AppKit's on macOS (D579).
+/// The accessibility an Apple system's view takes: UIKit's on iOS,
+/// AppKit's on macOS.
 #if defined(__APPLE__) && TARGET_OS_IPHONE
 constexpr ui::AccessPlatform kAppleAccess = ui::AccessPlatform::UiKit;
 #else
@@ -44,7 +44,7 @@ constexpr int kMostIterationsPerFrame = 4;
 // A page's frames are paced by the browser and never wait.
 [[maybe_unused]] constexpr auto kLongestWait = std::chrono::milliseconds{4};
 // The most iterations the events after a key wait for the players' input
-// to read it (D506): a few world ticks at any rate a game runs.
+// to read it: a few world ticks at any rate a game runs.
 constexpr int kMostIterationsAwaited = 16;
 
 // USB HID keyboard usages of the keys a text field takes.
@@ -62,7 +62,7 @@ constexpr std::uint16_t kUsageDown = 0x51;
 constexpr std::uint16_t kUsageUp = 0x52;
 constexpr std::uint16_t kUsageKeypadEnter = 0x58;
 constexpr std::uint16_t kUsageF11 = 0x44;
-// And the keys a chord may end in (D777): the letters, the digits one to
+// And the keys a chord may end in: the letters, the digits one to
 // nine and nought, and the function keys one to twelve.
 constexpr std::uint16_t kUsageZ = 0x1D;
 constexpr std::uint16_t kUsage1 = 0x1E;
@@ -129,7 +129,7 @@ std::optional<view::Typing> typingOf(const window::Key& key) {
     return typing;
 }
 
-/// A key going down as a chord (D777), if it is one: a letter or a digit
+/// A key going down as a chord, if it is one: a letter or a digit
 /// with Control or Command, Command read as Control so a shortcut is one
 /// name on every desktop, or a function key with any modifiers but F11,
 /// which the window keeps for its full screen. Control or Command with A
@@ -190,7 +190,7 @@ std::optional<view::Typing> typingOf(const window::Event& event) {
     }
 }
 
-/// An editor's input as the window's own record, for `window` (D790).
+/// An editor's input as the window's own record, for `window`.
 std::optional<window::Event> windowEventOf(const world_tooling::WindowInput& given, window::WindowId window) {
     window::Event made{.window = window};
     made.pointer.position = {.x = given.x, .y = given.y};
@@ -348,7 +348,7 @@ bool WindowHost::forwarded(const window::Event& event) {
     case window::EventKind::KeyDown:
     case window::EventKind::KeyUp:
         // Held only: a key goes down there while a press is, and up there
-        // whenever it went down there (D916).
+        // whenever it went down there.
         if (!forwarding_.focused() ||
             (forwarding_.keysOnlyWhileHeld() && event.kind == window::EventKind::KeyDown && !forwardedPress_)) {
             return false;
@@ -396,7 +396,7 @@ WindowHost::WindowHost(const host::HostRequest& request, WindowHostSettings sett
 }
 
 result::Status WindowHost::start(window::Windows& windows) {
-    // The window's size and place, logical pixels (D445): a player's
+    // The window's size and place, logical pixels: a player's
     // choice, or a tool's keeping a game it plays beside its own.
     window::WindowSettings made{.title = settings_.title};
     std::optional<window::Position> place;
@@ -407,27 +407,27 @@ result::Status WindowHost::start(window::Windows& windows) {
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kY, kConfiguration->unsignedInteger("window.y", 0));
         // A machine's gamepads may be left out, as a player who plays with
         // none keeps one lying there from moving them, or a test keeps the
-        // pads another program made (D467).
+        // pads another program made.
         RAWFRAME_TRY_ASSIGN(gamepads_, kConfiguration->truth("input.gamepads", true));
-        // A game made for touch tried with a mouse (D809).
+        // A game made for touch tried with a mouse.
         RAWFRAME_TRY_ASSIGN(touchFromMouse_, kConfiguration->truth("input.touch_from_mouse", false));
-        // A player who plays on the whole screen (D523).
+        // A player who plays on the whole screen.
         RAWFRAME_TRY_ASSIGN(const bool kFullscreen, kConfiguration->truth("window.fullscreen", false));
         if (kFullscreen) {
             made.mode = window::Mode::BorderlessFullscreen;
         }
         // An editor opened as an application, its window as large as the
-        // screen lets it (D920).
+        // screen lets it.
         RAWFRAME_TRY_ASSIGN(const bool kMaximized, kConfiguration->truth("window.maximized", false));
         if (kMaximized && !kFullscreen) {
             made.mode = window::Mode::Maximized;
         }
         made.size = {.width = static_cast<float>(kWidth), .height = static_cast<float>(kHeight)};
         // Kept hidden, as an editor keeps a game it shows in its own
-        // viewport, the pictures streamed to it (D789).
+        // viewport, the pictures streamed to it.
         RAWFRAME_TRY_ASSIGN(made.visible, kConfiguration->truth("window.visible", true));
         // Or hidden until what draws in it asks, so a program that finds
-        // nothing to draw with never stands as a blank window (D942).
+        // nothing to draw with never stands as a blank window.
         RAWFRAME_TRY_ASSIGN(showWhenAsked_, kConfiguration->truth("window.shown_when_asked", false));
         if (showWhenAsked_ && made.visible) {
             made.visible = false;
@@ -435,22 +435,22 @@ result::Status WindowHost::start(window::Windows& windows) {
             showWhenAsked_ = false;
         }
         // The views a preview of it may be split into, which an editor
-        // playing it in its viewport allows (D797).
+        // playing it in its viewport allows.
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kViews, kConfiguration->unsignedInteger("preview.views", 1));
-        // An editor's viewport, its camera flown here (D913).
+        // An editor's viewport, its camera flown here.
         RAWFRAME_TRY_ASSIGN(flying_, kConfiguration->truth("preview.flight", false));
         // An editor's edited World, its picture standing while time alone
-        // moves it (D979).
+        // moves it.
         RAWFRAME_TRY_ASSIGN(const bool kEdited, kConfiguration->truth("preview.edited", false));
         if (settings_.preview != nullptr) {
             settings_.preview->allow(static_cast<std::size_t>(std::min<std::uint64_t>(kViews, 4)));
             settings_.preview->showEdited(kEdited);
         }
-        // A game's own name over its window, as an export gives it (D519).
+        // A game's own name over its window, as an export gives it.
         if (const auto kTitle = kConfiguration->text("window.title")) {
             made.title = std::string{*kTitle};
         }
-        // And its own icon, as an export gives it too (D951), over the
+        // And its own icon, as an export gives it too, over the
         // program's.
         if (const auto kIcon = kConfiguration->path("window.icon")) {
             RAWFRAME_TRY_ASSIGN(std::vector<IconSide> sides, readIcon(*kIcon, request_.files));
@@ -474,13 +474,13 @@ result::Status WindowHost::start(window::Windows& windows) {
     }
     surfaces_.watch(kWindow);
     window_ = kWindow;
-    // Its own icon, where the program has one (D920); a platform that shows
+    // Its own icon, where the program has one; a platform that shows
     // none answers so, which changes nothing.
     if (!settings_.icon.empty()) {
         static_cast<void>(windows.requestIcon(window_, settings_.icon));
     }
     // The UI read by a screen reader where the platform has a bus for it,
-    // AT-SPI's (D571), unless `ui.accessibility` says not; the participant
+    // AT-SPI's, unless `ui.accessibility` says not; the participant
     // whose tree is the window's seats it, and says whether it is read.
     if (const composition::Configuration* kConfiguration = request_.configuration) {
         RAWFRAME_TRY_ASSIGN(accessible_, kConfiguration->truth("ui.accessibility", true));
@@ -490,7 +490,7 @@ result::Status WindowHost::start(window::Windows& windows) {
         RAWFRAME_TRY(access_.open({.platform = ui::AccessPlatform::Atspi,
                                    .application = made.title.empty() ? std::string{"Rawframe"} : made.title}));
     }
-    // A page's elements over the canvas (D612), made now: they wait behind
+    // A page's elements over the canvas, made now: they wait behind
     // the adapter's hidden button until a screen reader's user presses it.
     // A UI pixel is a CSS pixel, as it is AppKit's point.
     if (accessible_ && ui::accessBuilt(ui::AccessPlatform::Aria)) {
@@ -507,30 +507,30 @@ result::Status WindowHost::start(window::Windows& windows) {
 }
 
 window::FrameOutcome WindowHost::frame(window::Windows& windows) {
-    // An editor asking to close is a press on the close button (D923).
+    // An editor asking to close is a press on the close button.
     bool closing = closing_.asked();
     if (showing_.asked() && std::exchange(showWhenAsked_, false)) {
         static_cast<void>(windows.requestVisible(window_, true));
         // Shown, a window made hidden takes its mode again: Win32 shows it
-        // restored (D943).
+        // restored.
         if (shownMode_ != window::Mode::Windowed) {
             static_cast<void>(windows.requestMode(window_, shownMode_));
         }
     }
     const bool kWasSuspended = suspended_.load(std::memory_order_relaxed);
-    // The touch screen's halves split the window as it is now (D387).
+    // The touch screen's halves split the window as it is now.
     if (const auto kState = windows.state(window_); kState.has_value()) {
         bridge_->resize(kState->size.width);
     }
     // Not until the players' input has read the key that ended the last
     // reading: a frame may come before the host is due, and an iteration
     // may run no world tick, and the keys after it would then be read in
-    // the same tick after all (D506).
+    // the same tick after all.
     // What an editor's viewport handed this preview is acted on first,
-    // as the window's (D790).
+    // as the window's.
     // Kept until acted on: a frame that waits on the players' reading acts
     // on none.
-    // An editor's file dialogs shown over the window (D918); one the
+    // An editor's file dialogs shown over the window; one the
     // window cannot show is answered unsupported at once.
     for (view::FileDialogs::Asked& asked : dialogs_.asked()) {
         const window::FileDialog kDialog{
@@ -582,7 +582,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             platformSuspended_ = event->kind == window::EventKind::Suspending;
         }
         accessAsked_ = accessAsked_ || event->kind == window::EventKind::AccessibilityRequested;
-        // Whether a field takes text, told among the keys (D430): a key
+        // Whether a field takes text, told among the keys: a key
         // typed into a field is never a gated action's, even when the
         // field lets go before the input next reads.
         if (typing_.editing() != toldEditing_) {
@@ -595,8 +595,8 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
              event->kind == window::EventKind::GamepadAxisMoved)) {
             continue;
         }
-        // F11, or Alt and Enter, puts the window on the whole screen and back
-        // (D523): the window's, never a game's action.
+        // F11, or Alt and Enter, puts the window on the whole screen and back:
+        // the window's, never a game's action.
         if (event->kind == window::EventKind::KeyDown && !event->key.repeat &&
             (event->key.usage == kUsageF11 ||
              (event->key.usage == kUsageEnter &&
@@ -607,7 +607,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                 windows.requestMode(window_, kWhole ? window::Mode::Windowed : window::Mode::BorderlessFullscreen));
             continue;
         }
-        // A flown preview's input is its camera's alone (D913).
+        // A flown preview's input is its camera's alone.
         if (fly(*event)) {
             continue;
         }
@@ -615,7 +615,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         if (clipboardRead(windows, *event)) {
             continue;
         }
-        // A file dialog's choice, for the editor that asked (D918).
+        // A file dialog's choice, for the editor that asked.
         if (event->kind == window::EventKind::RequestCompleted &&
             event->completion.kind == window::RequestKind::FileDialog) {
             if (const auto kShown = std::ranges::find(
@@ -630,16 +630,16 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                 dialogsShown_.erase(kShown);
             }
         }
-        // Files dropped from outside, for an editor (D802).
+        // Files dropped from outside, for an editor.
         if (event->kind == window::EventKind::FilesDropped) {
             dropped_.dropped(view::FilesDropped::Drop{
                 .x = event->position.x, .y = event->position.y, .paths = event->paths, .truncated = event->truncated});
         }
-        // Where the mouse is, for what the UI shows under it (D422), where a
-        // press went down, for the field that takes the keyboard (D426),
-        // and the wheel turned there, for what scrolls (D441).
+        // Where the mouse is, for what the UI shows under it, where a
+        // press went down, for the field that takes the keyboard,
+        // and the wheel turned there, for what scrolls.
         if (event->kind == window::EventKind::ButtonDown) {
-            // With the keys held, which an editor reads (D787).
+            // With the keys held, which an editor reads.
             const std::uint16_t kHeld = event->pointer.modifiers;
             const auto kHolds = [kHeld](window::Modifier modifier) {
                 return (kHeld & static_cast<std::uint16_t>(modifier)) != 0;
@@ -650,7 +650,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                 view::UiPointing::Held{.control = kHolds(window::Modifier::Control) || kHolds(window::Modifier::Meta),
                                        .shift = kHolds(window::Modifier::Shift),
                                        .secondary = event->pointer.button == window::MouseButton::Right});
-            // Where an author clicked in the preview, as a ray (D456).
+            // Where an author clicked in the preview, as a ray.
             if (settings_.preview != nullptr && settings_.preview->looking().has_value() &&
                 event->pointer.button == window::MouseButton::Left) {
                 if (const auto kRay = previewRay(event->pointer.position.x, event->pointer.position.y);
@@ -660,7 +660,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             }
         } else if (event->kind == window::EventKind::TouchDown || event->kind == window::EventKind::TouchMoved ||
                    event->kind == window::EventKind::TouchUp || event->kind == window::EventKind::TouchCancelled) {
-            // A finger is the pointer while it touches (D628).
+            // A finger is the pointer while it touches.
             using Touching = view::UiPointing::Touching;
             const Touching kTouching = event->kind == window::EventKind::TouchDown    ? Touching::Down
                                        : event->kind == window::EventKind::TouchMoved ? Touching::Moved
@@ -669,7 +669,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             pointing_.touched(kTouching, event->touch.id, event->touch.position.x, event->touch.position.y);
         } else if (event->kind == window::EventKind::ButtonUp) {
             pointing_.released();
-            // And where the press was let go, for a drag (D457).
+            // And where the press was let go, for a drag.
             if (settings_.preview != nullptr && settings_.preview->looking().has_value() &&
                 event->pointer.button == window::MouseButton::Left) {
                 if (const auto kRay = previewRay(event->pointer.position.x, event->pointer.position.y);
@@ -685,7 +685,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         if (event->kind == window::EventKind::CursorMoved) {
             pointing_.pointAt(event->pointer.position.x, event->pointer.position.y);
             // And where it points in a preview, so the handle under it is
-            // drawn lit (D468).
+            // drawn lit.
             if (settings_.preview != nullptr && settings_.preview->looking().has_value()) {
                 settings_.preview->pointed(previewRay(event->pointer.position.x, event->pointer.position.y));
             }
@@ -695,18 +695,18 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                 settings_.preview->pointed(std::nullopt);
             }
         }
-        // A field holding focus takes what is typed (D426); the keys still
+        // A field holding focus takes what is typed; the keys still
         // reach the players' input, whose gated actions they no longer move.
         // A chord goes to the UI whether or not a field holds focus, and
-        // Delete with none holding it is one: what is chosen goes (D777).
+        // Delete with none holding it is one: what is chosen goes.
         // So is a letter alone with none holding it, an editor's F framing
-        // what is chosen (D792); a game's UI holds no such chord.
+        // what is chosen; a game's UI holds no such chord.
         std::optional<view::Typing> typed = typingOf(*event);
         if (typed.has_value() && !typing_.editing() && typed->kind == view::Typing::Kind::Key &&
             typed->key == view::TypingKey::Delete) {
             typed = view::Typing{.kind = view::Typing::Kind::Chord, .text = "Delete"};
         }
-        // As is Escape, an editor's dialog or menu closed by it (D942).
+        // As is Escape, an editor's dialog or menu closed by it.
         if (typed.has_value() && !typing_.editing() && typed->kind == view::Typing::Kind::Key &&
             typed->key == view::TypingKey::Dismiss) {
             typed = view::Typing{.kind = view::Typing::Kind::Chord, .text = "Escape"};
@@ -721,11 +721,10 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         // keyboard may move focus or give a field the keyboard, which the
         // iterations do; the events after it wait for the next frame, so a
         // key typed after one that gave a field the keyboard reaches that
-        // field however many a slow frame gathers (D458). So may a key
+        // field however many a slow frame gathers. So may a key
         // pressed while navigation reaches a node but is not entered: the
         // game's sample may enter it, after the frame's navigation is
-        // done, and a key after it would find navigation not yet entered
-        // (D476).
+        // done, and a key after it would find navigation not yet entered.
         if (event->kind == window::EventKind::KeyDown && !typing_.editing() &&
             (navigation_.focused() || navigation_.reachable())) {
             awaitingRead_ = true;
@@ -737,7 +736,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
         return end();
     }
     // The flown preview's view moved by what the input asked, at the
-    // frame's pace (D913).
+    // frame's pace.
     if (flying_ && settings_.preview != nullptr) {
         const execution::MonotonicInstant kNow = clock_.now();
         const double kSeconds = flown_.has_value() ? static_cast<double>((kNow - *flown_).nanoseconds) / 1e9 : 0.0;
@@ -747,7 +746,7 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     surfaces_.update(windows);
     if (const auto kState = windows.state(window_); kState.has_value()) {
         // A window kept hidden is told no size: it is the size it was
-        // asked to be, as an editor's viewport is (D790).
+        // asked to be, as an editor's viewport is.
         const bool kSized = kState->size.width > 0 && kState->size.height > 0;
         views_.window({.width = kSized ? kState->size.width : asked_.width,
                        .height = kSized ? kState->size.height : asked_.height});
@@ -758,8 +757,8 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     }
     // The platform's `suspending` comes in a frame of its own, after which
     // frames pause (Maul Window's mobile backends): the Host runs in it,
-    // due or not, so its participants hear of it before then (D565). A
-    // headset's session tells its own as an iteration runs (D679), heard
+    // due or not, so its participants hear of it before then. A
+    // headset's session tells its own as an iteration runs, heard
     // from the next.
     suspended_.store(platformSuspended_ || away_.away(), std::memory_order_release);
     const bool kTold = suspended_.load(std::memory_order_relaxed) != kWasSuspended;
@@ -792,7 +791,7 @@ void WindowHost::followAccess(window::Windows& windows) {
     // A platform whose clients ask for the window's tree (Android, Windows,
     // macOS) is read once one first asks, so nothing is built where no
     // screen reader runs, and again for each view the window shows in,
-    // as Android's changes with the activity (D576, D579).
+    // as Android's changes with the activity.
     if (accessible_ && accessAsked_) {
         const auto kHandles = windows.handles(window_);
         const auto kState = windows.state(window_);
@@ -970,7 +969,7 @@ bool WindowHost::fly(const window::Event& event) {
 }
 
 void WindowHost::moveView(const window::Event& event) {
-    // A preview's view moved as an editor's viewport is (D469): the wheel
+    // A preview's view moved as an editor's viewport is: the wheel
     // zooms and a drag with the right button orbits, both told to the
     // preview, which the author's session reads.
     if (settings_.preview == nullptr || !settings_.preview->looking().has_value()) {
@@ -978,7 +977,7 @@ void WindowHost::moveView(const window::Event& event) {
         return;
     }
     // With Shift held, freelook's: the view turned about its eye and flown
-    // along (D472).
+    // along.
     // A wheel's record names no modifiers, so the last a key or the
     // pointer told are kept.
     if (event.kind == window::EventKind::KeyDown || event.kind == window::EventKind::KeyUp) {

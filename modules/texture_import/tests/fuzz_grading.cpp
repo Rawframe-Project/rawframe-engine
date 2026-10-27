@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of a grading table as the importer decodes it
-// (D344): a `.cube` file from anyone meets the line reader through the
+// Coverage-guided fuzzing of a grading table as the importer decodes it:
+// a `.cube` file from anyone meets the line reader through the
 // limits, and what decodes is a volume the texture's own writer and reader
 // take back exactly.
 

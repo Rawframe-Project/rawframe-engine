@@ -66,7 +66,7 @@ std::string hexOf(const base::Bits128& value) {
     return std::string{text.data(), text.size()};
 }
 
-/// SPEC-0017's content-addressed path: `sha256/<two hex>/<sixty-two hex>`.
+/// The content-addressed path: `sha256/<two hex>/<sixty-two hex>`.
 std::filesystem::path blobPath(const std::filesystem::path& output, const content::ContentDigest& digest) {
     const std::string kHex = digest.text().substr(7);
     return output / "sha256" / kHex.substr(0, 2) / kHex.substr(2);
@@ -260,7 +260,7 @@ result::Result<BuildReport> packBuild(const BuildRequest& request) {
     RAWFRAME_TRY_ASSIGN(const std::string kManifest, document::writeCanonicalRecord(manifest));
     report.manifest = content::ContentDigest::of(bytesOf(kManifest));
 
-    // How it was packed, apart from what it is: SPEC-0021's packaging
+    // How it was packed, apart from what it is: the packaging
     // receipt, never needed to verify the Build.
     const auto kCookReceipt = readFile(request.cooked / "cook.receipt");
     Value receipt = Value::object();

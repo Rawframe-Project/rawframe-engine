@@ -36,7 +36,7 @@ namespace {
 
 constexpr diagnostics::EventIdentity kSceneSummary{"scene", "scene_summary"};
 // The particles' apart: with them the summary would pass the 32 fields a
-// record carries (D361).
+// record carries.
 constexpr diagnostics::EventIdentity kParticlesSummary{"scene", "scene_particles_summary"};
 constexpr std::string_view kProvided[] = {kSceneFrames.name};
 constexpr diagnostics::EventIdentity kMaterialUnread{"scene", "material_unread"};
@@ -53,7 +53,7 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kHeadsetEyes.name,
                                        view::kHeadsetHands.name};
 
-/// The most looks a split preview draws beside its own (D797). A device
+/// The most looks a split preview draws beside its own. A device
 /// drawing four region views at once stalled on lavapipe (its cause not
 /// yet found; three draw), so a preview splits at most three ways.
 constexpr std::size_t kMostOthers = 2;
@@ -105,28 +105,28 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(clients_, context.capability(world_replication::kClientWorlds));
         client_ = client;
-        // The local players' views, told where the host lends them (D367);
+        // The local players' views, told where the host lends them;
         // a scene of a client named by configuration is no player's.
         if (!client.has_value() && context.has(view::kPlayerViews.name)) {
             RAWFRAME_TRY_ASSIGN(views_, context.capability(view::kPlayerViews));
         }
-        // A preview's camera, where an authoring client sets one (D432).
+        // A preview's camera, where an authoring client sets one.
         if (!client.has_value() && context.has(view::kPreviewCamera.name)) {
             RAWFRAME_TRY_ASSIGN(preview_, context.capability(view::kPreviewCamera));
         }
-        // A headset's eyes, the player's view drawn for each (D595).
+        // A headset's eyes, the player's view drawn for each.
         if (!client.has_value() && context.has(view::kHeadsetEyes.name)) {
             RAWFRAME_TRY_ASSIGN(eyes_, context.capability(view::kHeadsetEyes));
         }
-        // And its hands, which what the player holds follows (D676).
+        // And its hands, which what the player holds follows.
         if (!client.has_value() && context.has(view::kHeadsetHands.name)) {
             RAWFRAME_TRY_ASSIGN(held_, context.capability(view::kHeadsetHands));
         }
-        // The poses its skinned models are drawn in (D508).
+        // The poses its skinned models are drawn in.
         if (context.has(world_animation::kPresentedPoses.name)) {
             RAWFRAME_TRY_ASSIGN(poses_, context.capability(world_animation::kPresentedPoses));
         }
-        // Split-screen (D362): the process's local players, each in its
+        // Split-screen: the process's local players, each in its
         // region by the game's layout for their count, the first in the
         // first.
         if (const std::size_t kPlayers = clients_->localPlayers(); kPlayers > 1) {
@@ -148,15 +148,15 @@ public:
             }
             regionFrames_.resize(regions_.size());
         }
-        // A constrained aspect (D369), or a render scale (D373), one that
-        // may change too (D533): one player's view is placed in the window
+        // A constrained aspect, or a render scale, one that
+        // may change too: one player's view is placed in the window
         // as a split-screen player's is in its region.
         aspect_ = files->description().aspect;
         if ((aspect_.has_value() || renderScale_.scale() < 1 || renderScale_.follows()) && regions_.empty()) {
             regions_.push_back(world_kest::GameRegion{});
             regionFrames_.resize(1);
         }
-        // A preview may be split as many ways as its window allows (D797),
+        // A preview may be split as many ways as its window allows,
         // which an editor playing it asks for: its regions are placed from
         // the start, shown only while it is, as a device joins its regions'
         // views once. A client that holds idle region views draws its window
@@ -169,13 +169,13 @@ public:
         textureViews_ = TextureViews(game->view, files->description().renderTextures);
         gameMeshes_ = game->meshes.size();
         // The game's materials from its cooked content, surfaces and post
-        // processes (D349).
+        // processes.
         std::vector<SceneMaterial> materials;
         std::vector<ScenePostProcessMaterial> postProcesses;
         RAWFRAME_TRY(
             readGameMaterials(context, *files, quality_, programs_, materials, postProcesses, unreadMaterials_));
         gameMaterials_ = materials.size();
-        // Followed as its content is (D734): the catalog read in now and
+        // Followed as its content is: the catalog read in now and
         // what it says each material's revision is.
         if (!files->materials().empty() && context.has(game_content::kGameContent.name)) {
             RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
@@ -254,8 +254,8 @@ public:
                     presentPlayers(frame.now);
                 }
             }
-            // The seconds since the frame before, on the Host's timeline
-            // (D293): nought for the first.
+            // The seconds since the frame before, on the Host's timeline:
+            // nought for the first.
             camera_.elapsed =
                 presented_.has_value() ? static_cast<float>((frame.now - *presented_).nanoseconds) / 1e9F : 0.0F;
             presented_ = frame.now;
@@ -263,7 +263,7 @@ public:
             const SceneFrame& kFrame = scene_->queue(camera_);
             pictures_.askAll(kFrame);
             queued_ = &kFrame;
-            // What it drew, for the editor whose preview this is (D842).
+            // What it drew, for the editor whose preview this is.
             if (preview_ != nullptr) {
                 describeFrame(kFrame, figures_, steps_);
                 preview_->described(figures_, steps_);
@@ -332,7 +332,7 @@ public:
             diagnostics::field("framesPreviewed", previewed_),
             diagnostics::field("marksShown", marksDrawn_),
             diagnostics::field("marksLit", marksLit_),
-            // Where the player's view last looked, about +Y (D521).
+            // Where the player's view last looked, about +Y.
             diagnostics::field("yaw", camera_.yaw)};
         emitter_.log(diagnostics::Severity::Info, kSceneSummary, "what one client's scene drew", fields);
         if (eyeFramesQueued_ != 0) {
@@ -345,7 +345,7 @@ public:
                           diagnostics::field("height", eyeHeight_)});
         }
         // Apart from the scene's summary, which holds as many fields as a
-        // record may (D361).
+        // record may.
         const std::uint64_t kHidden = scene_ != nullptr ? scene_->modelsHidden() : 0;
         if (placed_ != 0 || tracked_ != 0 || kHidden != 0 || splitFrames_ != 0 || overlayLines_ != 0 ||
             pathsDrawn_ != 0 || outlinesDrawn_ != 0) {
@@ -473,14 +473,14 @@ private:
             scene_->show(lines_);
         }
         // The camera first: a headset's hands are placed in the World by
-        // it before the models that follow them are extracted (D676).
+        // it before the models that follow them are extracted.
         const bool kOwned = !kView.owned.isNull() && kView.world->alive(kView.owned);
         if (kOwned && cameras_.read(*kView.world, kView.owned, camera_)) {
             ++viewed_;
         }
         // Seen from where the preview looks, exposed as the player's camera
-        // says (D432).
-        // Lit, but where the preview draws otherwise while it looks (D794).
+        // says.
+        // Lit, but where the preview draws otherwise while it looks.
         camera_.mode = view::ViewMode::Lit;
         if (kOwned && preview_ != nullptr && preview_->looking().has_value()) {
             const view::Perspective& kLook = *preview_->looking();
@@ -501,7 +501,7 @@ private:
         }
         shown_ = kView.seconds.value_or(0);
         scene_->shownAt(shown_);
-        // Without the layers an editor's preview hides (D791).
+        // Without the layers an editor's preview hides.
         scene_->hideLayers(preview_ != nullptr ? preview_->hidden() : std::vector<std::uint32_t>{});
         scene_->extract(*kView.world, posesOf(*kView.world), &hands);
         extracted_ = true;
@@ -512,20 +512,20 @@ private:
         }
         // What the preview marks, as three axes a meter long, red along X,
         // green along Y, blue along Z, and a ring about it, drawn over
-        // everything at a width the view keeps (D464, D467).
+        // everything at a width the view keeps.
         bool linesChanged = false;
         if (preview_ != nullptr && preview_->marks() != marksShown_) {
             marksShown_ = preview_->marks();
             markLines_.clear();
             if (const auto& kAt = preview_->marked(); kAt.has_value()) {
                 ++marksDrawn_;
-                // The part under the pointer drawn white and wider (D468).
+                // The part under the pointer drawn white and wider.
                 const view::MarkPart kLit = preview_->lit();
                 marksLit_ += kLit != view::MarkPart::None ? 1 : 0;
                 const auto kWidth = [](bool lit) {
                     return lit ? 1.0F / 90 : 1.0F / 150;
                 };
-                // Only the handles the author's tool uses (D974).
+                // Only the handles the author's tool uses.
                 const std::uint8_t kHandles = preview_->handles();
                 for (std::size_t axis = 0; (kHandles & view::kMarkAxes) != 0 && axis < 3; ++axis) {
                     std::array<double, 3> to = *kAt;
@@ -546,7 +546,7 @@ private:
                                                    .over = true});
                 }
                 // And a yellow ring about it on the level plane, its turn's
-                // handle (D467).
+                // handle.
                 for (std::size_t piece = 0; (kHandles & view::kMarkRing) != 0 && piece < view::kMarkRingPieces;
                      ++piece) {
                     const auto kOn = [&](std::size_t at) {
@@ -570,7 +570,7 @@ private:
         }
         // The paths the previewed scene's splines make, a cyan line through
         // each, behind what is nearer, as many pieces as the scene's lines
-        // leave room for after the mark's (D891).
+        // leave room for after the mark's.
         if (preview_ != nullptr && preview_->pathsShown() != pathsSeen_) {
             pathsSeen_ = preview_->pathsShown();
             pathLines_.clear();
@@ -589,8 +589,7 @@ private:
             linesChanged = true;
         }
         // What each author has chosen, a box about each in their color,
-        // over what is nearer, as many as the scene's lines leave room for
-        // (D907).
+        // over what is nearer, as many as the scene's lines leave room for.
         if (preview_ != nullptr && preview_->outlinesShown() != outlinesSeen_) {
             outlinesSeen_ = preview_->outlinesShown();
             outlineLines_.clear();
@@ -606,11 +605,10 @@ private:
             linesChanged = true;
         }
         // And what the preview draws over its scene, kind by kind, each
-        // frame (D798).
+        // frame.
         const std::uint8_t kOverlays =
             preview_ != nullptr && preview_->looking().has_value() ? preview_->overlays() : 0;
-        // An editor's view sees a sky with no picture as a clear day's
-        // (D914, D925).
+        // An editor's view sees a sky with no picture as a clear day's.
         scene_->gradeSky(preview_ != nullptr && preview_->looking().has_value());
         if (linesChanged || kOverlays != 0 || overlaid_) {
             lines_ = markLines_;
@@ -627,7 +625,7 @@ private:
     }
 
     /// The first player's World extracted again into each headset eye's
-    /// scene (D595), each eye keeping its own frames' history.
+    /// scene, each eye keeping its own frames' history.
     void extractEyes(world::World& world, const HandsInWorld& hands) {
         eyesSeen_ = eyes_ != nullptr ? eyes_->eyes().size() : 0;
         for (std::size_t at = 0; at < eyesSeen_; ++at) {
@@ -645,7 +643,7 @@ private:
         }
     }
 
-    /// Each eye's frame queued (D595), as `eyeViewOf` sees it from the
+    /// Each eye's frame queued, as `eyeViewOf` sees it from the
     /// first player's camera.
     void presentEyes() {
         if (eyes_ == nullptr || eyes_->eyes().size() != eyesSeen_) {
@@ -667,7 +665,7 @@ private:
         }
     }
 
-    /// The other local players' Worlds (D362), each extracted into its own
+    /// The other local players' Worlds, each extracted into its own
     /// scene and its camera read from its player.
     void extractPlayers() {
         for (LocalPlayer& each : localPlayers_) {
@@ -692,7 +690,7 @@ private:
         }
     }
 
-    /// The overlays' lines after the mark's (D798).
+    /// The overlays' lines after the mark's.
     void addOverlays(world::World& world, std::uint8_t overlays) {
         const std::size_t kBefore = lines_.size();
         drawOverlays(world,
@@ -704,7 +702,7 @@ private:
         overlayLines_ += lines_.size() - kBefore;
     }
 
-    /// A split preview's other looks (D797), each extracted into a scene
+    /// A split preview's other looks, each extracted into a scene
     /// of its own and seen as the preview's look is but from where it
     /// looks; none while the preview is not split.
     void extractSplits(world::World& world, bool owned) {
@@ -734,7 +732,7 @@ private:
     }
 
     /// The preview's look in the first of the split's regions and the
-    /// others' frames in theirs (D797).
+    /// others' frames in theirs.
     void presentSplits(execution::MonotonicInstant now) {
         const std::size_t kCount = splits_ + 1;
         if (regionFrames_.size() < kCount) {
@@ -768,7 +766,7 @@ private:
     }
 
     /// Each local player's region placed in the window as it is now, the
-    /// first's camera given its aspect, the others' frames queued (D362).
+    /// first's camera given its aspect, the others' frames queued.
     void presentPlayers(execution::MonotonicInstant now) {
         for (std::size_t at = 0; at < regions_.size(); ++at) {
             const world_kest::GameRegion& kRegion = regions_[at];
@@ -799,7 +797,7 @@ private:
         }
     }
 
-    /// Each local player's view as this frame derived it (D367): the
+    /// Each local player's view as this frame derived it: the
     /// first's region and camera, then the others', a player not presented
     /// having none.
     void tellViews() {
@@ -828,7 +826,7 @@ private:
         }
     }
 
-    /// A catalog the store published since the last (D734): the game's
+    /// A catalog the store published since the last: the game's
     /// materials read again where any one's revision changed, and every
     /// scene given them, as the frames from the next draw them. A texture
     /// a material newly names is not read until the game is played again.
@@ -883,7 +881,7 @@ private:
     ShadowSettings shadows_;
     SceneCamera camera_;
     GameCameras cameras_;
-    /// Split-screen (D362): the layout's regions, the local players after
+    /// Split-screen: the layout's regions, the local players after
     /// the first (whose are `scene_` and `camera_`), each region's frame,
     /// and the frames queued for the others.
     struct LocalPlayer {
@@ -895,10 +893,10 @@ private:
     };
     std::vector<world_kest::GameRegion> regions_;
     /// The game's constrained aspect, each region's view centered between
-    /// bars (D369); none fills.
+    /// bars; none fills.
     std::optional<world_kest::GameAspect> aspect_;
     std::vector<LocalPlayer> localPlayers_;
-    /// A split preview's other looks (D797): how many this frame, each's
+    /// A split preview's other looks: how many this frame, each's
     /// scene and camera, and the frames they drew.
     std::size_t previewViews_ = 1;
     std::size_t splits_ = 0;
@@ -906,10 +904,10 @@ private:
     std::vector<SceneCamera> splitCameras_;
     std::uint64_t splitFrames_ = 0;
     std::vector<RegionFrame> regionFrames_;
-    /// A headset's eyes (D595): where they are told, their scenes, the
+    /// A headset's eyes: where they are told, their scenes, the
     /// eyes extracted for, and their frames.
     view::HeadsetEyes* eyes_ = nullptr;
-    /// Where its hands are each frame (D676).
+    /// Where its hands are each frame.
     view::HeadsetHands* held_ = nullptr;
     std::vector<std::unique_ptr<Scene>> eyeScenes_;
     std::size_t eyesSeen_ = 0;
@@ -918,25 +916,25 @@ private:
     std::uint32_t eyeWidth_ = 0;
     std::uint32_t eyeHeight_ = 0;
     std::uint64_t playerFrames_ = 0;
-    /// The views into render textures (D361).
+    /// The views into render textures.
     TextureViews textureViews_;
     std::optional<execution::MonotonicInstant> presented_;
     std::size_t gameMeshes_ = 0;
     /// Frames seen through the player's own camera.
     std::uint64_t viewed_ = 0;
-    /// Frames seen through a preview's camera (D432).
+    /// Frames seen through a preview's camera.
     std::uint64_t previewed_ = 0;
     std::unique_ptr<Scene> scene_;
     /// The player's World's time as it is shown, which its eyes and its
-    /// views show too (D691).
+    /// views show too.
     double shown_ = 0;
-    /// The lines the player's view shows (D464).
+    /// The lines the player's view shows.
     std::vector<SceneLine> lines_;
     /// The mark's lines, and whether the overlays drew the frame before,
-    /// the bodies they outline, and the lines they drew (D798).
+    /// the bodies they outline, and the lines they drew.
     std::vector<SceneLine> markLines_;
     /// The splines' paths' lines, the preview's paths last seen, and how
-    /// many paths it drew (D891).
+    /// many paths it drew.
     std::vector<SceneLine> pathLines_;
     std::uint64_t pathsSeen_ = 0;
     std::uint64_t pathsDrawn_ = 0;
@@ -950,10 +948,10 @@ private:
     const SceneFrame* queued_ = nullptr;
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
-    /// The local players' views, told each frame (D367).
+    /// The local players' views, told each frame.
     view::PlayerViews* views_ = nullptr;
     view::PreviewCamera* preview_ = nullptr;
-    /// The last frame's description for the preview, kept to reuse (D842).
+    /// The last frame's description for the preview, kept to reuse.
     std::vector<view::FrameFigure> figures_;
     std::vector<view::FrameStep> steps_;
     const world_animation::PresentedPoses* poses_ = nullptr;
@@ -963,12 +961,12 @@ private:
         return poses_ != nullptr ? poses_->posesOf(world) : nullptr;
     }
     std::uint64_t marksShown_ = 0;
-    /// The preview's marks drawn, a point each (D464).
+    /// The preview's marks drawn, a point each.
     std::uint64_t marksDrawn_ = 0;
-    /// Those drawn with a part lit (D468).
+    /// Those drawn with a part lit.
     std::uint64_t marksLit_ = 0;
     /// Each local player's view drawn at this share of its region's pixels
-    /// each way (D373).
+    /// each way.
     RenderScale renderScale_{100, 100};
     std::uint64_t frames_ = 0;
     std::uint64_t drawn_ = 0;
@@ -979,10 +977,10 @@ private:
     std::uint64_t malformed_ = 0;
     std::uint64_t unknownMeshes_ = 0;
     std::uint64_t unknownMaterials_ = 0;
-    /// The particles' frames, summed (D360).
+    /// The particles' frames, summed.
     rawframe::particles::Tally particles_;
     std::size_t gameMaterials_ = 0;
-    /// What the materials are followed through (D734): the game's content,
+    /// What the materials are followed through: the game's content,
     /// its files, the catalog last seen, the materials' revisions in it, and
     /// how often they were read again.
     game_content::GameContent* content_ = nullptr;
@@ -1000,7 +998,7 @@ private:
     std::uint64_t overLimit_ = 0;
     std::size_t mostDraws_ = 0;
     /// The point and spot lights each frame lit with, culled, and left out
-    /// at the limit; a cluster's lights past its limit (D290).
+    /// at the limit; a cluster's lights past its limit.
     AntiAliasing antiAliasing_ = AntiAliasing::Taa;
     std::uint32_t multisamples_ = kDefaultMultisamples;
     material::Quality quality_ = material::Quality::High;
@@ -1010,10 +1008,10 @@ private:
     std::uint64_t lightsOverLimit_ = 0;
     std::uint64_t clusterOverflow_ = 0;
     /// The punctual shadows' squares each frame drew, and the lights that
-    /// asked for shadows past the budget (D292).
+    /// asked for shadows past the budget.
     std::uint64_t shadowSquares_ = 0;
     std::uint64_t shadowsEvicted_ = 0;
-    /// The decals drawn, and those culled or past the limit (D339).
+    /// The decals drawn, and those culled or past the limit.
     std::uint64_t decalsDrawn_ = 0;
     std::uint64_t decalsCulled_ = 0;
     diagnostics::Emitter emitter_;
@@ -1034,7 +1032,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .scope = composition::LifetimeScope::World,
         .providedCapabilities = kProvided,
         .optionalCapabilities = kMaybe,
-        // The materials' textures are decoded on the CPU executor (D309).
+        // The materials' textures are decoded on the CPU executor.
         .executor = {.cpu = true, .quota = {.maximumPendingTasks = 64}},
         .lifecycle = {.stopBudget = execution::MonotonicDuration::fromMilliseconds(10)},
         .observabilityIdentity = "render_scene.scene",

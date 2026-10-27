@@ -35,7 +35,7 @@ public:
                                                                "cooked content is read on the blocking-I/O executor")
                                                       .error()};
         }
-        // A host that holds files names its Composition among them (D167),
+        // A host that holds files names its Composition among them,
         // as a web client holds what it fetched.
         if (const composition::HeldFiles* held = context.heldFiles()) {
             return loadHeld(context, *held);
@@ -83,7 +83,7 @@ public:
                                                                std::filesystem::path{std::string{*kLibrary}}));
             return {};
         }
-        // A library alone plays the Composition it has active (D434), the
+        // A library alone plays the Composition it has active, the
         // one a launcher last installed, followed, or rolled back to.
         if (const auto kLibrary = configuration.path("content.library")) {
             if (root.has_value()) {

@@ -6,7 +6,7 @@
 
 namespace rawframe::world_runtime {
 
-/// What a World's save keeps (ADR-0057), from whoever defines the World's
+/// What a World's save keeps, from whoever defines the World's
 /// components: a game.
 class SavePlan {
 public:

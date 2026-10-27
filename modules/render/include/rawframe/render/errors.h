@@ -7,7 +7,7 @@
 
 namespace rawframe::render {
 
-/// The domain of every Error this module creates (SPEC-0024).
+/// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kRenderDomain{base::parseBits128Hex("6015492075ca36b9ddd79cd27d007fa5").value};
 
 enum class RenderError : std::uint32_t {

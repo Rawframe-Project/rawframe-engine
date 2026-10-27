@@ -5,7 +5,7 @@
 // unknown mesh is left out and counted; models draw in the order of their
 // meshes, then entities, and the limit leaves out a suffix of it; the sun
 // and sky light in linear physical units; a model's material is found by
-// its identity, read again in place of those it was made with (D734),
+// its identity, read again in place of those it was made with,
 // and translucent ones come last; an emitter emits the way
 // its pose turns it, placed relative to the eye; and a game's scene loads
 // against its program. A camera's effects are camera_test's, the other
@@ -78,7 +78,7 @@ RAWFRAME_TEST(TheEnginesMeshesAreClosedAndFaceOut) {
 }
 
 RAWFRAME_TEST(TheEnginesGridIsAFlatSquareFacingUp) {
-    // For a surface its material moves (D691): every vertex on the square
+    // For a surface its material moves: every vertex on the square
     // of half sides one, a cell a 128th of its side, every face up.
     const auto kGridMesh = engineMesh(kGrid);
     RAWFRAME_EXPECT(kGridMesh != nullptr && mesh::validate(*kGridMesh).has_value());
@@ -106,7 +106,7 @@ RAWFRAME_TEST(TheEnginesGridIsAFlatSquareFacingUp) {
 }
 
 RAWFRAME_TEST(AFrameShowsThePresentedWorldsTimeAndTheOneBefore) {
-    // What a material moving its vertices reads (D691): the time a scene
+    // What a material moving its vertices reads: the time a scene
     // was told, and the one its frame before showed; the eye's place.
     Rig rig;
     rig.scene->shownAt(2.5);
@@ -234,10 +234,10 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
     RAWFRAME_EXPECT(near(kDefault.lights.sun[0], 100000, 1) &&
                     near(kDefault.lights.sky[2], 5000 * std::pow((0xEB / 255.0F + 0.055F) / 1.055F, 2.4F), 0.5F) &&
                     kDefault.lights.sky[0] < kDefault.lights.sky[2] && kDefault.lights.toSun[1] > 0.8F);
-    // The default sun is the Sun's size, half a degree (D347).
+    // The default sun is the Sun's size, half a degree.
     RAWFRAME_EXPECT(near(kDefault.lights.sunWidth, 0.0093F, 0.0001F));
     // The default ground gives back a fifth of the sun's light at its
-    // height and the sky's (D304).
+    // height and the sky's.
     const float kFifth = std::pow((0x7C / 255.0F + 0.055F) / 1.055F, 2.4F);
     RAWFRAME_EXPECT(
         near(kDefault.lights.ground[0],
@@ -255,13 +255,13 @@ RAWFRAME_TEST(TheSunAndSkyLightInPhysicalUnits) {
                     near(kLit.lights.sky[0], 0) && near(kLit.lights.sky[2], 10));
     // Its width is twice the tangent of half its angle.
     RAWFRAME_EXPECT(near(kLit.lights.sunWidth, 2 * std::tan(0.1F), 0.0001F));
-    // A ground giving back nothing is black below the horizon (D304).
+    // A ground giving back nothing is black below the horizon.
     RAWFRAME_EXPECT(kLit.lights.ground == (std::array<float, 3>{0, 0, 0}));
     sky.ground = 0xFFFFFFFF;
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSkyId), &sky).has_value());
     const SceneFrame& kWhite = rig.frame({});
     RAWFRAME_EXPECT(near(kWhite.lights.ground[2], (215.86F / std::numbers::pi_v<float>)+10, 0.1F));
-    // The sky's picture is named through to the frame (D322); none without.
+    // The sky's picture is named through to the frame; none without.
     RAWFRAME_EXPECT(kWhite.lights.environment == 0);
     sky.environment = 0x5eed5eed5eed5eedULL;
     RAWFRAME_EXPECT(rig.world.insertErased(kLight, *rig.schema->find(kSkyId), &sky).has_value());
@@ -418,14 +418,14 @@ RAWFRAME_TEST(TheTemporalInputsFollowTheEyeAndTheModels) {
     const SceneFrame& kPlain = plain->queue(kCamera);
     RAWFRAME_EXPECT(!kPlain.temporal.enabled && !kPlain.temporal.history &&
                     kPlain.temporal.jitter == (std::array<float, 2>{0, 0}) && !kPlain.fxaa);
-    // FXAA works on the one picture: no jitter and no history (D296).
+    // FXAA works on the one picture: no jitter and no history.
     auto cheap = *Scene::create(*rig.schema, {.models = {kModelId}, .antiAliasing = AntiAliasing::Fxaa});
     cheap->extract(rig.world);
     const SceneFrame& kCheap = cheap->queue(kCamera);
     RAWFRAME_EXPECT(kCheap.fxaa && !kCheap.temporal.enabled && !kCheap.temporal.history &&
                     kCheap.temporal.jitter == (std::array<float, 2>{0, 0}) && kCheap.samples == 1);
     // Multisampling takes its samples in the models' passes alone: no
-    // jitter, no history, no FXAA (D343).
+    // jitter, no history, no FXAA.
     auto sampled =
         *Scene::create(*rig.schema, {.models = {kModelId}, .antiAliasing = AntiAliasing::Msaa, .multisamples = 2});
     sampled->extract(rig.world);
@@ -473,7 +473,7 @@ RAWFRAME_TEST(AModelsMaterialIsFoundByItsIdentity) {
                     kFrame.unknownMaterials == 1);
     // None is white, so a model's color is its base color.
     RAWFRAME_EXPECT(noMaterial()[0] == 1 && noMaterial()[7] == 0.3F && noMaterial()[15] == 0);
-    // Read again (D734): the stone changed and the brass gone, the frames
+    // Read again: the stone changed and the brass gone, the frames
     // from the next draw the new stone, and the brass's models with none.
     scene->replaceMaterials({{.id = 0xa2, .blob = brass}}, {});
     scene->extract(world);
@@ -569,7 +569,7 @@ RAWFRAME_TEST(TranslucentModelsComeLastFarthestFirst) {
     RAWFRAME_EXPECT(near(kFrame.draws[2].model[14], -15) && near(kFrame.draws[3].model[14], -10) &&
                     near(kFrame.draws[4].model[14], -5));
     // The glass's blob says it blends, so its shadow is cut by what it
-    // covers (D726); the opaque material's does not.
+    // covers; the opaque material's does not.
     const auto kBlends = [&kFrame](std::uint32_t at) {
         return (static_cast<std::uint32_t>(kFrame.materials[at][kFlagsAt]) & kBlendsFlag) != 0;
     };

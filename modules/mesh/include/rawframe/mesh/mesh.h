@@ -1,7 +1,7 @@
 #pragma once
 
-// The cooked mesh (ADR-0058's mesh family): triangles in the canonical space
-// of ADR-0046, meters with +Y up, in a form Rawframe owns. Import tooling
+// The cooked mesh: triangles in the engine's canonical space,
+// meters with +Y up, in a form Rawframe owns. Import tooling
 // writes it; the runtime reads it and decodes no source format. It holds
 // geometry, and what each part is drawn with only by identity, so a server
 // may read it for collision.
@@ -32,14 +32,14 @@ struct Part {
     std::uint32_t firstIndex = 0;
     std::uint32_t indexCount = 0;
     /// The game's material it is drawn with, by the identity a Model would
-    /// name it by (D314); nought for the Model's own.
+    /// name it by; nought for the Model's own.
     std::uint64_t material = 0;
 
     friend bool operator==(const Part&, const Part&) noexcept = default;
 };
 
-/// A bone a skinned mesh's vertices follow (D508): the skeleton's bone by
-/// its target identity (SPEC-0035), and the matrix taking the mesh's space
+/// A bone a skinned mesh's vertices follow: the skeleton's bone by
+/// its target identity, and the matrix taking the mesh's space
 /// into the bone's at its bind, column-major.
 struct Joint {
     base::Bits128 bone{};
@@ -48,7 +48,7 @@ struct Joint {
     friend bool operator==(const Joint&, const Joint&) noexcept = default;
 };
 
-/// What a mesh's vertices follow as a skeleton moves (D508): its joints,
+/// What a mesh's vertices follow as a skeleton moves: its joints,
 /// and for each vertex up to four of them by index and their weights,
 /// which sum to one. No joints, no skin.
 struct Skin {
@@ -62,11 +62,11 @@ struct Skin {
 /// Triangles as indices into the vertices, counter-clockwise from the front.
 /// Normals and texture coordinates are either absent or one per vertex; a
 /// skinned mesh's positions and normals are in the space its joints' binds
-/// take from (D508).
+/// take from.
 struct Mesh {
     std::vector<Vector3> positions;
     std::vector<Vector3> normals;
-    /// Origin top-left (ADR-0046).
+    /// Origin top-left.
     std::vector<Vector2> uvs;
     std::vector<std::uint32_t> indices;
     /// In order, together covering every index exactly once.
@@ -81,7 +81,7 @@ struct MeshLimits {
     std::size_t maximumVertices = std::size_t{1} << 22U;
     std::size_t maximumIndices = std::size_t{3} << 22U;
     std::size_t maximumParts = std::size_t{1} << 12U;
-    /// What one draw's bone palette holds (D508).
+    /// What one draw's bone palette holds.
     std::size_t maximumJoints = 256;
 };
 
@@ -98,7 +98,7 @@ struct MeshLimits {
 /// index, and part counts as 32 bits each, then the parts (first index and
 /// count as 32 bits each, the material as 64), the positions, the normals
 /// and texture coordinates when present, and the indices as 32 bits each.
-/// A skin follows them (D508): its joint count as 32 bits, each joint's
+/// A skin follows them: its joint count as 32 bits, each joint's
 /// bone (high then low 64 bits) and inverse bind's sixteen floats, then
 /// each vertex's four joint indices as 16 bits each and four weights. A
 /// mesh without one keeps the bytes it had.

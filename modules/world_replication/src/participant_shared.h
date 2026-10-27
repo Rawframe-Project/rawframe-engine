@@ -22,16 +22,16 @@ namespace rawframe::world_replication {
 /// Bytes as lower-case hexadecimal, for a capture's log.
 [[nodiscard]] std::string hexOf(std::span<const std::byte> bytes);
 
-/// SPEC-0041's two-sided capture is a development capability (D275): a
+/// The two-sided capture is a development capability: a
 /// shipping build refuses the key that asks for it.
 [[nodiscard]] result::Result<bool> captureAsked(const composition::Configuration& configuration, std::string_view key);
 
 /// The session bounds both sides use: a datagram fits one path MTU.
 [[nodiscard]] network::SessionProfile sessionProfile(std::size_t sessions);
 
-/// The event lanes both sides declare: the engine's (D267), the game's when
-/// it sends messages (D266), its bound checked when the game loaded, and
-/// its command lane when it has commands, bound by the largest (D425).
+/// The event lanes both sides declare: the engine's, the game's when
+/// it sends messages, its bound checked when the game loaded, and
+/// its command lane when it has commands, bound by the largest.
 [[nodiscard]] std::vector<network::EventLaneDeclaration> lanesOf(const ReplicationPlan& plan);
 
 /// A transport's room for `connections` connections.
@@ -39,7 +39,7 @@ namespace rawframe::world_replication {
 
 /// What peers must agree on: the protocol, the game, its replicated
 /// components, and the package revision, which is the CompositionId when
-/// the Runtime's content is a Composition (SPEC-0010's package fingerprint)
+/// the Runtime's content is a Composition
 /// and zero otherwise.
 [[nodiscard]] result::Result<network::Compatibility> compatibilityOf(composition::ParticipantContext& context,
                                                                      const ReplicationPlan& plan);
@@ -53,7 +53,7 @@ namespace rawframe::world_replication {
 [[nodiscard]] std::unexpected<result::Error> missing(std::string_view why);
 
 /// The bots participant (bots_participant.cpp): headless clients, and the
-/// process's own local players (D362, D363).
+/// process's own local players.
 [[nodiscard]] result::Result<composition::ParticipantOwner> makeBots(composition::ParticipantContext& context) noexcept;
 
 } // namespace rawframe::world_replication

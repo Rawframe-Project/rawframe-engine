@@ -1,4 +1,4 @@
-// The terrain importer (D854): a terrain document cooked into a mesh the
+// The terrain importer: a terrain document cooked into a mesh the
 // runtime reads, a part a layer painted drawn with its layer's material;
 // one that does not read, or whose sidecar gives it settings, refused.
 

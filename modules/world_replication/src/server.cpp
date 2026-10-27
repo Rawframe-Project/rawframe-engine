@@ -116,7 +116,7 @@ void ReplicationServer::State::onStateAck(Peer& peer, const network::SessionEven
     }
     // What lies more than an acknowledgement's reach behind the newest one
     // heard can never be acknowledged: forgotten now rather than when the
-    // window fills (D217). A connection claiming more than was sent only
+    // window fills. A connection claiming more than was sent only
     // forgets what it could have acknowledged.
     const std::uint64_t kLatest = std::min(kAck->latest, peer.stateSequence);
     while (!peer.sent.empty() && peer.sent.front().sequence + kAckBits < kLatest) {
@@ -125,7 +125,7 @@ void ReplicationServer::State::onStateAck(Peer& peer, const network::SessionEven
 }
 
 void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& event) {
-    // SPEC-0013's input ceilings, before any work on the record: one input
+    // The input ceilings, before any work on the record: one input
     // window a tick, and so many bytes a second.
     const std::uint64_t kSeconds = std::max<std::uint64_t>(peer.accept.tickRateSeconds, 1);
     const std::uint64_t kTicksPerSecond = (peer.accept.tickRateTicks + kSeconds - 1) / kSeconds;
@@ -172,9 +172,9 @@ void ReplicationServer::State::onInput(Peer& peer, const network::SessionEvent& 
     // within a command's age of it; a longer silence was a stall, and
     // pacing a client ahead for it would leave it that far early once it
     // made up what it owed, its commands waiting past their age and
-    // dropped (D323).
+    // dropped.
     // After a silence, and for the first window, the lead is what this
-    // window finds as it arrives (D522): a client sending windows further
+    // window finds as it arrives: a client sending windows further
     // apart than a command's age, drawn at a few frames a second, is paced
     // too, where it never was and every command it sent landed on a tick
     // already played.
@@ -238,7 +238,7 @@ void ReplicationServer::State::applyInputs(world::World& world) {
             peer.pendingLead = std::min(peer.pendingLead.value_or(kLead), kLead);
         }
         auto waiting = peer.waitingInputs.find(peer.nextInputTick);
-        // Stale input is dropped, not played late (SPEC-0013, D232): the age
+        // Stale input is dropped, not played late: the age
         // is in server ticks from its arrival.
         const std::uint64_t kMaximumAge = maximumAgeTicks(peer);
         if (waiting != peer.waitingInputs.end() && pumpTick > waiting->second.arrived + kMaximumAge) {
@@ -274,7 +274,7 @@ void ReplicationServer::State::applyInputs(world::World& world) {
         }
         peer.waitingInputs.erase(peer.waitingInputs.begin(), peer.waitingInputs.upper_bound(peer.nextInputTick));
         // Held or neutral, the tick is consumed all the same: a command
-        // for it arriving later is too late (SPEC-0041).
+        // for it arriving later is too late.
         peer.consumedInputTick = peer.nextInputTick++;
         network::Reader reader{command};
         const PeerNames kNames{peer};
@@ -525,7 +525,7 @@ result::Status ReplicationServer::declareSystems(const schema::SchemaRegistry& r
                                                .phase = world::Phase::ApplyInputs,
                                                .writes = state.inputWrites,
                                                .system = state.systems[0].get()});
-    // What an edited World holds still goes to its viewers (D912).
+    // What an edited World holds still goes to its viewers.
     systems.push_back(world::SystemDeclaration{.identity = "rawframe.replication.publish",
                                                .phase = world::Phase::Replication,
                                                .reads = state.reads,
@@ -590,7 +590,7 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
             break;
         }
         case network::SessionEventKind::Event:
-            // The command lane is the only one a client sends on (D425):
+            // The command lane is the only one a client sends on:
             // its sessions refuse a stream on any other.
             if (kPeer != state.peers.end() && event.eventLane == kGameCommandLane) {
                 state.onCommand(kPeer->second, event);

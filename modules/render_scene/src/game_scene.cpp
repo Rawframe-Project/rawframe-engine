@@ -93,7 +93,7 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
         if (declared && !world_kest::laidOutAs(program, type, size, fields)) {
             // A component line naming a type by the last part of an engine
             // type's name means the engine's: a game's own type of that
-            // name is named by its module (D749).
+            // name is named by its module.
             return std::unexpected<result::Error>{
                 refuse(result::ErrorClass::InvalidArgument,
                        RenderSceneError::BadComponents,
@@ -252,7 +252,7 @@ result::Result<GameScene> loadGameScene(const world_kest::GameFiles& game, const
                           "rawframe.model.PostProcess",
                           sizeof(PostProcess),
                           {{"material", offsetof(PostProcess, material)}, {"weight", offsetof(PostProcess, weight)}}));
-    // The particle triad as its own module reads it (D357).
+    // The particle triad as its own module reads it.
     for (const auto& [kDeclared, kType, kSize, kFields] :
          {std::tuple{
               !loaded.emitters.empty(), particles::kEmitterType, sizeof(ParticleEmitter), particles::emitterFields()},

@@ -1,6 +1,6 @@
 #pragma once
 
-// Pseudo-localization (ADR-0050, SPEC-0033): a message's text made to look
+// Pseudo-localization: a message's text made to look
 // translated, so untranslated strings, clipped layouts, and mirrored text
 // show up before any translator is asked. Development only: a shipping
 // build refuses to compile anything that includes this.
@@ -11,14 +11,14 @@
 //
 //   - accented: each ASCII letter an accented one (`Play` is `Ṗĺáý`);
 //   - padded: `~` added until the text is as long as a translation would
-//     be, by IBM's expansion ratios for its length (D145), or by a
+//     be, by IBM's expansion ratios for its length, or by a
 //     declared ratio;
 //   - marked: `[` before and `]` after, so a clipped end shows;
 //   - mirrored: each run of text between U+202E and U+202C, so right to
 //     left layout shows.
 
 #if RAWFRAME_SHIPPING
-#error "pseudo-localization is development only (SPEC-0033)"
+#error "pseudo-localization is development only"
 #endif
 
 #include "rawframe/localization/message.h"
@@ -31,7 +31,7 @@
 
 namespace rawframe::localization {
 
-/// SPEC-0033's named limit on expansion: a declared ratio is at least 1
+/// The named limit on expansion: a declared ratio is at least 1
 /// and at most this.
 inline constexpr double kMostExpansion = 3.0;
 

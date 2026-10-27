@@ -1,6 +1,6 @@
 #pragma once
 
-// The pinned CLDR data localization needs (ADR-0050), compiled ahead of
+// The pinned CLDR data localization needs, compiled ahead of
 // time by tools/generate_cldr.py into the tables under generated/. Every
 // table is sorted by its first column, so a lookup is a binary search.
 

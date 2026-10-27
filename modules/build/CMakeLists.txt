@@ -1,4 +1,4 @@
-# Builds (ADR-0023, ADR-0024, SPEC-0021): a cook's receipt-proven output
+# Builds: a cook's receipt-proven output
 # packed into a Build, chunked, content-addressed, and named by its root
 # hash. Tooling only: no runtime closure contains it.
 rawframe_module(NAME build

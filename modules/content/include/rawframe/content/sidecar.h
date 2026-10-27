@@ -1,6 +1,6 @@
 #pragma once
 
-// A source's sidecar (ADR-0024): `<source file>.rfmeta` beside it, naming
+// A source's sidecar: `<source file>.rfmeta` beside it, naming
 // the resource the source becomes and the importer that makes it. The cook
 // reads every sidecar; whatever resolves an authored name to a resource
 // (a game's scene line, a scene's instance in development) reads the
@@ -27,8 +27,8 @@ struct Sidecar {
     ResourceId id;
     std::string importer;
     std::optional<document::Value> settings;
-    /// The resource each subasset the importer finds in the source becomes
-    /// (ADR-0024, D314), by the key the importer gives it: its family, a
+    /// The resource each subasset the importer finds in the source becomes,
+    /// by the key the importer gives it: its family, a
     /// slash, and a name the source gives it, as `material/Brass`. A key
     /// the source no longer has keeps its identity, never given to another.
     std::map<std::string, ResourceId, std::less<>> subassets;

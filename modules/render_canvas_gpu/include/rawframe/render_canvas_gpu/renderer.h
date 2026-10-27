@@ -1,13 +1,13 @@
 #pragma once
 
-// The canvas's GPU half (SPEC-0024's canvas contract, D278): the draws the
-// queue stage built recorded into the frame `render` owns (D285). Each
+// The canvas's GPU half: the draws the
+// queue stage built recorded into the frame `render` owns. Each
 // texture they name is uploaded once as it was decoded, and again when a
 // reload replaces it; the quads' vertices and indices are written each
 // frame; and the draws are made in their order, each blending over what is
 // behind it, into the frame's picture, after the scene's; then the
 // particles, trails, and beams, over every sprite, through the device half
-// the scene's share (D357).
+// the scene's share.
 //
 // Its own module, apart from the CPU half, because the device is not on
 // every client yet: the bots count draws without a device, so the CPU half
@@ -33,17 +33,17 @@ namespace rawframe::render_canvas_gpu {
 /// The texture the game names `id`, decoded; none while it is not ready.
 using TextureSource = std::function<std::shared_ptr<const texture::Texture>(std::uint64_t id)>;
 
-/// SPEC-0024's limit points as the canvas's GPU half has them.
+/// The limit points as the canvas's GPU half has them.
 struct RendererLimits {
     /// Textures held on the device at once; a draw naming one past them is
     /// left out.
     std::size_t maximumTextures = 256;
-    /// SPEC-0024's `upload_bytes_per_frame`: a texture that would pass it
+    /// The `upload_bytes_per_frame`: a texture that would pass it
     /// waits for a later frame (`deferred`), its draws left out until then.
     /// Three quarters of what the device uploads in a frame, the rest kept
     /// for the frame's corners; a texture larger than it is never drawn.
     std::uint64_t uploadBytesPerFrame = render::kFrameUploadBytes / 4 * 3;
-    /// The particles alive at once across every emitter (D357): an
+    /// The particles alive at once across every emitter: an
     /// emitter whose ring would pass it is left out.
     std::uint32_t maximumParticles = 65536;
 };
@@ -62,7 +62,7 @@ struct RendererStatistics {
     std::uint64_t uploadsDeferred = 0;
     /// Textures replaced by a reload's new revision.
     std::uint64_t texturesReplaced = 0;
-    /// Emitters drawn (D357), those the pool could not hold, the particles
+    /// Emitters drawn, those the pool could not hold, the particles
     /// they spawned, and the trails and beams drawn, over every frame.
     std::uint64_t emittersDrawn = 0;
     std::uint64_t emittersLeftOut = 0;
@@ -83,8 +83,8 @@ public:
     /// What the next frame draws: `frame`'s draws, the textures they name
     /// uploaded if they must be; nothing for none; in `region` of the
     /// frame's picture (left, top, width, height in pixels: a local
-    /// player's in split-screen, D364), or the whole for none, the picture
-    /// cleared to `bars` (8-bit sRGB, D369) if this is the first to draw
+    /// player's in split-screen), or the whole for none, the picture
+    /// cleared to `bars` (8-bit sRGB) if this is the first to draw
     /// into it. All are held until the frame is made.
     void prepare(const render_canvas::CanvasFrame* frame,
                  TextureSource textures,

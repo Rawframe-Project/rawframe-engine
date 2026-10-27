@@ -19,7 +19,7 @@ enum class InputError : std::uint32_t {
     TooMany = 2,
     /// A device already paired.
     AlreadyPaired = 3,
-    /// A name or identity a set already has (D430).
+    /// A name or identity a set already has.
     Taken = 4,
 };
 

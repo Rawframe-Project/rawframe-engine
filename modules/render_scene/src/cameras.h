@@ -1,8 +1,8 @@
 #pragma once
 
 // The cameras a game's entities carry, read as the scene draws through
-// them: a player's or a render texture's view's (D361), its effects and
-// post processes (D349), and its eye where its pose places it (D520).
+// them: a player's or a render texture's view's, its effects and
+// post processes, and its eye where its pose places it.
 
 #include "rawframe/render_scene/scene.h"
 
@@ -19,8 +19,8 @@ public:
     explicit GameCameras(const GameScene& game);
 
     /// The camera on `entity` and its effects read into `camera`, the eye
-    /// placed by the entity's pose, or in the World where it is fixed
-    /// (D520); whether it has a camera (else it looks as the default
+    /// placed by the entity's pose, or in the World where it is fixed;
+    /// whether it has a camera (else it looks as the default
     /// does).
     [[nodiscard]] bool read(world::World& world, world::EntityHandle entity, SceneCamera& camera) const;
 

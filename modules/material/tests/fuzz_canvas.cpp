@@ -1,5 +1,5 @@
-// Coverage-guided fuzzing of the canvas materials a mod's Build can hold
-// (D355): the reader takes the canonical form only, so what it accepts
+// Coverage-guided fuzzing of the canvas materials a mod's Build can hold:
+// the reader takes the canonical form only, so what it accepts
 // writes back to the very same text, folding it never fails but by
 // refusal, and what folds is cooked and read back as it was.
 

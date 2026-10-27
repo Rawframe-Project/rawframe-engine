@@ -1,6 +1,6 @@
 #pragma once
 
-// The provider-neutral transport contract (SPEC-0010): listeners, logical
+// The provider-neutral transport contract: listeners, logical
 // connections, reliable ordered streams, unreliable datagrams, and a bounded
 // queue of owned events the Runtime drains. It carries opaque bytes and knows
 // no World, entity, or gameplay meaning. QUIC and loopback providers both
@@ -48,16 +48,16 @@ struct StreamId {
     friend constexpr bool operator==(StreamId, StreamId) noexcept = default;
 };
 
-/// The application protocols a provider's connections may speak (D408): a
-/// game's, and the tooling protocol's (ADR-0032), which never shares a
+/// The application protocols a provider's connections may speak: a
+/// game's, and the tooling protocol's, which never shares a
 /// game's lanes.
 inline constexpr std::string_view kGameApplication = "rawframe-game-v1";
 inline constexpr std::string_view kToolingApplication = "rawframe-tooling-v1";
-/// A shared authoring session's (ADR-0085, D881).
+/// A shared authoring session's.
 inline constexpr std::string_view kAuthoringApplication = "rawframe-authoring-v1";
 
 /// Every bound a provider enforces. All are required: zero is refused, and
-/// nothing grows without one (SPEC-0010 finite profile values).
+/// nothing grows without one.
 struct ProviderProfile {
     /// The application protocol its connections speak, QUIC's ALPN; a peer
     /// speaking another is refused (`Closed`, `Refused` on loopback, the
@@ -143,7 +143,7 @@ public:
     [[nodiscard]] virtual result::Status
     send(ConnectionId connection, StreamId stream, std::span<const std::byte> bytes) = 0;
     /// Bytes sent on a stream of this side's that its peer has not yet
-    /// received, as far as this provider can tell (D276); none for a stream
+    /// received, as far as this provider can tell; none for a stream
     /// or connection it does not know.
     [[nodiscard]] virtual std::size_t pendingBytes(ConnectionId connection, StreamId stream) const noexcept = 0;
     /// Queues one datagram, which may be lost, duplicated, or reordered.

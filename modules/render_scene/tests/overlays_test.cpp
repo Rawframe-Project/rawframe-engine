@@ -1,10 +1,9 @@
-// What an editor's preview draws over its scene (D798): a box's twelve
+// What an editor's preview draws over its scene: a box's twelve
 // edges at its corners, turned as its pose turns; a sphere's three great
 // circles; a mesh nothing; a point light's three circles of its range and
 // a spot's way and the ring its cone reaches. Each body's lines are
-// colored by what it is (D839): static, kinematic, moving, at rest, or a
-// sensor; and one touching another so, its hardest hit along its normal
-// (D845).
+// colored by what it is: static, kinematic, moving, at rest, or a
+// sensor; and one touching another so, its hardest hit along its normal.
 
 #include "../src/overlays.h"
 #include "rawframe/test/test.h"

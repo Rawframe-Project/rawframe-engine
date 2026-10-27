@@ -1,4 +1,4 @@
-// The inline-Slang node (D718): a function body with typed inputs and
+// The inline-Slang node: a function body with typed inputs and
 // outputs written once a material and called once a node, in the stages
 // it declares; what its declarations and its body may not say; and an
 // untrusted package's material refused for holding one.

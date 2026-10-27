@@ -1,5 +1,5 @@
 // A local player's view's render scale as its frames keep up with the
-// device (D533): it shrinks while most frames certainly take well over
+// device: it shrinks while most frames certainly take well over
 // their budget, by about the share of pixels that brings them within it,
 // grows a step after windows of frames done well within it, tries a step
 // more after windows of frames within it, waiting twice as long after a

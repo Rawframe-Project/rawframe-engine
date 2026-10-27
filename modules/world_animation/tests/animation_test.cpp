@@ -160,7 +160,7 @@ RAWFRAME_TEST(APoseFollowsTheGamesParameters) {
         return;
     }
     // Each bone by its target, in the pose's order, for a skinned mesh's
-    // joints (D508).
+    // joints.
     const std::span<const base::Bits128> kBones = stage.animation->bones(kWalker);
     RAWFRAME_EXPECT(kBones.size() == 2 && kBones[0] == kRoot && kBones[1] == kArm);
     RAWFRAME_EXPECT(stage.animation->bones(world::EntityHandle{}).empty());
@@ -372,7 +372,7 @@ RAWFRAME_TEST(ClipsAnimateTheGamesFields) {
 }
 
 RAWFRAME_TEST(AWorldNoScheduleStepsPlaysAsOneThatDoes) {
-    // A client's mirror (D258): bound to its registry and played step by
+    // A client's mirror: bound to its registry and played step by
     // step, it poses and counts as the scheduled World does, tick for tick.
     Stage scheduled;
     const world::EntityHandle kScheduled = scheduled.walker(1.0F);

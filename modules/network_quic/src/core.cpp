@@ -209,7 +209,7 @@ QUIC_STATUS connectionCallback(HQUIC, void* context, QUIC_CONNECTION_EVENT* even
     switch (event->Type) {
     case QUIC_CONNECTION_EVENT_CONNECTED: {
         // MsQuic says whether datagrams may be sent only some packets after
-        // the handshake (D172); asked now, a datagram sent at once is not
+        // the handshake; asked now, a datagram sent at once is not
         // dropped. The path's limit follows with its first state change.
         std::uint8_t sendEnabled = 0;
         std::uint32_t length = sizeof(sendEnabled);

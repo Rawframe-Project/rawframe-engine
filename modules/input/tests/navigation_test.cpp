@@ -1,4 +1,4 @@
-// The engine's navigation actions (D430): added once to a game's set, a
+// The engine's navigation actions: added once to a game's set, a
 // context above the game's that, enabled, claims its controls from the
 // game, and gated with the keyboard while a field takes text.
 

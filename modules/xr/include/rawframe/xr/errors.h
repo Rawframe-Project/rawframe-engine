@@ -7,7 +7,7 @@
 
 namespace rawframe::xr {
 
-/// The domain of every Error this module creates (ADR-0081, D591).
+/// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kXrDomain{base::parseBits128Hex("32574ba22afcb1c6fe3239ba37b4fa1b").value};
 
 enum class XrError : std::uint32_t {

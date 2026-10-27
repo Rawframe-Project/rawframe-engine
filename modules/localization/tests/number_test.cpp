@@ -1,4 +1,4 @@
-// Numbers (SPEC-0033): plain forms rounded the same everywhere, and CLDR's
+// Numbers: plain forms rounded the same everywhere, and CLDR's
 // symbols, digits, and grouping for each locale.
 
 #include "rawframe/localization/number.h"

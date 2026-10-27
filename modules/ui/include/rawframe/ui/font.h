@@ -1,6 +1,6 @@
 #pragma once
 
-// A cooked font (ADR-0049, ADR-0078, D385): a TrueType or OpenType font or
+// A cooked font: a TrueType or OpenType font or
 // collection the cook's sanitizer rebuilt, never an author's raw bytes, and
 // read by a tree's `addFont`.
 

@@ -1,4 +1,4 @@
-# Particles, trails, and beams on a client (ADR-0053, D357): the component
+# Particles, trails, and beams on a client: the component
 # triad as C++ reads it, and one view's accounting of them from frame to
 # frame, which the scene and the canvas both draw through. Client only: the
 # dedicated server carries the components as plain values and links none of

@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-/// SPEC-0021's ceiling on a CompositionRecord.
+/// The ceiling on a CompositionRecord.
 constexpr std::uint64_t kMaximumComposition = std::uint64_t{1} << 20U;
 
 std::unexpected<result::Error> failed(result::ErrorClass errorClass, InstallError error, std::string_view why) {

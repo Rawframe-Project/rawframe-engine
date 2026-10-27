@@ -1,4 +1,4 @@
-// Poses (ADR-0081's fourth value, D596): a controller's grip and aim mapped
+// Poses: a controller's grip and aim mapped
 // into pose actions in the one pipeline, on while located, the first
 // located binding's pose, and its buttons as any device's.
 
@@ -73,7 +73,7 @@ RAWFRAME_TEST(AControllersPoseIsAPoseActionsWhileLocated) {
     mapper.update();
     mapper.commit(2);
     RAWFRAME_EXPECT(!mapper.committed(kPlayer, kHand).on && mapper.releasedThisTick(kPlayer, kHand));
-    // Its buttons are bools, and its events are a controller's (D559).
+    // Its buttons are bools, and its events are a controller's.
     mapper.submit(
         ControlEvent{.device = kHands, .control = *controlNamed(DeviceClass::Controller, "select_right"), .x = 1});
     mapper.update();

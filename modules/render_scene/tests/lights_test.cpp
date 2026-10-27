@@ -50,7 +50,7 @@ RAWFRAME_TEST(TheSunsCascadesCoverTheViewAndHoldStill) {
     const std::array<float, 3> kInFirst = clipOf(kShadows.cascades[1].viewProjection, {0, -2, -10});
     RAWFRAME_EXPECT(std::abs(kInFirst[0]) < 1 && std::abs(kInFirst[1]) < 1 && kInFirst[2] > 0 && kInFirst[2] < 1);
     RAWFRAME_EXPECT(kFrame.draws.size() == 2);
-    // Each cascade names its own casters, one run after another (D298):
+    // Each cascade names its own casters, one run after another:
     // the far box in none, the others where their spheres reach.
     std::uint32_t named = 0;
     std::array<std::uint32_t, 4> ahead{};

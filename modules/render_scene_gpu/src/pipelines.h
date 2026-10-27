@@ -19,24 +19,24 @@
 
 namespace rawframe::render_scene_gpu {
 
-/// The shadow maps' depth: the sun's cascades' (D289) and the punctual
-/// lights' atlas (D292).
+/// The shadow maps' depth: the sun's cascades' and the punctual
+/// lights' atlas.
 constexpr mrhiFormat kShadowFormat = mrhi_formatDepth32Float;
 
 constexpr mrhiFormat kSceneFormat = mrhi_formatRgba16Float;
-/// Where each texel's point moved since the frame before (D291).
+/// Where each texel's point moved since the frame before.
 constexpr mrhiFormat kMotionFormat = mrhi_formatRg16Float;
 constexpr mrhiFormat kDepthFormat = mrhi_formatDepth32Float;
 /// Each point's normal and roughness, the prepass's auxiliary target when
-/// a screen-space effect asks for it (ADR-0051, D327).
+/// a screen-space effect asks for it.
 constexpr mrhiFormat kSurfaceFormat = mrhi_formatRgba16Float;
-/// What of the light from all around reaches each point (D327).
+/// What of the light from all around reaches each point.
 constexpr mrhiFormat kAmbientFormat = mrhi_formatR8Unorm;
-/// What each point reflects of the picture before, and how much (D331).
+/// What each point reflects of the picture before, and how much.
 constexpr mrhiFormat kReflectionFormat = mrhi_formatRgba16Float;
-/// The decals' normals' atlas (D342): linear, as normal textures are.
+/// The decals' normals' atlas: linear, as normal textures are.
 constexpr mrhiFormat kNormalsFormat = mrhi_formatRgba8Unorm;
-/// The reflection probes' atlas (D340), as the pictures it holds are.
+/// The reflection probes' atlas, as the pictures it holds are.
 constexpr mrhiFormat kProbeFormat = mrhi_formatRgba16Float;
 /// The frame's picture, as `render` declares it.
 constexpr mrhiFormat kPictureFormat = mrhi_formatRgba8UnormSrgb;
@@ -50,7 +50,7 @@ struct Asked {
     bool ready = false;
 };
 
-/// The models' passes' pipelines multisampled (D343): the prepass's, whole
+/// The models' passes' pipelines multisampled: the prepass's, whole
 /// and masked, with and without the surfaces; the lit, masked, and
 /// translucent models', plain and under decals; the sky's; and the resolve
 /// of the prepass's depth to one sample.
@@ -70,10 +70,10 @@ struct Multisampled {
 };
 
 /// The models' pipelines a material's program draws with, by what they
-/// draw: lit, the opaque, the masked (D310), and the translucent (D305);
+/// draw: lit, the opaque, the masked, and the translucent;
 /// in the prepass, the masked cut, and each point's surface, whole and
-/// masked (D327, D487); the masked casters into the shadow maps (D488);
-/// and, for a material that moves its vertices (D691), the opaque models'
+/// masked; the masked casters into the shadow maps;
+/// and, for a material that moves its vertices, the opaque models'
 /// depth and the solid casters, which run no other material's code.
 enum class Shade : std::uint8_t {
     Lit,
@@ -87,7 +87,7 @@ enum class Shade : std::uint8_t {
     Casting
 };
 
-/// A material's own program's pipelines (D485, D487): the engine's own
+/// A material's own program's pipelines: the engine's own
 /// models' but for the shader, by what they draw; lit, plain and under
 /// decals; each single- and multisampled; each asked for when a frame first
 /// wants it (`variantOf`); refused where its shader or a pipeline could not
@@ -95,19 +95,19 @@ enum class Shade : std::uint8_t {
 struct ProgramShading {
     std::shared_ptr<const material::ProgramMaterial> program;
     mrhiShaderId shader{};
-    /// The shadow's shader, which its masked casters are cut by (D488).
+    /// The shadow's shader, which its masked casters are cut by.
     mrhiShaderId shadowShader{};
     std::array<Asked, 22> variants{};
     std::array<bool, 22> asked{};
     bool refused = false;
-    /// What refused it, as the device said (D501).
+    /// What refused it, as the device said.
     std::string refusal;
 };
 
 /// Where a program's pipeline for `shade` lies among its variants: the lit
 /// twelve, then the prepass's six, which no decal changes, then the masked
 /// casters', which no view multisamples; then a moving material's depth,
-/// single and multisampled, and its solid casters' (D691).
+/// single and multisampled, and its solid casters'.
 [[nodiscard]] constexpr std::size_t variantOf(Shade shade, bool decaled, bool multisampled) noexcept {
     const auto kShade = static_cast<std::size_t>(shade);
     if (shade == Shade::CutCasting) {
@@ -126,7 +126,7 @@ struct ProgramShading {
 }
 
 /// The optional effects whose pipelines are asked for only when a view
-/// first wants them (D337): the prepass's surfaces target, which the
+/// first wants them: the prepass's surfaces target, which the
 /// ambient occlusion and the reflections read, and each effect.
 enum class Effect : std::uint8_t {
     Surfaces,
@@ -145,9 +145,9 @@ enum class Effect : std::uint8_t {
 };
 inline constexpr std::size_t kEffects = 13;
 
-/// The scene's shaders, samplers, and pipelines (D284 to D292): what every
+/// The scene's shaders, samplers, and pipelines: what every
 /// frame draws with asked of the device at once, each effect's when a view
-/// first wants it (D337), made as the device answers, and destroyed with
+/// first wants it, made as the device answers, and destroyed with
 /// it.
 struct Pipelines {
     render::Device* device = nullptr;
@@ -173,82 +173,81 @@ struct Pipelines {
     /// Compares a shadow map's depths, blending four (hardware 2x2 PCF).
     mrhiSamplerId shadowSampler{};
     /// Blends four texels, clamped at the edges: the picture before's
-    /// (D291) and FXAA's taps (D296).
+    /// and FXAA's taps.
     mrhiSamplerId filteredSampler{};
-    /// A material's texture's, by its declared filter and address (D309):
+    /// A material's texture's, by its declared filter and address:
     /// at `samplerOf`.
     std::array<mrhiSamplerId, 4> materialSamplers{};
     /// The shadow maps' casters, the depth prepass, the lit models, the sky
-    /// behind them, the metering's two steps (D293), the temporal pass, the
-    /// picture, and FXAA over it (D296).
+    /// behind them, the metering's two steps, the temporal pass, the
+    /// picture, and FXAA over it.
     Asked casting;
     /// The masked casters, cut where their opacity falls below their
-    /// cutoff (D310).
+    /// cutoff.
     Asked cutCasting;
     Asked depth;
     /// The masked models' depth, cut where their opacity falls below their
-    /// cutoff (D310).
+    /// cutoff.
     Asked cutout;
     /// The prepass leaving each point's surface too, for the ambient
-    /// occlusion (D327), whole and masked.
+    /// occlusion, whole and masked.
     Asked surfaces;
     Asked cutSurfaces;
-    /// The ambient occlusion, and its blur (D327).
+    /// The ambient occlusion, and its blur.
     Asked occlude;
     Asked blurOcclusion;
-    /// The screen-space reflections (D331).
+    /// The screen-space reflections.
     Asked march;
-    /// The motion blur's tiles, their neighbors, and its gathering (D334).
+    /// The motion blur's tiles, their neighbors, and its gathering.
     Asked motionTiles;
     Asked motionNeighbors;
     Asked motionGather;
-    /// The depth of field's halving, its bokeh, and its blend (D336).
+    /// The depth of field's halving, its bokeh, and its blend.
     Asked focusPrefilter;
     Asked focusBokeh;
     Asked focusCombine;
-    /// The contact shadows (D338).
+    /// The contact shadows.
     Asked contactShade;
     /// A decal's texture drawn into the colors' atlas, its normal texture
-    /// into the normals' (D342), and the lit, masked, and translucent
-    /// models under the frame's decals (D339).
+    /// into the normals', and the lit, masked, and translucent
+    /// models under the frame's decals.
     Asked decalFill;
     Asked decalNormalFill;
     Asked litDecaled;
     Asked maskedLitDecaled;
     Asked glassDecaled;
-    /// A reflection probe's picture drawn into the atlas (D340).
+    /// A reflection probe's picture drawn into the atlas.
     Asked probeFill;
     Asked lit;
-    /// The masked models lit only where their depth is the prepass's
-    /// (D310).
+    /// The masked models lit only where their depth is the prepass's.
     Asked maskedLit;
-    /// The translucent models, blended over what is behind them (D305).
+    /// The translucent models, blended over what is behind them.
     Asked glass;
     Asked sky;
     Asked histogram;
     Asked adapt;
-    /// Posed models' vertices skinned (D508).
+    /// Posed models' vertices skinned.
     Asked skin;
     Asked temporal;
     Asked tonemap;
     Asked fxaa;
-    /// The post processes (D350): in scene-linear light, in the picture's
+    /// The post processes: in scene-linear light, in the picture's
     /// display-referred light, and the picture graded only, the light the
     /// post processes before the tonemapper take.
     Asked postLinear;
     Asked postDisplay;
     Asked grade;
     /// The bloom's first halving, its others, and its doublings, added to
-    /// the level above (D328).
+    /// the level above.
     Asked bloomFirst;
     Asked bloomDown;
     Asked bloomUp;
-    /// The multisampled models' passes (D343), and the samples a pixel they
+    /// The multisampled models' passes, and the samples a pixel they
     /// take: set once, before they are first asked for; nought until then.
     Multisampled multisampled;
     std::uint32_t samples = 0;
-    /// Every material's own program a frame has named, by its program
-    /// (D485), held so no other takes its place while its pipelines live.
+    /// Every material's own program a frame has named, by its program,
+    /// held so no other takes its place while its pipelines live.
     std::map<const material::ProgramMaterial*, ProgramShading> programs;
 
     Pipelines() = default;
@@ -271,7 +270,7 @@ struct Pipelines {
 
     /// Each of `named`'s programs' lit pipelines a frame draws with asked
     /// for, plain and, where the frame wants them, under decals and
-    /// multisampled (`sampled`); those asked before polled (D485). A program refused
+    /// multisampled (`sampled`); those asked before polled. A program refused
     /// is refused for good, and is no frame's failure.
     void
     wantPrograms(std::span<const std::shared_ptr<const material::ProgramMaterial>> named, bool decaled, bool sampled);
@@ -282,12 +281,12 @@ struct Pipelines {
     programPipeline(const material::ProgramMaterial* program, Shade shade, bool decaled, bool sampled) const;
 
     /// The programs refused into `statistics`: how many, and why the first
-    /// was, if none was told before (D501); and how many are held.
+    /// was, if none was told before; and how many are held.
     void tellRefused(RendererStatistics& statistics) const;
     /// Lets go of each program no material holds any longer, its pipelines
     /// all answered: a material's program changed while the game plays
-    /// (D734) leaves its old one, whose pipelines would otherwise live as
-    /// long as the renderer (D759). Maul RHI retires what a frame in flight
+    /// leaves its old one, whose pipelines would otherwise live as
+    /// long as the renderer. Maul RHI retires what a frame in flight
     /// still uses once the frame is done.
     void forgetPrograms();
 
@@ -311,8 +310,7 @@ private:
     /// which the multisampled ones are made from too.
     std::array<mrhiGraphicsPipelineDef, 3> shading_{};
     mrhiGraphicsPipelineDef cut_{};
-    /// The casters' pipelines, which a material's program's are made from
-    /// (D488, D691).
+    /// The casters' pipelines, which a material's program's are made from.
     mrhiGraphicsPipelineDef casting_{};
     mrhiGraphicsPipelineDef cutCasting_{};
     mrhiGraphicsPipelineDef sky_{};
@@ -327,10 +325,10 @@ private:
 /// Maul RHI's refusal, named.
 std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome);
 
-/// A lit pipeline's twin under the decals (D339).
+/// A lit pipeline's twin under the decals.
 [[nodiscard]] mrhiGraphicsPipelineDef decaledOf(mrhiGraphicsPipelineDef def, std::string_view label);
 
-/// The prepass also leaving each point's surface (D327, D331), whole and
+/// The prepass also leaving each point's surface, whole and
 /// masked, from the prepass's pipeline.
 [[nodiscard]] std::array<mrhiGraphicsPipelineDef, 2> surfacing(const mrhiGraphicsPipelineDef& prepass);
 

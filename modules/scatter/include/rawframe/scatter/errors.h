@@ -7,7 +7,7 @@
 
 namespace rawframe::scatter {
 
-/// The domain of every Error the scatter format creates (D862).
+/// The domain of every Error the scatter format creates.
 inline constexpr result::ErrorDomain kScatterDomain{base::parseBits128Hex("3dc93b11bac9a2fa30cfbb62a163a612").value};
 
 /// Codes within kScatterDomain.

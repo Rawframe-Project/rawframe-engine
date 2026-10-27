@@ -1,4 +1,4 @@
-// Whether a view's frames draw the same picture (D952): what changes with
+// Whether a view's frames draw the same picture: what changes with
 // time alone leaves it still, anything drawn otherwise does not; a frame
 // that moves with time is never still; and a temporal resolve or an
 // adapting exposure waits until it has settled.
@@ -66,7 +66,7 @@ RAWFRAME_TEST(AFrameThatMovesWithTimeIsNeverStill) {
 }
 
 RAWFRAME_TEST(AnEditedWorldStandsWhileTimeAloneMovesIt) {
-    // D979: an editor's edited World, its emitters, post processes, and
+    // An editor's edited World, its emitters, post processes, and
     // program materials moving with time alone, stands; a change of its
     // own still draws.
     SceneFrame frame = aFrame(1);
@@ -104,7 +104,7 @@ RAWFRAME_TEST(AResolvingOrAdaptingFrameWaitsUntilItSettles) {
     adapting.metering.enabled = true;
     adapting.metering.elapsed = 1.0F / 60.0F;
     // A device drawing four frames a second steps the exposure a quarter
-    // of a second each (D979).
+    // of a second each.
     SceneFrame slow = adapting;
     slow.metering.elapsed = 0.25F;
     RAWFRAME_EXPECT(kStoodAfter(aFrame(1)) == 1);
@@ -112,7 +112,7 @@ RAWFRAME_TEST(AResolvingOrAdaptingFrameWaitsUntilItSettles) {
     RAWFRAME_EXPECT(kStoodAfter(adapting) >= 179 && kStoodAfter(adapting) <= 181);
     RAWFRAME_EXPECT(kStoodAfter(slow) == 12);
     // An exposure that takes no step, and an edited World's, are not waited
-    // for (D979).
+    // for.
     SceneFrame stepless = adapting;
     stepless.metering.elapsed = 0;
     RAWFRAME_EXPECT(kStoodAfter(stepless) == 1);

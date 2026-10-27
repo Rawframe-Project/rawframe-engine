@@ -75,7 +75,7 @@ bool setSerial(X509* certificate) {
 
 /// The common name as the certificate's one DNS subject alternative name.
 /// Some verifiers read only a certificate with extensions: Chromium's
-/// WebTransport by hash refuses one without (D250).
+/// WebTransport by hash refuses one without.
 bool addSubjectName(X509* certificate, std::string_view commonName) {
     GENERAL_NAMES* const kNames = GENERAL_NAMES_new();
     GENERAL_NAME* const kName = GENERAL_NAME_new();

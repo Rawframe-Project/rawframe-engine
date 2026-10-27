@@ -49,7 +49,7 @@ const HeldMesh* DeviceMeshes::choose(std::uint64_t id, const MeshSource& given, 
         if (source == nullptr || source->positions.empty() || source->indices.empty() || held_.size() >= maximum_) {
             return nullptr;
         }
-        // A skinned mesh's vertices are read by skinning too (D508).
+        // A skinned mesh's vertices are read by skinning too.
         const bool kSkinned = !source->skin.joints.empty();
         mrhiBufferDef vertexDef = mrhiDefaultBufferDef();
         vertexDef.size = std::uint64_t{source->positions.size()} * kVertexBytes;
@@ -155,7 +155,7 @@ const FrameMesh& DeviceMeshes::frameMeshOf(const HeldMesh& mesh) const {
 result::Status DeviceMeshes::bind(mrhiPassId pass, const HeldMesh& mesh, std::optional<VerticesAt> posed) const {
     // Posed vertices are bound from their offset to the buffer's end: the
     // draw reads only its own, and lavapipe leaks a vertex buffer bound at
-    // an offset with a size (D510).
+    // an offset with a size.
     const FrameMesh& kMade = imported_.at(&mesh);
     const mrhiResourceId kVertices = posed.has_value() ? posed->buffer : kMade.vertices;
     if (mrhiSetVertexBuffer(native_, pass, 0, kVertices, posed.has_value() ? posed->offset : 0, MRHI_WHOLE_SIZE) !=

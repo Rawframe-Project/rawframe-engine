@@ -1,4 +1,4 @@
-// A picture streamed to an editor (D789): written and read back whole, and
+// A picture streamed to an editor: written and read back whole, and
 // bytes that are not one whole picture, as a reader that came while it was
 // written may find, read as none.
 
@@ -35,7 +35,7 @@ RAWFRAME_TEST(PartOfAStreamedPictureIsNone) {
 
 #if RAWFRAME_FILE_SYSTEM
 RAWFRAME_TEST(AStreamWrittenInPlaceIsReadOnePictureAtATimeWhole) {
-    // A reader without a pause beside a writer (D967): each picture it
+    // A reader without a pause beside a writer: each picture it
     // takes whole, every pixel the one its sequence wrote, the sequences
     // rising; and a picture past the file's room put in a larger file the
     // reader follows.

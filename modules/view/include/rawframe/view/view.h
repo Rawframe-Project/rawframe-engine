@@ -1,9 +1,9 @@
 #pragma once
 
-// A view's geometry (ADR-0052, D366): the eye's axes from its aim, and
-// ADR-0052's picking and projection verbs between view points and the
+// A view's geometry: the eye's axes from its aim, and
+// the picking and projection verbs between view points and the
 // World, for a perspective view (the scene's) and an orthographic one (the
-// canvas's). View points are ADR-0046's screen space: logical pixels from
+// canvas's). View points are the screen space: logical pixels from
 // the view's top left, y down; the World is right-handed, +Y up, meters.
 // Everything is derived from declared camera state and the view's size, so
 // it works headlessly, with no frame drawn. A failure is one of a closed
@@ -39,7 +39,7 @@ struct Perspective {
 };
 
 /// A perspective view from `eye` looking at `target`, `fovY` radians
-/// high (D432); none for an eye at its target or a value not finite.
+/// high; none for an eye at its target or a value not finite.
 [[nodiscard]] std::optional<Perspective>
 lookingAt(const std::array<double, 3>& eye, const std::array<double, 3>& target, float fovY) noexcept;
 
@@ -57,7 +57,7 @@ struct ViewSize {
 };
 
 /// What of a window is covered from each edge, logical pixels: a phone's
-/// notch, its home indicator, the system's bars (D589).
+/// notch, its home indicator, the system's bars.
 struct ViewInsets {
     float top = 0;
     float right = 0;
@@ -65,7 +65,7 @@ struct ViewInsets {
     float left = 0;
 };
 
-/// Why a conversion has no answer (ADR-0052's closed set): the view has no
+/// Why a conversion has no answer: the view has no
 /// size; an input is not finite; the camera sees nothing (a field of view
 /// or height not above nought, a near plane not above nought); or the
 /// World point is not past the near plane.

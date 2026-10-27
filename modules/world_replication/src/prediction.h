@@ -23,13 +23,13 @@ public:
     /// The server's values for some predicted components of the player,
     /// after consuming input `consumed`, in `predicted` order with an empty
     /// span for one not in this state. With `whole`, the server says an
-    /// empty one is the value last heard, which is compared too (D274).
+    /// empty one is the value last heard, which is compared too.
     /// True when they confirmed the prediction, whose state is then
     /// `confirmed()`.
     bool authoritative(std::uint64_t consumed, std::span<const std::span<const std::byte>> values, bool whole);
     /// Every predicted component's value, in memory layout, at the last
     /// confirmed input tick. After a confirmation of the whole state, it is
-    /// the server's there: what a checksum record hashes (D204, D274).
+    /// the server's there: what a checksum record hashes.
     [[nodiscard]] const std::vector<std::vector<std::byte>>& confirmed() const noexcept {
         return confirmed_;
     }
@@ -64,7 +64,7 @@ private:
     void write(const State& state);
     /// Predicts every tick after the newest predicted one through `through`.
     void advance(std::uint64_t through);
-    /// SPEC-0041's effect ledger (D219): the last step's effects at `tick`,
+    /// The effect ledger: the last step's effects at `tick`,
     /// delivered, held, or recognized as already delivered.
     void emitted(std::uint64_t tick);
     /// Done with every effect at or before `tick`: those held for

@@ -1,6 +1,6 @@
 #pragma once
 
-// Messages (ADR-0050, SPEC-0033): a closed subset of Unicode MessageFormat
+// Messages: a closed subset of Unicode MessageFormat
 // 2.0, read once and checked whole, then formatted as often as asked.
 //
 //   Hello, {$name}!
@@ -11,7 +11,7 @@
 //   *   {{{$count} files}}
 //
 // A simple message is text with `{$argument}` placeholders; it may not
-// begin with `.` or with whitespace (D143: MF2 leaves leading whitespace to
+// begin with `.` or with whitespace (MF2 leaves leading whitespace to
 // be trimmed or kept, so the subset keeps neither). Text escapes are `\{`,
 // `\}`, and `\\`. A complex message is `.input {$a ...}` and
 // `.local $b = {... }` declarations, then either a quoted pattern
@@ -23,7 +23,7 @@
 // `cardinal`, `ordinal`, or `exact`, and `useGrouping` of `auto` or
 // `never`), and `:number` (those, and `minimumFractionDigits` and
 // `maximumFractionDigits`, 0 to 15, by default 0 and 3 or the minimum if
-// that is more, as ECMA-402 does (D143); only a written maximum below the
+// that is more, as ECMA-402 does; only a written maximum below the
 // minimum is refused). A function on a
 // value a declaration already annotated keeps that annotation's options
 // unless it sets them again. Operands are variables or quoted literals;
@@ -140,7 +140,7 @@ struct Message {
     friend bool operator==(const Message&, const Message&) = default;
 };
 
-/// SPEC-0033's named limits for messages.
+/// The named limits for messages.
 struct MessageLimits {
     std::size_t maximumBytes = 4096;
     std::size_t maximumDeclarations = 16;
@@ -157,7 +157,7 @@ struct MessageLimits {
 /// The arguments a message reads from its caller, each once, in name order.
 [[nodiscard]] std::vector<std::string> argumentsOf(const Message& message);
 
-/// SPEC-0033's closed argument types.
+/// The closed argument types.
 using ArgumentValue = std::variant<std::string, std::int64_t, double, bool>;
 
 struct Argument {

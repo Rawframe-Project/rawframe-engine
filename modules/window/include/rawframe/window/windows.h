@@ -1,6 +1,6 @@
 #pragma once
 
-// The windows of a client process (SPEC-0025) and the loop that runs them.
+// The windows of a client process and the loop that runs them.
 // `run` hands the process's main thread to the window system. On desktops
 // that call returns when the program stops; where the platform owns the
 // loop (the web, mobile) it drives the same calls. The program cannot tell
@@ -43,8 +43,7 @@ struct WindowSettings {
     bool visible = true;
     bool resizable = true;
     /// The window it belongs to, or none: an owned window stays above its
-    /// owner and is destroyed with it, as an editor's panels apart are
-    /// (D994).
+    /// owner and is destroyed with it, as an editor's panels apart are.
     WindowId owner{};
 };
 
@@ -74,12 +73,12 @@ struct WindowState {
     std::uint32_t surfaceGeneration = 0;
     /// What the platform's own bars and the screen's cutouts cover of the
     /// window, a phone's notch and home indicator: nought where nothing
-    /// does (D589).
+    /// does.
     Insets safeArea;
 };
 
 /// What the platform tells now of the monitor showing a window, for its
-/// HDR capability record (ADR-0052, D365): whether it reports HDR facts at
+/// HDR capability record: whether it reports HDR facts at
 /// all, whether HDR output is on, its peak luminance, and the luminance it
 /// shows SDR white at, in nits, nought where it does not tell. Facts may
 /// lag the platform's events: they are read again, never kept.
@@ -91,7 +90,7 @@ struct DisplayFacts {
     friend constexpr bool operator==(const DisplayFacts&, const DisplayFacts&) noexcept = default;
 };
 
-/// The named limits (SPEC-0025's limit points). Each is a hard ceiling: a
+/// The named limits. Each is a hard ceiling: a
 /// request past one is refused with OverLimit, and discrete input past its
 /// queue becomes InputStateReset. The values are the Maul Window defaults
 /// until a presentation profile names its own.
@@ -111,7 +110,7 @@ struct Limits {
 
 struct Platform;
 
-/// An image of a window's icon (D920): RGBA with straight alpha, 8 bits a
+/// An image of a window's icon: RGBA with straight alpha, 8 bits a
 /// channel, rows from the top, at most 256 pixels a side.
 struct IconImage {
     std::uint32_t width = 0;
@@ -119,7 +118,7 @@ struct IconImage {
     std::span<const std::uint8_t> pixels;
 };
 
-/// A file dialog to show (D918): what it chooses, its title, the absolute
+/// A file dialog to show: what it chooses, its title, the absolute
 /// folder it opens in, the name a save offers, and the kinds of file it
 /// offers, each a name and its extensions without dots joined by ';'; all
 /// empty for the platform's own.
@@ -160,8 +159,8 @@ public:
     /// SurfaceLost and SurfaceRestored). For the seam to the device only
     /// (`Surfaces`), never to be kept past the generation.
     [[nodiscard]] result::Result<HandleBundle> handles(WindowId window) const;
-    /// What the platform tells now of the monitor showing most of `window`
-    /// (D365); none known before it says which monitor, and for one gone.
+    /// What the platform tells now of the monitor showing most of `window`;
+    /// none known before it says which monitor, and for one gone.
     [[nodiscard]] DisplayFacts display(WindowId window) const;
 
     [[nodiscard]] result::Result<RequestId> requestTitle(WindowId window, std::string_view title);
@@ -179,12 +178,12 @@ public:
     /// list. Ask again to move the caret.
     [[nodiscard]] result::Result<RequestId> requestTextInput(WindowId window, bool enabled, Rect caret);
     /// Hands the platform's accessibility clients the root of the window's
-    /// tree, which the program's adapter implements, or none (D576): on
+    /// tree, which the program's adapter implements, or none: on
     /// Android an `AccessibilityNodeProvider`'s global reference, kept by
     /// the window while it is the root. X11, Wayland, and the web take no
     /// root and answer Unsupported.
     [[nodiscard]] result::Result<RequestId> requestAccessibilityRoot(WindowId window, void* root);
-    /// Shows the platform's file dialog over `window` (D918): the window
+    /// Shows the platform's file dialog over `window`: the window
     /// stays live and frames go on; its completion is Done with the paths
     /// chosen, which `dialogFiles` reads until the next dialog completes,
     /// Cancelled when the user closes it, and Unsupported where there are
@@ -192,14 +191,14 @@ public:
     [[nodiscard]] result::Result<RequestId> requestFileDialog(WindowId window, const FileDialog& dialog);
     /// The window's icon, as its title bar, the taskbar, and the window
     /// switcher show it, at most four images, each platform taking the
-    /// nearest (D920); none for the platform's own. The web and Wayland
+    /// nearest; none for the platform's own. The web and Wayland
     /// compositors without toplevel icons answer Unsupported.
     [[nodiscard]] result::Result<RequestId> requestIcon(WindowId window, std::span<const IconImage> images);
     /// The absolute paths a file dialog completed Done with.
     [[nodiscard]] result::Result<std::vector<std::string>> dialogFiles(RequestId request) const;
     /// Puts UTF-8 `text` on the clipboard, and asks for the clipboard's
-    /// text, which `clipboardText` reads once the read completes Done
-    /// (D999): later on the web, where the browser may ask the user first,
+    /// text, which `clipboardText` reads once the read completes Done:
+    /// later on the web, where the browser may ask the user first,
     /// and only for a focused window on Wayland.
     [[nodiscard]] result::Result<RequestId> requestClipboardWrite(WindowId window, std::string_view text);
     [[nodiscard]] result::Result<RequestId> requestClipboardRead(WindowId window);
@@ -245,7 +244,7 @@ public:
 };
 
 /// A message the platform shows in a box of its own, which waits for the
-/// person to close it (D927): one a program shows where it can draw nothing
+/// person to close it: one a program shows where it can draw nothing
 /// of its own, before any window or without a device to draw one with.
 struct Message {
     enum class Kind : std::uint8_t {
@@ -280,7 +279,7 @@ struct RunSettings {
 #if defined(__ANDROID__)
 /// What an Android program runs. There the platform starts a program, not a
 /// `main` that calls run: Maul Window's activity asks for it when the first
-/// activity is created (mwin-0026, D551), and runs it as run would. The
+/// activity is created, and runs it as run would. The
 /// program outlives every activity and the call that gave it.
 struct AndroidStart {
     /// None for a program that cannot run: its activity finishes.

@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of a cooked mesh read from content (D242), which
+// Coverage-guided fuzzing of a cooked mesh read from content, which
 // a mod's Build can hold. The reader is exact: a mesh it accepts encodes to
 // the very same bytes.
 

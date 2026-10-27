@@ -477,7 +477,7 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
             // A glTF loop repeats its first key at its end, where a clip
             // that loops comes back round by itself. The root's end may be
             // somewhere else, the ground a walk cycle covers: that becomes
-            // its drift (D134).
+            // its drift.
             const animation::Key kEnd = track.keys.back();
             std::erase_if(track.keys, [&clip](const animation::Key& key) {
                 return key.time >= clip.duration;

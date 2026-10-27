@@ -94,11 +94,11 @@ constexpr std::uint32_t kSpawnGroup = 64;
 /// bound).
 constexpr std::uint64_t kBlockStride = 256;
 
-/// The bytes one particle takes in the pool (D353): where it started and
+/// The bytes one particle takes in the pool: where it started and
 /// when it was born, its velocity and life, and the scale on its size.
 constexpr std::uint64_t kParticleBytes = 48;
 
-/// An emitter as the shaders read it (std140, D353): its anchor relative
+/// An emitter as the shaders read it (std140): its anchor relative
 /// to the eye; where it spawns relative to its anchor, and the sphere's
 /// radius; its way, and the cosine of the cone's half angle; its
 /// particles' speed, life, drag, and variation; their acceleration, and
@@ -107,8 +107,8 @@ constexpr std::uint64_t kParticleBytes = 48;
 /// and death; its ring's first slot in the pool, its size, where this
 /// spawn starts in it, and how many it spawns; how many of them are
 /// steady, its seed, its material's place, and its flipbook's columns and
-/// rows (sixteen bits each, D359); and the velocity its particles inherit,
-/// and their streak's seconds (D360).
+/// rows (sixteen bits each); and the velocity its particles inherit,
+/// and their streak's seconds.
 struct EmitterBlock {
     std::array<float, 4> anchor{};
     std::array<float, 4> origin{};
@@ -124,7 +124,7 @@ struct EmitterBlock {
 };
 static_assert(sizeof(EmitterBlock) == 176, "the particles' shaders read an emitter as 176 bytes");
 
-/// A ribbon's point as the ribbons' shader reads it (std430, D354): where
+/// A ribbon's point as the ribbons' shader reads it (std430): where
 /// it is relative to the eye and its width; its color; and its texture's
 /// coordinate along the ribbon.
 constexpr std::uint64_t kPointBytes = 48;
@@ -175,7 +175,7 @@ struct Ring {
 
 /// An emitter the open frame draws: its ring, what it spawns, its
 /// material's place, and the corners each particle takes: a quad's, or a
-/// streak's (D360).
+/// streak's.
 struct Drawn {
     std::uint32_t offset = 0;
     std::uint32_t capacity = 0;
@@ -190,7 +190,7 @@ constexpr std::uint32_t kStreakCorners = 8 * 6;
 
 /// The births' and the drawing's shaders and pipelines on one device, for
 /// one picture's format: made once and shared by every pool drawing into
-/// a picture of it (D361), so the device compiles them once.
+/// a picture of it, so the device compiles them once.
 struct Programs {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
@@ -370,7 +370,7 @@ struct Particles::State {
     render::Device* device = nullptr;
     mrhiDevice* native = nullptr;
     std::uint32_t capacity = 0;
-    /// Its shaders and pipelines, perhaps shared (D361).
+    /// Its shaders and pipelines, perhaps shared.
     std::shared_ptr<Programs> programs;
     mrhiBufferId buffer{};
     /// Each drawn emitter's ring, by its key.

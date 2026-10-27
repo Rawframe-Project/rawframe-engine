@@ -7,7 +7,7 @@
 
 namespace rawframe::render_canvas_gpu {
 
-/// The domain of every Error this module creates (SPEC-0024's canvas).
+/// The domain of every Error this module creates.
 inline constexpr result::ErrorDomain kCanvasGpuDomain{base::parseBits128Hex("2079ada685169d5f121be63722eeb709").value};
 
 enum class CanvasGpuError : std::uint32_t {

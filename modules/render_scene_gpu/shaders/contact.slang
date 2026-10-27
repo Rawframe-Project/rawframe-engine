@@ -1,4 +1,4 @@
-// The scene's contact shadows (ADR-0051, D338), in Slang (ADR-0026, D475):
+// The scene's contact shadows, in Slang:
 // from each point the prepass left, sixteen steps toward the sun over the
 // camera's length, each seen from the eye. Where one passes behind what
 // the prepass left there by less than the length (what stands there is
@@ -32,7 +32,7 @@ float3 seenAt(float3 place)
 }
 
 // The pass reads only where its fragment is, so its vertex half passes
-// nothing on (D418).
+// nothing on.
 [shader("vertex")]
 Bare vs(uint vertex : SV_VulkanVertexID)
 {

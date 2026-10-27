@@ -1,4 +1,4 @@
-# A client's text (ADR-0050, SPEC-0033): the game's string tables and
+# A client's text: the game's string tables and
 # translations read from its content into one catalog. Client only: a
 # dedicated server links none of this (tools/check_repo.py holds it so).
 rawframe_module(NAME world_localization

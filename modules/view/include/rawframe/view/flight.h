@@ -1,6 +1,6 @@
 #pragma once
 
-// An editor's viewport camera flown (D913), as Unity's and Unreal's are:
+// An editor's viewport camera flown, as Unity's and Unreal's are:
 // with the right button held the pointer turns the view and W A S D Q E
 // fly it, Shift faster, the wheel then setting the speed; the middle
 // button pans; Alt with the left orbits about the point ahead; the wheel

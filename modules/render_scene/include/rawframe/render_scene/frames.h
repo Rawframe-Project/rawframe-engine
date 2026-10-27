@@ -1,6 +1,6 @@
 #pragma once
 
-// The scene's frames as a device draws them (D283): what the scene
+// The scene's frames as a device draws them: what the scene
 // participant queued in this Host iteration's `present`, the view's size,
 // and the meshes and textures its draws name, for the GPU half to record
 // after it.
@@ -17,7 +17,7 @@
 
 namespace rawframe::render_scene {
 
-/// A render texture's frame (ADR-0052, D361): its identity and size, and
+/// A render texture's frame: its identity and size, and
 /// the frame its view queued this Host iteration; none while no view names
 /// it.
 struct TextureFrame {
@@ -27,9 +27,8 @@ struct TextureFrame {
     const SceneFrame* frame = nullptr;
 };
 
-/// A local player's region of the window in split-screen (ADR-0052,
-/// D362), in pixels from its top left, and the frame queued for it; none
-/// while its client has no World.
+/// A local player's region of the window in split-screen, in pixels from its top left, and the frame queued for it;
+/// none while its client has no World.
 struct RegionFrame {
     std::uint32_t x = 0;
     std::uint32_t y = 0;
@@ -38,7 +37,7 @@ struct RegionFrame {
     const SceneFrame* frame = nullptr;
 };
 
-/// A headset's eye's frame (D595): the first local player's view drawn
+/// A headset's eye's frame: the first local player's view drawn
 /// from the eye, `width` by `height` pixels through a frustum as wide each
 /// way as the eye's widest angle, and where that picture lies over the
 /// eye's image (left, top, width, height in the image's pixels, past its
@@ -64,30 +63,29 @@ public:
     /// none, and while the scene is idle.
     [[nodiscard]] virtual const SceneFrame* queued() const noexcept = 0;
     /// The game's render textures, each with the frame its view queued in
-    /// this Host iteration's `present` (D361), until the next iteration's
+    /// this Host iteration's `present`, until the next iteration's
     /// `presentation_extract`; a device draws them before the view's.
     [[nodiscard]] virtual std::span<const TextureFrame> textureFrames() const noexcept = 0;
-    /// In split-screen (D362), each local player's region and frame, the
+    /// In split-screen, each local player's region and frame, the
     /// first's the frame `queued` gives, in the players' order, each
     /// composed over those before; none while one player fills the window.
     /// Kept as `textureFrames` is.
     [[nodiscard]] virtual std::span<const RegionFrame> regionFrames() const noexcept = 0;
-    /// A headset's eyes' frames (D595), the left first, queued in this Host
+    /// A headset's eyes' frames, the left first, queued in this Host
     /// iteration's `present` and kept as `textureFrames` is; none while no
     /// headset shows the game.
     [[nodiscard]] virtual std::span<const EyeFrame> eyeFrames() const noexcept = 0;
     /// The color around the regions, 8-bit sRGB: a constrained aspect's
-    /// bars (D369), else black.
+    /// bars, else black.
     [[nodiscard]] virtual std::array<std::uint8_t, 3> bars() const noexcept = 0;
     /// The share of its region's pixels each way a local player's view is
-    /// drawn at (ADR-0052's render scale, D373): `scene.render_scale_percent`, one
+    /// drawn at: `scene.render_scale_percent`, one
     /// unless asked, lower while the frames do not keep up where a client
-    /// allows (D533); the view is scaled to its region.
+    /// allows; the view is scaled to its region.
     [[nodiscard]] virtual float renderScale() const noexcept = 0;
     /// A frame the device drew is done: it certainly took `atLeast` there,
     /// and at most `atMost`, where it was to take no longer than `budget`.
-    /// Where a client allows a lower render scale, the scale follows
-    /// (D533).
+    /// Where a client allows a lower render scale, the scale follows.
     virtual void paced(execution::MonotonicDuration atLeast,
                        execution::MonotonicDuration atMost,
                        execution::MonotonicDuration budget) noexcept = 0;
@@ -104,17 +102,17 @@ public:
     virtual void resize(std::uint32_t width, std::uint32_t height) noexcept = 0;
     /// Queues a frame from `camera` now, in place of the one queued, from
     /// the World last extracted: for a tool drawing the scene from
-    /// elsewhere (D326). The next `present` queues the view's own again;
+    /// elsewhere. The next `present` queues the view's own again;
     /// the models' motion then is measured from this frame. None while the
     /// scene is idle.
     [[nodiscard]] virtual const SceneFrame* queueFrom(const SceneCamera& camera) noexcept = 0;
-    /// The reflection probes last extracted, where their poses put them
-    /// (D325); none while the scene is idle.
+    /// The reflection probes last extracted, where their poses put them;
+    /// none while the scene is idle.
     [[nodiscard]] virtual std::span<const ProbeInstance> probes() const noexcept = 0;
     /// The mesh a draw names, the game's or the engine's; none for another,
     /// and while the scene is idle.
     [[nodiscard]] virtual std::shared_ptr<const mesh::Mesh> mesh(std::uint64_t id) const = 0;
-    /// The texture a material samples, decoded and held (D309); none while
+    /// The texture a material samples, decoded and held; none while
     /// it is not ready, for one the game does not declare, and while the
     /// scene is idle.
     [[nodiscard]] virtual std::shared_ptr<const texture::Texture> texture(std::uint64_t id) const = 0;

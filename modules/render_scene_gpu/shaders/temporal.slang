@@ -1,5 +1,5 @@
-// The scene's temporal anti-aliasing (D291, ADR-0051), in Slang (ADR-0026,
-// D475): the frame's pre-exposed light blended with the picture before,
+// The scene's temporal anti-aliasing, in Slang:
+// the frame's pre-exposed light blended with the picture before,
 // read where the texel's motion says it was and kept within the colors
 // around the texel now (in YCoCg), so what was not there before does not
 // ghost. A tenth of each frame is kept, the brighter weighted less, so a

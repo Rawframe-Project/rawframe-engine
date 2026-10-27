@@ -1,4 +1,4 @@
-// Sequences (D869): a timeline read and written back alike, refused where
+// Sequences: a timeline read and written back alike, refused where
 // it is not one, and played on so each key fires once when the play
 // reaches it, in a loop once for each pass.
 

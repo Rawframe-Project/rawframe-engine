@@ -23,7 +23,7 @@ enum class MaterialError : std::uint32_t {
     /// More nodes, inputs, or bytes than the limits allow.
     OverLimit = 3,
     /// A node its package's trust class may not hold: inline Slang outside
-    /// a first-party or explicitly trusted package (SPEC-0026, D718).
+    /// a first-party or explicitly trusted package.
     Untrusted = 4,
 };
 

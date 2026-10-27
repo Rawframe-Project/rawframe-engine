@@ -1,6 +1,6 @@
 #pragma once
 
-// What the scene's GPU tests share (D322): the device opened, a view as
+// What the scene's GPU tests share: the device opened, a view as
 // the queue stage makes it, boxes, and a frame drawn and read back.
 
 #include "rawframe/render/device.h"
@@ -22,7 +22,7 @@ namespace rawframe::scene_fixture {
 /// How long a test waits for a frame it drew: lavapipe compiles a
 /// pipeline on the CPU the first time a frame uses it, which a machine
 /// loaded by other builds takes far longer over than its five seconds
-/// alone (D476); past this, a frame that never ends still fails.
+/// alone; past this, a frame that never ends still fails.
 inline constexpr std::uint64_t kFrameWait = 60'000'000'000;
 
 /// Whether a device must answer: skipping is failing (the check sets it).
@@ -87,7 +87,7 @@ inline std::array<int, 3> at(const std::vector<std::byte>& pixels, std::uint32_t
             std::to_integer<int>(pixels[kAt + 2])};
 }
 
-/// One frame drawn and read back through `render`'s framer (D285); the
+/// One frame drawn and read back through `render`'s framer; the
 /// pipelines are made as the device answers, a few frames at most.
 inline std::optional<std::vector<std::byte>> drawn(render::Framer& framer,
                                                    render_scene_gpu::SceneRenderer& renderer,
@@ -115,7 +115,7 @@ inline std::optional<std::vector<std::byte>> drawn(render::Framer& framer,
 
 /// One frame drawn and read back once the renderer draws what `counted`
 /// counts: an effect's pipelines are asked for when a frame first wants
-/// it, and the frames before the device answers go without it (D337).
+/// it, and the frames before the device answers go without it.
 inline std::optional<std::vector<std::byte>> drawnWith(render::Framer& framer,
                                                        render_scene_gpu::SceneRenderer& renderer,
                                                        const render_scene::SceneFrame& frame,

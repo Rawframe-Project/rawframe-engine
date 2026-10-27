@@ -1,4 +1,4 @@
-# The 3D scene (ADR-0051, SPEC-0024): `rawframe.model`'s models extracted
+# The 3D scene: `rawframe.model`'s models extracted
 # from a client's World where their poses put them, then seen through a
 # camera, culled, and queued in draw order, lit by the sun and the sky.
 # Client only: the dedicated server carries the components as plain values

@@ -23,8 +23,8 @@ namespace rawframe::composition {
 
 class Composition;
 
-/// The process authorities a Host owns and hands to its composition
-/// (SPEC-0005 Host). All must outlive the composition.
+/// The process authorities a Host owns and hands to its composition.
+/// All must outlive the composition.
 struct HostServices {
     const execution::MonotonicSource* clock = nullptr;
     /// The parent of every participant's cancellation scope.
@@ -45,7 +45,7 @@ struct HostServices {
 };
 
 /// The health reason of a World behind by more than it can catch up, for
-/// longer than it may be (SPEC-0012's sustained tick debt, D186): a Host
+/// longer than it may be: a Host
 /// ends such a run as a controlled overload, where a supervisor's retry may
 /// help.
 inline constexpr std::string_view kOverloaded = "overloaded";
@@ -105,7 +105,7 @@ public:
     /// configuration names is one of them, never a file on a disk.
     [[nodiscard]] const HeldFiles* heldFiles() const noexcept;
 
-    /// Whether gameplay admission is open: the Host is active (SPEC-0012).
+    /// Whether gameplay admission is open: the Host is active.
     [[nodiscard]] bool admitting() const noexcept;
     /// Evidence for the Host, reported from the Host thread, each replacing
     /// this participant's last: the admitted connections it still serves (a
@@ -113,7 +113,7 @@ public:
     /// with `reason` a fixed category that outlives the participant.
     void reportConnections(std::size_t connections) noexcept;
     void reportHealth(Health health, std::string_view reason) noexcept;
-    /// The bytes this participant holds, as it counts them (D216): SPEC-0013's
+    /// The bytes this participant holds, as it counts them: its
     /// memory attribution, what the Host logs beside the process's resident
     /// memory. Nought until reported.
     void reportMemory(std::uint64_t bytes) noexcept;
@@ -125,7 +125,7 @@ private:
     std::size_t index_;
 };
 
-/// SPEC-0005's lifecycle states for one participant.
+/// The lifecycle states for one participant.
 enum class ParticipantState : std::uint8_t {
     Planned,
     Constructed,
@@ -156,8 +156,8 @@ public:
         return running_;
     }
     /// Whether the last stop, from the first quiesce until everything was
-    /// destroyed, took longer than the plan's shutdown budget: SPEC-0012's
-    /// shutdown timeout, which a Host reports as how its run ended (D185).
+    /// destroyed, took longer than the plan's shutdown budget: a
+    /// shutdown timeout, which a Host reports as how its run ended.
     [[nodiscard]] bool overran() const noexcept {
         return overran_;
     }

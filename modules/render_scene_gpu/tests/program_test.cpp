@@ -1,7 +1,7 @@
-// A material's own program lights its model on the device (D485) on
+// A material's own program lights its model on the device on
 // lavapipe: the scene's containers linked with a material written by hand
 // (tests/materials/checker.slang), built by tools/gen_shaders.py as the
-// cook builds a game's (D484). Skips where no adapter answers, unless
+// cook builds a game's. Skips where no adapter answers, unless
 // RAWFRAME_REQUIRE_GPU is set.
 
 #include "fixture.h"
@@ -123,8 +123,8 @@ RAWFRAME_TEST(AMaterialsOwnProgramLightsItsModel) {
     RAWFRAME_EXPECT(kStatistics.programsRefused == 0 && kWhite[0] == 0 && kWhite[1] == 0 && kChecked[0] > 100 &&
                     kChecked[1] > 100 && kStatistics.programModelsDrawn > 0);
     // The material's program changed, as a recooked graph's does while a
-    // game plays (D734): once the new one draws, the old one's pipelines
-    // are let go, not held as long as the renderer (D759).
+    // game plays: once the new one draws, the old one's pipelines
+    // are let go, not held as long as the renderer.
     frame.programs = {nullptr, checker()};
     const auto kChanged =
         drawnWith(**framer, **made, frame, kMeshes, &render_scene_gpu::RendererStatistics::programModelsDrawn);
@@ -148,8 +148,8 @@ RAWFRAME_TEST(AMaskedProgramMaterialIsCutWhereItsProgramSays) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // The checkerboard masked at a half (D310): its program clears the red
-    // cells, so the prepass cuts them away (D487) and the dark behind shows
+    // The checkerboard masked at a half: its program clears the red
+    // cells, so the prepass cuts them away and the dark behind shows
     // there; its blob, its states alone, would cut nothing.
     SceneFrame frame = looking();
     frame.shadows.count = 0;
@@ -204,7 +204,7 @@ RAWFRAME_TEST(AMaskedProgramMaterialCastsOnlyWhatItsProgramLeaves) {
     // below the eye and a box above it eight meters ahead, its shadow on the
     // floor behind it and to its left. The box is the checkerboard masked
     // at a half: its states alone cut nothing, so it casts all its shadow;
-    // its program clears its red cells, so light passes through it (D488).
+    // its program clears its red cells, so light passes through it.
     SceneFrame frame = looking();
     SceneDraw floor = box(8, 1, {1, 1, 1, 1});
     floor.model[0] = 10;
@@ -271,7 +271,7 @@ RAWFRAME_TEST(AGraphMaterialDrawsAsItsHandwrittenTwinDoes) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // ADR-0026's proof (D490): faded.material as rawframe.material writes it
+    // The proof: faded.material as rawframe.material writes it
     // (faded_graph.slang, checked word for word by material's tests) and
     // the same written by hand (faded.slang), each built by gen_shaders.py
     // as the cook builds a game's, draw a box lit by the default sun, its
@@ -361,7 +361,7 @@ RAWFRAME_TEST(AMovingMaterialRisesWithThePresentedWorldsTimeAndItsShadowWithIt) 
     };
     // The sun's shadows' scene again, its box red and drawn by
     // rising.material as rawframe.material writes it (rising_graph.slang),
-    // lifted a meter a second of the presented World's time (D691): in the
+    // lifted a meter a second of the presented World's time: in the
     // picture, through the depth prepass, and into the shadow map.
     SceneFrame frame = looking();
     SceneDraw floor = box(8, 1, {1, 1, 1, 1});
@@ -453,8 +453,8 @@ RAWFRAME_TEST(AMaterialKnowsTheFaceItIsDrawnOn) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // facing.material as rawframe.material writes it (facing_graph.slang,
-    // D705), unlit: green where the face drawn is the front, red where it
+    // facing.material as rawframe.material writes it (facing_graph.slang),
+    // unlit: green where the face drawn is the front, red where it
     // is the back. A box ahead shows its fronts; a box round the eye, its
     // backs alone.
     SceneFrame frame = looking();
@@ -493,8 +493,8 @@ RAWFRAME_TEST(AMaterialReadsItsParametersFromItsBlob) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // tinted.material as rawframe.material writes it (tinted_graph.slang,
-    // D708), unlit, its color its tint parameter's: the vector after its
+    // tinted.material as rawframe.material writes it (tinted_graph.slang),
+    // unlit, its color its tint parameter's: the vector after its
     // blob's nine, green as its default says, then red as an instance
     // would say. The material is the second of three, so the stride
     // between blobs is read too.
@@ -537,8 +537,8 @@ RAWFRAME_TEST(AMaterialReadsItsModelsAndItsEyesSpaces) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // spaced.material as rawframe.material writes it (spaced_graph.slang,
-    // D714), unlit: red by how far its point lies along its model's z, one
+    // spaced.material as rawframe.material writes it (spaced_graph.slang),
+    // unlit: red by how far its point lies along its model's z, one
     // on the engine box's face toward the eye, green by how squarely its
     // normal faces the eye in the eye's axes. Two boxes, near and small,
     // far and large, show the same yellow at the middle of the view, though

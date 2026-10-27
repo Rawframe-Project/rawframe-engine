@@ -1,4 +1,4 @@
-# The tooling protocol's runtime end (ADR-0032, D408): an endpoint a
+# The tooling protocol's runtime end: an endpoint a
 # composition selects, on a provider of its own, through which authoring
 # clients, test drivers, and agents inspect a running Runtime.
 rawframe_module(NAME world_tooling

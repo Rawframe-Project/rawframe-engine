@@ -1,4 +1,4 @@
-// Blockout documents (D846): solids read from their lines and written back
+// Blockout documents: solids read from their lines and written back
 // as read; each made into closed faces facing out, measured by the volume
 // they bound, so a face turned the wrong way or a cut that leaves a hole
 // open shows; and what is not a blockout refused by its line.

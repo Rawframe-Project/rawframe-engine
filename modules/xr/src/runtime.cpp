@@ -67,7 +67,7 @@ void setVariable(const char* name, const char* value) {
 #endif
 }
 
-/// The loader confined to the system's active runtime or `manifest` (D654):
+/// The loader confined to the system's active runtime or `manifest`:
 /// every override it would read removed, the one variable it takes a
 /// runtime's manifest from then set to `manifest` where one is named.
 /// Answers the overrides removed. The environment is the loader's only
@@ -121,7 +121,7 @@ result::Result<std::unique_ptr<Runtime>> Runtime::made(const RuntimeSettings& se
     if (!kVulkan) {
         return refused(XrError::Runtime, "the runtime cannot draw through Vulkan");
     }
-    // Hands tracked where the runtime offers it (D663), a tracked source
+    // Hands tracked where the runtime offers it, a tracked source
     // apart from the actions.
     RAWFRAME_TRY_ASSIGN(const bool kHands, offers(XR_EXT_HAND_TRACKING_EXTENSION_NAME));
     auto state = std::make_unique<State>();

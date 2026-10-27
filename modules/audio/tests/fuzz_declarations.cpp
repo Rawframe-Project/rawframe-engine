@@ -1,4 +1,4 @@
-// Coverage-guided fuzzing of the audio documents a Build carries (D242): a
+// Coverage-guided fuzzing of the audio documents a Build carries: a
 // mixer layout, and sound declarations read against the runners game's
 // layout. Neither has a writer, so the search looks for what breaks the
 // readers themselves.

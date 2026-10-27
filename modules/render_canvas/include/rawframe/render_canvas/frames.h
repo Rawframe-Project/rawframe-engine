@@ -1,6 +1,6 @@
 #pragma once
 
-// The canvas's frames as a device draws them (D279): what the canvas
+// The canvas's frames as a device draws them: what the canvas
 // participant queued in this Host iteration's `present`, the view's size,
 // and the textures its draws name, for the GPU half to record after it.
 
@@ -15,7 +15,7 @@
 
 namespace rawframe::render_canvas {
 
-/// A local player's region of the window in split-screen (ADR-0052, D364),
+/// A local player's region of the window in split-screen,
 /// in pixels from its top left, and the frame queued for it; none while
 /// its client has no World.
 struct CanvasRegion {
@@ -37,19 +37,19 @@ public:
     /// iteration's `presentation_extract`; none in an iteration that queued
     /// none, and while the canvas is idle.
     [[nodiscard]] virtual const CanvasFrame* queued() const noexcept = 0;
-    /// In split-screen (D364), each local player's region and frame, the
+    /// In split-screen, each local player's region and frame, the
     /// first's the frame `queued` gives, in the players' order; none while
     /// one player fills the window. Kept as `queued` is.
     [[nodiscard]] virtual std::span<const CanvasRegion> regionFrames() const noexcept = 0;
     /// The color around the regions, 8-bit sRGB: a constrained aspect's
-    /// bars (D369), else black.
+    /// bars, else black.
     [[nodiscard]] virtual std::array<std::uint8_t, 3> bars() const noexcept = 0;
     /// The view's size in pixels: `canvas.width` and `canvas.height` until
     /// what shows it sets another.
     [[nodiscard]] virtual std::uint32_t width() const noexcept = 0;
     [[nodiscard]] virtual std::uint32_t height() const noexcept = 0;
     /// The view's size from the next frame on, as the window it is shown in
-    /// has it (D281): the camera's aspect follows. Sides of nought are
+    /// has it: the camera's aspect follows. Sides of nought are
     /// ignored.
     virtual void resize(std::uint32_t width, std::uint32_t height) noexcept = 0;
     /// The texture the game names `id`, decoded and held, for the frame

@@ -36,7 +36,7 @@ namespace {
 
 constexpr diagnostics::EventIdentity kUiSummary{"ui", "ui_summary"};
 constexpr diagnostics::EventIdentity kFailed{"ui", "ui_failed"};
-// Navigation reaches more nodes than it ever has (D476): how many, so a
+// Navigation reaches more nodes than it ever has: how many, so a
 // test or a tool waits for the UI it will press rather than for time.
 constexpr diagnostics::EventIdentity kReachable{"ui", "ui_reachable"};
 constexpr diagnostics::EventIdentity kSubmitted{"ui", "ui_submitted"};
@@ -54,13 +54,12 @@ constexpr diagnostics::EventIdentity kRestyled{"ui", "ui_restyled"};
 constexpr diagnostics::EventIdentity kStylesUnread{"ui", "styles_unread"};
 constexpr diagnostics::EventIdentity kRearranged{"ui", "ui_rearranged"};
 constexpr diagnostics::EventIdentity kDocumentUnread{"ui", "ui_document_unread"};
-/// A styles or UI document's most bytes read again as an author edits it
-/// (D634).
+/// A styles or UI document's most bytes read again as an author edits it.
 constexpr std::size_t kMostDocumentBytes = std::size_t{4} * 1024 * 1024;
 #endif
 /// The decoded levels each image may hold.
 constexpr std::uint64_t kImageBudgetBytes = std::uint64_t{64} * 1024 * 1024;
-/// The fonts' bytes, all together (D386).
+/// The fonts' bytes, all together.
 constexpr std::uint64_t kFontBudgetBytes = std::uint64_t{64} * 1024 * 1024;
 constexpr std::string_view kProvided[] = {
     ui::kUiFrames.name, world_kest::kUiQueries.name, world_kest::kPresentationStarts.name};
@@ -90,7 +89,7 @@ struct WantedFont {
     bool done = false;
 };
 
-/// Where a hand points on a headset's panel (D605): a light dot, 14 logical
+/// Where a hand points on a headset's panel: a light dot, 14 logical
 /// pixels across, ringed dark so it shows on any UI, linear and
 /// premultiplied as a list's colors are.
 ui::Box cursorAt(std::array<float, 2> at) noexcept {
@@ -111,11 +110,11 @@ class UiParticipant final : public composition::Participant,
                             public world_kest::PresentationStarts {
 public:
     result::Status load(composition::ParticipantContext& context) {
-        // Where the player's settings are kept (D626), read whatever the
+        // Where the player's settings are kept, read whatever the
         // game is: a game without UI, and the web, keep none.
         [[maybe_unused]] const std::optional<std::string> kKept = context.configuration().path("ui.kept");
-        // How often a game read from its directory has its styles (D634) and
-        // UI document (D619) read again, in Host iterations; nought never,
+        // How often a game read from its directory has its styles and
+        // UI document read again, in Host iterations; nought never,
         // and never on the web.
         RAWFRAME_TRY_ASSIGN([[maybe_unused]] const std::uint64_t kReloadEvery,
                             context.configuration().unsignedInteger("ui.reload_every", 0));
@@ -146,14 +145,14 @@ public:
             return {};
         }
 #if RAWFRAME_FILE_SYSTEM
-        // An author's edits to the styles shown as the game plays (D634):
+        // An author's edits to the styles shown as the game plays:
         // the file, where the game is read from a directory.
         if (kReloadEvery != 0 && files->directory().has_value() && !files->description().styles.empty()) {
             reloadEvery_ = kReloadEvery;
             stylesPath_ = *files->directory() / files->description().styles;
             stylesText_ = fileText(stylesPath_, kMostDocumentBytes).value_or(std::string{});
         }
-        // And to its UI document, likewise (D619).
+        // And to its UI document, likewise.
         if (kReloadEvery != 0 && files->directory().has_value() && !files->description().ui.empty()) {
             reloadEvery_ = kReloadEvery;
             documentPath_ = *files->directory() / files->description().ui;
@@ -163,7 +162,7 @@ public:
         }
 #endif
 #if RAWFRAME_FILE_SYSTEM
-        // The player's settings, kept where the client keeps them (D626):
+        // The player's settings, kept where the client keeps them:
         // a file that does not read is said at the start, and written over
         // once the player changes one.
         if (kKept.has_value()) {
@@ -204,7 +203,7 @@ public:
                     return std::nullopt;
                 }
                 // Its arguments' values the node's `textValue` and
-                // `textSecond`, in its line's order (D647).
+                // `textSecond`, in its line's order.
                 std::array<localization::Argument, 2> arguments{};
                 for (std::size_t at = 0; at < kLabel->arguments.size(); ++at) {
                     arguments[at] = localization::Argument{.name = kLabel->arguments[at], .value = values[at]};
@@ -215,7 +214,7 @@ public:
                     return std::move(*words);
                 }
                 // A key its table lacks, or one not formatted, shows its key
-                // token, said once (SPEC-0033, D540): never nothing.
+                // token, said once: never nothing.
                 if (std::ranges::find(unformatted_, label) == unformatted_.end()) {
                     unformatted_.push_back(label);
                     emitter_.log(diagnostics::Severity::Warning,
@@ -245,8 +244,8 @@ public:
             RAWFRAME_TRY_ASSIGN(seat_, context.capability(ui::kAccessSeat));
         }
         RAWFRAME_TRY_ASSIGN(ui_, WorldUi::create(std::move(*settings)));
-        // The players' regions as the scene and the canvas have them (D364,
-        // D369): the layout for their count, else the whole window.
+        // The players' regions as the scene and the canvas have them: the layout for their count, else the whole
+        // window.
         const std::size_t kPlayers = std::max<std::size_t>(clients_->localPlayers(), 1);
         const auto& kLayouts = files->description().layouts;
         if (const auto kLayout = std::ranges::find(kLayouts, kPlayers, &world_kest::GameLayout::players);
@@ -257,7 +256,7 @@ public:
         }
         aspect_ = files->description().aspect;
         // The images the UI names, each read from the game's cooked content
-        // on its first naming (D378); without content, none is ever ready.
+        // on its first naming; without content, none is ever ready.
         std::optional<game_textures::TextureReading> reading;
         if (context.has(game_content::kGameContent.name) && context.cpuExecutor() != nullptr) {
             RAWFRAME_TRY_ASSIGN(game_content::GameContent * content, context.capability(game_content::kGameContent));
@@ -268,7 +267,7 @@ public:
                                                         .owner = context.owner(),
                                                         .scope = &context.scope(),
                                                         .clock = &context.clock()};
-                // The fonts, every one now: text waits for them (D386).
+                // The fonts, every one now: text waits for them.
                 if (!files->fonts().empty()) {
                     const content::ResourceTypeId kFontType{ui::kFontType};
                     RAWFRAME_TRY(content->admit(std::vector<content::AdmittedRepresentation>{
@@ -305,7 +304,7 @@ public:
                          {diagnostics::field("reason", *unkept_)});
         }
         // The window's UI where assistive technology reads it, when the
-        // program that runs the window asked for it (D571); a machine whose
+        // program that runs the window asked for it; a machine whose
         // platform cannot be reached plays on unread.
         if (seat_ != nullptr && ui_ != nullptr) {
             if (const result::Status kSeated = ui_->seatIn(*seat_); !kSeated.has_value()) {
@@ -319,7 +318,7 @@ public:
             }
         }
         // Presses anywhere in the window, a mouse being every local
-        // player's, against the UI as last laid out (D421).
+        // player's, against the UI as last laid out.
         if (pointing_ != nullptr && ui_ != nullptr) {
             pointing_->answer([this](float x, float y, bool pressing) -> std::optional<std::int64_t> {
                 if (failed_) {
@@ -332,13 +331,13 @@ public:
             });
         }
         // A press going down gives a text field the keyboard, or takes it,
-        // as the host reads the window's records (D426): the keys after it
+        // as the host reads the window's records: the keys after it
         // find the keyboard where it put it.
         if (pointing_ != nullptr && ui_ != nullptr) {
             pointing_->onRelease([this] {
                 if (!failed_) {
                     // Where the pointer is as the press is let go, which a
-                    // range dragged since the last frame moves to (D621).
+                    // range dragged since the last frame moves to.
                     ui_->hoverAt(pointing_->pointer());
                     ui_->release();
                 }
@@ -355,7 +354,7 @@ public:
                     ui_->wheelAt(x, y, deltaX, deltaY);
                 }
             });
-            // What a range holds, for the sample (D621).
+            // What a range holds, for the sample.
             pointing_->onValue([this](std::int64_t press) -> std::optional<float> {
                 return failed_ ? std::nullopt : ui_->valueOf(0, press);
             });
@@ -368,7 +367,7 @@ public:
                 }
             });
         }
-        // Navigation without a pointer (D430); a field it activates or
+        // Navigation without a pointer; a field it activates or
         // dismisses has the keyboard or gives it back at once, so the keys
         // after find it there.
         if (navigation_ != nullptr && ui_ != nullptr) {
@@ -390,7 +389,7 @@ public:
                         followCaret();
                         // What it activated, told as rarely as
                         // a player does it: a press, or a field
-                        // taking the keyboard (D505).
+                        // taking the keyboard.
                         emitter_.log(diagnostics::Severity::Info,
                                      kActivated,
                                      "navigation activated what it had focused",
@@ -451,16 +450,16 @@ public:
                                           .y = static_cast<float>(kPixels.y) / scale,
                                           .width = static_cast<float>(kPixels.width) / scale,
                                           .height = static_cast<float>(kPixels.height) / scale};
-            // Inside what the platform leaves clear (D589).
+            // Inside what the platform leaves clear.
             laidOut_.push_back(
                 views_ != nullptr && !panel_ ? insideSafeArea(kRegion, views_->window(), views_->safeArea()) : kRegion);
         }
-        // Words follow the locale a player chose (D539).
+        // Words follow the locale a player chose.
         if (text_ != nullptr && text_->revision() != reworded_) {
             reworded_ = text_->revision();
             ui_->reword();
         }
-        // The node under the mouse is hovered (D431).
+        // The node under the mouse is hovered.
         if (pointing_ != nullptr) {
             ui_->hoverAt(pointing_->pointer());
         }
@@ -477,7 +476,7 @@ public:
         drawn_ = &ui_->drawn();
         keepSettings();
         // On a headset's panel, where a hand points is drawn over all of
-        // the UI (D605): no window's cursor shows there.
+        // the UI: no window's cursor shows there.
         if (panel_ && pointing_ != nullptr) {
             if (const std::optional<std::array<float, 2>> kAt = pointing_->pointer(); kAt.has_value()) {
                 cursored_ = *drawn_;
@@ -490,11 +489,10 @@ public:
             }
         }
         // What screen readers asked since the last frame, done as
-        // navigation does it; a press waits for the players' input (D572).
+        // navigation does it; a press waits for the players' input.
         if (seat_ != nullptr) {
             // An access made once a client asks, as Android's, UI
-            // Automation's, AppKit's, and UIKit's are, said as it comes
-            // (D588).
+            // Automation's, AppKit's, and UIKit's are, said as it comes.
             if (!readSaid_ && seat_->access() != nullptr) {
                 readSaid_ = true;
                 emitter_.log(diagnostics::Severity::Info, kAccessible, "assistive technology reads the UI", {});
@@ -522,7 +520,7 @@ public:
             for (view::Submitted& given : ui_->takeSubmitted()) {
                 typing_->submit(std::move(given));
                 // Told each time, as a player submits rarely, so what waits
-                // on a field's text knows it was given (D489).
+                // on a field's text knows it was given.
                 emitter_.log(diagnostics::Severity::Info,
                              kSubmitted,
                              "a field's text was submitted",
@@ -668,17 +666,17 @@ public:
         return images_.texture(id, tick_);
     }
 
-    // What the host lends of the pointer, where the mouse is now (D422).
+    // What the host lends of the pointer, where the mouse is now.
     std::int64_t hovered() const override {
         return pointing_ != nullptr ? pointing_->hovered().value_or(0) : 0;
     }
 
-    // What a range holds now, the player's drags and presses in it (D621).
+    // What a range holds now, the player's drags and presses in it.
     std::optional<float> valueOf(std::size_t player, std::int64_t press) const override {
         return ui_ != nullptr && !failed_ ? ui_->valueOf(player, press) : std::nullopt;
     }
 
-    // What the UI document starts a node component as (D619).
+    // What the UI document starts a node component as.
     std::span<const std::byte> startOf(schema::ComponentTypeId component) const noexcept override {
         const auto kStart = std::ranges::find(starts_, component, &Start::component);
         return kStart == starts_.end() ? std::span<const std::byte>{} : std::as_bytes(std::span{&kStart->fields, 1});
@@ -691,7 +689,7 @@ public:
 
 private:
     /// The styles read again every `ui.reload_every` iterations, and given
-    /// to the UI where their text changed (D634); a document that does not
+    /// to the UI where their text changed; a document that does not
     /// read, or that the tree does not take, is said once a change.
     void restyleIfEdited([[maybe_unused]] std::uint64_t iteration) {
 #if RAWFRAME_FILE_SYSTEM
@@ -723,7 +721,7 @@ private:
 #endif
     }
 
-    /// The UI document read again as the styles are (D619): where its text
+    /// The UI document read again as the styles are: where its text
     /// changed, the nodes nested and given their words anew, and what the
     /// presentation components start as told presentation; a document that
     /// does not read, or that the game does not take, is said once a change
@@ -761,7 +759,7 @@ private:
 #endif
     }
 
-    /// The player's settings as they hold now (D626): those read, each the
+    /// The player's settings as they hold now: those read, each the
     /// UI holds over them.
     KeptValues keptNow() const {
         KeptValues values = held_;
@@ -774,7 +772,7 @@ private:
         return values;
     }
 
-    /// The player's settings written as they change (D626), one write at a
+    /// The player's settings written as they change, one write at a
     /// time, the changes made while one is under way by the next.
     void keepSettings() {
 #if RAWFRAME_FILE_SYSTEM
@@ -842,16 +840,16 @@ private:
     view::PlayerViews* views_ = nullptr;
     view::UiPointing* pointing_ = nullptr;
     /// The game's text, and its locale's revision the words were last
-    /// given in (D539).
+    /// given in.
     const world_localization::GameText* text_ = nullptr;
     std::uint64_t reworded_ = 0;
-    /// The labels already said to be unformatted (D540).
+    /// The labels already said to be unformatted.
     std::vector<std::uint64_t> unformatted_;
     view::UiTyping* typing_ = nullptr;
     view::UiNavigation* navigation_ = nullptr;
-    /// Where the window's UI is read for assistive technology (D571), and
+    /// Where the window's UI is read for assistive technology, and
     /// the press code of a node a screen reader pressed, not yet taken by
-    /// the players' input (D572).
+    /// the players' input.
     ui::AccessSeat* seat_ = nullptr;
     /// That assistive technology reads the UI has been said.
     bool readSaid_ = false;
@@ -863,8 +861,8 @@ private:
     const ui::DrawList* drawn_ = nullptr;
     std::uint32_t width_ = 1280;
     std::uint32_t height_ = 720;
-    /// Laid out on a headset's panel (D598), and what it drew with where a
-    /// hand points on it (D605).
+    /// Laid out on a headset's panel, and what it drew with where a
+    /// hand points on it.
     bool panel_ = false;
     ui::DrawList cursored_;
     std::uint64_t boxes_ = 0;
@@ -878,29 +876,28 @@ private:
     std::uint64_t fontsRead_ = 0;
     std::uint64_t glyphRuns_ = 0;
     std::uint64_t glyphsLeftOut_ = 0;
-    /// Presses the UI took (D421).
+    /// Presses the UI took.
     std::uint64_t presses_ = 0;
     /// Presses on no node: a player's, or a pointer's offered where the UI
-    /// is not (D588).
+    /// is not.
     std::uint64_t missed_ = 0;
-    /// Frames drawn with a hand's cursor on a headset's panel (D605).
+    /// Frames drawn with a hand's cursor on a headset's panel.
     std::uint64_t pointedFrames_ = 0;
     std::uint64_t tick_ = 0;
-    /// The most nodes navigation has reached (D476).
+    /// The most nodes navigation has reached.
     std::size_t mostReachable_ = 0;
-    /// The fields' texts submitted, told as each is (D489).
+    /// The fields' texts submitted, told as each is.
     std::uint64_t submittedTold_ = 0;
     bool failed_ = false;
-    /// The player's settings (D626): their file, its values as read, the
+    /// The player's settings: their file, its values as read, the
     /// node components' names in order, and the changes asked written.
 #if RAWFRAME_FILE_SYSTEM
     /// The styles' file and its text as last read, and how often it is read
-    /// again (D634); nought never.
+    /// again; nought never.
     std::uint64_t reloadEvery_ = 0;
     std::filesystem::path stylesPath_;
     std::string stylesText_;
-    /// The UI document's file and its text as last read, and what reads it
-    /// (D619).
+    /// The UI document's file and its text as last read, and what reads it.
     std::filesystem::path documentPath_;
     std::string documentText_;
     const world_kest::GameFiles* files_ = nullptr;
@@ -933,7 +930,7 @@ void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept
         .optionalCapabilities = kMaybe,
         .eligibility = {.roles = ~kServer},
         // Images are decoded, and fonts copied, on the CPU executor, and
-        // the player's settings written on the blocking-I/O one (D626);
+        // the player's settings written on the blocking-I/O one;
         // stopping writes the last of them, flushed to the disk, and says
         // what was drawn.
         .executor = {.cpu = true, .blockingIo = true, .quota = {.maximumPendingTasks = 64}},

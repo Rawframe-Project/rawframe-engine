@@ -62,7 +62,7 @@ std::string playerSlot(PlayerIdentity identity) {
     return slot;
 }
 
-/// The World's save and each player's (ADR-0057). The World's slot is
+/// The World's save and each player's. The World's slot is
 /// loaded when the World starts and kept every `save.every_seconds` and
 /// when it stops; a player's is applied to the player's entity when they
 /// join and kept when they leave. Captures happen between ticks on the Host

@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's sounds read by resource identity (ADR-0013, ADR-0025): every
+// A game's sounds read by resource identity: every
 // declared variant asked of the content store once, as a decoded clip for a
 // preloaded or on-demand sound or as its cooked bytes for a streamed one,
 // and held while the loader lives, so nothing a mixer plays is ever evicted
@@ -95,7 +95,7 @@ public:
     /// it wanted since the last frame, supplies what arrived, lets go the
     /// ones it let go for playing nothing, and, when the
     /// store's catalog was replaced, supplies each variant's new revision
-    /// once it is published (SPEC-0027 reload).
+    /// once it is published.
     [[nodiscard]] Served serve(audio::Sounds& into, std::uint64_t tick);
 
     struct State;

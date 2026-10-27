@@ -5,7 +5,7 @@
 // sounds are read from cooked content by resource identity, on-demand ones
 // when first wanted and released when idle, and new revisions replace old
 // ones when content reloads. A headset's head moves and turns a 3D
-// listener in its pose (D677).
+// listener in its pose.
 
 #include "rawframe/assets/errors.h"
 #include "rawframe/audio/decode.h"
@@ -35,7 +35,7 @@ namespace {
 
 constexpr auto kEmitterId = schema::ComponentTypeId::fromText("3c1f0a8e-5b2d-4e7a-9f64-1d8c2b7a0e53");
 constexpr auto kListenerId = schema::ComponentTypeId::fromText("9e4b7c21-6d0a-4f38-b5e2-7a1c3d9f8b06");
-/// A second emitter component, as a client's present systems set (D272).
+/// A second emitter component, as a client's present systems set.
 constexpr auto kOwnEmitterId = schema::ComponentTypeId::fromText("5b0e2d7c-1a93-4c68-8f2e-6d4a9b1c3e70");
 constexpr std::uint64_t kHum = 0xa1;
 constexpr std::uint64_t kClick = 0xa2;
@@ -205,7 +205,7 @@ RAWFRAME_TEST(CuesPlayOneShotsFromWhenFirstSeen) {
 }
 
 RAWFRAME_TEST(TwoEmittersOnOneEntityAreHeardApart) {
-    // D272: a replicated emitter and a client's own on one player, each
+    // A replicated emitter and a client's own on one player, each
     // with its own cue count and continuous sound.
     Rig rig;
     rig.spawn(std::nullopt, Listener{.active = true}, 0);

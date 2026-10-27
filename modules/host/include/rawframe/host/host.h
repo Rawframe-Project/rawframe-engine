@@ -20,8 +20,8 @@
 
 namespace rawframe::host {
 
-/// Why a Host run ended: SPEC-0012's exit reasons that a Host tells apart
-/// (D184). The process exits with `exitCode`, the reason's portable category;
+/// Why a Host run ended: the exit reasons that a Host tells apart.
+/// The process exits with `exitCode`, the reason's portable category;
 /// the reason itself, more precise, is logged once as the run ends.
 enum class HostExit : std::uint8_t {
     /// Stopped on request, or after `host.maximum_iterations`, in order.
@@ -55,7 +55,7 @@ enum class HostExit : std::uint8_t {
     ControlledOverload,
 };
 
-/// The reason's SPEC-0012 name, such as `invalid_launch_descriptor`.
+/// The reason's name, such as `invalid_launch_descriptor`.
 [[nodiscard]] std::string_view describe(HostExit exit) noexcept;
 /// The reason's portable OS category: 0 success, 64 invocation, 65 data,
 /// 69 unavailable, 70 software, 75 temporary, 78 configuration.
@@ -70,7 +70,7 @@ struct LogDestination {
     void* context = nullptr;
 };
 
-/// SPEC-0012's typed snapshot at the Host boundary: what an adapter for a
+/// The typed snapshot at the Host boundary: what an adapter for a
 /// supervisor or a listing reads, instead of parsing the log.
 struct HostStatus {
     composition::HostState state = composition::HostState::Starting;
@@ -99,26 +99,26 @@ struct HostRequest {
     /// stop: the Host drains, then stops. Setting it again changes nothing.
     const std::atomic<bool>* stopRequested = nullptr;
     /// Set by a program whose platform suspends it, from `suspending` until
-    /// `resumed` (SPEC-0025, D565), and while its headset shows nothing
-    /// (D679): each iteration's frame says so (`HostFrame::suspended`).
+    /// `resumed`, and while its headset shows nothing:
+    /// each iteration's frame says so (`HostFrame::suspended`).
     /// Null where nothing suspends a program.
     const std::atomic<bool>* suspended = nullptr;
     StatusObserver status;
-    /// The files the Host holds, from which every configured path is read
-    /// (D167); null where paths name the file system.
+    /// The files the Host holds, from which every configured path is read;
+    /// null where paths name the file system.
     const composition::HeldFiles* files = nullptr;
     /// Objects the caller owns and lends the participants by capability,
     /// such as a client's raw input from its window; each outlives the Host.
     std::span<const composition::LentCapability> lent;
     /// The shutdown budget a configuration naming none gets
     /// (`host.shutdown_budget_ms`): its participants' stop budgets must sum
-    /// within it (SPEC-0048).
+    /// within it.
     std::uint32_t defaultShutdownBudgetMs = 5000;
 };
 
 /// One Host run, driven by its caller one iteration at a time: a process's
 /// loop (`runHost`), or a browser's event loop, which calls `iterate` from
-/// each frame and never sleeps (D168). Constructing it composes and starts;
+/// each frame and never sleeps. Constructing it composes and starts;
 /// a refused start has already stopped and logged.
 class Host {
 public:
@@ -150,7 +150,7 @@ private:
 /// sink, the CPU and blocking-I/O executors, and the root cancellation scope;
 /// composes the plan; starts it; runs the Host schedule until asked to stop;
 /// drains; then stops the composition, the executors, and drains the sink,
-/// in that order (SPEC-0005 Host). It moves through SPEC-0012's lifecycle,
+/// in that order. It moves through the lifecycle,
 /// logging each state, activates at once, and drains on a stop request or an
 /// unhealthy report. Health is the worst of the participants' reports and the
 /// Host's own watch on its executors: work present while none finishes is

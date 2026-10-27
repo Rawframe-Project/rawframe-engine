@@ -31,7 +31,7 @@ constexpr std::string_view kMayUse[] = {input_kest::kFeed.name, view::kUiPointin
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
 
 /// The headset's controllers, both hands one device of the controller
-/// class (D596), numbered far past the window's devices (its keyboard,
+/// class, numbered far past the window's devices (its keyboard,
 /// mouse, and touch screen, then its gamepads counted up from four).
 constexpr input::DeviceId kHands{0x7852'0000};
 
@@ -45,7 +45,7 @@ struct HandControls {
 };
 
 /// A hand's pointer while its aim misses the panel: far outside it, where
-/// no UI is (D598).
+/// no UI is.
 constexpr std::array<float, 2> kAway = {-1'000'000, -1'000'000};
 
 HandControls handControls(std::string_view side) noexcept {
@@ -66,7 +66,7 @@ constexpr std::array<std::string_view, 9> kStateNames = {
 /// opened at load so the device is made by it, and a session made on the
 /// device the first time a frame is planned on it. Each Host iteration it
 /// begins the session's frame in `presentation_extract`, before anything
-/// draws, and tells the eyes the frame shows (D595); the frame is ended
+/// draws, and tells the eyes the frame shows; the frame is ended
 /// once drawn, or undrawn in `frame_end`.
 class HeadsetParticipant final : public composition::Participant, public render::Headset {
 public:
@@ -83,7 +83,7 @@ public:
                                                       .error()};
         }
         asked_ = true;
-        // The UI's panel (D597): 1280 by 720 pixels unless configured; a
+        // The UI's panel: 1280 by 720 pixels unless configured; a
         // side of nought shows none, the UI drawn over the eyes' mirror.
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kPanelWidth,
                             context.configuration().unsignedInteger("xr.panel_width", 1280));
@@ -106,8 +106,8 @@ public:
         if (context.has(view::kHeadsetAway.name)) {
             RAWFRAME_TRY_ASSIGN(away_, context.capability(view::kHeadsetAway));
         }
-        // The system's active runtime, or one a trusted configuration names
-        // (D654); never one an environment variable names.
+        // The system's active runtime, or one a trusted configuration names;
+        // never one an environment variable names.
         const std::string kManifest = context.configuration().path("xr.runtime").value_or("");
         auto runtime = Runtime::open({.manifest = kManifest});
         if (!runtime.has_value()) {
@@ -333,7 +333,7 @@ private:
                             .height = session_->images()[at].height});
         }
         eyes_.tell(eyes);
-        // Where each hand is for the frame's display time (D676): its
+        // Where each hand is for the frame's display time: its
         // controller's grip, else its tracked palm.
         std::array<std::optional<view::HeadsetHand>, 2> held;
         for (std::size_t side = 0; side < held.size(); ++side) {
@@ -348,7 +348,7 @@ private:
         held_.tell(held);
     }
 
-    /// The hands, as the client's controller device (D596): connected to
+    /// The hands, as the client's controller device: connected to
     /// the feed with the first frame, its buttons told as they change, its
     /// poses each frame they are located and once as they are lost. Hands
     /// the runtime does not bind, or a session without the input focus,
@@ -371,7 +371,7 @@ private:
             pose(kControls.grip, hand.grip, fed.grip);
             pose(kControls.aim, hand.aim, fed.aim);
             // Where it points on the panel, told before its select, so a
-            // press there is the UI's (D598).
+            // press there is the UI's.
             if (session_ != nullptr && session_->panel().has_value()) {
                 const std::array<float, 2> kPointed = pointOnPanel(hand.aim, panel_).value_or(kAway);
                 pointed(kControls.pointer, kPointed, pointed_[at]);
@@ -383,7 +383,7 @@ private:
         hover();
     }
 
-    /// The UI's pointer, where a hand points on the panel (D605): the right
+    /// The UI's pointer, where a hand points on the panel: the right
     /// hand's, else the left's, and away once neither points at it. While a
     /// headset shows the panel, the hands point; a mouse moved over the
     /// window points too until a hand next moves.
@@ -404,7 +404,7 @@ private:
         }
     }
 
-    /// What the game has the controllers feel (D600), taken from the feed
+    /// What the game has the controllers feel, taken from the feed
     /// each frame: felt in both hands, the one device being both.
     void feel() noexcept {
         if (feed_ == nullptr || !connected_) {
@@ -479,7 +479,7 @@ private:
     }
 
     /// The profiles the runtime presents the hands' controllers as, said
-    /// when they changed (D680).
+    /// when they changed.
     void profiled() noexcept {
         if (session_ == nullptr || session_->profiles() == profiles_) {
             return;
@@ -491,7 +491,7 @@ private:
                      {diagnostics::field("left", profiles_[0]), diagnostics::field("right", profiles_[1])});
     }
 
-    /// Whether the headset shows the person nothing (D679), told the
+    /// Whether the headset shows the person nothing, told the
     /// program where it lends a place for it.
     void tellAway(bool away) noexcept {
         if (away && !awayTold_) {
@@ -514,9 +514,9 @@ private:
     }
 
     view::HeadsetEyes eyes_;
-    /// Where the hands are each frame shown (D676).
+    /// Where the hands are each frame shown.
     view::HeadsetHands held_;
-    /// The hands the runtime tracks, told each frame (D663).
+    /// The hands the runtime tracks, told each frame.
     input::TrackedHands hands_;
     /// The client's devices, where its host lends them, and what the hands
     /// last told them.
@@ -525,11 +525,11 @@ private:
     std::array<Hand, 2> fed_{};
     std::array<std::array<float, 2>, 2> pointed_{kAway, kAway};
     /// The UI's pointer, where the host lends it, and where a hand last
-    /// told it (D605).
+    /// told it.
     view::UiPointing* pointing_ = nullptr;
     bool hovering_ = false;
     /// Where the host lends it, what tells the program the headset shows
-    /// nothing (D679); what it was last told, and how often it went away.
+    /// nothing; what it was last told, and how often it went away.
     view::HeadsetAway* away_ = nullptr;
     bool awayTold_ = false;
     std::uint64_t timesAway_ = 0;
@@ -548,7 +548,7 @@ private:
     bool asked_ = false;
     PanelSettings panel_;
     std::string unavailable_;
-    /// The loader's environment overrides ignored, if any (D654).
+    /// The loader's environment overrides ignored, if any.
     std::string ignored_;
     std::unique_ptr<Runtime> runtime_;
     std::unique_ptr<Session> session_;

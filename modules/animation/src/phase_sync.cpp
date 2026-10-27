@@ -1,4 +1,4 @@
-// Phase sync (SPEC-0035, D136) as the graph document holds it on a blend
+// Phase sync as the graph document holds it on a blend
 // or a blend space.
 
 #include "graph_parts.h"

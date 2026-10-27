@@ -35,18 +35,18 @@ public:
     /// predicts nothing.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> predictedComponents() const noexcept = 0;
     /// Components of other entities a predicting client steps its player
-    /// among (D39); empty for none.
+    /// among; empty for none.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> nearbyComponents() const noexcept = 0;
     /// A predictor for one client, running the game's predicted systems;
     /// `unsupported` for a game that predicts nothing.
     [[nodiscard]] virtual result::Result<std::unique_ptr<Predictor>> predictor() const = 0;
-    /// Each effect kind's class, by kind, for a predicting client's ledger
-    /// (D219); none for a game without effects.
+    /// Each effect kind's class, by kind, for a predicting client's ledger;
+    /// none for a game without effects.
     [[nodiscard]] virtual std::span<const EffectClass> effectClasses() const noexcept {
         return {};
     }
     /// The largest of the game's messages, in bytes, or nought for a game
-    /// that sends none (D266).
+    /// that sends none.
     [[nodiscard]] virtual std::size_t messageRecord() const noexcept {
         return 0;
     }
@@ -55,14 +55,14 @@ public:
     virtual void takeMessages(std::vector<PostedMessage>& into) noexcept {
         static_cast<void>(into);
     }
-    /// Appends the sessions the game's systems ended since last asked
-    /// (ADR-0073, D267). Asked on the Host thread between ticks.
+    /// Appends the sessions the game's systems ended since last asked.
+    /// Asked on the Host thread between ticks.
     virtual void takeTerminations(std::vector<PostedTermination>& into) noexcept {
         static_cast<void>(into);
     }
     /// Each of the game's commands' exact size, by its place among them,
     /// which a server checks every command it takes by; none for a game
-    /// without commands (D425).
+    /// without commands.
     [[nodiscard]] virtual std::span<const std::size_t> commandSizes() const noexcept {
         return {};
     }
@@ -73,7 +73,7 @@ public:
         static_cast<void>(commands);
     }
     /// The replicated components sent only to the connection whose player
-    /// holds them (D673); empty for a game that keeps none to its holder.
+    /// holds them; empty for a game that keeps none to its holder.
     [[nodiscard]] virtual std::span<const schema::ComponentTypeId> ownComponents() const noexcept {
         return {};
     }
@@ -85,20 +85,20 @@ public:
     /// Who is sent what: none for a game whose every entity every
     /// connection sees.
     [[nodiscard]] virtual const std::optional<InterestSettings>& interest() const noexcept = 0;
-    /// The game's districts streamed as units (D870), alive while the plan
+    /// The game's districts streamed as units, alive while the plan
     /// is; none for a game without them.
     [[nodiscard]] virtual const StreamedUnits* streamedUnits() const noexcept {
         return nullptr;
     }
     /// Entities one connection may have mapped at once, on both sides: a
-    /// game every client sees whole may need more than most (D742).
+    /// game every client sees whole may need more than most.
     [[nodiscard]] virtual std::size_t maximumMapped() const noexcept {
         return kMappedByDefault;
     }
     /// What the game's compensated queries gate by, from the server made
     /// for it until that server goes (null).
     virtual void attach(const InterestHistory* history) noexcept = 0;
-    /// The game's own admission rule (ADR-0043), asked on the Host thread
+    /// The game's own admission rule, asked on the Host thread
     /// after the engine's checks: a rejection, or none to admit.
     [[nodiscard]] virtual std::optional<network::Reject> admit(const network::Hello& hello) noexcept = 0;
 };

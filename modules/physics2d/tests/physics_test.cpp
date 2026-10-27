@@ -148,7 +148,7 @@ std::shared_ptr<const tilemap::Tilemap> level() {
 
 RAWFRAME_TEST(ACrateRestsOnATilemapsSolidTiles) {
     // A tiles body is its solid runs: the floor's two, so a crate falls
-    // through the tile that is not solid and rests on the floor (D859).
+    // through the tile that is not solid and rests on the floor.
     Scene scene{{.tilemaps = {BodyTilemap{.id = 7, .map = level()}}}};
     const world::EntityHandle kLevel = scene.tiles(7, kTiles);
     const world::EntityHandle kCrateEntity = scene.body(kCrate, {.x = 1.5, .y = 2});
@@ -275,7 +275,7 @@ RAWFRAME_TEST(TheSameWorldAndWritesGiveTheSameBits) {
     const std::vector<Pose2D> kSecond = kPlay(second);
     RAWFRAME_EXPECT(first.physics->digest() == second.physics->digest());
     // The same bits on every compiler and target the check builds, x86-64
-    // and wasm32 alike (D164): a moved digest says why in its commit.
+    // and wasm32 alike: a moved digest says why in its commit.
     RAWFRAME_EXPECT(first.physics->digest() == 0xfc0695d0dc1ed14fULL);
     RAWFRAME_EXPECT(kFirst.size() == kSecond.size() &&
                     std::memcmp(kFirst.data(), kSecond.data(), kFirst.size() * sizeof(Pose2D)) == 0);
@@ -489,7 +489,7 @@ RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {
     for (const Physics2DSettings& kSettings : {Physics2DSettings{.substeps = 0},
                                                Physics2DSettings{.bodyCapacity = 0},
                                                Physics2DSettings{.gravityY = std::nanf("")},
-                                               // A history past 64 MiB (D208).
+                                               // A history past 64 MiB.
                                                Physics2DSettings{.historyTicks = 1024}}) {
         const auto kMade = Physics2D::create(kSettings);
         RAWFRAME_EXPECT(!kMade.has_value() && kMade.error().code() == code(Physics2DError::InvalidSettings));

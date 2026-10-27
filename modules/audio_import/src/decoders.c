@@ -1,7 +1,7 @@
 // miniaudio's MP3 decoder and stb_vorbis in one translation unit, with every
 // miniaudio function internal to it so it never meets the runtime's device
 // layer. Only this file's two functions and stb_vorbis's own leave it
-// (ADR-0058: source decoders live in import tooling only).
+// (source decoders live in import tooling only).
 
 #include "decoders.h"
 
@@ -69,8 +69,7 @@ static void release_held(void) {
 #define MA_NO_RESOURCE_MANAGER
 #define MA_NO_NODE_GRAPH
 #define MA_NO_ENGINE
-// WAVE is read by the audio module's own decoder; FLAC is deferred by
-// SPEC-0036.
+// WAVE is read by the audio module's own decoder; FLAC is not taken yet.
 #define MA_NO_WAV
 #define MA_NO_FLAC
 
@@ -100,7 +99,7 @@ enum rawframe_decode_result rawframe_decode_compressed(const void* bytes,
     out->samples = NULL;
     out->frames = 0;
     // Float at the stream's own channels and rate: nothing is converted or
-    // resampled here (ADR-0038: resampling is the mixer's alone).
+    // resampled here (resampling is the mixer's alone).
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 0, 0);
     config.encodingFormat = form == rawframe_compressed_vorbis ? ma_encoding_format_vorbis : ma_encoding_format_mp3;
     ma_decoder decoder;

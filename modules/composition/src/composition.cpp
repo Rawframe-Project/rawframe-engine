@@ -255,7 +255,7 @@ void Composition::unwind(std::size_t started) noexcept {
     for (std::size_t index = slots_.size(); index-- > 0;) {
         Slot& slot = slots_[index];
         // Its destruction is its shutdown too: one past its stop budget is
-        // named, as a stop is, so a slow shutdown says whose it was (D489).
+        // named, as a stop is, so a slow shutdown says whose it was.
         const execution::MonotonicInstant kDestroying = services_.clock->now();
         slot.object.reset();
         if (const execution::MonotonicDuration kDestroyed = services_.clock->now() - kDestroying;

@@ -1,4 +1,4 @@
-// A provider under link conditions (D805): sends held the latency before the
+// A provider under link conditions: sends held the latency before the
 // inner provider has them, arrivals held as long, streams kept in order, and
 // datagrams lost and doubled as seeded.
 

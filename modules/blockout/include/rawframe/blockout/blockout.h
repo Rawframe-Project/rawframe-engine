@@ -1,6 +1,6 @@
 #pragma once
 
-// A blockout document (SPEC-0051's blockout row, D846): a level's rough
+// A blockout document: a level's rough
 // shapes as text, one solid a line, made into one mesh that a scene draws
 // and a static body collides with (a `rawframe.physics3d.body` of shape
 // Mesh). Written by hand, by a tool, or by Studio's Blockout mode; cooked
@@ -88,7 +88,7 @@ struct BlockoutLimits {
 /// (`OverLimit` of the mesh family) more triangles than the limit.
 [[nodiscard]] result::Result<mesh::Mesh> meshOf(const Blockout& blockout, const BlockoutLimits& limits = {});
 
-/// What a solid covers seen from above (D851): the least and the most X
+/// What a solid covers seen from above: the least and the most X
 /// and Z its corners reach, placed and turned, as a plan draws it.
 struct Footprint {
     double minX = 0;

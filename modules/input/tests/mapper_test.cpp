@@ -1,9 +1,9 @@
-// The mapping runtime against ADR-0037's validation list: edges accounted
+// The mapping runtime against the validation list: edges accounted
 // once to each domain and never lost within a tick, deadzones and
 // thresholds as declared, routing by priority and recency with consumption
 // that blocks, the hygiene set, the text gate, players kept apart, and
-// presses the UI takes at the pointer hidden from every action (D421), and
-// keys typed into a field hidden from gated actions until let go (D430).
+// presses the UI takes at the pointer hidden from every action, and
+// keys typed into a field hidden from gated actions until let go.
 
 #include "rawframe/input/feed.h"
 #include "rawframe/input/mapper.h"
@@ -293,7 +293,7 @@ RAWFRAME_TEST(AKeyTypedIntoAFieldIsItsUntilLetGo) {
     Rig rig;
     RAWFRAME_EXPECT(rig.mapper->activate(kFirst, kChat).has_value());
     // Space goes down into a field; the field lets go before it comes up:
-    // no jump, until space is pressed again (D430).
+    // no jump, until space is pressed again.
     rig.mapper->setTextEditing(true);
     rig.press(kKeyboard, key("space"));
     rig.press(kKeyboard, key("key_t"));
@@ -333,7 +333,7 @@ RAWFRAME_TEST(PlayersNeverShareActionState) {
     rig.press(kPad, pad("face_south"));
     RAWFRAME_EXPECT(!rig.now(kJump, kFirst).on && rig.mapper->statistics().unpairedEvents == 1);
     // The paired pads' three events are counted as a gamepad's, and the
-    // unpaired one as no class's (D559).
+    // unpaired one as no class's.
     RAWFRAME_EXPECT((rig.mapper->statistics().events == std::array<std::uint64_t, 5>{0, 0, 3, 0, 0}));
     // A device is paired once.
     RAWFRAME_EXPECT(!rig.mapper->pair(kSecondPad, DeviceClass::Gamepad, kFirst).has_value());
@@ -408,7 +408,7 @@ RAWFRAME_TEST(AHapticIsFeltOnThePlayersGamepadsAndTheLatestWins) {
     feed.feel(commands[0]);
     feed.feel({.device = kPad, .haptic = {.amplitude = 1, .milliseconds = 40}});
     feed.feel({.device = kSecondPad, .haptic = kFelt});
-    // Each output takes its own devices' (D600): the second pad's waits
+    // Each output takes its own devices': the second pad's waits
     // for whoever takes it.
     std::vector<HapticCommand> taken;
     const std::array kFirstPad{kPad};

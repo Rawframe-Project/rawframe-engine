@@ -16,7 +16,7 @@
 
 namespace rawframe::world_runtime {
 
-/// What the World's last ticks took (D838), for a profiler: each tick's
+/// What the World's last ticks took, for a profiler: each tick's
 /// duration, oldest first, and each system's time over the same ticks.
 struct TickProfile {
     /// The ticks counted, and the last one's index.
@@ -72,7 +72,7 @@ public:
 
     /// Counts World replacements. A participant that keeps entity handles
     /// checks it and lets them go when it changes: they name nothing in the
-    /// new World (SPEC-0011 publication).
+    /// new World.
     [[nodiscard]] virtual std::uint64_t generation() const noexcept = 0;
     /// An empty World with the running one's registry and settings, for a
     /// restore to build off to the side. `failed_precondition` before start.
@@ -84,7 +84,7 @@ public:
     /// Runs no tick at or past `limit` until the limit moves or is lifted, so
     /// something can happen at an exact tick between two of them.
     virtual void holdAt(std::optional<world::TickIndex> limit) noexcept = 0;
-    /// Pauses the World or lets it run again (D806). Paused, it runs no tick
+    /// Pauses the World or lets it run again. Paused, it runs no tick
     /// but those stepped, and the time it stands is not owed, so it does not
     /// hurry once let go; steps not yet run are dropped when it is.
     virtual void pause(bool paused) noexcept = 0;
@@ -95,10 +95,10 @@ public:
     /// Stepped ticks not yet run.
     [[nodiscard]] virtual std::uint32_t stepsLeft() const noexcept = 0;
     /// Time the World stood still on purpose inside a tick, a debugger's
-    /// breakpoint holding it (D492): owed no ticks, so carrying on runs the
+    /// breakpoint holding it: owed no ticks, so carrying on runs the
     /// game from where it stood, not ahead to catch up; nor is it behind.
     virtual void excuse(execution::MonotonicDuration stood) noexcept = 0;
-    /// The last ticks' profile, at most a window's (D838).
+    /// The last ticks' profile, at most a window's.
     [[nodiscard]] virtual TickProfile profile() const = 0;
 };
 

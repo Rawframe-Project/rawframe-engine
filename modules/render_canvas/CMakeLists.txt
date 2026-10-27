@@ -1,4 +1,4 @@
-# The 2D canvas (ADR-0045, SPEC-0024): `rawframe.canvas`'s sprites extracted
+# The 2D canvas: `rawframe.canvas`'s sprites extracted
 # from a client's World and queued into batched quads. Client only: the
 # dedicated server carries the components as plain values and links none of
 # this. Its textures are read decoded from cooked content; the device half,

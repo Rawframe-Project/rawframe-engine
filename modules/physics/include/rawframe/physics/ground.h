@@ -4,7 +4,7 @@
 
 namespace rawframe::physics {
 
-/// What a character stands on after a step (SPEC-0037 §11's ground state),
+/// What a character stands on after a step, its ground state,
 /// the same in both dimensions.
 enum class Ground : std::uint8_t {
     Airborne = 0,

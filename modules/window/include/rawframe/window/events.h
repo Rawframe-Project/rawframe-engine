@@ -1,12 +1,12 @@
 #pragma once
 
-// What a window system reports: SPEC-0025's closed notification and raw
+// What a window system reports: the closed notification and raw
 // input vocabularies, each record owned and in the order the platform gave
 // it. Positions and sizes are logical (the platform's scaled units) unless
-// a type says pixels. Gamepads are here too, since Maul Window owns them
-// (D126); their records are about no window. What Maul Window reports past
+// a type says pixels. Gamepads are here too, since Maul Window owns them;
+// their records are about no window. What Maul Window reports past
 // these vocabularies (pens, drags in progress, system facts) waits for the
-// amendment that admits it (D248).
+// amendment that admits it.
 
 #include <compare>
 #include <cstdint>
@@ -71,7 +71,7 @@ struct Rect {
     float height = 0;
 };
 
-/// SPEC-0025's closed generation-1 modes; nothing is called exclusive.
+/// The closed generation-1 modes; nothing is called exclusive.
 enum class Mode : std::uint8_t {
     Windowed,
     BorderlessFullscreen,
@@ -91,10 +91,10 @@ enum class RequestKind : std::uint8_t {
     CursorMode,
     TextInput,
     AccessibilityRoot,
-    /// A file dialog (D918), its paths read with `Windows::dialogFiles`.
+    /// A file dialog, its paths read with `Windows::dialogFiles`.
     FileDialog,
     /// The clipboard's text written, and read, its text then read with
-    /// `Windows::clipboardText` (D999).
+    /// `Windows::clipboardText`.
     ClipboardWrite,
     ClipboardRead
 };
@@ -215,7 +215,7 @@ enum class GamepadAxis : std::uint8_t {
 /// A gamepad's button or axis. `raw` means the pad is not mapped and
 /// `control` is the platform's own button or axis number; otherwise it is a
 /// GamepadButton or GamepadAxis. Values are as the platform gave them: no
-/// dead zone is applied here (ADR-0037).
+/// dead zone is applied here.
 struct GamepadInput {
     std::uint8_t control = 0;
     bool raw = false;
@@ -279,7 +279,7 @@ enum class EventKind : std::uint8_t {
     /// The window moved to the monitor in `monitor`.
     DisplayChanged,
     /// An accessibility client first asked for the window's tree, on the
-    /// platforms that say so (Win32, macOS, iOS, Android; D576).
+    /// platforms that say so (Win32, macOS, iOS, Android).
     AccessibilityRequested,
     GamepadAdded,
     GamepadRemoved,

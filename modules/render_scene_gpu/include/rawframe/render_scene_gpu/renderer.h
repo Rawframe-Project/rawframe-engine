@@ -1,16 +1,16 @@
 #pragma once
 
-// The 3D scene's GPU half (SPEC-0024's scene contract, D284): the draws the
-// queue stage built recorded into the frame `render` owns (D285), first. Each mesh they name is
+// The 3D scene's GPU half: the draws the
+// queue stage built recorded into the frame `render` owns, first. Each mesh they name is
 // uploaded once, positions and normals together; each frame writes the
 // draws' placements and the frame's view and light, and records a depth
 // prepass, the models lit by the sun and sky into a scene-linear FP16
-// target, pre-exposed (ADR-0047), over a reversed-Z depth (ADR-0051), and
+// target, pre-exposed, over a reversed-Z depth, and
 // the frame's picture: the scene target mapped for display by AgX into
 // sRGB, every pixel of it.
 // Consecutive draws of one mesh are one instanced draw.
 //
-// Its own module, apart from the CPU half, as the canvas's is (D278): the
+// Its own module, apart from the CPU half, as the canvas's is: the
 // device is not on every client yet. Client only.
 
 #include "rawframe/mesh/mesh.h"
@@ -34,26 +34,25 @@ namespace rawframe::render_scene_gpu {
 
 /// The mesh a draw names; none for one that cannot be drawn.
 using MeshSource = std::function<std::shared_ptr<const mesh::Mesh>(std::uint64_t id)>;
-/// The texture a material samples, decoded; none while it is not ready
-/// (D309).
+/// The texture a material samples, decoded; none while it is not ready.
 using TextureSource = std::function<std::shared_ptr<const texture::Texture>(std::uint64_t id)>;
 
-/// SPEC-0024's limit points as the scene's GPU half has them.
+/// The limit points as the scene's GPU half has them.
 struct RendererLimits {
     /// Meshes held on the device at once; a draw naming one past them is
     /// left out.
     std::size_t maximumMeshes = 1024;
     /// Textures held at once; a material sampling one past them samples
-    /// white (D309).
+    /// white.
     std::size_t maximumTextures = 256;
-    /// SPEC-0024's `upload_bytes_per_frame`: the frame's placements first,
+    /// The `upload_bytes_per_frame`: the frame's placements first,
     /// then meshes, then the materials' textures; a mesh that would pass it
     /// waits for a later frame (`deferred`), its draws left out until then,
     /// and a texture waits sampled as white. Three quarters of what the
     /// device uploads in a frame; a mesh or texture larger than what is left
     /// after the placements is never drawn.
     std::uint64_t uploadBytesPerFrame = render::kFrameUploadBytes / 4 * 3;
-    /// ADR-0053's live particles a view holds (D353): the pool every
+    /// The live particles a view holds: the pool every
     /// emitter's ring is found in, 48 bytes a particle; an emitter whose
     /// ring it has no room for is left out.
     std::uint32_t maximumParticles = 65536;
@@ -70,71 +69,71 @@ struct RendererStatistics {
     /// Models left out: their mesh not given, deferred, or past the meshes
     /// held.
     std::uint64_t modelsLeftOut = 0;
-    /// Posed models whose vertices were skinned, summed over frames (D508).
+    /// Posed models whose vertices were skinned, summed over frames.
     std::uint64_t modelsSkinned = 0;
     std::uint64_t meshesUploaded = 0;
-    /// The materials' textures uploaded (D309), and their bytes, apart
+    /// The materials' textures uploaded, and their bytes, apart
     /// from the meshes'.
     std::uint64_t texturesUploaded = 0;
     std::uint64_t textureBytes = 0;
     std::uint64_t uploadBytes = 0;
     std::uint64_t uploadsDeferred = 0;
     /// Frames antialiased over time, and those of them that reused the
-    /// picture before (D291).
+    /// picture before.
     std::uint64_t framesResolved = 0;
     std::uint64_t historyReused = 0;
-    /// Frames whose exposure was metered from what they saw (D293).
+    /// Frames whose exposure was metered from what they saw.
     std::uint64_t framesMetered = 0;
-    /// Frames antialiased by FXAA (D296).
+    /// Frames antialiased by FXAA.
     std::uint64_t framesSmoothed = 0;
-    /// Frames with ambient occlusion (D327), with bloom (D328), with
-    /// screen-space reflections (D331), with motion blur (D334), with depth
-    /// of field (D336), and with contact shadows (D338).
+    /// Frames with ambient occlusion, with bloom, with
+    /// screen-space reflections, with motion blur, with depth
+    /// of field, and with contact shadows.
     std::uint64_t framesOccluded = 0;
     std::uint64_t framesBloomed = 0;
     std::uint64_t framesReflected = 0;
     std::uint64_t framesMotionBlurred = 0;
     std::uint64_t framesFocused = 0;
     std::uint64_t framesContactShadowed = 0;
-    /// Decals drawn, summed over the frames (D339).
+    /// Decals drawn, summed over the frames.
     std::uint64_t decalsDrawn = 0;
-    /// Reflection probes drawn, summed over the frames (D340).
+    /// Reflection probes drawn, summed over the frames.
     std::uint64_t probesDrawn = 0;
-    /// Frames whose models' passes were multisampled (D343).
+    /// Frames whose models' passes were multisampled.
     std::uint64_t framesMultisampled = 0;
     /// Post processes run, summed over the frames, and those left out: by
     /// the scene's stage, or over a composed picture no recorder drew
-    /// (`final_output`, D350, D351).
+    /// (`final_output`).
     std::uint64_t postProcessesRun = 0;
     std::uint64_t postProcessesLeftOut = 0;
     /// Particle emitters drawn, summed over the frames; those left out for
-    /// want of room in the pool; and the particles they spawned (D353).
+    /// want of room in the pool; and the particles they spawned.
     std::uint64_t emittersDrawn = 0;
     std::uint64_t emittersLeftOut = 0;
     std::uint64_t particlesSpawned = 0;
-    /// Trails and beams drawn, summed over the frames (D354).
+    /// Trails and beams drawn, summed over the frames.
     std::uint64_t ribbonsDrawn = 0;
     /// Models drawn by their material's own program in every pass that runs
     /// a material's code, summed over the frames, and those drawn by the
     /// engine's own in any until its pipelines are made, or for good where
-    /// they were refused (D485, D487).
+    /// they were refused.
     std::uint64_t programModelsDrawn = 0;
     std::uint64_t programModelsWaiting = 0;
     /// Material programs the device refused, and why the first was: its
-    /// shader or a pipeline of it, as the device said (D501).
+    /// shader or a pipeline of it, as the device said.
     std::uint64_t programsRefused = 0;
     std::string programRefusal;
-    /// Material programs whose pipelines are held now (D759).
+    /// Material programs whose pipelines are held now.
     std::uint64_t programsHeld = 0;
 };
 
 /// The bytes of one draw's placement as the scene pipeline reads it: the
 /// model's rows, the normals' columns, the color, the model's rows the
-/// frame before (D291), and its material's place among the frame's (D303).
+/// frame before, and its material's place among the frame's.
 inline constexpr std::uint32_t kInstanceBytes = 152;
 
-/// A frame's light as its scene target held it before the tonemapper
-/// (D326): linear Rec. 709 in candela per square meter, red, green, and
+/// A frame's light as its scene target held it before the tonemapper:
+/// linear Rec. 709 in candela per square meter, red, green, and
 /// blue for each pixel, rows top first. Divided by the exposure the frame
 /// names: a metering camera's is off by what its metering moved.
 class TextureView;
@@ -153,7 +152,7 @@ public:
     [[nodiscard]] static result::Result<std::unique_ptr<SceneRenderer>> create(render::Device& device,
                                                                                RendererLimits limits = {});
     /// Drawing with `sharing`'s shaders, samplers, and pipelines, on its
-    /// device (D361): a second view's renderer makes none of its own, so
+    /// device: a second view's renderer makes none of its own, so
     /// the device compiles each once.
     [[nodiscard]] static result::Result<std::unique_ptr<SceneRenderer>>
     create(render::Device& device, const SceneRenderer& sharing, RendererLimits limits = {});
@@ -163,7 +162,7 @@ public:
     /// What the next frame draws: `frame`'s draws, the meshes they name
     /// and the textures their materials sample uploaded if they must be;
     /// nothing for none; and `views`' pictures, which recorders before it
-    /// draw, sampled by the materials naming their render textures (D361).
+    /// draw, sampled by the materials naming their render textures.
     /// All are held until the frame is made.
     void prepare(const render_scene::SceneFrame* frame,
                  MeshSource meshes,
@@ -177,7 +176,7 @@ public:
     [[nodiscard]] const RendererStatistics& statistics() const noexcept;
 
     /// What the scene draws over the composed picture (`final_output` post
-    /// processes, D351): a recorder of its own, to be recorded after every
+    /// processes): a recorder of its own, to be recorded after every
     /// other that draws the picture (the canvas), drawing only what the
     /// scene's frame in the same frame asks. Without it, those are left
     /// out and counted.
@@ -185,7 +184,7 @@ public:
 
     /// Reads back the light of the next frame submitted with a scene, one
     /// the device reads back at once (`render::kReadbackBytes`), for a
-    /// tool (D326).
+    /// tool.
     void capture() noexcept;
     /// The light captured, once the device finished its frame; given once.
     /// Never waits.
@@ -200,11 +199,11 @@ private:
     std::unique_ptr<State> state_;
 };
 
-/// Where a view's picture is composed into the frame's (D362): its top
+/// Where a view's picture is composed into the frame's: its top
 /// left, in pixels; the size it covers there, nought for its own (a view
-/// drawn at a render scale is scaled to its region's, D373); and the
+/// drawn at a render scale is scaled to its region's); and the
 /// color, 8-bit sRGB, the frame's picture is cleared to around it (a
-/// constrained aspect's bars, D369).
+/// constrained aspect's bars).
 struct Placement {
     std::uint32_t x = 0;
     std::uint32_t y = 0;
@@ -213,7 +212,7 @@ struct Placement {
     std::array<std::uint8_t, 3> bars{};
 };
 
-/// Where a view drawn apart covers an image of the frame's target (D595):
+/// Where a view drawn apart covers an image of the frame's target:
 /// the image's place among the target's, and where its picture lies over
 /// it (left, top, width, height in the image's pixels, past its edges as
 /// far as it reaches).
@@ -222,7 +221,7 @@ struct Covering {
     std::array<float, 4> viewport{};
 };
 
-/// A view drawn apart on the device (ADR-0052, D361, D362): its picture, a
+/// A view drawn apart on the device: its picture, a
 /// texture kept from frame to frame, `width` by `height`, 8-bit sRGB, that
 /// a scene renderer of its own draws its view's frame into as it would a
 /// frame's picture, display-referred, its post processes over it. A render
@@ -249,7 +248,7 @@ public:
     /// own); nothing for none. Placed, its picture is then copied into the
     /// frame's there, as far as the frame reaches, the frame's picture
     /// cleared first if nothing drew into it before. Covering, its picture
-    /// covers one of the target's images instead (a headset's eye, D595).
+    /// covers one of the target's images instead (a headset's eye).
     void prepare(const render_scene::SceneFrame* frame,
                  MeshSource meshes,
                  TextureSource textures = {},
@@ -263,7 +262,7 @@ public:
     /// submitted frame drew it.
     [[nodiscard]] bool missed() const noexcept;
     /// The frame prepared draws what the view shows already, so it is not
-    /// missed when the frame is not drawn (D979).
+    /// missed when the frame is not drawn.
     void stands() noexcept;
 
     [[nodiscard]] result::Status declare(render::Frame& frame) override;

@@ -1,10 +1,10 @@
-// Particles on lavapipe (D353): a burst is born into its emitter's ring
+// Particles on lavapipe: a burst is born into its emitter's ring
 // and drawn where it starts, stays drawn the frames after with nothing
 // spawned, and is gone past its life; a particle moving with drag is
 // drawn where the closed form puts it; one behind a model is hidden; an
 // emitting material with no opacity adds its light over what is behind;
 // an emitter whose ring the pool cannot hold is left out and counted; and
-// a ribbon is drawn across its points, its width about them (D354).
+// a ribbon is drawn across its points, its width about them.
 
 #include "fixture.h"
 #include "rawframe/material/material.h"
@@ -233,7 +233,7 @@ RAWFRAME_TEST(ARibbonIsDrawnAcrossItsPoints) {
                     at(*kCrossed, 16, 31)[0],
                     at(*kCrossed, 32, 20)[0],
                     at(*kCrossed, 40, 34)[0]);
-        // Within a step of red: Metal on Apple's GPU rounds green to 1 (D406).
+        // Within a step of red: Metal on Apple's GPU rounds green to 1.
         RAWFRAME_EXPECT(kMiddle[0] == 255 && kMiddle[1] <= 1 && kMiddle[2] <= 1);
         RAWFRAME_EXPECT(at(*kCrossed, 16, 31)[0] == 255 && at(*kCrossed, 40, 34)[0] == 255);
         RAWFRAME_EXPECT(at(*kCrossed, 32, 20) == at(*kSky, 32, 20));
@@ -254,7 +254,7 @@ RAWFRAME_TEST(ALineIsDrawnInItsOwnColor) {
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
         return render_scene::engineMesh(id);
     };
-    // A line (D464) across the view five meters ahead, green, on the
+    // A line across the view five meters ahead, green, on the
     // material after the frame's one, which the renderer makes: its color
     // stands as it is.
     SceneFrame lined = seen({}, red(), 0);

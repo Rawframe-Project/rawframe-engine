@@ -1,10 +1,10 @@
 #pragma once
 
-// Importing animation (ADR-0039, SPEC-0035): a glTF 2.0 skin and its
+// Importing animation: a glTF 2.0 skin and its
 // animations, as `.gltf` with embedded or sibling buffers or as `.glb`, made
 // into one skeleton document and a clip document for each animation. The
 // documents are the authority from then on: an author reviews them, the
-// cook reads them (D125), and importing again is a new authoring event.
+// cook reads them, and importing again is a new authoring event.
 // Import tooling only: the parser here is trusted with an author's own
 // files and never links into a client or a server.
 //
@@ -12,7 +12,7 @@
 // - The first skin. Its joints become the bones, parents before children,
 //   siblings in the glTF's child order. A joint's parent is a joint, but
 //   for exactly one root; each bone's bind pose is its node's rest
-//   transform, and its target is derived from its name path (SPEC-0035),
+//   transform, and its target is derived from its name path,
 //   an unnamed joint named `joint<index>`.
 // - What places the root (its parents that are not joints, and the scene)
 //   is folded into the root's bind pose and into every key of the root's
@@ -28,7 +28,7 @@
 //   its first key there. An animation of one instant lasts a thirtieth of a
 //   second.
 // - Required extensions: KHR_mesh_quantization only. Units and axes are
-//   glTF's, which are Rawframe's (ADR-0046).
+//   glTF's, which are Rawframe's.
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/skeleton.h"
@@ -54,7 +54,7 @@ struct ImportSettings {
     base::Bits128 skeleton;
     /// Clips repeat rather than hold their ends.
     bool loop = false;
-    /// Clips of differences from this basis rather than of poses (D137):
+    /// Clips of differences from this basis rather than of poses:
     /// the bind pose, or each channel's first key.
     std::optional<animation::AdditiveBasis> additive;
     /// The source, and each buffer it reads, at most.
@@ -89,7 +89,7 @@ struct SkinJoint {
 
 /// Each joint's target identity, in the skin's order, derived from its
 /// name path from the root as the skeleton's bones' are, so a mesh skinned
-/// to the skin names the bones of the skeleton imported from it (D508).
+/// to the skin names the bones of the skeleton imported from it.
 /// Refuses (`BadSource`) joints with no root or more than one, a parent
 /// past the joints, or a joint its own ancestor.
 [[nodiscard]] result::Result<std::vector<base::Bits128>> jointTargets(std::span<const SkinJoint> joints);

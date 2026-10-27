@@ -17,12 +17,12 @@ namespace rawframe::world_runtime {
 ///   world.overload_ms                 how long the World may stay more than a
 ///                                     second behind before it reports itself
 ///                                     overloaded, unhealthy; 0 never (30000)
-///   world.edited                      an editor's World (D912): its ticks
+///   world.edited                      an editor's World: its ticks
 ///                                     run only the systems that run while
 ///                                     editing, so nothing plays (false)
 ///
 /// And `rawframe.world_runtime.checkpoints`, which restores the World from a
-/// SPEC-0011 checkpoint before the first tick and captures checkpoints at
+/// checkpoint before the first tick and captures checkpoints at
 /// exact ticks, between two of them, for a World whose game provides a
 /// CheckpointPlan:
 ///
@@ -32,7 +32,7 @@ namespace rawframe::world_runtime {
 void registerParticipants(composition::ParticipantRegistrar& registrar) noexcept;
 
 #if RAWFRAME_FILE_SYSTEM
-/// Contributes `rawframe.world_runtime.saves` (ADR-0057), for a host whose
+/// Contributes `rawframe.world_runtime.saves`, for a host whose
 /// World keeps a game's save: it loads the slot when the World starts and
 /// keeps it at the declared points, writing on the blocking-I/O executor,
 /// which the composition must have. For a game that declares a save:

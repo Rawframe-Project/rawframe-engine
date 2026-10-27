@@ -1,7 +1,7 @@
 #pragma once
 
-// The particles, trails, and beams on the device (ADR-0053's one GPU
-// simulation, D353, D354, D357): what a view's accounting gives
+// The particles, trails, and beams on the device (the one GPU
+// simulation): what a view's accounting gives
 // (`rawframe.particles`) drawn the same way by the scene and the canvas.
 // One pool kept from frame to frame, in which each emitter a frame draws
 // holds a ring of its own, cleared by a compute pass when it starts; a
@@ -28,7 +28,7 @@
 
 namespace rawframe::particles_gpu {
 
-/// The view as the shaders read it (std140, D357): its projection of the
+/// The view as the shaders read it (std140): its projection of the
 /// World relative to the eye (column-major); the eye's right and up in the
 /// World's axes, with the particle clock now and its period; and the near
 /// plane, and one where the view is flat, facing straight down its forward
@@ -41,7 +41,7 @@ struct ViewBlock {
 };
 static_assert(sizeof(ViewBlock) == 112, "the particles' shaders read the view as 112 bytes");
 
-/// A material as the shaders read it (std140, D357): its color, a constant
+/// A material as the shaders read it (std140): its color, a constant
 /// plus a constant times its texture's color (its alpha in the fourth);
 /// its emission, a constant plus a constant times its emission texture's
 /// color; each texture's scale and offset; and its flags.
@@ -58,12 +58,12 @@ static_assert(sizeof(MaterialBlock) == 112, "the particles' shaders read a mater
 
 /// A material's flags: its texture's alpha shapes it (else a particle is
 /// a soft disc, a ribbon soft along its sides); it multiplies what is
-/// behind; it is drawn over everything, nothing hiding it (D464).
+/// behind; it is drawn over everything, nothing hiding it.
 inline constexpr std::uint32_t kShapedByTexture = 1;
 inline constexpr std::uint32_t kMultiplies = 2;
 inline constexpr std::uint32_t kOverEverything = 4;
 
-/// How a material blends over what is behind, as SPEC-0026's canvas set
+/// How a material blends over what is behind, as the canvas set
 /// has it: over it, its coverage hiding it; added to it; or multiplying
 /// it. The scene's are all over.
 enum class Blend : std::uint8_t {
@@ -102,7 +102,7 @@ enum class Target : std::uint8_t {
 /// none for one; and the depth they are hidden by and fade into
 /// (reversed-Z, its depth aspect sampled), or none for nought, hiding
 /// nothing; and the region of the picture they draw in, its left, top,
-/// width, and height in pixels (a local player's in split-screen, D364),
+/// width, and height in pixels (a local player's in split-screen),
 /// or none for the whole.
 struct Drawing {
     std::uint64_t picture = 0;
@@ -111,7 +111,7 @@ struct Drawing {
     std::optional<std::array<std::uint32_t, 4>> region;
 };
 
-/// The particles, trails, and beams on the device (D353, D354, D357). An
+/// The particles, trails, and beams on the device. An
 /// emitter whose ring the pool cannot hold is left out and counted; a ring
 /// is let go once its emitter is not drawn.
 class Particles {
@@ -122,7 +122,7 @@ public:
     [[nodiscard]] static result::Result<std::unique_ptr<Particles>>
     create(render::Device& device, Target target, std::uint32_t capacity);
     /// On `device`, which must be `sharing`'s, drawing into a picture of
-    /// its format with its shaders and pipelines (D361), so the device
+    /// its format with its shaders and pipelines, so the device
     /// compiles them once, with a pool of its own.
     [[nodiscard]] static result::Result<std::unique_ptr<Particles>>
     create(render::Device& device, const Particles& sharing, std::uint32_t capacity);

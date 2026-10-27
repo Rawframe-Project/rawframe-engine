@@ -69,7 +69,7 @@ result::Result<std::vector<Output>> outputsOf(const graph::Document& function) {
     return made;
 }
 
-/// What a call gives a texture input (D713): the game's texture by 16
+/// What a call gives a texture input: the game's texture by 16
 /// lowercase hex digits, or the caller's texture input.
 result::Result<GivenTexture> textureGiven(const surface_graph::Graph& surface, const Value* given) {
     if (given != nullptr && given->text() != nullptr) {

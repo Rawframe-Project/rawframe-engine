@@ -1,4 +1,4 @@
-// The grading table on lavapipe (D344): an unlit red face's color, looked
+// The grading table on lavapipe: an unlit red face's color, looked
 // up in a table that swaps red and green, shows green; the plain grade
 // without a table keeps it red; and a table named but not a volume is
 // passed over.

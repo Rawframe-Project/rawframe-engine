@@ -1,8 +1,8 @@
 #pragma once
 
-// The player's settings kept between runs (D626): the values of a game's
+// The player's settings kept between runs: the values of a game's
 // kept UI nodes, by their components' names, in a `ui.kept` document on the
-// player's machine, ADR-0057's settings-class preferences outside any save.
+// player's machine, the settings-class preferences outside any save.
 //
 //   {
 //     "kind": "ui.kept",
@@ -13,7 +13,7 @@
 //     }
 //   }
 //
-// Written by the engine alone, under SPEC-0028's profile, names in order;
+// Written by the engine alone, under the profile, names in order;
 // read leniently as to its whitespace, since a player may edit it.
 
 #include "rawframe/base/platform.h"
@@ -52,7 +52,7 @@ inline constexpr std::size_t kMostKeptValues = 1024;
 #if RAWFRAME_FILE_SYSTEM
 
 /// A small file's whole text, at most `most` bytes: none where it cannot be
-/// read whole (D626, D634).
+/// read whole.
 [[nodiscard]] std::optional<std::string> fileText(const std::filesystem::path& path, std::size_t most);
 
 /// The file the player's settings are kept in, written one at a time on the

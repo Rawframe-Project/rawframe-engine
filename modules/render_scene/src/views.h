@@ -1,6 +1,6 @@
 #pragma once
 
-// The views a game's render textures show (D361): of the entities whose
+// The views a game's render textures show: of the entities whose
 // view names a texture, the one of the lowest order, its World drawn by
 // the texture's own scene every frame or on demand.
 
@@ -57,7 +57,7 @@ public:
     void present(execution::MonotonicInstant now, ScenePictures& pictures);
     /// The device missed the frame offered for render texture `id`.
     void missed(std::uint64_t id) noexcept;
-    /// Every view's scene given `materials` (D734).
+    /// Every view's scene given `materials`.
     void replaceMaterials(const std::vector<SceneMaterial>& materials,
                           const std::vector<ScenePostProcessMaterial>& postProcesses);
     /// What the render textures were drawn with, if there are any.

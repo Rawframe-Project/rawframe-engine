@@ -1,6 +1,6 @@
 #pragma once
 
-// The sun's shadow cascades (ADR-0051, D292): each slice of the view's
+// The sun's shadow cascades: each slice of the view's
 // depth fitted with a square seen from the sun, its texels snapped to the
 // World's, so the shadows hold still as the eye moves.
 

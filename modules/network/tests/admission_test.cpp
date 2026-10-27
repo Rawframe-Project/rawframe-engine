@@ -239,7 +239,7 @@ RAWFRAME_TEST(AGracefulCloseSaysWhoIsLeaving) {
 }
 
 RAWFRAME_TEST(ATerminationSaysWhoEndedItAndWhy) {
-    // ADR-0073's record (D267): exact round trips, the note bounded, and
+    // The record: exact round trips, the note bounded, and
     // hostile records read only as they write.
     for (const Termination& kTermination :
          {Termination{.reason = TerminationReason::Game, .note = "left the arena"},

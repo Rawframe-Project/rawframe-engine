@@ -28,7 +28,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         if (!kLook.has_value()) {
             return errorLine(id, ToolingError::Malformed, refusal);
         }
-        // And the looks the window is split to show beside it (D797):
+        // And the looks the window is split to show beside it:
         // at most three, each a view as `view` is.
         std::vector<Look> others;
         if (const Value* kOthers = record.find("others"); kOthers != nullptr) {
@@ -58,7 +58,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.mark") {
-        // A point the preview marks, or none (D464): the view's.
+        // A point the preview marks, or none: the view's.
         if (!settings.grants.view) {
             return errorLine(id, ToolingError::NotGranted, "marking needs the view grant");
         }
@@ -69,7 +69,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         }
         Value made = Value::object();
         made.add("kind", Value::string("tooling.marked"));
-        // The part drawn lit, by name; none unless named (D468).
+        // The part drawn lit, by name; none unless named.
         const Value* kLit = record.find("lit");
         constexpr std::array<std::string_view, 5> kParts = {"", "x", "y", "z", "ring"};
         std::uint8_t lit = 0;
@@ -81,7 +81,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
             lit = static_cast<std::uint8_t>(kNamed - kParts.begin());
         }
         // Its handles drawn, by name, each name's place its bits; all
-        // unless named (D974).
+        // unless named.
         const Value* kHandles = record.find("handles");
         constexpr std::array<std::string_view, 4> kHandleNames = {"none", "axes", "ring", "all"};
         std::uint8_t handles = 3;
@@ -98,7 +98,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.paths") {
-        // The paths the previewed scene's splines make (D891): the view's.
+        // The paths the previewed scene's splines make: the view's.
         // At most 64 paths of 2 to 4,096 points, 4,096 points in all: a
         // scene draws at most 1,024 lines (render_scene's kMostSceneLines).
         if (!settings.grants.view) {
@@ -133,7 +133,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.outlines") {
-        // What each author has chosen, outlined (D907): the view's. At most
+        // What each author has chosen, outlined: the view's. At most
         // 16 authors' of at most 64 boxes, 256 in all.
         if (!settings.grants.view) {
             return errorLine(id, ToolingError::NotGranted, "outlining needs the view grant");
@@ -186,7 +186,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.hide") {
-        // The layers the preview leaves out (D791): the view's.
+        // The layers the preview leaves out: the view's.
         if (!settings.grants.view) {
             return errorLine(id, ToolingError::NotGranted, "hiding needs the view grant");
         }
@@ -209,7 +209,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.overlays") {
-        // What the preview draws over its scene (D798): the view's.
+        // What the preview draws over its scene: the view's.
         // The names are the renderer's; this only bounds them.
         if (!settings.grants.view) {
             return errorLine(id, ToolingError::NotGranted, "overlays need the view grant");
@@ -234,7 +234,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.drawn_frame") {
-        // What the frame the preview last drew holds (D842), its steps
+        // What the frame the preview last drew holds, its steps
         // when asked: the renderer's figures and passes, by its names.
         if (!settings.grants.view) {
             return errorLine(id, ToolingError::NotGranted, "a drawn frame needs the view grant");
@@ -257,7 +257,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         made.add("kind", Value::string("tooling.drawn_frame"));
         made.add("frames", Value::integer(static_cast<std::int64_t>(kDrawn->frames)));
         made.add("figures", std::move(figures));
-        // Each pass the GPU timed, in microseconds (D894).
+        // Each pass the GPU timed, in microseconds.
         Value passes = Value::array();
         for (const auto& [kPass, kNanoseconds] : kDrawn->passes) {
             Value pass = Value::object();
@@ -285,7 +285,7 @@ answerPreview(std::string_view kind, const Value& record, const Value& id, const
         return replyLine(id, "answer", std::move(made));
     }
     if (kind == "tooling.view_mode") {
-        // How the preview is drawn (D794): the view's. The names are
+        // How the preview is drawn: the view's. The names are
         // the renderer's; this only bounds the text.
         if (!settings.grants.view) {
             return errorLine(id, ToolingError::NotGranted, "a view mode needs the view grant");

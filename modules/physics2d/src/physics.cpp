@@ -65,7 +65,7 @@ template <typename T> [[nodiscard]] bool same(const T& left, const T& right) noe
 
 /// Whether a body can be made of these: sizes positive, the rest finite and
 /// in range. Tiles have no sizes of their own, no mass, and no inside: a
-/// tiles body is static and not a sensor (D859).
+/// tiles body is static and not a sensor.
 [[nodiscard]] bool makeable(const Body2D& body, const Pose2D& pose, const Velocity2D& velocity) noexcept {
     const bool kTiles = body.shape == static_cast<std::uint8_t>(Shape::Tiles);
     const bool kShape = body.shape == static_cast<std::uint8_t>(Shape::Circle) ||
@@ -95,7 +95,7 @@ struct Mapped {
     /// The sensor twin of a body whose class triggers with another.
     m2ShapeId trigger{};
     /// A tiles body's shapes past its first, and the tilemap it was made
-    /// of (D859).
+    /// of.
     std::vector<m2ShapeId> pieces;
     std::uint64_t tilemap = 0;
     /// Its pose after each of the last steps, by tick modulo the history's

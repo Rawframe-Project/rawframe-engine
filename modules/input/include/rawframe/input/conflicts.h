@@ -1,6 +1,6 @@
 #pragma once
 
-// SPEC-0029's conflict query, for the rebinding surface to show before a
+// The conflict query, for the rebinding surface to show before a
 // change is kept: collisions, shadowing, reserved controls, and orphaned
 // overrides, found by what would activate, not by comparing records.
 

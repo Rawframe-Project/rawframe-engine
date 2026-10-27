@@ -55,7 +55,7 @@ RAWFRAME_TEST(MalformedConfigurationIsRefused) {
 
 RAWFRAME_TEST(PathsAreUnderTheConfigurationsOwnDirectory) {
     // Where a process starts from never changes what its configuration
-    // names (SPEC-0012, D188): relative paths are under the file's directory.
+    // names: relative paths are under the file's directory.
     const auto kRead = Configuration::parse(
         "game = games/arena.game\nroot = /srv/content\ndrive = C:/content\nshare = \\\\host\\content\nempty =\n",
         "/etc/rawframe/");

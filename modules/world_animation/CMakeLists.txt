@@ -1,4 +1,4 @@
-# Animation in the World (ADR-0039, SPEC-0035): the Animator component, the
+# Animation in the World: the Animator component, the
 # step system that plays each entity's graph from its game's parameters,
 # and the participant that adds it for a game with animators. No renderer
 # in it, so a dedicated server plays what gameplay declares relevant.

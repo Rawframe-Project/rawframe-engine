@@ -1,6 +1,6 @@
 #pragma once
 
-// 3D physics in the World (ADR-0028, SPEC-0037) through Maul3D, whose types
+// 3D physics in the World through Maul3D, whose types
 // stay behind this module: physics2d's integration in three dimensions. One
 // physics world per World, stepped once per tick by one system in the
 // simulation phase, `rawframe.physics3d.step`:
@@ -67,8 +67,8 @@ struct Physics3DSettings {
     /// Every mesh a body may be made of, each identity once.
     std::vector<BodyMesh> meshes;
     bool sleeping = true;
-    /// Ticks of every body's pose kept for casting back in time
-    /// (SPEC-0041's compensation window); nought keeps none.
+    /// Ticks of every body's pose kept for casting back in time;
+    /// nought keeps none.
     std::uint32_t historyTicks = 64;
     physics::CollisionDocument collision;
 };
@@ -108,10 +108,10 @@ struct Physics3DStatistics {
 inline constexpr std::string_view kStepSystem = "rawframe.physics3d.step";
 /// While the World is edited, when nothing steps, the bodies follow their
 /// entities all the same, unmoved by the physics, so what a ray meets is
-/// what the author sees: a click in an editor's view picks it (D927).
+/// what the author sees: a click in an editor's view picks it.
 inline constexpr std::string_view kMirrorSystem = "rawframe.physics3d.mirror";
 
-/// A static body's share of the static geometry (D400): its entity, its
+/// A static body's share of the static geometry: its entity, its
 /// triangles' span of the indices, and the box its triangles fill.
 struct StaticShape {
     world::EntityHandle entity;
@@ -121,8 +121,8 @@ struct StaticShape {
     std::array<double, 3> high{};
 };
 
-/// The static bodies' shapes as triangles in World meters (D400): the
-/// surface other systems read the solid level from (ADR-0056's declared bake
+/// The static bodies' shapes as triangles in World meters: the
+/// surface other systems read the solid level from (the declared bake
 /// input for navigation), which carries nothing of theirs. A box, a
 /// cylinder's prism, and a mesh are their own triangles, wound outward; a
 /// sphere and a capsule are their bounding boxes'. Sensors and bodies the
@@ -133,8 +133,8 @@ struct StaticGeometry {
     std::vector<StaticShape> shapes;
 };
 
-/// Questions about where bodies are, answered from the last step (SPEC-0037
-/// queries against committed state). Only from the World's thread, between
+/// Questions about where bodies are, answered from the last step, the
+/// committed state. Only from the World's thread, between
 /// steps or from a system.
 class Physics3DQueries {
 public:
@@ -154,8 +154,8 @@ public:
                                            float towardY,
                                            float towardZ,
                                            std::uint64_t among) const noexcept = 0;
-    /// The same ray against every body where it was at an earlier moment
-    /// (SPEC-0041 lag compensation). The moment is clamped into the kept
+    /// The same ray against every body where it was at an earlier moment.
+    /// The moment is clamped into the kept
     /// history, and never past the last step; a body without a trail back
     /// to it is tried where it is and its hit marked discontinuous, and one
     /// the moment's gate keeps is tried where it is. Nothing moves.
@@ -169,7 +169,7 @@ public:
                                              std::uint64_t among) const noexcept = 0;
     /// A sphere of `radius` swept from the origin along `toward`: the first
     /// body it meets, as a ray's answer; one it starts inside is met
-    /// `inside`, at its start, with no normal (SPEC-0037 §9's start_solid).
+    /// `inside`, at its start, with no normal (start_solid).
     [[nodiscard]] virtual RayHit3D castSphere(double originX,
                                               double originY,
                                               double originZ,
@@ -187,7 +187,7 @@ public:
                                std::uint64_t among,
                                std::vector<world::EntityHandle>& into) const = 0;
     /// A count that changes whenever a static body is made, made again, or
-    /// removed: the static geometry is the same while it is (D400).
+    /// removed: the static geometry is the same while it is.
     [[nodiscard]] virtual std::uint64_t staticRevision() const noexcept = 0;
     /// The static geometry as the last step left it, into `into`, its last
     /// contents replaced.

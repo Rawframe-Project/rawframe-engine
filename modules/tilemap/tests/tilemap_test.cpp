@@ -1,4 +1,4 @@
-// Tilemap documents (D857): tiles read and written back as read; painted
+// Tilemap documents: tiles read and written back as read; painted
 // within the grid and nowhere past it; a row's solid tiles joined into one
 // body's box; a tile found in its sheet; and what is not a tilemap refused
 // by its line.

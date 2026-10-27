@@ -126,7 +126,7 @@ struct Client {
 constexpr std::size_t kMostBreakpoints = 64;
 constexpr std::size_t kMostFunctionName = 256;
 
-/// `debug.break`'s lines (D630): absent for none, else up to 64 of a
+/// `debug.break`'s lines: absent for none, else up to 64 of a
 /// `file`, a path's bytes, and a `line` from one; none for anything else.
 std::optional<std::vector<world_runtime::DebugLine>> linesOf(const Value* lines) {
     std::vector<world_runtime::DebugLine> read;
@@ -161,7 +161,7 @@ struct ToolingServer::State {
     std::vector<network::Event> events;
     Statistics statistics;
     /// Serving from inside a stopped tick, and whether a client said to
-    /// carry on (D460).
+    /// carry on.
     bool stopped = false;
     bool carryOn = false;
     world::TickIndex lastTick;
@@ -272,8 +272,7 @@ struct ToolingServer::State {
             Value each = Value::object();
             each.add("entity", Value::string(entityName(rows[at].entity)));
             each.add("components", std::move(names));
-            // Where it was authored, so a reader names it as its scene does
-            // (D996).
+            // Where it was authored, so a reader names it as its scene does.
             if (const auto kAuthored = picking != nullptr ? picking->authoredAt(rows[at].entity) : std::nullopt;
                 kAuthored.has_value()) {
                 each.add("scene", Value::string(kAuthored->first));
@@ -387,7 +386,7 @@ struct ToolingServer::State {
             return;
         }
         // Inside a stopped tick the World is half-stepped: only the
-        // debugger is answered (D460).
+        // debugger is answered.
         const bool kDebugVerb = kind != nullptr && kind->starts_with("debug.");
         if (stopped && !kDebugVerb) {
             send(connection,
@@ -440,8 +439,8 @@ struct ToolingServer::State {
             }
             return;
         }
-        // The preview's verbs (D432 to D798), answered where the preview is;
-        // the run verbs (D806).
+        // The preview's verbs, answered where the preview is;
+        // the run verbs.
         if (kind != nullptr) {
             if (std::optional<std::string> answered = answerRun(*kind, *parsed, id, settings)) {
                 send(connection, client, *answered);
@@ -462,7 +461,7 @@ struct ToolingServer::State {
         }
         if (kind != nullptr && *kind == "tooling.input") {
             // What an author did in an editor's viewport showing the
-            // preview (D790): the view's, as its look is.
+            // preview: the view's, as its look is.
             if (!settings.grants.view) {
                 send(connection, client, errorLine(id, ToolingError::NotGranted, "input needs the view grant"));
                 return;
@@ -482,7 +481,7 @@ struct ToolingServer::State {
             return;
         }
         if (kind != nullptr && *kind == "tooling.clicked") {
-            // Where the author pressed in the preview (D456): the view's.
+            // Where the author pressed in the preview: the view's.
             if (!settings.grants.view) {
                 send(connection, client, errorLine(id, ToolingError::NotGranted, "clicks need the view grant"));
                 return;
@@ -499,20 +498,20 @@ struct ToolingServer::State {
                 }
                 return point;
             };
-            // The wheel and the right button's drags, totals (D469).
+            // The wheel and the right button's drags, totals.
             if (kClicked.has_value()) {
                 made.add("wheel", Value::real(kClicked->wheel));
                 Value orbit = Value::array();
                 orbit.push(Value::real(kClicked->orbit[0]));
                 orbit.push(Value::real(kClicked->orbit[1]));
                 made.add("orbit", std::move(orbit));
-                // With Shift, freelook's (D472).
+                // With Shift, freelook's.
                 Value look = Value::array();
                 look.push(Value::real(kClicked->look[0]));
                 look.push(Value::real(kClicked->look[1]));
                 made.add("look", std::move(look));
                 made.add("fly", Value::real(kClicked->fly));
-                // Flown where it is drawn (D913).
+                // Flown where it is drawn.
                 if (kClicked->flights != 0) {
                     Value flown = Value::object();
                     flown.add("count", Value::integer(static_cast<std::int64_t>(kClicked->flights)));
@@ -521,7 +520,7 @@ struct ToolingServer::State {
                     made.add("flown", std::move(flown));
                 }
             }
-            // Where the pointer is, press or none (D468).
+            // Where the pointer is, press or none.
             if (kClicked.has_value() && kClicked->pointing) {
                 made.add("pointOrigin", kPoint(kClicked->pointOrigin));
                 made.add("pointToward", kPoint(kClicked->pointToward));
@@ -541,7 +540,7 @@ struct ToolingServer::State {
         }
         if (kind != nullptr && *kind == "tooling.pick") {
             // What a ray from an author's view meets, and where it was
-            // authored (D456): reading, so the inspect grant's.
+            // authored: reading, so the inspect grant's.
             if (!settings.grants.inspect) {
                 send(connection, client, errorLine(id, ToolingError::NotGranted, "picking needs the inspect grant"));
                 return;
@@ -590,8 +589,8 @@ struct ToolingServer::State {
     }
 
     /// `debug.break` (`functions`, names, and `lines`, each a `file` and a
-    /// `line`, D630), `debug.status`, `debug.continue`, and `debug.step`
-    /// (`how`: over, into, or out, D632), under the debug grant (D460).
+    /// `line`), `debug.status`, `debug.continue`, and `debug.step`
+    /// (`how`: over, into, or out), under the debug grant.
     void debug(
         network::ConnectionId connection, Client& client, const Value& id, std::string_view kind, const Value& record) {
         if (!settings.grants.debug || settings.debugging == nullptr) {

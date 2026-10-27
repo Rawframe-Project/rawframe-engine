@@ -43,7 +43,7 @@ struct Wanted {
     std::string path;
 };
 
-/// Bakes the scene's reflection probes (D326), one face a capture: the
+/// Bakes the scene's reflection probes, one face a capture: the
 /// scene queued from the face's camera, drawn with no probe reflected, so
 /// no probe's old picture is baked into another's.
 class BakeParticipant final : public composition::Participant {

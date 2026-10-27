@@ -19,10 +19,9 @@ enum class UiError : std::uint32_t {
     Capacity = 2,
     /// A node no longer in the tree.
     Stale = 3,
-    /// Bytes that are not a font the tree reads (D384).
+    /// Bytes that are not a font the tree reads.
     Format = 4,
-    /// An accessibility platform that cannot be reached, or is not built
-    /// (D571).
+    /// An accessibility platform that cannot be reached, or is not built.
     Unavailable = 5,
 };
 

@@ -1,8 +1,8 @@
 #pragma once
 
-// A game's guaranteed messages (D266): a server system sends one player a
+// A game's guaranteed messages: a server system sends one player a
 // value of a type the game declares; it arrives in the order sent, on the
-// game's event lane (SPEC-0010 guaranteed events), once the tick that sent
+// game's event lane, once the tick that sent
 // it has committed. Messages to a player who is not connected are counted
 // and go nowhere: the promise is to a connection, not to an identity.
 
@@ -27,7 +27,7 @@ inline constexpr std::uint64_t kGameMessageLane = 1;
     return {.id = kGameMessageLane, .fromServer = true, .maximumRecord = record};
 }
 
-/// The game's command lane (D425): a client's commands to the server, on
+/// The game's command lane: a client's commands to the server, on
 /// the lane both sides declare when the game has commands, whose records
 /// are at most the largest command.
 inline constexpr std::uint64_t kGameCommandLane = 2;
@@ -53,7 +53,7 @@ struct ReceivedCommand {
 };
 
 /// The engine's own lane, which both sides always declare: a session's
-/// termination (ADR-0073, D267).
+/// termination.
 [[nodiscard]] inline network::EventLaneDeclaration engineLane() noexcept {
     return {.id = network::kEngineLane, .fromServer = true, .maximumRecord = network::kMaximumEngineRecord};
 }

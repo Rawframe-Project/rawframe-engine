@@ -1,4 +1,4 @@
-# The in-process network provider (SPEC-0010 loopback): providers reach each
+# The in-process network provider: providers reach each
 # other by name, bytes are copied and owned, and delivery follows a clock and
 # seeded latency, jitter, loss, and duplication.
 rawframe_module(NAME network_loopback

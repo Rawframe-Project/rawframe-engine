@@ -1,7 +1,6 @@
 #pragma once
 
-// A material instance (ADR-0027's material instances, SPEC-0028's instance
-// documents, D709): a base surface material and overrides of its interface
+// A material instance: a base surface material and overrides of its interface
 // inputs, never of its nodes. It cooks to its base's identity and the
 // parameters its overrides make, so it draws with its base's program and
 // differs only in its blob.
@@ -47,7 +46,7 @@ struct InstanceDocument {
 
 /// What an instance's overrides make of its base: its parameters, and the
 /// texture each of its base's program's texture slots samples where an
-/// override of a texture input changes it (D710), nought where not.
+/// override of a texture input changes it, nought where not.
 struct InstanceValues {
     std::array<float, kParameterFloats> parameters{};
     std::array<std::uint64_t, 4> textures{};
@@ -56,18 +55,16 @@ struct InstanceValues {
 /// An instance's overrides made into its base's values: each names one of
 /// the base's interface inputs, is of its type (a texture input's the
 /// game's texture by 16 lowercase hex digits), and differs from its
-/// default, which an override equal to it would only repeat (SPEC-0028);
+/// default, which an override equal to it would only repeat;
 /// or names one of its static switches, which `switchedVariant` takes.
 /// Refuses (`Invalid`) any other, and a base `validateSurface` refuses; a
 /// texture override, a base `generateSlang` refuses.
 [[nodiscard]] result::Result<InstanceValues> instanceValues(const graph::Document& base,
                                                             const document::Value& overrides);
 
-/// The variant an instance's switch overrides make of its base (ADR-0027,
-/// D719): the base with each overridden switch's default the override's,
-/// which compiles to a program of its own; none where the instance
-/// overrides no switch, and it shares its base's program. Each switch
-/// override is a bool that differs from the switch's default. Refuses
+/// The variant an instance's switch overrides make of its base: the base with each overridden switch's default the
+/// override's, which compiles to a program of its own; none where the instance overrides no switch, and it shares its
+/// base's program. Each switch override is a bool that differs from the switch's default. Refuses
 /// (`Invalid`) any other, and a base `validateSurface` refuses.
 [[nodiscard]] result::Result<std::optional<graph::Document>> switchedVariant(const graph::Document& base,
                                                                              const document::Value& overrides);
@@ -81,7 +78,7 @@ struct MaterialInstance {
     friend bool operator==(const MaterialInstance&, const MaterialInstance&) = default;
 };
 
-/// A cooked instance's bytes: `RFMI`, format 2 (D709, D710), its base's
+/// A cooked instance's bytes: `RFMI`, format 2, its base's
 /// identity (its high word, then its low, eight bytes each), its
 /// parameters, then its four texture slots' identities (eight bytes each,
 /// nought for the base's). Little-endian.

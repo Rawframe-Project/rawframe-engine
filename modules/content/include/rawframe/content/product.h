@@ -1,9 +1,9 @@
 #pragma once
 
-// ADR-0023's product identities as text, where a Build or a Composition
+// The product identities as text, where a Build or a Composition
 // names what it is: a `publisher/name` subject and a Semantic Versioning
 // 2.0.0 version. Publishing and display identities only: resources are
-// still named by their 128-bit identities (ADR-0013).
+// still named by their 128-bit identities.
 
 #include <string_view>
 

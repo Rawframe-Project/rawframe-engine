@@ -1,10 +1,10 @@
-// A render texture's view on the device (ADR-0052, D361) on lavapipe: a
+// A render texture's view on the device on lavapipe: a
 // view draws its frame into its texture, and the player's view samples it
 // where a material names the render texture; before the view has drawn,
 // the material samples white; a split-screen view is placed in its
-// region, and one drawn at a render scale is scaled to fill it (D373).
+// region, and one drawn at a render scale is scaled to fill it.
 // An editor's view modes draw a surface's own color unlit, or its normal
-// as a color (D794).
+// as a color.
 // Skips where no adapter answers, unless RAWFRAME_REQUIRE_GPU is set.
 
 #include "fixture.h"
@@ -118,7 +118,7 @@ RAWFRAME_TEST(AViewsTextureIsSampledByTheSceneItShows) {
 }
 
 RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
-    // Two local players' views (D362), each drawn apart and copied into its
+    // Two local players' views, each drawn apart and copied into its
     // half of the frame's picture, the first clearing it.
     const auto kDevice = opened();
     if (kDevice == nullptr) {
@@ -137,7 +137,7 @@ RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
         return;
     }
     // Each its region's size from the next frame.
-    // The right letterboxed (D369): half as tall, between blue bars.
+    // The right letterboxed: half as tall, between blue bars.
     RAWFRAME_EXPECT((**left).resize(kSide / 2, kSide).has_value() &&
                     (**right).resize(kSide / 2, kSide / 2).has_value() && (**right).width() == kSide / 2);
     const render_scene_gpu::MeshSource kMeshes = [](std::uint64_t id) {
@@ -185,7 +185,7 @@ RAWFRAME_TEST(SplitScreenViewsArePlacedInTheirRegions) {
 }
 
 RAWFRAME_TEST(AViewDrawnAtItsRenderScaleFillsItsRegion) {
-    // A view drawn at half its region's size each way (D373), scaled into
+    // A view drawn at half its region's size each way, scaled into
     // the whole frame's picture: red to its corners.
     const auto kDevice = opened();
     if (kDevice == nullptr) {

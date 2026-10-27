@@ -3,11 +3,11 @@
 // cell; what is off the view, draws nothing, is malformed, or names an
 // undeclared texture is left out and counted; sprites draw in the order of
 // their layers, then entities, and batch only where the order allows, by
-// texture and material (D356); the limits leave out a suffix of the order;
+// texture and material; the limits leave out a suffix of the order;
 // particles, trails, and beams sit in the canvas's plane, seen through its
-// rectangle (D357); and a game's canvas loads against its program. A
+// rectangle; and a game's canvas loads against its program. A
 // sprite on a layer an editor's preview hides is left out, and the
-// preview's eye places the view (D793).
+// preview's eye places the view.
 
 #include "rawframe/physics2d/components.h"
 #include "rawframe/render_canvas/canvas.h"
@@ -140,7 +140,7 @@ RAWFRAME_TEST(ASpritesQuadIsWhereItsPoseAndPivotPutIt) {
 
 RAWFRAME_TEST(PickingAgreesWithTheCanvasCorners) {
     // Where the view's geometry says a World point shows is where the
-    // canvas puts a sprite's corner there (D366): clip space mapped to a
+    // canvas puts a sprite's corner there: clip space mapped to a
     // view of 800 by 400.
     Rig rig;
     rig.spawn(Sprite{.texture = kRunner, .width = 2, .height = 1, .pivotX = 0, .pivotY = 0},
@@ -306,7 +306,7 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
     const auto kPlain =
         kLoad(kUses, "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n");
     RAWFRAME_EXPECT(kPlain.has_value() && kPlain->textures.empty() && !kPlain->camera.has_value());
-    // A client has one view (D261).
+    // A client has one view.
     const auto kTwoViews =
         kLoad(kUses,
               "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n" + kView +
@@ -322,7 +322,7 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
                             "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
                             "component 6b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.other rawframe.canvas.Sprite\n");
     RAWFRAME_EXPECT(kTwo.has_value() && kTwo->sprites == (std::vector<schema::ComponentTypeId>{kSpriteId, kHatId}));
-    // The particle triad of rawframe.model, as the scene finds it (D357).
+    // The particle triad of rawframe.model, as the scene finds it.
     const auto kSparkling =
         kLoad("import rawframe.model\n\nfn draw(sprites: [canvas.Sprite], sparks: [model.ParticleEmitter], streaks: "
               "[model.Trail], rays: [model.Beam]) {\n}\n",
@@ -333,7 +333,7 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
     RAWFRAME_EXPECT(
         kSparkling.has_value() && kSparkling->emitters == (std::vector<schema::ComponentTypeId>{kSparksId}) &&
         kSparkling->trails == (std::vector<schema::ComponentTypeId>{kStreakId}) && kSparkling->beams.size() == 1);
-    // A tilemap component (D858).
+    // A tilemap component.
     const auto kTiled = kLoad("fn draw(sprites: [canvas.Sprite], maps: [canvas.Tilemap]) {\n}\n",
                               "component 5b1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.look rawframe.canvas.Sprite\n"
                               "component cb1d8f0e-2a44-4c1f-9d0e-7a6c3b2e1f90 drawn.level rawframe.canvas.Tilemap\n");
@@ -342,7 +342,7 @@ RAWFRAME_TEST(AGamesCanvasLoadsAgainstItsProgram) {
 
 RAWFRAME_TEST(ATilemapsTilesAreCellsOfItsSheet) {
     // A sheet four tiles across and two down; two-meter tiles; the map's
-    // top-left on the pose (D858).
+    // top-left on the pose.
     const std::shared_ptr<const schema::SchemaRegistry> kSchema = registry();
     world::World world{kSchema};
     const auto kMap =
@@ -383,7 +383,7 @@ RAWFRAME_TEST(ATilemapsTilesAreCellsOfItsSheet) {
 
 RAWFRAME_TEST(TilemapsStopAtTheSpriteLimit) {
     // Two placings of a three-tile map under a limit of four sprites: the
-    // tiles past it are counted, not made (D858).
+    // tiles past it are counted, not made.
     const std::shared_ptr<const schema::SchemaRegistry> kSchema = registry();
     world::World world{kSchema};
     const auto kMap =
@@ -413,7 +413,7 @@ RAWFRAME_TEST(TilemapsStopAtTheSpriteLimit) {
 
 RAWFRAME_TEST(SpritesDrawByTheirMaterials) {
     // A runner, then the same runner glowing, then a glow with no texture,
-    // then one naming a material the game has not (D356).
+    // then one naming a material the game has not.
     Rig rig;
     rig.spawn(Sprite{.texture = kRunner}, physics2d::Pose2D{});
     rig.spawn(Sprite{.texture = kRunner, .layer = 1, .material = kGlow}, physics2d::Pose2D{});
@@ -497,7 +497,7 @@ RAWFRAME_TEST(APreviewsEyePlacesTheView) {
 }
 
 RAWFRAME_TEST(ALineIsAThinQuadOverTheSprites) {
-    // D891: a preview's path, one line from (1000, -2) to (1004, -2), over
+    // A preview's path, one line from (1000, -2) to (1004, -2), over
     // a sprite, in a white draw of its own after the sprite's; a camera ten
     // meters tall and twenty wide, so the line is a twentieth of a meter
     // thick each way of its middle.
@@ -520,7 +520,7 @@ RAWFRAME_TEST(ALineIsAThinQuadOverTheSprites) {
 }
 
 RAWFRAME_TEST(TheGridIsBoundedWhateverTheCameraSays) {
-    // D933's grid about a ten meter view: a line a meter each way, the
+    // The grid about a ten meter view: a line a meter each way, the
     // axes colored. A camera a game set past a float's reach draws none,
     // and one too far off for a meter to move its place (where a stepped
     // loop had never ended) draws at most half a canvas's lines.
