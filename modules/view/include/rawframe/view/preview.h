@@ -48,6 +48,9 @@ enum class ViewMode : std::uint8_t {
 /// another.
 [[nodiscard]] std::optional<ViewMode> viewModeNamed(std::string_view name) noexcept;
 
+/// The most views a preview's window is split into: its quarters.
+inline constexpr std::size_t kMostPreviewViews = 4;
+
 /// Where view `at` of a preview split `count` ways lies in its window:
 /// one fills it, two stand side by side, three are its left half
 /// and the right half's top and bottom, four its quarters from the top
@@ -237,22 +240,13 @@ public:
     }
 
     /// The looks the preview's window is split to show beside its own,
-    /// as many as it allows, drawn in `previewRegion`'s places after the
-    /// first; none shows the one look in the whole window.
+    /// at most `kMostPreviewViews` in all, drawn in `previewRegion`'s places
+    /// after the first; none shows the one look in the whole window.
     void split(std::vector<Perspective> others) {
         others_ = std::move(others);
-        if (others_.size() + 1 > views_) {
-            others_.resize(views_ - 1);
+        if (others_.size() + 1 > kMostPreviewViews) {
+            others_.resize(kMostPreviewViews - 1);
         }
-    }
-    /// The views its window may be split into, its host's to allow before
-    /// the renderer starts, which places their regions then: one,
-    /// none split, unless the window's settings say more.
-    void allow(std::size_t views) noexcept {
-        views_ = std::max<std::size_t>(views, 1);
-    }
-    [[nodiscard]] std::size_t views() const noexcept {
-        return views_;
     }
     /// Whether it shows an editor's edited World, whose
     /// picture stands while only time moves it: an emitter's particles, a
@@ -426,7 +420,6 @@ private:
     ViewMode mode_ = ViewMode::Lit;
     std::uint8_t overlays_ = 0;
     std::vector<Perspective> others_;
-    std::size_t views_ = 1;
     bool edited_ = false;
     std::vector<FrameFigure> figures_;
     std::vector<FrameStep> steps_;

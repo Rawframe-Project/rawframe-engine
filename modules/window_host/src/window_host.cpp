@@ -434,16 +434,12 @@ result::Status WindowHost::start(window::Windows& windows) {
         } else {
             showWhenAsked_ = false;
         }
-        // The views a preview of it may be split into, which an editor
-        // playing it in its viewport allows.
-        RAWFRAME_TRY_ASSIGN(const std::uint64_t kViews, kConfiguration->unsignedInteger("preview.views", 1));
         // An editor's viewport, its camera flown here.
         RAWFRAME_TRY_ASSIGN(flying_, kConfiguration->truth("preview.flight", false));
         // An editor's edited World, its picture standing while time alone
         // moves it.
         RAWFRAME_TRY_ASSIGN(const bool kEdited, kConfiguration->truth("preview.edited", false));
         if (settings_.preview != nullptr) {
-            settings_.preview->allow(static_cast<std::size_t>(std::min<std::uint64_t>(kViews, 4)));
             settings_.preview->showEdited(kEdited);
         }
         // A game's own name over its window, as an export gives it.

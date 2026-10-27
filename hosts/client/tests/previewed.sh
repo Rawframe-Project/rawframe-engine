@@ -27,7 +27,6 @@ network.quic.fingerprint_file = $work/preview.fingerprint
 tooling.endpoint = 127.0.0.1:$port
 tooling.token_file = $work/token
 tooling.grants = view
-preview.views = 4
 CONF
 RAWFRAME_PLAY_WORK="$work/play" bash "$here/../../bots/tests/play.sh" "$1" "$2" 0 1 36000 "$5" "${7:-/dev/null}" \
     "$work/client.conf" >"$work/log" 2>&1 &

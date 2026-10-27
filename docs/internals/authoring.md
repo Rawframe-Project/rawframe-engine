@@ -43,7 +43,7 @@ A shared session is one session several collaborators speak to over QUIC, on its
 
 ## Previews and running games
 
-A running client or server can serve a tooling endpoint ([../operations/debugging.md](../operations/debugging.md#a-running-game)). A session attaches a client's endpoint to a scene: the view each scene is told or stepped to is shown there, edits to a scene reach the running World as the difference between what it authored and what it authors now, and the played game's pictures and input can stream through the editor's viewport. The profiler, network panel and live World read the same endpoint.
+A running client or server can serve a tooling endpoint ([../operations/debugging.md](../operations/debugging.md#a-running-game)). A session attaches a client's endpoint to a scene: the view each scene is told or stepped to is shown there, edits to a scene reach the running World as the difference between what it authored and what it authors now, and the played game's pictures and input can stream through the editor's viewport. A preview splits into up to four views, its window's halves or quarters (`authoring.split`), each another look at the scene, with no setting made ahead in the client. The profiler, network panel and live World read the same endpoint.
 
 ## Studio
 

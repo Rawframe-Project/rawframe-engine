@@ -30,7 +30,7 @@ Textures and meshes are uploaded once, and again when a reload replaces them; a 
 
 ## Views
 
-A local player sees the game through the camera on their entity, in their region of the window: the game's `layout` lines split the window for local players, and its `aspect` line keeps each view's shape, with bars of a declared color around it. A render texture (`rendertexture` lines) is a picture a camera's view is drawn into, every frame or when asked, which a material reads as it reads a texture. Each view's render scale follows its frames: fewer pixels while frames take clearly longer than they should, more once they keep well within it. In a headset each eye is a view of its own.
+A local player sees the game through the camera on their entity, in their region of the window: the game's `layout` lines split the window for local players, and its `aspect` line keeps each view's shape, with bars of a declared color around it. Each player's view is drawn apart and copied into its region, joining the frame when its region is first placed, as a preview's split views do. One frame holds every view it draws, so the device allows each frame 512 passes and 4 MiB of commands (`render::DeviceSettings`), room for four views of a scene like the plaza. A render texture (`rendertexture` lines) is a picture a camera's view is drawn into, every frame or when asked, which a material reads as it reads a texture. Each view's render scale follows its frames: fewer pixels while frames take clearly longer than they should, more once they keep well within it. In a headset each eye is a view of its own.
 
 ## The canvas
 
