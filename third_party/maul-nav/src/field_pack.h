@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Open-space fields packed for the tile cache (mnav-0016): each column's
+// Open-space fields packed for the tile cache: each column's
 // span count and each span's floor, height and area, in planes of bytes
 // (low bytes, then high), LZ coded. Links are not kept: unpacking links
 // the spans again as the bake does.

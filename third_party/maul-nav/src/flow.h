@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Flow fields (mnav-0007): the field, its search and its repairs, shared
+// Flow fields: the field, its search and its repairs, shared
 // by flow.c and flow_repair.c.
 
 #ifndef MAUL_NAV_SRC_FLOW_H

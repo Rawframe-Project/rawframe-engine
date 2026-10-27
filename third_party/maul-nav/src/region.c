@@ -7,6 +7,7 @@
 
 #include "allocator.h"
 #include "compact.h"
+#include "invariant.h"
 #include "sort.h"
 
 #include "maul-nav/bake.h"
@@ -493,6 +494,23 @@ static mnavResult Layer(mnavMemory* memory, const mnavCompactField* field, uint3
     return result;
 }
 
+// The spans of the border band carry its side's border region, and every
+// other span no region or one of the map's.
+static void CheckRegions(const mnavCompactField* field, int32_t border, const mnavRegionMap* map)
+{
+    int32_t width = field->frame.width;
+    for (int32_t c = 0; c < width * width; ++c)
+    {
+        uint32_t side = BorderSide(c % width, c / width, width, border);
+        for (uint32_t i = field->columns[c]; i < field->columns[c + 1]; ++i)
+        {
+            uint32_t id = map->ids[i];
+            MNAV_ASSERT(side != 0 ? id == 0 || id == (MNAV_BORDER_REGION | side)
+                                  : (id & MNAV_BORDER_REGION) == 0 && id <= map->count);
+        }
+    }
+}
+
 mnavResult mnavBuildRegions(mnavMemory* memory, const mnavCompactField* field, int32_t border,
                             int32_t minRegion, mnavRegionMap* map)
 {
@@ -516,6 +534,10 @@ mnavResult mnavBuildRegions(mnavMemory* memory, const mnavCompactField* field, i
     if (result != mnav_success)
     {
         mnavReleaseRegions(memory, map);
+    }
+    else if (MNAV_INVARIANTS)
+    {
+        CheckRegions(field, border, map);
     }
     return result;
 }

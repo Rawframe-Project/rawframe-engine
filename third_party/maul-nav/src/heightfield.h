@@ -53,7 +53,7 @@ mnavResult mnavBuildHeightfieldInput(mnavMemory* memory, const mnavBakeDef* def,
                                      int32_t tileX, int32_t tileZ, mnavHeightfield* heightfield);
 
 // The same from 2D outlines, which must be valid for def: every cell one
-// holds becomes a span at height 0 (mnav-0002). With a tile index of the
+// holds becomes a span at height 0. With a tile index of the
 // outlines, only those it lists for the tile are read. Returns
 // mnav_errorLimit past the tileTriangles limit on outlines touching the
 // tile, otherwise as above.

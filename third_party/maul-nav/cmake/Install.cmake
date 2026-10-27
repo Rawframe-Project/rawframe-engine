@@ -28,10 +28,10 @@ install(EXPORT ${PROJECT_NAME}Targets
 configure_package_config_file(${PROJECT_SOURCE_DIR}/cmake/Config.cmake.in
     ${PROJECT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
-# Before 1.0 a minor release may break compatibility; from 1.0 on only a
-# major release may.
+# Before 1.0 any release may break compatibility; from 1.0 on only a major
+# release may.
 if(PROJECT_VERSION_MAJOR EQUAL 0)
-    set(compatibility SameMinorVersion)
+    set(compatibility ExactVersion)
 else()
     set(compatibility SameMajorVersion)
 endif()

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Avoidance obstacles (mnav-0006): their vertices, the ones near an agent,
+// Avoidance obstacles: their vertices, the ones near an agent,
 // and the ORCA lines they give, after RVO2.
 
 #ifndef MAUL_NAV_SRC_OBSTACLE_H

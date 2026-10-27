@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A small LZ coder for cached tiles (mnav-0016), in LZ4's block format:
+// A small LZ coder for cached tiles, in LZ4's block format:
 // each sequence a token byte (the literals' count in its high four bits,
 // the match's length less four in its low four, either at 15 continued
 // by bytes added on until one under 255), the literals, then a two-byte

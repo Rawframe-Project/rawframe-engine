@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Hierarchies (mnav-0008): the graph shared by its build and its queries,
+// Hierarchies: the graph shared by its build and its queries,
 // and the searches within one cluster both use.
 
 #ifndef MAUL_NAV_SRC_HIERARCHY_H

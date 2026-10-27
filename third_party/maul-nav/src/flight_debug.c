@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Debug drawing for flight volumes (mnav-0015): the open blocks in a
+// Debug drawing for flight volumes: the open blocks in a
 // box, each a wire box drawn once, and a flight path's steps.
 
 #include "draw.h"
 #include "flight_frame.h"
 #include "flight_space.h"
+#include "fpenv.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/draw.h"
@@ -52,8 +53,8 @@ static int32_t Larger(int32_t a, int32_t b)
     return a > b ? a : b;
 }
 
-mnavResult mnavDebugFlight(const mnavFlightVolume* volume, mnavPos3 low, mnavPos3 high,
-                           mnavDebugBuffer* buffer)
+static MNAV_NOINLINE mnavResult DebugFlightWork(const mnavFlightVolume* volume, mnavPos3 low,
+                                                mnavPos3 high, mnavDebugBuffer* buffer)
 {
     if (volume == nullptr || !mnavGoodBuffer(buffer) || !Finite(low) || !Finite(high) ||
         low.x > high.x || low.y > high.y || low.z > high.z)
@@ -102,7 +103,17 @@ mnavResult mnavDebugFlight(const mnavFlightVolume* volume, mnavPos3 low, mnavPos
     return mnavDrawResult(buffer);
 }
 
-mnavResult mnavDebugFlightPath(const mnavFlightPath* path, mnavDebugBuffer* buffer)
+mnavResult mnavDebugFlight(const mnavFlightVolume* volume, mnavPos3 low, mnavPos3 high,
+                           mnavDebugBuffer* buffer)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = DebugFlightWork(volume, low, high, buffer);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult DebugFlightPathWork(const mnavFlightPath* path,
+                                                    mnavDebugBuffer* buffer)
 {
     if (path == nullptr || !mnavGoodBuffer(buffer) || path->pointCount < 0 ||
         (path->pointCount > 0 && path->points == nullptr))
@@ -114,4 +125,12 @@ mnavResult mnavDebugFlightPath(const mnavFlightPath* path, mnavDebugBuffer* buff
         mnavDrawLine(buffer, path->points[i - 1], path->points[i], mnav_debugPath, 0);
     }
     return mnavDrawResult(buffer);
+}
+
+mnavResult mnavDebugFlightPath(const mnavFlightPath* path, mnavDebugBuffer* buffer)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = DebugFlightPathWork(path, buffer);
+    mnavFloatEnvLeave(env);
+    return result;
 }

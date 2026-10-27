@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Link generation (mnav-0009), after Unity's drop-down and jump-across
+// Link generation, after Unity's drop-down and jump-across
 // links: samples along the edges with nothing across, a landing found
 // below or across from each, kept unless the host's clearance test
 // refuses it, the navmesh already walks there nearly as directly, or an
@@ -9,6 +9,7 @@
 
 #include "maul-nav/linkgen.h"
 
+#include "fpenv.h"
 #include "navmesh.h"
 #include "query.h"
 #include "query_filter.h"
@@ -274,20 +275,18 @@ static void SampleTile(Gen* g, int32_t slot)
     }
 }
 
-mnavResult mnavGenerateLinks(mnavQuery* query, const mnavNavmesh* navmesh,
-                             const mnavQueryFilter* filter, const mnavLinkGenDef* def,
-                             int32_t tileX0, int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
-                             mnavLinkDef* linksOut, int32_t capacity, int32_t* countOut)
+static MNAV_NOINLINE mnavResult GenerateLinksWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                                  const mnavQueryFilter* filter,
+                                                  const mnavLinkGenDef* def, int32_t tileX0,
+                                                  int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
+                                                  mnavLinkDef* linksOut, int32_t capacity,
+                                                  int32_t* countOut)
 {
     if (query == nullptr || navmesh == nullptr || def == nullptr || countOut == nullptr ||
         capacity < 0 || (capacity > 0 && linksOut == nullptr) ||
         def->cookie != MNAV_LINK_GEN_DEF_COOKIE || tileX1 < tileX0 || tileZ1 < tileZ0)
     {
         return mnav_errorInvalid;
-    }
-    if (def->version != MNAV_ABI_VERSION)
-    {
-        return mnav_errorVersion;
     }
     const mnavQueryFilter* usable = nullptr;
     mnavResult result = mnavCheckFilter(filter, &usable);
@@ -323,4 +322,16 @@ mnavResult mnavGenerateLinks(mnavQuery* query, const mnavNavmesh* navmesh,
     }
     *countOut = g.count;
     return g.count > capacity ? mnav_errorCapacity : mnav_success;
+}
+
+mnavResult mnavGenerateLinks(mnavQuery* query, const mnavNavmesh* navmesh,
+                             const mnavQueryFilter* filter, const mnavLinkGenDef* def,
+                             int32_t tileX0, int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
+                             mnavLinkDef* linksOut, int32_t capacity, int32_t* countOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = GenerateLinksWork(query, navmesh, filter, def, tileX0, tileZ0, tileX1,
+                                          tileZ1, linksOut, capacity, countOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Debug geometry of navmeshes, links, paths and corridors (mnav-0010), as
+// Debug geometry of navmeshes, links, paths and corridors, as
 // plain vertex and index data in a caller's buffer.
 
 #ifndef MAUL_NAV_DEBUG_H

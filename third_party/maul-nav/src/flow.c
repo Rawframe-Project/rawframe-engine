@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Flow fields (mnav-0007): Dijkstra's search from every goal at once over
+// Flow fields: Dijkstra's search from every goal at once over
 // a grid, with the grid path's steps. The step rule is symmetric, so the
 // cost found from the goals to a cell is the cost of the cell's way to
 // them. The open list is a binary heap by cost, then by cell index, with
@@ -12,6 +12,7 @@
 #include "allocator.h"
 #include "draw.h"
 #include "flow.h"
+#include "fpenv.h"
 #include "query_filter.h"
 
 #include "maul-nav/bake.h"
@@ -27,7 +28,8 @@
 // The diagonal's length in cells, rounded once to binary64.
 #define DIAGONAL 1.4142135623730951
 
-mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def, mnavFlowField** fieldOut)
+static MNAV_NOINLINE mnavResult CreateFlowFieldWork(const mnavFlowFieldDef* def,
+                                                    mnavFlowField** fieldOut)
 {
     if (fieldOut == nullptr)
     {
@@ -104,6 +106,14 @@ mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def, mnavFlowField** fiel
     }
     *fieldOut = f;
     return mnav_success;
+}
+
+mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def, mnavFlowField** fieldOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = CreateFlowFieldWork(def, fieldOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 void mnavDestroyFlowField(mnavFlowField* field)
@@ -323,9 +333,10 @@ static mnavResult Check(mnavFlowField* field, const mnavGrid* grid, const mnavFl
     return cells > (int64_t)field->def.cells ? mnav_errorLimit : mnav_success;
 }
 
-mnavResult mnavBeginFlowField(mnavFlowField* field, const mnavGrid* grid,
-                              const mnavQueryFilter* filter, const mnavFlowRegion* region,
-                              const mnavCell* goals, int32_t goalCount)
+static MNAV_NOINLINE mnavResult BeginFlowFieldWork(mnavFlowField* field, const mnavGrid* grid,
+                                                   const mnavQueryFilter* filter,
+                                                   const mnavFlowRegion* region,
+                                                   const mnavCell* goals, int32_t goalCount)
 {
     if (field != nullptr)
     {
@@ -375,14 +386,24 @@ mnavResult mnavBeginFlowField(mnavFlowField* field, const mnavGrid* grid,
     return mnav_success;
 }
 
+mnavResult mnavBeginFlowField(mnavFlowField* field, const mnavGrid* grid,
+                              const mnavQueryFilter* filter, const mnavFlowRegion* region,
+                              const mnavCell* goals, int32_t goalCount)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = BeginFlowFieldWork(field, grid, filter, region, goals, goalCount);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
 bool mnavFlowSameGrid(const mnavFlowField* f, const mnavGrid* grid)
 {
     return grid->areas != nullptr && grid->width == f->gridWidth && grid->height == f->gridHeight &&
            grid->cellSize == f->cellSize;
 }
 
-mnavResult mnavContinueFlowField(mnavFlowField* field, const mnavGrid* grid, int32_t cells,
-                                 bool* endedOut)
+static MNAV_NOINLINE mnavResult ContinueFlowFieldWork(mnavFlowField* field, const mnavGrid* grid,
+                                                      int32_t cells, bool* endedOut)
 {
     if (field == nullptr || grid == nullptr || field->state == mnav_flowNone || cells < 1 ||
         !mnavFlowSameGrid(field, grid))
@@ -408,15 +429,35 @@ mnavResult mnavContinueFlowField(mnavFlowField* field, const mnavGrid* grid, int
     return mnav_success;
 }
 
-mnavResult mnavBuildFlowField(mnavFlowField* field, const mnavGrid* grid,
-                              const mnavQueryFilter* filter, const mnavCell* goals,
-                              int32_t goalCount)
+mnavResult mnavContinueFlowField(mnavFlowField* field, const mnavGrid* grid, int32_t cells,
+                                 bool* endedOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = ContinueFlowFieldWork(field, grid, cells, endedOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult BuildFlowFieldWork(mnavFlowField* field, const mnavGrid* grid,
+                                                   const mnavQueryFilter* filter,
+                                                   const mnavCell* goals, int32_t goalCount)
 {
     mnavResult result = mnavBeginFlowField(field, grid, filter, nullptr, goals, goalCount);
     return result == mnav_success ? mnavContinueFlowField(field, grid, INT32_MAX, nullptr) : result;
 }
 
-mnavResult mnavFlowAt(const mnavFlowField* field, mnavCell cell, mnavFlow* flowOut)
+mnavResult mnavBuildFlowField(mnavFlowField* field, const mnavGrid* grid,
+                              const mnavQueryFilter* filter, const mnavCell* goals,
+                              int32_t goalCount)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = BuildFlowFieldWork(field, grid, filter, goals, goalCount);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult FlowAtWork(const mnavFlowField* field, mnavCell cell,
+                                           mnavFlow* flowOut)
 {
     if (field == nullptr || flowOut == nullptr || field->state == mnav_flowNone)
     {
@@ -437,7 +478,16 @@ mnavResult mnavFlowAt(const mnavFlowField* field, mnavCell cell, mnavFlow* flowO
     return mnav_success;
 }
 
-mnavResult mnavDebugFlowField(const mnavFlowField* field, double height, mnavDebugBuffer* buffer)
+mnavResult mnavFlowAt(const mnavFlowField* field, mnavCell cell, mnavFlow* flowOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = FlowAtWork(field, cell, flowOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult DebugFlowFieldWork(const mnavFlowField* field, double height,
+                                                   mnavDebugBuffer* buffer)
 {
     if (field == nullptr || !mnavGoodBuffer(buffer) || !isfinite(height))
     {
@@ -480,4 +530,12 @@ mnavResult mnavDebugFlowField(const mnavFlowField* field, double height, mnavDeb
                      mnav_debugFlow, 0);
     }
     return mnavDrawResult(buffer);
+}
+
+mnavResult mnavDebugFlowField(const mnavFlowField* field, double height, mnavDebugBuffer* buffer)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = DebugFlowFieldWork(field, height, buffer);
+    mnavFloatEnvLeave(env);
+    return result;
 }

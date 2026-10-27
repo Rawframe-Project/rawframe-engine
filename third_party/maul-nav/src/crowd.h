@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The neighbour grid of avoidance (mnav-0006): agents' keys sorted by
+// The neighbour grid of avoidance: agents' keys sorted by
 // cell and id, each occupied cell's run of them found by a hash, and the
 // nearest neighbours of an agent found in rings of squares or shells of
 // cubes round its own cell, so that the agents' order never matters.

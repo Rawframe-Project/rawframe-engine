@@ -25,6 +25,16 @@ typedef struct Poly
     int32_t count;
 } Poly;
 
+// A polygon within one row of cells, in (u, h) alone: the row's cuts are
+// across u, and the cells need only their heights. Each coordinate of a
+// cut's point is computed on its own, so leaving w out changes no other.
+typedef struct RowPoly
+{
+    float u[POLY_MAX];
+    float h[POLY_MAX];
+    int32_t count;
+} RowPoly;
+
 bool mnavMakeTileFrame(const mnavBakeDef* def, const mnavBakeCells* cells, int32_t tileX,
                        int32_t tileZ, mnavTileFrame* frame)
 {
@@ -80,6 +90,54 @@ static void ToCells(const mnavTileFrame* frame, const mnavVec3 corners[3], Poly*
     poly->count = 3;
 }
 
+// floorf and ceilf, without a call into the C library: a float of 2^23 or
+// more in magnitude is a whole number already, and below that the
+// truncation to an integer is exact and moved one toward the floor or the
+// ceiling when it went the other way. Equal to the C library's but for the
+// sign of a zero, which the integers and differences taken from them
+// cannot tell.
+static float Floor(float x)
+{
+    if (!(x > -8388608.0f && x < 8388608.0f))
+    {
+        return x;
+    }
+    float t = (float)(int32_t)x;
+    return t > x ? t - 1.0f : t;
+}
+
+static float Ceil(float x)
+{
+    if (!(x > -8388608.0f && x < 8388608.0f))
+    {
+        return x;
+    }
+    float t = (float)(int32_t)x;
+    return t < x ? t + 1.0f : t;
+}
+
+// (int32_t)Floor(x) and (int32_t)Ceil(x), the integer taken straight from
+// the truncation.
+static int32_t FloorToInt(float x)
+{
+    if (!(x > -8388608.0f && x < 8388608.0f))
+    {
+        return (int32_t)x;
+    }
+    int32_t i = (int32_t)x;
+    return (float)i > x ? i - 1 : i;
+}
+
+static int32_t CeilToInt(float x)
+{
+    if (!(x > -8388608.0f && x < 8388608.0f))
+    {
+        return (int32_t)x;
+    }
+    int32_t i = (int32_t)x;
+    return (float)i < x ? i + 1 : i;
+}
+
 static void Bounds(const Poly* poly, int32_t axis, float* low, float* high)
 {
     *low = poly->v[0][axis];
@@ -96,8 +154,8 @@ static void Bounds(const Poly* poly, int32_t axis, float* low, float* high)
 // floor(low) to ceil(high) - 1, or floor(low) alone for no extent.
 static void CellRange(float low, float high, int32_t* first, int32_t* last)
 {
-    float start = floorf(low);
-    float end = high > low ? ceilf(high) - 1.0f : start;
+    float start = Floor(low);
+    float end = high > low ? Ceil(high) - 1.0f : start;
     *first = (int32_t)start;
     *last = (int32_t)end;
 }
@@ -144,6 +202,39 @@ static void Split(const Poly* in, int32_t axis, float cut, Poly* below, Poly* ab
     }
 }
 
+// Split for a row's polygon at u = cut, as Split does it.
+static void SplitRow(const RowPoly* in, float cut, RowPoly* below, RowPoly* above)
+{
+    below->count = 0;
+    above->count = 0;
+    // Each corner's offset from the cut, carried to the next edge.
+    float da = in->u[in->count - 1] - cut;
+    for (int32_t i = 0, j = in->count - 1; i < in->count; j = i, ++i)
+    {
+        float db = in->u[i] - cut;
+        if ((da < 0.0f && db > 0.0f) || (da > 0.0f && db < 0.0f))
+        {
+            float t = da / (da - db);
+            float h = in->h[j] + (in->h[i] - in->h[j]) * t;
+            below->u[below->count] = cut;
+            below->h[below->count++] = h;
+            above->u[above->count] = cut;
+            above->h[above->count++] = h;
+        }
+        if (db <= 0.0f)
+        {
+            below->u[below->count] = in->u[i];
+            below->h[below->count++] = in->h[i];
+        }
+        if (db >= 0.0f)
+        {
+            above->u[above->count] = in->u[i];
+            above->h[above->count++] = in->h[i];
+        }
+        da = db;
+    }
+}
+
 static mnavResult Grow(mnavMemory* memory, mnavFragmentList* list)
 {
     if (list->count >= list->limit)
@@ -169,7 +260,22 @@ static mnavResult Grow(mnavMemory* memory, mnavFragmentList* list)
     return mnav_success;
 }
 
-static mnavResult Emit(mnavMemory* memory, const Poly* cell, int32_t x, int32_t z,
+// Adds the fragment of cell (x, z) whose piece spans heights low to high.
+static mnavResult EmitHeights(mnavMemory* memory, float low, float high, int32_t x, int32_t z,
+                              mnavAreaType area, mnavFragmentList* list)
+{
+    // Validated input keeps heights within MNAV_MAX_HEIGHT_CELLS; the
+    // clamps only absorb the last rounding of the division.
+    int32_t bottom = FloorToInt(low) + MNAV_HEIGHT_OFFSET;
+    int32_t top = CeilToInt(high) + MNAV_HEIGHT_OFFSET;
+    bottom = bottom < 0 ? 0 : (bottom > UINT16_MAX - 1 ? UINT16_MAX - 1 : bottom);
+    top = top <= bottom ? bottom + 1 : (top > UINT16_MAX ? UINT16_MAX : top);
+    return mnavAddFragment(
+        memory, list,
+        (mnavFragment){(uint16_t)x, (uint16_t)z, (uint16_t)bottom, (uint16_t)top, area});
+}
+
+static mnavResult Emit(mnavMemory* memory, const RowPoly* cell, int32_t x, int32_t z,
                        mnavAreaType area, mnavFragmentList* list)
 {
     // The loops cut only strictly inside a polygon's range, and a cut
@@ -180,18 +286,14 @@ static mnavResult Emit(mnavMemory* memory, const Poly* cell, int32_t x, int32_t 
     {
         return mnav_success;
     }
-    float low = 0.0f;
-    float high = 0.0f;
-    Bounds(cell, 1, &low, &high);
-    // Validated input keeps heights within MNAV_MAX_HEIGHT_CELLS; the
-    // clamps only absorb the last rounding of the division.
-    int32_t bottom = (int32_t)floorf(low) + MNAV_HEIGHT_OFFSET;
-    int32_t top = (int32_t)ceilf(high) + MNAV_HEIGHT_OFFSET;
-    bottom = bottom < 0 ? 0 : (bottom > UINT16_MAX - 1 ? UINT16_MAX - 1 : bottom);
-    top = top <= bottom ? bottom + 1 : (top > UINT16_MAX ? UINT16_MAX : top);
-    return mnavAddFragment(
-        memory, list,
-        (mnavFragment){(uint16_t)x, (uint16_t)z, (uint16_t)bottom, (uint16_t)top, area});
+    float low = cell->h[0];
+    float high = cell->h[0];
+    for (int32_t i = 1; i < cell->count; ++i)
+    {
+        low = cell->h[i] < low ? cell->h[i] : low;
+        high = cell->h[i] > high ? cell->h[i] : high;
+    }
+    return EmitHeights(memory, low, high, x, z, area, list);
 }
 
 mnavResult mnavAddFragment(mnavMemory* memory, mnavFragmentList* list, mnavFragment fragment)
@@ -213,7 +315,9 @@ mnavResult mnavAddFragment(mnavMemory* memory, mnavFragmentList* list, mnavFragm
 // rasterizing computes, one axis at a time. Corners all a cell or more
 // before the tile, or two past its far side, are out without dividing:
 // rounding is monotone, so their cells lie at -1 and below, or at the
-// tile's width and beyond.
+// tile's width and beyond. Likewise corners whose nearest lies from the
+// tile's corner to a cell short of its far side are in without dividing:
+// the first cell is from 0 to width - 1, and the last no lower.
 static bool SpansTile(const mnavTileFrame* frame, float a, float b, float c, float min)
 {
     float d[3] = {a - min, b - min, c - min};
@@ -223,6 +327,12 @@ static bool SpansTile(const mnavTileFrame* frame, float a, float b, float c, flo
         (d[0] > past && d[1] > past && d[2] > past))
     {
         return false;
+    }
+    float nearest = d[0] < d[1] ? d[0] : d[1];
+    nearest = d[2] < nearest ? d[2] : nearest;
+    if (nearest >= 0.0f && nearest < (float)(frame->width - 1) * frame->cellSize)
+    {
+        return true;
     }
     float u[3] = {d[0] / frame->cellSize, d[1] / frame->cellSize, d[2] / frame->cellSize};
     float low = u[0];
@@ -244,7 +354,8 @@ bool mnavTriangleTouchesTile(const mnavTileFrame* frame, const mnavVec3 corners[
            SpansTile(frame, corners[0].z, corners[1].z, corners[2].z, frame->minZ);
 }
 
-// Rasterizes one row of cells, z, of a polygon already clipped to it.
+// Rasterizes one row of cells, z, of a polygon already clipped to it. The
+// part still to cut and the next one swap places rather than copy.
 static mnavResult RasterizeRow(mnavMemory* memory, const mnavTileFrame* frame, const Poly* row,
                                int32_t z, mnavAreaType area, mnavFragmentList* list)
 {
@@ -256,25 +367,37 @@ static mnavResult RasterizeRow(mnavMemory* memory, const mnavTileFrame* frame, c
     CellRange(low, high, &first, &last);
     int32_t start = first < 0 ? 0 : first;
     int32_t end = last >= frame->width ? frame->width - 1 : last;
-    Poly rest = *row;
-    Poly cell;
-    Poly next;
+    RowPoly buffers[3];
+    buffers[1].count = 0;
+    buffers[2].count = 0;
+    RowPoly* rest = &buffers[0];
+    RowPoly* next = &buffers[1];
+    RowPoly* cell = &buffers[2];
+    for (int32_t i = 0; i < row->count; ++i)
+    {
+        rest->u[i] = row->v[i][AXIS_U];
+        rest->h[i] = row->v[i][1];
+    }
+    rest->count = row->count;
     if (start > first)
     {
-        Split(row, AXIS_U, (float)start, &cell, &rest);
+        SplitRow(rest, (float)start, cell, next);
+        RowPoly* swap = rest;
+        rest = next;
+        next = swap;
     }
     for (int32_t x = start; x <= end; ++x)
     {
+        const RowPoly* piece = rest;
         if (x < last)
         {
-            Split(&rest, AXIS_U, (float)(x + 1), &cell, &next);
+            SplitRow(rest, (float)(x + 1), cell, next);
+            RowPoly* swap = rest;
             rest = next;
+            next = swap;
+            piece = cell;
         }
-        else
-        {
-            cell = rest;
-        }
-        mnavResult result = Emit(memory, &cell, x, z, area, list);
+        mnavResult result = Emit(memory, piece, x, z, area, list);
         if (result != mnav_success)
         {
             return result;
@@ -287,39 +410,66 @@ mnavResult mnavRasterizeTriangle(mnavMemory* memory, const mnavTileFrame* frame,
                                  const mnavVec3 corners[3], mnavAreaType area,
                                  mnavFragmentList* list)
 {
-    Poly rest;
-    ToCells(frame, corners, &rest);
+    // The part still to cut and the next one swap places rather than copy.
+    Poly buffers[3];
+    buffers[1].count = 0;
+    buffers[2].count = 0;
+    Poly* rest = &buffers[0];
+    Poly* next = &buffers[1];
+    Poly* row = &buffers[2];
+    ToCells(frame, corners, rest);
     float low = 0.0f;
     float high = 0.0f;
     int32_t first = 0;
     int32_t last = 0;
-    Bounds(&rest, AXIS_W, &low, &high);
+    Bounds(rest, AXIS_W, &low, &high);
     CellRange(low, high, &first, &last);
+    if (first == last)
+    {
+        // One row holds the triangle; when one cell does too, no cut is
+        // made, and its fragment spans the corners' heights, or there is
+        // none when the cell is off the tile.
+        float lowU = 0.0f;
+        float highU = 0.0f;
+        int32_t firstU = 0;
+        int32_t lastU = 0;
+        Bounds(rest, AXIS_U, &lowU, &highU);
+        CellRange(lowU, highU, &firstU, &lastU);
+        if (firstU == lastU)
+        {
+            if (first < 0 || first >= frame->width || firstU < 0 || firstU >= frame->width)
+            {
+                return mnav_success;
+            }
+            Bounds(rest, 1, &low, &high);
+            return EmitHeights(memory, low, high, firstU, first, area, list);
+        }
+    }
     int32_t start = first < 0 ? 0 : first;
     int32_t end = last >= frame->width ? frame->width - 1 : last;
-    Poly row;
-    Poly next;
     if (start > first)
     {
-        Split(&rest, AXIS_W, (float)start, &row, &next);
+        Split(rest, AXIS_W, (float)start, row, next);
+        Poly* swap = rest;
         rest = next;
+        next = swap;
     }
     for (int32_t z = start; z <= end; ++z)
     {
+        const Poly* piece = rest;
         if (z < last)
         {
-            Split(&rest, AXIS_W, (float)(z + 1), &row, &next);
+            Split(rest, AXIS_W, (float)(z + 1), row, next);
+            Poly* swap = rest;
             rest = next;
+            next = swap;
+            piece = row;
         }
-        else
-        {
-            row = rest;
-        }
-        if (row.count < 3)
+        if (piece->count < 3)
         {
             continue;
         }
-        mnavResult result = RasterizeRow(memory, frame, &row, z, area, list);
+        mnavResult result = RasterizeRow(memory, frame, piece, z, area, list);
         if (result != mnav_success)
         {
             return result;

@@ -10,6 +10,7 @@
 #include "contour.h"
 #include "delaunay.h"
 #include "height_patch.h"
+#include "invariant.h"
 #include "polymesh.h"
 #include "region.h"
 #include "triangulate.h"
@@ -506,6 +507,34 @@ static mnavResult BuildPart(Builder* builder, int32_t p)
     return Store(builder, p);
 }
 
+// One part per polygon, the parts end to end over the vertices and the
+// triangles, each with its polygon's vertices and at most
+// MNAV_DETAIL_VERTICES, and every triangle's corners three distinct
+// vertices of its part.
+static void CheckDetailMesh(const mnavPolyMesh* mesh, const mnavDetailMesh* detail)
+{
+    MNAV_ASSERT(detail->partCount == mesh->polygonCount);
+    int32_t vertices = 0;
+    int32_t triangles = 0;
+    for (int32_t p = 0; p < detail->partCount; ++p)
+    {
+        const mnavDetailPart* part = &detail->parts[p];
+        MNAV_ASSERT(part->firstVertex == vertices && part->firstTriangle == triangles);
+        MNAV_ASSERT(part->vertexCount >= mesh->polygons[p].count &&
+                    part->vertexCount <= MNAV_DETAIL_VERTICES);
+        for (int32_t t = 0; t < part->triangleCount; ++t)
+        {
+            const uint8_t* c = detail->triangles[part->firstTriangle + t].corners;
+            MNAV_ASSERT(c[0] < part->vertexCount && c[1] < part->vertexCount &&
+                        c[2] < part->vertexCount);
+            MNAV_ASSERT(c[0] != c[1] && c[1] != c[2] && c[0] != c[2]);
+        }
+        vertices += part->vertexCount;
+        triangles += part->triangleCount;
+    }
+    MNAV_ASSERT(vertices == detail->vertexCount && triangles == detail->triangleCount);
+}
+
 mnavResult mnavBuildDetailMesh(mnavMemory* memory, const mnavCompactField* field,
                                const mnavRegionMap* regions, const mnavPolyMesh* mesh,
                                mnavDetailSettings settings, mnavDetailMesh* detail)
@@ -531,6 +560,10 @@ mnavResult mnavBuildDetailMesh(mnavMemory* memory, const mnavCompactField* field
     if (result != mnav_success)
     {
         mnavReleaseDetailMesh(memory, detail);
+    }
+    else if (MNAV_INVARIANTS)
+    {
+        CheckDetailMesh(mesh, detail);
     }
     return result;
 }

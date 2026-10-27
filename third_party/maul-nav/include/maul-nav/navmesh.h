@@ -3,7 +3,7 @@
 //
 // The navmesh queries read: tiles loaded from baked bytes, staged and
 // committed together, their polygons named by generation-checked ids and
-// linked across the tiles' shared sides (mnav-0004).
+// linked across the tiles' shared sides.
 
 #ifndef MAUL_NAV_NAVMESH_H
 #define MAUL_NAV_NAVMESH_H
@@ -52,7 +52,7 @@ extern "C"
         mnav_tileDetailTriangles = 5,
         // The payload's size or hash.
         mnav_tilePayload = 6,
-        // A flight tile's cube classes, nodes and leaves (mnav-0015).
+        // A flight tile's cube classes, nodes and leaves.
         mnav_tileFlightRoots = 7,
         mnav_tileFlightNodes = 8,
         mnav_tileFlightLeaves = 9,
@@ -74,7 +74,7 @@ extern "C"
     /// @param navmeshOut   Receives the navmesh, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` with the setting for an
     /// invalid def or a NULL argument; `mnav_errorVersion` for a def built
-    /// against another major or minor version; `mnav_errorLimit` when the
+    /// against another version of the headers; `mnav_errorLimit` when the
     /// navmesh does not fit the def's memory limit; `mnav_errorCapacity` when
     /// the allocator fails.
     /// @par Thread safety
@@ -212,7 +212,7 @@ extern "C"
 // The dearest off-mesh link, in the filter's cost units.
 #define MNAV_MAX_LINK_COST 1.0e9f
 
-    // How an agent traverses an off-mesh link (mnav-0004): kinds 0 to 5 are the
+    // How an agent traverses an off-mesh link: kinds 0 to 5 are the
     // library's, 6 to MNAV_LINK_KINDS - 1 the host's to name.
     typedef uint8_t mnavLinkKind;
 
@@ -243,7 +243,7 @@ extern "C"
         mnavLinkKind kind;
         // Whether agents may cross it from its end to its start too.
         bool twoWay;
-        // 0 for a point link; otherwise an edge link (mnav-0004): the start
+        // 0 for a point link; otherwise an edge link: the start
         // and end are the centers of two edges this wide, in meters, across
         // the link's direction on the ground, up to MNAV_MAX_LINK_WIDTH.
         // Agents cross it at points spaced along the width, no farther

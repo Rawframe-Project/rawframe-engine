@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The tile format (mnav-0003): a baked tile's polygon mesh and detail mesh as
+// The tile format: a baked tile's polygon mesh and detail mesh as
 // little-endian integers behind a versioned, fingerprinted header, and
 // the loader that checks every byte of it as hostile.
 
@@ -22,12 +22,12 @@
 // The header's size in bytes.
 #define MNAV_TILE_HEADER_BYTES 104
 
-// What a tile records beside its meshes: the generator's version, the
-// bake's fingerprint of its input, the tile's place in the grid, and the
+// What a tile records beside its meshes: the bake's generation
+// (MNAV_BAKE_GENERATOR), the bake's fingerprint of its input, the tile's place in the grid, and the
 // settings its integers are in.
 typedef struct mnavTileInfo
 {
-    mnavVersion generator;
+    uint16_t generator;
     uint64_t fingerprint;
     int32_t x;
     int32_t z;

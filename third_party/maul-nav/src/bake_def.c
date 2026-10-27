@@ -5,6 +5,7 @@
 
 #include "bake_def.h"
 
+#include "fpenv.h"
 #include "scalar.h"
 
 #include "maul-nav/bake.h"
@@ -17,9 +18,18 @@
 // the neighbor tile does.
 #define BORDER_MARGIN_CELLS 3
 
-mnavBakeDefResult mnavValidateBakeDef(const mnavBakeDef* def, mnavBakeCells* cellsOut)
+static MNAV_NOINLINE mnavBakeDefResult ValidateBakeDefWork(const mnavBakeDef* def,
+                                                           mnavBakeCells* cellsOut)
 {
     return mnavCheckBakeDef(def, cellsOut);
+}
+
+mnavBakeDefResult mnavValidateBakeDef(const mnavBakeDef* def, mnavBakeCells* cellsOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavBakeDefResult result = ValidateBakeDefWork(def, cellsOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 static mnavBakeDefResult Refuse(mnavBakeSetting setting)

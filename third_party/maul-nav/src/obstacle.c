@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Avoidance obstacles (mnav-0006). Edges give RVO2's obstacle lines (RVO2
+// Avoidance obstacles. Edges give RVO2's obstacle lines (RVO2
 // src/Agent.cc, computeNewVelocity, lines 274 to 506; the edge choice of
 // src/KdTree.cc, queryObstacleTreeRecursive), in binary64. A moving
 // obstacle is a static one in its own frame: its lines are built from the
@@ -10,6 +10,7 @@
 
 #include "obstacle.h"
 
+#include "invariant.h"
 #include "orca.h"
 
 #include "maul-nav/avoidance.h"
@@ -288,6 +289,19 @@ static int32_t Keep(const mnavObstacleVertex* vertices, mnavObstacleNear* list, 
     return count;
 }
 
+// At most the limit of entries, nearest first in NearBefore's order, each
+// measured within reach.
+static void CheckNear(const mnavObstacleVertex* vertices, const mnavObstacleNear* list,
+                      int32_t count, int32_t limit)
+{
+    MNAV_ASSERT(count >= 0 && count <= limit);
+    for (int32_t k = 0; k < count; ++k)
+    {
+        MNAV_ASSERT(list[k].distance >= 0.0);
+        MNAV_ASSERT(k == 0 || NearBefore(vertices, list[k - 1], list[k]));
+    }
+}
+
 int32_t mnavNearInGrid(mnavObstacleGrid* grid, const mnavObstacleVertex* vertices, mnavPos2 p,
                        double reach, mnavObstacleMeasure measure, const void* context,
                        mnavObstacleNear* list, int32_t limit)
@@ -326,6 +340,10 @@ int32_t mnavNearInGrid(mnavObstacleGrid* grid, const mnavObstacleVertex* vertice
                 count = Keep(vertices, list, count, limit, (mnavObstacleNear){distance, v});
             }
         }
+    }
+    if (MNAV_INVARIANTS)
+    {
+        CheckNear(vertices, list, count, limit);
     }
     return count;
 }

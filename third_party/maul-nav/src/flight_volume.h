@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flight volume's insides (mnav-0015), for the queries that read it.
+// The flight volume's insides, for the queries that read it.
 
 #ifndef MAUL_NAV_SRC_FLIGHT_VOLUME_H
 #define MAUL_NAV_SRC_FLIGHT_VOLUME_H

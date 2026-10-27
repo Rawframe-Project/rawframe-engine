@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A tile's flight volume (mnav-0015): the bake's input rasterized at the
+// A tile's flight volume: the bake's input rasterized at the
 // voxel size, solid below the ground when asked, dilated by the flier's
 // radius, as a compact octree per cube of the tile's side.
 

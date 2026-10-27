@@ -7,6 +7,7 @@
 
 #include "allocator.h"
 #include "heightfield.h"
+#include "invariant.h"
 
 #include "maul-nav/bake.h"
 
@@ -86,6 +87,53 @@ static uint16_t FindLink(const mnavCompactField* field, const mnavOpenSpan* span
     return MNAV_NO_LINK;
 }
 
+// A link from span i of column c, if any, leads into the neighboring
+// column to a span that shares height cells of space and whose floor is
+// within step.
+static void CheckLink(const mnavCompactField* field, int32_t c, uint32_t i, int32_t direction,
+                      int32_t height, int32_t step)
+{
+    const mnavOpenSpan* span = &field->spans[i];
+    if (span->links[direction] == MNAV_NO_LINK)
+    {
+        return;
+    }
+    int32_t width = field->frame.width;
+    int32_t nx = c % width + mnavDirectionX(direction);
+    int32_t nz = c / width + mnavDirectionZ(direction);
+    MNAV_ASSERT(nx >= 0 && nz >= 0 && nx < width && nz < width);
+    int32_t column = nx + nz * width;
+    MNAV_ASSERT(field->columns[column] + span->links[direction] < field->columns[column + 1]);
+    const mnavOpenSpan* other =
+        &field->spans[mnavLinkedSpan(field, c % width, c / width, i, direction)];
+    int32_t shared = Min(span->floor + span->height, other->floor + other->height) -
+                     Max(span->floor, other->floor);
+    int32_t rise = (int32_t)other->floor - (int32_t)span->floor;
+    MNAV_ASSERT(shared >= height && rise >= -step && rise <= step);
+}
+
+// The columns cover the spans in order, each column's floors ascend, and
+// every link holds (CheckLink).
+static void CheckCompactField(const mnavCompactField* field, int32_t height, int32_t step)
+{
+    int32_t width = field->frame.width;
+    MNAV_ASSERT(field->columns[0] == 0);
+    MNAV_ASSERT(field->columns[width * width] == (uint32_t)field->spanCount);
+    for (int32_t c = 0; c < width * width; ++c)
+    {
+        uint32_t end = field->columns[c + 1];
+        MNAV_ASSERT(field->columns[c] <= end);
+        for (uint32_t i = field->columns[c]; i < end; ++i)
+        {
+            MNAV_ASSERT(i + 1 == end || field->spans[i].floor < field->spans[i + 1].floor);
+            for (int32_t direction = 0; direction < 4; ++direction)
+            {
+                CheckLink(field, c, i, direction, height, step);
+            }
+        }
+    }
+}
+
 void mnavLinkCompactField(mnavCompactField* field, int32_t height, int32_t step)
 {
     int32_t width = field->frame.width;
@@ -109,6 +157,10 @@ void mnavLinkCompactField(mnavCompactField* field, int32_t height, int32_t step)
                 }
             }
         }
+    }
+    if (MNAV_INVARIANTS)
+    {
+        CheckCompactField(field, height, step);
     }
 }
 

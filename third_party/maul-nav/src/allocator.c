@@ -6,10 +6,31 @@
 
 #include "allocator.h"
 
+#include "fpenv.h"
+
 #include <stdckdint.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+
+// The host's allocator runs in the host's floating-point environment:
+// each call is the only work of a helper of its own, so none of the
+// caller's arithmetic moves into it.
+static MNAV_NOINLINE void* HostAlloc(const mnavAllocator* allocator, size_t bytes, size_t alignment)
+{
+    mnavFloatHost host = mnavFloatHostEnter();
+    void* block = allocator->alloc(bytes, alignment, allocator->context);
+    mnavFloatHostLeave(host);
+    return block;
+}
+
+static MNAV_NOINLINE void HostFree(const mnavAllocator* allocator, void* block, size_t bytes,
+                                   size_t alignment)
+{
+    mnavFloatHost host = mnavFloatHostEnter();
+    allocator->free(block, bytes, alignment, allocator->context);
+    mnavFloatHostLeave(host);
+}
 
 mnavMemory mnavMakeMemory(mnavAllocator allocator, uint64_t limit)
 {
@@ -36,7 +57,7 @@ mnavResult mnavAllocate(mnavMemory* memory, size_t count, size_t size, size_t al
     void* block = nullptr;
     if (memory->allocator.alloc != nullptr)
     {
-        block = memory->allocator.alloc(bytes, alignment, memory->allocator.context);
+        block = HostAlloc(&memory->allocator, bytes, alignment);
     }
     else if (alignment <= alignof(max_align_t))
     {
@@ -62,7 +83,7 @@ void mnavRelease(mnavMemory* memory, void* block, size_t count, size_t size, siz
     memory->used -= bytes;
     if (memory->allocator.free != nullptr)
     {
-        memory->allocator.free(block, bytes, alignment, memory->allocator.context);
+        HostFree(&memory->allocator, block, bytes, alignment);
         return;
     }
     free(block);

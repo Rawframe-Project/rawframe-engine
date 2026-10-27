@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The fingerprint of a tile's input (mnav-0003), which the navmesh and
+// The fingerprint of a tile's input, which the navmesh and
 // flight volume bakers both write into their tiles.
 
 #include "fingerprint.h"

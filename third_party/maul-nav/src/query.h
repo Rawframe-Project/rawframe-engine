@@ -58,7 +58,7 @@ typedef struct mnavSearchNode
     int32_t heap;
 } mnavSearchNode;
 
-// A grid search's node (mnav-0005): a cell reached, the way it came, its
+// A grid search's node: a cell reached, the way it came, its
 // cost and length so far and the heuristic, and its place in the open
 // list, MNAV_NO_NODE before it enters it, or MNAV_CLOSED.
 typedef struct mnavGridNode
@@ -72,7 +72,7 @@ typedef struct mnavGridNode
     double remaining;
 } mnavGridNode;
 
-// A flight search's node (mnav-0015): an open block of the flight volume,
+// A flight search's node: an open block of the flight volume,
 // its lowest voxel and side; the point the path passes in it, in voxels
 // of the volume's frame; its length so far and the distance left, in
 // voxels; the way it came, and the neighbor that reached it; whether the
@@ -114,7 +114,7 @@ typedef struct mnavSearch
     // The navmesh's commits when the search began.
     uint64_t commits;
     const mnavQueryFilter* filter;
-    // The heuristic's scale (mnav-0005).
+    // The heuristic's scale.
     double cheapest;
     mnavPos3 end;
     int32_t endSlot;
@@ -133,14 +133,14 @@ typedef struct mnavSearch
     bool beyond;
     // Whether off-mesh links are followed from where they land back to
     // where they take off, so that the costs found are those of walking to
-    // the start rather than from it (mnav-0008).
+    // the start rather than from it.
     bool backward;
     // The nodes whose closing ends the search, its tag -1 for none: a
-    // slot, a tag and a range of lows, as nodes' (mnav-0008).
+    // slot, a tag and a range of lows, as nodes'.
     int32_t goal[4];
 } mnavSearch;
 
-// A flight search in progress (mnav-0015), in plain data so that the
+// A flight search in progress, in plain data so that the
 // context keeps it between slices: the volume and its commits when it
 // began, the end, what stopped ways on, and the nodes found. A search
 // that needed no nodes (refused, or the start's block holding the end)
@@ -233,7 +233,7 @@ uint32_t mnavFindNode(const mnavQuery* query, int32_t slot, int32_t polygon, int
 // Confines the search just begun to the slots flagged in inside; with
 // beyond, nodes outside are opened but never expanded; with no end, the
 // search is Dijkstra's and never reaches the end, so that it runs until
-// its open list empties (mnav-0008).
+// its open list empties.
 void mnavConfineSearch(mnavQuery* query, const uint8_t* inside, bool beyond, bool noEnd);
 
 // Turns the search just begun backward: off-mesh links are followed from
@@ -244,12 +244,12 @@ void mnavTurnSearchBackward(mnavQuery* query);
 // Aims the search at another point: the end point, and the end polygon's
 // slot and index, or -1 for an end never reached; and at the nodes whose
 // closing ends it, goal's slot, tag and lowest and highest low, its tag
-// -1 for none (mnav-0008).
+// -1 for none.
 void mnavAimSearch(mnavQuery* query, mnavPos3 end, int32_t endSlot, int32_t endPolygon,
                    const int32_t goal[4]);
 
 // Starts the search over from node n, as it was reached: keeps only the
-// nodes on its way, closed, and opens n alone (mnav-0008).
+// nodes on its way, closed, and opens n alone.
 void mnavRestartSearch(mnavQuery* query, int32_t n);
 
 // Puts node n in the open list, by its cost and heuristic summed; ties

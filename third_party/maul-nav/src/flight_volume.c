@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flight volume (mnav-0015): flight tiles loaded from bytes, staged
+// The flight volume: flight tiles loaded from bytes, staged
 // and committed together, kept sorted by place.
 
 #include "flight_volume.h"
@@ -10,6 +10,7 @@
 #include "flight.h"
 #include "flight_def.h"
 #include "flight_tile.h"
+#include "fpenv.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/flight.h"
@@ -20,7 +21,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-mnavFlightDefResult mnavCreateFlightVolume(const mnavFlightDef* def, mnavFlightVolume** volumeOut)
+static MNAV_NOINLINE mnavFlightDefResult CreateFlightVolumeWork(const mnavFlightDef* def,
+                                                                mnavFlightVolume** volumeOut)
 {
     if (volumeOut == nullptr)
     {
@@ -44,6 +46,14 @@ mnavFlightDefResult mnavCreateFlightVolume(const mnavFlightDef* def, mnavFlightV
     *volume = (mnavFlightVolume){.def = *def, .shape = shape, .memory = memory};
     *volumeOut = volume;
     return (mnavFlightDefResult){mnav_success, mnav_flightSettingNone};
+}
+
+mnavFlightDefResult mnavCreateFlightVolume(const mnavFlightDef* def, mnavFlightVolume** volumeOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavFlightDefResult result = CreateFlightVolumeWork(def, volumeOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 static void DropEntries(mnavMemory* memory, mnavFlightEntry* entries, int32_t count)
@@ -125,7 +135,8 @@ static mnavResult Stage(mnavFlightVolume* volume, mnavFlightEntry change)
     return mnav_success;
 }
 
-mnavTileResult mnavStageFlightTile(mnavFlightVolume* volume, const uint8_t* bytes, size_t size)
+static MNAV_NOINLINE mnavTileResult StageFlightTileWork(mnavFlightVolume* volume,
+                                                        const uint8_t* bytes, size_t size)
 {
     if (volume == nullptr || bytes == nullptr)
     {
@@ -142,6 +153,14 @@ mnavTileResult mnavStageFlightTile(mnavFlightVolume* volume, const uint8_t* byte
     change.z = change.tile.tileZ;
     mnavResult result = Stage(volume, change);
     return (mnavTileResult){result, mnav_tileHeader, -1};
+}
+
+mnavTileResult mnavStageFlightTile(mnavFlightVolume* volume, const uint8_t* bytes, size_t size)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavTileResult result = StageFlightTileWork(volume, bytes, size);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 mnavResult mnavStageFlightTileRemoval(mnavFlightVolume* volume, int32_t tileX, int32_t tileZ)
@@ -205,7 +224,7 @@ static void Merge(mnavFlightVolume* volume, mnavFlightEntry* next)
     }
 }
 
-mnavResult mnavCommitFlight(mnavFlightVolume* volume)
+static MNAV_NOINLINE mnavResult CommitFlightWork(mnavFlightVolume* volume)
 {
     if (volume == nullptr)
     {
@@ -249,6 +268,14 @@ mnavResult mnavCommitFlight(mnavFlightVolume* volume)
     return mnav_success;
 }
 
+mnavResult mnavCommitFlight(mnavFlightVolume* volume)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = CommitFlightWork(volume);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
 mnavResult mnavGetFlightTile(const mnavFlightVolume* volume, int32_t tileX, int32_t tileZ,
                              uint64_t* fingerprintOut)
 {
@@ -281,7 +308,8 @@ static int64_t FloorDiv(int64_t a, int64_t b)
     return (a % b != 0 && a < 0) ? q - 1 : q;
 }
 
-mnavResult mnavIsFlightOpen(const mnavFlightVolume* volume, mnavPos3 point, bool* openOut)
+static MNAV_NOINLINE mnavResult IsFlightOpenWork(const mnavFlightVolume* volume, mnavPos3 point,
+                                                 bool* openOut)
 {
     if (volume == nullptr || openOut == nullptr)
     {
@@ -313,6 +341,14 @@ mnavResult mnavIsFlightOpen(const mnavFlightVolume* volume, mnavPos3 point, bool
     *openOut = !mnavFlightSolid(&e->tile, (int32_t)(v[0] - tileX * side), (int32_t)y,
                                 (int32_t)(v[2] - tileZ * side));
     return mnav_success;
+}
+
+mnavResult mnavIsFlightOpen(const mnavFlightVolume* volume, mnavPos3 point, bool* openOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = IsFlightOpenWork(volume, point, openOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 const mnavFlightTile* mnavFlightTileAt(const mnavFlightVolume* volume, int32_t tileX, int32_t tileZ)

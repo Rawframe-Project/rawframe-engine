@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Appending to debug buffers (mnav-0010).
+// Appending to debug buffers.
 
 #include "draw.h"
 

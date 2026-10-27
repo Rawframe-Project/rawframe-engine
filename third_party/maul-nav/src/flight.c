@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Flight volume tiles (mnav-0015): the bake's input rasterized at the
+// Flight volume tiles: the bake's input rasterized at the
 // voxel size by the heightfield, kept as a bitset per column of voxels
 // with a border as wide as the flier's radius, solid below the ground
 // when asked, dilated by a ball of that radius, then made into a compact

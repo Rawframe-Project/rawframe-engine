@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The commit's part in runtime tiers (mnav-0004).
+// The commit's part in runtime tiers.
 
 #ifndef MAUL_NAV_SRC_MODIFIERS_H
 #define MAUL_NAV_SRC_MODIFIERS_H

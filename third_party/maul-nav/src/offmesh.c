@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Off-mesh links (mnav-0004): staging them, and attaching them to polygons at
+// Off-mesh links: staging them, and attaching them to polygons at
 // each commit.
 
 #include "offmesh.h"
 
 #include "allocator.h"
+#include "fpenv.h"
 #include "navmesh.h"
 #include "nearest.h"
 #include "sort.h"
@@ -151,7 +152,8 @@ static int32_t NextFree(const mnavNavmesh* navmesh, int32_t s)
     return s;
 }
 
-mnavResult mnavStageLink(mnavNavmesh* navmesh, const mnavLinkDef* def, mnavLinkId* linkOut)
+static MNAV_NOINLINE mnavResult StageLinkWork(mnavNavmesh* navmesh, const mnavLinkDef* def,
+                                              mnavLinkId* linkOut)
 {
     if (navmesh == nullptr || def == nullptr || linkOut == nullptr)
     {
@@ -195,7 +197,15 @@ mnavResult mnavStageLink(mnavNavmesh* navmesh, const mnavLinkDef* def, mnavLinkI
     return mnav_success;
 }
 
-mnavResult mnavStageLinkRemoval(mnavNavmesh* navmesh, mnavLinkId id)
+mnavResult mnavStageLink(mnavNavmesh* navmesh, const mnavLinkDef* def, mnavLinkId* linkOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = StageLinkWork(navmesh, def, linkOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult StageLinkRemovalWork(mnavNavmesh* navmesh, mnavLinkId id)
 {
     if (navmesh == nullptr)
     {
@@ -229,7 +239,16 @@ mnavResult mnavStageLinkRemoval(mnavNavmesh* navmesh, mnavLinkId id)
     return mnav_success;
 }
 
-mnavResult mnavStageLinkEnabled(mnavNavmesh* navmesh, mnavLinkId id, bool enabled)
+mnavResult mnavStageLinkRemoval(mnavNavmesh* navmesh, mnavLinkId id)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = StageLinkRemovalWork(navmesh, id);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult StageLinkEnabledWork(mnavNavmesh* navmesh, mnavLinkId id,
+                                                     bool enabled)
 {
     if (navmesh == nullptr)
     {
@@ -259,7 +278,16 @@ mnavResult mnavStageLinkEnabled(mnavNavmesh* navmesh, mnavLinkId id, bool enable
     return result;
 }
 
-mnavResult mnavGetLink(const mnavNavmesh* navmesh, mnavLinkId id, mnavLinkState* stateOut)
+mnavResult mnavStageLinkEnabled(mnavNavmesh* navmesh, mnavLinkId id, bool enabled)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = StageLinkEnabledWork(navmesh, id, enabled);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult GetLinkWork(const mnavNavmesh* navmesh, mnavLinkId id,
+                                            mnavLinkState* stateOut)
 {
     if (navmesh == nullptr || stateOut == nullptr)
     {
@@ -293,6 +321,14 @@ mnavResult mnavGetLink(const mnavNavmesh* navmesh, mnavLinkId id, mnavLinkState*
     stateOut->enabled = navmesh->links[s].state.enabled;
     stateOut->crossings = attached;
     return mnav_success;
+}
+
+mnavResult mnavGetLink(const mnavNavmesh* navmesh, mnavLinkId id, mnavLinkState* stateOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = GetLinkWork(navmesh, id, stateOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 // The half sizes of the box a link end snaps within: its radius on the

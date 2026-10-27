@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flight tile format and its loader (mnav-0015).
+// The flight tile format and its loader.
 
 #include "flight_tile.h"
 
@@ -31,9 +31,8 @@ static size_t PayloadBytes(int64_t cubes, int64_t nodes, int64_t leaves)
     return (size_t)(cubes + nodes * NODE_BYTES + leaves * LEAF_BYTES);
 }
 
-static void WriteHeader(mnavByteWriter* w, const mnavFlightDef* def, mnavVersion generator,
-                        uint64_t fingerprint, const mnavFlightTile* tile, size_t payload,
-                        uint64_t hash)
+static void WriteHeader(mnavByteWriter* w, const mnavFlightDef* def, uint64_t fingerprint,
+                        const mnavFlightTile* tile, size_t payload, uint64_t hash)
 {
     for (int32_t k = 0; k < 4; ++k)
     {
@@ -41,9 +40,10 @@ static void WriteHeader(mnavByteWriter* w, const mnavFlightDef* def, mnavVersion
     }
     mnavPutU16(w, MNAV_FLIGHT_FORMAT);
     mnavPutU16(w, MNAV_FLIGHT_HEADER_BYTES);
-    mnavPutU16(w, generator.major);
-    mnavPutU16(w, generator.minor);
-    mnavPutU16(w, generator.patch);
+    // The generation, then two reserved words.
+    mnavPutU16(w, MNAV_FLIGHT_GENERATOR);
+    mnavPutU16(w, 0);
+    mnavPutU16(w, 0);
     mnavPutU16(w, def->groundBelow ? FLAG_GROUND_BELOW : 0u);
     mnavPutU64(w, fingerprint);
     mnavPutU64(w, hash);
@@ -65,9 +65,8 @@ static void WriteHeader(mnavByteWriter* w, const mnavFlightDef* def, mnavVersion
     mnavPutU32(w, (uint64_t)tile->leafCount);
 }
 
-mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, mnavVersion generator,
-                                uint64_t fingerprint, const mnavFlightTile* tile, uint8_t** bytes,
-                                size_t* size)
+mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, uint64_t fingerprint,
+                                const mnavFlightTile* tile, uint8_t** bytes, size_t* size)
 {
     *bytes = nullptr;
     *size = 0;
@@ -94,7 +93,7 @@ mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, mn
     }
     uint64_t hash = mnavHash64(MNAV_HASH_INIT, out + MNAV_FLIGHT_HEADER_BYTES, (int32_t)payload);
     w.at = out;
-    WriteHeader(&w, def, generator, fingerprint, tile, payload, hash);
+    WriteHeader(&w, def, fingerprint, tile, payload, hash);
     *bytes = out;
     *size = total;
     return mnav_success;
@@ -160,10 +159,10 @@ static mnavTileResult ReadHeader(const uint8_t* bytes, size_t size, const mnavFl
         return Refuse(mnav_errorVersion, mnav_tileHeader, -1);
     }
     bool valid = mnavGetU16(&r) == MNAV_FLIGHT_HEADER_BYTES;
-    for (int32_t k = 0; k < 3; ++k)
-    {
-        (void)mnavGetU16(&r);
-    }
+    // The generation, then two reserved words.
+    (void)mnavGetU16(&r);
+    valid &= mnavGetU16(&r) == 0;
+    valid &= mnavGetU16(&r) == 0;
     valid &= mnavGetU16(&r) == (def->groundBelow ? FLAG_GROUND_BELOW : 0u);
     h->fingerprint = mnavGetU64(&r);
     h->hash = mnavGetU64(&r);

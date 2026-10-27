@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The tile cache (mnav-0016): entries in a table of the def's tiles, each
+// The tile cache: entries in a table of the def's tiles, each
 // with a packed field and its own copies of volumes, all in the cache's
 // memory and within its limits.
 
@@ -10,6 +10,7 @@
 #include "allocator.h"
 #include "compact.h"
 #include "field_pack.h"
+#include "fpenv.h"
 #include "outline.h"
 
 #include "maul-nav/bake.h"
@@ -28,7 +29,8 @@ struct mnavTileCache
     int32_t count;
 };
 
-mnavResult mnavCreateTileCache(const mnavTileCacheDef* def, mnavTileCache** cacheOut)
+static MNAV_NOINLINE mnavResult CreateTileCacheWork(const mnavTileCacheDef* def,
+                                                    mnavTileCache** cacheOut)
 {
     if (cacheOut == nullptr)
     {
@@ -70,6 +72,14 @@ mnavResult mnavCreateTileCache(const mnavTileCacheDef* def, mnavTileCache** cach
     }
     *cacheOut = cache;
     return mnav_success;
+}
+
+mnavResult mnavCreateTileCache(const mnavTileCacheDef* def, mnavTileCache** cacheOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = CreateTileCacheWork(def, cacheOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 // Releases what an entry holds.

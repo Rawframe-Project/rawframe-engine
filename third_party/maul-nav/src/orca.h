@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// ORCA's linear programs (mnav-0006), after RVO2's linearProgram1 to 3 and
+// ORCA's linear programs, after RVO2's linearProgram1 to 3 and
 // in binary64: the velocity nearest a wanted one within a speed that
 // keeps to the left of every line, or that breaks the lines least.
 

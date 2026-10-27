@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Grid paths (mnav-0005): A* over weighted grids, and jump point search
+// Grid paths: A* over weighted grids, and jump point search
 // (Harabor and Grastien, 2011) when every included area costs the same,
 // with no blocked corner cut: a diagonal step needs both cells beside it
 // open. Nodes, the open list and the node table live in the query
 // context's memory, which serves one query at a time.
 
+#include "fpenv.h"
 #include "query.h"
 #include "query_filter.h"
 
@@ -439,8 +440,9 @@ static bool GoodGrid(const mnavGrid* grid, mnavCell a, mnavCell b)
            a.y < grid->height && b.x >= 0 && b.y >= 0 && b.x < grid->width && b.y < grid->height;
 }
 
-mnavResult mnavFindGridPath(mnavQuery* query, const mnavGrid* grid, const mnavQueryFilter* filter,
-                            mnavCell start, mnavCell end, mnavGridPath* pathOut)
+static MNAV_NOINLINE mnavResult FindGridPathWork(mnavQuery* query, const mnavGrid* grid,
+                                                 const mnavQueryFilter* filter, mnavCell start,
+                                                 mnavCell end, mnavGridPath* pathOut)
 {
     if (query == nullptr || grid == nullptr || pathOut == nullptr || !GoodGrid(grid, start, end))
     {
@@ -509,4 +511,13 @@ mnavResult mnavFindGridPath(mnavQuery* query, const mnavGrid* grid, const mnavQu
                                                  : mnav_pathNone;
     *pathOut = PathTo(&g, g.found != MNAV_NO_NODE ? g.found : g.best, ending);
     return mnav_success;
+}
+
+mnavResult mnavFindGridPath(mnavQuery* query, const mnavGrid* grid, const mnavQueryFilter* filter,
+                            mnavCell start, mnavCell end, mnavGridPath* pathOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = FindGridPathWork(query, grid, filter, start, end, pathOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

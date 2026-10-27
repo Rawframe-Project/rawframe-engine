@@ -3,7 +3,7 @@
 //
 // The exact shortest-path search: Polyanya (Cui, Harabor and Grastien,
 // 2017) over the navmesh's portals, with off-mesh links as roots of their
-// own (mnav-0005).
+// own.
 //
 // A node is an interval of a portal with a root that sees all of it: the
 // start, a corner the way turns at, or a link's landing point. Expanding
@@ -15,6 +15,7 @@
 // The best cost known at each root, kept in the node table by the root's
 // position, prunes a way to a root that is no cheaper.
 
+#include "fpenv.h"
 #include "navmesh.h"
 #include "offmesh.h"
 #include "polymesh.h"
@@ -844,10 +845,11 @@ static mnavResult Begin(Shortest* s, const mnavQueryFilter* filter, mnavPolygonI
     return mnav_success;
 }
 
-mnavResult mnavFindShortestPath(mnavQuery* query, const mnavNavmesh* navmesh,
-                                const mnavQueryFilter* filter, mnavPolygonId startPolygon,
-                                mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end,
-                                mnavPath* pathOut)
+static MNAV_NOINLINE mnavResult FindShortestPathWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                                     const mnavQueryFilter* filter,
+                                                     mnavPolygonId startPolygon, mnavPos3 start,
+                                                     mnavPolygonId endPolygon, mnavPos3 end,
+                                                     mnavPath* pathOut)
 {
     if (query == nullptr || navmesh == nullptr || pathOut == nullptr || !isfinite(start.x) ||
         !isfinite(start.y) || !isfinite(start.z) || !isfinite(end.x) || !isfinite(end.y) ||
@@ -889,4 +891,16 @@ mnavResult mnavFindShortestPath(mnavQuery* query, const mnavNavmesh* navmesh,
         pathOut->end = reach;
     }
     return mnav_success;
+}
+
+mnavResult mnavFindShortestPath(mnavQuery* query, const mnavNavmesh* navmesh,
+                                const mnavQueryFilter* filter, mnavPolygonId startPolygon,
+                                mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end,
+                                mnavPath* pathOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result =
+        FindShortestPathWork(query, navmesh, filter, startPolygon, start, endPolygon, end, pathOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }

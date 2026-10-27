@@ -15,7 +15,7 @@
 // in the last place.
 float mnavCosDegrees(float degrees);
 
-// Converts meters to whole cells (mnav-0002): a quotient within 2^-10 of an
+// Converts meters to whole cells: a quotient within 2^-10 of an
 // integer counts as that integer; otherwise it rounds up or down. Returns
 // false when the quotient exceeds max. meters and cell must be finite,
 // meters at least 0 and cell positive.

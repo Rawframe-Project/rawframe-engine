@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The LZ coder (mnav-0016): a greedy encoder that looks up the last place
+// The LZ coder: a greedy encoder that looks up the last place
 // each four bytes were seen, and a decoder that checks every count
 // against what is left.
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// An avoidance set's memory (mnav-0006), shared by the ground and the
+// An avoidance set's memory, shared by the ground and the
 // space calls, and the checks of their input's ranges.
 
 #ifndef MAUL_NAV_SRC_AVOIDANCE_H

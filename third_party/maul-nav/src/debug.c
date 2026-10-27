@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Debug geometry of navmeshes, links, paths and corridors (mnav-0010).
+// Debug geometry of navmeshes, links, paths and corridors.
 
 #include "maul-nav/debug.h"
 
 #include "draw.h"
+#include "fpenv.h"
 #include "navmesh.h"
 #include "nearest.h"
 
@@ -109,8 +110,9 @@ static void Bounds(mnavDebugBuffer* buffer, const mnavNavmesh* navmesh, int32_t 
     }
 }
 
-mnavResult mnavDebugNavmesh(const mnavNavmesh* navmesh, int32_t tileX0, int32_t tileZ0,
-                            int32_t tileX1, int32_t tileZ1, mnavDebugBuffer* buffer)
+static MNAV_NOINLINE mnavResult DebugNavmeshWork(const mnavNavmesh* navmesh, int32_t tileX0,
+                                                 int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
+                                                 mnavDebugBuffer* buffer)
 {
     if (navmesh == nullptr || !mnavGoodBuffer(buffer) || tileX1 < tileX0 || tileZ1 < tileZ0)
     {
@@ -134,7 +136,16 @@ mnavResult mnavDebugNavmesh(const mnavNavmesh* navmesh, int32_t tileX0, int32_t 
     return mnavDrawResult(buffer);
 }
 
-mnavResult mnavDebugLinks(const mnavNavmesh* navmesh, mnavDebugBuffer* buffer)
+mnavResult mnavDebugNavmesh(const mnavNavmesh* navmesh, int32_t tileX0, int32_t tileZ0,
+                            int32_t tileX1, int32_t tileZ1, mnavDebugBuffer* buffer)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = DebugNavmeshWork(navmesh, tileX0, tileZ0, tileX1, tileZ1, buffer);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult DebugLinksWork(const mnavNavmesh* navmesh, mnavDebugBuffer* buffer)
 {
     if (navmesh == nullptr || !mnavGoodBuffer(buffer))
     {
@@ -169,7 +180,15 @@ mnavResult mnavDebugLinks(const mnavNavmesh* navmesh, mnavDebugBuffer* buffer)
     return mnavDrawResult(buffer);
 }
 
-mnavResult mnavDebugPath(const mnavPath* path, mnavDebugBuffer* buffer)
+mnavResult mnavDebugLinks(const mnavNavmesh* navmesh, mnavDebugBuffer* buffer)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = DebugLinksWork(navmesh, buffer);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult DebugPathWork(const mnavPath* path, mnavDebugBuffer* buffer)
 {
     if (path == nullptr || !mnavGoodBuffer(buffer) || path->pointCount < 0 ||
         (path->pointCount > 0 && path->points == nullptr))
@@ -183,8 +202,17 @@ mnavResult mnavDebugPath(const mnavPath* path, mnavDebugBuffer* buffer)
     return mnavDrawResult(buffer);
 }
 
-mnavResult mnavDebugCorridor(const mnavNavmesh* navmesh, const mnavPolygonId* polygons,
-                             int32_t count, mnavDebugBuffer* buffer)
+mnavResult mnavDebugPath(const mnavPath* path, mnavDebugBuffer* buffer)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = DebugPathWork(path, buffer);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavResult DebugCorridorWork(const mnavNavmesh* navmesh,
+                                                  const mnavPolygonId* polygons, int32_t count,
+                                                  mnavDebugBuffer* buffer)
 {
     if (navmesh == nullptr || !mnavGoodBuffer(buffer) || count < 0 ||
         (count > 0 && polygons == nullptr))
@@ -205,4 +233,13 @@ mnavResult mnavDebugCorridor(const mnavNavmesh* navmesh, const mnavPolygonId* po
         }
     }
     return mnavDrawResult(buffer);
+}
+
+mnavResult mnavDebugCorridor(const mnavNavmesh* navmesh, const mnavPolygonId* polygons,
+                             int32_t count, mnavDebugBuffer* buffer)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = DebugCorridorWork(navmesh, polygons, count, buffer);
+    mnavFloatEnvLeave(env);
+    return result;
 }

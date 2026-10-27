@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Terrains (mnav-0003). A cell between samples (c, r), (c + 1, r),
+// Terrains. A cell between samples (c, r), (c + 1, r),
 // (c + 1, r + 1) and (c, r + 1) is two triangles split along the diagonal
 // from (c, r) to (c + 1, r + 1), wound so that they face up; a sample's
 // ground place is computed in binary64 and rounded once.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// 2D outlines filled into the fragments of one tile (mnav-0002). Each row
+// 2D outlines filled into the fragments of one tile. Each row
 // of cells is crossed at its centers' line: an edge from a to b crosses it
 // when exactly one end lies at or below the line, and a cell is inside
 // when its center lies at or after an even crossing and before the next,

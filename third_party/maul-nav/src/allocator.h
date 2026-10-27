@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Allocation through the caller's allocator, counted against a byte
-// limit (mnav-0002).
+// limit.
 
 #ifndef MAUL_NAV_SRC_ALLOCATOR_H
 #define MAUL_NAV_SRC_ALLOCATOR_H

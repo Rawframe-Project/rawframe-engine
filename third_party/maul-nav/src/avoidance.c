@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Avoidance sets (mnav-0006): their memory, and on the ground plane each
+// Avoidance sets: their memory, and on the ground plane each
 // agent's ORCA lines against its nearest neighbours (RVO2 src/Agent.cc,
 // computeNewVelocity, in binary64), its share of each avoidance set by
 // priority, and neighbours found through the sorted grid of crowd.h, so
@@ -13,6 +13,8 @@
 #include "avoidance.h"
 #include "crowd.h"
 #include "draw.h"
+#include "fpenv.h"
+#include "invariant.h"
 #include "obstacle.h"
 #include "orca.h"
 #include "orca3.h"
@@ -132,7 +134,8 @@ static mnavResult AllocatePrograms(mnavAvoidance* a)
     return result;
 }
 
-mnavResult mnavCreateAvoidance(const mnavAvoidanceDef* def, mnavAvoidance** avoidanceOut)
+static MNAV_NOINLINE mnavResult CreateAvoidanceWork(const mnavAvoidanceDef* def,
+                                                    mnavAvoidance** avoidanceOut)
 {
     if (avoidanceOut == nullptr)
     {
@@ -182,6 +185,14 @@ mnavResult mnavCreateAvoidance(const mnavAvoidanceDef* def, mnavAvoidance** avoi
     }
     *avoidanceOut = a;
     return mnav_success;
+}
+
+mnavResult mnavCreateAvoidance(const mnavAvoidanceDef* def, mnavAvoidance** avoidanceOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = CreateAvoidanceWork(def, avoidanceOut);
+    mnavFloatEnvLeave(env);
+    return result;
 }
 
 void mnavDestroyAvoidance(mnavAvoidance* avoidance)
@@ -259,6 +270,9 @@ static mnavPos2 Solve(mnavAvoidance* a, const mnavAgent* agents, double step, in
     int32_t count = fixed;
     int32_t neighbors = mnavCrowdNeighbors(
         &a->crowd, (mnavPos3){self->position.x, self->position.y, 0.0}, i, self->ignores);
+    // A line an obstacle and an agent at most: the lines fit their buffer.
+    MNAV_ASSERT(fixed <= near && near <= a->def.limits.obstacleNeighbors &&
+                neighbors <= a->def.limits.neighbors);
     for (int32_t n = 0; n < neighbors; ++n)
     {
         const mnavAgent* other = &agents[a->crowd.neighbors[n].index];
@@ -294,12 +308,19 @@ static mnavPos2 Solve(mnavAvoidance* a, const mnavAgent* agents, double step, in
     {
         velocity = mnavScale2(velocity, self->maxSpeed / sqrt(speedSq));
     }
+    // Within the speed circle, but for the scaling's last bits: relative,
+    // and a few units of the least subnormal where the squares are
+    // subnormal and round absolutely.
+    MNAV_ASSERT(isfinite(velocity.x) && isfinite(velocity.y) &&
+                mnavDot2(velocity, velocity) <=
+                    self->maxSpeed * self->maxSpeed * (1.0 + 0x1p-40) + 0x1p-1072);
     return velocity;
 }
 
-mnavResult mnavAvoid(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
-                     const mnavObstacle* obstacles, int32_t obstacleCount, double step,
-                     mnavPos2* velocitiesOut)
+static MNAV_NOINLINE mnavResult AvoidWork(mnavAvoidance* avoidance, const mnavAgent* agents,
+                                          int32_t agentCount, const mnavObstacle* obstacles,
+                                          int32_t obstacleCount, double step,
+                                          mnavPos2* velocitiesOut)
 {
     if (avoidance == nullptr || agentCount < 0 || obstacleCount < 0 ||
         (agentCount > 0 && (agents == nullptr || velocitiesOut == nullptr)) ||
@@ -334,6 +355,17 @@ mnavResult mnavAvoid(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t 
     return mnav_success;
 }
 
+mnavResult mnavAvoid(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
+                     const mnavObstacle* obstacles, int32_t obstacleCount, double step,
+                     mnavPos2* velocitiesOut)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result =
+        AvoidWork(avoidance, agents, agentCount, obstacles, obstacleCount, step, velocitiesOut);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
 const double mnavOutline[16][2] = {
     {1.0, 0.0},
     {0.9238795325112867, 0.3826834323650898},
@@ -353,8 +385,9 @@ const double mnavOutline[16][2] = {
     {0.9238795325112865, -0.3826834323650904},
 };
 
-mnavResult mnavDebugAvoidance(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
-                              double height, mnavDebugBuffer* buffer)
+static MNAV_NOINLINE mnavResult DebugAvoidanceWork(mnavAvoidance* avoidance,
+                                                   const mnavAgent* agents, int32_t agentCount,
+                                                   double height, mnavDebugBuffer* buffer)
 {
     if (avoidance == nullptr || agentCount < 0 || (agentCount > 0 && agents == nullptr) ||
         !isfinite(height) || !mnavGoodBuffer(buffer))
@@ -392,4 +425,13 @@ mnavResult mnavDebugAvoidance(mnavAvoidance* avoidance, const mnavAgent* agents,
         }
     }
     return mnavDrawResult(buffer);
+}
+
+mnavResult mnavDebugAvoidance(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
+                              double height, mnavDebugBuffer* buffer)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavResult result = DebugAvoidanceWork(avoidance, agents, agentCount, height, buffer);
+    mnavFloatEnvLeave(env);
+    return result;
 }
