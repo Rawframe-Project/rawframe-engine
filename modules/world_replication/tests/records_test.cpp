@@ -137,6 +137,10 @@ RAWFRAME_TEST(MappingRetirementsAreAscendingRunsWithGaps) {
     RAWFRAME_EXPECT(failedWith(kRuns({std::numeric_limits<std::uint32_t>::max(), 2}), ReplicationError::Malformed));
     RAWFRAME_EXPECT(
         failedWith(kRuns({std::numeric_limits<std::uint32_t>::max() - 1, 1, 1, 1}), ReplicationError::Malformed));
+    // Nor anything after a run that ends there: ID 1 again, once the end
+    // wrapped.
+    RAWFRAME_EXPECT(
+        failedWith(kRuns({std::numeric_limits<std::uint32_t>::max(), 1, 1, 1}), ReplicationError::Malformed));
 }
 
 RAWFRAME_TEST(StatePayloadsCarryRecordsForTheTable) {
@@ -350,8 +354,19 @@ RAWFRAME_TEST(HostilePeerPayloadsReadOnlyAsTheyWrite) {
                                                               .runs = {{.first = NetEntityId{5}, .count = 3},
                                                                        {.first = NetEntityId{90}, .count = 1}}})
                         .has_value());
+    // And one that ends at the last ID, which nothing may follow.
+    std::array<std::byte, 32> lastSeed{};
+    network::Writer retiringLast{lastSeed};
+    RAWFRAME_EXPECT(
+        encodeMappingRetirement(
+            retiringLast,
+            MappingRetirement{.replicationEpoch = 3,
+                              .runs = {{.first = NetEntityId{5}, .count = 3},
+                                       {.first = NetEntityId{std::numeric_limits<std::uint32_t>::max()}, .count = 1}}})
+            .has_value());
     const int kMappings = reencodes(mapping.written(), &decodeMappingDeclaration, &encodeMappingDeclaration) +
-                          reencodes(retiring.written(), &decodeMappingRetirement, &encodeMappingRetirement);
+                          reencodes(retiring.written(), &decodeMappingRetirement, &encodeMappingRetirement) +
+                          reencodes(retiringLast.written(), &decodeMappingRetirement, &encodeMappingRetirement);
     std::array<std::byte, 32> checksumSeed{};
     network::Writer checksum{checksumSeed};
     RAWFRAME_EXPECT(

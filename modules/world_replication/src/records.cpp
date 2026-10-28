@@ -74,6 +74,11 @@ result::Result<MappingRetirement> decodeMappingRetirement(std::span<const std::b
     // first, so the first gap is the first ID, never zero.
     std::uint64_t after = 0;
     while (reader.remaining() != 0) {
+        // A run that ends at the last ID is the last run: past it, the
+        // bounds below would wrap and name a small ID again.
+        if (after > std::numeric_limits<std::uint32_t>::max()) {
+            return malformed("a retired run follows one that ends at the last ID");
+        }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kGap, reader.varint());
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kCount, reader.varint());
         if (kGap == 0 || kCount == 0) {
