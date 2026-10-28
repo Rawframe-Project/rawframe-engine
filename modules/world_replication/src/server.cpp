@@ -407,7 +407,8 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
     }
     if ((settings.input && !settings.input->valid()) || (settings.perception && !settings.input) ||
         settings.maximumMapped == 0 || settings.maximumMapped > kMostMapped ||
-        settings.mappingBytesPerPublish < kLargestMappingFrame || settings.inputFutureWindow == 0 ||
+        settings.mappingBytesPerPublish < kLargestMappingFrame ||
+        settings.mappingBytesPerPublish > kMostMappingBytesPerPublish || settings.inputFutureWindow == 0 ||
         settings.paceInterval == 0 || settings.statePeriod == 0 ||
         settings.targetInputLead >= settings.inputFutureWindow) {
         return refuse(result::ErrorClass::InvalidArgument,

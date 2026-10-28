@@ -300,6 +300,19 @@ RAWFRAME_TEST(ANarrowBudgetSendsThePlayerFirstAndTheRestInTurn) {
     RAWFRAME_EXPECT(fresh == 20);
 }
 
+RAWFRAME_TEST(AMappingBudgetPastItsMostIsRefused) {
+    // Half of what a client's transport holds unread is the most; one byte
+    // more could let a single publish fill it.
+    Scenario scenario{{}};
+    const auto kWith = [&scenario](std::size_t budget) {
+        return world_replication::ReplicationServer::create(
+            *scenario.serverSessions, {.table = {.components = {positionCodec()}}, .mappingBytesPerPublish = budget});
+    };
+    RAWFRAME_EXPECT(kWith(world_replication::kMostMappingBytesPerPublish).has_value());
+    RAWFRAME_EXPECT(!kWith(world_replication::kMostMappingBytesPerPublish + 1).has_value());
+    RAWFRAME_EXPECT(!kWith(std::size_t{512} << 10U).has_value());
+}
+
 RAWFRAME_TEST(APredictingClientRunsAheadAndIsConfirmed) {
     Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(40)}, {.predicting = true}};
     const auto kPosition = *scenario.schema->key<Position>();

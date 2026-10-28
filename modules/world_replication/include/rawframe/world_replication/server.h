@@ -124,7 +124,8 @@ struct ServerReplicationSettings {
     /// are retired or declared at its next publishes, its own player always
     /// declared first. A join in view of many entities, or a mass removal,
     /// never sends more at once than the client's transport holds between
-    /// its reads. At least one declaration's.
+    /// its reads. At least one declaration's, and at most
+    /// kMostMappingBytesPerPublish.
     std::size_t mappingBytesPerPublish = kMappingBytesPerPublish;
     /// Ticks after which a value sent and not acknowledged is sent again,
     /// though it has not changed.
