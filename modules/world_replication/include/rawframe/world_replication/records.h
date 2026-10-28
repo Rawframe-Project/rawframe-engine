@@ -20,12 +20,12 @@ namespace rawframe::world_replication {
 inline constexpr std::size_t kMappedByDefault = 4096;
 inline constexpr std::size_t kMostMapped = std::size_t{1} << 16U;
 
-/// The bytes of mapping declarations one connection is sent per publish
-/// unless its game says otherwise: a sixteenth of the 256 KiB a client's
-/// transport holds unread, so a client that misses sixteen publishes
-/// still holds all they declared. At about 15 bytes a declaration, a
-/// join of kMappedByDefault entities takes four publishes, and of
-/// kMostMapped sixty.
+/// The bytes of mapping retirements and declarations one connection is
+/// sent per publish unless its game says otherwise: a sixteenth of the
+/// 256 KiB a client's transport holds unread, so a client that misses
+/// sixteen publishes still holds all they sent. At about 15 bytes a
+/// frame, a join of kMappedByDefault entities takes four publishes, and
+/// of kMostMapped sixty, as does removing that many at once.
 inline constexpr std::size_t kMappingBytesPerPublish = std::size_t{16} << 10U;
 /// The most a game may ask for: half of what a client's transport holds
 /// unread, past which one publish could end a connection that stalls once.

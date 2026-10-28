@@ -751,9 +751,11 @@ result::Status hostSession(Session& session, const HostSettings& settings, const
     RAWFRAME_TRY_ASSIGN(network_quic::Certificate certificate,
                         network_quic::makeSelfSignedCertificate("rawframe-authoring", 30));
     RAWFRAME_TRY_ASSIGN(const network_quic::Fingerprint kFingerprint, network_quic::fingerprintOf(certificate));
-    RAWFRAME_TRY_ASSIGN(
-        std::unique_ptr<network_quic::QuicNetwork> network,
-        network_quic::QuicNetwork::create(network_quic::QuicSettings{.certificate = std::move(certificate)}));
+    // Buffered: its records to collaborators run to megabytes, and it
+    // reads no pending bytes.
+    RAWFRAME_TRY_ASSIGN(std::unique_ptr<network_quic::QuicNetwork> network,
+                        network_quic::QuicNetwork::create(
+                            network_quic::QuicSettings{.certificate = std::move(certificate), .sendBuffering = true}));
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<network::Provider> provider,
                         network->provider(authoringProfile(settings.collaborators)));
     RAWFRAME_TRY_ASSIGN(std::unique_ptr<AuthoringHost> host,

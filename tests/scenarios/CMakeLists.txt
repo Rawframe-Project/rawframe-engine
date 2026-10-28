@@ -1,7 +1,8 @@
 # Scenario tests: whole slices of the engine working together, which no single
 # module's tests may reach because of the module graph. One program a file,
 # so the files run beside each other rather than one after another.
-foreach(scenario compensation game_subassets game_tilemaps install kest_bots replication replication_commands)
+foreach(scenario compensation game_subassets game_tilemaps install kest_bots replication replication_commands
+        replication_mappings)
     add_executable(rawframe_scenario_${scenario}_tests ${scenario}_test.cpp)
     rawframe_windows_program(rawframe_scenario_${scenario}_tests)
     target_link_libraries(rawframe_scenario_${scenario}_tests PRIVATE

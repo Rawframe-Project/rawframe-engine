@@ -300,37 +300,6 @@ RAWFRAME_TEST(ANarrowBudgetSendsThePlayerFirstAndTheRestInTurn) {
     RAWFRAME_EXPECT(fresh == 20);
 }
 
-RAWFRAME_TEST(AJoinDeclaresItsEntitiesWithinTheMappingBudget) {
-    // A hundred props in view and room for about a dozen declarations a
-    // publish: the join declares them over several publishes, none of which
-    // sends the connection more mapping bytes than the budget, and the
-    // client ends up mirroring every one.
-    constexpr std::size_t kBudget = 200;
-    Scenario scenario{{}, {.mappingBytesPerPublish = kBudget}};
-    const auto kPosition = *scenario.schema->key<Position>();
-    for (int index = 0; index < 100; ++index) {
-        const world::EntityHandle kProp = *scenario.serverWorld.create();
-        RAWFRAME_EXPECT(
-            scenario.serverWorld.insert(kProp, kPosition, Position{static_cast<float>(index), 0}).has_value());
-    }
-    // The publish that admits also sends the accept; the ones after it send
-    // mappings alone.
-    while (!scenario.client->admitted()) {
-        scenario.step(Steer{});
-    }
-    int declaring = 0;
-    for (int step = 0; step < 60; ++step) {
-        const std::uint64_t kBefore = scenario.serverTransport->statistics().streamBytesSent;
-        scenario.step(Steer{});
-        const std::uint64_t kSent = scenario.serverTransport->statistics().streamBytesSent - kBefore;
-        RAWFRAME_EXPECT(kSent <= kBudget);
-        declaring += kSent > 0 ? 1 : 0;
-    }
-    RAWFRAME_EXPECT(declaring >= 5);
-    RAWFRAME_EXPECT(scenario.mirrored() == 101);
-    RAWFRAME_EXPECT(scenario.othersAt().size() == 100);
-}
-
 RAWFRAME_TEST(AMappingBudgetPastItsMostIsRefused) {
     // Half of what a client's transport holds unread is the most; one byte
     // more could let a single publish fill it.

@@ -40,9 +40,7 @@ public:
     /// Sends one last record and waits, at most `within`, only until the
     /// endpoint has received it, not for its reply: whether it was
     /// received. Its connection acknowledges what arrives whatever its
-    /// program is doing, so a busy program holds no one up. The
-    /// connection must not buffer sends (`QuicSettings::sendBuffering`),
-    /// or a record counts as received once handed over.
+    /// program is doing, so a busy program holds no one up.
     [[nodiscard]] bool tell(std::string_view record, std::chrono::milliseconds within);
 
     /// Sends one record answered later, its reply and what is said of it
