@@ -27,6 +27,9 @@ inline constexpr std::size_t kMostMapped = std::size_t{1} << 16U;
 /// join of kMappedByDefault entities takes four publishes, and of
 /// kMostMapped sixty.
 inline constexpr std::size_t kMappingBytesPerPublish = std::size_t{16} << 10U;
+/// The most a game may ask for: half of what a client's transport holds
+/// unread, past which one publish could end a connection that stalls once.
+inline constexpr std::size_t kMostMappingBytesPerPublish = std::size_t{128} << 10U;
 
 /// A connection-local name for a replicated entity: never zero, never reused
 /// within its replication epoch, never an EntityHandle's bits.

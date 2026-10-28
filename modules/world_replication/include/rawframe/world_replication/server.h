@@ -123,7 +123,8 @@ struct ServerReplicationSettings {
     /// frames included: entities entering past it are declared at its next
     /// publishes, its own player always first. A join with many entities in
     /// view never sends more at once than the client's transport holds
-    /// between its reads. At least one declaration's.
+    /// between its reads. At least one declaration's, and at most
+    /// kMostMappingBytesPerPublish.
     std::size_t mappingBytesPerPublish = kMappingBytesPerPublish;
     /// Ticks after which a value sent and not acknowledged is sent again,
     /// though it has not changed.
