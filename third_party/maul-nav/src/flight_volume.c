@@ -44,6 +44,7 @@ static MNAV_NOINLINE mnavFlightDefResult CreateFlightVolumeWork(const mnavFlight
         return (mnavFlightDefResult){result, mnav_flightSettingNone};
     }
     *volume = (mnavFlightVolume){.def = *def, .shape = shape, .memory = memory};
+    volume->memory.host = &volume->host;
     *volumeOut = volume;
     return (mnavFlightDefResult){mnav_success, mnav_flightSettingNone};
 }
@@ -64,9 +65,14 @@ static void DropEntries(mnavMemory* memory, mnavFlightEntry* entries, int32_t co
     }
 }
 
+uint64_t mnavGetFlightVolumeMisuse(const mnavFlightVolume* volume)
+{
+    return volume != nullptr ? mnavHostMisuse(&volume->host) : 0;
+}
+
 void mnavDestroyFlightVolume(mnavFlightVolume* volume)
 {
-    if (volume == nullptr)
+    if (volume == nullptr || mnavHostCalledBack(&volume->host))
     {
         return;
     }
@@ -76,7 +82,12 @@ void mnavDestroyFlightVolume(mnavFlightVolume* volume)
                 alignof(mnavFlightEntry));
     mnavRelease(&volume->memory, volume->staged, (size_t)volume->stagedCapacity,
                 sizeof(mnavFlightEntry), alignof(mnavFlightEntry));
+    // The mark lives in the block being freed: it is set for good, so that
+    // a call back in from this release is refused too, and the release
+    // does not touch it.
+    mnavHostEnter(&volume->host);
     mnavMemory memory = volume->memory;
+    memory.host = nullptr;
     mnavRelease(&memory, volume, 1, sizeof(mnavFlightVolume), alignof(mnavFlightVolume));
 }
 
@@ -138,6 +149,10 @@ static mnavResult Stage(mnavFlightVolume* volume, mnavFlightEntry change)
 static MNAV_NOINLINE mnavTileResult StageFlightTileWork(mnavFlightVolume* volume,
                                                         const uint8_t* bytes, size_t size)
 {
+    if (volume != nullptr && mnavHostCalledBack(&volume->host))
+    {
+        return (mnavTileResult){mnav_errorBusy, mnav_tileHeader, -1};
+    }
     if (volume == nullptr || bytes == nullptr)
     {
         return (mnavTileResult){mnav_errorInvalid, mnav_tileHeader, -1};
@@ -155,21 +170,39 @@ static MNAV_NOINLINE mnavTileResult StageFlightTileWork(mnavFlightVolume* volume
     return (mnavTileResult){result, mnav_tileHeader, -1};
 }
 
+static MNAV_NOINLINE mnavTileResult StageFlightTileCounted(mnavFlightVolume* volume,
+                                                           const uint8_t* bytes, size_t size)
+{
+    mnavTileResult result = StageFlightTileWork(volume, bytes, size);
+    result.result = mnavHostCountInvalid(MNAV_HOST(volume), result.result);
+    return result;
+}
+
 mnavTileResult mnavStageFlightTile(mnavFlightVolume* volume, const uint8_t* bytes, size_t size)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavTileResult result = StageFlightTileWork(volume, bytes, size);
+    mnavTileResult result = StageFlightTileCounted(volume, bytes, size);
     mnavFloatEnvLeave(env);
     return result;
 }
 
-mnavResult mnavStageFlightTileRemoval(mnavFlightVolume* volume, int32_t tileX, int32_t tileZ)
+static mnavResult StageFlightTileRemovalWork(mnavFlightVolume* volume, int32_t tileX, int32_t tileZ)
 {
     if (volume == nullptr)
     {
         return mnav_errorInvalid;
     }
+    if (mnavHostCalledBack(&volume->host))
+    {
+        return mnav_errorBusy;
+    }
     return Stage(volume, (mnavFlightEntry){.x = tileX, .z = tileZ, .removal = true});
+}
+
+mnavResult mnavStageFlightTileRemoval(mnavFlightVolume* volume, int32_t tileX, int32_t tileZ)
+{
+    return mnavHostCountInvalid(MNAV_HOST(volume),
+                                StageFlightTileRemovalWork(volume, tileX, tileZ));
 }
 
 static int OrderEntries(const void* a, const void* b)
@@ -226,6 +259,10 @@ static void Merge(mnavFlightVolume* volume, mnavFlightEntry* next)
 
 static MNAV_NOINLINE mnavResult CommitFlightWork(mnavFlightVolume* volume)
 {
+    if (volume != nullptr && mnavHostCalledBack(&volume->host))
+    {
+        return mnav_errorBusy;
+    }
     if (volume == nullptr)
     {
         return mnav_errorInvalid;
@@ -233,7 +270,7 @@ static MNAV_NOINLINE mnavResult CommitFlightWork(mnavFlightVolume* volume)
     int64_t count = CountAfter(volume);
     if (count > volume->def.limits.tiles)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     mnavFlightEntry* next = nullptr;
     if (count > 0)
@@ -268,16 +305,21 @@ static MNAV_NOINLINE mnavResult CommitFlightWork(mnavFlightVolume* volume)
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult CommitFlightCounted(mnavFlightVolume* volume)
+{
+    return mnavHostCountInvalid(MNAV_HOST(volume), CommitFlightWork(volume));
+}
+
 mnavResult mnavCommitFlight(mnavFlightVolume* volume)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = CommitFlightWork(volume);
+    mnavResult result = CommitFlightCounted(volume);
     mnavFloatEnvLeave(env);
     return result;
 }
 
-mnavResult mnavGetFlightTile(const mnavFlightVolume* volume, int32_t tileX, int32_t tileZ,
-                             uint64_t* fingerprintOut)
+static mnavResult GetFlightTileWork(const mnavFlightVolume* volume, int32_t tileX, int32_t tileZ,
+                                    uint64_t* fingerprintOut)
 {
     if (volume == nullptr || fingerprintOut == nullptr)
     {
@@ -288,12 +330,19 @@ mnavResult mnavGetFlightTile(const mnavFlightVolume* volume, int32_t tileX, int3
     return e != nullptr ? mnav_success : mnav_errorNotLoaded;
 }
 
-// The voxel holding a coordinate, from the origin's, or false past what
-// a voxel index can be.
+mnavResult mnavGetFlightTile(const mnavFlightVolume* volume, int32_t tileX, int32_t tileZ,
+                             uint64_t* fingerprintOut)
+{
+    return mnavHostCountInvalid(MNAV_HOST(volume),
+                                GetFlightTileWork(volume, tileX, tileZ, fingerprintOut));
+}
+
+// The voxel holding a distance from the origin; false past
+// MNAV_MAX_FLIGHT_VOXELS.
 static bool VoxelOf(double meters, double voxel, int64_t* voxelOut)
 {
     double q = floor(meters / voxel);
-    if (!(fabs(q) < 1073741824.0))
+    if (!(fabs(q) <= (double)MNAV_MAX_FLIGHT_VOXELS))
     {
         return false;
     }
@@ -319,17 +368,22 @@ static MNAV_NOINLINE mnavResult IsFlightOpenWork(const mnavFlightVolume* volume,
     const mnavFlightDef* def = &volume->def;
     double voxel = (double)def->voxelSize;
     int64_t v[3] = {0, 0, 0};
+    if (isnan(point.x) || isnan(point.y) || isnan(point.z))
+    {
+        return mnav_errorInvalid;
+    }
     if (!VoxelOf(point.x - def->origin.x, voxel, &v[0]) ||
         !VoxelOf(point.y - def->origin.y, voxel, &v[1]) ||
         !VoxelOf(point.z - def->origin.z, voxel, &v[2]))
     {
-        return mnav_errorRange;
+        return mnav_errorLimit;
     }
+    // Below the floor or above the ceiling, the def's bounds.
     int64_t side = def->tileVoxels;
     int64_t y = v[1] - volume->shape.floorVoxel;
     if (y < 0 || y >= (int64_t)volume->shape.cubeCount * side)
     {
-        return mnav_errorRange;
+        return mnav_errorOutside;
     }
     int64_t tileX = FloorDiv(v[0], side);
     int64_t tileZ = FloorDiv(v[2], side);
@@ -343,10 +397,16 @@ static MNAV_NOINLINE mnavResult IsFlightOpenWork(const mnavFlightVolume* volume,
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult IsFlightOpenCounted(const mnavFlightVolume* volume, mnavPos3 point,
+                                                    bool* openOut)
+{
+    return mnavHostCountInvalid(MNAV_HOST(volume), IsFlightOpenWork(volume, point, openOut));
+}
+
 mnavResult mnavIsFlightOpen(const mnavFlightVolume* volume, mnavPos3 point, bool* openOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = IsFlightOpenWork(volume, point, openOut);
+    mnavResult result = IsFlightOpenCounted(volume, point, openOut);
     mnavFloatEnvLeave(env);
     return result;
 }

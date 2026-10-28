@@ -39,9 +39,13 @@ mnavResult mnavCheckFilter(const mnavQueryFilter* filter, const mnavQueryFilter*
     for (int32_t a = 0; a < MNAV_AREA_TYPES; ++a)
     {
         float cost = filter->costs[a];
-        if (!(cost >= MNAV_MIN_AREA_COST && cost <= MNAV_MAX_AREA_COST))
+        if (isnan(cost))
         {
-            return mnav_errorRange;
+            return mnav_errorInvalid;
+        }
+        if (cost < MNAV_MIN_AREA_COST || cost > MNAV_MAX_AREA_COST)
+        {
+            return mnav_errorLimit;
         }
     }
     *usable = filter;

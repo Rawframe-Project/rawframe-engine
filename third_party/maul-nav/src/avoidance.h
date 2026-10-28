@@ -9,6 +9,7 @@
 
 #include "allocator.h"
 #include "crowd.h"
+#include "host_code.h"
 #include "obstacle.h"
 #include "orca.h"
 #include "orca3.h"
@@ -26,6 +27,7 @@
 struct mnavAvoidance
 {
     mnavMemory memory;
+    mnavHostCode host;
     mnavAvoidanceDef def;
     // The neighbour grid; its table has room for tableCapacity runs.
     mnavCrowd crowd;
@@ -50,24 +52,53 @@ static inline bool mnavAvoidPositive(double v)
     return isfinite(v) && v > 0.0;
 }
 
-static inline bool mnavAvoidTime(double v)
+// Of two checks' statuses, the one the call returns: mnav_errorInvalid
+// when either is, else mnav_errorLimit when either is, else success.
+static inline mnavResult mnavAvoidJoin(mnavResult a, mnavResult b)
 {
-    return isfinite(v) && v >= MNAV_MIN_AVOIDANCE_TIME;
+    return a == mnav_errorInvalid || b == mnav_success ? a : b;
 }
 
-static inline bool mnavAvoidSpeed(double v)
+// mnav_errorInvalid for a NaN, mnav_errorLimit for a value whose
+// magnitude passes bound, an infinity included.
+static inline mnavResult mnavAvoidBound(double v, double bound)
 {
-    return isfinite(v) && fabs(v) <= MNAV_MAX_AVOIDANCE_SPEED;
+    if (isnan(v))
+    {
+        return mnav_errorInvalid;
+    }
+    return fabs(v) <= bound ? mnav_success : mnav_errorLimit;
 }
 
-static inline bool mnavAvoidCoordinate(double v)
+// A time: mnav_errorLimit below MNAV_MIN_AVOIDANCE_TIME, minus infinity
+// included; mnav_errorInvalid for a NaN or plus infinity, which no bound
+// names.
+static inline mnavResult mnavAvoidTime(double v)
 {
-    return isfinite(v) && fabs(v) <= MNAV_MAX_AVOIDANCE_COORDINATE;
+    if (isnan(v))
+    {
+        return mnav_errorInvalid;
+    }
+    if (v < MNAV_MIN_AVOIDANCE_TIME)
+    {
+        return mnav_errorLimit;
+    }
+    return isfinite(v) ? mnav_success : mnav_errorInvalid;
 }
 
-static inline bool mnavAvoidRadius(double v)
+static inline mnavResult mnavAvoidSpeed(double v)
 {
-    return mnavAvoidPositive(v) && v <= MNAV_MAX_AVOIDANCE_RADIUS;
+    return mnavAvoidBound(v, MNAV_MAX_AVOIDANCE_SPEED);
+}
+
+static inline mnavResult mnavAvoidCoordinate(double v)
+{
+    return mnavAvoidBound(v, MNAV_MAX_AVOIDANCE_COORDINATE);
+}
+
+static inline mnavResult mnavAvoidRadius(double v)
+{
+    return v > 0.0 ? mnavAvoidBound(v, MNAV_MAX_AVOIDANCE_RADIUS) : mnav_errorInvalid;
 }
 
 // Fills the set's obstacle grid with spheres, by their bounds on the

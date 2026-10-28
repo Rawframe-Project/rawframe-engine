@@ -19,12 +19,10 @@ typedef struct mnavDetailVertex
 } mnavDetailVertex;
 
 // Three corners, indices into the polygon's part of the vertices, wound
-// like the polygons, and in bit k whether the edge from corner k to the
-// next lies on the polygon's outline.
+// like the polygons.
 typedef struct mnavDetailTriangle
 {
     uint8_t corners[3];
-    uint8_t outline;
 } mnavDetailTriangle;
 
 // The triangles over a set of vertices, with room for capacity triangles
@@ -52,14 +50,16 @@ int64_t mnavDetailArea2(const mnavDetailVertex* a, const mnavDetailVertex* b,
 // convex quadrilateral, so every flip keeps the triangles wound alike.
 void mnavMakeDelaunay(mnavTriangulation* triangulation);
 
-// The first triangle holding (x, z) inside or on an edge, or -1; edge
-// receives the corner starting the edge it lies on, or -1 when inside.
+// The first triangle holding (x, z) inside or on an edge, which one of
+// them does; edge receives the corner starting the edge it lies on, or -1
+// when inside.
 int32_t mnavLocate(const mnavTriangulation* triangulation, int32_t x, int32_t z, int32_t* edge);
 
 // Inserts vertex v, which lies in triangle t (inside, or on the edge from
 // corner edge when edge is at least 0), and restores the Delaunay
-// property round it. Returns false, changing nothing, when v lies on an
-// edge with no triangle across it or the capacity is too small.
-bool mnavInsertVertex(mnavTriangulation* triangulation, int32_t v, int32_t t, int32_t edge);
+// property round it. v lies inside the triangles' outline, never on it,
+// so an edge it lies on has a triangle across; the triangles have room
+// for two more and the stack for four.
+void mnavInsertVertex(mnavTriangulation* triangulation, int32_t v, int32_t t, int32_t edge);
 
 #endif // MAUL_NAV_SRC_DELAUNAY_H

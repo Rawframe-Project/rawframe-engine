@@ -204,20 +204,36 @@ extern "C"
     /// @param avoidanceOut Receives the set, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultAvoidanceDef; `mnav_errorVersion` for one built
-    /// against another version of the headers; `mnav_errorRange` for a limit,
-    /// distance or horizon out of its range; `mnav_errorCapacity` when the
-    /// allocator fails.
+    /// against another version of the headers; `mnav_errorInvalid` also for a
+    /// limit below 1 (below 0 for obstacle vertices), a neighbor distance not
+    /// more than 0 or not finite, or a horizon that is NaN or plus infinity;
+    /// `mnav_errorLimit` for a limit past its MNAV_MAX_AVOIDANCE_ value or a
+    /// horizon shorter than MNAV_MIN_AVOIDANCE_TIME; `mnav_errorCapacity` when
+    /// the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateAvoidance(const mnavAvoidanceDef* def,
                                                            mnavAvoidance** avoidanceOut);
 
-    /// Destroys an avoidance set.
+    /// Destroys an avoidance set. Called back in from the avoidance set's
+    /// allocator, it does nothing and counts one misuse.
     ///
     /// @param avoidance The set, or NULL.
     /// @par Thread safety
     /// Safe from any thread; the set is used by one thread at a time.
     MNAV_API void mnavDestroyAvoidance(mnavAvoidance* avoidance);
+
+    /// Returns how many calls against the avoidance set were refused as misuse
+    /// since it was made: an argument refused with `mnav_errorInvalid` when the
+    /// avoidance set was the first object the call was given, and a call back
+    /// in from host code it ran (`mnav_errorBusy`).
+    ///
+    /// @param avoidance The avoidance set.
+    /// @return The count; 0 for NULL.
+    /// @par Thread safety
+    /// Safe from any thread. It may be read at any time, also while host
+    /// code the object runs calls back in.
+    MNAV_API uint64_t mnavGetAvoidanceMisuse(const mnavAvoidance* avoidance);
 
     /// Finds each agent's new velocity: the one nearest its preferred
     /// velocity, no faster than its maximum speed, that avoids the
@@ -243,13 +259,17 @@ extern "C"
     /// @param velocitiesOut Receives agentCount velocities, in the agents'
     ///                      order.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
-    /// agents or obstacles, a negative count, a step not finite or shorter
-    /// than MNAV_MIN_AVOIDANCE_TIME, an agent or obstacle with a value not
-    /// finite or out of
-    /// its range, a zero-length obstacle edge, a circle's radius not more
+    /// agents or obstacles, a negative count, a step that is NaN or plus
+    /// infinity, an agent or obstacle with a NaN value, an agent with a radius
+    /// not more than 0, a maximum speed below 0 or a priority not more than 0
+    /// or not finite, a zero-length obstacle edge, a circle's radius not more
     /// than 0, another obstacle with a radius, or a polygon not
-    /// counterclockwise; `mnav_errorLimit` for more agents or obstacle
-    /// points than the set's limits.
+    /// counterclockwise; `mnav_errorLimit` for a step shorter than
+    /// MNAV_MIN_AVOIDANCE_TIME, or a coordinate, speed or radius past its
+    /// MNAV_MAX_AVOIDANCE_ bound, an infinity included; `mnav_errorCapacity`
+    /// for more agents or obstacle points than the set's limits. Also
+    /// `mnav_errorBusy` when called back in from the avoidance set's allocator,
+    /// one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the set is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavAvoid(mnavAvoidance* avoidance, const mnavAgent* agents,
@@ -280,10 +300,15 @@ extern "C"
     /// @param velocitiesOut Receives agentCount velocities, in the agents'
     ///                      order.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
-    /// agents or spheres, a negative count, a step not finite or shorter
-    /// than MNAV_MIN_AVOIDANCE_TIME, or an agent or sphere with a value not
-    /// finite or out of its range; `mnav_errorLimit` for more agents than
-    /// the set's limit or more spheres than its obstacle points.
+    /// agents or spheres, a negative count, a step that is NaN or plus
+    /// infinity, an agent or sphere with a NaN value or a radius not more than
+    /// 0, or an agent with a maximum speed below 0 or a priority not more than
+    /// 0 or not finite; `mnav_errorLimit` for a step shorter than
+    /// MNAV_MIN_AVOIDANCE_TIME, or a coordinate, speed or radius past its
+    /// MNAV_MAX_AVOIDANCE_ bound, an infinity included; `mnav_errorCapacity`
+    /// for more agents than the set's limit or more spheres than its obstacle
+    /// points. Also `mnav_errorBusy` when called back in from the avoidance
+    /// set's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the set is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavAvoid3D(mnavAvoidance* avoidance,
@@ -301,11 +326,12 @@ extern "C"
     /// @param height     The lines' height.
     /// @param buffer     The buffer appended to.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
-    /// agents, an agent as mnavAvoid refuses it, a height not finite, or a
-    /// buffer with a count out of range, an array missing or an origin not
-    /// finite; `mnav_errorLimit` for more agents than the set's limit;
-    /// `mnav_errorCapacity` when the buffer filled, its counts saying what
-    /// the whole needs.
+    /// agents, a height not finite, or a buffer with a count out of range, an
+    /// array missing or an origin not finite; for an agent mnavAvoid refuses,
+    /// the status it gives; `mnav_errorCapacity` for more agents than the set's
+    /// limit, or when the buffer filled, its counts saying what the whole
+    /// needs. Also `mnav_errorBusy` when called back in from the avoidance
+    /// set's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the set and the buffer are used by one thread
     /// at a time.
@@ -326,11 +352,12 @@ extern "C"
     /// @param sphereCount How many, at least 0.
     /// @param buffer      The buffer appended to.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
-    /// agents or spheres, a negative count, an agent or sphere as
-    /// mnavAvoid3D refuses it, or a buffer with a count out of range, an
-    /// array missing or an origin not finite; `mnav_errorLimit` for more
-    /// agents or spheres than mnavAvoid3D takes; `mnav_errorCapacity` when
-    /// the buffer filled, its counts saying what the whole needs.
+    /// agents or spheres, a negative count, or a buffer with a count out of
+    /// range, an array missing or an origin not finite; for an agent or sphere
+    /// mnavAvoid3D refuses, or more of them than it takes, the status it gives;
+    /// `mnav_errorCapacity` when the buffer filled, its counts saying what the
+    /// whole needs. Also `mnav_errorBusy` when called back in from the
+    /// avoidance set's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the set and the buffer are used by one thread
     /// at a time.

@@ -11,7 +11,6 @@
 #ifndef MAUL_NAV_SRC_LZ_H
 #define MAUL_NAV_SRC_LZ_H
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -27,8 +26,9 @@ size_t mnavLzBound(size_t size);
 // bytes written.
 size_t mnavLzEncode(const uint8_t* in, size_t size, uint8_t* out, uint32_t* table);
 
-// Decodes size bytes of in into exactly outSize bytes of out. False for
-// bytes that are not such a coding, nothing read or written out of range.
-bool mnavLzDecode(const uint8_t* in, size_t size, uint8_t* out, size_t outSize);
+// Decodes size bytes of in, which mnavLzEncode wrote from outSize bytes,
+// into out. The library decodes only its own codings, so it asserts
+// rather than refuses.
+void mnavLzDecode(const uint8_t* in, size_t size, uint8_t* out, size_t outSize);
 
 #endif // MAUL_NAV_SRC_LZ_H

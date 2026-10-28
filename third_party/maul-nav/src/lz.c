@@ -2,12 +2,13 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The LZ coder: a greedy encoder that looks up the last place
-// each four bytes were seen, and a decoder that checks every count
-// against what is left.
+// each four bytes were seen, and a decoder of what it wrote, which
+// asserts every count against what is left.
 
 #include "lz.h"
 
-#include <stdbool.h>
+#include "invariant.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -96,28 +97,20 @@ size_t mnavLzEncode(const uint8_t* in, size_t size, uint8_t* out, uint32_t* tabl
     return (size_t)(out - start);
 }
 
-// Reads a count continued past 15; false when the bytes end first or it
-// passes most.
-static bool GetLength(const uint8_t* in, size_t size, size_t* at, size_t* length, size_t most)
+// Reads a count continued past 15.
+static size_t GetLength(const uint8_t* in, size_t size, size_t* at, size_t length)
 {
     uint8_t more = 255;
     while (more == 255)
     {
-        if (*at >= size)
-        {
-            return false;
-        }
+        MNAV_ASSERT(*at < size);
         more = in[(*at)++];
-        *length += more;
-        if (*length > most)
-        {
-            return false;
-        }
+        length += more;
     }
-    return true;
+    return length;
 }
 
-bool mnavLzDecode(const uint8_t* in, size_t size, uint8_t* out, size_t outSize)
+void mnavLzDecode(const uint8_t* in, size_t size, uint8_t* out, size_t outSize)
 {
     size_t at = 0;
     size_t written = 0;
@@ -125,32 +118,30 @@ bool mnavLzDecode(const uint8_t* in, size_t size, uint8_t* out, size_t outSize)
     {
         uint8_t token = in[at++];
         size_t count = token >> 4;
-        if ((count == 15 && !GetLength(in, size, &at, &count, outSize)) || count > size - at ||
-            count > outSize - written)
+        if (count == 15)
         {
-            return false;
+            count = GetLength(in, size, &at, count);
         }
+        MNAV_ASSERT(count <= size - at && count <= outSize - written);
         memcpy(&out[written], &in[at], count);
         at += count;
         written += count;
         if (at == size)
         {
             // The last sequence: literals only.
-            return (token & 15) == 0 && written == outSize;
+            MNAV_ASSERT((token & 15) == 0);
+            break;
         }
-        if (size - at < 2)
-        {
-            return false;
-        }
+        MNAV_ASSERT(size - at >= 2);
         size_t offset = (size_t)in[at] | (size_t)in[at + 1] << 8;
         at += 2;
         size_t length = (token & 15u);
-        if ((length == 15 && !GetLength(in, size, &at, &length, outSize)) || offset == 0 ||
-            offset > written || length + MIN_MATCH > outSize - written)
+        if (length == 15)
         {
-            return false;
+            length = GetLength(in, size, &at, length);
         }
         length += MIN_MATCH;
+        MNAV_ASSERT(offset > 0 && offset <= written && length <= outSize - written);
         // Byte by byte: a match may overlap the bytes it writes.
         for (size_t k = 0; k < length; ++k)
         {
@@ -158,5 +149,5 @@ bool mnavLzDecode(const uint8_t* in, size_t size, uint8_t* out, size_t outSize)
         }
         written += length;
     }
-    return written == outSize;
+    MNAV_ASSERT(written == outSize);
 }

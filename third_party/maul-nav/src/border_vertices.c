@@ -253,7 +253,7 @@ static bool Chain(Work* work)
 static mnavContourVertex Ground(const mnavPolyMesh* mesh, uint16_t index)
 {
     const mnavMeshVertex* v = &mesh->vertices[index];
-    return (mnavContourVertex){v->x, v->y, v->z, 0, 0};
+    return (mnavContourVertex){v->x, v->y, v->z, 0};
 }
 
 // Whether the hole keeps the outline's shape: a closed chain lies round
@@ -333,7 +333,7 @@ static mnavResult Commit(Work* work, int32_t added, int32_t maxPolygons)
     int32_t kept = mesh->polygonCount - work->touchingCount;
     if (kept + added > maxPolygons)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     mnavResult result =
         mnavReserve(work->memory, (void**)&mesh->polygons, &mesh->polygonCapacity,

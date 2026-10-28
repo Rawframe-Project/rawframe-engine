@@ -86,17 +86,21 @@ static MNAV_NOINLINE mnavResult SteerWork(const mnavCorners* corners, const mnav
     {
         return mnav_errorVersion;
     }
+    if (!(def->maxSpeed >= 0.0f) || !(def->slowDistance >= 0.0f) || !(def->arriveDistance >= 0.0f))
+    {
+        return mnav_errorInvalid;
+    }
     if (!InRange(def->maxSpeed, MNAV_MAX_STEER_SPEED) ||
         !InRange(def->slowDistance, MNAV_MAX_STEER_DISTANCE) ||
         !InRange(def->arriveDistance, MNAV_MAX_STEER_DISTANCE))
     {
-        return mnav_errorRange;
+        return mnav_errorLimit;
     }
     for (int32_t i = 0; i < corners->pointCount; ++i)
     {
         if (!Finite(corners->points[i]))
         {
-            return mnav_errorRange;
+            return mnav_errorInvalid;
         }
     }
     *steeringOut = (mnavSteering){{0.0, 0.0, 0.0}, mnav_steerArrived, -1};

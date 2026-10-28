@@ -62,7 +62,7 @@ typedef struct mnavPolyMesh
 } mnavPolyMesh;
 
 // Builds the polygons of a tile of tileCells cells from its merged
-// contours, not yet linked. Returns mnav_errorLimit past maxVertices
+// contours, not yet linked. Returns mnav_errorCapacity past maxVertices
 // vertices or maxPolygons polygons.
 mnavResult mnavBuildPolyMesh(mnavMemory* memory, const mnavContourSet* set, int32_t tileCells,
                              int32_t maxVertices, int32_t maxPolygons, mnavPolyMesh* mesh);

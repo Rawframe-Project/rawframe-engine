@@ -12,12 +12,13 @@
 #include "maul-nav/base.h"
 #include "maul-nav/query.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
 void mnavDestroyQuery(mnavQuery* query)
 {
-    if (query == nullptr)
+    if (query == nullptr || mnavHostCalledBack(&query->host))
     {
         return;
     }
@@ -31,8 +32,18 @@ void mnavDestroyQuery(mnavQuery* query)
                 alignof(int32_t));
     mnavRelease(memory, query->heap, nodes, sizeof(mnavHeapEntry), alignof(mnavHeapEntry));
     mnavRelease(memory, query->nodes, nodes, sizeof(mnavSearchNode), alignof(mnavSearchNode));
+    // The mark lives in the block being freed: it is set for good, so that
+    // a call back in from this release is refused too, and the release
+    // does not touch it.
+    mnavHostEnter(&query->host);
     mnavMemory last = *memory;
+    last.host = nullptr;
     mnavRelease(&last, query, 1, sizeof(mnavQuery), alignof(mnavQuery));
+}
+
+uint64_t mnavGetQueryMisuse(const mnavQuery* query)
+{
+    return query != nullptr ? mnavHostMisuse(&query->host) : 0;
 }
 
 static MNAV_NOINLINE mnavResult CreateQueryWork(const mnavQueryDef* def, mnavQuery** queryOut)
@@ -51,10 +62,13 @@ static MNAV_NOINLINE mnavResult CreateQueryWork(const mnavQueryDef* def, mnavQue
         return mnav_errorVersion;
     }
     const mnavQueryLimits* limits = &def->limits;
-    if (limits->nodes < 1 || limits->nodes > MNAV_MAX_QUERY_NODES ||
-        !(limits->pathLength > 0.0f && limits->pathLength <= MNAV_MAX_PATH_LENGTH))
+    if (limits->nodes < 1 || !(limits->pathLength > 0.0f))
     {
-        return mnav_errorRange;
+        return mnav_errorInvalid;
+    }
+    if (limits->nodes > MNAV_MAX_QUERY_NODES || limits->pathLength > MNAV_MAX_PATH_LENGTH)
+    {
+        return mnav_errorLimit;
     }
     mnavMemory memory = mnavMakeMemory(def->allocator, UINT64_MAX);
     mnavQuery* query = nullptr;
@@ -64,8 +78,8 @@ static MNAV_NOINLINE mnavResult CreateQueryWork(const mnavQueryDef* def, mnavQue
     {
         return result;
     }
-    *query = (mnavQuery){0};
-    query->memory = memory;
+    *query = (mnavQuery){.memory = memory};
+    query->memory.host = &query->host;
     query->limits = *limits;
     // A table at least twice the nodes keeps probes short.
     uint32_t table = 2;

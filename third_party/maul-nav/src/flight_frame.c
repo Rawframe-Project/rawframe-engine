@@ -20,22 +20,26 @@ mnavFlightFrame mnavMakeFlightFrame(const mnavFlightVolume* volume)
                              volume->shape.cubeCount * volume->def.tileVoxels};
 }
 
-bool mnavFlightToVoxels(const mnavFlightFrame* frame, mnavPos3 point, double out[3],
-                        int32_t voxel[3])
+mnavResult mnavFlightToVoxels(const mnavFlightFrame* frame, mnavPos3 point, double out[3],
+                              int32_t voxel[3])
 {
+    if (isnan(point.x) || isnan(point.y) || isnan(point.z))
+    {
+        return mnav_errorInvalid;
+    }
     out[0] = (point.x - frame->origin.x) / frame->voxel;
     out[1] = (point.y - frame->origin.y) / frame->voxel - (double)frame->floorVoxel;
     out[2] = (point.z - frame->origin.z) / frame->voxel;
     for (int32_t k = 0; k < 3; ++k)
     {
-        // A NaN fails the comparison.
-        if (!(fabs(out[k]) <= MNAV_FLIGHT_MAX_VOXELS))
+        // An infinity, from a point far past the origin, fails the comparison.
+        if (!(fabs(out[k]) <= (double)MNAV_MAX_FLIGHT_VOXELS))
         {
-            return false;
+            return mnav_errorLimit;
         }
         voxel[k] = (int32_t)floor(out[k]);
     }
-    return true;
+    return mnav_success;
 }
 
 mnavPos3 mnavFlightToWorld(const mnavFlightFrame* frame, const double v[3])

@@ -9,6 +9,7 @@
 #include "allocator.h"
 #include "flight.h"
 #include "flight_def.h"
+#include "host_code.h"
 
 #include "maul-nav/flight.h"
 
@@ -39,6 +40,7 @@ struct mnavFlightVolume
     int32_t stagedCapacity;
     // Commits so far, so that a search in slices knows the volume changed.
     uint64_t commits;
+    mnavHostCode host;
 };
 
 // The tile committed at a place, or NULL.

@@ -273,11 +273,14 @@ static int32_t Polygons(mnavQuery* query, const mnavNavmesh* navmesh, int32_t la
     return count;
 }
 
-static MNAV_NOINLINE mnavResult MoveAlongSurfaceWork(mnavQuery* query, const mnavNavmesh* navmesh,
-                                                     const mnavQueryFilter* filter,
-                                                     mnavPolygonId startPolygon, mnavPos3 start,
-                                                     mnavPos3 end, mnavMove* moveOut)
+mnavResult mnavMoveAlongSurfaceWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                    const mnavQueryFilter* filter, mnavPolygonId startPolygon,
+                                    mnavPos3 start, mnavPos3 end, mnavMove* moveOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     if (query == nullptr || navmesh == nullptr || moveOut == nullptr || !isfinite(start.x) ||
         !isfinite(start.y) || !isfinite(start.z) || !isfinite(end.x) || !isfinite(end.z))
     {
@@ -342,13 +345,24 @@ static MNAV_NOINLINE mnavResult MoveAlongSurfaceWork(mnavQuery* query, const mna
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult MoveAlongSurfaceCounted(mnavQuery* query,
+                                                        const mnavNavmesh* navmesh,
+                                                        const mnavQueryFilter* filter,
+                                                        mnavPolygonId startPolygon, mnavPos3 start,
+                                                        mnavPos3 end, mnavMove* moveOut)
+{
+    return mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+        mnavMoveAlongSurfaceWork(query, navmesh, filter, startPolygon, start, end, moveOut));
+}
+
 mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
                                 const mnavQueryFilter* filter, mnavPolygonId startPolygon,
                                 mnavPos3 start, mnavPos3 end, mnavMove* moveOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =
-        MoveAlongSurfaceWork(query, navmesh, filter, startPolygon, start, end, moveOut);
+        MoveAlongSurfaceCounted(query, navmesh, filter, startPolygon, start, end, moveOut);
     mnavFloatEnvLeave(env);
     return result;
 }

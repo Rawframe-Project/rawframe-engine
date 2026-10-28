@@ -8,6 +8,7 @@
 #define MAUL_NAV_SRC_FLOW_H
 
 #include "allocator.h"
+#include "host_code.h"
 
 #include "maul-nav/flow.h"
 #include "maul-nav/query.h"
@@ -38,6 +39,7 @@ enum
 struct mnavFlowField
 {
     mnavMemory memory;
+    mnavHostCode host;
     mnavFlowFieldDef def;
     // Per cell of the region, row by row: the cost to the goals, the next
     // cell's index, the place in the heap and the repair's marks.

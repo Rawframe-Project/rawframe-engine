@@ -32,7 +32,8 @@ mnavResult mnavPackField(mnavMemory* scratch, mnavMemory* memory, const mnavComp
                          mnavPackedField* packed);
 
 // Unpacks a field into memory and links its spans for an agent of height
-// cells that steps step cells; on failure field holds nothing.
+// cells that steps step cells. Whatever the result,
+// mnavReleaseCompactField frees what the field holds.
 mnavResult mnavUnpackField(mnavMemory* memory, const mnavPackedField* packed, int32_t height,
                            int32_t step, mnavCompactField* field);
 

@@ -16,6 +16,7 @@
 // position, prunes a way to a root that is no cheaper.
 
 #include "fpenv.h"
+#include "invariant.h"
 #include "navmesh.h"
 #include "offmesh.h"
 #include "polymesh.h"
@@ -260,6 +261,9 @@ static bool Repeats(const mnavQuery* query, int32_t parent, const mnavSearchNode
 static void Open(Shortest* s, int32_t parent, mnavSearchNode made, double ahead)
 {
     mnavQuery* query = s->query;
+    // Every step adds a cost and a length of at least 0.
+    MNAV_ASSERT(parent == MNAV_NO_NODE || (made.cost >= query->nodes[parent].cost &&
+                                           made.length >= query->nodes[parent].length));
     if (made.length + ahead > s->limit)
     {
         s->tooLong = true;
@@ -492,7 +496,8 @@ static void Spread(Shortest* s, int32_t n, const Piece* piece, Seen seen, bool f
 }
 
 // The edge of polygon other that runs from vertex to back to vertex from:
-// the entry edge of the polygon across an inner edge.
+// the entry edge of the polygon across an inner edge. The loader's check
+// that each neighbor runs its edge back makes it exist.
 static int32_t EntryOf(const mnavPolygon* other, uint16_t from, uint16_t to)
 {
     for (int32_t i = 0; i < other->count; ++i)
@@ -502,11 +507,13 @@ static int32_t EntryOf(const mnavPolygon* other, uint16_t from, uint16_t to)
             return i;
         }
     }
+    MNAV_ASSERT(false);
     return 0;
 }
 
 // The edge of a polygon on a tile side: at most one edge of a convex
-// polygon lies on one line.
+// polygon lies on one line, and a tile link targets only a polygon with
+// an edge on the side it faces.
 static int32_t SideEdgeOf(const mnavPolygon* polygon, int32_t side)
 {
     for (int32_t i = 0; i < polygon->count; ++i)
@@ -516,6 +523,7 @@ static int32_t SideEdgeOf(const mnavPolygon* polygon, int32_t side)
             return i;
         }
     }
+    MNAV_ASSERT(false);
     return 0;
 }
 
@@ -703,6 +711,8 @@ static int32_t Polygons(mnavQuery* query, const mnavNavmesh* navmesh, int32_t la
         if (previous == nullptr || crossed || previous->slot != id.slot ||
             previous->polygon != id.polygon)
         {
+            // A visit per node at most, and the nodes fit the corridor.
+            MNAV_ASSERT(count < query->limits.nodes);
             query->corridor[count++] = id;
         }
         crossed = node->tag == KIND_LANDING;
@@ -720,6 +730,8 @@ static void Push(mnavQuery* query, int32_t* count, mnavPos3 p)
 {
     if (*count == 0 || !Same(query->points[*count - 1], p))
     {
+        // The end, then at most two points a node.
+        MNAV_ASSERT(*count < 2 * query->limits.nodes + 1);
         query->points[(*count)++] = p;
     }
 }
@@ -742,6 +754,7 @@ static int32_t Points(Shortest* s, int32_t last, int32_t* linkCount, double* lin
         if (node->tag == KIND_TAKEOFF && n != last)
         {
             Push(query, &count, node->a);
+            MNAV_ASSERT(*linkCount < query->limits.nodes);
             *linkCost += (double)s->navmesh->links[node->low / 2].def.cost;
             const mnavOffLink* link = &s->navmesh->links[s->navmesh->links[node->low / 2].parent];
             query->links[(*linkCount)++] = (mnavPathLink){
@@ -851,6 +864,10 @@ static MNAV_NOINLINE mnavResult FindShortestPathWork(mnavQuery* query, const mna
                                                      mnavPolygonId endPolygon, mnavPos3 end,
                                                      mnavPath* pathOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     if (query == nullptr || navmesh == nullptr || pathOut == nullptr || !isfinite(start.x) ||
         !isfinite(start.y) || !isfinite(start.z) || !isfinite(end.x) || !isfinite(end.y) ||
         !isfinite(end.z))
@@ -884,13 +901,25 @@ static MNAV_NOINLINE mnavResult FindShortestPathWork(mnavQuery* query, const mna
     // uses the nodes, never the path written.
     mnavPathEnd reach = mnav_pathOutOfNodes;
     if (ending == mnav_pathOutOfNodes &&
-        mnavCheckReachable(query, navmesh, filter, startPolygon, start, endPolygon, end, &reach) ==
-            mnav_success &&
+        mnavCheckReachableWork(query, navmesh, filter, startPolygon, start, endPolygon, end,
+                               &reach) == mnav_success &&
         reach != mnav_pathFound && reach != mnav_pathOutOfNodes)
     {
         pathOut->end = reach;
     }
     return mnav_success;
+}
+
+static MNAV_NOINLINE mnavResult FindShortestPathCounted(mnavQuery* query,
+                                                        const mnavNavmesh* navmesh,
+                                                        const mnavQueryFilter* filter,
+                                                        mnavPolygonId startPolygon, mnavPos3 start,
+                                                        mnavPolygonId endPolygon, mnavPos3 end,
+                                                        mnavPath* pathOut)
+{
+    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+                                FindShortestPathWork(query, navmesh, filter, startPolygon, start,
+                                                     endPolygon, end, pathOut));
 }
 
 mnavResult mnavFindShortestPath(mnavQuery* query, const mnavNavmesh* navmesh,
@@ -899,8 +928,8 @@ mnavResult mnavFindShortestPath(mnavQuery* query, const mnavNavmesh* navmesh,
                                 mnavPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result =
-        FindShortestPathWork(query, navmesh, filter, startPolygon, start, endPolygon, end, pathOut);
+    mnavResult result = FindShortestPathCounted(query, navmesh, filter, startPolygon, start,
+                                                endPolygon, end, pathOut);
     mnavFloatEnvLeave(env);
     return result;
 }

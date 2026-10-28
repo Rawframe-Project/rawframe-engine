@@ -55,9 +55,9 @@ static inline const mnavOutline* mnavOutlineAt(const mnavOutlineSet* set, int32_
 }
 
 // Adds the fragments of a set's valid outlines for the tile. Returns
-// mnav_errorLimit past the tileTriangles limit on outlines touching the
-// tile, the tileSpans limit on fragments or the memory limit, and
-// mnav_errorCapacity when the allocator fails.
+// mnav_errorCapacity past the tileTriangles limit on outlines touching
+// the tile, the tileSpans limit on fragments or the memory limit, or when
+// the allocator fails.
 mnavResult mnavCollectOutlines(mnavMemory* memory, const mnavBakeDef* def,
                                const mnavTileFrame* frame, const mnavOutlineSet* set,
                                mnavFragmentList* list);

@@ -14,6 +14,7 @@
 
 #include "flow.h"
 #include "fpenv.h"
+#include "invariant.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/flow.h"
@@ -28,6 +29,8 @@ static void Raise(mnavFlowField* f, int32_t cell)
 {
     if ((f->marks[cell] & mnav_flowRaised) == 0)
     {
+        // Each cell is listed once, by its marks.
+        MNAV_ASSERT(f->touchedCount < f->region.width * f->region.height);
         f->marks[cell] |= mnav_flowRaised | mnav_flowTouched;
         f->touched[f->touchedCount++] = cell;
     }
@@ -150,8 +153,15 @@ static mnavResult Check(const mnavFlowField* field, const mnavGrid* grid, const 
 {
     if (field == nullptr || grid == nullptr || goalCount < 0 ||
         (goalCount > 0 && goals == nullptr) || changedCount < 0 ||
-        (changedCount > 0 && changed == nullptr) || field->state == mnav_flowNone ||
-        !mnavFlowSameGrid(field, grid))
+        (changedCount > 0 && changed == nullptr))
+    {
+        return mnav_errorInvalid;
+    }
+    if (field->state == mnav_flowNone)
+    {
+        return mnav_errorState;
+    }
+    if (!mnavFlowSameGrid(field, grid))
     {
         return mnav_errorInvalid;
     }
@@ -163,7 +173,7 @@ static mnavResult Check(const mnavFlowField* field, const mnavGrid* grid, const 
             return mnav_errorInvalid;
         }
     }
-    return field->state == mnav_flowWorking ? mnav_errorStale : mnav_success;
+    return field->state != mnav_flowEnded ? mnav_errorState : mnav_success;
 }
 
 // Marks the new goals, raises the old ones no longer goals, and keeps the
@@ -202,12 +212,19 @@ static MNAV_NOINLINE mnavResult UpdateFlowFieldWork(mnavFlowField* field, const 
                                                     const mnavCell* goals, int32_t goalCount,
                                                     const mnavCell* changed, int32_t changedCount)
 {
+    if (field != nullptr && mnavHostCalledBack(&field->host))
+    {
+        return mnav_errorBusy;
+    }
     mnavResult result = Check(field, grid, goals, goalCount, changed, changedCount);
     if (result != mnav_success)
     {
         return result;
     }
     mnavFlowSearch s = {field, grid->areas};
+    // Only an ended field is repaired, and its heap is empty: the raised
+    // cells below leave it without a place to update.
+    MNAV_ASSERT(field->heapCount == 0);
     field->repairing = true;
     field->touchedCount = 0;
     field->fixed = 0;
@@ -248,11 +265,21 @@ static MNAV_NOINLINE mnavResult UpdateFlowFieldWork(mnavFlowField* field, const 
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult UpdateFlowFieldCounted(mnavFlowField* field, const mnavGrid* grid,
+                                                       const mnavCell* goals, int32_t goalCount,
+                                                       const mnavCell* changed,
+                                                       int32_t changedCount)
+{
+    return mnavHostCountInvalid(MNAV_HOST(field), UpdateFlowFieldWork(field, grid, goals, goalCount,
+                                                                      changed, changedCount));
+}
+
 mnavResult mnavUpdateFlowField(mnavFlowField* field, const mnavGrid* grid, const mnavCell* goals,
                                int32_t goalCount, const mnavCell* changed, int32_t changedCount)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = UpdateFlowFieldWork(field, grid, goals, goalCount, changed, changedCount);
+    mnavResult result =
+        UpdateFlowFieldCounted(field, grid, goals, goalCount, changed, changedCount);
     mnavFloatEnvLeave(env);
     return result;
 }

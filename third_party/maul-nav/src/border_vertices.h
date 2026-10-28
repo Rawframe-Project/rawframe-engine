@@ -19,7 +19,7 @@
 // form only when they are joined edge to edge; an open chain must close
 // across the vertex's place, so the outline keeps its shape. A vertex
 // whose replacement cannot be built stays, still removable.
-// Polygons must not be linked yet. Returns mnav_errorLimit when the new
+// Polygons must not be linked yet. Returns mnav_errorCapacity when the new
 // polygons would pass maxPolygons.
 mnavResult mnavRemoveBorderVertices(mnavMemory* memory, mnavPolyMesh* mesh, int32_t maxPolygons);
 

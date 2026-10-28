@@ -7,6 +7,7 @@
 #define MAUL_NAV_SRC_QUERY_H
 
 #include "allocator.h"
+#include "host_code.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/navmesh.h"
@@ -172,6 +173,9 @@ typedef struct mnavFlightSliced
 struct mnavQuery
 {
     mnavMemory memory;
+    // Marked while its allocator or a link generation's clearance test
+    // runs.
+    mnavHostCode host;
     mnavQueryLimits limits;
     // One block of nodes serves a navmesh, grid or flight search,
     // whichever ran last; grid and flight nodes are the smaller.
@@ -262,5 +266,30 @@ int32_t mnavPopNode(mnavQuery* query);
 // The search heuristic's scale: the cheapest included area's cost, or less
 // for a kind of link the filter crosses that costs less per meter.
 double mnavHeuristicScale(const mnavNavmesh* navmesh, const mnavQueryFilter* filter);
+
+// The search calls without the misuse count, for calls inside the
+// library, which run in its floating-point environment already.
+mnavResult mnavBeginPathWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                             const mnavQueryFilter* filter, mnavPolygonId startPolygon,
+                             mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end);
+mnavResult mnavContinuePathWork(mnavQuery* query, const mnavNavmesh* navmesh, int32_t nodes,
+                                bool* endedOut);
+mnavResult mnavFindPathWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                            const mnavQueryFilter* filter, mnavPolygonId startPolygon,
+                            mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end,
+                            mnavPath* pathOut);
+mnavResult mnavFinishPathWork(mnavQuery* query, const mnavNavmesh* navmesh, mnavPath* pathOut);
+mnavResult mnavCheckReachableWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                  const mnavQueryFilter* filter, mnavPolygonId startPolygon,
+                                  mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end,
+                                  mnavPathEnd* endOut);
+mnavResult mnavMoveAlongSurfaceWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                                    const mnavQueryFilter* filter, mnavPolygonId startPolygon,
+                                    mnavPos3 start, mnavPos3 end, mnavMove* moveOut);
+mnavResult mnavRaycastWork(mnavQuery* query, const mnavNavmesh* navmesh,
+                           const mnavQueryFilter* filter, mnavPolygonId startPolygon,
+                           mnavPos3 start, mnavPos3 end, mnavRay* rayOut);
+mnavResult mnavGetHeightWork(const mnavNavmesh* navmesh, mnavPolygonId polygon, double x, double z,
+                             double* heightOut);
 
 #endif // MAUL_NAV_SRC_QUERY_H

@@ -10,7 +10,9 @@
 // lies in the circle.
 // Random numbers come from SplitMix64 (Vigna).
 
+#include "clip.h"
 #include "fpenv.h"
+#include "invariant.h"
 #include "navmesh.h"
 #include "nearest.h"
 #include "query.h"
@@ -27,46 +29,6 @@
 
 // 2^-53, turning 53 random bits into a number in [0, 1).
 #define UNIT 0x1.0p-53
-
-// The corners of a 32-gon inscribed in the unit circle, counterclockwise
-// from +X toward +Z, written out so that every platform has the same.
-static const double s_ring[32][2] = {
-    {1.0, 0.0},
-    {0.9807852804032304, 0.19509032201612825},
-    {0.9238795325112867, 0.3826834323650898},
-    {0.8314696123025452, 0.5555702330196022},
-    {0.7071067811865476, 0.7071067811865475},
-    {0.5555702330196023, 0.8314696123025452},
-    {0.38268343236508984, 0.9238795325112867},
-    {0.19509032201612833, 0.9807852804032304},
-    {0.0, 1.0},
-    {-0.1950903220161282, 0.9807852804032304},
-    {-0.3826834323650897, 0.9238795325112867},
-    {-0.555570233019602, 0.8314696123025455},
-    {-0.7071067811865475, 0.7071067811865476},
-    {-0.8314696123025453, 0.5555702330196022},
-    {-0.9238795325112867, 0.3826834323650899},
-    {-0.9807852804032304, 0.1950903220161286},
-    {-1.0, 0.0},
-    {-0.9807852804032304, -0.19509032201612836},
-    {-0.9238795325112868, -0.38268343236508967},
-    {-0.8314696123025455, -0.555570233019602},
-    {-0.7071067811865477, -0.7071067811865475},
-    {-0.5555702330196022, -0.8314696123025452},
-    {-0.38268343236509034, -0.9238795325112865},
-    {-0.19509032201612866, -0.9807852804032303},
-    {0.0, -1.0},
-    {0.1950903220161283, -0.9807852804032304},
-    {0.38268343236509, -0.9238795325112866},
-    {0.5555702330196018, -0.8314696123025455},
-    {0.7071067811865474, -0.7071067811865477},
-    {0.8314696123025452, -0.5555702330196022},
-    {0.9238795325112865, -0.3826834323650904},
-    {0.9807852804032303, -0.19509032201612872},
-};
-
-// The most corners a polygon clipped to the 32-gon has.
-#define CLIPPED (MNAV_POLYGON_VERTICES + 32)
 
 typedef struct Random
 {
@@ -114,8 +76,8 @@ static double Area(const mnavPos3* corners, int32_t count)
     return area * 0.5;
 }
 
-static MNAV_NOINLINE mnavResult GetHeightWork(const mnavNavmesh* navmesh, mnavPolygonId polygon,
-                                              double x, double z, double* heightOut)
+mnavResult mnavGetHeightWork(const mnavNavmesh* navmesh, mnavPolygonId polygon, double x, double z,
+                             double* heightOut)
 {
     if (navmesh == nullptr || heightOut == nullptr || !isfinite(x) || !isfinite(z))
     {
@@ -141,17 +103,24 @@ static MNAV_NOINLINE mnavResult GetHeightWork(const mnavNavmesh* navmesh, mnavPo
     }
     if (below && above)
     {
-        return mnav_errorRange;
+        return mnav_errorOutside;
     }
     *heightOut = mnavSurfaceHeight(navmesh, slot, (int32_t)polygon.polygon, x, z);
     return mnav_success;
+}
+
+static MNAV_NOINLINE mnavResult GetHeightCounted(const mnavNavmesh* navmesh, mnavPolygonId polygon,
+                                                 double x, double z, double* heightOut)
+{
+    return mnavHostCountInvalid(MNAV_HOST(navmesh),
+                                mnavGetHeightWork(navmesh, polygon, x, z, heightOut));
 }
 
 mnavResult mnavGetHeight(const mnavNavmesh* navmesh, mnavPolygonId polygon, double x, double z,
                          double* heightOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = GetHeightWork(navmesh, polygon, x, z, heightOut);
+    mnavResult result = GetHeightCounted(navmesh, polygon, x, z, heightOut);
     mnavFloatEnvLeave(env);
     return result;
 }
@@ -166,7 +135,10 @@ static mnavRandomPoint NoPoint(void)
 static mnavRandomPoint PointIn(const mnavNavmesh* navmesh, int32_t slot, int32_t polygon,
                                const mnavPos3* c, int32_t count, Random* r)
 {
-    // Callers pass parts with area, which have three corners or more.
+    // Callers pass parts with area, which have three corners or more: a
+    // polygon, or the part of the one picked around a center, which only
+    // a part with area takes.
+    MNAV_ASSERT(count >= 3);
     if (count < 3)
     {
         return NoPoint();
@@ -253,11 +225,19 @@ static MNAV_NOINLINE mnavResult FindRandomPointWork(const mnavNavmesh* navmesh,
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult FindRandomPointCounted(const mnavNavmesh* navmesh,
+                                                       const mnavQueryFilter* filter, uint64_t seed,
+                                                       mnavRandomPoint* pointOut)
+{
+    return mnavHostCountInvalid(MNAV_HOST(navmesh),
+                                FindRandomPointWork(navmesh, filter, seed, pointOut));
+}
+
 mnavResult mnavFindRandomPoint(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
                                uint64_t seed, mnavRandomPoint* pointOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = FindRandomPointWork(navmesh, filter, seed, pointOut);
+    mnavResult result = FindRandomPointCounted(navmesh, filter, seed, pointOut);
     mnavFloatEnvLeave(env);
     return result;
 }
@@ -307,6 +287,7 @@ static void SiftUp(mnavQuery* q, int32_t at)
 
 static int32_t Pop(mnavQuery* q)
 {
+    MNAV_ASSERT(q->heapCount > 0 && q->nodes[q->indexHeap[0]].heap == 0);
     int32_t top = q->indexHeap[0];
     int32_t last = q->indexHeap[--q->heapCount];
     int32_t at = 0;
@@ -419,6 +400,8 @@ static void Enter(Ring* r, int32_t from, int32_t slot, int32_t polygon, mnavPos3
     {
         if (q->nodes[n].heap != MNAV_NO_NODE && cost < q->nodes[n].cost)
         {
+            // A node still open is where the open list holds it.
+            MNAV_ASSERT(q->indexHeap[q->nodes[n].heap] == n);
             q->nodes[n].cost = cost;
             q->nodes[n].at = mid;
             q->nodes[n].parent = from;
@@ -432,6 +415,9 @@ static void Enter(Ring* r, int32_t from, int32_t slot, int32_t polygon, mnavPos3
         return;
     }
     n = q->nodeCount++;
+    // Each node enters the open list once, and the nodes made are at most
+    // its room.
+    MNAV_ASSERT(q->heapCount < q->limits.nodes);
     q->nodes[n] = (mnavSearchNode){a, b, mid, cost, 0.0, 0.0, slot, polygon, 0, 0, from, 0};
     q->table[cell] = n;
     Place(q, q->heapCount++, n);
@@ -620,6 +606,10 @@ static MNAV_NOINLINE mnavResult FindWallDistanceWork(mnavQuery* query, const mna
                                                      mnavPolygonId polygon, mnavPos3 center,
                                                      double radius, mnavWall* wallOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     if (wallOut == nullptr || !GoodRing(query, navmesh, center, radius))
     {
         return mnav_errorInvalid;
@@ -639,13 +629,24 @@ static MNAV_NOINLINE mnavResult FindWallDistanceWork(mnavQuery* query, const mna
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult FindWallDistanceCounted(mnavQuery* query,
+                                                        const mnavNavmesh* navmesh,
+                                                        const mnavQueryFilter* filter,
+                                                        mnavPolygonId polygon, mnavPos3 center,
+                                                        double radius, mnavWall* wallOut)
+{
+    return mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+        FindWallDistanceWork(query, navmesh, filter, polygon, center, radius, wallOut));
+}
+
 mnavResult mnavFindWallDistance(mnavQuery* query, const mnavNavmesh* navmesh,
                                 const mnavQueryFilter* filter, mnavPolygonId polygon,
                                 mnavPos3 center, double radius, mnavWall* wallOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =
-        FindWallDistanceWork(query, navmesh, filter, polygon, center, radius, wallOut);
+        FindWallDistanceCounted(query, navmesh, filter, polygon, center, radius, wallOut);
     mnavFloatEnvLeave(env);
     return result;
 }
@@ -656,6 +657,10 @@ static MNAV_NOINLINE mnavResult FindWallsWork(mnavQuery* query, const mnavNavmes
                                               mnavWallSegment* wallsOut, int32_t capacity,
                                               mnavWallsFound* foundOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     if (foundOut == nullptr || capacity < 0 || (wallsOut == nullptr && capacity > 0) ||
         !GoodRing(query, navmesh, center, radius))
     {
@@ -675,84 +680,37 @@ static MNAV_NOINLINE mnavResult FindWallsWork(mnavQuery* query, const mnavNavmes
     return r.count > capacity ? mnav_errorCapacity : mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult FindWallsCounted(mnavQuery* query, const mnavNavmesh* navmesh,
+                                                 const mnavQueryFilter* filter,
+                                                 mnavPolygonId polygon, mnavPos3 center,
+                                                 double radius, mnavWallSegment* wallsOut,
+                                                 int32_t capacity, mnavWallsFound* foundOut)
+{
+    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+                                FindWallsWork(query, navmesh, filter, polygon, center, radius,
+                                              wallsOut, capacity, foundOut));
+}
+
 mnavResult mnavFindWalls(mnavQuery* query, const mnavNavmesh* navmesh,
                          const mnavQueryFilter* filter, mnavPolygonId polygon, mnavPos3 center,
                          double radius, mnavWallSegment* wallsOut, int32_t capacity,
                          mnavWallsFound* foundOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = FindWallsWork(query, navmesh, filter, polygon, center, radius, wallsOut,
-                                      capacity, foundOut);
+    mnavResult result = FindWallsCounted(query, navmesh, filter, polygon, center, radius, wallsOut,
+                                         capacity, foundOut);
     mnavFloatEnvLeave(env);
     return result;
-}
-
-// Clips a convex polygon to the 32-gon of a circle on the ground,
-// Sutherland and Hodgman's way; returns the corners left.
-static int32_t ClipToCircle(const mnavPos3* corners, int32_t count, mnavPos3 center, double radius,
-                            mnavPos3 out[CLIPPED])
-{
-    mnavPos3 a[CLIPPED];
-    mnavPos3 b[CLIPPED];
-    memcpy(a, corners, (size_t)count * sizeof(mnavPos3));
-    int32_t n = count;
-    // The polygons' corners wind one way on the ground; the 32-gon's
-    // edges are kept with the same turn.
-    double turn = 0.0;
-    for (int32_t k = 1; k + 1 < count; ++k)
-    {
-        turn += Twice(corners[0], corners[k], corners[k + 1]);
-    }
-    double sign = turn < 0.0 ? -1.0 : 1.0;
-    for (int32_t e = 0; e < 32 && n > 0; ++e)
-    {
-        mnavPos3 p = {center.x + radius * s_ring[e][0], 0.0, center.z + radius * s_ring[e][1]};
-        mnavPos3 q = {center.x + radius * s_ring[(e + 1) % 32][0], 0.0,
-                      center.z + radius * s_ring[(e + 1) % 32][1]};
-        // A circle too small for its corners to differ at the center's
-        // place, as one of no radius is, holds no area: an edge of one
-        // point would keep every corner.
-        if (p.x == q.x && p.z == q.z)
-        {
-            return 0;
-        }
-        // The 32-gon turns counterclockwise in X and Z; flipped to the
-        // polygon's way when it turns the other.
-        if (sign < 0.0)
-        {
-            mnavPos3 swap = p;
-            p = q;
-            q = swap;
-        }
-        int32_t m = 0;
-        for (int32_t k = 0; k < n; ++k)
-        {
-            mnavPos3 s = a[k];
-            mnavPos3 t = a[(k + 1) % n];
-            double ds = Twice(p, q, s) * sign;
-            double dt = Twice(p, q, t) * sign;
-            if (ds >= 0.0)
-            {
-                b[m++] = s;
-            }
-            if ((ds >= 0.0) != (dt >= 0.0))
-            {
-                double u = ds / (ds - dt);
-                b[m++] =
-                    (mnavPos3){s.x + u * (t.x - s.x), s.y + u * (t.y - s.y), s.z + u * (t.z - s.z)};
-            }
-        }
-        memcpy(a, b, (size_t)m * sizeof(mnavPos3));
-        n = m;
-    }
-    memcpy(out, a, (size_t)n * sizeof(mnavPos3));
-    return n;
 }
 
 static MNAV_NOINLINE mnavResult FindRandomPointAroundWork(
     mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
     mnavPolygonId polygon, mnavPos3 center, double radius, uint64_t seed, mnavRandomPoint* pointOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     if (pointOut == nullptr || !GoodRing(query, navmesh, center, radius))
     {
         return mnav_errorInvalid;
@@ -771,9 +729,14 @@ static MNAV_NOINLINE mnavResult FindRandomPointAroundWork(
         int32_t n = Pop(query);
         const mnavSearchNode* node = &query->nodes[n];
         mnavPos3 c[MNAV_POLYGON_VERTICES];
-        mnavPos3 clipped[CLIPPED];
-        int32_t count = Corners(navmesh, node->slot, node->polygon, c);
-        double area = Area(clipped, ClipToCircle(c, count, center, radius, clipped));
+        mnavPos3 clipped[MNAV_CLIP_CORNERS];
+        int32_t count = mnavClipToCircle(c, Corners(navmesh, node->slot, node->polygon, c), center,
+                                         radius, clipped, MNAV_CLIP_CORNERS);
+        if (count < 0)
+        {
+            return mnav_errorLimit;
+        }
+        double area = Area(clipped, count);
         // Reservoir sampling by the area each polygon shares with the
         // circle: each one reached takes the pick with its share so far.
         sum += area;
@@ -795,11 +758,24 @@ static MNAV_NOINLINE mnavResult FindRandomPointAroundWork(
         return mnav_success;
     }
     mnavPos3 c[MNAV_POLYGON_VERTICES];
-    mnavPos3 clipped[CLIPPED];
-    int32_t count =
-        ClipToCircle(c, Corners(navmesh, slot, node->polygon, c), center, radius, clipped);
+    mnavPos3 clipped[MNAV_CLIP_CORNERS];
+    int32_t count = mnavClipToCircle(c, Corners(navmesh, slot, node->polygon, c), center, radius,
+                                     clipped, MNAV_CLIP_CORNERS);
+    if (count < 0)
+    {
+        return mnav_errorLimit;
+    }
     *pointOut = PointIn(navmesh, slot, node->polygon, clipped, count, &random);
     return mnav_success;
+}
+
+static MNAV_NOINLINE mnavResult FindRandomPointAroundCounted(
+    mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+    mnavPolygonId polygon, mnavPos3 center, double radius, uint64_t seed, mnavRandomPoint* pointOut)
+{
+    return mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+        FindRandomPointAroundWork(query, navmesh, filter, polygon, center, radius, seed, pointOut));
 }
 
 mnavResult mnavFindRandomPointAround(mnavQuery* query, const mnavNavmesh* navmesh,
@@ -808,8 +784,8 @@ mnavResult mnavFindRandomPointAround(mnavQuery* query, const mnavNavmesh* navmes
                                      mnavRandomPoint* pointOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result =
-        FindRandomPointAroundWork(query, navmesh, filter, polygon, center, radius, seed, pointOut);
+    mnavResult result = FindRandomPointAroundCounted(query, navmesh, filter, polygon, center,
+                                                     radius, seed, pointOut);
     mnavFloatEnvLeave(env);
     return result;
 }
