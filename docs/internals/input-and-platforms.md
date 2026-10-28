@@ -37,7 +37,7 @@ A game's effects may be felt: an `effect` line's `felt` names an output of the a
 
 `window` owns the process's windows through Maul Window: Wayland and X11 on Linux, Win32 on Windows, AppKit on macOS, UIKit on iOS, NativeActivity on Android, and a canvas in the browser without Emscripten. Only `window` includes Maul Window. A window's events become input in `input_window`, in order, with every held control let go when focus leaves, so no key sticks.
 
-`window_host` is a client's window participant: it opens the window (`window.*`), feeds input, lends the platform's clipboard, file dialogs and dropped files to an editor, and runs the UI's accessibility adapter. When the platform suspends the program, or a headset shows the person nothing, the client runs on but nothing reaches a person: frames, sound and input stop until it resumes.
+`window_host` is a client's window participant: it opens the window (`window.*`), feeds input, lends the platform's clipboard, file dialogs and dropped files to an editor, and runs the UI's accessibility adapter. Each of the window's frames runs the Host iterations that were due when it began, at most four and for about one display refresh: a frame whose iteration is slow runs that one and returns, so input is read between iterations (on Android the frames run on the main thread, and Android reports the app as not responding once a touch waits five seconds). When the platform suspends the program, or a headset shows the person nothing, the client runs on but nothing reaches a person: frames, sound and input stop until it resumes.
 
 ## Headsets
 
