@@ -504,12 +504,13 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     // Declare what is new, before any state names it: the connection's
     // own player first, whatever the bound on mappings.
     const std::size_t kSettled = peer.mapped.size();
+    std::size_t declared = 0;
     const auto kDeclare = [&](world::EntityHandle entity) {
         const NetEntityId kId{peer.nextNetEntity++};
         peer.mapped.add(entity, Mapping{.id = kId});
         peer.unsettled.push_back(entity);
         peer.byNetEntity[kId.value] = entity;
-        sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
+        declared += sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
     };
     if (!peer.mapped.contains(peer.player) && isPresent(peer.player) && peer.nextNetEntity != 0) {
         kDeclare(peer.player);
@@ -560,8 +561,12 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     std::ranges::sort(entering);
     entering.erase(std::ranges::unique(entering).begin(), entering.end());
     peer.bounded = false;
+    // Within the bytes a publish may declare, too: a join in view of many
+    // entities declares them over several publishes, never more at once
+    // than the client's transport holds between its reads.
     for (const std::size_t kIndex : entering) {
-        if (peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0) {
+        if (peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0 ||
+            declared + kLargestMappingFrame > settings.mappingBytesPerPublish) {
             peer.bounded = true;
             break;
         }
