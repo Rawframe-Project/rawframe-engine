@@ -158,6 +158,7 @@ inline network::Compatibility compatibility() {
 struct Options {
     std::uint32_t statePeriod = 1;
     std::size_t stateBytesPerPublish = 1092;
+    std::size_t mappingBytesPerPublish = world_replication::kMappingBytesPerPublish;
     bool predicting = false;
     std::optional<world_replication::InterestSettings> interest;
     /// Districts streamed as units, outliving the scenario.
@@ -219,6 +220,7 @@ struct Scenario {
              .units = options.units,
              .statePeriod = options.statePeriod,
              .stateBytesPerPublish = options.stateBytesPerPublish,
+             .mappingBytesPerPublish = options.mappingBytesPerPublish,
              .commandSizes = options.commandSizes,
              .own = std::move(options.own)});
         std::vector<world::SystemDeclaration> declarations;

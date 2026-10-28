@@ -19,6 +19,7 @@ The configuration is `key = value` lines; `#` starts a comment, and relative pat
 | `world.maximum_ticks_per_iteration`, `world.degraded_ms`, `world.debt_limit_ms`, `world.overload_ms` | How far behind the World may fall: it catches up at most so many ticks an iteration, is degraded (admission closed) so far behind, and overloaded past the debt limit or after degrading so long. |
 | `replication.endpoint` | Where players connect; replication is off without it. |
 | `replication.maximum_connections`, `replication.state_rate`, `replication.egress_bytes_per_second` | How many players, how often each is sent state, and how many bytes a second. |
+| `replication.mapping_bytes_per_publish` | How many bytes of entity declarations a player is sent each time it is sent state, 64 bytes to 128 KiB; 16 KiB by default. A player joining in view of more entities is told of them over several publishes. |
 | `network.quic.self_signed`, `network.quic.fingerprint_file`, `network.quic.renew_ms` | A certificate the server makes as it starts, the file it writes its fingerprint to for clients to pin, and how soon it renews. |
 | `network.quic.certificate_file`, `network.quic.private_key_file` | A certificate for the host's name instead. |
 | `network.quic.webtransport` | Listen for browsers too. |

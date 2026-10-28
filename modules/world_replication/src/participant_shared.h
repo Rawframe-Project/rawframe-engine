@@ -1,8 +1,8 @@
 #pragma once
 
 // What the replication participants share (participants.cpp,
-// bots_participant.cpp): their settings read from configuration, their
-// sessions' and transports' profiles, and the lanes both sides declare.
+// bots_participant.cpp): their settings read from configuration, and the
+// lanes both sides declare. Their profiles are public (profiles.h).
 
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/participant.h"
@@ -10,6 +10,7 @@
 #include "rawframe/network/transport.h"
 #include "rawframe/result/result.h"
 #include "rawframe/world_replication/plan.h"
+#include "rawframe/world_replication/profiles.h"
 
 #include <cstddef>
 #include <span>
@@ -26,16 +27,10 @@ namespace rawframe::world_replication {
 /// shipping build refuses the key that asks for it.
 [[nodiscard]] result::Result<bool> captureAsked(const composition::Configuration& configuration, std::string_view key);
 
-/// The session bounds both sides use: a datagram fits one path MTU.
-[[nodiscard]] network::SessionProfile sessionProfile(std::size_t sessions);
-
 /// The event lanes both sides declare: the engine's, the game's when
 /// it sends messages, its bound checked when the game loaded, and
 /// its command lane when it has commands, bound by the largest.
 [[nodiscard]] std::vector<network::EventLaneDeclaration> lanesOf(const ReplicationPlan& plan);
-
-/// A transport's room for `connections` connections.
-[[nodiscard]] network::ProviderProfile providerProfile(std::size_t connections);
 
 /// What peers must agree on: the protocol, the game, its replicated
 /// components, and the package revision, which is the CompositionId when

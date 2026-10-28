@@ -45,6 +45,10 @@ inline constexpr std::uint64_t kInterestKept = 1024;
 inline constexpr std::size_t kMaximumTombstones = 16'384;
 /// No place in a table by slot.
 inline constexpr std::size_t kNowhere = SIZE_MAX;
+/// The most bytes one mapping frame takes: its type and length, the epoch
+/// and the entity's name as varints of up to eight bytes, and whether it
+/// is owned.
+inline constexpr std::size_t kLargestMappingFrame = 1 + 1 + 8 + 8 + 1;
 
 /// Bytes a state datagram's framing takes around its payload, at most.
 inline constexpr std::size_t kStateHeaderRoom = 4 * 8;
@@ -184,7 +188,8 @@ struct ReplicationServer::State {
     std::vector<std::byte> datagram;
     std::vector<std::byte> frame;
 
-    void sendMapping(Peer& peer, network::ControlFrame type, NetEntityId entity, bool owned);
+    /// The frame's bytes, as the session writes it.
+    std::size_t sendMapping(Peer& peer, network::ControlFrame type, NetEntityId entity, bool owned);
 
     void onFrame(world::World& world, Peer& peer, const network::SessionEvent& event);
 
