@@ -91,14 +91,14 @@ static m2Vec2 ArmTo(const m2World* world, int32_t body, m2Pos2 p)
     return (m2Vec2){(float)(p.x - xf.p.x) - center.x, (float)(p.y - xf.p.y) - center.y};
 }
 
-// Adds dv to a particle's velocity, held within M2_MAX_SPEED: the passes
+// Adds dv to a particle's velocity, held within M2_SPEED_LIMIT: the passes
 // read the velocities they write, and strong springs would otherwise
 // feed each other past the float range within one pass.
 static void Push(m2Particles* p, int32_t i, float dx, float dy)
 {
     m2Vec2* v = &p->particleVelocities[i];
-    v->x = m2SaturateF(v->x + dx, M2_MAX_SPEED);
-    v->y = m2SaturateF(v->y + dy, M2_MAX_SPEED);
+    v->x = m2SaturateF(v->x + dx, M2_SPEED_LIMIT);
+    v->y = m2SaturateF(v->y + dy, M2_SPEED_LIMIT);
 }
 
 // Pushes two particles apart along n by dv, half each.
@@ -176,18 +176,18 @@ static void Pressures(m2Particles* p, const Fluid* f)
         uint32_t flags = p->particleFlags[i];
         float excess = p->particleWeights[i] - M2_FLUID_REST_DENSITY;
         float pressure = excess > 0.0f ? p->particlePressureStrength * excess * f->critical : 0.0f;
-        float near = 0.0f;
+        float nearPressure = 0.0f;
         if ((flags & m2_tensileParticle) != 0)
         {
             pressure = excess > 0.0f ? pressure : p->particleCohesion * excess * f->critical;
-            near = p->particleNearPressure * p->particleAccumulation2[i].x * f->critical;
+            nearPressure = p->particleNearPressure * p->particleAccumulation2[i].x * f->critical;
         }
         if ((flags & m2_powderParticle) != 0)
         {
             pressure = 0.0f;
         }
         p->particleAccumulation[i] = m2MinF(pressure, cap);
-        p->particleAccumulation2[i].y = near;
+        p->particleAccumulation2[i].y = nearPressure;
     }
 }
 
@@ -247,7 +247,8 @@ static m2Pos2 Ahead(const m2Particles* p, int32_t i, float dt)
 
 // Each triad matches its spawn shape to where its corners are heading:
 // the best-fit rotation of the spawn offsets onto the current ones about
-// their mean, and a velocity toward each rotated spawn corner.
+// their mean, and a velocity toward each rotated spawn corner. A corner's
+// offset from the mean is held to M2_REACH_LIMIT per axis, as a joint's is.
 static void ElasticTriads(m2Particles* p, const Fluid* f)
 {
     float strength = f->invDt * p->particleElasticStrength;
@@ -263,7 +264,7 @@ static void ElasticTriads(m2Particles* p, const Fluid* f)
         float cosine = 0.0f;
         for (int32_t c = 0; c < 3; ++c)
         {
-            now[c] = (m2Vec2){(float)(at[c].x - mx), (float)(at[c].y - my)};
+            now[c] = (m2Vec2){m2WorldOffset(at[c].x - mx), m2WorldOffset(at[c].y - my)};
             sine += spawn[c].x * now[c].y - spawn[c].y * now[c].x;
             cosine += spawn[c].x * now[c].x + spawn[c].y * now[c].y;
         }
@@ -283,7 +284,9 @@ static void ElasticTriads(m2Particles* p, const Fluid* f)
 }
 
 // Each spring pulls its two ends toward its spawn length, measured where
-// they are heading.
+// they are heading. Like a joint, it takes ends farther apart than
+// M2_REACH_LIMIT along an axis as that far apart. With the rest lengths
+// and spawn corners a restore accepts, every product stays finite.
 static void SpringNets(m2Particles* p, const Fluid* f)
 {
     float strength = f->invDt * p->particleSpringStrength;
@@ -293,7 +296,7 @@ static void SpringNets(m2Particles* p, const Fluid* f)
         int32_t b = p->particleSpringB[k];
         m2Pos2 pa = Ahead(p, a, f->dt);
         m2Pos2 pb = Ahead(p, b, f->dt);
-        m2Vec2 d = {(float)(pb.x - pa.x), (float)(pb.y - pa.y)};
+        m2Vec2 d = {m2WorldOffset(pb.x - pa.x), m2WorldOffset(pb.y - pa.y)};
         float length = sqrtf(d.x * d.x + d.y * d.y);
         if (length > 1.0e-6f)
         {
@@ -382,10 +385,10 @@ static void ApproachViscosity(m2World* world, const Fluid* f)
 
 // --- Speed, bodies and the advance --------------------------------------------
 
-// The critical speed, a diameter per step, and never past M2_MAX_SPEED.
+// The critical speed, a diameter per step, and never past M2_SPEED_LIMIT.
 static void LimitSpeed(m2Particles* p, const Fluid* f)
 {
-    float cap = m2MinF(f->critical, M2_MAX_SPEED);
+    float cap = m2MinF(f->critical, M2_SPEED_LIMIT);
     float cap2 = cap * cap;
     for (int32_t i = 0; i < p->maxParticleIndex; ++i)
     {
@@ -464,8 +467,8 @@ static void KeepOutOfBodies(m2World* world, const Fluid* f)
             double y = from.y + (double)(fraction * move.y) + (double)(M2_FLUID_SURFACE_GAP * n.y);
             // The surface gap can add a little speed; it stays in range.
             p->particleVelocities[i] =
-                (m2Vec2){m2SaturateF((float)(x - from.x) * f->invDt, M2_MAX_SPEED),
-                         m2SaturateF((float)(y - from.y) * f->invDt, M2_MAX_SPEED)};
+                (m2Vec2){m2SaturateF((float)(x - from.x) * f->invDt, M2_SPEED_LIMIT),
+                         m2SaturateF((float)(y - from.y) * f->invDt, M2_SPEED_LIMIT)};
         }
     }
 }

@@ -38,12 +38,34 @@ m2MotorJointDef m2DefaultMotorJointDef(void)
 // jointLength and its world target in jointTargets.
 // The def contract: finite values, non-negative gains and budgets,
 // ordered ranges.
-static bool DefValid(const m2MotorJointDef* def)
+static m2Result DefCheck(const m2MotorJointDef* def)
 {
-    return m2LocalVec2(def->linearOffset) && m2ValidAngle(def->angularOffset) &&
-           m2ValidMaxForce(def->maxForce) && m2ValidMaxForce(def->maxTorque) &&
-           m2ValidFraction(def->correctionFactor) && m2ValidRate(def->hertz) &&
-           m2ValidCoefficient(def->dampingRatio);
+    m2Result result =
+        m2BothChecks(m2CheckLocalVec2(def->linearOffset), m2CheckAngle(def->angularOffset));
+    result = m2BothChecks(result, m2CheckMaxForce(def->maxForce));
+    result = m2BothChecks(result, m2CheckMaxForce(def->maxTorque));
+    result = m2BothChecks(result, m2CheckFraction(def->correctionFactor));
+    result = m2BothChecks(result, m2CheckRate(def->springHertz));
+    return m2BothChecks(result, m2CheckCoefficient(def->springDampingRatio));
+}
+
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordMotorJointDef(m2MotorJointDef* out, const m2MotorJointDef* def)
+{
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->linearOffset = def->linearOffset;
+    out->angularOffset = def->angularOffset;
+    out->maxForce = def->maxForce;
+    out->maxTorque = def->maxTorque;
+    out->correctionFactor = def->correctionFactor;
+    out->springHertz = def->springHertz;
+    out->springDampingRatio = def->springDampingRatio;
+    out->userData = def->userData;
+    out->enableConnectedCollision = def->enableConnectedCollision;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreateMotorJointWorker(m2World* world, const m2MotorJointDef* def,
@@ -59,9 +81,14 @@ static M2_NOINLINE m2Result CreateMotorJointWorker(m2World* world, const m2Motor
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_MOJOINT_COOKIE || !DefValid(def))
+    if (def == NULL || def->internalValue != M2_MOJOINT_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = DefCheck(def);
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
@@ -89,11 +116,11 @@ static M2_NOINLINE m2Result CreateMotorJointWorker(m2World* world, const m2Motor
     // Spring drive rides the otherwise-idle secondary spring slots
     // (jointHertz2/jointDamping2 are only read for the angular spring of
     // the revolute and weld, which type 6 is not).
-    world->joints.jointHertz2[index] = def->hertz;
-    world->joints.jointDamping2[index] = def->dampingRatio;
+    world->joints.jointHertz2[index] = def->springHertz;
+    world->joints.jointDamping2[index] = def->springDampingRatio;
     world->joints.jointUserData[index] = def->userData;
-    world->joints.jointCollide[index] = def->collideConnected ? 1 : 0;
-    if (def->collideConnected == false)
+    world->joints.jointCollide[index] = def->enableConnectedCollision ? 1 : 0;
+    if (def->enableConnectedCollision == false)
     {
         m2RefilterJointedBodies(world, bodyA, bodyB);
     }
@@ -101,7 +128,7 @@ static M2_NOINLINE m2Result CreateMotorJointWorker(m2World* world, const m2Motor
     {
         m2OpCreateMotorJoint record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordMotorJointDef(&record.def, def);
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateMotorJoint, &record, (int32_t)sizeof(record));
     }

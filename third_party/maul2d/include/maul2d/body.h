@@ -14,12 +14,13 @@ extern "C"
 {
 #endif
 
-    /// A world-space box in f64, for editor and camera math.
-    typedef struct m2AabbResult
+    /// A box in world space, its corners 64-bit positions: what a body or
+    /// shape covers, and the region a box query looks in.
+    typedef struct m2WorldAabb
     {
         m2Pos2 lowerBound;
         m2Pos2 upperBound;
-    } m2AabbResult;
+    } m2WorldAabb;
 
     typedef enum m2BodyType
     {
@@ -38,8 +39,8 @@ extern "C"
     /// Per-axis motion locks. A locked axis holds still: its velocity is
     /// zeroed each substep, so contacts, joints, gravity and impulses
     /// cannot move the body along it. linearX and linearY lock world-frame
-    /// translation; angularZ locks rotation and is the same lock as
-    /// fixedRotation (setting either locks the spin). All default false.
+    /// translation; angularZ locks rotation, which also makes the
+    /// rotational inertia infinite. All default false.
     typedef struct m2MotionLocks
     {
         bool linearX;
@@ -58,8 +59,7 @@ extern "C"
         float gravityScale;
         float linearDamping; // v / (1 + h d) per substep, implicit
         float angularDamping;
-        m2MotionLocks motionLocks;   // angularZ is the same lock as fixedRotation
-        bool fixedRotation;          // never rotates: infinite rotational inertia
+        m2MotionLocks motionLocks;   // angularZ: never rotates, infinite inertia
         bool enableSleep;            // false: this body never sleeps
         bool isEnabled;              // false: created dormant, outside the simulation
         int8_t dominance;            // the higher side of a contact cannot be pushed
@@ -82,16 +82,18 @@ extern "C"
     /// @param world    The world.
     /// @param def      The body, from m2DefaultBodyDef. Its type must be
     ///                 one of m2BodyType; its position and rotation
-    ///                 finite; its velocities within M2_MAX_SPEED, and
+    ///                 finite; its velocities within M2_SPEED_LIMIT, and
     ///                 zero for a static body; its rotation not zero, and
     ///                 normalized to its direction; its gravity scale
-    ///                 within M2_MAX_GRAVITY_SCALE; its dampings from 0
-    ///                 to M2_MAX_RATE.
+    ///                 within M2_GRAVITY_SCALE_LIMIT; its dampings from 0
+    ///                 to M2_RATE_LIMIT.
     /// @param bodyOut  Receives the body; the null id on failure.
     /// @return m2_success; m2_errorInvalid for a null argument, a def not
-    ///         from m2DefaultBodyDef or a field out of range, which
-    ///         counts one misuse; m2_errorCapacity when the body pool is
-    ///         full; m2_errorState from host code the world is running.
+    ///         from m2DefaultBodyDef, a NaN or a field outside its domain,
+    ///         and m2_errorLimit for a field past its published bound, each
+    ///         of which counts one misuse; m2_errorCapacity when the body
+    ///         pool is full; m2_errorBusy from host code the world is
+    ///         running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2CreateBody(m2World* world, const m2BodyDef* def,
@@ -105,7 +107,7 @@ extern "C"
     /// @param world   The world.
     /// @param bodyId  The body.
     /// @return m2_success; m2_errorStale when the body is already gone;
-    ///         m2_errorState from host code the world is running.
+    ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2DestroyBody(m2World* world, m2BodyId bodyId);
@@ -249,14 +251,14 @@ extern "C"
     /// of the given length: the way to drive a kinematic body. It goes
     /// through the journaled velocity setters, so a replay repeats it. A
     /// stale id, a static body, an invalid argument or a pose too far to
-    /// reach within M2_MAX_SPEED changes nothing and counts one misuse.
+    /// reach within M2_SPEED_LIMIT changes nothing and counts one misuse.
     ///
     /// @param world     The world.
     /// @param bodyId    The body.
     /// @param position  The target origin.
     /// @param rotation  The target rotation, unit length.
-    /// @param dt        The step the move takes, from M2_MIN_TIME_STEP to
-    ///                  M2_MAX_TIME_STEP.
+    /// @param dt        The step the move takes, from M2_MIN_STEP to
+    ///                  M2_STEP_LIMIT.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Body_SetTargetTransform(m2World* world, m2BodyId bodyId, m2Pos2 position,
@@ -284,8 +286,8 @@ extern "C"
     /// lasts until a shape change, a fixed-rotation change or
     /// m2Body_ApplyMassFromShapes recomputes the mass. The body wakes. A
     /// stale id, a body that is not dynamic, a mass outside M2_MIN_MASS to
-    /// M2_MAX_MASS, a center beyond M2_HUGE, or a central inertia that is
-    /// neither 0 nor within M2_MIN_INERTIA to M2_MAX_INERTIA, changes
+    /// M2_MASS_LIMIT, a center beyond M2_LOCAL_LIMIT, or a central inertia that is
+    /// neither 0 nor within M2_MIN_INERTIA to M2_INERTIA_LIMIT, changes
     /// nothing and counts one misuse. Every override this accepts survives
     /// a snapshot. A central inertia of 0 leaves the body unable to turn.
     /// Mass computed from shapes is clamped into the same ranges.
@@ -318,25 +320,19 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Body_ApplyMassFromShapes(m2World* world, m2BodyId bodyId);
 
-    /// Takes a body out of the simulation without destroying it: its shapes
-    /// leave the broadphase (contacts end, riders wake), its joints stay
-    /// attached but inert, and queries stop seeing it. A disabled body
-    /// changes nothing. A stale id counts one misuse. Journaled.
+    /// Takes a body out of the simulation without destroying it, or puts
+    /// it back where it was. A disabled body's shapes leave the broadphase
+    /// (contacts end, riders wake), its joints stay attached but inert, and
+    /// queries stop seeing it. Setting the state a body already has changes
+    /// nothing and records nothing. A stale id counts one misuse.
+    /// Journaled.
     ///
     /// @param world   The world.
     /// @param bodyId  The body.
+    /// @param flag    True to enable it, false to disable it.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Body_Disable(m2World* world, m2BodyId bodyId);
-
-    /// Puts a disabled body back where it was. An enabled body changes
-    /// nothing. A stale id counts one misuse. Journaled.
-    ///
-    /// @param world   The world.
-    /// @param bodyId  The body.
-    /// @par Thread safety
-    /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Body_Enable(m2World* world, m2BodyId bodyId);
+    M2_API void m2Body_SetEnabled(m2World* world, m2BodyId bodyId, bool flag);
 
     /// Tells whether a body takes part in the simulation.
     ///
@@ -468,7 +464,18 @@ extern "C"
     /// several readers at once.
     M2_API m2Pos2 m2Body_GetWorldCenterOfMass(const m2World* world, m2BodyId bodyId);
 
-    /// Reads a body's rotational inertia about its center of mass.
+    /// Reads a body's mass: m2MassData.mass.
+    ///
+    /// @param world   The world.
+    /// @param bodyId  The body; a stale id counts one misuse.
+    /// @return The mass, kg; 0 for a body that is not dynamic or a stale id.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time, or by
+    /// several readers at once.
+    M2_API float m2Body_GetMass(const m2World* world, m2BodyId bodyId);
+
+    /// Reads a body's rotational inertia about its center of mass:
+    /// m2MassData.centralInertia.
     ///
     /// @param world   The world.
     /// @param bodyId  The body; a stale id counts one misuse.
@@ -476,7 +483,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API float m2Body_GetRotationalInertia(const m2World* world, m2BodyId bodyId);
+    M2_API float m2Body_GetCentralInertia(const m2World* world, m2BodyId bodyId);
 
     /// Computes the tight box around every shape of a body, without the
     /// broadphase margins.
@@ -488,10 +495,10 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API m2AabbResult m2Body_ComputeAabb(const m2World* world, m2BodyId bodyId);
+    M2_API m2WorldAabb m2Body_ComputeAabb(const m2World* world, m2BodyId bodyId);
 
     /// Sets the velocity of a body's center of mass and wakes it. A stale
-    /// id, a static body or a velocity beyond M2_MAX_SPEED on either axis
+    /// id, a static body or a velocity beyond M2_SPEED_LIMIT on either axis
     /// changes nothing and counts one misuse: a static body never moves.
     /// Journaled.
     ///
@@ -507,7 +514,7 @@ extern "C"
     ///
     /// @param world     The world.
     /// @param bodyId    The kinematic or dynamic body.
-    /// @param velocity  The angular velocity, radians/s, within M2_MAX_SPEED.
+    /// @param velocity  The angular velocity, radians/s, within M2_SPEED_LIMIT.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Body_SetAngularVelocity(m2World* world, m2BodyId bodyId, float velocity);
@@ -542,8 +549,8 @@ extern "C"
 
     /// Applies an impulse at a world point, changing the velocity at once;
     /// the lever arm is measured from the center of mass, each axis clamped
-    /// to M2_JOINT_REACH. The body wakes, and its velocity saturates at
-    /// M2_MAX_SPEED per axis. A stale id, a body that is not dynamic, a
+    /// to M2_REACH_LIMIT. The body wakes, and its velocity saturates at
+    /// M2_SPEED_LIMIT per axis. A stale id, a body that is not dynamic, a
     /// non-finite point or an impulse beyond M2_IMPULSE_LIMIT on either
     /// axis changes nothing and counts one misuse. Journaled.
     ///
@@ -567,11 +574,11 @@ extern "C"
     M2_API void m2Body_ApplyLinearImpulse(m2World* world, m2BodyId bodyId, m2Vec2 impulse);
 
     /// Adds a force at a world point for the next step. Forces accumulate
-    /// across calls, saturating at M2_MAX_FORCE per axis (and torque), act
+    /// across calls, saturating at M2_FORCE_LIMIT per axis (and torque), act
     /// during the step and clear when it ends. The lever arm is clamped as
     /// m2Body_ApplyLinearImpulseAtPoint clamps it. The body wakes. A stale
     /// id, a body that is not dynamic, a non-finite point or a force beyond
-    /// M2_MAX_FORCE on either axis changes nothing and counts one misuse.
+    /// M2_FORCE_LIMIT on either axis changes nothing and counts one misuse.
     /// Journaled.
     ///
     /// @param world       The world.
@@ -597,13 +604,13 @@ extern "C"
     ///
     /// @param world   The world.
     /// @param bodyId  The dynamic body.
-    /// @param torque  The torque, N m, within M2_MAX_FORCE.
+    /// @param torque  The torque, N m, within M2_FORCE_LIMIT.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Body_ApplyTorque(m2World* world, m2BodyId bodyId, float torque);
 
     /// Sets a body's linear damping. A stale id or a value outside 0 to
-    /// M2_MAX_RATE changes nothing and counts one misuse. Journaled.
+    /// M2_RATE_LIMIT changes nothing and counts one misuse. Journaled.
     ///
     /// @param world    The world.
     /// @param bodyId   The body.
@@ -643,7 +650,7 @@ extern "C"
     M2_API float m2Body_GetAngularDamping(const m2World* world, m2BodyId bodyId);
 
     /// Sets how strongly gravity pulls a body. A stale id or a scale beyond
-    /// M2_MAX_GRAVITY_SCALE changes nothing and counts one misuse.
+    /// M2_GRAVITY_SCALE_LIMIT changes nothing and counts one misuse.
     /// Journaled.
     ///
     /// @param world   The world.
@@ -653,30 +660,9 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Body_SetGravityScale(m2World* world, m2BodyId bodyId, float scale);
 
-    /// Fixes or frees a body's rotation. Fixing it zeroes the angular
-    /// velocity, and either way the inertia recomputes; it is the same lock
-    /// as m2MotionLocks.angularZ. A stale id counts one misuse. Journaled.
-    ///
-    /// @param world   The world.
-    /// @param bodyId  The body.
-    /// @param flag    True to fix the rotation.
-    /// @par Thread safety
-    /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Body_SetFixedRotation(m2World* world, m2BodyId bodyId, bool flag);
-
-    /// Tells whether a body's rotation is fixed.
-    ///
-    /// @param world   The world.
-    /// @param bodyId  The body; a stale id counts one misuse.
-    /// @return True when fixed; false for a stale id.
-    /// @par Thread safety
-    /// Safe from any thread; a world is used by one thread at a time, or by
-    /// several readers at once.
-    M2_API bool m2Body_IsFixedRotation(const m2World* world, m2BodyId bodyId);
-
-    /// Sets a body's motion locks. angularZ is the same lock as
-    /// fixedRotation, and changing it recomputes the inertia. The body
-    /// wakes. A stale id counts one misuse. Journaled.
+    /// Sets a body's motion locks. Locking an axis zeroes its velocity, and
+    /// changing angularZ recomputes the inertia. The body wakes. A stale id
+    /// counts one misuse. Journaled.
     ///
     /// @param world   The world.
     /// @param bodyId  The body.
@@ -716,7 +702,7 @@ extern "C"
     M2_API bool m2Body_IsSleepEnabled(const m2World* world, m2BodyId bodyId);
 
     /// Applies an angular impulse, changing the angular velocity at once.
-    /// The body wakes, and its spin saturates at M2_MAX_SPEED. A stale id, a
+    /// The body wakes, and its spin saturates at M2_SPEED_LIMIT. A stale id, a
     /// body that is not dynamic or an impulse beyond M2_IMPULSE_LIMIT
     /// changes nothing and counts one misuse. Journaled.
     ///

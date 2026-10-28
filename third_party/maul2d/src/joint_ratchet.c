@@ -35,9 +35,23 @@ m2RatchetJointDef m2DefaultRatchetJointDef(void)
 // engaged tooth rides jointLower. All snapshot state.
 // The def contract: finite values, non-negative gains and budgets,
 // ordered ranges.
-static bool DefValid(const m2RatchetJointDef* def)
+static m2Result DefCheck(const m2RatchetJointDef* def)
 {
-    return m2ValidRatchetTooth(def->ratchet) && m2ValidAngle(def->phase);
+    return m2BothChecks(m2CheckRatchetTooth(def->ratchet), m2CheckAngle(def->phase));
+}
+
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordRatchetJointDef(m2RatchetJointDef* out, const m2RatchetJointDef* def)
+{
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->ratchet = def->ratchet;
+    out->phase = def->phase;
+    out->userData = def->userData;
+    out->enableConnectedCollision = def->enableConnectedCollision;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreateRatchetJointWorker(m2World* world, const m2RatchetJointDef* def,
@@ -53,9 +67,14 @@ static M2_NOINLINE m2Result CreateRatchetJointWorker(m2World* world, const m2Rat
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_RTJOINT_COOKIE || !DefValid(def))
+    if (def == NULL || def->internalValue != M2_RTJOINT_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = DefCheck(def);
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
@@ -86,8 +105,8 @@ static M2_NOINLINE m2Result CreateRatchetJointWorker(m2World* world, const m2Rat
     world->joints.jointLower[index] =
         floorf((0.0f - def->phase) / def->ratchet) * def->ratchet + def->phase;
     world->joints.jointUserData[index] = def->userData;
-    world->joints.jointCollide[index] = def->collideConnected ? 1 : 0;
-    if (def->collideConnected == false)
+    world->joints.jointCollide[index] = def->enableConnectedCollision ? 1 : 0;
+    if (def->enableConnectedCollision == false)
     {
         m2RefilterJointedBodies(world, bodyA, bodyB);
     }
@@ -95,7 +114,7 @@ static M2_NOINLINE m2Result CreateRatchetJointWorker(m2World* world, const m2Rat
     {
         m2OpCreateRatchetJoint record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordRatchetJointDef(&record.def, def);
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateRatchetJoint, &record, (int32_t)sizeof(record));
     }

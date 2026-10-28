@@ -14,7 +14,22 @@ extern "C"
 {
 #endif
 
+// The most vertices a convex polygon holds, fixed at 8 for all of 1.x.
+// Every shape slot holds a geometry union sized by the polygon (140
+// bytes), so a larger limit would grow every shape's memory and its
+// snapshot and journal bytes, polygon or not, and a polygon pair's test
+// costs more with every vertex of either. An outline with more corners
+// becomes several convex pieces through m2DecomposeOutline, and a long
+// boundary becomes a chain.
 #define M2_MAX_POLYGON_VERTICES 8
+
+// The most points m2DecomposeOutline takes, and the most pieces
+// m2World_ShatterBody takes in one call.
+#define M2_MAX_OUTLINE_POINTS 64
+#define M2_MAX_SHATTER_PIECES 64
+
+// The most points m2ComputeHull takes in one cloud.
+#define M2_MAX_HULL_POINTS 256
 
     /// A shape of a world: a 1-based slot and a generation.
     typedef struct m2ShapeId
@@ -24,7 +39,7 @@ extern "C"
     } m2ShapeId;
 
     /// A circle. All geometry is authored in body-local space, in 32-bit
-    /// floats, with every coordinate and radius within M2_HUGE.
+    /// floats, with every coordinate and radius within M2_LOCAL_LIMIT.
     typedef struct m2Circle
     {
         m2Vec2 center;
@@ -82,9 +97,9 @@ extern "C"
     /// The def of a shape. Initialize it with m2DefaultShapeDef.
     typedef struct m2ShapeDef
     {
-        float density;      // kg/m^2, 0 to M2_MAX_DENSITY; a dynamic body gets a minimum mass
-        float friction;     // Coulomb, 0 to M2_MAX_COEFFICIENT; pairs mix by geometric mean
-        float tangentSpeed; // conveyor along the contact tangent, m/s, within M2_MAX_SPEED
+        float density;      // kg/m^2, 0 to M2_DENSITY_LIMIT; a dynamic body gets a minimum mass
+        float friction;     // Coulomb, 0 to M2_COEFFICIENT_LIMIT; pairs mix by geometric mean
+        float tangentSpeed; // conveyor along the contact tangent, m/s, within M2_SPEED_LIMIT
         float restitution;  // bounce in [0, 1]; pairs mix by maximum
         /// Two shapes collide when each one's category intersects the
         /// other's mask. Defaults: category 1, mask all. Queries take
@@ -114,14 +129,14 @@ extern "C"
     /// The def of a chain. Initialize it with m2DefaultChainDef. An open
     /// chain needs at least 4 points: the first and last are ghosts, and
     /// the chain collides along points[1..count-2]. A loop needs at least
-    /// 3 and wraps. Every point lies within M2_HUGE. The points are copied,
+    /// 3 and wraps. Every point lies within M2_LOCAL_LIMIT. The points are copied,
     /// so the array may be temporary.
     typedef struct m2ChainDef
     {
         const m2Vec2* points;
         int32_t count;
         bool isLoop;
-        float friction;    // 0 to M2_MAX_COEFFICIENT
+        float friction;    // 0 to M2_COEFFICIENT_LIMIT
         float restitution; // 0 to 1
         M2_ALIGN8 uint64_t categoryBits;
         M2_ALIGN8 uint64_t maskBits;
@@ -138,18 +153,24 @@ extern "C"
     M2_API m2ChainDef m2DefaultChainDef(void);
 
     /// Creates a chain's segment shapes on a body. A shape pool that runs
-    /// out midway leaves a shorter chain, which m2Chain_GetSegmentCount
-    /// reports. The id names the whole chain; destroying the body retires
-    /// it too. Journaled as one operation.
+    /// out midway leaves a shorter chain: its segments and its id stay, the
+    /// create returns m2_errorCapacity, and m2Chain_GetSegmentCount tells
+    /// how many it has. The id names the whole chain; destroying the body
+    /// retires it too. Journaled as one operation, a chain cut short
+    /// included.
     ///
     /// @param world     The world.
     /// @param bodyId    The body the segments attach to.
     /// @param def       The chain, from m2DefaultChainDef.
-    /// @param chainOut  Receives the chain; the null id on failure.
-    /// @return m2_success; m2_errorStale for a stale body; m2_errorInvalid
-    ///         for a bad def or a null chainOut; m2_errorCapacity when the
-    ///         chain or shape pool has no room at all; m2_errorState from
-    ///         host code the world is running.
+    /// @param chainOut  Receives the chain, a chain cut short included; the
+    ///                  null id when the create is refused.
+    /// @return m2_success; m2_errorCapacity, counting no misuse, when the
+    ///         shape pool ran out before the last segment (chainOut names
+    ///         the shorter chain) or the chain or shape pool has no room at
+    ///         all (chainOut is the null id); m2_errorStale for a stale
+    ///         body; m2_errorInvalid for a bad def or a null chainOut;
+    ///         m2_errorLimit for a point or value past its published bound;
+    ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2CreateChain(m2World* world, m2BodyId bodyId,
@@ -161,7 +182,7 @@ extern "C"
     /// @param world    The world.
     /// @param chainId  The chain.
     /// @return m2_success; m2_errorStale when the chain is already gone;
-    ///         m2_errorState from host code the world is running.
+    ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2DestroyChain(m2World* world, m2ChainId chainId);
@@ -187,6 +208,16 @@ extern "C"
     /// several readers at once.
     M2_API int32_t m2Chain_GetSegmentCount(const m2World* world, m2ChainId chainId);
 
+    /// Tells whether a chain is a closed loop, as its def's isLoop said.
+    ///
+    /// @param world    The world.
+    /// @param chainId  The chain; a stale id counts one misuse.
+    /// @return True for a loop; false for an open chain or a stale id.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time, or by
+    /// several readers at once.
+    M2_API bool m2Chain_IsLoop(const m2World* world, m2ChainId chainId);
+
     static const m2ChainId m2_nullChainId = {0, 0};
 
     /// Returns a shape def: density 1, friction 0.6, no bounce, category
@@ -201,10 +232,13 @@ extern "C"
     /// thresholds relative to its size.
     ///
     /// @param points      The vertices.
-    /// @param count       The number of points, 3 to 8.
+    /// @param count       The number of points, 3 to
+    ///                    M2_MAX_POLYGON_VERTICES.
     /// @param radius      The rounding radius, at least 0.
     /// @param polygonOut  Receives the polygon; left as it was on failure.
-    /// @return m2_success; m2_errorInvalid when the points do not make a
+    /// @return m2_success; m2_errorLimit for more than
+    ///         M2_MAX_POLYGON_VERTICES points, or a point or radius past
+    ///         M2_LOCAL_LIMIT; m2_errorInvalid when the points do not make a
     ///         valid polygon or an argument is null.
     /// @par Thread safety
     /// Safe from any thread.
@@ -216,12 +250,14 @@ extern "C"
     /// order. The way from a sprite's points to a collision shape.
     ///
     /// @param points      The cloud.
-    /// @param count       The number of points.
+    /// @param count       The number of points, 3 to M2_MAX_HULL_POINTS.
     /// @param radius      The rounding radius, at least 0.
     /// @param polygonOut  Receives the hull; left as it was on failure.
-    /// @return m2_success; m2_errorInvalid when no hull remains (too few
-    ///         points, all welded together, all collinear) or an argument
-    ///         is null.
+    /// @return m2_success; m2_errorLimit for more than M2_MAX_HULL_POINTS
+    ///         points, a point or the radius past M2_LOCAL_LIMIT, or a hull
+    ///         of more than M2_MAX_POLYGON_VERTICES vertices; m2_errorInvalid
+    ///         when no hull remains (too few points, all welded together,
+    ///         all collinear) or an argument is null.
     /// @par Thread safety
     /// Safe from any thread.
     M2_NODISCARD M2_API m2Result m2ComputeHull(const m2Vec2* points, int32_t count, float radius,
@@ -233,20 +269,21 @@ extern "C"
     /// dropped by validation; a clean outline loses nothing, and one that
     /// would lose every piece is refused.
     ///
-    /// @param points    The outline, up to 64 points.
+    /// @param points    The outline, up to M2_MAX_OUTLINE_POINTS points.
     /// @param count     The number of points.
     /// @param pieces    Receives up to capacity pieces; may be null to
     ///                  measure.
     /// @param capacity  The length of pieces.
     /// @param countOut  Receives the number of pieces, which may exceed
     ///                  capacity; left as it was on failure.
-    /// @return m2_success; m2_errorInvalid for too few or too many points,
-    ///         clockwise winding, an outline too thin for any piece to pass
-    ///         validation, an outline that is not simple (an edge
-    ///         crossing another, a vertex within 0.005 m of an edge it
-    ///         does not end, a repeated vertex, an edge folding back over
-    ///         its neighbor), a point beyond M2_HUGE or a null argument. It takes no world, so
-    ///         a refusal counts nothing.
+    /// @return m2_success; m2_errorLimit for more than
+    ///         M2_MAX_OUTLINE_POINTS points or a point past M2_LOCAL_LIMIT;
+    ///         m2_errorInvalid for too few points, clockwise winding, an
+    ///         outline too thin for any piece to pass validation, an
+    ///         outline that is not simple (an edge crossing another, a
+    ///         vertex within 0.005 m of an edge it does not end, a repeated
+    ///         vertex, an edge folding back over its neighbor) or a null
+    ///         argument. It takes no world, so a refusal counts nothing.
     /// @par Thread safety
     /// Safe from any thread.
     M2_NODISCARD M2_API m2Result m2DecomposeOutline(const m2Vec2* points, int32_t count,
@@ -265,7 +302,7 @@ extern "C"
     /// @param bodyId      The dynamic body to break.
     /// @param pieces      The pieces, body-local polygons (pair with
     ///                    m2DecomposeOutline).
-    /// @param pieceCount  The number of pieces, 1 to 64.
+    /// @param pieceCount  The number of pieces, 1 to M2_MAX_SHATTER_PIECES.
     /// @param bodiesOut   Receives up to capacity new bodies, in piece
     ///                    order; null ids on failure. May be null with
     ///                    capacity 0.
@@ -274,9 +311,11 @@ extern "C"
     ///                    exceed capacity; 0 on failure.
     /// @return m2_success; m2_errorStale for a stale body; m2_errorInvalid
     ///         for a body that is not dynamic, an invalid piece or piece
-    ///         count, or a bad output argument; m2_errorCapacity when the
+    ///         count, or a bad output argument; m2_errorLimit for more than
+    ///         M2_MAX_SHATTER_PIECES pieces or a piece past its bounds, as
+    ///         m2MakePolygon gives them; m2_errorCapacity when the
     ///         body or shape pool cannot seat every piece, which counts no
-    ///         misuse; m2_errorState from host code the world is running.
+    ///         misuse; m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2World_ShatterBody(m2World* world, m2BodyId bodyId,
@@ -303,8 +342,9 @@ extern "C"
     /// @param circle    The geometry, in the body's frame.
     /// @param shapeOut  Receives the shape; the null id on failure.
     /// @return m2_success; m2_errorStale for a stale body; m2_errorInvalid
-    ///         for a bad def or geometry or a null argument;
-    ///         m2_errorCapacity when the shape pool is full; m2_errorState
+    ///         for a bad def or geometry or a null argument; m2_errorLimit
+    ///         for a value or coordinate past its published bound;
+    ///         m2_errorCapacity when the shape pool is full; m2_errorBusy
     ///         from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
@@ -375,7 +415,7 @@ extern "C"
     /// @param world    The world.
     /// @param shapeId  The shape.
     /// @return m2_success; m2_errorStale when the shape is already gone;
-    ///         m2_errorState from host code the world is running.
+    ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2DestroyShape(m2World* world, m2ShapeId shapeId);
@@ -386,7 +426,7 @@ extern "C"
     ///
     /// @param world     The world.
     /// @param shapeId   The shape.
-    /// @param friction  The Coulomb friction, 0 to M2_MAX_COEFFICIENT.
+    /// @param friction  The Coulomb friction, 0 to M2_COEFFICIENT_LIMIT.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Shape_SetFriction(m2World* world, m2ShapeId shapeId, float friction);
@@ -403,7 +443,7 @@ extern "C"
     /// Sets a shape's conveyor speed along the contact tangent. A pair
     /// slides at the sum of both shapes' speeds; positive drives a rider
     /// toward +x on an upward-facing floor. Riders wake. A stale id or a
-    /// speed beyond M2_MAX_SPEED changes nothing and counts one misuse.
+    /// speed beyond M2_SPEED_LIMIT changes nothing and counts one misuse.
     /// Journaled.
     ///
     /// @param world    The world.
@@ -649,7 +689,7 @@ extern "C"
     ///
     /// @param world     The world.
     /// @param chainId   The chain.
-    /// @param friction  The Coulomb friction, 0 to M2_MAX_COEFFICIENT.
+    /// @param friction  The Coulomb friction, 0 to M2_COEFFICIENT_LIMIT.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Chain_SetFriction(m2World* world, m2ChainId chainId, float friction);
@@ -694,7 +734,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API m2AabbResult m2Shape_GetAabb(const m2World* world, m2ShapeId shapeId);
+    M2_API m2WorldAabb m2Shape_GetAabb(const m2World* world, m2ShapeId shapeId);
 
     /// Tells whether a world point is inside a shape. A point within the
     /// engine's slop skin of the surface counts as inside, as overlaps do.
@@ -721,7 +761,7 @@ extern "C"
     M2_API m2Pos2 m2Shape_GetClosestPoint(const m2World* world, m2ShapeId shapeId, m2Pos2 point);
 
     /// Sets a shape's density; a dynamic body recomputes its mass. A stale
-    /// id or a density outside 0 to M2_MAX_DENSITY changes nothing and
+    /// id or a density outside 0 to M2_DENSITY_LIMIT changes nothing and
     /// counts one misuse. Journaled.
     ///
     /// @param world    The world.
@@ -751,16 +791,6 @@ extern "C"
     /// several readers at once.
     M2_API uint64_t m2Shape_GetUserData(const m2World* world, m2ShapeId shapeId);
 
-    /// Reads a body's mass, derived from its shapes' densities.
-    ///
-    /// @param world   The world.
-    /// @param bodyId  The body; a stale id counts one misuse.
-    /// @return The mass; 0 for a body that is not dynamic or a stale id.
-    /// @par Thread safety
-    /// Safe from any thread; a world is used by one thread at a time, or by
-    /// several readers at once.
-    M2_API float m2Body_GetMass(const m2World* world, m2BodyId bodyId);
-
     static const m2ShapeId m2_nullShapeId = {0, 0};
 
     /// The filter of a query. A shape answers a query when each side's
@@ -779,17 +809,16 @@ extern "C"
     /// Safe from any thread.
     M2_API m2QueryFilter m2DefaultQueryFilter(void);
 
-    /// The closest hit of a ray or sweep. Queries never change the world,
-    /// and their results are canonical: on a tie the lower shape index
-    /// wins.
-    typedef struct m2RayCastResult
+    /// One hit of a ray or sweep, from a closest cast or from a cast that
+    /// lists every hit. Queries never change the world, and their results
+    /// are canonical: on a tie the lower shape index wins.
+    typedef struct m2CastHit
     {
-        m2ShapeId shapeId; // the null id when hit is false
-        m2Pos2 point;      // the world hit point; the origin on initial overlap
-        m2Vec2 normal;     // the world surface normal; (0, 0) on initial overlap
-        float fraction;    // the hit is origin + fraction * translation
-        bool hit;
-    } m2RayCastResult;
+        m2ShapeId shapeId;
+        m2Pos2 point;   // the world hit point; the origin on initial overlap
+        m2Vec2 normal;  // the world surface normal; (0, 0) on initial overlap
+        float fraction; // the hit is origin + fraction * translation
+    } m2CastHit;
 
     /// Casts a ray and returns its closest hit. A chain link is hit only
     /// from its solid side.
@@ -799,13 +828,15 @@ extern "C"
     /// @param translation  The ray, origin + t * translation for t in
     ///                     [0, 1].
     /// @param filter       Which shapes the ray sees.
-    /// @return The closest hit; no hit for a non-finite argument, which
-    ///         counts one misuse.
+    /// @param hitOut       Receives the closest hit; left as it was on a
+    ///                     miss.
+    /// @return True on a hit; false on a miss, and for a non-finite argument
+    ///         or a null hitOut, which count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API m2RayCastResult m2World_CastRayClosest(const m2World* world, m2Pos2 origin,
-                                                  m2Vec2 translation, m2QueryFilter filter);
+    M2_API bool m2World_CastRayClosest(const m2World* world, m2Pos2 origin, m2Vec2 translation,
+                                       m2QueryFilter filter, m2CastHit* hitOut);
 
     /// Casts a ray against one shape, with the conventions of
     /// m2World_CastRayClosest.
@@ -814,21 +845,14 @@ extern "C"
     /// @param shapeId      The shape; a stale id counts one misuse.
     /// @param origin       The start, in world space.
     /// @param translation  The ray.
-    /// @return The hit; no hit for a stale id or a non-finite argument.
+    /// @param hitOut       Receives the hit; left as it was on a miss.
+    /// @return True on a hit; false on a miss, and for a stale id, a
+    ///         non-finite argument or a null hitOut, which count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API m2RayCastResult m2Shape_CastRay(const m2World* world, m2ShapeId shapeId, m2Pos2 origin,
-                                           m2Vec2 translation);
-
-    /// One hit of a ray or sweep that lists every hit.
-    typedef struct m2RayHit
-    {
-        m2ShapeId shapeId;
-        m2Pos2 point;
-        m2Vec2 normal; // (0, 0) on initial overlap
-        float fraction;
-    } m2RayHit;
+    M2_API bool m2Shape_CastRay(const m2World* world, m2ShapeId shapeId, m2Pos2 origin,
+                                m2Vec2 translation, m2CastHit* hitOut);
 
     /// Casts a ray and lists every hit in ascending fraction, ties to the
     /// lower shape index. When there are more hits than capacity, the
@@ -847,7 +871,7 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API int32_t m2World_CastRayAll(const m2World* world, m2Pos2 origin, m2Vec2 translation,
-                                      m2RayHit* hits, int32_t capacity, m2QueryFilter filter);
+                                      m2CastHit* hits, int32_t capacity, m2QueryFilter filter);
 
     /// Sweeps a circle and lists every hit, as m2World_CastRayAll does.
     ///
@@ -865,7 +889,7 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API int32_t m2World_CastCircleAll(const m2World* world, const m2Circle* circle,
-                                         m2Transform origin, m2Vec2 translation, m2RayHit* hits,
+                                         m2Transform origin, m2Vec2 translation, m2CastHit* hits,
                                          int32_t capacity, m2QueryFilter filter);
 
     /// Sweeps a capsule and lists every hit, as m2World_CastRayAll does.
@@ -884,7 +908,7 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API int32_t m2World_CastCapsuleAll(const m2World* world, const m2Capsule* capsule,
-                                          m2Transform origin, m2Vec2 translation, m2RayHit* hits,
+                                          m2Transform origin, m2Vec2 translation, m2CastHit* hits,
                                           int32_t capacity, m2QueryFilter filter);
 
     /// Sweeps a polygon and lists every hit, as m2World_CastRayAll does.
@@ -903,7 +927,7 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API int32_t m2World_CastPolygonAll(const m2World* world, const m2Polygon* polygon,
-                                          m2Transform origin, m2Vec2 translation, m2RayHit* hits,
+                                          m2Transform origin, m2Vec2 translation, m2CastHit* hits,
                                           int32_t capacity, m2QueryFilter filter);
 
     /// A plane touching a character mover, from m2World_CollideMover.
@@ -982,14 +1006,16 @@ extern "C"
     /// @param origin       The circle's pose at the start.
     /// @param translation  The sweep.
     /// @param filter       Which shapes the sweep sees.
-    /// @return The closest hit; no hit for an invalid argument, which counts
-    ///         one misuse.
+    /// @param hitOut       Receives the closest hit; left as it was on a
+    ///                     miss.
+    /// @return True on a hit; false on a miss, and for an invalid argument or
+    ///         a null hitOut, which count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API m2RayCastResult m2World_CastCircleClosest(const m2World* world, const m2Circle* circle,
-                                                     m2Transform origin, m2Vec2 translation,
-                                                     m2QueryFilter filter);
+    M2_API bool m2World_CastCircleClosest(const m2World* world, const m2Circle* circle,
+                                          m2Transform origin, m2Vec2 translation,
+                                          m2QueryFilter filter, m2CastHit* hitOut);
 
     /// Sweeps a capsule and returns its closest hit, as
     /// m2World_CastCircleClosest does. A character controller's sweep.
@@ -999,14 +1025,16 @@ extern "C"
     /// @param origin       The capsule's pose at the start.
     /// @param translation  The sweep.
     /// @param filter       Which shapes the sweep sees.
-    /// @return The closest hit; no hit for an invalid argument, which counts
-    ///         one misuse.
+    /// @param hitOut       Receives the closest hit; left as it was on a
+    ///                     miss.
+    /// @return True on a hit; false on a miss, and for an invalid argument or
+    ///         a null hitOut, which count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API m2RayCastResult m2World_CastCapsuleClosest(const m2World* world,
-                                                      const m2Capsule* capsule, m2Transform origin,
-                                                      m2Vec2 translation, m2QueryFilter filter);
+    M2_API bool m2World_CastCapsuleClosest(const m2World* world, const m2Capsule* capsule,
+                                           m2Transform origin, m2Vec2 translation,
+                                           m2QueryFilter filter, m2CastHit* hitOut);
 
     /// Sweeps a polygon and returns its closest hit, as
     /// m2World_CastCircleClosest does.
@@ -1016,14 +1044,16 @@ extern "C"
     /// @param origin       The polygon's pose at the start.
     /// @param translation  The sweep.
     /// @param filter       Which shapes the sweep sees.
-    /// @return The closest hit; no hit for an invalid argument, which counts
-    ///         one misuse.
+    /// @param hitOut       Receives the closest hit; left as it was on a
+    ///                     miss.
+    /// @return True on a hit; false on a miss, and for an invalid argument or
+    ///         a null hitOut, which count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API m2RayCastResult m2World_CastPolygonClosest(const m2World* world,
-                                                      const m2Polygon* polygon, m2Transform origin,
-                                                      m2Vec2 translation, m2QueryFilter filter);
+    M2_API bool m2World_CastPolygonClosest(const m2World* world, const m2Polygon* polygon,
+                                           m2Transform origin, m2Vec2 translation,
+                                           m2QueryFilter filter, m2CastHit* hitOut);
 
     /// Lists the live shapes touching a posed circle, in ascending slot
     /// order. Touching within the engine's slop skin counts. A chain link
@@ -1087,8 +1117,7 @@ extern "C"
     /// ascending slot order.
     ///
     /// @param world     The world.
-    /// @param lower     The box's lower corner.
-    /// @param upper     The box's upper corner.
+    /// @param box       The box, in world space.
     /// @param results   Receives up to capacity shapes; may be null to
     ///                  measure.
     /// @param capacity  The length of results.
@@ -1098,8 +1127,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API int32_t m2World_OverlapAabb(const m2World* world, m2Pos2 lower, m2Pos2 upper,
-                                       m2ShapeId* results, int32_t capacity, m2QueryFilter filter);
+    M2_API int32_t m2World_OverlapAabb(const m2World* world, m2WorldAabb box, m2ShapeId* results,
+                                       int32_t capacity, m2QueryFilter filter);
 
 #ifdef __cplusplus
 }

@@ -84,6 +84,19 @@ static void BlastShape(m2World* world, const m2ExplosionDef* def, int32_t s)
     world->bodies.sleepTimes[body] = 0.0f;
 }
 
+// The explode record holds the def's fields and zero bytes between them:
+// copied field by field into a zeroed def, so no padding of the
+// caller's struct reaches the tape.
+static void RecordExplosionDef(m2ExplosionDef* out, const m2ExplosionDef* def)
+{
+    out->position = def->position;
+    out->radius = def->radius;
+    out->falloff = def->falloff;
+    out->impulse = def->impulse;
+    out->maskBits = def->maskBits;
+    out->internalValue = def->internalValue;
+}
+
 static M2_NOINLINE void WorldExplodeWorker(m2World* world, const m2ExplosionDef* def)
 {
     if (m2CheckWriter(world) != m2_success)
@@ -97,7 +110,13 @@ static M2_NOINLINE void WorldExplodeWorker(m2World* world, const m2ExplosionDef*
         m2Refuse(world, m2_errorInvalid);
         return;
     }
-    m2JournalRecord(world, m2_opExplode, def, (int32_t)sizeof(*def));
+    if (world->recorder.journalActive != 0)
+    {
+        m2ExplosionDef record;
+        memset(&record, 0, sizeof(record));
+        RecordExplosionDef(&record, def);
+        m2JournalRecord(world, m2_opExplode, &record, (int32_t)sizeof(record));
+    }
     for (int32_t s = 0; s < world->shapes.maxShapeIndex; ++s)
     {
         int32_t body = world->shapes.shapeBody[s];
@@ -206,15 +225,17 @@ static M2_NOINLINE m2Result WorldShatterBodyWorker(m2World* world, m2BodyId body
     {
         return m2Refuse(world, m2_errorStale);
     }
-    bool valid = pieces != NULL && pieceCount >= 1 && pieceCount <= 64 &&
-                 world->bodies.types[parent] == (uint8_t)m2_dynamicBody;
-    for (int32_t i = 0; valid && i < pieceCount; ++i)
+    m2Result checked = m2CheckValid(pieces != NULL && pieceCount >= 1 &&
+                                    world->bodies.types[parent] == (uint8_t)m2_dynamicBody);
+    checked = m2BothChecks(checked, m2CheckCount(pieceCount, M2_MAX_SHATTER_PIECES));
+    bool readable = pieces != NULL && pieceCount <= M2_MAX_SHATTER_PIECES;
+    for (int32_t i = 0; readable && i < pieceCount; ++i)
     {
-        valid = m2ValidatePolygon(&pieces[i]);
+        checked = m2BothChecks(checked, m2CheckPolygon(&pieces[i]));
     }
-    if (!valid)
+    if (checked != m2_success)
     {
-        return m2Refuse(world, m2_errorInvalid);
+        return m2Refuse(world, checked);
     }
     if (world->bodies.freeCount < pieceCount || world->shapes.shapeFreeCount < pieceCount)
     {

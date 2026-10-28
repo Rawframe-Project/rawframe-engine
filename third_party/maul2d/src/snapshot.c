@@ -22,20 +22,25 @@
 
 #define M2_SNAPSHOT_MAGIC M2_STATE_MAGIC('M', '2', 'S', 'N')
 
-#define M2_SNAPSHOT_VERSION 6u
+#define M2_SNAPSHOT_VERSION 7u
 
 // --- Snapshot -------------------------------------------------------------------
 
 // The header says which release, which build and which world shape wrote
 // the bytes; everything else, pool cursors included, is the state table's.
+// The world shape is the capacities and the particle radius, which sets
+// the particle state a world can make (spring rest lengths, triad spawn
+// corners) and is the one def setting the restore check measures by. It
+// is held widened to a double, which keeps the header free of padding.
 typedef struct m2SnapshotHeader
 {
     m2StatePrefix prefix;
     uint64_t configHash;
     int32_t capacities[6];
+    double particleRadius;
 } m2SnapshotHeader;
 
-_Static_assert(sizeof(m2SnapshotHeader) == 48, "snapshot header must be padding-free");
+_Static_assert(sizeof(m2SnapshotHeader) == 56, "snapshot header must be padding-free");
 
 static void WorldCapacities(const m2World* world, int32_t capacities[6])
 {
@@ -68,8 +73,8 @@ static uint64_t ConfigHash(void)
 // The snapshot's bytes, its header and the state table's block, from the
 // world's capacities; INT64_MAX when they do not fit a size_t. The block
 // is the walk's own size: m2StateSnapshotBytes sums the per-array sizes
-// m2StateWalk copies. A world m2CreateWorld accepted keeps them within
-// M2_MAX_SNAPSHOT_BYTES.
+// m2StateWalk copies. A world m2CreateWorld accepted has a size below
+// INT64_MAX.
 static int64_t SnapshotBytes(const m2World* world)
 {
     size_t block = 0;
@@ -83,24 +88,18 @@ static int64_t SnapshotBytes(const m2World* world)
 
 bool m2SnapshotFits(const m2World* world)
 {
-    return SnapshotBytes(world) <= M2_MAX_SNAPSHOT_BYTES;
+    return SnapshotBytes(world) < INT64_MAX;
 }
 
-static M2_NOINLINE int32_t WorldSnapshotSizeWorker(const m2World* world)
+static M2_NOINLINE int64_t WorldSnapshotSizeWorker(const m2World* world)
 {
-    if (world == NULL)
-    {
-        return 0;
-    }
-    int64_t size = SnapshotBytes(world);
-    M2_ASSERT(size <= M2_MAX_SNAPSHOT_BYTES);
-    return size <= M2_MAX_SNAPSHOT_BYTES ? (int32_t)size : 0;
+    return world != NULL ? SnapshotBytes(world) : 0;
 }
 
-int32_t m2World_SnapshotSize(const m2World* world)
+int64_t m2World_SnapshotSize(const m2World* world)
 {
     uint64_t env = m2FloatEnvEnter();
-    int32_t result = WorldSnapshotSizeWorker(world);
+    int64_t result = WorldSnapshotSizeWorker(world);
     m2FloatEnvLeave(env);
     return result;
 }
@@ -109,7 +108,7 @@ int32_t m2World_SnapshotSize(const m2World* world)
 // never drift apart (direction 0 = write, 1 = read).
 
 static M2_NOINLINE m2Result WorldSnapshotWorker(const m2World* world, void* buffer,
-                                                int32_t capacity, int32_t* bytesOut)
+                                                int64_t capacity, int64_t* bytesOut)
 {
     if (bytesOut == NULL)
     {
@@ -121,10 +120,9 @@ static M2_NOINLINE m2Result WorldSnapshotWorker(const m2World* world, void* buff
         return m2Refuse(world, m2_errorInvalid);
     }
     int64_t size = SnapshotBytes(world);
-    if ((int64_t)capacity < size)
+    if (capacity < size)
     {
-        // The size a buffer must have.
-        *bytesOut = size <= M2_MAX_SNAPSHOT_BYTES ? (int32_t)size : 0;
+        *bytesOut = size; // the size a buffer must have
         return m2_errorCapacity;
     }
 
@@ -134,17 +132,18 @@ static M2_NOINLINE m2Result WorldSnapshotWorker(const m2World* world, void* buff
         m2MakeStatePrefix(M2_SNAPSHOT_MAGIC, M2_SNAPSHOT_VERSION, (int32_t)sizeof(header));
     header.configHash = ConfigHash();
     WorldCapacities(world, header.capacities);
+    header.particleRadius = (double)world->particles.particleRadius;
 
     uint8_t* out = buffer;
     memcpy(out, &header, sizeof(header));
     size_t cursor = sizeof(header) + m2StateWalk((m2World*)world, out + sizeof(header), NULL, 0);
     M2_ASSERT(cursor == (size_t)size);
     (void)cursor;
-    *bytesOut = (int32_t)size; // at most capacity
+    *bytesOut = size; // at most capacity
     return m2_success;
 }
 
-m2Result m2World_Snapshot(const m2World* world, void* buffer, int32_t capacity, int32_t* bytesOut)
+m2Result m2World_Snapshot(const m2World* world, void* buffer, int64_t capacity, int64_t* bytesOut)
 {
     uint64_t env = m2FloatEnvEnter();
     m2Result result = WorldSnapshotWorker(world, buffer, capacity, bytesOut);
@@ -152,7 +151,7 @@ m2Result m2World_Snapshot(const m2World* world, void* buffer, int32_t capacity, 
     return result;
 }
 
-static M2_NOINLINE m2Result WorldRestoreWorker(m2World* world, const void* buffer, int32_t size)
+static M2_NOINLINE m2Result WorldRestoreWorker(m2World* world, const void* buffer, int64_t size)
 {
     m2Result writer = m2CheckWriter(world);
     if (writer != m2_success)
@@ -180,17 +179,18 @@ static M2_NOINLINE m2Result WorldRestoreWorker(m2World* world, const void* buffe
     }
     int32_t capacities[6];
     WorldCapacities(world, capacities);
-    if (memcmp(header.capacities, capacities, sizeof(capacities)) != 0)
+    if (memcmp(header.capacities, capacities, sizeof(capacities)) != 0 ||
+        !(header.particleRadius == (double)world->particles.particleRadius))
     {
-        return m2_errorInvalid; // another world shape
+        return m2_errorFormat; // another world shape
     }
     // Hostile bytes are checked before any of them land: every row the
     // table describes, cursors included, then how the rows fit together.
     const uint8_t* in = buffer;
-    if ((int64_t)size != SnapshotBytes(world) || !m2StateValidate(world, in + sizeof(header)) ||
+    if (size != SnapshotBytes(world) || !m2StateValidate(world, in + sizeof(header)) ||
         !m2SnapshotCheck(world, in + sizeof(header)))
     {
-        return m2_errorInvalid;
+        return m2_errorFormat;
     }
 
     size_t cursor = sizeof(header) + m2StateWalk(world, NULL, in + sizeof(header), 1);
@@ -215,7 +215,7 @@ static M2_NOINLINE m2Result WorldRestoreWorker(m2World* world, const void* buffe
     return m2_success;
 }
 
-m2Result m2World_Restore(m2World* world, const void* buffer, int32_t size)
+m2Result m2World_Restore(m2World* world, const void* buffer, int64_t size)
 {
     uint64_t env = m2FloatEnvEnter();
     m2Result result = WorldRestoreWorker(world, buffer, size);

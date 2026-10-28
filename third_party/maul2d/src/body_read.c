@@ -218,7 +218,7 @@ m2Pos2 m2Body_GetWorldCenterOfMass(const m2World* world, m2BodyId bodyId)
     return result;
 }
 
-static M2_NOINLINE float BodyGetRotationalInertiaWorker(const m2World* world, m2BodyId bodyId)
+static M2_NOINLINE float BodyGetCentralInertiaWorker(const m2World* world, m2BodyId bodyId)
 {
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
@@ -230,17 +230,17 @@ static M2_NOINLINE float BodyGetRotationalInertiaWorker(const m2World* world, m2
     return invI > 0.0f ? 1.0f / invI : 0.0f;
 }
 
-float m2Body_GetRotationalInertia(const m2World* world, m2BodyId bodyId)
+float m2Body_GetCentralInertia(const m2World* world, m2BodyId bodyId)
 {
     uint64_t env = m2FloatEnvEnter();
-    float result = BodyGetRotationalInertiaWorker(world, bodyId);
+    float result = BodyGetCentralInertiaWorker(world, bodyId);
     m2FloatEnvLeave(env);
     return result;
 }
 
-static M2_NOINLINE m2AabbResult BodyComputeAabbWorker(const m2World* world, m2BodyId bodyId)
+static M2_NOINLINE m2WorldAabb BodyComputeAabbWorker(const m2World* world, m2BodyId bodyId)
 {
-    m2AabbResult result = {{0.0, 0.0}, {0.0, 0.0}};
+    m2WorldAabb result = {{0.0, 0.0}, {0.0, 0.0}};
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
     {
@@ -273,10 +273,10 @@ static M2_NOINLINE m2AabbResult BodyComputeAabbWorker(const m2World* world, m2Bo
     return result;
 }
 
-m2AabbResult m2Body_ComputeAabb(const m2World* world, m2BodyId bodyId)
+m2WorldAabb m2Body_ComputeAabb(const m2World* world, m2BodyId bodyId)
 {
     uint64_t env = m2FloatEnvEnter();
-    m2AabbResult result = BodyComputeAabbWorker(world, bodyId);
+    m2WorldAabb result = BodyComputeAabbWorker(world, bodyId);
     m2FloatEnvLeave(env);
     return result;
 }

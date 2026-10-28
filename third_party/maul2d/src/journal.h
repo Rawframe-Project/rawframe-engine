@@ -49,7 +49,7 @@ enum
     m2_opSetFilter = 23,
     m2_opDestroyChain = 24,
     m2_opBodyParam = 25,
-    m2_opEnableSleeping = 26,
+    m2_opEnableSleep = 26,
     m2_opApplyForce = 27,
     m2_opApplyForceCenter = 28,
     m2_opApplyTorque = 29,
@@ -76,7 +76,7 @@ enum
     m2_opSetDominance = 50,
     m2_opCreateGearJoint = 51,
     m2_opCreatePulleyJoint = 52,
-    m2_opEmitParticle = 53,
+    m2_opCreateParticle = 53,
     m2_opDestroyParticle = 54,
     m2_opSetParticleVelocity = 55,
     m2_opCreateRatchetJoint = 56,
@@ -132,6 +132,8 @@ enum
     m2_jointParamMaxLength = 14,
     m2_jointParamGearRatio = 15,
     m2_jointParamPulleyRatio = 16,
+    m2_jointParamEnableSpring = 17,       // distance and wheel; resets the spring's impulses
+    m2_jointParamConnectedCollision = 18, // every kind but the filter joint
     m2_jointParamCount
 };
 
@@ -317,13 +319,13 @@ typedef struct m2OpMouseTarget
     m2Pos2 target;
 } m2OpMouseTarget;
 
-typedef struct m2OpEmitParticle
+typedef struct m2OpCreateParticle
 {
     m2Pos2 position;
     m2Vec2 velocity;
     uint32_t flags;
     m2ParticleId expected;
-} m2OpEmitParticle;
+} m2OpCreateParticle;
 
 typedef struct m2OpFillParticles
 {
@@ -424,7 +426,7 @@ typedef union m2OpPayload
     m2OpJointUserData jointUserData;
     m2OpMotorOffsets motorOffsets;
     m2OpMouseTarget mouseTarget;
-    m2OpEmitParticle emitParticle;
+    m2OpCreateParticle createParticle;
     m2OpFillParticles fillParticles;
     m2OpParticleVec particleVec;
     m2OpParticleFloat particleFloat;
@@ -442,17 +444,17 @@ typedef union m2OpPayload
     m2JointId jointId;
     m2ParticleId particleId;
     m2FluidVolumeId fluidVolumeId;
-    int32_t restoreSize;
+    int64_t restoreSize;
 } m2OpPayload;
 
 // Recording (src/journal.c). Each call appends one op; a full buffer
 // sets the overflow flag, reported by m2World_StopJournal.
 
 // Whether a record of 1 + bytes fits a tape of capacity bytes written up
-// to cursor (0 <= cursor <= capacity), computed in 64 bits.
-bool m2JournalRecordFits(int32_t cursor, int32_t capacity, int64_t bytes);
+// to cursor (0 <= cursor <= capacity).
+bool m2JournalRecordFits(int64_t cursor, int64_t capacity, int64_t bytes);
 void m2JournalRecord(m2World* world, uint8_t op, const void* payload, int32_t bytes);
-void m2JournalRecordRestore(m2World* world, const void* snapshot, int32_t size);
+void m2JournalRecordRestore(m2World* world, const void* snapshot, int64_t size);
 void m2JournalRecordShatter(m2World* world, m2BodyId bodyId, const m2Polygon* pieces,
                             int32_t pieceCount, int32_t expectedFirst);
 void m2JournalRecordChain(m2World* world, m2BodyId bodyId, const m2ChainDef* def,
@@ -465,11 +467,20 @@ typedef struct m2ReplayCursor
 {
     m2World* world;
     const uint8_t* data;
-    int32_t size;
-    int32_t offset;
+    int64_t size;
+    int64_t offset;
+    // What a refused record returns: m2_errorFormat, or m2_errorCapacity
+    // when the allocator refused a record's scratch memory.
+    m2Result failure;
 } m2ReplayCursor;
 
 typedef bool m2ReplayApplyFn(m2ReplayCursor* cursor, const m2OpPayload* payload);
+
+// Whether a record's tail of count elements of elementBytes each lies
+// within the tape after the cursor; the tail's size, reckoned in 64 bits
+// so no count can wrap it, goes to bytesOut.
+bool m2ReplayTailFits(const m2ReplayCursor* r, int32_t count, int32_t elementBytes,
+                      int64_t* bytesOut);
 
 typedef struct m2JournalCommand
 {

@@ -42,13 +42,13 @@ static bool ApplyDestroyBody(m2ReplayCursor* r, const m2OpPayload* p)
 
 static bool ApplyDisableBody(m2ReplayCursor* r, const m2OpPayload* p)
 {
-    m2Body_Disable(r->world, p->bodyId);
+    m2Body_SetEnabled(r->world, p->bodyId, false);
     return true;
 }
 
 static bool ApplyEnableBody(m2ReplayCursor* r, const m2OpPayload* p)
 {
-    m2Body_Enable(r->world, p->bodyId);
+    m2Body_SetEnabled(r->world, p->bodyId, true);
     return true;
 }
 
@@ -237,20 +237,29 @@ static bool ApplyShapeUserData(m2ReplayCursor* r, const m2OpPayload* p)
     return true;
 }
 
+bool m2ReplayTailFits(const m2ReplayCursor* r, int32_t count, int32_t elementBytes,
+                      int64_t* bytesOut)
+{
+    int64_t bytes = (int64_t)count * (int64_t)elementBytes; // an int32_t times a small size
+    *bytesOut = bytes;
+    return count >= 0 && bytes <= r->size - r->offset;
+}
+
 // Chains.
 
 static bool ApplyCreateChain(m2ReplayCursor* r, const m2OpPayload* p)
 {
     const m2OpChainHeader* op = &p->chainHeader;
-    if (op->count < 3 || op->count > (r->size - r->offset) / (int32_t)sizeof(m2Vec2))
+    int64_t pointBytes = 0;
+    if (op->count < 3 || !m2ReplayTailFits(r, op->count, (int32_t)sizeof(m2Vec2), &pointBytes))
     {
         return false;
     }
-    int32_t pointBytes = op->count * (int32_t)sizeof(m2Vec2);
     // The stream is unaligned; the points are copied out before use.
     m2Vec2* points = m2WorldAlloc(r->world, (size_t)pointBytes);
     if (points == NULL)
     {
+        r->failure = m2_errorCapacity;
         return false;
     }
     memcpy(points, r->data + r->offset, (size_t)pointBytes);
@@ -268,7 +277,8 @@ static bool ApplyCreateChain(m2ReplayCursor* r, const m2OpPayload* p)
     m2ChainId chain = m2_nullChainId;
     m2Result made = m2CreateChain(r->world, op->body, &def, &chain);
     m2WorldFree(r->world, points, (size_t)pointBytes);
-    return made == m2_success && m2Chain_GetSegmentCount(r->world, chain) == op->createdCount;
+    return (made == m2_success || made == m2_errorCapacity) &&
+           m2Chain_GetSegmentCount(r->world, chain) == op->createdCount;
 }
 
 static bool ApplyDestroyChain(m2ReplayCursor* r, const m2OpPayload* p)
@@ -346,21 +356,31 @@ static bool ApplyMouseTarget(m2ReplayCursor* r, const m2OpPayload* p)
 
 // Particles and fluid volumes.
 
-static bool ApplyEmitParticle(m2ReplayCursor* r, const m2OpPayload* p)
+// The particle def a create or fill record describes.
+static m2ParticleDef RecordedParticleDef(m2Pos2 position, m2Vec2 velocity, uint32_t flags)
 {
-    const m2OpEmitParticle* op = &p->emitParticle;
+    m2ParticleDef def = m2DefaultParticleDef();
+    def.position = position;
+    def.velocity = velocity;
+    def.flags = flags;
+    return def;
+}
+
+static bool ApplyCreateParticle(m2ReplayCursor* r, const m2OpPayload* p)
+{
+    const m2OpCreateParticle* op = &p->createParticle;
+    m2ParticleDef def = RecordedParticleDef(op->position, op->velocity, op->flags);
     m2ParticleId id = m2_nullParticleId;
-    return m2World_EmitParticle(r->world, op->position, op->velocity, op->flags, &id) ==
-               m2_success &&
-           id.index1 == op->expected.index1;
+    return m2CreateParticle(r->world, &def, &id) == m2_success && id.index1 == op->expected.index1;
 }
 
 static bool ApplyFillParticles(m2ReplayCursor* r, const m2OpPayload* p)
 {
     const m2OpFillParticles* op = &p->fillParticles;
-    int32_t made = m2World_FillPolygonWithParticles(r->world, &op->polygon, op->position,
-                                                    op->velocity, op->flags);
-    return made == op->expected;
+    m2ParticleDef def = RecordedParticleDef(op->position, op->velocity, op->flags);
+    int32_t made = 0;
+    m2Result result = m2CreateParticlesInPolygon(r->world, &def, &op->polygon, &made);
+    return (result == m2_success || result == m2_errorCapacity) && made == op->expected;
 }
 
 static bool ApplyDestroyParticle(m2ReplayCursor* r, const m2OpPayload* p)
@@ -418,9 +438,9 @@ static bool ApplySetWind(m2ReplayCursor* r, const m2OpPayload* p)
     return true;
 }
 
-static bool ApplyEnableSleeping(m2ReplayCursor* r, const m2OpPayload* p)
+static bool ApplyEnableSleep(m2ReplayCursor* r, const m2OpPayload* p)
 {
-    m2World_EnableSleeping(r->world, p->flag.flag != 0);
+    m2World_EnableSleep(r->world, p->flag.flag != 0);
     return true;
 }
 
@@ -432,7 +452,7 @@ static bool ApplyExplode(m2ReplayCursor* r, const m2OpPayload* p)
 
 static bool ApplyRestore(m2ReplayCursor* r, const m2OpPayload* p)
 {
-    int32_t bytes = p->restoreSize;
+    int64_t bytes = p->restoreSize;
     if (bytes <= 0 || bytes > r->size - r->offset)
     {
         return false; // truncated restore payload
@@ -448,15 +468,17 @@ static bool ApplyRestore(m2ReplayCursor* r, const m2OpPayload* p)
 static bool ApplyShatterBody(m2ReplayCursor* r, const m2OpPayload* p)
 {
     const m2OpShatterHeader* op = &p->shatterHeader;
-    if (op->pieceCount < 1 || op->pieceCount > (r->size - r->offset) / (int32_t)sizeof(m2Polygon))
+    int64_t pieceBytes = 0;
+    if (op->pieceCount < 1 ||
+        !m2ReplayTailFits(r, op->pieceCount, (int32_t)sizeof(m2Polygon), &pieceBytes))
     {
         return false;
     }
-    int32_t pieceBytes = op->pieceCount * (int32_t)sizeof(m2Polygon);
     // The stream is unaligned; the pieces are copied out before use.
     m2Polygon* pieces = m2WorldAlloc(r->world, (size_t)pieceBytes);
     if (pieces == NULL)
     {
+        r->failure = m2_errorCapacity;
         return false;
     }
     memcpy(pieces, r->data + r->offset, (size_t)pieceBytes);
@@ -482,29 +504,34 @@ static bool ApplyShatterBody(m2ReplayCursor* r, const m2OpPayload* p)
 static const uint16_t s_bodyBools[] = {M2_AT(m2OpCreateBody, def.motionLocks.linearX),
                                        M2_AT(m2OpCreateBody, def.motionLocks.linearY),
                                        M2_AT(m2OpCreateBody, def.motionLocks.angularZ),
-                                       M2_AT(m2OpCreateBody, def.fixedRotation),
                                        M2_AT(m2OpCreateBody, def.enableSleep),
                                        M2_AT(m2OpCreateBody, def.isEnabled),
                                        M2_AT(m2OpCreateBody, def.isBullet)};
 static const uint16_t s_shapeBools[] = {M2_AT(m2OpCreateShape, def.isSensor)};
-static const uint16_t s_distanceBools[] = {M2_AT(m2OpCreateDistanceJoint, def.enableSpring),
-                                           M2_AT(m2OpCreateDistanceJoint, def.collideConnected)};
-static const uint16_t s_revoluteBools[] = {M2_AT(m2OpCreateRevoluteJoint, def.enableMotor),
-                                           M2_AT(m2OpCreateRevoluteJoint, def.enableLimit),
-                                           M2_AT(m2OpCreateRevoluteJoint, def.collideConnected)};
-static const uint16_t s_prismaticBools[] = {M2_AT(m2OpCreatePrismaticJoint, def.enableMotor),
-                                            M2_AT(m2OpCreatePrismaticJoint, def.enableLimit),
-                                            M2_AT(m2OpCreatePrismaticJoint, def.collideConnected)};
-static const uint16_t s_weldBools[] = {M2_AT(m2OpCreateWeldJoint, def.collideConnected)};
+static const uint16_t s_distanceBools[] = {
+    M2_AT(m2OpCreateDistanceJoint, def.enableSpring),
+    M2_AT(m2OpCreateDistanceJoint, def.enableConnectedCollision)};
+static const uint16_t s_revoluteBools[] = {
+    M2_AT(m2OpCreateRevoluteJoint, def.enableSpring),
+    M2_AT(m2OpCreateRevoluteJoint, def.enableMotor),
+    M2_AT(m2OpCreateRevoluteJoint, def.enableLimit),
+    M2_AT(m2OpCreateRevoluteJoint, def.enableConnectedCollision)};
+static const uint16_t s_prismaticBools[] = {
+    M2_AT(m2OpCreatePrismaticJoint, def.enableMotor),
+    M2_AT(m2OpCreatePrismaticJoint, def.enableLimit),
+    M2_AT(m2OpCreatePrismaticJoint, def.enableConnectedCollision)};
+static const uint16_t s_weldBools[] = {M2_AT(m2OpCreateWeldJoint, def.enableConnectedCollision)};
 static const uint16_t s_wheelBools[] = {M2_AT(m2OpCreateWheelJoint, def.enableSpring),
                                         M2_AT(m2OpCreateWheelJoint, def.enableMotor),
                                         M2_AT(m2OpCreateWheelJoint, def.enableLimit),
-                                        M2_AT(m2OpCreateWheelJoint, def.collideConnected)};
-static const uint16_t s_motorBools[] = {M2_AT(m2OpCreateMotorJoint, def.collideConnected)};
-static const uint16_t s_mouseBools[] = {M2_AT(m2OpCreateMouseJoint, def.collideConnected)};
-static const uint16_t s_gearBools[] = {M2_AT(m2OpCreateGearJoint, def.collideConnected)};
-static const uint16_t s_pulleyBools[] = {M2_AT(m2OpCreatePulleyJoint, def.collideConnected)};
-static const uint16_t s_ratchetBools[] = {M2_AT(m2OpCreateRatchetJoint, def.collideConnected)};
+                                        M2_AT(m2OpCreateWheelJoint, def.enableConnectedCollision)};
+static const uint16_t s_motorBools[] = {M2_AT(m2OpCreateMotorJoint, def.enableConnectedCollision)};
+static const uint16_t s_mouseBools[] = {M2_AT(m2OpCreateMouseJoint, def.enableConnectedCollision)};
+static const uint16_t s_gearBools[] = {M2_AT(m2OpCreateGearJoint, def.enableConnectedCollision)};
+static const uint16_t s_pulleyBools[] = {
+    M2_AT(m2OpCreatePulleyJoint, def.enableConnectedCollision)};
+static const uint16_t s_ratchetBools[] = {
+    M2_AT(m2OpCreateRatchetJoint, def.enableConnectedCollision)};
 #undef M2_AT
 
 static const m2JournalCommand s_commands[m2_opCount] = {
@@ -530,14 +557,14 @@ static const m2JournalCommand s_commands[m2_opCount] = {
     M2_COMMAND(m2_opSetJointParam, m2OpJointParam, ApplySetJointParam),
     M2_COMMAND(m2_opSetTransform, m2OpSetTransform, ApplySetTransform),
     M2_COMMAND(m2_opSetType, m2OpBodyByte, ApplySetType),
-    M2_COMMAND(m2_opRestore, int32_t, ApplyRestore),
+    M2_COMMAND(m2_opRestore, int64_t, ApplyRestore),
     M2_COMMAND(m2_opCreateChain, m2OpChainHeader, ApplyCreateChain),
     M2_COMMAND(m2_opSetGravity, m2OpVec, ApplySetGravity),
     M2_COMMAND(m2_opShapeParam, m2OpShapeParam, ApplyShapeParam),
     M2_COMMAND(m2_opSetFilter, m2OpSetFilter, ApplySetFilter),
     M2_COMMAND(m2_opDestroyChain, m2ChainId, ApplyDestroyChain),
     M2_COMMAND(m2_opBodyParam, m2OpBodyParam, ApplyBodyParam),
-    M2_COMMAND(m2_opEnableSleeping, m2OpFlag, ApplyEnableSleeping),
+    M2_COMMAND(m2_opEnableSleep, m2OpFlag, ApplyEnableSleep),
     M2_COMMAND(m2_opApplyForce, m2OpBodyPoint, ApplyApplyForce),
     M2_COMMAND(m2_opApplyForceCenter, m2OpBodyVec, ApplyApplyForceCenter),
     M2_COMMAND(m2_opApplyTorque, m2OpBodyFloat, ApplyApplyTorque),
@@ -567,7 +594,7 @@ static const m2JournalCommand s_commands[m2_opCount] = {
     M2_COMMAND_BOOLS(m2_opCreateGearJoint, m2OpCreateGearJoint, ApplyCreateGearJoint, s_gearBools),
     M2_COMMAND_BOOLS(m2_opCreatePulleyJoint, m2OpCreatePulleyJoint, ApplyCreatePulleyJoint,
                      s_pulleyBools),
-    M2_COMMAND(m2_opEmitParticle, m2OpEmitParticle, ApplyEmitParticle),
+    M2_COMMAND(m2_opCreateParticle, m2OpCreateParticle, ApplyCreateParticle),
     M2_COMMAND(m2_opDestroyParticle, m2ParticleId, ApplyDestroyParticle),
     M2_COMMAND(m2_opSetParticleVelocity, m2OpParticleVec, ApplySetParticleVelocity),
     M2_COMMAND_BOOLS(m2_opCreateRatchetJoint, m2OpCreateRatchetJoint, ApplyCreateRatchetJoint,

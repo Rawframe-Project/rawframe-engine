@@ -21,6 +21,29 @@
 
 #include <string.h>
 
+// Queues the end event of a touching pair whose shape leaves between
+// steps; the next step's event window flushes it.
+static void QueueEndEvent(m2World* world, int32_t a, int32_t b)
+{
+    if (world->shapes.shapeSensor[a] != 0 || world->shapes.shapeSensor[b] != 0)
+    {
+        if (world->events.pendingSensorEndCount < world->contacts.pairCapacity)
+        {
+            m2SensorEndEvent* e =
+                &world->events.pendingSensorEnd[world->events.pendingSensorEndCount++];
+            m2SensorPairIds(world, a, b, &e->sensorShapeId, &e->visitorShapeId);
+            e->step = world->stepCount;
+        }
+    }
+    else if (world->events.pendingEndCount < world->contacts.pairCapacity)
+    {
+        m2ContactEndEvent* e = &world->events.pendingEndEvents[world->events.pendingEndCount++];
+        e->shapeIdA = m2MakeShapeId(world, a);
+        e->shapeIdB = m2MakeShapeId(world, b);
+        e->step = world->stepCount;
+    }
+}
+
 // Shared by destroy and disable: end every touching
 // contact of this shape, wake its riders, drop the proxy, prune pairs.
 void m2RetireShapeFromBroadphase(m2World* world, int32_t shapeIndex)
@@ -42,18 +65,7 @@ void m2RetireShapeFromBroadphase(m2World* world, int32_t shapeIndex)
         // float on a memory. (Caught by the floor-yank probe.)
         int32_t partner = world->shapes.shapeBody[a == shapeIndex ? b : a];
         m2WakeIfDynamic(world, partner);
-        bool sensor = world->shapes.shapeSensor[a] != 0 || world->shapes.shapeSensor[b] != 0;
-        m2ContactEndEvent* queue =
-            sensor ? world->events.pendingSensorEnd : world->events.pendingEndEvents;
-        int32_t* queueCount =
-            sensor ? &world->events.pendingSensorEndCount : &world->events.pendingEndCount;
-        if (*queueCount < world->contacts.pairCapacity)
-        {
-            m2ContactEndEvent* e = &queue[(*queueCount)++];
-            e->shapeIdA = m2MakeShapeId(world, a);
-            e->shapeIdB = m2MakeShapeId(world, b);
-            e->step = world->stepCount;
-        }
+        QueueEndEvent(world, a, b);
     }
 
     if (world->broadphase.proxyIds[shapeIndex] != M2_NULL_NODE)
@@ -146,11 +158,15 @@ m2ShapeDef m2DefaultShapeDef(void)
     return def;
 }
 
-static bool ShapeDefValid(const m2ShapeDef* def)
+static m2Result ShapeDefCheck(const m2ShapeDef* def)
 {
-    return def != NULL && def->internalValue == M2_SHAPE_COOKIE && m2ValidDensity(def->density) &&
-           m2ValidCoefficient(def->friction) && m2ValidRestitution(def->restitution) &&
-           m2ValidSpeed(def->tangentSpeed);
+    if (def == NULL || def->internalValue != M2_SHAPE_COOKIE)
+    {
+        return m2_errorInvalid;
+    }
+    m2Result result = m2BothChecks(m2CheckDensity(def->density), m2CheckCoefficient(def->friction));
+    result = m2BothChecks(result, m2CheckRestitution(def->restitution));
+    return m2BothChecks(result, m2CheckSpeed(def->tangentSpeed));
 }
 
 static void WriteShapeSlot(m2World* world, int32_t index, int32_t bodyIndex, const m2ShapeDef* def,
@@ -201,6 +217,23 @@ static bool InsertShapeProxy(m2World* world, int32_t index, int32_t oldMaxShapeI
     return false;
 }
 
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordShapeDef(m2ShapeDef* out, const m2ShapeDef* def)
+{
+    out->density = def->density;
+    out->friction = def->friction;
+    out->tangentSpeed = def->tangentSpeed;
+    out->restitution = def->restitution;
+    out->categoryBits = def->categoryBits;
+    out->maskBits = def->maskBits;
+    out->groupIndex = def->groupIndex;
+    out->isSensor = def->isSensor;
+    out->userData = def->userData;
+    out->internalValue = def->internalValue;
+}
+
 m2Result m2CreateShape(m2World* world, m2BodyId bodyId, const m2ShapeDef* def,
                        const m2ShapeGeometry* geometry, m2ShapeId* shapeOut)
 {
@@ -210,9 +243,10 @@ m2Result m2CreateShape(m2World* world, m2BodyId bodyId, const m2ShapeDef* def,
     {
         return m2Refuse(world, m2_errorStale);
     }
-    if (!ShapeDefValid(def))
+    m2Result checked = ShapeDefCheck(def);
+    if (checked != m2_success)
     {
-        return m2Refuse(world, m2_errorInvalid);
+        return m2Refuse(world, checked);
     }
     if (world->shapes.shapeFreeCount == 0)
     {
@@ -238,7 +272,7 @@ m2Result m2CreateShape(m2World* world, m2BodyId bodyId, const m2ShapeDef* def,
         m2OpCreateShape record;
         memset(&record, 0, sizeof(record));
         record.body = bodyId;
-        record.def = *def;
+        RecordShapeDef(&record.def, def);
         record.geometry = *geometry;
         record.expected = id;
         m2JournalRecord(world, m2_opCreateShape, &record, (int32_t)sizeof(record));
@@ -264,9 +298,10 @@ m2Result m2CreateShape(m2World* world, m2BodyId bodyId, const m2ShapeDef* def,
         {                                                                                          \
             return writer;                                                                         \
         }                                                                                          \
-        if (geom == NULL || !validator(geom))                                                      \
+        m2Result checked = validator(geom);                                                        \
+        if (checked != m2_success)                                                                 \
         {                                                                                          \
-            return m2Refuse(world, m2_errorInvalid);                                               \
+            return m2Refuse(world, checked);                                                       \
         }                                                                                          \
         m2ShapeGeometry geometry;                                                                  \
         memset(&geometry, 0, sizeof(geometry));                                                    \
@@ -287,13 +322,13 @@ m2Result m2CreateShape(m2World* world, m2BodyId bodyId, const m2ShapeDef* def,
         return result;                                                                             \
     }
 
-M2_SHAPE_CTOR(m2CreateCircleShape, m2Circle, m2_circleShape, m2ValidateCircle, circle)
+M2_SHAPE_CTOR(m2CreateCircleShape, m2Circle, m2_circleShape, m2CheckCircle, circle)
 
-M2_SHAPE_CTOR(m2CreateCapsuleShape, m2Capsule, m2_capsuleShape, m2ValidateCapsule, capsule)
+M2_SHAPE_CTOR(m2CreateCapsuleShape, m2Capsule, m2_capsuleShape, m2CheckCapsule, capsule)
 
-M2_SHAPE_CTOR(m2CreatePolygonShape, m2Polygon, m2_polygonShape, m2ValidatePolygon, polygon)
+M2_SHAPE_CTOR(m2CreatePolygonShape, m2Polygon, m2_polygonShape, m2CheckPolygon, polygon)
 
-M2_SHAPE_CTOR(m2CreateSegmentShape, m2Segment, m2_segmentShape, m2ValidateSegment, segment)
+M2_SHAPE_CTOR(m2CreateSegmentShape, m2Segment, m2_segmentShape, m2CheckSegment, segment)
 
 bool m2Shape_IsValid(const m2World* world, m2ShapeId shapeId)
 {
@@ -834,9 +869,9 @@ m2ChainId m2Shape_GetParentChain(const m2World* world, m2ShapeId shapeId)
     return result;
 }
 
-static M2_NOINLINE m2AabbResult ShapeGetAabbWorker(const m2World* world, m2ShapeId shapeId)
+static M2_NOINLINE m2WorldAabb ShapeGetAabbWorker(const m2World* world, m2ShapeId shapeId)
 {
-    m2AabbResult result = {{0.0, 0.0}, {0.0, 0.0}};
+    m2WorldAabb result = {{0.0, 0.0}, {0.0, 0.0}};
     int32_t index = world != NULL ? m2ShapeSlot(world, shapeId) : -1;
     if (index < 0)
     {
@@ -850,10 +885,10 @@ static M2_NOINLINE m2AabbResult ShapeGetAabbWorker(const m2World* world, m2Shape
     return result;
 }
 
-m2AabbResult m2Shape_GetAabb(const m2World* world, m2ShapeId shapeId)
+m2WorldAabb m2Shape_GetAabb(const m2World* world, m2ShapeId shapeId)
 {
     uint64_t env = m2FloatEnvEnter();
-    m2AabbResult result = ShapeGetAabbWorker(world, shapeId);
+    m2WorldAabb result = ShapeGetAabbWorker(world, shapeId);
     m2FloatEnvLeave(env);
     return result;
 }

@@ -18,6 +18,7 @@ add_library(rawframe_maul2d_vendor STATIC
     src/contact_solver.c
     src/contact_kernel.c
     src/core.c
+    src/decompose.c
     src/destruction.c
     src/distance.c
     src/draw.c

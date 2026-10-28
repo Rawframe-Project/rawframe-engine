@@ -63,7 +63,7 @@ namespace rawframe::physics2d {
         definition.bodyIdB = b;
         definition.localAnchorA = kAnchorA;
         definition.localAnchorB = kAnchorB;
-        definition.collideConnected = joint.collideConnected;
+        definition.enableConnectedCollision = joint.collideConnected;
         return m2CreateWeldJoint(physics, &definition, &made) == m2_success ? made : m2JointId{};
     }
     if (kLinearLocked && joint.angular != kLocked && (joint.motor == 0 || joint.motor == 3)) {
@@ -78,7 +78,7 @@ namespace rawframe::physics2d {
         definition.enableMotor = joint.motor == 3;
         definition.motorSpeed = joint.motorSpeed;
         definition.maxMotorTorque = joint.motorEffort;
-        definition.collideConnected = joint.collideConnected;
+        definition.enableConnectedCollision = joint.collideConnected;
         return m2CreateRevoluteJoint(physics, &definition, &made) == m2_success ? made : m2JointId{};
     }
     const bool kAlongX = joint.linearX != kLocked && joint.linearY == kLocked;
@@ -96,7 +96,7 @@ namespace rawframe::physics2d {
         definition.enableMotor = joint.motor != 0;
         definition.motorSpeed = joint.motorSpeed;
         definition.maxMotorForce = joint.motorEffort;
-        definition.collideConnected = joint.collideConnected;
+        definition.enableConnectedCollision = joint.collideConnected;
         return m2CreatePrismaticJoint(physics, &definition, &made) == m2_success ? made : m2JointId{};
     }
     if (joint.linearX == kFree && joint.linearY == kFree && joint.angular == kFree && joint.motor == 0 &&

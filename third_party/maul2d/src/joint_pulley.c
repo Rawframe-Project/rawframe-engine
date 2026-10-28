@@ -51,11 +51,30 @@ float m2PulleyLiveLength(const m2World* world, int32_t index, int32_t side)
 // reference angle: defs carry no length. All snapshot state.
 // The def contract: finite values, non-negative gains and budgets,
 // ordered ranges.
-static bool DefValid(const m2PulleyJointDef* def)
+static m2Result DefCheck(const m2PulleyJointDef* def)
 {
-    return m2FinitePos2(def->groundAnchorA) && m2FinitePos2(def->groundAnchorB) &&
-           m2LocalVec2(def->localAnchorA) && m2LocalVec2(def->localAnchorB) &&
-           m2ValidRatio(def->ratio) && def->ratio > 0.0f;
+    m2Result result = m2CheckValid(m2FinitePos2(def->groundAnchorA) &&
+                                   m2FinitePos2(def->groundAnchorB) && !(def->ratio < 0.0f));
+    result = m2BothChecks(result, m2CheckLocalVec2(def->localAnchorA));
+    result = m2BothChecks(result, m2CheckLocalVec2(def->localAnchorB));
+    return m2BothChecks(result, m2CheckRatio(def->ratio));
+}
+
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordPulleyJointDef(m2PulleyJointDef* out, const m2PulleyJointDef* def)
+{
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->groundAnchorA = def->groundAnchorA;
+    out->groundAnchorB = def->groundAnchorB;
+    out->localAnchorA = def->localAnchorA;
+    out->localAnchorB = def->localAnchorB;
+    out->ratio = def->ratio;
+    out->userData = def->userData;
+    out->enableConnectedCollision = def->enableConnectedCollision;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreatePulleyJointWorker(m2World* world, const m2PulleyJointDef* def,
@@ -71,9 +90,14 @@ static M2_NOINLINE m2Result CreatePulleyJointWorker(m2World* world, const m2Pull
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_PLJOINT_COOKIE || !DefValid(def))
+    if (def == NULL || def->internalValue != M2_PLJOINT_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = DefCheck(def);
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
@@ -98,8 +122,8 @@ static M2_NOINLINE m2Result CreatePulleyJointWorker(m2World* world, const m2Pull
     float lengthB = m2PulleyLiveLength(world, index, 1);
     world->joints.jointRefAngle[index] = lengthA + def->ratio * lengthB;
     world->joints.jointUserData[index] = def->userData;
-    world->joints.jointCollide[index] = def->collideConnected ? 1 : 0;
-    if (def->collideConnected == false)
+    world->joints.jointCollide[index] = def->enableConnectedCollision ? 1 : 0;
+    if (def->enableConnectedCollision == false)
     {
         m2RefilterJointedBodies(world, bodyA, bodyB);
     }
@@ -107,7 +131,7 @@ static M2_NOINLINE m2Result CreatePulleyJointWorker(m2World* world, const m2Pull
     {
         m2OpCreatePulleyJoint record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordPulleyJointDef(&record.def, def);
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreatePulleyJoint, &record, (int32_t)sizeof(record));
     }
