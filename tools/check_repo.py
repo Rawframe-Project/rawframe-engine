@@ -6,9 +6,13 @@
 2. File size: handwritten source fails at 1,500 lines and is
    reported from 1,000. Tables a tool writes under a `generated` directory
    are not handwritten and are not measured.
-3. Owner rules: no em dash in any text file, added or not, and no AI attribution
-   trailer in any commit message. The commits in ATTRIBUTION_ALLOWED are on
-   main for good, each with the reason; only their em dashes are checked.
+3. Owner rules: no em dash in any text file, added or not, and no
+   attribution in any commit message: a `Co-authored-by:` or
+   `claude-session:` trailer in its last paragraph, where git reads
+   trailers, or a line that begins as a tool's footer does ("Generated
+   with", "This PR was generated with"). A message that only names them,
+   quoted or not, passes. The commits in ATTRIBUTION_ALLOWED are on main for
+   good, each with the reason; only their em dashes are checked.
 4. No `.value()` call in engine source: on a Result it throws on failure, and
    exceptions are disabled. Test for `has_value()` and
    dereference, or use RAWFRAME_TRY_ASSIGN.
@@ -46,7 +50,8 @@ SOURCE_SUFFIXES = {".h", ".hpp", ".cpp", ".cc", ".c"}
 FAIL_LINES = 1500
 REPORT_LINES = 1000
 EM_DASH = chr(0x2014)
-ATTRIBUTION = re.compile(r"co-authored-by:|generated with|claude-session:", re.IGNORECASE)
+TRAILER = re.compile(r"(co-authored-by|claude-session):", re.IGNORECASE)
+FOOTER = re.compile(r"(this pr was )?generated with\b", re.IGNORECASE)
 # Commits already on main that carry such lines; history is not rewritten.
 ATTRIBUTION_ALLOWED = {
     # v0.0.1's squash, merged with release-please's footer and GitHub's
@@ -294,17 +299,27 @@ def check_owner_rules(files, findings):
         for number, line in enumerate(text.splitlines(), 1):
             if EM_DASH in line:
                 findings.append(f"{path.relative_to(ROOT)}:{number}: em dash")
-    log = subprocess.run(["git", "log", "--format=%H%n%B%n--end--"], cwd=ROOT, capture_output=True, text=True)
-    commit = None
-    allowed = False
-    for line in log.stdout.splitlines():
-        if re.fullmatch(r"[0-9a-f]{40}", line):
-            commit = line[:12]
-            allowed = line in ATTRIBUTION_ALLOWED
-        elif ATTRIBUTION.search(line) and not allowed:
-            findings.append(f"commit {commit}: AI attribution in message: {line.strip()}")
-        elif EM_DASH in line:
+    # One record a commit, apart at NUL, which no message can hold: its
+    # hash, then its message, so no line of a message is taken for a hash.
+    log = subprocess.run(["git", "log", "-z", "--format=%H%n%B"], cwd=ROOT, capture_output=True, text=True)
+    for record in filter(None, log.stdout.split("\0")):
+        full, _, message = record.lstrip("\n").partition("\n")
+        commit = full[:12]
+        if full not in ATTRIBUTION_ALLOWED:
+            for line in attribution_in(message):
+                findings.append(f"commit {commit}: AI attribution in message: {line.strip()}")
+        if EM_DASH in message:
             findings.append(f"commit {commit}: em dash in message")
+
+
+def attribution_in(message):
+    """The lines of a commit message that attribute it: a trailer in its last
+    paragraph, or a line that begins as a tool's footer does."""
+    lines = message.rstrip("\n").splitlines()
+    last = len(lines)
+    while last > 0 and lines[last - 1].strip():
+        last -= 1
+    return [line for at, line in enumerate(lines) if (at >= last and TRAILER.match(line)) or FOOTER.match(line)]
 
 
 def main():
