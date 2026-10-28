@@ -431,6 +431,73 @@ void ReplicationServer::State::keepChecksum(Peer& peer, world::TickIndex tick) {
     }
 }
 
+std::size_t ReplicationServer::State::retireLeaving(Peer& peer, world::TickIndex tick, bool& unretired) {
+    // In ID order, so what was declared together goes as one run, as many
+    // as the budget and the frames hold: a frame holds no more than the
+    // connection's frames may, and its runs start again from nothing.
+    std::ranges::sort(leaving);
+    const auto kFrame = [](std::size_t payload) {
+        return frameBytes(network::ControlFrame::MappingRetire, payload);
+    };
+    const std::size_t kFrameRoom = static_cast<std::size_t>(peer.accept.maximumFrame);
+    const std::size_t kHead = network::varintSize(peer.accept.replicationEpoch);
+    retirement = MappingRetirement{.replicationEpoch = peer.accept.replicationEpoch};
+    std::size_t sent = 0;
+    std::size_t payload = kHead;
+    std::uint64_t after = 0;
+    std::size_t taken = 0;
+    for (; taken < leaving.size(); ++taken) {
+        const std::uint32_t kId = leaving[taken].first;
+        const bool kExtends = !retirement.runs.empty() && kId == after;
+        std::size_t more = kExtends ? network::varintSize(retirement.runs.back().count + 1) -
+                                          network::varintSize(retirement.runs.back().count)
+                                    : network::varintSize(kId - after) + 1;
+        if (payload + more > kFrameRoom && !retirement.runs.empty()) {
+            sent += sendRetirement(peer);
+            retirement.runs.clear();
+            payload = kHead;
+            after = 0;
+            more = network::varintSize(kId) + 1;
+        }
+        if (payload + more > kFrameRoom || sent + kFrame(payload + more) > settings.mappingBytesPerPublish) {
+            break;
+        }
+        if (!retirement.runs.empty() && kId == after) {
+            ++retirement.runs.back().count;
+        } else {
+            retirement.runs.push_back(MappingRun{.first = NetEntityId{kId}, .count = 1});
+        }
+        payload += more;
+        after = std::uint64_t{kId} + 1;
+    }
+    if (!retirement.runs.empty()) {
+        sent += sendRetirement(peer);
+    }
+    // The ID is never used again in this epoch. A mapping past the budget
+    // stays, retiring: it counts against the bound on mappings and is sent
+    // nothing more, and an entity that comes back while it does is
+    // declared anew only once it went.
+    retiredNow.clear();
+    for (std::size_t index = 0; index < leaving.size(); ++index) {
+        const auto& [id, entity] = leaving[index];
+        Mapping* const kMapping = peer.mapped.find(entity);
+        if (index >= taken) {
+            kMapping->retiringSince = kMapping->retiringSince.value_or(tick.value);
+            unretired = true;
+            continue;
+        }
+        if (kMapping->firstSent.has_value()) {
+            peer.retired.push_back(Sent{
+                .entity = entity, .from = *kMapping->firstSent, .until = kMapping->retiringSince.value_or(tick.value)});
+        }
+        peer.byNetEntity.erase(id);
+        retiredNow.push_back(entity);
+    }
+    std::ranges::sort(retiredNow);
+    peer.mapped.erase(retiredNow);
+    return sent;
+}
+
 void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     keepChecksum(peer, tick);
     std::erase_if(peer.retired, [&](const Sent& gone) {
@@ -466,61 +533,46 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         comings.erase(std::ranges::unique(comings).begin(), comings.end());
     };
     // Retire what is gone or out of interest, then declare what entered,
-    // within the bytes a publish may send of either: a join in view of
-    // many entities, or a mass removal, goes over several publishes, never
-    // more at once than the client's transport holds between its reads.
-    // Retirements go first, as the client holds a mapping until its
-    // retirement arrives and counts it against its bound.
-    std::size_t mappingBytes = 0;
-    bool unretired = false;
-    // The ID is never used again in this epoch. A mapping past the budget
-    // stays, retiring: it counts against the bound on mappings and is sent
-    // nothing more, and an entity that comes back while it does is
-    // declared anew only once it went. What stays is marked as held for
-    // this connection.
+    // within the bytes a publish may send of either: a mass removal goes
+    // over several publishes, never more at once than the client's
+    // transport holds between its reads. Retirements go first, as the
+    // client holds a mapping until its retirement arrives and counts it
+    // against its bound. What stays is marked as held for this connection.
     ++markNow;
-    const auto kRetire = [&](world::EntityHandle entity, Mapping& mapping) {
-        if (mappingBytes + kLargestMappingFrame > settings.mappingBytesPerPublish) {
-            mapping.retiringSince = mapping.retiringSince.value_or(tick.value);
-            unretired = true;
-            return false;
-        }
-        if (mapping.firstSent.has_value()) {
-            peer.retired.push_back(Sent{
-                .entity = entity, .from = *mapping.firstSent, .until = mapping.retiringSince.value_or(tick.value)});
-        }
-        mappingBytes += sendMapping(peer, network::ControlFrame::MappingRetire, mapping.id, false);
-        peer.byNetEntity.erase(mapping.id.value);
-        return true;
-    };
+    leaving.clear();
     if (kComings) {
         kComing(&Changed::gone);
-        std::erase_if(comings, [&](world::EntityHandle gone) {
-            Mapping* const kMapping = peer.mapped.find(gone);
-            return kMapping != nullptr && !kRetire(gone, *kMapping);
-        });
-        peer.mapped.erase(comings);
+        for (const world::EntityHandle kGone : comings) {
+            if (const Mapping* const kMapping = peer.mapped.find(kGone); kMapping != nullptr) {
+                leaving.emplace_back(kMapping->id.value, kGone);
+            }
+        }
     } else {
-        peer.mapped.keepIf([&](Mappings::Entry& mapping) {
-            const std::size_t kIndex = presentIndex(mapping.first);
+        for (const auto& [entity, mapping] : peer.mapped) {
+            const std::size_t kIndex = presentIndex(entity);
             const bool kPresent = kIndex != kNowhere;
-            const bool kRetiring = mapping.second.retiringSince.has_value();
+            const bool kRetiring = mapping.retiringSince.has_value();
             if (kPresent && !kRetiring && relevant(peer, kViewer, entities[kIndex], true)) {
                 heldMark[kIndex] = markNow;
-                return true;
+                continue;
             }
             statistics.interestLeft += kPresent && !kRetiring ? 1 : 0;
-            return !kRetire(mapping.first, mapping.second);
-        });
+            leaving.emplace_back(mapping.id.value, entity);
+        }
     }
+    bool unretired = false;
+    std::size_t mappingBytes = retireLeaving(peer, tick, unretired);
     if (peer.retired.size() > kMaximumTombstones) {
         peer.retired.erase(peer.retired.begin(),
                            peer.retired.begin() +
                                static_cast<std::ptrdiff_t>(peer.retired.size() - kMaximumTombstones));
     }
     // Declare what is new, before any state names it: the connection's
-    // own player first, whatever the bound on mappings.
+    // own player first, whatever the bound on mappings. What a publish
+    // declares takes the next IDs in turn, so it goes as one run.
     const std::size_t kSettled = peer.mapped.size();
+    std::optional<MappingRun> declaring;
+    bool ownedFirst = false;
     const auto kDeclare = [&](world::EntityHandle entity) {
         // A retiring entity is not held, so it is not declared a second
         // time only because retirements filling the budget leave no room
@@ -530,7 +582,11 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         peer.mapped.add(entity, Mapping{.id = kId});
         peer.unsettled.push_back(entity);
         peer.byNetEntity[kId.value] = entity;
-        mappingBytes += sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
+        if (!declaring.has_value()) {
+            declaring = MappingRun{.first = kId};
+            ownedFirst = entity == peer.player;
+        }
+        ++declaring->count;
     };
     if (!peer.mapped.contains(peer.player) && isPresent(peer.player) && peer.nextNetEntity != 0) {
         kDeclare(peer.player);
@@ -581,13 +637,21 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     std::ranges::sort(entering);
     entering.erase(std::ranges::unique(entering).begin(), entering.end());
     peer.bounded = unretired;
+    // A declaration costs its frame's bytes whatever its count, so the
+    // count is bounded apart: it is what the client makes in one pump.
     for (const std::size_t kIndex : entering) {
         if (peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0 ||
-            mappingBytes + kLargestMappingFrame > settings.mappingBytesPerPublish) {
+            peer.unacknowledged.size() >= kMostUnacknowledgedDeclarations ||
+            (declaring.has_value() && declaring->count >= settings.mappingsPerPublish) ||
+            mappingBytes + kLargestDeclarationFrame > settings.mappingBytesPerPublish) {
             peer.bounded = true;
             break;
         }
         kDeclare(entities[kIndex].entity);
+    }
+    if (declaring.has_value()) {
+        peer.unacknowledged.push_back(*declaring);
+        mappingBytes += sendDeclaration(peer, *declaring, ownedFirst);
     }
     peer.mapped.settle(kSettled);
     // State for acknowledged mappings, as many datagrams as the byte

@@ -117,12 +117,67 @@ struct ReplicationClient::State {
     std::vector<Staged> staged;
     std::vector<std::byte> scratch;
 
-    void acknowledge(network::ControlFrame type, NetEntityId entity) {
+    void acknowledge(MappingRun run) {
         scratch.resize(32);
         network::Writer writer{scratch};
-        if (encodeMapping(writer, MappingRecord{.replicationEpoch = accept->replicationEpoch, .entity = entity})
+        if (encodeMappingDeclaration(writer,
+                                     MappingDeclaration{.replicationEpoch = accept->replicationEpoch, .run = run})
                 .has_value()) {
-            static_cast<void>(sessions->sendFrame(*connection, type, writer.written()));
+            static_cast<void>(sessions->sendFrame(*connection, network::ControlFrame::MappingAck, writer.written()));
+        }
+    }
+
+    /// A declaration: each of its IDs mirrored by a new entity, none of
+    /// them held already and no more than the bound in all.
+    void declare(const MappingDeclaration& declaration) {
+        const MappingRun kRun = declaration.run;
+        const std::uint64_t kEnd = std::uint64_t{kRun.first.value} + kRun.count;
+        const auto kHeld = mirrored.lower_bound(kRun.first.value);
+        if (kRun.count > settings.maximumMapped - mirrored.size() || (kHeld != mirrored.end() && kHeld->first < kEnd)) {
+            sessions->close(*connection);
+            return;
+        }
+        for (std::uint64_t id = kRun.first.value; id < kEnd; ++id) {
+            auto entity = world->create();
+            if (!entity.has_value()) {
+                sessions->close(*connection);
+                return;
+            }
+            mirrored.emplace_hint(mirrored.end(), static_cast<std::uint32_t>(id), *entity);
+            if (declaration.ownedFirst && id == kRun.first.value) {
+                owned = *entity;
+                ownedNet = kRun.first.value;
+            }
+        }
+        acknowledge(kRun);
+    }
+
+    /// A retirement: what of each run it holds, let go. Only what is held
+    /// is walked, whatever a run's count.
+    void retire(const MappingRetirement& retirement) {
+        for (const MappingRun& kRun : retirement.runs) {
+            const std::uint64_t kEnd = std::uint64_t{kRun.first.value} + kRun.count;
+            auto at = mirrored.lower_bound(kRun.first.value);
+            while (at != mirrored.end() && at->first < kEnd) {
+                static_cast<void>(world->destroy(at->second));
+                if (at->second == owned) {
+                    owned = {};
+                    ownedNet = 0;
+                    if (prediction) {
+                        prediction->reset();
+                    }
+                }
+                if (interpolation) {
+                    interpolation->retire(at->first);
+                }
+                at = mirrored.erase(at);
+            }
+            // IDs are never reused in an epoch, so nothing late can reach a
+            // replacement; what is kept of the retired ones can go.
+            appliedAt.erase(appliedAt.lower_bound({kRun.first.value, 0}),
+                            kEnd > std::numeric_limits<std::uint32_t>::max()
+                                ? appliedAt.end()
+                                : appliedAt.lower_bound({static_cast<std::uint32_t>(kEnd), 0}));
         }
     }
 
@@ -155,49 +210,18 @@ struct ReplicationClient::State {
                 serverStopping || network::decodeGracefulClose(event.payload) == network::CloseNotice::ServerStopping;
             return;
         }
-        if (kType != network::ControlFrame::MappingDeclare && kType != network::ControlFrame::MappingRetire) {
-            return;
-        }
-        const auto kRecord = decodeMapping(event.payload);
-        if (!kRecord.has_value() || kRecord->replicationEpoch != accept->replicationEpoch) {
-            return;
-        }
         if (kType == network::ControlFrame::MappingDeclare) {
-            if (mirrored.contains(kRecord->entity.value) || mirrored.size() >= settings.maximumMapped) {
-                sessions->close(*connection);
-                return;
+            const auto kDeclaration = decodeMappingDeclaration(event.payload);
+            if (kDeclaration.has_value() && kDeclaration->replicationEpoch == accept->replicationEpoch) {
+                declare(*kDeclaration);
             }
-            auto entity = world->create();
-            if (!entity.has_value()) {
-                sessions->close(*connection);
-                return;
-            }
-            mirrored[kRecord->entity.value] = *entity;
-            if (kRecord->owned) {
-                owned = *entity;
-                ownedNet = kRecord->entity.value;
-            }
-            acknowledge(network::ControlFrame::MappingAck, kRecord->entity);
             return;
         }
-        const auto kMirror = mirrored.find(kRecord->entity.value);
-        if (kMirror != mirrored.end()) {
-            static_cast<void>(world->destroy(kMirror->second));
-            if (kMirror->second == owned) {
-                owned = {};
-                ownedNet = 0;
-                if (prediction) {
-                    prediction->reset();
-                }
+        if (kType == network::ControlFrame::MappingRetire) {
+            const auto kRetirement = decodeMappingRetirement(event.payload);
+            if (kRetirement.has_value() && kRetirement->replicationEpoch == accept->replicationEpoch) {
+                retire(*kRetirement);
             }
-            mirrored.erase(kMirror);
-            if (interpolation) {
-                interpolation->retire(kRecord->entity.value);
-            }
-            // IDs are never reused in an epoch, so nothing late can reach a
-            // replacement; what is kept of the retired one can go.
-            appliedAt.erase(appliedAt.lower_bound({kRecord->entity.value, 0}),
-                            appliedAt.lower_bound({kRecord->entity.value + 1, 0}));
         }
     }
 

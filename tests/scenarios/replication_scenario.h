@@ -160,6 +160,7 @@ struct Options {
     std::uint32_t statePeriod = 1;
     std::size_t stateBytesPerPublish = 1092;
     std::size_t mappingBytesPerPublish = world_replication::kMappingBytesPerPublish;
+    std::size_t mappingsPerPublish = world_replication::kMappingsPerPublish;
     bool predicting = false;
     std::optional<world_replication::InterestSettings> interest;
     /// Districts streamed as units, outliving the scenario.
@@ -227,6 +228,7 @@ struct Scenario {
              .statePeriod = options.statePeriod,
              .stateBytesPerPublish = options.stateBytesPerPublish,
              .mappingBytesPerPublish = options.mappingBytesPerPublish,
+             .mappingsPerPublish = options.mappingsPerPublish,
              .commandSizes = options.commandSizes,
              .own = std::move(options.own)});
         std::vector<world::SystemDeclaration> declarations;

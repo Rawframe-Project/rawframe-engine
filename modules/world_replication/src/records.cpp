@@ -26,23 +26,76 @@ result::Result<NetEntityId> readEntity(network::Reader& reader) {
 
 } // namespace
 
-result::Status encodeMapping(network::Writer& writer, const MappingRecord& record) {
-    RAWFRAME_TRY(writer.varint(record.replicationEpoch));
-    RAWFRAME_TRY(writer.varint(record.entity.value));
-    return writer.varint(record.owned ? 1 : 0);
+result::Status encodeMappingDeclaration(network::Writer& writer, const MappingDeclaration& declaration) {
+    RAWFRAME_TRY(writer.varint(declaration.replicationEpoch));
+    RAWFRAME_TRY(writer.varint(declaration.run.first.value));
+    RAWFRAME_TRY(writer.varint(declaration.run.count));
+    return writer.varint(declaration.ownedFirst ? 1 : 0);
 }
 
-result::Result<MappingRecord> decodeMapping(std::span<const std::byte> payload) {
+result::Result<MappingDeclaration> decodeMappingDeclaration(std::span<const std::byte> payload) {
     network::Reader reader{payload};
-    MappingRecord record;
-    RAWFRAME_TRY_ASSIGN(record.replicationEpoch, reader.varint());
-    RAWFRAME_TRY_ASSIGN(record.entity, readEntity(reader));
+    MappingDeclaration declaration;
+    RAWFRAME_TRY_ASSIGN(declaration.replicationEpoch, reader.varint());
+    RAWFRAME_TRY_ASSIGN(declaration.run.first, readEntity(reader));
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kCount, reader.varintAtMost(std::numeric_limits<std::uint32_t>::max()));
     RAWFRAME_TRY_ASSIGN(const std::uint64_t kOwned, reader.varintAtMost(1));
-    record.owned = kOwned == 1;
-    if (record.replicationEpoch == 0 || reader.remaining() != 0) {
-        return malformed("a mapping record has a zero epoch or bytes past its end");
+    declaration.run.count = static_cast<std::uint32_t>(kCount);
+    declaration.ownedFirst = kOwned == 1;
+    if (declaration.replicationEpoch == 0 || kCount == 0 || reader.remaining() != 0) {
+        return malformed("a mapping declaration has a zero epoch or count, or bytes past its end");
     }
-    return record;
+    // Its last ID is an ID too.
+    if (declaration.run.first.value - 1 + kCount > std::numeric_limits<std::uint32_t>::max()) {
+        return malformed("a mapping declaration runs past the last ID");
+    }
+    return declaration;
+}
+
+result::Status encodeMappingRetirement(network::Writer& writer, const MappingRetirement& retirement) {
+    RAWFRAME_TRY(writer.varint(retirement.replicationEpoch));
+    std::uint64_t after = 0;
+    for (const MappingRun& kRun : retirement.runs) {
+        RAWFRAME_TRY(writer.varint(kRun.first.value - after));
+        RAWFRAME_TRY(writer.varint(kRun.count));
+        after = std::uint64_t{kRun.first.value} + kRun.count;
+    }
+    return {};
+}
+
+result::Result<MappingRetirement> decodeMappingRetirement(std::span<const std::byte> payload) {
+    network::Reader reader{payload};
+    MappingRetirement retirement;
+    RAWFRAME_TRY_ASSIGN(retirement.replicationEpoch, reader.varint());
+    if (retirement.replicationEpoch == 0) {
+        return malformed("a mapping retirement has a zero epoch");
+    }
+    // Where the run before ended, one past its last ID: zero before the
+    // first, so the first gap is the first ID, never zero.
+    std::uint64_t after = 0;
+    while (reader.remaining() != 0) {
+        // A run that ends at the last ID is the last run: past it, the
+        // bounds below would wrap and name a small ID again.
+        if (after > std::numeric_limits<std::uint32_t>::max()) {
+            return malformed("a retired run follows one that ends at the last ID");
+        }
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kGap, reader.varint());
+        RAWFRAME_TRY_ASSIGN(const std::uint64_t kCount, reader.varint());
+        if (kGap == 0 || kCount == 0) {
+            return malformed("a retired run touches the one before it, or is empty");
+        }
+        if (kGap > std::numeric_limits<std::uint32_t>::max() - after ||
+            kCount - 1 > std::numeric_limits<std::uint32_t>::max() - (after + kGap)) {
+            return malformed("a retired run runs past the last ID");
+        }
+        retirement.runs.push_back(MappingRun{.first = NetEntityId{static_cast<std::uint32_t>(after + kGap)},
+                                             .count = static_cast<std::uint32_t>(kCount)});
+        after += kGap + kCount;
+    }
+    if (retirement.runs.empty()) {
+        return malformed("a mapping retirement retires nothing");
+    }
+    return retirement;
 }
 
 result::Status encodeStateHeader(network::Writer& writer, const StateHeader& header) {

@@ -127,6 +127,10 @@ struct ServerReplicationSettings {
     /// its reads. At least one declaration's, and at most
     /// kMostMappingBytesPerPublish.
     std::size_t mappingBytesPerPublish = kMappingBytesPerPublish;
+    /// Entities one connection is declared per publish, its own player
+    /// among them: what its client makes in one pump. 1 to
+    /// kMostMappingsPerPublish.
+    std::size_t mappingsPerPublish = kMappingsPerPublish;
     /// Ticks after which a value sent and not acknowledged is sent again,
     /// though it has not changed.
     std::uint64_t resendAfter = 6;
