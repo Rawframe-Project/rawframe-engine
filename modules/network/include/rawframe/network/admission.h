@@ -27,7 +27,6 @@ enum class ControlFrame : std::uint64_t {
     MappingDeclare = 6,
     MappingAck = 8,
     MappingRetire = 10,
-    MappingRetireAck = 12,
     StateAck = 14,
     BaselineOffer = 16,
     BaselineResult = 18,

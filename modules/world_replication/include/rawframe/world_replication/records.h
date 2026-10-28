@@ -48,9 +48,11 @@ inline constexpr std::uint64_t kInputWindowPayload = 1;
 inline constexpr std::uint64_t kStateAckPayload = 2;
 inline constexpr std::uint64_t kChecksumPayload = 3;
 
-/// `mapping_declare`, `mapping_ack`, `mapping_retire`, and
-/// `mapping_retire_ack` all carry this. `owned` is set only on a declare,
-/// for the entity the receiving connection plays.
+/// `mapping_declare`, `mapping_ack` and `mapping_retire` all carry this.
+/// `owned` is set only on a declare, for the entity the receiving
+/// connection plays. A retirement is not acknowledged: it travels on the
+/// ordered control stream, so a client has let a mapping go before it
+/// reads any later declaration, and IDs are never reused in an epoch.
 struct MappingRecord {
     std::uint64_t replicationEpoch = 0;
     NetEntityId entity;
