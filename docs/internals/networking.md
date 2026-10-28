@@ -23,7 +23,7 @@ Local play bypasses bytes, never architecture: a game played alone still has a s
 
 ## Providers
 
-The `Provider` contract is listen, connect, QUIC-numbered streams, datagrams, close, and a bounded queue of owned events the Runtime drains each iteration. Every bound is a required value of a `ProviderProfile`; zero is refused and nothing grows without one. Streams never drop: a receiving queue that fills closes the connection. Datagrams are dropped and counted instead. A profile also names the application protocol (QUIC's ALPN), and a listener refuses a connector speaking another: the tooling protocol and a shared authoring session never share a game's lanes.
+The `Provider` contract is listen, connect, QUIC-numbered streams, datagrams, close, and a bounded queue of owned events the Runtime drains each iteration. Every bound is a required value of a `ProviderProfile`; zero is refused and nothing grows without one. Streams never drop: a receiving queue that fills closes the connection. Datagrams are dropped and counted instead. A stream's pending bytes are those its peer has not acknowledged, which the event bounds below count: the QUIC provider turns MsQuic's send buffering off for this, since with it on MsQuic releases a send once copied. Only the shared authoring session's host turns it on; it reads no pending bytes and sends records of megabytes. A profile also names the application protocol (QUIC's ALPN), and a listener refuses a connector speaking another: the tooling protocol and a shared authoring session never share a game's lanes.
 
 The loopback provider delivers on a clock, with seeded latency, jitter, loss and duplication, so tests and the arena exercise the same paths under bad networks deterministically (`network.loopback.*`).
 

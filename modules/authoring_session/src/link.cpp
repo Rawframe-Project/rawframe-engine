@@ -27,12 +27,6 @@ namespace rawframe::authoring_session {
 /// this machine or the next acknowledges it in milliseconds.
 constexpr std::chrono::milliseconds kEndWithin{1500};
 
-/// A link's connection: what it sends is released only once received, so
-/// a last record waits for no more than that.
-network_quic::QuicSettings linkSettings(const network_quic::Fingerprint& pin) {
-    return network_quic::QuicSettings{.pin = pin, .sendBuffering = false};
-}
-
 bool answered(std::string_view reply) {
     const auto kParsed = document::parse(reply);
     return kParsed.has_value() && kParsed->find("answer") != nullptr;
@@ -67,7 +61,7 @@ ToolingLink::open(std::string_view endpoint, const char* pinFile, const char* to
         said = "the pin file holds no certificate fingerprint";
         return nullptr;
     }
-    auto network = network_quic::QuicNetwork::create(linkSettings(*pin));
+    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin});
     if (!network.has_value()) {
         said = "QUIC could not start";
         return nullptr;
@@ -141,7 +135,7 @@ HostLink::open(std::string_view endpoint, const char* pinFile, const char* token
         said = "the pin file holds no certificate fingerprint";
         return nullptr;
     }
-    auto network = network_quic::QuicNetwork::create(linkSettings(*pin));
+    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin});
     if (!network.has_value()) {
         said = "QUIC could not start";
         return nullptr;

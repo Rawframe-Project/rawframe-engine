@@ -553,6 +553,84 @@ RAWFRAME_TEST(SessionsAdmitOverQuic) {
     }
 }
 
+RAWFRAME_TEST(AStalledPeerEndsWithinTheEventAge) {
+    // A peer that stops acknowledging an event lane's record ends as
+    // exhausted once the record has waited kMaximumEventAge, not when the
+    // connection goes idle.
+    const auto kIdentity = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
+    auto network = QuicNetwork::create(QuicSettings{.certificate = kIdentity});
+    auto clients = QuicNetwork::create(QuicSettings{.pin = *network_quic::fingerprintOf(kIdentity)});
+    RAWFRAME_EXPECT(network.has_value() && clients.has_value());
+    if (!network.has_value() || !clients.has_value()) {
+        return;
+    }
+    const std::uint16_t kPort = freePort();
+    Relay relay{kPort};
+    auto serverTransport = *(*network)->provider(kProfile);
+    auto clientTransport = *(*clients)->provider(kProfile);
+    const execution::SteadyClock kClock;
+    constexpr network::SessionProfile kSessions{.maximumSessions = 4,
+                                                .maximumPreAdmissionBytes = 2048,
+                                                .maximumControlBuffer = 1 << 16,
+                                                .maximumFramePayload = 4096,
+                                                .maximumDatagramPayload = 1024,
+                                                .admissionTimeout = execution::MonotonicDuration::fromSeconds(5)};
+    const std::vector<network::EventLaneDeclaration> kLanes{{.id = 1, .fromServer = true, .maximumRecord = 1024}};
+    network::Compatibility compatibility{.protocol = network::protocolFingerprint()};
+    auto server = *network::Sessions::server(
+        *serverTransport,
+        kClock,
+        network::ServerSettings{.profile = kSessions, .expected = compatibility, .lanes = kLanes});
+    auto client = *network::Sessions::client(*clientTransport, kClock, {.profile = kSessions, .lanes = kLanes});
+    RAWFRAME_EXPECT(server->listen({endpointAt(kPort)}).has_value());
+    RAWFRAME_EXPECT(client
+                        ->connect({endpointAt(relay.port())},
+                                  network::Hello{.compatibility = compatibility,
+                                                 .requestedSession = {std::byte{'a'}},
+                                                 .maximumDatagram = 1200,
+                                                 .maximumFrame = 65536})
+                        .has_value());
+    std::vector<network::SessionEvent> serverEvents;
+    std::vector<network::SessionEvent> clientEvents;
+    const auto kOf = [](const std::vector<network::SessionEvent>& events, network::SessionEventKind kind) {
+        for (const network::SessionEvent& event : events) {
+            if (event.kind == kind) {
+                return &event;
+            }
+        }
+        return static_cast<const network::SessionEvent*>(nullptr);
+    };
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    while (std::chrono::steady_clock::now() < deadline &&
+           (kOf(serverEvents, network::SessionEventKind::Admitted) == nullptr ||
+            kOf(clientEvents, network::SessionEventKind::Admitted) == nullptr)) {
+        server->pump(serverEvents);
+        client->pump(clientEvents);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    const network::SessionEvent* granted = kOf(serverEvents, network::SessionEventKind::Admitted);
+    if (granted == nullptr) {
+        RAWFRAME_EXPECT(granted != nullptr);
+        return;
+    }
+    const ConnectionId kPeer = granted->connection;
+
+    relay.block(true);
+    RAWFRAME_EXPECT(server->sendEvent(kPeer, 1, 7, std::vector<std::byte>(100)).has_value());
+    const auto kSent = std::chrono::steady_clock::now();
+    serverEvents.clear();
+    deadline = kSent + std::chrono::seconds{15};
+    while (std::chrono::steady_clock::now() < deadline &&
+           kOf(serverEvents, network::SessionEventKind::Ended) == nullptr) {
+        server->pump(serverEvents);
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    const network::SessionEvent* ended = kOf(serverEvents, network::SessionEventKind::Ended);
+    const auto kTook = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - kSent);
+    RAWFRAME_EXPECT(ended != nullptr && ended->reason == network::EndReason::QueueExhausted);
+    RAWFRAME_EXPECT(kTook < std::chrono::seconds{4});
+}
+
 // Where the tests run without Python, on an Android device, no
 // browser is played.
 #if defined(RAWFRAME_WEBTRANSPORT_CLIENT)
