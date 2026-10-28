@@ -168,9 +168,16 @@ public:
     /// owner must know to `into`.
     void pump(std::vector<SessionEvent>& into);
 
-    /// A control frame to an admitted peer.
+    /// A control frame to an admitted peer. It is gathered with the frames
+    /// sent to that peer after it and handed to the transport together, at
+    /// the first of: a datagram or event to the same peer, `flush`, the next
+    /// `pump`, or a stream send's worth gathered. Failing to hand them over
+    /// ends the connection, which an `Ended` says.
     [[nodiscard]] result::Status
     sendFrame(ConnectionId connection, ControlFrame type, std::span<const std::byte> payload);
+    /// Hands every gathered control frame to the transport: called once an
+    /// iteration's sending is done, so no frame waits for the next.
+    void flush() noexcept;
     /// A datagram record to an admitted peer, on the lane this side sends.
     [[nodiscard]] result::Status sendDatagram(ConnectionId connection, const DatagramRecord& record);
     /// One record on an event lane this side sends to an admitted peer: a
