@@ -73,6 +73,23 @@ class Attribution(unittest.TestCase):
         message = "fix(x): y\n\nGenerated with a tool\n\nRefs #1\n"
         self.assertEqual(attribution_in(message), ["Generated with a tool"])
 
+    def test_an_emoji_before_a_footer_fails(self):
+        message = "fix(x): y\n\nWhy.\n\n\U0001f916 Generated with [Claude Code](https://claude.com/claude-code)\n"
+        self.assertEqual(attribution_in(message),
+                         ["\U0001f916 Generated with [Claude Code](https://claude.com/claude-code)"])
+
+    def test_trailers_before_a_line_of_blanks_fail(self):
+        message = "fix(x): y\n\nWhy.\n\nCo-authored-by: Someone <a@b.c>\n   \n"
+        self.assertEqual(attribution_in(message), ["Co-authored-by: Someone <a@b.c>"])
+
+    def test_a_trailer_with_blanks_before_its_colon_fails(self):
+        message = "fix(x): y\n\nWhy.\n\nCo-authored-by : Someone <a@b.c>\n"
+        self.assertEqual(attribution_in(message), ["Co-authored-by : Someone <a@b.c>"])
+
+    def test_a_quoted_footer_is_a_mention(self):
+        message = 'fix(x): y\n\n("This PR was generated with Release Please") is its footer.\n\nRefs #1\n'
+        self.assertEqual(attribution_in(message), [])
+
     def test_a_trailer_outside_the_last_paragraph_is_prose(self):
         message = "fix(x): y\n\nCo-authored-by: lines are what GitHub adds.\n\nRefs #1\n"
         self.assertEqual(attribution_in(message), [])

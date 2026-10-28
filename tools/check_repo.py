@@ -50,8 +50,11 @@ SOURCE_SUFFIXES = {".h", ".hpp", ".cpp", ".cc", ".c"}
 FAIL_LINES = 1500
 REPORT_LINES = 1000
 EM_DASH = chr(0x2014)
-TRAILER = re.compile(r"(co-authored-by|claude-session):", re.IGNORECASE)
-FOOTER = re.compile(r"(this pr was )?generated with\b", re.IGNORECASE)
+# Git takes a trailer's key with blanks before its colon too.
+TRAILER = re.compile(r"(co-authored-by|claude-session)\s*:", re.IGNORECASE)
+# A footer may follow a mark of its own (an emoji, a dash), but not a quote
+# or a bracket, which make it a mention.
+FOOTER = re.compile(r"[^\w\"'`(\[{]*(this pr was )?generated with\b", re.IGNORECASE)
 # Commits already on main that carry such lines; history is not rewritten.
 ATTRIBUTION_ALLOWED = {
     # v0.0.1's squash, merged with release-please's footer and GitHub's
@@ -315,7 +318,10 @@ def check_owner_rules(files, findings):
 def attribution_in(message):
     """The lines of a commit message that attribute it: a trailer in its last
     paragraph, or a line that begins as a tool's footer does."""
-    lines = message.rstrip("\n").splitlines()
+    lines = message.splitlines()
+    # Git takes a line of blanks for an empty one.
+    while lines and not lines[-1].strip():
+        lines.pop()
     last = len(lines)
     while last > 0 and lines[last - 1].strip():
         last -= 1
