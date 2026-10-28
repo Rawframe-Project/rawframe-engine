@@ -34,7 +34,7 @@ m2WorldDef m2DefaultWorldDefValues(void)
     m2WorldDef def;
     memset(&def, 0, sizeof(def));
     def.gravity = (m2Vec2){0.0f, -10.0f};
-    def.enableSleeping = true;
+    def.enableSleep = true;
     def.bodyCapacity = 1024;
     def.shapeCapacity = 2048;
     def.jointCapacity = 256;
@@ -55,35 +55,44 @@ m2WorldDef m2DefaultWorldDefValues(void)
     return def;
 }
 
-// Checks a world def past its cookie and version. The fluids radius
-// floor is 4x linear slop so the skin laws keep meaning.
-static bool ValidWorldDef(const m2WorldDef* def)
+// Checks a world def past its cookie and version. The particle radius
+// floor, M2_MIN_PARTICLE_RADIUS, is four linear slops so the skin laws
+// keep meaning.
+static m2Result WorldDefCheck(const m2WorldDef* def)
 {
     if (def->bodyCapacity < 1 || def->shapeCapacity < 1 || def->jointCapacity < 1 ||
         def->fluidVolumeCapacity < 0 || def->particleCapacity < 0 ||
-        (def->allocator.alloc == NULL) != (def->allocator.free == NULL) ||
-        !m2ValidAcceleration(def->gravity))
+        (def->allocator.alloc == NULL) != (def->allocator.free == NULL))
     {
-        return false;
+        return m2_errorInvalid;
     }
+    m2Result result = m2CheckAcceleration(def->gravity);
     if (def->particleCapacity == 0)
     {
-        return true;
+        return result;
     }
     // A particle's mass is its density over a square of 1.5 radii, the
     // spacing of a fill; it must be a mass a body could have.
     float stride = 1.5f * def->particleRadius;
-    return m2WithinF(def->particleRadius, 0.02f, M2_HUGE) && m2ValidDensity(def->particleDensity) &&
-           m2ValidMass(def->particleDensity * stride * stride) &&
-           m2ValidGravityScale(def->particleGravityScale) &&
-           m2ValidCoefficient(def->particlePressureStrength) &&
-           m2ValidCoefficient(def->particleDampingStrength) &&
-           m2ValidCoefficient(def->particleViscousStrength) &&
-           m2ValidCoefficient(def->particleCohesionStrength) &&
-           m2ValidCoefficient(def->particleNearPressureStrength) &&
-           m2ValidCoefficient(def->particlePowderStrength) &&
-           m2ValidCoefficient(def->particleSpringStrength) &&
-           m2ValidCoefficient(def->particleElasticStrength);
+    result = m2BothChecks(
+        result, m2CheckPositive(def->particleRadius, M2_MIN_PARTICLE_RADIUS, M2_LOCAL_LIMIT));
+    result = m2BothChecks(result, m2CheckDensity(def->particleDensity));
+    if (result == m2_success)
+    {
+        result = m2CheckMass(def->particleDensity * stride * stride);
+    }
+    result = m2BothChecks(result, m2CheckGravityScale(def->particleGravityScale));
+    const float strengths[8] = {
+        def->particlePressureStrength,     def->particleDampingStrength,
+        def->particleViscousStrength,      def->particleCohesionStrength,
+        def->particleNearPressureStrength, def->particlePowderStrength,
+        def->particleSpringStrength,       def->particleElasticStrength,
+    };
+    for (int32_t i = 0; i < 8; ++i)
+    {
+        result = m2BothChecks(result, m2CheckCoefficient(strengths[i]));
+    }
+    return result;
 }
 
 // Copies the def's settings and capacities into a zeroed world. The
@@ -204,13 +213,13 @@ static M2_NOINLINE m2Result CreateWorldWorker(const m2WorldDef* def, m2World** w
     {
         return m2_errorVersion;
     }
-    if (!ValidWorldDef(def))
+    m2Result checked = WorldDefCheck(def);
+    if (checked != m2_success)
     {
-        return m2_errorInvalid;
+        return checked;
     }
-    // The world's snapshot, and a journal holding two of them, must fit
-    // their int32_t byte counts: measured on the def's capacities alone,
-    // before anything is allocated.
+    // The world's snapshot size must fit a size_t: measured on the def's
+    // capacities alone, before anything is allocated.
     m2World shape;
     memset(&shape, 0, sizeof(shape));
     if (!ApplyWorldDef(&shape, def) || !m2SnapshotFits(&shape))
@@ -232,7 +241,7 @@ static M2_NOINLINE m2Result CreateWorldWorker(const m2WorldDef* def, m2World** w
     }
     SeedFreeLists(world);
 
-    world->sleepEnabled = def->enableSleeping ? 1 : 0;
+    world->sleepEnabled = def->enableSleep ? 1 : 0;
     *worldOut = world;
     return m2_success;
 }
@@ -356,7 +365,7 @@ static void EmitTouchEvents(m2World* world)
             {
                 if (sensor)
                 {
-                    m2EmitSensorBegin(world, a, b, i);
+                    m2EmitSensorBegin(world, a, b);
                 }
                 else
                 {
@@ -552,7 +561,7 @@ m2MemoryUsage m2World_GetMemoryUsage(const m2World* world)
     return usage;
 }
 
-static M2_NOINLINE void WorldEnableSleepingWorker(m2World* world, bool flag)
+static M2_NOINLINE void WorldEnableSleepWorker(m2World* world, bool flag)
 {
     if (m2CheckWriter(world) != m2_success)
     {
@@ -571,7 +580,7 @@ static M2_NOINLINE void WorldEnableSleepingWorker(m2World* world, bool flag)
     {
         m2OpFlag record;
         record.flag = next;
-        m2JournalRecord(world, m2_opEnableSleeping, &record, (int32_t)sizeof(record));
+        m2JournalRecord(world, m2_opEnableSleep, &record, (int32_t)sizeof(record));
     }
     world->sleepEnabled = next;
     if (next == 0)
@@ -589,14 +598,14 @@ static M2_NOINLINE void WorldEnableSleepingWorker(m2World* world, bool flag)
     }
 }
 
-void m2World_EnableSleeping(m2World* world, bool flag)
+void m2World_EnableSleep(m2World* world, bool flag)
 {
     uint64_t env = m2FloatEnvEnter();
-    WorldEnableSleepingWorker(world, flag);
+    WorldEnableSleepWorker(world, flag);
     m2FloatEnvLeave(env);
 }
 
-bool m2World_IsSleepingEnabled(const m2World* world)
+bool m2World_IsSleepEnabled(const m2World* world)
 {
     return world != NULL && world->sleepEnabled != 0;
 }

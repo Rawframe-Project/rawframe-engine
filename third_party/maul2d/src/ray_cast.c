@@ -6,7 +6,7 @@
 // and the outward normal. A ray that starts inside a solid shape hits at
 // t = 0 with a zero normal.
 //
-// Circles solve the quadratic in its cancellation-free form; segments
+// Circles solve in the ray's own frame, about the closest approach; segments
 // intersect two lines by cross products; sharp polygons clip the ray
 // against every face (Cyrus and Beck); rounded polygons and capsules,
 // which are rounded two-vertex polygons, take the first hit on their
@@ -36,42 +36,61 @@ static m2Vec2 MulAdd(m2Vec2 a, float s, m2Vec2 b)
     return (m2Vec2){a.x + s * b.x, a.y + s * b.y};
 }
 
-static const m2CastHit s_miss = {{0.0f, 0.0f}, {0.0f, 0.0f}, 0.0f, false};
+static const m2LocalHit s_miss = {{0.0f, 0.0f}, {0.0f, 0.0f}, 0.0f, false};
 
-static m2CastHit StartsInside(m2Vec2 p1)
+static m2LocalHit StartsInside(m2Vec2 p1)
 {
-    m2CastHit hit = {p1, {0.0f, 0.0f}, 0.0f, true};
+    m2LocalHit hit = {p1, {0.0f, 0.0f}, 0.0f, true};
     return hit;
 }
 
-// |p1 + t d - center|^2 = radius^2, smallest root. With s = p1 - center,
-// a = d.d, b = d.s and c = s.s - r^2, the root t = c / (-b + sqrt(b^2 - a
-// c)) avoids subtracting nearly equal numbers when the ray grazes.
-static m2CastHit RayCastCircle(m2Vec2 p1, m2Vec2 d, float maxFraction, m2Vec2 center, float radius)
+// The circle in the ray's own terms: the ray's unit direction u, the
+// distance along it to the point of closest approach, and that point's
+// offset q from the center. The hit lies sqrt(r^2 - q.q) before it. The
+// quadratic b^2 - a c would subtract two products of the ray's length and
+// distance, which cancel from about 1e9 m and overflow from about 1e19;
+// here a far or long ray loses no more than the float position of its
+// origin does, and the normal comes from q, which is small near a hit.
+static m2LocalHit RayCastCircle(m2Vec2 p1, m2Vec2 d, float maxFraction, m2Vec2 center, float radius)
 {
     m2Vec2 s = Sub(p1, center);
-    float c = Dot(s, s) - radius * radius;
-    if (c < 0.0f)
+    if (Dot(s, s) < radius * radius)
     {
         return StartsInside(p1);
     }
-    float a = Dot(d, d);
-    float b = Dot(d, s);
-    float disc = b * b - a * c;
-    if (a == 0.0f || b >= 0.0f || disc < 0.0f)
+    // The direction scaled by its largest component first, so no square
+    // of the translation overflows.
+    float scale = m2MaxF(m2AbsF(d.x), m2AbsF(d.y));
+    if (!(scale > 0.0f))
     {
-        return s_miss; // no motion, moving away, or passing by
+        return s_miss; // no motion
     }
-    float t = c / (-b + sqrtf(disc));
+    m2Vec2 e = {d.x / scale, d.y / scale};
+    float length = sqrtf(Dot(e, e));
+    m2Vec2 u = {e.x / length, e.y / length};
+    float along = Dot(s, u);
+    if (along >= 0.0f)
+    {
+        return s_miss; // moving away
+    }
+    m2Vec2 q = MulAdd(s, -along, u);
+    float h2 = radius * radius - Dot(q, q);
+    if (h2 < 0.0f)
+    {
+        return s_miss; // passing by
+    }
+    float h = sqrtf(h2);
+    // Outside the circle the root is never negative, but rounding can take
+    // it a few ulps below 0 for an origin on the surface.
+    float t = m2MaxF(-along - h, 0.0f) / scale / length;
     if (t > maxFraction)
     {
         return s_miss;
     }
-    m2Vec2 point = MulAdd(p1, t, d);
-    m2Vec2 n = Sub(point, center);
-    float length = sqrtf(Dot(n, n));
-    m2CastHit hit = {point, {n.x / length, n.y / length}, t, true};
-    if (!(length > 0.0f))
+    m2Vec2 offset = MulAdd(q, -h, u);
+    float n = sqrtf(Dot(offset, offset));
+    m2LocalHit hit = {MulAdd(center, 1.0f, offset), {offset.x / n, offset.y / n}, t, true};
+    if (!(n > 0.0f))
     {
         hit.normal = (m2Vec2){0.0f, 0.0f};
     }
@@ -79,7 +98,7 @@ static m2CastHit RayCastCircle(m2Vec2 p1, m2Vec2 d, float maxFraction, m2Vec2 ce
 }
 
 // Two-sided: the normal faces the ray's origin.
-static m2CastHit RayCastSegment(m2Vec2 p1, m2Vec2 d, float maxFraction, m2Vec2 v1, m2Vec2 v2)
+static m2LocalHit RayCastSegment(m2Vec2 p1, m2Vec2 d, float maxFraction, m2Vec2 v1, m2Vec2 v2)
 {
     m2Vec2 e = Sub(v2, v1);
     float denom = Cross(d, e);
@@ -100,7 +119,7 @@ static m2CastHit RayCastSegment(m2Vec2 p1, m2Vec2 d, float maxFraction, m2Vec2 v
     {
         n = (m2Vec2){-n.x, -n.y};
     }
-    m2CastHit hit = {MulAdd(p1, t, d), n, t, true};
+    m2LocalHit hit = {MulAdd(p1, t, d), n, t, true};
     return hit;
 }
 
@@ -108,7 +127,7 @@ static m2CastHit RayCastSegment(m2Vec2 p1, m2Vec2 d, float maxFraction, m2Vec2 v
 // bound, leaving faces lower the upper bound, and a ray parallel to a
 // face outside it misses. Positions are taken relative to the first
 // vertex, since the polygon may sit far from the body origin.
-static m2CastHit RayCastSharpPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction, const m2Polygon* poly)
+static m2LocalHit RayCastSharpPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction, const m2Polygon* poly)
 {
     m2Vec2 base = poly->vertices[0];
     m2Vec2 start = Sub(p1, base);
@@ -147,11 +166,11 @@ static m2CastHit RayCastSharpPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction, con
     {
         return StartsInside(p1);
     }
-    m2CastHit hit = {MulAdd(p1, lower, d), poly->normals[entering], lower, true};
+    m2LocalHit hit = {MulAdd(p1, lower, d), poly->normals[entering], lower, true};
     return hit;
 }
 
-static void KeepFirst(m2CastHit* best, m2CastHit candidate)
+static void KeepFirst(m2LocalHit* best, m2LocalHit candidate)
 {
     if (candidate.hit && (!best->hit || candidate.fraction < best->fraction))
     {
@@ -183,14 +202,14 @@ static bool InsideRounded(m2Vec2 p, const m2Polygon* poly)
 // A rounded polygon is its faces pushed out by the radius joined by
 // circles at the corners. From outside, the first hit on an offset face
 // the ray enters or on a corner circle is the first hit on the shape.
-static m2CastHit RayCastRoundedPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction,
-                                       const m2Polygon* poly)
+static m2LocalHit RayCastRoundedPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction,
+                                        const m2Polygon* poly)
 {
     if (InsideRounded(p1, poly))
     {
         return StartsInside(p1);
     }
-    m2CastHit best = s_miss;
+    m2LocalHit best = s_miss;
     for (int32_t i = 0; i < poly->count; ++i)
     {
         int32_t j = i + 1 < poly->count ? i + 1 : 0;
@@ -199,7 +218,7 @@ static m2CastHit RayCastRoundedPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction,
         {
             m2Vec2 e1 = MulAdd(poly->vertices[i], poly->radius, n);
             m2Vec2 e2 = MulAdd(poly->vertices[j], poly->radius, n);
-            m2CastHit face = RayCastSegment(p1, d, maxFraction, e1, e2);
+            m2LocalHit face = RayCastSegment(p1, d, maxFraction, e1, e2);
             face.normal = n;
             KeepFirst(&best, face);
         }
@@ -208,13 +227,14 @@ static m2CastHit RayCastRoundedPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction,
     return best;
 }
 
-static m2CastHit RayCastPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction, const m2Polygon* poly)
+static m2LocalHit RayCastPolygon(m2Vec2 p1, m2Vec2 d, float maxFraction, const m2Polygon* poly)
 {
     return poly->radius == 0.0f ? RayCastSharpPolygon(p1, d, maxFraction, poly)
                                 : RayCastRoundedPolygon(p1, d, maxFraction, poly);
 }
 
-m2CastHit m2RayCastGeometry(const m2ShapeGeometry* geometry, m2Vec2 p1, m2Vec2 d, float maxFraction)
+m2LocalHit m2RayCastGeometry(const m2ShapeGeometry* geometry, m2Vec2 p1, m2Vec2 d,
+                             float maxFraction)
 {
     switch (geometry->type)
     {

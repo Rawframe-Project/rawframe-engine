@@ -22,7 +22,7 @@
 
 #define M2_TREE_COUNT 3 // one broadphase tree per body type
 
-// Per-body motion lock bits (the angular lock is fixedRotation).
+// Per-body motion lock bits; the angular lock is fixedRotations.
 #define M2_LOCK_LINEAR_X 1u
 #define M2_LOCK_LINEAR_Y 2u
 
@@ -151,6 +151,7 @@ typedef struct m2Chains
     int32_t maxChainIndex;
     uint8_t* chainAlive;
     int32_t* chainBody;
+    uint8_t* chainLoop; // 1 for a closed loop; read back only, never by the step
     uint32_t* chainGenerations;
     int32_t* chainFreeQueue;
     int32_t chainFreeHead;
@@ -318,11 +319,11 @@ typedef struct m2Events
     int32_t endEventCount;
     m2ContactEndEvent* pendingEndEvents; // between-step destroys, flushed at Step
     int32_t pendingEndCount;
-    m2ContactBeginEvent* sensorBeginEvents;
+    m2SensorBeginEvent* sensorBeginEvents;
     int32_t sensorBeginCount;
-    m2ContactEndEvent* sensorEndEvents;
+    m2SensorEndEvent* sensorEndEvents;
     int32_t sensorEndCount;
-    m2ContactEndEvent* pendingSensorEnd;
+    m2SensorEndEvent* pendingSensorEnd;
     int32_t pendingSensorEndCount;
     m2JointBreakEvent* jointBreakEvents;
     int32_t jointBreakEventCount;
@@ -332,8 +333,8 @@ typedef struct m2Events
 typedef struct m2Recorder
 {
     uint8_t* journal;
-    int32_t journalCapacity;
-    int32_t journalCursor;
+    int64_t journalCapacity;
+    int64_t journalCursor;
     uint8_t journalActive;
     uint8_t journalOverflow;
 } m2Recorder;
@@ -407,7 +408,7 @@ void m2WorldFree(const m2World* world, void* memory, size_t bytes);
 
 // The check every mutating call makes before anything else: a null world
 // is invalid, and a world running host code (a step's tasks, a debug draw
-// callback) refuses with m2_errorState. Returns m2_success otherwise.
+// callback) refuses with m2_errorBusy. Returns m2_success otherwise.
 m2Result m2CheckWriter(const m2World* world);
 
 // The 16 bytes every state format starts with, the snapshot's and the
@@ -431,13 +432,25 @@ typedef struct m2StatePrefix
 // The prefix this release writes for a format.
 m2StatePrefix m2MakeStatePrefix(uint32_t magic, uint32_t formatVersion, int32_t headerBytes);
 
+// Whether a caller's byte count of 0 or more can describe memory on this
+// target, that is, whether a size_t holds it. Only a 32-bit target says no.
+static inline bool m2SizeFitsMemory(int64_t bytes)
+{
+#if SIZE_MAX < INT64_MAX
+    return bytes <= (int64_t)SIZE_MAX;
+#else
+    (void)bytes;
+    return true;
+#endif
+}
+
 // Checks the prefix of untrusted bytes, in the order every state format
-// shares: too short or another magic is m2_errorInvalid, since the bytes
+// shares: too short or another magic is m2_errorFormat, since the bytes
 // are not this format; another release or format number is
 // m2_errorVersion, since only the release that wrote them reads them; a
 // header size that is not this format's, or bytes too short to hold it,
-// is m2_errorInvalid. Counts nothing: the bytes are untrusted.
-m2Result m2CheckStatePrefix(const void* bytes, int32_t size, uint32_t magic, uint32_t formatVersion,
+// is m2_errorFormat. Counts nothing: the bytes are untrusted.
+m2Result m2CheckStatePrefix(const void* bytes, int64_t size, uint32_t magic, uint32_t formatVersion,
                             int32_t headerBytes);
 
 #endif // MAUL2D_SRC_WORLD_INTERNAL_H

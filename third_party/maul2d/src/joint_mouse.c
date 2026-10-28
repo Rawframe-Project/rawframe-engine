@@ -24,8 +24,8 @@ m2MouseJointDef m2DefaultMouseJointDef(void)
 {
     m2MouseJointDef def;
     memset(&def, 0, sizeof(def));
-    def.hertz = 4.0f;
-    def.dampingRatio = 1.0f;
+    def.springHertz = 4.0f;
+    def.springDampingRatio = 1.0f;
     def.maxForce = 35.0f;
     def.internalValue = M2_MSJOINT_COOKIE;
     return def;
@@ -33,10 +33,28 @@ m2MouseJointDef m2DefaultMouseJointDef(void)
 
 // The def contract: finite values, non-negative gains and budgets,
 // ordered ranges.
-static bool DefValid(const m2MouseJointDef* def)
+static m2Result DefCheck(const m2MouseJointDef* def)
 {
-    return m2FinitePos2(def->target) && m2ValidRate(def->hertz) &&
-           m2ValidCoefficient(def->dampingRatio) && m2ValidMaxForce(def->maxForce);
+    m2Result result =
+        m2BothChecks(m2CheckValid(m2FinitePos2(def->target)), m2CheckRate(def->springHertz));
+    result = m2BothChecks(result, m2CheckCoefficient(def->springDampingRatio));
+    return m2BothChecks(result, m2CheckMaxForce(def->maxForce));
+}
+
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordMouseJointDef(m2MouseJointDef* out, const m2MouseJointDef* def)
+{
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->target = def->target;
+    out->springHertz = def->springHertz;
+    out->springDampingRatio = def->springDampingRatio;
+    out->maxForce = def->maxForce;
+    out->userData = def->userData;
+    out->enableConnectedCollision = def->enableConnectedCollision;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreateMouseJointWorker(m2World* world, const m2MouseJointDef* def,
@@ -52,9 +70,14 @@ static M2_NOINLINE m2Result CreateMouseJointWorker(m2World* world, const m2Mouse
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_MSJOINT_COOKIE || !DefValid(def))
+    if (def == NULL || def->internalValue != M2_MSJOINT_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = DefCheck(def);
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
@@ -68,13 +91,14 @@ static M2_NOINLINE m2Result CreateMouseJointWorker(m2World* world, const m2Mouse
     }
     // The grab point is where the target sits at creation, in B's
     // local frame (the single f64 crossing). It becomes B's anchor, a
-    // body-local length, so it stays within M2_HUGE like any other.
+    // body-local length, so it stays within M2_LOCAL_LIMIT like any other.
     m2Transform xfB = world->bodies.transforms[bodyB];
     m2Vec2 rel = {(float)(def->target.x - xfB.p.x), (float)(def->target.y - xfB.p.y)};
     m2Vec2 grab = {xfB.q.c * rel.x + xfB.q.s * rel.y, -xfB.q.s * rel.x + xfB.q.c * rel.y};
-    if (!m2LocalVec2(grab))
+    m2Result grabbed = m2CheckLocalVec2(grab);
+    if (grabbed != m2_success)
     {
-        return m2Refuse(world, m2_errorInvalid);
+        return m2Refuse(world, grabbed);
     }
     int32_t index = m2AllocateJoint(world);
     if (index < 0)
@@ -83,12 +107,12 @@ static M2_NOINLINE m2Result CreateMouseJointWorker(m2World* world, const m2Mouse
     }
     m2Vec2 zero = {0.0f, 0.0f};
     m2JointId jointId = m2FinishJoint(world, index, (uint8_t)m2_mouseJoint, bodyA, bodyB, zero,
-                                      grab, 0.0f, def->hertz, def->dampingRatio);
+                                      grab, 0.0f, def->springHertz, def->springDampingRatio);
     world->joints.jointLength[index] = def->maxForce;
     world->joints.jointTargets[index] = def->target;
     world->joints.jointUserData[index] = def->userData;
-    world->joints.jointCollide[index] = def->collideConnected ? 1 : 0;
-    if (def->collideConnected == false)
+    world->joints.jointCollide[index] = def->enableConnectedCollision ? 1 : 0;
+    if (def->enableConnectedCollision == false)
     {
         m2RefilterJointedBodies(world, bodyA, bodyB);
     }
@@ -96,7 +120,7 @@ static M2_NOINLINE m2Result CreateMouseJointWorker(m2World* world, const m2Mouse
     {
         m2OpCreateMouseJoint record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordMouseJointDef(&record.def, def);
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateMouseJoint, &record, (int32_t)sizeof(record));
     }

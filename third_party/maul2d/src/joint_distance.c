@@ -29,13 +29,37 @@ m2DistanceJointDef m2DefaultDistanceJointDef(void)
 
 // The def contract: finite values, non-negative gains and budgets,
 // ordered ranges.
-static bool DefValid(const m2DistanceJointDef* def)
+static m2Result DefCheck(const m2DistanceJointDef* def)
 {
-    return m2LocalVec2(def->localAnchorA) && m2LocalVec2(def->localAnchorB) &&
-           m2ValidReach(def->length) && m2ValidReach(def->minLength) &&
-           m2ValidReach(def->maxLength) &&
-           !(def->maxLength > 0.0f && def->minLength > def->maxLength) && m2ValidRate(def->hertz) &&
-           m2ValidCoefficient(def->dampingRatio);
+    m2Result result =
+        m2BothChecks(m2CheckLocalVec2(def->localAnchorA), m2CheckLocalVec2(def->localAnchorB));
+    result = m2BothChecks(result, m2CheckReach(def->length));
+    result = m2BothChecks(result, m2CheckReach(def->minLength));
+    result = m2BothChecks(result, m2CheckReach(def->maxLength));
+    result = m2BothChecks(
+        result, m2CheckValid(!(def->maxLength > 0.0f && def->minLength > def->maxLength)));
+    result = m2BothChecks(result, m2CheckRate(def->springHertz));
+    return m2BothChecks(result, m2CheckCoefficient(def->springDampingRatio));
+}
+
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordDistanceJointDef(m2DistanceJointDef* out, const m2DistanceJointDef* def)
+{
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->localAnchorA = def->localAnchorA;
+    out->localAnchorB = def->localAnchorB;
+    out->length = def->length;
+    out->minLength = def->minLength;
+    out->maxLength = def->maxLength;
+    out->springHertz = def->springHertz;
+    out->springDampingRatio = def->springDampingRatio;
+    out->enableSpring = def->enableSpring;
+    out->userData = def->userData;
+    out->enableConnectedCollision = def->enableConnectedCollision;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreateDistanceJointWorker(m2World* world, const m2DistanceJointDef* def,
@@ -51,9 +75,14 @@ static M2_NOINLINE m2Result CreateDistanceJointWorker(m2World* world, const m2Di
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_DJOINT_COOKIE || !DefValid(def))
+    if (def == NULL || def->internalValue != M2_DJOINT_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = DefCheck(def);
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
@@ -86,7 +115,7 @@ static M2_NOINLINE m2Result CreateDistanceJointWorker(m2World* world, const m2Di
     }
     m2JointId jointId =
         m2FinishJoint(world, index, (uint8_t)m2_distanceJoint, bodyA, bodyB, def->localAnchorA,
-                      def->localAnchorB, length, def->hertz, def->dampingRatio);
+                      def->localAnchorB, length, def->springHertz, def->springDampingRatio);
     // The hard range: off by default (0 .. huge); a def maxLength <= 0
     // means unbounded, mirroring "length <= 0 derives".
     world->joints.jointLower[index] = def->minLength > 0.0f ? def->minLength : 0.0f;
@@ -96,8 +125,8 @@ static M2_NOINLINE m2Result CreateDistanceJointWorker(m2World* world, const m2Di
         world->joints.jointFlags[index] |= M2_JOINT_ROPE; // rope/rod: gate the rest-length row
     }
     world->joints.jointUserData[index] = def->userData;
-    world->joints.jointCollide[index] = def->collideConnected ? 1 : 0;
-    if (def->collideConnected == false)
+    world->joints.jointCollide[index] = def->enableConnectedCollision ? 1 : 0;
+    if (def->enableConnectedCollision == false)
     {
         m2RefilterJointedBodies(world, bodyA, bodyB);
     }
@@ -105,7 +134,7 @@ static M2_NOINLINE m2Result CreateDistanceJointWorker(m2World* world, const m2Di
     {
         m2OpCreateDistanceJoint record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordDistanceJointDef(&record.def, def);
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateDistanceJoint, &record, (int32_t)sizeof(record));
     }
@@ -169,22 +198,22 @@ void m2DistanceJoint_SetLengthRange(m2World* world, m2JointId jointId, float min
     m2FloatEnvLeave(env);
 }
 
-bool m2DistanceJoint_IsSpringEnabled(const m2World* world, m2JointId jointId)
-{
-    int32_t index = m2TypedJointSlot(world, jointId, (uint8_t)m2_distanceJoint);
-    return index >= 0 && (world->joints.jointFlags[index] & M2_JOINT_ROPE) != 0;
-}
-
 // --- Solver ---------------------------------------------------------------
 //
 // One row along the line between the anchors: the rest length (impulse.x)
 // unless the joint is a free rope, and the length range when one is set.
-// The range stays hard on a soft rope: its rows use the stiff softness.
+// The rest row is a spring only while the spring is on; off, the joint is
+// a rod. The range stays hard on a soft rope: its rows use the stiff
+// softness.
 
 static void PrepareDistance(m2World* world, m2JointConstraint* c, const m2JointFrame* f)
 {
     int32_t j = f->joint;
     c->length = world->joints.jointLength[j];
+    if ((c->flags & M2_JOINT_ROPE) == 0)
+    {
+        c->soft = m2StiffJointSoftness(f->h);
+    }
     if (world->joints.jointLower[j] > 0.0f || world->joints.jointUpper[j] < M2_OPEN_LENGTH)
     {
         c->flags |= M2_JOINT_HARD_RANGE;

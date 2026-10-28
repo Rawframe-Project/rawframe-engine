@@ -202,7 +202,7 @@ struct Physics2D::State {
         definition.angularVelocity = row.velocity->angular;
         definition.linearDamping = body.linearDamping;
         definition.angularDamping = body.angularDamping;
-        definition.fixedRotation = body.fixedRotation;
+        definition.motionLocks.angularZ = body.fixedRotation;
         definition.isBullet = body.bullet;
         definition.userData = (std::uint64_t{row.entity.slot} << 32U) | row.entity.generation;
         m2BodyId kBody{};
@@ -344,9 +344,10 @@ struct Physics2D::State {
         return filter;
     }
 
-    /// A cast's closest hit as the answer a script reads.
-    [[nodiscard]] RayHit2D hitOf(const m2RayCastResult& result) const {
-        if (!result.hit) {
+    /// A cast's closest hit as the answer a script reads; `hit` says
+    /// whether it hit anything.
+    [[nodiscard]] RayHit2D hitOf(bool hit, const m2CastHit& result) const {
+        if (!hit) {
             return RayHit2D{};
         }
         return RayHit2D{.hit = true,
@@ -412,8 +413,8 @@ struct Physics2D::State {
         }
         const m2SensorEvents kOverlaps = m2World_GetSensorEvents(physics);
         for (std::int32_t index = 0; index < kOverlaps.beginCount; ++index) {
-            const world::EntityHandle kA = ownerOf(kOverlaps.beginEvents[index].shapeIdA);
-            const world::EntityHandle kB = ownerOf(kOverlaps.beginEvents[index].shapeIdB);
+            const world::EntityHandle kA = ownerOf(kOverlaps.beginEvents[index].sensorShapeId);
+            const world::EntityHandle kB = ownerOf(kOverlaps.beginEvents[index].visitorShapeId);
             if (!firstTelling(toldEntered, kA, kB)) {
                 continue;
             }
@@ -427,11 +428,12 @@ struct Physics2D::State {
         }
         for (std::int32_t index = 0; index < kOverlaps.endCount; ++index) {
             if (!firstTelling(toldExited,
-                              ownerOf(kOverlaps.endEvents[index].shapeIdA),
-                              ownerOf(kOverlaps.endEvents[index].shapeIdB))) {
+                              ownerOf(kOverlaps.endEvents[index].sensorShapeId),
+                              ownerOf(kOverlaps.endEvents[index].visitorShapeId))) {
                 continue;
             }
-            for (const m2ShapeId kShape : {kOverlaps.endEvents[index].shapeIdA, kOverlaps.endEvents[index].shapeIdB}) {
+            for (const m2ShapeId kShape :
+                 {kOverlaps.endEvents[index].sensorShapeId, kOverlaps.endEvents[index].visitorShapeId}) {
                 if (Contact2D* const kContact = contactOf(world, ownerOf(kShape))) {
                     ++kContact->exited;
                 }
@@ -805,7 +807,7 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
     definition.bodyCapacity = static_cast<std::int32_t>(settings.bodyCapacity);
     definition.shapeCapacity = static_cast<std::int32_t>(settings.shapeCapacity);
     definition.jointCapacity = static_cast<std::int32_t>(settings.jointCapacity);
-    definition.enableSleeping = settings.sleeping;
+    definition.enableSleep = settings.sleeping;
     if (m2CreateWorld(&definition, &state->physics) != m2_success) {
         return refuse(result::ErrorClass::ResourceExhausted,
                       Physics2DError::Capacity,
@@ -861,8 +863,10 @@ Physics2D::castRay(double originX, double originY, float towardX, float towardY,
     if (!kFilter.has_value()) {
         return RayHit2D{};
     }
-    return state_->hitOf(
-        m2World_CastRayClosest(state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, *kFilter));
+    m2CastHit hit{};
+    const bool kHit =
+        m2World_CastRayClosest(state_->physics, m2Pos2{originX, originY}, m2Vec2{towardX, towardY}, *kFilter, &hit);
+    return state_->hitOf(kHit, hit);
 }
 
 RayHit2D Physics2D::castCircle(
@@ -872,11 +876,14 @@ RayHit2D Physics2D::castCircle(
         return RayHit2D{};
     }
     const m2Circle kCircle{.center = {0, 0}, .radius = radius};
-    return state_->hitOf(m2World_CastCircleClosest(state_->physics,
-                                                   &kCircle,
-                                                   m2Transform{.p = {originX, originY}, .q = {1, 0}},
-                                                   m2Vec2{towardX, towardY},
-                                                   *kFilter));
+    m2CastHit hit{};
+    const bool kHit = m2World_CastCircleClosest(state_->physics,
+                                                &kCircle,
+                                                m2Transform{.p = {originX, originY}, .q = {1, 0}},
+                                                m2Vec2{towardX, towardY},
+                                                *kFilter,
+                                                &hit);
+    return state_->hitOf(kHit, hit);
 }
 
 void Physics2D::overlapCircle(
@@ -994,14 +1001,17 @@ RayHit2D Physics2D::castRayAt(double originX,
         const m2Pos2 kOrigin = toWorld(kNow, toLocal(then, m2Pos2{originX, originY}));
         const m2Vec2 kDirection = turnToWorld(kNow, turnToLocal(then, kToward));
         // A tiles body's nearest piece.
-        m2RayCastResult nearest = m2Shape_CastRay(state.physics, entry.shape, kOrigin, kDirection);
+        m2CastHit nearest{};
+        bool hitAny = m2Shape_CastRay(state.physics, entry.shape, kOrigin, kDirection, &nearest);
         for (const m2ShapeId kPiece : entry.pieces) {
-            const m2RayCastResult kPieceResult = m2Shape_CastRay(state.physics, kPiece, kOrigin, kDirection);
-            if (kPieceResult.hit && (!nearest.hit || kPieceResult.fraction < nearest.fraction)) {
-                nearest = kPieceResult;
+            m2CastHit piece{};
+            if (m2Shape_CastRay(state.physics, kPiece, kOrigin, kDirection, &piece) &&
+                (!hitAny || piece.fraction < nearest.fraction)) {
+                nearest = piece;
+                hitAny = true;
             }
         }
-        if (!nearest.hit || (closest.hit && nearest.fraction >= closest.fraction)) {
+        if (!hitAny || (closest.hit && nearest.fraction >= closest.fraction)) {
             continue;
         }
         const m2Pos2 kPoint = toWorld(then, toLocal(kNow, nearest.point));

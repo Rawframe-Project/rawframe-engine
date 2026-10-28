@@ -43,16 +43,19 @@ m2BodyDef m2DefaultBodyDef(void)
 
 // A def every field of which a snapshot of the world will restore: a
 // known type, a finite position, a rotation with a direction, and the
-// velocities, gravity scale and dampings within their ranges.
-static bool BodyDefValid(const m2BodyDef* def)
+// velocities, gravity scale and dampings within their bounds.
+static m2Result BodyDefCheck(const m2BodyDef* def)
 {
-    return (int32_t)def->type >= (int32_t)m2_staticBody &&
-           (int32_t)def->type <= (int32_t)m2_dynamicBody && m2FinitePos2(def->position) &&
-           m2FiniteF(def->rotation.c) && m2FiniteF(def->rotation.s) &&
-           (def->rotation.c != 0.0f || def->rotation.s != 0.0f) &&
-           m2ValidVelocity(def->linearVelocity) && m2ValidSpeed(def->angularVelocity) &&
-           m2ValidGravityScale(def->gravityScale) && m2ValidRate(def->linearDamping) &&
-           m2ValidRate(def->angularDamping);
+    m2Result result =
+        m2CheckValid((int32_t)def->type >= (int32_t)m2_staticBody &&
+                     (int32_t)def->type <= (int32_t)m2_dynamicBody && m2FinitePos2(def->position) &&
+                     m2FiniteF(def->rotation.c) && m2FiniteF(def->rotation.s) &&
+                     (def->rotation.c != 0.0f || def->rotation.s != 0.0f));
+    result = m2BothChecks(result, m2CheckVelocity(def->linearVelocity));
+    result = m2BothChecks(result, m2CheckSpeed(def->angularVelocity));
+    result = m2BothChecks(result, m2CheckGravityScale(def->gravityScale));
+    result = m2BothChecks(result, m2CheckRate(def->linearDamping));
+    return m2BothChecks(result, m2CheckRate(def->angularDamping));
 }
 
 // A static body never moves, so its def carries no velocity, as its
@@ -62,6 +65,32 @@ static bool StaticDefIsStill(const m2BodyDef* def)
     return def->type != m2_staticBody ||
            (def->linearVelocity.x == 0.0f && def->linearVelocity.y == 0.0f &&
             def->angularVelocity == 0.0f);
+}
+
+// The create-body record holds the def's fields and zero bytes between
+// them: copied field by field into the zeroed record, so no padding of
+// the caller's struct reaches the tape.
+_Static_assert(sizeof(m2OpCreateBody) == 88, "the create-body record is 88 bytes");
+
+static void RecordBodyDef(m2BodyDef* out, const m2BodyDef* def)
+{
+    out->type = def->type;
+    out->position = def->position;
+    out->rotation = def->rotation;
+    out->linearVelocity = def->linearVelocity;
+    out->angularVelocity = def->angularVelocity;
+    out->gravityScale = def->gravityScale;
+    out->linearDamping = def->linearDamping;
+    out->angularDamping = def->angularDamping;
+    out->motionLocks.linearX = def->motionLocks.linearX;
+    out->motionLocks.linearY = def->motionLocks.linearY;
+    out->motionLocks.angularZ = def->motionLocks.angularZ;
+    out->enableSleep = def->enableSleep;
+    out->isEnabled = def->isEnabled;
+    out->dominance = def->dominance;
+    out->isBullet = def->isBullet;
+    out->userData = def->userData;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreateBodyWorker(m2World* world, const m2BodyDef* def,
@@ -77,10 +106,14 @@ static M2_NOINLINE m2Result CreateBodyWorker(m2World* world, const m2BodyDef* de
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_BODY_COOKIE || !BodyDefValid(def) ||
-        !StaticDefIsStill(def))
+    if (def == NULL || def->internalValue != M2_BODY_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = m2BothChecks(BodyDefCheck(def), m2CheckValid(StaticDefIsStill(def)));
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     if (world->bodies.freeCount == 0)
     {
@@ -98,11 +131,11 @@ static M2_NOINLINE m2Result CreateBodyWorker(m2World* world, const m2BodyDef* de
     // angularZ-locked) body drops any initial angular velocity at birth,
     // the same as the runtime setter does.
     world->bodies.angularVelocities[index] =
-        (def->fixedRotation || def->motionLocks.angularZ) ? 0.0f : def->angularVelocity;
+        def->motionLocks.angularZ ? 0.0f : def->angularVelocity;
     world->bodies.gravityScales[index] = def->gravityScale;
     world->bodies.linearDampings[index] = def->linearDamping;
     world->bodies.angularDampings[index] = def->angularDamping;
-    world->bodies.fixedRotations[index] = (def->fixedRotation || def->motionLocks.angularZ) ? 1 : 0;
+    world->bodies.fixedRotations[index] = def->motionLocks.angularZ ? 1 : 0;
     world->bodies.motionLocks[index] =
         (uint8_t)((def->motionLocks.linearX ? M2_LOCK_LINEAR_X : 0u) |
                   (def->motionLocks.linearY ? M2_LOCK_LINEAR_Y : 0u));
@@ -127,7 +160,7 @@ static M2_NOINLINE m2Result CreateBodyWorker(m2World* world, const m2BodyDef* de
     {
         world->bodies.maxBodyIndex = index + 1;
     }
-    M2_ASSERT(m2StateBodyValid(world, index)); // BodyDefValid admits what a restore does
+    M2_ASSERT(m2StateBodyValid(world, index)); // BodyDefCheck admits what a restore does
 
     m2BodyId id = {(uint32_t)(index + 1), world->bodies.generations[index]};
 
@@ -135,7 +168,7 @@ static M2_NOINLINE m2Result CreateBodyWorker(m2World* world, const m2BodyDef* de
     {
         m2OpCreateBody record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordBodyDef(&record.def, def);
         record.expected = id;
         m2JournalRecord(world, m2_opCreateBody, &record, (int32_t)sizeof(record));
     }
@@ -412,24 +445,6 @@ void m2Body_SetGravityScale(m2World* world, m2BodyId bodyId, float scale)
     m2FloatEnvLeave(env);
 }
 
-static M2_NOINLINE void BodySetFixedRotationWorker(m2World* world, m2BodyId bodyId, bool flag)
-{
-    if (m2CheckWriter(world) != m2_success)
-    {
-        return;
-    }
-    m2SetBodyParamInternal(world, bodyId, m2_bodyParamFixedRotation, flag ? 1.0f : 0.0f);
-}
-
-void m2Body_SetFixedRotation(m2World* world, m2BodyId bodyId, bool flag)
-{
-    uint64_t env = m2FloatEnvEnter();
-    BodySetFixedRotationWorker(world, bodyId, flag);
-    m2FloatEnvLeave(env);
-}
-
-M2_BODY_GETTER(bool, m2Body_IsFixedRotation, world->bodies.fixedRotations[index] != 0, false)
-
 static M2_NOINLINE void BodySetMotionLocksWorker(m2World* world, m2BodyId bodyId,
                                                  m2MotionLocks locks)
 {
@@ -693,22 +708,9 @@ void m2Body_SetUserData(m2World* world, m2BodyId bodyId, uint64_t userData)
     world->bodies.userData[index] = userData;
 }
 
-static M2_NOINLINE void BodyDisableWorker(m2World* world, m2BodyId bodyId)
+// Takes a live, enabled body's shapes out of the broadphase.
+static void DisableBody(m2World* world, m2BodyId bodyId, int32_t index)
 {
-    if (m2CheckWriter(world) != m2_success)
-    {
-        return;
-    }
-    int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0)
-    {
-        m2Refuse(world, m2_errorStale);
-        return;
-    }
-    if (world->bodies.disabled[index] != 0)
-    {
-        return; // already dormant: no-op stays unjournaled
-    }
     m2JournalRecord(world, m2_opDisableBody, &bodyId, (int32_t)sizeof(bodyId));
     for (int32_t s = world->bodies.bodyShapeHead[index]; s != -1; s = world->shapes.shapeNext[s])
     {
@@ -719,29 +721,9 @@ static M2_NOINLINE void BodyDisableWorker(m2World* world, m2BodyId bodyId)
     world->bodies.sleepTimes[index] = 0.0f;
 }
 
-void m2Body_Disable(m2World* world, m2BodyId bodyId)
+// Puts a live, disabled body's shapes back into the broadphase.
+static void EnableBody(m2World* world, m2BodyId bodyId, int32_t index)
 {
-    uint64_t env = m2FloatEnvEnter();
-    BodyDisableWorker(world, bodyId);
-    m2FloatEnvLeave(env);
-}
-
-static M2_NOINLINE void BodyEnableWorker(m2World* world, m2BodyId bodyId)
-{
-    if (m2CheckWriter(world) != m2_success)
-    {
-        return;
-    }
-    int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0)
-    {
-        m2Refuse(world, m2_errorStale);
-        return;
-    }
-    if (world->bodies.disabled[index] == 0)
-    {
-        return; // already enabled
-    }
     m2JournalRecord(world, m2_opEnableBody, &bodyId, (int32_t)sizeof(bodyId));
     world->bodies.disabled[index] = 0;
     int32_t tree = world->bodies.types[index];
@@ -756,10 +738,36 @@ static M2_NOINLINE void BodyEnableWorker(m2World* world, m2BodyId bodyId)
     world->bodies.sleepTimes[index] = 0.0f;
 }
 
-void m2Body_Enable(m2World* world, m2BodyId bodyId)
+static M2_NOINLINE void BodySetEnabledWorker(m2World* world, m2BodyId bodyId, bool flag)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    int32_t index = m2BodySlot(world, bodyId);
+    if (index < 0)
+    {
+        m2Refuse(world, m2_errorStale);
+        return;
+    }
+    if ((world->bodies.disabled[index] == 0) == flag)
+    {
+        return; // no change: a no-op stays unjournaled
+    }
+    if (flag)
+    {
+        EnableBody(world, bodyId, index);
+    }
+    else
+    {
+        DisableBody(world, bodyId, index);
+    }
+}
+
+void m2Body_SetEnabled(m2World* world, m2BodyId bodyId, bool flag)
 {
     uint64_t env = m2FloatEnvEnter();
-    BodyEnableWorker(world, bodyId);
+    BodySetEnabledWorker(world, bodyId, flag);
     m2FloatEnvLeave(env);
 }
 
@@ -799,7 +807,7 @@ void m2Body_SetDominance(m2World* world, m2BodyId bodyId, int8_t dominance)
 }
 
 // The inverses a body keeps for mass data, or false when the data has
-// none a float holds: a mass outside its range, a center beyond M2_HUGE,
+// none a float holds: a mass outside its range, a center beyond M2_LOCAL_LIMIT,
 // a central inertia that is neither 0 nor within its range, or inverses
 // m2MassInversesValid refuses: one that overflows, or one whose own
 // inverse does, as the inverse of a mass of FLT_MAX does. The inertia is

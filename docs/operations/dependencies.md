@@ -13,7 +13,7 @@ Every third-party library is vendored under `third_party/` at an exact revision 
 | Library | Upstream | Revision | License | What is vendored |
 |---|---|---|---|---|
 | Kest | `Rawframe-Project/kest` | `fa092f540ffe2cb94f75199842792fb61e68451f` | MIT | `include/`, `src/` except `main.c`, `lib/`, `LICENSE` |
-| Maul2D 0.5.0 | `Rawframe-Project/maul2d` release archive `maul2d-0.5.0.tar.gz`, SHA-256 `7de114eac6e3190fd9254f55f8eae3defc7c4650c77aa0c0568e26bd95ce5352` | `c3695067c1353778dbb500b398fc4b85c83d5ea3` (`v0.5.0`) | MIT | `include/`, `src/`, `LICENSE`; the build file is the engine's |
+| Maul2D 0.6.0 | `Rawframe-Project/maul2d` release archive `maul2d-0.6.0.tar.gz`, SHA-256 `f97262cd98a47e2f52ed7a811ce144bff1c3f51931323457d1313484c9a845ae` | `501ac5c191658435cbdd4f70a0abd6cdd9e37f03` (`v0.6.0`) | MIT | `include/`, `src/`, `LICENSE`; the build file is the engine's |
 | Maul3D 0.7.0 | `Rawframe-Project/maul3d` release archive `maul3d-0.7.0.tar.gz`, SHA-256 `b4e42736c2c8413f8218846b9ce777bab79506d75c620707d571f24cb0632d4f` | `bf11f1fc3976ffb8b2ab4e4604252e760aea221c` (`v0.7.0`) | MIT | `include/`, `src/`, `LICENSE`; the build file is the engine's |
 | Maul Unicode 0.3.0 | `Rawframe-Project/maul-unicode` | `45523494be854c073dcb1a26a0b55dd07ca68879` | MIT; its Unicode tables Unicode-3.0 | `include/`, `src/`, `cmake/`, `CMakeLists.txt`, `LICENSE` |
 | Maul Window 0.13.0 and its main after it | `Rawframe-Project/maul-window` | `a0b6e4413e5d9ba3979e5dc756b1af5f7328b177` | MIT | `include/`, `src/`, `cmake/`, `protocols/`, `java/`, `tools/gen_web_glue.py`, `CMakeLists.txt`, `LICENSE` |

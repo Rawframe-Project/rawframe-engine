@@ -29,11 +29,32 @@ m2WeldJointDef m2DefaultWeldJointDef(void)
 
 // The def contract: finite values, non-negative gains and budgets,
 // ordered ranges.
-static bool DefValid(const m2WeldJointDef* def)
+static m2Result DefCheck(const m2WeldJointDef* def)
 {
-    return m2LocalVec2(def->localAnchorA) && m2LocalVec2(def->localAnchorB) &&
-           m2ValidRate(def->linearHertz) && m2ValidCoefficient(def->linearDampingRatio) &&
-           m2ValidRate(def->angularHertz) && m2ValidCoefficient(def->angularDampingRatio);
+    m2Result result =
+        m2BothChecks(m2CheckLocalVec2(def->localAnchorA), m2CheckLocalVec2(def->localAnchorB));
+    result = m2BothChecks(result, m2CheckRate(def->linearSpringHertz));
+    result = m2BothChecks(result, m2CheckCoefficient(def->linearSpringDampingRatio));
+    result = m2BothChecks(result, m2CheckRate(def->angularSpringHertz));
+    return m2BothChecks(result, m2CheckCoefficient(def->angularSpringDampingRatio));
+}
+
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordWeldJointDef(m2WeldJointDef* out, const m2WeldJointDef* def)
+{
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->localAnchorA = def->localAnchorA;
+    out->localAnchorB = def->localAnchorB;
+    out->linearSpringHertz = def->linearSpringHertz;
+    out->linearSpringDampingRatio = def->linearSpringDampingRatio;
+    out->angularSpringHertz = def->angularSpringHertz;
+    out->angularSpringDampingRatio = def->angularSpringDampingRatio;
+    out->userData = def->userData;
+    out->enableConnectedCollision = def->enableConnectedCollision;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreateWeldJointWorker(m2World* world, const m2WeldJointDef* def,
@@ -49,9 +70,14 @@ static M2_NOINLINE m2Result CreateWeldJointWorker(m2World* world, const m2WeldJo
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_WJOINT_COOKIE || !DefValid(def))
+    if (def == NULL || def->internalValue != M2_WJOINT_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = DefCheck(def);
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
@@ -68,24 +94,24 @@ static M2_NOINLINE m2Result CreateWeldJointWorker(m2World* world, const m2WeldJo
     {
         return m2Refuse(world, m2_errorCapacity);
     }
-    m2JointId jointId =
-        m2FinishJoint(world, index, (uint8_t)m2_weldJoint, bodyA, bodyB, def->localAnchorA,
-                      def->localAnchorB, 0.0f, def->linearHertz, def->linearDampingRatio);
+    m2JointId jointId = m2FinishJoint(world, index, (uint8_t)m2_weldJoint, bodyA, bodyB,
+                                      def->localAnchorA, def->localAnchorB, 0.0f,
+                                      def->linearSpringHertz, def->linearSpringDampingRatio);
     world->joints.jointUserData[index] = def->userData;
-    world->joints.jointCollide[index] = def->collideConnected ? 1 : 0;
-    if (def->collideConnected == false)
+    world->joints.jointCollide[index] = def->enableConnectedCollision ? 1 : 0;
+    if (def->enableConnectedCollision == false)
     {
         m2RefilterJointedBodies(world, bodyA, bodyB);
     }
-    world->joints.jointHertz2[index] = def->angularHertz;
-    world->joints.jointDamping2[index] = def->angularDampingRatio;
+    world->joints.jointHertz2[index] = def->angularSpringHertz;
+    world->joints.jointDamping2[index] = def->angularSpringDampingRatio;
     world->joints.jointRefAngle[index] =
         m2RelativeJointAngle(world->bodies.transforms[bodyA].q, world->bodies.transforms[bodyB].q);
     if (world->recorder.journalActive != 0)
     {
         m2OpCreateWeldJoint record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordWeldJointDef(&record.def, def);
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateWeldJoint, &record, (int32_t)sizeof(record));
     }

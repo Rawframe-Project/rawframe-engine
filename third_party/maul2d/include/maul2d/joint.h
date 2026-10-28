@@ -45,15 +45,15 @@ extern "C"
     } m2JointId;
 
     // Every joint def and setter takes its numbers within the ranges of
-    // base.h (docs/user/limits.md): hertz from 0 to M2_MAX_RATE, damping
-    // ratios from 0 to M2_MAX_COEFFICIENT, motor speeds within
-    // M2_MAX_SPEED, budgets from 0 to M2_MAX_FORCE, lengths and
-    // translations within M2_JOINT_REACH, angles within M2_MAX_ANGLE and
-    // ratios from M2_MIN_RATIO to M2_MAX_RATIO by magnitude. A def past
+    // base.h (docs/user/limits.md): hertz from 0 to M2_RATE_LIMIT, damping
+    // ratios from 0 to M2_COEFFICIENT_LIMIT, motor speeds within
+    // M2_SPEED_LIMIT, budgets from 0 to M2_FORCE_LIMIT, lengths and
+    // translations within M2_REACH_LIMIT, angles within M2_ANGLE_LIMIT and
+    // ratios from M2_MIN_RATIO to M2_RATIO_LIMIT by magnitude. A def past
     // them is refused.
 
-    /// Keeps two local anchor points at a distance. hertz 0 uses the stiff
-    /// default.
+    /// Keeps two local anchor points at a distance: a rod, or with
+    /// enableSpring a spring, a rope or a strut.
     typedef struct m2DistanceJointDef
     {
         m2BodyId bodyIdA;
@@ -64,18 +64,17 @@ extern "C"
         /// A hard length range, off by default. A bound that is set clamps
         /// whatever the spring does.
         float minLength;
-        float maxLength; // 0 or less: unbounded
-        float hertz;     // 0: the stiff default
-        float dampingRatio;
-        /// Off, the classic joint: rigid at length when hertz is 0, a soft
-        /// spring toward length when hertz is above 0, with the range
-        /// clamping either way. On with hertz 0 and a maxLength, a slack
-        /// rope (free until taut); with a minLength, a strut (free until
-        /// squeezed). With hertz above 0 it behaves as off.
+        float maxLength;   // 0 or less: unbounded
+        float springHertz; // 0 with enableSpring: no spring force, only the range
+        float springDampingRatio;
+        /// Off, a rod: rigid at length, with the range clamping. On, a
+        /// spring toward length with springHertz above 0; with springHertz
+        /// 0 and a maxLength, a slack rope (free until taut), and with a
+        /// minLength, a strut (free until squeezed).
         bool enableSpring;
-        M2_ALIGN8 uint64_t userData; // opaque, kept through snapshots and journals
-        bool collideConnected;       // false: the two bodies pass through each other
-        int32_t internalValue;       // the cookie m2DefaultDistanceJointDef sets
+        M2_ALIGN8 uint64_t userData;   // opaque, kept through snapshots and journals
+        bool enableConnectedCollision; // false: the two bodies pass through each other
+        int32_t internalValue;         // the cookie m2DefaultDistanceJointDef sets
     } m2DistanceJointDef;
 
     /// Pins two local anchor points together: a hinge. Limit angles, the
@@ -87,10 +86,11 @@ extern "C"
         m2BodyId bodyIdB;
         m2Vec2 localAnchorA;
         m2Vec2 localAnchorB;
-        float hertz; // 0: the stiff default
-        float dampingRatio;
-        float springHertz; // angular spring toward the creation angle; 0 is off
+        float constraintHertz; // the pin's softness; 0: the stiff default
+        float constraintDampingRatio;
+        float springHertz; // the angular spring toward the creation angle
         float springDampingRatio;
+        bool enableSpring; // off by default; springHertz 0 is no spring force
         bool enableMotor;
         float motorSpeed;     // rad/s, positive: B turns counter-clockwise against A
         float maxMotorTorque; // N m
@@ -98,7 +98,7 @@ extern "C"
         float lowerAngle; // radians from the creation angle
         float upperAngle;
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultRevoluteJointDef sets
     } m2RevoluteJointDef;
 
@@ -112,9 +112,9 @@ extern "C"
         m2BodyId bodyIdB;
         m2Vec2 localAnchorA;
         m2Vec2 localAnchorB;
-        m2Vec2 localAxisA; // in body A's frame; normalized at creation
-        float hertz;       // 0: the stiff default
-        float dampingRatio;
+        m2Vec2 localAxisA;     // in body A's frame; normalized at creation
+        float constraintHertz; // the slide's softness; 0: the stiff default
+        float constraintDampingRatio;
         bool enableMotor;
         float motorSpeed;    // m/s along the axis
         float maxMotorForce; // N
@@ -122,25 +122,26 @@ extern "C"
         float lowerTranslation; // meters from the separation at creation
         float upperTranslation;
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultPrismaticJointDef sets
     } m2PrismaticJointDef;
 
     /// Welds two bodies into one rigid piece: relative position and
     /// rotation keep their creation values. The linear and angular rows
-    /// soften apart: 0 hertz is rigid, above 0 the row is a spring.
+    /// soften apart: a spring hertz of 0 is rigid, above 0 the row is a
+    /// spring.
     typedef struct m2WeldJointDef
     {
         m2BodyId bodyIdA;
         m2BodyId bodyIdB;
         m2Vec2 localAnchorA;
         m2Vec2 localAnchorB;
-        float linearHertz; // 0: rigid
-        float linearDampingRatio;
-        float angularHertz; // 0: rigid
-        float angularDampingRatio;
+        float linearSpringHertz; // 0: rigid
+        float linearSpringDampingRatio;
+        float angularSpringHertz; // 0: rigid
+        float angularSpringDampingRatio;
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultWeldJointDef sets
     } m2WeldJointDef;
 
@@ -153,9 +154,9 @@ extern "C"
         m2Vec2 localAnchorA;
         m2Vec2 localAnchorB;
         m2Vec2 localAxisA; // in body A's frame; normalized at creation
-        bool enableSpring;
-        float hertz; // the suspension spring
-        float dampingRatio;
+        bool enableSpring; // the suspension spring
+        float springHertz;
+        float springDampingRatio;
         bool enableMotor;
         float motorSpeed;     // rad/s of B against A
         float maxMotorTorque; // N m
@@ -163,7 +164,7 @@ extern "C"
         float lowerTranslation; // meters from the separation at creation
         float upperTranslation;
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultWheelJointDef sets
     } m2WheelJointDef;
 
@@ -178,33 +179,33 @@ extern "C"
         float maxForce;         // N
         float maxTorque;        // N m
         float correctionFactor; // the share of the position error removed per step, [0, 1]
-        /// hertz 0 keeps the hard servo at correctionFactor per step. Above
-        /// 0 the drive is a soft spring with this frequency and damping
-        /// ratio (correctionFactor is then ignored), still within maxForce
-        /// and maxTorque. One stiffness serves both rows.
-        float hertz;
-        float dampingRatio;
+        /// springHertz 0 keeps the hard servo at correctionFactor per step.
+        /// Above 0 the drive is a soft spring with this frequency and
+        /// damping ratio (correctionFactor is then ignored), still within
+        /// maxForce and maxTorque. One stiffness serves both rows.
+        float springHertz;
+        float springDampingRatio;
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultMotorJointDef sets
     } m2MotorJointDef;
 
     /// A soft spring pulling a point of body B toward a world target: the
     /// way to drag a body. Body A only anchors the bookkeeping. The grabbed
     /// point is where the target lies at creation, in B's frame, so each
-    /// of its coordinates there starts within M2_HUGE. The spring has B's
+    /// of its coordinates there starts within M2_LOCAL_LIMIT. The spring has B's
     /// own mass: it pulls equally hard in every direction, with stiffness
-    /// mass (2 pi hertz)^2, held within maxForce.
+    /// mass (2 pi springHertz)^2, held within maxForce.
     typedef struct m2MouseJointDef
     {
         m2BodyId bodyIdA;
         m2BodyId bodyIdB;
         m2Pos2 target; // world space
-        float hertz;
-        float dampingRatio;
+        float springHertz;
+        float springDampingRatio;
         float maxForce; // N
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultMouseJointDef sets
     } m2MouseJointDef;
 
@@ -216,11 +217,11 @@ extern "C"
     {
         m2BodyId bodyIdA;
         m2BodyId bodyIdB;
-        /// M2_MIN_RATIO to M2_MAX_RATIO by magnitude; meshed cogs take a
+        /// M2_MIN_RATIO to M2_RATIO_LIMIT by magnitude; meshed cogs take a
         /// positive ratio and spin opposite.
         float ratio;
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultGearJointDef sets
     } m2GearJointDef;
 
@@ -236,9 +237,9 @@ extern "C"
         m2Pos2 groundAnchorB;
         m2Vec2 localAnchorA; // where the rope holds body A, in its frame
         m2Vec2 localAnchorB;
-        float ratio; // M2_MIN_RATIO to M2_MAX_RATIO
+        float ratio; // M2_MIN_RATIO to M2_RATIO_LIMIT
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultPulleyJointDef sets
     } m2PulleyJointDef;
 
@@ -251,12 +252,12 @@ extern "C"
     {
         m2BodyId bodyIdA;
         m2BodyId bodyIdB;
-        /// The tooth angle, M2_MIN_RATCHET_TOOTH to M2_MAX_ANGLE by
+        /// The tooth angle, M2_MIN_RATCHET_TOOTH to M2_ANGLE_LIMIT by
         /// magnitude; its sign is the free direction.
         float ratchet;
         float phase; // offsets the teeth, radians
         M2_ALIGN8 uint64_t userData;
-        bool collideConnected;
+        bool enableConnectedCollision;
         int32_t internalValue; // the cookie m2DefaultRatchetJointDef sets
     } m2RatchetJointDef;
 
@@ -358,16 +359,16 @@ extern "C"
     /// Creates a distance joint. A joint joins its bodies' sleep island,
     /// so they sleep and wake together, and both wake now. Destroying
     /// either body destroys the joint. Journaled. Every joint def's local
-    /// anchors, axis and linear offset lie within M2_HUGE; a def past it
-    /// is bad.
+    /// anchors, axis and linear offset lie within M2_LOCAL_LIMIT.
     ///
     /// @param world     The world.
     /// @param def       The joint, from m2DefaultDistanceJointDef.
     /// @param jointOut  Receives the joint; the null id on failure.
     /// @return m2_success; m2_errorStale when either body is stale;
     ///         m2_errorInvalid for a bad def, the same body twice or a null
-    ///         argument; m2_errorCapacity when the joint pool is full;
-    ///         m2_errorState from host code the world is running.
+    ///         argument; m2_errorLimit for a value of the def past its
+    ///         published bound; m2_errorCapacity when the joint pool is
+    ///         full; m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2CreateDistanceJoint(m2World* world,
@@ -492,13 +493,13 @@ extern "C"
     /// @param world    The world.
     /// @param jointId  The joint.
     /// @return m2_success; m2_errorStale when it is already gone;
-    ///         m2_errorState from host code the world is running.
+    ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2DestroyJoint(m2World* world, m2JointId jointId);
 
     /// Sets a motor's speed: rad/s on revolute and wheel joints, m/s on a
-    /// prismatic joint. A speed beyond M2_MAX_SPEED or another joint type
+    /// prismatic joint. A speed beyond M2_SPEED_LIMIT or another joint type
     /// counts one misuse.
     ///
     /// @param world    The world.
@@ -510,7 +511,7 @@ extern "C"
 
     /// Sets a motor's budget: a torque on revolute and wheel joints and on
     /// a motor joint, a force on a prismatic joint. A budget outside 0 to
-    /// M2_MAX_FORCE or another joint type counts one misuse.
+    /// M2_FORCE_LIMIT or another joint type counts one misuse.
     ///
     /// @param world             The world.
     /// @param jointId           A revolute, prismatic, wheel or motor joint.
@@ -539,8 +540,8 @@ extern "C"
 
     /// Sets the limits: angles in radians on a revolute joint, travel in
     /// meters on prismatic and wheel joints, both from the creation pose.
-    /// An inverted range, an angle beyond M2_MAX_ANGLE, a travel beyond
-    /// M2_JOINT_REACH or another joint type changes nothing, on either
+    /// An inverted range, an angle beyond M2_ANGLE_LIMIT, a travel beyond
+    /// M2_REACH_LIMIT or another joint type changes nothing, on either
     /// bound, and counts one misuse.
     ///
     /// @param world    The world.
@@ -565,55 +566,101 @@ extern "C"
     M2_API void m2Joint_SetBreakLimits(m2World* world, m2JointId jointId, float maxForce,
                                        float maxTorque);
 
-    /// Sets the softness of a joint's main rows: a distance joint's
-    /// spring, a wheel's suspension, a weld's linear row, a mouse joint's
-    /// drag spring, the point rows of the others. A motor or filter joint,
-    /// or a value out of its range, counts one misuse.
+    /// Sets the softness of the rows that hold a joint together: a revolute
+    /// joint's pin, a prismatic joint's slide, the tie of a gear, pulley or
+    /// ratchet joint. Another joint type, or a value out of its range,
+    /// counts one misuse. Journaled.
     ///
     /// @param world    The world.
-    /// @param jointId  The joint.
+    /// @param jointId  A revolute, prismatic, gear, pulley or ratchet joint.
     /// @param hertz    The frequency; 0 is the stiff default.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2Joint_SetConstraintHertz(m2World* world, m2JointId jointId, float hertz);
+
+    /// Sets the damping ratio of the rows m2Joint_SetConstraintHertz softens.
+    /// Another joint type, or a value out of its range, counts one misuse.
+    /// Journaled.
+    ///
+    /// @param world         The world.
+    /// @param jointId       A revolute, prismatic, gear, pulley or ratchet joint.
+    /// @param dampingRatio  The ratio, at least 0.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2Joint_SetConstraintDampingRatio(m2World* world, m2JointId jointId,
+                                                  float dampingRatio);
+
+    /// Sets a joint's spring frequency: a distance joint's spring, a wheel's
+    /// suspension, a revolute joint's angular spring, a motor joint's drive, a
+    /// mouse joint's drag. A distance, wheel or revolute spring acts only while
+    /// it is enabled (m2Joint_EnableSpring). Another joint type, or a value out
+    /// of its range, counts one misuse. Journaled.
+    ///
+    /// @param world    The world.
+    /// @param jointId  A distance, wheel, revolute, motor or mouse joint.
+    /// @param hertz    The frequency; 0 is no spring force, or the hard servo
+    ///                 on a motor joint.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Joint_SetSpringHertz(m2World* world, m2JointId jointId, float hertz);
 
-    /// Sets the damping ratio of a joint's main rows, as
-    /// m2Joint_SetSpringHertz does.
+    /// Sets the damping ratio of the spring m2Joint_SetSpringHertz tunes.
+    /// Another joint type, or a value out of its range, counts one misuse.
+    /// Journaled.
     ///
     /// @param world         The world.
-    /// @param jointId       The joint.
+    /// @param jointId       A distance, wheel, revolute, motor or mouse joint.
     /// @param dampingRatio  The ratio, at least 0.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2Joint_SetSpringDampingRatio(m2World* world, m2JointId jointId,
                                               float dampingRatio);
 
-    /// Sets the angular spring: a revolute joint's spring toward its
-    /// creation angle, a weld's angular row. Another joint type, or a
-    /// value out of its range, counts one misuse.
+    /// Softens a weld joint's linear rows into a spring. Another joint type, or
+    /// a value out of its range, counts one misuse. Journaled.
     ///
     /// @param world    The world.
-    /// @param jointId  A revolute or weld joint.
-    /// @param hertz    The frequency; 0 turns a revolute spring off and
-    ///                 makes a weld's row rigid.
+    /// @param jointId  A weld joint.
+    /// @param hertz    The frequency; 0 is rigid.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Joint_SetAngularSpringHertz(m2World* world, m2JointId jointId, float hertz);
+    M2_API void m2WeldJoint_SetLinearSpringHertz(m2World* world, m2JointId jointId, float hertz);
 
-    /// Sets the angular spring's damping ratio, as
-    /// m2Joint_SetAngularSpringHertz does.
+    /// Sets the damping ratio of a weld joint's linear spring. Another joint
+    /// type, or a value out of its range, counts one misuse. Journaled.
     ///
     /// @param world         The world.
-    /// @param jointId       A revolute or weld joint.
+    /// @param jointId       A weld joint.
     /// @param dampingRatio  The ratio, at least 0.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Joint_SetAngularSpringDampingRatio(m2World* world, m2JointId jointId,
-                                                     float dampingRatio);
+    M2_API void m2WeldJoint_SetLinearSpringDampingRatio(m2World* world, m2JointId jointId,
+                                                        float dampingRatio);
+
+    /// Softens a weld joint's angular row into a spring. Another joint type, or
+    /// a value out of its range, counts one misuse. Journaled.
+    ///
+    /// @param world    The world.
+    /// @param jointId  A weld joint.
+    /// @param hertz    The frequency; 0 is rigid.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2WeldJoint_SetAngularSpringHertz(m2World* world, m2JointId jointId, float hertz);
+
+    /// Sets the damping ratio of a weld joint's angular spring. Another joint
+    /// type, or a value out of its range, counts one misuse. Journaled.
+    ///
+    /// @param world         The world.
+    /// @param jointId       A weld joint.
+    /// @param dampingRatio  The ratio, at least 0.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2WeldJoint_SetAngularSpringDampingRatio(m2World* world, m2JointId jointId,
+                                                         float dampingRatio);
 
     /// Sets a distance joint's rest length and drops its stored impulses.
     /// Another joint type, or a length that is not positive or is beyond
-    /// M2_JOINT_REACH, counts one misuse.
+    /// M2_REACH_LIMIT, counts one misuse.
     ///
     /// @param world    The world.
     /// @param jointId  A distance joint.
@@ -624,8 +671,8 @@ extern "C"
 
     /// Sets a distance joint's hard length range. Each bound is raised to
     /// the linear slop (0.005 m) and the two are put in order. Another
-    /// joint type or a bound beyond M2_JOINT_REACH counts one misuse. Read the range
-    /// with m2Joint_GetLimits.
+    /// joint type or a bound beyond M2_REACH_LIMIT counts one misuse. Read the range
+    /// with m2DistanceJoint_GetLengthRange.
     ///
     /// @param world      The world.
     /// @param jointId    A distance joint.
@@ -636,17 +683,29 @@ extern "C"
     M2_API void m2DistanceJoint_SetLengthRange(m2World* world, m2JointId jointId, float minLength,
                                                float maxLength);
 
-    /// Tells whether a distance joint was created with enableSpring, which
-    /// makes it a slack rope or a strut while its hertz is 0.
+    /// Reads a distance joint's rest length.
     ///
     /// @param world    The world.
-    /// @param jointId  A distance joint.
-    /// @return True when its spring toggle is on; false for another joint
-    ///         type or a stale id, which count one misuse.
+    /// @param jointId  A distance joint; another type or a stale id counts
+    ///                 one misuse.
+    /// @return The length, meters; 0 for another joint type or a stale id.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API bool m2DistanceJoint_IsSpringEnabled(const m2World* world, m2JointId jointId);
+    M2_API float m2DistanceJoint_GetLength(const m2World* world, m2JointId jointId);
+
+    /// Reads the length range m2DistanceJoint_SetLengthRange sets.
+    ///
+    /// @param world         The world.
+    /// @param jointId       A distance joint; another type or a stale id
+    ///                      writes zeros and counts one misuse.
+    /// @param minLengthOut  Receives the shortest length, meters; may be null.
+    /// @param maxLengthOut  Receives the longest length, meters; may be null.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time, or by
+    /// several readers at once.
+    M2_API void m2DistanceJoint_GetLengthRange(const m2World* world, m2JointId jointId,
+                                               float* minLengthOut, float* maxLengthOut);
 
     /// Reads the force a joint carried on the last step: its stored
     /// impulses over that step's substep length. The break pass compares
@@ -722,21 +781,34 @@ extern "C"
     /// several readers at once.
     M2_API m2Vec2 m2Joint_GetLocalAxisA(const m2World* world, m2JointId jointId);
 
-    /// Reads a distance joint's rest length.
+    /// Reads the frequency m2Joint_SetConstraintHertz sets.
     ///
     /// @param world    The world.
-    /// @param jointId  A distance joint.
-    /// @return The length, meters; 0 for another joint type or a stale id.
+    /// @param jointId  A revolute, prismatic, gear, pulley or ratchet joint.
+    /// @return  The frequency; 0 for another joint type or a stale id, which
+    ///         count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API float m2Joint_GetLength(const m2World* world, m2JointId jointId);
+    M2_API float m2Joint_GetConstraintHertz(const m2World* world, m2JointId jointId);
+
+    /// Reads the damping ratio m2Joint_SetConstraintDampingRatio sets.
+    ///
+    /// @param world    The world.
+    /// @param jointId  A revolute, prismatic, gear, pulley or ratchet joint.
+    /// @return  The ratio; 0 for another joint type or a stale id, which count
+    ///         one misuse.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time, or by
+    /// several readers at once.
+    M2_API float m2Joint_GetConstraintDampingRatio(const m2World* world, m2JointId jointId);
 
     /// Reads the frequency m2Joint_SetSpringHertz sets.
     ///
     /// @param world    The world.
-    /// @param jointId  The joint.
-    /// @return The frequency; 0 for a stale id.
+    /// @param jointId  A distance, wheel, revolute, motor or mouse joint.
+    /// @return  The frequency; 0 for another joint type or a stale id, which
+    ///         count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
@@ -745,76 +817,57 @@ extern "C"
     /// Reads the damping ratio m2Joint_SetSpringDampingRatio sets.
     ///
     /// @param world    The world.
-    /// @param jointId  The joint.
-    /// @return The ratio; 0 for a stale id.
+    /// @param jointId  A distance, wheel, revolute, motor or mouse joint.
+    /// @return  The ratio; 0 for another joint type or a stale id, which count
+    ///         one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API float m2Joint_GetSpringDampingRatio(const m2World* world, m2JointId jointId);
 
-    /// Reads the frequency m2Joint_SetAngularSpringHertz sets.
+    /// Reads a weld joint's linear spring frequency.
     ///
     /// @param world    The world.
-    /// @param jointId  A revolute or weld joint.
-    /// @return The frequency; 0 for another joint type or a stale id.
+    /// @param jointId  A weld joint.
+    /// @return  The frequency; 0 for another joint type or a stale id, which
+    ///         count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API float m2Joint_GetAngularSpringHertz(const m2World* world, m2JointId jointId);
+    M2_API float m2WeldJoint_GetLinearSpringHertz(const m2World* world, m2JointId jointId);
 
-    /// Reads the damping ratio m2Joint_SetAngularSpringDampingRatio sets.
+    /// Reads a weld joint's linear spring damping ratio.
     ///
     /// @param world    The world.
-    /// @param jointId  A revolute or weld joint.
-    /// @return The ratio; 0 for another joint type or a stale id.
+    /// @param jointId  A weld joint.
+    /// @return  The ratio; 0 for another joint type or a stale id, which count
+    ///         one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API float m2Joint_GetAngularSpringDampingRatio(const m2World* world, m2JointId jointId);
+    M2_API float m2WeldJoint_GetLinearSpringDampingRatio(const m2World* world, m2JointId jointId);
 
-    /// Reads the main rows' frequency; the same value as
-    /// m2Joint_GetSpringHertz.
+    /// Reads a weld joint's angular spring frequency.
     ///
     /// @param world    The world.
-    /// @param jointId  The joint.
-    /// @return The frequency; 0 for a stale id.
+    /// @param jointId  A weld joint.
+    /// @return  The frequency; 0 for another joint type or a stale id, which
+    ///         count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API float m2Joint_GetHertz(const m2World* world, m2JointId jointId);
+    M2_API float m2WeldJoint_GetAngularSpringHertz(const m2World* world, m2JointId jointId);
 
-    /// Reads the main rows' damping ratio; the same value as
-    /// m2Joint_GetSpringDampingRatio.
+    /// Reads a weld joint's angular spring damping ratio.
     ///
     /// @param world    The world.
-    /// @param jointId  The joint.
-    /// @return The ratio; 0 for a stale id.
+    /// @param jointId  A weld joint.
+    /// @return  The ratio; 0 for another joint type or a stale id, which count
+    ///         one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API float m2Joint_GetDampingRatio(const m2World* world, m2JointId jointId);
-
-    /// Reads the angular spring's frequency; the same value as
-    /// m2Joint_GetAngularSpringHertz.
-    ///
-    /// @param world    The world.
-    /// @param jointId  A revolute or weld joint.
-    /// @return The frequency; 0 for another joint type or a stale id.
-    /// @par Thread safety
-    /// Safe from any thread; a world is used by one thread at a time, or by
-    /// several readers at once.
-    M2_API float m2Joint_GetAngularHertz(const m2World* world, m2JointId jointId);
-
-    /// Reads the angular spring's damping ratio; the same value as
-    /// m2Joint_GetAngularSpringDampingRatio.
-    ///
-    /// @param world    The world.
-    /// @param jointId  A revolute or weld joint.
-    /// @return The ratio; 0 for another joint type or a stale id.
-    /// @par Thread safety
-    /// Safe from any thread; a world is used by one thread at a time, or by
-    /// several readers at once.
-    M2_API float m2Joint_GetAngularDampingRatio(const m2World* world, m2JointId jointId);
+    M2_API float m2WeldJoint_GetAngularSpringDampingRatio(const m2World* world, m2JointId jointId);
 
     /// Reads a motor's target speed.
     ///
@@ -856,23 +909,36 @@ extern "C"
     /// several readers at once.
     M2_API bool m2Joint_IsLimitEnabled(const m2World* world, m2JointId jointId);
 
-    /// Tells whether a wheel joint's suspension spring is on. A distance
-    /// joint's toggle reads through m2DistanceJoint_IsSpringEnabled.
+    /// Turns a joint's spring on or off: a distance joint's, which makes a
+    /// rod a spring (or, at spring hertz 0, a slack rope or a strut), a
+    /// wheel's suspension, or a revolute joint's angular spring. A wheel's
+    /// or revolute joint's spring row drops its accumulated impulse; a
+    /// distance joint's rod and spring share the rest row, which keeps it.
+    /// Another joint type counts one misuse. Journaled.
     ///
     /// @param world    The world.
-    /// @param jointId  The joint.
-    /// @return True for a wheel with its spring on; false for any other
-    ///         joint and for a stale id.
+    /// @param jointId  A distance, wheel or revolute joint.
+    /// @param enable   True to turn the spring on.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2Joint_EnableSpring(m2World* world, m2JointId jointId, bool enable);
+
+    /// Tells whether a distance, wheel or revolute joint's spring is on.
+    ///
+    /// @param world    The world.
+    /// @param jointId  A distance, wheel or revolute joint.
+    /// @return True when its spring is on; false for another joint type or
+    ///         a stale id, which count one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API bool m2Joint_IsSpringEnabled(const m2World* world, m2JointId jointId);
 
-    /// Reads the limits, or a distance joint's length range.
+    /// Reads the limits m2Joint_SetLimits sets.
     ///
     /// @param world     The world.
-    /// @param jointId   A revolute, prismatic, wheel or distance joint;
-    ///                  another type or a stale id writes zeros.
+    /// @param jointId   A revolute, prismatic or wheel joint; another type
+    ///                  or a stale id writes zeros.
     /// @param lowerOut  Receives the lower limit; may be null.
     /// @param upperOut  Receives the upper limit; may be null.
     /// @par Thread safety
@@ -913,6 +979,19 @@ extern "C"
     /// several readers at once.
     M2_API m2BodyId m2Joint_GetBodyB(const m2World* world, m2JointId jointId);
 
+    /// Lets a joint's two bodies collide with each other, or keeps them
+    /// apart, as the def's enableConnectedCollision does at creation. Both
+    /// bodies wake and their pairs are found again on the next step. A
+    /// filter joint, which exists to keep its bodies apart, or a stale id
+    /// counts one misuse. Journaled.
+    ///
+    /// @param world    The world.
+    /// @param jointId  The joint.
+    /// @param enable   True to let the bodies collide.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2Joint_EnableConnectedCollision(m2World* world, m2JointId jointId, bool enable);
+
     /// Tells whether a joint's two bodies collide with each other.
     ///
     /// @param world    The world.
@@ -921,7 +1000,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API bool m2Joint_GetCollideConnected(const m2World* world, m2JointId jointId);
+    M2_API bool m2Joint_IsConnectedCollisionEnabled(const m2World* world, m2JointId jointId);
 
     /// Reads a joint's game data.
     ///
@@ -944,7 +1023,7 @@ extern "C"
 
     /// Measures how far a joint is now from what it holds: the anchor gap
     /// of point constraints, a distance joint's length error, a slider's
-    /// gap off its axis. Bodies more than M2_JOINT_REACH apart along an axis
+    /// gap off its axis. Bodies more than M2_REACH_LIMIT apart along an axis
     /// are taken as that far apart, as the solver takes them.
     ///
     /// @param world    The world.
@@ -969,8 +1048,8 @@ extern "C"
 
     /// Moves a motor joint's target, as a moving platform does every frame.
     /// The torque budget is set with m2Joint_SetMaxMotor. Another joint
-    /// type, an angular offset beyond M2_MAX_ANGLE or a linear offset beyond
-    /// M2_HUGE counts one misuse.
+    /// type, an angular offset beyond M2_ANGLE_LIMIT or a linear offset beyond
+    /// M2_LOCAL_LIMIT counts one misuse.
     ///
     /// @param world          The world.
     /// @param jointId        A motor joint.
@@ -1022,7 +1101,7 @@ extern "C"
     M2_API float m2MotorJoint_GetCorrectionFactor(const m2World* world, m2JointId jointId);
 
     /// Sets a gear joint's ratio. Another joint type, or a ratio whose
-    /// magnitude is outside M2_MIN_RATIO to M2_MAX_RATIO, counts one misuse.
+    /// magnitude is outside M2_MIN_RATIO to M2_RATIO_LIMIT, counts one misuse.
     ///
     /// @param world    The world.
     /// @param jointId  A gear joint.
@@ -1044,7 +1123,7 @@ extern "C"
     /// Sets a pulley joint's ratio. The rope total is measured again from
     /// the current pose, so the machine does not snap, and the stored
     /// impulse is dropped. Another joint type, or a ratio outside
-    /// M2_MIN_RATIO to M2_MAX_RATIO, counts one misuse.
+    /// M2_MIN_RATIO to M2_RATIO_LIMIT, counts one misuse.
     ///
     /// @param world    The world.
     /// @param jointId  A pulley joint.

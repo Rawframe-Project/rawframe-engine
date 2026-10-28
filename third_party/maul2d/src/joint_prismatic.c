@@ -30,13 +30,41 @@ m2PrismaticJointDef m2DefaultPrismaticJointDef(void)
 
 // The def contract: finite values, non-negative gains and budgets,
 // ordered ranges.
-static bool DefValid(const m2PrismaticJointDef* def)
+static m2Result DefCheck(const m2PrismaticJointDef* def)
 {
-    return m2LocalVec2(def->localAnchorA) && m2LocalVec2(def->localAnchorB) &&
-           m2LocalVec2(def->localAxisA) && m2ValidRate(def->hertz) &&
-           m2ValidCoefficient(def->dampingRatio) && m2ValidSpeed(def->motorSpeed) &&
-           m2ValidMaxForce(def->maxMotorForce) && m2ValidReach(def->lowerTranslation) &&
-           m2ValidReach(def->upperTranslation) && def->lowerTranslation <= def->upperTranslation;
+    m2Result result =
+        m2BothChecks(m2CheckLocalVec2(def->localAnchorA), m2CheckLocalVec2(def->localAnchorB));
+    result = m2BothChecks(result, m2CheckLocalVec2(def->localAxisA));
+    result = m2BothChecks(result, m2CheckRate(def->constraintHertz));
+    result = m2BothChecks(result, m2CheckCoefficient(def->constraintDampingRatio));
+    result = m2BothChecks(result, m2CheckSpeed(def->motorSpeed));
+    result = m2BothChecks(result, m2CheckMaxForce(def->maxMotorForce));
+    result = m2BothChecks(result, m2CheckReach(def->lowerTranslation));
+    result = m2BothChecks(result, m2CheckReach(def->upperTranslation));
+    return m2BothChecks(result, m2CheckValid(!(def->lowerTranslation > def->upperTranslation)));
+}
+
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordPrismaticJointDef(m2PrismaticJointDef* out, const m2PrismaticJointDef* def)
+{
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->localAnchorA = def->localAnchorA;
+    out->localAnchorB = def->localAnchorB;
+    out->localAxisA = def->localAxisA;
+    out->constraintHertz = def->constraintHertz;
+    out->constraintDampingRatio = def->constraintDampingRatio;
+    out->enableMotor = def->enableMotor;
+    out->motorSpeed = def->motorSpeed;
+    out->maxMotorForce = def->maxMotorForce;
+    out->enableLimit = def->enableLimit;
+    out->lowerTranslation = def->lowerTranslation;
+    out->upperTranslation = def->upperTranslation;
+    out->userData = def->userData;
+    out->enableConnectedCollision = def->enableConnectedCollision;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreatePrismaticJointWorker(m2World* world,
@@ -53,9 +81,14 @@ static M2_NOINLINE m2Result CreatePrismaticJointWorker(m2World* world,
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_PJOINT_COOKIE || !DefValid(def))
+    if (def == NULL || def->internalValue != M2_PJOINT_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = DefCheck(def);
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
@@ -80,10 +113,10 @@ static M2_NOINLINE m2Result CreatePrismaticJointWorker(m2World* world,
     }
     m2JointId jointId =
         m2FinishJoint(world, index, (uint8_t)m2_prismaticJoint, bodyA, bodyB, def->localAnchorA,
-                      def->localAnchorB, 0.0f, def->hertz, def->dampingRatio);
+                      def->localAnchorB, 0.0f, def->constraintHertz, def->constraintDampingRatio);
     world->joints.jointUserData[index] = def->userData;
-    world->joints.jointCollide[index] = def->collideConnected ? 1 : 0;
-    if (def->collideConnected == false)
+    world->joints.jointCollide[index] = def->enableConnectedCollision ? 1 : 0;
+    if (def->enableConnectedCollision == false)
     {
         m2RefilterJointedBodies(world, bodyA, bodyB);
     }
@@ -101,7 +134,7 @@ static M2_NOINLINE m2Result CreatePrismaticJointWorker(m2World* world,
     {
         m2OpCreatePrismaticJoint record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordPrismaticJointDef(&record.def, def);
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreatePrismaticJoint, &record, (int32_t)sizeof(record));
     }

@@ -37,11 +37,12 @@ constexpr float kSlope = 0.05F;
     if (!(kLength > 0)) {
         return 0;
     }
-    const m2RayCastResult kHit = m2World_CastCapsuleClosest(world, &thinner, at, translation, filter);
-    if (!kHit.hit || (kHit.normal.x == 0 && kHit.normal.y == 0)) {
+    m2CastHit hit{};
+    if (!m2World_CastCapsuleClosest(world, &thinner, at, translation, filter, &hit) ||
+        (hit.normal.x == 0 && hit.normal.y == 0)) {
         return 1;
     }
-    return std::max(0.0F, kHit.fraction - (kSkin / kLength));
+    return std::max(0.0F, hit.fraction - (kSkin / kLength));
 }
 
 } // namespace
@@ -104,9 +105,10 @@ CharacterMove moveCharacter(const m2World* world,
     // the snap below, if there is any.
     if (on.ground != physics::Ground::Grounded && wasGrounded && character.snap > 0 && wish.y <= 0) {
         const m2Vec2 kDown{0, -(character.snap + kSkin)};
-        const m2RayCastResult kHit = m2World_CastCapsuleClosest(world, &kThinner, at, kDown, filter);
-        if (kHit.hit && kHit.normal.y >= character.groundNormal) {
-            const float kDrop = std::max(0.0F, (kHit.fraction * -kDown.y) - kSkin);
+        m2CastHit hit{};
+        if (m2World_CastCapsuleClosest(world, &kThinner, at, kDown, filter, &hit) &&
+            hit.normal.y >= character.groundNormal) {
+            const float kDrop = std::max(0.0F, (hit.fraction * -kDown.y) - kSkin);
             kShift(at, m2Vec2{0, -kDrop});
             move.translation.y -= kDrop;
             on = kClassify(at);

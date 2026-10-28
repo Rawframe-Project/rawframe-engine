@@ -208,6 +208,48 @@ m2JointId m2FinishJoint(m2World* world, int32_t index, uint8_t type, int32_t bod
     return id;
 }
 
+// The kinds whose first and second stiffness pairs a tuning reaches, as
+// m2JointTuningSlot routes them.
+#define M2_FIRST_PAIR_KINDS                                                                        \
+    ((1u << m2_distanceJoint) | (1u << m2_wheelJoint) | (1u << m2_mouseJoint) |                    \
+     (1u << m2_revoluteJoint) | (1u << m2_prismaticJoint) | (1u << m2_weldJoint) |                 \
+     (1u << m2_gearJoint) | (1u << m2_pulleyJoint) | (1u << m2_ratchetJoint))
+#define M2_SECOND_PAIR_KINDS                                                                       \
+    ((1u << m2_revoluteJoint) | (1u << m2_motorJoint) | (1u << m2_weldJoint))
+
+int32_t m2JointTuningSlot(const m2World* world, m2JointId jointId, m2JointTuning tuning,
+                          bool* secondOut)
+{
+    int32_t index = world != NULL ? m2JointSlotChecked(world, jointId) : -1;
+    uint32_t kind = index >= 0 ? 1u << world->joints.jointType[index] : 0u;
+    uint32_t first = 0u;
+    uint32_t second = 0u;
+    switch (tuning)
+    {
+    case m2_tuneConstraint:
+        first = (1u << m2_revoluteJoint) | (1u << m2_prismaticJoint) | (1u << m2_gearJoint) |
+                (1u << m2_pulleyJoint) | (1u << m2_ratchetJoint);
+        break;
+    case m2_tuneSpring:
+        first = (1u << m2_distanceJoint) | (1u << m2_wheelJoint) | (1u << m2_mouseJoint);
+        second = (1u << m2_revoluteJoint) | (1u << m2_motorJoint);
+        break;
+    case m2_tuneWeldLinear:
+        first = 1u << m2_weldJoint;
+        break;
+    case m2_tuneWeldAngular:
+        second = 1u << m2_weldJoint;
+        break;
+    }
+    if ((kind & (first | second)) == 0)
+    {
+        m2Refuse(world, m2_errorInvalid); // a stale id or a kind without this tuning
+        return -1;
+    }
+    *secondOut = (kind & second) != 0;
+    return index;
+}
+
 // One journaled channel for every runtime joint parameter: replay
 // re-drives the same setters through the same records.
 // The contract of each joint parameter channel: the joint kinds that
@@ -234,17 +276,13 @@ static bool JointParamValid(uint8_t type, uint8_t param, float value)
     case m2_jointParamBreakTorque:
         return m2ValidBreakLimit(value);
     case m2_jointParamHertz:
-        return type != (uint8_t)m2_filterJoint && type != (uint8_t)m2_motorJoint &&
-               m2ValidRate(value);
+        return (M2_FIRST_PAIR_KINDS & (1u << type)) != 0 && m2ValidRate(value);
     case m2_jointParamDamping:
-        return type != (uint8_t)m2_filterJoint && type != (uint8_t)m2_motorJoint &&
-               m2ValidCoefficient(value);
+        return (M2_FIRST_PAIR_KINDS & (1u << type)) != 0 && m2ValidCoefficient(value);
     case m2_jointParamAngularHertz:
-        return (type == (uint8_t)m2_weldJoint || type == (uint8_t)m2_revoluteJoint) &&
-               m2ValidRate(value);
+        return (M2_SECOND_PAIR_KINDS & (1u << type)) != 0 && m2ValidRate(value);
     case m2_jointParamAngularDamping:
-        return (type == (uint8_t)m2_weldJoint || type == (uint8_t)m2_revoluteJoint) &&
-               m2ValidCoefficient(value);
+        return (M2_SECOND_PAIR_KINDS & (1u << type)) != 0 && m2ValidCoefficient(value);
     case m2_jointParamLength:
         return type == (uint8_t)m2_distanceJoint && m2ValidReach(value) && value > 0.0f;
     case m2_jointParamMinLength:
@@ -254,9 +292,49 @@ static bool JointParamValid(uint8_t type, uint8_t param, float value)
         return type == (uint8_t)m2_gearJoint && m2ValidRatio(value);
     case m2_jointParamPulleyRatio:
         return type == (uint8_t)m2_pulleyJoint && m2ValidRatio(value) && value > 0.0f;
+    case m2_jointParamEnableSpring:
+        return (M2_SPRING_KINDS & (1u << type)) != 0 && (value == 0.0f || value == 1.0f);
+    case m2_jointParamConnectedCollision:
+        // The filter joint exists to keep its bodies apart.
+        return type != (uint8_t)m2_filterJoint && (value == 0.0f || value == 1.0f);
     default:
         return false;
     }
+}
+
+// Writes a validated switch: a spring toggle drops the impulse of a row
+// only the spring uses (a wheel's suspension, a revolute's angular
+// spring); a distance joint's rod and spring share the rest row, which
+// keeps its impulse. A change of connected collision has the broadphase
+// look at the two bodies' pairs again, as the create does.
+static void ApplyJointSwitch(m2World* world, int32_t index, uint8_t param, bool on)
+{
+    m2Joints* j = &world->joints;
+    if (param == m2_jointParamConnectedCollision)
+    {
+        j->jointCollide[index] = on ? 1 : 0;
+        m2RefilterJointedBodies(world, j->jointBodyA[index], j->jointBodyB[index]);
+        return;
+    }
+    uint8_t type = j->jointType[index];
+    uint32_t bit = type == (uint8_t)m2_distanceJoint ? M2_JOINT_ROPE : M2_JOINT_SPRING;
+    j->jointFlags[index] = on ? (j->jointFlags[index] | bit) : (j->jointFlags[index] & ~bit);
+    if (type == (uint8_t)m2_wheelJoint)
+    {
+        j->jointImpulse[index].y = 0.0f;
+    }
+    else if (type == (uint8_t)m2_revoluteJoint)
+    {
+        j->jointSpringImpulse[index] = 0.0f; // the angular spring's own row
+    }
+}
+
+// A distance retarget drops the joint's accumulated impulses.
+static void DropDistanceImpulses(m2Joints* j, int32_t index)
+{
+    j->jointImpulse[index] = (m2Vec2){0.0f, 0.0f};
+    j->jointLowerImpulse[index] = 0.0f;
+    j->jointUpperImpulse[index] = 0.0f;
 }
 
 // Writes one validated parameter; distance and pulley retargets drop
@@ -307,21 +385,15 @@ static void ApplyJointParam(m2World* world, int32_t index, uint8_t param, float 
         break;
     case m2_jointParamLength:
         j->jointLength[index] = value;
-        j->jointImpulse[index] = (m2Vec2){0.0f, 0.0f};
-        j->jointLowerImpulse[index] = 0.0f;
-        j->jointUpperImpulse[index] = 0.0f;
+        DropDistanceImpulses(j, index);
         break;
     case m2_jointParamMinLength:
         j->jointLower[index] = value;
-        j->jointImpulse[index] = (m2Vec2){0.0f, 0.0f};
-        j->jointLowerImpulse[index] = 0.0f;
-        j->jointUpperImpulse[index] = 0.0f;
+        DropDistanceImpulses(j, index);
         break;
     case m2_jointParamMaxLength:
         j->jointUpper[index] = value;
-        j->jointImpulse[index] = (m2Vec2){0.0f, 0.0f};
-        j->jointLowerImpulse[index] = 0.0f;
-        j->jointUpperImpulse[index] = 0.0f;
+        DropDistanceImpulses(j, index);
         break;
     case m2_jointParamGearRatio:
         j->jointLength[index] = value; // phase carries over on purpose
@@ -336,6 +408,10 @@ static void ApplyJointParam(m2World* world, int32_t index, uint8_t param, float 
         break;
     case m2_jointParamUpper:
         j->jointUpper[index] = value;
+        break;
+    case m2_jointParamEnableSpring:
+    case m2_jointParamConnectedCollision:
+        ApplyJointSwitch(world, index, param, value != 0.0f);
         break;
     default:
         M2_ASSERT(false); // JointParamValid admits no other channel
@@ -436,6 +512,39 @@ void m2Joint_EnableLimit(m2World* world, m2JointId jointId, bool enable)
     m2FloatEnvLeave(env);
 }
 
+static M2_NOINLINE void JointEnableSpringWorker(m2World* world, m2JointId jointId, bool enable)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    m2SetJointParamInternal(world, jointId, m2_jointParamEnableSpring, enable ? 1.0f : 0.0f);
+}
+
+void m2Joint_EnableSpring(m2World* world, m2JointId jointId, bool enable)
+{
+    uint64_t env = m2FloatEnvEnter();
+    JointEnableSpringWorker(world, jointId, enable);
+    m2FloatEnvLeave(env);
+}
+
+static M2_NOINLINE void JointEnableConnectedCollisionWorker(m2World* world, m2JointId jointId,
+                                                            bool enable)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    m2SetJointParamInternal(world, jointId, m2_jointParamConnectedCollision, enable ? 1.0f : 0.0f);
+}
+
+void m2Joint_EnableConnectedCollision(m2World* world, m2JointId jointId, bool enable)
+{
+    uint64_t env = m2FloatEnvEnter();
+    JointEnableConnectedCollisionWorker(world, jointId, enable);
+    m2FloatEnvLeave(env);
+}
+
 static M2_NOINLINE void JointSetLimitsWorker(m2World* world, m2JointId jointId, float lower,
                                              float upper)
 {
@@ -466,70 +575,78 @@ void m2Joint_SetLimits(m2World* world, m2JointId jointId, float lower, float upp
     m2FloatEnvLeave(env);
 }
 
-static M2_NOINLINE void JointSetSpringHertzWorker(m2World* world, m2JointId jointId, float hertz)
+// Writes one stiffness value a public tuning names, through the joint
+// parameter channel of the pair it uses on this kind.
+static M2_NOINLINE void JointSetTuningWorker(m2World* world, m2JointId jointId,
+                                             m2JointTuning tuning, bool damping, float value)
 {
     if (m2CheckWriter(world) != m2_success)
     {
         return;
     }
-    m2SetJointParamInternal(world, jointId, m2_jointParamHertz, hertz);
+    bool second = false;
+    if (m2JointTuningSlot(world, jointId, tuning, &second) < 0)
+    {
+        return;
+    }
+    uint8_t param = second ? (damping ? m2_jointParamAngularDamping : m2_jointParamAngularHertz)
+                           : (damping ? m2_jointParamDamping : m2_jointParamHertz);
+    m2SetJointParamInternal(world, jointId, param, value);
+}
+
+void m2Joint_SetConstraintHertz(m2World* world, m2JointId jointId, float hertz)
+{
+    uint64_t env = m2FloatEnvEnter();
+    JointSetTuningWorker(world, jointId, m2_tuneConstraint, false, hertz);
+    m2FloatEnvLeave(env);
+}
+
+void m2Joint_SetConstraintDampingRatio(m2World* world, m2JointId jointId, float dampingRatio)
+{
+    uint64_t env = m2FloatEnvEnter();
+    JointSetTuningWorker(world, jointId, m2_tuneConstraint, true, dampingRatio);
+    m2FloatEnvLeave(env);
 }
 
 void m2Joint_SetSpringHertz(m2World* world, m2JointId jointId, float hertz)
 {
     uint64_t env = m2FloatEnvEnter();
-    JointSetSpringHertzWorker(world, jointId, hertz);
+    JointSetTuningWorker(world, jointId, m2_tuneSpring, false, hertz);
     m2FloatEnvLeave(env);
-}
-
-static M2_NOINLINE void JointSetSpringDampingRatioWorker(m2World* world, m2JointId jointId,
-                                                         float dampingRatio)
-{
-    if (m2CheckWriter(world) != m2_success)
-    {
-        return;
-    }
-    m2SetJointParamInternal(world, jointId, m2_jointParamDamping, dampingRatio);
 }
 
 void m2Joint_SetSpringDampingRatio(m2World* world, m2JointId jointId, float dampingRatio)
 {
     uint64_t env = m2FloatEnvEnter();
-    JointSetSpringDampingRatioWorker(world, jointId, dampingRatio);
+    JointSetTuningWorker(world, jointId, m2_tuneSpring, true, dampingRatio);
     m2FloatEnvLeave(env);
 }
 
-static M2_NOINLINE void JointSetAngularSpringHertzWorker(m2World* world, m2JointId jointId,
-                                                         float hertz)
-{
-    if (m2CheckWriter(world) != m2_success)
-    {
-        return;
-    }
-    m2SetJointParamInternal(world, jointId, m2_jointParamAngularHertz, hertz);
-}
-
-void m2Joint_SetAngularSpringHertz(m2World* world, m2JointId jointId, float hertz)
+void m2WeldJoint_SetLinearSpringHertz(m2World* world, m2JointId jointId, float hertz)
 {
     uint64_t env = m2FloatEnvEnter();
-    JointSetAngularSpringHertzWorker(world, jointId, hertz);
+    JointSetTuningWorker(world, jointId, m2_tuneWeldLinear, false, hertz);
     m2FloatEnvLeave(env);
 }
 
-static M2_NOINLINE void JointSetAngularSpringDampingRatioWorker(m2World* world, m2JointId jointId,
-                                                                float dampingRatio)
-{
-    if (m2CheckWriter(world) != m2_success)
-    {
-        return;
-    }
-    m2SetJointParamInternal(world, jointId, m2_jointParamAngularDamping, dampingRatio);
-}
-
-void m2Joint_SetAngularSpringDampingRatio(m2World* world, m2JointId jointId, float dampingRatio)
+void m2WeldJoint_SetLinearSpringDampingRatio(m2World* world, m2JointId jointId, float dampingRatio)
 {
     uint64_t env = m2FloatEnvEnter();
-    JointSetAngularSpringDampingRatioWorker(world, jointId, dampingRatio);
+    JointSetTuningWorker(world, jointId, m2_tuneWeldLinear, true, dampingRatio);
+    m2FloatEnvLeave(env);
+}
+
+void m2WeldJoint_SetAngularSpringHertz(m2World* world, m2JointId jointId, float hertz)
+{
+    uint64_t env = m2FloatEnvEnter();
+    JointSetTuningWorker(world, jointId, m2_tuneWeldAngular, false, hertz);
+    m2FloatEnvLeave(env);
+}
+
+void m2WeldJoint_SetAngularSpringDampingRatio(m2World* world, m2JointId jointId, float dampingRatio)
+{
+    uint64_t env = m2FloatEnvEnter();
+    JointSetTuningWorker(world, jointId, m2_tuneWeldAngular, true, dampingRatio);
     m2FloatEnvLeave(env);
 }
 
@@ -623,7 +740,8 @@ int32_t m2TypedJointSlot(const m2World* world, m2JointId jointId, uint8_t type)
     return index;
 }
 
-static M2_NOINLINE bool JointGetCollideConnectedWorker(const m2World* world, m2JointId jointId)
+static M2_NOINLINE bool JointIsConnectedCollisionEnabledWorker(const m2World* world,
+                                                               m2JointId jointId)
 {
     int32_t index = (int32_t)jointId.index1 - 1;
     if (world == NULL || index < 0 || index >= world->joints.jointCapacity ||
@@ -636,10 +754,10 @@ static M2_NOINLINE bool JointGetCollideConnectedWorker(const m2World* world, m2J
     return world->joints.jointCollide[index] != 0;
 }
 
-bool m2Joint_GetCollideConnected(const m2World* world, m2JointId jointId)
+bool m2Joint_IsConnectedCollisionEnabled(const m2World* world, m2JointId jointId)
 {
     uint64_t env = m2FloatEnvEnter();
-    bool result = JointGetCollideConnectedWorker(world, jointId);
+    bool result = JointIsConnectedCollisionEnabledWorker(world, jointId);
     m2FloatEnvLeave(env);
     return result;
 }

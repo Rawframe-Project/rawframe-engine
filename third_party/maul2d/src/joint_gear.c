@@ -34,9 +34,22 @@ m2GearJointDef m2DefaultGearJointDef(void)
 // accumulated phase itself rides jointRefAngle. All snapshot state.
 // The def contract: finite values, non-negative gains and budgets,
 // ordered ranges.
-static bool DefValid(const m2GearJointDef* def)
+static m2Result DefCheck(const m2GearJointDef* def)
 {
-    return m2ValidRatio(def->ratio);
+    return m2CheckRatio(def->ratio);
+}
+
+// The create record holds the def's fields and zero bytes between them:
+// copied field by field into the zeroed record, so no padding of the
+// caller's struct reaches the tape.
+static void RecordGearJointDef(m2GearJointDef* out, const m2GearJointDef* def)
+{
+    out->bodyIdA = def->bodyIdA;
+    out->bodyIdB = def->bodyIdB;
+    out->ratio = def->ratio;
+    out->userData = def->userData;
+    out->enableConnectedCollision = def->enableConnectedCollision;
+    out->internalValue = def->internalValue;
 }
 
 static M2_NOINLINE m2Result CreateGearJointWorker(m2World* world, const m2GearJointDef* def,
@@ -52,9 +65,14 @@ static M2_NOINLINE m2Result CreateGearJointWorker(m2World* world, const m2GearJo
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_GJOINT_COOKIE || !DefValid(def))
+    if (def == NULL || def->internalValue != M2_GJOINT_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
+    }
+    m2Result checked = DefCheck(def);
+    if (checked != m2_success)
+    {
+        return m2Refuse(world, checked);
     }
     int32_t bodyA = m2BodySlot(world, def->bodyIdA);
     int32_t bodyB = m2BodySlot(world, def->bodyIdB);
@@ -81,8 +99,8 @@ static M2_NOINLINE m2Result CreateGearJointWorker(m2World* world, const m2GearJo
     world->joints.jointLocalAnchorB[index] = (m2Vec2){qB.c, qB.s};
     world->joints.jointRefAngle[index] = 0.0f; // in phase by definition at birth
     world->joints.jointUserData[index] = def->userData;
-    world->joints.jointCollide[index] = def->collideConnected ? 1 : 0;
-    if (def->collideConnected == false)
+    world->joints.jointCollide[index] = def->enableConnectedCollision ? 1 : 0;
+    if (def->enableConnectedCollision == false)
     {
         m2RefilterJointedBodies(world, bodyA, bodyB);
     }
@@ -90,7 +108,7 @@ static M2_NOINLINE m2Result CreateGearJointWorker(m2World* world, const m2GearJo
     {
         m2OpCreateGearJoint record;
         memset(&record, 0, sizeof(record));
-        record.def = *def;
+        RecordGearJointDef(&record.def, def);
         record.expected = jointId;
         m2JournalRecord(world, m2_opCreateGearJoint, &record, (int32_t)sizeof(record));
     }
