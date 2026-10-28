@@ -86,6 +86,12 @@ class Attribution(unittest.TestCase):
         message = "fix(x): y\n\nWhy.\n\nCo-authored-by : Someone <a@b.c>\n"
         self.assertEqual(attribution_in(message), ["Co-authored-by : Someone <a@b.c>"])
 
+    def test_a_footer_in_markdown_marks_fails(self):
+        for line in ("[Generated with Claude Code](https://claude.com/claude-code)", "(Generated with Claude Code)",
+                     "_Generated with Claude Code_"):
+            with self.subTest(line=line):
+                self.assertEqual(attribution_in(f"fix(x): y\n\nWhy.\n\n{line}\n"), [line])
+
     def test_a_quoted_footer_is_a_mention(self):
         message = 'fix(x): y\n\n("This PR was generated with Release Please") is its footer.\n\nRefs #1\n'
         self.assertEqual(attribution_in(message), [])

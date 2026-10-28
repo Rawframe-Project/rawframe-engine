@@ -52,9 +52,10 @@ REPORT_LINES = 1000
 EM_DASH = chr(0x2014)
 # Git takes a trailer's key with blanks before its colon too.
 TRAILER = re.compile(r"(co-authored-by|claude-session)\s*:", re.IGNORECASE)
-# A footer may follow a mark of its own (an emoji, a dash), but not a quote
-# or a bracket, which make it a mention.
-FOOTER = re.compile(r"[^\w\"'`(\[{]*(this pr was )?generated with\b", re.IGNORECASE)
+# A footer may follow marks of its own (an emoji, a dash, a bracket or an
+# underscore of Markdown), but not a quote or a backtick, which make it a
+# mention.
+FOOTER = re.compile(r"(?:[^\w\"'`]|_)*(this pr was )?generated with\b", re.IGNORECASE)
 # Commits already on main that carry such lines; history is not rewritten.
 ATTRIBUTION_ALLOWED = {
     # v0.0.1's squash, merged with release-please's footer and GitHub's
