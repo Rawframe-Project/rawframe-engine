@@ -124,9 +124,12 @@ struct Target2D {
 /// What a body touched and what overlapped it, written by every step: counts
 /// now and for this step, the other body of the hardest contact begun this
 /// step (its closing speed, and the normal from this body toward it), and
-/// the first body that began to overlap it this step. An entity field is
-/// the null entity when nothing began. Overlaps are counted on both sides:
-/// on the sensor and on what is inside it.
+/// the first body that began to overlap it this step. Of several that began
+/// in the same step, the first is the one whose shape comes first in
+/// Maul2D's shape order: the order bodies were made, until a shape slot a
+/// removed body freed is taken again. An entity field is the null entity
+/// when nothing began. Overlaps are counted on both sides: on the sensor
+/// and on what is inside it.
 struct Contact2D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
         schema::ComponentTypeId::fromText("1f84d21a-eff7-400e-95f0-a45d96deaa07");

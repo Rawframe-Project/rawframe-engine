@@ -384,10 +384,11 @@ RAWFRAME_TEST(ASensorIsToldWhatPassesThroughIt) {
     RAWFRAME_EXPECT(scene.physics->statistics().overlapsBegun == 1 && scene.physics->statistics().contactsBegun == 0);
 }
 
-RAWFRAME_TEST(ASensorEnteredByTwoInOneStepKeepsTheFirstMade) {
+RAWFRAME_TEST(ASensorEnteredByTwoInOneStepKeepsTheFirstInShapeOrder) {
     // Two balls dropped side by side enter the zone in the same step. The
-    // zone's one visitor is the ball made first, whichever side it is on;
-    // each ball's visitor is the zone.
+    // zone's one visitor is the ball whose shape comes first in Maul2D's
+    // shape order, whichever side it is on; with no slot reused here, that
+    // is the ball made first. Each ball's visitor is the zone.
     for (const bool kRightFirst : {false, true}) {
         Scene scene;
         Body2D zone = kGround;

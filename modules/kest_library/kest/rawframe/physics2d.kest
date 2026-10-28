@@ -84,8 +84,10 @@ struct Target2D {
 // ended this step, and likewise of overlaps with sensors (on the sensor and
 // on what is inside it); the other body of the hardest contact begun this
 // step, its closing speed, and the normal from this body toward it; and the
-// first body that began to overlap this one this step. An Entity is the
-// null one when nothing began.
+// first body that began to overlap this one this step. Of several that began
+// in the same step, the first is the one whose shape comes first in Maul2D's
+// shape order: the order bodies were made, until a shape slot a removed body
+// freed is taken again. An Entity is the null one when nothing began.
 struct Contact2D {
     touching: u32
     began: u32
