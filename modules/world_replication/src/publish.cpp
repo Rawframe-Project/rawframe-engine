@@ -465,35 +465,52 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
         std::ranges::sort(comings);
         comings.erase(std::ranges::unique(comings).begin(), comings.end());
     };
-    // Retire what is gone or out of interest; the ID is never used again
-    // in this epoch. What stays is marked as held for this connection.
+    // Retire what is gone or out of interest, then declare what entered,
+    // within the bytes a publish may send of either: a join in view of
+    // many entities, or a mass removal, goes over several publishes, never
+    // more at once than the client's transport holds between its reads.
+    // Retirements go first, as the client holds a mapping until its
+    // retirement arrives and counts it against its bound.
+    std::size_t mappingBytes = 0;
+    bool unretired = false;
+    // The ID is never used again in this epoch. A mapping past the budget
+    // stays, retiring: it counts against the bound on mappings and is sent
+    // nothing more, and an entity that comes back while it does is
+    // declared anew only once it went. What stays is marked as held for
+    // this connection.
     ++markNow;
-    const auto kRetire = [&](world::EntityHandle entity, const Mapping& mapping) {
-        if (mapping.firstSent.has_value()) {
-            peer.retired.push_back(Sent{.entity = entity, .from = *mapping.firstSent, .until = tick.value});
+    const auto kRetire = [&](world::EntityHandle entity, Mapping& mapping) {
+        if (mappingBytes + kLargestMappingFrame > settings.mappingBytesPerPublish) {
+            mapping.retiringSince = mapping.retiringSince.value_or(tick.value);
+            unretired = true;
+            return false;
         }
-        sendMapping(peer, network::ControlFrame::MappingRetire, mapping.id, false);
+        if (mapping.firstSent.has_value()) {
+            peer.retired.push_back(Sent{
+                .entity = entity, .from = *mapping.firstSent, .until = mapping.retiringSince.value_or(tick.value)});
+        }
+        mappingBytes += sendMapping(peer, network::ControlFrame::MappingRetire, mapping.id, false);
         peer.byNetEntity.erase(mapping.id.value);
+        return true;
     };
     if (kComings) {
         kComing(&Changed::gone);
-        for (const world::EntityHandle kGone : comings) {
-            if (const Mapping* const kMapping = peer.mapped.find(kGone); kMapping != nullptr) {
-                kRetire(kGone, *kMapping);
-            }
-        }
+        std::erase_if(comings, [&](world::EntityHandle gone) {
+            Mapping* const kMapping = peer.mapped.find(gone);
+            return kMapping != nullptr && !kRetire(gone, *kMapping);
+        });
         peer.mapped.erase(comings);
     } else {
         peer.mapped.keepIf([&](Mappings::Entry& mapping) {
             const std::size_t kIndex = presentIndex(mapping.first);
             const bool kPresent = kIndex != kNowhere;
-            if (kPresent && relevant(peer, kViewer, entities[kIndex], true)) {
+            const bool kRetiring = mapping.second.retiringSince.has_value();
+            if (kPresent && !kRetiring && relevant(peer, kViewer, entities[kIndex], true)) {
                 heldMark[kIndex] = markNow;
                 return true;
             }
-            statistics.interestLeft += kPresent ? 1 : 0;
-            kRetire(mapping.first, mapping.second);
-            return false;
+            statistics.interestLeft += kPresent && !kRetiring ? 1 : 0;
+            return !kRetire(mapping.first, mapping.second);
         });
     }
     if (peer.retired.size() > kMaximumTombstones) {
@@ -504,13 +521,16 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     // Declare what is new, before any state names it: the connection's
     // own player first, whatever the bound on mappings.
     const std::size_t kSettled = peer.mapped.size();
-    std::size_t declared = 0;
     const auto kDeclare = [&](world::EntityHandle entity) {
+        // A retiring entity is not held, so it is not declared a second
+        // time only because retirements filling the budget leave no room
+        // for any declaration but the player's.
+        RAWFRAME_ASSERT(!unretired || entity == peer.player, "a declaration follows a retirement left waiting");
         const NetEntityId kId{peer.nextNetEntity++};
         peer.mapped.add(entity, Mapping{.id = kId});
         peer.unsettled.push_back(entity);
         peer.byNetEntity[kId.value] = entity;
-        declared += sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
+        mappingBytes += sendMapping(peer, network::ControlFrame::MappingDeclare, kId, entity == peer.player);
     };
     if (!peer.mapped.contains(peer.player) && isPresent(peer.player) && peer.nextNetEntity != 0) {
         kDeclare(peer.player);
@@ -560,13 +580,10 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     }
     std::ranges::sort(entering);
     entering.erase(std::ranges::unique(entering).begin(), entering.end());
-    peer.bounded = false;
-    // Within the bytes a publish may declare, too: a join in view of many
-    // entities declares them over several publishes, never more at once
-    // than the client's transport holds between its reads.
+    peer.bounded = unretired;
     for (const std::size_t kIndex : entering) {
         if (peer.mapped.size() >= settings.maximumMapped || peer.nextNetEntity == 0 ||
-            declared + kLargestMappingFrame > settings.mappingBytesPerPublish) {
+            mappingBytes + kLargestMappingFrame > settings.mappingBytesPerPublish) {
             peer.bounded = true;
             break;
         }
@@ -676,6 +693,10 @@ void ReplicationServer::State::publishTo(Peer& peer, world::TickIndex tick) {
     peer.lookedAt = publishes;
     unsettling.clear();
     const auto kLook = [&](world::EntityHandle entity, Mapping& held) {
+        // A retiring mapping is sent nothing more.
+        if (held.retiringSince.has_value()) {
+            return;
+        }
         if (!held.acknowledged || !isPresent(entity)) {
             unsettling.push_back(entity);
             return;

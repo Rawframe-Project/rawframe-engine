@@ -1,8 +1,10 @@
-// A join over QUIC in view of the most entities a connection may hold: the
-// server declares them within its mapping budget a publish, so neither its
+// A join over QUIC in view of the most entities a connection may hold, and
+// the removal of all of them at once after: the server declares and
+// retires them within its mapping budget a publish, so neither its
 // transport's sending bound nor the client's 256 KiB unread ever fills,
-// whether MsQuic buffers sends or not, and the client mirrors every one.
-// The transport and session bounds are replication's own (profiles.h).
+// whether MsQuic buffers sends or not, and the client mirrors every one,
+// then none. The transport and session bounds are replication's own
+// (profiles.h).
 
 #include "rawframe/network_quic/certificate.h"
 #include "rawframe/network_quic/quic.h"
@@ -32,9 +34,10 @@ std::uint16_t listenOnAnyPort(network::Sessions& sessions) {
     return 0;
 }
 
-/// The time from admission until the client has taken every mapping, or
-/// none when the join did not complete.
-std::optional<std::chrono::milliseconds> joinInViewOfTheMost(bool buffered) {
+/// The time from admission until the client has taken every mapping, or,
+/// with `remove`, from destroying every entity but its player after until
+/// the client has let all of them go; none when that did not complete.
+std::optional<std::chrono::milliseconds> joinInViewOfTheMost(bool buffered, bool remove) {
     const auto kIdentity = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
     auto serverNetwork = network_quic::QuicNetwork::create(
         network_quic::QuicSettings{.certificate = kIdentity, .sendBuffering = buffered});
@@ -69,9 +72,10 @@ std::optional<std::chrono::milliseconds> joinInViewOfTheMost(bool buffered) {
     auto schedule = *world::Schedule::compile(declarations, *kSchema);
     // Everything in view: the player is the last of kMostMapped.
     const auto kPosition = *kSchema->key<Position>();
+    std::vector<world::EntityHandle> props;
     for (std::size_t index = 0; index + 1 < world_replication::kMostMapped; ++index) {
-        const world::EntityHandle kProp = *serverWorld.create();
-        static_cast<void>(serverWorld.insert(kProp, kPosition, Position{static_cast<float>(index), 0}));
+        props.push_back(*serverWorld.create());
+        static_cast<void>(serverWorld.insert(props.back(), kPosition, Position{static_cast<float>(index), 0}));
     }
 
     auto clientSessions = *network::Sessions::client(
@@ -97,6 +101,7 @@ std::optional<std::chrono::milliseconds> joinInViewOfTheMost(bool buffered) {
     // pumps between them as a client's frames do.
     world::TickIndex tick;
     std::optional<std::chrono::steady_clock::time_point> admitted;
+    std::optional<std::chrono::steady_clock::time_point> removed;
     const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{60};
     while (std::chrono::steady_clock::now() < kDeadline && !client->ended()) {
         const auto kTickStart = std::chrono::steady_clock::now();
@@ -109,15 +114,25 @@ std::optional<std::chrono::milliseconds> joinInViewOfTheMost(bool buffered) {
             }
             const Steer kStill{};
             static_cast<void>(client->submitInput(std::as_bytes(std::span{&kStill, 1})));
-            if (kMirrored() == world_replication::kMostMapped) {
+            if (!removed.has_value() && kMirrored() == world_replication::kMostMapped) {
+                if (!remove) {
+                    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
+                                                                                 *admitted);
+                }
+                for (const world::EntityHandle kProp : props) {
+                    static_cast<void>(serverWorld.destroy(kProp));
+                }
+                removed = std::chrono::steady_clock::now();
+            } else if (removed.has_value() && kMirrored() == 1) {
                 return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
-                                                                             *admitted);
+                                                                             *removed);
             }
         }
         std::this_thread::sleep_until(kTickStart + std::chrono::microseconds{16'667});
     }
     std::fprintf(stderr,
-                 "join %s: ended %d, mirrored %zu of %zu\n",
+                 "%s %s: ended %d, mirrored %zu of %zu\n",
+                 removed.has_value() ? "removal" : "join",
                  buffered ? "buffered" : "unbuffered",
                  client->ended() ? 1 : 0,
                  kMirrored(),
@@ -128,7 +143,7 @@ std::optional<std::chrono::milliseconds> joinInViewOfTheMost(bool buffered) {
 } // namespace
 
 RAWFRAME_TEST(AJoinInViewOfTheMostEntitiesKeepsItsConnectionUnbuffered) {
-    const auto kTook = joinInViewOfTheMost(false);
+    const auto kTook = joinInViewOfTheMost(false, false);
     RAWFRAME_EXPECT(kTook.has_value());
     if (kTook.has_value()) {
         std::fprintf(stderr,
@@ -138,11 +153,31 @@ RAWFRAME_TEST(AJoinInViewOfTheMostEntitiesKeepsItsConnectionUnbuffered) {
 }
 
 RAWFRAME_TEST(AJoinInViewOfTheMostEntitiesKeepsItsConnectionBuffered) {
-    const auto kTook = joinInViewOfTheMost(true);
+    const auto kTook = joinInViewOfTheMost(true, false);
     RAWFRAME_EXPECT(kTook.has_value());
     if (kTook.has_value()) {
         std::fprintf(stderr,
                      "join buffered: every mapping taken %lld ms after admission\n",
+                     static_cast<long long>(kTook->count()));
+    }
+}
+
+RAWFRAME_TEST(AMassRemovalAfterTheFullestJoinKeepsItsConnectionUnbuffered) {
+    const auto kTook = joinInViewOfTheMost(false, true);
+    RAWFRAME_EXPECT(kTook.has_value());
+    if (kTook.has_value()) {
+        std::fprintf(stderr,
+                     "removal unbuffered: every mapping let go %lld ms after the removal\n",
+                     static_cast<long long>(kTook->count()));
+    }
+}
+
+RAWFRAME_TEST(AMassRemovalAfterTheFullestJoinKeepsItsConnectionBuffered) {
+    const auto kTook = joinInViewOfTheMost(true, true);
+    RAWFRAME_EXPECT(kTook.has_value());
+    if (kTook.has_value()) {
+        std::fprintf(stderr,
+                     "removal buffered: every mapping let go %lld ms after the removal\n",
                      static_cast<long long>(kTook->count()));
     }
 }

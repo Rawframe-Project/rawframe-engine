@@ -82,6 +82,11 @@ struct Replica {
 struct Mapping {
     NetEntityId id;
     bool acknowledged = false;
+    /// The tick it was found gone or out of interest while its retirement
+    /// waits for room in a publish: it is sent nothing more, named by
+    /// nothing, and counts as seen until then alone, though the client
+    /// holds it until the retirement arrives.
+    std::optional<std::uint64_t> retiringSince;
     /// The tick its first state record went out, for the victim gate.
     std::optional<std::uint64_t> firstSent;
     /// By replication table index.
@@ -262,8 +267,9 @@ struct Peer {
     /// its next publish looks at, with what changed since.
     std::optional<std::uint64_t> lookedAt;
     std::vector<world::EntityHandle> unsettled;
-    /// Whether the bound on mappings left an entity undeclared at its last
-    /// turn: its next looks at every entity again.
+    /// Whether the bound on mappings left an entity undeclared, or a
+    /// mapping unretired, at its last turn: its next looks at every entity
+    /// again.
     bool bounded = false;
     /// Which of the game's districts are in its interest, by their place,
     /// as of the districts' version.
@@ -319,11 +325,18 @@ public:
     }
     [[nodiscard]] std::uint32_t netOf(world::EntityHandle entity) const noexcept override {
         const Mapping* const kMapping = peer_->mapped.find(entity);
-        return kMapping != nullptr && kMapping->acknowledged ? kMapping->id.value : 0;
+        return kMapping != nullptr && kMapping->acknowledged && !kMapping->retiringSince.has_value()
+                   ? kMapping->id.value
+                   : 0;
     }
     [[nodiscard]] world::EntityHandle entityOf(std::uint32_t net) const noexcept override {
         const auto kFound = peer_->byNetEntity.find(net);
-        return kFound != peer_->byNetEntity.end() ? kFound->second : world::EntityHandle{};
+        if (kFound == peer_->byNetEntity.end()) {
+            return {};
+        }
+        // A retiring mapping names nothing, as a retired one does not.
+        const Mapping* const kMapping = peer_->mapped.find(kFound->second);
+        return kMapping != nullptr && !kMapping->retiringSince.has_value() ? kFound->second : world::EntityHandle{};
     }
 
 private:

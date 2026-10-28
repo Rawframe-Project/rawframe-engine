@@ -1,9 +1,10 @@
 #pragma once
 
 // The replication scenarios' world (replication_test.cpp,
-// replication_commands_test.cpp): a server World and a client World over
-// loopback, the client's player steering a position the server moves, and
-// what each scenario varies besides the network.
+// replication_commands_test.cpp, replication_mappings_test.cpp): a server
+// World and a client World over loopback, the client's player steering a
+// position the server moves, and what each scenario varies besides the
+// network.
 
 #include "rawframe/network_loopback/loopback.h"
 #include "rawframe/test/test.h"
@@ -170,6 +171,8 @@ struct Options {
     std::vector<std::size_t> commandSizes;
     /// Components sent to their holder's connection alone.
     std::vector<schema::ComponentTypeId> own;
+    /// The player's input is an Aim, naming an entity, not a Steer.
+    bool aiming = false;
 };
 
 inline std::vector<network::EventLaneDeclaration> lanesFor(const Options& options) {
@@ -214,8 +217,11 @@ struct Scenario {
         server = *world_replication::ReplicationServer::create(
             *serverSessions,
             {.table = {.components = {positionCodec(), steerCodec(), aimCodec()}},
-             .playerComponents = {Position::kComponentTypeId, Steer::kComponentTypeId},
-             .input = steerCodec(),
+             .playerComponents =
+                 options.aiming
+                     ? std::vector{Position::kComponentTypeId, Steer::kComponentTypeId, Aim::kComponentTypeId}
+                     : std::vector{Position::kComponentTypeId, Steer::kComponentTypeId},
+             .input = options.aiming ? aimCodec() : steerCodec(),
              .interest = std::move(options.interest),
              .units = options.units,
              .statePeriod = options.statePeriod,
@@ -235,7 +241,7 @@ struct Scenario {
             *clientSessions,
             clientWorld,
             {.table = {.components = {positionCodec(), steerCodec(), aimCodec()}},
-             .input = steerCodec(),
+             .input = options.aiming ? aimCodec() : steerCodec(),
              .prediction = options.predicting ? std::optional{world_replication::PredictionSettings{
                                                     .predictor = &predictor,
                                                     .predicted = {Position::kComponentTypeId, Steer::kComponentTypeId}}}
@@ -252,8 +258,9 @@ struct Scenario {
                 .has_value());
     }
 
-    /// One step: the server pumps and ticks, the client pumps and steers.
-    void step(Steer steer) {
+    /// One step: the server pumps and ticks, the client pumps and steers,
+    /// or aims.
+    template <typename Command> void step(Command command) {
         clock.advance(stepLength);
         server->pump(serverWorld, tick);
         const std::uint64_t kRan = tick.value;
@@ -263,7 +270,7 @@ struct Scenario {
         }
         client->pump();
         if (client->admitted()) {
-            RAWFRAME_EXPECT(client->submitInput(std::as_bytes(std::span{&steer, 1})).has_value());
+            RAWFRAME_EXPECT(client->submitInput(std::as_bytes(std::span{&command, 1})).has_value());
         }
     }
 

@@ -119,11 +119,12 @@ struct ServerReplicationSettings {
     /// connection's own player always goes first. The default is 64 KiB/s
     /// at 60 publishes a second.
     std::size_t stateBytesPerPublish = 1092;
-    /// Bytes of mapping declarations one connection is sent per publish,
-    /// frames included: entities entering past it are declared at its next
-    /// publishes, its own player always first. A join with many entities in
-    /// view never sends more at once than the client's transport holds
-    /// between its reads. At least one declaration's.
+    /// Bytes of mapping retirements and declarations one connection is sent
+    /// per publish, frames included, retirements first: mappings past it
+    /// are retired or declared at its next publishes, its own player always
+    /// declared first. A join in view of many entities, or a mass removal,
+    /// never sends more at once than the client's transport holds between
+    /// its reads. At least one declaration's.
     std::size_t mappingBytesPerPublish = kMappingBytesPerPublish;
     /// Ticks after which a value sent and not acknowledged is sent again,
     /// though it has not changed.
