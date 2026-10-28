@@ -15,3 +15,12 @@ foreach(scenario compensation game_subassets game_tilemaps install kest_bots rep
         RAWFRAME_SAMPLE_GAMES="${RAWFRAME_TEST_FILES}/games/")
     add_test(NAME scenario_${scenario} COMMAND rawframe_scenario_${scenario}_tests)
 endforeach()
+
+# A join over QUIC, where the transport's own bounds are what is held.
+if(TARGET rawframe_network_quic)
+    add_executable(rawframe_scenario_replication_quic_tests replication_quic_test.cpp)
+    rawframe_windows_program(rawframe_scenario_replication_quic_tests)
+    target_link_libraries(rawframe_scenario_replication_quic_tests PRIVATE
+        rawframe_policy rawframe::world_replication rawframe::network_loopback rawframe::network_quic rawframe::test)
+    add_test(NAME scenario_replication_quic COMMAND rawframe_scenario_replication_quic_tests)
+endif()

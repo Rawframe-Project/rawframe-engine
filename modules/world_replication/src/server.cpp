@@ -22,14 +22,18 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Replication
 
 } // namespace
 
-void ReplicationServer::State::sendMapping(Peer& peer, network::ControlFrame type, NetEntityId entity, bool owned) {
+std::size_t
+ReplicationServer::State::sendMapping(Peer& peer, network::ControlFrame type, NetEntityId entity, bool owned) {
     frame.resize(32);
     network::Writer writer{frame};
-    if (encodeMapping(writer,
-                      MappingRecord{.replicationEpoch = peer.accept.replicationEpoch, .entity = entity, .owned = owned})
-            .has_value()) {
-        static_cast<void>(sessions->sendFrame(peer.connection, type, writer.written()));
+    if (!encodeMapping(
+             writer, MappingRecord{.replicationEpoch = peer.accept.replicationEpoch, .entity = entity, .owned = owned})
+             .has_value()) {
+        return 0;
     }
+    static_cast<void>(sessions->sendFrame(peer.connection, type, writer.written()));
+    const std::size_t kPayload = writer.written().size();
+    return network::varintSize(static_cast<std::uint64_t>(type)) + network::varintSize(kPayload) + kPayload;
 }
 
 void ReplicationServer::State::strike(Peer& peer) {
@@ -404,7 +408,8 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
         }
     }
     if ((settings.input && !settings.input->valid()) || (settings.perception && !settings.input) ||
-        settings.maximumMapped == 0 || settings.maximumMapped > kMostMapped || settings.inputFutureWindow == 0 ||
+        settings.maximumMapped == 0 || settings.maximumMapped > kMostMapped ||
+        settings.mappingBytesPerPublish < kLargestMappingFrame || settings.inputFutureWindow == 0 ||
         settings.paceInterval == 0 || settings.statePeriod == 0 ||
         settings.targetInputLead >= settings.inputFutureWindow) {
         return refuse(result::ErrorClass::InvalidArgument,
