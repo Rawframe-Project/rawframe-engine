@@ -276,6 +276,9 @@ struct Peer {
     std::vector<bool> unitsIn;
     std::uint64_t unitsVersion = 0;
     std::map<std::uint32_t, world::EntityHandle> byNetEntity;
+    /// Declarations sent and not yet acknowledged, oldest first: a client
+    /// acknowledges each whole and in turn, on the ordered control stream.
+    std::deque<MappingRun> unacknowledged;
     /// The next input tick to consume, and commands waiting for theirs.
     std::uint64_t nextInputTick = 0;
     std::uint64_t consumedInputTick = 0;

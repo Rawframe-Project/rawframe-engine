@@ -123,6 +123,12 @@ public:
         if (kMappingBytes < 64 || kMappingBytes > kMostMappingBytesPerPublish) {
             return missing("replication.mapping_bytes_per_publish is 64 bytes to 128 KiB");
         }
+        RAWFRAME_TRY_ASSIGN(
+            const std::uint64_t kMappings,
+            context.configuration().unsignedInteger("replication.mappings_per_publish", kMappingsPerPublish));
+        if (kMappings == 0 || kMappings > kMostMappingsPerPublish) {
+            return missing("replication.mappings_per_publish is 1 to 16384");
+        }
         RAWFRAME_TRY_ASSIGN(const bool kCapture,
                             captureAsked(context.configuration(), "replication.divergence_capture"));
         // Every entity to every viewer, whatever the game's interest, where
@@ -148,6 +154,7 @@ public:
                     .statePeriod = static_cast<std::uint32_t>(kPeriod),
                     .stateBytesPerPublish = static_cast<std::size_t>(kPerPublish),
                     .mappingBytesPerPublish = static_cast<std::size_t>(kMappingBytes),
+                    .mappingsPerPublish = static_cast<std::size_t>(kMappings),
                     .presence = presence,
                     .predicted = {plan->predictedComponents().begin(), plan->predictedComponents().end()},
                     .captureDivergences = kCapture,

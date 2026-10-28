@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -73,19 +75,68 @@ RAWFRAME_TEST(ValuesCrossFieldByFieldInNetworkOrder) {
     RAWFRAME_EXPECT(!outside.valid());
 }
 
-RAWFRAME_TEST(MappingRecordsRoundTrip) {
-    const MappingRecord kRecord{.replicationEpoch = 99, .entity = NetEntityId{70000}, .owned = true};
-    std::array<std::byte, 16> out{};
+RAWFRAME_TEST(MappingDeclarationsRoundTrip) {
+    const MappingDeclaration kDeclaration{
+        .replicationEpoch = 99, .run = {.first = NetEntityId{70000}, .count = 4096}, .ownedFirst = true};
+    std::array<std::byte, 32> out{};
     network::Writer writer{out};
-    RAWFRAME_EXPECT(encodeMapping(writer, kRecord).has_value());
-    const auto kBack = decodeMapping(writer.written());
-    RAWFRAME_EXPECT(kBack.has_value() && kBack->replicationEpoch == 99 && kBack->entity == NetEntityId{70000} &&
-                    kBack->owned);
+    RAWFRAME_EXPECT(encodeMappingDeclaration(writer, kDeclaration).has_value());
+    const auto kBack = decodeMappingDeclaration(writer.written());
+    RAWFRAME_EXPECT(kBack.has_value() && kBack->replicationEpoch == 99 && kBack->run == kDeclaration.run &&
+                    kBack->ownedFirst);
     for (std::size_t length = 0; length < writer.written().size(); ++length) {
-        RAWFRAME_EXPECT(!decodeMapping(writer.written().first(length)).has_value());
+        RAWFRAME_EXPECT(!decodeMappingDeclaration(writer.written().first(length)).has_value());
     }
-    const std::array<std::byte, 3> kZeroEntity = {std::byte{1}, std::byte{0}, std::byte{0}};
-    RAWFRAME_EXPECT(failedWith(decodeMapping(kZeroEntity), ReplicationError::Malformed));
+    // No ID zero, no empty run, and no run past the last ID.
+    const auto kRefused = [](std::uint32_t first, std::uint64_t count) {
+        std::array<std::byte, 32> bytes{};
+        network::Writer refused{bytes};
+        RAWFRAME_EXPECT(refused.varint(1).has_value() && refused.varint(first).has_value() &&
+                        refused.varint(count).has_value() && refused.varint(0).has_value());
+        return failedWith(decodeMappingDeclaration(refused.written()), ReplicationError::Malformed);
+    };
+    RAWFRAME_EXPECT(kRefused(0, 1));
+    RAWFRAME_EXPECT(kRefused(5, 0));
+    RAWFRAME_EXPECT(kRefused(std::numeric_limits<std::uint32_t>::max(), 2));
+    RAWFRAME_EXPECT(!kRefused(std::numeric_limits<std::uint32_t>::max(), 1));
+}
+
+RAWFRAME_TEST(MappingRetirementsAreAscendingRunsWithGaps) {
+    const MappingRetirement kRetirement{.replicationEpoch = 7,
+                                        .runs = {{.first = NetEntityId{3}, .count = 2},
+                                                 {.first = NetEntityId{9}, .count = 1},
+                                                 {.first = NetEntityId{70000}, .count = 300}}};
+    std::array<std::byte, 64> out{};
+    network::Writer writer{out};
+    RAWFRAME_EXPECT(encodeMappingRetirement(writer, kRetirement).has_value());
+    // The epoch, then each run as the gap from where the one before ended
+    // and its count: 3 2, 4 1, 69990 300.
+    RAWFRAME_EXPECT(writer.written().size() == 1 + 1 + 1 + 1 + 1 + 4 + 2);
+    const auto kBack = decodeMappingRetirement(writer.written());
+    RAWFRAME_EXPECT(kBack.has_value() && kBack->replicationEpoch == 7 && kBack->runs == kRetirement.runs);
+    // Cut inside a run, it is refused.
+    RAWFRAME_EXPECT(!decodeMappingRetirement(writer.written().first(writer.written().size() - 1)).has_value());
+    const auto kRuns = [](std::initializer_list<std::uint64_t> values) {
+        std::array<std::byte, 64> bytes{};
+        network::Writer runs{bytes};
+        static_cast<void>(runs.varint(7));
+        for (const std::uint64_t kValue : values) {
+            static_cast<void>(runs.varint(kValue));
+        }
+        return decodeMappingRetirement(runs.written());
+    };
+    RAWFRAME_EXPECT(kRuns({3, 2}).has_value());
+    // One set of IDs has one spelling: nothing retired, an empty run, a
+    // run touching the one before (one run, written as two), ID zero.
+    RAWFRAME_EXPECT(failedWith(kRuns({}), ReplicationError::Malformed));
+    RAWFRAME_EXPECT(failedWith(kRuns({3, 0}), ReplicationError::Malformed));
+    RAWFRAME_EXPECT(failedWith(kRuns({3, 2, 0, 1}), ReplicationError::Malformed));
+    RAWFRAME_EXPECT(failedWith(kRuns({0, 1}), ReplicationError::Malformed));
+    // Nothing past the last ID, however the gaps add up.
+    RAWFRAME_EXPECT(kRuns({std::numeric_limits<std::uint32_t>::max(), 1}).has_value());
+    RAWFRAME_EXPECT(failedWith(kRuns({std::numeric_limits<std::uint32_t>::max(), 2}), ReplicationError::Malformed));
+    RAWFRAME_EXPECT(
+        failedWith(kRuns({std::numeric_limits<std::uint32_t>::max() - 1, 1, 1, 1}), ReplicationError::Malformed));
 }
 
 RAWFRAME_TEST(StatePayloadsCarryRecordsForTheTable) {
@@ -287,10 +338,20 @@ RAWFRAME_TEST(HostilePeerPayloadsReadOnlyAsTheyWrite) {
     const int kPerceptions = reencodes(perception.written(), &decodePerception, &encodePerception);
     std::array<std::byte, 32> mappingSeed{};
     network::Writer mapping{mappingSeed};
-    RAWFRAME_EXPECT(
-        encodeMapping(mapping, MappingRecord{.replicationEpoch = 3, .entity = NetEntityId{77}, .owned = true})
-            .has_value());
-    const int kMappings = reencodes(mapping.written(), &decodeMapping, &encodeMapping);
+    RAWFRAME_EXPECT(encodeMappingDeclaration(mapping,
+                                             MappingDeclaration{.replicationEpoch = 3,
+                                                                .run = {.first = NetEntityId{77}, .count = 40},
+                                                                .ownedFirst = true})
+                        .has_value());
+    std::array<std::byte, 32> retirementSeed{};
+    network::Writer retiring{retirementSeed};
+    RAWFRAME_EXPECT(encodeMappingRetirement(retiring,
+                                            MappingRetirement{.replicationEpoch = 3,
+                                                              .runs = {{.first = NetEntityId{5}, .count = 3},
+                                                                       {.first = NetEntityId{90}, .count = 1}}})
+                        .has_value());
+    const int kMappings = reencodes(mapping.written(), &decodeMappingDeclaration, &encodeMappingDeclaration) +
+                          reencodes(retiring.written(), &decodeMappingRetirement, &encodeMappingRetirement);
     std::array<std::byte, 32> checksumSeed{};
     network::Writer checksum{checksumSeed};
     RAWFRAME_EXPECT(

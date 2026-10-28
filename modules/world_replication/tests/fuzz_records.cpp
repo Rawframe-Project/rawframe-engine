@@ -37,7 +37,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     exact(kBytes, decodeStateAck, encodeStateAck);
     exact(kBytes, decodeChecksum, encodeChecksum);
     exact(kBytes, decodePerception, encodePerception);
-    exact(kBytes, decodeMapping, encodeMapping);
+    exact(kBytes, decodeMappingDeclaration, encodeMappingDeclaration);
+    exact(kBytes, decodeMappingRetirement, encodeMappingRetirement);
     exact(kBytes, decodePace, encodePace);
     // A state payload: its header, then as many record heads as it reads.
     network::Reader reader{kBytes};

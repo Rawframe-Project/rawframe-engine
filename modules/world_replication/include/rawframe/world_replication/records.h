@@ -23,13 +23,24 @@ inline constexpr std::size_t kMostMapped = std::size_t{1} << 16U;
 /// The bytes of mapping retirements and declarations one connection is
 /// sent per publish unless its game says otherwise: a sixteenth of the
 /// 256 KiB a client's transport holds unread, so a client that misses
-/// sixteen publishes still holds all they sent. At about 15 bytes a
-/// frame, a join of kMappedByDefault entities takes four publishes, and
-/// of kMostMapped sixty, as does removing that many at once.
+/// sixteen publishes still holds all they sent. A publish's declarations
+/// are one frame of a few bytes; its retirements cost a byte or two an
+/// ID, and what was declared together a few bytes in all.
 inline constexpr std::size_t kMappingBytesPerPublish = std::size_t{16} << 10U;
 /// The most a game may ask for: half of what a client's transport holds
 /// unread, past which one publish could end a connection that stalls once.
 inline constexpr std::size_t kMostMappingBytesPerPublish = std::size_t{128} << 10U;
+
+/// The entities one connection is declared per publish unless its game
+/// says otherwise, and the most it may ask for. A declaration's frame does
+/// not grow with its count, so the count is what is bounded: the client
+/// makes an entity for each in one pump, about a microsecond each on a
+/// desktop processor (docs/internals/networking.md). The default is a few
+/// milliseconds there, so a join of kMappedByDefault takes one publish and
+/// of kMostMapped sixteen; the most is about one 60 Hz frame there, and
+/// several on a phone.
+inline constexpr std::size_t kMappingsPerPublish = 4096;
+inline constexpr std::size_t kMostMappingsPerPublish = 16'384;
 
 /// A connection-local name for a replicated entity: never zero, never reused
 /// within its replication epoch, never an EntityHandle's bits.
@@ -51,19 +62,43 @@ inline constexpr std::uint64_t kInputWindowPayload = 1;
 inline constexpr std::uint64_t kStateAckPayload = 2;
 inline constexpr std::uint64_t kChecksumPayload = 3;
 
-/// `mapping_declare`, `mapping_ack` and `mapping_retire` all carry this.
-/// `owned` is set only on a declare, for the entity the receiving
-/// connection plays. A retirement is not acknowledged: it travels on the
-/// ordered control stream, so a client has let a mapping go before it
-/// reads any later declaration, and IDs are never reused in an epoch.
-struct MappingRecord {
-    std::uint64_t replicationEpoch = 0;
-    NetEntityId entity;
-    bool owned = false;
+/// Consecutive mapping IDs, the first of them and how many.
+struct MappingRun {
+    NetEntityId first;
+    std::uint32_t count = 0;
+
+    friend constexpr bool operator==(const MappingRun&, const MappingRun&) noexcept = default;
 };
 
-[[nodiscard]] result::Status encodeMapping(network::Writer& writer, const MappingRecord& record);
-[[nodiscard]] result::Result<MappingRecord> decodeMapping(std::span<const std::byte> payload);
+/// `mapping_declare` and `mapping_ack`: one run. A publish declares what
+/// enters under the next IDs in turn, so its declarations are one run
+/// whatever their count, and a client acknowledges each declaration whole.
+/// `ownedFirst` is set only on a declaration whose first is the entity the
+/// receiving connection plays.
+struct MappingDeclaration {
+    std::uint64_t replicationEpoch = 0;
+    MappingRun run;
+    bool ownedFirst = false;
+};
+
+[[nodiscard]] result::Status encodeMappingDeclaration(network::Writer& writer, const MappingDeclaration& declaration);
+[[nodiscard]] result::Result<MappingDeclaration> decodeMappingDeclaration(std::span<const std::byte> payload);
+
+/// `mapping_retire`: the mappings let go, as runs in ascending order with a
+/// gap between each and the next, so one set of IDs has one spelling.
+/// After the first, a run is written as the gap from the end of the one
+/// before: what a removal scatters costs a byte or two an ID, and what was
+/// declared together one run. A retirement is not acknowledged: it
+/// travels on the ordered control stream, so a client has let a mapping go
+/// before it reads any later declaration, and IDs are never reused in an
+/// epoch.
+struct MappingRetirement {
+    std::uint64_t replicationEpoch = 0;
+    std::vector<MappingRun> runs;
+};
+
+[[nodiscard]] result::Status encodeMappingRetirement(network::Writer& writer, const MappingRetirement& retirement);
+[[nodiscard]] result::Result<MappingRetirement> decodeMappingRetirement(std::span<const std::byte> payload);
 
 /// The start of every state payload.
 struct StateHeader {

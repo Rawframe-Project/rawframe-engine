@@ -43,12 +43,24 @@ inline constexpr std::uint64_t kInterestKept = 1024;
 /// The tombstones per connection: retired mappings remembered at
 /// most, the oldest forgotten past them.
 inline constexpr std::size_t kMaximumTombstones = 16'384;
+/// Declarations a connection may leave unacknowledged before it is
+/// declared nothing more: a second of publishes at 60 a second.
+inline constexpr std::size_t kMostUnacknowledgedDeclarations = 64;
 /// No place in a table by slot.
 inline constexpr std::size_t kNowhere = SIZE_MAX;
-/// The most bytes one mapping frame takes: its type and length, the epoch
-/// and the entity's name as varints of up to eight bytes, and whether it
-/// is owned.
-inline constexpr std::size_t kLargestMappingFrame = 1 + 1 + 8 + 8 + 1;
+/// The most bytes a declaration frame takes: its type and length, the
+/// epoch, the first ID and the count as varints of up to eight bytes, and
+/// whether the first is owned.
+inline constexpr std::size_t kLargestDeclarationFrame = 1 + 1 + 8 + 8 + 8 + 1;
+/// The least frame payload a connection may take: a declaration's, or a
+/// retirement's epoch and one run, whatever their values.
+inline constexpr std::size_t kLeastFramePayload = 8 + 8 + 8 + 1;
+
+/// A control frame's bytes as the session writes it: its type, its length
+/// and its payload.
+[[nodiscard]] inline std::size_t frameBytes(network::ControlFrame type, std::size_t payload) noexcept {
+    return network::varintSize(static_cast<std::uint64_t>(type)) + network::varintSize(payload) + payload;
+}
 
 /// Bytes a state datagram's framing takes around its payload, at most.
 inline constexpr std::size_t kStateHeaderRoom = 4 * 8;
@@ -122,6 +134,10 @@ struct ReplicationServer::State {
     std::vector<world::EntityHandle> previousEntities;
     /// One connection's entities gone or appeared since its last turn.
     std::vector<world::EntityHandle> comings;
+    /// One connection's mappings to retire, by ID, and those retired.
+    std::vector<std::pair<std::uint32_t, world::EntityHandle>> leaving;
+    std::vector<world::EntityHandle> retiredNow;
+    MappingRetirement retirement;
     std::deque<Changed> changed;
     /// The entities one connection's values are looked at for, and those
     /// it is still not known to hold all of.
@@ -189,7 +205,11 @@ struct ReplicationServer::State {
     std::vector<std::byte> frame;
 
     /// The frame's bytes, as the session writes it.
-    std::size_t sendMapping(Peer& peer, network::ControlFrame type, NetEntityId entity, bool owned);
+    std::size_t sendDeclaration(Peer& peer, MappingRun run, bool ownedFirst);
+    std::size_t sendRetirement(Peer& peer);
+    /// Retires `leaving` in ID order within the mapping budget, and leaves
+    /// the rest retiring; the bytes sent, and whether any was left.
+    std::size_t retireLeaving(Peer& peer, world::TickIndex tick, bool& unretired);
 
     void onFrame(world::World& world, Peer& peer, const network::SessionEvent& event);
 

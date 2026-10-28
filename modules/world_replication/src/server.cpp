@@ -22,18 +22,27 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, Replication
 
 } // namespace
 
-std::size_t
-ReplicationServer::State::sendMapping(Peer& peer, network::ControlFrame type, NetEntityId entity, bool owned) {
-    frame.resize(32);
+std::size_t ReplicationServer::State::sendDeclaration(Peer& peer, MappingRun run, bool ownedFirst) {
+    frame.resize(kLargestDeclarationFrame);
     network::Writer writer{frame};
-    if (!encodeMapping(
-             writer, MappingRecord{.replicationEpoch = peer.accept.replicationEpoch, .entity = entity, .owned = owned})
+    if (!encodeMappingDeclaration(
+             writer,
+             MappingDeclaration{.replicationEpoch = peer.accept.replicationEpoch, .run = run, .ownedFirst = ownedFirst})
              .has_value()) {
         return 0;
     }
-    static_cast<void>(sessions->sendFrame(peer.connection, type, writer.written()));
-    const std::size_t kPayload = writer.written().size();
-    return network::varintSize(static_cast<std::uint64_t>(type)) + network::varintSize(kPayload) + kPayload;
+    static_cast<void>(sessions->sendFrame(peer.connection, network::ControlFrame::MappingDeclare, writer.written()));
+    return frameBytes(network::ControlFrame::MappingDeclare, writer.written().size());
+}
+
+std::size_t ReplicationServer::State::sendRetirement(Peer& peer) {
+    frame.resize(static_cast<std::size_t>(peer.accept.maximumFrame));
+    network::Writer writer{frame};
+    if (!encodeMappingRetirement(writer, retirement).has_value()) {
+        return 0;
+    }
+    static_cast<void>(sessions->sendFrame(peer.connection, network::ControlFrame::MappingRetire, writer.written()));
+    return frameBytes(network::ControlFrame::MappingRetire, writer.written().size());
 }
 
 void ReplicationServer::State::strike(Peer& peer) {
@@ -54,19 +63,30 @@ void ReplicationServer::State::forget(world::World& world, std::map<std::uint64_
 void ReplicationServer::State::onFrame(world::World& world, Peer& peer, const network::SessionEvent& event) {
     const auto kType = static_cast<network::ControlFrame>(event.frameType);
     if (kType == network::ControlFrame::MappingAck) {
-        const auto kRecord = decodeMapping(event.payload);
-        if (!kRecord.has_value()) {
+        const auto kAck = decodeMappingDeclaration(event.payload);
+        if (!kAck.has_value() || kAck->ownedFirst) {
             strike(peer);
             return;
         }
         // One from before the epoch changed is late, not malformed.
-        if (kRecord->replicationEpoch != peer.accept.replicationEpoch) {
+        if (kAck->replicationEpoch != peer.accept.replicationEpoch) {
             return;
         }
-        const auto kEntity = peer.byNetEntity.find(kRecord->entity.value);
-        Mapping* const kMapping = kEntity != peer.byNetEntity.end() ? peer.mapped.find(kEntity->second) : nullptr;
-        if (kMapping != nullptr) {
-            kMapping->acknowledged = true;
+        // Each declaration is acknowledged whole and in turn, so what is
+        // walked is what this server declared, once; anything else is not
+        // playing by the protocol.
+        if (peer.unacknowledged.empty() || peer.unacknowledged.front() != kAck->run) {
+            strike(peer);
+            return;
+        }
+        peer.unacknowledged.pop_front();
+        const std::uint64_t kEnd = std::uint64_t{kAck->run.first.value} + kAck->run.count;
+        for (auto at = peer.byNetEntity.lower_bound(kAck->run.first.value);
+             at != peer.byNetEntity.end() && at->first < kEnd;
+             ++at) {
+            if (Mapping* const kMapping = peer.mapped.find(at->second); kMapping != nullptr) {
+                kMapping->acknowledged = true;
+            }
         }
         return;
     }
@@ -407,8 +427,9 @@ result::Result<std::unique_ptr<ReplicationServer>> ReplicationServer::create(net
     }
     if ((settings.input && !settings.input->valid()) || (settings.perception && !settings.input) ||
         settings.maximumMapped == 0 || settings.maximumMapped > kMostMapped ||
-        settings.mappingBytesPerPublish < kLargestMappingFrame ||
-        settings.mappingBytesPerPublish > kMostMappingBytesPerPublish || settings.inputFutureWindow == 0 ||
+        settings.mappingBytesPerPublish < kLargestDeclarationFrame ||
+        settings.mappingBytesPerPublish > kMostMappingBytesPerPublish || settings.mappingsPerPublish == 0 ||
+        settings.mappingsPerPublish > kMostMappingsPerPublish || settings.inputFutureWindow == 0 ||
         settings.paceInterval == 0 || settings.statePeriod == 0 ||
         settings.targetInputLead >= settings.inputFutureWindow) {
         return refuse(result::ErrorClass::InvalidArgument,
@@ -563,6 +584,12 @@ void ReplicationServer::pump(world::World& world, world::TickIndex tick) {
         const auto kPeer = state.peers.find(event.connection.value);
         switch (event.kind) {
         case network::SessionEventKind::Admitted: {
+            // A connection whose frames cannot hold one mapping frame
+            // could be told of nothing.
+            if (event.accept.maximumFrame < kLeastFramePayload) {
+                state.sessions->close(event.connection);
+                break;
+            }
             // No system runs between ticks, so the player is made directly.
             auto player = world.create();
             bool made = player.has_value();

@@ -1,6 +1,7 @@
 // A join over QUIC in view of the most entities a connection may hold, and
-// the removal of all of them at once after: the server declares and
-// retires them within its mapping budget a publish, so neither its
+// the removal of all of them at once after: the server declares them
+// within the count a publish declares and retires them as one run, so
+// neither its
 // transport's sending bound nor the client's 256 KiB unread ever fills,
 // whether MsQuic buffers sends or not, and the client mirrors every one,
 // then none. The transport and session bounds are replication's own
