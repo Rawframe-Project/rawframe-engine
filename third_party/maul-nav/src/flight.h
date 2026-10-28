@@ -56,8 +56,8 @@ typedef struct mnavFlightTile
 
 // Builds tile (tileX, tileZ) from input, which must be valid, with a
 // valid def and its shape; spansOut receives the heightfield's spans.
-// Returns the heightfield's errors, mnav_errorLimit past the def's node
-// or leaf limit or for memory, and mnav_errorCapacity.
+// Returns the heightfield's errors, and mnav_errorCapacity past the def's
+// node or leaf limit, for memory or when the allocator fails.
 mnavResult mnavBuildFlightTile(mnavMemory* memory, const mnavFlightDef* def,
                                const mnavFlightShape* shape, const mnavBakeInput* input,
                                int32_t tileX, int32_t tileZ, mnavFlightTile* tileOut,

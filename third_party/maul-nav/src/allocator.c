@@ -16,25 +16,33 @@
 // The host's allocator runs in the host's floating-point environment:
 // each call is the only work of a helper of its own, so none of the
 // caller's arithmetic moves into it.
-static MNAV_NOINLINE void* HostAlloc(const mnavAllocator* allocator, size_t bytes, size_t alignment)
+// Each call is also marked on the object the memory serves, so that a
+// call back into it from the allocator is refused.
+static MNAV_NOINLINE void* HostAlloc(const mnavMemory* memory, size_t bytes, size_t alignment)
 {
+    const mnavAllocator* allocator = &memory->allocator;
+    mnavHostEnter(memory->host);
     mnavFloatHost host = mnavFloatHostEnter();
     void* block = allocator->alloc(bytes, alignment, allocator->context);
     mnavFloatHostLeave(host);
+    mnavHostLeave(memory->host);
     return block;
 }
 
-static MNAV_NOINLINE void HostFree(const mnavAllocator* allocator, void* block, size_t bytes,
+static MNAV_NOINLINE void HostFree(const mnavMemory* memory, void* block, size_t bytes,
                                    size_t alignment)
 {
+    const mnavAllocator* allocator = &memory->allocator;
+    mnavHostEnter(memory->host);
     mnavFloatHost host = mnavFloatHostEnter();
     allocator->free(block, bytes, alignment, allocator->context);
     mnavFloatHostLeave(host);
+    mnavHostLeave(memory->host);
 }
 
 mnavMemory mnavMakeMemory(mnavAllocator allocator, uint64_t limit)
 {
-    return (mnavMemory){allocator, limit, 0, 0};
+    return (mnavMemory){allocator, limit, 0, 0, nullptr};
 }
 
 mnavResult mnavAllocate(mnavMemory* memory, size_t count, size_t size, size_t alignment, void** out)
@@ -48,7 +56,7 @@ mnavResult mnavAllocate(mnavMemory* memory, size_t count, size_t size, size_t al
     }
     if (total > memory->limit)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     if (bytes == 0)
     {
@@ -57,7 +65,7 @@ mnavResult mnavAllocate(mnavMemory* memory, size_t count, size_t size, size_t al
     void* block = nullptr;
     if (memory->allocator.alloc != nullptr)
     {
-        block = HostAlloc(&memory->allocator, bytes, alignment);
+        block = HostAlloc(memory, bytes, alignment);
     }
     else if (alignment <= alignof(max_align_t))
     {
@@ -83,7 +91,7 @@ void mnavRelease(mnavMemory* memory, void* block, size_t count, size_t size, siz
     memory->used -= bytes;
     if (memory->allocator.free != nullptr)
     {
-        HostFree(&memory->allocator, block, bytes, alignment);
+        HostFree(memory, block, bytes, alignment);
         return;
     }
     free(block);

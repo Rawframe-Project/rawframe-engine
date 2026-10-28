@@ -18,8 +18,8 @@
 mnavInputResult mnavCheckVolume(const mnavBakeDef* def, const mnavBakeVolume* volume);
 
 // Drops the walkable spans that include volumes, when there are any,
-// leave out, then those exclude volumes hold. Returns mnav_errorLimit for
-// the memory limit and mnav_errorCapacity when the allocator fails.
+// leave out, then those exclude volumes hold. Returns mnav_errorCapacity
+// for the memory limit or when the allocator fails.
 mnavResult mnavCarveVolumes(mnavMemory* memory, mnavCompactField* field,
                             const mnavBakeVolume* volumes, int32_t count);
 

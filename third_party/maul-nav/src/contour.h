@@ -19,18 +19,14 @@
 // The vertex is a corner on the tile's border between two interior
 // cells, removed when polygons are built so that tiles meet.
 #define MNAV_VERTEX_TILE_BORDER 1u
-// The edge from this vertex to the next separates two areas.
-#define MNAV_EDGE_AREA_BORDER 2u
 
 // A contour vertex, in cells of the tile without its border (x, z) and
-// cell heights (y), and the region across the edge from it to the next
-// vertex: 0 for a wall, a region, or a border region.
+// cell heights (y), and in flags whether it is MNAV_VERTEX_TILE_BORDER.
 typedef struct mnavContourVertex
 {
     int32_t x;
     int32_t y;
     int32_t z;
-    uint32_t neighbor;
     uint8_t flags;
 } mnavContourVertex;
 

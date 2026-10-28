@@ -9,6 +9,7 @@
 #include "flight_space.h"
 #include "flight_volume.h"
 #include "fpenv.h"
+#include "invariant.h"
 #include "query.h"
 
 #include "maul-nav/base.h"
@@ -88,6 +89,7 @@ static void SiftUp(Search* s, int32_t at)
 static int32_t Pop(Search* s)
 {
     mnavQuery* q = s->query;
+    MNAV_ASSERT(q->heapCount > 0 && s->nodes[q->indexHeap[0]].heap == 0);
     int32_t top = q->indexHeap[0];
     int32_t last = q->indexHeap[--q->heapCount];
     int32_t at = 0;
@@ -245,8 +247,13 @@ static void Reach(void* context, mnavFlightBlock block)
     memcpy(n->point, p, sizeof(p));
     if (n->heap == MNAV_NO_NODE)
     {
+        // Each node enters the open list once, and the nodes made are at
+        // most its room.
+        MNAV_ASSERT(s->query->heapCount < s->query->limits.nodes);
         Place(s, s->query->heapCount++, node);
     }
+    // A node still open is where the open list holds it.
+    MNAV_ASSERT(s->query->indexHeap[n->heap] == node);
     SiftUp(s, n->heap);
 }
 
@@ -314,6 +321,9 @@ static void Settle(Search* s, int32_t node)
     {
         return;
     }
+    // Reach names the neighbor whenever it names the parent; Bend relies
+    // on it too, for a node that bent here.
+    MNAV_ASSERT(n->via != MNAV_NO_NODE);
     const Node* via = &s->nodes[n->via];
     if (n->parent != n->via && InSight(s, via->point, n->point))
     {
@@ -367,6 +377,7 @@ static mnavFlightPath PathTo(const Search* s, const mnavFlightFrame* frame, int3
     int32_t count = 0;
     for (int32_t n = last; n != MNAV_NO_NODE; n = s->nodes[n].parent)
     {
+        MNAV_ASSERT(count < 2 * s->query->limits.nodes + 1);
         points[count++] = mnavFlightToWorld(frame, s->nodes[n].point);
         if (s->nodes[n].bend != 0)
         {
@@ -375,6 +386,7 @@ static mnavFlightPath PathTo(const Search* s, const mnavFlightFrame* frame, int3
             double bend[2][3];
             for (int32_t k = Bend(s, &s->nodes[n], bend) - 1; k >= 0; --k)
             {
+                MNAV_ASSERT(count < 2 * s->query->limits.nodes + 1);
                 points[count++] = mnavFlightToWorld(frame, bend[k]);
             }
         }
@@ -517,21 +529,34 @@ static void Store(const Search* s)
 }
 
 // Whether the context holds a search on this volume, unchanged since it
-// began: mnav_success, or the refusal.
+// began: mnav_success; mnav_errorState for none begun or a commit to the
+// volume since; mnav_errorInvalid for another volume.
 static mnavResult Holds(const mnavQuery* query, const mnavFlightVolume* volume)
 {
-    if (query == nullptr || volume == nullptr || !query->flight.active)
+    if (query == nullptr || volume == nullptr)
     {
         return mnav_errorInvalid;
     }
     const mnavFlightSliced* f = &query->flight;
-    return f->volume == volume && f->commits == volume->commits ? mnav_success : mnav_errorStale;
+    if (!f->active)
+    {
+        return mnav_errorState;
+    }
+    if (f->volume != volume)
+    {
+        return mnav_errorInvalid;
+    }
+    return f->commits == volume->commits ? mnav_success : mnav_errorState;
 }
 
 static MNAV_NOINLINE mnavResult BeginFlightPathWork(mnavQuery* query,
                                                     const mnavFlightVolume* volume, mnavPos3 start,
                                                     mnavPos3 end)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     if (query == nullptr || volume == nullptr)
     {
         return mnav_errorInvalid;
@@ -545,10 +570,16 @@ static MNAV_NOINLINE mnavResult BeginFlightPathWork(mnavQuery* query,
     double a[3];
     int32_t at[3];
     int32_t to[3];
-    if (!mnavFlightToVoxels(&frame, start, a, at) || !mnavFlightToVoxels(&frame, end, s.end, to) ||
-        at[1] < 0 || at[1] >= frame.layers || to[1] < 0 || to[1] >= frame.layers)
+    mnavResult result = mnavFlightToVoxels(&frame, start, a, at);
+    result = result == mnav_success ? mnavFlightToVoxels(&frame, end, s.end, to) : result;
+    if (result != mnav_success)
     {
-        return mnav_errorRange;
+        return result;
+    }
+    // Below the floor or above the ceiling, the volume's def's bounds.
+    if (at[1] < 0 || at[1] >= frame.layers || to[1] < 0 || to[1] >= frame.layers)
+    {
+        return mnav_errorOutside;
     }
     query->search.active = false;
     query->flight = (mnavFlightSliced){.volume = volume,
@@ -595,11 +626,19 @@ static MNAV_NOINLINE mnavResult BeginFlightPathWork(mnavQuery* query,
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult BeginFlightPathCounted(mnavQuery* query,
+                                                       const mnavFlightVolume* volume,
+                                                       mnavPos3 start, mnavPos3 end)
+{
+    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
+                                BeginFlightPathWork(query, volume, start, end));
+}
+
 mnavResult mnavBeginFlightPath(mnavQuery* query, const mnavFlightVolume* volume, mnavPos3 start,
                                mnavPos3 end)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = BeginFlightPathWork(query, volume, start, end);
+    mnavResult result = BeginFlightPathCounted(query, volume, start, end);
     mnavFloatEnvLeave(env);
     return result;
 }
@@ -608,6 +647,10 @@ static MNAV_NOINLINE mnavResult ContinueFlightPathWork(mnavQuery* query,
                                                        const mnavFlightVolume* volume,
                                                        int32_t nodes, bool* endedOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     mnavResult held = Holds(query, volume);
     if (held != mnav_success || endedOut == nullptr || nodes < 1)
     {
@@ -625,11 +668,19 @@ static MNAV_NOINLINE mnavResult ContinueFlightPathWork(mnavQuery* query,
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult ContinueFlightPathCounted(mnavQuery* query,
+                                                          const mnavFlightVolume* volume,
+                                                          int32_t nodes, bool* endedOut)
+{
+    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
+                                ContinueFlightPathWork(query, volume, nodes, endedOut));
+}
+
 mnavResult mnavContinueFlightPath(mnavQuery* query, const mnavFlightVolume* volume, int32_t nodes,
                                   bool* endedOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = ContinueFlightPathWork(query, volume, nodes, endedOut);
+    mnavResult result = ContinueFlightPathCounted(query, volume, nodes, endedOut);
     mnavFloatEnvLeave(env);
     return result;
 }
@@ -638,6 +689,10 @@ static MNAV_NOINLINE mnavResult FinishFlightPathWork(mnavQuery* query,
                                                      const mnavFlightVolume* volume,
                                                      mnavFlightPath* pathOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     mnavResult held = Holds(query, volume);
     if (held != mnav_success || pathOut == nullptr)
     {
@@ -670,11 +725,19 @@ static MNAV_NOINLINE mnavResult FinishFlightPathWork(mnavQuery* query,
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult FinishFlightPathCounted(mnavQuery* query,
+                                                        const mnavFlightVolume* volume,
+                                                        mnavFlightPath* pathOut)
+{
+    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
+                                FinishFlightPathWork(query, volume, pathOut));
+}
+
 mnavResult mnavFinishFlightPath(mnavQuery* query, const mnavFlightVolume* volume,
                                 mnavFlightPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = FinishFlightPathWork(query, volume, pathOut);
+    mnavResult result = FinishFlightPathCounted(query, volume, pathOut);
     mnavFloatEnvLeave(env);
     return result;
 }
@@ -683,24 +746,37 @@ static MNAV_NOINLINE mnavResult FindFlightPathWork(mnavQuery* query, const mnavF
                                                    mnavPos3 start, mnavPos3 end,
                                                    mnavFlightPath* pathOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     if (pathOut == nullptr)
     {
         return mnav_errorInvalid;
     }
-    mnavResult result = mnavBeginFlightPath(query, volume, start, end);
+    mnavResult result = BeginFlightPathWork(query, volume, start, end);
     bool ended = false;
     while (result == mnav_success && !ended)
     {
-        result = mnavContinueFlightPath(query, volume, INT32_MAX, &ended);
+        result = ContinueFlightPathWork(query, volume, INT32_MAX, &ended);
     }
-    return result == mnav_success ? mnavFinishFlightPath(query, volume, pathOut) : result;
+    return result == mnav_success ? FinishFlightPathWork(query, volume, pathOut) : result;
+}
+
+static MNAV_NOINLINE mnavResult FindFlightPathCounted(mnavQuery* query,
+                                                      const mnavFlightVolume* volume,
+                                                      mnavPos3 start, mnavPos3 end,
+                                                      mnavFlightPath* pathOut)
+{
+    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
+                                FindFlightPathWork(query, volume, start, end, pathOut));
 }
 
 mnavResult mnavFindFlightPath(mnavQuery* query, const mnavFlightVolume* volume, mnavPos3 start,
                               mnavPos3 end, mnavFlightPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = FindFlightPathWork(query, volume, start, end, pathOut);
+    mnavResult result = FindFlightPathCounted(query, volume, start, end, pathOut);
     mnavFloatEnvLeave(env);
     return result;
 }

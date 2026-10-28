@@ -9,6 +9,7 @@
 #include "bake_def.h"
 #include "detail.h"
 #include "fpenv.h"
+#include "invariant.h"
 #include "polymesh.h"
 #include "tile.h"
 
@@ -49,7 +50,9 @@ static MNAV_NOINLINE mnavBakeDefResult CreateNavmeshWork(const mnavBakeDef* def,
     }
     navmesh->def = *def;
     navmesh->cells = cells;
+    navmesh->linkSlotLimit = MNAV_MAX_LINKS;
     navmesh->memory = memory;
+    navmesh->memory.host = &navmesh->host;
     *navmeshOut = navmesh;
     return (mnavBakeDefResult){mnav_success, mnav_settingNone};
 }
@@ -60,6 +63,11 @@ mnavBakeDefResult mnavCreateNavmesh(const mnavBakeDef* def, mnavNavmesh** navmes
     mnavBakeDefResult result = CreateNavmeshWork(def, navmeshOut);
     mnavFloatEnvLeave(env);
     return result;
+}
+
+uint64_t mnavGetNavmeshMisuse(const mnavNavmesh* navmesh)
+{
+    return navmesh != nullptr ? mnavHostMisuse(&navmesh->host) : 0;
 }
 
 static void ReleaseLinks(mnavMemory* memory, mnavTile* tile)
@@ -86,7 +94,7 @@ static void FreeTile(mnavMemory* memory, mnavTile* tile)
 
 void mnavDestroyNavmesh(mnavNavmesh* navmesh)
 {
-    if (navmesh == nullptr)
+    if (navmesh == nullptr || mnavHostCalledBack(&navmesh->host))
     {
         return;
     }
@@ -113,7 +121,12 @@ void mnavDestroyNavmesh(mnavNavmesh* navmesh)
                 alignof(mnavPlace));
     mnavRelease(memory, navmesh->slots, (size_t)navmesh->slotCapacity, sizeof(mnavSlot),
                 alignof(mnavSlot));
+    // The mark lives in the block being freed: it is set for good, so that
+    // a call back in from this release is refused too, and the release
+    // does not touch it.
+    mnavHostEnter(&navmesh->host);
     mnavMemory last = *memory;
+    last.host = nullptr;
     mnavRelease(&last, navmesh, 1, sizeof(mnavNavmesh), alignof(mnavNavmesh));
 }
 
@@ -167,8 +180,8 @@ const mnavPolygon* mnavPolygonOf(const mnavNavmesh* navmesh, mnavPolygonId id,
     return &slot->tile->mesh.polygons[id.polygon];
 }
 
-mnavResult mnavGetTile(const mnavNavmesh* navmesh, int32_t tileX, int32_t tileZ,
-                       mnavTileId* tileOut)
+static mnavResult GetTileWork(const mnavNavmesh* navmesh, int32_t tileX, int32_t tileZ,
+                              mnavTileId* tileOut)
 {
     if (navmesh == nullptr || tileOut == nullptr)
     {
@@ -179,6 +192,12 @@ mnavResult mnavGetTile(const mnavNavmesh* navmesh, int32_t tileX, int32_t tileZ,
     *tileOut = tile != nullptr ? (mnavTileId){(uint32_t)slot + 1, navmesh->slots[slot].generation}
                                : (mnavTileId){0, 0};
     return tile != nullptr ? mnav_success : mnav_errorNotLoaded;
+}
+
+mnavResult mnavGetTile(const mnavNavmesh* navmesh, int32_t tileX, int32_t tileZ,
+                       mnavTileId* tileOut)
+{
+    return mnavHostCountInvalid(MNAV_HOST(navmesh), GetTileWork(navmesh, tileX, tileZ, tileOut));
 }
 
 static uint32_t FloatBits(float f)
@@ -237,6 +256,10 @@ static mnavResult Stage(mnavNavmesh* navmesh, int32_t x, int32_t z, mnavTile* ti
 static MNAV_NOINLINE mnavTileResult StageTileWork(mnavNavmesh* navmesh, const uint8_t* bytes,
                                                   size_t size)
 {
+    if (navmesh != nullptr && mnavHostCalledBackWriting(&navmesh->host))
+    {
+        return (mnavTileResult){mnav_errorBusy, mnav_tileHeader, -1};
+    }
     if (navmesh == nullptr)
     {
         return (mnavTileResult){mnav_errorInvalid, mnav_tileHeader, -1};
@@ -252,15 +275,16 @@ static MNAV_NOINLINE mnavTileResult StageTileWork(mnavNavmesh* navmesh, const ui
     *tile = (mnavTile){0};
     mnavTileResult result =
         mnavDecodeTile(memory, bytes, size, &tile->info, &tile->mesh, &tile->detail);
+    // Settings of another def are a check on the bytes too.
     if (result.result == mnav_success && !Matches(navmesh, &tile->info))
     {
-        result = (mnavTileResult){mnav_errorInvalid, mnav_tileHeader, -1};
+        result = (mnavTileResult){mnav_errorFormat, mnav_tileHeader, -1};
     }
     int32_t held = 0;
     if (result.result == mnav_success && navmesh->def.tier < mnav_tierDynamic &&
         mnavTileAt(navmesh, tile->info.x, tile->info.z, &held) != nullptr)
     {
-        result = (mnavTileResult){mnav_errorTier, mnav_tileHeader, -1};
+        result = (mnavTileResult){mnav_errorUnsupported, mnav_tileHeader, -1};
     }
     if (result.result == mnav_success)
     {
@@ -272,21 +296,38 @@ static MNAV_NOINLINE mnavTileResult StageTileWork(mnavNavmesh* navmesh, const ui
     return result;
 }
 
+static MNAV_NOINLINE mnavTileResult StageTileCounted(mnavNavmesh* navmesh, const uint8_t* bytes,
+                                                     size_t size)
+{
+    mnavTileResult result = StageTileWork(navmesh, bytes, size);
+    result.result = mnavHostCountInvalid(MNAV_HOST(navmesh), result.result);
+    return result;
+}
+
 mnavTileResult mnavStageTile(mnavNavmesh* navmesh, const uint8_t* bytes, size_t size)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavTileResult result = StageTileWork(navmesh, bytes, size);
+    mnavTileResult result = StageTileCounted(navmesh, bytes, size);
     mnavFloatEnvLeave(env);
     return result;
 }
 
-mnavResult mnavStageTileRemoval(mnavNavmesh* navmesh, int32_t tileX, int32_t tileZ)
+static mnavResult StageTileRemovalWork(mnavNavmesh* navmesh, int32_t tileX, int32_t tileZ)
 {
     if (navmesh == nullptr)
     {
         return mnav_errorInvalid;
     }
+    if (mnavHostCalledBackWriting(&navmesh->host))
+    {
+        return mnav_errorBusy;
+    }
     return Stage(navmesh, tileX, tileZ, nullptr);
+}
+
+mnavResult mnavStageTileRemoval(mnavNavmesh* navmesh, int32_t tileX, int32_t tileZ)
+{
+    return mnavHostCountInvalid(MNAV_HOST(navmesh), StageTileRemovalWork(navmesh, tileX, tileZ));
 }
 
 void mnavAcross(int32_t side, int32_t* x, int32_t* z, int32_t* facing)
@@ -458,7 +499,7 @@ static mnavResult BuildLinks(mnavNavmesh* navmesh, mnavTilePlan* plan, int32_t s
         relink.firstLink[p + 1] += relink.firstLink[p];
     }
     relink.linkCount = relink.firstLink[polygons];
-    result = relink.linkCount > navmesh->def.limits.tileLinks ? mnav_errorLimit : mnav_success;
+    result = relink.linkCount > navmesh->def.limits.tileLinks ? mnav_errorCapacity : mnav_success;
     if (result == mnav_success)
     {
         result = mnavAllocate(memory, (size_t)relink.linkCount, sizeof(mnavLink), alignof(mnavLink),
@@ -506,6 +547,8 @@ static int32_t TakeSlot(mnavTilePlan* plan)
             return s;
         }
     }
+    // MakePlan took a slot for every staged change.
+    MNAV_ASSERT(plan->slotCount < plan->slotCapacity);
     plan->slots[plan->slotCount] = (mnavSlot){0, false, 0, 0, nullptr};
     return plan->slotCount++;
 }
@@ -540,6 +583,19 @@ static void PlanChange(mnavTilePlan* plan, int32_t existing, const mnavStaged* s
     }
 }
 
+// Appends a place to the planned places, which stay sorted with each
+// place once, within the room MakePlan took for the committed places and
+// the staged changes, and each naming a slot that holds a tile.
+static void AddPlace(mnavTilePlan* plan, mnavPlace place)
+{
+    MNAV_ASSERT(plan->placeCount < plan->placeCapacity);
+    MNAV_ASSERT(plan->slots[place.slot].tile != nullptr);
+    MNAV_ASSERT(plan->placeCount == 0 ||
+                Before(plan->places[plan->placeCount - 1].x, plan->places[plan->placeCount - 1].z,
+                       place.x, place.z));
+    plan->places[plan->placeCount++] = place;
+}
+
 // Merges the committed places with the staged changes, both sorted, into
 // the planned places.
 static void PlanPlaces(const mnavNavmesh* navmesh, mnavTilePlan* plan)
@@ -555,10 +611,13 @@ static void PlanPlaces(const mnavNavmesh* navmesh, mnavTilePlan* plan)
             change == nullptr || (old != nullptr && Before(old->x, old->z, change->x, change->z));
         if (takeOld)
         {
-            plan->places[plan->placeCount++] = *old;
+            AddPlace(plan, *old);
             a += 1;
             continue;
         }
+        // Stage keeps one change a place.
+        MNAV_ASSERT(b == 0 || Before(navmesh->staged[b - 1].x, navmesh->staged[b - 1].z, change->x,
+                                     change->z));
         a += old != nullptr && old->x == change->x && old->z == change->z ? 1 : 0;
         b += 1;
         if (change->tile == nullptr)
@@ -569,7 +628,7 @@ static void PlanPlaces(const mnavNavmesh* navmesh, mnavTilePlan* plan)
         {
             if (plan->slots[s].tile == change->tile)
             {
-                plan->places[plan->placeCount++] = (mnavPlace){change->x, change->z, s};
+                AddPlace(plan, (mnavPlace){change->x, change->z, s});
             }
         }
     }
@@ -642,7 +701,7 @@ static mnavResult MakePlan(mnavNavmesh* navmesh, mnavTilePlan* plan)
     PlanPlaces(navmesh, plan);
     if (plan->placeCount > navmesh->def.limits.tiles)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     for (int32_t s = 0; s < plan->slotCount && result == mnav_success; ++s)
     {

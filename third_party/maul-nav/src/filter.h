@@ -12,20 +12,11 @@
 #include <stdint.h>
 
 // Gives a non-walkable span the area of the walkable span directly below
-// it when its top is at most step cells higher.
-void mnavFilterLowObstacles(mnavHeightfield* heightfield, int32_t step);
-
-// Makes a walkable span unwalkable when a neighbor drops more than step
-// cells into space at least height cells tall, or when the neighbors it
-// can reach differ by more than step cells. A cell outside the field
-// counts as a drop.
-void mnavFilterLedges(mnavHeightfield* heightfield, int32_t height, int32_t step);
-
-// Makes a walkable span unwalkable when less than height cells are free
-// above it.
-void mnavFilterLowHeight(mnavHeightfield* heightfield, int32_t height);
-
-// The three filters in order.
+// it when its top is at most step cells higher; then makes a walkable span
+// unwalkable when a neighbor drops more than step cells into space at
+// least height cells tall, when the neighbors it can reach differ by more
+// than step cells, or when less than height cells are free above it. A
+// cell outside the field counts as a drop.
 void mnavFilterWalkable(mnavHeightfield* heightfield, int32_t height, int32_t step);
 
 #endif // MAUL_NAV_SRC_FILTER_H

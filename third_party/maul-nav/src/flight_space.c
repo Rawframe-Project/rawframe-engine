@@ -8,6 +8,7 @@
 
 #include "flight.h"
 #include "flight_volume.h"
+#include "invariant.h"
 
 #include "maul-nav/flight.h"
 
@@ -73,6 +74,22 @@ static bool Inside(const mnavFlightBlock* b, const int32_t at[3])
            at[1] < b->y + b->size && at[2] < b->z + b->size;
 }
 
+// Moves block b to its child of side size holding voxel (x, y, z), and
+// returns the child's octant.
+static int32_t Halve(mnavFlightBlock* b, int32_t size, int32_t x, int32_t y, int32_t z)
+{
+    // A side of 16 voxels or more halves to the leaves' 4, which end a
+    // descent.
+    MNAV_ASSERT(size >= 4);
+    int32_t o =
+        (x >= b->x + size ? 1 : 0) | (y >= b->y + size ? 2 : 0) | (z >= b->z + size ? 4 : 0);
+    b->x += (o & 1) != 0 ? size : 0;
+    b->y += (o & 2) != 0 ? size : 0;
+    b->z += (o & 4) != 0 ? size : 0;
+    b->size = size;
+    return o;
+}
+
 // Descends tile t to voxel (x, y, z) of its own frame: what holds it, and
 // the block holding it; a leaf reached is kept in leaf and leafBits.
 static int32_t Hold(const mnavFlightTile* t, int32_t x, int32_t y, int32_t z, mnavFlightBlock* b,
@@ -87,12 +104,7 @@ static int32_t Hold(const mnavFlightTile* t, int32_t x, int32_t y, int32_t z, mn
     const mnavFlightNode* node = &t->nodes[t->rootNodes[c]];
     for (int32_t size = t->side / 2;; size /= 2)
     {
-        int32_t o =
-            (x >= b->x + size ? 1 : 0) | (y >= b->y + size ? 2 : 0) | (z >= b->z + size ? 4 : 0);
-        b->x += (o & 1) != 0 ? size : 0;
-        b->y += (o & 2) != 0 ? size : 0;
-        b->z += (o & 4) != 0 ? size : 0;
-        b->size = size;
+        int32_t o = Halve(b, size, x, y, z);
         if ((node->mask >> (o + 8) & 1u) != 0)
         {
             return MNAV_SPACE_SOLID;
@@ -245,6 +257,12 @@ typedef struct Frame
     int32_t size;
 } Frame;
 
+static void Push(Frame* stack, int32_t* top, Frame f)
+{
+    MNAV_ASSERT(*top < STACK_DEPTH);
+    stack[(*top)++] = f;
+}
+
 // The octant of a block of half side h at (x, y, z) that holds the whole
 // region, or -1 when the region meets more than one.
 static int32_t Holding(const Region* r, int32_t x, int32_t y, int32_t z, int32_t h)
@@ -345,7 +363,7 @@ static void Collect(const mnavFlightTile* t, int32_t c, const Region* r)
             }
             else
             {
-                stack[top++] = (Frame){Child(node, o), x, y, z, h};
+                Push(stack, &top, (Frame){Child(node, o), x, y, z, h});
             }
         }
     }
@@ -618,6 +636,10 @@ static bool Within(const mnavFlightCursor* cursor, Walk* w, const int32_t end[3]
         {
             return false;
         }
+        // A voxel short of the end's lies a step away along an axis the
+        // segment moves on, whose crossing is the one due; without it the
+        // walk would not move.
+        MNAV_ASSERT(*tied != 0);
         if (!Inside(&w->open, to))
         {
             if (!LeafClear(cursor, w->at, w->step, *tied, to))

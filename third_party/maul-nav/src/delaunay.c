@@ -34,7 +34,7 @@ static bool InCircle(const mnavDetailVertex* a, const mnavDetailVertex* b,
 
 static void Write(mnavTriangulation* tr, int32_t t, uint8_t a, uint8_t b, uint8_t c)
 {
-    tr->triangles[t] = (mnavDetailTriangle){{a, b, c}, 0};
+    tr->triangles[t] = (mnavDetailTriangle){{a, b, c}};
     tr->changed[t] = 1;
 }
 
@@ -149,8 +149,9 @@ int32_t mnavLocate(const mnavTriangulation* triangulation, int32_t x, int32_t z,
             return t;
         }
     }
+    MNAV_ASSERT(false);
     *edge = -1;
-    return -1;
+    return 0;
 }
 
 // Splits t at v inside it into three, each with v as corner 2.
@@ -170,25 +171,20 @@ static void SplitInside(mnavTriangulation* tr, uint8_t v, int32_t t)
     Legalize(tr, 3);
 }
 
-bool mnavInsertVertex(mnavTriangulation* triangulation, int32_t v, int32_t t, int32_t edge)
+void mnavInsertVertex(mnavTriangulation* triangulation, int32_t v, int32_t t, int32_t edge)
 {
     mnavTriangulation* tr = triangulation;
     uint8_t p = (uint8_t)v;
+    // Either split adds two triangles and stacks at most four edges.
+    MNAV_ASSERT(tr->count + 2 <= tr->capacity && tr->stackCapacity >= 4);
     if (edge < 0)
     {
-        if (tr->count + 2 > tr->capacity || tr->stackCapacity < 3)
-        {
-            return false;
-        }
         SplitInside(tr, p, t);
-        return true;
+        return;
     }
     int32_t far = 0;
     int32_t n = Across(tr, t, edge, &far);
-    if (n < 0 || tr->count + 2 > tr->capacity || tr->stackCapacity < 4)
-    {
-        return false;
-    }
+    MNAV_ASSERT(n >= 0);
     // The edge a to b of t = (a, b, c) and n = (b, a, d) splits at p into
     // four triangles, each with p as corner 2.
     uint8_t a = tr->triangles[t].corners[edge];
@@ -206,5 +202,4 @@ bool mnavInsertVertex(mnavTriangulation* triangulation, int32_t v, int32_t t, in
     tr->stack[2] = s;
     tr->stack[3] = s + 1;
     Legalize(tr, 4);
-    return true;
 }

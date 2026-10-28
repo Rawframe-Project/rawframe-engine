@@ -104,12 +104,15 @@ static void CheckLink(const mnavCompactField* field, int32_t c, uint32_t i, int3
     MNAV_ASSERT(nx >= 0 && nz >= 0 && nx < width && nz < width);
     int32_t column = nx + nz * width;
     MNAV_ASSERT(field->columns[column] + span->links[direction] < field->columns[column + 1]);
+    (void)column;
     const mnavOpenSpan* other =
         &field->spans[mnavLinkedSpan(field, c % width, c / width, i, direction)];
     int32_t shared = Min(span->floor + span->height, other->floor + other->height) -
                      Max(span->floor, other->floor);
     int32_t rise = (int32_t)other->floor - (int32_t)span->floor;
     MNAV_ASSERT(shared >= height && rise >= -step && rise <= step);
+    (void)shared;
+    (void)rise;
 }
 
 // The columns cover the spans in order, each column's floors ascend, and
@@ -182,10 +185,6 @@ mnavResult mnavAllocateCompactField(mnavMemory* memory, const mnavTileFrame* fra
     {
         result = mnavAllocate(memory, (size_t)spanCount, sizeof(mnavAreaType),
                               alignof(mnavAreaType), (void**)&field->areas);
-    }
-    if (result != mnav_success)
-    {
-        mnavReleaseCompactField(memory, field);
     }
     return result;
 }

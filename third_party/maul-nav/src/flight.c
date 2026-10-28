@@ -13,6 +13,7 @@
 #include "bake_def.h"
 #include "flight_def.h"
 #include "heightfield.h"
+#include "invariant.h"
 #include "raster.h"
 
 #include "maul-nav/bake.h"
@@ -245,7 +246,7 @@ static mnavResult Room(mnavMemory* memory, const mnavFlightLimits* limits, mnavF
 {
     if (nodes > limits->tileNodes || leaves > limits->tileLeaves)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     mnavResult r = mnavReserve(memory, (void**)&t->nodes, &t->nodeCapacity, t->nodeCount, nodes,
                                sizeof(mnavFlightNode), alignof(mnavFlightNode));
@@ -253,6 +254,20 @@ static mnavResult Room(mnavMemory* memory, const mnavFlightLimits* limits, mnavF
                ? mnavReserve(memory, (void**)&t->leaves, &t->leafCapacity, t->leafCount, leaves,
                              sizeof(uint64_t), alignof(uint64_t))
                : r;
+}
+
+// Appends a node, or a leaf, in the room Room took: one node and eight
+// leaves a block of the level.
+static void AddNode(mnavFlightTile* t, mnavFlightNode node)
+{
+    MNAV_ASSERT(t->nodeCount < t->nodeCapacity);
+    t->nodes[t->nodeCount++] = node;
+}
+
+static void AddLeaf(mnavFlightTile* t, uint64_t leaf)
+{
+    MNAV_ASSERT(t->leafCount < t->leafCapacity);
+    t->leaves[t->leafCount++] = leaf;
 }
 
 // Appends one cube's nodes, level by level from its root, and the mixed
@@ -294,7 +309,7 @@ static mnavResult Emit(mnavMemory* memory, const mnavFlightLimits* limits, const
                 node.mask |= (uint16_t)(1u << o);
                 if (l == 0)
                 {
-                    t->leaves[t->leafCount++] = v->leaves[ChildAt(n, x, y, z, o)];
+                    AddLeaf(t, v->leaves[ChildAt(n, x, y, z, o)]);
                     continue;
                 }
                 next[3 * nextCount] = x * 2 + (o & 1);
@@ -302,13 +317,15 @@ static mnavResult Emit(mnavMemory* memory, const mnavFlightLimits* limits, const
                 next[3 * nextCount + 2] = z * 2 + (o >> 2 & 1);
                 ++nextCount;
             }
-            t->nodes[t->nodeCount++] = node;
+            AddNode(t, node);
         }
         int32_t* swap = cur;
         cur = next;
         next = swap;
         count = nextCount;
     }
+    // The leaves' level hands no blocks on.
+    MNAV_ASSERT(count == 0);
     return mnav_success;
 }
 
@@ -508,6 +525,9 @@ bool mnavFlightSolid(const mnavFlightTile* tile, int32_t x, int32_t y, int32_t z
     const mnavFlightNode* node = &tile->nodes[tile->rootNodes[c]];
     for (int32_t size = tile->side / 2;; size /= 2)
     {
+        // A side of 16 voxels or more halves to the leaves' 4, which end
+        // the descent.
+        MNAV_ASSERT(size >= 4);
         int32_t o = (x >= size ? 1 : 0) | (y >= size ? 2 : 0) | (z >= size ? 4 : 0);
         x -= x >= size ? size : 0;
         y -= y >= size ? size : 0;

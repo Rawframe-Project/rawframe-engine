@@ -77,19 +77,34 @@ extern "C"
     /// @param fieldOut Receives the field, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultFlowFieldDef; `mnav_errorVersion` for one built
-    /// against another version of the headers; `mnav_errorRange` for a cell
-    /// limit out of its range; `mnav_errorCapacity` when the allocator fails.
+    /// against another version of the headers; `mnav_errorInvalid` also for an
+    /// allocator with one function or a cell limit below 1; `mnav_errorLimit`
+    /// for a cell limit past MNAV_MAX_FLOW_CELLS; `mnav_errorCapacity` when the
+    /// allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def,
                                                            mnavFlowField** fieldOut);
 
-    /// Destroys a flow field.
+    /// Destroys a flow field. Called back in from the field's allocator, it
+    /// does nothing and counts one misuse.
     ///
     /// @param field The field, or NULL.
     /// @par Thread safety
     /// Safe from any thread; the field is used by one thread at a time.
     MNAV_API void mnavDestroyFlowField(mnavFlowField* field);
+
+    /// Returns how many calls against the flow field were refused as misuse
+    /// since it was made: an argument refused with `mnav_errorInvalid` when the
+    /// flow field was the first object the call was given, and a call back in
+    /// from host code it ran (`mnav_errorBusy`).
+    ///
+    /// @param field The field.
+    /// @return The count; 0 for NULL.
+    /// @par Thread safety
+    /// Safe from any thread. It may be read at any time, also while host
+    /// code the object runs calls back in.
+    MNAV_API uint64_t mnavGetFlowFieldMisuse(const mnavFlowField* field);
 
     // A window of a grid's cells: columns x to x + width - 1 and rows y to
     // y + height - 1.
@@ -119,12 +134,15 @@ extern "C"
     /// @param goals     The goal cells, in grid places.
     /// @param goalCount How many, at least 0.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
-    /// negative count, a grid with no areas, a side out of range or a cell
-    /// size not more than 0 or not finite, a region empty or not within
-    /// the grid, a goal outside the grid, or a filter not built from
-    /// mnavDefaultQueryFilter; `mnav_errorRange` for a filter cost out of
-    /// its range; `mnav_errorLimit` for a region of more cells than the
-    /// field's limit. On an error the field holds nothing.
+    /// negative count, a grid with no areas, a side below 1 or a cell size not
+    /// more than 0 or not finite, a region empty or not within the grid, a goal
+    /// outside the grid, or a filter not built from mnavDefaultQueryFilter or
+    /// with a NaN cost; `mnav_errorLimit` for a side past MNAV_MAX_GRID_SIDE or
+    /// a filter cost past MNAV_MIN_AREA_COST or MNAV_MAX_AREA_COST, an infinity
+    /// included; `mnav_errorCapacity` for a region of more cells than the
+    /// field's limit. On an error the field holds nothing. Also
+    /// `mnav_errorBusy` when called back in from the field's allocator, one
+    /// misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the field is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavBeginFlowField(mnavFlowField* field,
@@ -142,8 +160,10 @@ extern "C"
     /// @param cells    The most cells to settle, at least 1.
     /// @param endedOut Receives whether the work has ended. May be NULL.
     /// @return `mnav_success`, also when the work had already ended;
-    /// `mnav_errorInvalid` for a NULL field or grid, no work begun, fewer
-    /// than 1 cell, or a grid of another size or cell size.
+    /// `mnav_errorInvalid` for a NULL field or grid, fewer than 1 cell, or a
+    /// grid of another size or cell size; `mnav_errorState` for no work begun.
+    /// Also `mnav_errorBusy` when called back in from the field's allocator,
+    /// one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the field is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavContinueFlowField(mnavFlowField* field,
@@ -167,10 +187,12 @@ extern "C"
     ///                     was last begun or repaired; each once or more,
     ///                     those outside the region ignored.
     /// @param changedCount How many, at least 0.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
-    /// a count, a negative count, nothing begun, a grid of another size or
-    /// cell size or with no areas, or a goal or changed cell outside the
-    /// grid; `mnav_errorStale` while work on the field has not ended.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with a
+    /// count, a negative count, a grid of another size or cell size or with no
+    /// areas, or a goal or changed cell outside the grid; `mnav_errorState` for
+    /// nothing begun, or while work on the field has not ended. Also
+    /// `mnav_errorBusy` when called back in from the field's allocator, one
+    /// misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the field is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavUpdateFlowField(mnavFlowField* field,
@@ -187,7 +209,8 @@ extern "C"
     /// @param filter    The areas usable and their costs, or NULL.
     /// @param goals     The goal cells.
     /// @param goalCount How many, at least 0.
-    /// @return As mnavBeginFlowField.
+    /// @return As mnavBeginFlowField. Also `mnav_errorBusy` when called back in
+    /// from the field's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the field is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavBuildFlowField(mnavFlowField* field,
@@ -200,9 +223,10 @@ extern "C"
     /// @param field   The field.
     /// @param cell    The cell, in grid places.
     /// @param flowOut Receives the cell's way, its next cell in grid places.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
-    /// cell outside the field's region, or nothing begun;
-    /// `mnav_errorStale` while work begun on the field has not ended.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument;
+    /// `mnav_errorOutside` for a cell outside the field's region, flowOut left
+    /// as it was; `mnav_errorState` for nothing begun, or while work begun on
+    /// the field has not ended.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read a field at once
     /// while no work runs on it.
@@ -220,9 +244,9 @@ extern "C"
     /// @return `mnav_success`, appending nothing when nothing was begun;
     /// `mnav_errorInvalid` for a NULL argument, a height not finite, or a
     /// buffer with a count out of range, an array missing or an origin not
-    /// finite; `mnav_errorStale` while work begun on the field has not
-    /// ended; `mnav_errorCapacity` when the buffer filled, its counts
-    /// saying what the whole needs.
+    /// finite; `mnav_errorState` while work begun on the field has not ended;
+    /// `mnav_errorCapacity` when the buffer filled, its counts saying what the
+    /// whole needs.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read a field at once
     /// while no work runs on it; the buffer is used by one thread at a

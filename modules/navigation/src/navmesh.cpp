@@ -26,10 +26,10 @@ result::Status checked(mnavResult outcome, std::string_view why) {
     switch (outcome) {
     case mnav_success:
         return {};
-    case mnav_errorLimit:
-        return refuse(NavigationError::Limit, why);
+    // Room the navmesh was made with, or memory: more would succeed. A
+    // value past a bound Maul Nav publishes is the input's fault.
     case mnav_errorCapacity:
-        return refuse(NavigationError::Capacity, why);
+        return refuse(NavigationError::Limit, why);
     default:
         return std::unexpected<result::Error>{
             refuse(NavigationError::Invalid, why).error().withContext("outcome", std::to_string(outcome))};
@@ -186,9 +186,9 @@ result::Status Navmesh::bake(std::span<const Mesh> meshes, const Area& area) {
     for (std::int32_t column = kColumn(area.minX); column <= kColumn(area.maxX); ++column) {
         for (std::int32_t row = kRow(area.minZ); row <= kRow(area.maxZ); ++row) {
             mnavBakeReport report{};
-            const result::Status kBaked = checked(
-                mnavBakeTile(state.baker, input.data(), static_cast<std::int32_t>(input.size()), column, row, &report),
-                "a navmesh tile could not be baked");
+            const mnavBakeInput kInput{.meshes = input.data(), .meshCount = static_cast<std::int32_t>(input.size())};
+            const result::Status kBaked =
+                checked(mnavBakeTile(state.baker, &kInput, column, row, &report), "a navmesh tile could not be baked");
             if (!kBaked.has_value()) {
                 state.unstage(staged);
                 return std::unexpected<result::Error>{kBaked.error()

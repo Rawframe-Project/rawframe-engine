@@ -9,6 +9,7 @@
 
 #include "allocator.h"
 #include "detail.h"
+#include "host_code.h"
 #include "polymesh.h"
 #include "tile.h"
 
@@ -111,6 +112,9 @@ struct mnavNavmesh
     mnavBakeDef def;
     mnavBakeCells cells;
     mnavMemory memory;
+    // Marked while its allocator or a link generation's clearance test
+    // runs; mutable through a const navmesh, which link generation reads.
+    mnavHostCode host;
     mnavSlot* slots;
     int32_t slotCount;
     int32_t slotCapacity;
@@ -126,6 +130,9 @@ struct mnavNavmesh
     mnavOffLink* links;
     int32_t linkSlots;
     int32_t linkCapacity;
+    // The slots an attachment's key holds: MNAV_MAX_LINKS, which a
+    // white-box test lowers to reach the last without that many links.
+    int32_t linkSlotLimit;
     int32_t linksHeld;
     int32_t linksPending;
     // Every attached link from each polygon it leaves, as keys sorted by

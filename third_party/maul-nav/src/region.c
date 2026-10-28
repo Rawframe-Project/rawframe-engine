@@ -507,7 +507,9 @@ static void CheckRegions(const mnavCompactField* field, int32_t border, const mn
             uint32_t id = map->ids[i];
             MNAV_ASSERT(side != 0 ? id == 0 || id == (MNAV_BORDER_REGION | side)
                                   : (id & MNAV_BORDER_REGION) == 0 && id <= map->count);
+            (void)id;
         }
+        (void)side;
     }
 }
 
@@ -531,11 +533,7 @@ mnavResult mnavBuildRegions(mnavMemory* memory, const mnavCompactField* field, i
     {
         result = Layer(memory, field, regions, minRegion, map);
     }
-    if (result != mnav_success)
-    {
-        mnavReleaseRegions(memory, map);
-    }
-    else if (MNAV_INVARIANTS)
+    if (result == mnav_success && MNAV_INVARIANTS)
     {
         CheckRegions(field, border, map);
     }

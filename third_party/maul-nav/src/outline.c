@@ -222,7 +222,7 @@ mnavResult mnavCollectOutlines(mnavMemory* memory, const mnavBakeDef* def,
     }
     if (touching > def->limits.tileTriangles)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     if (touching == 0)
     {

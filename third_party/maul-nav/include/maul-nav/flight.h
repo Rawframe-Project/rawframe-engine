@@ -25,12 +25,12 @@ extern "C"
 #endif
 
 // The flight tile format's version, written into every flight tile.
-#define MNAV_FLIGHT_FORMAT 2
+#define MNAV_FLIGHT_FORMAT 3
 
 // The flight bake's generation, written into every flight tile and hashed
 // into its fingerprint: it rises with any change to the library that gives
 // other flight tile bytes for the same def and input, and only then.
-#define MNAV_FLIGHT_GENERATOR 1
+#define MNAV_FLIGHT_GENERATOR 2
 
 // The range of a flight tile's side, in voxels: 4 times a power of 2.
 #define MNAV_MIN_FLIGHT_TILE_VOXELS 16
@@ -41,10 +41,14 @@ extern "C"
 #define MNAV_MAX_FLIGHT_TILE_LEAVES 16777216
 // The most voxels the box mnavDebugFlight draws may span.
 #define MNAV_MAX_FLIGHT_DEBUG_VOXELS 16777216
+// The farthest a point a flight volume's calls take may lie from the
+// volume's origin, in voxels on any axis (the floor's voxel counted from
+// the origin), so that a walk's voxel indices stay well within 32 bits.
+#define MNAV_MAX_FLIGHT_VOXELS 268435456
 
     // The named limits that bound a flight bake's work and a flight
     // volume's size. Each is at least 1 and at most its MNAV_MAX_ value.
-    // Reaching one is mnav_errorLimit.
+    // Reaching one is mnav_errorCapacity.
     typedef struct mnavFlightLimits
     {
         // Input triangles a bake reads, as mnavBakeLimits counts them.
@@ -231,9 +235,13 @@ extern "C"
     /// Checks a flight def.
     ///
     /// @param def  The def.
-    /// @return `mnav_success`; `mnav_errorInvalid` with the first setting
-    /// refused, or for a NULL def; `mnav_errorVersion` with no setting for
-    /// a def built against another version of the headers.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL def, or with the
+    /// first setting refused for a NaN, a value (an infinity included) outside
+    /// the range its field gives with no named constant, or not a power of two
+    /// where one is needed; `mnav_errorLimit` with the setting for a value past
+    /// an MNAV_MIN_ or MNAV_MAX_ bound its field names, an infinity included;
+    /// `mnav_errorVersion` with no setting for a def built against another
+    /// version of the headers.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavFlightDefResult mnavValidateFlightDef(const mnavFlightDef* def);
@@ -243,22 +251,34 @@ extern "C"
     ///
     /// @param def       The def.
     /// @param bakerOut  Receives the baker, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` with the setting for an
-    /// invalid def or a NULL argument; `mnav_errorVersion` for a def built
-    /// against another version of the headers; `mnav_errorLimit` when the baker
-    /// does not fit the def's memory limit; `mnav_errorCapacity` when the
-    /// allocator fails.
+    /// @return `mnav_success`; for a def mnavValidateFlightDef refuses, the
+    /// status and setting it gives; `mnav_errorInvalid` for a NULL bakerOut;
+    /// `mnav_errorCapacity` when the baker does not fit the def's memory
+    /// limit or the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavFlightDefResult mnavCreateFlightBaker(const mnavFlightDef* def,
                                                                       mnavFlightBaker** bakerOut);
 
-    /// Destroys a flight baker and the tile it holds.
+    /// Destroys a flight baker and the tile it holds. Called back in from the
+    /// flight baker's allocator, it does nothing and counts one misuse.
     ///
     /// @param baker  The baker, or NULL.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
     MNAV_API void mnavDestroyFlightBaker(mnavFlightBaker* baker);
+
+    /// Returns how many calls against the flight baker were refused as misuse
+    /// since it was made: an argument refused with `mnav_errorInvalid` when the
+    /// flight baker was the first object the call was given, and a call back in
+    /// from host code it ran (`mnav_errorBusy`).
+    ///
+    /// @param baker The flight baker.
+    /// @return The count; 0 for NULL.
+    /// @par Thread safety
+    /// Safe from any thread. It may be read at any time, also while host
+    /// code the object runs calls back in.
+    MNAV_API uint64_t mnavGetFlightBakerMisuse(const mnavFlightBaker* baker);
 
     /// Bakes one flight tile from the input a navmesh bake reads:
     /// every triangle is rasterized at the voxel size, and a
@@ -270,15 +290,18 @@ extern "C"
     ///
     /// @param baker     The baker; the tile it held before is dropped.
     /// @param input     The meshes, terrains and volumes, as
-    ///                  mnavBakeTileInput reads them.
+    ///                  mnavBakeTile reads them.
     /// @param tileX     The tile's column.
     /// @param tileZ     The tile's row.
     /// @param reportOut Receives the report. May be NULL.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL baker or
-    /// input or input mnavBakeTileInput refuses, the mesh named in the
-    /// report; `mnav_errorRange` for input or a tile past the extent;
-    /// `mnav_errorLimit` past a limit; `mnav_errorCapacity` when the
-    /// allocator fails.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL baker or input;
+    /// for input mnavBakeTile refuses, the status it gives, the mesh named in
+    /// the report; `mnav_errorLimit` for a tile past the extent, or when
+    /// rasterizing cuts a triangle into a piece of more than
+    /// MNAV_MAX_PIECE_CORNERS corners, as for mnavBakeTile;
+    /// `mnav_errorCapacity` past a named limit or the memory limit, or when the
+    /// allocator fails. Also `mnav_errorBusy` when called back in from the
+    /// flight baker's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavBakeFlightTile(mnavFlightBaker* baker,
@@ -308,22 +331,35 @@ extern "C"
     ///
     /// @param def        The def the tiles are baked with.
     /// @param volumeOut  Receives the volume, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` with the setting for an
-    /// invalid def or a NULL argument; `mnav_errorVersion` for a def built
-    /// against another version of the headers; `mnav_errorLimit` when the
-    /// volume does not fit the def's memory limit; `mnav_errorCapacity` when
-    /// the allocator fails.
+    /// @return `mnav_success`; for a def mnavValidateFlightDef refuses, the
+    /// status and setting it gives; `mnav_errorInvalid` for a NULL
+    /// volumeOut; `mnav_errorCapacity` when the volume does not fit the
+    /// def's memory limit or the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavFlightDefResult
     mnavCreateFlightVolume(const mnavFlightDef* def, mnavFlightVolume** volumeOut);
 
-    /// Destroys a flight volume, its tiles and everything staged.
+    /// Destroys a flight volume, its tiles and everything staged. Called back
+    /// in from the flight volume's allocator, it does nothing and counts one
+    /// misuse.
     ///
     /// @param volume  The volume, or NULL.
     /// @par Thread safety
     /// Safe from any thread; the volume is used by one thread at a time.
     MNAV_API void mnavDestroyFlightVolume(mnavFlightVolume* volume);
+
+    /// Returns how many calls against the flight volume were refused as misuse
+    /// since it was made: an argument refused with `mnav_errorInvalid` when the
+    /// flight volume was the first object the call was given, and a call back
+    /// in from host code it ran (`mnav_errorBusy`).
+    ///
+    /// @param volume The flight volume.
+    /// @return The count; 0 for NULL.
+    /// @par Thread safety
+    /// Safe from any thread. It may be read at any time, also while host
+    /// code the object runs calls back in.
+    MNAV_API uint64_t mnavGetFlightVolumeMisuse(const mnavFlightVolume* volume);
 
     /// Loads flight tile bytes, checking every field as hostile input and
     /// the tile's settings against the volume's def, and stages the tile
@@ -333,12 +369,13 @@ extern "C"
     /// @param volume  The volume.
     /// @param bytes   The tile's bytes, as mnavCopyFlightTile gives them.
     /// @param size    Their size in bytes.
-    /// @return `mnav_success`; `mnav_errorInvalid` naming the section and
-    /// element for malformed bytes, a tile baked with other settings (the
-    /// header) or a NULL argument; `mnav_errorVersion` for another flight
-    /// tile format version; `mnav_errorLimit` for a tile past the def's
-    /// node or leaf limit (the header) or past the memory limit;
-    /// `mnav_errorCapacity` when the allocator fails.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument;
+    /// `mnav_errorFormat` naming the section and element for malformed bytes, a
+    /// tile baked with other settings or past the def's node or leaf limit (the
+    /// header); `mnav_errorVersion` for another flight tile format version;
+    /// `mnav_errorCapacity` past the memory limit or when the allocator fails.
+    /// Also `mnav_errorBusy` when called back in from the flight volume's
+    /// allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the volume is used by one thread at a time.
     /// Staging changes nothing queries read, but it may not run beside
@@ -353,8 +390,9 @@ extern "C"
     /// @param tileX   The tile's column.
     /// @param tileZ   The tile's row.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL volume;
-    /// `mnav_errorLimit` past the memory limit; `mnav_errorCapacity` when
-    /// the allocator fails.
+    /// `mnav_errorCapacity` past the memory limit or when the allocator fails.
+    /// Also `mnav_errorBusy` when called back in from the flight volume's
+    /// allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the volume is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavStageFlightTileRemoval(mnavFlightVolume* volume,
@@ -366,8 +404,9 @@ extern "C"
     ///
     /// @param volume  The volume.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL volume;
-    /// `mnav_errorLimit` when the tiles would pass the tiles limit or
-    /// memory its limit; `mnav_errorCapacity` when the allocator fails.
+    /// `mnav_errorCapacity` when the tiles would pass the tiles limit or memory
+    /// its limit, or when the allocator fails. Also `mnav_errorBusy` when
+    /// called back in from the flight volume's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the volume is used by one thread at a time,
     /// so no query may run during a commit.
@@ -398,10 +437,11 @@ extern "C"
     /// @param point    The point, in world coordinates.
     /// @param openOut  Receives whether the point is open; false on
     ///                 failure.
-    /// @return `mnav_success`; `mnav_errorNotLoaded` when no tile is
-    /// committed under the point; `mnav_errorRange` for a point not
-    /// finite or below or above the volume; `mnav_errorInvalid` for a
-    /// NULL argument.
+    /// @return `mnav_success`; `mnav_errorNotLoaded` when no tile is committed
+    /// under the point; `mnav_errorInvalid` for a NULL argument or a point with
+    /// a NaN coordinate; `mnav_errorOutside` for a point below or above the
+    /// volume, openOut false; `mnav_errorLimit` for a point more than
+    /// MNAV_MAX_FLIGHT_VOXELS voxels from the origin, an infinity included.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
@@ -430,9 +470,13 @@ extern "C"
     ///                 within 512 blocks and the node budget: the search
     ///                 looks over the end's space that far first.
     ///                 `mnav_pathNone`, with the start alone.
-    /// @return `mnav_success`; `mnav_errorRange` for a point not finite,
-    /// below or above the volume or past the extent; `mnav_errorInvalid`
-    /// for a NULL argument.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
+    /// point with a NaN coordinate; `mnav_errorOutside` for a point below or
+    /// above the volume, pathOut left as it was; `mnav_errorLimit` for a point
+    /// more than MNAV_MAX_FLIGHT_VOXELS voxels from the origin, an infinity
+    /// included. Also `mnav_errorBusy` when called back in from host code a
+    /// call using the context runs (a link generation's clearance test, a
+    /// hierarchy's allocator as it builds), one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
     /// and the volume is not changed during the search.
@@ -453,9 +497,13 @@ extern "C"
     /// @param volume  The flight volume.
     /// @param start   The start, in world coordinates.
     /// @param end     The end, in world coordinates.
-    /// @return `mnav_success`; `mnav_errorRange` for a point not finite,
-    /// below or above the volume or past the extent; `mnav_errorInvalid`
-    /// for a NULL argument.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
+    /// point with a NaN coordinate; `mnav_errorOutside` for a point below or
+    /// above the volume, the context's search left as it was; `mnav_errorLimit`
+    /// for a point more than MNAV_MAX_FLIGHT_VOXELS voxels from the origin, an
+    /// infinity included. Also `mnav_errorBusy` when called back in from host
+    /// code a call using the context runs (a link generation's clearance test,
+    /// a hierarchy's allocator as it builds), one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavBeginFlightPath(mnavQuery* query,
@@ -469,10 +517,12 @@ extern "C"
     /// @param volume   The volume the search began on.
     /// @param nodes    The most nodes to close, at least 1.
     /// @param endedOut Receives whether the search has ended.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, no
-    /// flight search begun, or fewer than 1 node; `mnav_errorStale` for
-    /// another volume, or one committed to since the search began: begin
-    /// again.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, fewer
+    /// than 1 node, or a volume other than the search's; `mnav_errorState` for
+    /// no flight search begun, or a volume committed to since the search began:
+    /// begin again. Also `mnav_errorBusy` when called back in from host code a
+    /// call using the context runs (a link generation's clearance test, a
+    /// hierarchy's allocator as it builds), one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
     /// and the volume is not changed during the call.
@@ -487,9 +537,12 @@ extern "C"
     /// @param query    The query context; its memory holds the path.
     /// @param volume   The volume the search began on.
     /// @param pathOut  Receives the path.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or
-    /// no flight search begun; `mnav_errorStale` for another volume, or one
-    /// committed to since the search began.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
+    /// volume other than the search's; `mnav_errorState` for no flight search
+    /// begun, or a volume committed to since the search began. Also
+    /// `mnav_errorBusy` when called back in from host code a call using the
+    /// context runs (a link generation's clearance test, a hierarchy's
+    /// allocator as it builds), one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
     /// and the volume is not changed during the call.
@@ -505,8 +558,9 @@ extern "C"
     /// @param from    The ray's start, in world coordinates.
     /// @param to      Its end.
     /// @param hitOut  Receives what stopped it, where and at what fraction.
-    /// @return `mnav_success`; `mnav_errorRange` for a point not finite or
-    /// past the extent; `mnav_errorInvalid` for a NULL argument.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
+    /// point with a NaN coordinate; `mnav_errorLimit` for a point more than
+    /// MNAV_MAX_FLIGHT_VOXELS voxels from the origin, an infinity included.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
@@ -531,9 +585,10 @@ extern "C"
     /// @param hitOut      Receives what stopped that step, as
     ///                    mnavFlightRaycast gives it; may be NULL, and is
     ///                    left alone when every step is clear.
-    /// @return `mnav_success`; `mnav_errorRange` for a point not finite or
-    /// past the extent, before any step is cast; `mnav_errorInvalid` for a
-    /// NULL argument or a negative count.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
+    /// negative count or a point with a NaN coordinate; `mnav_errorLimit` for a
+    /// point more than MNAV_MAX_FLIGHT_VOXELS voxels from the origin, an
+    /// infinity included; either before any step is cast.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
@@ -552,9 +607,10 @@ extern "C"
     /// @param radius      How far to look, in meters, at least 0.
     /// @param nearestOut  Receives the nearest open point.
     /// @param foundOut    Receives whether one lies within the radius.
-    /// @return `mnav_success`; `mnav_errorRange` for a point not finite or
-    /// past the extent, or a radius below 0 or not finite;
-    /// `mnav_errorInvalid` for a NULL argument.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a point
+    /// with a NaN coordinate, or a radius below 0 or not finite;
+    /// `mnav_errorLimit` for a point more than MNAV_MAX_FLIGHT_VOXELS voxels
+    /// from the origin, an infinity included.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
@@ -574,12 +630,13 @@ extern "C"
     /// @param high    Its highest corner, at least low on every axis.
     /// @param buffer  The buffer appended to.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
-    /// corner not finite, a box backward, or a buffer with a count out of
-    /// range, an array missing or an origin not finite; `mnav_errorRange`
-    /// for a corner past the extent or a box of more than
+    /// corner with a NaN coordinate, a box backward, or a buffer with a count
+    /// out of range, an array missing or an origin not finite;
+    /// `mnav_errorLimit` for a corner more than MNAV_MAX_FLIGHT_VOXELS voxels
+    /// from the origin, an infinity included or a box of more than
     /// MNAV_MAX_FLIGHT_DEBUG_VOXELS voxels within the floor and ceiling;
-    /// `mnav_errorCapacity` when the buffer filled, its counts saying what
-    /// the whole needs.
+    /// `mnav_errorCapacity` when the buffer filled, its counts saying what the
+    /// whole needs.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; the buffer is used by one thread at a time.

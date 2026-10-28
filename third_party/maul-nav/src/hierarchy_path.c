@@ -3,7 +3,8 @@
 //
 // Hierarchical paths: the start and end joined to their
 // clusters' transitions, A* over the transitions, and a refinement step
-// by step, each step confined to one cluster.
+// by step, each step confined to one cluster; and the confined search
+// within one cluster, which building the graph runs too.
 
 #include "fpenv.h"
 #include "hierarchy.h"
@@ -18,6 +19,47 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+void mnavMarkCluster(mnavHierarchy* h, int32_t cluster, uint8_t value)
+{
+    for (int32_t i = h->firstSlot[cluster]; i < h->firstSlot[cluster + 1]; ++i)
+    {
+        h->inside[h->slots[i]] = value;
+    }
+}
+
+mnavResult mnavSearchCluster(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* navmesh,
+                             bool backward, int32_t cluster, mnavPolygonId polygon, mnavPos3 point)
+{
+    mnavResult result =
+        mnavBeginPathWork(query, navmesh, &h->filter, polygon, point, polygon, point);
+    if (result != mnav_success)
+    {
+        return result;
+    }
+    mnavMarkCluster(h, cluster, 1);
+    mnavConfineSearch(query, h->inside, true, true);
+    if (backward)
+    {
+        mnavTurnSearchBackward(query);
+    }
+    bool ended = false;
+    while (result == mnav_success && !ended)
+    {
+        result = mnavContinuePathWork(query, navmesh, INT32_MAX, &ended);
+    }
+    mnavMarkCluster(h, cluster, 0);
+    bool out = query->search.outOfNodes;
+    query->search.active = false;
+    query->flight.active = false;
+    return result != mnav_success ? result : (out ? mnav_errorCapacity : mnav_success);
+}
+
+double mnavCostTo(const mnavQuery* query, const mnavTransition* v)
+{
+    int32_t n = query->table[mnavFindNode(query, v->slot, v->polygon, v->tag, v->low)];
+    return n == MNAV_NO_NODE ? (double)INFINITY : query->nodes[n].cost;
+}
 
 // The abstract search's open list, by cost and estimate, then by index;
 // index transitionCount is the end.
@@ -200,7 +242,7 @@ static mnavResult Join(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* na
     int32_t last = h->clusterOf[endPolygon.slot - 1];
     ResetGraph(h);
     mnavResult result = mnavSearchCluster(h, query, navmesh, true, last, endPolygon, end);
-    if (result != mnav_success && result != mnav_errorLimit)
+    if (result != mnav_success && result != mnav_errorCapacity)
     {
         return result;
     }
@@ -214,7 +256,7 @@ static mnavResult Join(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* na
     }
     JoinLinks(h, query, navmesh, last);
     result = mnavSearchCluster(h, query, navmesh, false, first, startPolygon, start);
-    if (result != mnav_success && result != mnav_errorLimit)
+    if (result != mnav_success && result != mnav_errorCapacity)
     {
         return result;
     }
@@ -237,7 +279,7 @@ static mnavResult Run(mnavQuery* query, const mnavNavmesh* navmesh, bool* foundO
     bool ended = false;
     while (result == mnav_success && !ended)
     {
-        result = mnavContinuePath(query, navmesh, INT32_MAX, &ended);
+        result = mnavContinuePathWork(query, navmesh, INT32_MAX, &ended);
     }
     *foundOut = query->search.found != MNAV_NO_NODE;
     return result;
@@ -277,7 +319,7 @@ static mnavResult Refine(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* 
         h->heap[count++] = u;
     }
     mnavResult result =
-        mnavBeginPath(query, navmesh, &h->filter, startPolygon, start, endPolygon, end);
+        mnavBeginPathWork(query, navmesh, &h->filter, startPolygon, start, endPolygon, end);
     int32_t cluster = h->clusterOf[startPolygon.slot - 1];
     *foundOut = true;
     for (int32_t i = count - 1; i >= 0 && result == mnav_success && *foundOut; --i)
@@ -309,13 +351,21 @@ static mnavResult CheckQuery(const mnavQuery* query, const mnavHierarchy* h,
                              mnavPolygonId endPolygon, mnavPos3 end)
 {
     if (query == nullptr || h == nullptr || navmesh == nullptr || !FinitePoint(start) ||
-        !FinitePoint(end) || h->navmesh != navmesh)
+        !FinitePoint(end))
+    {
+        return mnav_errorInvalid;
+    }
+    if (h->navmesh == nullptr)
+    {
+        return mnav_errorState;
+    }
+    if (h->navmesh != navmesh)
     {
         return mnav_errorInvalid;
     }
     if (h->commits != navmesh->commits)
     {
-        return mnav_errorStale;
+        return mnav_errorState;
     }
     mnavResult result = mnavCheckPolygon(navmesh, startPolygon);
     return result == mnav_success ? mnavCheckPolygon(navmesh, endPolygon) : result;
@@ -338,6 +388,10 @@ static MNAV_NOINLINE mnavResult FindHierarchicalPathWork(mnavQuery* query, mnavH
                                                          mnavPolygonId endPolygon, mnavPos3 end,
                                                          mnavPath* pathOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     mnavHierarchy* h = hierarchy;
     if (pathOut == nullptr)
     {
@@ -351,15 +405,15 @@ static MNAV_NOINLINE mnavResult FindHierarchicalPathWork(mnavQuery* query, mnavH
     int32_t first = h->clusterOf[startPolygon.slot - 1];
     if (first == h->clusterOf[endPolygon.slot - 1])
     {
-        return mnavFindPath(query, navmesh, &h->filter, startPolygon, start, endPolygon, end,
-                            pathOut);
+        return mnavFindPathWork(query, navmesh, &h->filter, startPolygon, start, endPolygon, end,
+                                pathOut);
     }
     // Ends within a cluster's side of each other try the plain search
     // first, which finds the cheapest way where it has the nodes.
     if (Near(h, navmesh, start, end))
     {
-        result =
-            mnavFindPath(query, navmesh, &h->filter, startPolygon, start, endPolygon, end, pathOut);
+        result = mnavFindPathWork(query, navmesh, &h->filter, startPolygon, start, endPolygon, end,
+                                  pathOut);
         if (result != mnav_success || pathOut->end != mnav_pathOutOfNodes)
         {
             return result;
@@ -372,8 +426,8 @@ static MNAV_NOINLINE mnavResult FindHierarchicalPathWork(mnavQuery* query, mnavH
     }
     if (!SearchGraph(h, end))
     {
-        return mnavFindPath(query, navmesh, &h->filter, startPolygon, start, endPolygon, end,
-                            pathOut);
+        return mnavFindPathWork(query, navmesh, &h->filter, startPolygon, start, endPolygon, end,
+                                pathOut);
     }
     bool found = false;
     result = Refine(h, query, navmesh, startPolygon, start, endPolygon, end, &found);
@@ -383,10 +437,21 @@ static MNAV_NOINLINE mnavResult FindHierarchicalPathWork(mnavQuery* query, mnavH
     }
     if (!found)
     {
-        return mnavFindPath(query, navmesh, &h->filter, startPolygon, start, endPolygon, end,
-                            pathOut);
+        return mnavFindPathWork(query, navmesh, &h->filter, startPolygon, start, endPolygon, end,
+                                pathOut);
     }
-    return mnavFinishPath(query, navmesh, pathOut);
+    return mnavFinishPathWork(query, navmesh, pathOut);
+}
+
+static MNAV_NOINLINE mnavResult
+FindHierarchicalPathCounted(mnavQuery* query, mnavHierarchy* hierarchy, const mnavNavmesh* navmesh,
+                            mnavPolygonId startPolygon, mnavPos3 start, mnavPolygonId endPolygon,
+                            mnavPos3 end, mnavPath* pathOut)
+{
+    return mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), mnavHostFirst(MNAV_HOST(hierarchy), MNAV_HOST(navmesh))),
+        FindHierarchicalPathWork(query, hierarchy, navmesh, startPolygon, start, endPolygon, end,
+                                 pathOut));
 }
 
 mnavResult mnavFindHierarchicalPath(mnavQuery* query, mnavHierarchy* hierarchy,
@@ -395,8 +460,8 @@ mnavResult mnavFindHierarchicalPath(mnavQuery* query, mnavHierarchy* hierarchy,
                                     mnavPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = FindHierarchicalPathWork(query, hierarchy, navmesh, startPolygon, start,
-                                                 endPolygon, end, pathOut);
+    mnavResult result = FindHierarchicalPathCounted(query, hierarchy, navmesh, startPolygon, start,
+                                                    endPolygon, end, pathOut);
     mnavFloatEnvLeave(env);
     return result;
 }

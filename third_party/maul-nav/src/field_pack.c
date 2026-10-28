@@ -10,6 +10,7 @@
 
 #include "allocator.h"
 #include "compact.h"
+#include "invariant.h"
 #include "lz.h"
 
 #include "maul-nav/base.h"
@@ -98,9 +99,8 @@ mnavResult mnavPackField(mnavMemory* scratch, mnavMemory* memory, const mnavComp
     return result;
 }
 
-// Fills a field from its planes; false when its counts do not add up to
-// its spans.
-static bool Fill(const uint8_t* raw, mnavCompactField* field)
+// Fills a field from its planes, whose counts add up to its spans.
+static void Fill(const uint8_t* raw, mnavCompactField* field)
 {
     size_t columns = Columns(&field->frame);
     size_t spans = (size_t)field->spanCount;
@@ -111,10 +111,7 @@ static bool Fill(const uint8_t* raw, mnavCompactField* field)
         written += Get(raw, columns, c);
     }
     field->columns[columns] = written;
-    if (written != spans)
-    {
-        return false;
-    }
+    MNAV_ASSERT(written == spans);
     const uint8_t* floors = raw + 2 * columns;
     const uint8_t* heights = floors + 2 * spans;
     const uint8_t* areas = heights + 2 * spans;
@@ -127,7 +124,6 @@ static bool Fill(const uint8_t* raw, mnavCompactField* field)
         };
         field->areas[i] = areas[i];
     }
-    return true;
 }
 
 mnavResult mnavUnpackField(mnavMemory* memory, const mnavPackedField* packed, int32_t height,
@@ -137,18 +133,14 @@ mnavResult mnavUnpackField(mnavMemory* memory, const mnavPackedField* packed, in
     size_t rawSize = PlaneBytes(&packed->frame, packed->spanCount);
     uint8_t* raw = nullptr;
     mnavResult result = mnavAllocate(memory, rawSize, 1, 1, (void**)&raw);
-    if (result == mnav_success && !mnavLzDecode(packed->bytes, packed->size, raw, rawSize))
+    if (result == mnav_success)
     {
-        result = mnav_errorInvalid;
+        mnavLzDecode(packed->bytes, packed->size, raw, rawSize);
+        result = mnavAllocateCompactField(memory, &packed->frame, packed->spanCount, field);
     }
     if (result == mnav_success)
     {
-        result = mnavAllocateCompactField(memory, &packed->frame, packed->spanCount, field);
-    }
-    if (result == mnav_success && !Fill(raw, field))
-    {
-        mnavReleaseCompactField(memory, field);
-        result = mnav_errorInvalid;
+        Fill(raw, field);
     }
     mnavRelease(memory, raw, rawSize, 1, 1);
     if (result == mnav_success)

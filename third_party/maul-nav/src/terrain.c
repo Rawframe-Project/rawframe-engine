@@ -33,8 +33,7 @@ static mnavVec3 Sample(const mnavTerrain* t, int32_t column, int32_t row)
 
 static bool GoodShape(const mnavTerrain* t)
 {
-    return t->columns >= 2 && t->columns <= MNAV_MAX_TERRAIN_SIDE && t->rows >= 2 &&
-           t->rows <= MNAV_MAX_TERRAIN_SIDE && t->heights != nullptr && isfinite(t->spacingX) &&
+    return t->columns >= 2 && t->rows >= 2 && t->heights != nullptr && isfinite(t->spacingX) &&
            isfinite(t->spacingZ) && t->spacingX > 0.0f && t->spacingZ > 0.0f &&
            isfinite(t->origin.x) && isfinite(t->origin.y) && isfinite(t->origin.z);
 }
@@ -54,13 +53,13 @@ static mnavInputResult CheckSamples(const mnavBakeDef* def, const mnavTerrain* t
         for (int32_t c = 0; c < t->columns; ++c)
         {
             int32_t i = r * t->columns + c;
-            if (!isfinite(t->heights[i]))
+            if (isnan(t->heights[i]))
             {
                 return Refuse(mnav_errorInvalid, mnav_elementSample, i);
             }
             if (!InExtent(def, Sample(t, c, r)))
             {
-                return Refuse(mnav_errorRange, mnav_elementSample, i);
+                return Refuse(mnav_errorLimit, mnav_elementSample, i);
             }
         }
     }
@@ -73,9 +72,13 @@ mnavInputResult mnavCheckTerrain(const mnavBakeDef* def, const mnavTerrain* terr
     {
         return Refuse(mnav_errorInvalid, mnav_elementNone, -1);
     }
-    if (mnavTerrainTriangles(terrain) > def->limits.inputTriangles)
+    if (terrain->columns > MNAV_MAX_TERRAIN_SIDE || terrain->rows > MNAV_MAX_TERRAIN_SIDE)
     {
         return Refuse(mnav_errorLimit, mnav_elementNone, -1);
+    }
+    if (mnavTerrainTriangles(terrain) > def->limits.inputTriangles)
+    {
+        return Refuse(mnav_errorCapacity, mnav_elementNone, -1);
     }
     mnavInputResult result = CheckSamples(def, terrain);
     if (result.result != mnav_success || terrain->areas == nullptr)
