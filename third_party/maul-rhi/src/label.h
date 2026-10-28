@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Debug labels: UTF-8 without NUL, within MRHI_LABEL_BYTES, so that a
+// Debug labels: UTF-8 without NUL, within MRHI_MAX_LABEL_BYTES, so that a
 // driver can copy one into a fixed, terminated buffer.
 
 #ifndef MAUL_RHI_SRC_LABEL_H
@@ -31,8 +31,13 @@ static inline void mrhiDropLabel(const char** label, size_t* length)
 // Whether a label is valid: NULL only when empty, well-formed UTF-8
 // (Unicode's table of well-formed byte sequences: no overlong forms,
 // surrogates or code points past U+10FFFF), no NUL, at most
-// MRHI_LABEL_BYTES.
+// MRHI_MAX_LABEL_BYTES.
 bool mrhiIsLabelValid(const char* label, size_t length);
+
+// A label's refusal: mrhi_errorInvalid for NULL with a length or bytes
+// that are not valid as mrhiIsLabelValid says, mrhi_errorLimit for one
+// past MRHI_MAX_LABEL_BYTES, read no further, or success.
+mrhiResult mrhiCheckLabel(const char* label, size_t length);
 
 // Whether length bytes, at least 1, are well-formed UTF-8 without NUL.
 bool mrhiIsTextValid(const char* text, size_t length);

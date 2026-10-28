@@ -15,12 +15,15 @@ bool mrhiHasRoomForAnswer(const mrhiInstance* instance)
     return instance->queueCount + instance->pendingCount < instance->limits.notifications;
 }
 
+uint32_t mrhiPeekRequest(const mrhiInstance* instance)
+{
+    uint32_t next = instance->nextRequest + 1;
+    return next == 0 ? 1 : next;
+}
+
 uint32_t mrhiNextRequest(mrhiInstance* instance)
 {
-    if (++instance->nextRequest == 0)
-    {
-        ++instance->nextRequest;
-    }
+    instance->nextRequest = mrhiPeekRequest(instance);
     return instance->nextRequest;
 }
 
@@ -102,10 +105,17 @@ static void PollDriver(mrhiInstance* instance)
 mrhiResult mrhiNextInstanceNotification(mrhiInstance* instance,
                                         mrhiInstanceNotification* notificationOut)
 {
-    if (instance == nullptr || notificationOut == nullptr)
+    if (instance == nullptr)
     {
-        return instance == nullptr ? mrhi_errorInvalid
-                                   : mrhiMisuse(instance, mrhi_diagnosticNullArgument);
+        return mrhi_errorInvalid;
+    }
+    if (instance->allocatorGuard.busy)
+    {
+        return mrhiInstanceBusy(instance);
+    }
+    if (notificationOut == nullptr)
+    {
+        return mrhiMisuse(instance, mrhi_diagnosticNullArgument);
     }
     if (instance->queueCount == 0)
     {

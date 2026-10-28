@@ -68,8 +68,9 @@ typedef struct mrhiVulkanSwapchains
 } mrhiVulkanSwapchains;
 
 // Makes a surface's swapchain from a config the core has checked,
-// retiring the old one (0 for none) whether or not it succeeds, once the
-// queue is idle: its handle; mrhi_errorOutOfDate for a size the window
+// retiring the old one (0 for none) once the queue is idle, whatever
+// vkCreateSwapchainKHR answers: its handle, or on a failure the old one
+// for a refusal before that call, else 0; mrhi_errorOutOfDate for a size the window
 // does not take now, mrhi_errorUnsupported for the sRGB twin without
 // VK_KHR_swapchain_mutable_format, mrhi_errorCapacity, or
 // mrhi_errorPlatform.

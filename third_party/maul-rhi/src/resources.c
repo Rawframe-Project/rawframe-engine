@@ -59,6 +59,10 @@ mrhiResult mrhiCreateSampler(mrhiDevice* device, const mrhiSamplerDef* def,
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (def == nullptr || samplerOut == nullptr)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -90,7 +94,7 @@ mrhiResult mrhiCreateSampler(mrhiDevice* device, const mrhiSamplerDef* def,
         device, device->driver.vtable->createSampler(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
-        mrhiPoolRelease(&device->samplers, index1);
+        mrhiPoolUnacquire(&device->samplers, index1);
         return status;
     }
     device->samplerSlots[index1 - 1] = (mrhiSamplerSlot){
@@ -108,6 +112,10 @@ mrhiResult mrhiDestroySampler(mrhiDevice* device, mrhiSamplerId sampler)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (!mrhiPoolIsLive(&device->samplers, sampler.index1, sampler.generation))
     {
@@ -141,7 +149,7 @@ mrhiResult mrhiCheckBufferShape(mrhiDevice* device, const mrhiBufferDef* def)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticBufferSize);
     }
-    return def->size > device->limits.bufferBytes ? mrhi_errorUnsupported : mrhi_success;
+    return MRHI_DEVICE_LIMIT(device, bufferBytes, def->size);
 }
 
 mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBufferId* bufferOut)
@@ -153,6 +161,10 @@ mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBu
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (def == nullptr || bufferOut == nullptr)
     {
@@ -187,7 +199,7 @@ mrhiResult mrhiCreateBuffer(mrhiDevice* device, const mrhiBufferDef* def, mrhiBu
         device, device->driver.vtable->createBuffer(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
-        mrhiPoolRelease(&device->buffers, index1);
+        mrhiPoolUnacquire(&device->buffers, index1);
         return status;
     }
     device->bufferSlots[index1 - 1] =
@@ -201,6 +213,10 @@ mrhiResult mrhiDestroyBuffer(mrhiDevice* device, mrhiBufferId buffer)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (!mrhiPoolIsLive(&device->buffers, buffer.index1, buffer.generation))
     {

@@ -565,11 +565,11 @@ static void LayoutBatches(Layout* at, const mrhiDeviceLimits* limits, uint32_t s
     // most, beside the frame's first and last. A batch takes a command
     // buffer, and each native pass one more and the program's.
     at->batchLimit = MRHI_VULKAN_SPLIT ? limits->framePasses + 2 : 1;
-    at->partLimit = at->batchLimit + MRHI_NATIVE_PASSES;
+    at->partLimit = at->batchLimit + MRHI_MAX_NATIVE_PASSES;
     at->parts = mrhiLayoutAdd(layout, (size_t)slots * at->partLimit, sizeof(VkCommandBuffer),
                               alignof(VkCommandBuffer));
     at->submits =
-        mrhiLayoutAdd(layout, (size_t)slots * (at->partLimit + MRHI_NATIVE_PASSES),
+        mrhiLayoutAdd(layout, (size_t)slots * (at->partLimit + MRHI_MAX_NATIVE_PASSES),
                       sizeof(VkCommandBufferSubmitInfo), alignof(VkCommandBufferSubmitInfo));
     at->batches = mrhiLayoutAdd(layout, (size_t)slots * at->batchLimit, sizeof(mrhiVulkanBatch),
                                 alignof(mrhiVulkanBatch));
@@ -626,7 +626,7 @@ static Layout LayoutOf(const mrhiDeviceDef* def)
     // A texture binding takes a record at least, and a pass's targets
     // and resolves a view each.
     at.viewLimit = limits->frameCommandBytes / (uint32_t)sizeof(mrhiCommand) +
-                   limits->framePasses * (2u * MRHI_COLOR_TARGETS + 1u);
+                   limits->framePasses * (2u * MRHI_MAX_COLOR_TARGETS + 1u);
     at.frameViews = mrhiLayoutAdd(layout, (size_t)slots * at.viewLimit, sizeof(VkImageView),
                                   alignof(VkImageView));
     at.readbacks = mrhiLayoutAdd(layout, (size_t)slots * limits->readbacks, sizeof(mrhiVulkanRange),
@@ -771,7 +771,7 @@ static void PlaceFrames(VulkanDevice* device, const Layout* at, const mrhiDevice
             .views = (VkImageView*)(block + at->frameViews) + (size_t)i * at->viewLimit,
             .parts = (VkCommandBuffer*)(block + at->parts) + (size_t)i * at->partLimit,
             .submits = (VkCommandBufferSubmitInfo*)(block + at->submits) +
-                       (size_t)i * (at->partLimit + MRHI_NATIVE_PASSES),
+                       (size_t)i * (at->partLimit + MRHI_MAX_NATIVE_PASSES),
             .batches = (mrhiVulkanBatch*)(block + at->batches) + (size_t)i * at->batchLimit,
             .infos = (VkSubmitInfo2*)(block + at->infos) + (size_t)i * at->batchLimit,
             .semaphores = (VkSemaphoreSubmitInfo*)(block + at->semaphores) +

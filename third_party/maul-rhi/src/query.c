@@ -14,8 +14,6 @@
 #include <stdatomic.h>
 
 #define QUERY_SET_DEF_COOKIE 0x6D727173u
-// WebGPU's bound on a set's queries.
-#define MOST_QUERIES 4096
 
 mrhiQuerySetDef mrhiDefaultQuerySetDef(void)
 {
@@ -67,6 +65,10 @@ mrhiResult mrhiCreateQuerySet(mrhiDevice* device, const mrhiQuerySetDef* def,
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (def == nullptr || setOut == nullptr)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -76,9 +78,14 @@ mrhiResult mrhiCreateQuerySet(mrhiDevice* device, const mrhiQuerySetDef* def,
     {
         return status;
     }
-    if (def->type > mrhi_queryPipelineStatistics || def->count == 0 || def->count > MOST_QUERIES)
+    if (def->type > mrhi_queryPipelineStatistics || def->count == 0)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticQuerySetDef);
+    }
+    // WebGPU's bound on a set's queries.
+    if (def->count > MRHI_MAX_QUERY_SET_QUERIES)
+    {
+        return mrhiDeviceOverLimit(device, mrhi_diagnosticQuerySetDef);
     }
     if ((def->type == mrhi_queryTimestamp && !device->features.timestampQuery) ||
         (def->type == mrhi_queryPipelineStatistics && !device->features.pipelineStatisticsQuery))
@@ -105,7 +112,7 @@ mrhiResult mrhiCreateQuerySet(mrhiDevice* device, const mrhiQuerySetDef* def,
         device, device->driver.vtable->createQuerySet(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
-        mrhiPoolRelease(&device->querySets, index1);
+        mrhiPoolUnacquire(&device->querySets, index1);
         return status;
     }
     device->querySetSlots[index1 - 1] = (mrhiQuerySetSlot){
@@ -128,6 +135,10 @@ mrhiResult mrhiDestroyQuerySet(mrhiDevice* device, mrhiQuerySetId set)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (!mrhiPoolIsLive(&device->querySets, set.index1, set.generation))
     {

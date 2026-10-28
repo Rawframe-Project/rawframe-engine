@@ -166,6 +166,10 @@ mrhiResult mrhiCreateView(mrhiDevice* device, const mrhiViewDef* def, mrhiViewId
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (def == nullptr || viewOut == nullptr)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -190,7 +194,7 @@ mrhiResult mrhiCreateView(mrhiDevice* device, const mrhiViewDef* def, mrhiViewId
                                      device->driver.self, texture->handle, &resolved, &handle));
     if (status != mrhi_success)
     {
-        mrhiPoolRelease(&device->views, index1);
+        mrhiPoolUnacquire(&device->views, index1);
         return status;
     }
     device->viewSlots[index1 - 1] = (mrhiViewSlot){
@@ -226,6 +230,10 @@ mrhiResult mrhiDestroyView(mrhiDevice* device, mrhiViewId view)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (!mrhiPoolIsLive(&device->views, view.index1, view.generation))
     {

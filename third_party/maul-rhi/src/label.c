@@ -54,7 +54,24 @@ bool mrhiIsLabelValid(const char* label, size_t length)
     {
         return true;
     }
-    return label != nullptr && length <= MRHI_LABEL_BYTES && mrhiIsTextValid(label, length);
+    return label != nullptr && length <= MRHI_MAX_LABEL_BYTES && mrhiIsTextValid(label, length);
+}
+
+mrhiResult mrhiCheckLabel(const char* label, size_t length)
+{
+    if (length == 0)
+    {
+        return mrhi_success;
+    }
+    if (label == nullptr)
+    {
+        return mrhi_errorInvalid;
+    }
+    if (length > MRHI_MAX_LABEL_BYTES)
+    {
+        return mrhi_errorLimit;
+    }
+    return mrhiIsTextValid(label, length) ? mrhi_success : mrhi_errorInvalid;
 }
 
 bool mrhiIsTextValid(const char* text, size_t length)

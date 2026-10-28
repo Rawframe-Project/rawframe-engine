@@ -126,14 +126,14 @@ static VkShaderStageFlags StagesOf(mrhiShaderStages stages)
 static VkResult MakeSet(mrhiVulkanPipelines* pipelines, const mrhiReflection* reflection,
                         uint32_t table, VkDescriptorSetLayout* setOut)
 {
-    VkDescriptorSetLayoutBinding bindings[MRHI_TABLE_BINDINGS];
+    VkDescriptorSetLayoutBinding bindings[MRHI_MAX_TABLE_BINDINGS];
     uint32_t count = 0;
     for (uint32_t i = 0; i < reflection->bindingCount; ++i)
     {
         const mrhiShaderBinding* binding = &reflection->bindings[i];
         if (binding->table == table)
         {
-            MRHI_ASSERT(count < MRHI_TABLE_BINDINGS);
+            MRHI_ASSERT(count < MRHI_MAX_TABLE_BINDINGS);
             bindings[count++] = (VkDescriptorSetLayoutBinding){
                 .binding = binding->slot,
                 .descriptorType = DescriptorOf(binding->kind),

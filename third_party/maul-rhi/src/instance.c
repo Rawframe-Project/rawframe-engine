@@ -133,7 +133,7 @@ static mrhiInstance* Allocate(const mrhiInstanceDef* def)
     }
     mrhiInstance* instance = (mrhiInstance*)block;
     *instance = (mrhiInstance){
-        .allocator = def->allocator,
+        .allocatorGuard = {.program = def->allocator},
         .limits = def->limits,
         .bytes = layout.size,
         .queue = (mrhiInstanceNotification*)(block + queueAt),
@@ -143,6 +143,7 @@ static mrhiInstance* Allocate(const mrhiInstanceDef* def)
         .found = (mrhiDriverAdapter*)(block + foundAt),
         .surfaceSlots = (mrhiSurfaceSlot*)(block + surfaceSlotsAt),
     };
+    instance->allocator = mrhiGuardedAllocator(&instance->allocatorGuard);
     mrhiPoolInit(&instance->surfaces, limits->surfaces, (uint32_t*)(block + generationsAt),
                  (uint32_t*)(block + nextFreeAt));
     mrhiInitDiagnostics(&instance->diagnostics, (mrhiDiagnostic*)(block + diagnosticsAt),
@@ -256,6 +257,11 @@ void mrhiDestroyInstance(mrhiInstance* instance)
     {
         return;
     }
+    if (instance->allocatorGuard.busy)
+    {
+        mrhiInstanceBusy(instance);
+        return;
+    }
     if (instance->deviceCount > 0)
     {
         mrhiMisuse(instance, mrhi_diagnosticInstanceHasDevices);
@@ -266,7 +272,8 @@ void mrhiDestroyInstance(mrhiInstance* instance)
         mrhiDestroySurfaces(instance);
         instance->driver.vtable->destroy(instance->driver.self);
     }
-    mrhiAllocator allocator = instance->allocator;
+    // The block holds the guard, so it goes back past it.
+    mrhiAllocator allocator = instance->allocatorGuard.program;
     mrhiRelease(&allocator, instance, instance->bytes, alignof(mrhiInstance));
 }
 
@@ -277,11 +284,39 @@ mrhiResult mrhiMisuse(mrhiInstance* instance, mrhiDiagnosticCode code)
     return mrhi_errorInvalid;
 }
 
+mrhiResult mrhiInstanceBusy(mrhiInstance* instance)
+{
+    mrhiMisuse(instance, mrhi_diagnosticAllocatorCall);
+    return mrhi_errorBusy;
+}
+
+bool mrhiHoldInstance(mrhiInstance* instance)
+{
+    bool held = instance->allocatorGuard.busy;
+    instance->allocatorGuard.busy = true;
+    return held;
+}
+
+void mrhiReleaseInstance(mrhiInstance* instance, bool held)
+{
+    instance->allocatorGuard.busy = held;
+}
+
+mrhiResult mrhiOverLimit(mrhiInstance* instance, mrhiDiagnosticCode code)
+{
+    mrhiMisuse(instance, code);
+    return mrhi_errorLimit;
+}
+
 mrhiResult mrhiNextInstanceDiagnostic(mrhiInstance* instance, mrhiDiagnostic* diagnosticOut)
 {
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (instance->allocatorGuard.busy)
+    {
+        return mrhiInstanceBusy(instance);
     }
     if (diagnosticOut == nullptr)
     {

@@ -26,7 +26,7 @@ extern "C"
 #define MRHI_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MRHI_VERSION_MINOR 9
+#define MRHI_VERSION_MINOR 10
 // x-release-please-end
 // x-release-please-start-patch
 #define MRHI_VERSION_PATCH 0
@@ -50,7 +50,7 @@ extern "C"
 
 // The revision of the contract the headers are generated from
 // (contract/mrhi.json).
-#define MRHI_CONTRACT_VERSION 20
+#define MRHI_CONTRACT_VERSION 21
 
 // MRHI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_rhi_EXPORTS is defined while building
@@ -116,16 +116,27 @@ extern "C"
         mrhi_errorState = -6,
         // The program was built against another contract version.
         mrhi_errorVersion = -7,
+        // The data is malformed or does not contain what was asked for: a
+        // damaged shader container or pipeline cache, or an entry, constants or
+        // pipeline state its reflection does not take. Every check on such
+        // bytes fails with it, a bound included. Bad data is not a bug in the
+        // calling code, so it counts no misuse.
+        mrhi_errorFormat = -8,
+        // An argument passes a fixed bound of the library, published as a named
+        // constant (MRHI_MAX_LABEL_BYTES, MRHI_MAX_COLOR_TARGETS,
+        // MRHI_MAX_INDIRECT_DRAWS, MRHI_MAX_NATIVE_PASSES,
+        // MRHI_MAX_QUERY_SET_QUERIES). More room would not help. It counts one
+        // misuse, as invalid input does.
+        mrhi_errorLimit = -9,
+        // A call made from inside the allocator of the instance or device it
+        // would change, which may call no function of the library. It counts
+        // one misuse, as invalid input does.
+        mrhi_errorBusy = -10,
         // A surface no longer matches its window: configure it again before
         // acquiring.
-        mrhi_errorOutOfDate = -8,
+        mrhi_errorOutOfDate = -32,
         // The device is lost: the GPU was reset, removed or its driver failed.
-        mrhi_errorDeviceLost = -9,
-        // The data is malformed or does not contain what was asked for: a
-        // damaged shader container, or an entry, constants or pipeline state
-        // its reflection does not take. Bad data is not a bug in the calling
-        // code, so it counts no misuse.
-        mrhi_errorFormat = -10,
+        mrhi_errorDeviceLost = -33,
     };
 
     // A library version: major, minor and patch.
@@ -207,7 +218,7 @@ extern "C"
     } mrhiChain;
 
 // The bytes a debug label may take, in UTF-8.
-#define MRHI_LABEL_BYTES 256
+#define MRHI_MAX_LABEL_BYTES 256
 
     // A request, answered by exactly one notification in its owner's queue.
     typedef struct mrhiRequestId
@@ -245,7 +256,7 @@ extern "C"
         mrhi_diagnosticNullArgument = 1,
         // A def lacks its cookie (start from its default def), carries a
         // malformed extension chain or one deeper than the chainDepth limit, or
-        // a label that is not UTF-8 of at most MRHI_LABEL_BYTES.
+        // a label that is not UTF-8 of at most MRHI_MAX_LABEL_BYTES.
         mrhi_diagnosticDefHeader = 2,
         // An adapter request def is NULL, lacks its cookie or names an unknown
         // power preference.
@@ -284,8 +295,7 @@ extern "C"
         mrhi_diagnosticGraphicsPipelineMismatch = 17,
         // A compute pipeline that uses a heap, set in a pass without one.
         mrhi_diagnosticComputePipelineHeap = 18,
-        // Bindings set in a transfer pass, or for a table past the
-        // bindingTables limit.
+        // Bindings set in a transfer pass.
         mrhi_diagnosticBindingsTable = 19,
         // A binding count that is not the number of slots the pipeline's
         // reflection gives the table.
@@ -299,28 +309,23 @@ extern "C"
         // A root block set in a transfer pass, empty, or at an offset or size
         // not a multiple of 4.
         mrhi_diagnosticRootBlock = 23,
-        // A vertex buffer set at a slot past the vertexBuffers limit.
-        mrhi_diagnosticVertexBufferSlot = 24,
         // A draw reading vertices or instances past the end of a vertex buffer
         // it uses.
         mrhi_diagnosticVertexBufferTooSmall = 26,
         // An index buffer set with an unknown format.
         mrhi_diagnosticIndexBufferFormat = 27,
-        // A dispatch of more workgroups in a dimension than the
-        // workgroupsPerDimension limit.
-        mrhi_diagnosticDispatchSize = 29,
         // A counted indirect draw whose maxCount is zero or past
-        // MRHI_INDIRECT_DRAWS.
+        // MRHI_MAX_INDIRECT_DRAWS.
         mrhi_diagnosticIndirectCountLimit = 31,
-        // A viewport wider or taller than the textureDimension2d limit, outside
-        // twice that range, or with depths outside [0, 1] or in reverse order.
+        // A viewport with an edge or size that is not finite, a negative size,
+        // or depths outside [0, 1] or in reverse order.
         mrhi_diagnosticViewport = 32,
         // A scissor rectangle reaching past the pass's targets.
         mrhi_diagnosticScissor = 33,
         // A blend constant that is not finite.
         mrhi_diagnosticBlendConstant = 34,
         // A debug label that is empty, not UTF-8, or longer than
-        // MRHI_LABEL_BYTES.
+        // MRHI_MAX_LABEL_BYTES.
         mrhi_diagnosticDebugLabel = 35,
         // A debug group popped with none open.
         mrhi_diagnosticDebugGroupUnderflow = 36,
@@ -362,8 +367,8 @@ extern "C"
         // A heap entry's view without the usage its kind needs, a storage view
         // of more than one mip, or a sampled view marked writable.
         mrhi_diagnosticHeapView = 56,
-        // A heap entry's buffer without storage usage, or a range misaligned,
-        // empty, not a multiple of 4 or past the buffer.
+        // A heap entry's buffer without storage usage, or a range empty, not a
+        // multiple of 4 or past the buffer.
         mrhi_diagnosticHeapBuffer = 57,
         // A query set def of an unknown type, or of zero or too many queries.
         mrhi_diagnosticQuerySetDef = 58,
@@ -450,10 +455,10 @@ extern "C"
         // is not finite or set for points and lines, or no depth format while
         // the fragment entry writes depth.
         mrhi_diagnosticGraphicsDepthStencil = 87,
-        // A graphics pipeline's color targets are more than MRHI_COLOR_TARGETS,
-        // present without a fragment entry, malformed (format, blend or
-        // writes), not written by the fragment entry's outputs as their types
-        // allow, or absent with no depth either.
+        // A graphics pipeline's color targets are more than
+        // MRHI_MAX_COLOR_TARGETS, present without a fragment entry, malformed
+        // (format, blend or writes), not written by the fragment entry's
+        // outputs as their types allow, or absent with no depth either.
         mrhi_diagnosticGraphicsTargets = 88,
         // A graphics pipeline's sample count is not a power of two, or alpha to
         // coverage is asked single-sampled, without a first target that has
@@ -471,7 +476,8 @@ extern "C"
         // notifications, a command arena under one chunk, or readback bytes not
         // a multiple of 512.
         mrhi_diagnosticDeviceLimits = 92,
-        // A device def asks for limits below the floor every adapter reaches.
+        // A device def asks for limits below the floor every adapter reaches,
+        // or for an alignment that is not a power of two.
         mrhi_diagnosticLimitsFloor = 93,
         // An allocator with one function set and the other not.
         mrhi_diagnosticAllocator = 94,
@@ -499,7 +505,7 @@ extern "C"
         mrhi_diagnosticUndeclaredAccess = 102,
         // A pass def with an unknown pass class.
         mrhi_diagnosticPassClass = 103,
-        // A pass def with more than MRHI_COLOR_TARGETS color targets.
+        // A pass def with more than MRHI_MAX_COLOR_TARGETS color targets.
         mrhi_diagnosticPassColorTargets = 104,
         // A pass def with several views on a native pass or on one without
         // targets.
@@ -550,7 +556,7 @@ extern "C"
         // notification queue has no room for its answer: take the records
         // waiting there.
         mrhi_diagnosticNotifications = 118,
-        // A native pass added past MRHI_NATIVE_PASSES in one frame.
+        // A native pass added past MRHI_MAX_NATIVE_PASSES in one frame.
         mrhi_diagnosticNativePasses = 119,
         // A driver refused a frame's submission for memory: for its transients,
         // for the views, descriptor sets and buffers it makes to run the frame,
@@ -570,6 +576,117 @@ extern "C"
         // submit codes for the budget that ran out, or named one with another
         // result.
         mrhi_diagnosticDriverSubmitBudget = 124,
+        // A value past the device's textureDimension2d limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitTextureDimension2d = 125,
+        // A value past the device's textureDimension3d limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitTextureDimension3d = 126,
+        // A value past the device's textureArrayLayers limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitTextureArrayLayers = 127,
+        // A value past the device's bindingTables limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitBindingTables = 128,
+        // A value past the device's bindingsPerTable limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitBindingsPerTable = 129,
+        // A value past the device's sampledTexturesPerStage limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitSampledTexturesPerStage = 130,
+        // A value past the device's samplersPerStage limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitSamplersPerStage = 131,
+        // A value past the device's storageBuffersPerStage limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitStorageBuffersPerStage = 132,
+        // A value past the device's storageTexturesPerStage limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitStorageTexturesPerStage = 133,
+        // A value past the device's uniformBuffersPerStage limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitUniformBuffersPerStage = 134,
+        // A value past the device's uniformBindingBytes limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitUniformBindingBytes = 135,
+        // A value past the device's storageBindingBytes limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitStorageBindingBytes = 136,
+        // An offset off the device's uniformOffsetAlignment: mrhi_errorCapacity
+        // on the adapter's, mrhi_errorUnsupported off it too.
+        mrhi_diagnosticLimitUniformOffsetAlignment = 137,
+        // An offset off the device's storageOffsetAlignment: mrhi_errorCapacity
+        // on the adapter's, mrhi_errorUnsupported off it too.
+        mrhi_diagnosticLimitStorageOffsetAlignment = 138,
+        // A value past the device's vertexBuffers limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitVertexBuffers = 139,
+        // A value past the device's tablesPlusVertexBuffers limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitTablesPlusVertexBuffers = 140,
+        // A value past the device's bufferBytes limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitBufferBytes = 141,
+        // A value past the device's vertexAttributes limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitVertexAttributes = 142,
+        // A value past the device's vertexStride limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitVertexStride = 143,
+        // A value past the device's interStageVariables limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitInterStageVariables = 144,
+        // A value past the device's colorBytesPerSample limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitColorBytesPerSample = 145,
+        // A value past the device's workgroupStorageBytes limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitWorkgroupStorageBytes = 146,
+        // A value past the device's workgroupInvocations limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitWorkgroupInvocations = 147,
+        // A value past the device's workgroupSizeX limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitWorkgroupSizeX = 148,
+        // A value past the device's workgroupSizeY limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitWorkgroupSizeY = 149,
+        // A value past the device's workgroupSizeZ limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitWorkgroupSizeZ = 150,
+        // A value past the device's workgroupsPerDimension limit:
+        // mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past
+        // it.
+        mrhi_diagnosticLimitWorkgroupsPerDimension = 151,
+        // A value past the device's rootBlockBytes limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitRootBlockBytes = 152,
+        // A value past the device's heapSize limit: mrhi_errorCapacity within
+        // the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitHeapSize = 153,
+        // A value past the device's samplerHeapSize limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitSamplerHeapSize = 154,
+        // A value past the device's multiviewViews limit: mrhi_errorCapacity
+        // within the adapter's, mrhi_errorUnsupported past it.
+        mrhi_diagnosticLimitMultiviewViews = 155,
+        // A function that would change the instance or device was called from
+        // inside its allocator.
+        mrhi_diagnosticAllocatorCall = 156,
     };
 
     // A record from an instance's or a device's diagnostic queue.

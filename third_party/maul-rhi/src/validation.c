@@ -169,25 +169,26 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
                                mrhiDeviceDriver* deviceOut)
 {
     Layer* layer = self;
-    mrhiResult status =
-        layer->inner.vtable->createDevice(layer->inner.self, adapter, def, tag, deviceOut);
-    if (status != mrhi_success)
-    {
-        return status;
-    }
-    // A device that fails the handshake goes to the core unwrapped, which
-    // refuses it.
-    if (mrhiCheckDeviceVtable(deviceOut->vtable) != mrhi_success)
-    {
-        Expect(&layer->watch, false, mrhi_diagnosticDriverDeviceHandshake);
-        return status;
-    }
+    // The layer's part first: once the driver has a device, its answer to
+    // the tag is on its way.
     DeviceLayer* device =
         mrhiAllocate(&layer->allocator, sizeof(DeviceLayer), alignof(DeviceLayer));
     if (device == nullptr)
     {
-        deviceOut->vtable->destroy(deviceOut->self);
         return mrhi_errorCapacity;
+    }
+    mrhiResult status =
+        layer->inner.vtable->createDevice(layer->inner.self, adapter, def, tag, deviceOut);
+    // A device that fails the handshake goes to the core unwrapped, which
+    // refuses it.
+    bool handshake =
+        status == mrhi_success && mrhiCheckDeviceVtable(deviceOut->vtable) == mrhi_success;
+    Expect(&layer->watch, status != mrhi_success || handshake,
+           mrhi_diagnosticDriverDeviceHandshake);
+    if (!handshake)
+    {
+        mrhiRelease(&layer->allocator, device, sizeof(DeviceLayer), alignof(DeviceLayer));
+        return status;
     }
     *device =
         (DeviceLayer){.inner = *deviceOut, .allocator = layer->allocator, .watch = layer->watch};

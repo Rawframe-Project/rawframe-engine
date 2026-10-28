@@ -132,7 +132,7 @@ static void ClearDepth(const mrhiD3d12Recorder* recorder, D3D12_CPU_DESCRIPTOR_H
 static void StartTargets(mrhiD3d12Recorder* recorder)
 {
     const mrhiDriverPass* pass = recorder->pass;
-    D3D12_CPU_DESCRIPTOR_HANDLE colors[MRHI_COLOR_TARGETS] = {{0}};
+    D3D12_CPU_DESCRIPTOR_HANDLE colors[MRHI_MAX_COLOR_TARGETS] = {{0}};
     for (uint32_t i = 0; i < pass->colorTargetCount; ++i)
     {
         const mrhiColorTarget* target = &pass->colorTargets[i];
@@ -224,8 +224,8 @@ static void Resolve(mrhiD3d12Recorder* recorder)
 // bytes; PIX reads it as a narrow string.
 static void Mark(const mrhiD3d12Recorder* recorder, const char* label, size_t length, bool group)
 {
-    char name[MRHI_LABEL_BYTES + 1];
-    length = length < MRHI_LABEL_BYTES ? length : MRHI_LABEL_BYTES;
+    char name[MRHI_MAX_LABEL_BYTES + 1];
+    length = length < MRHI_MAX_LABEL_BYTES ? length : MRHI_MAX_LABEL_BYTES;
     memcpy(name, label, length);
     name[length] = '\0';
     if (group)

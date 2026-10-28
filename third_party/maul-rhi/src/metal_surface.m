@@ -120,15 +120,17 @@ mrhiResult mrhiMetalConfigure(const mrhiAllocator* allocator, id<MTLDevice> devi
                               uint64_t surface, const mrhiSurfaceConfig* config,
                               uint64_t oldSwapchain, uint64_t* swapchainOut)
 {
-    if (oldSwapchain != 0)
-    {
-        mrhiMetalUnconfigure(allocator, oldSwapchain);
-    }
+    // The only refusal, for memory, keeps the old configuration.
     MetalSwapchain* swapchain =
         mrhiAllocate(allocator, sizeof(MetalSwapchain), alignof(MetalSwapchain));
     if (swapchain == nullptr)
     {
+        *swapchainOut = oldSwapchain;
         return mrhi_errorCapacity;
+    }
+    if (oldSwapchain != 0)
+    {
+        mrhiMetalUnconfigure(allocator, oldSwapchain);
     }
     CAMetalLayer* layer = (CAMetalLayer*)(void*)(uintptr_t)surface;
     *swapchain = (MetalSwapchain){

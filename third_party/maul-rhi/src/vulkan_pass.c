@@ -241,7 +241,7 @@ void mrhiVulkanBeginPass(mrhiVulkanRecording* recording)
     {
         return;
     }
-    VkRenderingAttachmentInfo colors[MRHI_COLOR_TARGETS];
+    VkRenderingAttachmentInfo colors[MRHI_MAX_COLOR_TARGETS];
     for (uint32_t i = 0; i < pass->colorTargetCount; ++i)
     {
         colors[i] = ColorOf(recording, i);
@@ -430,11 +430,11 @@ void mrhiVulkanBindTable(mrhiVulkanRecording* recording, const mrhiCommand* comm
     {
         return;
     }
-    VkWriteDescriptorSet writes[MRHI_TABLE_BINDINGS];
-    VkDescriptorBufferInfo buffers[MRHI_TABLE_BINDINGS];
-    VkDescriptorImageInfo images[MRHI_TABLE_BINDINGS];
+    VkWriteDescriptorSet writes[MRHI_MAX_TABLE_BINDINGS];
+    VkDescriptorBufferInfo buffers[MRHI_MAX_TABLE_BINDINGS];
+    VkDescriptorImageInfo images[MRHI_MAX_TABLE_BINDINGS];
     uint32_t count = (uint32_t)command->b;
-    MRHI_ASSERT(count <= MRHI_TABLE_BINDINGS);
+    MRHI_ASSERT(count <= MRHI_MAX_TABLE_BINDINGS);
     for (uint32_t i = 0; i < count; ++i)
     {
         mrhiCommandBinding binding;

@@ -57,7 +57,7 @@ typedef struct mrhiD3d12LaneSlot
 
 // The lists one batch runs at most: its parts with the native passes'
 // between.
-#define MRHI_D3D12_BATCH_RUNS (1 + 2 * MRHI_NATIVE_PASSES)
+#define MRHI_D3D12_BATCH_RUNS (1 + 2 * MRHI_MAX_NATIVE_PASSES)
 
 typedef struct mrhiD3d12Lanes
 {

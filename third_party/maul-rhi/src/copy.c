@@ -157,7 +157,8 @@ mrhiResult mrhiCopyBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId sour
         {.object = from, .offset = sourceOffset},
         {.object = to, .offset = destinationOffset},
     };
-    memcpy(&records[1], sides, sizeof(sides));
+    memcpy(&records[1], &sides[0], sizeof(sides[0]));
+    memcpy(&records[2], &sides[1], sizeof(sides[1]));
     return mrhi_success;
 }
 
@@ -480,6 +481,7 @@ mrhiResult mrhiCopyTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
          .z = destination->z,
          .aspect = destination->aspect},
     };
-    memcpy(&records[1], sides, sizeof(sides));
+    memcpy(&records[1], &sides[0], sizeof(sides[0]));
+    memcpy(&records[2], &sides[1], sizeof(sides[1]));
     return mrhi_success;
 }

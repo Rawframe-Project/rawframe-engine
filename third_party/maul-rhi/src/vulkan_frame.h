@@ -49,7 +49,7 @@ static inline uint32_t mrhiVulkanLaneOf(mrhiPassClass passClass)
 
 // The command buffers one batch submits at most: its parts with the
 // native passes' between them.
-#define MRHI_VULKAN_BATCH_SUBMITS (1 + 2 * MRHI_NATIVE_PASSES)
+#define MRHI_VULKAN_BATCH_SUBMITS (1 + 2 * MRHI_MAX_NATIVE_PASSES)
 
 // One submission of a frame: a lane's command buffers, a range of its
 // slot's submits; by lane, the timeline value it waits for (0 for none,

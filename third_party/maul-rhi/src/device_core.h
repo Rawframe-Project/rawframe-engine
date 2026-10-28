@@ -7,6 +7,7 @@
 #ifndef MAUL_RHI_SRC_DEVICE_CORE_H
 #define MAUL_RHI_SRC_DEVICE_CORE_H
 
+#include "allocator.h"
 #include "capabilities_core.h"
 #include "command.h"
 #include "diagnostics.h"
@@ -17,6 +18,7 @@
 #include "maul-rhi/device.h"
 
 #include <stdatomic.h>
+#include <stddef.h>
 
 // Where a device texture or buffer was imported: the frame's serial and
 // the frame's slot for it.
@@ -270,7 +272,7 @@ typedef struct mrhiFrameUse
 // depth or stencil is written.
 typedef struct mrhiRenderLayout
 {
-    mrhiFormat colors[MRHI_COLOR_TARGETS];
+    mrhiFormat colors[MRHI_MAX_COLOR_TARGETS];
     mrhiFormat depth;
     uint32_t samples;
     // The views rendered: 1 without multiview.
@@ -300,13 +302,13 @@ typedef struct mrhiFramePass
     void* nativeCommands;
     uint32_t firstUse;
     uint32_t useCount;
-    mrhiColorTarget colorTargets[MRHI_COLOR_TARGETS];
+    mrhiColorTarget colorTargets[MRHI_MAX_COLOR_TARGETS];
     uint32_t colorTargetCount;
     mrhiDepthTarget depthTarget;
     // The views it renders: 1 without multiview.
     uint32_t viewCount;
     // The stores the compile derived for its targets.
-    mrhiStoreOp colorStores[MRHI_COLOR_TARGETS];
+    mrhiStoreOp colorStores[MRHI_MAX_COLOR_TARGETS];
     mrhiStoreOp depthStore;
     mrhiStoreOp stencilStore;
     // Its recording: an mrhiRecording, claimed atomically by the thread
@@ -431,9 +433,16 @@ struct mrhiDevice
     mrhiInstance* instance;
     // The driver handle of the adapter it was opened on.
     uint64_t adapter;
+    // The def's allocator behind the device's guard, which every
+    // allocation of the device and its driver goes through.
+    mrhiAllocatorGuard allocatorGuard;
     mrhiAllocator allocator;
     mrhiFeatures features;
+    // The limits it was granted, and those of its adapter, which tell a
+    // value past a granted limit the program could ask for from one the
+    // adapter lacks.
     mrhiLimits limits;
+    mrhiLimits adapterLimits;
     mrhiDeviceLimits deviceLimits;
     mrhiDeviceState state;
     // The open request, answered when the device leaves opening.
@@ -555,7 +564,7 @@ struct mrhiDevice
     uint32_t frameProgramChunks;
     uint32_t frameChunkLimit;
     _Atomic uint32_t frameChunksTaken;
-    // Each pass's label, MRHI_LABEL_BYTES apiece; and the tables a
+    // Each pass's label, MRHI_MAX_LABEL_BYTES apiece; and the tables a
     // submitted frame's view is built in.
     char* frameLabels;
     mrhiDriverPass* driverPasses;
@@ -594,6 +603,14 @@ const mrhiDriverAdapter* mrhiCheckDeviceDef(mrhiInstance* instance, const mrhiDe
 // returns mrhi_errorInvalid.
 mrhiResult mrhiDeviceMisuse(mrhiDevice* device, mrhiDiagnosticCode code);
 
+// Counts one misuse for a call made from inside the device's allocator,
+// records it, and returns mrhi_errorBusy.
+mrhiResult mrhiDeviceBusy(mrhiDevice* device);
+
+// Counts one misuse refused by a fixed bound of the library, records it,
+// and returns mrhi_errorLimit.
+mrhiResult mrhiDeviceOverLimit(mrhiDevice* device, mrhiDiagnosticCode code);
+
 // Records bad untrusted data refused by a check on the device, counting no
 // misuse, and returns mrhi_errorFormat.
 mrhiResult mrhiDeviceBadData(mrhiDevice* device, mrhiDiagnosticCode code);
@@ -601,6 +618,43 @@ mrhiResult mrhiDeviceBadData(mrhiDevice* device, mrhiDiagnosticCode code);
 // Records a refusal by the limit a code names, counting no misuse, and
 // returns mrhi_errorCapacity.
 mrhiResult mrhiDeviceFull(mrhiDevice* device, mrhiDiagnosticCode code);
+
+// A value past one of the device's limits answers by its adapter's:
+// mrhi_errorCapacity when the adapter's limit holds it, since a device
+// asking for more would take it, and mrhi_errorUnsupported when not. Each
+// such refusal is recorded under the code naming the limit
+// (mrhiLimitDiagnostic), the adapter's for unsupported, and counts no
+// misuse. A limit is named by its offset in mrhiLimits.
+
+// Checks a value against the limit at field: success within the device's,
+// or the refusal, recorded.
+mrhiResult mrhiDeviceLimit(mrhiDevice* device, uint64_t value, uint64_t granted, uint64_t adapter,
+                           size_t field);
+
+// Checks an offset against the alignment limit at field, where lower is
+// better: success for a multiple of the device's alignment, or the
+// refusal, recorded: capacity for a multiple of the adapter's only.
+mrhiResult mrhiDeviceAlignment(mrhiDevice* device, uint64_t offset, uint64_t granted,
+                               uint64_t adapter, size_t field);
+
+// The field a check of several limits names when every limit holds.
+#define MRHI_WITHIN_LIMITS SIZE_MAX
+
+// The answer of a check of several limits that names the first it found
+// passed, or MRHI_WITHIN_LIMITS: devicePast against the device's limits,
+// adapterPast against the adapter's. Success, or the refusal, recorded.
+mrhiResult mrhiDevicePastLimit(mrhiDevice* device, size_t devicePast, size_t adapterPast);
+
+// Checks a value against the device's limit named field (mrhiDeviceLimit).
+#define MRHI_DEVICE_LIMIT(device, field, value)                                                    \
+    mrhiDeviceLimit((device), (value), (device)->limits.field, (device)->adapterLimits.field,      \
+                    offsetof(mrhiLimits, field))
+
+// Checks an offset against the device's alignment limit named field
+// (mrhiDeviceAlignment).
+#define MRHI_DEVICE_ALIGNMENT(device, field, offset)                                               \
+    mrhiDeviceAlignment((device), (offset), (device)->limits.field, (device)->adapterLimits.field, \
+                        offsetof(mrhiLimits, field))
 
 // The head every object def opens with.
 typedef struct mrhiDefHead

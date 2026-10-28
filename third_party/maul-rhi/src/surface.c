@@ -83,10 +83,16 @@ static const mrhiChain* CheckDef(mrhiInstance* instance, const mrhiSurfaceDef* d
 {
     size_t accepted = instance->external ? SOURCE_COUNT + 1 : SOURCE_COUNT;
     mrhiResult chain = mrhiCheckChain(def->next, s_sources, accepted, instance->limits.chainDepth);
+    mrhiResult label = mrhiCheckLabel(def->label, def->labelLength);
     if (def->cookie != SURFACE_DEF_COOKIE || chain == mrhi_errorInvalid ||
-        !mrhiIsLabelValid(def->label, def->labelLength))
+        label == mrhi_errorInvalid)
     {
         *statusOut = mrhiMisuse(instance, mrhi_diagnosticDefHeader);
+        return nullptr;
+    }
+    if (label == mrhi_errorLimit)
+    {
+        *statusOut = mrhiOverLimit(instance, mrhi_diagnosticDefHeader);
         return nullptr;
     }
     if (chain != mrhi_success)
@@ -119,6 +125,10 @@ mrhiResult mrhiCreateSurface(mrhiInstance* instance, const mrhiSurfaceDef* def,
     {
         return mrhi_errorInvalid;
     }
+    if (instance->allocatorGuard.busy)
+    {
+        return mrhiInstanceBusy(instance);
+    }
     if (def == nullptr || surfaceOut == nullptr)
     {
         return mrhiMisuse(instance, mrhi_diagnosticNullArgument);
@@ -142,7 +152,7 @@ mrhiResult mrhiCreateSurface(mrhiInstance* instance, const mrhiSurfaceDef* def,
         instance->driver.vtable->createSurface(instance->driver.self, source, &driverDef, &handle);
     if (status != mrhi_success)
     {
-        mrhiPoolRelease(&instance->surfaces, index1);
+        mrhiPoolUnacquire(&instance->surfaces, index1);
         return status;
     }
     instance->surfaceSlots[index1 - 1] = (mrhiSurfaceSlot){.handle = handle};
@@ -178,9 +188,19 @@ mrhiResult mrhiDestroySurface(mrhiInstance* instance, mrhiSurfaceId surface)
     {
         return mrhi_errorInvalid;
     }
+    if (instance->allocatorGuard.busy)
+    {
+        return mrhiInstanceBusy(instance);
+    }
     if (mrhiFindSurface(instance, surface) == 0)
     {
         return mrhi_errorStale;
+    }
+    // Ending the surface ends its configuration, which changes the device.
+    const mrhiDevice* device = instance->surfaceSlots[surface.index1 - 1].device;
+    if (device != nullptr && device->allocatorGuard.busy)
+    {
+        return mrhiInstanceBusy(instance);
     }
     EndSurface(instance, surface.index1);
     return mrhi_success;

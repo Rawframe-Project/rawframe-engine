@@ -125,10 +125,10 @@ D3D12_COMPARISON_FUNC mrhiD3d12Compare(mrhiCompareFunction compare)
 
 void mrhiD3d12Label(ID3D12Object* object, const char* label, size_t labelLength)
 {
-    WCHAR name[MRHI_LABEL_BYTES + 1];
+    WCHAR name[MRHI_MAX_LABEL_BYTES + 1];
     int length = labelLength == 0 ? 0
                                   : MultiByteToWideChar(CP_UTF8, 0, label, (int)labelLength, name,
-                                                        MRHI_LABEL_BYTES);
+                                                        MRHI_MAX_LABEL_BYTES);
     if (length > 0)
     {
         name[length] = 0;

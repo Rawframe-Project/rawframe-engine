@@ -27,11 +27,18 @@ static uint8_t* TakeStaging(mrhiDevice* device, mrhiFramePass* pass, uint64_t by
     uint64_t room = device->deviceLimits.frameUploadBytes;
     uint64_t at = atomic_load_explicit(&device->stagingTaken, memory_order_relaxed);
     bool fits = pass->overflow == 0 && bytes <= room && at <= room - bytes;
-    uint64_t rounded = fits ? (bytes + PLACEMENT - 1) / PLACEMENT * PLACEMENT : 0;
-    while (fits &&
-           !atomic_compare_exchange_weak_explicit(&device->stagingTaken, &at, at + rounded,
-                                                  memory_order_relaxed, memory_order_relaxed))
+    uint64_t rounded = 0;
+    while (fits)
     {
+        // Up to the next boundary, or to the region's end where that comes
+        // first, so the staging taken never passes the region.
+        rounded = (bytes + PLACEMENT - 1) / PLACEMENT * PLACEMENT;
+        rounded = rounded < room - at ? rounded : room - at;
+        if (atomic_compare_exchange_weak_explicit(&device->stagingTaken, &at, at + rounded,
+                                                  memory_order_relaxed, memory_order_relaxed))
+        {
+            break;
+        }
         fits = at <= room - bytes;
     }
     if (!fits)
@@ -41,7 +48,11 @@ static uint8_t* TakeStaging(mrhiDevice* device, mrhiFramePass* pass, uint64_t by
         return nullptr;
     }
     *offsetOut = at;
-    return device->frameStaging + (size_t)device->stagingRegion * room + at;
+    uint8_t* staging = device->frameStaging + (size_t)device->stagingRegion * room + at;
+    // Drivers copy the staging whole, so the room up to the next boundary
+    // holds zeros, never what the memory held before.
+    memset(staging + bytes, 0, rounded - bytes);
+    return staging;
 }
 
 mrhiResult mrhiWriteBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
@@ -98,11 +109,13 @@ mrhiResult mrhiWriteBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId res
         {.offset = staged},
         {.object = object, .offset = offset},
     };
-    memcpy(&records[1], sides, sizeof(sides));
+    memcpy(&records[1], &sides[0], sizeof(sides[0]));
+    memcpy(&records[2], &sides[1], sizeof(sides[1]));
     return mrhi_success;
 }
 
-// Copies texels from the program's layout into staging rows of a pitch.
+// Copies texels from the program's layout into staging rows of a pitch,
+// zeros after each row.
 static void Repack(uint8_t* staging, uint64_t pitch, const uint8_t* bytes,
                    const mrhiTexelLayout* layout, uint64_t rows, uint64_t rowBytes, uint32_t layers)
 {
@@ -112,7 +125,9 @@ static void Repack(uint8_t* staging, uint64_t pitch, const uint8_t* bytes,
         {
             const uint8_t* from =
                 bytes + layout->offset + (z * layout->rowsPerImage + y) * layout->bytesPerRow;
-            memcpy(staging + (z * rows + y) * pitch, from, rowBytes);
+            uint8_t* to = staging + (z * rows + y) * pitch;
+            memcpy(to, from, rowBytes);
+            memset(to + rowBytes, 0, pitch - rowBytes);
         }
     }
 }

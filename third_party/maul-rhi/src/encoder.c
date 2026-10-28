@@ -222,7 +222,7 @@ mrhiResult mrhiEndPass(mrhiDevice* device, mrhiPassId id)
 // depth format and sample count.
 static bool AreTargetsEqual(const mrhiRenderLayout* a, const mrhiRenderLayout* b)
 {
-    for (uint32_t i = 0; i < MRHI_COLOR_TARGETS; ++i)
+    for (uint32_t i = 0; i < MRHI_MAX_COLOR_TARGETS; ++i)
     {
         if (a->colors[i] != b->colors[i])
         {
@@ -343,9 +343,10 @@ mrhiResult mrhiSetRootBlock(mrhiDevice* device, mrhiPassId id, uint32_t offset, 
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticRootBlock);
     }
-    if ((uint64_t)offset + size > device->limits.rootBlockBytes)
+    status = MRHI_DEVICE_LIMIT(device, rootBlockBytes, (uint64_t)offset + size);
+    if (status != mrhi_success)
     {
-        return mrhi_errorUnsupported;
+        return status;
     }
     mrhiCommand command = {.type = mrhiCommandRootBlock, .a = offset, .b = size};
     return Record(device, pass, command, bytes, size);
@@ -364,18 +365,27 @@ static mrhiFramePass* RenderPass(mrhiDevice* device, mrhiPassId id, mrhiResult* 
     return pass;
 }
 
-// Whether a viewport is within WebGPU's ranges: its size within the 2D
-// texture limit, its edges within twice it, and its depth range ordered
-// within 0 to 1. The comparisons refuse NaN and infinities.
-static bool IsViewportValid(const mrhiDevice* device, const mrhiViewport* viewport)
+// Whether a viewport is well formed: finite edges, a size not negative,
+// and its depth range ordered within 0 to 1. The comparisons refuse NaN.
+static bool IsViewportValid(const mrhiViewport* viewport)
 {
-    float limit = (float)device->limits.textureDimension2d;
+    return isfinite(viewport->x) && isfinite(viewport->y) && isfinite(viewport->width) &&
+           isfinite(viewport->height) && viewport->width >= 0.0f && viewport->height >= 0.0f &&
+           viewport->minDepth >= 0.0f && viewport->maxDepth <= 1.0f &&
+           viewport->minDepth <= viewport->maxDepth;
+}
+
+// The limit a viewport passes, by WebGPU's ranges for a 2D texture limit
+// (its size within the limit, its edges within twice it): the 2D
+// texture dimension, or MRHI_WITHIN_LIMITS.
+static size_t ViewportPast(const mrhiViewport* viewport, uint32_t textureDimension2d)
+{
+    float limit = (float)textureDimension2d;
     float range = 2.0f * limit;
-    return viewport->x >= -range && viewport->y >= -range && viewport->width >= 0.0f &&
-           viewport->width <= limit && viewport->height >= 0.0f && viewport->height <= limit &&
-           viewport->x + viewport->width <= range - 1.0f &&
-           viewport->y + viewport->height <= range - 1.0f && viewport->minDepth >= 0.0f &&
-           viewport->maxDepth <= 1.0f && viewport->minDepth <= viewport->maxDepth;
+    bool fits = viewport->x >= -range && viewport->y >= -range && viewport->width <= limit &&
+                viewport->height <= limit && viewport->x + viewport->width <= range - 1.0f &&
+                viewport->y + viewport->height <= range - 1.0f;
+    return fits ? MRHI_WITHIN_LIMITS : offsetof(mrhiLimits, textureDimension2d);
 }
 
 mrhiResult mrhiSetViewport(mrhiDevice* device, mrhiPassId id, const mrhiViewport* viewport)
@@ -394,9 +404,15 @@ mrhiResult mrhiSetViewport(mrhiDevice* device, mrhiPassId id, const mrhiViewport
     {
         return status;
     }
-    if (!IsViewportValid(device, viewport))
+    if (!IsViewportValid(viewport))
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticViewport);
+    }
+    status = mrhiDevicePastLimit(device, ViewportPast(viewport, device->limits.textureDimension2d),
+                                 ViewportPast(viewport, device->adapterLimits.textureDimension2d));
+    if (status != mrhi_success)
+    {
+        return status;
     }
     mrhiCommand command = {.type = mrhiCommandViewport};
     return Record(device, pass, command, viewport, sizeof(*viewport));
@@ -484,9 +500,11 @@ static mrhiResult Label(mrhiDevice* device, mrhiPassId id, mrhiCommandType type,
     {
         return mrhi_errorInvalid;
     }
-    if (length == 0 || !mrhiIsLabelValid(label, length))
+    mrhiResult valid = length == 0 ? mrhi_errorInvalid : mrhiCheckLabel(label, length);
+    if (valid != mrhi_success)
     {
-        return mrhiDeviceMisuse(device, mrhi_diagnosticDebugLabel);
+        return valid == mrhi_errorLimit ? mrhiDeviceOverLimit(device, mrhi_diagnosticDebugLabel)
+                                        : mrhiDeviceMisuse(device, mrhi_diagnosticDebugLabel);
     }
     mrhiResult status = mrhi_success;
     mrhiFramePass* pass = mrhiRecordingPass(device, id, &status);

@@ -24,8 +24,8 @@
 // What four full binding tables may take of a stage's samplers, and of
 // its resources with the color targets: the heaps have the rest, since
 // per-stage limits count every set of a pipeline.
-#define TABLES_RESERVE    (4u * MRHI_TABLE_BINDINGS)
-#define RESOURCES_RESERVE (TABLES_RESERVE + MRHI_COLOR_TARGETS)
+#define TABLES_RESERVE    (4u * MRHI_MAX_TABLE_BINDINGS)
+#define RESOURCES_RESERVE (TABLES_RESERVE + MRHI_MAX_COLOR_TARGETS)
 
 // Whether a device has the Vulkan 1.0 features the contract's floor
 // uses, which every device enables.

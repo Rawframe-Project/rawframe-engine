@@ -19,7 +19,7 @@
 
 // The SPI version a driver's vtable must carry. Any change to the SPI
 // headers raises it; 4 is the first installed.
-#define MRHI_SPI_VERSION 9
+#define MRHI_SPI_VERSION 10
 
 // The pass classes (mrhiPassClass): graphics, async compute and transfer.
 #define MRHI_PASS_CLASSES 3
@@ -144,8 +144,8 @@ typedef struct mrhiDriverPass
     mrhiPassClass passClass;
     const char* label;
     size_t labelLength;
-    mrhiColorTarget colorTargets[MRHI_COLOR_TARGETS];
-    mrhiStoreOp colorStores[MRHI_COLOR_TARGETS];
+    mrhiColorTarget colorTargets[MRHI_MAX_COLOR_TARGETS];
+    mrhiStoreOp colorStores[MRHI_MAX_COLOR_TARGETS];
     uint32_t colorTargetCount;
     mrhiDepthTarget depthTarget;
     mrhiStoreOp depthStore;
@@ -241,7 +241,10 @@ typedef struct mrhiDeviceDriverVtable
     void (*destroyView)(void* self, uint64_t handle);
     // Configures a surface, by its instance driver's handle, from a
     // config the core has checked; its swapchain handle, never zero.
-    // oldSwapchain, 0 for none, is retired whether or not this succeeds.
+    // oldSwapchain, 0 for none, is retired when this succeeds. On a
+    // failure, swapchainOut is oldSwapchain while it still works: a
+    // refusal before the platform retired it. It is 0 once the platform
+    // has retired it, which a failed platform call may also do.
     mrhiResult (*configureSurface)(void* self, uint64_t surface, const mrhiSurfaceConfig* config,
                                    uint64_t oldSwapchain, uint64_t* swapchainOut);
     void (*unconfigureSurface)(void* self, uint64_t swapchain);

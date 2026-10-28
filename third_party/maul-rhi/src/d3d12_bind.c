@@ -279,9 +279,9 @@ void mrhiD3d12BindTable(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
     uint32_t point = PointOf(pipeline);
     mrhiD3d12Bound* bound = recorder->bound[point][table];
     uint32_t boundCount = 0;
-    uint64_t samplers[MRHI_TABLE_BINDINGS] = {0};
+    uint64_t samplers[MRHI_MAX_TABLE_BINDINGS] = {0};
     uint32_t count = (uint32_t)command->b;
-    MRHI_ASSERT(count <= MRHI_TABLE_BINDINGS);
+    MRHI_ASSERT(count <= MRHI_MAX_TABLE_BINDINGS);
     for (uint32_t i = 0; i < count; ++i)
     {
         mrhiCommandBinding binding;

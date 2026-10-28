@@ -77,17 +77,23 @@ static bool IsShapeValid(const mrhiTextureDef* def)
     return sized && layers && def->mipLevels >= 1 && def->mipLevels <= FullChain(def);
 }
 
-// Whether the size is within the device's limits.
-static bool FitsLimits(const mrhiTextureDef* def, const mrhiLimits* limits)
+// The first of the limits a size passes, or MRHI_WITHIN_LIMITS.
+static size_t PastLimit(const mrhiTextureDef* def, const mrhiLimits* limits)
 {
     if (def->kind == mrhi_texture3d)
     {
         uint32_t most = limits->textureDimension3d;
-        return def->width <= most && def->height <= most && def->depthOrLayers <= most;
+        bool fits = def->width <= most && def->height <= most && def->depthOrLayers <= most;
+        return fits ? MRHI_WITHIN_LIMITS : offsetof(mrhiLimits, textureDimension3d);
     }
     uint32_t most = limits->textureDimension2d;
-    return def->width <= most && def->height <= most &&
-           def->depthOrLayers <= limits->textureArrayLayers;
+    if (def->width > most || def->height > most)
+    {
+        return offsetof(mrhiLimits, textureDimension2d);
+    }
+    return def->depthOrLayers <= limits->textureArrayLayers
+               ? MRHI_WITHIN_LIMITS
+               : offsetof(mrhiLimits, textureArrayLayers);
 }
 
 // Whether the sample count is 1, 2 or 4, several only on a 2D texture of
@@ -178,12 +184,12 @@ mrhiResult mrhiCheckTextureShape(mrhiDevice* device, const mrhiTextureDef* def, 
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticTextureViewFormats);
     }
-    if (!FitsLimits(def, &device->limits) ||
-        !mrhiFormatFamilyGranted(def->format, &device->features))
+    if (!mrhiFormatFamilyGranted(def->format, &device->features))
     {
         return mrhi_errorUnsupported;
     }
-    return mrhi_success;
+    return mrhiDevicePastLimit(device, PastLimit(def, &device->limits),
+                               PastLimit(def, &device->adapterLimits));
 }
 
 mrhiResult mrhiCheckTextureUsage(mrhiDevice* device, const mrhiTextureDef* def)
@@ -245,6 +251,10 @@ mrhiResult mrhiCreateTexture(mrhiDevice* device, const mrhiTextureDef* def,
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (def == nullptr || textureOut == nullptr)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -267,7 +277,7 @@ mrhiResult mrhiCreateTexture(mrhiDevice* device, const mrhiTextureDef* def,
         device, device->driver.vtable->createTexture(device->driver.self, &driverDef, &handle));
     if (status != mrhi_success)
     {
-        mrhiPoolRelease(&device->textures, index1);
+        mrhiPoolUnacquire(&device->textures, index1);
         return status;
     }
     mrhiTextureSlot* slot = &device->textureSlots[index1 - 1];
@@ -290,6 +300,10 @@ mrhiResult mrhiDestroyTexture(mrhiDevice* device, mrhiTextureId texture)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (!mrhiPoolIsLive(&device->textures, texture.index1, texture.generation))
     {

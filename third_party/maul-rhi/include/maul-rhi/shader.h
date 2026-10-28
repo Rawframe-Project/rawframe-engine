@@ -59,7 +59,7 @@ extern "C"
 
 // The bindings one table of a container holds at most: a table set while
 // recording fits one chunk of the frame's commands.
-#define MRHI_TABLE_BINDINGS 126
+#define MRHI_MAX_TABLE_BINDINGS 126
 
     // The samplers a sampler slot takes.
     typedef uint8_t mrhiSamplerBinding;
@@ -246,8 +246,8 @@ extern "C"
         // Extensions, or NULL.
         const mrhiChain* next;
         // A name for debugging tools: UTF-8 without NUL, labelLength bytes, at
-        // most MRHI_LABEL_BYTES; NULL when labelLength is 0. Only read during
-        // the call.
+        // most MRHI_MAX_LABEL_BYTES; NULL when labelLength is 0. Only read
+        // during the call.
         const char* label;
         // The label's bytes.
         size_t labelLength;
@@ -287,18 +287,22 @@ extern "C"
     /// @param shaderOut  Receives the shader; the null id on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def
     /// without its cookie, a bad label, or bytes that are not 8-byte aligned;
+    /// `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES;
     /// `mrhi_errorFormat` for a container that is malformed, damaged or
-    /// contradicts itself; `mrhi_errorVersion` for a container of another
-    /// version or holding a section type the library does not know;
+    /// contradicts itself, or holds a table of more than
+    /// MRHI_MAX_TABLE_BINDINGS bindings; `mrhi_errorVersion` for a container of
+    /// another version or holding a section type the library does not know;
     /// `mrhi_errorUnsupported` for a root block, bindings, a workgroup or
-    /// interface variables past the device's limits, a table of more than
-    /// MRHI_TABLE_BINDINGS bindings, 16-bit floats on a device without
-    /// shaderF16, the primitive index builtin, heap uses on a device without
-    /// bindless_sampling, or storage ones without bindless_heterogeneous, or a
-    /// critical extension the library does not know; `mrhi_errorState` for a
-    /// device that is not ready; `mrhi_errorCapacity` when the device's shader
-    /// limit is reached or its allocator fails; `mrhi_errorPlatform` when the
-    /// driver refuses the code.
+    /// interface variables past the adapter's limits, 16-bit floats on a device
+    /// without shaderF16, the primitive index builtin, heap uses on a device
+    /// without bindless_sampling, or storage ones without
+    /// bindless_heterogeneous, or a critical extension the library does not
+    /// know; `mrhi_errorState` for a device that is not ready;
+    /// `mrhi_errorCapacity` for a root block, bindings, a workgroup or
+    /// interface variables past the device's limits within the adapter's, or
+    /// when the device's shader limit is reached or its allocator fails;
+    /// `mrhi_errorPlatform` when the driver refuses the code; `mrhi_errorBusy`
+    /// for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiCreateShader(mrhiDevice* device,
@@ -310,7 +314,8 @@ extern "C"
     /// @param device  The device.
     /// @param shader  The shader.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device;
-    /// `mrhi_errorStale` for a shader the device no longer has.
+    /// `mrhi_errorStale` for a shader the device no longer has;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDestroyShader(mrhiDevice* device, mrhiShaderId shader);

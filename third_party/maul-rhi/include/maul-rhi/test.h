@@ -63,6 +63,9 @@ extern "C"
         uint64_t stagingBytes;
         // The sum of the bytes its uploads copy from staging.
         uint64_t uploadSum;
+        // The sum of every byte of its staging, the room between and after its
+        // uploads' rows among them.
+        uint64_t stagingSum;
         // The bytes its transients take together.
         uint64_t memoryBytes;
         // The device's objects made with a label, over its life: none in a
@@ -113,6 +116,9 @@ extern "C"
         // Set to lose the adapter's devices at their next poll, submission or
         // acquire, read each time; NULL for never.
         const bool* loseDevice;
+        // Set to refuse every object its devices make with mrhi_errorCapacity,
+        // as a driver out of memory does, read at each; NULL for never.
+        const bool* refuseObjects;
         // The reason a lost device's report gives.
         mrhiDeviceLossReason lossReason;
     } mrhiTestAdapter;
