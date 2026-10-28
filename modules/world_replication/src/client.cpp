@@ -670,6 +670,8 @@ void ReplicationClient::pump() {
     if (state.accept && state.acknowledgementDue) {
         state.sendAcknowledgement();
     }
+    // The pump's acknowledgements and mapping answers, together.
+    state.sessions->flush();
     if (state.accept && state.interpolation) {
         state.interpolation->show(*state.world, state.mirrored, state.table);
     }

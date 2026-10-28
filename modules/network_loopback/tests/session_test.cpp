@@ -594,3 +594,58 @@ RAWFRAME_TEST(LanesThePeerDoesNotTakeEndTheConnection) {
     RAWFRAME_EXPECT(kEndsAt(MonotonicDuration::fromMilliseconds(2500)) == 41);
     RAWFRAME_EXPECT(kEndsAt(MonotonicDuration::fromMilliseconds(1500)) == 0);
 }
+
+RAWFRAME_TEST(AControlFrameGoesOutInTheIterationItIsSent) {
+    // Frames an owner sends once admitted are gathered and handed to the
+    // transport together: by its flush, which it calls once an iteration's
+    // sending is done, so a lone frame goes out in the iteration it was sent
+    // in; by its next pump where it made none; and by a datagram to the
+    // same peer, which takes the frames before it along.
+    using Frames = std::vector<std::vector<std::byte>>;
+    World world{0, {}, Setup{.latency = MonotonicDuration{}}};
+    const Admitted kPeer = admit(world);
+    const auto kSent = [&world] {
+        return world.serverTransport->statistics().streamBytesSent;
+    };
+    const auto kFrames = [&world] {
+        Frames heard;
+        world.clientEvents.clear();
+        world.client->pump(world.clientEvents);
+        for (const SessionEvent& event : world.clientEvents) {
+            if (event.kind == SessionEventKind::Frame && event.frameType == 20) {
+                heard.push_back(event.payload);
+            }
+        }
+        return heard;
+    };
+
+    const std::uint64_t kBefore = kSent();
+    RAWFRAME_EXPECT(
+        world.server->sendFrame(kPeer.server, network::ControlFrame::Heartbeat, bodyOf("lone")).has_value());
+    RAWFRAME_EXPECT(kSent() == kBefore);
+    world.server->flush();
+    RAWFRAME_EXPECT(kSent() > kBefore);
+    // No time passes: the peer has it at once.
+    RAWFRAME_EXPECT(kFrames() == Frames{bodyOf("lone")});
+
+    RAWFRAME_EXPECT(
+        world.server->sendFrame(kPeer.server, network::ControlFrame::Heartbeat, bodyOf("left")).has_value());
+    world.serverEvents.clear();
+    world.server->pump(world.serverEvents);
+    RAWFRAME_EXPECT(kFrames() == Frames{bodyOf("left")});
+
+    for (const std::string_view kWord : {"one", "two", "three"}) {
+        RAWFRAME_EXPECT(
+            world.server->sendFrame(kPeer.server, network::ControlFrame::Heartbeat, bodyOf(kWord)).has_value());
+    }
+    const std::uint64_t kGathered = kSent();
+    RAWFRAME_EXPECT(world.server
+                        ->sendDatagram(kPeer.server,
+                                       network::DatagramRecord{.lane = network::DatagramLane::State,
+                                                               .laneEpoch = kPeer.epoch,
+                                                               .sequence = 1,
+                                                               .payload = bodyOf("state")})
+                        .has_value());
+    RAWFRAME_EXPECT(kSent() > kGathered);
+    RAWFRAME_EXPECT((kFrames() == Frames{bodyOf("one"), bodyOf("two"), bodyOf("three")}));
+}

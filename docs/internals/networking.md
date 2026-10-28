@@ -41,7 +41,7 @@ Nothing reaches the game before admission. Datagrams before it, or on another la
 
 - **State** travels as unreliable datagrams, each self-sufficient, so a lost one is simply superseded.
 - **Input** travels as redundant windows of the last commands in datagrams, so one lost datagram costs nothing.
-- **Mappings** (which entity a `NetEntityId` names) and the connection's control travel on the control stream.
+- **Mappings** (which entity a `NetEntityId` names) and the connection's control travel on the control stream. A session gathers the frames its owner sends once admitted and hands each connection's to the transport as one send: before a datagram or event to that peer (so a mapping precedes the state that uses it), when replication flushes after each tick's publish and at the end of the client's pump, or at the session's next pump. A frame each its own send cost the server tens of thousands of sends a second.
 - **Guaranteed events** travel on event lanes, each a one-way reliable stream of its own, declared on both sides and authorized at admission: a game's `message` lines (server to one player, delivered after the tick commits), its `command` lines (a player to the server, read on the next tick), and the engine's termination notice. Each connection's queued events are bounded (1,024 records, 128 KiB, 2 s); past any bound the lane cannot keep its promise and the connection ends as exhausted, so no promised event is silently dropped.
 
 Commands are untrusted: one of the wrong kind or size strikes its connection, at most eight a tick are sent, and past 32 a tick a connection's are dropped.
