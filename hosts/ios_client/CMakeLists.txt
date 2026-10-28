@@ -21,5 +21,6 @@ set_target_properties(rawframe_host_ios_client PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
 # Trial only: whether an opaque window takes the simulator's touches.
+enable_language(OBJC)
 target_sources(rawframe_host_ios_client PRIVATE src/touch_probe.m)
 target_link_libraries(rawframe_host_ios_client PRIVATE "-framework UIKit")
