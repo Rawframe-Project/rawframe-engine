@@ -11,6 +11,10 @@
 #include <thread>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 using rawframe::process::Child;
 using rawframe::studio::mintedIdentity;
 using rawframe::studio::programOnPath;
@@ -18,6 +22,10 @@ using rawframe::studio::VersionControl;
 
 namespace {
 
+// Git is run as a program only on the POSIX desktops: Windows' git runs
+// hooks in a shell of its own, which the scripts below are not written for,
+// and a phone or its simulator has no git to start.
+#if !defined(_WIN32) && !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IPHONE)
 std::string pathVariable() {
     const char* const kPath = std::getenv("PATH");
     return kPath != nullptr ? kPath : "";
@@ -64,6 +72,7 @@ markerScript(const std::filesystem::path& directory, const std::string& name, co
     std::filesystem::permissions(kScript, std::filesystem::perms::owner_all);
     return kScript;
 }
+#endif
 
 } // namespace
 
@@ -88,7 +97,7 @@ RAWFRAME_TEST(EveryGitCommandKeepsTheRepositorysProgramsOff) {
                      std::vector<std::string>{"diff", "--no-ext-diff", "--no-textconv", "HEAD", "--", "a"}));
 }
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IPHONE)
 RAWFRAME_TEST(GitRunsOnlyInATrustedRepositoryAndNeverItsReadersPrograms) {
     // A repository whose settings name a program for every way git may run
     // one: a commit hook, a file monitor, an external diff, a diff driver's
