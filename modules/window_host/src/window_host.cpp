@@ -39,6 +39,12 @@ constexpr ui::AccessPlatform kAppleAccess = ui::AccessPlatform::AppKit;
 // The most iterations one frame runs to catch up: a window hidden for a
 // while is not replayed in one frame.
 constexpr int kMostIterationsPerFrame = 4;
+// The longest a frame runs further iterations, about one display refresh.
+// Input waits for the whole frame, on a phone on the thread the system
+// times (Android calls an app not responding after five seconds), so a
+// frame whose iterations are slow runs one and returns: the next frame
+// runs the next, and the Host drops what it cannot catch up.
+constexpr auto kLongestCatchingUp = std::chrono::milliseconds{16};
 // The longest a desktop frame waits for the Host, since nothing else paces
 // a window that draws nothing: input waits no longer than this to be seen.
 // A page's frames are paced by the browser and never wait.
@@ -758,7 +764,19 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
     // from the next.
     suspended_.store(platformSuspended_ || away_.away(), std::memory_order_release);
     const bool kTold = suspended_.load(std::memory_order_relaxed) != kWasSuspended;
-    for (int ran = 0; ran < kMostIterationsPerFrame && (clock_.now() >= host_->due() || (kTold && ran == 0)); ++ran) {
+    // After the first, only iterations due when the frame began, and only
+    // while it is short: one made due by the frame's own slow work waits
+    // for the next frame, with the input that came meanwhile.
+    const execution::MonotonicInstant kBegan = clock_.now();
+    const auto kCatchingUp = [&](int ran) {
+        if (ran == 0) {
+            return kBegan >= host_->due() || kTold;
+        }
+        const execution::MonotonicDuration kSpent = clock_.now() - kBegan;
+        return ran < kMostIterationsPerFrame && host_->due() <= kBegan &&
+               std::chrono::nanoseconds{kSpent.nanoseconds} < kLongestCatchingUp;
+    };
+    for (int ran = 0; kCatchingUp(ran); ++ran) {
         if (!host_->iterate()) {
             return end();
         }

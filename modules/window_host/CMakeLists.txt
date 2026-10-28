@@ -7,3 +7,4 @@ endif()
 
 rawframe_module(NAME window_host SOURCES src/window_host.cpp src/asides.cpp src/clipboard.cpp src/icon.cpp
     DEPS host world_tooling view input_kest input_window input window ui texture composition execution result base)
+rawframe_module_tests(NAME window_host SOURCES tests/window_host_test.cpp)
