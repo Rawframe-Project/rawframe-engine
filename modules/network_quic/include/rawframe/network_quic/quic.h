@@ -50,6 +50,11 @@ struct QuicSettings {
     /// connection it is the provider profile's. An event past it is treated
     /// as one past its connection's queue.
     std::size_t maximumQueuedBytesInAll = std::size_t{16} << 20U;
+    /// Whether MsQuic copies a stream send and releases it at once, as it
+    /// does by default. Off, it releases a send only once the peer has
+    /// acknowledged it, so `pendingBytes` says what the peer has not
+    /// received: what a link's last records wait for before it closes.
+    bool sendBuffering = true;
 };
 
 class QuicNetwork {

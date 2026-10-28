@@ -365,6 +365,8 @@ HQUIC openConfiguration(const QUIC_API_TABLE& api,
     quic.IsSet.PeerUnidiStreamCount = 1;
     quic.DatagramReceiveEnabled = 1;
     quic.IsSet.DatagramReceiveEnabled = 1;
+    quic.SendBufferingEnabled = settings.sendBuffering ? 1 : 0;
+    quic.IsSet.SendBufferingEnabled = 1;
     // No resumption means no 0-RTT: nothing is accepted before a handshake.
     quic.ServerResumptionLevel = QUIC_SERVER_NO_RESUME;
     quic.IsSet.ServerResumptionLevel = 1;

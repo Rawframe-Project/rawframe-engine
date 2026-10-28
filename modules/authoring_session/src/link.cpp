@@ -23,9 +23,15 @@
 
 namespace rawframe::authoring_session {
 
-/// How long a link's last record waits for its reply: an endpoint on this
-/// machine or the next answers in milliseconds.
+/// How long a link's last record waits to be received: an endpoint on
+/// this machine or the next acknowledges it in milliseconds.
 constexpr std::chrono::milliseconds kEndWithin{1500};
+
+/// A link's connection: what it sends is released only once received, so
+/// a last record waits for no more than that.
+network_quic::QuicSettings linkSettings(const network_quic::Fingerprint& pin) {
+    return network_quic::QuicSettings{.pin = pin, .sendBuffering = false};
+}
 
 bool answered(std::string_view reply) {
     const auto kParsed = document::parse(reply);
@@ -36,12 +42,13 @@ ToolingLink::ToolingLink() = default;
 
 ToolingLink::~ToolingLink() {
     if (client_ != nullptr) {
-        // Said for the endpoint; whether its reply or the close comes first,
-        // the connection is over. A program already stopped never replies,
-        // and its link once waited ten seconds for it; one that left
-        // the last question unanswered is not waited for again.
+        // Said for the endpoint, waited for until it is received, not
+        // answered: a busy program answers only in its next frame. A
+        // program already stopped receives nothing, and its link once
+        // waited ten seconds for it; one that left the last record
+        // unreceived is not waited for again.
         if (!client_->silent()) {
-            (void)client_->ask(R"({"kind":"tooling.end","id":null})", kEndWithin);
+            (void)client_->tell(R"({"kind":"tooling.end","id":null})", kEndWithin);
         }
         client_->close();
     }
@@ -60,7 +67,7 @@ ToolingLink::open(std::string_view endpoint, const char* pinFile, const char* to
         said = "the pin file holds no certificate fingerprint";
         return nullptr;
     }
-    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin});
+    auto network = network_quic::QuicNetwork::create(linkSettings(*pin));
     if (!network.has_value()) {
         said = "QUIC could not start";
         return nullptr;
@@ -100,8 +107,8 @@ std::optional<std::string> ToolingLink::ask(std::string_view record) {
     return client_->ask(record);
 }
 
-std::optional<std::string> ToolingLink::askLast(std::string_view record) {
-    return client_->ask(record, kEndWithin);
+bool ToolingLink::tellLast(std::string_view record) {
+    return client_->tell(record, kEndWithin);
 }
 
 bool ToolingLink::send(std::string_view record) {
@@ -116,7 +123,7 @@ HostLink::HostLink() = default;
 
 HostLink::~HostLink() {
     if (client_ != nullptr) {
-        (void)client_->ask(R"({"kind":"authoring.end","id":null})", kEndWithin);
+        (void)client_->tell(R"({"kind":"authoring.end","id":null})", kEndWithin);
         client_->close();
     }
 }
@@ -134,7 +141,7 @@ HostLink::open(std::string_view endpoint, const char* pinFile, const char* token
         said = "the pin file holds no certificate fingerprint";
         return nullptr;
     }
-    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin});
+    auto network = network_quic::QuicNetwork::create(linkSettings(*pin));
     if (!network.has_value()) {
         said = "QUIC could not start";
         return nullptr;
