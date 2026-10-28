@@ -7,9 +7,8 @@
    reported from 1,000. Tables a tool writes under a `generated` directory
    are not handwritten and are not measured.
 3. Owner rules: no em dash in any text file, added or not, and no AI attribution
-   trailer in any commit message. A release commit (`chore: release X.Y.Z`)
-   is release-please's: its footer names the tool and GitHub's squash names
-   the release bot and the owner, so only its em dashes are checked.
+   trailer in any commit message. The commits in ATTRIBUTION_ALLOWED are on
+   main for good, each with the reason; only their em dashes are checked.
 4. No `.value()` call in engine source: on a Result it throws on failure, and
    exceptions are disabled. Test for `has_value()` and
    dereference, or use RAWFRAME_TRY_ASSIGN.
@@ -48,7 +47,12 @@ FAIL_LINES = 1500
 REPORT_LINES = 1000
 EM_DASH = chr(0x2014)
 ATTRIBUTION = re.compile(r"co-authored-by:|generated with|claude-session:", re.IGNORECASE)
-RELEASE_TITLE = re.compile(r"chore: release \d+\.\d+\.\d+( \(#\d+\))?")
+# Commits already on main that carry such lines; history is not rewritten.
+ATTRIBUTION_ALLOWED = {
+    # v0.0.1's squash, merged with release-please's footer and GitHub's
+    # Co-authored-by lines for the release bot and the owner.
+    "e77003bd55a41a3c0aa57a4718842a085c5541a6",
+}
 VALUE_CALL = re.compile(r"\.value\(\s*\)")
 BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
 BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
@@ -292,17 +296,12 @@ def check_owner_rules(files, findings):
                 findings.append(f"{path.relative_to(ROOT)}:{number}: em dash")
     log = subprocess.run(["git", "log", "--format=%H%n%B%n--end--"], cwd=ROOT, capture_output=True, text=True)
     commit = None
-    title = False
-    release = False
+    allowed = False
     for line in log.stdout.splitlines():
         if re.fullmatch(r"[0-9a-f]{40}", line):
             commit = line[:12]
-            title = True
-            continue
-        if title:
-            release = RELEASE_TITLE.fullmatch(line) is not None
-            title = False
-        if ATTRIBUTION.search(line) and not release:
+            allowed = line in ATTRIBUTION_ALLOWED
+        elif ATTRIBUTION.search(line) and not allowed:
             findings.append(f"commit {commit}: AI attribution in message: {line.strip()}")
         elif EM_DASH in line:
             findings.append(f"commit {commit}: em dash in message")
