@@ -130,6 +130,32 @@ std::optional<std::string> LineClient::ask(std::string_view record, std::chrono:
     return std::nullopt;
 }
 
+bool LineClient::tell(std::string_view record, std::chrono::milliseconds within) {
+    const auto kParsed = document::parse(record);
+    if (!kParsed.has_value() || kParsed->kind() != document::Value::Kind::Object) {
+        return false;
+    }
+    const std::string kLine = numbered(*kParsed, ++asked_);
+    const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(kLine.data()), kLine.size()};
+    if (!provider_.send(connection_, stream_, kBytes).has_value()) {
+        return false;
+    }
+    const auto kUntil = std::chrono::steady_clock::now() + within;
+    while (std::chrono::steady_clock::now() < kUntil) {
+        pump();
+        if (closed_) {
+            return false;
+        }
+        if (provider_.pendingBytes(connection_, stream_) == 0) {
+            silent_ = false;
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    silent_ = true;
+    return false;
+}
+
 bool LineClient::send(std::string_view record) {
     const auto kParsed = document::parse(record);
     if (!kParsed.has_value() || kParsed->kind() != document::Value::Kind::Object) {

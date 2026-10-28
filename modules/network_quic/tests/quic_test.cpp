@@ -8,10 +8,12 @@
 #include "rawframe/network_quic/quic.h"
 #include "rawframe/test/test.h"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <functional>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -23,6 +25,7 @@
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -78,10 +81,11 @@ std::vector<std::byte> bytesOf(std::string_view text) {
     return {kBytes.begin(), kBytes.end()};
 }
 
-/// Polls every provider until `done` holds or five seconds pass.
+/// Polls every provider until `done` holds or `within` passes.
 bool pumpUntil(std::initializer_list<std::pair<network::Provider*, std::vector<Event>*>> sides,
-               const std::function<bool()>& done) {
-    const auto kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+               const std::function<bool()>& done,
+               std::chrono::milliseconds within = std::chrono::seconds{5}) {
+    const auto kDeadline = std::chrono::steady_clock::now() + within;
     while (std::chrono::steady_clock::now() < kDeadline) {
         for (const auto& [provider, events] : sides) {
             provider->poll(*events, 64);
@@ -109,6 +113,96 @@ struct Pair {
     std::unique_ptr<QuicNetwork> client =
         *QuicNetwork::create(QuicSettings{.pin = *network_quic::fingerprintOf(identity)});
     std::uint16_t port = freePort();
+};
+
+#if defined(_WIN32)
+using Socket = SOCKET;
+using AddressLength = int;
+#else
+using Socket = int;
+using AddressLength = socklen_t;
+#endif
+
+/// A UDP relay on the loopback between one client and a server, which
+/// can stop carrying anything either way, as a path gone quiet.
+class Relay {
+public:
+    explicit Relay(std::uint16_t server) {
+        server_.sin_family = AF_INET;
+        server_.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        server_.sin_port = htons(server);
+        socket_ = ::socket(AF_INET, SOCK_DGRAM, 0);
+        sockaddr_in address{};
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        AddressLength length = sizeof(address);
+        ::bind(socket_, reinterpret_cast<sockaddr*>(&address), sizeof(address));
+        ::getsockname(socket_, reinterpret_cast<sockaddr*>(&address), &length);
+        port_ = ntohs(address.sin_port);
+        thread_ = std::thread{[this] {
+            carry();
+        }};
+    }
+    Relay(const Relay&) = delete;
+    Relay& operator=(const Relay&) = delete;
+    ~Relay() {
+        running_ = false;
+        thread_.join();
+#if defined(_WIN32)
+        ::closesocket(socket_);
+#else
+        ::close(socket_);
+#endif
+    }
+
+    [[nodiscard]] std::uint16_t port() const noexcept {
+        return port_;
+    }
+    void block(bool blocked) noexcept {
+        blocked_ = blocked;
+    }
+
+private:
+    void carry() {
+        std::array<char, 2048> datagram{};
+        std::optional<sockaddr_in> client;
+        while (running_) {
+            fd_set readable;
+            FD_ZERO(&readable);
+            FD_SET(socket_, &readable);
+            timeval wait{.tv_sec = 0, .tv_usec = 10'000};
+            if (::select(static_cast<int>(socket_) + 1, &readable, nullptr, nullptr, &wait) <= 0) {
+                continue;
+            }
+            sockaddr_in from{};
+            AddressLength length = sizeof(from);
+            const auto kRead = ::recvfrom(socket_,
+                                          datagram.data(),
+                                          static_cast<int>(datagram.size()),
+                                          0,
+                                          reinterpret_cast<sockaddr*>(&from),
+                                          &length);
+            if (kRead <= 0 || blocked_) {
+                continue;
+            }
+            const bool kFromServer = from.sin_port == server_.sin_port;
+            if (!kFromServer) {
+                client = from;
+            }
+            if (kFromServer && !client.has_value()) {
+                continue;
+            }
+            const sockaddr_in& kTo = kFromServer ? *client : server_;
+            ::sendto(socket_, datagram.data(), kRead, 0, reinterpret_cast<const sockaddr*>(&kTo), sizeof(kTo));
+        }
+    }
+
+    sockaddr_in server_{};
+    Socket socket_{};
+    std::uint16_t port_ = 0;
+    std::atomic<bool> running_{true};
+    std::atomic<bool> blocked_{false};
+    std::thread thread_;
 };
 
 } // namespace
@@ -204,6 +298,65 @@ RAWFRAME_TEST(TheContractOverQuic) {
     RAWFRAME_EXPECT(serverClosed != nullptr && serverClosed->reason == CloseReason::Closed);
     RAWFRAME_EXPECT(clientClosed != nullptr && clientClosed->reason == CloseReason::Closed);
     RAWFRAME_EXPECT(!client->send(*kConnection, *kStream, bytesOf("late")).has_value());
+}
+
+RAWFRAME_TEST(AnUnbufferedSendIsPendingUntilItsPeerHasIt) {
+    // Without send buffering, a stream send is pending until its peer
+    // acknowledged it: what a link's last record waits for. A path gone
+    // quiet holds it pending however long; once it carries again, nothing
+    // pending means the peer's side holds the bytes, read or not.
+    const auto kIdentity = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
+    auto network = QuicNetwork::create(QuicSettings{.certificate = kIdentity});
+    auto clients =
+        QuicNetwork::create(QuicSettings{.pin = *network_quic::fingerprintOf(kIdentity), .sendBuffering = false});
+    RAWFRAME_EXPECT(network.has_value() && clients.has_value());
+    if (!network.has_value() || !clients.has_value()) {
+        return;
+    }
+    const std::uint16_t kPort = freePort();
+    Relay relay{kPort};
+    auto server = *(*network)->provider(kProfile);
+    auto client = *(*clients)->provider(kProfile);
+    RAWFRAME_EXPECT(server->listen({endpointAt(kPort)}).has_value());
+    const auto kConnection = client->connect({endpointAt(relay.port())});
+    std::vector<Event> serverEvents;
+    std::vector<Event> clientEvents;
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {client.get(), &clientEvents}}, [&] {
+        return find(serverEvents, EventKind::Accepted) != nullptr &&
+               find(clientEvents, EventKind::Connected) != nullptr;
+    }));
+    if (!kConnection.has_value()) {
+        RAWFRAME_EXPECT(kConnection.has_value());
+        return;
+    }
+    const auto kStream = client->openStream(*kConnection, false);
+    if (!kStream.has_value()) {
+        RAWFRAME_EXPECT(kStream.has_value());
+        return;
+    }
+
+    relay.block(true);
+    RAWFRAME_EXPECT(client->send(*kConnection, *kStream, std::vector<std::byte>(1000)).has_value());
+    // Buffered, it would be released here at once.
+    RAWFRAME_EXPECT(!pumpUntil(
+        {{client.get(), &clientEvents}},
+        [&] {
+            return client->pendingBytes(*kConnection, *kStream) == 0;
+        },
+        std::chrono::milliseconds{300}));
+    RAWFRAME_EXPECT(client->pendingBytes(*kConnection, *kStream) == 1000);
+
+    relay.block(false);
+    RAWFRAME_EXPECT(pumpUntil({{client.get(), &clientEvents}}, [&] {
+        return client->pendingBytes(*kConnection, *kStream) == 0;
+    }));
+    std::size_t held = 0;
+    serverEvents.clear();
+    server->poll(serverEvents, 1024);
+    for (const Event& kEvent : serverEvents) {
+        held += kEvent.kind == EventKind::StreamBytes ? kEvent.bytes.size() : 0;
+    }
+    RAWFRAME_EXPECT(held == 1000);
 }
 
 RAWFRAME_TEST(APortAnotherServerHoldsIsRefused) {

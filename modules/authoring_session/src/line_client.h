@@ -37,6 +37,14 @@ public:
     /// endpoint that may have gone.
     [[nodiscard]] std::optional<std::string> ask(std::string_view record, std::chrono::milliseconds within);
 
+    /// Sends one last record and waits, at most `within`, only until the
+    /// endpoint has received it, not for its reply: whether it was
+    /// received. Its connection acknowledges what arrives whatever its
+    /// program is doing, so a busy program holds no one up. The
+    /// connection must not buffer sends (`QuicSettings::sendBuffering`),
+    /// or a record counts as received once handed over.
+    [[nodiscard]] bool tell(std::string_view record, std::chrono::milliseconds within);
+
     /// Sends one record answered later, its reply and what is said of it
     /// meanwhile (a cook's progress) kept for `heard` under the record's own
     /// id. Whether it was sent.

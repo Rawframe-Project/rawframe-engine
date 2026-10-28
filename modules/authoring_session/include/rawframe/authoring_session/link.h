@@ -44,10 +44,11 @@ public:
     /// Sends one record and waits for its reply line; none when the
     /// endpoint closed or kept silent.
     std::optional<std::string> ask(std::string_view record);
-    /// The same, a last record before the link is let go, waiting only a
-    /// moment: a program stopped by the system never replies, and the
-    /// ten seconds an ask waits held Studio's end.
-    std::optional<std::string> askLast(std::string_view record);
+    /// Sends a last record before the link is let go, waiting only until
+    /// the endpoint has received it, and at most a moment: a busy program
+    /// answers only in its next frame, and one stopped by the system never
+    /// does. Whether it was received.
+    bool tellLast(std::string_view record);
     /// Sends one record answered later: its reply kept for `heard`
     /// under the record's own id, so who sends it never waits on the
     /// endpoint's next frame. Whether it was sent.
