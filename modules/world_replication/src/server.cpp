@@ -382,6 +382,8 @@ public:
     }
     result::Status run(world::SystemContext& context) noexcept override {
         state_->publish(context.world, context.tick);
+        // The tick's mappings to peers it sent no state to go now too.
+        state_->sessions->flush();
         return {};
     }
 

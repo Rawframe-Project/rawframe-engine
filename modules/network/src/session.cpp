@@ -18,6 +18,10 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, NetworkErro
     return result::fail(errorClass, kNetworkDomain, code(error), why);
 }
 
+/// The most bytes one stream send carries: a frame or record larger goes in
+/// order across several.
+constexpr std::size_t kStreamPiece = 1024;
+
 enum class Phase : std::uint8_t {
     /// Client: waiting for the transport.
     Connecting,
@@ -67,6 +71,9 @@ struct Connection {
     /// Its event lanes could not keep their promise: it ends at the next
     /// pump.
     bool exhausted = false;
+    /// Control frames sent since the last flush, not yet the transport's:
+    /// sent together, as one stream send of each kStreamPiece.
+    std::vector<std::byte> unsent;
 };
 
 EndReason endReasonOf(CloseReason reason) noexcept {
@@ -199,8 +206,17 @@ public:
         }
     }
 
-    result::Status
-    sendControl(ConnectionId connection, Connection& state, ControlFrame type, std::span<const std::byte> payload) {
+    /// A control frame. Admission's are sent at once; one an owner sends once
+    /// admitted is gathered (`gather`) and sent with the connection's
+    /// others at the next flush: a datagram or event to the same peer, the
+    /// owner's flush, its next pump, or a full piece's worth gathered.
+    /// A frame each its own stream send cost a send per frame: Quarry's
+    /// server made twenty thousand a second, of 13 bytes.
+    result::Status sendControl(ConnectionId connection,
+                               Connection& state,
+                               ControlFrame type,
+                               std::span<const std::byte> payload,
+                               bool gather = false) {
         if (!state.control) {
             return refuse(result::ErrorClass::FailedPrecondition, NetworkError::WrongStream, "no control stream yet");
         }
@@ -211,14 +227,35 @@ public:
             RAWFRAME_TRY(writePreface(writer, StreamPreface{.kind = StreamKind::Control}));
         }
         RAWFRAME_TRY(writeFrame(writer, static_cast<std::uint64_t>(type), payload));
-        // A frame may be larger than one stream send: it goes in order.
-        std::span<const std::byte> rest = writer.written();
-        while (!rest.empty()) {
-            const std::size_t kPart = std::min<std::size_t>(rest.size(), 1024);
-            RAWFRAME_TRY(provider_->send(connection, *state.control, rest.first(kPart)));
+        const std::span<const std::byte> kFrame = writer.written();
+        state.unsent.insert(state.unsent.end(), kFrame.begin(), kFrame.end());
+        if (gather && state.unsent.size() < kStreamPiece) {
+            return {};
+        }
+        return flushControl(connection, state);
+    }
+
+    /// Hands a connection's gathered control frames to the transport, in
+    /// order, in pieces of one stream send. A send that fails has closed
+    /// the connection, since a stream cannot drop bytes; its `Ended` follows.
+    result::Status flushControl(ConnectionId connection, Connection& state) {
+        std::span<const std::byte> rest = state.unsent;
+        result::Status sent;
+        while (!rest.empty() && sent.has_value()) {
+            const std::size_t kPart = std::min(rest.size(), kStreamPiece);
+            sent = provider_->send(connection, *state.control, rest.first(kPart));
             rest = rest.subspan(kPart);
         }
-        return {};
+        state.unsent.clear();
+        return sent;
+    }
+
+    void flushAll() {
+        for (auto& [id, state] : connections_) {
+            if (!state.unsent.empty()) {
+                static_cast<void>(flushControl(ConnectionId{id}, state));
+            }
+        }
     }
 
     void onTransport(const Event& event, std::vector<SessionEvent>& into) {
@@ -686,6 +723,9 @@ result::Result<ConnectionId> Sessions::connect(const Endpoint& endpoint, const H
 }
 
 void Sessions::pump(std::vector<SessionEvent>& into) {
+    // What the owner sent since its last flush, if it made none: no frame
+    // waits past the owner's next pump.
+    core_->flushAll();
     core_->events_.clear();
     core_->provider_->poll(core_->events_, 4096);
     for (const Event& event : core_->events_) {
@@ -704,7 +744,7 @@ result::Status Sessions::sendFrame(ConnectionId connection, ControlFrame type, s
         type == ControlFrame::ProtocolAccept || type == ControlFrame::ProtocolReject) {
         return refuse(result::ErrorClass::InvalidArgument, NetworkError::TooLarge, "not a frame to send once admitted");
     }
-    return core_->sendControl(connection, kFound->second, type, payload);
+    return core_->sendControl(connection, kFound->second, type, payload, true);
 }
 
 result::Status Sessions::sendDatagram(ConnectionId connection, const DatagramRecord& record) {
@@ -717,6 +757,11 @@ result::Status Sessions::sendDatagram(ConnectionId connection, const DatagramRec
     if (record.lane != kMine || record.payload.size() > core_->profile_.maximumDatagramPayload) {
         return refuse(
             result::ErrorClass::InvalidArgument, NetworkError::WrongStream, "not this side's lane, or too large");
+    }
+    // The frames sent to this peer before it go first, so a mapping
+    // reaches the transport before the state that uses it.
+    if (!kFound->second.unsent.empty()) {
+        RAWFRAME_TRY(core_->flushControl(connection, kFound->second));
     }
     core_->scratch_.resize(record.payload.size() + 48);
     Writer writer{core_->scratch_};
@@ -741,6 +786,9 @@ result::Status Sessions::sendEvent(ConnectionId connection,
                       "not a lane this side sends on, or a record past its bound");
     }
     Connection& state = kFound->second;
+    if (!state.unsent.empty()) {
+        RAWFRAME_TRY(core_->flushControl(connection, state));
+    }
     if (state.exhausted) {
         return refuse(result::ErrorClass::ResourceExhausted,
                       NetworkError::Exhausted,
@@ -775,7 +823,7 @@ result::Status Sessions::sendEvent(ConnectionId connection,
     // A record may be larger than one stream send: it goes in order.
     std::span<const std::byte> rest = writer.written();
     while (!rest.empty()) {
-        const std::size_t kPart = std::min<std::size_t>(rest.size(), 1024);
+        const std::size_t kPart = std::min(rest.size(), kStreamPiece);
         RAWFRAME_TRY(core_->provider_->send(connection, stream->stream, rest.first(kPart)));
         stream->written += kPart;
         rest = rest.subspan(kPart);
@@ -796,7 +844,15 @@ void Sessions::close(ConnectionId connection) noexcept {
     }
 }
 
+void Sessions::flush() noexcept {
+    core_->flushAll();
+}
+
 void Sessions::closeAfterSending(ConnectionId connection) noexcept {
+    if (const auto kFound = core_->connections_.find(connection.value);
+        kFound != core_->connections_.end() && !kFound->second.unsent.empty()) {
+        static_cast<void>(core_->flushControl(connection, kFound->second));
+    }
     if (core_->connections_.erase(connection.value) != 0) {
         core_->rejected_[connection.value] = core_->clock_->now() + core_->profile_.admissionTimeout;
     }
