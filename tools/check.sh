@@ -168,17 +168,22 @@ build_and_test() {
     elif grep -q 'No tests were found' "out/$preset.$labels.log"; then
         printf '   %s: built in %ss, no %s test selected\n' "$preset" "$((built - began))" "$labels"
     else
-        # Each failed test's last lines, cut short, then the summary. CI's
-        # logs are public, and libFuzzer prints a finding's input from its
-        # first mutation line on, so a fuzz target's output stops there: the
-        # finding is reproduced by running the target locally.
+        # Each failed test's last lines, cut short, then what the reaper
+        # killed while the tests ran, then the summary. The reaper's lines
+        # fall among the tests' output, and a process left running fails
+        # the tier with no test failed, so they are printed on their own.
+        # CI's logs are public, and libFuzzer prints a finding's input from
+        # its first mutation line on, so a fuzz target's output stops there:
+        # the finding is reproduced by running the target locally.
         awk 'function flush() { if (shown) { print head; for (i = (n > 40 ? n - 39 : 1); i <= n; i++) print kept[i] } }
+             /^reap: / { next }
              /Test +#[0-9]+: / { flush(); shown = /\*\*\*|Failed|Exception|Timeout/; head = $0; n = 0
                                  fuzz = /_fuzz_/; dump = 0; next }
              /^(The following tests|[0-9]+% tests passed)/ { flush(); shown = 0 }
              fuzz && /^MS: [0-9]/ { dump = 1 }
              shown && !dump { kept[++n] = substr($0, 1, 1200) }
              END { flush() }' "out/$preset.$labels.log"
+        sed -n '/^[0-9]*% tests passed/q; /reap: /p' "out/$preset.$labels.log"
         sed -n '/^[0-9]*% tests passed/,$p' "out/$preset.$labels.log"
         fail "$preset $labels tests"
     fi
