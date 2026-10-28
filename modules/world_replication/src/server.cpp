@@ -644,7 +644,10 @@ ReplicationServer::sentSince(std::uint32_t viewer, world::EntityHandle entity, s
         }
         const Mapping* const kMapped = peer.mapped.find(entity);
         if (kMapped != nullptr && kMapped->firstSent.has_value()) {
-            return kMapped->firstSent;
+            // Retiring, it was seen until it went out of interest, as a
+            // retired one was.
+            return !kMapped->retiringSince.has_value() || tick < *kMapped->retiringSince ? kMapped->firstSent
+                                                                                         : std::nullopt;
         }
         const auto kThen = std::ranges::find_if(peer.retired, [&](const Sent& gone) {
             return gone.entity == entity && gone.from <= tick && tick < gone.until;
