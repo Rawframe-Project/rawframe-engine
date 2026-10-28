@@ -22,10 +22,10 @@ using rawframe::studio::VersionControl;
 
 namespace {
 
-// Git is run as a program only on the POSIX desktops: Windows' git runs
-// hooks in a shell of its own, which the scripts below are not written for,
-// and a phone or its simulator has no git to start.
-#if !defined(_WIN32) && !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IPHONE)
+// Git is run as a program on the desktops, where Studio runs; a phone or its
+// simulator has none to start. Git for Windows runs a repository's programs
+// through the sh it carries, so the scripts below are POSIX everywhere.
+#if !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IPHONE)
 std::string pathVariable() {
     const char* const kPath = std::getenv("PATH");
     return kPath != nullptr ? kPath : "";
@@ -64,13 +64,15 @@ int runAll(VersionControl& control, const std::filesystem::path& directory, cons
 }
 
 /// A script that leaves `marker` and does what git asked of it as little
-/// as it can.
-std::filesystem::path
+/// as it can, named as the sh git runs it through reads a path: with
+/// forward slashes, as backslashes are escapes there. Its lines end bare,
+/// as a carriage return would end up in the program the first names.
+std::string
 markerScript(const std::filesystem::path& directory, const std::string& name, const std::filesystem::path& marker) {
     const std::filesystem::path kScript = directory / name;
-    std::ofstream{kScript} << "#!/bin/sh\ntouch '" << marker.string() << "'\n";
+    std::ofstream{kScript, std::ios::binary} << "#!/bin/sh\ntouch '" << marker.generic_string() << "'\n";
     std::filesystem::permissions(kScript, std::filesystem::perms::owner_all);
-    return kScript;
+    return kScript.generic_string();
 }
 #endif
 
@@ -97,12 +99,11 @@ RAWFRAME_TEST(EveryGitCommandKeepsTheRepositorysProgramsOff) {
                      std::vector<std::string>{"diff", "--no-ext-diff", "--no-textconv", "HEAD", "--", "a"}));
 }
 
-#if !defined(_WIN32) && !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IPHONE)
+#if !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IPHONE)
 RAWFRAME_TEST(GitRunsOnlyInATrustedRepositoryAndNeverItsReadersPrograms) {
     // A repository whose settings name a program for every way git may run
     // one: a commit hook, a file monitor, an external diff, a diff driver's
-    // command, and a text conversion, each leaving a marker. Shell scripts
-    // as git for Windows would run them are left to the POSIX systems.
+    // command, and a text conversion, each leaving a marker.
     RAWFRAME_EXPECT(programOnPath("git", pathVariable()).has_value());
     std::error_code error;
     const std::filesystem::path kRoot =
@@ -115,14 +116,10 @@ RAWFRAME_TEST(GitRunsOnlyInATrustedRepositoryAndNeverItsReadersPrograms) {
     RAWFRAME_EXPECT(git(kGame, {"init", "--quiet"}));
     RAWFRAME_EXPECT(git(kGame, {"config", "user.name", "Author"}));
     RAWFRAME_EXPECT(git(kGame, {"config", "user.email", "author@example.com"}));
-    RAWFRAME_EXPECT(
-        git(kGame, {"config", "core.fsmonitor", markerScript(kRoot, "monitor", kMarks / "monitor").string()}));
-    RAWFRAME_EXPECT(
-        git(kGame, {"config", "diff.external", markerScript(kRoot, "external", kMarks / "external").string()}));
-    RAWFRAME_EXPECT(
-        git(kGame, {"config", "diff.mark.command", markerScript(kRoot, "driver", kMarks / "driver").string()}));
-    RAWFRAME_EXPECT(
-        git(kGame, {"config", "diff.conv.textconv", markerScript(kRoot, "textconv", kMarks / "textconv").string()}));
+    RAWFRAME_EXPECT(git(kGame, {"config", "core.fsmonitor", markerScript(kRoot, "monitor", kMarks / "monitor")}));
+    RAWFRAME_EXPECT(git(kGame, {"config", "diff.external", markerScript(kRoot, "external", kMarks / "external")}));
+    RAWFRAME_EXPECT(git(kGame, {"config", "diff.mark.command", markerScript(kRoot, "driver", kMarks / "driver")}));
+    RAWFRAME_EXPECT(git(kGame, {"config", "diff.conv.textconv", markerScript(kRoot, "textconv", kMarks / "textconv")}));
     const std::filesystem::path kHook = markerScript(kRoot, "pre-commit", kMarks / "hook");
     std::filesystem::copy_file(kHook, kGame / ".git" / "hooks" / "pre-commit", error);
     std::ofstream{kGame / ".gitattributes"} << "*.scene diff=mark\n*.ui diff=conv\n";
