@@ -199,7 +199,6 @@ struct ReplicationClient::State {
             appliedAt.erase(appliedAt.lower_bound({kRecord->entity.value, 0}),
                             appliedAt.lower_bound({kRecord->entity.value + 1, 0}));
         }
-        acknowledge(network::ControlFrame::MappingRetireAck, kRecord->entity);
     }
 
     /// The server says how early this client's input arrives; a client that

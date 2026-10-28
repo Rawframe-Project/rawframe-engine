@@ -859,6 +859,32 @@ RAWFRAME_TEST(RemoteEntitiesAreShownBetweenStates) {
     RAWFRAME_EXPECT(scenario.client->interpolationStatistics().blended > 500);
 }
 
+RAWFRAME_TEST(ARetirementIsNotAnswered) {
+    // Twenty props mirrored, then destroyed at once: the client lets each
+    // go and sends nothing back for it.
+    Scenario scenario{{}};
+    const auto kPosition = *scenario.schema->key<Position>();
+    std::vector<world::EntityHandle> props;
+    for (int index = 0; index < 20; ++index) {
+        props.push_back(*scenario.serverWorld.create());
+        RAWFRAME_EXPECT(
+            scenario.serverWorld.insert(props.back(), kPosition, Position{static_cast<float>(index), 0}).has_value());
+    }
+    for (int step = 0; step < 60; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.mirrored() == 21);
+    for (const world::EntityHandle kProp : props) {
+        RAWFRAME_EXPECT(scenario.serverWorld.destroy(kProp).has_value());
+    }
+    const std::uint64_t kBefore = scenario.clientTransport->statistics().streamBytesSent;
+    for (int step = 0; step < 30; ++step) {
+        scenario.step(Steer{});
+    }
+    RAWFRAME_EXPECT(scenario.mirrored() == 1);
+    RAWFRAME_EXPECT(scenario.clientTransport->statistics().streamBytesSent == kBefore);
+}
+
 RAWFRAME_TEST(AnAttemptEndedUnansweredIsAskedAgainFromNothing) {
     // A client whose hello the server did not hear in its admission
     // time ends unanswered, no refusal; asked again, it is not ended, and

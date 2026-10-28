@@ -53,7 +53,7 @@ void ReplicationServer::State::forget(world::World& world, std::map<std::uint64_
 
 void ReplicationServer::State::onFrame(world::World& world, Peer& peer, const network::SessionEvent& event) {
     const auto kType = static_cast<network::ControlFrame>(event.frameType);
-    if (kType == network::ControlFrame::MappingAck || kType == network::ControlFrame::MappingRetireAck) {
+    if (kType == network::ControlFrame::MappingAck) {
         const auto kRecord = decodeMapping(event.payload);
         if (!kRecord.has_value()) {
             strike(peer);
@@ -63,12 +63,10 @@ void ReplicationServer::State::onFrame(world::World& world, Peer& peer, const ne
         if (kRecord->replicationEpoch != peer.accept.replicationEpoch) {
             return;
         }
-        if (kType == network::ControlFrame::MappingAck) {
-            const auto kEntity = peer.byNetEntity.find(kRecord->entity.value);
-            Mapping* const kMapping = kEntity != peer.byNetEntity.end() ? peer.mapped.find(kEntity->second) : nullptr;
-            if (kMapping != nullptr) {
-                kMapping->acknowledged = true;
-            }
+        const auto kEntity = peer.byNetEntity.find(kRecord->entity.value);
+        Mapping* const kMapping = kEntity != peer.byNetEntity.end() ? peer.mapped.find(kEntity->second) : nullptr;
+        if (kMapping != nullptr) {
+            kMapping->acknowledged = true;
         }
         return;
     }
