@@ -109,7 +109,10 @@ extern "C"
         // The layout and rates are maud_layoutNone and 0 where the platform
         // cannot tell them without opening the device, as on ALSA, whose
         // devices are not opened to be listed; a stream that opens one
-        // learns its rate. maud_notifyDeviceFormatChanged reports a change.
+        // learns its rate. A rate the platform reports outside 8,000 to
+        // 384,000 reads as 0 too, and a native stream on a device whose
+        // rate is 0 keeps its own. maud_notifyDeviceFormatChanged reports
+        // a change.
         maudChannelLayout nativeLayout;
         uint32_t nativeSampleRate;
         // The rates the device can run at without conversion.

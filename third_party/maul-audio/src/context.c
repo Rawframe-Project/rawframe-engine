@@ -17,9 +17,10 @@
 static bool DefValid(const maudContextDef* def)
 {
     return def->cookie == MAUD_CONTEXT_DEF_COOKIE && maudIsAllocatorValid(&def->allocator) &&
-           def->limits.streams != 0 && def->limits.periodFrames != 0 && def->limits.devices != 0 &&
-           def->limits.notifications >= 2 && def->limits.deviceTextBytes != 0 &&
-           def->offlineSampleRate >= MIN_RATE && def->offlineSampleRate <= MAX_RATE &&
+           def->limits.streams != 0 && def->limits.periodFrames != 0 &&
+           def->limits.periodFrames <= MAUD_MAX_PERIOD_FRAMES && def->limits.devices != 0 &&
+           def->limits.deviceTextBytes != 0 && def->offlineSampleRate >= MIN_RATE &&
+           def->offlineSampleRate <= MAX_RATE &&
            (def->androidJavaVm == nullptr) == (def->androidContext == nullptr) &&
            def->backend <= maud_backendPrivate;
 }
@@ -177,6 +178,12 @@ maudResult maudCreateContext(const maudContextDef* def, maudContext** contextOut
     {
         return maud_errorVersion;
     }
+    if (def != nullptr && def->cookie == MAUD_CONTEXT_DEF_COOKIE &&
+        (def->limits.periodFrames > MAUD_MAX_PERIOD_FRAMES ||
+         def->limits.notifications < MAUD_MIN_NOTIFICATIONS))
+    {
+        return maud_errorLimit;
+    }
     if (def == nullptr || !DefValid(def))
     {
         return maud_errorInvalid;
@@ -191,8 +198,11 @@ maudResult maudCreateContext(const maudContextDef* def, maudContext** contextOut
                                          sizeof(maudNotification), alignof(maudNotification));
     size_t textOffset =
         maudLayoutAdd(&layout, (size_t)def->limits.devices * 2u, def->limits.deviceTextBytes, 1);
-    MAUD_ASSERT(!layout.overflow);
-    unsigned char* block = maudAllocate(&def->allocator, layout.size, alignof(maudContext));
+    // The limits are the caller's: a block past the address space, as
+    // their largest values make where size_t has 32 bits, is refused.
+    unsigned char* block = layout.overflow
+                               ? nullptr
+                               : maudAllocate(&def->allocator, layout.size, alignof(maudContext));
     if (block == nullptr)
     {
         return maud_errorCapacity;
@@ -230,7 +240,7 @@ maudResult maudDestroyContext(maudContext* context)
     }
     if (maudRefuseControl(context))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     for (uint32_t i = 0; i < context->streams.capacity; ++i)
     {
@@ -404,7 +414,7 @@ maudResult maudResumeContext(maudContext* context)
     }
     if (maudRefuseControl(context))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (context->backend->resumeContext != nullptr)
     {

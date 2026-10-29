@@ -79,7 +79,8 @@ extern "C"
 
     /// Computes air absorption per band from ISO 9613 part 1 at 101.325 kPa:
     /// the standard's attenuation averaged in dB over each band, as an
-    /// amplitude exponent per metre.
+    /// amplitude exponent per metre. The same bits on every platform and
+    /// in any floating-point mode, since bakes take it as an input.
     ///
     /// @param temperatureCelsius  -20 to 50.
     /// @param humidityPercent     Relative humidity, 10 to 100.

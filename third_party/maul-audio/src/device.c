@@ -128,7 +128,7 @@ void maudSetDefaultDevice(maudContext* context, maudDeviceRole role, maudDeviceI
 maudResult maudGetDevices(const maudContext* context, maudDirection direction, maudDeviceId* idsOut,
                           uint32_t capacity, uint32_t* countOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (countOut != nullptr)
     {
         *countOut = 0;
@@ -158,7 +158,7 @@ maudResult maudGetDevices(const maudContext* context, maudDirection direction, m
 maudResult maudGetDeviceInfo(const maudContext* context, maudDeviceId device,
                              maudDeviceInfo* infoOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (infoOut != nullptr)
     {
         memset(infoOut, 0, sizeof(*infoOut));
@@ -207,7 +207,7 @@ static maudResult CopyText(const maudContext* context, maudDeviceId device, bool
 maudResult maudGetDeviceName(const maudContext* context, maudDeviceId device, char* bytesOut,
                              size_t capacity, size_t* lengthOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (lengthOut != nullptr)
     {
         *lengthOut = 0;
@@ -218,7 +218,7 @@ maudResult maudGetDeviceName(const maudContext* context, maudDeviceId device, ch
 maudResult maudGetDeviceKey(const maudContext* context, maudDeviceId device, char* bytesOut,
                             size_t capacity, size_t* lengthOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (lengthOut != nullptr)
     {
         *lengthOut = 0;
@@ -229,7 +229,7 @@ maudResult maudGetDeviceKey(const maudContext* context, maudDeviceId device, cha
 maudResult maudGetDefaultDevice(const maudContext* context, maudDirection direction,
                                 maudDeviceRole role, maudDeviceId* deviceOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (deviceOut != nullptr)
     {
         memset(deviceOut, 0, sizeof(*deviceOut));
@@ -295,6 +295,15 @@ void maudSetDeviceSpatializer(maudContext* context, maudDeviceSlot* slot,
                                       .direction = slot->info.direction,
                                       .device = IdOf(context, slot),
                                   });
+}
+
+uint32_t maudDeviceRate(double rate)
+{
+    if (!(rate >= MAUD_DEVICE_MIN_RATE - 0.5 && rate < MAUD_DEVICE_MAX_RATE + 0.5))
+    {
+        return 0;
+    }
+    return (uint32_t)(rate + 0.5);
 }
 
 bool maudSetDeviceFormat(maudContext* context, maudDeviceSlot* slot, const maudDeviceInfo* info)

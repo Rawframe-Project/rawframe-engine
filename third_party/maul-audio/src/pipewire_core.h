@@ -102,6 +102,8 @@ typedef struct maudPipewireConnection
 typedef struct maudPipewireDefaults
 {
     struct pw_proxy* metadata;
+    // The bound metadata's global, so its removal is noticed.
+    uint32_t global;
     struct spa_hook listener;
     char names[2][MAUD_PIPEWIRE_NAME_BYTES];
 } maudPipewireDefaults;
@@ -111,6 +113,8 @@ typedef struct maudPipewireDefaults
 typedef struct maudPipewireClock
 {
     struct pw_proxy* metadata;
+    // The bound metadata's global, so its removal is noticed.
+    uint32_t global;
     struct spa_hook listener;
     uint32_t clockRate;
     uint32_t forceRate;

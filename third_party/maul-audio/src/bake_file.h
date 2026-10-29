@@ -14,8 +14,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define MAUD_BAKE_HEADER 40u
-
 // What a loading spatializer allows: its limits and its reflections'
 // field layout (order 0 for none).
 typedef struct maudBakeLimits
@@ -27,7 +25,9 @@ typedef struct maudBakeLimits
 } maudBakeLimits;
 
 // The size of a set's file; with a bake whose fields are of the given
-// order and bins (order 0 for none). 0 if it would not fit in size_t.
+// order and bins (order 0 for none). 0 if a part would pass the
+// UINT32_MAX bytes its frame's length holds, or the file would not fit
+// in size_t.
 size_t maudBakeFileBytes(const maudProbeGraph* graph, const maudProbeBake* bake,
                          uint32_t fieldOrder, uint32_t fieldBins);
 
@@ -37,9 +37,10 @@ void maudWriteBakeFile(const maudProbeGraph* graph, const maudProbeBake* bake, u
                        uint32_t fieldBins, uint8_t* out);
 
 // Reads a file into a graph and a bake (empty for probes and links
-// alone): maud_errorInvalid for a file not well formed;
-// maud_errorUnsupported for another version or fields that do not match
-// the limits' layout; maud_errorCapacity past the limits or when memory
+// alone): maud_errorFormat for a file not well formed;
+// maud_errorVersion for another version or a field only a later one
+// writes; maud_errorUnsupported for energy fields that do not match the
+// limits' layout; maud_errorCapacity past the limits or when memory
 // runs out. Nothing is allocated on failure.
 maudResult maudReadBakeFile(const uint8_t* data, size_t size, const maudBakeLimits* limits,
                             const maudAllocator* allocator, maudProbeGraph* graph,

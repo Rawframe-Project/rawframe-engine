@@ -489,6 +489,12 @@ static maudResult Open(maudContext* context, maudStreamSlot* slot)
 {
     maudWasapiStream* entry = EntryOf(context, slot);
     *entry = (maudWasapiStream){.core = &slot->core};
+    // An input that ran on another client, before a move or a lost
+    // device's reopen, starts its next block afresh.
+    if (slot->core.def.direction != maud_directionOutput)
+    {
+        maudRestartInputPeriod(&slot->core.period);
+    }
     if (slot->core.binding.current.index1 == 0)
     {
         return maud_success;

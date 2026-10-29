@@ -16,6 +16,8 @@
 #include "air_absorption.h"
 #include "allocator.h"
 #include "direct_step.h"
+#include "fpenv.h"
+#include "host_tasks.h"
 #include "occlusion.h"
 #include "pathing.h"
 #include "probe_sets.h"
@@ -29,25 +31,14 @@
 #include <string.h>
 
 #define SOURCE_DEF_COOKIE 0x6D61736Fu
-#define MAX_SOURCES       65536u
-#define MAX_SAMPLES       1024u
-#define MAX_SURFACES      16u
-#define MAX_MATERIALS     65536u
 // Rays per round of queries, and per query.
-#define ROUND           4096u
-#define BATCH           64u
-#define MIN_REVERB_RAYS 64u
-#define MAX_REVERB_RAYS 16384u
+#define ROUND 4096u
+#define BATCH 64u
 // A reverberation ray's bounces at most; past them the decay is filled
 // in at its rate.
-#define REVERB_BOUNCES       1024u
-#define NO_REVERB            0.1f
-#define MAX_REFLECTION_ORDER 3u
-#define MAX_PROBE_SETS       64u
-#define MAX_PROBES           65536u
-#define MAX_PROBE_PAIRS      16777216u
-#define MAX_PATHS            4096u
-#define SILENT               (-96.0f)
+#define REVERB_BOUNCES 1024u
+#define NO_REVERB      0.1f
+#define SILENT         (-96.0f)
 
 maudSourceDef maudDefaultSourceDef(void)
 {
@@ -131,18 +122,23 @@ static bool ReverbValid(const maudSpatializerDef* def)
         }
     }
     bool reflections = def->reflectionOrder == 0 ||
-                       (def->reflectionOrder <= MAX_REFLECTION_ORDER && def->reverbRays > 0 &&
-                        def->reflectionDuration >= 0.05f && def->reflectionDuration <= 4.0f &&
-                        def->reflectionRate >= 44100.0f && def->reflectionRate <= 384000.0f);
-    return reflections && (def->reverbRays == 0 || (def->reverbRays >= MIN_REVERB_RAYS &&
-                                                    def->reverbRays <= MAX_REVERB_RAYS));
+                       (def->reverbRays > 0 && def->reflectionDuration >= 0.05f &&
+                        def->reflectionDuration <= 4.0f && def->reflectionRate >= 44100.0f &&
+                        def->reflectionRate <= 384000.0f);
+    return reflections;
 }
 
-static bool ProbesValid(const maudSpatializerDef* def)
+// Whether a count passes one of the published bounds.
+static bool PastLimits(const maudSpatializerDef* def)
 {
-    return def->probeSetCapacity <= MAX_PROBE_SETS && def->maxProbes >= 1 &&
-           def->maxProbes <= MAX_PROBES && def->maxProbePairs >= 1 &&
-           def->maxProbePairs <= MAX_PROBE_PAIRS && def->maxPaths <= MAX_PATHS;
+    return def->sourceCapacity > MAUD_MAX_SOURCES ||
+           def->maxOcclusionSamples > MAUD_MAX_OCCLUSION_SAMPLES ||
+           def->maxSurfaces > MAUD_MAX_SURFACES || def->materialCapacity > MAUD_MAX_MATERIALS ||
+           (def->reverbRays != 0 &&
+            (def->reverbRays < MAUD_MIN_REVERB_RAYS || def->reverbRays > MAUD_MAX_REVERB_RAYS)) ||
+           def->reflectionOrder > MAUD_MAX_REFLECTION_ORDER ||
+           def->probeSetCapacity > MAUD_MAX_PROBE_SETS || def->maxProbes > MAUD_MAX_PROBES ||
+           def->maxProbePairs > MAUD_MAX_PROBE_PAIRS || def->maxPaths > MAUD_MAX_PATHS;
 }
 
 // Allocates everything a spatializer holds but itself; false if any
@@ -204,7 +200,8 @@ static bool Allocate(maudSpatializer* s, const maudSpatializerDef* def)
     return all;
 }
 
-maudResult maudCreateSpatializer(const maudSpatializerDef* def, maudSpatializer** spatializerOut)
+static MAUD_NOINLINE maudResult CreateSpatializer(const maudSpatializerDef* def,
+                                                  maudSpatializer** spatializerOut)
 {
     if (spatializerOut != nullptr)
     {
@@ -215,13 +212,16 @@ maudResult maudCreateSpatializer(const maudSpatializerDef* def, maudSpatializer*
     {
         return maud_errorVersion;
     }
+    if (def != nullptr && spatializerOut != nullptr && def->cookie == MAUD_SPATIALIZER_DEF_COOKIE &&
+        PastLimits(def))
+    {
+        return maud_errorLimit;
+    }
     if (def == nullptr || spatializerOut == nullptr || def->cookie != MAUD_SPATIALIZER_DEF_COOKIE ||
-        def->sourceCapacity == 0 || def->sourceCapacity > MAX_SOURCES ||
-        def->maxOcclusionSamples == 0 || def->maxOcclusionSamples > MAX_SAMPLES ||
-        def->maxSurfaces == 0 || def->maxSurfaces > MAX_SURFACES || def->materialCapacity == 0 ||
-        def->materialCapacity > MAX_MATERIALS ||
+        def->sourceCapacity == 0 || def->maxOcclusionSamples == 0 || def->maxSurfaces == 0 ||
+        def->materialCapacity == 0 ||
         (def->enqueueTask == nullptr) != (def->finishTask == nullptr) || !ReverbValid(def) ||
-        !ProbesValid(def) || !maudIsAllocatorValid(&def->allocator))
+        def->maxProbes == 0 || def->maxProbePairs == 0 || !maudIsAllocatorValid(&def->allocator))
     {
         return maud_errorInvalid;
     }
@@ -281,6 +281,16 @@ maudResult maudCreateSpatializer(const maudSpatializerDef* def, maudSpatializer*
     return maud_success;
 }
 
+// The occlusion's sample points and the reflections' tables are made
+// here, so creation is a computing entry too.
+maudResult maudCreateSpatializer(const maudSpatializerDef* def, maudSpatializer** spatializerOut)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = CreateSpatializer(def, spatializerOut);
+    maudFloatEnvLeave(token);
+    return result;
+}
+
 void maudDestroySpatializer(maudSpatializer* spatializer)
 {
     if (spatializer != nullptr && !maudSpatializerBusy(spatializer))
@@ -323,8 +333,8 @@ static bool PatternValid(const maudDirectivityPattern* pattern)
     return maudGetDirectivity(pattern, (maudVector3){0.0f, 0.0f, -1.0f}, out) == maud_success;
 }
 
-maudResult maudCreateSource(maudSpatializer* spatializer, const maudSourceDef* def,
-                            maudSourceId* sourceOut)
+static MAUD_NOINLINE maudResult CreateSource(maudSpatializer* spatializer, const maudSourceDef* def,
+                                             maudSourceId* sourceOut)
 {
     if (sourceOut != nullptr)
     {
@@ -336,7 +346,7 @@ maudResult maudCreateSource(maudSpatializer* spatializer, const maudSourceDef* d
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (def == nullptr || sourceOut == nullptr || def->cookie != SOURCE_DEF_COOKIE ||
         !PatternValid(&def->directivity) || def->occlusion > maud_occlusionVolumetric ||
@@ -364,6 +374,17 @@ maudResult maudCreateSource(maudSpatializer* spatializer, const maudSourceDef* d
     return maud_success;
 }
 
+// Checking a def compares floats, which denormals-are-zero would read
+// otherwise: the host's mode must not decide what is accepted.
+maudResult maudCreateSource(maudSpatializer* spatializer, const maudSourceDef* def,
+                            maudSourceId* sourceOut)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = CreateSource(spatializer, def, sourceOut);
+    maudFloatEnvLeave(token);
+    return result;
+}
+
 // The live slot an id names for a call that changes it, or the reason
 // there is none.
 static maudResult Find(maudSpatializer* spatializer, maudSourceId source, Slot** slotOut)
@@ -374,7 +395,7 @@ static maudResult Find(maudSpatializer* spatializer, maudSourceId source, Slot**
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (source.index1 == 0 || source.index1 > spatializer->capacity || source.generation == 0)
     {
@@ -403,8 +424,8 @@ maudResult maudDestroySource(maudSpatializer* spatializer, maudSourceId source)
     return maud_success;
 }
 
-maudResult maudSetSourcePose(maudSpatializer* spatializer, maudSourceId source,
-                             const maudPose* pose)
+static MAUD_NOINLINE maudResult SetSourcePose(maudSpatializer* spatializer, maudSourceId source,
+                                              const maudPose* pose)
 {
     Slot* slot = nullptr;
     maudResult result = Find(spatializer, source, &slot);
@@ -420,8 +441,17 @@ maudResult maudSetSourcePose(maudSpatializer* spatializer, maudSourceId source,
     return maud_success;
 }
 
+maudResult maudSetSourcePose(maudSpatializer* spatializer, maudSourceId source,
+                             const maudPose* pose)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = SetSourcePose(spatializer, source, pose);
+    maudFloatEnvLeave(token);
+    return result;
+}
+
 // Queries batches [start, end) of the round's rays.
-static void QueryBatches(uint32_t start, uint32_t end, void* context)
+static MAUD_NOINLINE void QueryBatches(uint32_t start, uint32_t end, void* context)
 {
     maudSpatializer* s = context;
     for (uint32_t b = start; b < end; ++b)
@@ -442,19 +472,8 @@ static void QueryBatches(uint32_t start, uint32_t end, void* context)
 static void Query(maudSpatializer* s)
 {
     uint32_t batches = (s->roundRays + BATCH - 1) / BATCH;
-    if (batches == 0)
-    {
-        return;
-    }
-    if (s->enqueueTask != nullptr)
-    {
-        void* task = s->enqueueTask(QueryBatches, batches, 1, s, s->userTaskContext);
-        s->finishTask(task, s->userTaskContext);
-    }
-    else
-    {
-        QueryBatches(0, batches, s);
-    }
+    maudHostTasks hooks = {s->enqueueTask, s->finishTask, s->userTaskContext};
+    maudRunHostTasks(&hooks, QueryBatches, batches, s);
 }
 
 static uint32_t RaysOf(const maudSpatializer* s, const Slot* slot)
@@ -579,8 +598,8 @@ static bool MaterialValid(const maudAcousticMaterial* m)
     return valid;
 }
 
-maudResult maudSetMaterials(maudSpatializer* spatializer, const maudAcousticMaterial* materials,
-                            uint32_t count)
+static MAUD_NOINLINE maudResult SetMaterials(maudSpatializer* spatializer,
+                                             const maudAcousticMaterial* materials, uint32_t count)
 {
     if (spatializer == nullptr)
     {
@@ -588,7 +607,7 @@ maudResult maudSetMaterials(maudSpatializer* spatializer, const maudAcousticMate
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (count > 0 && materials == nullptr)
     {
@@ -613,7 +632,17 @@ maudResult maudSetMaterials(maudSpatializer* spatializer, const maudAcousticMate
     return maud_success;
 }
 
-maudResult maudSimulateDirect(maudSpatializer* spatializer, const maudPose* listener)
+maudResult maudSetMaterials(maudSpatializer* spatializer, const maudAcousticMaterial* materials,
+                            uint32_t count)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = SetMaterials(spatializer, materials, count);
+    maudFloatEnvLeave(token);
+    return result;
+}
+
+static MAUD_NOINLINE maudResult SimulateDirect(maudSpatializer* spatializer,
+                                               const maudPose* listener)
 {
     if (spatializer == nullptr)
     {
@@ -621,7 +650,7 @@ maudResult maudSimulateDirect(maudSpatializer* spatializer, const maudPose* list
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (listener == nullptr || !maudPoseValid(listener))
     {
@@ -655,8 +684,16 @@ maudResult maudSimulateDirect(maudSpatializer* spatializer, const maudPose* list
     return maud_success;
 }
 
+maudResult maudSimulateDirect(maudSpatializer* spatializer, const maudPose* listener)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = SimulateDirect(spatializer, listener);
+    maudFloatEnvLeave(token);
+    return result;
+}
+
 // Traces batches [start, end) of a reverberation estimate.
-static void TraceBatches(uint32_t start, uint32_t end, void* context)
+static MAUD_NOINLINE void TraceBatches(uint32_t start, uint32_t end, void* context)
 {
     maudSpatializer* s = context;
     for (uint32_t b = start; b < end; ++b)
@@ -700,7 +737,8 @@ static void EstimateReverb(maudSpatializer* s, const maudPose* listener)
     }
 }
 
-maudResult maudSimulateReverb(maudSpatializer* spatializer, const maudPose* listener)
+static MAUD_NOINLINE maudResult SimulateReverb(maudSpatializer* spatializer,
+                                               const maudPose* listener)
 {
     if (spatializer == nullptr)
     {
@@ -708,7 +746,7 @@ maudResult maudSimulateReverb(maudSpatializer* spatializer, const maudPose* list
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (listener == nullptr || !maudPoseValid(listener))
     {
@@ -716,12 +754,20 @@ maudResult maudSimulateReverb(maudSpatializer* spatializer, const maudPose* list
     }
     if (spatializer->trace.rays == 0)
     {
-        return maud_errorState;
+        return maud_errorUnsupported;
     }
     maudSpatializerRunHost(spatializer, true);
     EstimateReverb(spatializer, listener);
     maudSpatializerRunHost(spatializer, false);
     return maud_success;
+}
+
+maudResult maudSimulateReverb(maudSpatializer* spatializer, const maudPose* listener)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = SimulateReverb(spatializer, listener);
+    maudFloatEnvLeave(token);
+    return result;
 }
 
 uint32_t maudTraceFrom(maudSpatializer* s, maudVector3 position, maudReverbResult* result)
@@ -733,15 +779,8 @@ uint32_t maudTraceFrom(maudSpatializer* s, maudVector3 position, maudReverbResul
     s->trace.materialCount = s->materialCount;
     s->trace.listener = position;
     uint32_t batches = maudReverbBatches(s->trace.rays);
-    if (s->enqueueTask != nullptr)
-    {
-        void* task = s->enqueueTask(TraceBatches, batches, 1, s, s->userTaskContext);
-        s->finishTask(task, s->userTaskContext);
-    }
-    else
-    {
-        TraceBatches(0, batches, s);
-    }
+    maudHostTasks hooks = {s->enqueueTask, s->finishTask, s->userTaskContext};
+    maudRunHostTasks(&hooks, TraceBatches, batches, s);
     maudReverbFit fit;
     maudFitReverb(s->histograms, batches, &fit);
     memcpy(result->reverbTime, fit.times, sizeof(fit.times));
@@ -771,7 +810,7 @@ uint64_t maudLatchResults(maudSpatializer* spatializer)
 maudResult maudGetDirectResult(const maudSpatializer* spatializer, maudSourceId source,
                                maudDirectResult* resultOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (resultOut != nullptr)
     {
         memset(resultOut, 0, sizeof(*resultOut));
@@ -797,7 +836,7 @@ maudResult maudGetDirectResult(const maudSpatializer* spatializer, maudSourceId 
 
 maudResult maudGetReverbResult(const maudSpatializer* spatializer, maudReverbResult* resultOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (resultOut != nullptr)
     {
         memset(resultOut, 0, sizeof(*resultOut));
@@ -830,7 +869,7 @@ maudResult maudRenderReflections(maudSpatializer* spatializer, const maudQuatern
     }
     if (spatializer->reflections == nullptr)
     {
-        return maud_errorState;
+        return maud_errorUnsupported;
     }
     uint32_t channels = maudReflectionsOrder(spatializer->reflections) + 1;
     channels *= channels;

@@ -299,6 +299,8 @@ static int OnSettingsProperty(void* data, uint32_t subject, const char* key, con
     {
         return 0;
     }
+    // A rate no stream runs at is taken as none set.
+    number = maudDeviceRate(number);
     if (spa_streq(key, "clock.rate"))
     {
         pipewire->clock.clockRate = number;
@@ -327,6 +329,7 @@ static void BindSettings(maudPipewire* pipewire, uint32_t globalId)
                                        PW_TYPE_INTERFACE_Metadata, PW_VERSION_METADATA, 0);
     if (clock->metadata != nullptr)
     {
+        clock->global = globalId;
         pw_metadata_add_listener((struct pw_metadata*)clock->metadata, &clock->listener,
                                  &s_settingsEvents, pipewire);
     }
@@ -339,9 +342,38 @@ static void BindDefaults(maudPipewire* pipewire, uint32_t globalId)
                                           PW_TYPE_INTERFACE_Metadata, PW_VERSION_METADATA, 0);
     if (defaults->metadata != nullptr)
     {
+        defaults->global = globalId;
         pw_metadata_add_listener((struct pw_metadata*)defaults->metadata, &defaults->listener,
                                  &s_metadataEvents, pipewire);
     }
+}
+
+// Lets go of a metadata whose global went, as the default metadata does
+// when the session manager that owns it restarts, so that the next one
+// of its name is bound. The defaults it named stay until the new one's
+// properties arrive.
+static bool UnbindRemovedMetadata(maudPipewire* pipewire, uint32_t id)
+{
+    struct pw_proxy** metadata = nullptr;
+    struct spa_hook* listener = nullptr;
+    if (pipewire->defaults.metadata != nullptr && pipewire->defaults.global == id)
+    {
+        metadata = &pipewire->defaults.metadata;
+        listener = &pipewire->defaults.listener;
+    }
+    else if (pipewire->clock.metadata != nullptr && pipewire->clock.global == id)
+    {
+        metadata = &pipewire->clock.metadata;
+        listener = &pipewire->clock.listener;
+    }
+    else
+    {
+        return false;
+    }
+    spa_hook_remove(listener);
+    pipewire->api.proxyDestroy(*metadata);
+    *metadata = nullptr;
+    return true;
 }
 
 static void OnGlobal(void* data, uint32_t id, uint32_t permissions, const char* type,
@@ -388,6 +420,10 @@ static void OnGlobal(void* data, uint32_t id, uint32_t permissions, const char* 
 static void OnGlobalRemove(void* data, uint32_t id)
 {
     maudPipewire* pipewire = data;
+    if (UnbindRemovedMetadata(pipewire, id))
+    {
+        return;
+    }
     maudPipewireNode* node = FindNode(pipewire, id);
     if (node != nullptr)
     {

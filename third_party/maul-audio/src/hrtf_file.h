@@ -37,8 +37,8 @@ typedef struct maudHrtfFile
 } maudHrtfFile;
 
 // Checks count bytes as a .maudhrtf file and describes it in fileOut.
-// maud_errorInvalid for anything malformed, maud_errorUnsupported for
-// another format version.
+// maud_errorFormat for anything malformed, maud_errorVersion for
+// another format version or a field tag only a later version writes.
 maudResult maudReadHrtfFile(const void* bytes, size_t count, maudHrtfFile* fileOut);
 
 // A ring's elevation in degrees and its azimuth count.

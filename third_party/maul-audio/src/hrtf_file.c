@@ -2,18 +2,22 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Reading .maudhrtf files. Numbers are assembled byte by byte, so the
-// host's byte order does not matter. The sizes follow from the header's
-// counts, each bounded first, so no product overflows 64 bits; the file
-// must be exactly that long, its checksum must match, and its texts must
-// be UTF-8.
+// host's byte order does not matter. The checksum must match, the fields
+// must be well framed (file_fields.h), each field's length must be the
+// one its counts give, each count bounded first so no product overflows
+// 64 bits, and the texts must be UTF-8.
 
 #include "hrtf_file.h"
+
+#include "file_fields.h"
 
 #include <math.h>
 #include <string.h>
 
-#define HEADER_BYTES 48u
-#define VERSION      2u
+#define HEADER_BYTES 16u
+#define VERSION      3u
+// The head field: rate, taps, rings, directions, scale and distance.
+#define HEAD_BYTES   24u
 #define MIN_RATE     8000u
 #define MAX_RATE     384000u
 #define MIN_TAPS     8u
@@ -24,6 +28,24 @@
 #define MAX_LICENSE  65536u
 #define MIN_DISTANCE 0.05f
 #define MAX_DISTANCE 100.0f
+
+// The fields, in the order a writer puts them.
+enum
+{
+    FIELD_HEAD,
+    FIELD_NAME,
+    FIELD_LICENSE,
+    FIELD_RINGS,
+    FIELD_DELAYS,
+    FIELD_TAPS,
+    FIELD_COUNT
+};
+
+static const uint32_t s_tags[FIELD_COUNT] = {
+    MAUD_FIELD_TAG('h', 'e', 'a', 'd'), MAUD_FIELD_TAG('n', 'a', 'm', 'e'),
+    MAUD_FIELD_TAG('l', 'i', 'c', 's'), MAUD_FIELD_TAG('r', 'i', 'n', 'g'),
+    MAUD_FIELD_TAG('d', 'l', 'a', 'y'), MAUD_FIELD_TAG('t', 'a', 'p', 's'),
+};
 
 static uint32_t U16(const uint8_t* at)
 {
@@ -127,47 +149,68 @@ static bool RingsValid(const maudHrtfFile* file)
 maudResult maudReadHrtfFile(const void* bytes, size_t count, maudHrtfFile* fileOut)
 {
     const uint8_t* data = bytes;
-    if (data == nullptr || count < HEADER_BYTES || memcmp(data, "MAUDHRTF", 8) != 0)
+    if (data == nullptr)
     {
         return maud_errorInvalid;
+    }
+    if (count < HEADER_BYTES || memcmp(data, "MAUDHRTF", 8) != 0)
+    {
+        return maud_errorFormat;
     }
     if (U32(data + 8) != VERSION)
     {
-        return maud_errorUnsupported;
+        return maud_errorVersion;
     }
+    if (maudCrc32(data + HEADER_BYTES, count - HEADER_BYTES) != U32(data + 12))
+    {
+        return maud_errorFormat;
+    }
+    maudField fields[FIELD_COUNT];
+    maudResult read = maudReadFields(data, count, HEADER_BYTES, s_tags, FIELD_COUNT, fields);
+    if (read != maud_success)
+    {
+        return read;
+    }
+    // The head, rings, delays and taps have no default; an absent name or
+    // license is empty.
+    if (!fields[FIELD_HEAD].present || fields[FIELD_HEAD].length != HEAD_BYTES ||
+        !fields[FIELD_RINGS].present || !fields[FIELD_DELAYS].present ||
+        !fields[FIELD_TAPS].present)
+    {
+        return maud_errorFormat;
+    }
+    const uint8_t* head = fields[FIELD_HEAD].bytes;
     maudHrtfFile file = {
-        .sampleRate = U32(data + 12),
-        .taps = U32(data + 16),
-        .ringCount = U32(data + 20),
-        .directionCount = U32(data + 24),
-        .scale = F32(data + 28),
-        .distance = F32(data + 32),
+        .sampleRate = U32(head),
+        .taps = U32(head + 4),
+        .ringCount = U32(head + 8),
+        .directionCount = U32(head + 12),
+        .scale = F32(head + 16),
+        .distance = F32(head + 20),
     };
-    uint32_t nameBytes = U32(data + 36);
-    uint32_t licenseBytes = U32(data + 40);
+    uint32_t nameBytes = fields[FIELD_NAME].length;
+    uint32_t licenseBytes = fields[FIELD_LICENSE].length;
     if (!CountsValid(&file, nameBytes, licenseBytes))
     {
-        return maud_errorInvalid;
+        return maud_errorFormat;
     }
     // Bounded counts: every product here fits in 64 bits.
-    uint64_t expected = (uint64_t)HEADER_BYTES + nameBytes + licenseBytes +
-                        8u * (uint64_t)file.ringCount + 4u * (uint64_t)file.directionCount +
-                        4u * (uint64_t)file.directionCount * file.taps;
-    if (expected != (uint64_t)count ||
-        maudCrc32(data + HEADER_BYTES, count - HEADER_BYTES) != U32(data + 44))
+    if (fields[FIELD_RINGS].length != 8u * (uint64_t)file.ringCount ||
+        fields[FIELD_DELAYS].length != 4u * (uint64_t)file.directionCount ||
+        fields[FIELD_TAPS].length != 4u * (uint64_t)file.directionCount * file.taps)
     {
-        return maud_errorInvalid;
+        return maud_errorFormat;
     }
-    file.name = data + HEADER_BYTES;
+    file.name = fields[FIELD_NAME].present ? fields[FIELD_NAME].bytes : data;
     file.nameLength = nameBytes;
-    file.license = file.name + nameBytes;
+    file.license = fields[FIELD_LICENSE].present ? fields[FIELD_LICENSE].bytes : data;
     file.licenseLength = licenseBytes;
-    file.rings = file.license + licenseBytes;
-    file.delays = file.rings + 8u * (size_t)file.ringCount;
-    file.samples = file.delays + 4u * (size_t)file.directionCount;
+    file.rings = fields[FIELD_RINGS].bytes;
+    file.delays = fields[FIELD_DELAYS].bytes;
+    file.samples = fields[FIELD_TAPS].bytes;
     if (!IsUtf8(file.name, nameBytes) || !IsUtf8(file.license, licenseBytes) || !RingsValid(&file))
     {
-        return maud_errorInvalid;
+        return maud_errorFormat;
     }
     *fileOut = file;
     return maud_success;

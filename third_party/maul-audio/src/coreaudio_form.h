@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What a CoreAudio device leads to: its data source, else its
-// transport, and the listeners that see its data source change.
+// What a CoreAudio device leads to: its channels, its data source, else
+// its transport, and the listeners that see its data source change.
 
 #ifndef MAUL_AUDIO_SRC_COREAUDIO_FORM_H
 #define MAUL_AUDIO_SRC_COREAUDIO_FORM_H
 
 #include "coreaudio_core.h"
+
+// The channels of a stream configuration read as size bytes of list:
+// the sum over its buffers, or 0 when the bytes do not hold every buffer
+// the list counts.
+uint32_t maudCoreAudioChannelsOf(const AudioBufferList* list, UInt32 size);
 
 // The form of one direction of a device: its data source in that scope
 // (internal or external speaker, headphones, microphone, line, S/PDIF),

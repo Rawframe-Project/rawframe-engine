@@ -17,7 +17,6 @@
 #include <math.h>
 #include <string.h>
 
-#define MAX_FRAMES         16384u
 #define DEFAULT_MAX_FRAMES 1024u
 // At 48 kHz, in proportion at other rates: the filters' length, the
 // group delay carried through the fit, and the fade at the filters' end.
@@ -42,7 +41,7 @@ static bool DefValid(const maudBinauralDecoderDef* def)
 {
     return def->cookie == MAUD_BINAURAL_DECODER_DEF_COOKIE && def->hrtf != nullptr &&
            def->order >= 1 && def->order <= MAUD_MAX_AMBISONIC_ORDER && def->maxFrames >= 1 &&
-           def->maxFrames <= MAX_FRAMES && maudIsAllocatorValid(&def->allocator);
+           maudIsAllocatorValid(&def->allocator);
 }
 
 static uint32_t Scaled(double atFortyEight, uint32_t rate)
@@ -62,6 +61,12 @@ maudResult maudCreateBinauralDecoder(const maudBinauralDecoderDef* def,
         def->version != MAUD_ABI_VERSION)
     {
         return maud_errorVersion;
+    }
+    if (def != nullptr && decoderOut != nullptr &&
+        def->cookie == MAUD_BINAURAL_DECODER_DEF_COOKIE &&
+        (def->order > MAUD_MAX_AMBISONIC_ORDER || def->maxFrames > MAUD_MAX_BINAURAL_FRAMES))
+    {
+        return maud_errorLimit;
     }
     if (def == nullptr || decoderOut == nullptr || !DefValid(def))
     {
@@ -147,10 +152,13 @@ static bool ChannelsValid(const maudBinauralDecoder* decoder, const float* const
 maudResult maudDecodeBinaural(maudBinauralDecoder* decoder, const float* const* bed,
                               float* const out[2], uint32_t frames)
 {
-    if (decoder == nullptr || frames > decoder->maxFrames ||
-        (frames > 0 && !ChannelsValid(decoder, bed, out)))
+    if (decoder == nullptr || (frames > 0 && !ChannelsValid(decoder, bed, out)))
     {
         return maud_errorInvalid;
+    }
+    if (frames > decoder->maxFrames)
+    {
+        return maud_errorCapacity;
     }
     if (frames == 0)
     {

@@ -243,7 +243,7 @@ static void ApplyFrames(maudGainControl* gain, float* frames, uint32_t count)
 maudResult maudApplyGainControl(maudGainControl* gain, float* frames, uint32_t frameCount,
                                 maudGainState* stateOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (stateOut != nullptr)
     {
         memset(stateOut, 0, sizeof(*stateOut));

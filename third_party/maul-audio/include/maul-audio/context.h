@@ -19,6 +19,13 @@ extern "C"
     // A context. Create it with maudCreateContext.
     typedef struct maudContext maudContext;
 
+// The largest period a context's limit may allow, in frames: over
+// twenty seconds at 48 kHz.
+#define MAUD_MAX_PERIOD_FRAMES 1048576u
+// The fewest records a context's notification queue may hold: one for a
+// change and one for the overflow that may follow it.
+#define MAUD_MIN_NOTIFICATIONS 2u
+
     // Which backend a context talks to.
     typedef uint8_t maudBackendKind;
 
@@ -51,12 +58,14 @@ extern "C"
     {
         // Streams that exist at once.
         uint16_t streams;
-        // The largest period a stream may ask for, in frames.
+        // The largest period a stream may ask for, in frames, from 1 to
+        // MAUD_MAX_PERIOD_FRAMES.
         uint32_t periodFrames;
         // Devices, of both directions, that exist at once.
         uint16_t devices;
         // Records the notification queue holds before it overflows; at
-        // least 2.
+        // least MAUD_MIN_NOTIFICATIONS. Fewer, 0 included, is refused with
+        // maud_errorLimit.
         uint16_t notifications;
         // Bytes of a device's name, and of its key.
         uint16_t deviceTextBytes;
@@ -139,10 +148,13 @@ extern "C"
     ///         another binary interface than the library's, checked
     ///         before anything else of it; `maud_errorInvalid` for a NULL
     ///         argument, a def without its cookie, an allocator with one function, a limit
-    ///         of 0 or an offline rate out of range; `maud_errorUnsupported`
+    ///         other than notifications of 0, or an offline rate out of range;
+    ///         `maud_errorLimit` for a period limit past MAUD_MAX_PERIOD_FRAMES or
+    ///         fewer notifications than MAUD_MIN_NOTIFICATIONS, 0 included; `maud_errorUnsupported`
     ///         when this build or platform lacks the backend asked for, or
     ///         no audio service of it answers;
-    ///         `maud_errorCapacity` when the allocator fails.
+    ///         `maud_errorCapacity` when the allocator fails, or when the
+    ///         limits need more memory than the address space holds.
     /// @par Thread safety
     /// Safe from any thread.
     MAUD_NODISCARD MAUD_API maudResult maudCreateContext(const maudContextDef* def,
@@ -151,7 +163,7 @@ extern "C"
     /// Destroys a context and every stream it still holds.
     ///
     /// @param context  The context. NULL does nothing.
-    /// @return `maud_success`, or `maud_errorState` when called on a thread
+    /// @return `maud_success`, or `maud_errorBusy` when called on a thread
     ///         that is rendering one of its streams or running its allocator;
     ///         the context is then left as it was and the call counts as
     ///         misuse.
@@ -170,7 +182,7 @@ extern "C"
     ///
     /// @param context  The context.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL context;
-    ///         `maud_errorState` when called on a thread that is rendering one
+    ///         `maud_errorBusy` when called on a thread that is rendering one
     ///         of the context's streams or running its allocator, which counts
     ///         as misuse.
     /// @par Thread safety
@@ -190,7 +202,7 @@ extern "C"
     /// @param context    The context.
     /// @param suspended  Whether the host is suspended.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL context;
-    ///         `maud_errorState` when called on a thread that is rendering one
+    ///         `maud_errorBusy` when called on a thread that is rendering one
     ///         of the context's streams or running its allocator, which counts
     ///         as misuse.
     /// @par Thread safety

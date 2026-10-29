@@ -79,7 +79,12 @@ extern "C"
         uint32_t frameCount;
         uint32_t sampleRate;
         maudChannelLayout layout;
-        // The stream frame index of the block's first frame.
+        // The stream frame index of the block's first frame. An input's
+        // blocks follow on one another, except where its platform stream
+        // is connected again, after a move or a server's restart: the
+        // frames it had gathered toward a block there are dropped, so that
+        // no block joins two devices' sound, and the next block's position
+        // is past them.
         uint64_t position;
         // Object streams: the def's objectCount objects to fill and place
         // (maul-audio/objects.h), and how many active ones the platform
@@ -94,7 +99,7 @@ extern "C"
     // maudGetStreamPosition, maudGetStreamClock, maudGetContextMisuse and
     // maudGetHostNanoseconds, and render or feed another offline stream
     // (maudRenderStream, maudFeedStream, maudRenderObjects). Any other
-    // call that changes the context is refused with maud_errorState and
+    // call that changes the context is refused with maud_errorBusy and
     // counted as misuse, rendering its own stream again included.
     typedef void (*maudStreamCallback)(const maudStreamBlock* block, void* user);
 
@@ -293,7 +298,10 @@ extern "C"
         // Times the platform revealed that an output played without the
         // stream's frames (underruns) or that an input lost frames before
         // the stream got them (overruns). A duplex stream's are its
-        // output's and its input's; its slips are counted apart.
+        // output's and its input's; its slips are counted apart. On ALSA
+        // through a sound server, an output whose sink stops taking frames
+        // mid-stream and resumes later also counts an underrun: the server
+        // reports it as it reports a starved stream.
         uint64_t underruns;
         uint64_t overruns;
         // Whether the stream keeps other streams and applications off its
@@ -323,12 +331,13 @@ extern "C"
     /// @param streamOut    Receives the stream's id; the null id on failure.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL argument, a def
     ///         without its cookie or callback, or a value out of range;
-    ///         `maud_errorUnsupported` for what the backend cannot do (the
+    ///         `maud_errorLimit` for an objectCount past
+    ///         MAUD_MAX_STREAM_OBJECTS; `maud_errorUnsupported` for what the backend cannot do (the
     ///         offline backend has only pull mode and no converter; ALSA,
     ///         Core Audio, iOS and AAudio have no loopback, and no platform
     ///         an exclusive one);
     ///         `maud_errorCapacity` past the stream or period limit or when the
-    ///         allocator fails; `maud_errorState` on a thread rendering one of
+    ///         allocator fails; `maud_errorBusy` on a thread rendering one of
     ///         the context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -343,7 +352,7 @@ extern "C"
     /// @param stream   The stream.
     /// @return `maud_success`; `maud_errorStale` for an id that names no
     ///         stream; `maud_errorInvalid` for a NULL context;
-    ///         `maud_errorState` on a thread rendering one of the context's
+    ///         `maud_errorBusy` on a thread rendering one of the context's
     ///         streams or running its allocator, or, on the offline backend,
     ///         while another thread renders the stream.
     /// @par Thread safety
@@ -355,7 +364,7 @@ extern "C"
     /// @param context  The context.
     /// @param stream   The stream.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
-    ///         NULL context; `maud_errorState` on a thread rendering one of the
+    ///         NULL context; `maud_errorBusy` on a thread rendering one of the
     ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -366,7 +375,7 @@ extern "C"
     /// @param context  The context.
     /// @param stream   The stream.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
-    ///         NULL context; `maud_errorState` on a thread rendering one of the
+    ///         NULL context; `maud_errorBusy` on a thread rendering one of the
     ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -471,7 +480,8 @@ extern "C"
     ///         NULL pointer where frames are due, an input stream or a total
     ///         that does not fit in memory; `maud_errorUnsupported` on a
     ///         context that is not offline; `maud_errorState` for a stopped
-    ///         or suspended stream or one already rendering.
+    ///         or suspended stream; `maud_errorBusy` for one already rendering,
+    ///         or on a thread running the context's allocator.
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. A stream renders on one
     /// thread at a time.
@@ -493,7 +503,8 @@ extern "C"
     ///         NULL pointer where frames are due, an output stream or a total
     ///         that does not fit in memory; `maud_errorUnsupported` on a
     ///         context that is not offline; `maud_errorState` for a stopped
-    ///         or suspended stream or one already rendering.
+    ///         or suspended stream; `maud_errorBusy` for one already rendering,
+    ///         or on a thread running the context's allocator.
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. A stream renders on one
     /// thread at a time.

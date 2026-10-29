@@ -457,6 +457,12 @@ maudResult maudIosAttachStream(maudContext* context, maudStreamSlot* slot)
     maudIosStream* entry = EntryOf(context, slot);
     *entry = (maudIosStream){.core = &slot->core, .owner = context->native};
     maudResetVoice(&slot->core);
+    // An input that ran on another unit, before a route change or the
+    // media server's reset, starts its next block afresh.
+    if (slot->core.def.direction != maud_directionOutput)
+    {
+        maudRestartInputPeriod(&slot->core.period);
+    }
     if (Voiced(&slot->core))
     {
         return OpenVoiced(context, slot);

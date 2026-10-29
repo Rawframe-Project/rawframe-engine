@@ -6,6 +6,8 @@
 
 #include "allocator.h"
 
+#include "fpenv.h"
+
 #include <stdckdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -22,11 +24,30 @@ bool maudIsAllocatorValid(const maudAllocator* allocator)
     return (allocator->alloc == nullptr) == (allocator->free == nullptr);
 }
 
+// A host's allocator is host code whose result feeds nothing the library
+// promises the bits of, so it runs in the host's own floating-point
+// environment, even when an entry of the library calls it (fpenv.h).
+static MAUD_NOINLINE void* HostAlloc(const maudAllocator* allocator, size_t size, size_t alignment)
+{
+    maudFloatHost host = maudFloatHostEnter();
+    void* memory = allocator->alloc(size, alignment, allocator->context);
+    maudFloatHostLeave(host);
+    return memory;
+}
+
+static MAUD_NOINLINE void HostFree(const maudAllocator* allocator, void* memory, size_t size,
+                                   size_t alignment)
+{
+    maudFloatHost host = maudFloatHostEnter();
+    allocator->free(memory, size, alignment, allocator->context);
+    maudFloatHostLeave(host);
+}
+
 void* maudAllocate(const maudAllocator* allocator, size_t size, size_t alignment)
 {
     if (allocator->alloc != nullptr)
     {
-        return allocator->alloc(size, alignment, allocator->context);
+        return HostAlloc(allocator, size, alignment);
     }
     return alignment <= alignof(max_align_t) ? malloc(size) : nullptr;
 }
@@ -44,7 +65,7 @@ void maudRelease(const maudAllocator* allocator, void* memory, size_t size, size
 #endif
     if (allocator->free != nullptr)
     {
-        allocator->free(memory, size, alignment, allocator->context);
+        HostFree(allocator, memory, size, alignment);
         return;
     }
     free(memory);

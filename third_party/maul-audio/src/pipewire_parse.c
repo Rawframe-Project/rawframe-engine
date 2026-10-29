@@ -72,6 +72,14 @@ uint32_t maudPipewireGraphRate(uint32_t forceRate, uint32_t clockRate, uint32_t 
     return forceRate != 0 ? forceRate : clockRate != 0 ? clockRate : fallback;
 }
 
+uint32_t maudPipewireChunkBytes(uint32_t offset, uint32_t size, uint32_t maxsize,
+                                uint32_t* offsetOut)
+{
+    *offsetOut = offset < maxsize ? offset : maxsize;
+    uint32_t room = maxsize - *offsetOut;
+    return size < room ? size : room;
+}
+
 // The PipeWire channel position of each speaker.
 static uint32_t PositionOf(maudSpeaker speaker)
 {

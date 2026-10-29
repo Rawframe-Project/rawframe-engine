@@ -69,8 +69,9 @@ extern "C"
     ///         NULL pointer where frames are due, a stream without objects,
     ///         another object count or a total that does not fit in
     ///         memory; `maud_errorUnsupported` on a context that is not
-    ///         offline; `maud_errorState` for a stopped or suspended stream
-    ///         or one already rendering.
+    ///         offline; `maud_errorState` for a stopped or suspended stream;
+    ///         `maud_errorBusy` for one already rendering, or on a thread
+    ///         running the context's allocator.
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. A stream renders on one
     /// thread at a time.

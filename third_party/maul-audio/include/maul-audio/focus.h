@@ -68,7 +68,7 @@ extern "C"
     ///         `maud_errorUnsupported` where the backend has no audio focus
     ///         (the desktop platforms, the web, the offline backend, and
     ///         Android without the Java half); `maud_errorInvalid` for a NULL
-    ///         context, an unknown request or role; `maud_errorState` when
+    ///         context, an unknown request or role; `maud_errorBusy` when
     ///         called on a thread that is rendering one of the context's
     ///         streams or running its allocator, which counts as misuse.
     /// @par Thread safety

@@ -124,6 +124,12 @@ void maudPullPeriod(maudPeriod* period, float* out, uint32_t frames)
     }
 }
 
+void maudRestartInputPeriod(maudPeriod* period)
+{
+    period->nextBlock += period->cursor;
+    period->cursor = 0;
+}
+
 void maudPushPeriod(maudPeriod* period, const float* in, uint32_t frames)
 {
     size_t channels = period->channelCount;

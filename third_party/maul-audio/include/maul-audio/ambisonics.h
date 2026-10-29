@@ -42,8 +42,9 @@ extern "C"
     /// @param direction  The direction, in the listener's frame.
     /// @param gainsOut   Receives the order's channel count of gains; left as
     ///                   they were on failure.
-    /// @return `maud_success`, or `maud_errorInvalid` for an order out of
-    ///         range, a NULL pointer or a direction that is not finite.
+    /// @return `maud_success`; `maud_errorLimit` for an order past
+    ///         MAUD_MAX_AMBISONIC_ORDER; `maud_errorInvalid` for an order
+    ///         of 0, a NULL pointer or a direction that is not finite.
     /// @par Thread safety
     /// Safe from any thread.
     MAUD_NODISCARD MAUD_API maudResult maudGetAmbisonicGains(uint32_t order, maudVector3 direction,
@@ -60,9 +61,10 @@ extern "C"
     /// @param bed     The order's channel count of channels, frames each,
     ///                added to.
     /// @param frames  The frames.
-    /// @return `maud_success`, or `maud_errorInvalid` for an order out of
-    ///         range, a NULL pointer or a value that is not finite;
-    ///         nothing is written then.
+    /// @return `maud_success`; `maud_errorLimit` for an order past
+    ///         MAUD_MAX_AMBISONIC_ORDER; `maud_errorInvalid` for an order
+    ///         of 0, a NULL pointer or a value that is not finite; nothing
+    ///         is written on failure.
     /// @par Thread safety
     /// Safe from any thread; the bed is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudEncodeAmbisonic(uint32_t order,
@@ -81,9 +83,10 @@ extern "C"
     /// @param to      The rotation at this call's end.
     /// @param bed     The order's channel count of channels, frames each.
     /// @param frames  The frames.
-    /// @return `maud_success`, or `maud_errorInvalid` for an order out of
-    ///         range, a NULL pointer, or a quaternion of zero length or
-    ///         not finite; nothing is written then.
+    /// @return `maud_success`; `maud_errorLimit` for an order past
+    ///         MAUD_MAX_AMBISONIC_ORDER; `maud_errorInvalid` for an order
+    ///         of 0, a NULL pointer, or a quaternion of zero length or not
+    ///         finite; nothing is written on failure.
     /// @par Thread safety
     /// Safe from any thread; the bed is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudRotateAmbisonic(uint32_t order,
@@ -108,7 +111,7 @@ extern "C"
         // The order decoded, 1 to MAUD_MAX_AMBISONIC_ORDER; a bed's
         // higher channels are ignored.
         uint32_t order;
-        // The most frames one call decodes, 1 to 16,384.
+        // The most frames one call decodes, 1 to MAUD_MAX_BINAURAL_FRAMES.
         uint32_t maxFrames;
         maudAllocator allocator;
     } maudBinauralDecoderDef;
@@ -151,7 +154,9 @@ extern "C"
     /// @param decoderOut  Receives the decoder; NULL on failure.
     /// @return `maud_success`; `maud_errorVersion` for a def stamped with
     ///         another binary interface than the library's, checked
-    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a
+    ///         before anything else of it; `maud_errorLimit` for an order
+    ///         past MAUD_MAX_AMBISONIC_ORDER or a maxFrames past
+    ///         MAUD_MAX_BINAURAL_FRAMES; `maud_errorInvalid` for a NULL pointer, a
     ///         def without its cookie, without a set or out of range, or a
     ///         set whose directions cannot carry the order;
     ///         `maud_errorCapacity` when the allocator fails.
@@ -175,8 +180,9 @@ extern "C"
     ///                 frames each.
     /// @param out      Two channels of frames samples each.
     /// @param frames   0 to the def's maxFrames; 0 does nothing.
-    /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer
-    ///         or too many frames; nothing is written then.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer;
+    ///         `maud_errorCapacity` for more frames than the def's
+    ///         maxFrames. Nothing is written on failure.
     /// @par Thread safety
     /// Safe from any thread; the decoder is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudDecodeBinaural(maudBinauralDecoder* decoder,
@@ -247,9 +253,10 @@ extern "C"
     /// @param decoderOut  Receives the decoder; NULL on failure.
     /// @return `maud_success`; `maud_errorVersion` for a def stamped with
     ///         another binary interface than the library's, checked
-    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a
-    ///         def without its cookie, an order out of range or a layout
-    ///         the library does not have; `maud_errorCapacity` when the
+    ///         before anything else of it; `maud_errorLimit` for an order
+    ///         past MAUD_MAX_AMBISONIC_ORDER; `maud_errorInvalid` for a NULL pointer, a
+    ///         def without its cookie, an order of 0 or a layout the
+    ///         library does not have; `maud_errorCapacity` when the
     ///         allocator fails.
     /// @par Thread safety
     /// Safe from any thread.

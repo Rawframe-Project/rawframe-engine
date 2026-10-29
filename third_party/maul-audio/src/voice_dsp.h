@@ -63,6 +63,6 @@ float maudLevelDbfs(double meanSquare);
 double maudExpIntegral(double x);
 
 // The level below which a frame counts as silence.
-#define MAUD_FLOOR_DBFS -100.0f
+#define MAUD_FLOOR_DBFS (-100.0f)
 
 #endif // MAUL_AUDIO_SRC_VOICE_DSP_H

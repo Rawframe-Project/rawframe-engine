@@ -11,12 +11,10 @@
 
 #include "allocator.h"
 #include "bvh.h"
+#include "fpenv.h"
 #include "scene_state.h"
 
 #include <math.h>
-
-#define MAX_TRIANGLES 16777216u
-#define MAX_INSTANCES 65536u
 
 static bool MeshValid(const maudMesh* mesh)
 {
@@ -67,9 +65,13 @@ static bool MeshesValid(const maudMesh* meshes, uint32_t count, uint64_t* sum)
 static maudResult Check(const maudAcousticSceneDef* def)
 {
     uint64_t sum = 0;
+    if (def->cookie == MAUD_ACOUSTIC_SCENE_DEF_COOKIE &&
+        (def->instanceCapacity > MAUD_MAX_INSTANCES || def->maxTriangles > MAUD_MAX_TRIANGLES))
+    {
+        return maud_errorLimit;
+    }
     if (def->cookie != MAUD_ACOUSTIC_SCENE_DEF_COOKIE || !maudIsAllocatorValid(&def->allocator) ||
-        def->instanceCapacity > MAX_INSTANCES || def->maxTriangles == 0 ||
-        def->maxTriangles > MAX_TRIANGLES || !MeshesValid(def->meshes, def->meshCount, &sum) ||
+        def->maxTriangles == 0 || !MeshesValid(def->meshes, def->meshCount, &sum) ||
         !MeshesValid(def->instanceMeshes, def->instanceMeshCount, &sum))
     {
         return maud_errorInvalid;
@@ -184,7 +186,8 @@ static bool Build(maudAcousticScene* scene, const maudAcousticSceneDef* def)
     return maudAllocateInstances(scene, def->instanceCapacity);
 }
 
-maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def, maudAcousticScene** sceneOut)
+static MAUD_NOINLINE maudResult CreateAcousticScene(const maudAcousticSceneDef* def,
+                                                    maudAcousticScene** sceneOut)
 {
     if (sceneOut != nullptr)
     {
@@ -221,6 +224,14 @@ maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def, maudAcoustic
     return maud_success;
 }
 
+maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def, maudAcousticScene** sceneOut)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = CreateAcousticScene(def, sceneOut);
+    maudFloatEnvLeave(token);
+    return result;
+}
+
 void maudDestroyAcousticScene(maudAcousticScene* scene)
 {
     if (scene != nullptr)
@@ -244,7 +255,8 @@ static void Unpack(const maudRay* ray, float* origin, float* direction)
     direction[2] = ray->direction.z;
 }
 
-void maudSceneAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded, void* scene)
+static MAUD_NOINLINE void AnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded,
+                                 void* scene)
 {
     const maudAcousticScene* s = scene;
     for (uint32_t i = 0; i < count; ++i)
@@ -259,6 +271,15 @@ void maudSceneAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded, voi
                                                            origin, direction, tMin, tMax)) ||
             maudInstancesAnyHit(s, origin, direction, tMin, tMax);
     }
+}
+
+// The queries enter too: a host may call them from its own threads, and
+// inside the spatializer's tasks entering costs two reads of the register.
+void maudSceneAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded, void* scene)
+{
+    uint64_t token = maudFloatEnvEnter();
+    AnyHit(rays, count, occluded, scene);
+    maudFloatEnvLeave(token);
 }
 
 maudVector3 maudTriangleNormal(const maudTriangle* t)
@@ -279,7 +300,8 @@ maudVector3 maudTriangleNormal(const maudTriangle* t)
     return (maudVector3){(float)(n[0] / length), (float)(n[1] / length), (float)(n[2] / length)};
 }
 
-void maudSceneClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits, void* scene)
+static MAUD_NOINLINE void ClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits,
+                                     void* scene)
 {
     const maudAcousticScene* s = scene;
     for (uint32_t i = 0; i < count; ++i)
@@ -305,4 +327,11 @@ void maudSceneClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits, 
         }
         maudInstancesClosestHit(s, origin, direction, rays[i].minDistance, found, &best, &hits[i]);
     }
+}
+
+void maudSceneClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits, void* scene)
+{
+    uint64_t token = maudFloatEnvEnter();
+    ClosestHit(rays, count, hits, scene);
+    maudFloatEnvLeave(token);
 }

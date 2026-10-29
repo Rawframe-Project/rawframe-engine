@@ -1,14 +1,31 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Data sources and transports. The data source codes are IOKit's port
-// subtypes (IOAudioTypes.h), written out so the library needs no IOKit
-// header.
+// Channels, data sources and transports. The data source codes are
+// IOKit's port subtypes (IOAudioTypes.h), written out so the library
+// needs no IOKit header.
 
 #include "coreaudio_form.h"
 
+#include <stddef.h>
+
 #define FOUR(a, b, c, d)                                                                           \
     (((UInt32)(a) << 24) | ((UInt32)(b) << 16) | ((UInt32)(c) << 8) | (UInt32)(d))
+
+uint32_t maudCoreAudioChannelsOf(const AudioBufferList* list, UInt32 size)
+{
+    size_t head = offsetof(AudioBufferList, mBuffers);
+    if (size < head || list->mNumberBuffers > (size - head) / sizeof(AudioBuffer))
+    {
+        return 0;
+    }
+    uint64_t channels = 0;
+    for (UInt32 i = 0; i < list->mNumberBuffers; ++i)
+    {
+        channels += list->mBuffers[i].mNumberChannels;
+    }
+    return channels <= UINT32_MAX ? (uint32_t)channels : 0;
+}
 
 static AudioObjectPropertyScope ScopeOf(maudDirection direction)
 {

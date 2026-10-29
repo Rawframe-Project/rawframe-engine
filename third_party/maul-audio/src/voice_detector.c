@@ -76,7 +76,7 @@ void maudDestroyVoiceDetector(maudVoiceDetector* detector)
 maudResult maudDetectVoice(maudVoiceDetector* detector, const float* frames, uint32_t frameCount,
                            maudVoiceState* stateOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (stateOut != nullptr)
     {
         memset(stateOut, 0, sizeof(*stateOut));

@@ -8,6 +8,7 @@
 
 #include "air_absorption.h"
 
+#include "fpenv.h"
 #include "portable_math.h"
 
 #include "maul-audio/direct.h"
@@ -50,8 +51,8 @@ void maudAirAbsorptionOf(double celsius, double humidity, float* absorption)
     }
 }
 
-maudResult maudGetAirAbsorption(float temperatureCelsius, float humidityPercent,
-                                float* absorptionOut)
+static MAUD_NOINLINE maudResult GetAirAbsorption(float temperatureCelsius, float humidityPercent,
+                                                 float* absorptionOut)
 {
     if (absorptionOut == nullptr || !(temperatureCelsius >= -20.0f) ||
         !(temperatureCelsius <= 50.0f) || !(humidityPercent >= 10.0f) ||
@@ -61,4 +62,15 @@ maudResult maudGetAirAbsorption(float temperatureCelsius, float humidityPercent,
     }
     maudAirAbsorptionOf((double)temperatureCelsius, (double)humidityPercent, absorptionOut);
     return maud_success;
+}
+
+// Every default def that traces takes its air from here, so the
+// coefficients are a bake's input.
+maudResult maudGetAirAbsorption(float temperatureCelsius, float humidityPercent,
+                                float* absorptionOut)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = GetAirAbsorption(temperatureCelsius, humidityPercent, absorptionOut);
+    maudFloatEnvLeave(token);
+    return result;
 }

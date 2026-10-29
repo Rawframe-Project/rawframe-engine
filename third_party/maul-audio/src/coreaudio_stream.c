@@ -576,6 +576,12 @@ static maudResult Open(maudContext* context, maudStreamSlot* slot)
     maudCoreAudioStream* entry = EntryOf(context, slot);
     *entry = (maudCoreAudioStream){.core = &slot->core};
     maudResetVoice(&slot->core);
+    // An input that ran on another unit, before a move or the audio
+    // server's restart, starts its next block afresh.
+    if (slot->core.def.direction != maud_directionOutput)
+    {
+        maudRestartInputPeriod(&slot->core.period);
+    }
     if (Voiced(&slot->core))
     {
         return OpenVoiced(context, slot);

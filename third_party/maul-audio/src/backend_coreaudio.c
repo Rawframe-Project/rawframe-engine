@@ -71,17 +71,8 @@ static uint32_t ChannelsIn(maudCoreAudio* coreaudio, AudioObjectID object,
 {
     AudioObjectPropertyAddress address =
         maudCoreAudioAddress(kAudioDevicePropertyStreamConfiguration, scope);
-    if (ReadScratch(coreaudio, object, &address) < sizeof(AudioBufferList))
-    {
-        return 0;
-    }
-    const AudioBufferList* list = (const AudioBufferList*)(void*)coreaudio->scratch;
-    uint32_t channels = 0;
-    for (UInt32 i = 0; i < list->mNumberBuffers; ++i)
-    {
-        channels += list->mBuffers[i].mNumberChannels;
-    }
-    return channels;
+    UInt32 size = ReadScratch(coreaudio, object, &address);
+    return maudCoreAudioChannelsOf((const AudioBufferList*)(void*)coreaudio->scratch, size);
 }
 
 // Reads the nominal rate into info, and the bounds of the rates the
@@ -92,12 +83,15 @@ static void ReadRates(maudCoreAudio* coreaudio, AudioObjectID object, maudDevice
                                                               kAudioObjectPropertyScopeGlobal);
     Float64 nominal = 0.0;
     UInt32 size = sizeof(nominal);
-    if (AudioObjectGetPropertyData(object, &address, 0, nullptr, &size, &nominal) != noErr ||
-        nominal < 1.0)
+    if (AudioObjectGetPropertyData(object, &address, 0, nullptr, &size, &nominal) != noErr)
     {
         return;
     }
-    uint32_t rate = (uint32_t)(nominal + 0.5);
+    uint32_t rate = maudDeviceRate(nominal);
+    if (rate == 0)
+    {
+        return;
+    }
     info->nativeSampleRate = rate;
     info->minSampleRate = rate;
     info->maxSampleRate = rate;
@@ -106,8 +100,18 @@ static void ReadRates(maudCoreAudio* coreaudio, AudioObjectID object, maudDevice
     const AudioValueRange* ranges = (const AudioValueRange*)(void*)coreaudio->scratch;
     for (UInt32 i = 0; i < bytes / sizeof(AudioValueRange); ++i)
     {
-        uint32_t low = (uint32_t)(ranges[i].mMinimum + 0.5);
-        uint32_t high = (uint32_t)(ranges[i].mMaximum + 0.5);
+        // A range is taken within the rates a stream runs at; one wholly
+        // outside them, or not a range of numbers, is left out.
+        Float64 lowest = ranges[i].mMinimum;
+        Float64 highest = ranges[i].mMaximum;
+        if (!(lowest <= highest) || highest < MAUD_DEVICE_MIN_RATE || lowest > MAUD_DEVICE_MAX_RATE)
+        {
+            continue;
+        }
+        uint32_t low =
+            lowest < MAUD_DEVICE_MIN_RATE ? MAUD_DEVICE_MIN_RATE : maudDeviceRate(lowest);
+        uint32_t high =
+            highest > MAUD_DEVICE_MAX_RATE ? MAUD_DEVICE_MAX_RATE : maudDeviceRate(highest);
         info->minSampleRate = low < info->minSampleRate ? low : info->minSampleRate;
         info->maxSampleRate = high > info->maxSampleRate ? high : info->maxSampleRate;
     }
