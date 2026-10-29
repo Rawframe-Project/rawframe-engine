@@ -143,8 +143,9 @@ extern "C"
     /// allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetHeapEntry(mrhiDevice* device, mrhiHeapId heap,
-                                                        uint32_t index, const mrhiHeapEntry* entry);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiHeap_SetEntry(mrhiDevice* device, mrhiHeapId heap,
+                                                         uint32_t index,
+                                                         const mrhiHeapEntry* entry);
 
     /// Empties a resource entry. Its index can be written again once the frames
     /// submitted before now finish.
@@ -158,8 +159,8 @@ extern "C"
     /// allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiClearHeapEntry(mrhiDevice* device, mrhiHeapId heap,
-                                                          uint32_t index);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiHeap_ClearEntry(mrhiDevice* device, mrhiHeapId heap,
+                                                           uint32_t index);
 
     /// Writes an empty sampler entry, which frames submitted later read at its
     /// index. Destroying the sampler empties it.
@@ -175,8 +176,8 @@ extern "C"
     /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetHeapSampler(mrhiDevice* device, mrhiHeapId heap,
-                                                          uint32_t index, mrhiSamplerId sampler);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiHeap_SetSampler(mrhiDevice* device, mrhiHeapId heap,
+                                                           uint32_t index, mrhiSamplerId sampler);
 
     /// Empties a sampler entry. Its index can be written again once the frames
     /// submitted before now finish.
@@ -190,8 +191,8 @@ extern "C"
     /// allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiClearHeapSampler(mrhiDevice* device, mrhiHeapId heap,
-                                                            uint32_t index);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiHeap_ClearSampler(mrhiDevice* device, mrhiHeapId heap,
+                                                             uint32_t index);
 
 #ifdef __cplusplus
 }

@@ -119,8 +119,8 @@ result::Status DepthOfFieldPass::addPasses(mrhiResourceId shown, mrhiResourceId 
 
 result::Status DepthOfFieldPass::write(mrhiPassId upload) {
     if (mrhiResult outcome = mrhi_success;
-        enabled_ &&
-        (outcome = mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(LensBlock))) != mrhi_success) {
+        enabled_ && (outcome = mrhiPass_WriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(LensBlock))) !=
+                        mrhi_success) {
         return failed("the depth of field's lens could not be written", outcome);
     }
     return {};
@@ -143,11 +143,11 @@ result::Status DepthOfFieldPass::record(const Pipelines& pipelines) {
                                                       bufferAt(4, blockResource_, sizeof(LensBlock)),
                                                       textureAt(5, kCircles)};
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiBeginPass(native_, kPass)) != mrhi_success ||
-            (outcome = mrhiSetGraphicsPipeline(native_, kPass, kPipeline)) != mrhi_success ||
-            (outcome = mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
-            (outcome = mrhiDraw(native_, kPass, 3, 1, 0, 0)) != mrhi_success ||
-            (outcome = mrhiEndPass(native_, kPass)) != mrhi_success) {
+            (outcome = mrhiPass_Begin(native_, kPass)) != mrhi_success ||
+            (outcome = mrhiPass_SetGraphicsPipeline(native_, kPass, kPipeline)) != mrhi_success ||
+            (outcome = mrhiPass_SetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+            (outcome = mrhiPass_Draw(native_, kPass, 3, 1, 0, 0)) != mrhi_success ||
+            (outcome = mrhiPass_End(native_, kPass)) != mrhi_success) {
             return failed("the depth of field could not be drawn", outcome);
         }
     }

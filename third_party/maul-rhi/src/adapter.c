@@ -8,6 +8,7 @@
 #include "capabilities_core.h"
 #include "chain.h"
 #include "instance_core.h"
+#include "outputs.h"
 
 #include "generated/out_copies.h"
 
@@ -174,8 +175,8 @@ mrhiResult mrhiRefreshAdapters(mrhiInstance* instance, const mrhiPending* search
     return total > count ? mrhi_errorCapacity : mrhi_success;
 }
 
-mrhiResult mrhiRequestAdapters(mrhiInstance* instance, const mrhiAdapterRequestDef* def,
-                               mrhiRequestId* requestOut)
+mrhiResult mrhiInstance_RequestAdapters(mrhiInstance* instance, const mrhiAdapterRequestDef* def,
+                                        mrhiRequestId* requestOut)
 {
     if (requestOut != nullptr)
     {
@@ -233,8 +234,8 @@ mrhiResult mrhiRequestAdapters(mrhiInstance* instance, const mrhiAdapterRequestD
     return mrhi_success;
 }
 
-mrhiResult mrhiGetAdapters(mrhiInstance* instance, mrhiAdapterId* adapters, size_t capacity,
-                           size_t* countOut)
+static mrhiResult ListAdapters(mrhiInstance* instance, mrhiAdapterId* adapters, size_t capacity,
+                               size_t* countOut)
 {
     if (instance == nullptr || countOut == nullptr || (adapters == nullptr && capacity > 0))
     {
@@ -250,6 +251,13 @@ mrhiResult mrhiGetAdapters(mrhiInstance* instance, mrhiAdapterId* adapters, size
     return mrhi_success;
 }
 
+mrhiResult mrhiInstance_GetAdapters(mrhiInstance* instance, mrhiAdapterId* adaptersOut,
+                                    size_t capacity, size_t* countOut)
+{
+    return mrhiClearFailed(ListAdapters(instance, adaptersOut, capacity, countOut), adaptersOut,
+                           capacity * sizeof(mrhiAdapterId), countOut);
+}
+
 const mrhiDriverAdapter* mrhiFindAdapter(const mrhiInstance* instance, mrhiAdapterId adapter)
 {
     uint32_t slot = adapter.index1 - 1;
@@ -261,8 +269,8 @@ const mrhiDriverAdapter* mrhiFindAdapter(const mrhiInstance* instance, mrhiAdapt
     return &instance->slots[slot].adapter;
 }
 
-mrhiResult mrhiGetAdapterInfo(mrhiInstance* instance, mrhiAdapterId adapter,
-                              mrhiAdapterInfo* infoOut)
+mrhiResult mrhiAdapter_GetInfo(mrhiInstance* instance, mrhiAdapterId adapter,
+                               mrhiAdapterInfo* infoOut)
 {
     if (instance == nullptr || infoOut == nullptr)
     {
@@ -278,8 +286,8 @@ mrhiResult mrhiGetAdapterInfo(mrhiInstance* instance, mrhiAdapterId adapter,
     return mrhi_success;
 }
 
-mrhiResult mrhiGetAdapterFeatures(mrhiInstance* instance, mrhiAdapterId adapter,
-                                  mrhiFeatures* featuresOut)
+mrhiResult mrhiAdapter_GetFeatures(mrhiInstance* instance, mrhiAdapterId adapter,
+                                   mrhiFeatures* featuresOut)
 {
     if (instance == nullptr || featuresOut == nullptr)
     {
@@ -295,8 +303,8 @@ mrhiResult mrhiGetAdapterFeatures(mrhiInstance* instance, mrhiAdapterId adapter,
     return mrhi_success;
 }
 
-mrhiResult mrhiGetAdapterLimits(mrhiInstance* instance, mrhiAdapterId adapter,
-                                mrhiLimits* limitsOut)
+mrhiResult mrhiAdapter_GetLimits(mrhiInstance* instance, mrhiAdapterId adapter,
+                                 mrhiLimits* limitsOut)
 {
     if (instance == nullptr || limitsOut == nullptr)
     {
@@ -312,8 +320,8 @@ mrhiResult mrhiGetAdapterLimits(mrhiInstance* instance, mrhiAdapterId adapter,
     return mrhi_success;
 }
 
-mrhiResult mrhiGetFormatCaps(mrhiInstance* instance, mrhiAdapterId adapter, mrhiFormat format,
-                             mrhiFormatCaps* capsOut)
+mrhiResult mrhiAdapter_GetFormatCaps(mrhiInstance* instance, mrhiAdapterId adapter,
+                                     mrhiFormat format, mrhiFormatCaps* capsOut)
 {
     if (instance == nullptr || capsOut == nullptr || !mrhiIsFormatKnown(format))
     {

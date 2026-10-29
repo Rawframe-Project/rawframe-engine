@@ -287,8 +287,8 @@ static mrhiResult CheckBuffer(mrhiDevice* device, const mrhiHeapEntry* entry, ui
     return mrhi_success;
 }
 
-mrhiResult mrhiSetHeapEntry(mrhiDevice* device, mrhiHeapId heap, uint32_t index,
-                            const mrhiHeapEntry* entry)
+mrhiResult mrhiHeap_SetEntry(mrhiDevice* device, mrhiHeapId heap, uint32_t index,
+                             const mrhiHeapEntry* entry)
 {
     if (device == nullptr)
     {
@@ -339,8 +339,8 @@ mrhiResult mrhiSetHeapEntry(mrhiDevice* device, mrhiHeapId heap, uint32_t index,
     return mrhi_success;
 }
 
-mrhiResult mrhiSetHeapSampler(mrhiDevice* device, mrhiHeapId heap, uint32_t index,
-                              mrhiSamplerId sampler)
+mrhiResult mrhiHeap_SetSampler(mrhiDevice* device, mrhiHeapId heap, uint32_t index,
+                               mrhiSamplerId sampler)
 {
     if (device == nullptr)
     {
@@ -396,12 +396,12 @@ static mrhiResult Clear(mrhiDevice* device, mrhiHeapId heap, uint32_t index, boo
     return mrhi_success;
 }
 
-mrhiResult mrhiClearHeapEntry(mrhiDevice* device, mrhiHeapId heap, uint32_t index)
+mrhiResult mrhiHeap_ClearEntry(mrhiDevice* device, mrhiHeapId heap, uint32_t index)
 {
     return Clear(device, heap, index, false);
 }
 
-mrhiResult mrhiClearHeapSampler(mrhiDevice* device, mrhiHeapId heap, uint32_t index)
+mrhiResult mrhiHeap_ClearSampler(mrhiDevice* device, mrhiHeapId heap, uint32_t index)
 {
     return Clear(device, heap, index, true);
 }

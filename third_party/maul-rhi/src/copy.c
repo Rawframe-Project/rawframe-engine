@@ -61,8 +61,8 @@ mrhiCommand* mrhiTakeCopy(mrhiDevice* device, mrhiFramePass* pass, mrhiCommandTy
     return records;
 }
 
-mrhiResult mrhiClearBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
-                           uint64_t offset, uint64_t size)
+mrhiResult mrhiPass_ClearBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
+                                uint64_t offset, uint64_t size)
 {
     if (device == nullptr)
     {
@@ -108,9 +108,9 @@ mrhiResult mrhiClearBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId res
     return mrhi_success;
 }
 
-mrhiResult mrhiCopyBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId source,
-                          uint64_t sourceOffset, mrhiResourceId destination,
-                          uint64_t destinationOffset, uint64_t size)
+mrhiResult mrhiPass_CopyBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId source,
+                               uint64_t sourceOffset, mrhiResourceId destination,
+                               uint64_t destinationOffset, uint64_t size)
 {
     if (device == nullptr)
     {
@@ -390,16 +390,17 @@ static mrhiResult CopyBufferTexture(mrhiDevice* device, mrhiPassId id, const mrh
     return mrhi_success;
 }
 
-mrhiResult mrhiCopyBufferToTexture(mrhiDevice* device, mrhiPassId pass,
-                                   const mrhiBufferCopy* source, const mrhiTextureCopy* destination,
-                                   const mrhiExtent3d* size)
+mrhiResult mrhiPass_CopyBufferToTexture(mrhiDevice* device, mrhiPassId pass,
+                                        const mrhiBufferCopy* source,
+                                        const mrhiTextureCopy* destination,
+                                        const mrhiExtent3d* size)
 {
     return CopyBufferTexture(device, pass, source, destination, size, false);
 }
 
-mrhiResult mrhiCopyTextureToBuffer(mrhiDevice* device, mrhiPassId pass,
-                                   const mrhiTextureCopy* source, const mrhiBufferCopy* destination,
-                                   const mrhiExtent3d* size)
+mrhiResult mrhiPass_CopyTextureToBuffer(mrhiDevice* device, mrhiPassId pass,
+                                        const mrhiTextureCopy* source,
+                                        const mrhiBufferCopy* destination, const mrhiExtent3d* size)
 {
     return CopyBufferTexture(device, pass, destination, source, size, true);
 }
@@ -413,8 +414,8 @@ static bool IsEveryAspect(const mrhiTextureSide* side)
     return side->aspect == mrhi_aspectAll || single;
 }
 
-mrhiResult mrhiCopyTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureCopy* source,
-                           const mrhiTextureCopy* destination, const mrhiExtent3d* size)
+mrhiResult mrhiPass_CopyTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureCopy* source,
+                                const mrhiTextureCopy* destination, const mrhiExtent3d* size)
 {
     if (device == nullptr)
     {

@@ -222,7 +222,7 @@ void mrhiDeriveStores(mrhiDevice* device)
     }
 }
 
-mrhiResult mrhiGetPassPlan(mrhiDevice* device, mrhiPassId pass, mrhiPassPlan* planOut)
+mrhiResult mrhiPass_GetPlan(mrhiDevice* device, mrhiPassId pass, mrhiPassPlan* planOut)
 {
     if (device == nullptr)
     {

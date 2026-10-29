@@ -104,8 +104,8 @@ static void PollDriver(mrhiInstance* instance)
     }
 }
 
-mrhiResult mrhiNextInstanceNotification(mrhiInstance* instance,
-                                        mrhiInstanceNotification* notificationOut)
+mrhiResult mrhiInstance_TakeNotification(mrhiInstance* instance,
+                                         mrhiInstanceNotification* notificationOut)
 {
     if (instance == nullptr)
     {

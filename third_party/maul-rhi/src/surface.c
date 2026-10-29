@@ -219,8 +219,8 @@ void mrhiDestroySurfaces(mrhiInstance* instance)
     }
 }
 
-mrhiResult mrhiGetSurfaceCaps(mrhiInstance* instance, mrhiSurfaceId surface, mrhiAdapterId adapter,
-                              mrhiSurfaceCaps* capsOut)
+mrhiResult mrhiSurface_GetCaps(mrhiInstance* instance, mrhiSurfaceId surface, mrhiAdapterId adapter,
+                               mrhiSurfaceCaps* capsOut)
 {
     if (instance == nullptr || capsOut == nullptr)
     {

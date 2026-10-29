@@ -39,7 +39,7 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
     return std::unexpected<result::Error>{
         result::fail(result::ErrorClass::Unavailable, kRenderDomain, code(RenderError::Device), why)
             .error()
-            .withContext("outcome", std::string{mrhiResultName(outcome)})};
+            .withContext("outcome", std::string{mrhiGetResultName(outcome)})};
 }
 
 /// The device's diagnostic records: more than one frame's refusals leave,
@@ -354,12 +354,13 @@ struct Device::State {
         RAWFRAME_TRY_ASSIGN(void* wanted, settings.vulkan->physicalDevice(adopted->instance));
         std::array<mrhiAdapterId, 16> found{};
         std::size_t count = 0;
-        if (mrhiGetAdapters(instance, found.data(), found.size(), &count) != mrhi_success) {
+        if (mrhiInstance_GetAdapters(instance, found.data(), found.size(), &count) != mrhi_success) {
             count = 0;
         }
         for (std::size_t at = 0; at < count; ++at) {
             void* physical = nullptr;
-            if (mrhiGetVulkanPhysicalDevice(instance, found[at], &physical) == mrhi_success && physical == wanted) {
+            if (mrhiAdapter_GetVulkanPhysicalDevice(instance, found[at], &physical) == mrhi_success &&
+                physical == wanted) {
                 chosen = found[at];
                 return {};
             }
@@ -387,7 +388,7 @@ struct Device::State {
             if (const result::Status kChosen = chooseTheRuntimes(); !kChosen.has_value()) {
                 return fail(kChosen.error().clone());
             }
-        } else if (mrhiGetAdapters(instance, &chosen, 1, &count) != mrhi_success || count == 0) {
+        } else if (mrhiInstance_GetAdapters(instance, &chosen, 1, &count) != mrhi_success || count == 0) {
             result::Error none =
                 refuse(result::ErrorClass::NotFound,
                        RenderError::NoAdapter,
@@ -400,11 +401,11 @@ struct Device::State {
             return fail(std::move(none));
         }
         mrhiAdapterInfo info{};
-        if (const mrhiResult kRead = mrhiGetAdapterInfo(instance, chosen, &info); kRead != mrhi_success) {
+        if (const mrhiResult kRead = mrhiAdapter_GetInfo(instance, chosen, &info); kRead != mrhi_success) {
             return fail(failed("the adapter could not be read", kRead).error());
         }
         mrhiFeatures features{};
-        if (const mrhiResult kRead = mrhiGetAdapterFeatures(instance, chosen, &features); kRead != mrhi_success) {
+        if (const mrhiResult kRead = mrhiAdapter_GetFeatures(instance, chosen, &features); kRead != mrhi_success) {
             return fail(failed("the adapter's features could not be read", kRead).error());
         }
         adapter = AdapterDescription{.name = std::string{info.name, info.nameLength},
@@ -432,7 +433,7 @@ struct Device::State {
         if (settings.vulkan != nullptr) {
             void* create = nullptr;
             void* physical = nullptr;
-            if (const mrhiResult kDescribed = mrhiDescribeVulkanDevice(instance, &def, &create, &physical);
+            if (const mrhiResult kDescribed = mrhiInstance_DescribeVulkanDevice(instance, &def, &create, &physical);
                 kDescribed != mrhi_success) {
                 return fail(failed("the device could not be described for the runtime", kDescribed).error());
             }
@@ -487,13 +488,14 @@ result::Result<bool> Device::open() {
             def.compatibleSurface = *state.compatible;
         }
         mrhiRequestId request{};
-        if (const mrhiResult kAsked = mrhiRequestAdapters(state.instance, &def, &request); kAsked != mrhi_success) {
+        if (const mrhiResult kAsked = mrhiInstance_RequestAdapters(state.instance, &def, &request);
+            kAsked != mrhi_success) {
             RAWFRAME_TRY(state.fail(failed("the adapters could not be asked for", kAsked).error()));
         }
         state.phase = Phase::Finding;
     }
     mrhiInstanceNotification record{};
-    while (state.phase != Phase::Ready && mrhiNextInstanceNotification(state.instance, &record) == mrhi_success) {
+    while (state.phase != Phase::Ready && mrhiInstance_TakeNotification(state.instance, &record) == mrhi_success) {
         if (record.kind == mrhi_instanceAdaptersFound && state.phase == Phase::Finding) {
             RAWFRAME_TRY(state.found(record));
         } else if (record.kind == mrhi_instanceDeviceReady && state.phase == Phase::Opening) {
@@ -521,13 +523,13 @@ std::optional<VulkanObjects> Device::vulkan() const noexcept {
     VulkanObjects objects;
     void* getInstanceProcAddr = nullptr;
     void* getDeviceProcAddr = nullptr;
-    if (mrhiGetVulkanDevice(state_->device,
-                            &objects.instance,
-                            &objects.physicalDevice,
-                            &objects.device,
-                            &getInstanceProcAddr,
-                            &getDeviceProcAddr) != mrhi_success ||
-        mrhiGetVulkanQueue(state_->device, &objects.queueFamily, &objects.queueIndex) != mrhi_success) {
+    if (mrhiDevice_GetVulkanDevice(state_->device,
+                                   &objects.instance,
+                                   &objects.physicalDevice,
+                                   &objects.device,
+                                   &getInstanceProcAddr,
+                                   &getDeviceProcAddr) != mrhi_success ||
+        mrhiDevice_GetVulkanQueue(state_->device, &objects.queueFamily, &objects.queueIndex) != mrhi_success) {
         return std::nullopt;
     }
     return objects;
@@ -583,7 +585,8 @@ std::optional<window::PixelSize> Device::adoptedSize(std::uint64_t texture) cons
 std::uint8_t Device::sampleCounts(std::uint32_t format) const noexcept {
     mrhiFormatCaps caps{};
     if (state_->phase != Phase::Ready ||
-        mrhiGetFormatCaps(state_->instance, state_->chosen, static_cast<mrhiFormat>(format), &caps) != mrhi_success) {
+        mrhiAdapter_GetFormatCaps(state_->instance, state_->chosen, static_cast<mrhiFormat>(format), &caps) !=
+            mrhi_success) {
         return 0;
     }
     return caps.sampleCounts;
@@ -594,7 +597,7 @@ void Device::pump() {
         return;
     }
     mrhiDeviceNotification record{};
-    while (mrhiNextDeviceNotification(state_->device, &record) == mrhi_success) {
+    while (mrhiDevice_TakeNotification(state_->device, &record) == mrhi_success) {
         if (record.kind == mrhi_deviceLostNotice) {
             state_->lost = true;
             continue;
@@ -673,7 +676,7 @@ Device::prepare(std::uint64_t surface, const window::SurfaceState& window, Prese
     // its display's facts change.
     mrhiSurfaceCaps caps{};
     if (!kFits || held.facts != window.display) {
-        if (const mrhiResult kRead = mrhiGetSurfaceCaps(state.instance, held.id, state.chosen, &caps);
+        if (const mrhiResult kRead = mrhiSurface_GetCaps(state.instance, held.id, state.chosen, &caps);
             kRead != mrhi_success) {
             return failed("the surface's capabilities could not be read", kRead);
         }
@@ -702,7 +705,7 @@ Device::prepare(std::uint64_t surface, const window::SurfaceState& window, Prese
         config.presentMode = presentModeFor(policy, caps.presentModes);
         config.width = window.pixelSize.width;
         config.height = window.pixelSize.height;
-        const mrhiResult kConfigured = mrhiConfigureSurface(state.device, &config);
+        const mrhiResult kConfigured = mrhiDevice_ConfigureSurface(state.device, &config);
         held.configured = kConfigured == mrhi_success;
         if (kConfigured == mrhi_errorOutOfDate) {
             // The window moved on meanwhile: the next frame tries again.

@@ -15,7 +15,7 @@
 #include "metal_native.h"
 #endif
 
-mrhiResult mrhiGetMetalDevice(mrhiDevice* device, void** deviceOut, void** queueOut)
+mrhiResult mrhiDevice_GetMetalDevice(mrhiDevice* device, void** deviceOut, void** queueOut)
 {
     if (device == nullptr)
     {
@@ -34,7 +34,7 @@ mrhiResult mrhiGetMetalDevice(mrhiDevice* device, void** deviceOut, void** queue
 #endif
 }
 
-mrhiResult mrhiGetMetalTexture(mrhiDevice* device, mrhiTextureId texture, void** textureOut)
+mrhiResult mrhiTexture_GetMetalTexture(mrhiDevice* device, mrhiTextureId texture, void** textureOut)
 {
     if (device == nullptr)
     {
@@ -61,7 +61,7 @@ mrhiResult mrhiGetMetalTexture(mrhiDevice* device, mrhiTextureId texture, void**
 #endif
 }
 
-mrhiResult mrhiSetMetalPassCommands(mrhiDevice* device, mrhiPassId pass, void* commandBuffer)
+mrhiResult mrhiPass_SetMetalCommands(mrhiDevice* device, mrhiPassId pass, void* commandBuffer)
 {
     if (device == nullptr)
     {

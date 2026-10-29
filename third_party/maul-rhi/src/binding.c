@@ -276,8 +276,8 @@ static mrhiResult CheckBinding(mrhiDevice* device, const mrhiFramePass* pass,
     return status;
 }
 
-mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
-                           const mrhiBinding* bindings, uint32_t count)
+mrhiResult mrhiPass_SetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
+                                const mrhiBinding* bindings, uint32_t count)
 {
     if (device == nullptr)
     {

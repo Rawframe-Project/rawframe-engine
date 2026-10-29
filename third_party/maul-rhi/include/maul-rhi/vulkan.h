@@ -66,8 +66,8 @@ extern "C"
     } mrhiInstanceVulkanExtensions;
 
     // A VkDevice made from the instance's last description
-    // (mrhiDescribeVulkanDevice) of an equal device def, which the device
-    // adopts and never destroys, chained on a device def with the type
+    // (mrhiInstance_DescribeVulkanDevice) of an equal device def, which the
+    // device adopts and never destroys, chained on a device def with the type
     // mrhi_structDeviceVulkanAdopt. Vulkan only. Without such a description the
     // def is refused with mrhi_errorInvalid; on another driver's adapter with
     // mrhi_errorUnsupported.
@@ -138,10 +138,10 @@ extern "C"
     /// `mrhi_errorInvalid` for a NULL argument or a malformed def.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDescribeVulkanDevice(mrhiInstance* instance,
-                                                                const mrhiDeviceDef* def,
-                                                                void** createInfoOut,
-                                                                void** physicalDeviceOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiInstance_DescribeVulkanDevice(mrhiInstance* instance,
+                                                                         const mrhiDeviceDef* def,
+                                                                         void** createInfoOut,
+                                                                         void** physicalDeviceOut);
 
     /// Reads an adapter's VkPhysicalDevice, to find the adapter an OpenXR
     /// runtime names (xrGetVulkanGraphicsDevice2KHR).
@@ -154,9 +154,8 @@ extern "C"
     /// longer has; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetVulkanPhysicalDevice(mrhiInstance* instance,
-                                                                   mrhiAdapterId adapter,
-                                                                   void** physicalDeviceOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiAdapter_GetVulkanPhysicalDevice(
+        mrhiInstance* instance, mrhiAdapterId adapter, void** physicalDeviceOut);
 
     /// Reads the queue family and index a Vulkan device submits on, for
     /// XrGraphicsBindingVulkan2KHR.
@@ -168,8 +167,9 @@ extern "C"
     /// driver is not Vulkan; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetVulkanQueue(mrhiDevice* device, uint32_t* familyOut,
-                                                          uint32_t* indexOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetVulkanQueue(mrhiDevice* device,
+                                                                 uint32_t* familyOut,
+                                                                 uint32_t* indexOut);
 
     /// Reads a Vulkan device's native objects, borrowed for the device's life:
     /// what an upscaler's context is made from (XeSS's xessVKCreateContext,
@@ -187,11 +187,9 @@ extern "C"
     /// driver is not Vulkan; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetVulkanDevice(mrhiDevice* device, void** instanceOut,
-                                                           void** physicalDeviceOut,
-                                                           void** deviceOut,
-                                                           void** getInstanceProcAddrOut,
-                                                           void** getDeviceProcAddrOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetVulkanDevice(
+        mrhiDevice* device, void** instanceOut, void** physicalDeviceOut, void** deviceOut,
+        void** getInstanceProcAddrOut, void** getDeviceProcAddrOut);
 
     // A device texture's Vulkan image, as an upscaler's resource description
     // takes it (Streamline's sl::Resource, XeSS's xess_vk_image_view_info, with
@@ -227,17 +225,16 @@ extern "C"
     /// longer has; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetVulkanTexture(mrhiDevice* device,
-                                                            mrhiTextureId texture,
-                                                            mrhiVulkanTextureInfo* textureOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiTexture_GetVulkanTexture(
+        mrhiDevice* device, mrhiTextureId texture, mrhiVulkanTextureInfo* textureOut);
 
     /// Hands a native pass the command buffer the program recorded for it: a
     /// primary VkCommandBuffer from the program's own pool on the device's
     /// queue family, ended and not submitted. The library submits it at the
     /// pass's place in the frame, after the library's commands before it and
     /// before those after it; it must leave every declared resource in its
-    /// access's layout (mrhiGetVulkanTexture), and may change any other state.
-    /// The program keeps it alive until the frame is done.
+    /// access's layout (mrhiTexture_GetVulkanTexture), and may change any other
+    /// state. The program keeps it alive until the frame is done.
     ///
     /// @param device         The device.
     /// @param pass           The native pass, begun.
@@ -248,9 +245,9 @@ extern "C"
     /// buffer or a pass that is not native.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetVulkanPassCommands(mrhiDevice* device,
-                                                                 mrhiPassId pass,
-                                                                 void* commandBuffer);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetVulkanCommands(mrhiDevice* device,
+                                                                  mrhiPassId pass,
+                                                                  void* commandBuffer);
 
 #ifdef __cplusplus
 }

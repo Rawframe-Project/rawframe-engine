@@ -15,7 +15,7 @@
 #include "d3d12_device.h"
 #endif
 
-mrhiResult mrhiGetD3d12Device(mrhiDevice* device, void** deviceOut, void** queueOut)
+mrhiResult mrhiDevice_GetD3d12Device(mrhiDevice* device, void** deviceOut, void** queueOut)
 {
     if (device == nullptr)
     {
@@ -40,7 +40,8 @@ mrhiResult mrhiGetD3d12Device(mrhiDevice* device, void** deviceOut, void** queue
 #endif
 }
 
-mrhiResult mrhiGetD3d12Texture(mrhiDevice* device, mrhiTextureId texture, void** resourceOut)
+mrhiResult mrhiTexture_GetD3d12Texture(mrhiDevice* device, mrhiTextureId texture,
+                                       void** resourceOut)
 {
     if (device == nullptr)
     {
@@ -73,7 +74,7 @@ mrhiResult mrhiGetD3d12Texture(mrhiDevice* device, mrhiTextureId texture, void**
 #endif
 }
 
-mrhiResult mrhiSetD3d12PassCommands(mrhiDevice* device, mrhiPassId pass, void* commandList)
+mrhiResult mrhiPass_SetD3d12Commands(mrhiDevice* device, mrhiPassId pass, void* commandList)
 {
     if (device == nullptr)
     {

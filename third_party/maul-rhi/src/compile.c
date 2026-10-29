@@ -241,7 +241,7 @@ mrhiResult mrhiCompile(mrhiDevice* device)
     return status;
 }
 
-mrhiResult mrhiCompileFrame(mrhiDevice* device)
+mrhiResult mrhiDevice_CompileFrame(mrhiDevice* device)
 {
     if (device == nullptr)
     {
@@ -258,7 +258,7 @@ mrhiResult mrhiCompileFrame(mrhiDevice* device)
     return mrhiCompile(device);
 }
 
-mrhiResult mrhiIsPassKept(mrhiDevice* device, mrhiPassId pass, bool* keptOut)
+mrhiResult mrhiPass_IsKept(mrhiDevice* device, mrhiPassId pass, bool* keptOut)
 {
     if (device == nullptr)
     {

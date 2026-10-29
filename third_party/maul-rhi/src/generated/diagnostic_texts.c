@@ -8,7 +8,7 @@
 
 #include "maul-rhi/base.h"
 
-const char* mrhiDiagnosticText(mrhiDiagnosticCode code)
+const char* mrhiGetDiagnosticText(mrhiDiagnosticCode code)
 {
     switch (code)
     {

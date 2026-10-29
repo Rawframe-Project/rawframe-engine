@@ -156,7 +156,7 @@ static mrhiSurfaceSlot* CheckConfig(mrhiDevice* device, const mrhiSurfaceConfig*
     return *statusOut == mrhi_success ? slot : nullptr;
 }
 
-mrhiResult mrhiConfigureSurface(mrhiDevice* device, const mrhiSurfaceConfig* config)
+mrhiResult mrhiDevice_ConfigureSurface(mrhiDevice* device, const mrhiSurfaceConfig* config)
 {
     if (device == nullptr)
     {
@@ -235,7 +235,7 @@ void mrhiEndConfigurations(mrhiDevice* device)
     }
 }
 
-mrhiResult mrhiUnconfigureSurface(mrhiDevice* device, mrhiSurfaceId surface)
+mrhiResult mrhiSurface_Unconfigure(mrhiDevice* device, mrhiSurfaceId surface)
 {
     if (device == nullptr)
     {

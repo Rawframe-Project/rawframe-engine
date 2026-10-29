@@ -8,6 +8,7 @@
 
 #include "copy_core.h"
 #include "invariant.h"
+#include "outputs.h"
 
 #include <stdatomic.h>
 #include <stdckdint.h>
@@ -150,8 +151,8 @@ static uint64_t RingOffset(const mrhiDevice* device, const mrhiReadback* readbac
     return ring == 0 ? 0 : readback->position % ring;
 }
 
-mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
-                          uint64_t offset, uint64_t size, mrhiRequestId* requestOut)
+mrhiResult mrhiPass_ReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
+                               uint64_t offset, uint64_t size, mrhiRequestId* requestOut)
 {
     if (requestOut != nullptr)
     {
@@ -209,8 +210,8 @@ mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId reso
     return mrhi_success;
 }
 
-mrhiResult mrhiReadTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureCopy* source,
-                           const mrhiExtent3d* size, mrhiRequestId* requestOut)
+mrhiResult mrhiPass_ReadTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureCopy* source,
+                                const mrhiExtent3d* size, mrhiRequestId* requestOut)
 {
     if (requestOut != nullptr)
     {
@@ -320,8 +321,8 @@ static void Free(mrhiDevice* device, mrhiReadback* readback)
     }
 }
 
-mrhiResult mrhiTakeReadback(mrhiDevice* device, mrhiRequestId request, void* bytes, size_t capacity,
-                            size_t* sizeOut)
+static mrhiResult Take(mrhiDevice* device, mrhiRequestId request, void* bytes, size_t capacity,
+                       size_t* sizeOut)
 {
     if (device == nullptr)
     {
@@ -378,4 +379,11 @@ mrhiResult mrhiTakeReadback(mrhiDevice* device, mrhiRequestId request, void* byt
     }
     Free(device, readback);
     return mrhi_success;
+}
+
+mrhiResult mrhiRequest_TakeReadback(mrhiDevice* device, mrhiRequestId request, void* bytesOut,
+                                    size_t capacity, size_t* sizeOut)
+{
+    return mrhiClearFailed(Take(device, request, bytesOut, capacity, sizeOut), bytesOut, capacity,
+                           sizeOut);
 }

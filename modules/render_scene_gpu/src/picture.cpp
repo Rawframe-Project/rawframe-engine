@@ -172,10 +172,10 @@ result::Status PicturePass::addFxaa(mrhiResourceId display, mrhiResourceId into,
 
 result::Status PicturePass::write(mrhiPassId upload) {
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(PictureBlock))) !=
+        (outcome = mrhiPass_WriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(PictureBlock))) !=
             mrhi_success ||
         (gradedFirst_ &&
-         (outcome = mrhiWriteBuffer(native_, upload, gradeResource_, 0, &gradeBlock_, sizeof(PictureBlock))) !=
+         (outcome = mrhiPass_WriteBuffer(native_, upload, gradeResource_, 0, &gradeBlock_, sizeof(PictureBlock))) !=
              mrhi_success)) {
         return failed("the picture's grade could not be written", outcome);
     }
@@ -201,11 +201,11 @@ result::Status drawPicture(mrhiDevice* native,
                                           textureAt(4, kTable)};
     binding[4].viewKind = mrhi_texture3d;
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiBeginPass(native, pass)) != mrhi_success ||
-        (outcome = mrhiSetGraphicsPipeline(native, pass, pipeline)) != mrhi_success ||
-        (outcome = mrhiSetBindings(native, pass, 0, binding.data(), binding.size())) != mrhi_success ||
-        (outcome = mrhiDraw(native, pass, 3, 1, 0, 0)) != mrhi_success ||
-        (outcome = mrhiEndPass(native, pass)) != mrhi_success) {
+        (outcome = mrhiPass_Begin(native, pass)) != mrhi_success ||
+        (outcome = mrhiPass_SetGraphicsPipeline(native, pass, pipeline)) != mrhi_success ||
+        (outcome = mrhiPass_SetBindings(native, pass, 0, binding.data(), binding.size())) != mrhi_success ||
+        (outcome = mrhiPass_Draw(native, pass, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiPass_End(native, pass)) != mrhi_success) {
         return failed("the picture could not be drawn", outcome);
     }
     return {};
@@ -233,12 +233,12 @@ result::Status PicturePass::recordFxaa(const Pipelines& pipelines) {
     const std::array<mrhiBinding, 2> kDisplayBinding = {textureAt(0, display_),
                                                         samplerAt(1, pipelines.filteredSampler)};
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiBeginPass(native_, fxaaPass_)) != mrhi_success ||
-        (outcome = mrhiSetGraphicsPipeline(native_, fxaaPass_, pipelines.fxaa.pipeline)) != mrhi_success ||
-        (outcome = mrhiSetBindings(native_, fxaaPass_, 0, kDisplayBinding.data(), kDisplayBinding.size())) !=
+        (outcome = mrhiPass_Begin(native_, fxaaPass_)) != mrhi_success ||
+        (outcome = mrhiPass_SetGraphicsPipeline(native_, fxaaPass_, pipelines.fxaa.pipeline)) != mrhi_success ||
+        (outcome = mrhiPass_SetBindings(native_, fxaaPass_, 0, kDisplayBinding.data(), kDisplayBinding.size())) !=
             mrhi_success ||
-        (outcome = mrhiDraw(native_, fxaaPass_, 3, 1, 0, 0)) != mrhi_success ||
-        (outcome = mrhiEndPass(native_, fxaaPass_)) != mrhi_success) {
+        (outcome = mrhiPass_Draw(native_, fxaaPass_, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiPass_End(native_, fxaaPass_)) != mrhi_success) {
         return failed("the picture could not be antialiased", outcome);
     }
     return {};
