@@ -92,7 +92,9 @@ grep -q '^window.height' "$work/studio.conf" || printf 'window.height = 720\n' >
 # Its preferences its own, never those of whoever runs it.
 grep -q '^studio.preferences' "$work/studio.conf" ||
     printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
-"$1" --config "$work/studio.conf" >"$work/log" 2>&1 &
+# In a process group of its own, which click.py kills if it will not stop,
+# the played server and client with it.
+setsid "$1" --config "$work/studio.conf" >"$work/log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"
 python3 "$here/../../../tools/click.py" "$studio" "$work/log" studio_shown "$work/studio.pid" "${@:4}"
