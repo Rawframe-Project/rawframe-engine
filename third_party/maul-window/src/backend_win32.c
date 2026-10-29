@@ -14,6 +14,7 @@
 #include "win32_dialog.h"
 #include "win32_drop.h"
 #include "win32_input.h"
+#include "win32_occlusion.h"
 #include "win32_output.h"
 #include "win32_services.h"
 #include "win32_system.h"
@@ -94,7 +95,7 @@ static BOOL CALLBACK KeepFirstIcon(HMODULE module, LPCWSTR type, LPWSTR name, LO
 {
     (void)module;
     (void)type;
-    FirstIcon* first = (FirstIcon*)into;
+    FirstIcon* first = mwinWin32Pointer(into);
     if (IS_INTRESOURCE(name))
     {
         first->number = (WORD)(ULONG_PTR)name;
@@ -188,6 +189,7 @@ static void Stop(mwinContext* context)
 #endif
     mwinWin32KeepAwake(platform, false);
     mwinWin32StopTouchKeyboard(platform);
+    mwinWin32StopOcclusion(platform);
     mwinWin32StopOle(platform);
     mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
     context->backendData = nullptr;
@@ -224,6 +226,7 @@ static mwinResult Start(mwinContext* context)
     context->backendData = platform;
     BecomeDpiAware();
     mwinWin32StartOle(platform);
+    mwinWin32StartOcclusion(platform);
     if (!RegisterWindowClass(platform))
     {
         Stop(context);

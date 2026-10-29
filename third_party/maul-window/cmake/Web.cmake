@@ -2,7 +2,7 @@
 # (EM_JS): with Emscripten the program's link takes it in and nothing
 # else is needed. Without Emscripten (wasm32-wasi) the same functions are
 # imports, and the build writes maul-window.mjs, which gives the page
-# them (mwin-0022); the library's MAUL_WINDOW_WEB_GLUE property names it.
+# them; the library's MAUL_WINDOW_WEB_GLUE property names it.
 
 set(MWIN_WEB_SOURCES
     src/backend_web.c

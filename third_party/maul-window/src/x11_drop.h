@@ -21,4 +21,9 @@ bool mwinX11HandleDropEvent(mwinX11Platform* platform, const xcb_generic_event_t
 // Ends a drop past its deadline.
 void mwinX11CheckDrop(mwinX11Platform* platform, uint64_t nowNs);
 
+// Ends the drag over a window that goes, before its X id is let go: a
+// drop under way is refused to its source and delivered to no window, so
+// a window that takes the slot later never gets it.
+void mwinX11ForgetDrag(mwinX11Platform* platform, uint32_t slot);
+
 #endif // MAUL_WINDOW_SRC_X11_DROP_H

@@ -3,7 +3,9 @@
 //
 // UTF-8 output into a caller buffer that may be too small: bytes that
 // fit are written, and every byte is counted, so the caller learns the
-// size the whole result needs.
+// size the whole result needs. A count that would not fit in size_t
+// stays at SIZE_MAX, which no result reaches otherwise, and nothing more
+// is written.
 
 #ifndef MAUL_UNICODE_SRC_WRITER_H
 #define MAUL_UNICODE_SRC_WRITER_H
@@ -49,6 +51,11 @@ static inline void muniWriterPut(muniWriter* writer, uint32_t codePoint)
         bytes[3] = (uint8_t)(0x80 | (codePoint & 0x3F));
         size = 4;
     }
+    if (writer->needed > SIZE_MAX - 1 - size)
+    {
+        writer->needed = SIZE_MAX;
+        return;
+    }
     for (size_t i = 0; i < size; i++)
     {
         if (writer->needed + i < writer->capacity)
@@ -57,6 +64,12 @@ static inline void muniWriterPut(muniWriter* writer, uint32_t codePoint)
         }
     }
     writer->needed += size;
+}
+
+// Whether the whole output fit in the buffer.
+static inline bool muniWriterFits(const muniWriter* writer)
+{
+    return writer->needed <= writer->capacity && writer->needed != SIZE_MAX;
 }
 
 #endif // MAUL_UNICODE_SRC_WRITER_H

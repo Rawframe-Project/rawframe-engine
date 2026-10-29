@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// XCB, opened at run time (mwin-0006) into a table each context loads for
+// XCB, opened at run time into a table each context loads for
 // itself: libxcb, and where they are there libxcb-randr for monitors,
 // libxkbcommon-x11 and libxcb-xkb for the keyboard, libxcb-cursor for
 // cursor themes, libxcb-render for cursors made from images, and

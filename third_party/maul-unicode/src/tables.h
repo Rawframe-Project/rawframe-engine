@@ -28,6 +28,8 @@ uint8_t muniLookupWhiteSpace(uint32_t codePoint);
 extern const uint64_t muniWhiteSpaceHash;
 uint8_t muniLookupDefaultIgnorable(uint32_t codePoint);
 extern const uint64_t muniDefaultIgnorableHash;
+uint8_t muniLookupIdeographic(uint32_t codePoint);
+extern const uint64_t muniIdeographicHash;
 // The zeros of the decimal digit systems, sorted: a digit's value is its
 // distance from the greatest zero at or below it.
 extern const uint32_t muniDecimalZeros[];

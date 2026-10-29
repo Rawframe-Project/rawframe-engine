@@ -62,7 +62,8 @@ extern "C"
     /// @param workspace           Scratch memory of length bytes.
     /// @param paragraphLengthOut  Receives the paragraph's length in bytes.
     /// @param paragraphLevelOut   Receives the paragraph embedding level,
-    ///                            0 or 1.
+    ///                            0 or 1. On an error, levels and both
+    ///                            outputs are left as they were.
     /// @return `muni_success`, or `muni_errorInvalid` for a NULL argument or
     ///         an unknown direction.
     /// @par Thread safety
@@ -82,13 +83,14 @@ extern "C"
     /// @param line            The line's text within the paragraph.
     /// @param levels          The line's levels from muniResolveBidi.
     /// @param length          The line's length in bytes.
-    /// @param paragraphLevel  The paragraph embedding level.
+    /// @param paragraphLevel  The paragraph embedding level, 0 or 1.
     /// @param runs            The output. May be NULL when capacity is 0.
     /// @param capacity        The number of runs the output can hold.
     /// @param countOut        Receives the number of runs.
     /// @return `muni_success`; `muni_errorCapacity` when the runs do not
     ///         fit, and then none is written; `muni_errorInvalid` for a
-    ///         NULL argument.
+    ///         NULL argument, a level above 126 or a paragraph level
+    ///         above 1.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniResult muniReorderBidiLine(const char* line, const uint8_t* levels,
@@ -98,13 +100,15 @@ extern "C"
 
     /// Computes a visual order from levels (rule L2), for any units the
     /// caller orders: code points, clusters or glyphs of one line, each
-    /// with its level after rule L1.
+    /// with its level after rule L1. An error leaves visualToLogicalOut as
+    /// it was.
     ///
     /// @param levels             One level per unit, in logical order.
     /// @param count              The number of units.
     /// @param visualToLogicalOut Receives, for each position from left to
     ///                           right, the logical index of its unit.
-    /// @return `muni_success`, or `muni_errorInvalid` for a NULL argument.
+    /// @return `muni_success`, or `muni_errorInvalid` for a NULL argument or
+    ///         a level above 126, the highest rule L1 leaves.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniResult muniReorderBidiLevels(const uint8_t* levels, size_t count,
@@ -115,9 +119,13 @@ extern "C"
     ///
     /// @param map         A permutation of 0 to count - 1.
     /// @param count       The number of entries.
-    /// @param inverseOut  Receives the inverse permutation.
-    /// @return `muni_success`, or `muni_errorInvalid` for a NULL argument or
-    ///         an entry out of range.
+    /// @param inverseOut  Receives the inverse permutation. Must not overlap
+    ///                    map. On an error, its contents are unspecified:
+    ///                    telling a permutation from a map that repeats an
+    ///                    entry, in linear time and without memory, takes
+    ///                    inverseOut as scratch.
+    /// @return `muni_success`, or `muni_errorInvalid` for a NULL argument, an
+    ///         entry out of range or an entry that repeats an earlier one.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniResult muniInvertBidiMap(const size_t* map, size_t count,

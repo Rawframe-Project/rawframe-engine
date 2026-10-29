@@ -252,7 +252,7 @@ extern "C"
 #define MWIN_CURSOR_IMAGES 4
 #define MWIN_CURSOR_SIZE   128
 
-    // A cursor made from images (mwin-0027): an id of the context's,
+    // A cursor made from images: an id of the context's,
     // checked by generation.
     typedef struct mwinCursorId
     {

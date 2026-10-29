@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Input methods over the session bus, for the X11 backend (mwin-0030): Fcitx
+// Input methods over the session bus, for the X11 backend: Fcitx
 // 5 (org.freedesktop.portal.Fcitx) when XMODIFIERS names fcitx, else
 // IBus through its portal (org.freedesktop.portal.IBus), else Fcitx 5.
 // One input context, made the first time a window takes text, follows
@@ -27,12 +27,13 @@
 #define MWIN_IME_PATH_BYTES 128
 
 // A key held for the input method's answer: the call (none for a key
-// held only behind others), the window, its X keycode, and the records
-// the backend made for it.
+// held only behind others), the window by id, since its slot may hold
+// another window by the answer, its X keycode, and the records the
+// backend made for it.
 typedef struct mwinImeKey
 {
     mwinBusCall call;
-    uint32_t slot;
+    mwinWindowId window;
     uint8_t keycode;
     mwinEvent key;
     char text[MWIN_IME_TEXT_BYTES];

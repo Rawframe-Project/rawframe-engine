@@ -125,12 +125,15 @@ static int ClassOf(mwinEventType type)
 
 static uint32_t At(const mwinRing* ring, uint32_t index)
 {
+    MWIN_ASSERT(ring->head < ring->capacity && ring->count <= ring->capacity &&
+                index < ring->capacity);
     return (ring->head + index) % ring->capacity;
 }
 
 // Removes the record at position index, keeping the others in order.
 static void RemoveAt(mwinRing* ring, uint32_t index)
 {
+    MWIN_ASSERT(index < ring->count);
     for (uint32_t i = index; i + 1 < ring->count; i++)
     {
         ring->events[At(ring, i)] = ring->events[At(ring, i + 1)];
@@ -180,6 +183,8 @@ static bool Append(mwinContext* context, mwinRing* ring, const mwinEvent* event)
     {
         return false;
     }
+    // The stream hands out records by their sequence, so it only grows.
+    MWIN_ASSERT(ring->count == 0 || ring->sequences[At(ring, ring->count - 1)] < context->sequence);
     uint32_t slot = At(ring, ring->count);
     ring->events[slot] = *event;
     ring->events[slot].samples = 1;
@@ -296,7 +301,8 @@ static void PostReset(mwinContext* context, uint32_t slot, uint64_t timeNs)
     reset.window = mwinWindowIdOf(context, slot);
     reset.timeNs = timeNs;
     // A reset replaces one still waiting, so it always has room.
-    (void)Append(context, &context->windows[slot].rings[mwin_classNotification], &reset);
+    bool added = Append(context, &context->windows[slot].rings[mwin_classNotification], &reset);
+    MWIN_ASSERT(added);
 }
 
 // Whether a composition's segments can be read: at most
@@ -384,6 +390,7 @@ static bool Consumed(mwinWindow* window, const mwinEvent* record)
 
 void mwinPost(mwinContext* context, uint32_t slot, const mwinEvent* event)
 {
+    MWIN_ASSERT(slot < context->limits.windows);
     mwinWindow* window = &context->windows[slot];
     if (window->status != mwin_slotLive)
     {
@@ -471,7 +478,10 @@ void mwinPostDestroyed(mwinContext* context, uint32_t slot, uint64_t timeNs)
     event.type = mwin_eventWindowDestroyed;
     event.window = mwinWindowIdOf(context, slot);
     event.timeNs = timeNs;
-    (void)Append(context, ring, &event);
+    // Only completions are left, at most one per request slot, and the
+    // ring holds more than the request slots.
+    bool added = Append(context, ring, &event);
+    MWIN_ASSERT(added);
 }
 
 void mwinBeginPump(mwinContext* context)
@@ -549,6 +559,11 @@ mwinResult mwinNextEvent(mwinContext* context, mwinEvent* eventOut)
     if (window != nullptr && window->status == mwin_slotDestroyed &&
         eventOut->type == mwin_eventWindowDestroyed)
     {
+        // Its completions came before it, so every request slot is free.
+        for (uint32_t i = 0; i < context->limits.requestsPerWindow; i++)
+        {
+            MWIN_ASSERT(window->requests[i].status == mwin_requestFree);
+        }
         window->status = mwin_slotFree;
     }
     if (eventOut->type == mwin_eventRequestCompleted)

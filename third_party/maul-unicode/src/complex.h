@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Runs of Line_Break=SA text handed to a caller's breaker (muni-0005).
+// Runs of Line_Break=SA text handed to a caller's breaker.
 // Line and word rules call muniComplexTrack for each code point they
 // read, and ask muniComplexBreakAt before deciding about one.
 

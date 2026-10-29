@@ -1,8 +1,8 @@
 # The Win32 backend. It links the system libraries every Windows has:
 # user32 for windows and input, shcore for monitor DPI, imm32 for input
 # methods, advapi32 for the user's settings in the registry, dwmapi for
-# the frame's theme, ole32 and shell32 for drag and drop, setupapi for a
-# monitor's EDID.
+# the frame's theme and cloaking, ole32 and shell32 for drag and drop,
+# setupapi for a monitor's EDID, wtsapi32 for the session's locking.
 
 set(MWIN_WIN32_SOURCES
     src/backend_win32.c
@@ -14,6 +14,7 @@ set(MWIN_WIN32_SOURCES
     src/win32_ime.c
     src/win32_touch_keyboard.c
     src/win32_message_box.c
+    src/win32_occlusion.c
     src/win32_input.c
     src/win32_output.c
     src/win32_pointer.c
@@ -32,5 +33,5 @@ target_compile_definitions(maul-window PRIVATE MAUL_WINDOW_WIN32)
 set_source_files_properties(${MWIN_WIN32_SOURCES} PROPERTIES
     COMPILE_DEFINITIONS "_WIN32_WINNT=0x0A00;WINVER=0x0A00;UNICODE;_UNICODE")
 target_link_libraries(maul-window PRIVATE user32 shcore imm32 advapi32 dwmapi ole32 shell32
-    setupapi)
-string(APPEND MAUL_PKG_LIBS_PRIVATE " -luser32 -lshcore -limm32 -ladvapi32 -ldwmapi -lole32 -lshell32 -lsetupapi")
+    setupapi wtsapi32)
+string(APPEND MAUL_PKG_LIBS_PRIVATE " -luser32 -lshcore -limm32 -ladvapi32 -ldwmapi -lole32 -lshell32 -lsetupapi -lwtsapi32")

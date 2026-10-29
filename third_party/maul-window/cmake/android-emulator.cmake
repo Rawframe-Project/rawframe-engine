@@ -1,4 +1,4 @@
-# The Android emulator (mwin-0026), for the tests:
+# The Android emulator, for the tests:
 #
 #   cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/android-emulator.cmake
 #

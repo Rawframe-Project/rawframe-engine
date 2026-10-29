@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The mouse pointer's icon over the activity's view: a shape as the
-// system's PointerIcon of a type, a cursor made from images (mwin-0027)
+// system's PointerIcon of a type, a cursor made from images
 // as a PointerIcon made once per image from a bitmap. Android draws a
 // bitmap's pixels as they are, so the image is the one for the
 // display's density, with its hotspot scaled.

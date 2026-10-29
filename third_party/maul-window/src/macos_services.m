@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The macOS clipboard and services (macos.h): text, and data by MIME
-// type as UTType names it (mwin-0029), on the general pasteboard,
+// type as UTType names it, on the general pasteboard,
 // written and read at once while the request is submitted;
 // addresses opened by NSWorkspace in the user's default program; files
 // shown by the Finder, selected; and the display kept awake by a power

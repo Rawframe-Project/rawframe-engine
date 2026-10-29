@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Android's pointers as the contract's records (mwin-0026), with no
+// Android's pointers as the contract's records, with no
 // platform type: the backend reads each motion event into samples
 // (android_input.c), and these functions turn them into touches, the
 // pen and the cursor, which tests drive on any platform.

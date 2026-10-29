@@ -42,7 +42,8 @@ static void RefreshOf(NSScreen* screen, mwinMonitorInfo* info)
     if (@available(macOS 12.0, *))
     {
         info->refreshMilliHz = (uint32_t)lround(screen.maximumFramesPerSecond * 1000.0);
-        info->variableRefresh = screen.minimumRefreshInterval != screen.maximumRefreshInterval;
+        info->variableRefresh =
+            screen.minimumRefreshInterval != screen.maximumRefreshInterval ? mwin_yes : mwin_no;
         return;
     }
     CGDisplayModeRef mode = CGDisplayCopyDisplayMode(DisplayOf(screen));
@@ -51,7 +52,7 @@ static void RefreshOf(NSScreen* screen, mwinMonitorInfo* info)
     CGDisplayModeRelease(mode);
 }
 
-// The screen's extended dynamic range (mwin-0036): Apple tells headroom,
+// The screen's extended dynamic range: Apple tells headroom,
 // never nits. The headroom is what the screen shows over SDR white at its
 // brightness now once content asks for EDR; EDR is on while content on
 // the screen goes above SDR white.

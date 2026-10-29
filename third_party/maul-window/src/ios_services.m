@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The iOS clipboard and services (ios.h): text, and data by MIME type as
-// UTType names it (mwin-0029), on the general pasteboard, written and
+// UTType names it, on the general pasteboard, written and
 // read at once while the request is submitted
 // (reading what another application put there, iOS may ask the user
 // first, and the answer waits for them; a refusal reads as no text);

@@ -50,9 +50,9 @@ mwinResult mwinLoadDBus(mwinDBusApi* api)
         FIND(addFilter, dbus_connection_add_filter) &&
         FIND(removeFilter, dbus_connection_remove_filter) &&
         FIND(isSignal, dbus_message_is_signal) && FIND(path, dbus_message_get_path) &&
-        FIND(uniqueName, dbus_bus_get_unique_name) && FIND(next, dbus_message_iter_next) &&
-        FIND(recurse, dbus_message_iter_recurse) && FIND(send, dbus_connection_send) &&
-        FIND(sendWithReply, dbus_connection_send_with_reply) &&
+        FIND(sender, dbus_message_get_sender) && FIND(uniqueName, dbus_bus_get_unique_name) &&
+        FIND(next, dbus_message_iter_next) && FIND(recurse, dbus_message_iter_recurse) &&
+        FIND(send, dbus_connection_send) && FIND(sendWithReply, dbus_connection_send_with_reply) &&
         FIND(completed, dbus_pending_call_get_completed) &&
         FIND(stealReply, dbus_pending_call_steal_reply) && FIND(cancel, dbus_pending_call_cancel) &&
         FIND(unrefPending, dbus_pending_call_unref) && FIND(messageType, dbus_message_get_type) &&

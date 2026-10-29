@@ -61,7 +61,7 @@ muniTextResult muniNormalize(const char* text, size_t length, muniNormalForm for
     }
     muniNormalizerFlush(&normalizer);
     *neededOut = normalizer.writer.needed;
-    return (muniTextResult){normalizer.writer.needed > capacity ? muni_errorCapacity : muni_success,
+    return (muniTextResult){!muniWriterFits(&normalizer.writer) ? muni_errorCapacity : muni_success,
                             length};
 }
 
@@ -119,6 +119,12 @@ muniTextResult muniCheckNormalization(const char* text, size_t length, muniNorma
         muniQuickCheck check = QuickCheck(codePoint, form);
         if ((markClass != 0 && lastClass > markClass) || check == muni_quickCheckNo)
         {
+            // The answer is settled, but the rest must still be valid.
+            muniTextResult rest = muniValidateUtf8(text + offset, length - offset);
+            if (rest.status != muni_success)
+            {
+                return (muniTextResult){rest.status, offset + rest.offset};
+            }
             *answerOut = muni_quickCheckNo;
             return (muniTextResult){muni_success, length};
         }
@@ -129,18 +135,29 @@ muniTextResult muniCheckNormalization(const char* text, size_t length, muniNorma
     return (muniTextResult){muni_success, length};
 }
 
-bool muniDecomposePair(uint32_t codePoint, uint32_t* firstOut, uint32_t* secondOut)
+muniResult muniDecomposePair(uint32_t codePoint, uint32_t* firstOut, uint32_t* secondOut,
+                             size_t* countOut)
 {
-    uint32_t first;
-    uint32_t second;
-    if (firstOut == nullptr || secondOut == nullptr ||
-        !muniCanonicalMapping(codePoint, &first, &second))
+    if (firstOut == nullptr || secondOut == nullptr || countOut == nullptr)
     {
-        return false;
+        return muni_errorInvalid;
+    }
+    uint32_t first = 0;
+    uint32_t second = 0;
+    size_t count = 0;
+    if (muniCanonicalMapping(codePoint, &first, &second))
+    {
+        count = second == 0 ? 1 : 2;
+    }
+    else
+    {
+        first = 0;
+        second = 0;
     }
     *firstOut = first;
     *secondOut = second;
-    return true;
+    *countOut = count;
+    return muni_success;
 }
 
 uint32_t muniComposePair(uint32_t first, uint32_t second)

@@ -22,6 +22,18 @@
 #include "maul-window/monitor.h"
 #include "maul-window/system.h"
 
+// Checks an internal invariant, a state that cannot occur unless the
+// library itself is wrong: never an argument, a platform's report or
+// another program's bytes, which are validated in every build. On in
+// debug, sanitizer and fuzz builds, where a broken invariant stops the
+// run where it happened; release builds compile it out without
+// evaluating the condition.
+#if defined(NDEBUG)
+#define MWIN_ASSERT(cond) ((void)sizeof((cond) ? 1 : 0))
+#else
+#define MWIN_ASSERT(cond) ((cond) ? (void)0 : __builtin_trap())
+#endif
+
 // The classes of records, each with its own storage per window.
 enum
 {
@@ -285,7 +297,7 @@ struct mwinContext
     bool inProgram;
     // The platform's loop runs the program's frames after the backend's
     // run returned; its last frame ends the program and frees the
-    // context (mwin-0022).
+    // context.
     bool loopOutlivesRun;
     // What init returned.
     mwinResult status;

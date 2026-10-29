@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Wayland clipboard and primary selection (mwin-0029). The
+// The Wayland clipboard and primary selection. The
 // clipboard is the seat's data device and its selection
 // (wayland_clipboard.c); the primary selection is its protocol's device
 // and selection, text only, where the compositor has it

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Win32's Xbox gamepads through Windows.Gaming.Input (mwin-0023): every
+// Win32's Xbox gamepads through Windows.Gaming.Input: every
 // Xbox-compatible pad, with no limit of four, its name, USB ids and
 // battery, and its motors. The runtime is found through combase.dll
 // when a context starts; where it is missing, XInput reads the pads

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What the Android backend keeps (mwin-0026): the activity the program
+// What the Android backend keeps: the activity the program
 // shows in, and the Java side reached through it; the activity's native
 // window and input queue; what drives the frames; whether the activity
 // is started and whether the program was told it stopped; and the one
@@ -45,11 +45,13 @@ typedef struct mwinAndroidWindow
     mwinInsets safeArea;
     mwinRect covered;
     // The cursor asked for: a shape, or a cursor made from images when
-    // cursorImage is live (mwin-0027).
+    // cursorImage is live.
     mwinCursorShape cursorShape;
     mwinCursorId cursorImage;
     // Whether the window was told its monitor.
     bool displayTold;
+    // Whether the window was told it cannot be seen.
+    bool occluded;
 } mwinAndroidWindow;
 
 // The window's insets as the activity last told them, in pixels: the
@@ -261,6 +263,11 @@ void mwinAndroidSurfaceCame(mwinAndroidPlatform* platform);
 void mwinAndroidSurfaceWent(mwinAndroidPlatform* platform);
 void mwinAndroidReadSize(mwinAndroidPlatform* platform);
 void mwinAndroidPostFocus(mwinAndroidPlatform* platform);
+// The activity stopped or started: the window, once made, is occluded
+// while it is stopped (nothing of it can be seen) and revealed when it
+// starts again. A pause alone leaves it revealed: the activity may still
+// show in part, under a translucent one or beside another.
+void mwinAndroidPostOcclusion(mwinAndroidPlatform* platform);
 
 // A key's press or release, as an event of the input queue or an input
 // method gives it: Android's action, key code, scan code (0 for none),

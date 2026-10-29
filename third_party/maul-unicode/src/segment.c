@@ -9,6 +9,7 @@
 
 #include "segmenter.h"
 
+#include <stddef.h>
 #include <string.h>
 
 static muniSegmenter Load(const muniSegmentIterator* iterator)
@@ -21,6 +22,19 @@ static muniSegmenter Load(const muniSegmentIterator* iterator)
 static void Store(muniSegmentIterator* iterator, const muniSegmenter* segmenter)
 {
     memcpy(iterator, segmenter, sizeof(*segmenter));
+}
+
+// Marks the iterator in caller memory busy before a call that may run the
+// caller's word segmenter, so a call the segmenter makes on it is refused
+// instead of working on the state the outer call will overwrite. The
+// outer call's Store clears the mark.
+static void MarkBusy(muniSegmentIterator* iterator, const muniSegmenter* segmenter)
+{
+    if (segmenter->complex.breaker != nullptr)
+    {
+        uint8_t busy = muni_phaseBusy;
+        memcpy((unsigned char*)iterator + offsetof(muniSegmenter, phase), &busy, sizeof(busy));
+    }
 }
 
 static muniResult Init(muniSegmentIterator* iterator, uint8_t kind, const char* text, size_t length,
@@ -72,12 +86,103 @@ muniResult muniSetComplexBreaker(muniSegmentIterator* iterator, muniComplexBreak
     }
     muniSegmenter segmenter = Load(iterator);
     bool supported = segmenter.kind == muni_segmentLine || segmenter.kind == muni_segmentWord;
-    if (!supported || segmenter.started || segmenter.waiting)
+    if (!supported)
     {
         return muni_errorInvalid;
     }
+    if (segmenter.phase == muni_phaseBusy)
+    {
+        return muni_errorBusy;
+    }
+    if (segmenter.started || segmenter.phase == muni_phaseWaiting)
+    {
+        return muni_errorState;
+    }
     segmenter.complex.breaker = breaker;
     segmenter.complex.context = context;
+    Store(iterator, &segmenter);
+    return muni_success;
+}
+
+// The most overrides a table can hold: one per scalar value, since its
+// code points strictly increase.
+#define MAX_OVERRIDES 0x10F800u
+
+// Whether a table of overrides is in strictly increasing order of code
+// point and names only code points and known classes: up to classCount.
+static bool ValidOverrides(const muniBreakClassOverride* overrides, size_t count,
+                           uint8_t classCount)
+{
+    for (size_t i = 0; i < count; ++i)
+    {
+        uint32_t codePoint = overrides[i].codePoint;
+        if (codePoint > 0x10FFFF || (codePoint >= 0xD800 && codePoint <= 0xDFFF) ||
+            overrides[i].value >= classCount || (i > 0 && codePoint <= overrides[i - 1].codePoint))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+muniResult muniSetBreakClassOverrides(muniSegmentIterator* iterator,
+                                      const muniBreakClassOverride* overrides, size_t count)
+{
+    if (iterator == nullptr || (overrides == nullptr && count != 0) || count > MAX_OVERRIDES)
+    {
+        return muni_errorInvalid;
+    }
+    muniSegmenter segmenter = Load(iterator);
+    uint32_t* countField = nullptr;
+    uint8_t classCount = 0;
+    if (segmenter.kind == muni_segmentWord)
+    {
+        countField = &segmenter.rules.word.overrideCount;
+        classCount = muni_wbWSegSpace + 1;
+    }
+    else if (segmenter.kind == muni_segmentSentence)
+    {
+        countField = &segmenter.rules.sentence.overrideCount;
+        classCount = muni_sbClose + 1;
+    }
+    if (countField == nullptr || !ValidOverrides(overrides, count, classCount))
+    {
+        return muni_errorInvalid;
+    }
+    if (segmenter.phase == muni_phaseBusy)
+    {
+        return muni_errorBusy;
+    }
+    if (segmenter.started || segmenter.phase == muni_phaseWaiting)
+    {
+        return muni_errorState;
+    }
+    segmenter.overrides = count == 0 ? nullptr : overrides;
+    *countField = (uint32_t)count;
+    Store(iterator, &segmenter);
+    return muni_success;
+}
+
+muniResult muniSetLineOptions(muniSegmentIterator* iterator, uint32_t options)
+{
+    if (iterator == nullptr || (options & ~(uint32_t)muni_lineCjAsIdeographic) != 0)
+    {
+        return muni_errorInvalid;
+    }
+    muniSegmenter segmenter = Load(iterator);
+    if (segmenter.kind != muni_segmentLine)
+    {
+        return muni_errorInvalid;
+    }
+    if (segmenter.phase == muni_phaseBusy)
+    {
+        return muni_errorBusy;
+    }
+    if (segmenter.started || segmenter.phase == muni_phaseWaiting)
+    {
+        return muni_errorState;
+    }
+    segmenter.options = (uint8_t)options;
     Store(iterator, &segmenter);
     return muni_success;
 }
@@ -90,11 +195,16 @@ muniResult muniFeedSegmentIterator(muniSegmentIterator* iterator, const char* te
         return muni_errorInvalid;
     }
     muniSegmenter segmenter = Load(iterator);
-    if (!segmenter.waiting || !muniCursorFeed(&segmenter.cursor, text, length, moreFollows))
+    if (segmenter.phase == muni_phaseBusy)
     {
-        return muni_errorInvalid;
+        return muni_errorBusy;
     }
-    segmenter.waiting = false;
+    if (segmenter.phase != muni_phaseWaiting)
+    {
+        return muni_errorState;
+    }
+    muniCursorFeed(&segmenter.cursor, text, length, moreFollows);
+    segmenter.phase = muni_phaseReady;
     Store(iterator, &segmenter);
     return muni_success;
 }
@@ -123,8 +233,13 @@ muniResult muniNextSegmentBreak(muniSegmentIterator* iterator, size_t* offsetOut
         return muni_errorInvalid;
     }
     muniSegmenter segmenter = Load(iterator);
+    if (segmenter.phase == muni_phaseBusy)
+    {
+        return muni_errorBusy;
+    }
+    MarkBusy(iterator, &segmenter);
     muniResult status = Next(&segmenter, offsetOut);
-    segmenter.waiting = status == muni_needMoreText;
+    segmenter.phase = status == muni_needMoreText ? muni_phaseWaiting : muni_phaseReady;
     Store(iterator, &segmenter);
     return status;
 }
@@ -140,8 +255,13 @@ muniResult muniNextLineBreak(muniSegmentIterator* iterator, size_t* offsetOut, b
     {
         return muni_errorInvalid;
     }
+    if (segmenter.phase == muni_phaseBusy)
+    {
+        return muni_errorBusy;
+    }
+    MarkBusy(iterator, &segmenter);
     muniResult status = Next(&segmenter, offsetOut);
-    segmenter.waiting = status == muni_needMoreText;
+    segmenter.phase = status == muni_needMoreText ? muni_phaseWaiting : muni_phaseReady;
     *mandatoryOut = status == muni_success && segmenter.mandatory;
     Store(iterator, &segmenter);
     return status;

@@ -242,10 +242,18 @@ static void Post(mwinWebPlatform* platform, uint32_t slot, mwinEvent* event, dou
 
 static void OnKey(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecord* record)
 {
+    // The page's codes index its own table of names, which has 256.
+    if (record->code < 0 || record->code > 255)
+    {
+        return;
+    }
     mwinKeyCode code = (mwinKeyCode)record->code;
-    mwinKey meaning = record->z > 0.0f ? (mwinKey)record->z : MWIN_KEY_NAMED | code;
+    // What it means is a Unicode scalar value, or it means its name.
+    uint32_t said = mwinWebWhole(record->z, 0x10FFFF) ? (uint32_t)record->z : 0;
+    mwinKey meaning = said != 0 && (said < 0xD800 || said > 0xDFFF) ? said : MWIN_KEY_NAMED | code;
     mwinEvent event = {.type = record->x != 0.0f ? mwin_eventKeyDown : mwin_eventKeyUp};
-    event.data.key = (mwinKeyEvent){code, (mwinModifiers)record->extra, meaning, record->y != 0.0f};
+    mwinModifiers modifiers = (mwinModifiers)(record->extra & MWIN_WEB_MODIFIERS);
+    event.data.key = (mwinKeyEvent){code, modifiers, meaning, record->y != 0.0f};
     Post(platform, slot, &event, record->timeMs);
 }
 
@@ -268,9 +276,14 @@ static void OnMouse(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecor
     static const mwinEventType types[] = {mwin_eventCursorMoved, mwin_eventCursorEntered,
                                           mwin_eventCursorLeft, mwin_eventButtonDown,
                                           mwin_eventButtonUp};
+    if (record->code < mwin_webMoved || record->code > mwin_webReleased)
+    {
+        return;
+    }
     mwinWebWindow* window = &platform->windows[slot];
     mwinPosition position = {record->x, record->y};
-    mwinMouseButton button = (mwinMouseButton)record->z;
+    mwinMouseButton button =
+        mwinWebWhole(record->z, mwin_buttonForward) ? (mwinMouseButton)record->z : 0;
     bool pressed = record->code == mwin_webPressed;
     bool released = record->code == mwin_webReleased;
     if ((!pressed && !released) || button == 0)
@@ -291,8 +304,9 @@ static void OnMouse(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecor
         return;
     }
     mwinEvent event = {.type = types[record->code]};
-    event.data.pointer = (mwinPointerEvent){position, (mwinModifiers)record->extra, window->buttons,
-                                            button, window->clicks.clicks};
+    mwinModifiers modifiers = (mwinModifiers)(record->extra & MWIN_WEB_MODIFIERS);
+    event.data.pointer =
+        (mwinPointerEvent){position, modifiers, window->buttons, button, window->clicks.clicks};
     Post(platform, slot, &event, record->timeMs);
 }
 
@@ -305,8 +319,10 @@ static void OnTouch(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecor
         return;
     }
     mwinEvent event = {.type = types[record->code]};
+    // A pressure from 0 to 1, or -1 where the browser does not measure it.
+    float pressure = record->z == -1.0f ? -1.0f : mwinWebUnit(record->z);
     event.data.touch =
-        (mwinTouchEvent){(uint64_t)(uint32_t)record->extra, {record->x, record->y}, record->z};
+        (mwinTouchEvent){(uint64_t)(uint32_t)record->extra, {record->x, record->y}, pressure};
     Post(platform, slot, &event, record->timeMs);
 }
 
@@ -314,10 +330,14 @@ static void OnTouch(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecor
 static void OnPen(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecord* record)
 {
     mwinWebWindow* window = &platform->windows[slot];
-    mwinPenFlags flags = (mwinPenFlags)record->extra;
+    mwinPenFlags flags =
+        (mwinPenFlags)(record->extra & (mwin_penEraser | mwin_penContact | mwin_penBarrel));
+    // Tilts within 90 degrees of upright.
+    float tiltX = record->w < -90.0f ? -90.0f : record->w > 90.0f ? 90.0f : record->w;
+    float tiltY = record->v < -90.0f ? -90.0f : record->v > 90.0f ? 90.0f : record->v;
     mwinEvent event = {0};
     event.data.pen =
-        (mwinPenEvent){{record->x, record->y}, record->z, record->w, record->v, flags, 0};
+        (mwinPenEvent){{record->x, record->y}, mwinWebUnit(record->z), tiltX, tiltY, flags, 0};
     if (((flags ^ window->penFlags) & mwin_penBarrel) != 0)
     {
         event.type =

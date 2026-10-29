@@ -96,12 +96,18 @@ static void Post(mwinWin32Window* window, const mwinEvent* event)
     mwinPost(window->platform->context, window->slot, event);
 }
 
+// When the input message being handled happened.
+static uint64_t TimeOf(mwinWin32Window* window)
+{
+    return mwinWin32InputTime(window->platform, mwinWin32MessageTime());
+}
+
 static void PostKey(mwinWin32Window* window, mwinEventType type, uint32_t scan, bool repeat)
 {
     mwinKeyCode code = s_codes[scan];
     mwinEvent event = {0};
     event.type = type;
-    event.timeNs = mwinWin32Now();
+    event.timeNs = TimeOf(window);
     event.data.key = (mwinKeyEvent){code, Modifiers(), MeaningOf(scan, code), repeat};
     Post(window, &event);
 }
@@ -152,7 +158,7 @@ static void OnCharacter(mwinWin32Window* window, WPARAM unit)
     }
     mwinEvent event = {0};
     event.type = mwin_eventTextInput;
-    event.timeNs = mwinWin32Now();
+    event.timeNs = TimeOf(window);
     event.data.text = (mwinTextEvent){text, (uint32_t)length};
     Post(window, &event);
 }
@@ -169,7 +175,7 @@ static void PostPointer(mwinWin32Window* window, mwinEventType type, mwinPositio
 {
     mwinEvent event = {0};
     event.type = type;
-    event.timeNs = mwinWin32Now();
+    event.timeNs = TimeOf(window);
     event.data.pointer =
         (mwinPointerEvent){position, Modifiers(), window->buttons, button, window->clicks.clicks};
     Post(window, &event);
@@ -265,7 +271,7 @@ static void OnButton(mwinWin32Window* window, UINT message, WPARAM wParam, LPARA
         }
         window->buttons |= bit;
         float scale = mwinWin32Scale(window->dpi);
-        (void)mwinCountClickWithin(&window->clicks, button, position, mwinWin32Now(),
+        (void)mwinCountClickWithin(&window->clicks, button, position, TimeOf(window),
                                    (uint64_t)GetDoubleClickTime() * 1000000u,
                                    (float)GetSystemMetrics(SM_CXDOUBLECLK) / 2.0f / scale);
     }
@@ -302,7 +308,7 @@ static void OnWheel(mwinWin32Window* window, UINT message, WPARAM wParam)
     float detents = (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA;
     mwinEvent event = {0};
     event.type = mwin_eventWheel;
-    event.timeNs = mwinWin32Now();
+    event.timeNs = TimeOf(window);
     // Windows counts away from the user and to the right as positive.
     event.data.wheel = message == WM_MOUSEWHEEL ? (mwinWheelEvent){0.0f, detents}
                                                 : (mwinWheelEvent){detents, 0.0f};
@@ -330,7 +336,7 @@ static void OnRawInput(mwinWin32Window* window, LPARAM handle)
     }
     mwinEvent event = {0};
     event.type = mwin_eventRawPointerDelta;
-    event.timeNs = mwinWin32Now();
+    event.timeNs = TimeOf(window);
     event.data.delta =
         (mwinDeltaEvent){(float)input.data.mouse.lLastX, (float)input.data.mouse.lLastY};
     Post(window, &event);

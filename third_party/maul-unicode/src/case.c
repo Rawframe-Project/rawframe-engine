@@ -375,6 +375,6 @@ muniTextResult muniConvertCase(const char* text, size_t length, muniCaseOperatio
     {
         return (muniTextResult){status, stop};
     }
-    return (muniTextResult){converter.writer.needed > capacity ? muni_errorCapacity : muni_success,
+    return (muniTextResult){!muniWriterFits(&converter.writer) ? muni_errorCapacity : muni_success,
                             length};
 }

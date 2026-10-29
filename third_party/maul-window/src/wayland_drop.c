@@ -60,6 +60,12 @@ void mwinWaylandDragEnter(mwinWaylandPlatform* platform, uint32_t serial,
                           struct wl_data_offer* offer, bool files, const char* textType)
 {
     mwinWaylandDrag* drag = &platform->drag;
+    // A compositor sends a leave before another enter; a drag still
+    // reported leaves first all the same.
+    if (drag->slot >= 0 && drag->contents != 0)
+    {
+        Post(platform, mwin_eventDragLeft);
+    }
     DestroyOffer(&platform->api, drag->offer);
     drag->offer = offer;
     drag->serial = serial;
@@ -206,6 +212,32 @@ void mwinWaylandPumpDrag(mwinWaylandPlatform* platform, uint64_t nowNs)
     if ((files >= 0 && text >= 0) || nowNs >= drag->deadlineNs)
     {
         Deliver(platform, files, text);
+    }
+}
+
+void mwinWaylandForgetDrag(mwinWaylandPlatform* platform, uint32_t slot)
+{
+    mwinWaylandDrag* drag = &platform->drag;
+    if (drag->slot == (int32_t)slot)
+    {
+        // The offer stays until the compositor's leave or drop, which
+        // then report nothing.
+        if (drag->offer != nullptr && drag->contents != 0)
+        {
+            Accept(platform, nullptr);
+        }
+        drag->slot = -1;
+        drag->contents = 0;
+    }
+    if (drag->dropSlot == (int32_t)slot)
+    {
+        // Let go without finishing, which the source hears as cancelled.
+        DestroyOffer(&platform->api, drag->dropped);
+        drag->dropped = nullptr;
+        drag->dropSlot = -1;
+        drag->lost = false;
+        mwinWaylandClosePipe(&drag->files, platform->context);
+        mwinWaylandClosePipe(&drag->text, platform->context);
     }
 }
 

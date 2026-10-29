@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A Linux gamepad's motion sensors (mwin-0028): the second evdev device
+// A Linux gamepad's motion sensors: the second evdev device
 // its driver makes (hid-playstation's "Motion Sensors", hid-nintendo's
 // "IMU"), marked INPUT_PROP_ACCELEROMETER, with acceleration on ABS_X,
 // ABS_Y and ABS_Z in units per g and rotation on ABS_RX, ABS_RY and

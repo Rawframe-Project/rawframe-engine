@@ -242,10 +242,12 @@ static muniResult NextFromUtf8(const uint8_t* text, size_t length, size_t offset
     return status != muni_success && mode == muni_convertReplace ? muni_success : status;
 }
 
+// SIZE_MAX as needed stands for a count that does not fit in size_t.
 static muniTextResult Finish(size_t needed, size_t capacity, size_t length, size_t* neededOut)
 {
     *neededOut = needed;
-    return (muniTextResult){needed > capacity ? muni_errorCapacity : muni_success, length};
+    bool fits = needed <= capacity && needed != SIZE_MAX;
+    return (muniTextResult){fits ? muni_success : muni_errorCapacity, length};
 }
 
 static bool BadArguments(const void* input, size_t length, const void* output, size_t capacity,
@@ -326,11 +328,19 @@ muniTextResult muniConvertUtf16ToUtf8(const uint16_t* units, size_t length, muni
         }
         uint8_t encoded[4];
         size_t encodedSize = EncodeUtf8Unchecked(codePoint, encoded);
-        if (needed + encodedSize <= capacity)
+        if (needed > SIZE_MAX - 1 - encodedSize)
         {
-            memcpy(bytes + needed, encoded, encodedSize);
+            // Three bytes for each unit can pass SIZE_MAX on 32-bit targets.
+            needed = SIZE_MAX;
         }
-        needed += encodedSize;
+        else
+        {
+            if (needed + encodedSize <= capacity)
+            {
+                memcpy(bytes + needed, encoded, encodedSize);
+            }
+            needed += encodedSize;
+        }
         offset += size;
     }
     return Finish(needed, capacity, length, neededOut);

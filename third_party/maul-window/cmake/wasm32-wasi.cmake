@@ -1,4 +1,4 @@
-# The web without Emscripten (mwin-0022): Clang's wasm32-wasi and
+# The web without Emscripten: Clang's wasm32-wasi and
 # wasi-libc, as a program built with a plain WebAssembly toolchain has.
 #
 #   cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/wasm32-wasi.cmake [-DCMAKE_C_COMPILER=clang-20]

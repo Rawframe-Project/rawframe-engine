@@ -131,8 +131,9 @@ static muniDecision Decide(const muniSegmenter* segmenter, uint8_t value, uint32
                                                                     : muni_decideJoin;
 }
 
-static uint8_t Lookup(uint32_t codePoint)
+static uint8_t Lookup(const muniSegmenter* segmenter, uint32_t codePoint)
 {
+    (void)segmenter;
     return muniLookupGraphemeClusterBreak(codePoint);
 }
 

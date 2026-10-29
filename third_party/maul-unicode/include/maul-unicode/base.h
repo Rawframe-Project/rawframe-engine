@@ -17,15 +17,32 @@ extern "C"
 {
 #endif
 
-// The library version. CMake reads it from here.
+// The library version. CMake reads it from here, and release-please
+// moves it between the markers.
+// x-release-please-start-major
 #define MUNI_VERSION_MAJOR 0
-#define MUNI_VERSION_MINOR 3
+// x-release-please-end
+// x-release-please-start-minor
+#define MUNI_VERSION_MINOR 5
+// x-release-please-end
+// x-release-please-start-patch
 #define MUNI_VERSION_PATCH 0
+// x-release-please-end
 
 // The one Unicode version every table in the library comes from.
 #define MUNI_UNICODE_VERSION_MAJOR 18
 #define MUNI_UNICODE_VERSION_MINOR 0
 #define MUNI_UNICODE_VERSION_PATCH 0
+
+// The results version: it moves up with every change to what
+// muniNormalize, muniToNfkcCasefold, muniConvertCase or muniGetSkeleton
+// give for some text, or to the verdict of muniCheckIdentifier,
+// muniGetRestrictionLevel, muniCheckMixedNumbers or
+// muniGetResolvedScripts, a new Unicode version included, and with
+// nothing else. Store it beside normalized keys, skeletons and stored
+// verdicts, and recompute them when muniGetResultsVersion differs from
+// the stored value.
+#define MUNI_RESULTS_VERSION 1
 
 // MUNI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_unicode_EXPORTS is defined while building
@@ -70,37 +87,53 @@ extern "C"
         // An iterator needs the next piece of its text before it can
         // answer.
         muni_needMoreText = 2,
-        // An argument is invalid: a null pointer where one is required, a
-        // value out of range.
+        // The errors the Maul family shares, at the family's values.
+
+        // An argument a correct program never passes: a null pointer where
+        // one is required, an iterator of the wrong kind, a value outside
+        // the documented range of its parameter.
         muni_errorInvalid = -1,
-        // A caller buffer or a named limit is too small for the result.
+        // A caller buffer or workspace is too small for the result. More
+        // room would succeed.
         muni_errorCapacity = -2,
+        // The call is not allowed in the iterator's current state, which
+        // only another call changes: a setting after the iterator was
+        // asked for a result, or a piece of text it did not ask for.
+        muni_errorState = -6,
+        // The text goes past a fixed bound of the library, published as a
+        // named constant: MUNI_MAX_NORMALIZATION_SEGMENT. More room would
+        // not help.
+        muni_errorLimit = -9,
+        // The iterator is inside a call that is running the caller's
+        // code, such as a word segmenter, and that code called it again.
+        // The same call succeeds once the outer call returns.
+        muni_errorBusy = -10,
+
+        // The errors of Maul Unicode alone, from -32 down.
+
         // UTF-8: a byte that cannot start a sequence (a continuation byte,
         // or 0xF8 to 0xFF).
-        muni_errorUtf8Lead = -3,
+        muni_errorUtf8Lead = -32,
         // UTF-8: a lead byte not followed by the continuation bytes it
         // needs.
-        muni_errorUtf8Continuation = -4,
+        muni_errorUtf8Continuation = -33,
         // UTF-8: a sequence cut short by the end of the input. When text
         // arrives in pieces, the next piece may complete it.
-        muni_errorUtf8Truncated = -5,
+        muni_errorUtf8Truncated = -34,
         // UTF-8: an overlong form, a code point encoded in more bytes
         // than it needs.
-        muni_errorUtf8Overlong = -6,
+        muni_errorUtf8Overlong = -35,
         // UTF-8: an encoded surrogate, U+D800 to U+DFFF.
-        muni_errorUtf8Surrogate = -7,
+        muni_errorUtf8Surrogate = -36,
         // UTF-8: a value past U+10FFFF.
-        muni_errorUtf8TooLarge = -8,
+        muni_errorUtf8TooLarge = -37,
         // UTF-16: a surrogate that is not half of a pair.
-        muni_errorUtf16Surrogate = -9,
-        // The input goes past a documented limit of the algorithm, such as
-        // the number of combining marks normalization reorders at once.
-        muni_errorLimit = -10,
-        // The text is not an identifier (UAX #31).
-        muni_errorIdentifier = -11,
+        muni_errorUtf16Surrogate = -38,
         // UTF-32: a value that is no Unicode scalar value, a surrogate or
         // one past U+10FFFF.
-        muni_errorUtf32Value = -12,
+        muni_errorUtf32Value = -39,
+        // The text is not an identifier (UAX #31).
+        muni_errorIdentifier = -40,
     };
 
     // A library or Unicode version: major, minor and patch.
@@ -125,6 +158,20 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_API muniVersion muniGetUnicodeVersion(void);
+
+    /// Returns the results version of the library that was linked: it
+    /// moves up with every change to what muniNormalize,
+    /// muniToNfkcCasefold, muniConvertCase or muniGetSkeleton give for
+    /// some text, or to the verdict of muniCheckIdentifier,
+    /// muniGetRestrictionLevel, muniCheckMixedNumbers or
+    /// muniGetResolvedScripts, in any release, and stays the same
+    /// otherwise. A program that stores their results stores it beside
+    /// them and recomputes them when it changes.
+    ///
+    /// @return The results version, MUNI_RESULTS_VERSION of the library.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUNI_API uint32_t muniGetResultsVersion(void);
 
     /// Returns the name of a result code, for diagnostics.
     ///

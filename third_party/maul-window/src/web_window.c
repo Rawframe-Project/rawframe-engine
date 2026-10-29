@@ -233,8 +233,10 @@ void mwinWebHandleWindowRecord(mwinWebPlatform* platform, const mwinWebRecord* r
     switch (record->kind)
     {
     case mwin_webResized:
-        Resize(platform, slot, (mwinSize){record->x, record->y},
-               (mwinPixelSize){(uint32_t)record->z, (uint32_t)record->w}, timeNs);
+        // A size not below none, its pixels as counts.
+        Resize(platform, slot,
+               (mwinSize){record->x > 0.0f ? record->x : 0.0f, record->y > 0.0f ? record->y : 0.0f},
+               (mwinPixelSize){mwinWebCount(record->z), mwinWebCount(record->w)}, timeNs);
         break;
     case mwin_webFocus:
         PostType(platform, slot, record->code != 0 ? mwin_eventFocusGained : mwin_eventFocusLost,

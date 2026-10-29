@@ -9,6 +9,7 @@
 #include "x11_chrome.h"
 #include "x11_clipboard.h"
 #include "x11_cursor.h"
+#include "x11_drop.h"
 #include "x11_icon.h"
 #include "x11_input.h"
 #include "x11_output.h"
@@ -290,7 +291,7 @@ void mwinX11CreateWindow(mwinContext* context, uint32_t slot)
                                     XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE |
                                     XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE |
                                     XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_ENTER_WINDOW |
-                                    XCB_EVENT_MASK_LEAVE_WINDOW};
+                                    XCB_EVENT_MASK_LEAVE_WINDOW | XCB_EVENT_MASK_VISIBILITY_CHANGE};
     xcb_generic_error_t* error = api->requestCheck(
         platform->connection,
         api->createWindowChecked(platform->connection, XCB_COPY_FROM_PARENT, window->window,
@@ -325,6 +326,7 @@ void mwinX11DestroyWindow(mwinContext* context, uint32_t slot)
     mwinX11Window* window = &platform->windows[slot];
     mwinX11CursorFocus(platform, slot, false);
     mwinX11ForgetPointer(platform, slot);
+    mwinX11ForgetDrag(platform, slot);
     if (window->window != 0)
     {
         platform->api.destroyWindow(platform->connection, window->window);
@@ -503,7 +505,7 @@ static int CarryOut(mwinX11Platform* platform, mwinX11Window* window, mwinWindow
         return mwinX11SetCursorImage(platform, window->slot, request->value.cursor);
     case mwin_requestTextInput:
         // Keys type text whether asked or not; an input method takes
-        // them while it is asked (mwin-0030).
+        // them while it is asked.
         window->textInput = request->value.textInput.enabled;
         window->caret = request->value.textInput.caret;
         mwinX11FollowIme(platform);
@@ -756,6 +758,26 @@ static void OnMap(mwinX11Platform* platform, uint32_t slot, bool shown)
     }
 }
 
+// Reports the window covered by others or seen again, as the X server
+// computes it: wholly covered is occluded, any part in sight revealed. A
+// compositing window manager draws windows off screen, and the X server
+// then reports none of them covered.
+static void OnVisibility(mwinX11Platform* platform, const xcb_visibility_notify_event_t* event)
+{
+    int32_t slot = mwinX11SlotOf(platform, event->window);
+    if (slot < 0)
+    {
+        return;
+    }
+    mwinX11Window* window = &platform->windows[slot];
+    bool obscured = event->state == XCB_VISIBILITY_FULLY_OBSCURED;
+    if (obscured != window->obscured)
+    {
+        window->obscured = obscured;
+        PostType(platform, (uint32_t)slot, obscured ? mwin_eventOccluded : mwin_eventRevealed);
+    }
+}
+
 bool mwinX11HandleWindowEvent(mwinX11Platform* platform, const xcb_generic_event_t* event)
 {
     switch (event->response_type & 0x7F)
@@ -774,6 +796,9 @@ bool mwinX11HandleWindowEvent(mwinX11Platform* platform, const xcb_generic_event
         }
         return true;
     }
+    case XCB_VISIBILITY_NOTIFY:
+        OnVisibility(platform, (const xcb_visibility_notify_event_t*)event);
+        return true;
     case XCB_FOCUS_IN:
     case XCB_FOCUS_OUT:
         OnFocus(platform, (const xcb_focus_in_event_t*)event,

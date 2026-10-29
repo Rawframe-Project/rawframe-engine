@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The desktop's look and motion on Linux, from the Settings portal
-// (mwin-0018): asked for at the start without waiting, taken
+// The desktop's look and motion on Linux, from the Settings portal:
+// asked for at the start without waiting, taken
 // at a later pump, and followed through SettingChanged.
 //
 // - The theme is org.freedesktop.appearance's color-scheme, unknown

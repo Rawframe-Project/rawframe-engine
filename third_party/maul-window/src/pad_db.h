@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Gamepad mappings, compiled from SDL_GameControllerDB (mwin-0009) into
+// Gamepad mappings, compiled from SDL_GameControllerDB into
 // src/generated/ by tools/gen_gamepad_db.py: for each device by bus,
 // vendor, product and version, where each control of the standard
 // location model comes from among the device's numbered buttons, axes

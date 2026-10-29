@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The chords each platform keeps (mwin-0031), as tables of rules: a key,
+// The chords each platform keeps, as tables of rules: a key,
 // or a run of keys, or any key but the modifier keys, with the
 // modifiers it needs and those it allows besides; the first rule that
 // matches answers, and a chord no rule matches is delivered. The tables

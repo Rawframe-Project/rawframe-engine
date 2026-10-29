@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Bit counting on 64-bit words, through the compiler builtins GCC and
-// Clang (clang-cl included) provide (family 0008 uses only what the
-// compiler provides, which rules out <stdbit.h> from the C library), and
-// the rank indexes built on it.
+// Bit counting on 64-bit words, and the rank indexes built on it, through
+// the compiler builtins GCC and Clang (clang-cl included) provide:
+// <stdbit.h> comes from the C library and is missing on some targets.
 
 #ifndef MAUL_UNICODE_SRC_BITS_H
 #define MAUL_UNICODE_SRC_BITS_H
+
+#include "invariant.h"
 
 #include <stdint.h>
 
@@ -19,6 +20,7 @@ static inline unsigned muniCountOnes(uint64_t bits)
 // The index of the lowest set bit; bits must not be 0.
 static inline unsigned muniLowestBit(uint64_t bits)
 {
+    MUNI_ASSERT(bits != 0);
     return (unsigned)__builtin_ctzll(bits);
 }
 

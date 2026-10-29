@@ -154,7 +154,7 @@ static void OnKey(mwinX11Platform* platform, const xcb_key_press_event_t* event,
                                      mwinXkbKeyOf(&keyboard->xkb, evdev, code), repeat};
     char text[MWIN_XKB_TEXT_BYTES];
     uint32_t length = pressed ? mwinXkbType(&keyboard->xkb, evdev, !repeat, text) : 0;
-    // An input method may take the key: it answers later (mwin-0030).
+    // An input method may take the key: it answers later.
     uint32_t keysym = platform->xkbApi.stateKeyGetOneSym(keyboard->xkb.state, event->detail);
     if (mwinImeOffer(&platform->ime, (uint32_t)slot, keysym, event->detail, event->state, &record,
                      text, length, mwinMonotonicNow()))
@@ -534,7 +534,7 @@ static mwinPosition PlaceOf(const mwinX11Platform* platform, xcb_input_fp1616_t 
                           (float)y / 65536.0f / platform->scale};
 }
 
-// A pen's XI2 event as its pen record (mwin-0037), in place of a mouse
+// A pen's XI2 event as its pen record, in place of a mouse
 // record.
 static void PostPen(mwinX11Platform* platform, mwinX11Pen* pen, mwinX11PenInput input,
                     const xcb_input_button_press_event_t* event)
@@ -631,7 +631,7 @@ static void OnXiButton(mwinX11Platform* platform, const xcb_input_button_press_e
     platform->pointer.device = 0;
 }
 
-// A touch screen's touch event as its touch record (mwin-0039). It has
+// A touch screen's touch event as its touch record. It has
 // the layout of a button event, whose valuator readers it takes.
 static void OnXiTouch(mwinX11Platform* platform, const xcb_input_touch_begin_event_t* event,
                       mwinX11TouchInput input)

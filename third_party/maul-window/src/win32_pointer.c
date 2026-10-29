@@ -13,6 +13,15 @@ static void Post(mwinWin32Window* window, const mwinEvent* event)
     mwinPost(window->platform->context, window->slot, event);
 }
 
+// When a pointer's input happened: the performance counter's value
+// Windows took with it, or, where it gave none, the message's time.
+static uint64_t TimeOf(mwinWin32Window* window, const POINTER_INFO* info)
+{
+    return mwinWin32InputTime(window->platform, info->PerformanceCount != 0
+                                                    ? mwinWin32CounterNs(info->PerformanceCount)
+                                                    : mwinWin32MessageTime());
+}
+
 // A place on the screen in the window's logical units.
 static mwinPosition PositionOf(const mwinWin32Window* window, POINT point)
 {
@@ -36,11 +45,11 @@ static int TouchSlot(const mwinWin32Window* window, UINT32 id)
 }
 
 static void PostTouch(mwinWin32Window* window, mwinEventType type, UINT32 id, mwinPosition position,
-                      float pressure)
+                      float pressure, uint64_t timeNs)
 {
     mwinEvent event = {0};
     event.type = type;
-    event.timeNs = mwinWin32Now();
+    event.timeNs = timeNs;
     event.data.touch = (mwinTouchEvent){id, position, pressure};
     Post(window, &event);
 }
@@ -73,7 +82,8 @@ static void OnTouch(mwinWin32Window* window, UINT message, UINT32 id)
     }
     float pressure =
         (info.touchMask & TOUCH_MASK_PRESSURE) != 0 ? (float)info.pressure / PRESSURE_RANGE : -1.0f;
-    PostTouch(window, type, id, PositionOf(window, info.pointerInfo.ptPixelLocation), pressure);
+    PostTouch(window, type, id, PositionOf(window, info.pointerInfo.ptPixelLocation), pressure,
+              TimeOf(window, &info.pointerInfo));
 }
 
 static mwinPenFlags PenFlagsOf(const POINTER_PEN_INFO* info)
@@ -85,11 +95,12 @@ static mwinPenFlags PenFlagsOf(const POINTER_PEN_INFO* info)
     return flags;
 }
 
-static void PostPen(mwinWin32Window* window, mwinEventType type, const mwinPenEvent* pen)
+static void PostPen(mwinWin32Window* window, mwinEventType type, const mwinPenEvent* pen,
+                    uint64_t timeNs)
 {
     mwinEvent event = {0};
     event.type = type;
-    event.timeNs = mwinWin32Now();
+    event.timeNs = timeNs;
     event.data.pen = *pen;
     Post(window, &event);
 }
@@ -102,6 +113,7 @@ static void OnPen(mwinWin32Window* window, UINT message, UINT32 id)
     {
         return;
     }
+    uint64_t timeNs = TimeOf(window, &info.pointerInfo);
     mwinPenFlags flags = PenFlagsOf(&info);
     bool contact = (flags & mwin_penContact) != 0;
     mwinPenEvent pen = {0};
@@ -117,14 +129,14 @@ static void OnPen(mwinWin32Window* window, UINT message, UINT32 id)
         pen.button = 1;
         PostPen(window,
                 (flags & mwin_penBarrel) != 0 ? mwin_eventPenButtonDown : mwin_eventPenButtonUp,
-                &pen);
+                &pen, timeNs);
         pen.button = 0;
     }
     window->penFlags = flags;
     mwinEventType type = message == WM_POINTERDOWN ? mwin_eventPenDown
                          : message == WM_POINTERUP ? mwin_eventPenUp
                                                    : mwin_eventPenMoved;
-    PostPen(window, type, &pen);
+    PostPen(window, type, &pen, timeNs);
 }
 
 bool mwinWin32HandlePointer(mwinWin32Window* window, UINT message, WPARAM wParam)
@@ -147,7 +159,10 @@ bool mwinWin32HandlePointer(mwinWin32Window* window, UINT message, WPARAM wParam
         if (slot >= 0)
         {
             window->touches[slot] = 0;
-            PostTouch(window, mwin_eventTouchCancelled, id, (mwinPosition){0.0f, 0.0f}, -1.0f);
+            // A message Windows may send rather than post: the time it
+            // is handled.
+            PostTouch(window, mwin_eventTouchCancelled, id, (mwinPosition){0.0f, 0.0f}, -1.0f,
+                      mwinWin32InputTime(window->platform, mwinWin32Now()));
         }
         return true;
     }

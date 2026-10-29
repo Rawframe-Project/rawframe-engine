@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The X11 clipboard and primary selection (mwin-0029): CLIPBOARD and
+// The X11 clipboard and primary selection: CLIPBOARD and
 // PRIMARY, owned and received by a hidden window of the backend's,
 // owned at the time of the last input event. As an owner the backend
 // answers other clients' requests for TARGETS, TIMESTAMP, UTF8_STRING

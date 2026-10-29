@@ -531,7 +531,7 @@ extern "C"
                                                        uint32_t* countOut, uint64_t* checksumOut);
 
     /// Reads the cursor made from images a window shows, with the image it
-    /// took for the test backend's scale (mwin-0027).
+    /// took for the test backend's scale.
     ///
     /// @param context    A context of the test backend.
     /// @param window     The window.
@@ -549,8 +549,8 @@ extern "C"
                                                          uint32_t* imageOut);
 
     /// Reads what a window last had carried out of its on-screen keyboard
-    /// requests: whether the keyboard shows, and the purpose asked for
-    /// (mwin-0038). Hidden with mwin_purposeText before any.
+    /// requests: whether the keyboard shows, and the purpose asked for.
+    /// Hidden with mwin_purposeText before any.
     ///
     /// @param context     A context of the test backend.
     /// @param window      The window.
@@ -568,7 +568,7 @@ extern "C"
 
     /// Reads what a window last had carried out of its text input
     /// requests: whether it accepts text, and the caret it gave, which a
-    /// platform places candidate windows by (mwin-0038). Not accepting,
+    /// platform places candidate windows by. Not accepting,
     /// with an empty caret, before any.
     ///
     /// @param context     A context of the test backend.

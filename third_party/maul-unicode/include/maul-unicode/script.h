@@ -27,7 +27,7 @@ extern "C"
     // data the caller keeps anywhere and needs no cleanup.
     typedef struct muniScriptIterator
     {
-        uint64_t opaque[28];
+        uint64_t opaque[26];
     } muniScriptIterator;
 
     // A script run: it ends at byte offset end, where the next one starts.
@@ -59,9 +59,10 @@ extern "C"
     /// @param text         The next piece. May be NULL when length is 0.
     /// @param length       The number of bytes.
     /// @param moreFollows  true when still more pieces will be fed.
-    /// @return `muni_success`, or `muni_errorInvalid` for a NULL argument,
-    ///         an iterator that did not ask for more text, or one
-    ///         initialized without more text to follow.
+    /// @return `muni_success`; `muni_errorState` for an iterator that did
+    ///         not ask for more text, such as one initialized without more
+    ///         text to follow; `muni_errorInvalid` for a NULL argument.
+    ///         `muni_errorInvalid` is reported before `muni_errorState`.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_NODISCARD MUNI_API muniResult muniFeedScriptIterator(muniScriptIterator* iterator,
@@ -74,7 +75,8 @@ extern "C"
     /// @param runOut    Receives the run: where it ends, as a byte offset
     ///                  from the start of the whole text, and its script.
     ///                  A text of Common and Inherited characters only is
-    ///                  one run of Common.
+    ///                  one run of Common. Left as it was unless the call
+    ///                  returns `muni_success`.
     /// @return `muni_success` with a run; `muni_done` after the last one;
     ///         `muni_needMoreText` when the run's end or script depends on
     ///         text not yet fed; `muni_errorInvalid` for a NULL argument.

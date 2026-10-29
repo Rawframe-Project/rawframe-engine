@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The power facts on Linux (mwin-0018): low power from the
+// The power facts on Linux: low power from the
 // desktop portal's PowerProfileMonitor (power-saver-enabled) on the
 // session bus, on battery from UPower's OnBattery on the system bus.
 // Each is asked for at the start without waiting, taken at a later
 // pump, and followed through PropertiesChanged; unknown where nothing
-// answers.
+// answers. The services own both buses (linux_services.h).
 
 #ifndef MAUL_WINDOW_SRC_LINUX_POWER_H
 #define MAUL_WINDOW_SRC_LINUX_POWER_H
@@ -18,7 +18,7 @@ typedef struct mwinLinuxPower
 {
     mwinContext* context;
     mwinLinuxBus* session;
-    mwinLinuxBus system;
+    mwinLinuxBus* system;
     mwinBusCall saverCall;
     mwinBusCall batteryCall;
     bool sessionListening;
@@ -30,14 +30,12 @@ typedef struct mwinLinuxPower
 
 // Asks for both facts and listens for their changes.
 void mwinPowerStart(mwinLinuxPower* power, mwinContext* context, mwinLinuxBus* session,
-                    uint64_t nowNs);
+                    mwinLinuxBus* system, uint64_t nowNs);
 
-// Reads the system bus and takes the answers that came; after the
-// session bus's pump.
+// Takes the answers that came; after both buses' pumps.
 void mwinPowerPump(mwinLinuxPower* power, uint64_t nowNs);
 
-// Stops listening and closes the system bus, before the session bus
-// closes.
+// Stops listening, before the buses close.
 void mwinPowerStop(mwinLinuxPower* power);
 
 #endif // MAUL_WINDOW_SRC_LINUX_POWER_H

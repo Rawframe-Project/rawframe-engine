@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The web clipboard: navigator.clipboard's writeText and readText, and
-// for data by MIME type (mwin-0029) write and read with a ClipboardItem,
+// for data by MIME type write and read with a ClipboardItem,
 // a type other than text/plain, text/html and image/png a web custom
 // format ("web " before it), answered when their promises settle. The
 // browser may sanitize what it takes: image/png is decoded and encoded

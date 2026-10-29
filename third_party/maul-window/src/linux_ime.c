@@ -590,17 +590,23 @@ void mwinImeFocus(mwinLinuxIme* ime, int32_t slot, mwinRect caret)
     }
 }
 
-// Posts a held key as the backend made it, when its window lives.
+// Posts a held key as the backend made it, when its window lives: a
+// window made in its slot since gets none of it.
 static void Deliver(mwinLinuxIme* ime, const mwinImeKey* held)
 {
-    mwinPost(ime->context, held->slot, &held->key);
+    if (mwinFindWindow(ime->context, held->window) == nullptr)
+    {
+        return;
+    }
+    uint32_t slot = held->window.index1 - 1;
+    mwinPost(ime->context, slot, &held->key);
     if (held->length > 0)
     {
         mwinEvent typed = {0};
         typed.type = mwin_eventTextInput;
         typed.timeNs = held->key.timeNs;
         typed.data.text = (mwinTextEvent){held->text, held->length};
-        mwinPost(ime->context, held->slot, &typed);
+        mwinPost(ime->context, slot, &typed);
     }
 }
 
@@ -677,7 +683,10 @@ bool mwinImeOffer(mwinLinuxIme* ime, uint32_t slot, uint32_t keysym, uint32_t ke
         Release(ime, false);
     }
     mwinImeKey* held = &ime->held[(ime->first + ime->count) % MWIN_IME_HELD];
-    *held = (mwinImeKey){.slot = slot, .keycode = (uint8_t)keycode, .key = *key, .length = length};
+    *held = (mwinImeKey){.window = mwinWindowIdOf(ime->context, slot),
+                         .keycode = (uint8_t)keycode,
+                         .key = *key,
+                         .length = length};
     if (length > 0)
     {
         memcpy(held->text, text, length);

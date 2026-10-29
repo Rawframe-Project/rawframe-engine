@@ -63,14 +63,20 @@ EM_JS(void, mwinPageWatchDrops, (const mwinContext* context, uint32_t slot), {
     listen('drop', drop);
 });
 
+// The drops wait in a queue other scripts can reach: a dropped record
+// with no drop behind it, or a drop of other shapes, is a drop of
+// nothing, never a throw.
 EM_JS(uint32_t, mwinPageDropNameCount, (const mwinContext* context), {
-    return Module.mwinWeb.get(context).drops[0].names.length;
+    const drop = Module.mwinWeb.get(context).drops[0];
+    return drop && Array.isArray(drop.names) ? drop.names.length : 0;
 });
 
-// A file's name into out: its length, or -1 when it does not fit.
+// A file's name into out: its length, or -1 when it does not fit or is
+// no string.
 EM_JS(int, mwinPageDropName, (const mwinContext* context, uint32_t index, char* out, uint32_t capacity), {
-    const name = Module.mwinWeb.get(context).drops[0].names[index];
-    if (lengthBytesUTF8(name) >= capacity) {
+    const drop = Module.mwinWeb.get(context).drops[0];
+    const name = drop && Array.isArray(drop.names) ? drop.names[index] : undefined;
+    if (typeof name !== 'string' || lengthBytesUTF8(name) >= capacity) {
         return -1;
     }
     return stringToUTF8(name, out, capacity);
@@ -78,15 +84,19 @@ EM_JS(int, mwinPageDropName, (const mwinContext* context, uint32_t index, char* 
 
 // The text's bytes, or -1 for none.
 EM_JS(int, mwinPageDropTextLength, (const mwinContext* context), {
-    const bytes = Module.mwinWeb.get(context).drops[0].bytes;
-    return bytes === null ? -1 : bytes.length;
+    const drop = Module.mwinWeb.get(context).drops[0];
+    return drop && drop.bytes instanceof Uint8Array ? drop.bytes.length : -1;
 });
 
-// Takes the drop off the page, its text into out unless it is NULL.
-EM_JS(void, mwinPageTakeDrop, (const mwinContext* context, char* out), {
+// Takes the drop off the page, its text into out unless it is NULL:
+// exactly length bytes, the length the backend made room for, whatever
+// the bytes are by now.
+EM_JS(void, mwinPageTakeDrop, (const mwinContext* context, char* out, uint32_t length), {
     const drop = Module.mwinWeb.get(context).drops.shift();
-    if (out && drop.bytes) {
-        HEAPU8.set(drop.bytes, out);
+    if (out && length > 0) {
+        const bytes = drop && drop.bytes instanceof Uint8Array ? drop.bytes : new Uint8Array(0);
+        HEAPU8.fill(0, out, out + length);
+        HEAPU8.set(bytes.subarray(0, length), out);
     }
 });
 // clang-format on
@@ -117,7 +127,7 @@ static void Gather(mwinWebPlatform* platform)
     char* bytes = length > 0 && (uint32_t)length <= context->limits.dropBytes
                       ? mwinAllocate(&context->allocator, (size_t)length, 1)
                       : nullptr;
-    mwinPageTakeDrop(context, bytes);
+    mwinPageTakeDrop(context, bytes, bytes != nullptr ? (uint32_t)length : 0);
     if (length >= 0 && (length == 0 || bytes != nullptr))
     {
         mwinSetDroppedText(context, bytes, (size_t)length);
@@ -136,7 +146,7 @@ void mwinWebHandleDropRecord(mwinWebPlatform* platform, const mwinWebRecord* rec
 {
     mwinContext* context = platform->context;
     uint32_t slot = (uint32_t)record->slot;
-    bool live = context->windows[slot].status == mwin_slotLive;
+    bool live = record->slot >= 0;
     uint64_t timeNs = mwinWebNanoseconds(record->timeMs);
     mwinPosition position = {record->x, record->y};
     if (record->kind == mwin_webDropped)
@@ -150,10 +160,12 @@ void mwinWebHandleDropRecord(mwinWebPlatform* platform, const mwinWebRecord* rec
     }
     static const mwinEventType types[] = {mwin_eventDragEntered, mwin_eventDragMoved,
                                           mwin_eventDragLeft};
-    if (live)
+    if (live && record->code >= 0 && record->code <= 2)
     {
         mwinEvent event = {.type = types[record->code], .timeNs = timeNs};
-        event.data.drag = (mwinDragEvent){position, (mwinDragContents)record->z};
+        mwinDragContents contents =
+            (mwinDragContents)(mwinWebCount(record->z) & (mwin_dragFiles | mwin_dragText));
+        event.data.drag = (mwinDragEvent){position, contents};
         mwinPost(context, slot, &event);
     }
 }

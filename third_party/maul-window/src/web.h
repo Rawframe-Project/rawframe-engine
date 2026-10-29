@@ -13,6 +13,8 @@
 #include "core.h"
 #include "web_pad.h"
 
+#include <math.h>
+
 // A canvas's selector as the native handles give it: "#" and its id.
 #define MWIN_WEB_SELECTOR_BYTES 128
 
@@ -164,10 +166,51 @@ typedef struct mwinWebRecord
     double timeMs;
 } mwinWebRecord;
 
-// Milliseconds on performance.now() in nanoseconds.
+// Carries out a record the page reported. Every field is the page's,
+// which other scripts share, so each is checked before it is used: its
+// slot names a live window, its numbers are finite (others count as 0),
+// and the handlers check the rest.
+void mwinWebHandleRecord(mwinWebPlatform* platform, const mwinWebRecord* reported);
+
+// Milliseconds on performance.now() in nanoseconds: 0 for a time that
+// is no number or not after the page's start, the most there is past it.
 static inline uint64_t mwinWebNanoseconds(double milliseconds)
 {
-    return milliseconds > 0.0 ? (uint64_t)(milliseconds * 1000000.0) : 0;
+    // Just under 2^64 nanoseconds.
+    return !(milliseconds > 0.0)             ? 0
+           : milliseconds < 18446744073709.0 ? (uint64_t)(milliseconds * 1000000.0)
+                                             : UINT64_MAX;
+}
+
+// A count of the page's as a float (a canvas's pixels): 0 for none, the
+// most a uint32_t holds past it. The float below 2^32 nearest it is
+// 2^32 - 256.
+static inline uint32_t mwinWebCount(float value)
+{
+    return !(value > 0.0f) ? 0 : value < 4294967040.0f ? (uint32_t)value : UINT32_MAX;
+}
+
+// Whether a float of the page's is a whole number from 1 to most.
+static inline bool mwinWebWhole(float value, uint32_t most)
+{
+    return value >= 1.0f && value <= (float)most && value == floorf(value);
+}
+
+// The modifier bits there are; a record's others are the page's junk.
+#define MWIN_WEB_MODIFIERS                                                                         \
+    (mwin_modShift | mwin_modControl | mwin_modAlt | mwin_modMeta | mwin_modCapsLock |             \
+     mwin_modNumLock)
+
+// A scale of the page's: above 0 and finite, else 1.
+static inline float mwinWebScaleOf(float value)
+{
+    return isfinite(value) && value > 0.0f ? value : 1.0f;
+}
+
+// A float of the page's from 0 to 1.
+static inline float mwinWebUnit(float value)
+{
+    return value > 0.0f ? (value < 1.0f ? value : 1.0f) : 0.0f;
 }
 
 #endif // MAUL_WINDOW_SRC_WEB_H

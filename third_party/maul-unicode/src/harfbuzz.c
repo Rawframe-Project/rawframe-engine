@@ -101,7 +101,8 @@ static hb_bool_t Decompose(hb_unicode_funcs_t* functions, hb_codepoint_t codePoi
     (void)context;
     uint32_t first;
     uint32_t second;
-    if (!muniDecomposePair(codePoint, &first, &second))
+    size_t count;
+    if (muniDecomposePair(codePoint, &first, &second, &count) != muni_success || count == 0)
     {
         return false;
     }

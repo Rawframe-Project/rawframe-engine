@@ -16,6 +16,11 @@ muniVersion muniGetUnicodeVersion(void)
                          MUNI_UNICODE_VERSION_PATCH};
 }
 
+uint32_t muniGetResultsVersion(void)
+{
+    return MUNI_RESULTS_VERSION;
+}
+
 const char* muniResultName(muniResult result)
 {
     switch (result)
@@ -30,6 +35,8 @@ const char* muniResultName(muniResult result)
         return "muni_errorInvalid";
     case muni_errorCapacity:
         return "muni_errorCapacity";
+    case muni_errorState:
+        return "muni_errorState";
     case muni_errorUtf8Lead:
         return "muni_errorUtf8Lead";
     case muni_errorUtf8Continuation:
@@ -46,6 +53,8 @@ const char* muniResultName(muniResult result)
         return "muni_errorUtf16Surrogate";
     case muni_errorLimit:
         return "muni_errorLimit";
+    case muni_errorBusy:
+        return "muni_errorBusy";
     case muni_errorIdentifier:
         return "muni_errorIdentifier";
     case muni_errorUtf32Value:

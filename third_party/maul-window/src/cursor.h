@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Cursors made from images (mwin-0027): the context's slots, and the
+// Cursors made from images: the context's slots, and the
 // image a window takes for its scale.
 
 #ifndef MAUL_WINDOW_SRC_CURSOR_H

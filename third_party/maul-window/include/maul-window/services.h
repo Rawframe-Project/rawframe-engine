@@ -110,6 +110,11 @@ extern "C"
     typedef struct mwinMessageBoxDef
     {
         uint32_t cookie;
+        // MWIN_ABI_VERSION of the headers the program was built with: a
+        // message box needs no context, so its def is a root, like the
+        // application def. The cookie and this stay the first two fields
+        // in every version.
+        uint32_t version;
         // UTF-8 without NULs, not NUL-terminated.
         const char* title;
         size_t titleLength;
@@ -119,13 +124,31 @@ extern "C"
         mwinMessageButtons buttons;
     } mwinMessageBoxDef;
 
+// The cookie of a message box def, which its default sets and
+// mwinShowMessageBox checks.
+#define MWIN_MESSAGE_BOX_DEF_COOKIE 0x6D776D62u
+
     /// Returns the default message box def: no title or message, an
-    /// error with an OK button.
+    /// error with an OK button, and the ABI version of the headers the
+    /// program is built with. Built in the program, so that the version
+    /// is the program's.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
     /// Safe from any thread.
-    MWIN_API mwinMessageBoxDef mwinDefaultMessageBoxDef(void);
+    static inline mwinMessageBoxDef mwinDefaultMessageBoxDef(void)
+    {
+#ifdef __cplusplus
+        mwinMessageBoxDef def = {};
+#else
+    mwinMessageBoxDef def = {0};
+#endif
+        def.cookie = MWIN_MESSAGE_BOX_DEF_COOKIE;
+        def.version = MWIN_ABI_VERSION;
+        def.kind = mwin_messageError;
+        def.buttons = mwin_buttonsOk;
+        return def;
+    }
 
     /// Shows a message box and waits for the user. It needs no context,
     /// so a program can report an error that stops it from starting. On
@@ -138,7 +161,9 @@ extern "C"
     /// @param def          The message box.
     /// @param acceptedOut  Receives true for OK or Yes, false for Cancel,
     ///                     No or a closed box. May be NULL.
-    /// @return `mwin_success`; `mwin_errorUnsupported` where the platform
+    /// @return `mwin_success`; `mwin_errorVersion` for a def built from
+    ///         another release's headers, checked first;
+    ///         `mwin_errorUnsupported` where the platform
     ///         has no message box (Android, Linux without zenity,
     ///         kdialog, or an X server, the test backend alone);
     ///         `mwin_errorPlatform` when it failed;

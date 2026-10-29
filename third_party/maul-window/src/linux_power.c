@@ -52,12 +52,13 @@ static void Publish(mwinLinuxPower* power, uint64_t nowNs)
 }
 
 // PropertiesChanged(s interface, a{sv} changed, as invalidated): the
-// fact of the interface the signal names, where it changed.
+// fact of the interface the signal names, where it changed; an entry of
+// other types is passed over.
 static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, void* data)
 {
     mwinLinuxPower* power = data;
     const mwinDBusApi* api =
-        connection == power->system.connection ? &power->system.api : &power->session->api;
+        connection == power->system->connection ? &power->system->api : &power->session->api;
     mwinDBusIter arguments;
     mwinDBusIter changed;
     const char* interface = nullptr;
@@ -78,9 +79,11 @@ static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, 
     {
         mwinDBusIter entry;
         const char* name = nullptr;
-        api->recurse(&changed, &entry);
-        api->getBasic(&entry, (void*)&name);
-        (void)api->next(&entry);
+        if (!mwinBusEntry(api, &changed, &name, &entry) ||
+            api->argType(&entry) != mwin_dbusTypeVariant)
+        {
+            continue;
+        }
         int8_t* fact = monitor && strcmp(name, SAVER) == 0    ? &power->saver
                        : upower && strcmp(name, BATTERY) == 0 ? &power->battery
                                                               : nullptr;
@@ -135,17 +138,14 @@ static bool Ask(mwinLinuxPower* power, mwinLinuxBus* bus, const char* destinatio
 }
 
 void mwinPowerStart(mwinLinuxPower* power, mwinContext* context, mwinLinuxBus* session,
-                    uint64_t nowNs)
+                    mwinLinuxBus* system, uint64_t nowNs)
 {
-    *power = (mwinLinuxPower){.context = context,
-                              .session = session,
-                              .system = {.system = true},
-                              .saver = -1,
-                              .battery = -1};
+    *power = (mwinLinuxPower){
+        .context = context, .session = session, .system = system, .saver = -1, .battery = -1};
     power->sessionListening =
         Ask(power, session, PORTAL, PORTAL_PATH, MONITOR, SAVER, &power->saverCall, nowNs);
-    power->systemListening = Ask(power, &power->system, UPOWER, UPOWER_PATH, UPOWER, BATTERY,
-                                 &power->batteryCall, nowNs);
+    power->systemListening =
+        Ask(power, system, UPOWER, UPOWER_PATH, UPOWER, BATTERY, &power->batteryCall, nowNs);
 }
 
 // Get's answer, a variant with a boolean, once it came; an error's
@@ -171,12 +171,8 @@ static void Take(mwinLinuxPower* power, mwinLinuxBus* bus, mwinBusCall* call, in
 
 void mwinPowerPump(mwinLinuxPower* power, uint64_t nowNs)
 {
-    if (power->system.connection != nullptr)
-    {
-        mwinBusPump(&power->system, 0);
-    }
     Take(power, power->session, &power->saverCall, &power->saver, nowNs);
-    Take(power, &power->system, &power->batteryCall, &power->battery, nowNs);
+    Take(power, power->system, &power->batteryCall, &power->battery, nowNs);
 }
 
 void mwinPowerStop(mwinLinuxPower* power)
@@ -186,16 +182,15 @@ void mwinPowerStop(mwinLinuxPower* power)
         return;
     }
     mwinBusDrop(power->session, &power->saverCall);
-    mwinBusDrop(&power->system, &power->batteryCall);
+    mwinBusDrop(power->system, &power->batteryCall);
     if (power->sessionListening)
     {
         power->session->api.removeFilter(power->session->connection, Filter, power);
     }
     if (power->systemListening)
     {
-        power->system.api.removeFilter(power->system.connection, Filter, power);
+        power->system->api.removeFilter(power->system->connection, Filter, power);
     }
     power->sessionListening = false;
     power->systemListening = false;
-    mwinBusClose(&power->system);
 }

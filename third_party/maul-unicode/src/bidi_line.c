@@ -14,6 +14,22 @@
 
 #include <string.h>
 
+// The highest level rules I1 and I2 leave, and so rule L1: the depth
+// limit 125 raised by one, or the even 124 raised by two.
+#define MAX_LINE_LEVEL (MUNI_BIDI_MAX_DEPTH + 1)
+
+static bool LevelsInRange(const uint8_t* levels, size_t count)
+{
+    for (size_t k = 0; k < count; k++)
+    {
+        if (levels[k] > MAX_LINE_LEVEL)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 // The runs being collected; count goes on past capacity.
 typedef struct Runs
 {
@@ -190,17 +206,27 @@ muniResult muniReorderBidiLine(const char* line, const uint8_t* levels, size_t l
                                size_t* countOut)
 {
     if (((line == nullptr || levels == nullptr) && length != 0) ||
-        (runs == nullptr && capacity != 0) || countOut == nullptr)
+        (runs == nullptr && capacity != 0) || countOut == nullptr || paragraphLevel > 1 ||
+        !LevelsInRange(levels, length))
     {
         return muni_errorInvalid;
+    }
+    // Every run holds at least one byte, so with a capacity of length
+    // they fit; with less, they are counted first, so that runs which do
+    // not fit leave the output as it was.
+    if (capacity < length)
+    {
+        Runs counted = {nullptr, 0, 0, 0, 0};
+        CollectRuns(&counted, (const uint8_t*)line, levels, length, paragraphLevel);
+        if (counted.count > capacity)
+        {
+            *countOut = counted.count;
+            return muni_errorCapacity;
+        }
     }
     Runs collected = {runs, capacity, 0, 0, 0};
     CollectRuns(&collected, (const uint8_t*)line, levels, length, paragraphLevel);
     *countOut = collected.count;
-    if (collected.count > capacity)
-    {
-        return muni_errorCapacity;
-    }
     OrderRuns(runs, collected.count);
     return muni_success;
 }
@@ -219,7 +245,8 @@ static void ReverseIndexes(size_t* map, size_t first, size_t end)
 
 muniResult muniReorderBidiLevels(const uint8_t* levels, size_t count, size_t* visualToLogicalOut)
 {
-    if ((levels == nullptr || visualToLogicalOut == nullptr) && count != 0)
+    if (((levels == nullptr || visualToLogicalOut == nullptr) && count != 0) ||
+        !LevelsInRange(levels, count))
     {
         return muni_errorInvalid;
     }
@@ -260,9 +287,15 @@ muniResult muniInvertBidiMap(const size_t* map, size_t count, size_t* inverseOut
     {
         return muni_errorInvalid;
     }
+    // No index reaches SIZE_MAX, so it marks a slot no entry has set yet,
+    // and an entry that finds its slot set repeats an earlier one.
     for (size_t k = 0; k < count; k++)
     {
-        if (map[k] >= count)
+        inverseOut[k] = SIZE_MAX;
+    }
+    for (size_t k = 0; k < count; k++)
+    {
+        if (map[k] >= count || inverseOut[map[k]] != SIZE_MAX)
         {
             return muni_errorInvalid;
         }

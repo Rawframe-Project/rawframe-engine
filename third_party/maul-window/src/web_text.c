@@ -93,9 +93,11 @@ EM_JS(void, mwinPageSetPurpose, (const mwinContext* context, uint32_t slot, int 
 });
 
 // Takes the string of the record being handled: its length, or -1 when
-// it does not fit.
+// it does not fit. Anything but a string, which another script may have
+// put there, is empty.
 EM_JS(int, mwinPageTakeString, (const mwinContext* context, char* out, uint32_t capacity), {
-    const text = Module.mwinWeb.get(context).strings.shift() || "";
+    const taken = Module.mwinWeb.get(context).strings.shift();
+    const text = typeof taken === 'string' ? taken : "";
     const length = lengthBytesUTF8(text);
     if (length >= capacity) {
         return -1;

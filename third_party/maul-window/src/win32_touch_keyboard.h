@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Win32's touch keyboard and input purpose (mwin-0033). The window's
+// Win32's touch keyboard and input purpose. The window's
 // input scope, set through msctf's SetInputScope, tells the touch
 // keyboard and the input method what the field takes; the keyboard is
 // shown and hidden through the window's InputPane (IInputPaneInterop,
