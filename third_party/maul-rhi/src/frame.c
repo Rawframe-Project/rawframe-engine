@@ -8,6 +8,7 @@
 
 #include "device_core.h"
 #include "invariant.h"
+#include "outputs.h"
 
 #include "generated/out_copies.h"
 
@@ -344,6 +345,7 @@ mrhiResult mrhiDevice_SubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut)
 
 mrhiResult mrhiDevice_GetFrameUsage(mrhiDevice* device, mrhiFrameUsage* usageOut)
 {
+    mrhiClearOutput(usageOut, sizeof(*usageOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -410,6 +412,7 @@ mrhiResult mrhiRequest_WaitFrame(mrhiDevice* device, mrhiRequestId token, uint64
 
 mrhiResult mrhiDevice_TakeNotification(mrhiDevice* device, mrhiDeviceNotification* notificationOut)
 {
+    mrhiClearOutput(notificationOut, sizeof(*notificationOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

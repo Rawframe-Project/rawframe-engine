@@ -266,8 +266,7 @@ extern "C"
     /// those past it are counted but not recorded.
     ///
     /// @param instance       The instance.
-    /// @param diagnosticOut  Receives the record; untouched unless one is
-    ///                       taken.
+    /// @param diagnosticOut  Receives the record; zeros unless one is taken.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
     /// drained or keeps none; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorBusy` for a call from inside the instance's allocator.
@@ -318,7 +317,7 @@ extern "C"
     /// polling its drivers for finished work.
     ///
     /// @param instance         The instance.
-    /// @param notificationOut  Receives the record.
+    /// @param notificationOut  Receives the record; zeros unless one is taken.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
     /// drained; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorBusy` for a
     /// call from inside the instance's allocator.
@@ -349,7 +348,7 @@ extern "C"
     ///
     /// @param instance  The instance.
     /// @param adapter   The adapter.
-    /// @param infoOut   Receives the facts.
+    /// @param infoOut   Receives the facts; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for an adapter the instance no longer has.
     /// @par Thread safety

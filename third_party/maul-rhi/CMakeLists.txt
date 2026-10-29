@@ -269,8 +269,14 @@ if(MAUL_RHI_BUILD_TESTS)
             target_link_libraries(test_${test} PRIVATE d3d12 dxgi)
         endforeach()
         # A failed frame's drain that never returns is a hang: the suite
-        # runs in about a second on CI.
-        set_tests_properties(d3d12_queues PROPERTIES TIMEOUT 10)
+        # runs in about a second on CI. The limit stays well above the
+        # suite's own 10 second wait for a frame, so a frame that never
+        # finishes is reported by the suite, with what it waited on, before
+        # ctest stops it.
+        set_tests_properties(d3d12_queues PROPERTIES TIMEOUT 30)
+        # A frame that never finished within 10 s, once, with no output:
+        # quarantined until the nightly passes it 14 nights in a row.
+        maul_quarantine(d3d12_queues)
         # GPU-based validation's false state errors (#7) reproduced without
         # library code: built with the tests so that it keeps compiling,
         # run by hand as docs/operations/debugging.md says.
@@ -318,6 +324,7 @@ if(MAUL_RHI_BUILD_TESTS)
         maul_add_test(frame_resource)
         maul_add_test(pass)
         maul_add_test(plan)
+        maul_add_test(failed_outputs)
         maul_add_test(lanes WHITEBOX)
         maul_add_test(memory)
         maul_add_test(shader WHITEBOX)

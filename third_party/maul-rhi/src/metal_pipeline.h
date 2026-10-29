@@ -85,6 +85,11 @@ void mrhiMetalForgetPipeline(mrhiMetalPipelines* pipelines, uint64_t handle);
 // Frees a destroyed pipeline once no frame can name it.
 void mrhiMetalReleasePipeline(const mrhiMetalPipelines* pipelines, uint64_t handle);
 
+// The options every MSL library is compiled with, autoreleased: the safe
+// math mode, so that Metal keeps the float math as the source writes it
+// instead of reassociating and folding it.
+MTLCompileOptions* mrhiMetalCompileOptions(void);
+
 // Moves up to capacity answers into events and returns how many.
 size_t mrhiMetalPollPipelines(mrhiMetalPipelines* pipelines, mrhiDriverEvent* events,
                               size_t capacity);

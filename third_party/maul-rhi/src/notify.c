@@ -6,6 +6,7 @@
 
 #include "instance_core.h"
 #include "invariant.h"
+#include "outputs.h"
 
 #include "generated/out_copies.h"
 
@@ -107,6 +108,7 @@ static void PollDriver(mrhiInstance* instance)
 mrhiResult mrhiInstance_TakeNotification(mrhiInstance* instance,
                                          mrhiInstanceNotification* notificationOut)
 {
+    mrhiClearOutput(notificationOut, sizeof(*notificationOut));
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;

@@ -10,6 +10,7 @@
 #include "instance_core.h"
 #include "invariant.h"
 #include "label.h"
+#include "outputs.h"
 
 #include "generated/out_copies.h"
 
@@ -222,6 +223,7 @@ void mrhiDestroySurfaces(mrhiInstance* instance)
 mrhiResult mrhiSurface_GetCaps(mrhiInstance* instance, mrhiSurfaceId surface, mrhiAdapterId adapter,
                                mrhiSurfaceCaps* capsOut)
 {
+    mrhiClearOutput(capsOut, sizeof(*capsOut));
     if (instance == nullptr || capsOut == nullptr)
     {
         return instance == nullptr ? mrhi_errorInvalid

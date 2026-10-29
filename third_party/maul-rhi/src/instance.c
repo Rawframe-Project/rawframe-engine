@@ -9,6 +9,7 @@
 #include "chain.h"
 #include "instance_core.h"
 #include "invariant.h"
+#include "outputs.h"
 #include "validation.h"
 
 #include "maul-rhi/vulkan.h"
@@ -310,6 +311,7 @@ mrhiResult mrhiOverLimit(mrhiInstance* instance, mrhiDiagnosticCode code)
 
 mrhiResult mrhiInstance_TakeDiagnostic(mrhiInstance* instance, mrhiDiagnostic* diagnosticOut)
 {
+    mrhiClearOutput(diagnosticOut, sizeof(*diagnosticOut));
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;

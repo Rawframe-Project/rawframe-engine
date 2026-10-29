@@ -272,6 +272,7 @@ const mrhiDriverAdapter* mrhiFindAdapter(const mrhiInstance* instance, mrhiAdapt
 mrhiResult mrhiAdapter_GetInfo(mrhiInstance* instance, mrhiAdapterId adapter,
                                mrhiAdapterInfo* infoOut)
 {
+    mrhiClearOutput(infoOut, sizeof(*infoOut));
     if (instance == nullptr || infoOut == nullptr)
     {
         return instance == nullptr ? mrhi_errorInvalid
@@ -289,6 +290,7 @@ mrhiResult mrhiAdapter_GetInfo(mrhiInstance* instance, mrhiAdapterId adapter,
 mrhiResult mrhiAdapter_GetFeatures(mrhiInstance* instance, mrhiAdapterId adapter,
                                    mrhiFeatures* featuresOut)
 {
+    mrhiClearOutput(featuresOut, sizeof(*featuresOut));
     if (instance == nullptr || featuresOut == nullptr)
     {
         return instance == nullptr ? mrhi_errorInvalid
@@ -306,6 +308,7 @@ mrhiResult mrhiAdapter_GetFeatures(mrhiInstance* instance, mrhiAdapterId adapter
 mrhiResult mrhiAdapter_GetLimits(mrhiInstance* instance, mrhiAdapterId adapter,
                                  mrhiLimits* limitsOut)
 {
+    mrhiClearOutput(limitsOut, sizeof(*limitsOut));
     if (instance == nullptr || limitsOut == nullptr)
     {
         return instance == nullptr ? mrhi_errorInvalid
@@ -323,6 +326,7 @@ mrhiResult mrhiAdapter_GetLimits(mrhiInstance* instance, mrhiAdapterId adapter,
 mrhiResult mrhiAdapter_GetFormatCaps(mrhiInstance* instance, mrhiAdapterId adapter,
                                      mrhiFormat format, mrhiFormatCaps* capsOut)
 {
+    mrhiClearOutput(capsOut, sizeof(*capsOut));
     if (instance == nullptr || capsOut == nullptr || !mrhiIsFormatKnown(format))
     {
         return instance == nullptr ? mrhi_errorInvalid

@@ -16,6 +16,7 @@
 #include "encoder_core.h"
 #include "invariant.h"
 #include "label.h"
+#include "outputs.h"
 
 #include <string.h>
 
@@ -260,6 +261,7 @@ mrhiResult mrhiDevice_CompileFrame(mrhiDevice* device)
 
 mrhiResult mrhiPass_IsKept(mrhiDevice* device, mrhiPassId pass, bool* keptOut)
 {
+    mrhiClearOutput(keptOut, sizeof(*keptOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

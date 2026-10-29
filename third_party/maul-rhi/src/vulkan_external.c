@@ -8,6 +8,7 @@
 #include "device_core.h"
 #include "encoder_core.h"
 #include "instance_core.h"
+#include "outputs.h"
 #include "validation.h"
 
 #include "maul-rhi/vulkan.h"
@@ -24,6 +25,8 @@
 mrhiResult mrhiInstance_DescribeVulkanDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
                                              void** createInfoOut, void** physicalDeviceOut)
 {
+    mrhiClearHandle(createInfoOut);
+    mrhiClearHandle(physicalDeviceOut);
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;
@@ -64,6 +67,7 @@ mrhiResult mrhiInstance_DescribeVulkanDevice(mrhiInstance* instance, const mrhiD
 mrhiResult mrhiAdapter_GetVulkanPhysicalDevice(mrhiInstance* instance, mrhiAdapterId adapter,
                                                void** physicalDeviceOut)
 {
+    mrhiClearHandle(physicalDeviceOut);
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;
@@ -93,6 +97,8 @@ mrhiResult mrhiAdapter_GetVulkanPhysicalDevice(mrhiInstance* instance, mrhiAdapt
 
 mrhiResult mrhiDevice_GetVulkanQueue(mrhiDevice* device, uint32_t* familyOut, uint32_t* indexOut)
 {
+    mrhiClearOutput(familyOut, sizeof(*familyOut));
+    mrhiClearOutput(indexOut, sizeof(*indexOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -114,6 +120,11 @@ mrhiResult mrhiDevice_GetVulkanDevice(mrhiDevice* device, void** instanceOut,
                                       void** physicalDeviceOut, void** deviceOut,
                                       void** getInstanceProcAddrOut, void** getDeviceProcAddrOut)
 {
+    mrhiClearHandle(instanceOut);
+    mrhiClearHandle(physicalDeviceOut);
+    mrhiClearHandle(deviceOut);
+    mrhiClearHandle(getInstanceProcAddrOut);
+    mrhiClearHandle(getDeviceProcAddrOut);
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
@@ -145,6 +156,7 @@ mrhiResult mrhiDevice_GetVulkanDevice(mrhiDevice* device, void** instanceOut,
 mrhiResult mrhiTexture_GetVulkanTexture(mrhiDevice* device, mrhiTextureId texture,
                                         mrhiVulkanTextureInfo* textureOut)
 {
+    mrhiClearOutput(textureOut, sizeof(*textureOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

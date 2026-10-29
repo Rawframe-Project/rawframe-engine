@@ -341,7 +341,7 @@ extern "C"
     ///
     /// @param device   The device.
     /// @param shader   The shader.
-    /// @param infoOut  Receives what it holds.
+    /// @param infoOut  Receives what it holds; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for a shader the device no longer has.
     /// @par Thread safety

@@ -138,7 +138,7 @@ extern "C"
     /// for one.
     ///
     /// @param device           The device.
-    /// @param notificationOut  Receives the record.
+    /// @param notificationOut  Receives the record; zeros unless one is taken.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
     /// drained; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorBusy` for a
     /// call from inside the device's allocator.
@@ -626,7 +626,7 @@ extern "C"
     ///
     /// @param device   The device.
     /// @param pass     The pass.
-    /// @param keptOut  Receives whether it is kept.
+    /// @param keptOut  Receives whether it is kept; false on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for a pass of another frame; `mrhi_errorState` for a
     /// frame not compiled.
@@ -750,7 +750,7 @@ extern "C"
     ///
     /// @param device    The device.
     /// @param resource  The resource.
-    /// @param planOut   Receives the plan.
+    /// @param planOut   Receives the plan; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for a resource of another frame; `mrhi_errorState` for
     /// a frame not compiled.
@@ -778,7 +778,7 @@ extern "C"
     ///
     /// @param device   The device.
     /// @param pass     The pass.
-    /// @param planOut  Receives the plan.
+    /// @param planOut  Receives the plan; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for a pass of another frame; `mrhi_errorState` for a
     /// frame not compiled.
@@ -826,7 +826,7 @@ extern "C"
     /// to learn its headroom.
     ///
     /// @param device    The device.
-    /// @param usageOut  Receives the usage.
+    /// @param usageOut  Receives the usage; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.

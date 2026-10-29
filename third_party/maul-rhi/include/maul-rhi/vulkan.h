@@ -130,8 +130,10 @@ extern "C"
     ///
     /// @param instance           The instance.
     /// @param def                The device def, its adapter set.
-    /// @param createInfoOut      Receives the const VkDeviceCreateInfo*.
-    /// @param physicalDeviceOut  Receives the VkPhysicalDevice.
+    /// @param createInfoOut      Receives the const VkDeviceCreateInfo*; NULL
+    ///                           on any failure.
+    /// @param physicalDeviceOut  Receives the VkPhysicalDevice; NULL on any
+    ///                           failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the instance's
     /// driver is not Vulkan, or for a def the adapter cannot take;
     /// `mrhi_errorStale` for an adapter the instance no longer has;
@@ -148,7 +150,8 @@ extern "C"
     ///
     /// @param instance           The instance.
     /// @param adapter            The adapter.
-    /// @param physicalDeviceOut  Receives the VkPhysicalDevice.
+    /// @param physicalDeviceOut  Receives the VkPhysicalDevice; NULL on any
+    ///                           failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the instance's
     /// driver is not Vulkan; `mrhi_errorStale` for an adapter the instance no
     /// longer has; `mrhi_errorInvalid` for a NULL argument.
@@ -161,8 +164,8 @@ extern "C"
     /// XrGraphicsBindingVulkan2KHR.
     ///
     /// @param device     The device.
-    /// @param familyOut  Receives the queue family index.
-    /// @param indexOut   Receives the queue index.
+    /// @param familyOut  Receives the queue family index; 0 on any failure.
+    /// @param indexOut   Receives the queue index; 0 on any failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the device's
     /// driver is not Vulkan; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
@@ -176,13 +179,16 @@ extern "C"
     /// Streamline's Vulkan setup).
     ///
     /// @param device                  The device.
-    /// @param instanceOut             Receives the VkInstance.
-    /// @param physicalDeviceOut       Receives the VkPhysicalDevice.
-    /// @param deviceOut               Receives the VkDevice.
+    /// @param instanceOut             Receives the VkInstance; NULL on any
+    ///                                failure.
+    /// @param physicalDeviceOut       Receives the VkPhysicalDevice; NULL on
+    ///                                any failure.
+    /// @param deviceOut               Receives the VkDevice; NULL on any
+    ///                                failure.
     /// @param getInstanceProcAddrOut  Receives the vkGetInstanceProcAddr the
-    ///                                library uses.
+    ///                                library uses; NULL on any failure.
     /// @param getDeviceProcAddrOut    Receives the vkGetDeviceProcAddr the
-    ///                                library uses.
+    ///                                library uses; NULL on any failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the device's
     /// driver is not Vulkan; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
@@ -219,7 +225,7 @@ extern "C"
     ///
     /// @param device      The device.
     /// @param texture     The texture.
-    /// @param textureOut  Receives the image.
+    /// @param textureOut  Receives the image; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the device's
     /// driver is not Vulkan; `mrhi_errorStale` for a texture the device no
     /// longer has; `mrhi_errorInvalid` for a NULL argument.

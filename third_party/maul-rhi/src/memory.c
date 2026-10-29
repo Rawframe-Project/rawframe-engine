@@ -9,6 +9,7 @@
 
 #include "device_core.h"
 #include "invariant.h"
+#include "outputs.h"
 
 #include "generated/out_copies.h"
 
@@ -224,6 +225,7 @@ void mrhiDeriveStores(mrhiDevice* device)
 
 mrhiResult mrhiPass_GetPlan(mrhiDevice* device, mrhiPassId pass, mrhiPassPlan* planOut)
 {
+    mrhiClearOutput(planOut, sizeof(*planOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
