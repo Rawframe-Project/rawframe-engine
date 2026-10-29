@@ -203,7 +203,8 @@ mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId reso
         {.object = object, .offset = offset},
         {.offset = RingOffset(device, readback)},
     };
-    memcpy(&records[1], sides, sizeof(sides));
+    memcpy(&records[1], &sides[0], sizeof(sides[0]));
+    memcpy(&records[2], &sides[1], sizeof(sides[1]));
     *requestOut = (mrhiRequestId){readback->request, 1};
     return mrhi_success;
 }
@@ -325,6 +326,10 @@ mrhiResult mrhiTakeReadback(mrhiDevice* device, mrhiRequestId request, void* byt
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (sizeOut == nullptr || (bytes == nullptr && capacity > 0))
     {

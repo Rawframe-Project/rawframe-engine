@@ -106,8 +106,8 @@ extern "C"
         // Extensions, or NULL.
         const mrhiChain* next;
         // A name for debugging tools: UTF-8 without NUL, labelLength bytes, at
-        // most MRHI_LABEL_BYTES; NULL when labelLength is 0. Only read during
-        // the call.
+        // most MRHI_MAX_LABEL_BYTES; NULL when labelLength is 0. Only read
+        // during the call.
         const char* label;
         // The label's bytes.
         size_t labelLength;
@@ -148,12 +148,14 @@ extern "C"
     ///                    on any failure.
     /// @return `mrhi_success` with the device opening; `mrhi_errorInvalid` for
     /// a NULL argument, a def without its cookie, a label that is not UTF-8
-    /// without NUL within MRHI_LABEL_BYTES, a zero limit, limits below the
-    /// floor or an allocator with one function; `mrhi_errorStale` for an
-    /// adapter the instance no longer has; `mrhi_errorUnsupported` for features
-    /// or limits beyond the adapter's, or a critical extension the library does
+    /// without NUL, a zero limit, limits below the floor, an alignment that is
+    /// not a power of two or an allocator with one function; `mrhi_errorLimit`
+    /// for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorStale` for an adapter
+    /// the instance no longer has; `mrhi_errorUnsupported` for features or
+    /// limits beyond the adapter's, or a critical extension the library does
     /// not know; `mrhi_errorCapacity` when the instance's queue has no room for
-    /// the answer or an allocator fails.
+    /// the answer or an allocator fails; `mrhi_errorBusy` for a call from
+    /// inside the instance's allocator.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiCreateDevice(mrhiInstance* instance,
@@ -163,7 +165,8 @@ extern "C"
 
     /// Destroys a device in any state, and ends the configurations of the
     /// surfaces it configured. A device still opening answers its request with
-    /// mrhi_errorStale.
+    /// mrhi_errorStale. From inside its allocator, or while its instance is
+    /// busy, it refuses, counting the call as misuse and destroying nothing.
     ///
     /// @param device  The device, or NULL for nothing.
     /// @par Thread safety
@@ -228,7 +231,8 @@ extern "C"
                                                                     double* periodOut);
 
     /// Returns how many calls the device has refused as invalid input
-    /// (mrhi_errorInvalid).
+    /// (mrhi_errorInvalid), past a fixed bound (mrhi_errorLimit) or from inside
+    /// its allocator (mrhi_errorBusy).
     ///
     /// @param device  The device.
     /// @return The count; 0 for a NULL device.
@@ -238,15 +242,17 @@ extern "C"
 
     /// Takes the oldest record from the device's diagnostic queue, which holds
     /// a record for each call the device refused as invalid input or bad data,
-    /// for each frame call refused at one of its limits, and for each
-    /// submission its driver refused for a budget it names, up to the
-    /// diagnostics limit; refusals past it are counted but not recorded.
+    /// for each frame call refused at one of its limits, for each call refused
+    /// past one of the device's limits (mrhiLimits) under that limit's code,
+    /// and for each submission its driver refused for a budget it names, up to
+    /// the diagnostics limit; refusals past it are counted but not recorded.
     ///
     /// @param device         The device.
     /// @param diagnosticOut  Receives the record; untouched unless one is
     ///                       taken.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
-    /// drained or keeps none; `mrhi_errorInvalid` for a NULL argument.
+    /// drained or keeps none; `mrhi_errorInvalid` for a NULL argument;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiNextDeviceDiagnostic(mrhiDevice* device,
@@ -318,7 +324,8 @@ extern "C"
     /// @param device  The device.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device;
     /// `mrhi_errorState` for a device still opening; `mrhi_errorDeviceLost` for
-    /// a device already lost.
+    /// a device already lost; `mrhi_errorBusy` for a call from inside the
+    /// device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiSimulateDeviceLoss(mrhiDevice* device);

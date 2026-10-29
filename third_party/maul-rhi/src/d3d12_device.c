@@ -115,6 +115,9 @@ static mrhiResult ConfigureSurface(void* self, uint64_t surface, const mrhiSurfa
                                    uint64_t oldSwapchain, uint64_t* swapchainOut)
 {
     D3d12Device* device = self;
+    // A window holds one swapchain, so the old one goes before
+    // CreateSwapChainForHwnd; nothing checked alone comes before that call,
+    // and a failure leaves swapchainOut 0, the old one retired.
     if (oldSwapchain != 0)
     {
         mrhiD3d12WaitIdle(&device->frames);

@@ -93,13 +93,11 @@ static bool IsColorTaken(const mrhiSurfaceCaps* caps, const mrhiSurfaceConfig* c
 static bool IsSupported(const mrhiDevice* device, const mrhiSurfaceCaps* caps,
                         const mrhiSurfaceConfig* config)
 {
-    uint32_t most = device->limits.textureDimension2d;
     return caps->presentable && IsColorTaken(caps, config) &&
            (config->usage & ~caps->usages) == 0 &&
            (config->presentMode & caps->presentModes) != 0 &&
            (config->alphaMode & caps->alphaModes) != 0 &&
-           mrhiFormatTakes(device, config->color.format, config->usage) && config->width <= most &&
-           config->height <= most;
+           mrhiFormatTakes(device, config->color.format, config->usage);
 }
 
 // Checks a config's own values and names on a live device: success, or
@@ -159,7 +157,9 @@ static mrhiSurfaceSlot* CheckConfig(mrhiDevice* device, const mrhiSurfaceConfig*
         *statusOut = mrhi_errorUnsupported;
         return nullptr;
     }
-    return slot;
+    uint32_t side = config->width > config->height ? config->width : config->height;
+    *statusOut = MRHI_DEVICE_LIMIT(device, textureDimension2d, side);
+    return *statusOut == mrhi_success ? slot : nullptr;
 }
 
 mrhiResult mrhiConfigureSurface(mrhiDevice* device, const mrhiSurfaceConfig* config)
@@ -167,6 +167,11 @@ mrhiResult mrhiConfigureSurface(mrhiDevice* device, const mrhiSurfaceConfig* con
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    // The call changes the instance's surface slots as well.
+    if (device->allocatorGuard.busy || device->instance->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (config == nullptr)
     {
@@ -187,9 +192,18 @@ mrhiResult mrhiConfigureSurface(mrhiDevice* device, const mrhiSurfaceConfig* con
     mrhiSwapchainSlot* slot = &device->swapchainSlots[index1 - 1];
     uint64_t old = surface->device == nullptr ? 0 : slot->handle;
     uint64_t handle = 0;
+    // The surface's slot is the instance's, so the instance is held while
+    // the driver runs the allocator.
+    bool held = mrhiHoldInstance(device->instance);
     status =
         mrhiDriverStatus(device, device->driver.vtable->configureSurface(
                                      device->driver.self, surface->handle, config, old, &handle));
+    mrhiReleaseInstance(device->instance, held);
+    // A refusal the platform never saw keeps the old swapchain working.
+    if (status != mrhi_success && old != 0 && handle == old)
+    {
+        return status;
+    }
     if (status != mrhi_success)
     {
         mrhiPoolRelease(&device->swapchains, index1);
@@ -207,7 +221,9 @@ mrhiResult mrhiConfigureSurface(mrhiDevice* device, const mrhiSurfaceConfig* con
 void mrhiEndConfiguration(mrhiDevice* device, uint32_t swapchain)
 {
     const mrhiSwapchainSlot* slot = &device->swapchainSlots[swapchain - 1];
+    bool held = mrhiHoldInstance(device->instance);
     device->driver.vtable->unconfigureSurface(device->driver.self, slot->handle);
+    mrhiReleaseInstance(device->instance, held);
     mrhiSurfaceSlot* surface = &device->instance->surfaceSlots[slot->surface.index1 - 1];
     surface->device = nullptr;
     surface->swapchain = 0;
@@ -230,6 +246,11 @@ mrhiResult mrhiUnconfigureSurface(mrhiDevice* device, mrhiSurfaceId surface)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    // The call changes the instance's surface slots as well.
+    if (device->allocatorGuard.busy || device->instance->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (mrhiFindSurface(device->instance, surface) == 0)
     {

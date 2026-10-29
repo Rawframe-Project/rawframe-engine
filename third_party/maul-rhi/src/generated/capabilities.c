@@ -8,6 +8,8 @@
 
 #include "capabilities_core.h"
 
+#include <stddef.h>
+
 bool mrhiFeaturesWithin(const mrhiFeatures* asked, const mrhiFeatures* granted)
 {
     return true
@@ -67,6 +69,84 @@ bool mrhiLimitsWithin(const mrhiLimits* asked, const mrhiLimits* granted)
         && asked->samplerHeapSize <= granted->samplerHeapSize
         && asked->framesInFlight <= granted->framesInFlight
         && asked->multiviewViews <= granted->multiviewViews;
+}
+
+bool mrhiAlignmentsValid(const mrhiLimits* limits)
+{
+    return true
+        && limits->uniformOffsetAlignment != 0 && (limits->uniformOffsetAlignment & (limits->uniformOffsetAlignment - 1)) == 0
+        && limits->storageOffsetAlignment != 0 && (limits->storageOffsetAlignment & (limits->storageOffsetAlignment - 1)) == 0;
+}
+
+mrhiDiagnosticCode mrhiLimitDiagnostic(size_t field)
+{
+    switch (field)
+    {
+    case offsetof(mrhiLimits, textureDimension2d):
+        return mrhi_diagnosticLimitTextureDimension2d;
+    case offsetof(mrhiLimits, textureDimension3d):
+        return mrhi_diagnosticLimitTextureDimension3d;
+    case offsetof(mrhiLimits, textureArrayLayers):
+        return mrhi_diagnosticLimitTextureArrayLayers;
+    case offsetof(mrhiLimits, bindingTables):
+        return mrhi_diagnosticLimitBindingTables;
+    case offsetof(mrhiLimits, bindingsPerTable):
+        return mrhi_diagnosticLimitBindingsPerTable;
+    case offsetof(mrhiLimits, sampledTexturesPerStage):
+        return mrhi_diagnosticLimitSampledTexturesPerStage;
+    case offsetof(mrhiLimits, samplersPerStage):
+        return mrhi_diagnosticLimitSamplersPerStage;
+    case offsetof(mrhiLimits, storageBuffersPerStage):
+        return mrhi_diagnosticLimitStorageBuffersPerStage;
+    case offsetof(mrhiLimits, storageTexturesPerStage):
+        return mrhi_diagnosticLimitStorageTexturesPerStage;
+    case offsetof(mrhiLimits, uniformBuffersPerStage):
+        return mrhi_diagnosticLimitUniformBuffersPerStage;
+    case offsetof(mrhiLimits, uniformBindingBytes):
+        return mrhi_diagnosticLimitUniformBindingBytes;
+    case offsetof(mrhiLimits, storageBindingBytes):
+        return mrhi_diagnosticLimitStorageBindingBytes;
+    case offsetof(mrhiLimits, uniformOffsetAlignment):
+        return mrhi_diagnosticLimitUniformOffsetAlignment;
+    case offsetof(mrhiLimits, storageOffsetAlignment):
+        return mrhi_diagnosticLimitStorageOffsetAlignment;
+    case offsetof(mrhiLimits, vertexBuffers):
+        return mrhi_diagnosticLimitVertexBuffers;
+    case offsetof(mrhiLimits, tablesPlusVertexBuffers):
+        return mrhi_diagnosticLimitTablesPlusVertexBuffers;
+    case offsetof(mrhiLimits, bufferBytes):
+        return mrhi_diagnosticLimitBufferBytes;
+    case offsetof(mrhiLimits, vertexAttributes):
+        return mrhi_diagnosticLimitVertexAttributes;
+    case offsetof(mrhiLimits, vertexStride):
+        return mrhi_diagnosticLimitVertexStride;
+    case offsetof(mrhiLimits, interStageVariables):
+        return mrhi_diagnosticLimitInterStageVariables;
+    case offsetof(mrhiLimits, colorBytesPerSample):
+        return mrhi_diagnosticLimitColorBytesPerSample;
+    case offsetof(mrhiLimits, workgroupStorageBytes):
+        return mrhi_diagnosticLimitWorkgroupStorageBytes;
+    case offsetof(mrhiLimits, workgroupInvocations):
+        return mrhi_diagnosticLimitWorkgroupInvocations;
+    case offsetof(mrhiLimits, workgroupSizeX):
+        return mrhi_diagnosticLimitWorkgroupSizeX;
+    case offsetof(mrhiLimits, workgroupSizeY):
+        return mrhi_diagnosticLimitWorkgroupSizeY;
+    case offsetof(mrhiLimits, workgroupSizeZ):
+        return mrhi_diagnosticLimitWorkgroupSizeZ;
+    case offsetof(mrhiLimits, workgroupsPerDimension):
+        return mrhi_diagnosticLimitWorkgroupsPerDimension;
+    case offsetof(mrhiLimits, rootBlockBytes):
+        return mrhi_diagnosticLimitRootBlockBytes;
+    case offsetof(mrhiLimits, heapSize):
+        return mrhi_diagnosticLimitHeapSize;
+    case offsetof(mrhiLimits, samplerHeapSize):
+        return mrhi_diagnosticLimitSamplerHeapSize;
+    case offsetof(mrhiLimits, multiviewViews):
+        return mrhi_diagnosticLimitMultiviewViews;
+    default:
+        return 0;
+    }
 }
 
 void mrhiMaskFeatures(mrhiFeatures* features, mrhiDriverKind driver)

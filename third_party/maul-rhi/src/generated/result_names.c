@@ -36,12 +36,16 @@ const char* mrhiResultName(mrhiResult result)
         return "mrhi_errorState";
     case mrhi_errorVersion:
         return "mrhi_errorVersion";
+    case mrhi_errorFormat:
+        return "mrhi_errorFormat";
+    case mrhi_errorLimit:
+        return "mrhi_errorLimit";
+    case mrhi_errorBusy:
+        return "mrhi_errorBusy";
     case mrhi_errorOutOfDate:
         return "mrhi_errorOutOfDate";
     case mrhi_errorDeviceLost:
         return "mrhi_errorDeviceLost";
-    case mrhi_errorFormat:
-        return "mrhi_errorFormat";
     default:
         return "unknown result";
     }

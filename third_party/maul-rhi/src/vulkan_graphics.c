@@ -162,8 +162,8 @@ static void VertexInputOf(const mrhiGraphicsPipelineDef* def, VertexInput* input
 // The color targets' formats and blending, in room for all of them.
 typedef struct Targets
 {
-    VkFormat formats[MRHI_COLOR_TARGETS];
-    VkPipelineColorBlendAttachmentState blends[MRHI_COLOR_TARGETS];
+    VkFormat formats[MRHI_MAX_COLOR_TARGETS];
+    VkPipelineColorBlendAttachmentState blends[MRHI_MAX_COLOR_TARGETS];
     VkPipelineColorBlendStateCreateInfo blend;
     VkPipelineRenderingCreateInfo rendering;
 } Targets;

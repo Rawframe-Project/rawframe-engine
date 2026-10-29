@@ -15,6 +15,19 @@
 // Whether an allocator is usable: both functions set, or neither.
 bool mrhiIsAllocatorValid(const mrhiAllocator* allocator);
 
+// A program's allocator behind a flag: while the program's functions
+// run, the object it serves is busy, and its functions that change it
+// refuse calls with mrhi_errorBusy.
+typedef struct mrhiAllocatorGuard
+{
+    mrhiAllocator program;
+    bool busy;
+} mrhiAllocatorGuard;
+
+// An allocator that calls the guard's program allocator with the guard
+// busy. The guard must outlive every use of it.
+mrhiAllocator mrhiGuardedAllocator(mrhiAllocatorGuard* guard);
+
 // size bytes aligned to alignment, a power of two, or NULL.
 void* mrhiAllocate(const mrhiAllocator* allocator, size_t size, size_t alignment);
 

@@ -31,9 +31,12 @@ mrhiResult mrhiTakePipelineSlot(mrhiDevice* device, mrhiPipelineKind kind,
                                 mrhiReflection* reflection, uint32_t* index1Out,
                                 uint32_t* generationOut);
 
-// Frees a pipeline slot the driver refused, and its hold on the
-// reflection.
+// Frees a pipeline slot, and its hold on the reflection.
 void mrhiFreePipelineSlot(mrhiDevice* device, uint32_t index1);
+
+// Gives back a slot the driver refused as it was before it was taken,
+// and its hold on the reflection.
+void mrhiUntakePipelineSlot(mrhiDevice* device, uint32_t index1);
 
 // The driver tag of a slot's creation: its slot above its request.
 uint64_t mrhiPipelineTag(const mrhiDevice* device, uint32_t index1);

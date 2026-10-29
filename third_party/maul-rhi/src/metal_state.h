@@ -66,7 +66,7 @@ typedef struct mrhiMetalEncoder
     const mrhiMetalPipeline* pipeline;
     uint8_t root[MRHI_METAL_ROOT_BYTES];
     bool dirty;
-    mrhiMetalBound tables[MRHI_METAL_TABLES][MRHI_TABLE_BINDINGS];
+    mrhiMetalBound tables[MRHI_METAL_TABLES][MRHI_MAX_TABLE_BINDINGS];
     uint32_t tableCounts[MRHI_METAL_TABLES];
     uint32_t sizes[MRHI_METAL_BUFFERS];
     id<MTLBuffer> indexBuffer;

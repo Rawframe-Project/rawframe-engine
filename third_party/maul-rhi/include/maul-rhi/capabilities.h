@@ -95,9 +95,11 @@ extern "C"
         uint32_t uniformBindingBytes;
         // The bytes of one storage buffer binding.
         uint64_t storageBindingBytes;
-        // The alignment of a uniform binding's offset; lower is better.
+        // The alignment of a uniform binding's offset, a power of two; lower is
+        // better.
         uint32_t uniformOffsetAlignment;
-        // The alignment of a storage binding's offset; lower is better.
+        // The alignment of a storage binding's offset, a power of two; lower is
+        // better.
         uint32_t storageOffsetAlignment;
         // Vertex buffers a pipeline reads.
         uint32_t vertexBuffers;

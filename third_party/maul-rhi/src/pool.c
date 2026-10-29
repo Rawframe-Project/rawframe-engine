@@ -60,3 +60,15 @@ void mrhiPoolRelease(mrhiPool* pool, uint32_t index1)
     pool->freeHead = index1;
     --pool->used;
 }
+
+void mrhiPoolUnacquire(mrhiPool* pool, uint32_t index1)
+{
+    // Only the slot the last acquire took, whose next free slot is the
+    // head again.
+    MRHI_ASSERT(index1 != 0 && index1 <= pool->capacity && pool->used > 0);
+    MRHI_ASSERT((pool->generations[index1 - 1] & 1u) == 1u &&
+                pool->freeHead == pool->nextFree[index1 - 1]);
+    --pool->generations[index1 - 1];
+    pool->freeHead = index1;
+    --pool->used;
+}

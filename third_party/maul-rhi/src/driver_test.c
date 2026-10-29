@@ -11,6 +11,7 @@
 #include "format_caps.h"
 #include "frame_walk.h"
 #include "invariant.h"
+#include "pipeline_walk.h"
 
 #include <stdalign.h>
 #include <string.h>
@@ -184,6 +185,14 @@ typedef struct TestView
     uint64_t texture;
 } TestView;
 
+// A swapchain's record, from the device's allocator as a native
+// driver's are.
+typedef struct TestSwapchain
+{
+    uint64_t handle;
+    struct TestSwapchain* next;
+} TestSwapchain;
+
 typedef struct TestDevice
 {
     mrhiAllocator allocator;
@@ -198,6 +207,9 @@ typedef struct TestDevice
     uint32_t textures;
     uint32_t querySets;
     uint32_t heaps;
+    // The limits the device was opened with, which pipelines are walked
+    // against.
+    mrhiLimits limits;
     // Live shaders and pipelines; the core destroys each before the device.
     uint32_t shaders;
     uint32_t pipelines;
@@ -215,6 +227,8 @@ typedef struct TestDevice
     uint32_t named;
     const mrhiResult* acquireOutcome;
     uint32_t imagesOut;
+    // The flag that refuses every object made, as memory running out.
+    const bool* refuseObjects;
     // The flag that loses the device, why, and whether it is lost and the
     // loss reported.
     const bool* loseDevice;
@@ -229,9 +243,11 @@ typedef struct TestDevice
     uint64_t pipelinesMade;
     uint64_t pipelinesCached;
     // The last label an object was given, copied as a real driver would.
-    char label[MRHI_LABEL_BYTES + 1];
-    // Configured surfaces; the core ends each before the device.
+    char label[MRHI_MAX_LABEL_BYTES + 1];
+    // Configured surfaces, and their records; the core ends each before
+    // the device.
     uint32_t swapchains;
+    TestSwapchain* swapchainRecords;
     // Running frames; held ones finish only through a wait.
     bool holdFrames;
     mrhiResult frameOutcome;
@@ -249,7 +265,7 @@ typedef struct TestDevice
 // allow.
 static void Name(TestDevice* device, const char* label, size_t length)
 {
-    MRHI_ASSERT(length <= MRHI_LABEL_BYTES && (label != nullptr || length == 0));
+    MRHI_ASSERT(length <= MRHI_MAX_LABEL_BYTES && (label != nullptr || length == 0));
     device->named += length > 0 ? 1 : 0;
     for (size_t i = 0; i < length; ++i)
     {
@@ -280,6 +296,10 @@ static mrhiResult MakeObject(TestDevice* device, uint64_t* handleOut)
     {
         device->lossTold = true;
         return mrhi_errorDeviceLost;
+    }
+    if (device->refuseObjects != nullptr && *device->refuseObjects)
+    {
+        return mrhi_errorCapacity;
     }
     if (device->madeBeforeFailure != 0 && device->made == device->madeBeforeFailure)
     {
@@ -517,6 +537,8 @@ static size_t ExportPipelineCache(void* self, void* bytes, size_t capacity)
     return 16;
 }
 
+// Holds a pipeline's creation, trapping on a pipeline that breaks a rule
+// of its shader's reflection, as no driver could make it.
 static mrhiResult CreateComputePipeline(void* self, const mrhiDriverComputePipeline* pipeline,
                                         uint64_t tag, uint64_t* handleOut)
 {
@@ -525,6 +547,7 @@ static mrhiResult CreateComputePipeline(void* self, const mrhiDriverComputePipel
     MRHI_ASSERT(pipeline->shader != 0 && tag > UINT32_MAX &&
                 pipeline->entry < pipeline->reflection->entryCount &&
                 pipeline->reflection->entries[pipeline->entry].stage == mrhi_stageCompute);
+    MRHI_ASSERT(mrhiWalkComputePipeline(pipeline) == 0);
     return HoldPipeline(device, tag, handleOut);
 }
 
@@ -539,6 +562,7 @@ static mrhiResult CreateGraphicsPipeline(void* self, const mrhiDriverGraphicsPip
         pipeline->reflection->entries[pipeline->vertexEntry].stage == mrhi_stageVertex &&
         (pipeline->fragmentEntry == pipeline->reflection->entryCount ||
          pipeline->reflection->entries[pipeline->fragmentEntry].stage == mrhi_stageFragment));
+    MRHI_ASSERT(mrhiWalkGraphicsPipeline(pipeline, &device->limits) == 0);
     return HoldPipeline(device, tag, handleOut);
 }
 
@@ -558,20 +582,55 @@ static void DestroyPipeline(void* self, uint64_t handle)
     --device->pipelines;
 }
 
+// Gives back a configured swapchain's record.
+static void EndSwapchain(TestDevice* device, uint64_t handle)
+{
+    for (TestSwapchain** link = &device->swapchainRecords; *link != nullptr; link = &(*link)->next)
+    {
+        TestSwapchain* record = *link;
+        if (record->handle == handle)
+        {
+            MRHI_ASSERT(device->swapchains > 0);
+            *link = record->next;
+            --device->swapchains;
+            mrhiRelease(&device->allocator, record, sizeof(TestSwapchain), alignof(TestSwapchain));
+            return;
+        }
+    }
+    // The core ends only the swapchains it configured, each once.
+    MRHI_ASSERT(false);
+}
+
 static mrhiResult ConfigureSurface(void* self, uint64_t surface, const mrhiSurfaceConfig* config,
                                    uint64_t oldSwapchain, uint64_t* swapchainOut)
 {
     (void)config;
     TestDevice* device = self;
     MRHI_ASSERT(surface != 0);
+    // A refusal for memory comes before the platform, which keeps the old
+    // swapchain; making the object stands for the platform's call, which
+    // retires it whatever it answers.
+    TestSwapchain* record =
+        mrhiAllocate(&device->allocator, sizeof(TestSwapchain), alignof(TestSwapchain));
+    if (record == nullptr)
+    {
+        *swapchainOut = oldSwapchain;
+        return mrhi_errorCapacity;
+    }
     if (oldSwapchain != 0)
     {
-        MRHI_ASSERT(device->swapchains > 0);
-        --device->swapchains;
+        EndSwapchain(device, oldSwapchain);
     }
     mrhiResult status = MakeObject(device, swapchainOut);
-    device->swapchains += status == mrhi_success ? 1 : 0;
-    return status;
+    if (status != mrhi_success)
+    {
+        mrhiRelease(&device->allocator, record, sizeof(TestSwapchain), alignof(TestSwapchain));
+        return status;
+    }
+    *record = (TestSwapchain){.handle = *swapchainOut, .next = device->swapchainRecords};
+    device->swapchainRecords = record;
+    ++device->swapchains;
+    return mrhi_success;
 }
 
 // Acquires an image as the adapter's test says: a new handle each time,
@@ -606,8 +665,8 @@ static void ReleaseImage(void* self, uint64_t swapchain, uint64_t image)
 static void UnconfigureSurface(void* self, uint64_t swapchain)
 {
     TestDevice* device = self;
-    MRHI_ASSERT(swapchain != 0 && swapchain <= device->nextHandle && device->swapchains > 0);
-    --device->swapchains;
+    MRHI_ASSERT(swapchain != 0 && swapchain <= device->nextHandle);
+    EndSwapchain(device, swapchain);
 }
 
 // A texture's bytes: 4 per texel and sample, doubled for mips; none for
@@ -829,6 +888,7 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
         .allocator = def->allocator,
         .nextHandle = HANDLE_BASE,
         .madeBeforeFailure = driver->adapters[adapter - 1].objectsBeforeFailure,
+        .limits = def->limits,
         .holdFrames = driver->adapters[adapter - 1].holdFrames,
         .frameOutcome = driver->adapters[adapter - 1].frameOutcome,
         .submitBudget = driver->adapters[adapter - 1].submitBudget,
@@ -836,6 +896,7 @@ static mrhiResult CreateDevice(void* self, uint64_t adapter, const mrhiDeviceDef
         .frameLog = driver->adapters[adapter - 1].frameLog,
         .acquireOutcome = driver->adapters[adapter - 1].acquireOutcome,
         .loseDevice = driver->adapters[adapter - 1].loseDevice,
+        .refuseObjects = driver->adapters[adapter - 1].refuseObjects,
         .lossReason = driver->adapters[adapter - 1].lossReason,
         .timestampPeriod = driver->adapters[adapter - 1].timestampPeriod > 0.0
                                ? driver->adapters[adapter - 1].timestampPeriod

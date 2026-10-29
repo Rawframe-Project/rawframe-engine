@@ -200,8 +200,8 @@ extern "C"
         // Extensions, or NULL.
         const mrhiChain* next;
         // A name for debugging tools: UTF-8 without NUL, labelLength bytes, at
-        // most MRHI_LABEL_BYTES; NULL when labelLength is 0. Only read during
-        // the call.
+        // most MRHI_MAX_LABEL_BYTES; NULL when labelLength is 0. Only read
+        // during the call.
         const char* label;
         // The label's bytes.
         size_t labelLength;
@@ -220,12 +220,14 @@ extern "C"
     /// @param def         The surface to make.
     /// @param surfaceOut  Receives the surface; the null id on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def
-    /// without its cookie, a label that is not UTF-8 without NUL within
-    /// MRHI_LABEL_BYTES, or a def without exactly one source;
-    /// `mrhi_errorUnsupported` for a source the instance's driver cannot use,
-    /// an instance without a driver, or a critical extension the library does
-    /// not know; `mrhi_errorCapacity` when the instance's surface limit is
-    /// reached; `mrhi_errorPlatform` when the driver fails.
+    /// without its cookie, a label that is not UTF-8 without NUL, or a def
+    /// without exactly one source; `mrhi_errorLimit` for a label past
+    /// MRHI_MAX_LABEL_BYTES; `mrhi_errorUnsupported` for a source the
+    /// instance's driver cannot use, an instance without a driver, or a
+    /// critical extension the library does not know; `mrhi_errorCapacity` when
+    /// the instance's surface limit is reached; `mrhi_errorPlatform` when the
+    /// driver fails; `mrhi_errorBusy` for a call from inside the instance's
+    /// allocator.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiCreateSurface(mrhiInstance* instance,
@@ -238,7 +240,9 @@ extern "C"
     /// @param instance  The instance.
     /// @param surface   The surface.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL instance;
-    /// `mrhi_errorStale` for a surface the instance no longer has.
+    /// `mrhi_errorStale` for a surface the instance no longer has;
+    /// `mrhi_errorBusy` for a call from inside the instance's allocator or from
+    /// inside that of the device the surface is configured on.
     /// @par Thread safety
     /// Safe from any thread; the instance and the device that configured the
     /// surface are used by one thread at a time.
@@ -316,7 +320,9 @@ extern "C"
     MRHI_API mrhiSurfaceConfig mrhiDefaultSurfaceConfig(void);
 
     /// Configures a surface on a ready device, or reconfigures one the device
-    /// holds. A failed reconfiguration leaves the surface unconfigured.
+    /// holds. A refused reconfiguration keeps the surface configured as it was,
+    /// unless the platform's call failed after retiring the old swapchain,
+    /// which leaves the surface unconfigured.
     ///
     /// @param device  The device.
     /// @param config  The configuration.
@@ -327,14 +333,17 @@ extern "C"
     /// a surface the instance no longer has; `mrhi_errorUnsupported` for a
     /// surface the device's adapter cannot present to, a color, usage, present
     /// mode or alpha mode it does not report, a usage the format cannot take on
-    /// the device, a size past the device's limits, view formats the device
+    /// the device, a size past the adapter's limits, view formats the device
     /// cannot give the surface's images, or a critical extension the library
     /// does not know; `mrhi_errorOutOfDate` for a size the window does not take
     /// now, where the window fixes its images' size (Vulkan on Win32, X11 and
     /// Android), to be configured again with the window's size;
     /// `mrhi_errorState` for a device that is not ready, or a surface
-    /// configured on another device; `mrhi_errorCapacity` when the device's
-    /// surface limit is reached; `mrhi_errorPlatform` when the driver fails.
+    /// configured on another device; `mrhi_errorCapacity` for a size past the
+    /// device's limits within the adapter's, or when the device's surface limit
+    /// is reached; `mrhi_errorPlatform` when the driver fails; `mrhi_errorBusy`
+    /// for a call from inside the device's allocator, or while its instance is
+    /// busy.
     /// @par Thread safety
     /// Safe from any thread; the device and its instance are used by one thread
     /// at a time.
@@ -348,7 +357,9 @@ extern "C"
     /// @param surface  The surface.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device;
     /// `mrhi_errorStale` for a surface the instance no longer has;
-    /// `mrhi_errorState` for a surface the device has not configured.
+    /// `mrhi_errorState` for a surface the device has not configured;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator, or while
+    /// its instance is busy.
     /// @par Thread safety
     /// Safe from any thread; the device and its instance are used by one thread
     /// at a time.

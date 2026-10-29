@@ -56,7 +56,7 @@ bool mrhiAreInterfaceRecordsValid(const uint8_t* records, uint32_t count, mrhiIn
                                        (variable.interpolation == 0 ||
                                         (variable.interpolation == 1 && variable.location == 0))
                                  : variable.interpolation == 0 && variable.sampling == 0;
-        bool location = role != mrhi_interfaceOutput || variable.location < MRHI_COLOR_TARGETS;
+        bool location = role != mrhi_interfaceOutput || variable.location < MRHI_MAX_COLOR_TARGETS;
         if (!type || variable.components < 1 || variable.components > 4 || !interpolation ||
             !location)
         {

@@ -63,7 +63,7 @@ static mrhiDriverPass ViewPass(const mrhiDevice* device, uint32_t index, uint32_
     mrhiDriverPass view = {
         .id = {index + 1, device->frameSerial},
         .passClass = pass->passClass,
-        .label = pass->labelLength > 0 ? &device->frameLabels[(size_t)index * MRHI_LABEL_BYTES]
+        .label = pass->labelLength > 0 ? &device->frameLabels[(size_t)index * MRHI_MAX_LABEL_BYTES]
                                        : nullptr,
         .labelLength = pass->labelLength,
         .colorTargetCount = pass->colorTargetCount,

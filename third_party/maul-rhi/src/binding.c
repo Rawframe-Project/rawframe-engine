@@ -11,7 +11,7 @@
 
 #include <string.h>
 
-static_assert(1 + MRHI_TABLE_BINDINGS <= MRHI_CHUNK_COMMANDS, "a whole table fits a chunk");
+static_assert(1 + MRHI_MAX_TABLE_BINDINGS <= MRHI_CHUNK_COMMANDS, "a whole table fits a chunk");
 
 // The reflection of the pass's pipeline: or NULL with the refusal.
 static const mrhiReflection* ReflectionOf(const mrhiDevice* device, const mrhiFramePass* pass,
@@ -124,26 +124,36 @@ static bool IsSampledAs(const mrhiDevice* device, mrhiFormat format, mrhiTexture
     return type == mrhi_sampleUnfilterableFloat || (type == mrhi_sampleFloat && filtering);
 }
 
-// Checks a buffer binding and records its range: success, or
-// mrhi_errorInvalid.
-static mrhiResult CheckBuffer(const mrhiDevice* device, const mrhiShaderBinding* slot,
+// Checks a buffer binding and records its range: success,
+// mrhi_errorInvalid, or the refusal of an offset or size past the
+// device's limits.
+static mrhiResult CheckBuffer(mrhiDevice* device, const mrhiShaderBinding* slot,
                               const mrhiBinding* binding, uint64_t total,
                               mrhiCommandBinding* recordedOut)
 {
     bool uniform = slot->kind == mrhi_bindingUniformBuffer;
-    const mrhiLimits* limits = &device->limits;
-    uint64_t alignment = uniform ? limits->uniformOffsetAlignment : limits->storageOffsetAlignment;
-    uint64_t most = uniform ? limits->uniformBindingBytes : limits->storageBindingBytes;
     uint64_t offset = binding->offset;
     if (offset > total)
     {
         return mrhi_errorInvalid;
     }
     uint64_t size = binding->size == MRHI_WHOLE_SIZE ? total - offset : binding->size;
-    if (size == 0 || offset % alignment != 0 || size > total - offset || size > most ||
-        size < slot->minSize || (!uniform && size % 4 != 0))
+    if (size == 0 || size > total - offset || size < slot->minSize || (!uniform && size % 4 != 0))
     {
         return mrhi_errorInvalid;
+    }
+    mrhiResult aligned = uniform ? MRHI_DEVICE_ALIGNMENT(device, uniformOffsetAlignment, offset)
+                                 : MRHI_DEVICE_ALIGNMENT(device, storageOffsetAlignment, offset);
+    mrhiResult sized = uniform ? MRHI_DEVICE_LIMIT(device, uniformBindingBytes, size)
+                               : MRHI_DEVICE_LIMIT(device, storageBindingBytes, size);
+    // What the adapter cannot do outranks what a device could ask for.
+    if (aligned == mrhi_errorUnsupported || sized == mrhi_errorUnsupported)
+    {
+        return mrhi_errorUnsupported;
+    }
+    if (aligned != mrhi_success || sized != mrhi_success)
+    {
+        return mrhi_errorCapacity;
     }
     recordedOut->offset = offset;
     recordedOut->size = size;
@@ -215,7 +225,7 @@ static mrhiResult CheckSampler(const mrhiDevice* device, const mrhiShaderBinding
 
 // Checks one binding against its slot and the pass, recording it:
 // success, or the refusal.
-static mrhiResult CheckBinding(const mrhiDevice* device, const mrhiFramePass* pass,
+static mrhiResult CheckBinding(mrhiDevice* device, const mrhiFramePass* pass,
                                const mrhiShaderBinding* slot, const mrhiBinding* binding,
                                mrhiCommandBinding* recordedOut)
 {
@@ -283,9 +293,14 @@ mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
     {
         return status;
     }
-    if (mrhiWorkOf(pass) == mrhiWorkTransfer || table >= device->limits.bindingTables)
+    if (mrhiWorkOf(pass) == mrhiWorkTransfer)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticBindingsTable);
+    }
+    status = MRHI_DEVICE_LIMIT(device, bindingTables, (uint64_t)table + 1);
+    if (status != mrhi_success)
+    {
+        return status;
     }
     const mrhiReflection* reflection = ReflectionOf(device, pass, &status);
     if (reflection == nullptr)
@@ -297,8 +312,8 @@ mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
         return mrhiDeviceMisuse(device, mrhi_diagnosticBindingsCount);
     }
     // Checked first, so that a refused table takes no room.
-    mrhiCommandBinding recorded[MRHI_TABLE_BINDINGS];
-    bool seen[MRHI_TABLE_BINDINGS] = {0};
+    mrhiCommandBinding recorded[MRHI_MAX_TABLE_BINDINGS];
+    bool seen[MRHI_MAX_TABLE_BINDINGS] = {0};
     for (uint32_t i = 0; i < count; ++i)
     {
         uint32_t position = 0;

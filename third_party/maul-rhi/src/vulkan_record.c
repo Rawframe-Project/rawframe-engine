@@ -290,7 +290,8 @@ static void NoteReadback(const mrhiVulkanRecording* recording, uint64_t offset, 
 static void CopyBuffers(const mrhiVulkanRecording* recording, const mrhiCommand* command)
 {
     mrhiCommandBufferSide sides[2];
-    memcpy(sides, &command[1], sizeof(sides));
+    memcpy(&sides[0], &command[1], sizeof(sides[0]));
+    memcpy(&sides[1], &command[2], sizeof(sides[1]));
     const VkBufferCopy region = {
         .srcOffset = sides[0].offset,
         .dstOffset = sides[1].offset,
@@ -335,7 +336,8 @@ static void CopyWithTexture(const mrhiVulkanRecording* recording, const mrhiComm
 static void CopyTextures(const mrhiVulkanRecording* recording, const mrhiCommand* command)
 {
     mrhiCommandTextureSide sides[2];
-    memcpy(sides, &command[1], sizeof(sides));
+    memcpy(&sides[0], &command[1], sizeof(sides[0]));
+    memcpy(&sides[1], &command[2], sizeof(sides[1]));
     const mrhiCommandTextureSide* source = &sides[0];
     const mrhiCommandTextureSide* target = &sides[1];
     mrhiVulkanFrameTexture from = mrhiVulkanFrameImage(recording, source->object);

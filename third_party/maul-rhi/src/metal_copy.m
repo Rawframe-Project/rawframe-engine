@@ -131,7 +131,8 @@ static void CopyWithTexture(mrhiMetalEncoder* encoder, const mrhiCommand* comman
 static void CopyTexture(mrhiMetalEncoder* encoder, const mrhiCommand* command)
 {
     mrhiCommandTextureSide sides[2];
-    memcpy(sides, &command[1], sizeof(sides));
+    memcpy(&sides[0], &command[1], sizeof(sides[0]));
+    memcpy(&sides[1], &command[2], sizeof(sides[1]));
     id<MTLTexture> source = encoder->objects[sides[0].object - 1];
     id<MTLTexture> target = encoder->objects[sides[1].object - 1];
     bool volume = TextureOf(encoder, sides[0].object)->kind == mrhi_texture3d;
@@ -162,7 +163,8 @@ void mrhiMetalCopy(mrhiMetalEncoder* encoder, const mrhiCommand* command)
     case mrhiCommandReadBuffer:
     {
         mrhiCommandBufferSide sides[2];
-        memcpy(sides, &command[1], sizeof(sides));
+        memcpy(&sides[0], &command[1], sizeof(sides[0]));
+        memcpy(&sides[1], &command[2], sizeof(sides[1]));
         bool readback = command->type == mrhiCommandReadBuffer;
         if (readback)
         {

@@ -80,7 +80,8 @@ extern "C"
     /// without its cookie; `mrhi_errorUnsupported` for a critical extension the
     /// library does not know; `mrhi_errorState` for a device that is not ready
     /// or has a frame open; `mrhi_errorCapacity` while the device's
-    /// framesInFlight frames are still running, until one finishes.
+    /// framesInFlight frames are still running, until one finishes;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiBeginFrame(mrhiDevice* device, const mrhiFrameDef* def);
@@ -89,7 +90,8 @@ extern "C"
     ///
     /// @param device  The device.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device;
-    /// `mrhi_errorState` for a device without an open frame.
+    /// `mrhi_errorState` for a device without an open frame; `mrhi_errorBusy`
+    /// for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDropFrame(mrhiDevice* device);
@@ -106,7 +108,8 @@ extern "C"
     /// format cannot take, the frame staying open; `mrhi_errorCapacity` when
     /// the device's queue has no room for the answer, or a pass's commands did
     /// not fit the frame's, the frame staying open to be dropped;
-    /// `mrhi_errorPlatform` when the driver fails, the frame closing.
+    /// `mrhi_errorPlatform` when the driver fails, the frame closing;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiSubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut);
@@ -120,7 +123,8 @@ extern "C"
     /// @param timeoutNs  The longest wait in nanoseconds; 0 only checks.
     /// @return `mrhi_success` once the frame has finished; `mrhi_timeout` when
     /// the deadline passed first; `mrhi_errorInvalid` for a NULL device or a
-    /// token the device never gave.
+    /// token the device never gave; `mrhi_errorBusy` for a call from inside the
+    /// device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiWaitFrame(mrhiDevice* device, mrhiRequestId token,
@@ -133,7 +137,8 @@ extern "C"
     /// @param device           The device.
     /// @param notificationOut  Receives the record.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
-    /// drained; `mrhi_errorInvalid` for a NULL argument.
+    /// drained; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorBusy` for a
+    /// call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult
@@ -155,7 +160,8 @@ extern "C"
     /// once on the web; `mrhi_empty` at once when the queue is empty and the
     /// device owes no answer, with no pipeline pending and no frame running (a
     /// readback is owed only once its frame is submitted); `mrhi_errorInvalid`
-    /// for a NULL device.
+    /// for a NULL device; `mrhi_errorBusy` for a call from inside the device's
+    /// allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiWaitDeviceNotification(mrhiDevice* device,
@@ -181,13 +187,15 @@ extern "C"
     /// @param resourceOut  Receives the frame's id for it; the null id on any
     ///                     failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def
-    /// without its cookie, a label that is not UTF-8 without NUL within
-    /// MRHI_LABEL_BYTES, a usage other than 0, or a shape mrhiCreateTexture
-    /// refuses as invalid; `mrhi_errorUnsupported` for a size past the device's
-    /// limits, a compressed format without its feature, or a critical extension
-    /// the library does not know; `mrhi_errorState` for a device without an
-    /// open frame; `mrhi_errorCapacity` when the device's frameResources limit
-    /// is reached.
+    /// without its cookie, a label that is not UTF-8 without NUL, a usage other
+    /// than 0, or a shape mrhiCreateTexture refuses as invalid;
+    /// `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES;
+    /// `mrhi_errorUnsupported` for a size past the adapter's limits, a
+    /// compressed format without its feature, or a critical extension the
+    /// library does not know; `mrhi_errorState` for a device without an open
+    /// frame; `mrhi_errorCapacity` for a size past the device's limits within
+    /// the adapter's, or when the device's frameResources limit is reached;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDeclareTexture(mrhiDevice* device,
@@ -204,12 +212,14 @@ extern "C"
     /// @param resourceOut  Receives the frame's id for it; the null id on any
     ///                     failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def
-    /// without its cookie, a label that is not UTF-8 without NUL within
-    /// MRHI_LABEL_BYTES, a usage other than 0, or a size that is zero or not a
-    /// multiple of 4; `mrhi_errorUnsupported` for a size past the device's
-    /// bufferBytes, or a critical extension the library does not know;
-    /// `mrhi_errorState` for a device without an open frame;
-    /// `mrhi_errorCapacity` when the device's frameResources limit is reached.
+    /// without its cookie, a label that is not UTF-8 without NUL, a usage other
+    /// than 0, or a size that is zero or not a multiple of 4; `mrhi_errorLimit`
+    /// for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorUnsupported` for a
+    /// size past the adapter's bufferBytes, or a critical extension the library
+    /// does not know; `mrhi_errorState` for a device without an open frame;
+    /// `mrhi_errorCapacity` for a size past the device's bufferBytes within the
+    /// adapter's, or when the device's frameResources limit is reached;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDeclareBuffer(mrhiDevice* device,
@@ -226,7 +236,8 @@ extern "C"
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for a texture the device no longer has;
     /// `mrhi_errorState` for a device without an open frame;
-    /// `mrhi_errorCapacity` when the device's frameResources limit is reached.
+    /// `mrhi_errorCapacity` when the device's frameResources limit is reached;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiImportTexture(mrhiDevice* device, mrhiTextureId texture,
@@ -242,7 +253,8 @@ extern "C"
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for a buffer the device no longer has;
     /// `mrhi_errorState` for a device without an open frame;
-    /// `mrhi_errorCapacity` when the device's frameResources limit is reached.
+    /// `mrhi_errorCapacity` when the device's frameResources limit is reached;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiImportBuffer(mrhiDevice* device, mrhiBufferId buffer,
@@ -265,7 +277,8 @@ extern "C"
     /// `mrhi_errorStale` for a surface the instance no longer has;
     /// `mrhi_errorState` for a device without an open frame, a frame already
     /// compiled, or a surface not configured on the device;
-    /// `mrhi_errorCapacity` when the device's frameResources limit is reached.
+    /// `mrhi_errorCapacity` when the device's frameResources limit is reached;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiAcquireSurfaceImage(mrhiDevice* device,
@@ -289,7 +302,8 @@ extern "C"
     /// sampled usage; `mrhi_errorUnsupported` without the bindless_sampling
     /// feature; `mrhi_errorState` for a device without an open frame or with a
     /// compiled one; `mrhi_errorStale` for a resource not of the open frame, or
-    /// whose object the device no longer has.
+    /// whose object the device no longer has; `mrhi_errorBusy` for a call from
+    /// inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiSealResource(mrhiDevice* device,
@@ -309,14 +323,14 @@ extern "C"
     /// without the bindless_sampling feature; `mrhi_errorState` for a device
     /// without an open frame or with a compiled one; `mrhi_errorStale` for a
     /// resource not of the open frame, or whose object the device no longer
-    /// has.
+    /// has; `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiUnsealResource(mrhiDevice* device,
                                                           mrhiResourceId resource);
 
 // The native passes a frame holds at most (mrhiPassDef's native).
-#define MRHI_NATIVE_PASSES 8
+#define MRHI_MAX_NATIVE_PASSES 8
 
     // Where a pass runs: a hint drivers without the queue ignore, running it on
     // the graphics queue.
@@ -413,7 +427,7 @@ extern "C"
     } mrhiAccess;
 
 // The color targets one pass writes at most.
-#define MRHI_COLOR_TARGETS 8
+#define MRHI_MAX_COLOR_TARGETS 8
 
     // A color target's clear value.
     typedef struct mrhiClearColor
@@ -494,8 +508,8 @@ extern "C"
         // Extensions, or NULL.
         const mrhiChain* next;
         // A name for debugging tools, shown around the pass's work: UTF-8
-        // without NUL, labelLength bytes, at most MRHI_LABEL_BYTES; NULL when
-        // labelLength is 0. Only read during the call.
+        // without NUL, labelLength bytes, at most MRHI_MAX_LABEL_BYTES; NULL
+        // when labelLength is 0. Only read during the call.
         const char* label;
         // The label's bytes.
         size_t labelLength;
@@ -516,8 +530,8 @@ extern "C"
         // How many.
         uint32_t accessCount;
         // Its color targets, colorTargetCount of them.
-        mrhiColorTarget colorTargets[MRHI_COLOR_TARGETS];
-        // How many, at most MRHI_COLOR_TARGETS.
+        mrhiColorTarget colorTargets[MRHI_MAX_COLOR_TARGETS];
+        // How many, at most MRHI_MAX_COLOR_TARGETS.
         uint32_t colorTargetCount;
         // Its depth target, if its resource is not null.
         mrhiDepthTarget depthTarget;
@@ -569,14 +583,18 @@ extern "C"
     /// occlusion query set that is not one or is named by a pass without
     /// targets, or timestamps of a set that is not a timestamp set, without a
     /// set, with neither query, with both the same, or with a query past the
-    /// set's count or already written in this frame; `mrhi_errorStale` for a
-    /// resource of another frame, an imported object destroyed since, or a
-    /// query set or heap the device no longer has; `mrhi_errorUnsupported` for
-    /// a critical extension the library does not know, or views past one
-    /// without the multiview feature or past its limit; `mrhi_errorState` for a
-    /// device without an open frame, or a frame already compiled;
-    /// `mrhi_errorCapacity` when the device's framePasses or frameAccesses
-    /// limit is reached.
+    /// set's count or already written in this frame; `mrhi_errorLimit` for more
+    /// than MRHI_MAX_COLOR_TARGETS color targets, a native pass past
+    /// MRHI_MAX_NATIVE_PASSES in the frame or a label past
+    /// MRHI_MAX_LABEL_BYTES; `mrhi_errorStale` for a resource of another frame,
+    /// an imported object destroyed since, or a query set or heap the device no
+    /// longer has; `mrhi_errorUnsupported` for a critical extension the library
+    /// does not know, or views past one without the multiview feature or past
+    /// the adapter's limit; `mrhi_errorState` for a device without an open
+    /// frame, or a frame already compiled; `mrhi_errorCapacity` for views past
+    /// the device's limit within the adapter's, or when the device's
+    /// framePasses or frameAccesses limit is reached; `mrhi_errorBusy` for a
+    /// call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def,
@@ -594,7 +612,8 @@ extern "C"
     /// texture whose format cannot take the usages its kept passes make of it,
     /// the frame staying open; `mrhi_errorCapacity` when the barriers exceed
     /// the device's frameBarriers, the frame staying open; `mrhi_errorState`
-    /// for a device without an open frame, or a frame already compiled.
+    /// for a device without an open frame, or a frame already compiled;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiCompileFrame(mrhiDevice* device);
@@ -743,7 +762,7 @@ extern "C"
         bool kept;
         // What each color target keeps: its own store, made a discard when
         // nothing later reads it and it is not imported.
-        mrhiStoreOp colorStores[MRHI_COLOR_TARGETS];
+        mrhiStoreOp colorStores[MRHI_MAX_COLOR_TARGETS];
         // What the depth target's depth keeps, likewise.
         mrhiStoreOp depthStore;
         // What its stencil keeps, likewise.

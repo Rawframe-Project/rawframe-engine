@@ -36,4 +36,9 @@ bool mrhiPoolIsLive(const mrhiPool* pool, uint32_t index1, uint32_t generation);
 // Frees a live slot and ends its ids.
 void mrhiPoolRelease(mrhiPool* pool, uint32_t index1);
 
+// Gives back the slot the last acquire took, as if it had never been
+// taken: its generation and the free list as they were, so the next
+// acquire hands out the same id.
+void mrhiPoolUnacquire(mrhiPool* pool, uint32_t index1);
+
 #endif // MAUL_RHI_SRC_POOL_H

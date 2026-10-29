@@ -61,3 +61,27 @@ size_t mrhiLayoutAdd(mrhiLayout* layout, size_t count, size_t itemSize, size_t a
     layout->size = end;
     return offset;
 }
+
+static void* GuardedAlloc(size_t size, size_t alignment, void* context)
+{
+    mrhiAllocatorGuard* guard = context;
+    bool busy = guard->busy;
+    guard->busy = true;
+    void* memory = mrhiAllocate(&guard->program, size, alignment);
+    guard->busy = busy;
+    return memory;
+}
+
+static void GuardedFree(void* memory, size_t size, size_t alignment, void* context)
+{
+    mrhiAllocatorGuard* guard = context;
+    bool busy = guard->busy;
+    guard->busy = true;
+    mrhiRelease(&guard->program, memory, size, alignment);
+    guard->busy = busy;
+}
+
+mrhiAllocator mrhiGuardedAllocator(mrhiAllocatorGuard* guard)
+{
+    return (mrhiAllocator){.alloc = GuardedAlloc, .free = GuardedFree, .context = guard};
+}

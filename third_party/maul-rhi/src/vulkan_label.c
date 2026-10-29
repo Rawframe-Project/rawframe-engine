@@ -14,12 +14,12 @@
 // A label with its NUL.
 typedef struct Text
 {
-    char bytes[MRHI_LABEL_BYTES + 1];
+    char bytes[MRHI_MAX_LABEL_BYTES + 1];
 } Text;
 
 static Text TextOf(const char* label, size_t labelLength)
 {
-    MRHI_ASSERT(labelLength <= MRHI_LABEL_BYTES);
+    MRHI_ASSERT(labelLength <= MRHI_MAX_LABEL_BYTES);
     Text text;
     memcpy(text.bytes, label, labelLength);
     text.bytes[labelLength] = '\0';

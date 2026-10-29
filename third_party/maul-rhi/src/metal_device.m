@@ -363,7 +363,7 @@ static Room RoomOf(const mrhiDeviceLimits* limits)
     // A pass opens one batch at most, beside the frame's first and last,
     // and each native pass commits one more command buffer before its own.
     room.batchLimit = limits->framePasses + 2;
-    room.commitLimit = room.batchLimit + MRHI_NATIVE_PASSES;
+    room.commitLimit = room.batchLimit + MRHI_MAX_NATIVE_PASSES;
     room.batches =
         mrhiLayoutAdd(layout, room.batchLimit, sizeof(mrhiMetalBatch), alignof(mrhiMetalBatch));
     size_t passes = (size_t)limits->framePasses + 1;

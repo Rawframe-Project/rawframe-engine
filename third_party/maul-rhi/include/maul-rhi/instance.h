@@ -239,8 +239,9 @@ extern "C"
     MRHI_NODISCARD MRHI_API mrhiResult mrhiCreateInstance(const mrhiInstanceDef* def,
                                                           mrhiInstance** instanceOut);
 
-    /// Destroys an instance. While any of its devices exists it refuses,
-    /// counting the call as misuse and destroying nothing.
+    /// Destroys an instance. While any of its devices exists, or from inside
+    /// its allocator, it refuses, counting the call as misuse and destroying
+    /// nothing.
     ///
     /// @param instance  The instance, or NULL for nothing.
     /// @par Thread safety
@@ -248,8 +249,9 @@ extern "C"
     MRHI_API void mrhiDestroyInstance(mrhiInstance* instance);
 
     /// Returns how many calls the instance has refused as invalid input
-    /// (mrhi_errorInvalid): a count release builds can watch to catch a
-    /// caller's bugs. Stale ids are not misuse.
+    /// (mrhi_errorInvalid), past a fixed bound (mrhi_errorLimit) or from inside
+    /// its allocator (mrhi_errorBusy): a count release builds can watch to
+    /// catch a caller's bugs. Stale ids are not misuse.
     ///
     /// @param instance  The instance.
     /// @return The count; 0 for a NULL instance.
@@ -267,7 +269,8 @@ extern "C"
     /// @param diagnosticOut  Receives the record; untouched unless one is
     ///                       taken.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
-    /// drained or keeps none; `mrhi_errorInvalid` for a NULL argument.
+    /// drained or keeps none; `mrhi_errorInvalid` for a NULL argument;
+    /// `mrhi_errorBusy` for a call from inside the instance's allocator.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiNextInstanceDiagnostic(mrhiInstance* instance,
@@ -304,7 +307,8 @@ extern "C"
     /// for a NULL argument or a def without its cookie; `mrhi_errorStale` for a
     /// compatible surface the instance no longer has; `mrhi_errorUnsupported`
     /// for a critical extension the library does not know; `mrhi_errorCapacity`
-    /// when the notification queue has no room for the answer.
+    /// when the notification queue has no room for the answer; `mrhi_errorBusy`
+    /// for a call from inside the instance's allocator.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiRequestAdapters(mrhiInstance* instance,
@@ -317,7 +321,8 @@ extern "C"
     /// @param instance         The instance.
     /// @param notificationOut  Receives the record.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
-    /// drained; `mrhi_errorInvalid` for a NULL argument.
+    /// drained; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorBusy` for a
+    /// call from inside the instance's allocator.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult

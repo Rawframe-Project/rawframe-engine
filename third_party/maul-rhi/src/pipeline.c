@@ -138,6 +138,14 @@ void mrhiFreePipelineSlot(mrhiDevice* device, uint32_t index1)
     mrhiPoolRelease(&device->pipelines, index1);
 }
 
+void mrhiUntakePipelineSlot(mrhiDevice* device, uint32_t index1)
+{
+    mrhiPipelineSlot* slot = &device->pipelineSlots[index1 - 1];
+    mrhiReleaseReflection(&device->allocator, slot->reflection);
+    *slot = (mrhiPipelineSlot){0};
+    mrhiPoolUnacquire(&device->pipelines, index1);
+}
+
 mrhiRequestId mrhiStartPipeline(mrhiDevice* device, uint32_t index1)
 {
     ++device->pendingCount;
@@ -213,6 +221,10 @@ mrhiResult mrhiCreateComputePipeline(mrhiDevice* device, const mrhiComputePipeli
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (def == nullptr || pipelineOut == nullptr || requestOut == nullptr)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -249,7 +261,7 @@ mrhiResult mrhiCreateComputePipeline(mrhiDevice* device, const mrhiComputePipeli
                                           mrhiPipelineTag(device, index1), &slot->handle));
     if (status != mrhi_success)
     {
-        mrhiFreePipelineSlot(device, index1);
+        mrhiUntakePipelineSlot(device, index1);
         return status;
     }
     *pipelineOut = (mrhiComputePipelineId){index1, generation};
@@ -281,6 +293,10 @@ mrhiResult mrhiDestroyComputePipeline(mrhiDevice* device, mrhiComputePipelineId 
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     return mrhiDestroyPipeline(device, mrhiPipelineCompute, pipeline.index1, pipeline.generation);
 }

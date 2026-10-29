@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The command stream: 32-byte records in 4 KiB chunks of a frame's
-// arena, each pass linking its own chunks. A command's payload records
-// follow it in the same chunk.
+// The command stream: 32-byte records in chunks of a frame's arena,
+// each pass linking its own chunks. A command's payload records follow
+// it in the same chunk, each payload struct in its own record from the
+// record's start, copied in and out one record at a time.
 
 #ifndef MAUL_RHI_SRC_COMMAND_H
 #define MAUL_RHI_SRC_COMMAND_H
 
 #include <stdint.h>
+
+// The bytes of a record.
+#define MRHI_RECORD_BYTES 32
 
 // What a command record does. Fields a to d hold its operands; a is 32
 // bits, so a driver handle goes in b, c or d.
@@ -123,7 +127,6 @@ typedef struct mrhiCommandBinding
     uint8_t baseMip;
     uint8_t mipCount;
     uint8_t kind;
-    uint8_t reserved;
 } mrhiCommandBinding;
 
 // A buffer's side of a copy as recorded: its frame resource's slot plus
@@ -134,7 +137,6 @@ typedef struct mrhiCommandBufferSide
     uint32_t bytesPerRow;
     uint64_t offset;
     uint32_t rowsPerImage;
-    uint8_t reserved[12];
 } mrhiCommandBufferSide;
 
 // A texture's side of a copy as recorded: its frame resource's slot
@@ -147,10 +149,10 @@ typedef struct mrhiCommandTextureSide
     uint32_t y;
     uint32_t z;
     uint8_t aspect;
-    uint8_t reserved[11];
 } mrhiCommandTextureSide;
 
-// A chunk's bytes, and the records after its 32-byte header.
+// The bytes a chunk counts for in the limits, which it fits, and its
+// records.
 #define MRHI_CHUNK_BYTES    4096
 #define MRHI_CHUNK_COMMANDS 127
 
@@ -160,14 +162,15 @@ typedef struct mrhiCommandChunk
 {
     uint32_t next;
     uint32_t count;
-    uint8_t reserved[24];
     mrhiCommand commands[MRHI_CHUNK_COMMANDS];
 } mrhiCommandChunk;
 
-static_assert(sizeof(mrhiCommand) == 32, "a command is one record");
-static_assert(sizeof(mrhiCommandBinding) == 32, "a binding is one record");
-static_assert(sizeof(mrhiCommandBufferSide) == 32, "a side is one record");
-static_assert(sizeof(mrhiCommandTextureSide) == 32, "a side is one record");
-static_assert(sizeof(mrhiCommandChunk) == MRHI_CHUNK_BYTES, "a chunk is 4 KiB");
+static_assert(sizeof(mrhiCommand) == MRHI_RECORD_BYTES, "a command is one record");
+// A table's bindings are copied as one array, so a binding fills its
+// record exactly.
+static_assert(sizeof(mrhiCommandBinding) == MRHI_RECORD_BYTES, "a binding is one record");
+static_assert(sizeof(mrhiCommandBufferSide) <= MRHI_RECORD_BYTES, "a side fits one record");
+static_assert(sizeof(mrhiCommandTextureSide) <= MRHI_RECORD_BYTES, "a side fits one record");
+static_assert(sizeof(mrhiCommandChunk) <= MRHI_CHUNK_BYTES, "a chunk fits 4 KiB");
 
 #endif // MAUL_RHI_SRC_COMMAND_H

@@ -368,8 +368,8 @@ extern "C"
         // Extensions, or NULL.
         const mrhiChain* next;
         // A name for debugging tools: UTF-8 without NUL, labelLength bytes, at
-        // most MRHI_LABEL_BYTES; NULL when labelLength is 0. Only read during
-        // the call.
+        // most MRHI_MAX_LABEL_BYTES; NULL when labelLength is 0. Only read
+        // during the call.
         const char* label;
         // The label's bytes.
         size_t labelLength;
@@ -442,8 +442,8 @@ extern "C"
         // does not write the sample mask.
         bool alphaToCoverage;
         // The color targets by location, colorTargetCount of them.
-        mrhiColorTargetState colorTargets[MRHI_COLOR_TARGETS];
-        // How many, at most MRHI_COLOR_TARGETS; 0 without a fragment entry.
+        mrhiColorTargetState colorTargets[MRHI_MAX_COLOR_TARGETS];
+        // How many, at most MRHI_MAX_COLOR_TARGETS; 0 without a fragment entry.
         uint32_t colorTargetCount;
         // Values for the container's constants, each id at most once; every
         // constant without a default needs one. NULL when constantCount is 0.
@@ -481,22 +481,28 @@ extern "C"
     /// for a NULL argument, a def without its cookie, a bad label, a NULL
     /// vertex entry, a NULL fragment entry with a length, constants as for
     /// compute pipelines, or state that contradicts itself or WebGPU's rules;
-    /// `mrhi_errorFormat` for entries the shader has not as vertex and fragment
-    /// entries, constants as for compute pipelines, or state the reflection
-    /// refuses: a vertex input without an attribute of its scalar class, a
-    /// fragment depth without a depth format, a target its fragment output does
-    /// not fit, blending by an alpha or a second source the output lacks, alpha
-    /// to coverage with a written sample mask, or a fragment input no vertex
-    /// output matches; invalid input outranks format, and format outranks
-    /// unsupported; `mrhi_errorStale` for a shader the device no longer has;
+    /// `mrhi_errorLimit` for more than MRHI_MAX_COLOR_TARGETS color targets or
+    /// a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorFormat` for entries the
+    /// shader has not as vertex and fragment entries, constants as for compute
+    /// pipelines, or state the reflection refuses: a vertex input without an
+    /// attribute of its scalar class, a fragment depth without a depth format,
+    /// a target its fragment output does not fit, blending by an alpha or a
+    /// second source the output lacks, alpha to coverage with a written sample
+    /// mask, or a fragment input no vertex output matches; more color targets
+    /// than the bound are refused first, unread; invalid input outranks format,
+    /// format outranks unsupported, and unsupported outranks capacity;
+    /// `mrhi_errorStale` for a shader the device no longer has;
     /// `mrhi_errorUnsupported` for vertex buffers, attributes, strides, inter-
-    /// stage variables or color bytes past the device's limits, target formats
+    /// stage variables or color bytes past the adapter's limits, target formats
     /// the device cannot render, blend or multisample as asked, unclipped depth
-    /// without its feature, views past one without multiview or past its limit,
-    /// a critical extension the library does not know; `mrhi_errorState` for a
-    /// device that is not ready; `mrhi_errorCapacity` when the device's
-    /// pipeline limit is reached or its queue has no room for the answer;
-    /// `mrhi_errorPlatform` when the driver refuses at once.
+    /// without its feature, views past one without multiview or past the
+    /// adapter's limit, a critical extension the library does not know;
+    /// `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity`
+    /// for vertex buffers, attributes, strides, inter-stage variables, color
+    /// bytes or views past the device's limits within the adapter's, or when
+    /// the device's pipeline limit is reached or its queue has no room for the
+    /// answer; `mrhi_errorPlatform` when the driver refuses at once;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult
@@ -509,7 +515,8 @@ extern "C"
     /// @param device    The device.
     /// @param pipeline  The pipeline.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device;
-    /// `mrhi_errorStale` for a pipeline the device no longer has.
+    /// `mrhi_errorStale` for a pipeline the device no longer has;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDestroyGraphicsPipeline(mrhiDevice* device,
@@ -530,8 +537,8 @@ extern "C"
         // Extensions, or NULL.
         const mrhiChain* next;
         // A name for debugging tools: UTF-8 without NUL, labelLength bytes, at
-        // most MRHI_LABEL_BYTES; NULL when labelLength is 0. Only read during
-        // the call.
+        // most MRHI_MAX_LABEL_BYTES; NULL when labelLength is 0. Only read
+        // during the call.
         const char* label;
         // The label's bytes.
         size_t labelLength;
@@ -571,6 +578,7 @@ extern "C"
     /// @return `mrhi_success` with the pipeline pending; `mrhi_errorInvalid`
     /// for a NULL argument, a def without its cookie, a bad label, a NULL
     /// entry, NULL constants with a count, or a constant given twice;
+    /// `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES;
     /// `mrhi_errorFormat` for an entry the shader has not as a compute entry, a
     /// constant the shader has not or with a value its type cannot hold, or a
     /// constant without a default left unset; `mrhi_errorStale` for a shader
@@ -578,7 +586,8 @@ extern "C"
     /// extension the library does not know; `mrhi_errorState` for a device that
     /// is not ready; `mrhi_errorCapacity` when the device's pipeline limit is
     /// reached or its queue has no room for the answer; `mrhi_errorPlatform`
-    /// when the driver refuses at once.
+    /// when the driver refuses at once; `mrhi_errorBusy` for a call from inside
+    /// the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiCreateComputePipeline(mrhiDevice* device,
@@ -592,7 +601,8 @@ extern "C"
     /// @param device    The device.
     /// @param pipeline  The pipeline.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device;
-    /// `mrhi_errorStale` for a pipeline the device no longer has.
+    /// `mrhi_errorStale` for a pipeline the device no longer has;
+    /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDestroyComputePipeline(mrhiDevice* device,
@@ -623,7 +633,8 @@ extern "C"
     /// the def gave none; `mrhi_errorVersion` for one of another ABI version
     /// (MRHI_ABI_VERSION) or envelope version; `mrhi_errorStale` for one from
     /// another driver or adapter, or one the driver declined;
-    /// `mrhi_errorInvalid` for a damaged one, or a NULL device.
+    /// `mrhi_errorFormat` for a damaged one; `mrhi_errorInvalid` for a NULL
+    /// device.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiGetPipelineCacheOutcome(mrhiDevice* device);

@@ -36,6 +36,10 @@ mrhiResult mrhiDeclareTexture(mrhiDevice* device, const mrhiTextureDef* def,
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (def == nullptr || resourceOut == nullptr)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -66,6 +70,10 @@ mrhiResult mrhiDeclareBuffer(mrhiDevice* device, const mrhiBufferDef* def,
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (def == nullptr || resourceOut == nullptr)
     {
@@ -112,6 +120,10 @@ mrhiResult mrhiImportTexture(mrhiDevice* device, mrhiTextureId texture, mrhiReso
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (resourceOut == nullptr)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -152,6 +164,10 @@ mrhiResult mrhiImportBuffer(mrhiDevice* device, mrhiBufferId buffer, mrhiResourc
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (resourceOut == nullptr)
     {
@@ -217,6 +233,10 @@ mrhiResult mrhiSealResource(mrhiDevice* device, mrhiResourceId resource)
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     mrhiResult status = mrhi_success;
     mrhiFrameResource* found = FindSealable(device, resource, &status);
     if (found == nullptr)
@@ -238,6 +258,10 @@ mrhiResult mrhiUnsealResource(mrhiDevice* device, mrhiResourceId resource)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     mrhiResult status = mrhi_success;
     mrhiFrameResource* found = FindSealable(device, resource, &status);
@@ -276,6 +300,10 @@ mrhiResult mrhiAcquireSurfaceImage(mrhiDevice* device, mrhiSurfaceId surface,
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (imageOut == nullptr)
     {

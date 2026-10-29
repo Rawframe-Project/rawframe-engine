@@ -247,6 +247,10 @@ mrhiResult mrhiCompileFrame(mrhiDevice* device)
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (!device->frameOpen || device->frameCompiled)
     {
         return mrhi_errorState;

@@ -125,7 +125,8 @@ static VkResult Fill(const mrhiVulkanSwapchains* swapchains, mrhiVulkanSwapchain
     return result;
 }
 
-// Makes a swapchain in a free slot.
+// Makes a swapchain in a free slot: the slot once vkCreateSwapchainKHR
+// was called, NULL for a refusal before it.
 static mrhiResult Make(mrhiVulkanSwapchains* swapchains, VkSurfaceKHR surface,
                        const mrhiSurfaceConfig* config, VkSwapchainKHR old,
                        mrhiVulkanSwapchain** slotOut)
@@ -213,15 +214,21 @@ mrhiResult mrhiVulkanConfigure(mrhiVulkanSwapchains* swapchains, VkSurfaceKHR su
     mrhiVulkanSwapchain* slot = nullptr;
     mrhiResult status = Make(swapchains, surface, config,
                              retired != nullptr ? retired->swapchain : VK_NULL_HANDLE, &slot);
+    // Only vkCreateSwapchainKHR retires the old swapchain, whatever it
+    // answers; a refusal before it leaves the old one working.
+    if (slot == nullptr)
+    {
+        *handleOut = old;
+        return status;
+    }
     if (retired != nullptr)
     {
         (void)swapchains->api->vkQueueWaitIdle(swapchains->queue);
         Free(swapchains, retired);
     }
-    if (status == mrhi_success)
-    {
-        *handleOut = (uint64_t)slot->generation << 32 | (uint64_t)(slot - swapchains->slots + 1);
-    }
+    *handleOut = status == mrhi_success
+                     ? (uint64_t)slot->generation << 32 | (uint64_t)(slot - swapchains->slots + 1)
+                     : 0;
     return status;
 }
 

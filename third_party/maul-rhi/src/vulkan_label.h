@@ -3,7 +3,7 @@
 //
 // Labels on Vulkan: object names and command labels through
 // VK_EXT_debug_utils where the instance has it, and nothing where it has
-// not. Labels are UTF-8 without NUL, at most MRHI_LABEL_BYTES; Vulkan's
+// not. Labels are UTF-8 without NUL, at most MRHI_MAX_LABEL_BYTES; Vulkan's
 // are NUL-terminated, so each is copied first.
 
 #ifndef MAUL_RHI_SRC_VULKAN_LABEL_H

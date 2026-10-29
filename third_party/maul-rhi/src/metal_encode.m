@@ -291,7 +291,7 @@ static void Bind(mrhiMetalEncoder* encoder, const mrhiCommand* command)
 {
     uint32_t table = command->a;
     uint32_t count = (uint32_t)command->b;
-    MRHI_ASSERT(table < MRHI_METAL_TABLES && count <= MRHI_TABLE_BINDINGS);
+    MRHI_ASSERT(table < MRHI_METAL_TABLES && count <= MRHI_MAX_TABLE_BINDINGS);
     for (uint32_t i = 0; i < count; ++i)
     {
         mrhiCommandBinding binding;

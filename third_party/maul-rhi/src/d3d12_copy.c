@@ -202,7 +202,8 @@ static void CopyWithTexture(mrhiD3d12Recorder* recorder, const mrhiCommand* comm
 static void CopyTexture(const mrhiD3d12Recorder* recorder, const mrhiCommand* command)
 {
     mrhiCommandTextureSide sides[2];
-    memcpy(sides, &command[1], sizeof(sides));
+    memcpy(&sides[0], &command[1], sizeof(sides[0]));
+    memcpy(&sides[1], &command[2], sizeof(sides[1]));
     const mrhiD3d12Object* source = &recorder->table[sides[0].object - 1];
     const mrhiD3d12Object* target = &recorder->table[sides[1].object - 1];
     bool volume = source->texture->kind == mrhi_texture3d;
@@ -487,7 +488,8 @@ void mrhiD3d12Copy(mrhiD3d12Recorder* recorder, const mrhiCommand* command)
     case mrhiCommandReadBuffer:
     {
         mrhiCommandBufferSide sides[2];
-        memcpy(sides, &command[1], sizeof(sides));
+        memcpy(&sides[0], &command[1], sizeof(sides[0]));
+        memcpy(&sides[1], &command[2], sizeof(sides[1]));
         bool readback = command->type == mrhiCommandReadBuffer;
         if (readback)
         {

@@ -157,12 +157,12 @@ typedef struct mrhiD3d12Recorder
     ID3D12RootSignature* graphicsRoot;
     ID3D12RootSignature* computeRoot;
     // The buffers each table bound for graphics (0) and compute (1) uses.
-    mrhiD3d12Bound bound[2][MRHI_D3D12_TABLES][MRHI_TABLE_BINDINGS];
+    mrhiD3d12Bound bound[2][MRHI_D3D12_TABLES][MRHI_MAX_TABLE_BINDINGS];
     uint32_t boundCounts[2][MRHI_D3D12_TABLES];
     // The last sampler table written, which a table of the same samplers
     // takes again, since a slot has few sampler descriptors.
     D3D12_GPU_DESCRIPTOR_HANDLE samplerRun;
-    uint64_t samplerHandles[MRHI_TABLE_BINDINGS];
+    uint64_t samplerHandles[MRHI_MAX_TABLE_BINDINGS];
     uint32_t samplerCount;
     // The vertex buffers set, set on the list at the next draw since
     // their strides are the pipeline's, and the index buffer.

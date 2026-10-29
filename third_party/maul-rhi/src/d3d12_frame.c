@@ -105,7 +105,7 @@ static uint32_t BatchLimit(const mrhiDeviceLimits* limits)
 
 static uint32_t ListLimit(const mrhiDeviceLimits* limits, mrhiD3d12Lane lane)
 {
-    return BatchLimit(limits) + (lane == mrhiD3d12LaneDirect ? MRHI_NATIVE_PASSES : 0);
+    return BatchLimit(limits) + (lane == mrhiD3d12LaneDirect ? MRHI_MAX_NATIVE_PASSES : 0);
 }
 
 static uint32_t SlotLists(const mrhiDeviceLimits* limits)
@@ -126,7 +126,7 @@ mrhiD3d12FrameRoom mrhiD3d12PlanFrames(mrhiLayout* layout, const mrhiDeviceLimit
     room.lists =
         mrhiLayoutAdd(layout, (size_t)slots * SlotLists(limits), sizeof(ID3D12GraphicsCommandList*),
                       alignof(ID3D12GraphicsCommandList*));
-    room.runs = mrhiLayoutAdd(layout, (size_t)slots * (SlotLists(limits) + MRHI_NATIVE_PASSES),
+    room.runs = mrhiLayoutAdd(layout, (size_t)slots * (SlotLists(limits) + MRHI_MAX_NATIVE_PASSES),
                               sizeof(ID3D12CommandList*), alignof(ID3D12CommandList*));
     room.batches = mrhiLayoutAdd(layout, (size_t)slots * BatchLimit(limits), sizeof(mrhiD3d12Batch),
                                  alignof(mrhiD3d12Batch));
@@ -160,7 +160,7 @@ void mrhiD3d12LayFrames(mrhiD3d12Frames* frames, unsigned char* block,
     frames->resourceLimit = limits->frameResources;
     // Each pass takes a view of each color target and one of its depth
     // target at most.
-    frames->targetLimit = limits->framePasses * MRHI_COLOR_TARGETS;
+    frames->targetLimit = limits->framePasses * MRHI_MAX_COLOR_TARGETS;
     frames->depthLimit = limits->framePasses;
     // Each binding of a table is a record of the frame's commands, and
     // takes one descriptor at most, as each clear does, the library's of
@@ -195,7 +195,7 @@ void mrhiD3d12LayFrames(mrhiD3d12Frames* frames, unsigned char* block,
     lanes->queues[mrhiD3d12LaneDirect] = frames->queue;
     lanes->recorder = &frames->recorder;
     lanes->batchLimit = BatchLimit(limits);
-    lanes->runLimit = SlotLists(limits) + MRHI_NATIVE_PASSES;
+    lanes->runLimit = SlotLists(limits) + MRHI_MAX_NATIVE_PASSES;
     lanes->passLanes = (mrhiD3d12Lane*)(block + room->passLanes);
     lanes->passBatches = (uint32_t*)(block + room->passBatches);
     lanes->followed = (bool*)(block + room->followed);
@@ -242,7 +242,7 @@ static bool OpenSlot(mrhiD3d12Frames* frames, mrhiD3d12Slot* slot)
     }
     // A frame of the direct lane's work alone takes these.
     ID3D12GraphicsCommandList** parts = slot->lanes.lists[mrhiD3d12LaneDirect];
-    for (uint32_t i = 0; i < 1 + MRHI_NATIVE_PASSES; ++i)
+    for (uint32_t i = 0; i < 1 + MRHI_MAX_NATIVE_PASSES; ++i)
     {
         if (FAILED(ID3D12Device_CreateCommandList(device, 0, D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                   slot->lanes.allocators[mrhiD3d12LaneDirect],

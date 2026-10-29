@@ -39,7 +39,7 @@ mrhiResult mrhiImportPipelineCache(mrhiDevice* device, const void* bytes, size_t
     const uint8_t* data = bytes;
     if (size < HEADER_BYTES || memcmp(data, MAGIC, sizeof(MAGIC)) != 0)
     {
-        return mrhi_errorInvalid;
+        return mrhi_errorFormat;
     }
     // Every envelope version keeps the magic and its version here; the
     // rest of another version's header may lie elsewhere, so the version
@@ -50,13 +50,13 @@ mrhiResult mrhiImportPipelineCache(mrhiDevice* device, const void* bytes, size_t
     }
     if (mrhiRead64(data + 8) != size)
     {
-        return mrhi_errorInvalid;
+        return mrhi_errorFormat;
     }
     uint8_t digest[MRHI_DIGEST_BYTES];
     mrhiSha256(data + DIGESTED_FROM, size - DIGESTED_FROM, digest);
     if (memcmp(digest, data + 16, MRHI_DIGEST_BYTES) != 0)
     {
-        return mrhi_errorInvalid;
+        return mrhi_errorFormat;
     }
     if (mrhiRead32(data + 48) != MRHI_ABI_VERSION)
     {
@@ -101,6 +101,9 @@ mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytes, size_t capacity
     {
         return mrhi_errorPlatform;
     }
+    // The header is built field by field over zeros, so nothing the
+    // caller's bytes held stays in it.
+    memset(data, 0, HEADER_BYTES);
     memcpy(data, MAGIC, sizeof(MAGIC));
     mrhiWrite32(data + 4, CACHE_VERSION);
     mrhiWrite64(data + 8, *sizeOut);

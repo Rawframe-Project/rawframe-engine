@@ -515,8 +515,9 @@ static mrhiResult CheckNative(mrhiDevice* device, const mrhiPassDef* def)
     {
         natives += device->framePasses[i].native ? 1u : 0u;
     }
-    return natives < MRHI_NATIVE_PASSES ? mrhi_success
-                                        : mrhiDeviceFull(device, mrhi_diagnosticNativePasses);
+    return natives < MRHI_MAX_NATIVE_PASSES
+               ? mrhi_success
+               : mrhiDeviceOverLimit(device, mrhi_diagnosticNativePasses);
 }
 
 static mrhiResult CheckDef(mrhiDevice* device, const mrhiPassDef* def)
@@ -535,18 +536,22 @@ static mrhiResult CheckDef(mrhiDevice* device, const mrhiPassDef* def)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
-    if (def->colorTargetCount > MRHI_COLOR_TARGETS)
+    if (def->colorTargetCount > MRHI_MAX_COLOR_TARGETS)
     {
-        return mrhiDeviceMisuse(device, mrhi_diagnosticPassColorTargets);
+        return mrhiDeviceOverLimit(device, mrhi_diagnosticPassColorTargets);
     }
     if (ViewsOf(def) > 1 && (def->native || !targets))
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticPassViews);
     }
-    if (ViewsOf(def) > 1 &&
-        (!device->features.multiview || ViewsOf(def) > device->limits.multiviewViews))
+    if (ViewsOf(def) > 1 && !device->features.multiview)
     {
         return mrhi_errorUnsupported;
+    }
+    status = MRHI_DEVICE_LIMIT(device, multiviewViews, ViewsOf(def));
+    if (status != mrhi_success)
+    {
+        return status;
     }
     if (!device->frameOpen || device->frameCompiled)
     {
@@ -593,6 +598,23 @@ static void MeasureTargets(const mrhiDevice* device, mrhiFramePass* pass)
     }
 }
 
+// Copies a def's color targets into its pass, each with the format it
+// renders in: drivers never see none.
+static void CopyTargets(const mrhiDevice* device, const mrhiPassDef* def, mrhiFramePass* pass)
+{
+    for (uint32_t i = 0; i < def->colorTargetCount; ++i)
+    {
+        pass->colorTargets[i] = def->colorTargets[i];
+        if (def->colorTargets[i].resource.index1 != 0)
+        {
+            const mrhiTextureDef* texture = mrhiFrameTextureOf(
+                &device->frameResources[def->colorTargets[i].resource.index1 - 1]);
+            pass->colorTargets[i].viewFormat =
+                mrhiViewFormatOf(texture, def->colorTargets[i].viewFormat);
+        }
+    }
+}
+
 mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* passOut)
 {
     if (passOut != nullptr)
@@ -602,6 +624,10 @@ mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* p
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (def == nullptr || passOut == nullptr)
     {
@@ -654,22 +680,11 @@ mrhiResult mrhiAddPass(mrhiDevice* device, const mrhiPassDef* def, mrhiPassId* p
     }
     if (pass->labelLength > 0)
     {
-        memcpy(&device->frameLabels[(size_t)(device->framePassCount - 1) * MRHI_LABEL_BYTES],
+        memcpy(&device->frameLabels[(size_t)(device->framePassCount - 1) * MRHI_MAX_LABEL_BYTES],
                def->label, def->labelLength);
     }
     mrhiMarkPassTimestamps(device, def, pass);
-    for (uint32_t i = 0; i < def->colorTargetCount; ++i)
-    {
-        pass->colorTargets[i] = def->colorTargets[i];
-        // Drivers see the format a target renders in, never none.
-        if (def->colorTargets[i].resource.index1 != 0)
-        {
-            const mrhiTextureDef* texture = mrhiFrameTextureOf(
-                &device->frameResources[def->colorTargets[i].resource.index1 - 1]);
-            pass->colorTargets[i].viewFormat =
-                mrhiViewFormatOf(texture, def->colorTargets[i].viewFormat);
-        }
-    }
+    CopyTargets(device, def, pass);
     MeasureTargets(device, pass);
     device->frameUseCount += count;
     *passOut = (mrhiPassId){device->framePassCount, device->frameSerial};

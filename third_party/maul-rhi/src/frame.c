@@ -135,6 +135,10 @@ mrhiResult mrhiSimulateDeviceLoss(mrhiDevice* device)
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (device->state != mrhi_deviceReady)
     {
         return device->state == mrhi_deviceLost ? mrhi_errorDeviceLost : mrhi_errorState;
@@ -191,6 +195,10 @@ mrhiResult mrhiBeginFrame(mrhiDevice* device, const mrhiFrameDef* def)
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (def == nullptr)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -239,6 +247,10 @@ mrhiResult mrhiDropFrame(mrhiDevice* device)
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (!device->frameOpen)
     {
         return mrhi_errorState;
@@ -258,6 +270,10 @@ mrhiResult mrhiSubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (tokenOut == nullptr)
     {
@@ -365,6 +381,10 @@ mrhiResult mrhiWaitFrame(mrhiDevice* device, mrhiRequestId token, uint64_t timeo
     {
         return mrhi_errorInvalid;
     }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     if (token.index1 == 0 || token.index1 > device->lastRequest || token.generation != 1)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticFrameToken);
@@ -386,10 +406,17 @@ mrhiResult mrhiWaitFrame(mrhiDevice* device, mrhiRequestId token, uint64_t timeo
 
 mrhiResult mrhiNextDeviceNotification(mrhiDevice* device, mrhiDeviceNotification* notificationOut)
 {
-    if (device == nullptr || notificationOut == nullptr)
+    if (device == nullptr)
     {
-        return device == nullptr ? mrhi_errorInvalid
-                                 : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
+        return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
+    if (notificationOut == nullptr)
+    {
+        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
     if (device->queueCount == 0)
     {
@@ -410,6 +437,10 @@ mrhiResult mrhiWaitDeviceNotification(mrhiDevice* device, uint64_t timeoutNs)
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
+    }
+    if (device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
     }
     if (device->queueCount == 0)
     {
