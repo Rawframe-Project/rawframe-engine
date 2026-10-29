@@ -334,8 +334,8 @@ bool maudBakedReverb(maudSpatializer* s, maudVector3 position)
     return true;
 }
 
-maudResult maudProbeSet_Save(const maudSpatializer* spatializer, maudProbeSetId set, void* bytes,
-                             size_t capacity, size_t* sizeOut)
+static maudResult SaveBake(const maudSpatializer* spatializer, maudProbeSetId set, void* bytesOut,
+                           size_t capacity, size_t* sizeOut)
 {
     // Cleared first, so a failure leaves zero.
     if (sizeOut != nullptr)
@@ -360,7 +360,7 @@ maudResult maudProbeSet_Save(const maudSpatializer* spatializer, maudProbeSetId 
         return maud_errorCapacity;
     }
     *sizeOut = size;
-    if (bytes == nullptr)
+    if (bytesOut == nullptr)
     {
         return maud_success;
     }
@@ -368,8 +368,21 @@ maudResult maudProbeSet_Save(const maudSpatializer* spatializer, maudProbeSetId 
     {
         return maud_errorCapacity;
     }
-    maudWriteBakeFile(graph, bake, s->trace.fieldOrder, s->trace.fieldBins, bytes);
+    maudWriteBakeFile(graph, bake, s->trace.fieldOrder, s->trace.fieldBins, bytesOut);
     return maud_success;
+}
+
+maudResult maudProbeSet_Save(const maudSpatializer* spatializer, maudProbeSetId set, void* bytesOut,
+                             size_t capacity, size_t* sizeOut)
+{
+    maudResult result = SaveBake(spatializer, set, bytesOut, capacity, sizeOut);
+    if (result != maud_success && bytesOut != nullptr)
+    {
+        // A refused save leaves zeros, never an earlier file a host could
+        // store as this one.
+        memset(bytesOut, 0, capacity);
+    }
+    return result;
 }
 
 static MAUD_NOINLINE maudResult LoadProbeSet(maudSpatializer* spatializer, const void* bytes,

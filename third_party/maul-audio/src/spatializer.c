@@ -857,7 +857,7 @@ maudResult maudSpatializer_GetReverbResult(const maudSpatializer* spatializer,
 
 maudResult maudSpatializer_RenderReflections(maudSpatializer* spatializer,
                                              const maudQuaternion* orientation, const float* send,
-                                             float* const* bed, uint32_t frames)
+                                             float* const* bed, uint32_t frameCount)
 {
     if (spatializer == nullptr || orientation == nullptr)
     {
@@ -875,17 +875,17 @@ maudResult maudSpatializer_RenderReflections(maudSpatializer* spatializer,
     }
     uint32_t channels = maudReflectionsOrder(spatializer->reflections) + 1;
     channels *= channels;
-    if (frames > 0 && (send == nullptr || bed == nullptr))
+    if (frameCount > 0 && (send == nullptr || bed == nullptr))
     {
         return maudSpatializerInvalid(spatializer);
     }
-    for (uint32_t c = 0; c < channels && frames > 0; ++c)
+    for (uint32_t c = 0; c < channels && frameCount > 0; ++c)
     {
         if (bed[c] == nullptr)
         {
             return maudSpatializerInvalid(spatializer);
         }
     }
-    maudConvolveReflections(spatializer->reflections, orientation, send, bed, frames);
+    maudConvolveReflections(spatializer->reflections, orientation, send, bed, frameCount);
     return maud_success;
 }

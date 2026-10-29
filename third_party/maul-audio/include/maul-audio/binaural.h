@@ -112,27 +112,31 @@ extern "C"
     MAUD_API void maudDestroyBinaural(maudBinaural* effect);
 
     /// Renders frames of a source's mono signal for both ears, written to
-    /// out[0] (left) and out[1] (right). When the position changes, the
+    /// samplesOut[0] (left) and samplesOut[1] (right). When the position changes, the
     /// old and new responses are crossfaded while each ear's delay and
     /// near-field filter move, over 2.67 ms; a change during a fade
     /// starts when it ends, the latest one winning. The first call after
     /// creation or a reset starts at its parameters.
     ///
-    /// @param effect  The effect.
-    /// @param params  The source's parameters.
-    /// @param in      frames samples.
-    /// @param out     Two channels of frames samples each, apart from in.
-    /// @param frames  0 to the def's maxFrames; 0 does nothing.
+    /// @param effect      The effect.
+    /// @param params      The source's parameters.
+    /// @param samples     frameCount samples.
+    /// @param samplesOut  Two channels of frameCount samples each, apart from samples.
+    /// @param frameCount  0 to the def's maxFrames; 0 does nothing.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
     ///         parameter that is not finite; `maud_errorCapacity` for more
-    ///         frames than the def's maxFrames. Nothing is written on
-    ///         failure.
+    ///         frames than the def's maxFrames. On failure each channel of
+    ///         samplesOut that is not NULL is silenced over frameCount samples,
+    ///         but never past the def's maxFrames (MAUD_MAX_BINAURAL_FRAMES
+    ///         for a NULL effect): a failed call writes no more than a
+    ///         successful one could.
     /// @par Thread safety
     /// Safe from any thread; the effect is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudBinaural_Process(maudBinaural* effect,
                                                             const maudBinauralParams* params,
-                                                            const float* in, float* const out[2],
-                                                            uint32_t frames);
+                                                            const float* samples,
+                                                            float* const samplesOut[2],
+                                                            uint32_t frameCount);
 
     /// Forgets the signal an effect has heard and its parameters, as for a
     /// source that starts again.

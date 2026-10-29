@@ -243,8 +243,21 @@ static bool PointersValid(const maudSpeakerDecoder* decoder, const float* const*
     return true;
 }
 
-maudResult maudSpeakerDecoder_Decode(const maudSpeakerDecoder* decoder, const float* const* bed,
-                                     float* const* out, uint32_t frames)
+// Writes silence over each channel a caller gave, for a failed call: at
+// most what a successful call would have written.
+static void Silence(float* const* channels, uint32_t count, uint32_t frames)
+{
+    for (uint32_t c = 0; channels != nullptr && c < count; ++c)
+    {
+        if (channels[c] != nullptr)
+        {
+            memset(channels[c], 0, (size_t)frames * sizeof(float));
+        }
+    }
+}
+
+static maudResult Run(const maudSpeakerDecoder* decoder, const float* const* bed, float* const* out,
+                      uint32_t frames)
 {
     if (decoder == nullptr || (frames > 0 && !PointersValid(decoder, bed, out)))
     {
@@ -268,4 +281,15 @@ maudResult maudSpeakerDecoder_Decode(const maudSpeakerDecoder* decoder, const fl
         }
     }
     return maud_success;
+}
+
+maudResult maudSpeakerDecoder_Decode(const maudSpeakerDecoder* decoder, const float* const* bed,
+                                     float* const* samplesOut, uint32_t frameCount)
+{
+    maudResult result = Run(decoder, bed, samplesOut, frameCount);
+    if (result != maud_success && decoder != nullptr)
+    {
+        Silence(samplesOut, decoder->speakers, frameCount);
+    }
+    return result;
 }

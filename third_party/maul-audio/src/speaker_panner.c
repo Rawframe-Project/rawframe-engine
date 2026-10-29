@@ -426,11 +426,11 @@ static inline void AddRamped(float* out, const float* in, float a, float step, u
 }
 
 maudResult maudSpeakerPanner_Pan(const maudSpeakerPanner* panner, const maudPanSource* from,
-                                 const maudPanSource* to, const float* in, float* const* out,
-                                 uint32_t frames)
+                                 const maudPanSource* to, const float* samples,
+                                 float* const* channels, uint32_t frameCount)
 {
-    if (panner == nullptr || !SourceValid(from) || !SourceValid(to) || in == nullptr ||
-        !OutValid(panner, out))
+    if (panner == nullptr || !SourceValid(from) || !SourceValid(to) || samples == nullptr ||
+        !OutValid(panner, channels))
     {
         return maud_errorInvalid;
     }
@@ -446,14 +446,14 @@ maudResult maudSpeakerPanner_Pan(const maudSpeakerPanner* panner, const maudPanS
         {
             continue;
         }
-        float step = frames > 0 ? (b - a) / (float)frames : 0.0f;
-        if (maudRampSigned(frames))
+        float step = frameCount > 0 ? (b - a) / (float)frameCount : 0.0f;
+        if (maudRampSigned(frameCount))
         {
-            AddRamped(out[c], in, a, step, frames, true);
+            AddRamped(channels[c], samples, a, step, frameCount, true);
         }
         else
         {
-            AddRamped(out[c], in, a, step, frames, false);
+            AddRamped(channels[c], samples, a, step, frameCount, false);
         }
     }
     return maud_success;

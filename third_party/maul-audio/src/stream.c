@@ -270,14 +270,14 @@ maudResult maudStream_GetFormat(const maudContext* context, maudStreamId stream,
 }
 
 maudResult maudStream_GetPosition(const maudContext* context, maudStreamId stream,
-                                  uint64_t* framesOut)
+                                  uint64_t* positionOut)
 {
     // Cleared first, so a failure leaves zero.
-    if (framesOut != nullptr)
+    if (positionOut != nullptr)
     {
-        *framesOut = 0;
+        *positionOut = 0;
     }
-    if (context == nullptr || framesOut == nullptr)
+    if (context == nullptr || positionOut == nullptr)
     {
         return maud_errorInvalid;
     }
@@ -286,7 +286,7 @@ maudResult maudStream_GetPosition(const maudContext* context, maudStreamId strea
     {
         return maud_errorStale;
     }
-    *framesOut = atomic_load_explicit(&slot->core.position, memory_order_acquire);
+    *positionOut = atomic_load_explicit(&slot->core.position, memory_order_acquire);
     return maud_success;
 }
 

@@ -149,8 +149,21 @@ static bool ChannelsValid(const maudBinauralDecoder* decoder, const float* const
     return true;
 }
 
-maudResult maudBinauralDecoder_Decode(maudBinauralDecoder* decoder, const float* const* bed,
-                                      float* const out[2], uint32_t frames)
+// Writes silence over each channel a caller gave, for a failed call: at
+// most what a successful call would have written.
+static void Silence(float* const* channels, uint32_t count, uint32_t frames)
+{
+    for (uint32_t c = 0; channels != nullptr && c < count; ++c)
+    {
+        if (channels[c] != nullptr)
+        {
+            memset(channels[c], 0, (size_t)frames * sizeof(float));
+        }
+    }
+}
+
+static maudResult Run(maudBinauralDecoder* decoder, const float* const* bed, float* const out[2],
+                      uint32_t frames)
 {
     if (decoder == nullptr || (frames > 0 && !ChannelsValid(decoder, bed, out)))
     {
@@ -185,4 +198,16 @@ maudResult maudBinauralDecoder_Decode(maudBinauralDecoder* decoder, const float*
         memmove(channel, channel + frames, ((size_t)taps - 1) * sizeof(float));
     }
     return maud_success;
+}
+
+maudResult maudBinauralDecoder_Decode(maudBinauralDecoder* decoder, const float* const* bed,
+                                      float* const samplesOut[2], uint32_t frameCount)
+{
+    maudResult result = Run(decoder, bed, samplesOut, frameCount);
+    if (result != maud_success)
+    {
+        uint32_t most = decoder != nullptr ? decoder->maxFrames : MAUD_MAX_BINAURAL_FRAMES;
+        Silence(samplesOut, 2, frameCount < most ? frameCount : most);
+    }
+    return result;
 }

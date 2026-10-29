@@ -238,8 +238,8 @@ static inline void ScaleRamped(float* out, float start, float step, uint32_t fra
     }
 }
 
-maudResult maudDirectEffect_Process(maudDirectEffect* effect, const maudDirectParams* params,
-                                    const float* in, float* out, uint32_t frames)
+static maudResult Run(maudDirectEffect* effect, const maudDirectParams* params, const float* in,
+                      float* out, uint32_t frames)
 {
     if (effect == nullptr || params == nullptr || !ParamsValid(params) ||
         (frames > 0 && (in == nullptr || out == nullptr)))
@@ -291,4 +291,15 @@ maudResult maudDirectEffect_Process(maudDirectEffect* effect, const maudDirectPa
     }
     effect->overall = overall;
     return maud_success;
+}
+
+maudResult maudDirectEffect_Process(maudDirectEffect* effect, const maudDirectParams* params,
+                                    const float* samples, float* samplesOut, uint32_t frameCount)
+{
+    maudResult result = Run(effect, params, samples, samplesOut, frameCount);
+    if (result != maud_success && samplesOut != nullptr)
+    {
+        memset(samplesOut, 0, (size_t)frameCount * sizeof(float));
+    }
+    return result;
 }

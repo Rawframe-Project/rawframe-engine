@@ -104,24 +104,22 @@ extern "C"
 
     /// Adds a mono source into the layout's channels, its direction and
     /// gain moving linearly from `from` to `to` across the call: frame n
-    /// uses the gains (n + 1) / frames of the way.
+    /// uses the gains (n + 1) / frameCount of the way.
     ///
-    /// @param panner  The panner.
-    /// @param from    The source at the previous call's end.
-    /// @param to      The source at this call's end.
-    /// @param in      frames samples.
-    /// @param out     The layout's channel count of channels, frames each,
-    ///                added to.
-    /// @param frames  The frames.
+    /// @param panner      The panner.
+    /// @param from        The source at the previous call's end.
+    /// @param to          The source at this call's end.
+    /// @param samples     frameCount samples.
+    /// @param channels    The layout's channel count of channels, frameCount each,
+    ///                    added to.
+    /// @param frameCount  The frames.
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer or
     ///         a value that is not finite; nothing is written then.
     /// @par Thread safety
     /// Safe from any thread; the output is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSpeakerPanner_Pan(const maudSpeakerPanner* panner,
-                                                             const maudPanSource* from,
-                                                             const maudPanSource* to,
-                                                             const float* in, float* const* out,
-                                                             uint32_t frames);
+    MAUD_NODISCARD MAUD_API maudResult maudSpeakerPanner_Pan(
+        const maudSpeakerPanner* panner, const maudPanSource* from, const maudPanSource* to,
+        const float* samples, float* const* channels, uint32_t frameCount);
 
 #ifdef __cplusplus
 }
