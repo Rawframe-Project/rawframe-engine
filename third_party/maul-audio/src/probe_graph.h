@@ -25,11 +25,11 @@
 // spatializer's allocator and limits.
 typedef struct maudProbeQueries
 {
-    maudAnyHitFn* anyHit;
-    maudClosestHitFn* closestHit;
+    maudAnyHitFunction* anyHit;
+    maudClosestHitFunction* closestHit;
     void* rayContext;
-    maudEnqueueTaskFn* enqueueTask;
-    maudFinishTaskFn* finishTask;
+    maudEnqueueTaskFunction* enqueueTask;
+    maudFinishTaskFunction* finishTask;
     void* userTaskContext;
     const maudAllocator* allocator;
     uint32_t maxProbes;

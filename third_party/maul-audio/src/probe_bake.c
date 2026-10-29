@@ -23,13 +23,13 @@ bool maudCreateProbeBake(const maudAllocator* allocator, uint32_t count, uint32_
     *bake = (maudProbeBake){.count = count, .fieldFloats = fieldFloats};
     maudLayout layout = {0};
     size_t times =
-        maudLayoutAdd(&layout, (size_t)count * MAUD_DIRECT_BANDS, sizeof(float), alignof(float));
+        maudLayoutAdd(&layout, (size_t)count * MAUD_BANDS, sizeof(float), alignof(float));
     size_t levels =
-        maudLayoutAdd(&layout, (size_t)count * MAUD_DIRECT_BANDS, sizeof(float), alignof(float));
+        maudLayoutAdd(&layout, (size_t)count * MAUD_BANDS, sizeof(float), alignof(float));
     size_t tailTimes =
-        maudLayoutAdd(&layout, (size_t)count * MAUD_DIRECT_BANDS, sizeof(float), alignof(float));
+        maudLayoutAdd(&layout, (size_t)count * MAUD_BANDS, sizeof(float), alignof(float));
     size_t tailLevels =
-        maudLayoutAdd(&layout, (size_t)count * MAUD_DIRECT_BANDS, sizeof(float), alignof(float));
+        maudLayoutAdd(&layout, (size_t)count * MAUD_BANDS, sizeof(float), alignof(float));
     size_t fields =
         maudLayoutAdd(&layout, (size_t)count * fieldFloats, sizeof(float), alignof(float));
     if (layout.overflow)
@@ -96,7 +96,7 @@ static void BlendTail(const maudProbeBake* bake, const maudPathEnd* end, const d
     double weight = 0.0;
     for (uint32_t k = 0; k < n; ++k)
     {
-        size_t at = (size_t)end->probes[k] * MAUD_DIRECT_BANDS + (size_t)b;
+        size_t at = (size_t)end->probes[k] * MAUD_BANDS + (size_t)b;
         bool has = bake->tailTimes[at] > 0.0f;
         level += weights[k] * (has ? (double)bake->tailLevels[at] : -96.0);
         logTime += has ? weights[k] * maudLog((double)bake->tailTimes[at]) : 0.0;
@@ -107,7 +107,7 @@ static void BlendTail(const maudProbeBake* bake, const maudPathEnd* end, const d
 }
 
 bool maudInterpolateBake(const maudProbeGraph* graph, const maudProbeBake* bake,
-                         maudAnyHitFn* anyHit, void* context, maudVector3 point,
+                         maudAnyHitFunction* anyHit, void* context, maudVector3 point,
                          maudReverbResult* result, float* field)
 {
     maudPathEnd end;
@@ -118,13 +118,13 @@ bool maudInterpolateBake(const maudProbeGraph* graph, const maudProbeBake* bake,
     }
     double weights[BLEND];
     uint32_t n = Weights(&end, weights);
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         double logTime = 0.0;
         double level = 0.0;
         for (uint32_t k = 0; k < n; ++k)
         {
-            size_t at = (size_t)end.probes[k] * MAUD_DIRECT_BANDS + (size_t)b;
+            size_t at = (size_t)end.probes[k] * MAUD_BANDS + (size_t)b;
             logTime += weights[k] * maudLog((double)bake->times[at]);
             level += weights[k] * (double)bake->levels[at];
         }

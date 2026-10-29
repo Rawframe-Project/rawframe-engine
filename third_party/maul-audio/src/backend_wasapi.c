@@ -151,7 +151,7 @@ static void ReadSpatializer(IMMDevice* device, maudDeviceInfo* info)
     }
     ISpatialAudioClient_Release(client);
     info->spatializer = objects > 0 ? maud_spatializerOn : maud_spatializerOff;
-    info->spatialObjects = objects;
+    info->spatialObjectCount = objects;
 }
 
 // Describes one endpoint into endpoint and spec; false when it cannot.

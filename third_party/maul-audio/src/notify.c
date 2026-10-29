@@ -43,7 +43,7 @@ void maudPostNotification(maudContext* context, const maudNotification* record)
     }
 }
 
-maudResult maudNextNotification(maudContext* context, maudNotification* notificationOut)
+maudResult maudContext_NextNotification(maudContext* context, maudNotification* notificationOut)
 {
     // Cleared first, so a failure leaves zero.
     if (notificationOut != nullptr)

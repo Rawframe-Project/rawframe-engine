@@ -281,8 +281,8 @@ static void Play(maudWasapiObjects* objects, uint32_t index, UINT32 frames, UINT
     ISpatialAudioObject* object = objects->held[index];
     float volume = record->gain < 0.0f ? 0.0f : record->gain > 1.0f ? 1.0f : record->gain;
     if (!Write(object, record->samples, 1, frames) ||
-        FAILED(ISpatialAudioObject_SetPosition(object, record->position[0], record->position[1],
-                                               record->position[2])) ||
+        FAILED(ISpatialAudioObject_SetPosition(object, record->position.x, record->position.y,
+                                               record->position.z)) ||
         FAILED(ISpatialAudioObject_SetVolume(object, volume)))
     {
         Release(objects, index);
@@ -311,7 +311,7 @@ HRESULT maudWasapiRenderObjects(maudWasapiObjects* objects, maudStreamCore* core
     {
         held += objects->held[i] != nullptr ? 1u : 0u;
     }
-    period->objectsAvailable = held + available;
+    period->availableObjectCount = held + available;
     if (running)
     {
         maudPullObjects(period, objects->frames, objects->records, frames);

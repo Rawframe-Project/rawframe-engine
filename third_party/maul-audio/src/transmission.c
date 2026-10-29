@@ -34,7 +34,7 @@ bool maudCrossSurface(const maudRayHit* hit, const maudRay* ray,
     {
         return false;
     }
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         transmission[b] *=
             hit->material < materialCount ? materials[hit->material].transmission[b] : 0.0f;

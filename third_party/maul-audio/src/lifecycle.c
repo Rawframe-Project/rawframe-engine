@@ -10,7 +10,7 @@
 
 #include "maul-audio/context.h"
 
-maudResult maudSetContextSuspended(maudContext* context, bool suspended)
+maudResult maudContext_SetSuspended(maudContext* context, bool suspended)
 {
     if (context == nullptr)
     {

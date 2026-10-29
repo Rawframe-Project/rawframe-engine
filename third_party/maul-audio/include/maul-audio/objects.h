@@ -4,7 +4,7 @@
 // Object streams: an output stream whose callback places mono objects
 // around the listener beside the stream's ordinary output, the bed, for
 // a platform renderer to spatialize (Windows' spatial sound objects,
-// Apple's spatial mixer). A device's spatializer and spatialObjects say
+// Apple's spatial mixer). A device's spatializer and spatialObjectCount say
 // what the platform takes there. The host still computes what the path
 // does to each source (distance, occlusion, air) and applies it to an
 // object's frames; only the binaural or panning step moves to the
@@ -37,12 +37,12 @@ extern "C"
         float* samples;
         // Where it sounds from, relative to the listener: metres, +x
         // right, +y up, -z ahead. The listener's origin at first.
-        float position[3];
+        maudVector3 position;
         // Its linear gain, from 0; 1 at first.
         float gain;
         // Whether it sounds. Objects start inactive; the platform's object
         // is given back while one is not, and active objects past the
-        // block's objectsAvailable are not heard.
+        // block's availableObjectCount are not heard.
         bool active;
     };
 
@@ -50,7 +50,7 @@ extern "C"
     /// which stands in for the platform's renderer: the bed into bedOut and
     /// each object's frames into the buffer its samples point to, with the
     /// position, gain and activity the callback last gave it. The block
-    /// offers every object (objectsAvailable is the stream's objectCount).
+    /// offers every object (availableObjectCount is the stream's objectCount).
     /// The stream's clock advances by frameCount.
     ///
     /// @param context      The context.
@@ -62,7 +62,7 @@ extern "C"
     ///                     room for frameCount frames (or NULL when
     ///                     frameCount is 0); the rest is written. The bed,
     ///                     the records and their samples are left as they
-    ///                     were on failure, as maudRenderStream's frames.
+    ///                     were on failure, as maudStream_Render's frames.
     /// @param objectCount  The stream's objectCount.
     /// @param frameCount   The number of frames.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
@@ -75,10 +75,11 @@ extern "C"
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. A stream renders on one
     /// thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudRenderObjects(maudContext* context, maudStreamId stream,
-                                                         float* bedOut,
-                                                         maudStreamObject* objectsOut,
-                                                         uint32_t objectCount, uint32_t frameCount);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_RenderObjects(maudContext* context,
+                                                                maudStreamId stream, float* bedOut,
+                                                                maudStreamObject* objectsOut,
+                                                                uint32_t objectCount,
+                                                                uint32_t frameCount);
 
 #ifdef __cplusplus
 }

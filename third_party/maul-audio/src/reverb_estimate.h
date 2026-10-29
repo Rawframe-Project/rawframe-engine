@@ -22,13 +22,13 @@
 
 typedef struct maudReverbTrace
 {
-    maudClosestHitFn* closestHit;
-    maudAnyHitFn* anyHit;
+    maudClosestHitFunction* closestHit;
+    maudAnyHitFunction* anyHit;
     void* context;
     const maudAcousticMaterial* materials;
     uint32_t materialCount;
     // The air's amplitude exponent per metre and band.
-    float air[MAUD_DIRECT_BANDS];
+    float air[MAUD_BANDS];
     maudVector3 listener;
     // All rays (a multiple of the batch or not); bounces at most.
     uint32_t rays;
@@ -45,10 +45,10 @@ typedef struct maudReverbTrace
 // every band: a bin's energy is what reaches the listener in it.
 typedef struct maudReverbHistogram
 {
-    float energy[MAUD_DIRECT_BANDS][MAUD_REVERB_BINS];
+    float energy[MAUD_BANDS][MAUD_REVERB_BINS];
     float truncated;
     // The batch's field if the trace has one: (fieldOrder + 1)^2
-    // channels of MAUD_DIRECT_BANDS bands of fieldBins bins, SN3D in the
+    // channels of MAUD_BANDS bands of fieldBins bins, SN3D in the
     // world's axes taken as a listener's (x right, y up, -z ahead).
     float* field;
 } maudReverbHistogram;
@@ -67,9 +67,9 @@ void maudTraceReverbBatch(const maudReverbTrace* trace, uint32_t batch,
 // tail time and share of 0.
 typedef struct maudReverbFit
 {
-    float times[MAUD_DIRECT_BANDS];
-    float tailTimes[MAUD_DIRECT_BANDS];
-    float tailShares[MAUD_DIRECT_BANDS];
+    float times[MAUD_BANDS];
+    float tailTimes[MAUD_BANDS];
+    float tailShares[MAUD_BANDS];
 } maudReverbFit;
 
 // Sums count histograms into the first, in order, and fits each band:

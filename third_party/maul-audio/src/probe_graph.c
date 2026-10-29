@@ -109,7 +109,7 @@ bool maudProbeSetDefValid(const maudProbeSetDef* def)
            def->boxMin.z <= def->boxMax.z;
 }
 
-static void Run(const maudProbeQueries* q, maudTaskFn* task, uint32_t items, void* context)
+static void Run(const maudProbeQueries* q, maudTaskFunction* task, uint32_t items, void* context)
 {
     maudHostTasks hooks = {q->enqueueTask, q->finishTask, q->userTaskContext};
     maudRunHostTasks(&hooks, task, items, context);

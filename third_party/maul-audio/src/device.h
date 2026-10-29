@@ -61,7 +61,7 @@ size_t maudCutUtf8(const char* text, size_t limit);
 void maudSetDeviceForm(maudContext* context, maudDeviceSlot* slot, maudDeviceForm form);
 
 // Sets a live device's spatializer state from info's spatializer,
-// headTracking and spatialObjects; a change posts
+// headTracking and spatialObjectCount; a change posts
 // maud_notifySpatializerChanged.
 void maudSetDeviceSpatializer(maudContext* context, maudDeviceSlot* slot,
                               const maudDeviceInfo* info);

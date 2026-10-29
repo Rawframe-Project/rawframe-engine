@@ -52,7 +52,7 @@ extern "C"
     typedef struct maudHrtfInfo
     {
         uint32_t sampleRate;
-        uint32_t taps;
+        uint32_t tapCount;
         uint32_t directionCount;
         uint32_t ringCount;
         // The metres from the head's centre at which the set was measured.
@@ -123,7 +123,8 @@ extern "C"
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer.
     /// @par Thread safety
     /// Safe from any thread; the set is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetHrtfInfo(const maudHrtf* hrtf, maudHrtfInfo* infoOut);
+    MAUD_NODISCARD MAUD_API maudResult maudHrtf_GetInfo(const maudHrtf* hrtf,
+                                                        maudHrtfInfo* infoOut);
 
 #ifdef __cplusplus
 }

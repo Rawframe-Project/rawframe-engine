@@ -14,7 +14,7 @@
 #define MIN_RATE 8000u
 #define MAX_RATE 384000u
 // The longest hangover a def may ask for.
-#define MAX_HANGOVER_MS 10000u
+#define MAX_HANGOVER 10.0f
 
 struct maudVoiceDetector
 {
@@ -28,7 +28,7 @@ static bool DefValid(const maudVoiceDetectorDef* def)
 {
     return def->cookie == MAUD_VOICE_DETECTOR_DEF_COOKIE && def->sampleRate >= MIN_RATE &&
            def->sampleRate <= MAX_RATE && maudGetLayoutChannelCount(def->layout) != 0 &&
-           def->aggressiveness <= 3 && def->hangoverMilliseconds <= MAX_HANGOVER_MS &&
+           def->aggressiveness <= 3 && def->hangover >= 0.0f && def->hangover <= MAX_HANGOVER &&
            maudIsAllocatorValid(&def->allocator);
 }
 
@@ -58,7 +58,7 @@ maudResult maudCreateVoiceDetector(const maudVoiceDetectorDef* def, maudVoiceDet
     detector->channels = channels;
     detector->scale = 1.0f / (float)channels;
     maudInitVadCore(&detector->core, def->sampleRate, def->aggressiveness,
-                    def->hangoverMilliseconds / 10);
+                    (uint32_t)(def->hangover * 100.0f + 0.5f));
     *detectorOut = detector;
     return maud_success;
 }
@@ -73,8 +73,8 @@ void maudDestroyVoiceDetector(maudVoiceDetector* detector)
     maudRelease(&allocator, detector, sizeof(maudVoiceDetector), alignof(maudVoiceDetector));
 }
 
-maudResult maudDetectVoice(maudVoiceDetector* detector, const float* frames, uint32_t frameCount,
-                           maudVoiceState* stateOut)
+maudResult maudVoiceDetector_Detect(maudVoiceDetector* detector, const float* frames,
+                                    uint32_t frameCount, maudVoiceState* stateOut)
 {
     // Cleared first, so a failure leaves zero.
     if (stateOut != nullptr)

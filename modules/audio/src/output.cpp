@@ -28,7 +28,7 @@ std::unexpected<result::Error> refuse(result::ErrorClass errorClass, AudioError 
 std::unexpected<result::Error> noDevice(std::string_view why, maudResult outcome) {
     return std::unexpected<result::Error>{refuse(result::ErrorClass::Unavailable, AudioError::NoDevice, why)
                                               .error()
-                                              .withContext("outcome", maudResultName(outcome))};
+                                              .withContext("outcome", maudGetResultName(outcome))};
 }
 
 void raise(std::atomic<std::int64_t>& largest, std::int64_t value) noexcept {
@@ -122,7 +122,7 @@ struct Output::State {
             const auto kPeriod = std::chrono::nanoseconds{std::int64_t{1'000'000'000} * period / rate};
             auto next = std::chrono::steady_clock::now();
             while (pacing.load(std::memory_order_acquire)) {
-                static_cast<void>(maudRenderStream(context, stream, buffer.data(), period));
+                static_cast<void>(maudStream_Render(context, stream, buffer.data(), period));
                 next += kPeriod;
                 std::this_thread::sleep_until(next);
             }
@@ -165,9 +165,10 @@ result::Result<std::unique_ptr<Output>> Output::open(const OutputSettings& setti
     if (const maudResult kMade = maudCreateContext(&contextDef, &state->context); kMade != maud_success) {
         return noDevice("no audio backend is available", kMade);
     }
-    state->backend = maudGetContextBackend(state->context);
+    state->backend = maudContext_GetBackend(state->context);
     maudDeviceId device{};
-    if (const maudResult kFound = maudGetDefaultDevice(state->context, maud_directionOutput, maud_roleGeneral, &device);
+    if (const maudResult kFound =
+            maudContext_GetDefaultDevice(state->context, maud_directionOutput, maud_roleGeneral, &device);
         kFound != maud_success || device.index1 == 0) {
         return std::unexpected<result::Error>{noDevice("no output device could be opened", kFound)
                                                   .error()
@@ -191,7 +192,7 @@ result::Result<std::unique_ptr<Output>> Output::open(const OutputSettings& setti
                                                   .withContext("backend", std::string{nameOf(state->backend)})};
     }
     maudStreamFormat format{};
-    if (const maudResult kRead = maudGetStreamFormat(state->context, state->stream, &format); kRead != maud_success) {
+    if (const maudResult kRead = maudStream_GetFormat(state->context, state->stream, &format); kRead != maud_success) {
         return noDevice("the output device's format could not be read", kRead);
     }
     state->rate = format.sampleRate;
@@ -219,7 +220,7 @@ result::Status Output::start(Mixer& mixer) {
         return refuse(result::ErrorClass::FailedPrecondition, AudioError::BadSettings, "the output is rendering");
     }
     state_->shared.mixer.store(&mixer, std::memory_order_release);
-    if (const maudResult kStarted = maudStartStream(state_->context, state_->stream); kStarted != maud_success) {
+    if (const maudResult kStarted = maudStream_Start(state_->context, state_->stream); kStarted != maud_success) {
         state_->shared.mixer.store(nullptr, std::memory_order_release);
         state_->lost = true;
         return noDevice("the output device would not start", kStarted);
@@ -236,7 +237,7 @@ void Output::stop() noexcept {
     state_->stopPacing();
     if (state_->rendering) {
         // Returns once the device's thread has left its last callback.
-        static_cast<void>(maudStopStream(state_->context, state_->stream));
+        static_cast<void>(maudStream_Stop(state_->context, state_->stream));
         state_->rendering = false;
     }
     state_->shared.mixer.store(nullptr, std::memory_order_release);
@@ -249,7 +250,7 @@ OutputState Output::state() const noexcept {
     // A device that went away, or a default that left no device, suspends
     // the stream: output is lost, and the mixer is not rendered.
     maudStreamStatus status{};
-    if (maudGetStreamStatus(state_->context, state_->stream, &status) == maud_success &&
+    if (maudStream_GetStatus(state_->context, state_->stream, &status) == maud_success &&
         (status.suspension == maud_suspendDeviceLost || status.suspension == maud_suspendNoDevice)) {
         return OutputState::Lost;
     }

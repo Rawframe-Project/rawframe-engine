@@ -130,7 +130,7 @@ extern "C"
         // reads these.
         maudPlatformSpatializer spatializer;
         bool headTracking;
-        uint32_t spatialObjects;
+        uint32_t spatialObjectCount;
     } maudDeviceInfo;
 
     /// Lists the devices of one direction, in a stable order.
@@ -146,9 +146,11 @@ extern "C"
     ///         where one is required or an unknown direction.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetDevices(const maudContext* context,
-                                                      maudDirection direction, maudDeviceId* idsOut,
-                                                      uint32_t capacity, uint32_t* countOut);
+    MAUD_NODISCARD MAUD_API maudResult maudContext_GetDevices(const maudContext* context,
+                                                              maudDirection direction,
+                                                              maudDeviceId* idsOut,
+                                                              uint32_t capacity,
+                                                              uint32_t* countOut);
 
     /// Reports what a device is and runs at.
     ///
@@ -159,9 +161,9 @@ extern "C"
     ///         device; `maud_errorInvalid` for a NULL pointer.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetDeviceInfo(const maudContext* context,
-                                                         maudDeviceId device,
-                                                         maudDeviceInfo* infoOut);
+    MAUD_NODISCARD MAUD_API maudResult maudDevice_GetInfo(const maudContext* context,
+                                                          maudDeviceId device,
+                                                          maudDeviceInfo* infoOut);
 
     /// Copies a device's display name, UTF-8, without a terminating NUL.
     ///
@@ -176,9 +178,9 @@ extern "C"
     ///         `maud_errorInvalid` for a NULL pointer where one is required.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetDeviceName(const maudContext* context,
-                                                         maudDeviceId device, char* bytesOut,
-                                                         size_t capacity, size_t* lengthOut);
+    MAUD_NODISCARD MAUD_API maudResult maudDevice_GetName(const maudContext* context,
+                                                          maudDeviceId device, char* bytesOut,
+                                                          size_t capacity, size_t* lengthOut);
 
     /// Copies a device's persistent key, UTF-8, without a terminating NUL:
     /// the same for the same device after it is unplugged and plugged
@@ -196,9 +198,9 @@ extern "C"
     ///         `maud_errorInvalid` for a NULL pointer where one is required.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetDeviceKey(const maudContext* context,
-                                                        maudDeviceId device, char* bytesOut,
-                                                        size_t capacity, size_t* lengthOut);
+    MAUD_NODISCARD MAUD_API maudResult maudDevice_GetKey(const maudContext* context,
+                                                         maudDeviceId device, char* bytesOut,
+                                                         size_t capacity, size_t* lengthOut);
 
     /// Reports the default device of a direction for a role.
     ///
@@ -212,10 +214,10 @@ extern "C"
     ///         direction or role.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetDefaultDevice(const maudContext* context,
-                                                            maudDirection direction,
-                                                            maudDeviceRole role,
-                                                            maudDeviceId* deviceOut);
+    MAUD_NODISCARD MAUD_API maudResult maudContext_GetDefaultDevice(const maudContext* context,
+                                                                    maudDirection direction,
+                                                                    maudDeviceRole role,
+                                                                    maudDeviceId* deviceOut);
 
 #ifdef __cplusplus
 }

@@ -91,17 +91,17 @@ extern "C"
         // takes this period; the bed is output. NULL and 0 otherwise.
         maudStreamObject* objects;
         uint32_t objectCount;
-        uint32_t objectsAvailable;
+        uint32_t availableObjectCount;
     } maudStreamBlock;
 
     // The host's real-time callback. It must not allocate, lock or wait.
-    // Of the stream's context it may call only maudGetStreamFormat,
-    // maudGetStreamPosition, maudGetStreamClock, maudGetContextMisuse and
+    // Of the stream's context it may call only maudStream_GetFormat,
+    // maudStream_GetPosition, maudStream_GetClock, maudContext_GetMisuse and
     // maudGetHostNanoseconds, and render or feed another offline stream
-    // (maudRenderStream, maudFeedStream, maudRenderObjects). Any other
+    // (maudStream_Render, maudStream_Feed, maudStream_RenderObjects). Any other
     // call that changes the context is refused with maud_errorBusy and
     // counted as misuse, rendering its own stream again included.
-    typedef void (*maudStreamCallback)(const maudStreamBlock* block, void* user);
+    typedef void maudStreamFunction(const maudStreamBlock* block, void* user);
 
     // Parts of the platform's voice processing, as flags: asked for by an
     // input or duplex stream, and reported as active.
@@ -203,7 +203,7 @@ extern "C"
         // maud_errorUnsupported where the backend has no object renderer.
         // 0 for an ordinary stream.
         uint32_t objectCount;
-        maudStreamCallback callback;
+        maudStreamFunction* callback;
         void* user;
     } maudStreamDef;
 
@@ -232,9 +232,9 @@ extern "C"
         // It follows the default device, and its direction has no device.
         maud_suspendNoDevice = 2,
         // The platform holds audio until the user acts: on the web, until
-        // a user gesture's handler calls maudResumeContext; on iOS, while
+        // a user gesture's handler calls maudContext_Unlock; on iOS, while
         // an interruption (a call, an alarm) lasts, and after one that
-        // ended without the hint to resume, until maudResumeContext or a
+        // ended without the hint to resume, until maudContext_Unlock or a
         // focus request.
         maud_suspendPolicy = 3,
         // The platform has not granted access to its device: on the web,
@@ -247,7 +247,7 @@ extern "C"
         // its device. A loopback stream whose sharing the user stopped stays here: only
         // a new stream made in a gesture's handler can ask again.
         maud_suspendPermission = 4,
-        // The host suspended the context (maudSetContextSuspended): its
+        // The host suspended the context (maudContext_SetSuspended): its
         // application is in the background, hidden, or asleep.
         maud_suspendHost = 5,
         // The platform failed to open it on its device: the device
@@ -368,7 +368,7 @@ extern "C"
     ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudStartStream(maudContext* context, maudStreamId stream);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_Start(maudContext* context, maudStreamId stream);
 
     /// Stops a stream. Stopping a stopped stream does nothing.
     ///
@@ -379,7 +379,7 @@ extern "C"
     ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudStopStream(maudContext* context, maudStreamId stream);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_Stop(maudContext* context, maudStreamId stream);
 
     /// Reports what a stream runs at.
     ///
@@ -390,9 +390,9 @@ extern "C"
     ///         NULL pointer.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_NODISCARD MAUD_API maudResult maudGetStreamFormat(const maudContext* context,
-                                                           maudStreamId stream,
-                                                           maudStreamFormat* formatOut);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_GetFormat(const maudContext* context,
+                                                            maudStreamId stream,
+                                                            maudStreamFormat* formatOut);
 
     /// Reports whether a stream is started, suspended, and on which device.
     ///
@@ -403,9 +403,9 @@ extern "C"
     ///         NULL pointer.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetStreamStatus(const maudContext* context,
-                                                           maudStreamId stream,
-                                                           maudStreamStatus* statusOut);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_GetStatus(const maudContext* context,
+                                                            maudStreamId stream,
+                                                            maudStreamStatus* statusOut);
 
     /// Reports how many frames a stream has moved to or from its device.
     ///
@@ -416,15 +416,15 @@ extern "C"
     ///         NULL pointer.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_NODISCARD MAUD_API maudResult maudGetStreamPosition(const maudContext* context,
-                                                             maudStreamId stream,
-                                                             uint64_t* framesOut);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_GetPosition(const maudContext* context,
+                                                              maudStreamId stream,
+                                                              uint64_t* framesOut);
 
     // Where a stream's frames meet the host clock, as the platform last
     // reported it.
     typedef struct maudStreamClock
     {
-        // A frame of the stream, counted from 0 as maudGetStreamPosition
+        // A frame of the stream, counted from 0 as maudStream_GetPosition
         // counts.
         uint64_t position;
         // When that frame is heard (output) or was captured (input), in
@@ -449,9 +449,9 @@ extern "C"
     ///         NULL pointer.
     /// @par Thread safety
     /// Safe from any thread. It never makes the rendering thread wait.
-    MAUD_NODISCARD MAUD_API maudResult maudGetStreamClock(const maudContext* context,
-                                                          maudStreamId stream,
-                                                          maudStreamClock* clockOut);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_GetClock(const maudContext* context,
+                                                           maudStreamId stream,
+                                                           maudStreamClock* clockOut);
 
     /// Returns the host clock streams are stamped with: CLOCK_MONOTONIC on
     /// Linux and other POSIX systems, the performance counter on Windows,
@@ -485,8 +485,8 @@ extern "C"
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. A stream renders on one
     /// thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudRenderStream(maudContext* context, maudStreamId stream,
-                                                        float* framesOut, uint32_t frameCount);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_Render(maudContext* context, maudStreamId stream,
+                                                         float* framesOut, uint32_t frameCount);
 
     /// Feeds the next frames to an offline input stream from a caller
     /// buffer, calling the stream's callback once per completed period, on
@@ -508,8 +508,8 @@ extern "C"
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. A stream renders on one
     /// thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudFeedStream(maudContext* context, maudStreamId stream,
-                                                      const float* frames, uint32_t frameCount);
+    MAUD_NODISCARD MAUD_API maudResult maudStream_Feed(maudContext* context, maudStreamId stream,
+                                                       const float* frames, uint32_t frameCount);
 
 #ifdef __cplusplus
 }

@@ -374,8 +374,8 @@ static bool Finite(maudVector3 v)
     return isfinite(v.x) && isfinite(v.y) && isfinite(v.z);
 }
 
-maudResult maudGetSpeakerGains(const maudSpeakerPanner* panner, maudVector3 direction,
-                               float* gainsOut)
+maudResult maudSpeakerPanner_GetGains(const maudSpeakerPanner* panner, maudVector3 direction,
+                                      float* gainsOut)
 {
     // With a panner, its layout's gains read zero on failure; without
     // one their count is not known, and they are left as they were.
@@ -425,9 +425,9 @@ static inline void AddRamped(float* out, const float* in, float a, float step, u
     }
 }
 
-maudResult maudPanToSpeakers(const maudSpeakerPanner* panner, const maudPanSource* from,
-                             const maudPanSource* to, const float* in, float* const* out,
-                             uint32_t frames)
+maudResult maudSpeakerPanner_Pan(const maudSpeakerPanner* panner, const maudPanSource* from,
+                                 const maudPanSource* to, const float* in, float* const* out,
+                                 uint32_t frames)
 {
     if (panner == nullptr || !SourceValid(from) || !SourceValid(to) || in == nullptr ||
         !OutValid(panner, out))

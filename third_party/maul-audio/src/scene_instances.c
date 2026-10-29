@@ -25,7 +25,7 @@
 #define PAD_SHARE 1e-5f
 #define PAD_FLOOR 1e-6f
 
-bool maudAllocateInstances(maudAcousticScene* scene, uint32_t capacity)
+bool maudAllocateInstances(maudScene* scene, uint32_t capacity)
 {
     scene->capacity = capacity;
     if (capacity == 0)
@@ -63,7 +63,7 @@ static void Free(const maudAllocator* a, void* memory, size_t bytes, size_t alig
     }
 }
 
-void maudReleaseInstances(maudAcousticScene* scene)
+void maudReleaseInstances(maudScene* scene)
 {
     const maudAllocator* a = &scene->allocator;
     size_t n = scene->capacity;
@@ -75,7 +75,7 @@ void maudReleaseInstances(maudAcousticScene* scene)
          alignof(maudBvhNode));
 }
 
-static bool TransformValid(const maudInstanceTransform* t)
+static bool TransformValid(const maudSceneInstanceTransform* t)
 {
     maudQuaternion q = t->orientation;
     float length = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
@@ -84,14 +84,14 @@ static bool TransformValid(const maudInstanceTransform* t)
 }
 
 // Counts one misuse and returns maud_errorInvalid, for invalid arguments.
-static maudResult Invalid(maudAcousticScene* scene)
+static maudResult Invalid(maudScene* scene)
 {
     atomic_fetch_add_explicit(&scene->misuse, 1, memory_order_relaxed);
     return maud_errorInvalid;
 }
 
-static MAUD_NOINLINE maudResult CreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
-                                                    const maudInstanceTransform* transform,
+static MAUD_NOINLINE maudResult CreateSceneInstance(maudScene* scene, uint32_t mesh,
+                                                    const maudSceneInstanceTransform* transform,
                                                     maudSceneInstanceId* instanceOut)
 {
     if (instanceOut != nullptr)
@@ -122,8 +122,8 @@ static MAUD_NOINLINE maudResult CreateSceneInstance(maudAcousticScene* scene, ui
 
 // Checking a transform squares its orientation, which flush-to-zero
 // would take to 0: the host's mode must not decide what is accepted.
-maudResult maudCreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
-                                   const maudInstanceTransform* transform,
+maudResult maudCreateSceneInstance(maudScene* scene, uint32_t mesh,
+                                   const maudSceneInstanceTransform* transform,
                                    maudSceneInstanceId* instanceOut)
 {
     uint64_t token = maudFloatEnvEnter();
@@ -132,7 +132,7 @@ maudResult maudCreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
     return result;
 }
 
-static maudResult Find(maudAcousticScene* scene, maudSceneInstanceId id, maudSceneInstance** out)
+static maudResult Find(maudScene* scene, maudSceneInstanceId id, maudSceneInstance** out)
 {
     if (scene == nullptr)
     {
@@ -151,9 +151,8 @@ static maudResult Find(maudAcousticScene* scene, maudSceneInstanceId id, maudSce
     return maud_success;
 }
 
-static MAUD_NOINLINE maudResult MoveSceneInstance(maudAcousticScene* scene,
-                                                  maudSceneInstanceId instance,
-                                                  const maudInstanceTransform* transform)
+static MAUD_NOINLINE maudResult MoveSceneInstance(maudScene* scene, maudSceneInstanceId instance,
+                                                  const maudSceneInstanceTransform* transform)
 {
     maudSceneInstance* slot = nullptr;
     maudResult result = Find(scene, instance, &slot);
@@ -169,8 +168,8 @@ static MAUD_NOINLINE maudResult MoveSceneInstance(maudAcousticScene* scene,
     return maud_success;
 }
 
-maudResult maudMoveSceneInstance(maudAcousticScene* scene, maudSceneInstanceId instance,
-                                 const maudInstanceTransform* transform)
+maudResult maudSceneInstance_Move(maudScene* scene, maudSceneInstanceId instance,
+                                  const maudSceneInstanceTransform* transform)
 {
     uint64_t token = maudFloatEnvEnter();
     maudResult result = MoveSceneInstance(scene, instance, transform);
@@ -178,7 +177,7 @@ maudResult maudMoveSceneInstance(maudAcousticScene* scene, maudSceneInstanceId i
     return result;
 }
 
-maudResult maudDestroySceneInstance(maudAcousticScene* scene, maudSceneInstanceId instance)
+maudResult maudDestroySceneInstance(maudScene* scene, maudSceneInstanceId instance)
 {
     maudSceneInstance* slot = nullptr;
     maudResult result = Find(scene, instance, &slot);
@@ -245,7 +244,7 @@ static maudTriangle WorldBox(const maudPlacedInstance* p, float scale, const mau
     return box;
 }
 
-static MAUD_NOINLINE maudResult CommitAcousticScene(maudAcousticScene* scene)
+static MAUD_NOINLINE maudResult CommitAcousticScene(maudScene* scene)
 {
     if (scene == nullptr)
     {
@@ -271,7 +270,7 @@ static MAUD_NOINLINE maudResult CommitAcousticScene(maudAcousticScene* scene)
     return maud_success;
 }
 
-maudResult maudCommitAcousticScene(maudAcousticScene* scene)
+maudResult maudScene_Commit(maudScene* scene)
 {
     uint64_t token = maudFloatEnvEnter();
     maudResult result = CommitAcousticScene(scene);
@@ -303,7 +302,7 @@ static Local Enter(const maudPlacedInstance* p, const float* origin, const float
 
 typedef struct Query
 {
-    const maudAcousticScene* scene;
+    const maudScene* scene;
     const float* origin;
     const float* direction;
     float tMin;
@@ -323,8 +322,8 @@ static bool AnyVisit(const maudTriangle* entry, float* limit, void* context)
     return maudBvhAnyHit(mesh->nodes, mesh->triangles, l.origin, l.direction, q->tMin, *limit);
 }
 
-bool maudInstancesAnyHit(const maudAcousticScene* scene, const float* origin,
-                         const float* direction, float tMin, float tMax)
+bool maudInstancesAnyHit(const maudScene* scene, const float* origin, const float* direction,
+                         float tMin, float tMax)
 {
     if (scene->placedCount == 0)
     {
@@ -368,9 +367,8 @@ static bool ClosestVisit(const maudTriangle* entry, float* limit, void* context)
     return false;
 }
 
-void maudInstancesClosestHit(const maudAcousticScene* scene, const float* origin,
-                             const float* direction, float tMin, bool found, float* best,
-                             maudRayHit* hit)
+void maudInstancesClosestHit(const maudScene* scene, const float* origin, const float* direction,
+                             float tMin, bool found, float* best, maudRayHit* hit)
 {
     if (scene->placedCount == 0)
     {

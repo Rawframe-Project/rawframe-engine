@@ -107,19 +107,19 @@ extern "C"
     // depend only on the ray and the host's geometry. Called from inside
     // a step, on its thread or on the host's tasks, never on the audio
     // thread, with at most 64 rays at a time.
-    typedef void maudAnyHitFn(const maudRay* rays, uint32_t count, uint8_t* occluded,
-                              void* context);
+    typedef void maudAnyHitFunction(const maudRay* rays, uint32_t count, uint8_t* occluded,
+                                    void* context);
 
     // A surface's acoustic properties per band, each 0 to 1.
     typedef struct maudAcousticMaterial
     {
         // The share of energy a reflection off the surface absorbs.
-        float absorption[MAUD_DIRECT_BANDS];
+        float absorption[MAUD_BANDS];
         // The share of a reflection scattered rather than mirrored.
         float scattering;
         // The share of amplitude a crossing of the surface lets through. A
         // closed wall has two surfaces, and its material each one's share.
-        float transmission[MAUD_DIRECT_BANDS];
+        float transmission[MAUD_BANDS];
     } maudAcousticMaterial;
 
     // What a closest-hit query found on a ray: the distance to the
@@ -134,25 +134,25 @@ extern "C"
     } maudRayHit;
 
     // Finds each of count rays' nearest hit, writing hits[i]; as
-    // maudAnyHitFn, an answer depends only on the ray and the geometry.
-    typedef void maudClosestHitFn(const maudRay* rays, uint32_t count, maudRayHit* hits,
-                                  void* context);
+    // maudAnyHitFunction, an answer depends only on the ray and the geometry.
+    typedef void maudClosestHitFunction(const maudRay* rays, uint32_t count, maudRayHit* hits,
+                                        void* context);
 
     // The task hooks: enqueueTask has the host run task over [0,
     // itemCount) in ranges of at least minRange items, each exactly once,
     // on any threads in any order, and returns a handle that finishTask
     // waits on. Results do not depend on the split, nor on the threads'
     // floating-point modes.
-    typedef void maudTaskFn(uint32_t start, uint32_t end, void* taskContext);
-    typedef void* maudEnqueueTaskFn(maudTaskFn* task, uint32_t itemCount, uint32_t minRange,
-                                    void* taskContext, void* userContext);
-    typedef void maudFinishTaskFn(void* userTask, void* userContext);
+    typedef void maudTaskFunction(uint32_t start, uint32_t end, void* taskContext);
+    typedef void* maudEnqueueTaskFunction(maudTaskFunction* task, uint32_t itemCount,
+                                          uint32_t minRange, void* taskContext, void* userContext);
+    typedef void maudFinishTaskFunction(void* userTask, void* userContext);
 
     // The ray hooks, the task hooks and the spatializer's allocator run
     // while the spatializer works. Of the spatializer they may call only
-    // its rendering side (maudLatchResults, maudGetDirectResult,
-    // maudGetReverbResult, maudRenderReflections), which is built to run
-    // during a step, and maudGetSpatializerMisuse. Any other call that
+    // its rendering side (maudSpatializer_LatchResults, maudSource_GetDirectResult,
+    // maudSpatializer_GetReverbResult, maudSpatializer_RenderReflections), which is built to run
+    // during a step, and maudSpatializer_GetMisuse. Any other call that
     // changes it is refused with maud_errorBusy and counted as misuse,
     // from whichever thread the host runs them on.
 
@@ -170,10 +170,10 @@ extern "C"
         // MAUD_MAX_OCCLUSION_SAMPLES.
         uint32_t maxOcclusionSamples;
         // The host's any-hit query; NULL leaves every path clear.
-        maudAnyHitFn* anyHit;
+        maudAnyHitFunction* anyHit;
         // The host's closest-hit query; NULL lets every occluded path
         // pass nothing.
-        maudClosestHitFn* closestHit;
+        maudClosestHitFunction* closestHit;
         void* rayContext;
         // The most surfaces a transmission path counts, 1 to
         // MAUD_MAX_SURFACES.
@@ -186,7 +186,7 @@ extern "C"
         uint32_t reverbRays;
         // The air's amplitude exponent per metre and band, for the
         // estimate (as the direct effect's def).
-        float airAbsorption[MAUD_DIRECT_BANDS];
+        float airAbsorption[MAUD_BANDS];
         // Geometric reflections: the bed's order (0 for none, else 1 to
         // MAUD_MAX_REFLECTION_ORDER; they need reverbRays), the response's length in seconds
         // (0.05 to 4) and the rate rendering runs at (44,100 to
@@ -194,7 +194,7 @@ extern "C"
         // (order + 1)^2 channels.
         uint32_t reflectionOrder;
         float reflectionDuration;
-        float reflectionRate;
+        uint32_t reflectionRate;
         // Probe sets for pathing: how many at once (0 to
         // MAUD_MAX_PROBE_SETS), the most probes one holds (1 to
         // MAUD_MAX_PROBES) and the most probe pairs within range one tests
@@ -209,8 +209,8 @@ extern "C"
         // each.
         uint32_t maxPaths;
         // The task hooks; both NULL runs queries on the step's thread.
-        maudEnqueueTaskFn* enqueueTask;
-        maudFinishTaskFn* finishTask;
+        maudEnqueueTaskFunction* enqueueTask;
+        maudFinishTaskFunction* finishTask;
         void* userTaskContext;
         maudAllocator allocator;
     } maudSpatializerDef;
@@ -229,10 +229,10 @@ extern "C"
         uint32_t occlusionSamples;
         // Whether an occluded path's transmission is walked through the
         // closest-hit query.
-        bool transmission;
+        bool enableTransmission;
         // Whether an occluded source looks for a path around what hides
-        // it, over the probe set in use (maudSetPathing).
-        bool pathing;
+        // it, over the probe set in use (maudProbeSet_UseForPathing).
+        bool enablePathing;
     } maudSourceDef;
 
     // How to create a probe set: probes at the host's points or, without
@@ -264,8 +264,8 @@ extern "C"
     // What a probe set holds.
     typedef struct maudProbeSetInfo
     {
-        uint32_t probes;
-        uint32_t links;
+        uint32_t probeCount;
+        uint32_t linkCount;
         // Whether it holds a bake.
         bool baked;
     } maudProbeSetInfo;
@@ -279,16 +279,16 @@ extern "C"
         // frame, unit length (straight ahead when the two coincide).
         maudVector3 direction;
         // The source's directivity towards the listener, per band.
-        float directivity[MAUD_DIRECT_BANDS];
+        float directivity[MAUD_BANDS];
         // How much of the source the path's obstacles hide, 0 to 1.
         float occlusion;
         // What passes through them, per band: the product of the crossed
         // surfaces' transmission. 1 for a clear path; 0 for an occluded
         // one without a walk.
-        float transmission[MAUD_DIRECT_BANDS];
+        float transmission[MAUD_BANDS];
         // The surfaces the walk crossed; the spatializer's maxSurfaces
         // when the limit stopped it, more surfaces perhaps uncounted.
-        uint32_t surfaces;
+        uint32_t surfaceCount;
         // Whether a path around the obstacles was found. Then distance is
         // the path's length; direction and directivity blend the path's
         // with the straight line's by the energy each brings; and
@@ -304,9 +304,9 @@ extern "C"
     {
         // The time to decay by 60 dB per band, 0.1 to 20 s, for
         // maudReverbParams; 0.1 s before the first estimate.
-        float reverbTime[MAUD_DIRECT_BANDS];
+        float reverbTime[MAUD_BANDS];
         // The estimates made before the step; 0 for none.
-        uint32_t estimates;
+        uint32_t estimateCount;
         // For maudReverbParams: the send's level per band (dB) and delay
         // (s) that give the reverb the traced energy. Without reflections
         // it matches at 100 ms with no delay; with them, the tail begins
@@ -314,7 +314,7 @@ extern "C"
         // reverb's first 23 ms are silent, so the delay is the duration
         // less 23 ms). 0 dB and no delay before an estimate, -96 dB with
         // nothing to reflect.
-        float level[MAUD_DIRECT_BANDS];
+        float level[MAUD_BANDS];
         float delay;
         // Where a band decays in two slopes, as a room fed through a door
         // by a livelier one does, the slower slope: its time (0.1 to 20 s;
@@ -322,8 +322,8 @@ extern "C"
         // (dB, -96 where there is none); reverbTime and level are then the
         // faster slope's. maudReverbParams' tailTime and tailLevel take
         // them, for a reverb made with a tail.
-        float tailTime[MAUD_DIRECT_BANDS];
-        float tailLevel[MAUD_DIRECT_BANDS];
+        float tailTime[MAUD_BANDS];
+        float tailLevel[MAUD_BANDS];
     } maudReverbResult;
 
 // The cookie of a spatializer def, which its default sets and
@@ -357,7 +357,7 @@ extern "C"
         def.materialCapacity = 64;
         def.reverbRays = 2048;
         def.reflectionDuration = 1.0f;
-        def.reflectionRate = 48000.0f;
+        def.reflectionRate = 48000;
         def.maxProbes = 4096;
         def.maxProbePairs = 1048576;
         def.maxPaths = 32;
@@ -413,7 +413,7 @@ extern "C"
     /// @return The count since the spatializer was created.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API uint64_t maudGetSpatializerMisuse(const maudSpatializer* spatializer);
+    MAUD_API uint64_t maudSpatializer_GetMisuse(const maudSpatializer* spatializer);
 
     /// Creates a source, at the world's origin facing -z until its pose
     /// is set. It appears in results from the next step on.
@@ -463,8 +463,9 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSetSourcePose(maudSpatializer* spatializer,
-                                                         maudSourceId source, const maudPose* pose);
+    MAUD_NODISCARD MAUD_API maudResult maudSource_SetPose(maudSpatializer* spatializer,
+                                                          maudSourceId source,
+                                                          const maudPose* pose);
 
     /// Runs a direct step for a listener and publishes its results. Its
     /// occlusion rays go to the any-hit query, and then the transmission
@@ -482,8 +483,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSimulateDirect(maudSpatializer* spatializer,
-                                                          const maudPose* listener);
+    MAUD_NODISCARD MAUD_API maudResult maudSpatializer_SimulateDirect(maudSpatializer* spatializer,
+                                                                      const maudPose* listener);
 
     /// Replaces the material table that hits' indices name. A hit on a
     /// material outside it lets nothing through.
@@ -499,9 +500,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSetMaterials(maudSpatializer* spatializer,
-                                                        const maudAcousticMaterial* materials,
-                                                        uint32_t count);
+    MAUD_NODISCARD MAUD_API maudResult maudSpatializer_SetMaterials(
+        maudSpatializer* spatializer, const maudAcousticMaterial* materials, uint32_t count);
 
     /// Estimates the reverberation times at the listener's position from
     /// the scene: rays from the listener in batches of 64, each hit lit
@@ -514,7 +514,7 @@ extern "C"
     /// the times with its results. If the def asks for reflections, the
     /// same rays' energy, on spherical harmonics of its arrival
     /// direction, becomes a response (noise shaped per 10 ms and per
-    /// band) published at once for maudRenderReflections.
+    /// band) published at once for maudSpatializer_RenderReflections.
     ///
     /// @param spatializer  The spatializer.
     /// @param listener     The listener's pose.
@@ -527,8 +527,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSimulateReverb(maudSpatializer* spatializer,
-                                                          const maudPose* listener);
+    MAUD_NODISCARD MAUD_API maudResult maudSpatializer_SimulateReverb(maudSpatializer* spatializer,
+                                                                      const maudPose* listener);
 
     /// Latches the newest published step for the rendering side; until
     /// the next latch, results come from it.
@@ -539,7 +539,7 @@ extern "C"
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. The rendering side is
     /// used by one thread at a time.
-    MAUD_API uint64_t maudLatchResults(maudSpatializer* spatializer);
+    MAUD_API uint64_t maudSpatializer_LatchResults(maudSpatializer* spatializer);
 
     /// Reads a source's result from the latched step.
     ///
@@ -553,9 +553,8 @@ extern "C"
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. The rendering side is
     /// used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetDirectResult(const maudSpatializer* spatializer,
-                                                           maudSourceId source,
-                                                           maudDirectResult* resultOut);
+    MAUD_NODISCARD MAUD_API maudResult maudSource_GetDirectResult(
+        const maudSpatializer* spatializer, maudSourceId source, maudDirectResult* resultOut);
 
     /// Renders geometric reflections: convolves the host's mono send with
     /// the newest response published and adds the result into a bed of
@@ -581,10 +580,9 @@ extern "C"
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. The rendering side is
     /// used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudRenderReflections(maudSpatializer* spatializer,
-                                                             const maudQuaternion* orientation,
-                                                             const float* send, float* const* bed,
-                                                             uint32_t frames);
+    MAUD_NODISCARD MAUD_API maudResult maudSpatializer_RenderReflections(
+        maudSpatializer* spatializer, const maudQuaternion* orientation, const float* send,
+        float* const* bed, uint32_t frames);
 
     /// Reads the reverberation estimate the latched step published.
     ///
@@ -595,8 +593,8 @@ extern "C"
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. The rendering side is
     /// used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetReverbResult(const maudSpatializer* spatializer,
-                                                           maudReverbResult* resultOut);
+    MAUD_NODISCARD MAUD_API maudResult maudSpatializer_GetReverbResult(
+        const maudSpatializer* spatializer, maudReverbResult* resultOut);
 
     /// Returns the default probe set def: no points and an empty box (set
     /// one or the other), 2 m spacing, 1.5 m height, a 5 m range.
@@ -646,25 +644,25 @@ extern "C"
     MAUD_NODISCARD MAUD_API maudResult maudDestroyProbeSet(maudSpatializer* spatializer,
                                                            maudProbeSetId set);
 
-    /// Reads what a probe set holds and, if points is not NULL, copies
-    /// its probes from first on into points, count of them.
+    /// Reads what a probe set holds and, if pointsOut is not NULL, copies
+    /// its probes from first on into pointsOut, count of them.
     ///
     /// @param spatializer  The spatializer.
     /// @param set          The set.
-    /// @param infoOut      Receives the counts; all zero on failure.
     /// @param first        The first probe to copy.
+    /// @param infoOut      Receives the counts; all zero on failure.
+    /// @param pointsOut    Receives them, or NULL.
     /// @param count        The probes to copy.
-    /// @param points       Receives them, or NULL.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer
     ///         or info, a 0 or unknown id, or probes past the set's;
     ///         `maud_errorStale` for a destroyed set's id.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetProbeSet(const maudSpatializer* spatializer,
-                                                       maudProbeSetId set,
-                                                       maudProbeSetInfo* infoOut, uint32_t first,
-                                                       uint32_t count, maudVector3* points);
+    MAUD_NODISCARD MAUD_API maudResult maudProbeSet_GetInfo(const maudSpatializer* spatializer,
+                                                            maudProbeSetId set, uint32_t first,
+                                                            maudProbeSetInfo* infoOut,
+                                                            maudVector3* pointsOut, uint32_t count);
 
     /// Sets the probe set occluded sources look for paths over, from the
     /// next direct step on; 0 for none. Destroying the set ends its use.
@@ -678,11 +676,11 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSetPathing(maudSpatializer* spatializer,
-                                                      maudProbeSetId set);
+    MAUD_NODISCARD MAUD_API maudResult maudProbeSet_UseForPathing(maudSpatializer* spatializer,
+                                                                  maudProbeSetId set);
 
     /// Bakes a probe set: a reverberation estimate at every probe, as
-    /// maudSimulateReverb makes one there, with the energy field when the
+    /// maudSpatializer_SimulateReverb makes one there, with the energy field when the
     /// spatializer renders reflections; it replaces an earlier bake. The
     /// rays go through the task hooks, and the bake's values are the same
     /// bits on every platform, however the tasks run and whatever the
@@ -703,11 +701,11 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudBakeProbeSet(maudSpatializer* spatializer,
-                                                        maudProbeSetId set);
+    MAUD_NODISCARD MAUD_API maudResult maudProbeSet_Bake(maudSpatializer* spatializer,
+                                                         maudProbeSetId set);
 
     /// Sets the baked probe set reverberation estimates come from, from
-    /// the next maudSimulateReverb on; 0 for none. An estimate then blends
+    /// the next maudSpatializer_SimulateReverb on; 0 for none. An estimate then blends
     /// the 4 nearest probes the listener sees within the set's range
     /// (Shepard's weights, cut off at the fifth nearest, so moving is
     /// smooth) and traces nothing; with no probe in sight it traces.
@@ -723,8 +721,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudUseBakedReverb(maudSpatializer* spatializer,
-                                                          maudProbeSetId set);
+    MAUD_NODISCARD MAUD_API maudResult maudProbeSet_UseBakedReverb(maudSpatializer* spatializer,
+                                                                   maudProbeSetId set);
 
     /// Saves a probe set as a `.maudbake` file (docs/internals/file-formats.md):
     /// its probes, links and bake. A set saves to the same bytes on every
@@ -746,9 +744,9 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSaveProbeSet(const maudSpatializer* spatializer,
-                                                        maudProbeSetId set, void* bytes,
-                                                        size_t capacity, size_t* sizeOut);
+    MAUD_NODISCARD MAUD_API maudResult maudProbeSet_Save(const maudSpatializer* spatializer,
+                                                         maudProbeSetId set, void* bytes,
+                                                         size_t capacity, size_t* sizeOut);
 
     /// Loads a probe set from a `.maudbake` file, treated as hostile:
     /// every count is checked against the spatializer's limits before

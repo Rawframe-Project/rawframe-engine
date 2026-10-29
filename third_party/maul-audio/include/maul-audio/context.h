@@ -25,6 +25,13 @@ extern "C"
 // The fewest records a context's notification queue may hold: one for a
 // change and one for the overflow that may follow it.
 #define MAUD_MIN_NOTIFICATIONS 2u
+// The most a context's limits may allow: streams that exist at once,
+// devices of both directions, queued notifications, and bytes of a
+// device's name or key. Each is far past what a program needs.
+#define MAUD_MAX_STREAMS           65535u
+#define MAUD_MAX_DEVICES           65535u
+#define MAUD_MAX_NOTIFICATIONS     65535u
+#define MAUD_MAX_DEVICE_TEXT_BYTES 65535u
 
     // Which backend a context talks to.
     typedef uint8_t maudBackendKind;
@@ -53,22 +60,27 @@ extern "C"
         maud_backendPrivate = 9,
     };
 
-    // The named limits of a context. A request past one is refused.
+    // The named limits of a context. A request past one is refused. A
+    // limit past its MAUD_MAX_* constant, or below MAUD_MIN_NOTIFICATIONS,
+    // is refused with maud_errorLimit; any other limit of 0 with
+    // maud_errorInvalid.
     typedef struct maudLimits
     {
-        // Streams that exist at once.
-        uint16_t streams;
+        // Streams that exist at once, from 1 to MAUD_MAX_STREAMS.
+        uint32_t streams;
         // The largest period a stream may ask for, in frames, from 1 to
         // MAUD_MAX_PERIOD_FRAMES.
         uint32_t periodFrames;
-        // Devices, of both directions, that exist at once.
-        uint16_t devices;
-        // Records the notification queue holds before it overflows; at
-        // least MAUD_MIN_NOTIFICATIONS. Fewer, 0 included, is refused with
-        // maud_errorLimit.
-        uint16_t notifications;
-        // Bytes of a device's name, and of its key.
-        uint16_t deviceTextBytes;
+        // Devices, of both directions, that exist at once, from 1 to
+        // MAUD_MAX_DEVICES.
+        uint32_t devices;
+        // Records the notification queue holds before it overflows, from
+        // MAUD_MIN_NOTIFICATIONS to MAUD_MAX_NOTIFICATIONS. Fewer, 0
+        // included, is refused with maud_errorLimit.
+        uint32_t notifications;
+        // Bytes of a device's name, and of its key, from 1 to
+        // MAUD_MAX_DEVICE_TEXT_BYTES.
+        uint32_t deviceTextBytes;
     } maudLimits;
 
     // How a context is made. Build it with maudDefaultContextDef.
@@ -149,8 +161,10 @@ extern "C"
     ///         before anything else of it; `maud_errorInvalid` for a NULL
     ///         argument, a def without its cookie, an allocator with one function, a limit
     ///         other than notifications of 0, or an offline rate out of range;
-    ///         `maud_errorLimit` for a period limit past MAUD_MAX_PERIOD_FRAMES or
-    ///         fewer notifications than MAUD_MIN_NOTIFICATIONS, 0 included; `maud_errorUnsupported`
+    ///         `maud_errorLimit` for a limit past its MAUD_MAX_* constant
+    ///         (streams, period frames, devices, notifications, device text
+    ///         bytes) or fewer notifications than MAUD_MIN_NOTIFICATIONS, 0
+    ///         included; `maud_errorUnsupported`
     ///         when this build or platform lacks the backend asked for, or
     ///         no audio service of it answers;
     ///         `maud_errorCapacity` when the allocator fails, or when the
@@ -178,7 +192,9 @@ extern "C"
     /// resume holds audio until this is called. Streams held meanwhile are
     /// suspended with maud_suspendPolicy and resume, with a notification,
     /// once the platform lets the context run. Where no policy holds audio
-    /// it does nothing.
+    /// it does nothing. On the web it is what Web Audio calls resume():
+    /// the unlock after a gesture. It does not undo maudContext_SetSuspended,
+    /// the host's own suspension, which only that call ends.
     ///
     /// @param context  The context.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL context;
@@ -187,12 +203,14 @@ extern "C"
     ///         as misuse.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudResumeContext(maudContext* context);
+    MAUD_NODISCARD MAUD_API maudResult maudContext_Unlock(maudContext* context);
 
     /// Suspends a context for the host's lifecycle, or resumes it: the
     /// application went to the background, its tab was hidden or the
     /// system sleeps, and later it is back. The library never infers this
-    /// itself. Suspending suspends every stream that runs or only waits
+    /// itself. It reports a state the host learns from the system, so it is
+    /// a setter, not a switch that turns a part of the library on or off.
+    /// Suspending suspends every stream that runs or only waits
     /// to run with maud_suspendHost, with a notification each, and stops
     /// its platform side; on the web it also suspends the AudioContext.
     /// Resuming lets each run again, or wait for what it waited for. A
@@ -207,8 +225,8 @@ extern "C"
     ///         as misuse.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSetContextSuspended(maudContext* context,
-                                                               bool suspended);
+    MAUD_NODISCARD MAUD_API maudResult maudContext_SetSuspended(maudContext* context,
+                                                                bool suspended);
 
     /// Returns the backend a context talks to: the one its def named, or
     /// for maud_backendNative the one it chose.
@@ -217,7 +235,7 @@ extern "C"
     /// @return The backend kind, never maud_backendNative.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API maudBackendKind maudGetContextBackend(const maudContext* context);
+    MAUD_API maudBackendKind maudContext_GetBackend(const maudContext* context);
 
     /// Returns how many calls the context refused as misuse: invalid
     /// arguments against it, and calls refused because they came from
@@ -229,7 +247,7 @@ extern "C"
     /// @return The count since the context was created.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API uint64_t maudGetContextMisuse(const maudContext* context);
+    MAUD_API uint64_t maudContext_GetMisuse(const maudContext* context);
 
 #ifdef __cplusplus
 }

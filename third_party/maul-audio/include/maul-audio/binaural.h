@@ -40,7 +40,7 @@ extern "C"
         // head's near field (a rigid sphere of headRadius, against the
         // distance the set was measured at) and looking its response up
         // in the direction it sees the source from (parallax).
-        bool nearField;
+        bool enableNearField;
         // The head's radius in metres, 0.05 to 0.15.
         float headRadius;
         maudAllocator allocator;
@@ -83,7 +83,7 @@ extern "C"
         def.cookie = MAUD_BINAURAL_DEF_COOKIE;
         def.version = MAUD_ABI_VERSION;
         def.maxFrames = 1024;
-        def.nearField = true;
+        def.enableNearField = true;
         def.headRadius = 0.0875f;
         return def;
     }
@@ -129,10 +129,10 @@ extern "C"
     ///         failure.
     /// @par Thread safety
     /// Safe from any thread; the effect is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudProcessBinaural(maudBinaural* effect,
-                                                           const maudBinauralParams* params,
-                                                           const float* in, float* const out[2],
-                                                           uint32_t frames);
+    MAUD_NODISCARD MAUD_API maudResult maudBinaural_Process(maudBinaural* effect,
+                                                            const maudBinauralParams* params,
+                                                            const float* in, float* const out[2],
+                                                            uint32_t frames);
 
     /// Forgets the signal an effect has heard and its parameters, as for a
     /// source that starts again.
@@ -141,7 +141,7 @@ extern "C"
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer.
     /// @par Thread safety
     /// Safe from any thread; the effect is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudResetBinaural(maudBinaural* effect);
+    MAUD_NODISCARD MAUD_API maudResult maudBinaural_Reset(maudBinaural* effect);
 
 #ifdef __cplusplus
 }

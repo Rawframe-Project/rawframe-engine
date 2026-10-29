@@ -30,7 +30,7 @@ void maudInitObjects(maudPeriod* period, maudStreamObject* objects, float* sampl
     period->objects = objects;
     period->objectSamples = samples;
     period->objectCount = count;
-    period->objectsAvailable = count;
+    period->availableObjectCount = count;
     for (uint32_t i = 0; i < count; ++i)
     {
         objects[i] =
@@ -49,7 +49,7 @@ static void CallBlock(maudPeriod* period, bool output)
         .position = period->nextBlock,
         .objects = period->objectCount > 0 ? period->objects : nullptr,
         .objectCount = period->objectCount,
-        .objectsAvailable = period->objectsAvailable,
+        .availableObjectCount = period->availableObjectCount,
     };
     period->callback(&block, period->user);
     period->nextBlock += period->frames;
@@ -99,7 +99,7 @@ void maudPullObjects(maudPeriod* period, float* bed, maudStreamObject* objectsOu
     for (uint32_t i = 0; i < period->objectCount; ++i)
     {
         const maudStreamObject* object = &period->objects[i];
-        memcpy(objectsOut[i].position, object->position, sizeof(object->position));
+        objectsOut[i].position = object->position;
         objectsOut[i].gain = object->gain;
         objectsOut[i].active = object->active;
     }

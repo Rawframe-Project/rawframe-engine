@@ -121,7 +121,7 @@ void maudDestroyBinauralDecoder(maudBinauralDecoder* decoder)
     maudRelease(&allocator, decoder, decoder->bytes, alignof(maudBinauralDecoder));
 }
 
-maudResult maudResetBinauralDecoder(maudBinauralDecoder* decoder)
+maudResult maudBinauralDecoder_Reset(maudBinauralDecoder* decoder)
 {
     if (decoder == nullptr)
     {
@@ -149,8 +149,8 @@ static bool ChannelsValid(const maudBinauralDecoder* decoder, const float* const
     return true;
 }
 
-maudResult maudDecodeBinaural(maudBinauralDecoder* decoder, const float* const* bed,
-                              float* const out[2], uint32_t frames)
+maudResult maudBinauralDecoder_Decode(maudBinauralDecoder* decoder, const float* const* bed,
+                                      float* const out[2], uint32_t frames)
 {
     if (decoder == nullptr || (frames > 0 && !ChannelsValid(decoder, bed, out)))
     {

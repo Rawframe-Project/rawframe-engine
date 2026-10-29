@@ -179,8 +179,12 @@ maudResult maudCreateContext(const maudContextDef* def, maudContext** contextOut
         return maud_errorVersion;
     }
     if (def != nullptr && def->cookie == MAUD_CONTEXT_DEF_COOKIE &&
-        (def->limits.periodFrames > MAUD_MAX_PERIOD_FRAMES ||
-         def->limits.notifications < MAUD_MIN_NOTIFICATIONS))
+        (def->limits.streams > MAUD_MAX_STREAMS ||
+         def->limits.periodFrames > MAUD_MAX_PERIOD_FRAMES ||
+         def->limits.devices > MAUD_MAX_DEVICES ||
+         def->limits.notifications < MAUD_MIN_NOTIFICATIONS ||
+         def->limits.notifications > MAUD_MAX_NOTIFICATIONS ||
+         def->limits.deviceTextBytes > MAUD_MAX_DEVICE_TEXT_BYTES))
     {
         return maud_errorLimit;
     }
@@ -258,12 +262,12 @@ maudResult maudDestroyContext(maudContext* context)
     return maud_success;
 }
 
-maudBackendKind maudGetContextBackend(const maudContext* context)
+maudBackendKind maudContext_GetBackend(const maudContext* context)
 {
     return context->backend->kind;
 }
 
-uint64_t maudGetContextMisuse(const maudContext* context)
+uint64_t maudContext_GetMisuse(const maudContext* context)
 {
     return atomic_load_explicit(&context->misuse, memory_order_relaxed);
 }
@@ -406,7 +410,7 @@ void maudReleaseStream(maudContext* context, maudStreamSlot* slot)
     maudContextRelease(context, duplex, duplex->bytes, alignof(maudDuplex));
 }
 
-maudResult maudResumeContext(maudContext* context)
+maudResult maudContext_Unlock(maudContext* context)
 {
     if (context == nullptr)
     {

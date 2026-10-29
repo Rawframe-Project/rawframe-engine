@@ -240,8 +240,8 @@ static void ApplyFrames(maudGainControl* gain, float* frames, uint32_t count)
     gain->envelope = envelope;
 }
 
-maudResult maudApplyGainControl(maudGainControl* gain, float* frames, uint32_t frameCount,
-                                maudGainState* stateOut)
+maudResult maudGainControl_Apply(maudGainControl* gain, float* frames, uint32_t frameCount,
+                                 maudGainState* stateOut)
 {
     // Cleared first, so a failure leaves zero.
     if (stateOut != nullptr)

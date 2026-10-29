@@ -46,7 +46,7 @@ void maudReleaseProbeBake(const maudAllocator* allocator, maudProbeBake* bake);
 // tail's time is blended over the probes with one. False when no probe
 // is in sight (nothing written).
 bool maudInterpolateBake(const maudProbeGraph* graph, const maudProbeBake* bake,
-                         maudAnyHitFn* anyHit, void* context, maudVector3 point,
+                         maudAnyHitFunction* anyHit, void* context, maudVector3 point,
                          maudReverbResult* result, float* field);
 
 #endif // MAUL_AUDIO_SRC_PROBE_BAKE_H

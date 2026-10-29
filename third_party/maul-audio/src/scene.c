@@ -62,15 +62,15 @@ static bool MeshesValid(const maudMesh* meshes, uint32_t count, uint64_t* sum)
 }
 
 // Checks the def and its triangles against its limit.
-static maudResult Check(const maudAcousticSceneDef* def)
+static maudResult Check(const maudSceneDef* def)
 {
     uint64_t sum = 0;
-    if (def->cookie == MAUD_ACOUSTIC_SCENE_DEF_COOKIE &&
+    if (def->cookie == MAUD_SCENE_DEF_COOKIE &&
         (def->instanceCapacity > MAUD_MAX_INSTANCES || def->maxTriangles > MAUD_MAX_TRIANGLES))
     {
         return maud_errorLimit;
     }
-    if (def->cookie != MAUD_ACOUSTIC_SCENE_DEF_COOKIE || !maudIsAllocatorValid(&def->allocator) ||
+    if (def->cookie != MAUD_SCENE_DEF_COOKIE || !maudIsAllocatorValid(&def->allocator) ||
         def->maxTriangles == 0 || !MeshesValid(def->meshes, def->meshCount, &sum) ||
         !MeshesValid(def->instanceMeshes, def->instanceMeshCount, &sum))
     {
@@ -136,7 +136,7 @@ void maudReleaseSceneMesh(const maudAllocator* allocator, maudSceneMesh* mesh)
     *mesh = (maudSceneMesh){0};
 }
 
-static void Release(maudAcousticScene* scene)
+static void Release(maudScene* scene)
 {
     maudAllocator allocator = scene->allocator;
     maudReleaseSceneMesh(&allocator, &scene->statics);
@@ -150,12 +150,12 @@ static void Release(maudAcousticScene* scene)
                     alignof(maudSceneMesh));
     }
     maudReleaseInstances(scene);
-    maudRelease(&allocator, scene, sizeof(maudAcousticScene), alignof(maudAcousticScene));
+    maudRelease(&allocator, scene, sizeof(maudScene), alignof(maudScene));
 }
 
 // Builds every hierarchy and the instances' slots; false when memory
 // runs out.
-static bool Build(maudAcousticScene* scene, const maudAcousticSceneDef* def)
+static bool Build(maudScene* scene, const maudSceneDef* def)
 {
     if (!maudBuildSceneMesh(&def->allocator, def->meshes, def->meshCount, &scene->statics))
     {
@@ -186,15 +186,13 @@ static bool Build(maudAcousticScene* scene, const maudAcousticSceneDef* def)
     return maudAllocateInstances(scene, def->instanceCapacity);
 }
 
-static MAUD_NOINLINE maudResult CreateAcousticScene(const maudAcousticSceneDef* def,
-                                                    maudAcousticScene** sceneOut)
+static MAUD_NOINLINE maudResult CreateAcousticScene(const maudSceneDef* def, maudScene** sceneOut)
 {
     if (sceneOut != nullptr)
     {
         *sceneOut = nullptr;
     }
-    if (def != nullptr && def->cookie == MAUD_ACOUSTIC_SCENE_DEF_COOKIE &&
-        def->version != MAUD_ABI_VERSION)
+    if (def != nullptr && def->cookie == MAUD_SCENE_DEF_COOKIE && def->version != MAUD_ABI_VERSION)
     {
         return maud_errorVersion;
     }
@@ -207,13 +205,12 @@ static MAUD_NOINLINE maudResult CreateAcousticScene(const maudAcousticSceneDef* 
     {
         return result;
     }
-    maudAcousticScene* scene =
-        maudAllocate(&def->allocator, sizeof(maudAcousticScene), alignof(maudAcousticScene));
+    maudScene* scene = maudAllocate(&def->allocator, sizeof(maudScene), alignof(maudScene));
     if (scene == nullptr)
     {
         return maud_errorCapacity;
     }
-    *scene = (maudAcousticScene){.allocator = def->allocator};
+    *scene = (maudScene){.allocator = def->allocator};
     atomic_init(&scene->misuse, 0);
     if (!Build(scene, def))
     {
@@ -224,7 +221,7 @@ static MAUD_NOINLINE maudResult CreateAcousticScene(const maudAcousticSceneDef* 
     return maud_success;
 }
 
-maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def, maudAcousticScene** sceneOut)
+maudResult maudCreateScene(const maudSceneDef* def, maudScene** sceneOut)
 {
     uint64_t token = maudFloatEnvEnter();
     maudResult result = CreateAcousticScene(def, sceneOut);
@@ -232,7 +229,7 @@ maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def, maudAcoustic
     return result;
 }
 
-void maudDestroyAcousticScene(maudAcousticScene* scene)
+void maudDestroyScene(maudScene* scene)
 {
     if (scene != nullptr)
     {
@@ -240,7 +237,7 @@ void maudDestroyAcousticScene(maudAcousticScene* scene)
     }
 }
 
-uint64_t maudGetAcousticSceneMisuse(const maudAcousticScene* scene)
+uint64_t maudScene_GetMisuse(const maudScene* scene)
 {
     return atomic_load_explicit(&scene->misuse, memory_order_relaxed);
 }
@@ -258,7 +255,7 @@ static void Unpack(const maudRay* ray, float* origin, float* direction)
 static MAUD_NOINLINE void AnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded,
                                  void* scene)
 {
-    const maudAcousticScene* s = scene;
+    const maudScene* s = scene;
     for (uint32_t i = 0; i < count; ++i)
     {
         float origin[3];
@@ -275,7 +272,7 @@ static MAUD_NOINLINE void AnyHit(const maudRay* rays, uint32_t count, uint8_t* o
 
 // The queries enter too: a host may call them from its own threads, and
 // inside the spatializer's tasks entering costs two reads of the register.
-void maudSceneAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded, void* scene)
+void maudFindAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded, void* scene)
 {
     uint64_t token = maudFloatEnvEnter();
     AnyHit(rays, count, occluded, scene);
@@ -303,7 +300,7 @@ maudVector3 maudTriangleNormal(const maudTriangle* t)
 static MAUD_NOINLINE void ClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits,
                                      void* scene)
 {
-    const maudAcousticScene* s = scene;
+    const maudScene* s = scene;
     for (uint32_t i = 0; i < count; ++i)
     {
         hits[i] = (maudRayHit){INFINITY, {0.0f, 0.0f, 0.0f}, 0};
@@ -329,7 +326,7 @@ static MAUD_NOINLINE void ClosestHit(const maudRay* rays, uint32_t count, maudRa
     }
 }
 
-void maudSceneClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits, void* scene)
+void maudFindClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits, void* scene)
 {
     uint64_t token = maudFloatEnvEnter();
     ClosestHit(rays, count, hits, scene);

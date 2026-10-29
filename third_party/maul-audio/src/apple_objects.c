@@ -251,7 +251,7 @@ maudResult maudOpenAppleObjects(maudContext* context, maudStreamCore* core, maud
         return maud_errorCapacity;
     }
     // The mixer takes every object.
-    core->period.objectsAvailable = core->period.objectCount;
+    core->period.availableObjectCount = core->period.objectCount;
     if (AudioComponentInstanceNew(component, &objects->mixer) != noErr)
     {
         objects->mixer = nullptr;
@@ -294,9 +294,9 @@ static void Place(AudioUnit mixer, uint32_t bus, const maudStreamObject* record)
     {
         return;
     }
-    float x = record->position[0];
-    float y = record->position[1];
-    float z = record->position[2];
+    float x = record->position.x;
+    float y = record->position.y;
+    float z = record->position.z;
     float across = sqrtf(x * x + z * z);
     float azimuth = across > 0.0f ? atan2f(x, -z) * DEGREES_PER_RADIAN : 0.0f;
     float elevation = across > 0.0f || y != 0.0f ? atan2f(y, across) * DEGREES_PER_RADIAN : 0.0f;

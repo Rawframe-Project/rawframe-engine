@@ -22,7 +22,7 @@ extern "C"
 #define MAUD_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MAUD_VERSION_MINOR 2
+#define MAUD_VERSION_MINOR 3
 // x-release-please-end
 // x-release-please-start-patch
 #define MAUD_VERSION_PATCH 0
@@ -187,7 +187,7 @@ extern "C"
     /// @return A static, NUL-terminated string such as "maud_errorCapacity".
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API const char* maudResultName(maudResult result);
+    MAUD_API const char* maudGetResultName(maudResult result);
 
 #ifdef __cplusplus
 }
