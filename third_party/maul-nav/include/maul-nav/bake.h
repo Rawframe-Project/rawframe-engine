@@ -32,6 +32,15 @@ extern "C"
 #define MNAV_MAX_EXTENT_CELLS 4194304
 #define MNAV_MAX_HEIGHT_CELLS 32767
 
+// The most corners a piece of an input triangle holds as a bake cuts it
+// along cell lines: seven in exact arithmetic, and one more where rounding
+// splits a cut. Input whose piece would pass it is refused.
+#define MNAV_MAX_PIECE_CORNERS 12
+
+// The most entries a tile index holds: listed triangles or outlines,
+// summed over the tiles each reaches, and tiles its grid spans.
+#define MNAV_MAX_INDEX_ENTRIES 2147483646
+
 // The largest values the named limits may take.
 #define MNAV_MAX_INPUT_TRIANGLES 268435456
 #define MNAV_MAX_TILE_SPANS      67108864
@@ -73,7 +82,7 @@ extern "C"
     } mnavAgentProfile;
 
     // The named limits that bound a bake's work. Each is at least 1 and at
-    // most its MNAV_MAX_ value. Reaching one is mnav_errorLimit, never a
+    // most its MNAV_MAX_ value. Reaching one is mnav_errorCapacity, never a
     // silent truncation. None is in seconds, so a bake's outcome does not
     // depend on the machine.
     typedef struct mnavBakeLimits
@@ -118,9 +127,12 @@ extern "C"
         mnav_tierDynamic = 2,
     };
 
-    // A clock the host passes in: now returns ticks in a unit of the
-    // host's choosing, never going back, and is called from the thread
-    // that bakes, in the host's own floating-point environment.
+    // A clock the host passes in: now returns ticks in a unit of the host's
+    // choosing, never going back, and is called from the thread that bakes, in
+    // the host's own floating-point environment. It may call nothing of the
+    // baker, or of the tile index or tile cache the bake uses: such a call that
+    // would change one of them is refused with mnav_errorBusy, one misuse
+    // counted.
     typedef struct mnavClock
     {
         uint64_t (*now)(void* context);
@@ -151,7 +163,10 @@ extern "C"
         // smaller islands away from a tile's edge are dropped.
         float minRegionArea;
         // How far a simplified wall may stray from the cells it follows, in
-        // meters, at least 0.
+        // meters, at least 0. Walls simplified a cell or more can cross
+        // themselves or each other, and a ring that then does not
+        // triangulate whole loses the area it did not triangulate; the
+        // report counts it in partialRings.
         float maxEdgeError;
         // The longest wall edge, in meters, at least 0; 0 for no limit.
         float maxEdgeLength;
@@ -405,12 +420,12 @@ extern "C"
     ///
     /// @param def     The bake def the outline is for.
     /// @param outline The outline.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, an
-    /// invalid def, fewer than 3 points, an area of MNAV_AREA_TYPES or more, or
-    /// a point that is not finite (the point); `mnav_errorVersion` for a def
-    /// built against another version of the headers; `mnav_errorRange` for a
-    /// point past the extent input may have (the point); `mnav_errorLimit` for
-    /// more points than the inputTriangles limit.
+    /// @return `mnav_success`; for a def mnavValidateBakeDef refuses, the
+    /// status it gives; `mnav_errorInvalid` for a NULL argument, fewer than 3
+    /// points, an area of MNAV_AREA_TYPES or more, or a point with a NaN
+    /// coordinate (the point); `mnav_errorLimit` for a point past the extent
+    /// input may have, an infinity included (the point); `mnav_errorCapacity`
+    /// for more points than the inputTriangles limit.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavInputResult mnavValidateOutline(const mnavBakeDef* def,
@@ -471,11 +486,13 @@ extern "C"
     /// @param def       The def to check.
     /// @param cellsOut  Receives the settings in cells when the def is
     ///                  valid. May be NULL.
-    /// @return `mnav_success`; `mnav_errorInvalid` with the setting for a
-    /// NULL def, a def without its cookie, an allocator with one function,
-    /// a value that is not finite or lies outside its range, an agent
-    /// radius whose border is wider than a tile, or an agent height or
-    /// step height past MNAV_MAX_HEIGHT_CELLS; `mnav_errorVersion` with no
+    /// @return `mnav_success`; `mnav_errorInvalid` with the setting for a NULL
+    /// def, a def without its cookie, an allocator with one function, a NaN, a
+    /// value (an infinity included) outside the range its field gives with no
+    /// named constant, or an agent radius whose border is wider than a tile;
+    /// `mnav_errorLimit` with the setting for a value past an MNAV_MIN_ or
+    /// MNAV_MAX_ bound its field names, an infinity and an agent height or step
+    /// height past MNAV_MAX_HEIGHT_CELLS included; `mnav_errorVersion` with no
     /// setting for a def built against another version of the headers.
     /// @par Thread safety
     /// Safe from any thread.
@@ -486,29 +503,29 @@ extern "C"
     ///
     /// @param def   The bake def the mesh is for.
     /// @param mesh  The mesh.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, an
-    /// invalid def, a negative count, a NULL array its count needs, a vertex
-    /// coordinate that is not finite, a vertex index outside the vertices or an
-    /// area type of MNAV_AREA_TYPES or more; `mnav_errorVersion` for a def
-    /// built against another version of the headers; `mnav_errorLimit` for more
-    /// triangles than the def's inputTriangles limit; `mnav_errorRange` for a
-    /// vertex more than MNAV_MAX_EXTENT_CELLS cells from the origin on the
-    /// ground or MNAV_MAX_HEIGHT_CELLS cell heights above or below it. The
-    /// element and index name the first offending vertex or triangle.
+    /// @return `mnav_success`; for a def mnavValidateBakeDef refuses, the
+    /// status it gives; `mnav_errorInvalid` for a NULL argument, a negative
+    /// count, a NULL array its count needs, a NaN vertex coordinate, a vertex
+    /// index outside the vertices or an area type of MNAV_AREA_TYPES or more;
+    /// `mnav_errorCapacity` for more triangles than the def's inputTriangles
+    /// limit; `mnav_errorLimit` for a vertex more than MNAV_MAX_EXTENT_CELLS
+    /// cells from the origin on the ground or MNAV_MAX_HEIGHT_CELLS cell
+    /// heights above or below it, an infinity included. The element and index
+    /// name the first offending vertex or triangle.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavInputResult mnavValidateTriangleMesh(const mnavBakeDef* def,
                                                                      const mnavTriangleMesh* mesh);
 
 // The tile format version this library writes and reads.
-#define MNAV_TILE_FORMAT 2
+#define MNAV_TILE_FORMAT 3
 
 // The navmesh bake's generation, written into every tile and hashed into
 // its fingerprint. It rises with any change to the library that gives
 // other tile bytes for the same def and input, and only then, so a tile a
 // host keeps by its fingerprint goes stale exactly when a bake would
 // differ, not at every release.
-#define MNAV_BAKE_GENERATOR 1
+#define MNAV_BAKE_GENERATOR 3
 
     // A baker: the def it was made with, its memory, and the last tile it
     // baked. Made by mnavCreateBaker.
@@ -570,9 +587,10 @@ extern "C"
         uint64_t stageTicks[MNAV_BAKE_STAGES];
         uint64_t stageMemory[MNAV_BAKE_STAGES];
         // Holes that no bridge could join to their outline, polygon rings
-        // and detail outlines whose triangulation stopped short, detail
-        // samples that found no height and took the polygon's, and
-        // polygons whose detail reached its vertex cap.
+        // whose triangulation stopped short, detail samples that found no
+        // height and took the polygon's, and polygons whose detail reached
+        // its vertex cap. Rings cut short usually come from a large
+        // maxEdgeError.
         int32_t droppedHoles;
         int32_t partialRings;
         int32_t fallbackHeights;
@@ -587,53 +605,81 @@ extern "C"
     ///
     /// @param def       The def.
     /// @param bakerOut  Receives the baker, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` with the setting for an
-    /// invalid def or a NULL argument; `mnav_errorVersion` for a def built
-    /// against another version of the headers; `mnav_errorLimit` when the baker
-    /// does not fit the def's memory limit; `mnav_errorCapacity` when the
-    /// allocator fails.
+    /// @return `mnav_success`; for a def mnavValidateBakeDef refuses, the
+    /// status and setting it gives; `mnav_errorInvalid` for a NULL bakerOut;
+    /// `mnav_errorCapacity` when the baker does not fit the def's memory
+    /// limit or the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavBakeDefResult mnavCreateBaker(const mnavBakeDef* def,
                                                               mnavBaker** bakerOut);
 
-    /// Destroys a baker and the tile it holds.
+    /// Destroys a baker and the tile it holds. Called back in from host code a
+    /// call on the baker runs (an allocator, the clock), it does nothing and
+    /// counts one misuse.
     ///
     /// @param baker  The baker, or NULL.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
     MNAV_API void mnavDestroyBaker(mnavBaker* baker);
 
-    /// Bakes one tile from triangle meshes and terrains, shaped by
-    /// volumes, as mnavBakeTile does from meshes alone; a terrain's
-    /// triangles count as input triangles, after the meshes', toward the
-    /// limits and the fingerprint, and a volume's points count as input
-    /// triangles too. A refused terrain is reported as the mesh at its
-    /// index after the meshes, a refused volume as the one at its index
-    /// after the terrains. Given a tile index, the bake checks each mesh's
-    /// counts and pointers and then only the triangles the index lists for
-    /// the tile, with their vertices, before reading them.
+    /// Returns how many calls against the baker were refused as misuse since it
+    /// was made: an argument refused with `mnav_errorInvalid` when the baker
+    /// was the first object the call was given, and a call back in from host
+    /// code it ran (`mnav_errorBusy`).
+    ///
+    /// @param baker The baker.
+    /// @return The count; 0 for NULL.
+    /// @par Thread safety
+    /// Safe from any thread. It may be read at any time, also while host
+    /// code the object runs calls back in.
+    MNAV_API uint64_t mnavGetBakerMisuse(const mnavBaker* baker);
+
+    /// Bakes tile (tileX, tileZ) of triangle meshes and terrains, shaped
+    /// by volumes: checks the input, then rasterizes, filters,
+    /// partitions, traces and triangulates the tile and lays its detail,
+    /// and keeps the tile's bytes for mnavCopyBakedTile, in place of any
+    /// tile baked before. The same input and def give the same bytes on
+    /// every platform. A terrain's triangles count as input triangles,
+    /// after the meshes', toward the limits and the fingerprint, and a
+    /// volume's points count as input triangles too. A refused terrain is
+    /// reported as the mesh at its index after the meshes, a refused
+    /// volume as the one at its index after the terrains. Given a tile
+    /// index, the bake checks each mesh's counts and pointers and then
+    /// only the triangles the index lists for the tile, with their
+    /// vertices, before reading them.
     ///
     /// @param baker     The baker; the tile it held before is dropped.
-    /// @param input     The meshes and terrains.
-    /// @param tileX     The tile's column.
+    /// @param input     The meshes, terrains, volumes and index, in the
+    ///                  def's frame.
+    /// @param tileX     The tile's column in the grid from the origin.
     /// @param tileZ     The tile's row.
-    /// @param reportOut Receives the report. May be NULL.
-    /// @return As mnavBakeTile; a terrain with a side out of range, a
-    /// spacing not more than 0 or not finite, a height not finite (the
-    /// sample) or an area of MNAV_AREA_TYPES or more (the cell) is
-    /// `mnav_errorInvalid`, a sample past the extent input may have
-    /// `mnav_errorRange`; a volume with fewer than 3 points, a kind out of
-    /// range, an area volume's area not walkable, heights not finite or
-    /// backward, or a point not finite (the point) is `mnav_errorInvalid`,
-    /// a point past the extent (the point) `mnav_errorRange`; a tile index
-    /// made for another grid, another number of meshes or another number
-    /// of triangles in a mesh is `mnav_errorInvalid`.
+    /// @param reportOut Receives what the bake did. May be NULL.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL baker or input, a
+    /// negative count, NULL meshes, terrains or volumes with a positive count,
+    /// or a mesh its check refuses (the report names it); a terrain with fewer
+    /// than 2 samples on a side, a spacing not more than 0 or not finite, a NaN
+    /// height (the sample) or an area of MNAV_AREA_TYPES or more (the cell) is
+    /// `mnav_errorInvalid`, a side past MNAV_MAX_TERRAIN_SIDE or a sample past
+    /// the extent input may have `mnav_errorLimit`; a volume with fewer than 3
+    /// points, a kind out of range, an area volume's area not walkable, heights
+    /// not finite or backward, or a NaN point coordinate (the point) is
+    /// `mnav_errorInvalid`, a point past the extent, an infinity included (the
+    /// point), `mnav_errorLimit`; a tile index made for another grid, another
+    /// number of meshes or another number of triangles in a mesh is
+    /// `mnav_errorInvalid`; `mnav_errorLimit` for a mesh past the extent, a
+    /// tile past it, or a triangle that rasterizing cuts into a piece of more
+    /// than MNAV_MAX_PIECE_CORNERS corners, which only rounding can cause (the
+    /// report's stage says where); `mnav_errorCapacity` when a named limit or
+    /// the memory limit is reached or the allocator fails. On failure the baker
+    /// holds no tile. Also `mnav_errorBusy` when called back in from host code
+    /// a call on the baker runs (an allocator, the clock), one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBakeTileInput(mnavBaker* baker,
-                                                         const mnavBakeInput* input, int32_t tileX,
-                                                         int32_t tileZ, mnavBakeReport* reportOut);
+    /// Bakers share nothing, so one per thread bakes tiles in parallel.
+    MNAV_NODISCARD MNAV_API mnavResult mnavBakeTile(mnavBaker* baker, const mnavBakeInput* input,
+                                                    int32_t tileX, int32_t tileZ,
+                                                    mnavBakeReport* reportOut);
 
     /// Makes a tile index of meshes for a def's tile grid:
     /// checks every mesh as a bake does, then lists for each tile the
@@ -652,12 +698,13 @@ extern "C"
     /// @param reportOut Receives the result, the first mesh refused and
     ///                  what its check found, and the memory peak; the
     ///                  other fields are 0. May be NULL.
-    /// @return `mnav_success`; `mnav_errorInvalid` for an invalid def, a NULL
-    /// indexOut, a negative count, NULL meshes with a positive count, or a mesh
-    /// its check refuses; `mnav_errorVersion` for a def built against another
-    /// version of the headers; `mnav_errorRange` for a mesh past the extent;
-    /// `mnav_errorLimit` past the def's memory limit or past 2^31 - 1 listed
-    /// triangles; `mnav_errorCapacity` when the allocator fails.
+    /// @return `mnav_success`; for a def mnavValidateBakeDef refuses, the
+    /// status it gives; for a mesh mnavValidateTriangleMesh refuses, the
+    /// status it gives; `mnav_errorInvalid` for a NULL indexOut, a negative
+    /// count or NULL meshes with a positive count; `mnav_errorLimit` past
+    /// MNAV_MAX_INDEX_ENTRIES listed triangles or tiles of the grid;
+    /// `mnav_errorCapacity` past the def's memory limit or when the allocator
+    /// fails.
     /// @par Thread safety
     /// Safe from any thread. An index is never changed after it is made,
     /// so any number of bakes on any threads may read it at once.
@@ -694,7 +741,9 @@ extern "C"
                                                              mnavTileIndex** indexOut,
                                                              mnavBakeReport* reportOut);
 
-    /// Destroys a tile index.
+    /// Destroys a tile index. Called back in from the index's allocator, or
+    /// from host code a bake reading the index runs, it does nothing and counts
+    /// one misuse.
     ///
     /// @param index  The index, or NULL.
     /// @par Thread safety
@@ -702,77 +751,48 @@ extern "C"
     /// No bake may be reading it.
     MNAV_API void mnavDestroyTileIndex(mnavTileIndex* index);
 
-    /// Bakes tile (tileX, tileZ) of the meshes: checks every mesh, then
-    /// rasterizes, filters, partitions, traces and triangulates the tile
-    /// and lays its detail, and keeps the tile's bytes for
-    /// mnavCopyBakedTile, in place of any tile baked before. The same
-    /// meshes and def give the same bytes on every platform.
+    /// Returns how many calls against the tile index were refused as misuse
+    /// since it was made: an argument refused with `mnav_errorInvalid` when the
+    /// tile index was the first object the call was given, and a call back in
+    /// from host code it ran (`mnav_errorBusy`).
     ///
-    /// @param baker      The baker.
-    /// @param meshes     The input meshes, in the def's frame.
-    /// @param meshCount  The number of meshes, at least 0.
-    /// @param tileX      The tile's column in the grid from the origin.
-    /// @param tileZ      The tile's row.
-    /// @param reportOut  Receives what the bake did. May be NULL.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL baker, a
-    /// negative count, NULL meshes with a positive count, or a mesh its
-    /// check refuses (the report names it); `mnav_errorRange` for a mesh
-    /// past the extent or a tile past it; `mnav_errorLimit` when a named
-    /// limit or the memory limit is reached (the report's stage says
-    /// where); `mnav_errorCapacity` when the allocator fails. On failure
-    /// the baker holds no tile.
+    /// @param index The index.
+    /// @return The count; 0 for NULL.
     /// @par Thread safety
-    /// Safe from any thread; the baker is used by one thread at a time.
-    /// Bakers share nothing, so one per thread bakes tiles in parallel.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBakeTile(mnavBaker* baker,
-                                                    const mnavTriangleMesh* meshes,
-                                                    int32_t meshCount, int32_t tileX, int32_t tileZ,
-                                                    mnavBakeReport* reportOut);
+    /// Safe from any thread. It may be read at any time, also while host
+    /// code the object runs calls back in.
+    MNAV_API uint64_t mnavGetTileIndexMisuse(const mnavTileIndex* index);
 
-    /// Bakes tile (tileX, tileZ) of 2D outlines: checks every
-    /// outline, fills the cells whose centers a walkable outline holds and
-    /// no obstruction does as a flat floor at height 0, with the highest
+    /// Bakes tile (tileX, tileZ) of 2D outlines: checks the outlines,
+    /// fills the cells whose centers a walkable outline holds and no
+    /// obstruction does as a flat floor at height 0, with the highest
     /// area among the outlines holding them, then erodes, partitions,
     /// traces and triangulates as mnavBakeTile does; the walkable filters,
     /// which judge heights, do not run. The report's mesh names a refused
     /// outline and its triangles count the outlines reaching the tile.
+    /// Given a tile index of the outlines, the bake checks only the
+    /// outlines it lists for the tile, which hold every outline reaching
+    /// it, and makes the same tile to the byte; the total of the points
+    /// still counts every outline.
     ///
-    /// @param baker        The baker.
-    /// @param outlines     The input outlines, in the def's frame.
-    /// @param outlineCount The number of outlines, at least 0.
-    /// @param tileX        The tile's column in the grid from the origin.
-    /// @param tileZ        The tile's row.
-    /// @param reportOut    Receives what the bake did. May be NULL.
-    /// @return As mnavBakeTile, for outlines; also `mnav_errorLimit` for
-    /// more points in all than the inputTriangles limit, or more outlines
-    /// reaching the tile than the tileTriangles limit.
+    /// @param baker     The baker; the tile it held before is dropped.
+    /// @param input     The outlines and the index, in the def's frame.
+    /// @param tileX     The tile's column in the grid from the origin.
+    /// @param tileZ     The tile's row.
+    /// @param reportOut Receives what the bake did. May be NULL.
+    /// @return As mnavBakeTile, for outlines: a NULL input is
+    /// `mnav_errorInvalid`, and so is a tile index made for another grid, for
+    /// meshes, or for another number of outlines or of points in one; also
+    /// `mnav_errorCapacity` for more points in all than the inputTriangles
+    /// limit, or more outlines reaching the tile than the tileTriangles limit.
+    /// Also `mnav_errorBusy` when called back in from host code a call on the
+    /// baker runs (an allocator, the clock), one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
     /// Bakers share nothing, so one per thread bakes tiles in parallel.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBakeTile2D(mnavBaker* baker, const mnavOutline* outlines,
-                                                      int32_t outlineCount, int32_t tileX,
+    MNAV_NODISCARD MNAV_API mnavResult mnavBakeTile2D(mnavBaker* baker,
+                                                      const mnavBake2DInput* input, int32_t tileX,
                                                       int32_t tileZ, mnavBakeReport* reportOut);
-
-    /// Bakes tile (tileX, tileZ) of 2D outlines as mnavBakeTile2D does,
-    /// from an input record. Given a tile index of the outlines, the bake
-    /// checks only the outlines it lists for the tile, which hold every
-    /// outline reaching it, and makes the same tile to the byte; the
-    /// total of the points still counts every outline.
-    ///
-    /// @param baker     The baker; the tile it held before is dropped.
-    /// @param input     The outlines and the index, or NULL.
-    /// @param tileX     The tile's column.
-    /// @param tileZ     The tile's row.
-    /// @param reportOut Receives the report. May be NULL.
-    /// @return As mnavBakeTile2D; a NULL input is `mnav_errorInvalid`, and
-    /// so is a tile index made for another grid, for meshes, or for
-    /// another number of outlines or of points in one.
-    /// @par Thread safety
-    /// Safe from any thread; the baker is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBakeTile2DInput(mnavBaker* baker,
-                                                           const mnavBake2DInput* input,
-                                                           int32_t tileX, int32_t tileZ,
-                                                           mnavBakeReport* reportOut);
 
     /// Copies the last baked tile's bytes into caller memory.
     ///
@@ -844,34 +864,52 @@ extern "C"
     ///
     /// @param def       The def, from mnavDefaultTileCacheDef.
     /// @param cacheOut  Receives the cache, or NULL on failure.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
-    /// not from mnavDefaultTileCacheDef; `mnav_errorVersion` for one built
-    /// against another version of the headers; `mnav_errorRange` for a limit
-    /// out of its range; `mnav_errorCapacity` when the allocator fails.
+    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a def
+    /// not from mnavDefaultTileCacheDef, an allocator with one function or a
+    /// limit below 1; `mnav_errorVersion` for one built against another
+    /// version of the headers; `mnav_errorLimit` for more tiles than
+    /// MNAV_MAX_CACHED_TILES; `mnav_errorCapacity` when the cache does not
+    /// fit its memory or the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateTileCache(const mnavTileCacheDef* def,
                                                            mnavTileCache** cacheOut);
 
-    /// Destroys a tile cache and everything it holds.
+    /// Destroys a tile cache and everything it holds. Called back in from host
+    /// code a call on the cache runs (an allocator, the clock), it does nothing
+    /// and counts one misuse.
     ///
     /// @param cache The cache, or NULL.
     /// @par Thread safety
     /// Safe from any thread; the cache is used by one thread at a time.
     MNAV_API void mnavDestroyTileCache(mnavTileCache* cache);
 
-    /// Bakes a tile as mnavBakeTileInput does and keeps what a rebuild
+    /// Returns how many calls against the tile cache were refused as misuse
+    /// since it was made: an argument refused with `mnav_errorInvalid` when the
+    /// tile cache was the first object the call was given, and a call back in
+    /// from host code it ran (`mnav_errorBusy`).
+    ///
+    /// @param cache The cache.
+    /// @return The count; 0 for NULL.
+    /// @par Thread safety
+    /// Safe from any thread. It may be read at any time, also while host
+    /// code the object runs calls back in.
+    MNAV_API uint64_t mnavGetTileCacheMisuse(const mnavTileCache* cache);
+
+    /// Bakes a tile as mnavBakeTile does and keeps what a rebuild
     /// needs in the cache, replacing what it held for the tile.
     ///
     /// @param baker     The baker.
     /// @param cache     The cache.
-    /// @param input     The input, as mnavBakeTileInput takes it.
+    /// @param input     The input, as mnavBakeTile takes it.
     /// @param tileX     The tile's column.
     /// @param tileZ     The tile's row.
     /// @param reportOut Receives the report. May be NULL.
-    /// @return As mnavBakeTileInput; `mnav_errorInvalid` for a NULL cache;
-    /// `mnav_errorLimit` when the cache holds its most tiles or bytes, with
-    /// no tile baked and the tile's old entry dropped.
+    /// @return As mnavBakeTile; `mnav_errorInvalid` for a NULL cache;
+    /// `mnav_errorCapacity` when the cache holds its most tiles or bytes, with
+    /// no tile baked and the tile's old entry dropped. Also `mnav_errorBusy`
+    /// when called back in from host code a call on the baker or the cache runs
+    /// (an allocator, the clock), one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the baker and the cache are used by one thread
     /// at a time.
@@ -881,7 +919,7 @@ extern "C"
 
     /// Rebuilds a cached tile with obstacles, without its triangles: the
     /// cached field, the cached volumes and then the obstacles, run from
-    /// the volumes on. The bytes are those mnavBakeTileInput gives the same
+    /// the volumes on. The bytes are those mnavBakeTile gives the same
     /// input with the obstacles appended to its volumes. An exclude
     /// obstacle carves, an area obstacle changes the area within it.
     ///
@@ -894,10 +932,13 @@ extern "C"
     ///                      when obstacleCount is 0.
     /// @param obstacleCount How many, at least 0.
     /// @param reportOut     Receives the report. May be NULL.
-    /// @return `mnav_success`; `mnav_errorNotLoaded` for a tile the cache
-    /// does not hold; `mnav_errorInvalid` for a NULL argument, a negative
-    /// count, a baker of another def, or an obstacle as a bake refuses a
-    /// volume, named in the report; otherwise as mnavBakeTileInput.
+    /// @return `mnav_success`; `mnav_errorNotLoaded` for a tile the cache does
+    /// not hold; `mnav_errorInvalid` for a NULL argument, a negative count or a
+    /// baker of another def; for an obstacle a bake refuses as a volume, the
+    /// status the bake gives, the obstacle named in the report; otherwise as
+    /// mnavBakeTile. Also `mnav_errorBusy` when called back in from host code a
+    /// call on the baker or the cache runs (an allocator, the clock), one
+    /// misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the baker and the cache are used by one thread
     /// at a time.
@@ -907,7 +948,9 @@ extern "C"
                                                        int32_t obstacleCount,
                                                        mnavBakeReport* reportOut);
 
-    /// Drops what the cache holds for a tile, if anything.
+    /// Drops what the cache holds for a tile, if anything. Called back in from
+    /// host code a call on the cache runs (an allocator, the clock), it does
+    /// nothing and counts one misuse.
     ///
     /// @param cache The cache, or NULL.
     /// @param tileX The tile's column.

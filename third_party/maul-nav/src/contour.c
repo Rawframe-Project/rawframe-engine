@@ -15,11 +15,29 @@
 #include <stdint.h>
 #include <string.h>
 
+// The edge from a raw vertex to the next separates two areas.
+#define EDGE_AREA_BORDER 2u
+
+// A raw vertex, in cells of the field with its border (x, z) and cell
+// heights (y), the region across the edge from it to the next vertex (0
+// for a wall, a region, or a border region), and its flags: the
+// vertex's MNAV_VERTEX_TILE_BORDER and the edge's EDGE_AREA_BORDER.
+// Tracing and simplification read the region and the area border; a
+// stored vertex keeps only the tile-border flag, which polygons read.
+typedef struct RawVertex
+{
+    int32_t x;
+    int32_t y;
+    int32_t z;
+    uint32_t neighbor;
+    uint8_t flags;
+} RawVertex;
+
 // The working buffers one contour needs: its raw vertices, one per
 // boundary edge, and the raw indices its simplified form keeps.
 typedef struct Work
 {
-    mnavContourVertex* raw;
+    RawVertex* raw;
     int32_t rawCount;
     int32_t rawCapacity;
     int32_t* kept;
@@ -147,9 +165,8 @@ static int32_t CornerHeight(const Tracer* tracer, int32_t x, int32_t z, uint32_t
 static mnavResult Emit(mnavMemory* memory, const Tracer* tracer, Work* work, int32_t x, int32_t z,
                        uint32_t i, int32_t direction)
 {
-    mnavResult result =
-        mnavReserve(memory, (void**)&work->raw, &work->rawCapacity, work->rawCount,
-                    work->rawCount + 1, sizeof(mnavContourVertex), alignof(mnavContourVertex));
+    mnavResult result = mnavReserve(memory, (void**)&work->raw, &work->rawCapacity, work->rawCount,
+                                    work->rawCount + 1, sizeof(RawVertex), alignof(RawVertex));
     if (result != mnav_success)
     {
         return result;
@@ -166,9 +183,9 @@ static mnavResult Emit(mnavMemory* memory, const Tracer* tracer, Work* work, int
     uint8_t flags = tileBorder ? MNAV_VERTEX_TILE_BORDER : 0;
     if (n >= 0 && tracer->field->areas[n] != tracer->field->areas[i])
     {
-        flags |= MNAV_EDGE_AREA_BORDER;
+        flags |= EDGE_AREA_BORDER;
     }
-    work->raw[work->rawCount++] = (mnavContourVertex){cx, y, cz, neighbor, flags};
+    work->raw[work->rawCount++] = (RawVertex){cx, y, cz, neighbor, flags};
     return mnav_success;
 }
 
@@ -253,7 +270,7 @@ static float SegmentDistance(int32_t x, int32_t z, int32_t ax, int32_t az, int32
     return px * px + pz * pz;
 }
 
-static bool LexicallyAfter(const mnavContourVertex* b, const mnavContourVertex* a)
+static bool LexicallyAfter(const RawVertex* b, const RawVertex* a)
 {
     return b->x > a->x || (b->x == a->x && b->z > a->z);
 }
@@ -265,10 +282,10 @@ static mnavResult Seed(mnavMemory* memory, Work* work)
     int32_t n = work->rawCount;
     for (int32_t i = 0; i < n; ++i)
     {
-        const mnavContourVertex* a = &work->raw[i];
-        const mnavContourVertex* b = &work->raw[(i + 1) % n];
+        const RawVertex* a = &work->raw[i];
+        const RawVertex* b = &work->raw[(i + 1) % n];
         bool changes =
-            a->neighbor != b->neighbor || ((a->flags ^ b->flags) & MNAV_EDGE_AREA_BORDER) != 0;
+            a->neighbor != b->neighbor || ((a->flags ^ b->flags) & EDGE_AREA_BORDER) != 0;
         mnavResult result = changes ? Keep(memory, work, work->keptCount - 1, i) : mnav_success;
         if (result != mnav_success)
         {
@@ -290,30 +307,53 @@ static mnavResult Seed(mnavMemory* memory, Work* work)
     return result == mnav_success ? Keep(memory, work, 0, high) : result;
 }
 
+// Every raw vertex from at to end, stepping by step, has the neighbor
+// first has and lies on the segment from from to to.
+static void CheckStraight(const Work* work, int32_t at, int32_t end, int32_t step,
+                          const RawVertex* from, const RawVertex* to)
+{
+    int32_t n = work->rawCount;
+    uint32_t neighbor = work->raw[at].neighbor;
+    for (; at != end; at = (at + step) % n)
+    {
+        const RawVertex* v = &work->raw[at];
+        int64_t cross = (int64_t)(to->x - from->x) * (v->z - from->z) -
+                        (int64_t)(to->z - from->z) * (v->x - from->x);
+        MNAV_ASSERT(cross == 0 && v->neighbor == neighbor);
+        (void)cross;
+    }
+    (void)neighbor;
+}
+
 // The raw vertex farthest from the kept segment at position i, or -1,
 // for walls and area borders; the segment is measured in its lexical
-// direction so the regions on both sides of an edge agree.
+// direction so the regions on both sides of an edge agree. Every other
+// edge has a region of the same area or a border region across, and is
+// straight: a region is a whole layer of row sweeps (region.c), and
+// spans linked along x always share a sweep, so two regions of one area
+// meet only across a row of cells, and a border region only along the
+// tile's side. Simplifying such an edge would keep nothing more.
 static int32_t Farthest(const Work* work, int32_t i, float* distanceOut)
 {
     int32_t n = work->rawCount;
     int32_t ai = work->kept[i];
     int32_t bi = work->kept[(i + 1) % work->keptCount];
-    const mnavContourVertex* a = &work->raw[ai];
-    const mnavContourVertex* b = &work->raw[bi];
+    const RawVertex* a = &work->raw[ai];
+    const RawVertex* b = &work->raw[bi];
     bool forward = LexicallyAfter(b, a);
     int32_t step = forward ? 1 : n - 1;
     int32_t at = forward ? (ai + 1) % n : (bi + n - 1) % n;
     int32_t end = forward ? bi : ai;
-    const mnavContourVertex* from = forward ? a : b;
-    const mnavContourVertex* to = forward ? b : a;
-    const mnavContourVertex* first = &work->raw[at];
+    const RawVertex* from = forward ? a : b;
+    const RawVertex* to = forward ? b : a;
+    const RawVertex* first = &work->raw[at];
     int32_t farthest = -1;
     float distance = 0.0f;
-    if (first->neighbor == 0 || (first->flags & MNAV_EDGE_AREA_BORDER) != 0)
+    if (first->neighbor == 0 || (first->flags & EDGE_AREA_BORDER) != 0)
     {
         for (; at != end; at = (at + step) % n)
         {
-            const mnavContourVertex* v = &work->raw[at];
+            const RawVertex* v = &work->raw[at];
             float d = SegmentDistance(v->x, v->z, from->x, from->z, to->x, to->z);
             if (d > distance)
             {
@@ -321,6 +361,10 @@ static int32_t Farthest(const Work* work, int32_t i, float* distanceOut)
                 farthest = at;
             }
         }
+    }
+    else if (MNAV_INVARIANTS)
+    {
+        CheckStraight(work, at, end, step, from, to);
     }
     *distanceOut = distance;
     return farthest;
@@ -355,8 +399,8 @@ static mnavResult SplitLongWalls(mnavMemory* memory, Work* work, int32_t edgeLen
     {
         int32_t ai = work->kept[i];
         int32_t bi = work->kept[(i + 1) % work->keptCount];
-        const mnavContourVertex* a = &work->raw[ai];
-        const mnavContourVertex* b = &work->raw[bi];
+        const RawVertex* a = &work->raw[ai];
+        const RawVertex* b = &work->raw[bi];
         int32_t dx = b->x - a->x;
         int32_t dz = b->z - a->z;
         int32_t between = bi < ai ? bi + n - ai : bi - ai;
@@ -386,10 +430,9 @@ static int64_t SignedArea(const mnavContourVertex* vertices, int32_t count)
     return area;
 }
 
-// Appends the kept vertices to the set as one contour: each takes the
-// region across and the area border of the edge that starts at it (the
-// next raw vertex's) and its own tile-border flag, moves out of the
-// border, and loses any repeat of the next vertex's ground position.
+// Appends the kept vertices to the set as one contour: each keeps only
+// its place and its tile-border flag, moves out of the border, and loses
+// any repeat of the next vertex's ground position.
 static mnavResult Store(mnavMemory* memory, const Work* work, uint32_t region, mnavAreaType area,
                         int32_t border, mnavContourSet* set)
 {
@@ -406,15 +449,9 @@ static mnavResult Store(mnavMemory* memory, const Work* work, uint32_t region, m
     for (int32_t k = 0; k < work->keptCount; ++k)
     {
         int32_t index = work->kept[k];
-        const mnavContourVertex* v = &work->raw[index];
-        const mnavContourVertex* next = &work->raw[(index + 1) % work->rawCount];
-        out[count++] = (mnavContourVertex){
-            v->x - border,
-            v->y,
-            v->z - border,
-            next->neighbor,
-            (uint8_t)((next->flags & MNAV_EDGE_AREA_BORDER) | (v->flags & MNAV_VERTEX_TILE_BORDER)),
-        };
+        const RawVertex* v = &work->raw[index];
+        out[count++] = (mnavContourVertex){v->x - border, v->y, v->z - border,
+                                           (uint8_t)(v->flags & MNAV_VERTEX_TILE_BORDER)};
     }
     // Repeats on the ground confuse triangulation; drop the earlier of
     // each pair until none is left, the last against the first included.
@@ -506,6 +543,7 @@ static void CheckContours(const mnavContourSet* set, const mnavRegionMap* region
             const mnavContourVertex* w = &v[(k + 1) % contour->count];
             MNAV_ASSERT(v[k].x >= 0 && v[k].x <= side && v[k].z >= 0 && v[k].z <= side);
             MNAV_ASSERT(v[k].x != w->x || v[k].z != w->z);
+            (void)w;
         }
         MNAV_ASSERT(contour->hole == (SignedArea(v, contour->count) < 0));
         next += contour->count;
@@ -529,14 +567,9 @@ mnavResult mnavBuildContours(mnavMemory* memory, const mnavCompactField* field,
     Work work = {0};
     result = TraceAll(memory, &tracer, &work, edgeError, edgeLength, set);
     mnavRelease(memory, work.kept, (size_t)work.keptCapacity, sizeof(int32_t), alignof(int32_t));
-    mnavRelease(memory, work.raw, (size_t)work.rawCapacity, sizeof(mnavContourVertex),
-                alignof(mnavContourVertex));
+    mnavRelease(memory, work.raw, (size_t)work.rawCapacity, sizeof(RawVertex), alignof(RawVertex));
     mnavRelease(memory, tracer.edges, (size_t)field->spanCount, sizeof(uint8_t), alignof(uint8_t));
-    if (result != mnav_success)
-    {
-        mnavReleaseContours(memory, set);
-    }
-    else if (MNAV_INVARIANTS)
+    if (result == mnav_success && MNAV_INVARIANTS)
     {
         CheckContours(set, regions, field->frame.width - 2 * border);
     }

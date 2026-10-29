@@ -8,6 +8,8 @@
 #include "allocator.h"
 #include "bytes.h"
 #include "detail.h"
+#include "fields.h"
+#include "invariant.h"
 #include "polymesh.h"
 
 #include "maul-nav/bake.h"
@@ -20,113 +22,147 @@
 
 #define SUBCELLS 16
 // The bytes of a vertex, a polygon's head and edge, a detail part, a
-// detail vertex and a detail triangle.
+// detail vertex and a detail triangle, and of the TILE field.
 #define VERTEX_BYTES   6
 #define POLYGON_BYTES  2
 #define EDGE_BYTES     5
 #define PART_BYTES     2
-#define TRIANGLE_BYTES 4
+#define TRIANGLE_BYTES 3
+#define INFO_BYTES     48
 
 static const uint8_t MAGIC[4] = {'M', 'N', 'A', 'V'};
 
-static size_t PayloadBytes(const mnavPolyMesh* mesh, const mnavDetailMesh* detail)
+// The fields, in order of their names, and the section each one's
+// refusals name.
+enum
 {
-    size_t bytes = (size_t)mesh->vertexCount * VERTEX_BYTES;
+    FIELD_PARTS,
+    FIELD_TRIANGLES,
+    FIELD_DETAIL_VERTICES,
+    FIELD_POLYGONS,
+    FIELD_INFO,
+    FIELD_VERTICES,
+    FIELDS
+};
+
+static const uint32_t TAGS[FIELDS] = {
+    MNAV_TAG('D', 'P', 'R', 'T'), MNAV_TAG('D', 'T', 'R', 'I'), MNAV_TAG('D', 'V', 'R', 'T'),
+    MNAV_TAG('P', 'O', 'L', 'Y'), MNAV_TAG('T', 'I', 'L', 'E'), MNAV_TAG('V', 'E', 'R', 'T'),
+};
+
+static const mnavTileSection SECTIONS[FIELDS] = {
+    mnav_tileDetailParts, mnav_tileDetailTriangles, mnav_tileDetailVertices,
+    mnav_tilePolygons,    mnav_tileHeader,          mnav_tileVertices,
+};
+
+// The payload bytes of each field.
+static void FieldSizes(const mnavPolyMesh* mesh, const mnavDetailMesh* detail, size_t sizes[FIELDS])
+{
+    size_t polygons = 0;
     size_t extra = 0;
     for (int32_t p = 0; p < mesh->polygonCount; ++p)
     {
-        bytes += POLYGON_BYTES + (size_t)mesh->polygons[p].count * EDGE_BYTES + PART_BYTES;
+        polygons += POLYGON_BYTES + (size_t)mesh->polygons[p].count * EDGE_BYTES;
         extra += (size_t)(detail->parts[p].vertexCount - mesh->polygons[p].count);
     }
-    return bytes + extra * VERTEX_BYTES + (size_t)detail->triangleCount * TRIANGLE_BYTES;
+    sizes[FIELD_PARTS] = (size_t)mesh->polygonCount * PART_BYTES;
+    sizes[FIELD_TRIANGLES] = (size_t)detail->triangleCount * TRIANGLE_BYTES;
+    sizes[FIELD_DETAIL_VERTICES] = extra * VERTEX_BYTES;
+    sizes[FIELD_POLYGONS] = polygons;
+    sizes[FIELD_INFO] = INFO_BYTES;
+    sizes[FIELD_VERTICES] = (size_t)mesh->vertexCount * VERTEX_BYTES;
 }
 
-static void WritePayload(mnavByteWriter* w, const mnavPolyMesh* mesh, const mnavDetailMesh* detail)
+static void WriteInfo(mnavByteWriter* w, const mnavTileInfo* info)
 {
-    for (int32_t v = 0; v < mesh->vertexCount; ++v)
+    mnavPutU32(w, (uint32_t)info->x);
+    mnavPutU32(w, (uint32_t)info->z);
+    mnavPutU16(w, (uint64_t)info->tileCells);
+    mnavPutU16(w, (uint64_t)info->agentHeight);
+    mnavPutU16(w, (uint64_t)info->agentRadius);
+    mnavPutU16(w, (uint64_t)info->agentStep);
+    mnavPutU32(w, mnavFloatBits(info->cellSize));
+    mnavPutU32(w, mnavFloatBits(info->cellHeight));
+    mnavPutU64(w, mnavDoubleBits(info->origin.x));
+    mnavPutU64(w, mnavDoubleBits(info->origin.y));
+    mnavPutU64(w, mnavDoubleBits(info->origin.z));
+}
+
+static void WriteField(mnavByteWriter* w, int32_t field, const mnavTileInfo* info,
+                       const mnavPolyMesh* mesh, const mnavDetailMesh* detail)
+{
+    switch (field)
     {
-        mnavPutU16(w, mesh->vertices[v].x);
-        mnavPutU16(w, mesh->vertices[v].y);
-        mnavPutU16(w, mesh->vertices[v].z);
-    }
-    for (int32_t p = 0; p < mesh->polygonCount; ++p)
-    {
-        const mnavPolygon* polygon = &mesh->polygons[p];
-        mnavPutU8(w, polygon->count);
-        mnavPutU8(w, polygon->area);
-        for (int32_t k = 0; k < polygon->count; ++k)
+    case FIELD_PARTS:
+        for (int32_t p = 0; p < mesh->polygonCount; ++p)
         {
-            mnavPutU16(w, polygon->vertices[k]);
-            mnavPutU16(w, polygon->neighbors[k]);
-            mnavPutU8(w, polygon->sides[k]);
+            mnavPutU8(w, (uint64_t)(detail->parts[p].vertexCount - mesh->polygons[p].count));
+            mnavPutU8(w, detail->parts[p].triangleCount);
         }
-    }
-    for (int32_t p = 0; p < mesh->polygonCount; ++p)
-    {
-        mnavPutU8(w, (uint64_t)(detail->parts[p].vertexCount - mesh->polygons[p].count));
-        mnavPutU8(w, detail->parts[p].triangleCount);
-    }
-    for (int32_t p = 0; p < mesh->polygonCount; ++p)
-    {
-        const mnavDetailPart* part = &detail->parts[p];
-        for (int32_t v = mesh->polygons[p].count; v < part->vertexCount; ++v)
+        break;
+    case FIELD_TRIANGLES:
+        for (int32_t t = 0; t < detail->triangleCount; ++t)
         {
-            const mnavDetailVertex* d = &detail->vertices[part->firstVertex + v];
-            mnavPutU16(w, (uint64_t)d->x);
-            mnavPutU16(w, (uint64_t)d->y);
-            mnavPutU16(w, (uint64_t)d->z);
+            for (int32_t c = 0; c < 3; ++c)
+            {
+                mnavPutU8(w, detail->triangles[t].corners[c]);
+            }
         }
-    }
-    for (int32_t t = 0; t < detail->triangleCount; ++t)
-    {
-        const mnavDetailTriangle* triangle = &detail->triangles[t];
-        mnavPutU8(w, triangle->corners[0]);
-        mnavPutU8(w, triangle->corners[1]);
-        mnavPutU8(w, triangle->corners[2]);
-        mnavPutU8(w, triangle->outline);
+        break;
+    case FIELD_DETAIL_VERTICES:
+        for (int32_t p = 0; p < mesh->polygonCount; ++p)
+        {
+            const mnavDetailPart* part = &detail->parts[p];
+            for (int32_t v = mesh->polygons[p].count; v < part->vertexCount; ++v)
+            {
+                const mnavDetailVertex* d = &detail->vertices[part->firstVertex + v];
+                mnavPutU16(w, (uint64_t)d->x);
+                mnavPutU16(w, (uint64_t)d->y);
+                mnavPutU16(w, (uint64_t)d->z);
+            }
+        }
+        break;
+    case FIELD_POLYGONS:
+        for (int32_t p = 0; p < mesh->polygonCount; ++p)
+        {
+            const mnavPolygon* polygon = &mesh->polygons[p];
+            mnavPutU8(w, polygon->count);
+            mnavPutU8(w, polygon->area);
+            for (int32_t k = 0; k < polygon->count; ++k)
+            {
+                mnavPutU16(w, polygon->vertices[k]);
+                mnavPutU16(w, polygon->neighbors[k]);
+                mnavPutU8(w, polygon->sides[k]);
+            }
+        }
+        break;
+    case FIELD_INFO:
+        WriteInfo(w, info);
+        break;
+    default:
+        for (int32_t v = 0; v < mesh->vertexCount; ++v)
+        {
+            mnavPutU16(w, mesh->vertices[v].x);
+            mnavPutU16(w, mesh->vertices[v].y);
+            mnavPutU16(w, mesh->vertices[v].z);
+        }
+        break;
     }
 }
 
-static void WriteHeader(mnavByteWriter* w, const mnavTileInfo* info, const mnavPolyMesh* mesh,
-                        const mnavDetailMesh* detail, size_t payload, uint64_t hash)
+static void WriteHeader(mnavByteWriter* w, const mnavTileInfo* info, size_t payload, uint64_t hash,
+                        uint64_t fields)
 {
-    int32_t extra = detail->vertexCount;
-    for (int32_t p = 0; p < mesh->polygonCount; ++p)
-    {
-        extra -= mesh->polygons[p].count;
-    }
     for (int32_t k = 0; k < 4; ++k)
     {
         mnavPutU8(w, MAGIC[k]);
     }
     mnavPutU16(w, MNAV_TILE_FORMAT);
-    mnavPutU16(w, MNAV_TILE_HEADER_BYTES);
-    // The generation, then three reserved words.
     mnavPutU16(w, info->generator);
-    mnavPutU16(w, 0);
-    mnavPutU16(w, 0);
-    mnavPutU16(w, 0);
     mnavPutU64(w, info->fingerprint);
     mnavPutU64(w, hash);
     mnavPutU32(w, payload);
-    mnavPutU32(w, (uint32_t)info->x);
-    mnavPutU32(w, (uint32_t)info->z);
-    mnavPutU16(w, (uint64_t)info->tileCells);
-    mnavPutU16(w, 0);
-    mnavPutU32(w, mnavFloatBits(info->cellSize));
-    mnavPutU32(w, mnavFloatBits(info->cellHeight));
-    mnavPutU16(w, (uint64_t)info->agentHeight);
-    mnavPutU16(w, (uint64_t)info->agentRadius);
-    mnavPutU16(w, (uint64_t)info->agentStep);
-    mnavPutU16(w, 0);
-    mnavPutU64(w, mnavDoubleBits(info->origin.x));
-    mnavPutU64(w, mnavDoubleBits(info->origin.y));
-    mnavPutU64(w, mnavDoubleBits(info->origin.z));
-    mnavPutU16(w, (uint64_t)mesh->vertexCount);
-    mnavPutU16(w, (uint64_t)mesh->polygonCount);
-    mnavPutU32(w, (uint64_t)extra);
-    mnavPutU32(w, (uint64_t)detail->triangleCount);
-    mnavPutU32(w, 0);
+    mnavPutU32(w, fields);
 }
 
 mnavResult mnavEncodeTile(mnavMemory* memory, const mnavTileInfo* info, const mnavPolyMesh* mesh,
@@ -134,7 +170,14 @@ mnavResult mnavEncodeTile(mnavMemory* memory, const mnavTileInfo* info, const mn
 {
     *bytes = nullptr;
     *size = 0;
-    size_t payload = PayloadBytes(mesh, detail);
+    size_t sizes[FIELDS];
+    FieldSizes(mesh, detail, sizes);
+    size_t payload = 0;
+    for (int32_t f = 0; f < FIELDS; ++f)
+    {
+        // An empty field holds its default and is left out.
+        payload += sizes[f] > 0 ? mnavFieldBytes(sizes[f]) : 0;
+    }
     size_t total = MNAV_TILE_HEADER_BYTES + payload;
     uint8_t* out = nullptr;
     mnavResult result = mnavAllocate(memory, total, 1, 1, (void**)&out);
@@ -143,10 +186,21 @@ mnavResult mnavEncodeTile(mnavMemory* memory, const mnavTileInfo* info, const mn
         return result;
     }
     mnavByteWriter w = {out + MNAV_TILE_HEADER_BYTES};
-    WritePayload(&w, mesh, detail);
+    uint64_t fields = 0;
+    for (int32_t f = 0; f < FIELDS; ++f)
+    {
+        if (sizes[f] > 0)
+        {
+            mnavPutFieldHead(&w, TAGS[f], sizes[f]);
+            WriteField(&w, f, info, mesh, detail);
+            mnavPutFieldPad(&w, sizes[f]);
+            fields += 1;
+        }
+    }
+    MNAV_ASSERT(w.at == out + total);
     uint64_t hash = mnavHash64(MNAV_HASH_INIT, out + MNAV_TILE_HEADER_BYTES, (int32_t)payload);
     w.at = out;
-    WriteHeader(&w, info, mesh, detail, payload, hash);
+    WriteHeader(&w, info, payload, hash, fields);
     *bytes = out;
     *size = total;
     return mnav_success;
@@ -167,14 +221,13 @@ static mnavTileResult Accept(void)
     return (mnavTileResult){mnav_success, mnav_tileHeader, -1};
 }
 
-// The counts the header gives the payload.
+// The counts the fields' lengths give.
 typedef struct Counts
 {
     int32_t vertices;
     int32_t polygons;
     int64_t detailVertices;
     int64_t detailTriangles;
-    size_t payload;
 } Counts;
 
 static bool Finite(double v)
@@ -182,7 +235,7 @@ static bool Finite(double v)
     return isfinite(v);
 }
 
-// Checks the settings the header records.
+// Checks the settings the TILE field records.
 static bool ValidInfo(const mnavTileInfo* info)
 {
     int32_t reach = MNAV_MAX_EXTENT_CELLS / (info->tileCells > 0 ? info->tileCells : 1);
@@ -197,73 +250,101 @@ static bool ValidInfo(const mnavTileInfo* info)
     return grid && cells && agent && origin;
 }
 
+// Reads the header and finds the fields: the payload's hash covers them.
 static mnavTileResult ReadHeader(const uint8_t* bytes, size_t size, mnavTileInfo* info,
-                                 Counts* counts)
+                                 mnavField fields[FIELDS])
 {
     if (size < MNAV_TILE_HEADER_BYTES || memcmp(bytes, MAGIC, sizeof(MAGIC)) != 0)
     {
-        return Refuse(mnav_errorInvalid, mnav_tileHeader, -1);
+        return Refuse(mnav_errorFormat, mnav_tileHeader, -1);
     }
     mnavByteReader r = {bytes + sizeof(MAGIC), MNAV_TILE_HEADER_BYTES - sizeof(MAGIC), false};
     if (mnavGetU16(&r) != MNAV_TILE_FORMAT)
     {
         return Refuse(mnav_errorVersion, mnav_tileHeader, -1);
     }
-    uint64_t headerBytes = mnavGetU16(&r);
     info->generator = (uint16_t)mnavGetU16(&r);
-    uint64_t reserved = mnavGetU16(&r);
-    reserved |= mnavGetU16(&r);
-    reserved |= mnavGetU16(&r);
     info->fingerprint = mnavGetU64(&r);
     uint64_t hash = mnavGetU64(&r);
-    counts->payload = (size_t)mnavGetU32(&r);
+    size_t payload = (size_t)mnavGetU32(&r);
+    uint64_t count = mnavGetU32(&r);
+    // The payload's hash takes a 32-bit size; no tile within the caps
+    // comes near it.
+    if (payload != size - MNAV_TILE_HEADER_BYTES || payload > INT32_MAX ||
+        mnavHash64(MNAV_HASH_INIT, bytes + MNAV_TILE_HEADER_BYTES, (int32_t)payload) != hash)
+    {
+        return Refuse(mnav_errorFormat, mnav_tilePayload, -1);
+    }
+    mnavFieldsResult read =
+        mnavReadFields(bytes + MNAV_TILE_HEADER_BYTES, payload, count, TAGS, FIELDS, fields);
+    if (read.result != mnav_success)
+    {
+        return read.known >= 0 ? Refuse(read.result, SECTIONS[read.known], -1)
+                               : Refuse(read.result, mnav_tilePayload, read.at);
+    }
+    // An absent TILE has no bytes.
+    const mnavField* tile = &fields[FIELD_INFO];
+    if (tile->size != INFO_BYTES)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileHeader, -1);
+    }
+    r = (mnavByteReader){tile->bytes, tile->size, false};
     info->x = (int32_t)(uint32_t)mnavGetU32(&r);
     info->z = (int32_t)(uint32_t)mnavGetU32(&r);
     info->tileCells = (int32_t)mnavGetU16(&r);
-    reserved |= mnavGetU16(&r);
-    uint32_t cellSize = (uint32_t)mnavGetU32(&r);
-    uint32_t cellHeight = (uint32_t)mnavGetU32(&r);
-    memcpy(&info->cellSize, &cellSize, sizeof(cellSize));
-    memcpy(&info->cellHeight, &cellHeight, sizeof(cellHeight));
     info->agentHeight = (int32_t)mnavGetU16(&r);
     info->agentRadius = (int32_t)mnavGetU16(&r);
     info->agentStep = (int32_t)mnavGetU16(&r);
-    reserved |= mnavGetU16(&r);
-    double* origin[3] = {&info->origin.x, &info->origin.y, &info->origin.z};
-    for (int32_t k = 0; k < 3; ++k)
-    {
-        uint64_t bits = mnavGetU64(&r);
-        memcpy(origin[k], &bits, sizeof(bits));
-    }
-    counts->vertices = (int32_t)mnavGetU16(&r);
-    counts->polygons = (int32_t)mnavGetU16(&r);
-    counts->detailVertices = (int64_t)mnavGetU32(&r);
-    counts->detailTriangles = (int64_t)mnavGetU32(&r);
-    reserved |= mnavGetU32(&r);
-    if (headerBytes != MNAV_TILE_HEADER_BYTES || reserved != 0 || !ValidInfo(info))
-    {
-        return Refuse(mnav_errorInvalid, mnav_tileHeader, -1);
-    }
-    // The payload's hash takes a 32-bit size; no tile within the caps
-    // comes near it.
-    if (counts->payload != size - MNAV_TILE_HEADER_BYTES || counts->payload > INT32_MAX ||
-        mnavHash64(MNAV_HASH_INIT, bytes + MNAV_TILE_HEADER_BYTES, (int32_t)counts->payload) !=
-            hash)
-    {
-        return Refuse(mnav_errorInvalid, mnav_tilePayload, -1);
-    }
-    return Accept();
+    info->cellSize = mnavBitsFloat((uint32_t)mnavGetU32(&r));
+    info->cellHeight = mnavBitsFloat((uint32_t)mnavGetU32(&r));
+    info->origin.x = mnavBitsDouble(mnavGetU64(&r));
+    info->origin.y = mnavBitsDouble(mnavGetU64(&r));
+    info->origin.z = mnavBitsDouble(mnavGetU64(&r));
+    return ValidInfo(info) ? Accept() : Refuse(mnav_errorFormat, mnav_tileHeader, -1);
 }
 
-// Whether the payload can hold what the header counts, at the fewest
-// bytes each takes, so nothing larger than the input is allocated.
-static bool Fits(const Counts* counts)
+// Counts each field's records from its length, which must hold whole
+// records: the polygons by walking their heads. Every count is bounded by
+// the bytes present, so nothing larger than the input is allocated.
+static mnavTileResult Count(const mnavField fields[FIELDS], Counts* counts)
 {
-    int64_t least = (int64_t)counts->vertices * VERTEX_BYTES +
-                    (int64_t)counts->polygons * (POLYGON_BYTES + 3 * EDGE_BYTES + PART_BYTES) +
-                    counts->detailVertices * VERTEX_BYTES +
-                    counts->detailTriangles * TRIANGLE_BYTES;
-    return least <= (int64_t)counts->payload && counts->detailTriangles >= counts->polygons;
+    const mnavField* vertices = &fields[FIELD_VERTICES];
+    if (vertices->size % VERTEX_BYTES != 0 || vertices->size / VERTEX_BYTES > UINT16_MAX)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileVertices, -1);
+    }
+    counts->vertices = (int32_t)(vertices->size / VERTEX_BYTES);
+    const mnavField* polygons = &fields[FIELD_POLYGONS];
+    size_t at = 0;
+    int32_t count = 0;
+    while (at < polygons->size)
+    {
+        uint8_t corners = polygons->bytes[at];
+        size_t record = POLYGON_BYTES + (size_t)corners * EDGE_BYTES;
+        if (corners < 3 || corners > MNAV_POLYGON_VERTICES || record > polygons->size - at ||
+            count == UINT16_MAX)
+        {
+            return Refuse(mnav_errorFormat, mnav_tilePolygons, count);
+        }
+        at += record;
+        count += 1;
+    }
+    counts->polygons = count;
+    if (fields[FIELD_PARTS].size != (size_t)count * PART_BYTES)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileDetailParts, -1);
+    }
+    if (fields[FIELD_DETAIL_VERTICES].size % VERTEX_BYTES != 0)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileDetailVertices, -1);
+    }
+    if (fields[FIELD_TRIANGLES].size % TRIANGLE_BYTES != 0)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileDetailTriangles, -1);
+    }
+    counts->detailVertices = (int64_t)(fields[FIELD_DETAIL_VERTICES].size / VERTEX_BYTES);
+    counts->detailTriangles = (int64_t)(fields[FIELD_TRIANGLES].size / TRIANGLE_BYTES);
+    return Accept();
 }
 
 static mnavResult AllocateMesh(mnavMemory* memory, const Counts* counts, int32_t tileCells,
@@ -312,7 +393,7 @@ static mnavTileResult ReadVertices(mnavByteReader* r, mnavPolyMesh* mesh, int32_
         vertex->z = (uint16_t)mnavGetU16(r);
         if (r->exhausted || vertex->x > mesh->tileCells || vertex->z > mesh->tileCells)
         {
-            return Refuse(mnav_errorInvalid, mnav_tileVertices, v);
+            return Refuse(mnav_errorFormat, mnav_tileVertices, v);
         }
         mesh->vertexCount += 1;
     }
@@ -444,7 +525,7 @@ static mnavTileResult ReadPolygons(mnavByteReader* r, mnavPolyMesh* mesh, int32_
     {
         if (!ReadPolygon(r, mesh, count, &mesh->polygons[p]))
         {
-            return Refuse(mnav_errorInvalid, mnav_tilePolygons, p);
+            return Refuse(mnav_errorFormat, mnav_tilePolygons, p);
         }
         mesh->polygonCount += 1;
     }
@@ -452,7 +533,7 @@ static mnavTileResult ReadPolygons(mnavByteReader* r, mnavPolyMesh* mesh, int32_
     {
         if (!Convex(mesh, &mesh->polygons[p]) || !Linked(mesh, p))
         {
-            return Refuse(mnav_errorInvalid, mnav_tilePolygons, p);
+            return Refuse(mnav_errorFormat, mnav_tilePolygons, p);
         }
     }
     return Accept();
@@ -473,7 +554,7 @@ static mnavTileResult ReadParts(mnavByteReader* r, const mnavPolyMesh* mesh, con
         if (r->exhausted || count > MNAV_DETAIL_VERTICES || parts < 1 ||
             parts > 2 * MNAV_DETAIL_VERTICES)
         {
-            return Refuse(mnav_errorInvalid, mnav_tileDetailParts, p);
+            return Refuse(mnav_errorFormat, mnav_tileDetailParts, p);
         }
         detail->parts[p] =
             (mnavDetailPart){(int32_t)vertices, (int32_t)triangles, (uint8_t)count, (uint8_t)parts};
@@ -483,7 +564,7 @@ static mnavTileResult ReadParts(mnavByteReader* r, const mnavPolyMesh* mesh, con
     }
     if (extra != counts->detailVertices || triangles != counts->detailTriangles)
     {
-        return Refuse(mnav_errorInvalid, mnav_tileDetailParts, -1);
+        return Refuse(mnav_errorFormat, mnav_tileDetailParts, -1);
     }
     return Accept();
 }
@@ -523,7 +604,7 @@ static mnavTileResult ReadDetailVertices(mnavMemory* memory, mnavByteReader* r,
             out[k].z = (int32_t)mnavGetU16(r);
             if (r->exhausted || out[k].x > limit || out[k].z > limit)
             {
-                return Refuse(mnav_errorInvalid, mnav_tileDetailVertices, extra);
+                return Refuse(mnav_errorFormat, mnav_tileDetailVertices, extra);
             }
             extra += 1;
         }
@@ -556,10 +637,9 @@ static mnavTileResult ReadDetailTriangles(mnavMemory* memory, mnavByteReader* r,
                 triangle->corners[c] = (uint8_t)mnavGetU8(r);
                 inside = inside && triangle->corners[c] < part->vertexCount;
             }
-            triangle->outline = (uint8_t)mnavGetU8(r);
-            if (r->exhausted || !inside || triangle->outline > 7)
+            if (r->exhausted || !inside)
             {
-                return Refuse(mnav_errorInvalid, mnav_tileDetailTriangles, t);
+                return Refuse(mnav_errorFormat, mnav_tileDetailTriangles, t);
             }
         }
     }
@@ -567,30 +647,37 @@ static mnavTileResult ReadDetailTriangles(mnavMemory* memory, mnavByteReader* r,
     return Accept();
 }
 
-// Reads the payload's sections in order, each checked before the next.
-static mnavTileResult ReadPayload(mnavMemory* memory, mnavByteReader* r, const Counts* counts,
-                                  mnavPolyMesh* mesh, mnavDetailMesh* detail)
+// A reader over a field's payload.
+static mnavByteReader Over(const mnavField* field)
 {
-    mnavTileResult result = ReadVertices(r, mesh, counts->vertices);
+    return (mnavByteReader){field->bytes, field->size, false};
+}
+
+// Reads the fields, each checked before the next that depends on it.
+static mnavTileResult ReadPayload(mnavMemory* memory, const mnavField fields[FIELDS],
+                                  const Counts* counts, mnavPolyMesh* mesh, mnavDetailMesh* detail)
+{
+    mnavByteReader r = Over(&fields[FIELD_VERTICES]);
+    mnavTileResult result = ReadVertices(&r, mesh, counts->vertices);
     if (result.result == mnav_success)
     {
-        result = ReadPolygons(r, mesh, counts->polygons);
+        r = Over(&fields[FIELD_POLYGONS]);
+        result = ReadPolygons(&r, mesh, counts->polygons);
     }
     if (result.result == mnav_success)
     {
-        result = ReadParts(r, mesh, counts, detail);
+        r = Over(&fields[FIELD_PARTS]);
+        result = ReadParts(&r, mesh, counts, detail);
     }
     if (result.result == mnav_success)
     {
-        result = ReadDetailVertices(memory, r, mesh, detail);
+        r = Over(&fields[FIELD_DETAIL_VERTICES]);
+        result = ReadDetailVertices(memory, &r, mesh, detail);
     }
     if (result.result == mnav_success)
     {
-        result = ReadDetailTriangles(memory, r, counts, detail);
-    }
-    if (result.result == mnav_success && r->left != 0)
-    {
-        result = Refuse(mnav_errorInvalid, mnav_tilePayload, -1);
+        r = Over(&fields[FIELD_TRIANGLES]);
+        result = ReadDetailTriangles(memory, &r, counts, detail);
     }
     return result;
 }
@@ -606,10 +693,11 @@ mnavTileResult mnavDecodeTile(mnavMemory* memory, const uint8_t* bytes, size_t s
         return Refuse(mnav_errorInvalid, mnav_tileHeader, -1);
     }
     Counts counts = {0};
-    mnavTileResult result = ReadHeader(bytes, size, info, &counts);
-    if (result.result == mnav_success && !Fits(&counts))
+    mnavField fields[FIELDS];
+    mnavTileResult result = ReadHeader(bytes, size, info, fields);
+    if (result.result == mnav_success)
     {
-        result = Refuse(mnav_errorInvalid, mnav_tilePayload, -1);
+        result = Count(fields, &counts);
     }
     if (result.result == mnav_success)
     {
@@ -618,8 +706,7 @@ mnavTileResult mnavDecodeTile(mnavMemory* memory, const uint8_t* bytes, size_t s
     }
     if (result.result == mnav_success)
     {
-        mnavByteReader r = {bytes + MNAV_TILE_HEADER_BYTES, counts.payload, false};
-        result = ReadPayload(memory, &r, &counts, mesh, detail);
+        result = ReadPayload(memory, fields, &counts, mesh, detail);
     }
     if (result.result != mnav_success)
     {

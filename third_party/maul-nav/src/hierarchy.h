@@ -8,6 +8,7 @@
 #define MAUL_NAV_SRC_HIERARCHY_H
 
 #include "allocator.h"
+#include "host_code.h"
 #include "query.h"
 
 #include "maul-nav/base.h"
@@ -54,10 +55,16 @@ typedef struct mnavEdge
 struct mnavHierarchy
 {
     mnavMemory memory;
+    mnavHostCode host;
     mnavHierarchyDef def;
     // The graph's navmesh and its commits when built; NULL with no graph.
     const mnavNavmesh* navmesh;
     uint64_t commits;
+    // While a build or update runs, the context it searches with, marked
+    // while the hierarchy's allocator runs, and the navmesh it reads,
+    // marked for the whole call; NULL otherwise.
+    mnavQuery* building;
+    const mnavNavmesh* reading;
     mnavQueryFilter filter;
     double scale;
     // Per slot: its cluster, or -1, its place's first transition, and
@@ -103,7 +110,7 @@ void mnavMarkCluster(mnavHierarchy* h, int32_t cluster, uint8_t value);
 
 // Runs Dijkstra's search from a point in a polygon within a cluster,
 // opening the nodes just beyond it, backward when asked (off-mesh links
-// followed from where they land); mnav_errorLimit when it runs out of
+// followed from where they land); mnav_errorCapacity when it runs out of
 // nodes.
 mnavResult mnavSearchCluster(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* navmesh,
                              bool backward, int32_t cluster, mnavPolygonId polygon, mnavPos3 point);

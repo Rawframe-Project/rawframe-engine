@@ -22,5 +22,10 @@
 // A check of a whole structure, a loop of MNAV_ASSERTs, is called as
 // `if (MNAV_INVARIANTS) { Check...(...); }`, so that release builds drop
 // the loop with the assertions while it still compiles there.
+//
+// A value that only assertions read is marked read after the last of
+// them, as `(void)value;`. Without it, the static analyzer takes the
+// value's store for a dead one in release builds, where the assertions
+// compile out; clang-tidy runs on both builds.
 
 #endif // MAUL_NAV_SRC_INVARIANT_H

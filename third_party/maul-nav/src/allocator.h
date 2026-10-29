@@ -7,6 +7,8 @@
 #ifndef MAUL_NAV_SRC_ALLOCATOR_H
 #define MAUL_NAV_SRC_ALLOCATOR_H
 
+#include "host_code.h"
+
 #include "maul-nav/base.h"
 
 #include <stddef.h>
@@ -15,20 +17,23 @@
 typedef struct mnavMemory
 {
     mnavAllocator allocator;
-    // The most bytes held at once; reaching past it is mnav_errorLimit.
+    // The most bytes held at once; reaching past it is mnav_errorCapacity.
     uint64_t limit;
     // The bytes held now, and the most held so far.
     uint64_t used;
     uint64_t peak;
+    // The object whose allocator this is, marked while the allocator
+    // runs; NULL for none.
+    mnavHostCode* host;
 } mnavMemory;
 
-// A memory counter over an allocator; a zeroed allocator means the C
-// library's functions.
+// A memory counter over an allocator, marking no object; a zeroed
+// allocator means the C library's functions.
 mnavMemory mnavMakeMemory(mnavAllocator allocator, uint64_t limit);
 
 // Allocates count elements of size bytes each, aligned to alignment, a
-// power of two. Returns mnav_errorLimit past the limit, mnav_errorCapacity
-// when the size overflows or the allocator fails.
+// power of two. Returns mnav_errorCapacity past the limit, when the size
+// overflows or when the allocator fails.
 mnavResult mnavAllocate(mnavMemory* memory, size_t count, size_t size, size_t alignment,
                         void** out);
 

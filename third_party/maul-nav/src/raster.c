@@ -12,28 +12,8 @@
 #include <math.h>
 #include <string.h>
 
-// A clipped polygon in cell units: (u, h, w) per vertex, u and w across
-// the tile's cells, h in cell heights. Clipping a triangle by one slab adds
-// at most one vertex per side, so 12 is ample.
-#define POLY_MAX 12
-#define AXIS_U   0
-#define AXIS_W   2
-
-typedef struct Poly
-{
-    float v[POLY_MAX][3];
-    int32_t count;
-} Poly;
-
-// A polygon within one row of cells, in (u, h) alone: the row's cuts are
-// across u, and the cells need only their heights. Each coordinate of a
-// cut's point is computed on its own, so leaving w out changes no other.
-typedef struct RowPoly
-{
-    float u[POLY_MAX];
-    float h[POLY_MAX];
-    int32_t count;
-} RowPoly;
+#define AXIS_U 0
+#define AXIS_W 2
 
 bool mnavMakeTileFrame(const mnavBakeDef* def, const mnavBakeCells* cells, int32_t tileX,
                        int32_t tileZ, mnavTileFrame* frame)
@@ -79,7 +59,7 @@ int32_t mnavTriangleArea(const mnavVec3 corners[3], mnavAreaType area, float cos
     return area;
 }
 
-static void ToCells(const mnavTileFrame* frame, const mnavVec3 corners[3], Poly* poly)
+static void ToCells(const mnavTileFrame* frame, const mnavVec3 corners[3], mnavRasterPoly* poly)
 {
     for (int32_t i = 0; i < 3; ++i)
     {
@@ -138,7 +118,7 @@ static int32_t CeilToInt(float x)
     return (float)i < x ? i + 1 : i;
 }
 
-static void Bounds(const Poly* poly, int32_t axis, float* low, float* high)
+static void Bounds(const mnavRasterPoly* poly, int32_t axis, float* low, float* high)
 {
     *low = poly->v[0][axis];
     *high = poly->v[0][axis];
@@ -167,9 +147,15 @@ static void Copy(float to[3], const float from[3])
     to[2] = from[2];
 }
 
-// Splits a polygon at axis = cut into the part below and the part above.
-// A vertex on the cut goes to both.
-static void Split(const Poly* in, int32_t axis, float cut, Poly* below, Poly* above)
+// Whether a part of count corners has room for an edge's crossing, when
+// the edge crosses, and its end, when that goes to the part.
+static bool Room(int32_t count, bool cross, bool end)
+{
+    return count + (cross ? 1 : 0) + (end ? 1 : 0) <= MNAV_RASTER_CORNERS;
+}
+
+bool mnavSplitPoly(const mnavRasterPoly* in, int32_t axis, float cut, mnavRasterPoly* below,
+                   mnavRasterPoly* above)
 {
     below->count = 0;
     above->count = 0;
@@ -179,7 +165,12 @@ static void Split(const Poly* in, int32_t axis, float cut, Poly* below, Poly* ab
         const float* b = in->v[i];
         float da = a[axis] - cut;
         float db = b[axis] - cut;
-        if ((da < 0.0f && db > 0.0f) || (da > 0.0f && db < 0.0f))
+        bool cross = (da < 0.0f && db > 0.0f) || (da > 0.0f && db < 0.0f);
+        if (!Room(below->count, cross, db <= 0.0f) || !Room(above->count, cross, db >= 0.0f))
+        {
+            return false;
+        }
+        if (cross)
         {
             float t = da / (da - db);
             float point[3];
@@ -200,10 +191,10 @@ static void Split(const Poly* in, int32_t axis, float cut, Poly* below, Poly* ab
             Copy(above->v[above->count++], b);
         }
     }
+    return true;
 }
 
-// Split for a row's polygon at u = cut, as Split does it.
-static void SplitRow(const RowPoly* in, float cut, RowPoly* below, RowPoly* above)
+bool mnavSplitRow(const mnavRasterRow* in, float cut, mnavRasterRow* below, mnavRasterRow* above)
 {
     below->count = 0;
     above->count = 0;
@@ -212,7 +203,12 @@ static void SplitRow(const RowPoly* in, float cut, RowPoly* below, RowPoly* abov
     for (int32_t i = 0, j = in->count - 1; i < in->count; j = i, ++i)
     {
         float db = in->u[i] - cut;
-        if ((da < 0.0f && db > 0.0f) || (da > 0.0f && db < 0.0f))
+        bool cross = (da < 0.0f && db > 0.0f) || (da > 0.0f && db < 0.0f);
+        if (!Room(below->count, cross, db <= 0.0f) || !Room(above->count, cross, db >= 0.0f))
+        {
+            return false;
+        }
+        if (cross)
         {
             float t = da / (da - db);
             float h = in->h[j] + (in->h[i] - in->h[j]) * t;
@@ -233,13 +229,14 @@ static void SplitRow(const RowPoly* in, float cut, RowPoly* below, RowPoly* abov
         }
         da = db;
     }
+    return true;
 }
 
 static mnavResult Grow(mnavMemory* memory, mnavFragmentList* list)
 {
     if (list->count >= list->limit)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     int32_t capacity = list->capacity < 1024 ? 1024 : list->capacity * 2;
     capacity = capacity > list->limit ? list->limit : capacity;
@@ -275,7 +272,7 @@ static mnavResult EmitHeights(mnavMemory* memory, float low, float high, int32_t
         (mnavFragment){(uint16_t)x, (uint16_t)z, (uint16_t)bottom, (uint16_t)top, area});
 }
 
-static mnavResult Emit(mnavMemory* memory, const RowPoly* cell, int32_t x, int32_t z,
+static mnavResult Emit(mnavMemory* memory, const mnavRasterRow* cell, int32_t x, int32_t z,
                        mnavAreaType area, mnavFragmentList* list)
 {
     // The loops cut only strictly inside a polygon's range, and a cut
@@ -356,8 +353,9 @@ bool mnavTriangleTouchesTile(const mnavTileFrame* frame, const mnavVec3 corners[
 
 // Rasterizes one row of cells, z, of a polygon already clipped to it. The
 // part still to cut and the next one swap places rather than copy.
-static mnavResult RasterizeRow(mnavMemory* memory, const mnavTileFrame* frame, const Poly* row,
-                               int32_t z, mnavAreaType area, mnavFragmentList* list)
+static mnavResult RasterizeRow(mnavMemory* memory, const mnavTileFrame* frame,
+                               const mnavRasterPoly* row, int32_t z, mnavAreaType area,
+                               mnavFragmentList* list)
 {
     float low = 0.0f;
     float high = 0.0f;
@@ -367,12 +365,12 @@ static mnavResult RasterizeRow(mnavMemory* memory, const mnavTileFrame* frame, c
     CellRange(low, high, &first, &last);
     int32_t start = first < 0 ? 0 : first;
     int32_t end = last >= frame->width ? frame->width - 1 : last;
-    RowPoly buffers[3];
+    mnavRasterRow buffers[3];
     buffers[1].count = 0;
     buffers[2].count = 0;
-    RowPoly* rest = &buffers[0];
-    RowPoly* next = &buffers[1];
-    RowPoly* cell = &buffers[2];
+    mnavRasterRow* rest = &buffers[0];
+    mnavRasterRow* next = &buffers[1];
+    mnavRasterRow* cell = &buffers[2];
     for (int32_t i = 0; i < row->count; ++i)
     {
         rest->u[i] = row->v[i][AXIS_U];
@@ -381,18 +379,24 @@ static mnavResult RasterizeRow(mnavMemory* memory, const mnavTileFrame* frame, c
     rest->count = row->count;
     if (start > first)
     {
-        SplitRow(rest, (float)start, cell, next);
-        RowPoly* swap = rest;
+        if (!mnavSplitRow(rest, (float)start, cell, next))
+        {
+            return mnav_errorLimit;
+        }
+        mnavRasterRow* swap = rest;
         rest = next;
         next = swap;
     }
     for (int32_t x = start; x <= end; ++x)
     {
-        const RowPoly* piece = rest;
+        const mnavRasterRow* piece = rest;
         if (x < last)
         {
-            SplitRow(rest, (float)(x + 1), cell, next);
-            RowPoly* swap = rest;
+            if (!mnavSplitRow(rest, (float)(x + 1), cell, next))
+            {
+                return mnav_errorLimit;
+            }
+            mnavRasterRow* swap = rest;
             rest = next;
             next = swap;
             piece = cell;
@@ -411,12 +415,12 @@ mnavResult mnavRasterizeTriangle(mnavMemory* memory, const mnavTileFrame* frame,
                                  mnavFragmentList* list)
 {
     // The part still to cut and the next one swap places rather than copy.
-    Poly buffers[3];
+    mnavRasterPoly buffers[3];
     buffers[1].count = 0;
     buffers[2].count = 0;
-    Poly* rest = &buffers[0];
-    Poly* next = &buffers[1];
-    Poly* row = &buffers[2];
+    mnavRasterPoly* rest = &buffers[0];
+    mnavRasterPoly* next = &buffers[1];
+    mnavRasterPoly* row = &buffers[2];
     ToCells(frame, corners, rest);
     float low = 0.0f;
     float high = 0.0f;
@@ -449,18 +453,24 @@ mnavResult mnavRasterizeTriangle(mnavMemory* memory, const mnavTileFrame* frame,
     int32_t end = last >= frame->width ? frame->width - 1 : last;
     if (start > first)
     {
-        Split(rest, AXIS_W, (float)start, row, next);
-        Poly* swap = rest;
+        if (!mnavSplitPoly(rest, AXIS_W, (float)start, row, next))
+        {
+            return mnav_errorLimit;
+        }
+        mnavRasterPoly* swap = rest;
         rest = next;
         next = swap;
     }
     for (int32_t z = start; z <= end; ++z)
     {
-        const Poly* piece = rest;
+        const mnavRasterPoly* piece = rest;
         if (z < last)
         {
-            Split(rest, AXIS_W, (float)(z + 1), row, next);
-            Poly* swap = rest;
+            if (!mnavSplitPoly(rest, AXIS_W, (float)(z + 1), row, next))
+            {
+                return mnav_errorLimit;
+            }
+            mnavRasterPoly* swap = rest;
             rest = next;
             next = swap;
             piece = row;

@@ -11,6 +11,7 @@
 #include "compact.h"
 #include "field_pack.h"
 #include "fpenv.h"
+#include "host_code.h"
 #include "outline.h"
 
 #include "maul-nav/bake.h"
@@ -27,6 +28,7 @@ struct mnavTileCache
     mnavTileCacheDef def;
     mnavCachedTile* tiles;
     int32_t count;
+    mnavHostCode host;
 };
 
 static MNAV_NOINLINE mnavResult CreateTileCacheWork(const mnavTileCacheDef* def,
@@ -49,10 +51,13 @@ static MNAV_NOINLINE mnavResult CreateTileCacheWork(const mnavTileCacheDef* def,
     {
         return mnav_errorInvalid;
     }
-    if (def->limits.tiles < 1 || def->limits.tiles > MNAV_MAX_CACHED_TILES ||
-        def->limits.memoryBytes < 1)
+    if (def->limits.tiles < 1 || def->limits.memoryBytes < 1)
     {
-        return mnav_errorRange;
+        return mnav_errorInvalid;
+    }
+    if (def->limits.tiles > MNAV_MAX_CACHED_TILES)
+    {
+        return mnav_errorLimit;
     }
     mnavMemory memory = mnavMakeMemory(def->allocator, def->limits.memoryBytes);
     mnavTileCache* cache = nullptr;
@@ -63,6 +68,7 @@ static MNAV_NOINLINE mnavResult CreateTileCacheWork(const mnavTileCacheDef* def,
         return result;
     }
     *cache = (mnavTileCache){.memory = memory, .def = *def};
+    cache->memory.host = &cache->host;
     result = mnavAllocate(&cache->memory, (size_t)def->limits.tiles, sizeof(mnavCachedTile),
                           alignof(mnavCachedTile), (void**)&cache->tiles);
     if (result != mnav_success)
@@ -95,7 +101,7 @@ static void Release(mnavMemory* memory, mnavCachedTile* tile)
 
 void mnavDestroyTileCache(mnavTileCache* cache)
 {
-    if (cache == nullptr)
+    if (cache == nullptr || mnavHostCalledBack(&cache->host))
     {
         return;
     }
@@ -106,6 +112,11 @@ void mnavDestroyTileCache(mnavTileCache* cache)
     mnavMemory memory = cache->memory;
     mnavRelease(&memory, cache->tiles, (size_t)cache->def.limits.tiles, sizeof(mnavCachedTile),
                 alignof(mnavCachedTile));
+    // The mark lives in the block being freed: it is set for good, so that
+    // a call back in from this release is refused too, and the release
+    // does not touch it.
+    mnavHostEnter(&cache->host);
+    memory.host = nullptr;
     mnavRelease(&memory, cache, 1, sizeof(mnavTileCache), alignof(mnavTileCache));
 }
 
@@ -127,7 +138,17 @@ const mnavCachedTile* mnavFindCachedTile(const mnavTileCache* cache, int32_t til
     return i >= 0 ? &cache->tiles[i] : nullptr;
 }
 
-void mnavDropCachedTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ)
+mnavHostCode* mnavTileCacheHost(mnavTileCache* cache)
+{
+    return cache != nullptr ? &cache->host : nullptr;
+}
+
+uint64_t mnavGetTileCacheMisuse(const mnavTileCache* cache)
+{
+    return cache != nullptr ? mnavHostMisuse(&cache->host) : 0;
+}
+
+void mnavUncacheTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ)
 {
     int32_t i = cache != nullptr ? IndexOf(cache, tileX, tileZ) : -1;
     if (i < 0)
@@ -137,6 +158,14 @@ void mnavDropCachedTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ)
     Release(&cache->memory, &cache->tiles[i]);
     cache->tiles[i] = cache->tiles[cache->count - 1];
     cache->count -= 1;
+}
+
+void mnavDropCachedTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ)
+{
+    if (cache != nullptr && !mnavHostCalledBack(&cache->host))
+    {
+        mnavUncacheTile(cache, tileX, tileZ);
+    }
 }
 
 uint64_t mnavGetTileCacheBytes(const mnavTileCache* cache)
@@ -211,10 +240,10 @@ mnavResult mnavCacheTile(mnavTileCache* cache, mnavMemory* scratch, const mnavCa
                          const mnavCompactField* field, const mnavBakeVolume* volumes,
                          int32_t volumeCount)
 {
-    mnavDropCachedTile(cache, tile->tileX, tile->tileZ);
+    mnavUncacheTile(cache, tile->tileX, tile->tileZ);
     if (cache->count == cache->def.limits.tiles)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     // The volumes kept are marked in the cache's memory for the while.
     bool* keep = nullptr;

@@ -52,6 +52,7 @@ add_library(maul-nav ${MAUL_LIBRARY_KIND}
     src/base.c
     src/baker.c
     src/border_vertices.c
+    src/clip.c
     src/commit.c
     src/compact.c
     src/corridor.c
@@ -62,6 +63,7 @@ add_library(maul-nav ${MAUL_LIBRARY_KIND}
     src/draw.c
     src/detail.c
     src/erode.c
+    src/fields.c
     src/filter.c
     src/fingerprint.c
     src/flight.c
@@ -127,48 +129,114 @@ endif()
 
 if(MAUL_NAV_BUILD_TESTS)
     enable_testing()
+    # maul_add_dense(<name> [WHITEBOX]): test_<name> with the argument
+    # dense, as <name>_dense, the suite's sweeps in full (test/dense.h).
+    # Labeled dense: every cell runs it but the AddressSanitizer one, the
+    # pull request's slowest, and the dense-asan preset runs it there at
+    # night. WHITEBOX: only the dense form reaches src/, so it is built
+    # apart as test_<name>_dense with TEST_DENSE_WHITEBOX defined, and left
+    # out of shared builds like every white-box suite.
+    function(maul_add_dense name)
+        cmake_parse_arguments(ARG "WHITEBOX" "" "" ${ARGN})
+        set(target test_${name})
+        if(ARG_WHITEBOX)
+            if(MAUL_NAV_BUILD_SHARED)
+                return()
+            endif()
+            set(target test_${name}_dense)
+            add_executable(${target} ${PROJECT_SOURCE_DIR}/test/test_${name}.c)
+            target_link_libraries(${target} PRIVATE ${PROJECT_NAME})
+            target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
+            target_compile_definitions(${target} PRIVATE TEST_DENSE_WHITEBOX)
+            maul_apply_flags(${target})
+        endif()
+        if(TARGET ${target})
+            add_test(NAME ${name}_dense COMMAND ${target} dense)
+            set_tests_properties(${name}_dense PROPERTIES LABELS "${name};dense")
+        endif()
+    endfunction()
     maul_add_test(base)
+    # Writes and checks test/hand_tiles.h (test_hand_tiles.c); the checks
+    # job and tools/check.sh run its --check.
+    maul_add_test(hand_tiles WHITEBOX MANUAL)
     maul_add_test(bake)
     maul_add_test(baker)
-    maul_add_test(border_vertices WHITEBOX)
-    maul_add_test(compact WHITEBOX)
-    maul_add_test(contour WHITEBOX)
-    maul_add_test(delaunay WHITEBOX)
-    maul_add_test(detail WHITEBOX)
-    maul_add_test(filter WHITEBOX)
-    maul_add_test(height_patch WHITEBOX)
-    maul_add_test(heightfield WHITEBOX)
-    maul_add_test(holes WHITEBOX)
-    maul_add_test(navmesh WHITEBOX)
+    maul_add_test(border_vertices)
+    # Hand-built rings for the removals no bake reaches
+    # (test_border_vertices_rings.c).
+    maul_add_test(border_vertices_rings WHITEBOX)
+    maul_add_test(compact)
+    maul_add_test(contour)
+    maul_add_test(delaunay)
+    maul_add_test(detail)
+    maul_add_test(filter)
+    maul_add_test(filter_random WHITEBOX)
+    maul_add_test(height_patch)
+    maul_add_test(height_patch_hand WHITEBOX)
+    maul_add_test(heightfield)
+    # The cuts of rasterizing running out of room, which no bake reaches.
+    maul_add_test(raster_cut WHITEBOX)
+    maul_add_test(holes)
+    # Hand-built contour sets for dropping a hole, which no bake reaches
+    # (test_holes_rings.c).
+    maul_add_test(holes_rings WHITEBOX)
+    maul_add_test(navmesh)
+    # The navmesh's link and slot tables, which no public call shows
+    # (test_navmesh_tables.c).
+    maul_add_test(navmesh_tables WHITEBOX)
     maul_add_test(nearest)
-    maul_add_test(nearest_rules WHITEBOX)
-    maul_add_test(path WHITEBOX)
-    maul_add_test(path_rules WHITEBOX)
-    maul_add_test(raycast WHITEBOX)
-    maul_add_test(query_filter WHITEBOX)
-    maul_add_test(offmesh WHITEBOX)
-    maul_add_test(path_links WHITEBOX)
-    maul_add_test(shortest WHITEBOX)
+    maul_add_test(nearest_rules)
+    maul_add_test(path)
+    maul_add_test(path_rules)
+    maul_add_dense(path_rules WHITEBOX)
+    maul_add_test(raycast)
+    maul_add_test(query_filter)
+    maul_add_test(offmesh)
+    # A link slot at its last generation, which the API reaches only after
+    # 2^32 links (test_link_slots.c).
+    maul_add_test(link_slots WHITEBOX)
+    maul_add_test(path_links)
+    maul_add_test(shortest)
+    # The nodes the exact search makes, which no public call reports
+    # (test_shortest_work.c).
+    maul_add_test(shortest_work WHITEBOX)
     maul_add_test(flight WHITEBOX)
-    maul_add_test(flight_volume WHITEBOX)
+    maul_add_test(flight_volume)
+    # The octree the tiles hold, the walk and the payload's structure,
+    # which no public call shows (test_flight_octree.c).
+    maul_add_test(flight_octree WHITEBOX)
     maul_add_test(flight_query)
-    maul_add_test(sliced WHITEBOX)
-    maul_add_test(surface WHITEBOX)
-    maul_add_test(walls WHITEBOX)
-    maul_add_test(corridor WHITEBOX)
-    maul_add_test(tiers WHITEBOX)
-    maul_add_test(resnap WHITEBOX)
+    maul_add_dense(flight_query)
+    maul_add_test(sliced)
+    maul_add_test(surface)
+    # The node table a move leaves clean, which no result shows
+    # (test_query_table.c).
+    maul_add_test(query_table WHITEBOX)
+    maul_add_test(walls)
+    maul_add_test(corridor)
+    maul_add_test(tiers)
+    maul_add_test(resnap)
     maul_add_test(bake2d)
     maul_add_test(grid)
     maul_add_test(flow)
     maul_add_test(hierarchy)
+    maul_add_dense(hierarchy)
     maul_add_test(spatial)
+    # The circle clip running out of room, which no public call reaches at
+    # the room the random point gives it.
+    maul_add_test(clip WHITEBOX)
     maul_add_test(steer)
     maul_add_test(linkgen)
+    maul_add_test(busy)
+    maul_add_test(busy_owners)
+    maul_add_test(misuse)
+    # Generation stopping at its limits, run small here.
+    maul_add_test(linkgen_limits WHITEBOX)
     maul_add_test(debug)
     maul_add_test(guide)
     maul_add_test(navflow)
     maul_add_test(alloc_failures)
+    maul_add_dense(alloc_failures)
     maul_add_test(rings)
     maul_add_test(refusals)
     maul_add_test(version)
@@ -177,9 +245,11 @@ if(MAUL_NAV_BUILD_TESTS)
     if(NOT EMSCRIPTEN)
         maul_add_test(workers POSIX)
         maul_add_test(shared_reads POSIX)
+        maul_add_test(busy_threads POSIX)
     endif()
     maul_add_test(edge_links)
     maul_add_test(scenarios)
+    maul_add_dense(scenarios)
     # The 1,000-agent doorway crowd, a large scene: nightly, never in the
     # pull request check.
     add_test(NAME doorway COMMAND test_scenarios --doorway)
@@ -187,10 +257,14 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_test(terrain)
     maul_add_test(funnel WHITEBOX)
     maul_add_test(lz WHITEBOX)
+    # The family's suite of the floating-point environment's module
+    # (synced from .github with src/fpenv.c): it calls the module's entries
+    # under every host setting, which no public call exposes on its own.
     maul_add_test(fpenv WHITEBOX)
     maul_add_test(tile_cache)
+    maul_add_dense(tile_cache)
     maul_add_test(tile_index)
-    maul_add_test(volume WHITEBOX)
+    maul_add_test(volume)
     maul_add_test(avoidance)
     maul_add_test(avoidance3)
     maul_add_test(crowd WHITEBOX)
@@ -198,9 +272,9 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_test(orca WHITEBOX)
     maul_add_test(orca3 WHITEBOX)
     maul_add_test(obstacle WHITEBOX)
-    maul_add_test(polymesh WHITEBOX)
-    maul_add_test(region WHITEBOX)
-    maul_add_test(scalar WHITEBOX)
+    maul_add_test(polymesh)
+    maul_add_test(region)
+    maul_add_test(scalar)
     maul_add_test(tile WHITEBOX)
     maul_add_header_tests()
     maul_add_exports_test()

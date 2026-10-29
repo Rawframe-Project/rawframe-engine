@@ -20,10 +20,10 @@ result::Status checked(mnavResult outcome, std::string_view why) {
     switch (outcome) {
     case mnav_success:
         return {};
-    case mnav_errorLimit:
-        return refuse(NavigationError::Limit, why);
+    // Room the navmesh was made with, or memory: more would succeed. A
+    // value past a bound Maul Nav publishes is the input's fault.
     case mnav_errorCapacity:
-        return refuse(NavigationError::Capacity, why);
+        return refuse(NavigationError::Limit, why);
     default:
         return std::unexpected<result::Error>{
             refuse(NavigationError::Invalid, why).error().withContext("outcome", std::to_string(outcome))};

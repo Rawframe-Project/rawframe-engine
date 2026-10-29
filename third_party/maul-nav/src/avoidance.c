@@ -30,18 +30,24 @@
 // Obstacle grid entries per obstacle vertex.
 #define ENTRIES_PER_VERTEX 8
 
-// Whether a def's limits, distance and horizons lie in their ranges.
-static bool GoodLimits(const mnavAvoidanceDef* def)
+// The def's limits, distance and horizons: mnav_errorInvalid for a count
+// below 1 (0 for obstacle vertices) or a distance not positive and finite,
+// mnav_errorLimit past an MNAV_MAX_ value; the horizons as mnavAvoidTime.
+static mnavResult CheckLimits(const mnavAvoidanceDef* def)
 {
     const mnavAvoidanceLimits* limits = &def->limits;
-    return limits->agents >= 1 && limits->agents <= MNAV_MAX_AVOIDANCE_AGENTS &&
-           limits->neighbors >= 1 && limits->neighbors <= MNAV_MAX_AVOIDANCE_NEIGHBORS &&
-           limits->obstacleVertices >= 0 &&
-           limits->obstacleVertices <= MNAV_MAX_AVOIDANCE_VERTICES &&
-           limits->obstacleNeighbors >= 1 &&
-           limits->obstacleNeighbors <= MNAV_MAX_AVOIDANCE_NEIGHBORS &&
-           mnavAvoidPositive(def->neighborDistance) && mnavAvoidTime(def->timeHorizon) &&
-           mnavAvoidTime(def->obstacleTimeHorizon);
+    if (limits->agents < 1 || limits->neighbors < 1 || limits->obstacleVertices < 0 ||
+        limits->obstacleNeighbors < 1 || !mnavAvoidPositive(def->neighborDistance))
+    {
+        return mnav_errorInvalid;
+    }
+    bool within = limits->agents <= MNAV_MAX_AVOIDANCE_AGENTS &&
+                  limits->neighbors <= MNAV_MAX_AVOIDANCE_NEIGHBORS &&
+                  limits->obstacleVertices <= MNAV_MAX_AVOIDANCE_VERTICES &&
+                  limits->obstacleNeighbors <= MNAV_MAX_AVOIDANCE_NEIGHBORS;
+    mnavResult result =
+        mnavAvoidJoin(mnavAvoidTime(def->timeHorizon), mnavAvoidTime(def->obstacleTimeHorizon));
+    return mnavAvoidJoin(result, within ? mnav_success : mnav_errorLimit);
 }
 
 // Allocates the neighbour grid's arrays for the set's limits.
@@ -154,9 +160,10 @@ static MNAV_NOINLINE mnavResult CreateAvoidanceWork(const mnavAvoidanceDef* def,
     {
         return mnav_errorInvalid;
     }
-    if (!GoodLimits(def))
+    mnavResult checked = CheckLimits(def);
+    if (checked != mnav_success)
     {
-        return mnav_errorRange;
+        return checked;
     }
     mnavMemory memory = mnavMakeMemory(def->allocator, UINT64_MAX);
     mnavAvoidance* a = nullptr;
@@ -168,6 +175,7 @@ static MNAV_NOINLINE mnavResult CreateAvoidanceWork(const mnavAvoidanceDef* def,
     }
     *a = (mnavAvoidance){0};
     a->memory = memory;
+    a->memory.host = &a->host;
     a->def = *def;
     result = AllocateCrowd(a);
     if (result == mnav_success)
@@ -195,9 +203,14 @@ mnavResult mnavCreateAvoidance(const mnavAvoidanceDef* def, mnavAvoidance** avoi
     return result;
 }
 
+uint64_t mnavGetAvoidanceMisuse(const mnavAvoidance* avoidance)
+{
+    return avoidance != nullptr ? mnavHostMisuse(&avoidance->host) : 0;
+}
+
 void mnavDestroyAvoidance(mnavAvoidance* avoidance)
 {
-    if (avoidance == nullptr)
+    if (avoidance == nullptr || mnavHostCalledBack(&avoidance->host))
     {
         return;
     }
@@ -229,16 +242,28 @@ void mnavDestroyAvoidance(mnavAvoidance* avoidance)
     mnavRelease(&memory, avoidance->projected, lines, sizeof(mnavLine), alignof(mnavLine));
     mnavRelease(&memory, avoidance->planes, lines, sizeof(mnavPlane), alignof(mnavPlane));
     mnavRelease(&memory, avoidance->projectedPlanes, lines, sizeof(mnavPlane), alignof(mnavPlane));
+    // The mark lives in the block being freed: it is set for good, so that
+    // a call back in from this release is refused too, and the release
+    // does not touch it.
+    mnavHostEnter(&avoidance->host);
+    memory.host = nullptr;
     mnavRelease(&memory, avoidance, 1, sizeof(mnavAvoidance), alignof(mnavAvoidance));
 }
 
-static bool GoodAgent(const mnavAgent* agent)
+static mnavResult CheckAgent(const mnavAgent* agent)
 {
-    return mnavAvoidCoordinate(agent->position.x) && mnavAvoidCoordinate(agent->position.y) &&
-           mnavAvoidSpeed(agent->velocity.x) && mnavAvoidSpeed(agent->velocity.y) &&
-           mnavAvoidSpeed(agent->preferred.x) && mnavAvoidSpeed(agent->preferred.y) &&
-           mnavAvoidRadius(agent->radius) && mnavAvoidSpeed(agent->maxSpeed) &&
-           agent->maxSpeed >= 0.0 && mnavAvoidPositive(agent->priority);
+    if (!(agent->maxSpeed >= 0.0) || !mnavAvoidPositive(agent->priority))
+    {
+        return mnav_errorInvalid;
+    }
+    mnavResult result = mnavAvoidJoin(mnavAvoidCoordinate(agent->position.x),
+                                      mnavAvoidCoordinate(agent->position.y));
+    result = mnavAvoidJoin(result, mnavAvoidJoin(mnavAvoidSpeed(agent->velocity.x),
+                                                 mnavAvoidSpeed(agent->velocity.y)));
+    result = mnavAvoidJoin(result, mnavAvoidJoin(mnavAvoidSpeed(agent->preferred.x),
+                                                 mnavAvoidSpeed(agent->preferred.y)));
+    return mnavAvoidJoin(
+        result, mnavAvoidJoin(mnavAvoidRadius(agent->radius), mnavAvoidSpeed(agent->maxSpeed)));
 }
 
 // Checks the agents as hostile input and fills the ground grid's keys.
@@ -247,9 +272,10 @@ static mnavResult FillKeys(mnavAvoidance* a, const mnavAgent* agents, int32_t co
     mnavBeginCrowd(&a->crowd, false);
     for (int32_t i = 0; i < count; ++i)
     {
-        if (!GoodAgent(&agents[i]))
+        mnavResult result = CheckAgent(&agents[i]);
+        if (result != mnav_success)
         {
-            return mnav_errorInvalid;
+            return result;
         }
         mnavPos3 position = {agents[i].position.x, agents[i].position.y, 0.0};
         a->crowd.keys[i] = mnavCrowdKeyOf(&a->crowd, position, agents[i].id, i);
@@ -322,17 +348,26 @@ static MNAV_NOINLINE mnavResult AvoidWork(mnavAvoidance* avoidance, const mnavAg
                                           int32_t obstacleCount, double step,
                                           mnavPos2* velocitiesOut)
 {
+    if (avoidance != nullptr && mnavHostCalledBack(&avoidance->host))
+    {
+        return mnav_errorBusy;
+    }
     if (avoidance == nullptr || agentCount < 0 || obstacleCount < 0 ||
         (agentCount > 0 && (agents == nullptr || velocitiesOut == nullptr)) ||
-        (obstacleCount > 0 && obstacles == nullptr) || !mnavAvoidTime(step))
+        (obstacleCount > 0 && obstacles == nullptr))
     {
         return mnav_errorInvalid;
     }
+    mnavResult result = mnavAvoidTime(step);
+    if (result != mnav_success)
+    {
+        return result;
+    }
     if (agentCount > avoidance->def.limits.agents)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
-    mnavResult result = FillKeys(avoidance, agents, agentCount);
+    result = FillKeys(avoidance, agents, agentCount);
     if (result != mnav_success)
     {
         return result;
@@ -355,13 +390,23 @@ static MNAV_NOINLINE mnavResult AvoidWork(mnavAvoidance* avoidance, const mnavAg
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult AvoidCounted(mnavAvoidance* avoidance, const mnavAgent* agents,
+                                             int32_t agentCount, const mnavObstacle* obstacles,
+                                             int32_t obstacleCount, double step,
+                                             mnavPos2* velocitiesOut)
+{
+    return mnavHostCountInvalid(
+        MNAV_HOST(avoidance),
+        AvoidWork(avoidance, agents, agentCount, obstacles, obstacleCount, step, velocitiesOut));
+}
+
 mnavResult mnavAvoid(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
                      const mnavObstacle* obstacles, int32_t obstacleCount, double step,
                      mnavPos2* velocitiesOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =
-        AvoidWork(avoidance, agents, agentCount, obstacles, obstacleCount, step, velocitiesOut);
+        AvoidCounted(avoidance, agents, agentCount, obstacles, obstacleCount, step, velocitiesOut);
     mnavFloatEnvLeave(env);
     return result;
 }
@@ -389,6 +434,10 @@ static MNAV_NOINLINE mnavResult DebugAvoidanceWork(mnavAvoidance* avoidance,
                                                    const mnavAgent* agents, int32_t agentCount,
                                                    double height, mnavDebugBuffer* buffer)
 {
+    if (avoidance != nullptr && mnavHostCalledBack(&avoidance->host))
+    {
+        return mnav_errorBusy;
+    }
     if (avoidance == nullptr || agentCount < 0 || (agentCount > 0 && agents == nullptr) ||
         !isfinite(height) || !mnavGoodBuffer(buffer))
     {
@@ -396,7 +445,7 @@ static MNAV_NOINLINE mnavResult DebugAvoidanceWork(mnavAvoidance* avoidance,
     }
     if (agentCount > avoidance->def.limits.agents)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     mnavResult result = FillKeys(avoidance, agents, agentCount);
     if (result != mnav_success)
@@ -427,11 +476,19 @@ static MNAV_NOINLINE mnavResult DebugAvoidanceWork(mnavAvoidance* avoidance,
     return mnavDrawResult(buffer);
 }
 
+static MNAV_NOINLINE mnavResult DebugAvoidanceCounted(mnavAvoidance* avoidance,
+                                                      const mnavAgent* agents, int32_t agentCount,
+                                                      double height, mnavDebugBuffer* buffer)
+{
+    return mnavHostCountInvalid(MNAV_HOST(avoidance),
+                                DebugAvoidanceWork(avoidance, agents, agentCount, height, buffer));
+}
+
 mnavResult mnavDebugAvoidance(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
                               double height, mnavDebugBuffer* buffer)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = DebugAvoidanceWork(avoidance, agents, agentCount, height, buffer);
+    mnavResult result = DebugAvoidanceCounted(avoidance, agents, agentCount, height, buffer);
     mnavFloatEnvLeave(env);
     return result;
 }

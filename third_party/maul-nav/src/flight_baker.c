@@ -13,7 +13,9 @@
 #include "flight_def.h"
 #include "flight_tile.h"
 #include "fpenv.h"
+#include "host_code.h"
 #include "raster.h"
+#include "tile_index.h"
 
 #include "maul-nav/bake.h"
 #include "maul-nav/base.h"
@@ -33,6 +35,7 @@ struct mnavFlightBaker
     mnavMemory memory;
     uint8_t* tile;
     size_t tileSize;
+    mnavHostCode host;
 };
 
 static MNAV_NOINLINE mnavFlightDefResult CreateFlightBakerWork(const mnavFlightDef* def,
@@ -63,7 +66,8 @@ static MNAV_NOINLINE mnavFlightDefResult CreateFlightBakerWork(const mnavFlightD
     {
         return (mnavFlightDefResult){result, mnav_flightSettingNone};
     }
-    *baker = (mnavFlightBaker){*def, shape, voxels, cells, memory, nullptr, 0};
+    *baker = (mnavFlightBaker){*def, shape, voxels, cells, memory, nullptr, 0, {0}};
+    baker->memory.host = &baker->host;
     *bakerOut = baker;
     return (mnavFlightDefResult){mnav_success, mnav_flightSettingNone};
 }
@@ -83,14 +87,24 @@ static void DropTile(mnavFlightBaker* baker)
     baker->tileSize = 0;
 }
 
+uint64_t mnavGetFlightBakerMisuse(const mnavFlightBaker* baker)
+{
+    return baker != nullptr ? mnavHostMisuse(&baker->host) : 0;
+}
+
 void mnavDestroyFlightBaker(mnavFlightBaker* baker)
 {
-    if (baker == nullptr)
+    if (baker == nullptr || mnavHostCalledBack(&baker->host))
     {
         return;
     }
     DropTile(baker);
+    // The mark lives in the block being freed: it is set for good, so that
+    // a call back in from this release is refused too, and the release
+    // does not touch it.
+    mnavHostEnter(&baker->host);
     mnavMemory memory = baker->memory;
+    memory.host = nullptr;
     mnavRelease(&memory, baker, 1, sizeof(mnavFlightBaker), alignof(mnavFlightBaker));
 }
 
@@ -134,7 +148,7 @@ static mnavResult Bake(mnavFlightBaker* baker, const mnavBakeInput* input, int32
     if (result == mnav_success &&
         !mnavMakeTileFrame(&baker->voxels, &baker->cells, tileX, tileZ, &frame))
     {
-        result = mnav_errorRange;
+        result = mnav_errorLimit;
     }
     if (result != mnav_success)
     {
@@ -164,6 +178,10 @@ static MNAV_NOINLINE mnavResult BakeFlightTileWork(mnavFlightBaker* baker,
                                                    const mnavBakeInput* input, int32_t tileX,
                                                    int32_t tileZ, mnavFlightBakeReport* reportOut)
 {
+    if (baker != nullptr && mnavHostCalledBack(&baker->host))
+    {
+        return mnav_errorBusy;
+    }
     mnavFlightBakeReport report = {0};
     report.mesh = -1;
     report.input = (mnavInputResult){mnav_success, mnav_elementNone, -1};
@@ -172,7 +190,11 @@ static MNAV_NOINLINE mnavResult BakeFlightTileWork(mnavFlightBaker* baker,
     {
         DropTile(baker);
         baker->memory.peak = baker->memory.used;
+        // The index the bake reads is held through the whole call.
+        mnavHostCode* index = mnavTileIndexHost(input->index);
+        mnavHostEnter(index);
         result = Bake(baker, input, tileX, tileZ, &report);
+        mnavHostLeave(index);
         report.tileBytes = result == mnav_success ? baker->tileSize : 0;
         report.memoryPeak = baker->memory.peak;
     }
@@ -181,7 +203,9 @@ static MNAV_NOINLINE mnavResult BakeFlightTileWork(mnavFlightBaker* baker,
     {
         *reportOut = report;
     }
-    return result;
+    // A refused input element, which the report names, counts no misuse.
+    return report.input.result == mnav_success ? mnavHostCountInvalid(MNAV_HOST(baker), result)
+                                               : result;
 }
 
 mnavResult mnavBakeFlightTile(mnavFlightBaker* baker, const mnavBakeInput* input, int32_t tileX,
@@ -193,8 +217,8 @@ mnavResult mnavBakeFlightTile(mnavFlightBaker* baker, const mnavBakeInput* input
     return result;
 }
 
-mnavResult mnavCopyFlightTile(const mnavFlightBaker* baker, uint8_t* bufferOut, size_t capacity,
-                              size_t* sizeOut)
+static mnavResult CopyFlightTileWork(const mnavFlightBaker* baker, uint8_t* bufferOut,
+                                     size_t capacity, size_t* sizeOut)
 {
     if (baker == nullptr || (bufferOut == nullptr && capacity > 0) || baker->tile == nullptr)
     {
@@ -213,4 +237,11 @@ mnavResult mnavCopyFlightTile(const mnavFlightBaker* baker, uint8_t* bufferOut, 
         memcpy(bufferOut, baker->tile, baker->tileSize);
     }
     return mnav_success;
+}
+
+mnavResult mnavCopyFlightTile(const mnavFlightBaker* baker, uint8_t* bufferOut, size_t capacity,
+                              size_t* sizeOut)
+{
+    return mnavHostCountInvalid(MNAV_HOST(baker),
+                                CopyFlightTileWork(baker, bufferOut, capacity, sizeOut));
 }

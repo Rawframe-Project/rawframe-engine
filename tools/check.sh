@@ -16,8 +16,9 @@
 #                            web build and its tests, the web page against the
 #                            dedicated server, real browsers playing the sample
 #                            games, and every integration test.
-#   tools/check.sh nightly   also clang-shipping and wasm-shipping, and the
-#                            tick and web download budgets measured in them.
+#   tools/check.sh nightly   also clang-shipping and wasm-shipping, the
+#                            tick and web download budgets measured in them,
+#                            and the tests labeled quarantined.
 #
 # The builds are the presets of CMakePresets.json, in out/<preset>, reused
 # from run to run. Each tree's logs sit beside it. JOBS (default 8) bounds
@@ -141,11 +142,14 @@ build_and_test() {
         printf '   %s: built in %ss\n' "$preset" "$((built - began))"
         return
     }
-    local filter=()
-    case "$labels" in
-    unit) filter=(-LE "$integration") ;;
-    integration) filter=(-L "$integration") ;;
-    esac
+    # A test that fails now and then carries the label `quarantined`, with
+    # its issue on the line above: it runs only in the nightly tier until it
+    # is fixed, never retried.
+    local filter=() excluded=()
+    [ "$labels" = unit ] && excluded+=(integration)
+    [ "$tier" = nightly ] || excluded+=(quarantined)
+    [ "$labels" = integration ] && filter+=(-L "$integration")
+    [ "${#excluded[@]}" -gt 0 ] && filter+=(-LE "^($(IFS='|'; echo "${excluded[*]}"))\$")
     if [ "$select" = reached ]; then
         local reached
         mapfile -t reached < <(python3 tools/affected.py "out/$preset")

@@ -35,7 +35,9 @@ static void LowObstaclesColumn(mnavHeightfield* heightfield, int32_t c, int32_t 
     }
 }
 
-void mnavFilterLowObstacles(mnavHeightfield* heightfield, int32_t step)
+// Gives a non-walkable span the area of the walkable span directly below
+// it when its top is at most step cells higher.
+static void LowObstacles(mnavHeightfield* heightfield, int32_t step)
 {
     int32_t columnCount = heightfield->frame.width * heightfield->frame.width;
     for (int32_t c = 0; c < columnCount; ++c)
@@ -172,13 +174,13 @@ static void LowHeightColumn(mnavHeightfield* heightfield, int32_t c, int32_t hei
     }
 }
 
-// The ledge filter on column c, and with lowHeight the low height filter
-// after it: both read only heights and clear areas, so the column's
-// result is the one the two filters give one after the other. Most
+// The ledge filter on column c, and the low height filter after it: both
+// read only heights and clear areas, so the column's result is the one
+// the two filters give one after the other over the whole field. Most
 // columns, and their neighbors, hold one span, and those take DropsAlone,
 // which answers as IsLedge does; that span's ceiling is open.
 static void LedgesColumn(mnavHeightfield* heightfield, int32_t c, bool edge, int32_t height,
-                         int32_t step, bool lowHeight)
+                         int32_t step)
 {
     int32_t width = heightfield->frame.width;
     const uint32_t* columns = heightfield->columns;
@@ -186,10 +188,7 @@ static void LedgesColumn(mnavHeightfield* heightfield, int32_t c, bool edge, int
     if (edge || !AllAlone(columns, c, width))
     {
         FilterColumn(heightfield, c, edge, height, step);
-        if (lowHeight)
-        {
-            LowHeightColumn(heightfield, c, height);
-        }
+        LowHeightColumn(heightfield, c, height);
         return;
     }
     mnavSpan* span = &spans[columns[c]];
@@ -197,7 +196,7 @@ static void LedgesColumn(mnavHeightfield* heightfield, int32_t c, bool edge, int
     {
         return;
     }
-    if (lowHeight && OPEN_TOP - (int32_t)span->top < height)
+    if (OPEN_TOP - (int32_t)span->top < height)
     {
         span->area = mnav_areaNone;
         return;
@@ -215,32 +214,9 @@ static void LedgesColumn(mnavHeightfield* heightfield, int32_t c, bool edge, int
     }
 }
 
-void mnavFilterLedges(mnavHeightfield* heightfield, int32_t height, int32_t step)
-{
-    int32_t width = heightfield->frame.width;
-    for (int32_t z = 0; z < width; ++z)
-    {
-        bool edgeRow = z == 0 || z == width - 1;
-        for (int32_t x = 0; x < width; ++x)
-        {
-            LedgesColumn(heightfield, x + z * width, edgeRow || x == 0 || x == width - 1, height,
-                         step, false);
-        }
-    }
-}
-
-void mnavFilterLowHeight(mnavHeightfield* heightfield, int32_t height)
-{
-    int32_t columnCount = heightfield->frame.width * heightfield->frame.width;
-    for (int32_t c = 0; c < columnCount; ++c)
-    {
-        LowHeightColumn(heightfield, c, height);
-    }
-}
-
 void mnavFilterWalkable(mnavHeightfield* heightfield, int32_t height, int32_t step)
 {
-    mnavFilterLowObstacles(heightfield, step);
+    LowObstacles(heightfield, step);
     int32_t width = heightfield->frame.width;
     for (int32_t z = 0; z < width; ++z)
     {
@@ -248,7 +224,7 @@ void mnavFilterWalkable(mnavHeightfield* heightfield, int32_t height, int32_t st
         for (int32_t x = 0; x < width; ++x)
         {
             LedgesColumn(heightfield, x + z * width, edgeRow || x == 0 || x == width - 1, height,
-                         step, true);
+                         step);
         }
     }
 }

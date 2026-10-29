@@ -301,6 +301,7 @@ static void CheckNeighbors(const mnavCrowd* crowd, int32_t index, double rangeSq
         const mnavCrowdNeighbor* n = &crowd->neighbors[k];
         MNAV_ASSERT(n->index != index && n->distance < rangeSq);
         MNAV_ASSERT(k == 0 || NeighborBefore(&crowd->neighbors[k - 1], n));
+        (void)n;
     }
 }
 

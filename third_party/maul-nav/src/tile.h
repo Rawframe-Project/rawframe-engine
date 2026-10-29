@@ -19,8 +19,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// The header's size in bytes.
-#define MNAV_TILE_HEADER_BYTES 104
+// The header's size in bytes: the magic, the format version, the
+// generation, the fingerprint, the payload's hash and size, and the field
+// count. The fields follow.
+#define MNAV_TILE_HEADER_BYTES 32
 
 // What a tile records beside its meshes: the bake's generation
 // (MNAV_BAKE_GENERATOR), the bake's fingerprint of its input, the tile's place in the grid, and the
@@ -53,7 +55,7 @@ void mnavReleaseTileBytes(mnavMemory* memory, uint8_t* bytes, size_t size);
 
 // Reads a tile from size bytes. On success the meshes hold what was
 // written (regions are not stored and read as 0); on failure nothing is
-// held. A malformed tile is mnav_errorInvalid, another format version
+// held. A malformed tile is mnav_errorFormat, another format version
 // mnav_errorVersion.
 mnavTileResult mnavDecodeTile(mnavMemory* memory, const uint8_t* bytes, size_t size,
                               mnavTileInfo* info, mnavPolyMesh* mesh, mnavDetailMesh* detail);

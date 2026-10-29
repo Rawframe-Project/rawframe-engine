@@ -42,8 +42,8 @@ typedef struct mnavObstacleNear
 } mnavObstacleNear;
 
 // Checks the obstacles as hostile input and writes their vertices, at most
-// capacity: mnav_errorInvalid for a bad obstacle, mnav_errorLimit for too
-// many points.
+// capacity: mnav_errorInvalid for a malformed obstacle, mnav_errorLimit
+// for one past a bound, mnav_errorCapacity for too many points.
 mnavResult mnavBuildObstacles(const mnavObstacle* obstacles, int32_t count,
                               mnavObstacleVertex* vertices, int32_t capacity, int32_t* vertexCount);
 

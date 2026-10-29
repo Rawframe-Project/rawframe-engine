@@ -7,8 +7,10 @@
 
 #include "allocator.h"
 #include "bytes.h"
+#include "fields.h"
 #include "flight.h"
 #include "flight_def.h"
+#include "invariant.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/flight.h"
@@ -16,53 +18,82 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 static const uint8_t MAGIC[4] = {'M', 'N', 'V', 'F'};
 
-// The header's flags: the ground below is solid.
+// FLHT's flags: the ground below is solid.
 #define FLAG_GROUND_BELOW 1u
 
-// The bytes of a node and of a leaf.
-#define NODE_BYTES 2
-#define LEAF_BYTES 8
+// The bytes of a cube's class, a node and a leaf, and of the FLHT field.
+#define ROOT_BYTES   1
+#define NODE_BYTES   2
+#define LEAF_BYTES   8
+#define FLIGHT_BYTES 56
 
-static size_t PayloadBytes(int64_t cubes, int64_t nodes, int64_t leaves)
+// The fields, in order of their names, and the section each one's
+// refusals name.
+enum
 {
-    return (size_t)(cubes + nodes * NODE_BYTES + leaves * LEAF_BYTES);
-}
+    FIELD_FLIGHT,
+    FIELD_LEAVES,
+    FIELD_NODES,
+    FIELD_ROOTS,
+    FIELDS
+};
 
-static void WriteHeader(mnavByteWriter* w, const mnavFlightDef* def, uint64_t fingerprint,
-                        const mnavFlightTile* tile, size_t payload, uint64_t hash)
+static const uint32_t TAGS[FIELDS] = {
+    MNAV_TAG('F', 'L', 'H', 'T'),
+    MNAV_TAG('L', 'E', 'A', 'F'),
+    MNAV_TAG('N', 'O', 'D', 'E'),
+    MNAV_TAG('R', 'O', 'O', 'T'),
+};
+
+static const mnavTileSection SECTIONS[FIELDS] = {
+    mnav_tileHeader,
+    mnav_tileFlightLeaves,
+    mnav_tileFlightNodes,
+    mnav_tileFlightRoots,
+};
+
+static void WriteField(mnavByteWriter* w, int32_t field, const mnavFlightDef* def,
+                       const mnavFlightTile* tile)
 {
-    for (int32_t k = 0; k < 4; ++k)
+    switch (field)
     {
-        mnavPutU8(w, MAGIC[k]);
+    case FIELD_FLIGHT:
+        mnavPutU32(w, (uint32_t)tile->tileX);
+        mnavPutU32(w, (uint32_t)tile->tileZ);
+        mnavPutU16(w, (uint64_t)tile->side);
+        mnavPutU16(w, def->groundBelow ? FLAG_GROUND_BELOW : 0u);
+        mnavPutU32(w, mnavFloatBits(def->voxelSize));
+        mnavPutU32(w, mnavFloatBits(def->radius));
+        mnavPutU32(w, mnavFloatBits(def->floor));
+        mnavPutU32(w, mnavFloatBits(def->ceiling));
+        mnavPutU64(w, mnavDoubleBits(def->origin.x));
+        mnavPutU64(w, mnavDoubleBits(def->origin.y));
+        mnavPutU64(w, mnavDoubleBits(def->origin.z));
+        mnavPutU32(w, (uint32_t)tile->floorVoxel);
+        break;
+    case FIELD_LEAVES:
+        for (int32_t k = 0; k < tile->leafCount; ++k)
+        {
+            mnavPutU64(w, tile->leaves[k]);
+        }
+        break;
+    case FIELD_NODES:
+        for (int32_t n = 0; n < tile->nodeCount; ++n)
+        {
+            mnavPutU16(w, tile->nodes[n].mask);
+        }
+        break;
+    default:
+        for (int32_t c = 0; c < tile->cubeCount; ++c)
+        {
+            mnavPutU8(w, tile->roots[c]);
+        }
+        break;
     }
-    mnavPutU16(w, MNAV_FLIGHT_FORMAT);
-    mnavPutU16(w, MNAV_FLIGHT_HEADER_BYTES);
-    // The generation, then two reserved words.
-    mnavPutU16(w, MNAV_FLIGHT_GENERATOR);
-    mnavPutU16(w, 0);
-    mnavPutU16(w, 0);
-    mnavPutU16(w, def->groundBelow ? FLAG_GROUND_BELOW : 0u);
-    mnavPutU64(w, fingerprint);
-    mnavPutU64(w, hash);
-    mnavPutU32(w, payload);
-    mnavPutU32(w, (uint32_t)tile->tileX);
-    mnavPutU32(w, (uint32_t)tile->tileZ);
-    mnavPutU16(w, (uint64_t)tile->side);
-    mnavPutU16(w, 0);
-    mnavPutU32(w, mnavFloatBits(def->voxelSize));
-    mnavPutU32(w, mnavFloatBits(def->radius));
-    mnavPutU32(w, mnavFloatBits(def->floor));
-    mnavPutU32(w, mnavFloatBits(def->ceiling));
-    mnavPutU64(w, mnavDoubleBits(def->origin.x));
-    mnavPutU64(w, mnavDoubleBits(def->origin.y));
-    mnavPutU64(w, mnavDoubleBits(def->origin.z));
-    mnavPutU32(w, (uint32_t)tile->floorVoxel);
-    mnavPutU32(w, (uint64_t)tile->cubeCount);
-    mnavPutU32(w, (uint64_t)tile->nodeCount);
-    mnavPutU32(w, (uint64_t)tile->leafCount);
 }
 
 mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, uint64_t fingerprint,
@@ -70,7 +101,15 @@ mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, ui
 {
     *bytes = nullptr;
     *size = 0;
-    size_t payload = PayloadBytes(tile->cubeCount, tile->nodeCount, tile->leafCount);
+    const size_t sizes[FIELDS] = {FLIGHT_BYTES, (size_t)tile->leafCount * LEAF_BYTES,
+                                  (size_t)tile->nodeCount * NODE_BYTES,
+                                  (size_t)tile->cubeCount * ROOT_BYTES};
+    size_t payload = 0;
+    for (int32_t f = 0; f < FIELDS; ++f)
+    {
+        // An empty field holds its default and is left out.
+        payload += sizes[f] > 0 ? mnavFieldBytes(sizes[f]) : 0;
+    }
     size_t total = MNAV_FLIGHT_HEADER_BYTES + payload;
     uint8_t* out = nullptr;
     mnavResult result = mnavAllocate(memory, total, 1, 1, (void**)&out);
@@ -79,21 +118,30 @@ mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, ui
         return result;
     }
     mnavByteWriter w = {out + MNAV_FLIGHT_HEADER_BYTES};
-    for (int32_t c = 0; c < tile->cubeCount; ++c)
+    uint64_t fields = 0;
+    for (int32_t f = 0; f < FIELDS; ++f)
     {
-        mnavPutU8(&w, tile->roots[c]);
+        if (sizes[f] > 0)
+        {
+            mnavPutFieldHead(&w, TAGS[f], sizes[f]);
+            WriteField(&w, f, def, tile);
+            mnavPutFieldPad(&w, sizes[f]);
+            fields += 1;
+        }
     }
-    for (int32_t n = 0; n < tile->nodeCount; ++n)
-    {
-        mnavPutU16(&w, tile->nodes[n].mask);
-    }
-    for (int32_t k = 0; k < tile->leafCount; ++k)
-    {
-        mnavPutU64(&w, tile->leaves[k]);
-    }
+    MNAV_ASSERT(w.at == out + total);
     uint64_t hash = mnavHash64(MNAV_HASH_INIT, out + MNAV_FLIGHT_HEADER_BYTES, (int32_t)payload);
     w.at = out;
-    WriteHeader(&w, def, fingerprint, tile, payload, hash);
+    for (int32_t k = 0; k < 4; ++k)
+    {
+        mnavPutU8(&w, MAGIC[k]);
+    }
+    mnavPutU16(&w, MNAV_FLIGHT_FORMAT);
+    mnavPutU16(&w, MNAV_FLIGHT_GENERATOR);
+    mnavPutU64(&w, fingerprint);
+    mnavPutU64(&w, hash);
+    mnavPutU32(&w, payload);
+    mnavPutU32(&w, fields);
     *bytes = out;
     *size = total;
     return mnav_success;
@@ -114,21 +162,11 @@ static mnavTileResult Accept(void)
     return (mnavTileResult){mnav_success, mnav_tileHeader, -1};
 }
 
-// The header's fields beside the settings, which are checked as read.
-typedef struct Header
-{
-    uint64_t fingerprint;
-    uint64_t hash;
-    uint64_t payload;
-    int64_t nodes;
-    int64_t leaves;
-} Header;
-
-// Whether the header's settings are the def's and its shape the shape.
+// Whether FLHT's settings are the def's and its shape the shape.
 static bool SameSettings(mnavByteReader* r, const mnavFlightDef* def, const mnavFlightShape* shape)
 {
     bool same = mnavGetU16(r) == (uint64_t)def->tileVoxels;
-    same &= mnavGetU16(r) == 0;
+    same &= mnavGetU16(r) == (def->groundBelow ? FLAG_GROUND_BELOW : 0u);
     same &= mnavGetU32(r) == mnavFloatBits(def->voxelSize);
     same &= mnavGetU32(r) == mnavFloatBits(def->radius);
     same &= mnavGetU32(r) == mnavFloatBits(def->floor);
@@ -137,52 +175,79 @@ static bool SameSettings(mnavByteReader* r, const mnavFlightDef* def, const mnav
     same &= mnavGetU64(r) == mnavDoubleBits(def->origin.y);
     same &= mnavGetU64(r) == mnavDoubleBits(def->origin.z);
     same &= mnavGetU32(r) == (uint32_t)shape->floorVoxel;
-    same &= mnavGetU32(r) == (uint64_t)shape->cubeCount;
     return same;
 }
 
+// Reads the header, finds the fields, which the payload's hash covers,
+// and checks FLHT and the counts the lengths give.
 static mnavTileResult ReadHeader(const uint8_t* bytes, size_t size, const mnavFlightDef* def,
-                                 const mnavFlightShape* shape, mnavFlightTile* tile, Header* h)
+                                 const mnavFlightShape* shape, mnavFlightTile* tile,
+                                 mnavField fields[FIELDS], uint64_t* fingerprint)
 {
-    mnavByteReader r = {bytes, size, false};
-    bool magic = true;
-    for (int32_t k = 0; k < 4; ++k)
+    if (size < MNAV_FLIGHT_HEADER_BYTES || memcmp(bytes, MAGIC, sizeof(MAGIC)) != 0)
     {
-        magic &= mnavGetU8(&r) == MAGIC[k];
+        return Refuse(mnav_errorFormat, mnav_tileHeader, -1);
     }
-    if (!magic || size < MNAV_FLIGHT_HEADER_BYTES)
-    {
-        return Refuse(mnav_errorInvalid, mnav_tileHeader, -1);
-    }
+    mnavByteReader r = {bytes + sizeof(MAGIC), MNAV_FLIGHT_HEADER_BYTES - sizeof(MAGIC), false};
     if (mnavGetU16(&r) != MNAV_FLIGHT_FORMAT)
     {
         return Refuse(mnav_errorVersion, mnav_tileHeader, -1);
     }
-    bool valid = mnavGetU16(&r) == MNAV_FLIGHT_HEADER_BYTES;
-    // The generation, then two reserved words.
     (void)mnavGetU16(&r);
-    valid &= mnavGetU16(&r) == 0;
-    valid &= mnavGetU16(&r) == 0;
-    valid &= mnavGetU16(&r) == (def->groundBelow ? FLAG_GROUND_BELOW : 0u);
-    h->fingerprint = mnavGetU64(&r);
-    h->hash = mnavGetU64(&r);
-    h->payload = mnavGetU32(&r);
+    *fingerprint = mnavGetU64(&r);
+    uint64_t hash = mnavGetU64(&r);
+    size_t payload = (size_t)mnavGetU32(&r);
+    uint64_t count = mnavGetU32(&r);
+    if (payload != size - MNAV_FLIGHT_HEADER_BYTES || payload > INT32_MAX ||
+        mnavHash64(MNAV_HASH_INIT, bytes + MNAV_FLIGHT_HEADER_BYTES, (int32_t)payload) != hash)
+    {
+        return Refuse(mnav_errorFormat, mnav_tilePayload, -1);
+    }
+    mnavFieldsResult read =
+        mnavReadFields(bytes + MNAV_FLIGHT_HEADER_BYTES, payload, count, TAGS, FIELDS, fields);
+    if (read.result != mnav_success)
+    {
+        return read.known >= 0 ? Refuse(read.result, SECTIONS[read.known], -1)
+                               : Refuse(read.result, mnav_tilePayload, read.at);
+    }
+    // An absent FLHT has no bytes.
+    const mnavField* flight = &fields[FIELD_FLIGHT];
+    if (flight->size != FLIGHT_BYTES)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileHeader, -1);
+    }
+    r = (mnavByteReader){flight->bytes, flight->size, false};
     tile->tileX = (int32_t)(uint32_t)mnavGetU32(&r);
     tile->tileZ = (int32_t)(uint32_t)mnavGetU32(&r);
-    valid &= SameSettings(&r, def, shape);
-    h->nodes = (int64_t)mnavGetU32(&r);
-    h->leaves = (int64_t)mnavGetU32(&r);
-    if (!valid)
+    if (!SameSettings(&r, def, shape))
     {
-        return Refuse(mnav_errorInvalid, mnav_tileHeader, -1);
+        return Refuse(mnav_errorFormat, mnav_tileHeader, -1);
     }
-    if (h->nodes > def->limits.tileNodes || h->leaves > def->limits.tileLeaves)
+    if (fields[FIELD_ROOTS].size != (size_t)shape->cubeCount * ROOT_BYTES)
     {
-        return Refuse(mnav_errorLimit, mnav_tileHeader, -1);
+        return Refuse(mnav_errorFormat, mnav_tileFlightRoots, -1);
+    }
+    if (fields[FIELD_NODES].size % NODE_BYTES != 0)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileFlightNodes, -1);
+    }
+    if (fields[FIELD_LEAVES].size % LEAF_BYTES != 0)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileFlightLeaves, -1);
+    }
+    size_t nodes = fields[FIELD_NODES].size / NODE_BYTES;
+    size_t leaves = fields[FIELD_LEAVES].size / LEAF_BYTES;
+    if (nodes > (size_t)def->limits.tileNodes || leaves > (size_t)def->limits.tileLeaves)
+    {
+        return Refuse(mnav_errorFormat, mnav_tileHeader, -1);
     }
     tile->side = def->tileVoxels;
     tile->floorVoxel = shape->floorVoxel;
     tile->cubeCount = shape->cubeCount;
+    tile->nodeCount = (int32_t)nodes;
+    tile->nodeCapacity = tile->nodeCount;
+    tile->leafCount = (int32_t)leaves;
+    tile->leafCapacity = tile->leafCount;
     return Accept();
 }
 
@@ -226,12 +291,12 @@ static mnavTileResult ReadCube(mnavByteReader* r, mnavFlightTile* tile, int32_t 
         {
             if (w->node >= tile->nodeCount)
             {
-                return Refuse(mnav_errorInvalid, mnav_tileFlightNodes, tile->nodeCount);
+                return Refuse(mnav_errorFormat, mnav_tileFlightNodes, tile->nodeCount);
             }
             uint32_t mask = (uint32_t)mnavGetU16(r);
             if (!MixedMask(mask))
             {
-                return Refuse(mnav_errorInvalid, mnav_tileFlightNodes, w->node);
+                return Refuse(mnav_errorFormat, mnav_tileFlightNodes, w->node);
             }
             bool last = l == levels - 1;
             int64_t first = last ? w->leaf + next : base + count + next;
@@ -271,32 +336,40 @@ static mnavTileResult ReadNodes(mnavByteReader* r, mnavFlightTile* tile)
     }
     if (w.node != tile->nodeCount)
     {
-        return Refuse(mnav_errorInvalid, mnav_tileFlightNodes, w.node);
+        return Refuse(mnav_errorFormat, mnav_tileFlightNodes, w.node);
     }
     if (w.leaf != tile->leafCount)
     {
-        return Refuse(mnav_errorInvalid, mnav_tileFlightLeaves, -1);
+        return Refuse(mnav_errorFormat, mnav_tileFlightLeaves, -1);
     }
     return Accept();
 }
 
-static mnavTileResult ReadPayload(mnavByteReader* r, mnavFlightTile* tile)
+static mnavByteReader Over(const mnavField* field)
 {
+    return (mnavByteReader){field->bytes, field->size, false};
+}
+
+static mnavTileResult ReadPayload(const mnavField fields[FIELDS], mnavFlightTile* tile)
+{
+    mnavByteReader r = Over(&fields[FIELD_ROOTS]);
     for (int32_t c = 0; c < tile->cubeCount; ++c)
     {
-        tile->roots[c] = (uint8_t)mnavGetU8(r);
+        tile->roots[c] = (uint8_t)mnavGetU8(&r);
         if (tile->roots[c] > MNAV_FLIGHT_MIXED)
         {
-            return Refuse(mnav_errorInvalid, mnav_tileFlightRoots, c);
+            return Refuse(mnav_errorFormat, mnav_tileFlightRoots, c);
         }
     }
-    mnavTileResult result = ReadNodes(r, tile);
+    r = Over(&fields[FIELD_NODES]);
+    mnavTileResult result = ReadNodes(&r, tile);
+    r = Over(&fields[FIELD_LEAVES]);
     for (int32_t k = 0; k < tile->leafCount && result.result == mnav_success; ++k)
     {
-        tile->leaves[k] = mnavGetU64(r);
+        tile->leaves[k] = mnavGetU64(&r);
         if (tile->leaves[k] == 0 || tile->leaves[k] == UINT64_MAX)
         {
-            result = Refuse(mnav_errorInvalid, mnav_tileFlightLeaves, k);
+            result = Refuse(mnav_errorFormat, mnav_tileFlightLeaves, k);
         }
     }
     return result;
@@ -323,33 +396,22 @@ mnavTileResult mnavDecodeFlightTile(mnavMemory* memory, const mnavFlightDef* def
                                     mnavFlightTile* tile, uint64_t* fingerprintOut)
 {
     *tile = (mnavFlightTile){0};
-    Header h = {0};
-    mnavTileResult result = ReadHeader(bytes, size, def, shape, tile, &h);
+    mnavField fields[FIELDS];
+    uint64_t fingerprint = 0;
+    mnavTileResult result = ReadHeader(bytes, size, def, shape, tile, fields, &fingerprint);
     if (result.result != mnav_success)
     {
         *tile = (mnavFlightTile){0};
         return result;
     }
-    size_t payload = PayloadBytes(tile->cubeCount, h.nodes, h.leaves);
-    if (h.payload != payload || size - MNAV_FLIGHT_HEADER_BYTES != payload ||
-        mnavHash64(MNAV_HASH_INIT, bytes + MNAV_FLIGHT_HEADER_BYTES, (int32_t)payload) != h.hash)
-    {
-        *tile = (mnavFlightTile){0};
-        return Refuse(mnav_errorInvalid, mnav_tilePayload, -1);
-    }
-    tile->nodeCount = (int32_t)h.nodes;
-    tile->nodeCapacity = tile->nodeCount;
-    tile->leafCount = (int32_t)h.leaves;
-    tile->leafCapacity = tile->leafCount;
     mnavResult allocated = Allocate(memory, tile);
-    mnavByteReader r = {bytes + MNAV_FLIGHT_HEADER_BYTES, payload, false};
-    result =
-        allocated == mnav_success ? ReadPayload(&r, tile) : Refuse(allocated, mnav_tileHeader, -1);
+    result = allocated == mnav_success ? ReadPayload(fields, tile)
+                                       : Refuse(allocated, mnav_tileHeader, -1);
     if (result.result != mnav_success)
     {
         mnavReleaseFlightTile(memory, tile);
         return result;
     }
-    *fingerprintOut = h.fingerprint;
+    *fingerprintOut = fingerprint;
     return Accept();
 }

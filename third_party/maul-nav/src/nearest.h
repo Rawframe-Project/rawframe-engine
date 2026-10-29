@@ -8,6 +8,8 @@
 
 #include "navmesh.h"
 
+#include "maul-nav/query.h"
+
 #include <stdint.h>
 
 // The tile places a box covers: columns x0 to x1, rows z0 to z1, kept
@@ -29,5 +31,13 @@ double mnavSurfaceHeight(const mnavNavmesh* navmesh, int32_t slot, int32_t polyg
 
 // A detail vertex of the tile in slot, in world meters.
 mnavPos3 mnavDetailWorld(const mnavNavmesh* navmesh, int32_t slot, const mnavDetailVertex* v);
+
+// The calls without the misuse count, for calls inside the library,
+// which run in its floating-point environment already.
+mnavResult mnavFindPolygonsWork(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+                                mnavPos3 center, mnavVec3 halfExtents, mnavPolygonId* polygonsOut,
+                                int32_t capacity, mnavFound* foundOut);
+mnavResult mnavFindNearestWork(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+                               mnavPos3 point, mnavVec3 halfExtents, mnavNearest* nearestOut);
 
 #endif // MAUL_NAV_SRC_NEAREST_H

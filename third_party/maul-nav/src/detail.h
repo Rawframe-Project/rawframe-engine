@@ -47,8 +47,6 @@ typedef struct mnavDetailMesh
     // Samples that found no height within the search radius and took the
     // polygon's own.
     int32_t fallbackHeights;
-    // Polygons whose outline could not be triangulated to the end.
-    int32_t failedPolygons;
     // Polygons that reached MNAV_DETAIL_VERTICES with samples still
     // beyond the maximum error.
     int32_t cappedPolygons;

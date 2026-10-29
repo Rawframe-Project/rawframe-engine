@@ -35,7 +35,7 @@ static mnavResult AddTriangle(mnavMemory* memory, const mnavBakeDef* def,
     }
     if (++*touching > def->limits.tileTriangles)
     {
-        return mnav_errorLimit;
+        return mnav_errorCapacity;
     }
     return mnavRasterizeTriangle(memory, frame, corners, (mnavAreaType)area, list);
 }
@@ -279,6 +279,7 @@ static void CheckHeightfield(const mnavHeightfield* heightfield)
             const mnavSpan* span = &heightfield->spans[i];
             MNAV_ASSERT(span->bottom < span->top);
             MNAV_ASSERT(i + 1 == end || span->top < heightfield->spans[i + 1].bottom);
+            (void)span;
         }
     }
 }
@@ -319,24 +320,15 @@ static mnavResult Merge(mnavMemory* memory, const mnavFragment* sorted, int32_t 
 static mnavResult Finish(mnavMemory* memory, const mnavBakeCells* cells, mnavResult result,
                          mnavFragmentList* list, mnavHeightfield* heightfield);
 
-mnavResult mnavBuildHeightfield(mnavMemory* memory, const mnavBakeDef* def,
-                                const mnavBakeCells* cells, const mnavTriangleMesh* meshes,
-                                int32_t meshCount, int32_t tileX, int32_t tileZ,
-                                mnavHeightfield* heightfield)
-{
-    const mnavBakeInput input = {meshes, meshCount, nullptr, 0, nullptr, 0, nullptr};
-    return mnavBuildHeightfieldInput(memory, def, cells, &input, tileX, tileZ, heightfield);
-}
-
 mnavResult mnavBuildHeightfieldInput(mnavMemory* memory, const mnavBakeDef* def,
                                      const mnavBakeCells* cells, const mnavBakeInput* input,
                                      int32_t tileX, int32_t tileZ, mnavHeightfield* heightfield)
 {
     *heightfield = (mnavHeightfield){0};
-    if (!mnavMakeTileFrame(def, cells, tileX, tileZ, &heightfield->frame))
-    {
-        return mnav_errorRange;
-    }
+    // The baker refused a tile past the input's extent before any stage.
+    bool framed = mnavMakeTileFrame(def, cells, tileX, tileZ, &heightfield->frame);
+    MNAV_ASSERT(framed);
+    (void)framed;
     mnavFragmentList list = {nullptr, 0, 0, def->limits.tileSpans};
     mnavResult result =
         Collect(memory, def, cells, input, tileX, tileZ, &heightfield->frame, &list);
@@ -349,10 +341,9 @@ mnavResult mnavBuildHeightfield2D(mnavMemory* memory, const mnavBakeDef* def,
                                   int32_t tileZ, mnavHeightfield* heightfield)
 {
     *heightfield = (mnavHeightfield){0};
-    if (!mnavMakeTileFrame(def, cells, tileX, tileZ, &heightfield->frame))
-    {
-        return mnav_errorRange;
-    }
+    bool framed = mnavMakeTileFrame(def, cells, tileX, tileZ, &heightfield->frame);
+    MNAV_ASSERT(framed);
+    (void)framed;
     mnavFragmentList list = {nullptr, 0, 0, def->limits.tileSpans};
     const mnavOutlineSet set = mnavOutlinesFor(outlines, outlineCount, index, tileX, tileZ);
     mnavResult result = mnavCollectOutlines(memory, def, &heightfield->frame, &set, &list);
@@ -360,7 +351,8 @@ mnavResult mnavBuildHeightfield2D(mnavMemory* memory, const mnavBakeDef* def,
 }
 
 // Sorts and merges the collected fragments into spans, when collecting
-// succeeded, and releases them.
+// succeeded, and releases them; what the heightfield holds after a
+// failure is its caller's to release.
 static mnavResult Finish(mnavMemory* memory, const mnavBakeCells* cells, mnavResult result,
                          mnavFragmentList* list, mnavHeightfield* heightfield)
 {
@@ -386,10 +378,6 @@ static mnavResult Finish(mnavMemory* memory, const mnavBakeCells* cells, mnavRes
     }
     mnavRelease(memory, cursors, columnCount, sizeof(uint32_t), alignof(uint32_t));
     mnavReleaseFragments(memory, list);
-    if (result != mnav_success)
-    {
-        mnavReleaseHeightfield(memory, heightfield);
-    }
     return result;
 }
 

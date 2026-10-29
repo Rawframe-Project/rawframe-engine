@@ -8,6 +8,7 @@
 // context's memory, which serves one query at a time.
 
 #include "fpenv.h"
+#include "invariant.h"
 #include "query.h"
 #include "query_filter.h"
 
@@ -111,6 +112,7 @@ static void SiftUp(Grid* g, int32_t at)
 static int32_t Pop(Grid* g)
 {
     mnavQuery* q = g->query;
+    MNAV_ASSERT(q->heapCount > 0 && g->nodes[q->indexHeap[0]].heap == 0);
     int32_t top = q->indexHeap[0];
     int32_t last = q->indexHeap[--q->heapCount];
     int32_t at = 0;
@@ -162,6 +164,9 @@ static uint32_t Slot(const Grid* g, int32_t x, int32_t y)
 static void Reach(Grid* g, int32_t from, int32_t x, int32_t y, double length, double cost)
 {
     mnavQuery* q = g->query;
+    // A step or a jump moves a cell or more and costs at least 0, as area
+    // costs are at least MNAV_MIN_AREA_COST.
+    MNAV_ASSERT(length > 0.0 && cost >= 0.0);
     const GridNode* parent = &g->nodes[from];
     double remaining = Octile(g, x, y, g->end.x, g->end.y);
     if (parent->length + length + remaining > g->limit)
@@ -194,6 +199,10 @@ static void Reach(Grid* g, int32_t from, int32_t x, int32_t y, double length, do
     n->cost = total;
     n->length = parent->length + length;
     n->parent = from;
+    // Each node enters the open list once, and the nodes made are at most
+    // its room; one in it is where the open list holds it.
+    MNAV_ASSERT(n->heap == MNAV_NO_NODE ? q->heapCount < q->limits.nodes
+                                        : q->indexHeap[n->heap] == node);
     if (n->heap == MNAV_NO_NODE)
     {
         Place(g, q->heapCount++, node);
@@ -409,6 +418,8 @@ static mnavGridPath PathTo(const Grid* g, int32_t last, mnavPathEnd end)
     int32_t count = 0;
     for (int32_t n = last; n != MNAV_NO_NODE; n = g->nodes[n].parent)
     {
+        // Each node made is on the way once at most.
+        MNAV_ASSERT(count < g->query->limits.nodes);
         cells[count++] = (mnavCell){g->nodes[n].x, g->nodes[n].y};
     }
     for (int32_t i = 0; i < count / 2; ++i)
@@ -434,19 +445,27 @@ static mnavGridPath PathTo(const Grid* g, int32_t last, mnavPathEnd end)
 
 static bool GoodGrid(const mnavGrid* grid, mnavCell a, mnavCell b)
 {
-    return grid->areas != nullptr && grid->width >= 1 && grid->width <= MNAV_MAX_GRID_SIDE &&
-           grid->height >= 1 && grid->height <= MNAV_MAX_GRID_SIDE && isfinite(grid->cellSize) &&
-           grid->cellSize > 0.0f && a.x >= 0 && a.y >= 0 && a.x < grid->width &&
-           a.y < grid->height && b.x >= 0 && b.y >= 0 && b.x < grid->width && b.y < grid->height;
+    return grid->areas != nullptr && grid->width >= 1 && grid->height >= 1 &&
+           isfinite(grid->cellSize) && grid->cellSize > 0.0f && a.x >= 0 && a.y >= 0 &&
+           a.x < grid->width && a.y < grid->height && b.x >= 0 && b.y >= 0 && b.x < grid->width &&
+           b.y < grid->height;
 }
 
 static MNAV_NOINLINE mnavResult FindGridPathWork(mnavQuery* query, const mnavGrid* grid,
                                                  const mnavQueryFilter* filter, mnavCell start,
                                                  mnavCell end, mnavGridPath* pathOut)
 {
+    if (query != nullptr && mnavHostCalledBack(&query->host))
+    {
+        return mnav_errorBusy;
+    }
     if (query == nullptr || grid == nullptr || pathOut == nullptr || !GoodGrid(grid, start, end))
     {
         return mnav_errorInvalid;
+    }
+    if (grid->width > MNAV_MAX_GRID_SIDE || grid->height > MNAV_MAX_GRID_SIDE)
+    {
+        return mnav_errorLimit;
     }
     const mnavQueryFilter* usable = nullptr;
     mnavResult checked = mnavCheckFilter(filter, &usable);
@@ -513,11 +532,19 @@ static MNAV_NOINLINE mnavResult FindGridPathWork(mnavQuery* query, const mnavGri
     return mnav_success;
 }
 
+static MNAV_NOINLINE mnavResult FindGridPathCounted(mnavQuery* query, const mnavGrid* grid,
+                                                    const mnavQueryFilter* filter, mnavCell start,
+                                                    mnavCell end, mnavGridPath* pathOut)
+{
+    return mnavHostCountInvalid(MNAV_HOST(query),
+                                FindGridPathWork(query, grid, filter, start, end, pathOut));
+}
+
 mnavResult mnavFindGridPath(mnavQuery* query, const mnavGrid* grid, const mnavQueryFilter* filter,
                             mnavCell start, mnavCell end, mnavGridPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = FindGridPathWork(query, grid, filter, start, end, pathOut);
+    mnavResult result = FindGridPathCounted(query, grid, filter, start, end, pathOut);
     mnavFloatEnvLeave(env);
     return result;
 }

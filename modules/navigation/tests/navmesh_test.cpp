@@ -79,7 +79,7 @@ RAWFRAME_TEST(APathGoesAroundAWallAndStraightOnceItIsGone) {
     // The same geometry gives the same bytes, here and on every platform.
     // A tile records the format and generator that baked it, so a Maul Nav
     // that moves either moves this value; its commit says which.
-    RAWFRAME_EXPECT(navmesh.fingerprint() == 0x511f670f4623190aULL);
+    RAWFRAME_EXPECT(navmesh.fingerprint() == 0x530d3bbdede27404ULL);
     auto again = Navmesh::create({});
     RAWFRAME_EXPECT(again.has_value() && (*again)->bake(kWalled, kLot).has_value());
     RAWFRAME_EXPECT(again.has_value() && (*again)->fingerprint() == navmesh.fingerprint());
@@ -147,4 +147,12 @@ RAWFRAME_TEST(SettingsAndAreasMaulNavRefusesAreRefused) {
     const std::vector<Mesh> kTorn = {Mesh{.vertices = {{0, 0, 0}, {1, 0, 0}}, .indices = {0, 1}}};
     RAWFRAME_EXPECT(!(*made)->bake(kTorn, {.minX = 0, .minZ = 0, .maxX = 1, .maxZ = 1}).has_value());
     RAWFRAME_EXPECT((*made)->statistics().tiles == 0 && (*made)->statistics().bakes == 0);
+    // Two tiles, then two more elsewhere: each bake fits, but the navmesh
+    // holds two, so the second runs out of room and keeps the first's.
+    const std::vector<Mesh> kWide = {floor(0, 0, 80, 20)};
+    RAWFRAME_EXPECT((*made)->bake(kWide, {.minX = 1, .minZ = 1, .maxX = 1, .maxZ = 1}).has_value());
+    RAWFRAME_EXPECT((*made)->bake(kWide, {.minX = 30, .minZ = 1, .maxX = 30, .maxZ = 1}).has_value());
+    const auto kFull = (*made)->bake(kWide, {.minX = 60, .minZ = 1, .maxX = 60, .maxZ = 1});
+    RAWFRAME_EXPECT(!kFull.has_value() && kFull.error().code() == code(NavigationError::Limit));
+    RAWFRAME_EXPECT((*made)->statistics().tiles == 2);
 }

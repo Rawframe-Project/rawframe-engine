@@ -20,21 +20,29 @@ extern "C"
 
 // The farthest a generated link may reach, across or down, in meters.
 #define MNAV_MAX_LINK_REACH 100.0f
+// The most polygons a landing's search box, a cell wide, may meet.
+#define MNAV_MAX_LINK_LANDINGS 32
 
     // Decides whether the way between two points is free for the agent:
     // the host's collision test. True to keep the link. It is called only
     // within mnavGenerateLinks, on the thread that called it, before that
     // call returns; never afterward or from another thread. Its answer
     // decides the links, so it runs in the library's floating-point
-    // environment: round to nearest, denormals kept.
+    // environment: round to nearest, denormals kept. It may call what only
+    // reads the navmesh, with a query context of its own, and
+    // mnavStageTile and mnavStageTileRemoval, which change nothing
+    // generation reads; while it runs, the navmesh's other stage calls,
+    // commit and destroy and every call on the generating context are
+    // refused with mnav_errorBusy, one misuse counted on that object.
     typedef bool (*mnavClearanceFn)(void* context, mnavPos3 from, mnavPos3 to);
 
     // How links are generated. Build it with mnavDefaultLinkGenDef.
     typedef struct mnavLinkGenDef
     {
         uint32_t cookie;
-        // The distance between samples along an edge, in meters, more than
-        // 0 and at most MNAV_MAX_LINK_REACH.
+        // The distance between samples along an edge, in meters, at most
+        // MNAV_MAX_LINK_REACH and at least the navmesh's cell size: samples
+        // closer than a cell tell nothing a cell's resolution can.
         float spacing;
         // The deepest drop, and the farthest jump across, in meters, 0 to
         // MNAV_MAX_LINK_REACH; 0 turns that kind off.
@@ -126,15 +134,27 @@ extern "C"
     /// @param countOut  Receives the number of links generated, also beyond
     ///                  the capacity.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a def
-    /// not from mnavDefaultLinkGenDef, a tile range backward, or a filter not
-    /// built from mnavDefaultQueryFilter;
-    /// `mnav_errorRange` for a def value or filter cost out of its range;
-    /// `mnav_errorCapacity` when more links were generated than the buffer
-    /// holds, the first capacity written.
+    /// not from mnavDefaultLinkGenDef, a def value NaN or below 0, a spacing of
+    /// 0 or below the navmesh's cell size, a detour other than 0 below 1 or
+    /// past 10^6, a kind of MNAV_LINK_KINDS or more, a tile range backward, or
+    /// a filter not built from mnavDefaultQueryFilter or with a NaN cost;
+    /// `mnav_errorLimit` for a def value past its MNAV_MAX_ bound, an infinity
+    /// included, or a filter cost past MNAV_MIN_AREA_COST or
+    /// MNAV_MAX_AREA_COST, an infinity included; `mnav_errorCapacity` when more
+    /// links were generated than the buffer holds, the first capacity written;
+    /// `mnav_errorLimit` when generation stops, the links found so far counted
+    /// and the first capacity written: at a link past MNAV_MAX_LINKS, the most
+    /// a navmesh holds, or at a landing's search box meeting more than
+    /// MNAV_MAX_LINK_LANDINGS polygons. Also `mnav_errorBusy` when called back
+    /// in from host code a call using the context runs (a link generation's
+    /// clearance test, a hierarchy's allocator as it builds), one misuse
+    /// counted.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
     /// and no commit runs on the navmesh. The def's clearance test runs on
-    /// the calling thread, within the call.
+    /// the calling thread, within the call; while it runs, the navmesh's
+    /// stage calls but mnavStageTile and mnavStageTileRemoval are refused
+    /// with `mnav_errorBusy` from any thread.
     MNAV_NODISCARD MNAV_API mnavResult
     mnavGenerateLinks(mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
                       const mnavLinkGenDef* def, int32_t tileX0, int32_t tileZ0, int32_t tileX1,

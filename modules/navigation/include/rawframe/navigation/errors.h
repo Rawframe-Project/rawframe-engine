@@ -13,13 +13,12 @@ inline constexpr result::ErrorDomain kNavigationDomain{base::parseBits128Hex("48
 enum class NavigationError : std::uint32_t {
     /// A setting, an input, or a query is out of range: a setting Maul Nav
     /// refuses, geometry that is not finite or past what a navmesh holds,
-    /// a point that is not finite.
+    /// a point that is not finite. More room would not help.
     Invalid = 1,
-    /// A named limit was reached: the tiles, a tile's triangles, polygons,
-    /// or links, the memory, or a search's nodes.
+    /// Room ran out: the tiles, the memory or a search's nodes a navmesh
+    /// was made with, the agents avoidance holds, or memory itself. More
+    /// room would succeed.
     Limit = 2,
-    /// Memory ran out.
-    Capacity = 3,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(NavigationError error) noexcept {

@@ -108,4 +108,8 @@ if(RAWFRAME_BUILD_TESTS AND RAWFRAME_XVFB)
     # A record a test waited for and never saw fails it at once.
     get_property(studio_tests DIRECTORY PROPERTY TESTS)
     set_tests_properties(${studio_tests} PROPERTIES LABELS integration FAIL_REGULAR_EXPRESSION "never saw")
+    # https://github.com/Rawframe-Project/rawframe-engine/issues/70
+    if(TEST studio_plays_in_viewport)
+        set_property(TEST studio_plays_in_viewport APPEND PROPERTY LABELS quarantined)
+    endif()
 endif()

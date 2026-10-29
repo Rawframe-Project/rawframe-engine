@@ -53,14 +53,15 @@ typedef struct mnavCompactField
 } mnavCompactField;
 
 // Builds the open-space field of a filtered heightfield's walkable spans
-// for an agent of height and step cells.
+// for an agent of height and step cells. Whatever the result,
+// mnavReleaseCompactField frees what the field holds.
 mnavResult mnavBuildCompactField(mnavMemory* memory, const mnavHeightfield* heightfield,
                                  int32_t height, int32_t step, mnavCompactField* field);
 
 void mnavReleaseCompactField(mnavMemory* memory, mnavCompactField* field);
 
 // Allocates a field of spanCount spans over a frame, its contents unset;
-// on failure it holds nothing.
+// whatever the result, mnavReleaseCompactField frees what it holds.
 mnavResult mnavAllocateCompactField(mnavMemory* memory, const mnavTileFrame* frame,
                                     int32_t spanCount, mnavCompactField* field);
 

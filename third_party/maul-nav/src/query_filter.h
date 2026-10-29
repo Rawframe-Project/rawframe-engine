@@ -14,7 +14,8 @@
 
 // Checks a caller's filter, NULL for the default, and points usable at the
 // filter to use: mnav_errorInvalid for one not built from
-// mnavDefaultQueryFilter, mnav_errorRange for a cost out of its range.
+// mnavDefaultQueryFilter or with a NaN cost, mnav_errorLimit for a cost
+// past MNAV_MIN_AREA_COST or MNAV_MAX_AREA_COST, an infinity included.
 mnavResult mnavCheckFilter(const mnavQueryFilter* filter, const mnavQueryFilter** usable);
 
 // Whether a filter includes an area type. No polygon has area 0. Inline:
