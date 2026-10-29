@@ -1626,7 +1626,7 @@
               "name": "diagnostic_out",
               "type": "struct.diagnostic",
               "pointer": "mutable",
-              "doc": "Receives the record; untouched unless one is taken."
+              "doc": "Receives the record; zeros unless one is taken."
             }
           ],
           "thread_safety": {
@@ -1743,7 +1743,7 @@
               "name": "notification_out",
               "type": "struct.instance_notification",
               "pointer": "mutable",
-              "doc": "Receives the record."
+              "doc": "Receives the record; zeros unless one is taken."
             }
           ],
           "thread_safety": {
@@ -1817,7 +1817,7 @@
               "name": "info_out",
               "type": "struct.adapter_info",
               "pointer": "mutable",
-              "doc": "Receives the facts."
+              "doc": "Receives the facts; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -6405,7 +6405,7 @@
               "name": "features_out",
               "type": "struct.features",
               "pointer": "mutable",
-              "doc": "Receives the features."
+              "doc": "Receives the features; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -6456,7 +6456,7 @@
               "name": "limits_out",
               "type": "struct.limits",
               "pointer": "mutable",
-              "doc": "Receives the limits."
+              "doc": "Receives the limits; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -6512,7 +6512,7 @@
               "name": "caps_out",
               "type": "struct.format_caps",
               "pointer": "mutable",
-              "doc": "Receives the capabilities."
+              "doc": "Receives the capabilities; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -6915,7 +6915,7 @@
               "name": "features_out",
               "type": "struct.features",
               "pointer": "mutable",
-              "doc": "Receives the features."
+              "doc": "Receives the features; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -6944,7 +6944,7 @@
               "name": "limits_out",
               "type": "struct.limits",
               "pointer": "mutable",
-              "doc": "Receives the limits."
+              "doc": "Receives the limits; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -6973,7 +6973,7 @@
               "name": "budgets_out",
               "type": "struct.device_budgets",
               "pointer": "mutable",
-              "doc": "Receives the budgets."
+              "doc": "Receives the budgets; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -7002,7 +7002,7 @@
               "name": "period_out",
               "type": "float64",
               "pointer": "mutable",
-              "doc": "Receives the nanoseconds per tick."
+              "doc": "Receives the nanoseconds per tick; 0 on any failure."
             }
           ],
           "thread_safety": {
@@ -7072,7 +7072,7 @@
               "name": "diagnostic_out",
               "type": "struct.diagnostic",
               "pointer": "mutable",
-              "doc": "Receives the record; untouched unless one is taken."
+              "doc": "Receives the record; zeros unless one is taken."
             }
           ],
           "thread_safety": {
@@ -7319,7 +7319,7 @@
               "name": "report_out",
               "type": "struct.device_loss_report",
               "pointer": "mutable",
-              "doc": "Receives the report."
+              "doc": "Receives the report; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -11506,7 +11506,7 @@
               "name": "caps_out",
               "type": "struct.surface_caps",
               "pointer": "mutable",
-              "doc": "Receives the capabilities."
+              "doc": "Receives the capabilities; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -12152,7 +12152,7 @@
               "name": "notification_out",
               "type": "struct.device_notification",
               "pointer": "mutable",
-              "doc": "Receives the record."
+              "doc": "Receives the record; zeros unless one is taken."
             }
           ],
           "thread_safety": {
@@ -13451,7 +13451,7 @@
               "name": "kept_out",
               "type": "bool",
               "pointer": "mutable",
-              "doc": "Receives whether it is kept."
+              "doc": "Receives whether it is kept; false on any failure."
             }
           ],
           "thread_safety": {
@@ -14041,7 +14041,7 @@
               "name": "plan_out",
               "type": "struct.resource_plan",
               "pointer": "mutable",
-              "doc": "Receives the plan."
+              "doc": "Receives the plan; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -14104,7 +14104,7 @@
               "name": "plan_out",
               "type": "struct.pass_plan",
               "pointer": "mutable",
-              "doc": "Receives the plan."
+              "doc": "Receives the plan; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -14181,7 +14181,7 @@
               "name": "usage_out",
               "type": "struct.frame_usage",
               "pointer": "mutable",
-              "doc": "Receives the usage."
+              "doc": "Receives the usage; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -15711,7 +15711,7 @@
               "name": "info_out",
               "type": "struct.shader_info",
               "pointer": "mutable",
-              "doc": "Receives what it holds."
+              "doc": "Receives what it holds; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -21712,13 +21712,13 @@
               "name": "create_info_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the const VkDeviceCreateInfo*."
+              "doc": "Receives the const VkDeviceCreateInfo*; NULL on any failure."
             },
             {
               "name": "physical_device_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the VkPhysicalDevice."
+              "doc": "Receives the VkPhysicalDevice; NULL on any failure."
             }
           ],
           "thread_safety": {
@@ -21769,7 +21769,7 @@
               "name": "physical_device_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the VkPhysicalDevice."
+              "doc": "Receives the VkPhysicalDevice; NULL on any failure."
             }
           ],
           "thread_safety": {
@@ -21815,13 +21815,13 @@
               "name": "family_out",
               "type": "uint32",
               "pointer": "mutable",
-              "doc": "Receives the queue family index."
+              "doc": "Receives the queue family index; 0 on any failure."
             },
             {
               "name": "index_out",
               "type": "uint32",
               "pointer": "mutable",
-              "doc": "Receives the queue index."
+              "doc": "Receives the queue index; 0 on any failure."
             }
           ],
           "thread_safety": {
@@ -21867,31 +21867,31 @@
               "name": "instance_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the VkInstance."
+              "doc": "Receives the VkInstance; NULL on any failure."
             },
             {
               "name": "physical_device_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the VkPhysicalDevice."
+              "doc": "Receives the VkPhysicalDevice; NULL on any failure."
             },
             {
               "name": "device_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the VkDevice."
+              "doc": "Receives the VkDevice; NULL on any failure."
             },
             {
               "name": "get_instance_proc_addr_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the vkGetInstanceProcAddr the library uses."
+              "doc": "Receives the vkGetInstanceProcAddr the library uses; NULL on any failure."
             },
             {
               "name": "get_device_proc_addr_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the vkGetDeviceProcAddr the library uses."
+              "doc": "Receives the vkGetDeviceProcAddr the library uses; NULL on any failure."
             }
           ],
           "thread_safety": {
@@ -21999,7 +21999,7 @@
               "name": "texture_out",
               "type": "struct.vulkan_texture_info",
               "pointer": "mutable",
-              "doc": "Receives the image."
+              "doc": "Receives the image; zeros on any failure."
             }
           ],
           "thread_safety": {
@@ -22105,13 +22105,13 @@
               "name": "device_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the ID3D12Device*."
+              "doc": "Receives the ID3D12Device*; NULL on any failure."
             },
             {
               "name": "queue_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the ID3D12CommandQueue* the device submits on."
+              "doc": "Receives the ID3D12CommandQueue* the device submits on; NULL on any failure."
             }
           ],
           "thread_safety": {
@@ -22162,7 +22162,7 @@
               "name": "resource_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the ID3D12Resource*."
+              "doc": "Receives the ID3D12Resource*; NULL on any failure."
             }
           ],
           "thread_safety": {
@@ -22268,13 +22268,13 @@
               "name": "device_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the id<MTLDevice>."
+              "doc": "Receives the id<MTLDevice>; NULL on any failure."
             },
             {
               "name": "queue_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the id<MTLCommandQueue> of the device's graphics passes, which a native pass's command buffer comes from."
+              "doc": "Receives the id<MTLCommandQueue> of the device's graphics passes, which a native pass's command buffer comes from; NULL on any failure."
             }
           ],
           "thread_safety": {
@@ -22325,7 +22325,7 @@
               "name": "texture_out",
               "type": "void",
               "pointer": "out",
-              "doc": "Receives the id<MTLTexture>."
+              "doc": "Receives the id<MTLTexture>; NULL on any failure."
             }
           ],
           "thread_safety": {
@@ -22668,5 +22668,5 @@
       ]
     }
   ],
-  "contract_version": 23
+  "contract_version": 24
 }

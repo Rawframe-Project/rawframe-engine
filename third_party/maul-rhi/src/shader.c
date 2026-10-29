@@ -7,6 +7,7 @@
 
 #include "device_core.h"
 #include "label.h"
+#include "outputs.h"
 
 #include "generated/out_copies.h"
 
@@ -299,6 +300,7 @@ mrhiResult mrhiDestroyShader(mrhiDevice* device, mrhiShaderId shader)
 
 mrhiResult mrhiShader_GetInfo(mrhiDevice* device, mrhiShaderId shader, mrhiShaderInfo* infoOut)
 {
+    mrhiClearOutput(infoOut, sizeof(*infoOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

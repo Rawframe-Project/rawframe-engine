@@ -280,7 +280,7 @@ extern "C"
     /// @param instance  The instance.
     /// @param surface   The surface.
     /// @param adapter   The adapter.
-    /// @param capsOut   Receives the capabilities.
+    /// @param capsOut   Receives the capabilities; zeros on any failure.
     /// @return `mrhi_success`, with presentable false when the adapter cannot
     /// present there; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for a surface or adapter the instance no longer has.

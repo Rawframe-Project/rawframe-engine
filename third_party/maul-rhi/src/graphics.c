@@ -121,10 +121,19 @@ static mrhiResult CheckBuffers(mrhiDevice* device, const mrhiGraphicsPipelineDef
     return status;
 }
 
-// One vertex attribute: in a buffer, of a known format, aligned, within
-// its buffer's stride, and at a location within the limit.
-static mrhiResult CheckAttribute(mrhiDevice* device, const mrhiGraphicsPipelineDef* def,
-                                 const mrhiVertexAttribute* attribute)
+// How far the attributes reach toward two device limits: the furthest
+// end of an attribute in a buffer of stride 0 against vertexStride, and
+// one past the highest location against vertexAttributes.
+typedef struct Reach
+{
+    uint64_t end;
+    uint64_t locations;
+} Reach;
+
+// One vertex attribute: in a buffer, of a known format, aligned and
+// within its buffer's stride; its reach toward the limits goes to reach.
+static mrhiResult CheckAttribute(const mrhiGraphicsPipelineDef* def,
+                                 const mrhiVertexAttribute* attribute, Reach* reach)
 {
     mrhiVertexLayout layout = mrhiGetVertexLayout(attribute->format);
     if (attribute->buffer >= def->vertexBufferCount || layout.bytes == 0)
@@ -134,13 +143,13 @@ static mrhiResult CheckAttribute(mrhiDevice* device, const mrhiGraphicsPipelineD
     uint32_t alignment = layout.bytes < 4 ? layout.bytes : 4;
     uint64_t end = (uint64_t)attribute->offset + layout.bytes;
     uint32_t stride = def->vertexBuffers[attribute->buffer].stride;
-    mrhiResult status = Need(attribute->offset % alignment == 0 && (stride == 0 || end <= stride));
-    if (stride == 0)
+    if (stride == 0 && end > reach->end)
     {
-        status = Worse(status, MRHI_DEVICE_LIMIT(device, vertexStride, end));
+        reach->end = end;
     }
-    return Worse(status,
-                 MRHI_DEVICE_LIMIT(device, vertexAttributes, (uint64_t)attribute->location + 1));
+    uint64_t locations = (uint64_t)attribute->location + 1;
+    reach->locations = locations > reach->locations ? locations : reach->locations;
+    return Need(attribute->offset % alignment == 0 && (stride == 0 || end <= stride));
 }
 
 // The binding tables the reflection's layout declares: one past the
@@ -178,14 +187,20 @@ static mrhiResult CheckVertex(mrhiDevice* device, const mrhiGraphicsPipelineDef*
         return Worse(status, count);
     }
     const mrhiVertexAttribute* attributes = def->vertexAttributes;
+    Reach reach = {0};
     for (uint32_t i = 0; i < def->vertexAttributeCount && status != mrhi_errorInvalid; ++i)
     {
-        status = Worse(status, CheckAttribute(device, def, &attributes[i]));
+        status = Worse(status, CheckAttribute(def, &attributes[i], &reach));
         for (uint32_t j = 0; j < i; ++j)
         {
             status = Worse(status, Need(attributes[j].location != attributes[i].location));
         }
     }
+    // Each limit is checked once, at the furthest reach, so that a def
+    // names it once however many attributes pass it, and the diagnostics
+    // keep room for the check that refuses the def.
+    status = Worse(status, MRHI_DEVICE_LIMIT(device, vertexStride, reach.end));
+    status = Worse(status, MRHI_DEVICE_LIMIT(device, vertexAttributes, reach.locations));
     for (uint32_t i = 0; i < stages.vertex->inputCount && status != mrhi_errorInvalid; ++i)
     {
         const mrhiShaderVariable* input = &stages.reflection->inputs[stages.vertex->firstInput + i];

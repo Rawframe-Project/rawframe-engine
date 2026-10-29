@@ -17,7 +17,8 @@
 # driver writes the pipeline's values; a fixed one keeps its default. DXC
 # compiles each entry for SHADER_MODEL, 6.1 for one reading the view index, 6.2
 # with 16-bit types for a module declaring Float16, to DIR/NAME.dxil without
-# reflection or debug data. HLSL that reads a loop's variable after its continue
+# reflection or debug data, and with the float math as the source writes it
+# (DXC_FLAGS). HLSL that reads a loop's variable after its continue
 # block has stepped it is refused (stale_reads). spirv-cross and dxc must be on
 # the path.
 #
@@ -33,6 +34,12 @@ import sys
 import tempfile
 
 SHADER_MODEL = "6_0"
+# What every DXC compile of the family's DXIL passes. -Gis keeps the float
+# math strict: without it DXC marks each float operation fast, then
+# reassociates and folds it (c - (c - a) becomes a), so D3D12 computes
+# something other than the source and the other APIs. The shader stamp
+# records these flags and refuses DXIL made without -Gis.
+DXC_FLAGS = ("-Gis", "-Qstrip_reflect", "-Qstrip_debug")
 STAGES = {"vertex": ("vert", "vs"), "fragment": ("frag", "ps"), "compute": ("comp", "cs")}
 OP_VARIABLE = 59
 STORAGE_PUSH_CONSTANT = 9
@@ -225,8 +232,8 @@ def main():
                                        "after its loop stepped it; read it inside the loop's body")
                 with open(hlsl, "w", encoding="utf-8") as f:
                     f.write(declaration + source)
-                run(["dxc", "-T", f"{profile}_{model}", "-E", "main", "-Qstrip_reflect",
-                     "-Qstrip_debug", *(["-enable-16bit-types"] if float16 else []), *defines,
+                run(["dxc", "-T", f"{profile}_{model}", "-E", "main", *DXC_FLAGS,
+                     *(["-enable-16bit-types"] if float16 else []), *defines,
                      "-Fo",
                      os.path.join(folder, entry["name"] + ".dxil"), hlsl],
                     f"dxc on {entry['name']}")

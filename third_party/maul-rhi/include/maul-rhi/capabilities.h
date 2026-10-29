@@ -326,7 +326,7 @@ extern "C"
     ///
     /// @param instance     The instance.
     /// @param adapter      The adapter.
-    /// @param featuresOut  Receives the features.
+    /// @param featuresOut  Receives the features; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for an adapter the instance no longer has.
     /// @par Thread safety
@@ -339,7 +339,7 @@ extern "C"
     ///
     /// @param instance   The instance.
     /// @param adapter    The adapter.
-    /// @param limitsOut  Receives the limits.
+    /// @param limitsOut  Receives the limits; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorStale` for an adapter the instance no longer has.
     /// @par Thread safety
@@ -354,7 +354,7 @@ extern "C"
     /// @param instance  The instance.
     /// @param adapter   The adapter.
     /// @param format    The format.
-    /// @param capsOut   Receives the capabilities.
+    /// @param capsOut   Receives the capabilities; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument or a
     /// format the contract does not list; `mrhi_errorStale` for an adapter the
     /// instance no longer has.

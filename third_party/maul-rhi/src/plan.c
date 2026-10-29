@@ -955,6 +955,7 @@ mrhiResult mrhiDevice_GetFrameBarriers(mrhiDevice* device, mrhiBarrier* barriers
 mrhiResult mrhiResource_GetPlan(mrhiDevice* device, mrhiResourceId resource,
                                 mrhiResourcePlan* planOut)
 {
+    mrhiClearOutput(planOut, sizeof(*planOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;

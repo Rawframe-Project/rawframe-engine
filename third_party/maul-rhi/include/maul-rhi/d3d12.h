@@ -27,9 +27,9 @@ extern "C"
     /// FidelityFX SDK's backend, XeSS's xessD3D12CreateContext).
     ///
     /// @param device     The device.
-    /// @param deviceOut  Receives the ID3D12Device*.
+    /// @param deviceOut  Receives the ID3D12Device*; NULL on any failure.
     /// @param queueOut   Receives the ID3D12CommandQueue* the device submits
-    ///                   on.
+    ///                   on; NULL on any failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the device's
     /// driver is not D3D12; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
@@ -48,7 +48,7 @@ extern "C"
     ///
     /// @param device       The device.
     /// @param texture      The texture.
-    /// @param resourceOut  Receives the ID3D12Resource*.
+    /// @param resourceOut  Receives the ID3D12Resource*; NULL on any failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the device's
     /// driver is not D3D12; `mrhi_errorStale` for a texture the device no
     /// longer has; `mrhi_errorInvalid` for a NULL argument.

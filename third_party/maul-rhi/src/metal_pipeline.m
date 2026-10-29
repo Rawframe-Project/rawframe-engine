@@ -43,7 +43,7 @@ static void* PointerOf(uint64_t handle)
     return (void*)(uintptr_t)handle;
 }
 
-static MTLCompileOptions* CompileOptions(void)
+MTLCompileOptions* mrhiMetalCompileOptions(void)
 {
     MTLCompileOptions* options = [[[MTLCompileOptions alloc] init] autorelease];
     if (@available(macOS 15.0, iOS 18.0, *))
@@ -90,7 +90,7 @@ static bool TakeMetallib(id<MTLDevice> device, const mrhiContainer* container, N
 static bool CompileMsl(id<MTLDevice> device, const mrhiContainer* container, NSString* label,
                        id<MTLLibrary>* libraries)
 {
-    MTLCompileOptions* options = CompileOptions();
+    MTLCompileOptions* options = mrhiMetalCompileOptions();
     for (uint32_t i = 0; i < container->entryCount; ++i)
     {
         mrhiMetalEntry entry = mrhiContainerMetalEntry(container, i);

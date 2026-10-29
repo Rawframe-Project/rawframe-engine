@@ -18,6 +18,7 @@
 #include "invariant.h"
 #include "metal_encode.h"
 #include "metal_lanes.h"
+#include "metal_pipeline.h"
 #include "metal_resource.h"
 #include "metal_surface.h"
 
@@ -50,7 +51,9 @@ static id<MTLComputePipelineState> MakeClamp(id<MTLDevice> device)
 {
     NSError* error = nil;
     NSString* source = [NSString stringWithUTF8String:s_clampSource];
-    id<MTLLibrary> library = [device newLibraryWithSource:source options:nil error:&error];
+    id<MTLLibrary> library = [device newLibraryWithSource:source
+                                                  options:mrhiMetalCompileOptions()
+                                                    error:&error];
     id<MTLFunction> function = [library newFunctionWithName:@"clampRecords"];
     id<MTLComputePipelineState> state =
         function == nil ? nil : [device newComputePipelineStateWithFunction:function error:&error];

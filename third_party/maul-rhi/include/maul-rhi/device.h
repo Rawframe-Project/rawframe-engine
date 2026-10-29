@@ -186,7 +186,7 @@ extern "C"
     /// Reads the optional features a device was granted.
     ///
     /// @param device       The device.
-    /// @param featuresOut  Receives the features.
+    /// @param featuresOut  Receives the features; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
@@ -196,7 +196,7 @@ extern "C"
     /// Reads the limits a device was granted.
     ///
     /// @param device     The device.
-    /// @param limitsOut  Receives the limits.
+    /// @param limitsOut  Receives the limits; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
@@ -208,7 +208,7 @@ extern "C"
     /// diagnostics. A library given a device learns them here.
     ///
     /// @param device      The device.
-    /// @param budgetsOut  Receives the budgets.
+    /// @param budgetsOut  Receives the budgets; zeros on any failure.
     /// @return `mrhi_success`, in any device state; `mrhi_errorInvalid` for a
     /// NULL argument.
     /// @par Thread safety
@@ -220,7 +220,7 @@ extern "C"
     /// the API reports nanoseconds already.
     ///
     /// @param device     The device.
-    /// @param periodOut  Receives the nanoseconds per tick.
+    /// @param periodOut  Receives the nanoseconds per tick; 0 on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorState` for a device that is not ready;
     /// `mrhi_errorUnsupported` for a device without the timestamp_query
@@ -248,8 +248,7 @@ extern "C"
     /// the diagnostics budget; refusals past it are counted but not recorded.
     ///
     /// @param device         The device.
-    /// @param diagnosticOut  Receives the record; untouched unless one is
-    ///                       taken.
+    /// @param diagnosticOut  Receives the record; zeros unless one is taken.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
     /// drained or keeps none; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorBusy` for a call from inside the device's allocator.
@@ -306,7 +305,7 @@ extern "C"
     /// Reads what is known about a lost device's loss.
     ///
     /// @param device     The device.
-    /// @param reportOut  Receives the report.
+    /// @param reportOut  Receives the report; zeros on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorState` for a device that is not lost.
     /// @par Thread safety

@@ -27,10 +27,10 @@ extern "C"
     /// MTLFXTemporalScalerDescriptor makes its scaler from the MTLDevice).
     ///
     /// @param device     The device.
-    /// @param deviceOut  Receives the id<MTLDevice>.
+    /// @param deviceOut  Receives the id<MTLDevice>; NULL on any failure.
     /// @param queueOut   Receives the id<MTLCommandQueue> of the device's
     ///                   graphics passes, which a native pass's command buffer
-    ///                   comes from.
+    ///                   comes from; NULL on any failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the device's
     /// driver is not Metal; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
@@ -43,7 +43,7 @@ extern "C"
     ///
     /// @param device      The device.
     /// @param texture     The texture.
-    /// @param textureOut  Receives the id<MTLTexture>.
+    /// @param textureOut  Receives the id<MTLTexture>; NULL on any failure.
     /// @return `mrhi_success`; `mrhi_errorUnsupported` where the device's
     /// driver is not Metal; `mrhi_errorStale` for a texture the device no
     /// longer has; `mrhi_errorInvalid` for a NULL argument.

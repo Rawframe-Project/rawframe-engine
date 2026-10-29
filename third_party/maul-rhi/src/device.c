@@ -13,6 +13,7 @@
 #include "instance_core.h"
 #include "invariant.h"
 #include "label.h"
+#include "outputs.h"
 
 #include "generated/out_copies.h"
 #include "maul-rhi/vulkan.h"
@@ -658,6 +659,7 @@ mrhiResult mrhiDeviceUsable(const mrhiDevice* device)
 
 mrhiResult mrhiDevice_GetFeatures(mrhiDevice* device, mrhiFeatures* featuresOut)
 {
+    mrhiClearOutput(featuresOut, sizeof(*featuresOut));
     if (device == nullptr || featuresOut == nullptr)
     {
         return device == nullptr ? mrhi_errorInvalid
@@ -669,6 +671,7 @@ mrhiResult mrhiDevice_GetFeatures(mrhiDevice* device, mrhiFeatures* featuresOut)
 
 mrhiResult mrhiDevice_GetLimits(mrhiDevice* device, mrhiLimits* limitsOut)
 {
+    mrhiClearOutput(limitsOut, sizeof(*limitsOut));
     if (device == nullptr || limitsOut == nullptr)
     {
         return device == nullptr ? mrhi_errorInvalid
@@ -680,6 +683,7 @@ mrhiResult mrhiDevice_GetLimits(mrhiDevice* device, mrhiLimits* limitsOut)
 
 mrhiResult mrhiDevice_GetBudgets(mrhiDevice* device, mrhiDeviceBudgets* budgetsOut)
 {
+    mrhiClearOutput(budgetsOut, sizeof(*budgetsOut));
     if (device == nullptr || budgetsOut == nullptr)
     {
         return device == nullptr ? mrhi_errorInvalid
@@ -691,6 +695,7 @@ mrhiResult mrhiDevice_GetBudgets(mrhiDevice* device, mrhiDeviceBudgets* budgetsO
 
 mrhiResult mrhiDevice_GetTimestampPeriod(mrhiDevice* device, double* periodOut)
 {
+    mrhiClearOutput(periodOut, sizeof(*periodOut));
     if (device == nullptr || periodOut == nullptr)
     {
         return device == nullptr ? mrhi_errorInvalid
@@ -711,6 +716,7 @@ mrhiResult mrhiDevice_GetTimestampPeriod(mrhiDevice* device, double* periodOut)
 
 mrhiResult mrhiDevice_GetLossReport(mrhiDevice* device, mrhiDeviceLossReport* reportOut)
 {
+    mrhiClearOutput(reportOut, sizeof(*reportOut));
     if (device == nullptr || reportOut == nullptr)
     {
         return device == nullptr ? mrhi_errorInvalid
@@ -731,6 +737,7 @@ uint64_t mrhiDevice_GetMisuse(mrhiDevice* device)
 
 mrhiResult mrhiDevice_TakeDiagnostic(mrhiDevice* device, mrhiDiagnostic* diagnosticOut)
 {
+    mrhiClearOutput(diagnosticOut, sizeof(*diagnosticOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
