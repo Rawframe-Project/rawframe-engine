@@ -75,6 +75,7 @@ rules() {
     step "repository rules"
     python3 tools/check_repo.py || fail "repository rules"
     python3 tools/check_repo_test.py -q || fail "repository rules' tests"
+    python3 tools/click_test.py -q || fail "click.py's tests"
     if [ -f "$org/scripts/docs_check.py" ]; then
         local exclude=()
         while read -r path; do

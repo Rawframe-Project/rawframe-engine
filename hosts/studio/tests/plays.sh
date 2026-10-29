@@ -73,7 +73,9 @@ grep -q '^window.height' "$work/studio.conf" || printf 'window.height = 720\n' >
 # Its preferences its own, never those of whoever runs it.
 grep -q '^studio.preferences' "$work/studio.conf" ||
     printf 'studio.preferences = %s\n' "$work/studio.preferences" >>"$work/studio.conf"
-"$1" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
+# In a process group of its own, which click.py kills if it will not stop,
+# the played server and client with it.
+setsid "$1" --config "$work/studio.conf" >"$work/studio.log" 2>&1 &
 studio=$!
 echo "$studio" >"$work/studio.pid"
 # A machine with no device for the played client is a skip: Studio is
@@ -99,8 +101,12 @@ for step in "${@:7}"; do
     steps+=("${step//\{game\}/$work/game}")
 done
 python3 "$here/../../../tools/click.py" "$studio" "$work/studio.log" studio_shown "$work/studio.pid" "${steps[@]}"
+clicks=$?
 wait "$studio"
 status=$?
+# Clicks that failed fail the test, though Studio stopped cleanly when
+# click.py stopped it.
+[ "$status" -ne 0 ] || status=$clicks
 if [ -n "${watcher:-}" ]; then
     kill "$watcher" 2>/dev/null
     wait "$watcher" 2>/dev/null
