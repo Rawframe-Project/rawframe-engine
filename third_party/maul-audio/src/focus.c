@@ -25,7 +25,8 @@ void maudReportFocus(maudContext* context, maudFocus focus)
                          &(maudNotification){.kind = maud_notifyFocusChanged, .focus = focus});
 }
 
-maudResult maudRequestFocus(maudContext* context, maudFocusRequest request, maudDeviceRole role)
+maudResult maudContext_RequestFocus(maudContext* context, maudFocusRequest request,
+                                    maudDeviceRole role)
 {
     if (context == nullptr || request > maud_focusBriefMixed || role > maud_roleCommunications)
     {
@@ -42,7 +43,7 @@ maudResult maudRequestFocus(maudContext* context, maudFocusRequest request, maud
     return context->backend->requestFocus(context, request, role);
 }
 
-maudResult maudGetContextFocus(const maudContext* context, maudFocus* focusOut)
+maudResult maudContext_GetFocus(const maudContext* context, maudFocus* focusOut)
 {
     // Cleared first, so a failure leaves zero.
     if (focusOut != nullptr)

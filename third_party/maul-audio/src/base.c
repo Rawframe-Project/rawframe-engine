@@ -10,7 +10,7 @@ maudVersion maudGetVersion(void)
     return (maudVersion){MAUD_VERSION_MAJOR, MAUD_VERSION_MINOR, MAUD_VERSION_PATCH};
 }
 
-const char* maudResultName(maudResult result)
+const char* maudGetResultName(maudResult result)
 {
     switch (result)
     {

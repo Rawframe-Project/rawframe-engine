@@ -60,8 +60,8 @@ struct maudSpatializer
     uint32_t* free;
     uint32_t freeCount;
     uint32_t maxSamples;
-    maudAnyHitFn* anyHit;
-    maudClosestHitFn* closestHit;
+    maudAnyHitFunction* anyHit;
+    maudClosestHitFunction* closestHit;
     void* rayContext;
     uint32_t maxSurfaces;
     uint32_t materialCapacity;
@@ -73,8 +73,8 @@ struct maudSpatializer
     // The sources walking a transmission path, and how far each got.
     uint32_t* walkers;
     float* walked;
-    maudEnqueueTaskFn* enqueueTask;
-    maudFinishTaskFn* finishTask;
+    maudEnqueueTaskFunction* enqueueTask;
+    maudFinishTaskFunction* finishTask;
     void* userTaskContext;
     // The unit ball's points, a round's rays and answers, and where each
     // source's rays start in the round.

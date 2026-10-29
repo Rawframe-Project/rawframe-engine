@@ -189,12 +189,12 @@ static maudResult SetStarted(maudContext* context, maudStreamId stream, bool sta
     return maud_success;
 }
 
-maudResult maudStartStream(maudContext* context, maudStreamId stream)
+maudResult maudStream_Start(maudContext* context, maudStreamId stream)
 {
     return SetStarted(context, stream, true);
 }
 
-maudResult maudStopStream(maudContext* context, maudStreamId stream)
+maudResult maudStream_Stop(maudContext* context, maudStreamId stream)
 {
     return SetStarted(context, stream, false);
 }
@@ -207,8 +207,8 @@ static bool SharesClock(const maudContext* context, const maudDuplex* duplex)
            context->backend->sharesClock(context, duplex->output, duplex->input);
 }
 
-maudResult maudGetStreamStatus(const maudContext* context, maudStreamId stream,
-                               maudStreamStatus* statusOut)
+maudResult maudStream_GetStatus(const maudContext* context, maudStreamId stream,
+                                maudStreamStatus* statusOut)
 {
     // Cleared first, so a failure leaves zero.
     if (statusOut != nullptr)
@@ -248,8 +248,8 @@ maudResult maudGetStreamStatus(const maudContext* context, maudStreamId stream,
     return maud_success;
 }
 
-maudResult maudGetStreamFormat(const maudContext* context, maudStreamId stream,
-                               maudStreamFormat* formatOut)
+maudResult maudStream_GetFormat(const maudContext* context, maudStreamId stream,
+                                maudStreamFormat* formatOut)
 {
     // Cleared first, so a failure leaves zero.
     if (formatOut != nullptr)
@@ -269,8 +269,8 @@ maudResult maudGetStreamFormat(const maudContext* context, maudStreamId stream,
     return maud_success;
 }
 
-maudResult maudGetStreamPosition(const maudContext* context, maudStreamId stream,
-                                 uint64_t* framesOut)
+maudResult maudStream_GetPosition(const maudContext* context, maudStreamId stream,
+                                  uint64_t* framesOut)
 {
     // Cleared first, so a failure leaves zero.
     if (framesOut != nullptr)
@@ -290,8 +290,8 @@ maudResult maudGetStreamPosition(const maudContext* context, maudStreamId stream
     return maud_success;
 }
 
-maudResult maudGetStreamClock(const maudContext* context, maudStreamId stream,
-                              maudStreamClock* clockOut)
+maudResult maudStream_GetClock(const maudContext* context, maudStreamId stream,
+                               maudStreamClock* clockOut)
 {
     // Cleared first, so a failure leaves zero.
     if (clockOut != nullptr)
@@ -389,8 +389,8 @@ static void EndRender(maudStreamCore* core, uint32_t frameCount)
     atomic_store_explicit(&core->renderingThread, 0, memory_order_release);
 }
 
-maudResult maudRenderStream(maudContext* context, maudStreamId stream, float* framesOut,
-                            uint32_t frameCount)
+maudResult maudStream_Render(maudContext* context, maudStreamId stream, float* framesOut,
+                             uint32_t frameCount)
 {
     maudStreamCore* core = nullptr;
     maudResult result = BeginRender(context, stream, maud_directionOutput, 0, framesOut != nullptr,
@@ -404,8 +404,8 @@ maudResult maudRenderStream(maudContext* context, maudStreamId stream, float* fr
     return maud_success;
 }
 
-maudResult maudFeedStream(maudContext* context, maudStreamId stream, const float* frames,
-                          uint32_t frameCount)
+maudResult maudStream_Feed(maudContext* context, maudStreamId stream, const float* frames,
+                           uint32_t frameCount)
 {
     maudStreamCore* core = nullptr;
     maudResult result =
@@ -419,9 +419,9 @@ maudResult maudFeedStream(maudContext* context, maudStreamId stream, const float
     return maud_success;
 }
 
-maudResult maudRenderObjects(maudContext* context, maudStreamId stream, float* bedOut,
-                             maudStreamObject* objectsOut, uint32_t objectCount,
-                             uint32_t frameCount)
+maudResult maudStream_RenderObjects(maudContext* context, maudStreamId stream, float* bedOut,
+                                    maudStreamObject* objectsOut, uint32_t objectCount,
+                                    uint32_t frameCount)
 {
     // The objects' records are written whatever the frame count.
     if (context != nullptr && objectsOut == nullptr)
@@ -443,7 +443,7 @@ maudResult maudRenderObjects(maudContext* context, maudStreamId stream, float* b
     {
         return result;
     }
-    core->period.objectsAvailable = objectCount;
+    core->period.availableObjectCount = objectCount;
     maudPullObjects(&core->period, bedOut, objectsOut, frameCount);
     EndRender(core, frameCount);
     return maud_success;

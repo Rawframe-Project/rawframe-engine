@@ -178,6 +178,14 @@ if(MAUL_AUDIO_SPATIAL)
     target_sources(maul-audio PRIVATE ${MAUL_AUDIO_SPATIAL_SOURCES})
 endif()
 maul_configure_library(maul-audio)
+# With Emscripten's defaults a failed allocation aborts the module before
+# the library sees it. Every program that links the library through CMake,
+# in this tree or through the installed package, links so that malloc may
+# fail and maud_errorCapacity reaches it; docs/user/platforms.md asks other
+# builds to do the same.
+if(EMSCRIPTEN)
+    target_link_options(maul-audio INTERFACE -sABORTING_MALLOC=0)
+endif()
 # The voice processors use the C math library, a library of its own on
 # POSIX systems other than Darwin; static consumers need it too.
 if(UNIX AND NOT APPLE)
@@ -456,11 +464,15 @@ if(MAUL_AUDIO_BUILD_TESTS AND MAUL_AUDIO_DEVICE)
     # whose callback runs on the stalled thread itself.
     if(MAUL_AUDIO_SPATIAL AND NOT EMSCRIPTEN)
         maul_add_test(stall)
-        set_tests_properties(stall PROPERTIES RESOURCE_LOCK pipewire-daemon)
+        # Whether a block waited for the stalled host: quarantined, so it
+        # runs at night, until the check has passed fourteen nights.
+        add_test(NAME stall_blocks COMMAND test_stall blocks)
+        set_tests_properties(stall_blocks PROPERTIES LABELS "stall;quarantine")
+        set_tests_properties(stall stall_blocks PROPERTIES RESOURCE_LOCK pipewire-daemon)
         # Its stream may open ALSA's default PCM on a machine without
         # sound, where libasound leaks.
         if(MAUL_AUDIO_SANITIZE AND MAUL_AUDIO_ALSA)
-            set_tests_properties(stall PROPERTIES ENVIRONMENT
+            set_tests_properties(stall stall_blocks PROPERTIES ENVIRONMENT
                 "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/test/lsan-alsa.supp")
         endif()
     endif()
@@ -785,7 +797,8 @@ endif()
 # when a change reaches it by name.
 if(MAUL_AUDIO_BUILD_TESTS)
     foreach(name pipewire pipewire_move pipewire_defaults pipewire_restart pipewire_starved pulse
-                 pulse_rate alsa stall guide_device coreaudio wasapi wasapi_sta ios ios_capture
+                 pulse_rate alsa stall stall_blocks guide_device coreaudio wasapi wasapi_sta ios
+                 ios_capture
                  aaudio android_java)
         if(TEST ${name})
             set_property(TEST ${name} APPEND PROPERTY LABELS integration)
@@ -794,7 +807,8 @@ if(MAUL_AUDIO_BUILD_TESTS)
     # The suites that skip where their platform is absent
     # (PlatformAbsent, test/test_wait.h).
     foreach(name pipewire pipewire_move pipewire_defaults pipewire_restart pipewire_starved pulse
-                 pulse_rate alsa stall guide_device coreaudio wasapi wasapi_sta aaudio)
+                 pulse_rate alsa stall stall_blocks guide_device coreaudio wasapi wasapi_sta
+                 aaudio)
         if(TEST ${name})
             # hygiene: exit 77 means the suite's platform is absent, never a failure
             set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
@@ -826,7 +840,7 @@ if(MAUL_AUDIO_BUILD_TESTS AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux"
     get_property(maul_audio_tests DIRECTORY PROPERTY TESTS)
     set(maul_audio_server_tests "")
     foreach(name pipewire pipewire_move pipewire_defaults pipewire_restart pipewire_starved pulse
-                 pulse_rate alsa stall guide_device)
+                 pulse_rate alsa stall stall_blocks guide_device)
         if(TEST ${name})
             list(APPEND maul_audio_server_tests ${name})
         endif()

@@ -161,7 +161,7 @@ static bool Describe(maudCoreAudio* coreaudio, AudioObjectID object, maudDirecti
     if (direction == maud_directionOutput)
     {
         spec->info.spatializer = maud_spatializerOn;
-        spec->info.spatialObjects = MAUD_MAX_STREAM_OBJECTS;
+        spec->info.spatialObjectCount = MAUD_MAX_STREAM_OBJECTS;
     }
     return true;
 }

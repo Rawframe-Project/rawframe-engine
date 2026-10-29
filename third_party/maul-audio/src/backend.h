@@ -54,8 +54,8 @@ struct maudBackend
     // after its streams were suspended or before they resume. May be
     // NULL.
     void (*suspendContext)(maudContext* context, bool suspended);
-    // Whether the caller's thread renders the streams (maudRenderStream
-    // and maudFeedStream), as on the offline backend.
+    // Whether the caller's thread renders the streams (maudStream_Render
+    // and maudStream_Feed), as on the offline backend.
     bool rendersOnCaller;
     // Whether the backend renders object streams (maul-audio/objects.h):
     // hands their objects to a platform renderer, or to the caller.
@@ -76,7 +76,7 @@ struct maudBackend
     // once the stream is open reports again through the core's
     // spatialMark. May be NULL: unknown.
     maudSpatialMark (*markStream)(const maudStreamDef* def, const maudStreamFormat* format);
-    // Asks the platform for audio focus or gives it back (maudRequestFocus,
+    // Asks the platform for audio focus or gives it back (maudContext_RequestFocus,
     // whose results it returns); the backend reports the state that
     // follows through maudReportFocus. May be NULL: no audio focus.
     maudResult (*requestFocus)(maudContext* context, maudFocusRequest request, maudDeviceRole role);

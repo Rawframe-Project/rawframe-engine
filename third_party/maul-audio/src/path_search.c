@@ -68,7 +68,7 @@ void maudDestroyPathSearch(const maudAllocator* allocator, maudPathSearch* searc
 }
 
 void maudAttachPath(const maudProbeGraph* graph, float range, maudVector3 point,
-                    maudAnyHitFn* anyHit, void* context, maudPathEnd* end)
+                    maudAnyHitFunction* anyHit, void* context, maudPathEnd* end)
 {
     uint32_t nearest[MAUD_PATH_CANDIDATES];
     float lengths[MAUD_PATH_CANDIDATES];

@@ -56,9 +56,9 @@ extern "C"
     ///         streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudAddOfflineDevice(maudContext* context,
-                                                            const maudOfflineDeviceDef* def,
-                                                            maudDeviceId* deviceOut);
+    MAUD_NODISCARD MAUD_API maudResult maudCreateOfflineDevice(maudContext* context,
+                                                               const maudOfflineDeviceDef* def,
+                                                               maudDeviceId* deviceOut);
 
     /// Removes a device from an offline context, as an unplug would. A
     /// default it was passes to the first remaining device of its direction.
@@ -72,24 +72,24 @@ extern "C"
     ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudRemoveOfflineDevice(maudContext* context,
-                                                               maudDeviceId device);
+    MAUD_NODISCARD MAUD_API maudResult maudDestroyOfflineDevice(maudContext* context,
+                                                                maudDeviceId device);
 
     /// Makes a device the default of its direction for a role. Streams that
     /// follow that default move to it.
     ///
     /// @param context  An offline context.
-    /// @param role     The role.
     /// @param device   The device.
+    /// @param role     The role.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL context or an unknown role; `maud_errorUnsupported` on a
     ///         context that is not offline; `maud_errorBusy` on a thread
     ///         rendering one of the context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSetOfflineDefaultDevice(maudContext* context,
-                                                                   maudDeviceRole role,
-                                                                   maudDeviceId device);
+    MAUD_NODISCARD MAUD_API maudResult maudDevice_SetOfflineDefault(maudContext* context,
+                                                                    maudDeviceId device,
+                                                                    maudDeviceRole role);
 
     /// Changes what a device leads to, as plugging headphones into its jack
     /// does: a change posts maud_notifyRouteChanged.
@@ -103,9 +103,9 @@ extern "C"
     ///         rendering one of the context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSetOfflineDeviceForm(maudContext* context,
-                                                                maudDeviceId device,
-                                                                maudDeviceForm form);
+    MAUD_NODISCARD MAUD_API maudResult maudDevice_SetOfflineForm(maudContext* context,
+                                                                 maudDeviceId device,
+                                                                 maudDeviceForm form);
 
     /// Changes a device's native layout and rate, as a user picking another
     /// format in the system's settings does: a change posts
@@ -123,10 +123,10 @@ extern "C"
     ///         streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSetOfflineDeviceFormat(maudContext* context,
-                                                                  maudDeviceId device,
-                                                                  maudChannelLayout layout,
-                                                                  uint32_t sampleRate);
+    MAUD_NODISCARD MAUD_API maudResult maudDevice_SetOfflineFormat(maudContext* context,
+                                                                   maudDeviceId device,
+                                                                   maudChannelLayout layout,
+                                                                   uint32_t sampleRate);
 
     /// Changes what a platform spatializer does on an output device, as a
     /// user turning one on does: a change posts
@@ -136,7 +136,7 @@ extern "C"
     /// @param device        An output device.
     /// @param spatializer   Its new state.
     /// @param headTracking  Whether it can follow the listener's head.
-    /// @param objects       The positioned objects it takes; 0 unless on.
+    /// @param objectCount   The positioned objects it takes; 0 unless on.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL context, an unknown state, objects while not on, or an
     ///         input device; `maud_errorUnsupported` on a context that is not
@@ -144,9 +144,9 @@ extern "C"
     ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudSetOfflineDeviceSpatializer(
+    MAUD_NODISCARD MAUD_API maudResult maudDevice_SetOfflineSpatializer(
         maudContext* context, maudDeviceId device, maudPlatformSpatializer spatializer,
-        bool headTracking, uint32_t objects);
+        bool headTracking, uint32_t objectCount);
 
 #ifdef __cplusplus
 }

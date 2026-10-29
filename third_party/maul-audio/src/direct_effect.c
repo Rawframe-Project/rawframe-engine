@@ -20,8 +20,8 @@
 #include <math.h>
 #include <string.h>
 
-#define MIN_RATE 32000.0f
-#define MAX_RATE 384000.0f
+#define MIN_RATE 32000u
+#define MAX_RATE 384000u
 #define FLOOR_DB (-24.0)
 #define REFIT_DB 0.05
 #define SILENT   1e-6f
@@ -29,12 +29,12 @@
 struct maudDirectEffect
 {
     maudAllocator allocator;
-    float absorption[MAUD_DIRECT_BANDS];
+    float absorption[MAUD_BANDS];
     maudBandEqSetup setup;
     maudBandEqState state;
     maudBandEqFilters filters;
     // The targets the filters were fitted to, and whether all are 0 dB.
-    double targets[MAUD_DIRECT_BANDS];
+    double targets[MAUD_BANDS];
     bool flat;
     float overall;
     bool started;
@@ -64,7 +64,7 @@ maudResult maudGetDirectivity(const maudDirectivityPattern* pattern, maudVector3
     {
         return maud_errorInvalid;
     }
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         if (!Unit(pattern->weight[b]) || !(pattern->power[b] >= 0.0f) ||
             !isfinite(pattern->power[b]))
@@ -75,7 +75,7 @@ maudResult maudGetDirectivity(const maudDirectivityPattern* pattern, maudVector3
     float length = sqrtf(toListener.x * toListener.x + toListener.y * toListener.y +
                          toListener.z * toListener.z);
     float cosine = length > 0.0f ? -toListener.z / length : 1.0f;
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         float w = pattern->weight[b];
         directivityOut[b] = powf(fabsf((1.0f - w) + w * cosine), pattern->power[b]);
@@ -85,12 +85,12 @@ maudResult maudGetDirectivity(const maudDirectivityPattern* pattern, maudVector3
 
 static bool DefValid(const maudDirectEffectDef* def)
 {
-    if (def->cookie != MAUD_DIRECT_EFFECT_DEF_COOKIE || !(def->sampleRate >= MIN_RATE) ||
-        !(def->sampleRate <= MAX_RATE) || !maudIsAllocatorValid(&def->allocator))
+    if (def->cookie != MAUD_DIRECT_EFFECT_DEF_COOKIE || def->sampleRate < MIN_RATE ||
+        def->sampleRate > MAX_RATE || !maudIsAllocatorValid(&def->allocator))
     {
         return false;
     }
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         if (!(def->airAbsorption[b] >= 0.0f) || !isfinite(def->airAbsorption[b]))
         {
@@ -103,7 +103,7 @@ static bool DefValid(const maudDirectEffectDef* def)
 // Flat filters, nothing heard.
 static void Clear(maudDirectEffect* effect)
 {
-    double zero[MAUD_DIRECT_BANDS] = {0.0, 0.0, 0.0};
+    double zero[MAUD_BANDS] = {0.0, 0.0, 0.0};
     maudDesignBandEq(&effect->setup, zero, &effect->filters);
     memset(&effect->state, 0, sizeof(effect->state));
     memcpy(effect->targets, zero, sizeof(zero));
@@ -135,7 +135,7 @@ maudResult maudCreateDirectEffect(const maudDirectEffectDef* def, maudDirectEffe
     }
     *effect = (maudDirectEffect){.allocator = def->allocator};
     memcpy(effect->absorption, def->airAbsorption, sizeof(effect->absorption));
-    maudSetupBandEq(&effect->setup, def->sampleRate);
+    maudSetupBandEq(&effect->setup, (float)def->sampleRate);
     Clear(effect);
     *effectOut = effect;
     return maud_success;
@@ -151,7 +151,7 @@ void maudDestroyDirectEffect(maudDirectEffect* effect)
     maudRelease(&allocator, effect, sizeof(maudDirectEffect), alignof(maudDirectEffect));
 }
 
-maudResult maudResetDirectEffect(maudDirectEffect* effect)
+maudResult maudDirectEffect_Reset(maudDirectEffect* effect)
 {
     if (effect == nullptr)
     {
@@ -168,7 +168,7 @@ static bool ParamsValid(const maudDirectParams* p)
     {
         return false;
     }
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         if (!Unit(p->transmission[b]) || !Unit(p->directivity[b]))
         {
@@ -182,16 +182,16 @@ static bool ParamsValid(const maudDirectParams* p)
 // floored below it).
 static float Targets(const maudDirectEffect* effect, const maudDirectParams* p, double* targets)
 {
-    float bands[MAUD_DIRECT_BANDS];
+    float bands[MAUD_BANDS];
     float loudest = 0.0f;
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         float air = expf(-effect->absorption[b] * p->distance);
         float through = (1.0f - p->occlusion) + p->occlusion * p->transmission[b];
         bands[b] = air * p->directivity[b] * through;
         loudest = fmaxf(loudest, bands[b]);
     }
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         targets[b] = loudest > SILENT
                          ? fmax(FLOOR_DB, 20.0 * log10((double)bands[b] / (double)loudest))
@@ -202,7 +202,7 @@ static float Targets(const maudDirectEffect* effect, const maudDirectParams* p, 
 
 static bool Moved(const double* from, const double* to)
 {
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         if (fabs(to[b] - from[b]) >= REFIT_DB)
         {
@@ -221,7 +221,7 @@ static bool Refit(maudDirectEffect* effect, const double* targets, maudBandEqFil
     {
         return false;
     }
-    double gains[MAUD_DIRECT_BANDS];
+    double gains[MAUD_BANDS];
     maudSolveBandEq(&effect->setup, targets, gains);
     maudDesignBandEq(&effect->setup, gains, &effect->filters);
     memcpy(effect->targets, targets, sizeof(effect->targets));
@@ -238,8 +238,8 @@ static inline void ScaleRamped(float* out, float start, float step, uint32_t fra
     }
 }
 
-maudResult maudProcessDirect(maudDirectEffect* effect, const maudDirectParams* params,
-                             const float* in, float* out, uint32_t frames)
+maudResult maudDirectEffect_Process(maudDirectEffect* effect, const maudDirectParams* params,
+                                    const float* in, float* out, uint32_t frames)
 {
     if (effect == nullptr || params == nullptr || !ParamsValid(params) ||
         (frames > 0 && (in == nullptr || out == nullptr)))
@@ -250,7 +250,7 @@ maudResult maudProcessDirect(maudDirectEffect* effect, const maudDirectParams* p
     {
         return maud_success;
     }
-    double targets[MAUD_DIRECT_BANDS];
+    double targets[MAUD_BANDS];
     float overall = Targets(effect, params, targets);
     bool wasFlat = effect->flat;
     maudBandEqFilters previous;

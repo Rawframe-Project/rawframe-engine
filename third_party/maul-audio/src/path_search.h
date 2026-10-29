@@ -57,7 +57,7 @@ void maudDestroyPathSearch(const maudAllocator* allocator, maudPathSearch* searc
 // Attaches a point: its nearest probes within range, tested by one
 // query, nearest first; a NULL query sees them all.
 void maudAttachPath(const maudProbeGraph* graph, float range, maudVector3 point,
-                    maudAnyHitFn* anyHit, void* context, maudPathEnd* end);
+                    maudAnyHitFunction* anyHit, void* context, maudPathEnd* end);
 
 // The shortest path from the source's end to the listener's: vertices
 // from the listener (listener, probes, source) and the probes' indices

@@ -54,7 +54,7 @@ extern "C"
     /// before playing; on Android an application targeting Android 15
     /// may ask only while it is the top application or runs a foreground
     /// service. The state that follows comes as maud_notifyFocusChanged
-    /// records and from maudGetContextFocus; a request the platform
+    /// records and from maudContext_GetFocus; a request the platform
     /// delays, as during a call, is held once the platform grants it.
     /// Releasing reports maud_focusNone. The library never pauses or ducks
     /// streams for focus: the host does.
@@ -73,9 +73,9 @@ extern "C"
     ///         streams or running its allocator, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudRequestFocus(maudContext* context,
-                                                        maudFocusRequest request,
-                                                        maudDeviceRole role);
+    MAUD_NODISCARD MAUD_API maudResult maudContext_RequestFocus(maudContext* context,
+                                                                maudFocusRequest request,
+                                                                maudDeviceRole role);
 
     /// Reads where the context stands with audio focus, as of the last
     /// drain of its notifications.
@@ -85,8 +85,8 @@ extern "C"
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudGetContextFocus(const maudContext* context,
-                                                           maudFocus* focusOut);
+    MAUD_NODISCARD MAUD_API maudResult maudContext_GetFocus(const maudContext* context,
+                                                            maudFocus* focusOut);
 
 #ifdef __cplusplus
 }

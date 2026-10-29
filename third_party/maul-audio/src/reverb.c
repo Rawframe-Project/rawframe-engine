@@ -33,8 +33,8 @@
 // directional channels carry a sixth of its energy rather than the
 // diffuse third.
 #define SEND_SIGNS 0x5A3Cu
-#define MIN_RATE   44100.0f
-#define MAX_RATE   384000.0f
+#define MIN_RATE   44100u
+#define MAX_RATE   384000u
 #define MIN_TIME   0.1f
 #define MAX_TIME   20.0f
 #define MAX_DELAY  4.0f
@@ -76,7 +76,7 @@ typedef struct Network
     float encode[4][LINES];
     Bank current;
     Bank target;
-    float times[MAUD_DIRECT_BANDS];
+    float times[MAUD_BANDS];
     // Whether it has run since made, reset or cleared, and whether its
     // filters ramp in this call.
     bool started;
@@ -86,7 +86,7 @@ typedef struct Network
     maudBandEqFilters eqCurrent;
     maudBandEqFilters eqTarget;
     maudBandEqState eqState;
-    float levels[MAUD_DIRECT_BANDS];
+    float levels[MAUD_BANDS];
     bool flat;
     bool leveling;
 } Network;
@@ -174,9 +174,8 @@ maudResult maudCreateReverb(const maudReverbDef* def, maudReverb** reverbOut)
         return maud_errorVersion;
     }
     if (def == nullptr || reverbOut == nullptr || def->cookie != MAUD_REVERB_DEF_COOKIE ||
-        !(def->sampleRate >= MIN_RATE) || !(def->sampleRate <= MAX_RATE) ||
-        !(def->maxDelay >= 0.0f) || !(def->maxDelay <= MAX_DELAY) ||
-        !maudIsAllocatorValid(&def->allocator))
+        def->sampleRate < MIN_RATE || def->sampleRate > MAX_RATE || !(def->maxDelay >= 0.0f) ||
+        !(def->maxDelay <= MAX_DELAY) || !maudIsAllocatorValid(&def->allocator))
     {
         return maud_errorInvalid;
     }
@@ -187,7 +186,7 @@ maudResult maudCreateReverb(const maudReverbDef* def, maudReverb** reverbOut)
     }
     *r = (maudReverb){.allocator = def->allocator,
                       .rate = (double)def->sampleRate,
-                      .networkCount = def->tail ? 2u : 1u};
+                      .networkCount = def->enableTail ? 2u : 1u};
     for (uint32_t k = 0; k < r->networkCount; ++k)
     {
         Network* n = &r->networks[k];
@@ -218,8 +217,8 @@ maudResult maudCreateReverb(const maudReverbDef* def, maudReverb** reverbOut)
     }
     r->delayLine = r->memory + offset;
     maudSetupOctaveEq(&r->setup, r->rate);
-    maudSetupBandEq(&r->eqSetup, def->sampleRate);
-    if (maudResetReverb(r) != maud_success)
+    maudSetupBandEq(&r->eqSetup, (float)def->sampleRate);
+    if (maudReverb_Reset(r) != maud_success)
     {
         maudDestroyReverb(r);
         return maud_errorInvalid;
@@ -250,7 +249,7 @@ static void Clear(Network* n)
     n->started = false;
 }
 
-maudResult maudResetReverb(maudReverb* reverb)
+maudResult maudReverb_Reset(maudReverb* reverb)
 {
     if (reverb == nullptr)
     {
@@ -270,13 +269,13 @@ maudResult maudResetReverb(maudReverb* reverb)
 // interpolated in log time over log frequency, held beyond the ends.
 static double OctaveTime(const float* times, double hz)
 {
-    const double centres[MAUD_DIRECT_BANDS] = {sqrt(20.0 * 800.0), sqrt(800.0 * 8000.0),
-                                               sqrt(8000.0 * 20000.0)};
+    const double centres[MAUD_BANDS] = {sqrt(20.0 * 800.0), sqrt(800.0 * 8000.0),
+                                        sqrt(8000.0 * 20000.0)};
     if (hz <= centres[0])
     {
         return (double)times[0];
     }
-    for (int b = 0; b + 1 < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b + 1 < MAUD_BANDS; ++b)
     {
         if (hz <= centres[b + 1])
         {
@@ -284,7 +283,7 @@ static double OctaveTime(const float* times, double hz)
             return exp((1.0 - u) * log((double)times[b]) + u * log((double)times[b + 1]));
         }
     }
-    return (double)times[MAUD_DIRECT_BANDS - 1];
+    return (double)times[MAUD_BANDS - 1];
 }
 
 // Designs every line's filters for the times into bank.
@@ -438,7 +437,7 @@ static void Blend(const Bank* from, const Bank* to, float t, Bank* out)
 
 static bool ParamsValid(const maudReverb* r, const maudReverbParams* p)
 {
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         if (!(p->reverbTime[b] >= MIN_TIME) || !(p->reverbTime[b] <= MAX_TIME) ||
             !(p->level[b] >= MIN_LEVEL) || !(p->level[b] <= MAX_LEVEL) ||
@@ -459,7 +458,7 @@ static void Retarget(const maudReverb* r, Network* n, const float* times, const 
 {
     bool changed = !n->started;
     bool leveled = !n->started;
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         changed = changed || fabsf(times[b] - n->times[b]) > REFIT * n->times[b];
         leveled = leveled || fabsf(levels[b] - n->levels[b]) > RELEVEL;
@@ -471,10 +470,10 @@ static void Retarget(const maudReverb* r, Network* n, const float* times, const 
     }
     if (leveled)
     {
-        double targets[MAUD_DIRECT_BANDS];
-        double gains[MAUD_DIRECT_BANDS];
+        double targets[MAUD_BANDS];
+        double gains[MAUD_BANDS];
         n->flat = true;
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             targets[b] = (double)levels[b];
             n->flat = n->flat && levels[b] == 0.0f;
@@ -505,11 +504,11 @@ static bool RetargetTail(maudReverb* r, const maudReverbParams* p, uint32_t fram
         return false;
     }
     Network* n = &r->networks[1];
-    float times[MAUD_DIRECT_BANDS];
-    float levels[MAUD_DIRECT_BANDS];
+    float times[MAUD_BANDS];
+    float levels[MAUD_BANDS];
     bool any = false;
     double longest = 0.0;
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         bool has = p->tailTime[b] > 0.0f;
         any = any || has;
@@ -613,8 +612,8 @@ static void Settle(Network* n)
     n->ramp = false;
 }
 
-maudResult maudProcessReverb(maudReverb* reverb, const maudReverbParams* params, const float* in,
-                             float* const* bed, uint32_t frames)
+maudResult maudReverb_Process(maudReverb* reverb, const maudReverbParams* params, const float* in,
+                              float* const* bed, uint32_t frames)
 {
     if (reverb == nullptr || params == nullptr || !ParamsValid(reverb, params) ||
         (frames > 0 && (in == nullptr || bed == nullptr || bed[0] == nullptr || bed[1] == nullptr ||

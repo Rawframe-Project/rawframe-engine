@@ -74,9 +74,9 @@ struct maudEchoCanceller
 static bool DefValid(const maudEchoCancellerDef* def)
 {
     return def->cookie == MAUD_ECHO_CANCELLER_DEF_COOKIE && def->sampleRate >= MIN_RATE &&
-           def->sampleRate <= MAX_RATE && def->tailSeconds >= MIN_TAIL &&
-           def->tailSeconds <= MAX_TAIL && def->floorDb >= MIN_FLOOR_DB &&
-           def->floorDb <= MAX_FLOOR_DB && maudIsAllocatorValid(&def->allocator);
+           def->sampleRate <= MAX_RATE && def->tailTime >= MIN_TAIL && def->tailTime <= MAX_TAIL &&
+           def->floorDb >= MIN_FLOOR_DB && def->floorDb <= MAX_FLOOR_DB &&
+           maudIsAllocatorValid(&def->allocator);
 }
 
 // The smallest power of two of frames lasting MIN_BLOCK or more.
@@ -139,7 +139,7 @@ maudResult maudCreateEchoCanceller(const maudEchoCancellerDef* def,
     uint32_t block = BlockOf(def->sampleRate);
     // The partitions covering the path; a float's tail a hair past a whole
     // number of blocks (0.2 s at 16 kHz) does not take another.
-    uint32_t partitions = (uint32_t)ceil((double)def->tailSeconds * rate / block - 1e-6);
+    uint32_t partitions = (uint32_t)ceil((double)def->tailTime * rate / block - 1e-6);
     Layout l = LayoutOf(block, partitions, rate);
     unsigned char* memory =
         l.total > 0 ? maudAllocate(&def->allocator, l.total, alignof(double)) : nullptr;
@@ -220,8 +220,9 @@ static void Block(maudEchoCanceller* c)
                           c->filter.binsPerBand, c->output);
 }
 
-maudResult maudCancelEcho(maudEchoCanceller* canceller, float* capture, const float* render,
-                          uint32_t frameCount, maudEchoState* stateOut)
+maudResult maudEchoCanceller_Cancel(maudEchoCanceller* canceller, float* capture,
+                                    const float* render, uint32_t frameCount,
+                                    maudEchoState* stateOut)
 {
     // Cleared first, so a failure leaves zero.
     if (stateOut != nullptr)

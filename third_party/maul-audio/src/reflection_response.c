@@ -43,7 +43,7 @@ static uint32_t Size(uint32_t hop)
 size_t maudResponseScratch(double rate)
 {
     // Three complex frames.
-    return (size_t)MAUD_DIRECT_BANDS * 2 * Size(maudResponseHop(rate));
+    return (size_t)MAUD_BANDS * 2 * Size(maudResponseHop(rate));
 }
 
 // A number in (0, 1] from a bin, an FFT bin and a stream (lowbias32).
@@ -99,18 +99,18 @@ static bool Spectra(const double* energy, uint32_t bin, uint32_t hop, uint32_t n
     {
         return false;
     }
-    double centres[MAUD_DIRECT_BANDS];
+    double centres[MAUD_BANDS];
     Centres(centres);
-    double logs[MAUD_DIRECT_BANDS];
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    double logs[MAUD_BANDS];
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         logs[b] = log(fmax(energy[b], QUIET));
     }
-    memset(frames, 0, (size_t)MAUD_DIRECT_BANDS * 2 * n * sizeof(double));
+    memset(frames, 0, (size_t)MAUD_BANDS * 2 * n * sizeof(double));
     for (uint32_t k = 0; k <= n / 2; ++k)
     {
         double logHz = log(fmax((double)k * rate / (double)n, 1.0));
-        double w[MAUD_DIRECT_BANDS];
+        double w[MAUD_BANDS];
         Weights(centres, logHz, w);
         double level = exp(w[0] * logs[0] + w[1] * logs[1] + w[2] * logs[2]);
         double magnitude = sqrt((double)n * level / (double)hop);
@@ -118,7 +118,7 @@ static bool Spectra(const double* energy, uint32_t bin, uint32_t hop, uint32_t n
         double angle = 2.0 * PI_D * Uniform(bin, k, 1);
         double re = magnitude * cos(angle);
         double im = k == 0 || k == n / 2 ? 0.0 : magnitude * sin(angle);
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             double* f = frames + (size_t)b * 2 * n;
             f[2 * k] = w[b] * re;
@@ -147,7 +147,7 @@ static void Add(const double* bases, uint32_t n, const double* ratio, int64_t st
         }
         double window = sin(PI_D * ((double)i + 0.5) / (double)span);
         double sum = 0.0;
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             sum += ratio[b] * bases[(size_t)b * 2 * n + 2 * i];
         }
@@ -168,8 +168,8 @@ void maudReconstructResponse(const float* field, uint32_t order, uint32_t bins, 
     }
     for (uint32_t bin = 0; bin < bins && (uint64_t)bin * hop < frames; ++bin)
     {
-        double energy[MAUD_DIRECT_BANDS];
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        double energy[MAUD_BANDS];
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             energy[b] = (double)field[(uint32_t)b * bins + bin];
         }
@@ -177,7 +177,7 @@ void maudReconstructResponse(const float* field, uint32_t order, uint32_t bins, 
         {
             continue;
         }
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             maudFft(scratch + (size_t)b * 2 * n, n, true);
         }
@@ -185,11 +185,11 @@ void maudReconstructResponse(const float* field, uint32_t order, uint32_t bins, 
         int64_t start = (int64_t)bin * hop - hop / 2;
         for (uint32_t c = 0; c < channels; ++c)
         {
-            double ratio[MAUD_DIRECT_BANDS];
-            for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+            double ratio[MAUD_BANDS];
+            for (int b = 0; b < MAUD_BANDS; ++b)
             {
                 double e = energy[b];
-                double v = (double)field[((size_t)c * MAUD_DIRECT_BANDS + b) * bins + bin];
+                double v = (double)field[((size_t)c * MAUD_BANDS + b) * bins + bin];
                 ratio[b] = e > QUIET ? v / e : 0.0;
             }
             Add(scratch, n, ratio, start, span, out[c], frames);

@@ -16,13 +16,14 @@
 // The host's task hooks; both NULL runs the work on the calling thread.
 typedef struct maudHostTasks
 {
-    maudEnqueueTaskFn* enqueue;
-    maudFinishTaskFn* finish;
+    maudEnqueueTaskFunction* enqueue;
+    maudFinishTaskFunction* finish;
     void* user;
 } maudHostTasks;
 
 // Runs task over [0, items) in ranges of at least one item and returns
 // once every range has run.
-void maudRunHostTasks(const maudHostTasks* hooks, maudTaskFn* task, uint32_t items, void* context);
+void maudRunHostTasks(const maudHostTasks* hooks, maudTaskFunction* task, uint32_t items,
+                      void* context);
 
 #endif // MAUL_AUDIO_SRC_HOST_TASKS_H

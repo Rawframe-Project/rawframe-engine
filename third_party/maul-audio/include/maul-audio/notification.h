@@ -44,11 +44,11 @@ extern "C"
         // the browser's default for that direction moves to another
         // device; the Default itself stays the default.
         maud_notifyRouteChanged = 9,
-        // The context's audio focus is now focus (maudRequestFocus).
+        // The context's audio focus is now focus (maudContext_RequestFocus).
         maud_notifyFocusChanged = 10,
         // What the platform's spatializer does on device, an output,
         // changed (maudDeviceInfo's spatializer, headTracking and
-        // spatialObjects).
+        // spatialObjectCount).
         maud_notifySpatializerChanged = 11,
         // device, of direction, now runs natively at another format
         // (maudDeviceInfo's nativeLayout or its rates), as when a user
@@ -89,8 +89,8 @@ extern "C"
     ///         allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudNextNotification(maudContext* context,
-                                                            maudNotification* notificationOut);
+    MAUD_NODISCARD MAUD_API maudResult
+    maudContext_NextNotification(maudContext* context, maudNotification* notificationOut);
 
 #ifdef __cplusplus
 }

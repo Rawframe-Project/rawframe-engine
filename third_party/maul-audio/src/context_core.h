@@ -96,7 +96,7 @@ typedef struct maudDuplex
     maudStreamSlot* output;
     maudStreamSlot* input;
     // The host's callback and user, called by the output half.
-    maudStreamCallback callback;
+    maudStreamFunction* callback;
     void* user;
     // Frames of channels samples; capacity is a power of two.
     float* ring;
@@ -186,7 +186,7 @@ struct maudContext
     size_t bytes;
     // The platform holds the context's audio until the user acts.
     bool held;
-    // The host suspended the context (maudSetContextSuspended).
+    // The host suspended the context (maudContext_SetSuspended).
     bool hostSuspended;
     // The audio focus last reported (focus.h).
     maudFocus focus;

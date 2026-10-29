@@ -20,7 +20,12 @@ extern "C"
 {
 #endif
 
-#define MAUD_DIRECT_BANDS 3
+// The bands of every frequency-dependent value of the Spatial part: air
+// absorption, transmission, directivity, materials, reverberation times
+// and levels, and a bake's energy fields. Low first: up to 800 Hz, 800 Hz
+// to 8 kHz, above 8 kHz. It sizes public structs and the bake format, so
+// from 1.0.0 it never changes.
+#define MAUD_BANDS 3
 
     // A source's direct effect.
     typedef struct maudDirectEffect maudDirectEffect;
@@ -34,10 +39,10 @@ extern "C"
         // cookie and this stay the first two fields in every version.
         uint32_t version;
         // The rate the effect runs at, 32,000 to 384,000 Hz.
-        float sampleRate;
+        uint32_t sampleRate;
         // Air absorption per band: the amplitude falls as
         // exp(-airAbsorption[band] * distance in metres).
-        float airAbsorption[MAUD_DIRECT_BANDS];
+        float airAbsorption[MAUD_BANDS];
         maudAllocator allocator;
     } maudDirectEffectDef;
 
@@ -52,10 +57,10 @@ extern "C"
         // path, 1 fully blocked.
         float occlusion;
         // What passes through the obstacles, per band, 0 to 1.
-        float transmission[MAUD_DIRECT_BANDS];
+        float transmission[MAUD_BANDS];
         // The source's directivity towards the listener, per band, 0 to
         // 1 (maudGetDirectivity computes it).
-        float directivity[MAUD_DIRECT_BANDS];
+        float directivity[MAUD_BANDS];
     } maudDirectParams;
 
     // A directivity pattern: a weighted dipole per band, the gain
@@ -64,9 +69,9 @@ extern "C"
     typedef struct maudDirectivityPattern
     {
         // 0 omnidirectional, 0.5 cardioid, 1 dipole.
-        float weight[MAUD_DIRECT_BANDS];
+        float weight[MAUD_BANDS];
         // Sharpness; 1 for the plain pattern.
-        float power[MAUD_DIRECT_BANDS];
+        float power[MAUD_BANDS];
     } maudDirectivityPattern;
 
     /// Returns the default direct params: gain 1, no distance, a clear
@@ -116,7 +121,7 @@ extern "C"
 #endif
         def.cookie = MAUD_DIRECT_EFFECT_DEF_COOKIE;
         def.version = MAUD_ABI_VERSION;
-        def.sampleRate = 48000.0f;
+        def.sampleRate = 48000;
         (void)maudGetAirAbsorption(20.0f, 50.0f, def.airAbsorption);
         return def;
     }
@@ -177,10 +182,10 @@ extern "C"
     ///         nothing is written then.
     /// @par Thread safety
     /// Safe from any thread; the effect is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudProcessDirect(maudDirectEffect* effect,
-                                                         const maudDirectParams* params,
-                                                         const float* in, float* out,
-                                                         uint32_t frames);
+    MAUD_NODISCARD MAUD_API maudResult maudDirectEffect_Process(maudDirectEffect* effect,
+                                                                const maudDirectParams* params,
+                                                                const float* in, float* out,
+                                                                uint32_t frames);
 
     /// Forgets the signal and the params an effect has seen.
     ///
@@ -188,7 +193,7 @@ extern "C"
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer.
     /// @par Thread safety
     /// Safe from any thread; the effect is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudResetDirectEffect(maudDirectEffect* effect);
+    MAUD_NODISCARD MAUD_API maudResult maudDirectEffect_Reset(maudDirectEffect* effect);
 
 #ifdef __cplusplus
 }

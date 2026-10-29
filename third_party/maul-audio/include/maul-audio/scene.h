@@ -31,7 +31,7 @@ extern "C"
 #define MAUD_MAX_INSTANCES 65536u
 
     // An acoustic scene.
-    typedef struct maudAcousticScene maudAcousticScene;
+    typedef struct maudScene maudScene;
 
     // Triangles over shared vertices, in the world's coordinates.
     typedef struct maudMesh
@@ -56,16 +56,16 @@ extern "C"
     // Where an instance is: a local point p lands at position + scale x
     // (p turned by orientation), the orientation a quaternion of any
     // nonzero length, scale 0.001 to 1,000.
-    typedef struct maudInstanceTransform
+    typedef struct maudSceneInstanceTransform
     {
         maudVector3 position;
         maudQuaternion orientation;
         float scale;
-    } maudInstanceTransform;
+    } maudSceneInstanceTransform;
 
     // How to create an acoustic scene. Build it with
-    // maudDefaultAcousticSceneDef.
-    typedef struct maudAcousticSceneDef
+    // maudDefaultSceneDef.
+    typedef struct maudSceneDef
     {
         uint32_t cookie;
         // MAUD_ABI_VERSION of the headers the program was built with; the
@@ -84,11 +84,11 @@ extern "C"
         // MAUD_MAX_TRIANGLES.
         uint32_t maxTriangles;
         maudAllocator allocator;
-    } maudAcousticSceneDef;
+    } maudSceneDef;
 
 // The cookie of an acoustic scene def, which its default sets and
-// maudCreateAcousticScene checks.
-#define MAUD_ACOUSTIC_SCENE_DEF_COOKIE 0x6D617363u
+// maudCreateScene checks.
+#define MAUD_SCENE_DEF_COOKIE 0x6D617363u
 
     /// Returns the default acoustic scene def: no meshes, no instances,
     /// 16,777,216 triangles at most.
@@ -99,14 +99,14 @@ extern "C"
     /// @return The def, with a valid cookie and version.
     /// @par Thread safety
     /// Safe from any thread.
-    static inline maudAcousticSceneDef maudDefaultAcousticSceneDef(void)
+    static inline maudSceneDef maudDefaultSceneDef(void)
     {
 #ifdef __cplusplus
-        maudAcousticSceneDef def = {};
+        maudSceneDef def = {};
 #else
-    maudAcousticSceneDef def = {0};
+    maudSceneDef def = {0};
 #endif
-        def.cookie = MAUD_ACOUSTIC_SCENE_DEF_COOKIE;
+        def.cookie = MAUD_SCENE_DEF_COOKIE;
         def.version = MAUD_ABI_VERSION;
         def.maxTriangles = 16777216;
         return def;
@@ -115,7 +115,7 @@ extern "C"
     /// Creates an acoustic scene: copies the meshes and builds a bounding
     /// volume hierarchy over their triangles, the same on every platform.
     ///
-    /// @param def       The def, from maudDefaultAcousticSceneDef.
+    /// @param def       The def, from maudDefaultSceneDef.
     /// @param sceneOut  Receives the scene; NULL on failure.
     /// @return `maud_success`; `maud_errorVersion` for a def stamped with
     ///         another binary interface than the library's, checked
@@ -128,8 +128,8 @@ extern "C"
     ///         than the def's maxTriangles or when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_NODISCARD MAUD_API maudResult maudCreateAcousticScene(const maudAcousticSceneDef* def,
-                                                               maudAcousticScene** sceneOut);
+    MAUD_NODISCARD MAUD_API maudResult maudCreateScene(const maudSceneDef* def,
+                                                       maudScene** sceneOut);
 
     /// Destroys an acoustic scene. NULL is ignored. No query may be
     /// running on it.
@@ -137,7 +137,7 @@ extern "C"
     /// @param scene  The scene.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API void maudDestroyAcousticScene(maudAcousticScene* scene);
+    MAUD_API void maudDestroyScene(maudScene* scene);
 
     /// Returns how many calls the scene refused as misuse: invalid
     /// arguments to the functions that change its instances. Stale ids
@@ -147,9 +147,9 @@ extern "C"
     /// @return The count since the scene was created.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API uint64_t maudGetAcousticSceneMisuse(const maudAcousticScene* scene);
+    MAUD_API uint64_t maudScene_GetMisuse(const maudScene* scene);
 
-    /// Answers any-hit queries against a scene (a maudAnyHitFn): a ray
+    /// Answers any-hit queries against a scene (a maudAnyHitFunction): a ray
     /// hits when a triangle lies within [minDistance, maxDistance] along
     /// it. A ray through an edge or vertex shared by triangles hits.
     ///
@@ -159,10 +159,10 @@ extern "C"
     /// @param scene     The scene.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API void maudSceneAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded,
-                                  void* scene);
+    MAUD_API void maudFindAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded,
+                                 void* scene);
 
-    /// Answers closest-hit queries against a scene (a maudClosestHitFn):
+    /// Answers closest-hit queries against a scene (a maudClosestHitFunction):
     /// the nearest triangle within a ray's distances, equal distances
     /// going to the triangle listed first (meshes in order, then their
     /// triangles); its unit normal faces the side the triangle is wound
@@ -174,8 +174,8 @@ extern "C"
     /// @param scene  The scene.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API void maudSceneClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits,
-                                      void* scene);
+    MAUD_API void maudFindClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits,
+                                     void* scene);
 
     /// Makes an instance of one of the scene's instancing meshes. It is
     /// part of queries from the next commit on.
@@ -192,7 +192,7 @@ extern "C"
     /// Safe from any thread; the scene is used by one thread at a time.
     /// Changes and commits must not overlap its queries.
     MAUD_NODISCARD MAUD_API maudResult maudCreateSceneInstance(
-        maudAcousticScene* scene, uint32_t mesh, const maudInstanceTransform* transform,
+        maudScene* scene, uint32_t mesh, const maudSceneInstanceTransform* transform,
         maudSceneInstanceId* instanceOut);
 
     /// Moves an instance, from the next commit on.
@@ -207,8 +207,8 @@ extern "C"
     /// Safe from any thread; the scene is used by one thread at a time.
     /// Changes and commits must not overlap its queries.
     MAUD_NODISCARD MAUD_API maudResult
-    maudMoveSceneInstance(maudAcousticScene* scene, maudSceneInstanceId instance,
-                          const maudInstanceTransform* transform);
+    maudSceneInstance_Move(maudScene* scene, maudSceneInstanceId instance,
+                           const maudSceneInstanceTransform* transform);
 
     /// Destroys an instance; it leaves queries at the next commit.
     ///
@@ -220,7 +220,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the scene is used by one thread at a time.
     /// Changes and commits must not overlap its queries.
-    MAUD_NODISCARD MAUD_API maudResult maudDestroySceneInstance(maudAcousticScene* scene,
+    MAUD_NODISCARD MAUD_API maudResult maudDestroySceneInstance(maudScene* scene,
                                                                 maudSceneInstanceId instance);
 
     /// Commits the instances' changes: the live instances, where they
@@ -232,7 +232,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the scene is used by one thread at a time.
     /// Changes and commits must not overlap its queries.
-    MAUD_NODISCARD MAUD_API maudResult maudCommitAcousticScene(maudAcousticScene* scene);
+    MAUD_NODISCARD MAUD_API maudResult maudScene_Commit(maudScene* scene);
 
 #ifdef __cplusplus
 }

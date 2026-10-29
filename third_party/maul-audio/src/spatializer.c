@@ -48,8 +48,8 @@ maudSourceDef maudDefaultSourceDef(void)
         .occlusion = maud_occlusionRay,
         .occlusionRadius = 1.0f,
         .occlusionSamples = 32,
-        .transmission = true,
-        .pathing = true,
+        .enableTransmission = true,
+        .enablePathing = true,
     };
 }
 
@@ -114,7 +114,7 @@ static void Release(maudSpatializer* s)
 
 static bool ReverbValid(const maudSpatializerDef* def)
 {
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         if (!(def->airAbsorption[b] >= 0.0f) || !isfinite(def->airAbsorption[b]))
         {
@@ -123,8 +123,8 @@ static bool ReverbValid(const maudSpatializerDef* def)
     }
     bool reflections = def->reflectionOrder == 0 ||
                        (def->reverbRays > 0 && def->reflectionDuration >= 0.05f &&
-                        def->reflectionDuration <= 4.0f && def->reflectionRate >= 44100.0f &&
-                        def->reflectionRate <= 384000.0f);
+                        def->reflectionDuration <= 4.0f && def->reflectionRate >= 44100 &&
+                        def->reflectionRate <= 384000);
     return reflections;
 }
 
@@ -174,7 +174,7 @@ static bool Allocate(maudSpatializer* s, const maudSpatializerDef* def)
         uint32_t batches = maudReverbBatches(def->reverbRays);
         s->reflections =
             maudCreateReflections(&def->allocator, def->reflectionOrder, def->reflectionDuration,
-                                  def->reflectionRate, batches);
+                                  (float)def->reflectionRate, batches);
         all = s->reflections != nullptr;
         if (all)
         {
@@ -301,7 +301,7 @@ void maudDestroySpatializer(maudSpatializer* spatializer)
     }
 }
 
-uint64_t maudGetSpatializerMisuse(const maudSpatializer* spatializer)
+uint64_t maudSpatializer_GetMisuse(const maudSpatializer* spatializer)
 {
     return atomic_load_explicit(&spatializer->misuse, memory_order_relaxed);
 }
@@ -329,7 +329,7 @@ void maudSpatializerRunHost(maudSpatializer* s, bool running)
 
 static bool PatternValid(const maudDirectivityPattern* pattern)
 {
-    float out[MAUD_DIRECT_BANDS];
+    float out[MAUD_BANDS];
     return maudGetDirectivity(pattern, (maudVector3){0.0f, 0.0f, -1.0f}, out) == maud_success;
 }
 
@@ -368,8 +368,8 @@ static MAUD_NOINLINE maudResult CreateSource(maudSpatializer* spatializer, const
     slot->occlusion = def->occlusion;
     slot->radius = def->occlusionRadius;
     slot->samples = def->occlusionSamples;
-    slot->transmission = def->transmission;
-    slot->pathing = def->pathing;
+    slot->transmission = def->enableTransmission;
+    slot->pathing = def->enablePathing;
     *sourceOut = (maudSourceId){index + 1, slot->generation};
     return maud_success;
 }
@@ -441,8 +441,8 @@ static MAUD_NOINLINE maudResult SetSourcePose(maudSpatializer* spatializer, maud
     return maud_success;
 }
 
-maudResult maudSetSourcePose(maudSpatializer* spatializer, maudSourceId source,
-                             const maudPose* pose)
+maudResult maudSource_SetPose(maudSpatializer* spatializer, maudSourceId source,
+                              const maudPose* pose)
 {
     uint64_t token = maudFloatEnvEnter();
     maudResult result = SetSourcePose(spatializer, source, pose);
@@ -545,7 +545,7 @@ static void Cross(maudSpatializer* s, const maudPose* listener, Entry* entries, 
             if (maudCrossSurface(&s->hits[k], &s->rays[k], s->materials, s->materialCount,
                                  r->transmission, &s->walked[i]))
             {
-                r->surfaces += 1;
+                r->surfaceCount += 1;
                 s->walkers[kept++] = i;
             }
         }
@@ -572,7 +572,7 @@ static void Transmit(maudSpatializer* s, const maudPose* listener, Entry* entrie
             s->walked[i] = 0.0f;
             continue;
         }
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             r->transmission[b] = 0.0f;
         }
@@ -591,7 +591,7 @@ static bool Unit(float v)
 static bool MaterialValid(const maudAcousticMaterial* m)
 {
     bool valid = Unit(m->scattering);
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         valid = valid && Unit(m->absorption[b]) && Unit(m->transmission[b]);
     }
@@ -632,8 +632,8 @@ static MAUD_NOINLINE maudResult SetMaterials(maudSpatializer* spatializer,
     return maud_success;
 }
 
-maudResult maudSetMaterials(maudSpatializer* spatializer, const maudAcousticMaterial* materials,
-                            uint32_t count)
+maudResult maudSpatializer_SetMaterials(maudSpatializer* spatializer,
+                                        const maudAcousticMaterial* materials, uint32_t count)
 {
     uint64_t token = maudFloatEnvEnter();
     maudResult result = SetMaterials(spatializer, materials, count);
@@ -684,7 +684,7 @@ static MAUD_NOINLINE maudResult SimulateDirect(maudSpatializer* spatializer,
     return maud_success;
 }
 
-maudResult maudSimulateDirect(maudSpatializer* spatializer, const maudPose* listener)
+maudResult maudSpatializer_SimulateDirect(maudSpatializer* spatializer, const maudPose* listener)
 {
     uint64_t token = maudFloatEnvEnter();
     maudResult result = SimulateDirect(spatializer, listener);
@@ -713,14 +713,14 @@ static void Clear(const maudRay* rays, uint32_t count, uint8_t* occluded, void* 
 // A reverberation step's estimate, from the baked set in use or traced.
 static void EstimateReverb(maudSpatializer* s, const maudPose* listener)
 {
-    s->reverb.estimates += 1;
+    s->reverb.estimateCount += 1;
     if (maudBakedReverb(s, listener->position))
     {
         return;
     }
     if (s->closestHit == nullptr)
     {
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             s->reverb.reverbTime[b] = NO_REVERB;
             s->reverb.level[b] = SILENT;
@@ -762,7 +762,7 @@ static MAUD_NOINLINE maudResult SimulateReverb(maudSpatializer* spatializer,
     return maud_success;
 }
 
-maudResult maudSimulateReverb(maudSpatializer* spatializer, const maudPose* listener)
+maudResult maudSpatializer_SimulateReverb(maudSpatializer* spatializer, const maudPose* listener)
 {
     uint64_t token = maudFloatEnvEnter();
     maudResult result = SimulateReverb(spatializer, listener);
@@ -792,7 +792,7 @@ uint32_t maudTraceFrom(maudSpatializer* s, maudVector3 position, maudReverbResul
     return batches;
 }
 
-uint64_t maudLatchResults(maudSpatializer* spatializer)
+uint64_t maudSpatializer_LatchResults(maudSpatializer* spatializer)
 {
     if (spatializer == nullptr)
     {
@@ -807,8 +807,8 @@ uint64_t maudLatchResults(maudSpatializer* spatializer)
     return spatializer->buffers[spatializer->front].step;
 }
 
-maudResult maudGetDirectResult(const maudSpatializer* spatializer, maudSourceId source,
-                               maudDirectResult* resultOut)
+maudResult maudSource_GetDirectResult(const maudSpatializer* spatializer, maudSourceId source,
+                                      maudDirectResult* resultOut)
 {
     // Cleared first, so a failure leaves zero.
     if (resultOut != nullptr)
@@ -834,7 +834,8 @@ maudResult maudGetDirectResult(const maudSpatializer* spatializer, maudSourceId 
     return maud_success;
 }
 
-maudResult maudGetReverbResult(const maudSpatializer* spatializer, maudReverbResult* resultOut)
+maudResult maudSpatializer_GetReverbResult(const maudSpatializer* spatializer,
+                                           maudReverbResult* resultOut)
 {
     // Cleared first, so a failure leaves zero.
     if (resultOut != nullptr)
@@ -854,8 +855,9 @@ maudResult maudGetReverbResult(const maudSpatializer* spatializer, maudReverbRes
     return maud_success;
 }
 
-maudResult maudRenderReflections(maudSpatializer* spatializer, const maudQuaternion* orientation,
-                                 const float* send, float* const* bed, uint32_t frames)
+maudResult maudSpatializer_RenderReflections(maudSpatializer* spatializer,
+                                             const maudQuaternion* orientation, const float* send,
+                                             float* const* bed, uint32_t frames)
 {
     if (spatializer == nullptr || orientation == nullptr)
     {

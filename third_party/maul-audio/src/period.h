@@ -18,7 +18,7 @@
 
 typedef struct maudPeriod
 {
-    maudStreamCallback callback;
+    maudStreamFunction* callback;
     void* user;
     // frames * channelCount interleaved samples.
     float* samples;
@@ -33,11 +33,11 @@ typedef struct maudPeriod
     uint64_t nextBlock;
     // An object stream's objects, as the callback last left them, and
     // their frames, one period each, object after object; NULL and 0 for
-    // other streams. The backend sets objectsAvailable before a pull.
+    // other streams. The backend sets availableObjectCount before a pull.
     maudStreamObject* objects;
     float* objectSamples;
     uint32_t objectCount;
-    uint32_t objectsAvailable;
+    uint32_t availableObjectCount;
 } maudPeriod;
 
 // Sets a period up over samples, which holds frames * channelCount

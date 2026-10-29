@@ -36,9 +36,9 @@ static double Attenuation(double f, double t, double rh)
 
 void maudAirAbsorptionOf(double celsius, double humidity, float* absorption)
 {
-    const double edges[MAUD_DIRECT_BANDS + 1] = {20.0, 800.0, 8000.0, 20000.0};
+    const double edges[MAUD_BANDS + 1] = {20.0, 800.0, 8000.0, 20000.0};
     double t = celsius + 273.15;
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         double ratio = maudPow(edges[b + 1] / edges[b], 1.0 / POINTS);
         double sum = 0.0;

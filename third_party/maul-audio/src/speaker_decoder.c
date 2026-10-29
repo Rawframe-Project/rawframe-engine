@@ -87,7 +87,7 @@ static bool Build(const maudSpeakerPanner* panner, uint32_t order, double m[][16
         Harmonics(order, p, y);
         // The field's axes to the listener's: x ahead is -z, y left is -x.
         maudVector3 direction = {(float)-p[1], (float)p[2], (float)-p[0]};
-        if (maudGetSpeakerGains(panner, direction, gains) != maud_success)
+        if (maudSpeakerPanner_GetGains(panner, direction, gains) != maud_success)
         {
             return false;
         }
@@ -205,7 +205,7 @@ void maudDestroySpeakerDecoder(maudSpeakerDecoder* decoder)
     maudRelease(&allocator, decoder, sizeof(maudSpeakerDecoder), alignof(maudSpeakerDecoder));
 }
 
-maudResult maudGetSpeakerDecoderMatrix(const maudSpeakerDecoder* decoder, float* matrixOut)
+maudResult maudSpeakerDecoder_GetMatrix(const maudSpeakerDecoder* decoder, float* matrixOut)
 {
     if (decoder == nullptr || matrixOut == nullptr)
     {
@@ -243,8 +243,8 @@ static bool PointersValid(const maudSpeakerDecoder* decoder, const float* const*
     return true;
 }
 
-maudResult maudDecodeToSpeakers(const maudSpeakerDecoder* decoder, const float* const* bed,
-                                float* const* out, uint32_t frames)
+maudResult maudSpeakerDecoder_Decode(const maudSpeakerDecoder* decoder, const float* const* bed,
+                                     float* const* out, uint32_t frames)
 {
     if (decoder == nullptr || (frames > 0 && !PointersValid(decoder, bed, out)))
     {

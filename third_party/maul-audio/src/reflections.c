@@ -109,7 +109,7 @@ maudReflections* maudCreateReflections(const maudAllocator* allocator, uint32_t 
         .retiring = 3,
     };
     atomic_init(&r->shared, 1u);
-    r->fieldFloats = (size_t)r->channels * MAUD_DIRECT_BANDS * r->bins;
+    r->fieldFloats = (size_t)r->channels * MAUD_BANDS * r->bins;
     r->responseFloats = maudStagedResponseFloats(&r->plan, r->channels);
     r->field =
         maudAllocate(allocator, (size_t)batches * r->fieldFloats * sizeof(float), alignof(double));
@@ -229,7 +229,7 @@ void maudConvolveReflections(maudReflections* reflections, const maudQuaternion*
         maudRunStaged(&r->convolver, send + done, chunk, n);
         maudQuaternion from = Toward(r->last, *orientation, (float)done / (float)frames);
         maudQuaternion to = Toward(r->last, *orientation, (float)(done + n) / (float)frames);
-        if (maudRotateAmbisonic(r->order, &from, &to, chunk, n) == maud_success)
+        if (maudRotateAmbisonic(chunk, n, r->order, &from, &to) == maud_success)
         {
             for (uint32_t c = 0; c < r->channels; ++c)
             {

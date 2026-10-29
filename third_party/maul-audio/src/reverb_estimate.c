@@ -35,7 +35,7 @@ typedef struct Path
     float origin[3];
     float direction[3];
     // The energy left per band after absorption (air apart).
-    float energy[MAUD_DIRECT_BANDS];
+    float energy[MAUD_BANDS];
     float distance;
     uint32_t ray;
     bool alive;
@@ -193,9 +193,9 @@ static void Project(const maudReverbTrace* trace, const Shading* s, const float*
     uint32_t channels = Channels(trace);
     for (uint32_t c = 0; c < channels; ++c)
     {
-        for (uint32_t b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (uint32_t b = 0; b < MAUD_BANDS; ++b)
         {
-            field[(c * MAUD_DIRECT_BANDS + b) * trace->fieldBins + bin] += g[c] * energy[b];
+            field[(c * MAUD_BANDS + b) * trace->fieldBins + bin] += g[c] * energy[b];
         }
     }
 }
@@ -224,8 +224,8 @@ static void Gather(const maudReverbTrace* trace, const Path* path, const Shading
     // Each ray stands for its share of the sphere.
     float share = 4.0f * PI_F / (float)trace->rays;
     float spread = share * (lambert + lobe) / (4.0f * PI_F * r * r);
-    float energy[MAUD_DIRECT_BANDS];
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    float energy[MAUD_BANDS];
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         float air = ExpF(-2.0f * trace->air[b] * total);
         energy[b] = spread * (1.0f - s->material->absorption[b]) * path->energy[b] * air;
@@ -242,7 +242,7 @@ static bool Bounce(const maudReverbTrace* trace, uint32_t bounce, const Shading*
 {
     path->distance += s->hitDistance;
     float left = 0.0f;
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         path->energy[b] *= 1.0f - s->material->absorption[b];
         left = fmaxf(left, path->energy[b] * ExpF(-2.0f * trace->air[b] * path->distance));
@@ -335,8 +335,7 @@ void maudTraceReverbBatch(const maudReverbTrace* trace, uint32_t batch,
     histogram->field = field;
     if (trace->fieldOrder > 0)
     {
-        memset(field, 0,
-               (size_t)Channels(trace) * MAUD_DIRECT_BANDS * trace->fieldBins * sizeof(float));
+        memset(field, 0, (size_t)Channels(trace) * MAUD_BANDS * trace->fieldBins * sizeof(float));
     }
     Path paths[MAUD_REVERB_BATCH];
     uint32_t first = batch * MAUD_REVERB_BATCH;
@@ -708,7 +707,7 @@ void maudFitReverb(maudReverbHistogram* histograms, uint32_t count, maudReverbFi
     *fit = (maudReverbFit){0};
     for (uint32_t h = 1; h < count; ++h)
     {
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             for (uint32_t i = 0; i < MAUD_REVERB_BINS; ++i)
             {
@@ -723,7 +722,7 @@ void maudFitReverb(maudReverbHistogram* histograms, uint32_t count, maudReverbFi
     }
     float cut = floorf(truncated / BIN_SECONDS);
     uint32_t bins = cut < (float)MAUD_REVERB_BINS ? (uint32_t)cut : MAUD_REVERB_BINS;
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         fit->times[b] = Fit(histograms[0].energy[b], bins, (uint32_t)b, fit);
     }
@@ -732,7 +731,7 @@ void maudFitReverb(maudReverbHistogram* histograms, uint32_t count, maudReverbFi
 void maudSumReverbFields(const maudReverbTrace* trace, maudReverbHistogram* histograms,
                          uint32_t count)
 {
-    size_t values = (size_t)Channels(trace) * MAUD_DIRECT_BANDS * trace->fieldBins;
+    size_t values = (size_t)Channels(trace) * MAUD_BANDS * trace->fieldBins;
     for (uint32_t h = 1; h < count && trace->fieldOrder > 0; ++h)
     {
         for (size_t i = 0; i < values; ++i)
@@ -762,7 +761,7 @@ void maudReverbLevels(const maudReverbHistogram* summed, const maudReverbFit* fi
     last = last < 1 ? 1 : last > MAUD_REVERB_BINS ? MAUD_REVERB_BINS : last;
     uint32_t first = last > 5 ? last - 5 : 0;
     double centre = 0.5 * (double)(first + last) * (double)BIN_SECONDS;
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         double mean = 0.0;
         for (uint32_t i = first; i < last; ++i)

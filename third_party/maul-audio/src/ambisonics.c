@@ -180,8 +180,8 @@ static void RotateFrame(uint32_t order, const float* a, const float* b, float t,
     }
 }
 
-maudResult maudRotateAmbisonic(uint32_t order, const maudQuaternion* from, const maudQuaternion* to,
-                               float* const* bed, uint32_t frames)
+maudResult maudRotateAmbisonic(float* const* bed, uint32_t frames, uint32_t order,
+                               const maudQuaternion* from, const maudQuaternion* to)
 {
     if (order > MAUD_MAX_AMBISONIC_ORDER)
     {

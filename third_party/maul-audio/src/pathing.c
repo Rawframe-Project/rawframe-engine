@@ -169,7 +169,7 @@ static void Feed(const maudPathing* p, const maudPathJob* job, const maudVector3
     {
         length += Distance(v[k], v[k + 1]);
     }
-    float around[MAUD_DIRECT_BANDS];
+    float around[MAUD_BANDS];
     maudPathDiffraction(&p->diffraction, v, count, around);
     float spread = r->distance > 0.0f ? length / r->distance : 1.0f;
     float o = r->occlusion;
@@ -177,19 +177,19 @@ static void Feed(const maudPathing* p, const maudPathJob* job, const maudVector3
     float straight = (1.0f - o) + o * through;
     float ws = straight * straight;
     float wp = o * around[1] * o * around[1];
-    float directivity[MAUD_DIRECT_BANDS];
+    float directivity[MAUD_BANDS];
     maudVector3 leaving = Toward(job->pose->position, v[count - 2]);
     if (maudGetDirectivity(job->pattern, maudUnrotate(job->pose->orientation, leaving),
                            directivity) != maud_success)
     {
         // Patterns are checked when sources are made; keep the straight
         // one's should one not be.
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             directivity[b] = r->directivity[b];
         }
     }
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         float t = r->transmission[b] * spread;
         r->transmission[b] = fminf(1.0f, sqrtf(around[b] * around[b] + t * t));

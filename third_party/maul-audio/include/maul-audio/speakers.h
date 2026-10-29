@@ -98,8 +98,9 @@ extern "C"
     ///         a direction that is not finite.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_NODISCARD MAUD_API maudResult maudGetSpeakerGains(const maudSpeakerPanner* panner,
-                                                           maudVector3 direction, float* gainsOut);
+    MAUD_NODISCARD MAUD_API maudResult maudSpeakerPanner_GetGains(const maudSpeakerPanner* panner,
+                                                                  maudVector3 direction,
+                                                                  float* gainsOut);
 
     /// Adds a mono source into the layout's channels, its direction and
     /// gain moving linearly from `from` to `to` across the call: frame n
@@ -116,10 +117,11 @@ extern "C"
     ///         a value that is not finite; nothing is written then.
     /// @par Thread safety
     /// Safe from any thread; the output is used by one thread at a time.
-    MAUD_NODISCARD MAUD_API maudResult maudPanToSpeakers(const maudSpeakerPanner* panner,
-                                                         const maudPanSource* from,
-                                                         const maudPanSource* to, const float* in,
-                                                         float* const* out, uint32_t frames);
+    MAUD_NODISCARD MAUD_API maudResult maudSpeakerPanner_Pan(const maudSpeakerPanner* panner,
+                                                             const maudPanSource* from,
+                                                             const maudPanSource* to,
+                                                             const float* in, float* const* out,
+                                                             uint32_t frames);
 
 #ifdef __cplusplus
 }

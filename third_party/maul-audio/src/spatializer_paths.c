@@ -138,7 +138,7 @@ maudResult maudDestroyProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
     return result;
 }
 
-maudResult maudSetPathing(maudSpatializer* spatializer, maudProbeSetId set)
+maudResult maudProbeSet_UseForPathing(maudSpatializer* spatializer, maudProbeSetId set)
 {
     if (spatializer == nullptr)
     {
@@ -165,9 +165,9 @@ maudResult maudSetPathing(maudSpatializer* spatializer, maudProbeSetId set)
     return maud_success;
 }
 
-maudResult maudGetProbeSet(const maudSpatializer* spatializer, maudProbeSetId set,
-                           maudProbeSetInfo* infoOut, uint32_t first, uint32_t count,
-                           maudVector3* points)
+maudResult maudProbeSet_GetInfo(const maudSpatializer* spatializer, maudProbeSetId set,
+                                uint32_t first, maudProbeSetInfo* infoOut, maudVector3* pointsOut,
+                                uint32_t count)
 {
     // Cleared first, so a failure leaves zero.
     if (infoOut != nullptr)
@@ -185,14 +185,14 @@ maudResult maudGetProbeSet(const maudSpatializer* spatializer, maudProbeSetId se
     {
         return result;
     }
-    if (points != nullptr && (first > graph->count || count > graph->count - first))
+    if (pointsOut != nullptr && (first > graph->count || count > graph->count - first))
     {
         return maud_errorInvalid;
     }
     *infoOut = (maudProbeSetInfo){graph->count, graph->links, bake->memory != nullptr};
-    if (points != nullptr && count > 0)
+    if (pointsOut != nullptr && count > 0)
     {
-        memcpy(points, graph->points + first, (size_t)count * sizeof(maudVector3));
+        memcpy(pointsOut, graph->points + first, (size_t)count * sizeof(maudVector3));
     }
     return maud_success;
 }
@@ -205,7 +205,7 @@ static uint32_t FieldFloats(const maudSpatializer* s)
         return 0;
     }
     uint32_t channels = (s->trace.fieldOrder + 1) * (s->trace.fieldOrder + 1);
-    return channels * MAUD_DIRECT_BANDS * s->trace.fieldBins;
+    return channels * MAUD_BANDS * s->trace.fieldBins;
 }
 
 // Bakes a set's estimates, and its fields with reflections, from each
@@ -222,13 +222,12 @@ static bool Bake(maudSpatializer* s, const maudProbeGraph* graph, maudProbeBake*
     {
         maudReverbResult estimate = {0};
         uint32_t batches = maudTraceFrom(s, graph->points[p], &estimate);
-        memcpy(bake->times + (size_t)p * MAUD_DIRECT_BANDS, estimate.reverbTime,
+        memcpy(bake->times + (size_t)p * MAUD_BANDS, estimate.reverbTime,
                sizeof(estimate.reverbTime));
-        memcpy(bake->levels + (size_t)p * MAUD_DIRECT_BANDS, estimate.level,
-               sizeof(estimate.level));
-        memcpy(bake->tailTimes + (size_t)p * MAUD_DIRECT_BANDS, estimate.tailTime,
+        memcpy(bake->levels + (size_t)p * MAUD_BANDS, estimate.level, sizeof(estimate.level));
+        memcpy(bake->tailTimes + (size_t)p * MAUD_BANDS, estimate.tailTime,
                sizeof(estimate.tailTime));
-        memcpy(bake->tailLevels + (size_t)p * MAUD_DIRECT_BANDS, estimate.tailLevel,
+        memcpy(bake->tailLevels + (size_t)p * MAUD_BANDS, estimate.tailLevel,
                sizeof(estimate.tailLevel));
         if (fieldFloats > 0)
         {
@@ -272,7 +271,7 @@ static MAUD_NOINLINE maudResult BakeProbeSet(maudSpatializer* spatializer, maudP
     return baked ? maud_success : maud_errorCapacity;
 }
 
-maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
+maudResult maudProbeSet_Bake(maudSpatializer* spatializer, maudProbeSetId set)
 {
     uint64_t token = maudFloatEnvEnter();
     maudResult result = BakeProbeSet(spatializer, set);
@@ -280,7 +279,7 @@ maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
     return result;
 }
 
-maudResult maudUseBakedReverb(maudSpatializer* spatializer, maudProbeSetId set)
+maudResult maudProbeSet_UseBakedReverb(maudSpatializer* spatializer, maudProbeSetId set)
 {
     if (spatializer == nullptr)
     {
@@ -335,8 +334,8 @@ bool maudBakedReverb(maudSpatializer* s, maudVector3 position)
     return true;
 }
 
-maudResult maudSaveProbeSet(const maudSpatializer* spatializer, maudProbeSetId set, void* bytes,
-                            size_t capacity, size_t* sizeOut)
+maudResult maudProbeSet_Save(const maudSpatializer* spatializer, maudProbeSetId set, void* bytes,
+                             size_t capacity, size_t* sizeOut)
 {
     // Cleared first, so a failure leaves zero.
     if (sizeOut != nullptr)

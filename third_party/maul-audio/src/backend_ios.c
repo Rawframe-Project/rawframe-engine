@@ -46,7 +46,7 @@ static maudDeviceSpec DefaultSpec(const maudIos* ios, maudDirection direction, m
                 // An object stream renders through the system's spatial
                 // mixer, which takes any number of objects.
                 .spatializer = output ? maud_spatializerOn : maud_spatializerUnknown,
-                .spatialObjects = output ? MAUD_MAX_STREAM_OBJECTS : 0,
+                .spatialObjectCount = output ? MAUD_MAX_STREAM_OBJECTS : 0,
             },
         .name = name,
         .nameLength = maudCutUtf8(name, ios->context->def.limits.deviceTextBytes),
@@ -181,7 +181,7 @@ static maudFocus Settled(const maudIos* ios)
 // An interruption began: iOS has deactivated the session and stopped the
 // units; the streams wait until it ends. When it ends with the hint to
 // resume they run again; without it they wait for the host
-// (maudResumeContext, or a focus request).
+// (maudContext_Unlock, or a focus request).
 static void Interrupt(maudContext* context, int interruption)
 {
     maudIos* ios = context->native;
@@ -201,7 +201,7 @@ static void Interrupt(maudContext* context, int interruption)
 // The media services were reset: every unit went with them and the
 // session forgot its category (QA1749). The streams are held as by an
 // interruption while the session is set up again and every unit made
-// again; they run when the host asks (maudResumeContext, or a focus
+// again; they run when the host asks (maudContext_Unlock, or a focus
 // request), as Apple asks an application not to go active by itself.
 static void Reset(maudContext* context)
 {

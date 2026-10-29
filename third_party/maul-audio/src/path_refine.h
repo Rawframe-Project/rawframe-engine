@@ -25,14 +25,15 @@
 
 typedef struct maudDiffraction
 {
-    float gain[MAUD_DIRECT_BANDS][MAUD_DIFFRACTION_STEPS];
+    float gain[MAUD_BANDS][MAUD_DIFFRACTION_STEPS];
 } maudDiffraction;
 
 void maudSetupDiffraction(maudDiffraction* diffraction);
 
 // Refines a path's count vertices in place, its ends fixed; returns the
 // count left. A NULL query leaves it as it is.
-uint32_t maudRefinePath(maudAnyHitFn* anyHit, void* context, maudVector3* vertices, uint32_t count);
+uint32_t maudRefinePath(maudAnyHitFunction* anyHit, void* context, maudVector3* vertices,
+                        uint32_t count);
 
 // The amplitude per band around a path's corners.
 void maudPathDiffraction(const maudDiffraction* diffraction, const maudVector3* vertices,

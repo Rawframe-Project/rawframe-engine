@@ -117,7 +117,7 @@ static float F32(const uint8_t* p)
 static uint64_t FieldFloats(const Header* h)
 {
     return h->layers & LAYER_FIELDS
-               ? (uint64_t)(h->order + 1) * (h->order + 1) * MAUD_DIRECT_BANDS * h->bins
+               ? (uint64_t)(h->order + 1) * (h->order + 1) * MAUD_BANDS * h->bins
                : 0;
 }
 
@@ -264,10 +264,10 @@ void maudWriteBakeFile(const maudProbeGraph* graph, const maudProbeBake* bake, u
     }
     if (h.layers & LAYER_REVERB)
     {
-        PutFloats(out + l.times, bake->times, (uint64_t)h.probes * MAUD_DIRECT_BANDS);
-        PutFloats(out + l.levels, bake->levels, (uint64_t)h.probes * MAUD_DIRECT_BANDS);
-        PutFloats(out + l.tailTimes, bake->tailTimes, (uint64_t)h.probes * MAUD_DIRECT_BANDS);
-        PutFloats(out + l.tailLevels, bake->tailLevels, (uint64_t)h.probes * MAUD_DIRECT_BANDS);
+        PutFloats(out + l.times, bake->times, (uint64_t)h.probes * MAUD_BANDS);
+        PutFloats(out + l.levels, bake->levels, (uint64_t)h.probes * MAUD_BANDS);
+        PutFloats(out + l.tailTimes, bake->tailTimes, (uint64_t)h.probes * MAUD_BANDS);
+        PutFloats(out + l.tailLevels, bake->tailLevels, (uint64_t)h.probes * MAUD_BANDS);
     }
     if (h.layers & LAYER_FIELDS)
     {
@@ -419,7 +419,7 @@ static bool LinksValid(const uint8_t* data, const Header* h, const Layout* l)
 
 static bool ValuesValid(const uint8_t* data, const Header* h, const Layout* l)
 {
-    uint64_t values = (h->layers & LAYER_REVERB) ? (uint64_t)h->probes * MAUD_DIRECT_BANDS : 0;
+    uint64_t values = (h->layers & LAYER_REVERB) ? (uint64_t)h->probes * MAUD_BANDS : 0;
     for (uint64_t i = 0; i < values; ++i)
     {
         float t = F32(data + l->times + 4 * i);
@@ -439,7 +439,7 @@ static bool ValuesValid(const uint8_t* data, const Header* h, const Layout* l)
         }
     }
     uint64_t perProbe = FieldFloats(h);
-    uint64_t w = (uint64_t)MAUD_DIRECT_BANDS * h->bins;
+    uint64_t w = (uint64_t)MAUD_BANDS * h->bins;
     for (uint64_t i = 0; i < (uint64_t)h->probes * perProbe; ++i)
     {
         float f = F32(data + l->fields + 4 * i);
@@ -471,7 +471,7 @@ static void Fill(const uint8_t* data, const Header* h, const Layout* l, maudProb
         }
     }
     graph->range = h->range;
-    uint64_t values = (h->layers & LAYER_REVERB) ? (uint64_t)h->probes * MAUD_DIRECT_BANDS : 0;
+    uint64_t values = (h->layers & LAYER_REVERB) ? (uint64_t)h->probes * MAUD_BANDS : 0;
     for (uint64_t i = 0; i < values; ++i)
     {
         bake->times[i] = F32(data + l->times + 4 * i);

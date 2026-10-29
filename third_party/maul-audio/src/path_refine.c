@@ -96,8 +96,8 @@ static double Coefficient(double turn, double hz)
 
 void maudSetupDiffraction(maudDiffraction* diffraction)
 {
-    const double centres[MAUD_DIRECT_BANDS] = {400.0, 4400.0, 15000.0};
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    const double centres[MAUD_BANDS] = {400.0, 4400.0, 15000.0};
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         double reference = Coefficient(1e-8, centres[b]);
         for (uint32_t d = 0; d < MAUD_DIFFRACTION_STEPS; ++d)
@@ -123,7 +123,7 @@ static float Length(maudVector3 a, maudVector3 b)
 
 typedef struct Rays
 {
-    maudAnyHitFn* anyHit;
+    maudAnyHitFunction* anyHit;
     void* context;
 } Rays;
 
@@ -240,7 +240,8 @@ static void Search(const Rays* r, const maudVector3* d, maudVector3* v, uint32_t
     }
 }
 
-uint32_t maudRefinePath(maudAnyHitFn* anyHit, void* context, maudVector3* vertices, uint32_t count)
+uint32_t maudRefinePath(maudAnyHitFunction* anyHit, void* context, maudVector3* vertices,
+                        uint32_t count)
 {
     if (anyHit == nullptr)
     {
@@ -261,7 +262,7 @@ uint32_t maudRefinePath(maudAnyHitFn* anyHit, void* context, maudVector3* vertic
 void maudPathDiffraction(const maudDiffraction* diffraction, const maudVector3* vertices,
                          uint32_t count, float* gains)
 {
-    for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+    for (int b = 0; b < MAUD_BANDS; ++b)
     {
         gains[b] = 1.0f;
     }
@@ -283,7 +284,7 @@ void maudPathDiffraction(const maudDiffraction* diffraction, const maudVector3* 
         uint32_t i = (uint32_t)degrees;
         i = i >= MAUD_DIFFRACTION_STEPS - 1 ? MAUD_DIFFRACTION_STEPS - 2 : i;
         float t = degrees - (float)i;
-        for (int b = 0; b < MAUD_DIRECT_BANDS; ++b)
+        for (int b = 0; b < MAUD_BANDS; ++b)
         {
             const float* g = diffraction->gain[b];
             gains[b] *= g[i] + t * (g[i + 1] - g[i]);

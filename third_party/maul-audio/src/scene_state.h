@@ -30,7 +30,7 @@ typedef struct maudSceneInstance
     uint32_t generation;
     bool live;
     uint32_t mesh;
-    maudInstanceTransform transform;
+    maudSceneInstanceTransform transform;
 } maudSceneInstance;
 
 // An instance as the last commit placed it: world = position + scale x
@@ -43,7 +43,7 @@ typedef struct maudPlacedInstance
     float inverseScale;
 } maudPlacedInstance;
 
-struct maudAcousticScene
+struct maudScene
 {
     maudAllocator allocator;
     maudSceneMesh statics;
@@ -74,18 +74,17 @@ maudVector3 maudTriangleNormal(const maudTriangle* t);
 
 // The instances' slots and top level, for the def's capacity; false
 // when memory runs out (maudReleaseInstances frees what was made).
-bool maudAllocateInstances(maudAcousticScene* scene, uint32_t capacity);
-void maudReleaseInstances(maudAcousticScene* scene);
+bool maudAllocateInstances(maudScene* scene, uint32_t capacity);
+void maudReleaseInstances(maudScene* scene);
 
 // Whether a ray hits a committed instance within [tMin, tMax].
-bool maudInstancesAnyHit(const maudAcousticScene* scene, const float* origin,
-                         const float* direction, float tMin, float tMax);
+bool maudInstancesAnyHit(const maudScene* scene, const float* origin, const float* direction,
+                         float tMin, float tMax);
 
 // A committed instance's hit nearer than *best, or at it when the
 // static scene has none there (found false) and the instance's slot is
 // the lowest at that distance; writes *best and *hit.
-void maudInstancesClosestHit(const maudAcousticScene* scene, const float* origin,
-                             const float* direction, float tMin, bool found, float* best,
-                             maudRayHit* hit);
+void maudInstancesClosestHit(const maudScene* scene, const float* origin, const float* direction,
+                             float tMin, bool found, float* best, maudRayHit* hit);
 
 #endif // MAUL_AUDIO_SRC_SCENE_STATE_H

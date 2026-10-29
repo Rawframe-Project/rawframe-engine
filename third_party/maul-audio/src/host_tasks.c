@@ -12,7 +12,7 @@
 // The work every range shares.
 typedef struct Work
 {
-    maudTaskFn* task;
+    maudTaskFunction* task;
     void* context;
 } Work;
 
@@ -52,7 +52,8 @@ static MAUD_NOINLINE void Finish(const maudHostTasks* hooks, void* handle)
     maudFloatHostLeave(host);
 }
 
-void maudRunHostTasks(const maudHostTasks* hooks, maudTaskFn* task, uint32_t items, void* context)
+void maudRunHostTasks(const maudHostTasks* hooks, maudTaskFunction* task, uint32_t items,
+                      void* context)
 {
     if (items == 0)
     {
