@@ -23,12 +23,20 @@ work="$(mktemp -d)"
 bus=""
 trap '[ -n "$bus" ] && kill "$bus" 2>/dev/null; rm -rf "$log" "$work"' EXIT
 
-started="$(dbus-daemon --session --fork --print-address=1 --print-pid=1)" || {
+# The daemon stays this script's child, never --fork: a daemon that forks
+# away is handed to tools/reap.py, which kills it a minute later as left
+# running by a test, while this test still talks over it.
+command -v dbus-daemon >/dev/null 2>&1 || {
     echo "skip: no dbus-daemon"
     exit 0
 }
-address="$(head -1 <<<"$started")"
-bus="$(tail -1 <<<"$started")"
+mkfifo "$work/bus-address"
+dbus-daemon --session --nofork --print-address=3 3>"$work/bus-address" &
+bus=$!
+read -r address <"$work/bus-address" && [ -n "$address" ] || {
+    echo "skip: no dbus-daemon"
+    exit 0
+}
 
 grep '^content\.root' "$3" >"$work/content.conf" || true
 AT_SPI_BUS_ADDRESS="$address" RAWFRAME_PLAY_WORK="$work" \
