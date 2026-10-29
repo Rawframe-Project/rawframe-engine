@@ -208,6 +208,25 @@ static int FindBackends(mwinBackendKind kind, const mwinBackendOps* backends[2])
     return count;
 }
 
+// The context's allocator: the program's, with the context marked busy
+// while it runs.
+static void* HostAllocate(size_t size, size_t alignment, void* user)
+{
+    mwinContext* context = user;
+    ++context->hosting;
+    void* memory = mwinAllocate(&context->host, size, alignment);
+    --context->hosting;
+    return memory;
+}
+
+static void HostRelease(void* memory, size_t size, size_t alignment, void* user)
+{
+    mwinContext* context = user;
+    ++context->hosting;
+    mwinRelease(&context->host, memory, size, alignment);
+    --context->hosting;
+}
+
 static mwinResult CreateContext(const mwinAppDef* def, mwinContext** contextOut)
 {
     const mwinLimits* limits = &def->context.limits;
@@ -221,7 +240,8 @@ static mwinResult CreateContext(const mwinAppDef* def, mwinContext** contextOut)
     }
     memset(block, 0, layout.size);
     mwinContext* context = (mwinContext*)block;
-    context->allocator = def->context.allocator;
+    context->host = def->context.allocator;
+    context->allocator = (mwinAllocator){HostAllocate, HostRelease, context};
     context->memorySize = layout.size;
     context->misuse = &context->misuseCount;
     context->limits = *limits;
@@ -248,8 +268,8 @@ static void DestroyContext(mwinContext* context)
             mwinReleaseRequestData(context, &context->windows[slot].requests[i]);
         }
     }
-    mwinAllocator allocator = context->allocator;
-    mwinRelease(&allocator, context, context->memorySize, alignof(max_align_t));
+    mwinAllocator host = context->host;
+    mwinRelease(&host, context, context->memorySize, alignof(max_align_t));
 }
 
 uint64_t mwinGetContextMisuse(const mwinContext* context)

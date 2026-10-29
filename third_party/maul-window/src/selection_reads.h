@@ -19,7 +19,7 @@
 typedef struct mwinSelectionRead
 {
     mwinRequestKind kind;
-    char mime[MWIN_CLIPBOARD_MIME + 1];
+    char mime[MWIN_MAX_CLIPBOARD_MIME + 1];
     uint32_t mimeLength;
 } mwinSelectionRead;
 

@@ -17,7 +17,7 @@ void mwinTestCarryOutText(mwinContext* context, uint32_t slot, const mwinRequest
     {
         text->enabled = request->value.textInput.enabled;
         text->caret = request->value.textInput.caret;
-        if (!text->enabled && window->state.composing)
+        if (!text->enabled && window->imeComposing)
         {
             // Leaving text input ends the composition.
             mwinEvent end = {0};

@@ -86,8 +86,8 @@ static size_t Units(const mwinDialogCopy* copy)
 
 static HRESULT SetFilters(IFileDialog* dialog, const mwinDialogCopy* copy, WCHAR** at)
 {
-    COMDLG_FILTERSPEC specs[MWIN_DIALOG_FILTERS];
-    char spec[3 * MWIN_DIALOG_FILTER_BYTES + 1];
+    COMDLG_FILTERSPEC specs[MWIN_MAX_DIALOG_FILTERS];
+    char spec[3 * MWIN_MAX_DIALOG_FILTER_BYTES + 1];
     for (uint32_t i = 0; i < copy->filterCount; i++)
     {
         const mwinDialogFilter* filter = &copy->filters[i];

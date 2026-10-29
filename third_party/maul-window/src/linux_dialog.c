@@ -85,7 +85,7 @@ static bool AppendFilter(const mwinDBusApi* api, mwinDBusIter* iter, const mwinD
     while (built && *extension != '\0')
     {
         size_t length = strcspn(extension, ";");
-        char glob[5 * MWIN_DIALOG_FILTER_BYTES + 3];
+        char glob[5 * MWIN_MAX_DIALOG_FILTER_BYTES + 3];
         glob[mwinCaseBlindPattern(extension, length, glob)] = '\0';
         mwinDBusIter pattern;
         uint32_t kind = 0;
@@ -221,7 +221,7 @@ static void GatherUris(const mwinDBusApi* api, mwinContext* context, mwinDBusIte
         {
             const char* text = "";
             api->getBasic(&uris, (void*)&text);
-            char copy[3 * MWIN_ADDRESS_BYTES + 16];
+            char copy[3 * MWIN_MAX_ADDRESS_BYTES + 16];
             size_t length = strlen(text);
             char* path = nullptr;
             size_t pathLength = 0;

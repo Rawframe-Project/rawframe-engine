@@ -49,8 +49,8 @@ extern "C"
     // for the same run and offset each time it is asked. It must not
     // initialize the iterator that called it; any other call it makes on
     // that iterator returns muni_errorBusy.
-    typedef size_t (*muniComplexBreakFn)(void* context, const char* run, size_t length,
-                                         size_t from);
+    typedef size_t (*muniComplexBreakFunction)(void* context, const char* run, size_t length,
+                                               size_t from);
 
     /// Starts an iterator over the grapheme cluster boundaries of a UTF-8 text or
     /// its first piece.
@@ -143,7 +143,7 @@ extern "C"
     /// Safe from any thread; an iterator is used by one thread at a time,
     /// and calls the segmenter on that thread.
     MUNI_NODISCARD MUNI_API muniResult muniSetComplexBreaker(muniSegmentIterator* iterator,
-                                                             muniComplexBreakFn breaker,
+                                                             muniComplexBreakFunction breaker,
                                                              void* context);
 
     // A code point and the class a word or sentence iterator gives it in

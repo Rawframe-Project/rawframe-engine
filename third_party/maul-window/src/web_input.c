@@ -262,7 +262,7 @@ static void OnText(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecord
     char text[4];
     size_t length = 0;
     if (record->code < 0x20 || record->code == 0x7F ||
-        muniEncodeUtf8((uint32_t)record->code, text, &length) != muni_success)
+        muniEncodeUtf8((uint32_t)record->code, text, sizeof(text), &length) != muni_success)
     {
         return;
     }

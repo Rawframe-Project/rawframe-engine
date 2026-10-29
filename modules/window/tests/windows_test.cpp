@@ -1,10 +1,11 @@
 // The contract tests, on the headless test platform: the two-phase
 // close with a refusal, requests answered after the notifications they
 // caused and superseded when replaced, stale ids refused, input reset on
-// focus loss, raw input and drops carried whole, gamepads about no window,
-// a program whose start fails, and the seam's window side: a surface
-// generation's handles given once, none while the surface is lost, and its
-// display's facts as the platform tells them.
+// focus loss, raw input and drops carried whole, an icon past its bounds
+// refused as over the limit, gamepads about no window, a program whose
+// start fails, and the seam's window side: a surface generation's handles
+// given once, none while the surface is lost, and its display's facts as
+// the platform tells them.
 
 #include "rawframe/test/test.h"
 #include "rawframe/window/errors.h"
@@ -14,9 +15,11 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -264,6 +267,25 @@ RAWFRAME_TEST(DroppedFilesArriveAsInertPaths) {
         RAWFRAME_EXPECT((event.paths == std::vector<std::string>{"/tmp/a.png", "/tmp/b c.txt"}));
         RAWFRAME_EXPECT(!event.truncated && event.position.x == 5 && event.window == script.window);
     }
+}
+
+RAWFRAME_TEST(AnIconPastItsBoundsIsOverLimit) {
+    bool tooMany = false;
+    bool tooLarge = false;
+    Script script{{
+        [&](Windows& windows, Script& self) {
+            const std::vector<std::uint8_t> kPixel(4, 255);
+            const std::vector<IconImage> kFive(5, IconImage{.width = 1, .height = 1, .pixels = kPixel});
+            tooMany = failsWith(windows.requestIcon(self.window, kFive), WindowError::OverLimit);
+            const std::vector<std::uint8_t> kRow(std::size_t{257} * 4, 255);
+            const IconImage kWide{.width = 257, .height = 1, .pixels = kRow};
+            tooLarge = failsWith(windows.requestIcon(self.window, std::span{&kWide, 1}), WindowError::OverLimit);
+        },
+        [](Windows&, Script&) {},
+    }};
+    RAWFRAME_EXPECT(testing::run(script, RunSettings{}).has_value());
+    RAWFRAME_EXPECT(tooMany);
+    RAWFRAME_EXPECT(tooLarge);
 }
 
 RAWFRAME_TEST(GamepadsAreAboutNoWindowAndRumble) {

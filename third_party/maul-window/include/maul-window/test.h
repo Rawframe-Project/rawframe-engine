@@ -66,9 +66,10 @@ extern "C"
     /// @return `mwin_success`; `mwin_errorStale` for a window that no
     ///         longer exists; `mwin_errorCapacity` when 1,024 reports or
     ///         64 KiB of their text already wait; `mwin_errorUnsupported`
-    ///         for a context of another backend; `mwin_errorInvalid` for a
-    ///         NULL argument, a
-    ///         record type only the core makes, or text that is not UTF-8.
+    ///         for a context of another backend; `mwin_errorLimit` for a
+    ///         composition of more than MWIN_MAX_PREEDIT_SEGMENTS
+    ///         segments; `mwin_errorInvalid` for a NULL argument, a record
+    ///         type only the core makes, or text that is not UTF-8.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinTestPost(mwinContext* context, const mwinEvent* event);
@@ -387,12 +388,13 @@ extern "C"
     /// once, as another program would: its text goes.
     ///
     /// @param context     A context of the test backend.
-    /// @param mime        The type, 1 to MWIN_CLIPBOARD_MIME bytes, taken
+    /// @param mime        The type, 1 to MWIN_MAX_CLIPBOARD_MIME bytes, taken
     ///                    as it is.
     /// @param mimeLength  Its bytes.
     /// @param bytes       The data. May be NULL when length is 0.
     /// @param length      Its bytes.
-    /// @return As mwinTestSetClipboard.
+    /// @return As mwinTestSetClipboard, with `mwin_errorLimit` for a type
+    ///         longer than MWIN_MAX_CLIPBOARD_MIME.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinTestSetClipboardData(mwinContext* context,

@@ -20,14 +20,24 @@ mwinResult mwinRequestHitRegions(mwinContext* context, mwinWindowId window,
                                  const mwinHitRegion* regions, uint32_t count,
                                  mwinRequestId* requestOut)
 {
-    bool valid = count <= MWIN_HIT_REGIONS && (regions != nullptr || count == 0);
-    for (uint32_t i = 0; valid && i < count; i++)
+    if (mwinIsBusy(context))
     {
-        valid = IsRegion(&regions[i]);
+        return mwinBusy(context);
     }
-    if (!valid)
+    if (regions == nullptr && count != 0)
     {
         return mwinMisuse(context);
+    }
+    if (count > MWIN_MAX_HIT_REGIONS)
+    {
+        return mwinRefuse(context, mwin_errorLimit);
+    }
+    for (uint32_t i = 0; i < count; i++)
+    {
+        if (!IsRegion(&regions[i]))
+        {
+            return mwinMisuse(context);
+        }
     }
     uint32_t slot = 0;
     int32_t request = 0;

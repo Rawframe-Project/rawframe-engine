@@ -294,14 +294,19 @@ static bool Merge(mwinRing* ring, const mwinEvent* event)
     return false;
 }
 
+// Posts a window's reset, which also ends its composition: the record
+// lost may have been a composition, and the program drops the one it
+// shows.
 static void PostReset(mwinContext* context, uint32_t slot, uint64_t timeNs)
 {
+    context->windows[slot].state.composing = false;
     mwinEvent reset = {0};
     reset.type = mwin_eventInputStateReset;
     reset.window = mwinWindowIdOf(context, slot);
     reset.timeNs = timeNs;
     // A reset replaces one still waiting, so it always has room.
-    bool added = Append(context, &context->windows[slot].rings[mwin_classNotification], &reset);
+    [[maybe_unused]] bool added =
+        Append(context, &context->windows[slot].rings[mwin_classNotification], &reset);
     MWIN_ASSERT(added);
 }
 
@@ -380,7 +385,7 @@ static bool Consumed(mwinWindow* window, const mwinEvent* record)
         return consumed;
     }
     mwinKey key = record->data.key.key;
-    if (window->state.composing && key != 0 && key < MWIN_KEY_NAMED)
+    if (window->imeComposing && key != 0 && key < MWIN_KEY_NAMED)
     {
         *held = (uint8_t)(*held | bit);
         return true;
@@ -398,6 +403,13 @@ void mwinPost(mwinContext* context, uint32_t slot, const mwinEvent* event)
     }
     mwinEvent record = *event;
     record.window = mwinWindowIdOf(context, slot);
+    if (record.type == mwin_eventImePreedit || record.type == mwin_eventFocusLost)
+    {
+        // The input method goes on composing whether or not the program
+        // gets its composition.
+        window->imeComposing =
+            record.type == mwin_eventImePreedit && record.data.preedit.length > 0;
+    }
     bool text = record.type == mwin_eventTextInput || record.type == mwin_eventImePreedit;
     if ((text && !TakeText(context, slot, &record)) || Consumed(window, &record))
     {
@@ -465,6 +477,7 @@ void mwinPostDestroyed(mwinContext* context, uint32_t slot, uint64_t timeNs)
     }
     mwinDropText(&window->text);
     memset(window->consumedKeys, 0, sizeof(window->consumedKeys));
+    window->imeComposing = false;
     // Completions stay: every request is answered, even a cancelled one.
     mwinRing* ring = &window->rings[mwin_classNotification];
     for (uint32_t i = ring->count; i > 0; i--)
@@ -480,7 +493,7 @@ void mwinPostDestroyed(mwinContext* context, uint32_t slot, uint64_t timeNs)
     event.timeNs = timeNs;
     // Only completions are left, at most one per request slot, and the
     // ring holds more than the request slots.
-    bool added = Append(context, ring, &event);
+    [[maybe_unused]] bool added = Append(context, ring, &event);
     MWIN_ASSERT(added);
 }
 
@@ -531,6 +544,10 @@ static mwinRing* FindOldest(mwinContext* context, mwinWindow** windowOut)
 
 mwinResult mwinNextEvent(mwinContext* context, mwinEvent* eventOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (context == nullptr || eventOut == nullptr)
     {
         return mwinMisuse(context);

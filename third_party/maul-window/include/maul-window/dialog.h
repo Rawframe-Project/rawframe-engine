@@ -27,9 +27,9 @@ extern "C"
 
 // The most filters a dialog offers, and the most bytes of a dialog's
 // title, of a filter's name and of its extensions.
-#define MWIN_DIALOG_FILTERS      16
-#define MWIN_DIALOG_TITLE_BYTES  512
-#define MWIN_DIALOG_FILTER_BYTES 256
+#define MWIN_MAX_DIALOG_FILTERS      16
+#define MWIN_MAX_DIALOG_TITLE_BYTES  512
+#define MWIN_MAX_DIALOG_FILTER_BYTES 256
 
     // What a dialog chooses.
     typedef uint8_t mwinDialogKind;
@@ -99,11 +99,14 @@ extern "C"
     /// @return `mwin_success`; `mwin_errorCapacity` when the context
     ///         cannot hold the copy or the window has its limit of
     ///         requests in flight; `mwin_errorStale` for a window that no
-    ///         longer exists; `mwin_errorInvalid` for a NULL context or
-    ///         def, an invalid def, text that is not UTF-8, holds a NUL or
-    ///         passes its limit (the folder and name MWIN_ADDRESS_BYTES), a
-    ///         folder that is not absolute, a filter without a name or
-    ///         extensions, or an extension with a dot, '*' or '?'.
+    ///         longer exists; `mwin_errorLimit` for text past its bound
+    ///         (the title MWIN_MAX_DIALOG_TITLE_BYTES, the folder and name
+    ///         MWIN_MAX_ADDRESS_BYTES, a filter's name and extensions
+    ///         MWIN_MAX_DIALOG_FILTER_BYTES) or more than MWIN_MAX_DIALOG_FILTERS
+    ///         filters; `mwin_errorInvalid` for a NULL context or def, an
+    ///         invalid def, text that is not UTF-8 or holds a NUL, a folder
+    ///         that is not absolute, a filter without a name or extensions,
+    ///         or an extension with a dot, '*' or '?'.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinRequestFileDialog(mwinContext* context,

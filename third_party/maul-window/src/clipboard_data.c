@@ -32,12 +32,17 @@ bool mwinIsPlainText(const char* mime, size_t length)
 }
 
 // A MIME type as the clipboard takes it: printable ASCII, a type and a
-// subtype on either side of a slash before any parameter.
-static bool IsMime(const char* mime, size_t length)
+// subtype on either side of a slash before any parameter; past
+// MWIN_MAX_CLIPBOARD_MIME bytes, mwin_errorLimit.
+static mwinResult CheckMime(const char* mime, size_t length)
 {
-    if (mime == nullptr || length == 0 || length > MWIN_CLIPBOARD_MIME)
+    if (mime == nullptr || length == 0)
     {
-        return false;
+        return mwin_errorInvalid;
+    }
+    if (length > MWIN_MAX_CLIPBOARD_MIME)
+    {
+        return mwin_errorLimit;
     }
     size_t slash = 0;
     size_t end = length;
@@ -45,12 +50,12 @@ static bool IsMime(const char* mime, size_t length)
     {
         if (mime[i] < 0x20 || mime[i] > 0x7E)
         {
-            return false;
+            return mwin_errorInvalid;
         }
         end = mime[i] == ';' && end == length ? i : end;
         slash = mime[i] == '/' && slash == 0 && i < end ? i : slash;
     }
-    return slash > 0 && slash + 1 < end;
+    return slash > 0 && slash + 1 < end ? mwin_success : mwin_errorInvalid;
 }
 
 bool mwinSameMime(const char* a, size_t aLength, const char* b, size_t bLength)
@@ -122,40 +127,50 @@ void mwinReleaseClipboardExtras(mwinContext* context)
 
 // Checks a write's items: their types, each once, a text one UTF-8; the
 // bytes of the others in all, and the text's, into totalOut and textOut
-// (the text item's index, or -1). False for a misuse.
-static bool CheckItems(const mwinClipboardItem* items, uint32_t count, size_t* totalOut,
-                       int* textOut)
+// (the text item's index, or -1). mwin_errorLimit for more items or a
+// longer type than the named bounds, mwin_errorInvalid for a misuse.
+static mwinResult CheckItems(const mwinClipboardItem* items, uint32_t count, size_t* totalOut,
+                             int* textOut)
 {
     *totalOut = 0;
     *textOut = -1;
-    if (items == nullptr || count == 0 || count > MWIN_CLIPBOARD_ITEMS)
+    if (items == nullptr || count == 0)
     {
-        return false;
+        return mwin_errorInvalid;
+    }
+    if (count > MWIN_MAX_CLIPBOARD_ITEMS)
+    {
+        return mwin_errorLimit;
     }
     for (uint32_t i = 0; i < count; i++)
     {
         const mwinClipboardItem* item = &items[i];
-        if (!IsMime(item->mime, item->mimeLength) || (item->bytes == nullptr && item->length != 0))
+        mwinResult status = CheckMime(item->mime, item->mimeLength);
+        if (status != mwin_success)
         {
-            return false;
+            return status;
+        }
+        if (item->bytes == nullptr && item->length != 0)
+        {
+            return mwin_errorInvalid;
         }
         for (size_t j = 0; j < i; j++)
         {
             if (mwinSameMime(items[j].mime, items[j].mimeLength, item->mime, item->mimeLength))
             {
-                return false;
+                return mwin_errorInvalid;
             }
         }
         bool text = mwinIsPlainText(item->mime, item->mimeLength);
         if (text &&
             (*textOut >= 0 || muniValidateUtf8(item->bytes, item->length).status != muni_success))
         {
-            return false;
+            return mwin_errorInvalid;
         }
         *textOut = text ? (int)i : *textOut;
         *totalOut = item->length > SIZE_MAX - *totalOut ? SIZE_MAX : *totalOut + item->length;
     }
-    return true;
+    return mwin_success;
 }
 
 // Copies a write's items but the text into one block: NULL when the
@@ -206,11 +221,20 @@ mwinResult mwinRequestClipboardWriteData(mwinContext* context, mwinWindowId wind
                                          const mwinClipboardItem* items, uint32_t count,
                                          mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     size_t total = 0;
     int text = -1;
-    if (context == nullptr || !CheckItems(items, count, &total, &text))
+    if (context == nullptr)
     {
         return mwinMisuse(context);
+    }
+    mwinResult checked = CheckItems(items, count, &total, &text);
+    if (checked != mwin_success)
+    {
+        return mwinRefuse(context, checked);
     }
     if (total > context->limits.clipboardBytes)
     {
@@ -251,9 +275,22 @@ mwinResult mwinRequestClipboardWriteData(mwinContext* context, mwinWindowId wind
 mwinResult mwinRequestClipboardReadData(mwinContext* context, mwinWindowId window, const char* mime,
                                         size_t mimeLength, mwinRequestId* requestOut)
 {
-    if (context == nullptr || !IsMime(mime, mimeLength) || mwinIsPlainText(mime, mimeLength))
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
+    if (context == nullptr)
     {
         return mwinMisuse(context);
+    }
+    mwinResult checked = CheckMime(mime, mimeLength);
+    if (checked == mwin_success && mwinIsPlainText(mime, mimeLength))
+    {
+        checked = mwin_errorInvalid;
+    }
+    if (checked != mwin_success)
+    {
+        return mwinRefuse(context, checked);
     }
     char* copy = mwinAllocate(&context->allocator, mimeLength + 1, 1);
     if (copy == nullptr)
@@ -332,6 +369,10 @@ mwinResult mwinGetPrimaryText(const mwinContext* context, mwinRequestId request,
 mwinResult mwinRequestPrimaryWrite(mwinContext* context, mwinWindowId window, const char* text,
                                    size_t length, mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (context == nullptr || (text == nullptr && length != 0) ||
         muniValidateUtf8(text, length).status != muni_success)
     {
@@ -369,6 +410,10 @@ mwinResult mwinRequestPrimaryWrite(mwinContext* context, mwinWindowId window, co
 mwinResult mwinRequestPrimaryRead(mwinContext* context, mwinWindowId window,
                                   mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     uint32_t slot = 0;
     int32_t request = 0;
     mwinResult status = mwinBeginRequest(context, window, mwin_requestPrimaryRead, &slot, &request);

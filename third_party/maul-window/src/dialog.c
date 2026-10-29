@@ -6,8 +6,8 @@
 #include "dialog.h"
 
 #include "allocator.h"
+#include "utf8.h"
 
-#include "maul-unicode/encoding.h"
 #include "maul-window/services.h"
 
 #include <stdalign.h>
@@ -21,20 +21,22 @@ mwinFileDialogDef mwinDefaultFileDialogDef(void)
     return (mwinFileDialogDef){.cookie = DIALOG_COOKIE, .kind = mwin_dialogOpen};
 }
 
-static bool IsText(const char* text, size_t length, size_t limit)
+static mwinResult CheckText(const char* text, size_t length, size_t limit)
 {
-    return (text != nullptr || length == 0) && length <= limit &&
-           (length == 0 || (muniValidateUtf8(text, length).status == muni_success &&
-                            memchr(text, '\0', length) == nullptr));
+    return mwinCheckText(text, length, limit, mwin_errorLimit, false);
 }
 
 // Extensions without dots or wildcards, separated by ';', none empty.
-static bool IsExtensions(const char* text, size_t length)
+static mwinResult CheckExtensions(const char* text, size_t length)
 {
-    if (length == 0 || !IsText(text, length, MWIN_DIALOG_FILTER_BYTES) || text[0] == ';' ||
-        text[length - 1] == ';')
+    mwinResult status = CheckText(text, length, MWIN_MAX_DIALOG_FILTER_BYTES);
+    if (status != mwin_success)
     {
-        return false;
+        return status;
+    }
+    if (length == 0 || text[0] == ';' || text[length - 1] == ';')
+    {
+        return mwin_errorInvalid;
     }
     for (size_t i = 0; i < length; i++)
     {
@@ -42,10 +44,10 @@ static bool IsExtensions(const char* text, size_t length)
                     text[i] == '\\' || (unsigned char)text[i] <= ' ';
         if (wild || (text[i] == ';' && text[i + 1] == ';'))
         {
-            return false;
+            return mwin_errorInvalid;
         }
     }
-    return true;
+    return mwin_success;
 }
 
 static bool IsAbsolute(const char* path, size_t length)
@@ -58,23 +60,45 @@ static bool IsAbsolute(const char* path, size_t length)
 #endif
 }
 
-static bool IsDef(const mwinFileDialogDef* def)
+// The def's status: mwin_errorLimit for text or filters past their
+// named bounds, mwin_errorInvalid for anything else wrong.
+static mwinResult CheckDef(const mwinFileDialogDef* def)
 {
-    bool valid = def->cookie == DIALOG_COOKIE && def->kind <= mwin_dialogFolder &&
-                 IsText(def->title, def->titleLength, MWIN_DIALOG_TITLE_BYTES) &&
-                 IsText(def->folder, def->folderLength, MWIN_ADDRESS_BYTES) &&
-                 (def->folderLength == 0 || IsAbsolute(def->folder, def->folderLength)) &&
-                 IsText(def->name, def->nameLength, MWIN_ADDRESS_BYTES) &&
-                 def->filterCount <= MWIN_DIALOG_FILTERS &&
-                 (def->filters != nullptr || def->filterCount == 0);
-    for (uint32_t i = 0; valid && i < def->filterCount; i++)
+    if (def->cookie != DIALOG_COOKIE || def->kind > mwin_dialogFolder ||
+        (def->filters == nullptr && def->filterCount != 0))
+    {
+        return mwin_errorInvalid;
+    }
+    if (def->filterCount > MWIN_MAX_DIALOG_FILTERS)
+    {
+        return mwin_errorLimit;
+    }
+    mwinResult status = CheckText(def->title, def->titleLength, MWIN_MAX_DIALOG_TITLE_BYTES);
+    if (status == mwin_success)
+    {
+        status = CheckText(def->folder, def->folderLength, MWIN_MAX_ADDRESS_BYTES);
+    }
+    if (status == mwin_success && def->folderLength != 0 &&
+        !IsAbsolute(def->folder, def->folderLength))
+    {
+        status = mwin_errorInvalid;
+    }
+    if (status == mwin_success)
+    {
+        status = CheckText(def->name, def->nameLength, MWIN_MAX_ADDRESS_BYTES);
+    }
+    for (uint32_t i = 0; status == mwin_success && i < def->filterCount; i++)
     {
         const mwinFileFilter* filter = &def->filters[i];
-        valid = filter->nameLength > 0 &&
-                IsText(filter->name, filter->nameLength, MWIN_DIALOG_FILTER_BYTES) &&
-                IsExtensions(filter->extensions, filter->extensionsLength);
+        status = filter->nameLength == 0
+                     ? mwin_errorInvalid
+                     : CheckText(filter->name, filter->nameLength, MWIN_MAX_DIALOG_FILTER_BYTES);
+        if (status == mwin_success)
+        {
+            status = CheckExtensions(filter->extensions, filter->extensionsLength);
+        }
     }
-    return valid;
+    return status;
 }
 
 // Copies text and its NUL to where at points, and moves it on.
@@ -134,9 +158,18 @@ static mwinDialogCopy* Copy(const mwinContext* context, const mwinFileDialogDef*
 mwinResult mwinRequestFileDialog(mwinContext* context, mwinWindowId window,
                                  const mwinFileDialogDef* def, mwinRequestId* requestOut)
 {
-    if (context == nullptr || def == nullptr || !IsDef(def))
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
+    if (context == nullptr || def == nullptr)
     {
         return mwinMisuse(context);
+    }
+    mwinResult status = CheckDef(def);
+    if (status != mwin_success)
+    {
+        return mwinRefuse(context, status);
     }
     mwinDialogCopy* copy = Copy(context, def);
     if (copy == nullptr)
@@ -145,7 +178,7 @@ mwinResult mwinRequestFileDialog(mwinContext* context, mwinWindowId window,
     }
     uint32_t slot = 0;
     int32_t request = 0;
-    mwinResult status = mwinBeginRequest(context, window, mwin_requestFileDialog, &slot, &request);
+    status = mwinBeginRequest(context, window, mwin_requestFileDialog, &slot, &request);
     if (status != mwin_success)
     {
         mwinRelease(&context->allocator, copy, copy->size, alignof(mwinDialogCopy));

@@ -155,7 +155,7 @@ typedef struct mwinAndroidPads
     jmethodID ranges;
     jmethodID battery;
     jmethodID rumble;
-    jmethodID hasMotion;
+    jmethodID capabilities;
     jmethodID motion;
     jintArray keys;
 } mwinAndroidPads;

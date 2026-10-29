@@ -57,7 +57,7 @@ void mwinWaylandOfferText(const mwinWaylandPlatform* platform, void* source, uin
 static void KeepType(mwinWaylandTypes* types, const char* type)
 {
     size_t length = strlen(type);
-    if (length <= MWIN_CLIPBOARD_MIME && length < sizeof(types->bytes) - types->length)
+    if (length <= MWIN_MAX_CLIPBOARD_MIME && length < sizeof(types->bytes) - types->length)
     {
         memcpy(types->bytes + types->length, type, length + 1);
         types->length += (uint16_t)(length + 1);

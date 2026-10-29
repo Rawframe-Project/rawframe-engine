@@ -97,9 +97,12 @@ extern "C"
     /// @param window      The window.
     /// @param handlesOut  Receives the bundle.
     /// @return `mwin_success`; `mwin_errorState` while the window has no
-    ///         surface (before mwin_eventWindowCreated, or between a lost
-    ///         and a restored surface); `mwin_errorStale` for a window that
-    ///         no longer exists; `mwin_errorInvalid` for a NULL argument.
+    ///         surface (before mwin_eventWindowCreated, or between
+    ///         mwin_eventSurfaceLost and mwin_eventSurfaceRestored): the
+    ///         program waits for the record that brings the surface, as
+    ///         only reading its records changes this state;
+    ///         `mwin_errorStale` for a window that no longer exists;
+    ///         `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinGetNativeHandles(const mwinContext* context,

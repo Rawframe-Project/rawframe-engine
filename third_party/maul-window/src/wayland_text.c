@@ -5,6 +5,8 @@
 
 #include "wayland_text.h"
 
+#include "utf8.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -13,10 +15,10 @@ static void Post(mwinWaylandPlatform* platform, const mwinEvent* event)
     mwinPost(platform->context, (uint32_t)platform->text.focus, event);
 }
 
-// Ends a composition the window shows.
+// Ends the input method's composition, when one runs.
 static void EndComposition(mwinWaylandPlatform* platform, uint32_t slot)
 {
-    if (!platform->context->windows[slot].state.composing)
+    if (!platform->context->windows[slot].imeComposing)
     {
         return;
     }
@@ -58,16 +60,19 @@ static void Apply(mwinWaylandPlatform* platform)
     (void)mwinWlRequest(api, object, ZWP_TEXT_INPUT_V3_COMMIT, nullptr, 0);
 }
 
-// Keeps a string of the input method's until done; NULL is empty.
+// Keeps a string of the input method's until done, as its UTF-8 repair:
+// libwayland takes any bytes before the NUL, and another program sends
+// them. NULL is empty; a repair past the capacity is lost.
 static void Keep(mwinWaylandString* kept, const char* text, uint32_t capacity)
 {
     size_t length = text != nullptr ? strlen(text) : 0;
+    size_t repaired = mwinRepairUtf8(text, length, nullptr);
     kept->set = true;
-    kept->lost = length > capacity;
-    kept->length = kept->lost ? 0 : (uint32_t)length;
+    kept->lost = repaired > capacity;
+    kept->length = kept->lost ? 0 : (uint32_t)repaired;
     if (kept->length > 0)
     {
-        memcpy(kept->bytes, text, kept->length);
+        (void)mwinRepairUtf8(text, length, kept->bytes);
     }
 }
 

@@ -29,7 +29,9 @@ endif()
 if(MAUL_WINDOW_GAMEPAD)
     set(MWIN_LINUX_PAD_SOURCES
         src/linux_battery.c
+        src/linux_evdev_drop.c
         src/linux_motion.c
+        src/linux_motion_events.c
         src/linux_pad.c
         src/pad_db.c
         src/pad_map.c

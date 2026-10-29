@@ -13,7 +13,11 @@
 mwinResult mwinRequestVirtualKeyboard(mwinContext* context, mwinWindowId window, bool visible,
                                       mwinInputPurpose purpose, mwinRequestId* requestOut)
 {
-    if (purpose > mwin_purposeUrl)
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
+    if (purpose >= MWIN_INPUT_PURPOSES)
     {
         return mwinMisuse(context);
     }
@@ -34,6 +38,10 @@ mwinResult mwinRequestVirtualKeyboard(mwinContext* context, mwinWindowId window,
 mwinResult mwinRequestTextInput(mwinContext* context, mwinWindowId window, bool enabled,
                                 mwinRect caret, mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (!isfinite(caret.x) || !isfinite(caret.y) || !isfinite(caret.width) ||
         !isfinite(caret.height) || caret.width < 0.0f || caret.height < 0.0f)
     {
@@ -55,6 +63,10 @@ mwinResult mwinRequestTextInput(mwinContext* context, mwinWindowId window, bool 
 mwinResult mwinRequestCursorMode(mwinContext* context, mwinWindowId window, mwinCursorMode mode,
                                  mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (mode > mwin_cursorConfinedHidden)
     {
         return mwinMisuse(context);
@@ -73,6 +85,10 @@ mwinResult mwinRequestCursorMode(mwinContext* context, mwinWindowId window, mwin
 mwinResult mwinRequestCursorShape(mwinContext* context, mwinWindowId window, mwinCursorShape shape,
                                   mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (shape > mwin_shapeProgress)
     {
         return mwinMisuse(context);

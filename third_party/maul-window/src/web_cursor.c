@@ -68,7 +68,7 @@ static uint32_t ImageOf(mwinWebPlatform* platform, mwinCursorId id)
     if (cursor->nativeId[0] == 0)
     {
         const mwinIconCopy* copy = cursor->images;
-        uint32_t images[MWIN_CURSOR_IMAGES * 3];
+        uint32_t images[MWIN_MAX_CURSOR_IMAGES * 3];
         for (uint32_t i = 0; i < copy->count; i++)
         {
             images[i * 3] = (uint32_t)(uintptr_t)copy->images[i].pixels;

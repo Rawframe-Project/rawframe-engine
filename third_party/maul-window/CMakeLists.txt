@@ -77,7 +77,7 @@ option(MAUL_WINDOW_GAMEPAD "Build the gamepad component" ON)
 # installed package when there is one, otherwise the pinned release,
 # built and installed along. It comes before the family modules below,
 # whose copies then serve this project.
-set(MAUL_WINDOW_UNICODE_VERSION 0.0.1)
+set(MAUL_WINDOW_UNICODE_VERSION 0.6.0)
 find_package(maul-unicode ${MAUL_WINDOW_UNICODE_VERSION} CONFIG QUIET)
 if(NOT maul-unicode_FOUND)
     include(FetchContent)
@@ -150,8 +150,8 @@ if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
         COMPILE_DEFINITIONS _POSIX_C_SOURCE=200809L)
 endif()
 if(MAUL_WINDOW_TEST_BACKEND)
-    target_sources(maul-window PRIVATE src/backend_test.c src/backend_test_services.c
-        src/backend_test_text.c)
+    target_sources(maul-window PRIVATE src/backend_test.c src/backend_test_pads.c
+        src/backend_test_services.c src/backend_test_text.c)
     target_compile_definitions(maul-window PRIVATE MAUL_WINDOW_TEST_BACKEND)
 endif()
 # The gamepad component: its functions, and the backends' gamepad code.
@@ -271,6 +271,12 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(window)
         maul_add_test(input)
         maul_add_test(lifecycle)
+        # Calls from inside the allocator; with the gamepad component, a
+        # gamepad's setter among them.
+        maul_add_test(busy)
+        if(TARGET test_busy AND MAUL_WINDOW_GAMEPAD)
+            target_compile_definitions(test_busy PRIVATE MWIN_TEST_GAMEPAD)
+        endif()
         maul_add_test(monitor)
         maul_add_test(system)
         maul_add_test(ime)
@@ -301,6 +307,11 @@ if(MAUL_WINDOW_BUILD_TESTS)
         if(TARGET test_android_name AND NOT MAUL_WINDOW_ANDROID)
             target_sources(test_android_name PRIVATE ${PROJECT_SOURCE_DIR}/src/android_name.c)
             target_link_libraries(test_android_name PRIVATE maul-unicode::maul-unicode)
+        endif()
+        # The input scope each purpose sets on Windows, on every platform.
+        maul_add_test(win32_scope WHITEBOX)
+        if(TARGET test_win32_scope AND NOT MAUL_WINDOW_WIN32)
+            target_sources(test_win32_scope PRIVATE ${PROJECT_SOURCE_DIR}/src/win32_scope.c)
         endif()
         if(MAUL_WINDOW_GAMEPAD)
             maul_add_test(gamepad)
@@ -505,13 +516,30 @@ if(MAUL_WINDOW_BUILD_TESTS)
     if((MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11) AND MAUL_WINDOW_GAMEPAD)
         # Numbered controls through their mapping.
         maul_add_test(pad_map WHITEBOX)
+        # Windows' HID gamepads' numbering and reports, as plain values.
+        maul_add_test(hid_controls WHITEBOX)
+        if(TARGET test_hid_controls)
+            target_sources(test_hid_controls PRIVATE ${PROJECT_SOURCE_DIR}/src/hid_controls.c)
+        endif()
+        # A motion device's identity, factors, reports and times, as plain
+        # values.
+        maul_add_test(linux_motion_events WHITEBOX)
+        # An evdev reader's steps after the kernel drops events, as plain
+        # values.
+        maul_add_test(linux_evdev_drop WHITEBOX)
         # Makes virtual gamepads through /dev/uinput, labeled uinput: a
         # container without the device leaves them out.
         maul_add_test(linux_gamepad POSIX)
         target_compile_definitions(test_linux_gamepad PRIVATE _GNU_SOURCE)
         # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(linux_gamepad PROPERTIES SKIP_RETURN_CODE 77 RESOURCE_LOCK uinput)
-        set(pads linux_gamepad)
+        # Which devices become gamepads, how they are read, rumble refused
+        # and the gamepad limit, through /dev/uinput too.
+        maul_add_test(linux_pad_devices POSIX)
+        target_compile_definitions(test_linux_pad_devices PRIVATE _GNU_SOURCE)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
+        set_tests_properties(linux_pad_devices PROPERTIES SKIP_RETURN_CODE 77 RESOURCE_LOCK uinput)
+        set(pads linux_gamepad linux_pad_devices)
         # Where both backends are built, the X11 one too, Wayland's
         # display hidden; the pads of one run would be the other's.
         if(MAUL_WINDOW_WAYLAND AND MAUL_WINDOW_X11)
@@ -594,7 +622,8 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # Applications in the emulator, built by tools/build_android_app.sh
         # without Gradle and run by tools/run_android_app.sh.
         set(MWIN_ANDROID_TESTS android android_input android_cursor android_ime android_pad
-            android_services android_dialog android_drop android_system android_access)
+            android_services android_dialog android_drop android_system android_access
+            android_pad_ds4)
         foreach(name ${MWIN_ANDROID_TESTS})
             set(package maul.window.tests.${name})
             add_library(test_${name} SHARED test/test_${name}.c)
@@ -621,14 +650,20 @@ if(MAUL_WINDOW_BUILD_TESTS)
             set_tests_properties(${name} PROPERTIES TIMEOUT 240 RESOURCE_LOCK emulator
                                  LABELS "${name};integration")
         endforeach()
+        # Intermittent in the Android 15 emulator: battery saver not
+        # reported after a fresh boot, and an explored finger not heard.
+        maul_quarantine(android_system android_access)
+        # Intermittent in the Android 15 emulator: a swipe's moves and lift
+        # not delivered.
+        maul_quarantine(android_input)
     endif()
     if(MAUL_WINDOW_IOS)
         # Applications in the simulator, run by tools/run_ios_app.sh; ios_input,
         # ios_keys and ios_ime hand the view touches, recognizers, presses, text
-        # and compositions as UIKit would.
-        # ios_scenes needs an iPad, where CI runs it.
+        # and compositions as UIKit would; ios_touch has idb touch the window
+        # through the system. ios_scenes needs an iPad, where CI runs it.
         set(MWIN_IOS_TESTS ios ios_input ios_keys ios_ime ios_services ios_drop ios_dialog
-            ios_system ios_scenes)
+            ios_system ios_touch ios_scenes)
         if(MAUL_WINDOW_GAMEPAD)
             list(APPEND MWIN_IOS_TESTS ios_gamepad)
         endif()
@@ -677,8 +712,9 @@ if(MAUL_WINDOW_BUILD_TESTS)
             # The XInput gamepads against a stand-in for XInput.
             maul_add_test(win32_gamepad WHITEBOX)
             # Generic gamepads against a stand-in for Raw Input and the HID
-            # parser.
+            # parser, and their numbering and reports as plain values.
             maul_add_test(win32_hid WHITEBOX)
+            maul_add_test(hid_controls WHITEBOX)
             # Windows.Gaming.Input itself, where the system has it.
             maul_add_test(win32_wgi WHITEBOX)
             target_link_libraries(test_win32_wgi PRIVATE ole32)
@@ -774,10 +810,10 @@ if(MAUL_WINDOW_FUZZ)
         list(APPEND MWIN_FUZZ_AREAS linux_bus scroll x11_drop x11_selection)
     endif()
     if(MAUL_WINDOW_WAYLAND)
-        list(APPEND MWIN_FUZZ_AREAS wayland_offer)
+        list(APPEND MWIN_FUZZ_AREAS wayland_offer wayland_text)
     endif()
     if(MAUL_WINDOW_GAMEPAD AND (MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11))
-        list(APPEND MWIN_FUZZ_AREAS pad)
+        list(APPEND MWIN_FUZZ_AREAS battery hid linux_motion pad)
     endif()
     foreach(area ${MWIN_FUZZ_AREAS})
         add_executable(fuzz_${area} test/fuzz_${area}.c)
@@ -798,6 +834,10 @@ if(MAUL_WINDOW_FUZZ)
     target_sources(fuzz_web_records PRIVATE src/backend_web.c src/web_clipboard.c
                    src/web_cursor.c src/web_drop.c src/web_input.c src/web_page.c
                    src/web_services.c src/web_text.c src/web_window.c)
+    # Windows' HID gamepads' numbering and reports, built for the host.
+    if(TARGET fuzz_hid)
+        target_sources(fuzz_hid PRIVATE src/hid_controls.c)
+    endif()
     if(MAUL_WINDOW_X11)
         target_include_directories(fuzz_scroll SYSTEM PRIVATE ${MWIN_XCB_INCLUDE_DIRS})
         target_include_directories(fuzz_x11_selection SYSTEM PRIVATE ${MWIN_XCB_INCLUDE_DIRS})
@@ -811,6 +851,9 @@ if(MAUL_WINDOW_FUZZ)
         target_include_directories(fuzz_wayland_offer SYSTEM PRIVATE ${MWIN_PROTOCOL_OUT}
                                    ${MWIN_WAYLAND_INCLUDE_DIR})
         target_compile_definitions(fuzz_wayland_offer PRIVATE _POSIX_C_SOURCE=200809L)
+        target_include_directories(fuzz_wayland_text SYSTEM PRIVATE ${MWIN_PROTOCOL_OUT}
+                                   ${MWIN_WAYLAND_INCLUDE_DIR})
+        target_compile_definitions(fuzz_wayland_text PRIVATE _POSIX_C_SOURCE=200809L)
     endif()
 endif()
 

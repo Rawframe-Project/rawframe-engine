@@ -228,8 +228,10 @@ extern "C"
 #endif
 
     /// Returns how many calls the context has refused as invalid input
-    /// (`mwin_errorInvalid`): a count release builds can watch to catch a
-    /// program's bugs. Stale ids are not misuse.
+    /// (`mwin_errorInvalid`), past a named bound (`mwin_errorLimit`) or
+    /// from inside its allocator (`mwin_errorBusy`): a count release
+    /// builds can watch to catch a program's bugs. Stale ids are not
+    /// misuse.
     ///
     /// @param context  The context.
     /// @return The count; 0 for a NULL context.

@@ -18,7 +18,8 @@
 // Discrete records (keys, text, buttons, touches and pen contacts
 // beginning or ending) are never merged: when their storage is full the
 // window gets mwin_eventInputStateReset instead, which also follows every
-// loss of focus, after which no key or button counts as held. Motion,
+// loss of focus, after which no key or button counts as held and no
+// composition is shown. Motion,
 // raw deltas and the wheel are delivered sample by sample while there is
 // room, and merged into the newest waiting record of their kind when
 // there is not; samples says how many a record stands for.
@@ -34,9 +35,12 @@
 // window accepts text (mwinRequestTextInput), mwin_eventImePreedit
 // reports the text being composed, with its caret, its selection and
 // styled segments; an empty preedit ends the composition. Committed text
-// arrives as mwin_eventTextInput. While a composition runs, the keys it
-// consumes produce no key records: a key that types a character and goes
-// down during a composition is left out, and so is its release.
+// arrives as mwin_eventTextInput. While the input method composes, the
+// keys it consumes produce no key records: a key that types a character
+// and goes down during a composition is left out, and so is its release.
+// A reset ends the composition shown, not the input method's: its keys
+// stay left out until it ends its composition with an empty preedit or
+// the focus leaves.
 
 #ifndef MAUL_WINDOW_EVENT_H
 #define MAUL_WINDOW_EVENT_H
@@ -81,7 +85,8 @@ extern "C"
         mwin_eventHidden = 14,
         // A request was answered (data.completion).
         mwin_eventRequestCompleted = 15,
-        // Forget every key and button held: focus was lost or input was.
+        // Forget every key and button held, and drop any composition shown:
+        // focus was lost or input was.
         // About a gamepad (the null window, data.gamepad), read its state
         // again (mwinGetGamepadState).
         mwin_eventInputStateReset = 16,

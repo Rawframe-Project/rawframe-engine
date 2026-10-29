@@ -169,13 +169,18 @@ typedef struct mwinWindow
     // One bit per key code whose press a composition consumed, so its
     // release goes too.
     uint8_t consumedKeys[32];
+    // Whether the input method composes, which decides the keys it
+    // consumes: from every composition the backend posts, kept or lost.
+    // Unlike state.composing, a reset does not end it; only an empty
+    // composition or the focus leaving does.
+    bool imeComposing;
     mwinRequest* requests;
     char* title;
     char* pendingTitle;
     uint16_t titleLength;
     uint16_t pendingTitleLength;
     // The hit regions the program declared (chrome.c).
-    mwinHitRegion regions[MWIN_HIT_REGIONS];
+    mwinHitRegion regions[MWIN_MAX_HIT_REGIONS];
     uint8_t regionCount;
     // The accessibility root the platform took, and whether a client has
     // asked for the tree (accessibility.c).
@@ -226,7 +231,12 @@ typedef struct mwinDropPayload
 
 struct mwinContext
 {
+    // Every block after the context's own goes through allocator, which
+    // calls the program's, host, and counts in hosting the calls under
+    // way: while one is, a call that changes the context is refused.
     mwinAllocator allocator;
+    mwinAllocator host;
+    uint32_t hosting;
     size_t memorySize;
     // Calls refused as invalid input, counted through misuse, which
     // points at misuseCount so that calls taking a const context count
@@ -443,6 +453,33 @@ static inline mwinResult mwinMisuse(const mwinContext* context)
         ++*context->misuse;
     }
     return mwin_errorInvalid;
+}
+
+// Whether the context is inside the program's allocator, where a call
+// that changes it is refused through mwinBusy.
+static inline bool mwinIsBusy(const mwinContext* context)
+{
+    return context != nullptr && context->hosting > 0;
+}
+
+// Counts one misuse on a context inside its allocator and answers
+// mwin_errorBusy.
+static inline mwinResult mwinBusy(const mwinContext* context)
+{
+    ++*context->misuse;
+    return mwin_errorBusy;
+}
+
+// Answers a refusal's status, counting one misuse on a live context
+// for mwin_errorInvalid and mwin_errorLimit, as mwinMisuse does; a
+// limit of mwinLimits that is full is not misuse.
+static inline mwinResult mwinRefuse(const mwinContext* context, mwinResult status)
+{
+    if (context != nullptr && (status == mwin_errorInvalid || status == mwin_errorLimit))
+    {
+        ++*context->misuse;
+    }
+    return status;
 }
 
 // The id of the request in a window slot's request slot.

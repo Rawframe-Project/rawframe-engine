@@ -77,7 +77,7 @@ muniResult muniInitLineIterator(muniSegmentIterator* iterator, const char* text,
     return Init(iterator, muni_segmentLine, text, length, moreFollows);
 }
 
-muniResult muniSetComplexBreaker(muniSegmentIterator* iterator, muniComplexBreakFn breaker,
+muniResult muniSetComplexBreaker(muniSegmentIterator* iterator, muniComplexBreakFunction breaker,
                                  void* context)
 {
     if (iterator == nullptr)

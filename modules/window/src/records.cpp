@@ -191,6 +191,7 @@ std::unexpected<result::Error> failure(mwinResult status, std::string_view what)
     case mwin_errorStale:
         return result::fail(result::ErrorClass::NotFound, kWindowDomain, code(WindowError::Stale), what);
     case mwin_errorCapacity:
+    case mwin_errorLimit:
         return result::fail(result::ErrorClass::ResourceExhausted, kWindowDomain, code(WindowError::OverLimit), what);
     case mwin_errorUnsupported:
         return result::fail(result::ErrorClass::Unsupported, kWindowDomain, code(WindowError::Unsupported), what);

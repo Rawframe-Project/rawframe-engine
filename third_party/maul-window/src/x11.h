@@ -193,7 +193,7 @@ typedef struct mwinX11Clipboard
     xcb_window_t window;
     bool owned[MWIN_X11_SELECTIONS];
     xcb_timestamp_t ownedTime[MWIN_X11_SELECTIONS];
-    xcb_atom_t types[MWIN_CLIPBOARD_ITEMS];
+    xcb_atom_t types[MWIN_MAX_CLIPBOARD_ITEMS];
     struct
     {
         xcb_window_t requestor;

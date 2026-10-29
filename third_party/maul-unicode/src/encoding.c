@@ -222,14 +222,21 @@ static size_t EncodeUtf8Unchecked(uint32_t codePoint, uint8_t* bytes)
     return 4;
 }
 
-muniResult muniEncodeUtf8(uint32_t codePoint, char* bytes, size_t* sizeOut)
+muniResult muniEncodeUtf8(uint32_t codePoint, char* bytes, size_t capacity, size_t* sizeOut)
 {
-    if (bytes == nullptr || sizeOut == nullptr || codePoint > 0x10FFFF ||
+    if ((bytes == nullptr && capacity != 0) || sizeOut == nullptr || codePoint > 0x10FFFF ||
         (codePoint >= 0xD800 && codePoint <= 0xDFFF))
     {
         return muni_errorInvalid;
     }
-    *sizeOut = EncodeUtf8Unchecked(codePoint, (uint8_t*)bytes);
+    uint8_t encoded[4];
+    size_t size = EncodeUtf8Unchecked(codePoint, encoded);
+    *sizeOut = size;
+    if (size > capacity)
+    {
+        return muni_errorCapacity;
+    }
+    memcpy(bytes, encoded, size);
     return muni_success;
 }
 

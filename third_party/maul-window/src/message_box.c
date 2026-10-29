@@ -5,16 +5,7 @@
 
 #include "message_box.h"
 
-#include "maul-unicode/encoding.h"
-
-#include <string.h>
-
-static bool IsText(const char* text, size_t length, size_t limit)
-{
-    return (text != nullptr || length == 0) && length <= limit &&
-           muniValidateUtf8(text, length).status == muni_success &&
-           (length == 0 || memchr(text, '\0', length) == nullptr);
-}
+#include "utf8.h"
 
 #if !defined(MAUL_WINDOW_WIN32) && !defined(MAUL_WINDOW_WEB) && !defined(MAUL_WINDOW_WAYLAND) &&   \
     !defined(MAUL_WINDOW_X11) && !defined(MAUL_WINDOW_MACOS) && !defined(MAUL_WINDOW_IOS)
@@ -36,11 +27,20 @@ mwinResult mwinShowMessageBox(const mwinMessageBoxDef* def, bool* acceptedOut)
         return mwin_errorVersion;
     }
     if (def == nullptr || def->cookie != MWIN_MESSAGE_BOX_DEF_COOKIE ||
-        def->kind > mwin_messageError || def->buttons > mwin_buttonsYesNo ||
-        !IsText(def->title, def->titleLength, MWIN_MESSAGE_TITLE_BYTES) ||
-        !IsText(def->message, def->messageLength, MWIN_MESSAGE_BYTES))
+        def->kind > mwin_messageError || def->buttons > mwin_buttonsYesNo)
     {
         return mwin_errorInvalid;
+    }
+    mwinResult checked = mwinCheckText(def->title, def->titleLength, MWIN_MAX_MESSAGE_TITLE_BYTES,
+                                       mwin_errorLimit, false);
+    if (checked == mwin_success)
+    {
+        checked = mwinCheckText(def->message, def->messageLength, MWIN_MAX_MESSAGE_BYTES,
+                                mwin_errorLimit, false);
+    }
+    if (checked != mwin_success)
+    {
+        return checked;
     }
     bool accepted = false;
     mwinResult status = mwinPlatformMessageBox(def, &accepted);

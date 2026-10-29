@@ -39,3 +39,18 @@ size_t mwinRepairUtf8(const char* bytes, size_t length, char* out)
     }
     return written;
 }
+
+mwinResult mwinCheckText(const char* text, size_t length, size_t limit, mwinResult over, bool nul)
+{
+    if (text == nullptr && length != 0)
+    {
+        return mwin_errorInvalid;
+    }
+    if (length > limit)
+    {
+        return over;
+    }
+    bool valid = length == 0 || (muniValidateUtf8(text, length).status == muni_success &&
+                                 (nul || memchr(text, '\0', length) == nullptr));
+    return valid ? mwin_success : mwin_errorInvalid;
+}

@@ -249,8 +249,8 @@ extern "C"
     };
 
 // The images one cursor holds, and the most pixels of a side.
-#define MWIN_CURSOR_IMAGES 4
-#define MWIN_CURSOR_SIZE   128
+#define MWIN_MAX_CURSOR_IMAGES 4
+#define MWIN_MAX_CURSOR_SIZE   128
 
     // A cursor made from images: an id of the context's,
     // checked by generation.
@@ -266,7 +266,7 @@ extern "C"
         uint32_t cookie;
         // The cursor at scale 1 first, then the same cursor at higher
         // scales, larger; each in the icon's form, at most
-        // MWIN_CURSOR_SIZE a side. Only read during the call.
+        // MWIN_MAX_CURSOR_SIZE a side. Only read during the call.
         const mwinIconImage* images;
         uint32_t imageCount;
         // The hotspot, in the first image's pixels from its top left.
@@ -285,6 +285,10 @@ extern "C"
         mwin_purposePassword = 3,
         mwin_purposeUrl = 4,
     };
+
+// How many input purposes there are: each is below it, and a value from
+// it on is not one.
+#define MWIN_INPUT_PURPOSES 5
 
     /// Asks to show or hide the on-screen keyboard over a window, where
     /// the platform has one; others answer mwin_outcomeUnsupported.
@@ -368,12 +372,13 @@ extern "C"
     /// @param context    The context.
     /// @param def        The images and hotspot.
     /// @param cursorOut  Receives the cursor's id.
-    /// @return `mwin_success`; `mwin_errorInvalid` for a NULL argument, a
-    ///         def without its cookie, no images or more than
-    ///         MWIN_CURSOR_IMAGES, an image without pixels, with no width
-    ///         or height or more than MWIN_CURSOR_SIZE, or a stride below
-    ///         its width times 4, an image not wider than the one before,
-    ///         or a hotspot outside the first image;
+    /// @return `mwin_success`; `mwin_errorLimit` for more images than
+    ///         MWIN_MAX_CURSOR_IMAGES or an image larger than MWIN_MAX_CURSOR_SIZE
+    ///         a side; `mwin_errorInvalid` for a NULL argument, a def
+    ///         without its cookie, no images, an image without pixels,
+    ///         with no width or height, or a stride below its width times
+    ///         4, an image not wider than the one before, or a hotspot
+    ///         outside the first image;
     ///         `mwin_errorCapacity` past the limit's cursors or when the
     ///         allocator fails.
     /// @par Thread safety

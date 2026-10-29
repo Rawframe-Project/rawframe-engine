@@ -27,10 +27,10 @@ mwinResult mwinPlatformMessageBox(const mwinMessageBoxDef* def, bool* acceptedOu
     static const UINT icons[] = {MB_ICONINFORMATION, MB_ICONWARNING, MB_ICONERROR};
     static const UINT buttons[] = {MB_OK, MB_OKCANCEL, MB_YESNO};
     // A UTF-16 unit for each byte of UTF-8 at most.
-    WCHAR title[MWIN_MESSAGE_TITLE_BYTES + 1];
-    WCHAR text[MWIN_MESSAGE_BYTES + 1];
-    Wide(def->title, def->titleLength, title, MWIN_MESSAGE_TITLE_BYTES + 1);
-    Wide(def->message, def->messageLength, text, MWIN_MESSAGE_BYTES + 1);
+    WCHAR title[MWIN_MAX_MESSAGE_TITLE_BYTES + 1];
+    WCHAR text[MWIN_MAX_MESSAGE_BYTES + 1];
+    Wide(def->title, def->titleLength, title, MWIN_MAX_MESSAGE_TITLE_BYTES + 1);
+    Wide(def->message, def->messageLength, text, MWIN_MAX_MESSAGE_BYTES + 1);
     int answer =
         MessageBoxW(nullptr, text, title,
                     icons[def->kind] | buttons[def->buttons] | MB_TASKMODAL | MB_SETFOREGROUND);

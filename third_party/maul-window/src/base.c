@@ -32,6 +32,10 @@ const char* mwinResultName(mwinResult result)
         return "mwin_errorState";
     case mwin_errorVersion:
         return "mwin_errorVersion";
+    case mwin_errorLimit:
+        return "mwin_errorLimit";
+    case mwin_errorBusy:
+        return "mwin_errorBusy";
     default:
         return "unknown result";
     }

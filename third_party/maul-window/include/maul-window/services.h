@@ -24,11 +24,11 @@ extern "C"
 #endif
 
 // The most bytes of an address or a path.
-#define MWIN_ADDRESS_BYTES 4096
+#define MWIN_MAX_ADDRESS_BYTES 4096
 
 // The most bytes of a message box's title, and of its message.
-#define MWIN_MESSAGE_TITLE_BYTES 512
-#define MWIN_MESSAGE_BYTES       8192
+#define MWIN_MAX_MESSAGE_TITLE_BYTES 512
+#define MWIN_MAX_MESSAGE_BYTES       8192
 
     /// Asks the system to open a web or mail address in the user's
     /// default program.
@@ -38,13 +38,14 @@ extern "C"
     /// @param url        UTF-8, not NUL-terminated: http://, https:// or
     ///                   mailto: (in any case), then no spaces or control
     ///                   characters.
-    /// @param length     Its bytes, at most MWIN_ADDRESS_BYTES.
+    /// @param length     Its bytes, at most MWIN_MAX_ADDRESS_BYTES.
     /// @param requestOut Receives the request's id. May be NULL.
     /// @return `mwin_success`; `mwin_errorCapacity` when the context
     ///         cannot hold the copy or the window has its limit of
     ///         requests in flight; `mwin_errorStale` for a window that no
-    ///         longer exists; `mwin_errorInvalid` for a NULL context or
-    ///         an address this does not open.
+    ///         longer exists; `mwin_errorLimit` for more than
+    ///         MWIN_MAX_ADDRESS_BYTES; `mwin_errorInvalid` for a NULL context
+    ///         or an address this does not open.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinRequestOpenUrl(mwinContext* context, mwinWindowId window,
@@ -57,7 +58,7 @@ extern "C"
     /// @param window     The window asking.
     /// @param path       An absolute path in UTF-8, not NUL-terminated,
     ///                   without NULs.
-    /// @param length     Its bytes, at most MWIN_ADDRESS_BYTES.
+    /// @param length     Its bytes, at most MWIN_MAX_ADDRESS_BYTES.
     /// @param requestOut Receives the request's id. May be NULL.
     /// @return As mwinRequestOpenUrl; `mwin_errorInvalid` also for a path
     ///         that is not absolute.
@@ -167,8 +168,10 @@ extern "C"
     ///         has no message box (Android, Linux without zenity,
     ///         kdialog, or an X server, the test backend alone);
     ///         `mwin_errorPlatform` when it failed;
-    ///         `mwin_errorInvalid` for a NULL or invalid def, or text that
-    ///         is not UTF-8, holds a NUL or passes its limit.
+    ///         `mwin_errorLimit` for a title past
+    ///         MWIN_MAX_MESSAGE_TITLE_BYTES or a message past
+    ///         MWIN_MAX_MESSAGE_BYTES; `mwin_errorInvalid` for a NULL or
+    ///         invalid def, or text that is not UTF-8 or holds a NUL.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinShowMessageBox(const mwinMessageBoxDef* def,

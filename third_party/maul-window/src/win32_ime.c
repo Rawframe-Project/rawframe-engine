@@ -23,10 +23,10 @@ static void PostType(mwinWin32Window* window, mwinEventType type)
     Post(window, &event);
 }
 
-// Ends a composition the window shows.
+// Ends the input method's composition, when one runs.
 static void EndComposition(mwinWin32Window* window)
 {
-    if (!window->platform->context->windows[window->slot].state.composing)
+    if (!window->platform->context->windows[window->slot].imeComposing)
     {
         return;
     }
