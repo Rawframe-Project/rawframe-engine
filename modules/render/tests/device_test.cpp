@@ -2,7 +2,9 @@
 // software rasterizer allowed, and shown to work by clearing a target and
 // reading it back. A machine with no adapter skips, unless
 // RAWFRAME_REQUIRE_GPU is set, as the check sets it where lavapipe is, and
-// makes lavapipe the only driver the Vulkan loader sees.
+// makes lavapipe the only driver the Vulkan loader sees. A runtime that
+// makes the Vulkan objects, as an OpenXR runtime does, has the device opened
+// on its own adapter.
 
 #include "../src/present.h"
 #include "rawframe/render/device.h"
@@ -10,6 +12,7 @@
 #include "rawframe/test/test.h"
 
 #include <array>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <maul-rhi/device.h>
@@ -17,6 +20,9 @@
 #include <maul-rhi/frame.h>
 #include <maul-rhi/surface.h>
 #include <memory>
+#include <optional>
+#include <string_view>
+#include <vulkan/vulkan_core.h>
 
 using namespace rawframe;
 
@@ -53,6 +59,86 @@ std::unique_ptr<render::Device> opened() {
     }
     RAWFRAME_EXPECT(false);
     return nullptr;
+}
+
+/// A runtime that makes the Vulkan objects on the first device the
+/// loader lists, as an OpenXR runtime does on the one it presents from, or
+/// that names a device the loader never listed.
+class Runtime final : public render::VulkanMaker {
+public:
+    explicit Runtime(bool listed) : listed_(listed) {
+    }
+
+    result::Result<void*> instance(const void* createInfo, void* getInstanceProcAddr) override {
+        entry_ = reinterpret_cast<PFN_vkGetInstanceProcAddr>(getInstanceProcAddr);
+        const auto kCreate = reinterpret_cast<PFN_vkCreateInstance>(entry_(VK_NULL_HANDLE, "vkCreateInstance"));
+        VkInstance made = VK_NULL_HANDLE;
+        if (kCreate == nullptr ||
+            kCreate(static_cast<const VkInstanceCreateInfo*>(createInfo), nullptr, &made) != VK_SUCCESS) {
+            return refused("the runtime's instance");
+        }
+        instance_ = made;
+        return static_cast<void*>(made);
+    }
+
+    result::Result<void*> physicalDevice(void* instance) override {
+        if (!listed_) {
+            return static_cast<void*>(&unlisted_);
+        }
+        const auto kList = reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(
+            entry_(static_cast<VkInstance>(instance), "vkEnumeratePhysicalDevices"));
+        std::uint32_t count = 1;
+        VkPhysicalDevice first = VK_NULL_HANDLE;
+        if (kList == nullptr || kList(static_cast<VkInstance>(instance), &count, &first) < VK_SUCCESS || count == 0) {
+            return refused("the runtime's device");
+        }
+        chosen = first;
+        return static_cast<void*>(first);
+    }
+
+    result::Result<void*> device(void* physicalDevice, const void* createInfo, void*) override {
+        const auto kCreate = reinterpret_cast<PFN_vkCreateDevice>(entry_(instance_, "vkCreateDevice"));
+        VkDevice made = VK_NULL_HANDLE;
+        if (kCreate == nullptr || kCreate(static_cast<VkPhysicalDevice>(physicalDevice),
+                                          static_cast<const VkDeviceCreateInfo*>(createInfo),
+                                          nullptr,
+                                          &made) != VK_SUCCESS) {
+            return refused("the runtime's device");
+        }
+        return static_cast<void*>(made);
+    }
+
+    VkPhysicalDevice chosen = VK_NULL_HANDLE;
+
+private:
+    static std::unexpected<result::Error> refused(std::string_view what) {
+        return result::fail(
+            result::ErrorClass::Unavailable, render::kRenderDomain, render::code(render::RenderError::NoAdapter), what);
+    }
+
+    bool listed_;
+    int unlisted_ = 0;
+    PFN_vkGetInstanceProcAddr entry_ = nullptr;
+    VkInstance instance_ = VK_NULL_HANDLE;
+};
+
+/// Opens `device` to the end: true when ready, false when it failed with
+/// `NoAdapter`.
+std::optional<bool> openToTheEnd(render::Device& device) {
+    for (int poll = 0; poll < 1000; ++poll) {
+        const auto kOpen = device.open();
+        if (!kOpen.has_value()) {
+            if (kOpen.error().domain() == render::kRenderDomain &&
+                kOpen.error().code() == render::code(render::RenderError::NoAdapter)) {
+                return false;
+            }
+            return std::nullopt;
+        }
+        if (*kOpen) {
+            return true;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -173,4 +259,28 @@ RAWFRAME_TEST(APolicyPresentsByTheFirstModeOfItsChainTheSurfaceOffers) {
     RAWFRAME_EXPECT(render::policyOf(mrhi_presentFifo) == PresentPolicy::Vsync);
     RAWFRAME_EXPECT(render::policyOf(mrhi_presentMailbox) == PresentPolicy::LowLatencyVsync);
     RAWFRAME_EXPECT(render::policyOf(mrhi_presentImmediate) == PresentPolicy::Immediate);
+}
+
+RAWFRAME_TEST(ARuntimesDeviceOpensOnItsOwnAdapterAmongThoseListed) {
+    // The device layer lists the adapters Maul RHI found and opens the one
+    // whose Vulkan device the runtime presents from; a device the runtime
+    // names that is not among them finds no adapter. Where there is no
+    // Vulkan loader or no adapter answers, it skips unless one is required.
+    Runtime runtime(true);
+    auto device = render::Device::request({.allowSoftware = true, .vulkan = &runtime});
+    const std::optional<bool> kOpened = device.has_value() ? openToTheEnd(**device) : std::optional<bool>{false};
+    if (kOpened != true) {
+        RAWFRAME_EXPECT(!required());
+        std::puts("skip: no Vulkan adapter");
+        return;
+    }
+    const std::optional<render::VulkanObjects> kObjects = (*device)->vulkan();
+    RAWFRAME_EXPECT(kObjects.has_value() && kObjects->physicalDevice == static_cast<void*>(runtime.chosen));
+
+    Runtime elsewhere(false);
+    auto unlisted = render::Device::request({.allowSoftware = true, .vulkan = &elsewhere});
+    RAWFRAME_EXPECT(unlisted.has_value());
+    if (unlisted.has_value()) {
+        RAWFRAME_EXPECT(openToTheEnd(**unlisted) == false);
+    }
 }

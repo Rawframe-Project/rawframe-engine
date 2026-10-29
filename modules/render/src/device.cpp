@@ -3,6 +3,7 @@
 #include "present.h"
 #include "rawframe/render/errors.h"
 
+#include <algorithm>
 #include <array>
 #include <map>
 #include <maul-rhi/capabilities.h>
@@ -16,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 #include <vulkan/vulkan_core.h>
 
 // WIN32_LEAN_AND_MEAN and NOMINMAX come from the build, for every file.
@@ -352,12 +354,18 @@ struct Device::State {
     /// The adapter the runtime presents from, among those found.
     result::Status chooseTheRuntimes() {
         RAWFRAME_TRY_ASSIGN(void* wanted, settings.vulkan->physicalDevice(adopted->instance));
-        std::array<mrhiAdapterId, 16> found{};
+        // As many as Maul RHI lists, which is its instance's limit and not
+        // a length of ours; the count it reports is the total, so the
+        // loop stays within what was copied.
         std::size_t count = 0;
-        if (mrhiInstance_GetAdapters(instance, found.data(), found.size(), &count) != mrhi_success) {
+        if (mrhiInstance_GetAdapters(instance, nullptr, 0, &count) != mrhi_success) {
             count = 0;
         }
-        for (std::size_t at = 0; at < count; ++at) {
+        std::vector<mrhiAdapterId> found(count);
+        if (!found.empty() && mrhiInstance_GetAdapters(instance, found.data(), found.size(), &count) != mrhi_success) {
+            count = 0;
+        }
+        for (std::size_t at = 0; at < std::min(count, found.size()); ++at) {
             void* physical = nullptr;
             if (mrhiAdapter_GetVulkanPhysicalDevice(instance, found[at], &physical) == mrhi_success &&
                 physical == wanted) {
