@@ -201,19 +201,26 @@ if(RAWFRAME_BUILD_TESTS)
     add_subdirectory(tests/scenarios)
 endif()
 
-# Every test of a thread build reads ThreadSanitizer's suppressions for the
-# libraries built without it (tools/thread.tsan).
-if(RAWFRAME_BUILD_TESTS AND RAWFRAME_SANITIZE STREQUAL "thread")
-    function(rawframe_suppress_threads directory)
+# Every test, and every process it starts, carries its name in
+# RAWFRAME_TEST_NAME, so tools/reap.py kills what a test left running only
+# once that test has ended. Every test of a thread build also reads
+# ThreadSanitizer's suppressions for the libraries built without it
+# (tools/thread.tsan).
+if(RAWFRAME_BUILD_TESTS)
+    function(rawframe_mark_tests directory)
         get_property(tests DIRECTORY ${directory} PROPERTY TESTS)
         foreach(each IN LISTS tests)
             set_property(TEST ${each} DIRECTORY ${directory} APPEND PROPERTY ENVIRONMENT_MODIFICATION
-                         "TSAN_OPTIONS=set:suppressions=${PROJECT_SOURCE_DIR}/tools/thread.tsan")
+                         "RAWFRAME_TEST_NAME=set:${each}")
+            if(RAWFRAME_SANITIZE STREQUAL "thread")
+                set_property(TEST ${each} DIRECTORY ${directory} APPEND PROPERTY ENVIRONMENT_MODIFICATION
+                             "TSAN_OPTIONS=set:suppressions=${PROJECT_SOURCE_DIR}/tools/thread.tsan")
+            endif()
         endforeach()
         get_property(below DIRECTORY ${directory} PROPERTY SUBDIRECTORIES)
         foreach(each IN LISTS below)
-            rawframe_suppress_threads(${each})
+            rawframe_mark_tests(${each})
         endforeach()
     endfunction()
-    rawframe_suppress_threads(${PROJECT_SOURCE_DIR})
+    rawframe_mark_tests(${PROJECT_SOURCE_DIR})
 endif()
