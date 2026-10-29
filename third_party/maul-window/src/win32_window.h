@@ -14,9 +14,6 @@
 
 #include "win32.h"
 
-// The class name every window of the library shares.
-#define MWIN_WIN32_CLASS L"MaulWindow"
-
 // The window procedure of the class.
 LRESULT CALLBACK mwinWin32WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 

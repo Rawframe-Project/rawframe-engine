@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Win32 clipboard: text as CF_UNICODETEXT and data by MIME type
-// (mwin-0029), each type a registered format ("PNG" for image/png and
+// The Win32 clipboard: text as CF_UNICODETEXT and data by MIME type,
+// each type a registered format ("PNG" for image/png and
 // "HTML Format" for text/html, as other programs name them), written and
 // read at once while the request is submitted. Another program may hold
 // the clipboard open for a moment, so opening it is tried a few times.

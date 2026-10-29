@@ -300,7 +300,7 @@ extern "C"
     // the selection in order and no segment empty; the caret is -1 where
     // the method hides it. The library fits what the platform hands it
     // (an offset inside a character, past the end, a selection backwards)
-    // to that (mwin-0034). Valid until the frame that drained it returns.
+    // to that. Valid until the frame that drained it returns.
     typedef struct mwinPreeditEvent
     {
         const char* text;

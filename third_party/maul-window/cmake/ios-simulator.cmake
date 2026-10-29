@@ -1,4 +1,4 @@
-# The iOS simulator (mwin-0025), for the tests:
+# The iOS simulator, for the tests:
 #
 #   cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/ios-simulator.cmake
 #

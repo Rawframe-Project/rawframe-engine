@@ -7,6 +7,7 @@
 
 #include "monotonic.h"
 
+#include <float.h>
 #include <string.h>
 
 #define PORTAL      "org.freedesktop.portal.Desktop"
@@ -113,7 +114,12 @@ static void Take(mwinLinuxSettings* settings, const char* space, const char* key
     else if (strcmp(space, GNOME) == 0 && strcmp(key, "text-scaling-factor") == 0 &&
              type == mwin_dbusTypeDouble)
     {
-        api->getBasic(&value, &settings->textScale);
+        // A scale a float cannot hold, or rounds to none, is no scale; a
+        // NaN fails both.
+        double scale = 0.0;
+        api->getBasic(&value, &scale);
+        settings->textScale =
+            scale <= (double)FLT_MAX && (float)scale > 0.0f ? scale : settings->textScale;
     }
     else if (strcmp(space, KDE) == 0 && strcmp(key, "AnimationDurationFactor") == 0)
     {
@@ -137,7 +143,8 @@ static void Publish(mwinLinuxSettings* settings, uint64_t nowNs)
     mwinSetSystemFacts(settings->context, &facts, nowNs);
 }
 
-// ReadAll's answer: a{sa{sv}}, the keys of each namespace asked for.
+// ReadAll's answer: a{sa{sv}}, the keys of each namespace asked for; an
+// entry of other types is passed over.
 static void TakeAll(mwinLinuxSettings* settings, DBusMessage* reply)
 {
     const mwinDBusApi* api = &settings->bus->api;
@@ -153,18 +160,21 @@ static void TakeAll(mwinLinuxSettings* settings, DBusMessage* reply)
         mwinDBusIter space;
         mwinDBusIter keys;
         const char* name = nullptr;
-        api->recurse(&spaces, &space);
-        api->getBasic(&space, (void*)&name);
-        (void)api->next(&space);
+        if (!mwinBusEntry(api, &spaces, &name, &space) ||
+            api->argType(&space) != mwin_dbusTypeArray)
+        {
+            continue;
+        }
         api->recurse(&space, &keys);
         for (; api->argType(&keys) == mwin_dbusTypeDictEntry; (void)api->next(&keys))
         {
             mwinDBusIter entry;
             const char* key = nullptr;
-            api->recurse(&keys, &entry);
-            api->getBasic(&entry, (void*)&key);
-            (void)api->next(&entry);
-            Take(settings, name, key, &entry);
+            if (mwinBusEntry(api, &keys, &key, &entry) &&
+                api->argType(&entry) == mwin_dbusTypeVariant)
+            {
+                Take(settings, name, key, &entry);
+            }
         }
     }
 }

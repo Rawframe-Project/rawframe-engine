@@ -15,6 +15,7 @@
 #define MAUL_UNICODE_SRC_SEGMENTER_H
 
 #include "cursor.h"
+#include "invariant.h"
 
 #include "maul-unicode/segment.h"
 
@@ -25,6 +26,15 @@ enum
     muni_segmentWord = 2,
     muni_segmentSentence = 3,
     muni_segmentLine = 4,
+};
+
+// What an iterator in caller memory is doing between calls, and during a
+// call that hands a run to the caller's word segmenter.
+enum
+{
+    muni_phaseReady = 0,   // it can be asked for a boundary
+    muni_phaseWaiting = 1, // the last call returned muni_needMoreText
+    muni_phaseBusy = 2,    // a call is inside the word segmenter
 };
 
 // A rule set's answer about the position before a code point. A hold
@@ -58,19 +68,21 @@ typedef struct muniGraphemeRules
 
 typedef struct muniWordRules
 {
-    uint8_t actual;   // the previous code point's Word_Break
-    uint8_t previous; // the previous one after rule WB4, which skips Extend
-    uint8_t before;   // the one before that, after rule WB4
-    bool oddRegional; // an odd number of regional indicators precedes
+    uint8_t actual;         // the previous code point's Word_Break
+    uint8_t previous;       // the previous one after rule WB4, which skips Extend
+    uint8_t before;         // the one before that, after rule WB4
+    bool oddRegional;       // an odd number of regional indicators precedes
+    uint32_t overrideCount; // the entries of the segmenter's overrides
 } muniWordRules;
 
 typedef struct muniSentenceRules
 {
-    uint8_t actual;   // the previous code point's Sentence_Break
-    uint8_t previous; // the previous one after rule SB5, which skips Extend
-    uint8_t before;   // the one before that, after rule SB5
-    uint8_t ending;   // where a sentence ending "SATerm Close* Sp*" stands
-    bool aterm;       // the ending's terminator is an ATerm
+    uint8_t actual;         // the previous code point's Sentence_Break
+    uint8_t previous;       // the previous one after rule SB5, which skips Extend
+    uint8_t before;         // the one before that, after rule SB5
+    uint8_t ending;         // where a sentence ending "SATerm Close* Sp*" stands
+    bool aterm;             // the ending's terminator is an ATerm
+    uint32_t overrideCount; // the entries of the segmenter's overrides
 } muniSentenceRules;
 
 typedef struct muniLineRules
@@ -88,7 +100,7 @@ typedef struct muniLineRules
 } muniLineRules;
 
 // A run of Thai, Lao, Khmer or Burmese (Line_Break=SA) that a caller's
-// breaker segments (muni-0005). The run lies in the current piece.
+// breaker segments. The run lies in the current piece.
 typedef struct muniComplexRun
 {
     muniComplexBreakFn breaker; // NULL when the caller set none
@@ -108,9 +120,10 @@ typedef struct muniSegmenter
     bool started;      // a code point has been read
     bool endReported;  // the boundary at the end has been reported
     bool holding;      // a boundary at heldOffset is undecided
-    bool waiting;      // the last call returned muni_needMoreText
+    uint8_t phase;     // a muni_phase value
     bool mandatory;    // the last boundary reported must be taken
     uint8_t holdKind;  // the kind of the open hold
+    uint8_t options;   // a line iterator's muni_line options
 
     union
     {
@@ -119,6 +132,10 @@ typedef struct muniSegmenter
         muniSentenceRules sentence;
         muniLineRules line;
     } rules;
+
+    // The caller's class overrides of a word or sentence iterator, sorted
+    // by code point; their count is in the word or sentence rules.
+    const muniBreakClassOverride* overrides;
 } muniSegmenter;
 
 static_assert(sizeof(muniSegmenter) <= sizeof(muniSegmentIterator),
@@ -127,15 +144,41 @@ static_assert(sizeof(muniSegmenter) <= sizeof(muniSegmentIterator),
 // The rules as functions of the segmenter and the next code point: its
 // property value from lookup, the decision about the boundary before it,
 // the decision while a hold is open, and the update after it is read.
-typedef uint8_t (*muniLookupRule)(uint32_t codePoint);
+typedef uint8_t (*muniLookupRule)(const muniSegmenter* segmenter, uint32_t codePoint);
 typedef muniDecision (*muniDecideRule)(const muniSegmenter* segmenter, uint8_t value,
                                        uint32_t codePoint);
 typedef void (*muniAbsorbRule)(muniSegmenter* segmenter, uint8_t value, uint32_t codePoint);
+
+// The class overrides give a code point, or value when they do not name
+// it: a binary search, so a long table costs a logarithm per code point.
+static inline uint8_t muniOverrideClass(const muniBreakClassOverride* overrides, uint32_t count,
+                                        uint32_t codePoint, uint8_t value)
+{
+    // Set only with a table of at least one entry.
+    MUNI_ASSERT(overrides != nullptr && count > 0);
+    uint32_t low = 0;
+    uint32_t high = count;
+    while (low < high)
+    {
+        uint32_t middle = low + (high - low) / 2;
+        if (overrides[middle].codePoint < codePoint)
+        {
+            low = middle + 1;
+        }
+        else
+        {
+            high = middle;
+        }
+    }
+    return low < count && overrides[low].codePoint == codePoint ? overrides[low].value : value;
+}
 
 // Reports a boundary.
 static inline muniResult muniSegmenterReport(muniSegmenter* segmenter, size_t offset,
                                              bool mandatory, size_t* offsetOut)
 {
+    // Every boundary lies after at least one code point.
+    MUNI_ASSERT(offset > 0);
     segmenter->mandatory = mandatory;
     *offsetOut = offset;
     return muni_success;
@@ -181,10 +224,11 @@ static inline muniResult muniSegmenterNext(muniSegmenter* segmenter, size_t* off
         {
             return muniSegmenterEnd(segmenter, offsetOut, resolve);
         }
-        uint8_t value = lookup(codePoint);
+        uint8_t value = lookup(segmenter, codePoint);
         muniDecision decision = muni_decideJoin;
         if (segmenter->holding)
         {
+            MUNI_ASSERT(segmenter->heldOffset < segmenter->cursor.offset);
             decision = resolve(segmenter, value, codePoint);
             if (decision == muni_decideBreak)
             {

@@ -104,6 +104,9 @@ float mwinPadNormalize(int32_t value, int32_t minimum, int32_t maximum)
     {
         return 0.0f;
     }
-    float normal = (float)((double)(value - minimum) * 2.0 / (double)(maximum - minimum) - 1.0);
+    // In 64 bits: a device's range may span the whole of int32_t.
+    int64_t offset = (int64_t)value - minimum;
+    int64_t span = (int64_t)maximum - minimum;
+    float normal = (float)((double)offset * 2.0 / (double)span - 1.0);
     return normal < -1.0f ? -1.0f : (normal > 1.0f ? 1.0f : normal);
 }

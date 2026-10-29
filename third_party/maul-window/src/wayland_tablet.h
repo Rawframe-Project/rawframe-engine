@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Tablets on Wayland (mwin-0037): the first seat's tablet seat, whose
+// Tablets on Wayland: the first seat's tablet seat, whose
 // tools post pen records and no mouse record, as a compositor emulates
 // the pointer only for a client without the tablet seat. A tool's
 // changes gather until its frame event, which posts its barrel button,

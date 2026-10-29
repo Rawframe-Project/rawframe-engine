@@ -1,4 +1,4 @@
-# The iOS backend (mwin-0025), in Objective-C with manual retain and
+# The iOS backend, in Objective-C with manual retain and
 # release, as the macOS backend: UIKit for scenes, windows and input,
 # CoreGraphics for its geometry, QuartzCore for the views' CAMetalLayers
 # and the display link, UniformTypeIdentifiers for what drags carry and

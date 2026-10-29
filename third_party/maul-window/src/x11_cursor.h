@@ -24,7 +24,7 @@ void mwinX11StopCursors(mwinX11Platform* platform);
 mwinOutcome mwinX11SetCursorMode(mwinX11Platform* platform, uint32_t slot, mwinCursorMode mode);
 mwinOutcome mwinX11SetCursorShape(mwinX11Platform* platform, uint32_t slot, mwinCursorShape shape);
 
-// Carries out a request for a cursor made from images (mwin-0027):
+// Carries out a request for a cursor made from images:
 // unsupported without RENDER's ARGB pictures.
 mwinOutcome mwinX11SetCursorImage(mwinX11Platform* platform, uint32_t slot, mwinCursorId cursor);
 

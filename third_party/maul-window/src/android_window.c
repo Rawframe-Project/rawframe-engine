@@ -69,6 +69,18 @@ void mwinAndroidPostFocus(mwinAndroidPlatform* platform)
     PostType(platform, window->focused ? mwin_eventFocusGained : mwin_eventFocusLost);
 }
 
+void mwinAndroidPostOcclusion(mwinAndroidPlatform* platform)
+{
+    mwinAndroidWindow* window = &platform->window;
+    bool occluded = !platform->started;
+    if (platform->slot < 0 || !window->created || window->occluded == occluded)
+    {
+        return;
+    }
+    window->occluded = occluded;
+    PostType(platform, occluded ? mwin_eventOccluded : mwin_eventRevealed);
+}
+
 void mwinAndroidSurfaceCame(mwinAndroidPlatform* platform)
 {
     mwinAndroidWindow* window = &platform->window;
@@ -96,6 +108,8 @@ void mwinAndroidSurfaceCame(mwinAndroidPlatform* platform)
     mwinAndroidPostInsets(platform);
     PostType(platform, mwin_eventShown);
     mwinAndroidPostFocus(platform);
+    // Made while the activity is stopped, its surface not gone yet.
+    mwinAndroidPostOcclusion(platform);
     int32_t request = mwinFindActiveRequest(&context->windows[slot],
                                             context->limits.requestsPerWindow, mwin_requestCreate);
     if (request >= 0)

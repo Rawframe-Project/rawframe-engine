@@ -1,4 +1,4 @@
-# The macOS backend (mwin-0024), in Objective-C with manual retain and
+# The macOS backend, in Objective-C with manual retain and
 # release, as Maul RHI's Metal driver: AppKit for windows and input,
 # Carbon for the keyboard layouts, IOKit to keep the display awake and
 # read the power source, QuartzCore for the views' CAMetalLayers,

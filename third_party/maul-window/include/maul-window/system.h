@@ -28,16 +28,6 @@ extern "C"
         mwin_themeDark = 2,
     };
 
-    // A yes or no the platform may not know.
-    typedef uint8_t mwinTristate;
-
-    enum
-    {
-        mwin_unknown = 0,
-        mwin_no = 1,
-        mwin_yes = 2,
-    };
-
     // The system's preferences and facts.
     typedef struct mwinSystemFacts
     {

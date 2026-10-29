@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Pens on X11 (mwin-0037): the slave pointer devices that are a
+// Pens on X11: the slave pointer devices that are a
 // tablet's pen or eraser, and the pen records their XInput2 events make
 // in place of mouse records. A device is a pen by its X input type
 // (STYLUS or ERASER); one of type TABLET or none by an eraser in its

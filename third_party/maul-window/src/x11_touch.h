@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Touch on X11 (mwin-0039): the slave devices with a direct touch class,
+// Touch on X11: the slave devices with a direct touch class,
 // which are touch screens, and the touch records their XInput 2.2 touch
 // events make. A touch's id is its device's number in the high 32 bits
 // and the server's touch number in the low. Pressure comes from the

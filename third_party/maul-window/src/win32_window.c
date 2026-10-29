@@ -13,6 +13,7 @@
 #include "win32_icon.h"
 #include "win32_ime.h"
 #include "win32_input.h"
+#include "win32_occlusion.h"
 #include "win32_output.h"
 #include "win32_pointer.h"
 #include "win32_services.h"
@@ -469,6 +470,7 @@ LRESULT CALLBACK mwinWin32WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPA
     {
         mwinWin32ReadSystem(window->platform);
     }
+    mwinWin32ObserveOcclusion(window, message, wParam, lParam);
     if (HandleSizeMove(window, message, wParam) ||
         HandleWindowMessage(window, message, wParam, lParam, &result) ||
         mwinWin32HandleInput(window, message, wParam, lParam, &result) ||
@@ -586,6 +588,7 @@ void mwinWin32CreateWindow(mwinContext* context, uint32_t slot)
     mwinWin32StartIme(window);
     mwinWin32ApplyTheme(window);
     Establish(window);
+    mwinWin32WatchOcclusion(window);
     if (core->def.mode == mwin_modeBorderlessFullscreen)
     {
         EnterFullscreen(window);
@@ -611,6 +614,7 @@ void mwinWin32DestroyWindow(mwinContext* context, uint32_t slot)
         mwinWin32DetachDrop(window);
         mwinWin32DetachPane(window);
         mwinWin32ForgetObject(window);
+        mwinWin32UnwatchOcclusion(window);
     }
     // The window's last messages find no window of the program's; its
     // icons go after it, which shows them until then.

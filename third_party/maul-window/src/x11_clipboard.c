@@ -87,15 +87,16 @@ int mwinX11WriteSelection(mwinX11Platform* platform, mwinRequestKind kind)
     mwinX11Clipboard* clipboard = &platform->clipboard;
     const mwinX11Api* api = &platform->api;
     int selection = kind == mwin_requestPrimaryWrite ? mwin_x11Primary : mwin_x11Clipboard;
-    if (!mwinX11EnsureClipboardWindow(platform))
-    {
-        return mwin_outcomeFailed;
-    }
-    // The readers taking the last text or data in pieces are dropped.
+    // The readers taking the last text or data in pieces are dropped,
+    // first: the core has already replaced those bytes.
     for (int i = 0; i < MWIN_X11_SENDS; i++)
     {
         clipboard->sends[i].requestor =
             clipboard->sends[i].selection == selection ? 0 : clipboard->sends[i].requestor;
+    }
+    if (!mwinX11EnsureClipboardWindow(platform))
+    {
+        return mwin_outcomeFailed;
     }
     if (selection == mwin_x11Clipboard && !InternTypes(platform))
     {
@@ -303,6 +304,8 @@ static bool SendPiece(mwinX11Platform* platform, const xcb_property_notify_event
         const char* bytes = SourceOf(platform->context, clipboard->sends[i].selection,
                                      clipboard->sends[i].item, &total);
         uint32_t offset = clipboard->sends[i].offset;
+        // A write that replaced these bytes dropped this send first.
+        MWIN_ASSERT(offset <= total);
         uint32_t left = total - offset;
         uint32_t length = left < PIECE_BYTES ? left : PIECE_BYTES;
         platform->api.changeProperty(platform->connection, XCB_PROP_MODE_REPLACE, event->window,

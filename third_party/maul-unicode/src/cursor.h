@@ -10,6 +10,7 @@
 #define MAUL_UNICODE_SRC_CURSOR_H
 
 #include "encoding.h"
+#include "invariant.h"
 
 #include "maul-unicode/base.h"
 
@@ -27,10 +28,11 @@ typedef struct muniCursor
 void muniCursorInit(muniCursor* cursor, const char* text, size_t length, bool moreFollows);
 
 // Hands the cursor its next piece. Bytes still unread in the current
-// piece are kept as pending. Returns false, changing nothing, when no
-// piece was announced or when more than a cut-off sequence is unread,
-// which happens only when the caller feeds before muni_needMoreText.
-bool muniCursorFeed(muniCursor* cursor, const char* text, size_t length, bool moreFollows);
+// piece are kept as pending. Only a cursor that answered
+// muni_needMoreText may be fed: more pieces were announced, and at most
+// the start of one cut-off sequence is unread. The iterators refuse an
+// earlier feed before calling this.
+void muniCursorFeed(muniCursor* cursor, const char* text, size_t length, bool moreFollows);
 
 // The slow paths of muniCursorPeek and muniCursorAdvance: bytes pending
 // from an earlier piece, or fewer than four left in this one.
@@ -49,6 +51,7 @@ static inline muniResult muniCursorPeek(const muniCursor* cursor, uint32_t* code
     if (cursor->pendingCount == 0 && remaining >= 4)
     {
         (void)muniStepUtf8(cursor->text + cursor->position, remaining, codePointOut, sizeOut);
+        MUNI_ASSERT(*sizeOut >= 1 && *sizeOut <= 4);
         return muni_success;
     }
     return muniCursorPeekSlow(cursor, codePointOut, sizeOut);
@@ -59,6 +62,7 @@ static inline void muniCursorAdvance(muniCursor* cursor, size_t size)
 {
     if (cursor->pendingCount == 0)
     {
+        MUNI_ASSERT(size >= 1 && size <= cursor->length - cursor->position);
         cursor->offset += size;
         cursor->position += size;
         return;

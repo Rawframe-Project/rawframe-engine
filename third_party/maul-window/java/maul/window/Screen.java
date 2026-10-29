@@ -12,7 +12,7 @@ import java.lang.reflect.Method;
 /**
  * The activity's display, the library's one monitor, as far as Android
  * tells it in Java only: its size, density, refresh rate and HDR facts
- * (mwin-0036). Called by the library on the main thread only.
+ *. Called by the library on the main thread only.
  */
 final class Screen {
     // Where the facts go in facts()'s answer.
@@ -36,7 +36,8 @@ final class Screen {
      * dots per inch across and down; its refresh rate in hertz; 1 where it
      * can show HDR; the desired peak and frame-average luminance in nits,
      * 0 where unknown; the HDR/SDR ratio now (Android 14), 0 where
-     * unknown; and 1 where it supports adaptive refresh (Android 16).
+     * unknown; and whether it supports adaptive refresh, 2 for yes and 1
+     * for no (Android 16), 0 where unknown.
      */
     static float[] facts(Activity activity) {
         float[] facts = new float[COUNT];
@@ -60,24 +61,25 @@ final class Screen {
         if (Build.VERSION.SDK_INT >= 34 && display.isHdrSdrRatioAvailable()) {
             facts[RATIO] = display.getHdrSdrRatio();
         }
-        facts[ADAPTIVE] = adaptive(display) ? 1.0f : 0.0f;
+        facts[ADAPTIVE] = adaptive(display);
         return facts;
     }
 
     /**
      * Whether the display supports adaptive refresh, which Android 16
-     * tells; reached by reflection, as the library builds against an
-     * older SDK.
+     * tells: 2 for yes, 1 for no, 0 where unknown. Reached by reflection,
+     * as the library builds against an older SDK.
      */
-    private static boolean adaptive(Display display) {
+    private static float adaptive(Display display) {
         if (Build.VERSION.SDK_INT < 36) {
-            return false;
+            return 0.0f;
         }
         try {
             Method method = Display.class.getMethod("hasArrSupport");
-            return Boolean.TRUE.equals(method.invoke(display));
+            Object supported = method.invoke(display);
+            return supported instanceof Boolean ? ((Boolean) supported ? 2.0f : 1.0f) : 0.0f;
         } catch (ReflectiveOperationException | RuntimeException error) {
-            return false;
+            return 0.0f;
         }
     }
 

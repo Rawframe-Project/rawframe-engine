@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Memory through a def's allocator (conventions section 9): a zeroed
+// Memory through a def's allocator: a zeroed
 // allocator means the C library's functions, which serve alignments up
 // to that of max_align_t. A layout lays out a block's parts with checked
-// arithmetic (conventions section 8), as Maul RHI's does.
+// arithmetic, as Maul RHI's does.
 
 #ifndef MAUL_WINDOW_SRC_ALLOCATOR_H
 #define MAUL_WINDOW_SRC_ALLOCATOR_H

@@ -107,7 +107,7 @@ typedef struct mwinX11Window
     int32_t modeRequest;
     uint64_t modeDeadlineNs;
     // The cursor the program asked for over the window: a shape, or a
-    // cursor made from images when cursorImage is live (mwin-0027); and
+    // cursor made from images when cursorImage is live; and
     // whether the pointer is grabbed to keep it inside.
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
@@ -120,6 +120,8 @@ typedef struct mwinX11Window
     // coordinates (mwinRequestTextInput).
     bool textInput;
     mwinRect caret;
+    // Whether the X server last reported it wholly covered.
+    bool obscured;
 } mwinX11Window;
 
 // The core keyboard through XKB: the device, XKB's event code, the
@@ -268,7 +270,7 @@ struct mwinX11Platform
     mwinX11Drag drag;
     // Addresses, files and the bus (linux_services.c).
     mwinLinuxServices services;
-    // The input method over the session bus (linux_ime.c, W40).
+    // The input method over the session bus (linux_ime.c).
     mwinLinuxIme ime;
     // The time of the latest key or button event, which taking the
     // selection quotes.

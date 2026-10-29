@@ -3,7 +3,7 @@
 //
 // Cursors over canvases: the CSS cursor property, a shape's keyword,
 // `none` for a hidden cursor, or for a cursor made from images
-// (mwin-0027) PNG data URLs the page makes once per cursor, in an
+// PNG data URLs the page makes once per cursor, in an
 // image-set() that gives each image its scale where the browser takes
 // one in a cursor, else the first image alone.
 

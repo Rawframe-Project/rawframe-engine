@@ -195,19 +195,19 @@ static void Finish(mwinLinuxDialogs* dialogs, mwinLinuxDialog* dialog, mwinOutco
     mwinZenityStop(&dialog->zenity, context);
 }
 
-// Gathers the file URIs of a Response's results, a{sv} with "uris".
+// Gathers the file URIs of a Response's results, a{sv} with "uris" as
+// an array of strings; an entry of other types is passed over.
 static void GatherUris(const mwinDBusApi* api, mwinContext* context, mwinDBusIter* results)
 {
     mwinDBusIter entry;
     for (bool more = api->argType(results) == mwin_dbusTypeDictEntry; more;
          more = api->next(results))
     {
-        const char* key = "";
+        const char* key = nullptr;
         mwinDBusIter value;
         mwinDBusIter uris;
-        api->recurse(results, &entry);
-        api->getBasic(&entry, (void*)&key);
-        if (strcmp(key, "uris") != 0 || !api->next(&entry))
+        if (!mwinBusEntry(api, results, &key, &entry) || strcmp(key, "uris") != 0 ||
+            api->argType(&entry) != mwin_dbusTypeVariant)
         {
             continue;
         }

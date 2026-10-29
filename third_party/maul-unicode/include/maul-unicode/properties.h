@@ -4,19 +4,30 @@
 // Character properties from the Unicode Character Database. Every lookup
 // takes a code point, cannot fail and returns the property's value; a
 // value above U+10FFFF gets the value of an unassigned code point.
+//
+// Each property's values are numbered in the library's own order. A
+// value that a new Unicode version adds is appended after the last, and
+// the existing values keep their numbers. From 1.0 this is part of the
+// API under the 1.x rules; before 1.0, data that must outlive a breaking
+// release stores the UCD's short names instead of the numbers.
 
 #ifndef MAUL_UNICODE_PROPERTIES_H
 #define MAUL_UNICODE_PROPERTIES_H
 
 #include "maul-unicode/base.h"
 
+// An array of this many scripts holds the Script_Extensions of any code
+// point, for the Unicode version of this release. A release with a new
+// Unicode version may raise it; muniGetScriptExtensions still reports the
+// count it needs.
+#define MUNI_MAX_SCRIPT_EXTENSIONS 32
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-    // General_Category, one value per UCD short name. The numbering is the
-    // library's own and stable within a major version.
+    // General_Category, one value per UCD short name.
     typedef uint8_t muniGeneralCategory;
 
     enum
@@ -248,6 +259,19 @@ extern "C"
     /// Safe from any thread.
     MUNI_API bool muniIsDefaultIgnorable(uint32_t codePoint);
 
+    /// Tells whether a code point has the Ideographic property
+    /// (PropList.txt): the CJK unified and compatibility ideographs, the
+    /// Small Seal characters, the characters of Tangut, Khitan Small
+    /// Script, Jurchen and Nushu, and a few CJK marks and numerals such
+    /// as U+3007 IDEOGRAPHIC NUMBER ZERO. The CJK radicals, which
+    /// Script=Han includes, do not have it.
+    ///
+    /// @param codePoint  Any value; one above U+10FFFF has it not.
+    /// @return true when the code point is Ideographic.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUNI_API bool muniIsIdeographic(uint32_t codePoint);
+
     /// Returns the value of a decimal digit: a code point of General
     /// Category Nd (Numeric_Type Decimal), such as '7' or the Devanagari
     /// seven, which parse as numbers. Superscripts, fractions and Roman
@@ -453,8 +477,8 @@ extern "C"
     ///
     /// @param codePoint  Any value.
     /// @param scripts    The output. May be NULL when capacity is 0.
-    /// @param capacity   The number of scripts the output can hold; 32
-    ///                   always suffice.
+    /// @param capacity   The number of scripts the output can hold;
+    ///                   MUNI_MAX_SCRIPT_EXTENSIONS always suffice.
     /// @param countOut   Receives the number of scripts.
     /// @return `muni_success`, `muni_errorCapacity` when they do not all
     ///         fit (the ones that fit are written), or `muni_errorInvalid`

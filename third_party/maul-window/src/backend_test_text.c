@@ -3,7 +3,7 @@
 //
 // Text input and the on-screen keyboard on the test platform: the
 // requests carried out, and what they asked for kept for the test's
-// readers (mwin-0038).
+// readers.
 
 #include "backend_test.h"
 

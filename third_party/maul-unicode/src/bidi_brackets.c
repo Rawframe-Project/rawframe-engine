@@ -11,6 +11,8 @@
 
 #include "bidi_brackets.h"
 
+#include "invariant.h"
+
 #define STACK_SIZE 63
 
 typedef struct Opening
@@ -114,7 +116,9 @@ static size_t Partner(const muniBidiParagraph* paragraph, size_t index)
             depth -= 1;
         }
     }
-    return paragraph->length; // unreachable: every marked opening has a partner
+    // FindPairs marks an opening bracket only together with its closing one.
+    MUNI_ASSERT(false);
+    return paragraph->length;
 }
 
 // N0 items b to d: the direction the pair from opening to closing takes,

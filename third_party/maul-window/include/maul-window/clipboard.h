@@ -13,7 +13,7 @@
 // read's request until another read finds text; a read refused or too
 // large leaves it. Asked with any other request, the getter answers
 // mwin_errorStale, so a completion is never answered with another
-// read's text (mwin-0040). Text another program put there is
+// read's text. Text another program put there is
 // checked before the program sees it: ill-formed UTF-8 has each maximal ill-formed subpart replaced
 // with U+FFFD, and text past the clipboardBytes limit, after that, completes the read with
 // mwin_outcomeTooLarge. An empty clipboard, or one without text, reads as empty text.
@@ -22,7 +22,7 @@
 // ask for it, until the next write or the context's end.
 //
 // Beside text, the clipboard takes data by MIME type, its bytes passed
-// through as they are (mwin-0029): an image as image/png the program
+// through as they are: an image as image/png the program
 // encodes itself. A write offers up to MWIN_CLIPBOARD_ITEMS items, one
 // of which may be text/plain, offered as the platform's text and read
 // with the text calls; a text write replaces the data, a data write the

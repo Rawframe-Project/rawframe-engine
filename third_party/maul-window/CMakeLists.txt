@@ -7,7 +7,7 @@ set(MAUL_MACRO_PREFIX MWIN)
 set(MAUL_TITLE "Maul Window")
 set(MAUL_PREFIX MAUL_WINDOW)
 
-# The oldest macOS the backend runs on (mwin-0024), unless the build or
+# The oldest macOS the backend runs on, unless the build or
 # the project including the library asks for another; the compiler then
 # refuses a later API used without a check. A toolchain file says its
 # own (the iOS simulator's, cmake/ios-simulator.cmake, iOS 15).
@@ -64,7 +64,7 @@ else()
     set(MAUL_WINDOW_ANDROID_DEFAULT OFF)
 endif()
 option(MAUL_WINDOW_ANDROID "Build the Android backend" ${MAUL_WINDOW_ANDROID_DEFAULT})
-# The web: Emscripten's, or a plain WebAssembly toolchain's (mwin-0022).
+# The web: Emscripten's, or a plain WebAssembly toolchain's.
 if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
     set(MAUL_WINDOW_WEB_DEFAULT ON)
 else()
@@ -77,7 +77,7 @@ option(MAUL_WINDOW_GAMEPAD "Build the gamepad component" ON)
 # installed package when there is one, otherwise the pinned release,
 # built and installed along. It comes before the family modules below,
 # whose copies then serve this project.
-set(MAUL_WINDOW_UNICODE_VERSION 0.3.0)
+set(MAUL_WINDOW_UNICODE_VERSION 0.0.1)
 find_package(maul-unicode ${MAUL_WINDOW_UNICODE_VERSION} CONFIG QUIET)
 if(NOT maul-unicode_FOUND)
     include(FetchContent)
@@ -143,7 +143,7 @@ add_library(maul-window ${MAUL_LIBRARY_KIND}
 # POSIX.
 if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
     set(MWIN_POSIX_SOURCES src/dbus_api.c src/linux_bus.c src/linux_dialog.c src/linux_inhibit.c
-        src/linux_locale.c src/linux_power.c src/linux_services.c
+        src/linux_languages.c src/linux_locale.c src/linux_power.c src/linux_services.c
         src/linux_settings.c src/linux_zenity.c src/posix_message_box.c)
     target_sources(maul-window PRIVATE ${MWIN_POSIX_SOURCES})
     set_source_files_properties(${MWIN_POSIX_SOURCES} PROPERTIES
@@ -200,8 +200,72 @@ set(MAUL_PKG_REQUIRES_PRIVATE "maul-unicode >= ${MAUL_WINDOW_UNICODE_VERSION}")
 
 if(MAUL_WINDOW_BUILD_TESTS)
     enable_testing()
+    # The Linux backends' tests reach a display server of the build's own:
+    # an Xvfb, and a headless weston with the Wayland backend, which the
+    # display fixture starts before them and stops after
+    # (tools/test_display.sh). The display number comes from the build
+    # directory, so two build trees never share one; the stand-in
+    # compositors put their sockets in the same runtime directory.
+    #
+    # A server that is not installed is a platform missing: the tests get
+    # an empty DISPLAY or WAYLAND_DISPLAY in its place, and skip.
+    if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
+        set(MWIN_TEST_RUNTIME ${PROJECT_BINARY_DIR}/rt)
+        file(MAKE_DIRECTORY ${MWIN_TEST_RUNTIME})
+        file(CHMOD ${MWIN_TEST_RUNTIME} DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE)
+        string(SHA1 hash ${PROJECT_BINARY_DIR})
+        string(SUBSTRING ${hash} 0 3 hash)
+        math(EXPR MWIN_TEST_DISPLAY "200 + 0x${hash} % 400")
+        find_program(MWIN_XVFB Xvfb)
+        find_program(MWIN_WESTON weston)
+        set(MWIN_TEST_X11 "")
+        set(MWIN_TEST_WAYLAND "")
+        set(compositor "")
+        if(MWIN_XVFB)
+            set(MWIN_TEST_X11 :${MWIN_TEST_DISPLAY})
+            if(MAUL_WINDOW_WAYLAND AND MWIN_WESTON)
+                set(MWIN_TEST_WAYLAND wayland-mwin)
+                set(compositor wayland)
+            endif()
+        endif()
+        add_test(NAME display_start COMMAND ${PROJECT_SOURCE_DIR}/tools/test_display.sh start
+                 ${MWIN_TEST_RUNTIME} ${MWIN_TEST_DISPLAY} ${compositor})
+        add_test(NAME display_stop COMMAND ${PROJECT_SOURCE_DIR}/tools/test_display.sh stop
+                 ${MWIN_TEST_RUNTIME})
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
+        set_tests_properties(display_start PROPERTIES FIXTURES_SETUP display SKIP_RETURN_CODE 77
+                                                      LABELS integration)
+        set_tests_properties(display_stop PROPERTIES FIXTURES_CLEANUP display LABELS integration)
+        # The fixture signals only what it started, on a display of its own,
+        # outside the range the build trees' displays come from.
+        math(EXPR display ${MWIN_TEST_DISPLAY}+400)
+        add_test(NAME display_fixture
+                 COMMAND ${PROJECT_SOURCE_DIR}/test/test_display_fixture.sh
+                         ${PROJECT_SOURCE_DIR}/tools/test_display.sh
+                         ${PROJECT_BINARY_DIR}/rt-fixture ${display})
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
+        set_tests_properties(display_fixture PROPERTIES SKIP_RETURN_CODE 77 LABELS integration)
+    endif()
+    # mwin_display_tests(<tests>): tests that need the display fixture. Both
+    # buses are named where none listens, so no test reaches the machine's
+    # own; the tests that need a bus start one of their own.
+    function(mwin_display_tests)
+        set_property(TEST ${ARGN} APPEND PROPERTY FIXTURES_REQUIRED display)
+        set_property(TEST ${ARGN} APPEND PROPERTY ENVIRONMENT DISPLAY=${MWIN_TEST_X11}
+                     XDG_RUNTIME_DIR=${MWIN_TEST_RUNTIME} WAYLAND_DISPLAY=${MWIN_TEST_WAYLAND}
+                     DBUS_SESSION_BUS_ADDRESS=unix:path=${MWIN_TEST_RUNTIME}/no-bus
+                     DBUS_SYSTEM_BUS_ADDRESS=unix:path=${MWIN_TEST_RUNTIME}/no-bus)
+        set_property(TEST ${ARGN} APPEND PROPERTY LABELS integration)
+    endfunction()
+    # mwin_integration_tests(<tests>): tests that drive a real window
+    # system, device, simulator or browser. They stay out of the
+    # changed-files check (tools/check.sh changed).
+    function(mwin_integration_tests)
+        set_property(TEST ${ARGN} APPEND PROPERTY LABELS integration)
+    endfunction()
     maul_add_test(base)
-    # The guide's opening program, built only (family record 0019).
+    # The guide's opening program, built only, since it waits for its user
+    # to close the window.
     maul_add_test(guide_hello MANUAL)
     if(MAUL_WINDOW_TEST_BACKEND)
         maul_add_test(window)
@@ -251,10 +315,12 @@ if(MAUL_WINDOW_BUILD_TESTS)
         endif()
     endif()
     if(MAUL_WINDOW_WAYLAND)
-        # Needs a compositor: skipped without WAYLAND_DISPLAY.
+        # Against the display fixture's weston.
         maul_add_test(wayland POSIX)
         target_compile_definitions(test_wayland PRIVATE _POSIX_C_SOURCE=200809L)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(wayland PROPERTIES SKIP_RETURN_CODE 77)
+        mwin_display_tests(wayland)
         mwin_add_wayland_server_test(wayland_input)
         mwin_add_wayland_server_test(wayland_clipboard)
         mwin_add_wayland_server_test(wayland_clipboard_data)
@@ -278,26 +344,30 @@ if(MAUL_WINDOW_BUILD_TESTS)
         endif()
     endif()
     if(MAUL_WINDOW_X11)
-        # Needs an X server: skipped without DISPLAY.
+        # Against the display fixture's Xvfb.
         maul_add_test(x11 POSIX)
         target_compile_definitions(test_x11 PRIVATE _POSIX_C_SOURCE=200809L)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(x11 PROPERTIES SKIP_RETURN_CODE 77)
         # Drives the X server through XTEST, which the test links.
         pkg_check_modules(MWIN_TEST_XCB REQUIRED IMPORTED_TARGET xcb xcb-xtest xcb-xfixes)
         maul_add_test(x11_input POSIX)
         target_compile_definitions(test_x11_input PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_input PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(x11_input PROPERTIES SKIP_RETURN_CODE 77)
         # The library's own message box, answered by the test's own
         # connection where neither zenity nor kdialog is on PATH.
         maul_add_test(x11_message_box POSIX)
         target_compile_definitions(test_x11_message_box PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_message_box PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(x11_message_box PROPERTIES SKIP_RETURN_CODE 77)
         # Another client of the test's own connection shares CLIPBOARD.
         maul_add_test(x11_clipboard POSIX)
         target_compile_definitions(test_x11_clipboard PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_clipboard PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(x11_clipboard PROPERTIES SKIP_RETURN_CODE 77)
         # Its data and PRIMARY likewise.
         maul_add_test(x11_clipboard_data POSIX)
@@ -307,11 +377,13 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(x11_icon POSIX)
         target_compile_definitions(test_x11_icon PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_icon PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(x11_icon PROPERTIES SKIP_RETURN_CODE 77)
         # A drag source of the test's own connection, by XDND.
         maul_add_test(x11_drop POSIX)
         target_compile_definitions(test_x11_drop PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_drop PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(x11_drop PROPERTIES SKIP_RETURN_CODE 77)
         # Reads at the edges of the clipboard's limit.
         maul_add_test(x11_clipboard_limits POSIX)
@@ -325,6 +397,10 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(x11_hints POSIX)
         target_compile_definitions(test_x11_hints PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_hints PRIVATE PkgConfig::MWIN_TEST_XCB)
+        # Occlusion by a window of the test's own connection.
+        maul_add_test(x11_visibility POSIX)
+        target_compile_definitions(test_x11_visibility PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_x11_visibility PRIVATE PkgConfig::MWIN_TEST_XCB)
         # Owned windows and popups read back by the test's own connection.
         maul_add_test(x11_owned POSIX)
         target_compile_definitions(test_x11_owned PRIVATE _POSIX_C_SOURCE=200809L)
@@ -351,13 +427,18 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(x11_touch WHITEBOX)
         # The scale of Xft.dpi.
         maul_add_test(x11_resources WHITEBOX)
-        # The tests that move the X server's focus or pointer, or own its
-        # selections, take turns.
+        # The tests that move the X server's focus or pointer, own its
+        # selections or cover others' windows take turns.
         set_tests_properties(x11 x11_input x11_clipboard x11_clipboard_data
                              x11_clipboard_limits x11_clipboard_readers x11_hints x11_icon
-                             x11_drop x11_owned x11_chrome x11_monitor x11_monitor_facts PROPERTIES
+                             x11_drop x11_owned x11_chrome x11_monitor x11_monitor_facts
+                             x11_visibility PROPERTIES
+                             # hygiene: exit 77 is a missing platform, and CI fails any skipped test
                              SKIP_RETURN_CODE 77
                              RESOURCE_LOCK x11-focus)
+        mwin_display_tests(x11 x11_input x11_message_box x11_clipboard x11_clipboard_data
+                           x11_clipboard_limits x11_clipboard_readers x11_hints x11_icon x11_drop
+                           x11_owned x11_chrome x11_monitor x11_monitor_facts x11_visibility)
     endif()
     if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
         # Stand-ins for zenity and kdialog on PATH.
@@ -400,47 +481,61 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(linux_power POSIX)
         target_compile_definitions(test_linux_power PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_linux_power PRIVATE ${CMAKE_DL_LIBS})
-        # Input methods through Fcitx 5 and IBus of the test's own (mwin-0030).
+        # The desktop's languages through AccountsService of the test's own
+        # and a configuration folder of its own.
+        maul_add_test(linux_languages POSIX)
+        target_compile_definitions(test_linux_languages PRIVATE _POSIX_C_SOURCE=200809L)
+        target_link_libraries(test_linux_languages PRIVATE ${CMAKE_DL_LIBS})
+        # Input methods through Fcitx 5 and IBus of the test's own.
         maul_add_test(x11_ime POSIX)
         target_compile_definitions(test_x11_ime PRIVATE _POSIX_C_SOURCE=200809L)
         target_link_libraries(test_x11_ime PRIVATE ${CMAKE_DL_LIBS} PkgConfig::MWIN_TEST_XCB)
         set(MWIN_BUS_TESTS linux_services linux_awake linux_dialog linux_settings linux_power
-            x11_ime)
+            linux_languages x11_ime)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(${MWIN_BUS_TESTS} PROPERTIES SKIP_RETURN_CODE 77)
+        mwin_display_tests(${MWIN_BUS_TESTS})
         # It moves the X server's focus, as the X11 tests do.
         set_tests_properties(x11_ime PROPERTIES RESOURCE_LOCK x11-focus)
         if(MAUL_WINDOW_TSAN)
-            set_tests_properties(${MWIN_BUS_TESTS} PROPERTIES
+            set_property(TEST ${MWIN_BUS_TESTS} APPEND PROPERTY
                 ENVIRONMENT "TSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/test/tsan.supp")
         endif()
     endif()
     if((MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11) AND MAUL_WINDOW_GAMEPAD)
         # Numbered controls through their mapping.
         maul_add_test(pad_map WHITEBOX)
-        # Makes virtual gamepads through uinput: skipped without it or a
-        # display.
+        # Makes virtual gamepads through /dev/uinput, labeled uinput: a
+        # container without the device leaves them out.
         maul_add_test(linux_gamepad POSIX)
         target_compile_definitions(test_linux_gamepad PRIVATE _GNU_SOURCE)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(linux_gamepad PROPERTIES SKIP_RETURN_CODE 77 RESOURCE_LOCK uinput)
+        set(pads linux_gamepad)
         # Where both backends are built, the X11 one too, Wayland's
         # display hidden; the pads of one run would be the other's.
         if(MAUL_WINDOW_WAYLAND AND MAUL_WINDOW_X11)
             add_test(NAME linux_gamepad_x11 COMMAND test_linux_gamepad)
+            # hygiene: exit 77 is a missing platform, and CI fails any skipped test
             set_tests_properties(linux_gamepad_x11 PROPERTIES SKIP_RETURN_CODE 77
                                  ENVIRONMENT_MODIFICATION "WAYLAND_DISPLAY=unset:"
-                                 RESOURCE_LOCK uinput)
+                                 LABELS linux_gamepad RESOURCE_LOCK uinput)
+            list(APPEND pads linux_gamepad_x11)
         endif()
+        mwin_display_tests(${pads})
+        set_property(TEST ${pads} APPEND PROPERTY LABELS uinput)
     endif()
     if(MAUL_WINDOW_WEB)
         # Runs in headless Chrome through puppeteer, which the runner
         # finds through MWIN_NODE_MODULES: skipped without it. Without
         # Emscripten a test is a reactor whose main the runner calls, with
-        # its imports beside it (mwin-0022).
+        # its imports beside it.
         function(mwin_add_web_test name)
             maul_add_test(${name} MANUAL WHITEBOX)
             add_test(NAME ${name} COMMAND node ${PROJECT_SOURCE_DIR}/test/web_runner.cjs
                      $<TARGET_FILE:test_${name}>)
-            set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
+            # hygiene: exit 77 is a missing platform, and CI fails any skipped test
+            set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77 LABELS "${name};integration")
             if(NOT EMSCRIPTEN)
                 target_link_options(test_${name} PRIVATE -mexec-model=reactor -Wl,--stack-first -Wl,--export-table
                                     -Wl,--export=main)
@@ -461,6 +556,7 @@ if(MAUL_WINDOW_BUILD_TESTS)
         mwin_add_web_test(web_drop)
         mwin_add_web_test(web_locales)
         mwin_add_web_test(web_power)
+        mwin_add_web_test(web_records)
     endif()
     if(MAUL_WINDOW_MACOS)
         # Needs the session's window server, which CI's macOS runners have.
@@ -474,7 +570,7 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # Objective-C, to make the NSEvents AppKit would deliver and call
         # the view as an input method would.
         foreach(name macos_input macos_ime macos_pen macos_drop macos_dialog macos_system
-                     macos_owned macos_chrome macos_access)
+                     macos_owned macos_chrome macos_access macos_occlusion)
             add_executable(test_${name} test/test_${name}.m)
             target_link_libraries(test_${name} PRIVATE maul-window "-framework AppKit"
                                   "-framework Carbon" "-framework UniformTypeIdentifiers")
@@ -483,13 +579,16 @@ if(MAUL_WINDOW_BUILD_TESTS)
                                   OBJC_STANDARD_REQUIRED ON OBJC_EXTENSIONS OFF)
             target_compile_options(test_${name} PRIVATE -fno-objc-arc)
             add_test(NAME ${name} COMMAND test_${name})
+            set_tests_properties(${name} PROPERTIES LABELS ${name})
         endforeach()
-        set_tests_properties(macos macos_input macos_ime macos_pen macos_services macos_drop
-                             macos_dialog macos_system macos_owned macos_chrome macos_access
-                             PROPERTIES TIMEOUT 60)
+        target_link_libraries(test_macos_occlusion PRIVATE "-framework IOKit")
+        set(MWIN_MACOS_TESTS macos macos_input macos_ime macos_pen macos_services macos_drop
+            macos_dialog macos_system macos_owned macos_chrome macos_access macos_occlusion)
         if(MAUL_WINDOW_GAMEPAD)
-            set_tests_properties(macos_gamepad PROPERTIES TIMEOUT 60)
+            list(APPEND MWIN_MACOS_TESTS macos_gamepad)
         endif()
+        set_tests_properties(${MWIN_MACOS_TESTS} PROPERTIES TIMEOUT 60)
+        mwin_integration_tests(${MWIN_MACOS_TESTS})
     endif()
     if(MAUL_WINDOW_ANDROID AND DEFINED ENV{ANDROID_HOME})
         # Applications in the emulator, built by tools/build_android_app.sh
@@ -519,15 +618,17 @@ if(MAUL_WINDOW_BUILD_TESTS)
             add_custom_target(test_${name}_apk ALL DEPENDS ${PROJECT_BINARY_DIR}/test_${name}.apk)
             add_test(NAME ${name} COMMAND ${PROJECT_SOURCE_DIR}/tools/run_android_app.sh
                      ${PROJECT_BINARY_DIR}/test_${name}.apk ${package})
-            set_tests_properties(${name} PROPERTIES TIMEOUT 240 RESOURCE_LOCK emulator)
+            set_tests_properties(${name} PROPERTIES TIMEOUT 240 RESOURCE_LOCK emulator
+                                 LABELS "${name};integration")
         endforeach()
     endif()
     if(MAUL_WINDOW_IOS)
         # Applications in the simulator, run by tools/run_ios_app.sh; ios_input,
         # ios_keys and ios_ime hand the view touches, recognizers, presses, text
         # and compositions as UIKit would.
+        # ios_scenes needs an iPad, where CI runs it.
         set(MWIN_IOS_TESTS ios ios_input ios_keys ios_ime ios_services ios_drop ios_dialog
-            ios_system)
+            ios_system ios_scenes)
         if(MAUL_WINDOW_GAMEPAD)
             list(APPEND MWIN_IOS_TESTS ios_gamepad)
         endif()
@@ -546,21 +647,31 @@ if(MAUL_WINDOW_BUILD_TESTS)
             target_compile_options(test_${name} PRIVATE -fno-objc-arc)
             add_test(NAME ${name} COMMAND ${PROJECT_SOURCE_DIR}/tools/run_ios_app.sh
                      $<TARGET_BUNDLE_DIR:test_${name}>)
-            set_tests_properties(${name} PROPERTIES TIMEOUT 240 RESOURCE_LOCK simulator)
+            set_tests_properties(${name} PROPERTIES TIMEOUT 240 RESOURCE_LOCK simulator
+                                 FIXTURES_REQUIRED ios_simulator LABELS "${name};integration")
         endforeach()
+        # A device's first install and launch of a test application, paid
+        # before the tests so that their time is their own.
+        add_test(NAME ios_warm_up COMMAND ${PROJECT_SOURCE_DIR}/tools/warm_ios_simulator.sh
+                 $<TARGET_BUNDLE_DIR:test_ios>)
+        set_tests_properties(ios_warm_up PROPERTIES TIMEOUT 300 RESOURCE_LOCK simulator
+                             FIXTURES_SETUP ios_simulator LABELS "ios;integration")
         if(MAUL_WINDOW_GAMEPAD)
             target_link_libraries(test_ios_gamepad PRIVATE "-framework GameController")
         endif()
     endif()
     if(MAUL_WINDOW_WIN32)
         maul_add_test(win32)
-        target_link_libraries(test_win32 PRIVATE user32 shcore)
+        target_link_libraries(test_win32 PRIVATE user32 shcore dwmapi)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
+        set_tests_properties(win32 PROPERTIES SKIP_RETURN_CODE 77)
         # Drives the desktop through SendInput.
         maul_add_test(win32_input)
         target_link_libraries(test_win32_input PRIVATE user32)
         # Injects touch and pen: skipped where Windows cannot (wine).
         maul_add_test(win32_pointer)
         target_link_libraries(test_win32_pointer PRIVATE user32)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(win32_pointer PROPERTIES SKIP_RETURN_CODE 77)
         if(MAUL_WINDOW_GAMEPAD AND MAUL_WINDOW_TEST_BACKEND)
             # The XInput gamepads against a stand-in for XInput.
@@ -575,6 +686,7 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # Composes through the input context: skipped with no input method.
         maul_add_test(win32_ime)
         target_link_libraries(test_win32_ime PRIVATE user32 imm32)
+        # hygiene: exit 77 is a missing platform, and CI fails any skipped test
         set_tests_properties(win32_ime PROPERTIES SKIP_RETURN_CODE 77)
         # Changes the user's settings for a moment, and puts them back.
         maul_add_test(win32_system)
@@ -629,8 +741,14 @@ if(MAUL_WINDOW_BUILD_TESTS)
                              win32_chrome win32_touch_keyboard win32_message_box
                              win32_window_props
                              PROPERTIES RESOURCE_LOCK desktop)
+        mwin_integration_tests(win32 win32_input win32_pointer win32_ime win32_system
+                               win32_clipboard win32_services win32_dialog win32_owned
+                               win32_chrome win32_message_box win32_window_props win32_icon
+                               win32_class_icon win32_accessibility)
     endif()
     maul_add_header_tests()
+    # The program defines mwinAndroidMain; the library only declares it.
+    maul_add_exports_test(PROGRAM mwinAndroidMain)
 endif()
 
 # The fuzz targets: test/fuzz_<area>.c, run as fuzz_<area> <corpus dir>,
@@ -640,15 +758,23 @@ if(MAUL_WINDOW_FUZZ)
         message(FATAL_ERROR "The fuzz targets run on the test backend: set MAUL_WINDOW_TEST_BACKEND")
     endif()
     # The library is instrumented too: its coverage guides libFuzzer, and
-    # the sanitizers watch its code, not only the targets'.
-    target_compile_options(maul-window PRIVATE -fsanitize=fuzzer-no-link,address,undefined)
+    # the sanitizers watch its code, not only the targets'. Undefined
+    # behavior stops the run as a crash would, as in the sanitizer cells;
+    # by default UBSan only prints it, and libFuzzer goes on.
+    target_compile_options(maul-window PRIVATE -fsanitize=fuzzer-no-link,address,undefined
+                                               -fno-sanitize-recover=all)
     target_link_options(maul-window PUBLIC -fsanitize=address,undefined)
-    set(MWIN_FUZZ_AREAS edid payload preedit)
+    # The web backend's records run on the host too (web_records).
+    set(MWIN_FUZZ_AREAS edid payload preedit web_records)
     if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
         list(APPEND MWIN_FUZZ_AREAS locale)
     endif()
     if(MAUL_WINDOW_X11)
-        list(APPEND MWIN_FUZZ_AREAS scroll)
+        # The bus target reaches the input method too, which only X11 has.
+        list(APPEND MWIN_FUZZ_AREAS linux_bus scroll x11_drop x11_selection)
+    endif()
+    if(MAUL_WINDOW_WAYLAND)
+        list(APPEND MWIN_FUZZ_AREAS wayland_offer)
     endif()
     if(MAUL_WINDOW_GAMEPAD AND (MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11))
         list(APPEND MWIN_FUZZ_AREAS pad)
@@ -659,14 +785,32 @@ if(MAUL_WINDOW_FUZZ)
         # The targets reach the library's own functions.
         target_include_directories(fuzz_${area} PRIVATE ${PROJECT_SOURCE_DIR}/src)
         maul_apply_flags(fuzz_${area})
-        target_compile_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined)
+        target_compile_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined
+                                                    -fno-sanitize-recover=all)
         target_link_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined)
     endforeach()
     if(MAUL_WINDOW_WAYLAND OR MAUL_WINDOW_X11)
         target_compile_definitions(fuzz_payload PRIVATE MAUL_WINDOW_ZENITY)
     endif()
+    # The web backend's C files, built for the host with its page's
+    # functions declared weak (web_js.h); the message box is left out, as
+    # the host's own is in the library.
+    target_sources(fuzz_web_records PRIVATE src/backend_web.c src/web_clipboard.c
+                   src/web_cursor.c src/web_drop.c src/web_input.c src/web_page.c
+                   src/web_services.c src/web_text.c src/web_window.c)
     if(MAUL_WINDOW_X11)
         target_include_directories(fuzz_scroll SYSTEM PRIVATE ${MWIN_XCB_INCLUDE_DIRS})
+        target_include_directories(fuzz_x11_selection SYSTEM PRIVATE ${MWIN_XCB_INCLUDE_DIRS})
+        target_include_directories(fuzz_x11_drop SYSTEM PRIVATE ${MWIN_XCB_INCLUDE_DIRS})
+        target_compile_definitions(fuzz_x11_selection PRIVATE _POSIX_C_SOURCE=200809L)
+        target_compile_definitions(fuzz_x11_drop PRIVATE _POSIX_C_SOURCE=200809L)
+        target_compile_definitions(fuzz_linux_bus PRIVATE _POSIX_C_SOURCE=200809L)
+    endif()
+    if(MAUL_WINDOW_WAYLAND)
+        # The backend's headers, with the protocols generated for it.
+        target_include_directories(fuzz_wayland_offer SYSTEM PRIVATE ${MWIN_PROTOCOL_OUT}
+                                   ${MWIN_WAYLAND_INCLUDE_DIR})
+        target_compile_definitions(fuzz_wayland_offer PRIVATE _POSIX_C_SOURCE=200809L)
     endif()
 endif()
 

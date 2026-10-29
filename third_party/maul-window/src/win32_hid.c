@@ -348,12 +348,13 @@ static LONG Extend(ULONG value, const mwinHidValue* control)
 
 static uint8_t HatBits(const mwinHidValue* hat, LONG value)
 {
-    LONG steps = hat->maximum - hat->minimum + 1;
-    if (value < hat->minimum || value > hat->maximum || steps <= 0)
+    // In 64 bits: a device's logical range may span the whole of LONG.
+    int64_t steps = (int64_t)hat->maximum - hat->minimum + 1;
+    if (value < hat->minimum || value > hat->maximum)
     {
         return 0;
     }
-    return s_hatBits[(value - hat->minimum) * 8 / steps];
+    return s_hatBits[((int64_t)value - hat->minimum) * 8 / steps];
 }
 
 // One input report: the buttons down, and each axis's and hat's value.
@@ -414,7 +415,8 @@ void mwinWin32HidInput(mwinWin32Hid* hid, HRAWINPUT input, uint64_t timeNs)
     mwinHidPad* pad = Find(hid, data.raw.header.hDevice);
     const RAWHID* reports = &data.raw.data.hid;
     size_t offset = offsetof(RAWINPUT, data.hid.bRawData);
-    for (DWORD i = 0; pad != nullptr && i < reports->dwCount; i++)
+    // Reports of no size carry nothing, however many there are.
+    for (DWORD i = 0; pad != nullptr && reports->dwSizeHid > 0 && i < reports->dwCount; i++)
     {
         size_t start = (size_t)i * reports->dwSizeHid;
         if (offset + start + reports->dwSizeHid > size)

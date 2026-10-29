@@ -72,6 +72,11 @@ bool muniIsDefaultIgnorable(uint32_t codePoint)
     return muniLookupDefaultIgnorable(codePoint) != 0;
 }
 
+bool muniIsIdeographic(uint32_t codePoint)
+{
+    return muniLookupIdeographic(codePoint) != 0;
+}
+
 int32_t muniGetDecimalDigitValue(uint32_t codePoint)
 {
     if (codePoint - '0' < 10)

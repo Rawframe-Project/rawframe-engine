@@ -3,7 +3,7 @@
 //
 // Win32 monitors, and their HDR facts: whether HDR output is on and the
 // SDR white level from DisplayConfig, the luminances from the EDID
-// Windows keeps in the monitor's registry key (mwin-0036), which gives
+// Windows keeps in the monitor's registry key, which gives
 // the physical size too.
 
 #include "win32_output.h"

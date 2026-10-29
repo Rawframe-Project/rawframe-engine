@@ -42,7 +42,7 @@ mwinOutcome mwinWaylandSetCursorMode(mwinWaylandPlatform* platform, uint32_t slo
 mwinOutcome mwinWaylandSetCursorShape(mwinWaylandPlatform* platform, uint32_t slot,
                                       mwinCursorShape shape);
 
-// Carries out a request for a cursor made from images (mwin-0027):
+// Carries out a request for a cursor made from images:
 // unsupported without shared memory.
 mwinOutcome mwinWaylandSetCursorImage(mwinWaylandPlatform* platform, uint32_t slot,
                                       mwinCursorId cursor);

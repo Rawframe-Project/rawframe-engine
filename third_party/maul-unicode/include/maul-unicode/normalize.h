@@ -8,15 +8,21 @@
 // full-width letters, into their plain counterparts.
 //
 // Normalization writes into a caller buffer and allocates nothing. It
-// reorders at most 32 code points at once: a character followed by more
-// combining marks than that is refused with muni_errorLimit rather than
-// buffered without bound (real text carries a handful; UAX #15's
-// stream-safe text carries at most 30).
+// reorders at most MUNI_MAX_NORMALIZATION_SEGMENT code points at once, a
+// starter and the combining marks after it once fully decomposed, so 31
+// marks after a starter. A longer run is refused with muni_errorLimit
+// rather than buffered without bound (real text carries a handful;
+// UAX #15's stream-safe text carries at most 30).
 
 #ifndef MAUL_UNICODE_NORMALIZE_H
 #define MAUL_UNICODE_NORMALIZE_H
 
 #include "maul-unicode/encoding.h"
+
+// The most code points of one normalization segment: a starter and the
+// combining marks after it, after full decomposition. Normalization,
+// NFKC_Casefold and skeletons refuse a longer run with muni_errorLimit.
+#define MUNI_MAX_NORMALIZATION_SEGMENT 32
 
 #ifdef __cplusplus
 extern "C"
@@ -57,13 +63,18 @@ extern "C"
     /// @param output      The output. May be NULL when capacity is 0.
     /// @param capacity    The number of bytes output can hold.
     /// @param neededOut   Receives the number of bytes the whole result
-    ///                    needs, which may exceed capacity. On another
-    ///                    error, the bytes before it.
+    ///                    needs, which may exceed capacity, or SIZE_MAX
+    ///                    when that does not fit in a size_t. On a UTF-8
+    ///                    error, the bytes before it, which output holds
+    ///                    as far as they fit. On `muni_errorLimit`, the
+    ///                    same for the text before the starter whose run
+    ///                    of combining marks hit the limit.
+    ///                    `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the result does not fit (the bytes that fit are written); in
     ///         strict mode the first UTF-8 error and its offset;
     ///         `muni_errorLimit` and the offset of the code point that
-    ///         makes a run of combining marks too long;
+    ///         makes a segment longer than MUNI_MAX_NORMALIZATION_SEGMENT;
     ///         `muni_errorInvalid` for a NULL argument or an unknown form.
     /// @par Thread safety
     /// Safe from any thread.
@@ -79,7 +90,7 @@ extern "C"
     /// @param length     The number of bytes.
     /// @param form       muni_nfc, muni_nfd, muni_nfkc or muni_nfkd.
     /// @param answerOut  Receives muni_quickCheckYes, muni_quickCheckNo or
-    ///                   muni_quickCheckMaybe.
+    ///                   muni_quickCheckMaybe. Left as it was on an error.
     /// @return `muni_success` and the length; the first UTF-8 error and
     ///         its offset; `muni_errorInvalid` for a NULL argument or an
     ///         unknown form.
@@ -89,18 +100,23 @@ extern "C"
                                                                   muniNormalForm form,
                                                                   muniQuickCheck* answerOut);
 
-    /// Returns the canonical decomposition of a code point one level deep,
-    /// as shapers such as HarfBuzz ask for it: two code points, or one
-    /// with the second 0. Hangul syllables split into LV + T or L + V.
+    /// Gives the canonical decomposition of a code point one level deep,
+    /// as shapers such as HarfBuzz ask for it: two code points, one (a
+    /// singleton), or none. Hangul syllables split into LV + T or L + V.
     ///
     /// @param codePoint  Any value.
-    /// @param firstOut   Receives the first code point.
-    /// @param secondOut  Receives the second code point, or 0.
-    /// @return true when the code point decomposes; the outputs are left
-    ///         alone when it does not, or when either is NULL.
+    /// @param firstOut   Receives the first code point, or 0 when the count
+    ///                   is 0.
+    /// @param secondOut  Receives the second code point, or 0 when the
+    ///                   count is below 2.
+    /// @param countOut   Receives 0 when the code point does not decompose,
+    ///                   1 for a singleton and 2 for a pair.
+    /// @return `muni_success`, or `muni_errorInvalid` for a NULL output,
+    ///         and then every output is left as it was.
     /// @par Thread safety
     /// Safe from any thread.
-    MUNI_API bool muniDecomposePair(uint32_t codePoint, uint32_t* firstOut, uint32_t* secondOut);
+    MUNI_NODISCARD MUNI_API muniResult muniDecomposePair(uint32_t codePoint, uint32_t* firstOut,
+                                                         uint32_t* secondOut, size_t* countOut);
 
     /// Returns the primary composite of two code points (UAX #15 D114),
     /// Hangul syllables included.

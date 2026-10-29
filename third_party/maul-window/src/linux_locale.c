@@ -109,15 +109,15 @@ static bool Has(const char* list, size_t length, const char* tag, size_t tagLeng
     return false;
 }
 
-// Adds the tags of a list of names separated by colons.
-static size_t AddNames(const char* names, char* out, size_t length, size_t capacity)
+size_t mwinLinuxAddLocales(const char* names, size_t namesLength, char* out, size_t length,
+                           size_t capacity)
 {
-    while (names != nullptr && *names != '\0')
+    for (size_t at = 0; names != nullptr && at < namesLength;)
     {
-        const char* colon = strchr(names, ':');
-        size_t nameLength = colon != nullptr ? (size_t)(colon - names) : strlen(names);
+        const char* colon = memchr(names + at, ':', namesLength - at);
+        size_t end = colon != nullptr ? (size_t)(colon - names) : namesLength;
         char tag[TAG_BYTES];
-        size_t tagLength = TagOf(names, nameLength, tag);
+        size_t tagLength = TagOf(names + at, end - at, tag);
         size_t needed = tagLength + (length > 0 ? 1u : 0u);
         if (tagLength > 0 && !Has(out, length, tag, tagLength) && length + needed <= capacity)
         {
@@ -126,9 +126,15 @@ static size_t AddNames(const char* names, char* out, size_t length, size_t capac
             memcpy(out + length, tag, tagLength);
             length += tagLength;
         }
-        names = colon != nullptr ? colon + 1 : nullptr;
+        at = end + 1;
     }
     return length;
+}
+
+static size_t AddNames(const char* names, char* out, size_t length, size_t capacity)
+{
+    return names != nullptr ? mwinLinuxAddLocales(names, strlen(names), out, length, capacity)
+                            : length;
 }
 
 size_t mwinLinuxLocalesOf(const char* language, const char* messages, char* out, size_t capacity)
@@ -149,6 +155,72 @@ static const char* Set(const char* name)
 {
     const char* value = getenv(name);
     return value != nullptr && value[0] != '\0' ? value : nullptr;
+}
+
+// The line from at, without its end and a carriage return, and where
+// the next begins.
+static size_t LineOf(const char* text, size_t length, size_t at, size_t* nextOut)
+{
+    const char* newline = memchr(text + at, '\n', length - at);
+    size_t end = newline != nullptr ? (size_t)(newline - text) : length;
+    *nextOut = newline != nullptr ? end + 1 : length;
+    return end > at && text[end - 1] == '\r' ? end - 1 - at : end - at;
+}
+
+static bool IsBlank(char c)
+{
+    return c == ' ' || c == '\t';
+}
+
+bool mwinLinuxPlasmaLocales(const char* text, size_t length, char* out, size_t capacity,
+                            size_t* lengthOut)
+{
+    if (text == nullptr || memchr(text, '\0', length) != nullptr)
+    {
+        return false;
+    }
+    bool translations = false;
+    *lengthOut = 0;
+    for (size_t at = 0, next = 0; at < length; at = next)
+    {
+        size_t lineLength = LineOf(text, length, at, &next);
+        const char* line = text + at;
+        while (lineLength > 0 && IsBlank(line[0]))
+        {
+            line += 1;
+            lineLength -= 1;
+        }
+        while (lineLength > 0 && IsBlank(line[lineLength - 1]))
+        {
+            lineLength -= 1;
+        }
+        if (lineLength > 0 && line[0] == '[')
+        {
+            translations = lineLength == 14 && memcmp(line, "[Translations]", 14) == 0;
+            continue;
+        }
+        size_t key = 8;
+        if (!translations || lineLength < key || memcmp(line, "LANGUAGE", key) != 0)
+        {
+            continue;
+        }
+        while (key < lineLength && IsBlank(line[key]))
+        {
+            key += 1;
+        }
+        if (key == lineLength || line[key] != '=')
+        {
+            continue;
+        }
+        key += 1;
+        while (key < lineLength && IsBlank(line[key]))
+        {
+            key += 1;
+        }
+        // The last LANGUAGE counts, as KConfig reads it.
+        *lengthOut = mwinLinuxAddLocales(line + key, lineLength - key, out, 0, capacity);
+    }
+    return true;
 }
 
 size_t mwinLinuxLocales(char* out, size_t capacity)

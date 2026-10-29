@@ -16,15 +16,36 @@ extern "C"
 {
 #endif
 
-// The library version. CMake reads it from here.
+// The library version. CMake reads it from here, and release-please
+// moves it between the markers.
+// x-release-please-start-major
 #define MWIN_VERSION_MAJOR 0
-#define MWIN_VERSION_MINOR 13
-#define MWIN_VERSION_PATCH 0
+// x-release-please-end
+// x-release-please-start-minor
+#define MWIN_VERSION_MINOR 5
+// x-release-please-end
+// x-release-please-start-patch
+#define MWIN_VERSION_PATCH 1
+// x-release-please-end
 
-// The ABI a program is built for: major and minor, as the ABI holds within
-// a minor release. The application def carries it (mwinDefaultAppDef), and
-// mwinRun refuses a def built for another.
-#define MWIN_ABI_VERSION ((MWIN_VERSION_MAJOR << 16) | MWIN_VERSION_MINOR)
+// The binary interface a program is built for: the whole version before
+// 1.0, when any release may break it, and the major and minor version from
+// 1.0 on. The top bit is always set, so a zeroed def never matches. The
+// root defs carry it, those of the calls a program can make first: the
+// application def (mwinDefaultAppDef) and the message box def
+// (mwinDefaultMessageBoxDef). mwinRun and mwinShowMessageBox refuse a def
+// built for another; every other def is used inside a run.
+#define MWIN_ABI_VERSION                                                                           \
+    (UINT32_C(0x80000000) | ((uint32_t)MWIN_VERSION_MAJOR << 16) |                                 \
+     (MWIN_VERSION_MAJOR == 0                                                                      \
+          ? (((uint32_t)MWIN_VERSION_MINOR << 8) | (uint32_t)MWIN_VERSION_PATCH)                   \
+          : (uint32_t)MWIN_VERSION_MINOR))
+#if MWIN_VERSION_MAJOR > 0x7FFF || MWIN_VERSION_MINOR > 0xFFFF
+#error "MWIN_VERSION_MAJOR or MWIN_VERSION_MINOR does not fit MWIN_ABI_VERSION"
+#endif
+#if MWIN_VERSION_MAJOR == 0 && (MWIN_VERSION_MINOR > 0xFF || MWIN_VERSION_PATCH > 0xFF)
+#error "before 1.0, MWIN_VERSION_MINOR and MWIN_VERSION_PATCH must fit 8 bits each"
+#endif
 
 // MWIN_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_window_EXPORTS is defined while building
@@ -81,9 +102,19 @@ extern "C"
         // The call is not allowed now: before the context exists, or from
         // inside a function the library itself is running.
         mwin_errorState = -6,
-        // A def was built from headers of another major or minor version
-        // than the library's.
+        // A def was built from headers of another binary interface than
+        // the library's (MWIN_ABI_VERSION).
         mwin_errorVersion = -7,
+    };
+
+    // A yes or no the platform may not know.
+    typedef uint8_t mwinTristate;
+
+    enum
+    {
+        mwin_unknown = 0,
+        mwin_no = 1,
+        mwin_yes = 2,
     };
 
     // The allocator an owner object takes in its def and keeps for its
@@ -96,7 +127,7 @@ extern "C"
         void* context;
     } mwinAllocator;
 
-    // Ids name what a context owns (family record 0016): a 1-based slot,
+    // Ids name what a context owns: a 1-based slot,
     // 0 for the null id, and a generation that tells a live object from
     // the earlier occupants of its slot. One type per kind, so a window id
     // cannot be passed where a request id belongs.
@@ -114,7 +145,7 @@ extern "C"
         uint32_t generation;
     } mwinMonitorId;
 
-    // A request in flight (family record 0018).
+    // A request in flight.
     typedef struct mwinRequestId
     {
         uint32_t index1;

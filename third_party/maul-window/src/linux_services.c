@@ -26,7 +26,7 @@ extern char** environ;
 
 void mwinLinuxServicesStart(mwinLinuxServices* services, mwinContext* context)
 {
-    *services = (mwinLinuxServices){.context = context};
+    *services = (mwinLinuxServices){.context = context, .system = {.system = true}};
     mwinDialogsStart(&services->dialogs, context, &services->bus);
     char locales[MWIN_LINUX_LOCALE_BYTES];
     size_t capacity = context->limits.localeBytes;
@@ -34,7 +34,10 @@ void mwinLinuxServicesStart(mwinLinuxServices* services, mwinContext* context)
         mwinLinuxLocales(locales, capacity < sizeof(locales) ? capacity : sizeof(locales));
     (void)mwinSetLocales(context, locales, length, mwinMonotonicNow());
     mwinSettingsStart(&services->settings, context, &services->bus, mwinMonotonicNow());
-    mwinPowerStart(&services->power, context, &services->bus, mwinMonotonicNow());
+    mwinPowerStart(&services->power, context, &services->bus, &services->system,
+                   mwinMonotonicNow());
+    mwinLanguagesStart(&services->languages, context, &services->system, locales, length,
+                       mwinMonotonicNow());
 }
 
 // Runs xdg-open on a target, followed until it ends: -1, or the outcome
@@ -230,7 +233,14 @@ void mwinLinuxServicesPump(mwinLinuxServices* services, uint64_t nowNs, bool awa
 {
     mwinBusPump(&services->bus, 0);
     mwinSettingsPump(&services->settings, nowNs);
+    // The system bus is read after the settings are taken, as the power
+    // module read it in its own pump.
+    if (services->system.connection != nullptr)
+    {
+        mwinBusPump(&services->system, 0);
+    }
     mwinPowerPump(&services->power, nowNs);
+    mwinLanguagesPump(&services->languages, nowNs);
     PumpReveals(services, nowNs);
     PumpOpeners(services, nowNs);
     mwinDialogsPump(&services->dialogs, nowNs);
@@ -250,6 +260,8 @@ void mwinLinuxServicesStop(mwinLinuxServices* services)
     mwinDialogsStop(&services->dialogs);
     mwinSettingsStop(&services->settings);
     mwinPowerStop(&services->power);
+    mwinLanguagesStop(&services->languages);
+    mwinBusClose(&services->system);
     if (services->bus.connection != nullptr)
     {
         mwinInhibitStop(&services->bus, &services->inhibit);

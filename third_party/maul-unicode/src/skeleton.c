@@ -22,15 +22,15 @@
 #include "tables.h"
 #include "writer.h"
 
+#include "maul-unicode/normalize.h"
 #include "maul-unicode/security.h"
 
-#define MAX_SEGMENT 32
-#define POOLED      0x8000u
+#define POOLED 0x8000u
 
 typedef struct Stage
 {
-    uint32_t codePoints[MAX_SEGMENT];
-    uint8_t classes[MAX_SEGMENT];
+    uint32_t codePoints[MUNI_MAX_NORMALIZATION_SEGMENT];
+    uint8_t classes[MUNI_MAX_NORMALIZATION_SEGMENT];
     size_t count;
 } Stage;
 
@@ -42,7 +42,7 @@ typedef struct Skeleton
     Stage decomposed;      // NFD of the text
     Stage mapped;          // NFD of the prototypes
     size_t offset;         // where the code point being added starts
-    size_t overflow;       // where a stage first outgrew MAX_SEGMENT, or SIZE_MAX
+    size_t overflow;       // where a stage first outgrew its segment, or SIZE_MAX
     muniWriter writer;
 } Skeleton;
 
@@ -50,7 +50,7 @@ typedef struct Skeleton
 // lower class. The caller passes a starter on to an empty stage.
 static void Place(Skeleton* skeleton, Stage* stage, uint32_t codePoint, uint8_t markClass)
 {
-    if (stage->count == MAX_SEGMENT)
+    if (stage->count == MUNI_MAX_NORMALIZATION_SEGMENT)
     {
         skeleton->overflow =
             skeleton->overflow < skeleton->offset ? skeleton->overflow : skeleton->offset;
@@ -354,13 +354,21 @@ static muniResult AddParagraphs(Skeleton* skeleton, size_t length, muniBidiDirec
 }
 
 muniTextResult muniGetSkeleton(const char* text, size_t length, muniBidiDirection direction,
-                               uint8_t* workspace, char* output, size_t capacity, size_t* neededOut)
+                               uint8_t* workspace, size_t workspaceSize, char* output,
+                               size_t capacity, size_t* neededOut)
 {
-    if ((text == nullptr && length != 0) || (workspace == nullptr && length != 0) ||
+    if ((text == nullptr && length != 0) || (workspace == nullptr && workspaceSize != 0) ||
         (output == nullptr && capacity != 0) || neededOut == nullptr ||
         direction > muni_bidiRightToLeft)
     {
         return (muniTextResult){muni_errorInvalid, 0};
+    }
+    // Checked for all text, not only text that needs bidi, so a short
+    // workspace shows up whatever the text is. Halving cannot overflow.
+    if (workspaceSize / 2 < length)
+    {
+        *neededOut = 0;
+        return (muniTextResult){muni_errorCapacity, 0};
     }
     muniTextResult valid = muniValidateUtf8(text, length);
     if (valid.status != muni_success)
@@ -375,6 +383,7 @@ muniTextResult muniGetSkeleton(const char* text, size_t length, muniBidiDirectio
         muniResult status = AddParagraphs(&skeleton, length, direction, workspace);
         if (status != muni_success)
         {
+            *neededOut = 0;
             return (muniTextResult){status, 0};
         }
     }
@@ -384,11 +393,14 @@ muniTextResult muniGetSkeleton(const char* text, size_t length, muniBidiDirectio
     }
     FlushDecomposed(&skeleton);
     FlushMapped(&skeleton);
-    *neededOut = skeleton.writer.needed;
+    // The skeleton follows display order, so the bytes counted before an
+    // error would tell the caller nothing.
     if (skeleton.overflow != SIZE_MAX)
     {
+        *neededOut = 0;
         return (muniTextResult){muni_errorLimit, skeleton.overflow};
     }
-    return (muniTextResult){skeleton.writer.needed > capacity ? muni_errorCapacity : muni_success,
+    *neededOut = skeleton.writer.needed;
+    return (muniTextResult){!muniWriterFits(&skeleton.writer) ? muni_errorCapacity : muni_success,
                             length};
 }

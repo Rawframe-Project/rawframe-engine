@@ -32,7 +32,7 @@ mwinOutcome mwinWin32SetCursorImage(mwinWin32Window* window, mwinCursorId cursor
 HCURSOR mwinWin32CursorOf(const mwinWin32Window* window);
 
 // Destroys the cursors made for the cursor in a slot, and shows the
-// default shape over the windows showing it (mwin-0027).
+// default shape over the windows showing it.
 void mwinWin32ReleaseCursor(mwinContext* context, uint32_t slot);
 
 // Clips the cursor as the window's mode wants, now that the window has

@@ -33,6 +33,9 @@
 typedef struct mwinWin32Platform mwinWin32Platform;
 typedef struct mwinWin32Window mwinWin32Window;
 
+// The class name every window of the library shares.
+#define MWIN_WIN32_CLASS L"MaulWindow"
+
 // The touches followed at once on a window; more are left out.
 #define MWIN_WIN32_TOUCHES 10
 
@@ -87,7 +90,7 @@ struct mwinWin32Window
     bool fullscreen;
     WINDOWPLACEMENT restore;
     // The cursor the program asked for over the window: a shape, or a
-    // cursor made from images when cursorImage is live (mwin-0027).
+    // cursor made from images when cursorImage is live.
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
     mwinCursorId cursorImage;
@@ -123,6 +126,14 @@ struct mwinWin32Window
     // logical units it was last reported to cover.
     mwinWin32PaneHandler paneHandler;
     mwinRect covered;
+    // Whether the window is minimized or cloaked, whether the program
+    // was told it is occluded, and what was asked of Windows to tell it
+    // of the session and the display (win32_occlusion.c).
+    bool minimized;
+    bool cloaked;
+    bool occluded;
+    bool sessionWatched;
+    HPOWERNOTIFY displayWatch;
 };
 
 // A monitor by its HMONITOR, which Windows keeps while it is connected.
@@ -160,6 +171,8 @@ struct mwinWin32Platform
     bool inSizeMove;
     // The mouse's raw input goes to the window with focus.
     bool rawInput;
+    // The time of the latest input record (mwinWin32InputTime).
+    uint64_t lastInputNs;
     // OLE started on the thread: drags reach windows through their drop
     // targets. Without it, only dropped files come, as WM_DROPFILES.
     bool ole;
@@ -185,7 +198,23 @@ struct mwinWin32Platform
     HRESULT(WINAPI* makeString)(const WCHAR*, UINT32, void**);
     HRESULT(WINAPI* deleteString)(void*);
     bool keyboardTried;
+    // The hook that hears of cloaking, and whether the session is locked
+    // or the display off (win32_occlusion.c).
+    HWINEVENTHOOK cloakHook;
+    bool locked;
+    bool displayOff;
 };
+
+// An input record's time, never before the record stamped last, of any
+// kind. Times from GetMessageTime are a tick step off either way, and
+// touch and pen times are exact, so two records in order could read
+// out of order: a program dividing by the interval would see it
+// negative.
+static inline uint64_t mwinWin32InputTime(mwinWin32Platform* platform, uint64_t timeNs)
+{
+    platform->lastInputNs = timeNs > platform->lastInputNs ? timeNs : platform->lastInputNs;
+    return platform->lastInputNs;
+}
 
 // The logical units per pixel of a DPI.
 static inline float mwinWin32Scale(uint32_t dpi)

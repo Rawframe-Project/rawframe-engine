@@ -125,8 +125,7 @@ extern "C"
     } mwinGamepadState;
 
     // A gamepad's motion as its sensors report it, for a gamepad held in
-    // front of the player: x to the right, y up, z toward the player
-    // (mwin-0028).
+    // front of the player: x to the right, y up, z toward the player.
     typedef struct mwinGamepadMotion
     {
         // The latest acceleration in m/s^2, gravity included: a gamepad

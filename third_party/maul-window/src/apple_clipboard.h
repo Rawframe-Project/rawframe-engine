@@ -3,7 +3,7 @@
 //
 // The clipboard's types on Apple's systems (apple_clipboard.m), which
 // the macOS and iOS backends share: a MIME type's pasteboard type, as
-// UTType names it (mwin-0029). Included by Objective-C files only.
+// UTType names it. Included by Objective-C files only.
 
 #ifndef MAUL_WINDOW_SRC_APPLE_CLIPBOARD_H
 #define MAUL_WINDOW_SRC_APPLE_CLIPBOARD_H

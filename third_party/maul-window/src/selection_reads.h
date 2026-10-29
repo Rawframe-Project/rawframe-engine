@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The reads of the clipboard and the primary selection as the X11 and
-// Wayland backends run them (mwin-0029): answered at once from what the
+// Wayland backends run them: answered at once from what the
 // program owns, or through the other client one at a time, the others
 // waiting their turn. A read answers every window's request of its kind,
 // and for data of its type; a window has one request of a kind at most.

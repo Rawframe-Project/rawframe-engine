@@ -15,13 +15,11 @@ void muniCursorInit(muniCursor* cursor, const char* text, size_t length, bool mo
     cursor->moreFollows = moreFollows;
 }
 
-bool muniCursorFeed(muniCursor* cursor, const char* text, size_t length, bool moreFollows)
+void muniCursorFeed(muniCursor* cursor, const char* text, size_t length, bool moreFollows)
 {
-    size_t unread = cursor->length - cursor->position;
-    if (!cursor->moreFollows || cursor->pendingCount + unread >= sizeof(cursor->pending))
-    {
-        return false;
-    }
+    MUNI_ASSERT(cursor->moreFollows);
+    MUNI_ASSERT(cursor->pendingCount + (cursor->length - cursor->position) <
+                sizeof(cursor->pending));
     while (cursor->position < cursor->length && cursor->pendingCount < sizeof(cursor->pending))
     {
         cursor->pending[cursor->pendingCount] = cursor->text[cursor->position];
@@ -32,7 +30,6 @@ bool muniCursorFeed(muniCursor* cursor, const char* text, size_t length, bool mo
     cursor->length = length;
     cursor->position = 0;
     cursor->moreFollows = moreFollows;
-    return true;
 }
 
 muniResult muniCursorPeekSlow(const muniCursor* cursor, uint32_t* codePointOut, size_t* sizeOut)
@@ -62,6 +59,7 @@ muniResult muniCursorPeekSlow(const muniCursor* cursor, uint32_t* codePointOut, 
 
 void muniCursorAdvanceSlow(muniCursor* cursor, size_t size)
 {
+    MUNI_ASSERT(size >= 1 && size <= cursor->pendingCount + (cursor->length - cursor->position));
     cursor->offset += size;
     size_t fromPending = size < cursor->pendingCount ? size : cursor->pendingCount;
     memmove(cursor->pending, cursor->pending + fromPending, cursor->pendingCount - fromPending);

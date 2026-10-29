@@ -7,9 +7,11 @@
 //
 // - A finger is a touch, by the UITouch's address, stable over its life;
 //   its pressure is its force where the device measures it, else -1.
-// - The Pencil is a pen touching the screen: its force is its pressure,
-//   its altitude and azimuth its tilt. It has no eraser end and no
-//   barrel button; its hover is not reported.
+// - The Pencil is a pen: touching the screen, its force is its pressure,
+//   its altitude and azimuth its tilt; above it (iPadOS 16.1, a Pencil
+//   and iPad that hover), a hover recognizer of its own gives its place,
+//   and its tilt from iPadOS 16.4, as pen motion without contact. It has
+//   no eraser end and no barrel button.
 // - A mouse or trackpad on an iPad is the cursor: its clicks come as
 //   touches of the indirect pointer type, where the program's Info.plist
 //   sets UIApplicationSupportsIndirectInputEvents (else as fingers), with
@@ -75,12 +77,16 @@ static void OnFinger(mwinIOSPlatform* platform, uint32_t slot, UITouch* touch,
 
 // Degrees from upright toward positive x and y, from the Pencil's
 // altitude over the screen and the azimuth its cap points along.
+static void Tilt(double altitude, double azimuth, float* x, float* y)
+{
+    double rise = fmax(tan(altitude), 1e-6);
+    *x = (float)(atan(cos(azimuth) / rise) * 180.0 / M_PI);
+    *y = (float)(atan(sin(azimuth) / rise) * 180.0 / M_PI);
+}
+
 static void TiltOf(UITouch* touch, UIView* view, float* x, float* y)
 {
-    double altitude = fmax(tan(touch.altitudeAngle), 1e-6);
-    double azimuth = [touch azimuthAngleInView:view];
-    *x = (float)(atan(cos(azimuth) / altitude) * 180.0 / M_PI);
-    *y = (float)(atan(sin(azimuth) / altitude) * 180.0 / M_PI);
+    Tilt(touch.altitudeAngle, [touch azimuthAngleInView:view], x, y);
 }
 
 static void OnPencil(mwinIOSPlatform* platform, uint32_t slot, UITouch* touch,
@@ -178,6 +184,31 @@ void mwinIOSHover(mwinIOSPlatform* platform, uint32_t slot, UIHoverGestureRecogn
     default:
         break;
     }
+}
+
+void mwinIOSPencilHover(mwinIOSPlatform* platform, uint32_t slot, UIHoverGestureRecognizer* hover)
+{
+    // Leaving posts nothing, as with the other backends' pens; touching
+    // ends the hover, and the touch posts the pen's contact.
+    if (hover.state != UIGestureRecognizerStateBegan &&
+        hover.state != UIGestureRecognizerStateChanged)
+    {
+        return;
+    }
+    UIView* view = platform->windows[slot].view;
+    CGPoint point = [hover locationInView:view];
+    mwinEvent event = {.type = mwin_eventPenMoved};
+    mwinPenEvent* pen = &event.data.pen;
+    pen->position = (mwinPosition){(float)point.x, (float)point.y};
+    float tiltX = 0.0f;
+    float tiltY = 0.0f;
+    if (@available(iOS 16.4, *))
+    {
+        Tilt(hover.altitudeAngle, [hover azimuthAngleInView:view], &tiltX, &tiltY);
+    }
+    pen->tiltX = tiltX;
+    pen->tiltY = tiltY;
+    Post(platform, slot, &event);
 }
 
 void mwinIOSScroll(mwinIOSPlatform* platform, uint32_t slot, UIPanGestureRecognizer* pan)

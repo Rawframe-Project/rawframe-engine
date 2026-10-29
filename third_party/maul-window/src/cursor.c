@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Cursors made from images (mwin-0027).
+// Cursors made from images.
 
 #include "cursor.h"
 

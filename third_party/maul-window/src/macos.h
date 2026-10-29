@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What the macOS backend keeps (mwin-0024): per window slot its NSWindow,
+// What the macOS backend keeps: per window slot its NSWindow,
 // the library's content view with its CAMetalLayer, the window's delegate
 // and what the program was told of it; per monitor slot the display
 // shown there; what drives the program's frames; the keyboard's layout,
@@ -41,7 +41,7 @@ typedef struct mwinMacWindow
     uint8_t buttons;
     bool pointerInside;
     // The cursor asked for: a shape, or a cursor made from images when
-    // cursorImage is live (mwin-0027).
+    // cursorImage is live.
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
     mwinCursorId cursorImage;

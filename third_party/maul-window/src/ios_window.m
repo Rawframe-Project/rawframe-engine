@@ -3,8 +3,15 @@
 //
 // iOS windows (ios.h): a window is a scene's UIWindow, whose root view
 // controller shows the library's view. A new window takes the scene
-// that waits for one (the one the system connected at launch, or one a
-// destroyed window left); without one it fails. The system sizes and
+// that waits for one (the one the system connected at launch, or the
+// last window's when it was destroyed). Without one, where the
+// application supports several scenes (iPadOS), it asks UIKit for a new
+// scene and is made when that scene connects; its creation fails when
+// UIKit refuses, or when no scene came in SCENE_DEADLINE_NS. Elsewhere it
+// is unsupported. A destroyed window's scene is let go while other
+// windows remain, so no empty scene stays on the screen. A scene the
+// user closes asks its window to close (mwin_eventCloseRequested), and
+// the window shows no more. The system sizes and
 // places scenes, so a window's size is its scene's, in points, and its
 // place is on its screen; the mode is borderless full screen while the
 // window covers its screen, windowed otherwise (an iPad's split view or
@@ -16,6 +23,10 @@
 
 #include <math.h>
 #include <string.h>
+
+// How long a window waits for the scene it asked for: the deadline the
+// library's other answers from outside get (linux_bus.h).
+#define SCENE_DEADLINE_NS 10000000000ull
 
 static void Post(mwinIOSPlatform* platform, uint32_t slot, mwinEvent* event)
 {
@@ -177,21 +188,24 @@ static void Show(mwinIOSPlatform* platform, uint32_t slot, bool visible)
     PostType(platform, slot, visible ? mwin_eventShown : mwin_eventHidden);
 }
 
-void mwinIOSCreateWindow(mwinContext* context, uint32_t slot)
+// Completes a window's creation request, where it is still active.
+static void Created(mwinContext* context, uint32_t slot, mwinOutcome outcome)
 {
-    mwinIOSPlatform* platform = mwinIOSPlatformOf(context);
+    int32_t request = mwinFindActiveRequest(&context->windows[slot],
+                                            context->limits.requestsPerWindow, mwin_requestCreate);
+    if (request >= 0)
+    {
+        mwinComplete(context, slot, (uint32_t)request, outcome);
+    }
+}
+
+// Makes a window on a scene, which it holds.
+static void Attach(mwinIOSPlatform* platform, uint32_t slot, UIWindowScene* scene)
+{
+    mwinContext* context = platform->context;
     const mwinWindow* core = &context->windows[slot];
     mwinIOSWindow* window = &platform->windows[slot];
-    *window = (mwinIOSWindow){.monitor = -1, .position = {NAN, NAN}, .mode = (mwinWindowMode)0xFF};
-    int32_t request =
-        mwinFindActiveRequest(core, context->limits.requestsPerWindow, mwin_requestCreate);
-    UIWindowScene* scene = platform->waitingScene;
-    if (scene == nil)
-    {
-        mwinComplete(context, slot, (uint32_t)request, mwin_outcomeFailed);
-        return;
-    }
-    platform->waitingScene = nil;
+    window->asking = false;
     @autoreleasepool
     {
         UIWindow* made = [[UIWindow alloc] initWithWindowScene:scene];
@@ -210,8 +224,158 @@ void mwinIOSCreateWindow(mwinContext* context, uint32_t slot)
         {
             Show(platform, slot, true);
         }
+        // A scene already in the background shows nothing of the window.
+        mwinIOSSceneSeen(platform, scene,
+                         scene.activationState != UISceneActivationStateBackground);
     }
-    mwinComplete(context, slot, (uint32_t)request, mwin_outcomeDone);
+    Created(context, slot, mwin_outcomeDone);
+}
+
+// UIKit refused the scene a window asked for.
+static void Refused(uint32_t slot, uint32_t ask)
+{
+    mwinContext* context = mwinIOSCurrentContext();
+    if (context == nullptr || slot >= context->limits.windows)
+    {
+        return;
+    }
+    mwinIOSPlatform* platform = mwinIOSPlatformOf(context);
+    mwinIOSWindow* window = &platform->windows[slot];
+    if (window->asking && window->ask == ask)
+    {
+        window->asking = false;
+        Created(context, slot, mwin_outcomeFailed);
+    }
+}
+
+// Asks UIKit for a new scene for a window.
+static void Ask(mwinIOSPlatform* platform, uint32_t slot)
+{
+    mwinIOSWindow* window = &platform->windows[slot];
+    window->asking = true;
+    window->ask = ++platform->asks;
+    window->askDeadlineNs = mwinIOSNow() + SCENE_DEADLINE_NS;
+    uint32_t ask = window->ask;
+    // The handler may come on another queue.
+    [UIApplication.sharedApplication requestSceneSessionActivation:nil
+                                                      userActivity:nil
+                                                           options:nil
+                                                      errorHandler:^(NSError* error) {
+                                                        (void)error;
+                                                        dispatch_async(dispatch_get_main_queue(), ^{
+                                                          Refused(slot, ask);
+                                                        });
+                                                      }];
+}
+
+void mwinIOSCreateWindow(mwinContext* context, uint32_t slot)
+{
+    mwinIOSPlatform* platform = mwinIOSPlatformOf(context);
+    mwinIOSWindow* window = &platform->windows[slot];
+    *window = (mwinIOSWindow){.monitor = -1, .position = {NAN, NAN}, .mode = (mwinWindowMode)0xFF};
+    UIWindowScene* scene = platform->waitingScene;
+    if (scene != nil)
+    {
+        platform->waitingScene = nil;
+        Attach(platform, slot, scene);
+    }
+    else if (UIApplication.sharedApplication.supportsMultipleScenes)
+    {
+        @autoreleasepool
+        {
+            Ask(platform, slot);
+        }
+    }
+    else
+    {
+        Created(context, slot, mwin_outcomeUnsupported);
+    }
+}
+
+void mwinIOSSceneCame(mwinIOSPlatform* platform, UIWindowScene* scene)
+{
+    // The window that asked first; scenes come in the order asked.
+    int32_t slot = -1;
+    for (uint32_t i = 0; i < platform->context->limits.windows; i++)
+    {
+        const mwinIOSWindow* window = &platform->windows[i];
+        if (window->asking && (slot < 0 || window->ask < platform->windows[slot].ask))
+        {
+            slot = (int32_t)i;
+        }
+    }
+    if (slot >= 0)
+    {
+        Attach(platform, (uint32_t)slot, [scene retain]);
+    }
+    else if (platform->waitingScene == nil)
+    {
+        platform->waitingScene = [scene retain];
+    }
+    else
+    {
+        // One no window asked for, a scene waiting already: let go.
+        [UIApplication.sharedApplication requestSceneSessionDestruction:scene.session
+                                                                options:nil
+                                                           errorHandler:nil];
+    }
+}
+
+void mwinIOSSceneWent(mwinIOSPlatform* platform, UIScene* scene)
+{
+    if (platform->waitingScene == scene)
+    {
+        [platform->waitingScene release];
+        platform->waitingScene = nil;
+    }
+    // The window can no longer show: it is asked to close.
+    int32_t slot = mwinIOSSlotOfScene(platform, scene);
+    if (slot >= 0 && !platform->windows[slot].gone)
+    {
+        mwinIOSWindow* window = &platform->windows[slot];
+        window->gone = true;
+        window->window.hidden = YES;
+        mwinEvent event = {.type = mwin_eventCloseRequested, .timeNs = mwinIOSNow()};
+        mwinPost(platform->context, (uint32_t)slot, &event);
+    }
+}
+
+void mwinIOSSceneSeen(mwinIOSPlatform* platform, UIScene* scene, bool seen)
+{
+    int32_t slot = mwinIOSSlotOfScene(platform, scene);
+    if (slot < 0 || platform->windows[slot].gone || platform->windows[slot].occluded != seen)
+    {
+        return;
+    }
+    platform->windows[slot].occluded = !seen;
+    PostType(platform, (uint32_t)slot, seen ? mwin_eventRevealed : mwin_eventOccluded);
+}
+
+void mwinIOSPumpScenes(mwinIOSPlatform* platform)
+{
+    uint64_t now = mwinIOSNow();
+    for (uint32_t i = 0; i < platform->context->limits.windows; i++)
+    {
+        mwinIOSWindow* window = &platform->windows[i];
+        if (window->asking && now >= window->askDeadlineNs)
+        {
+            window->asking = false;
+            Created(platform->context, i, mwin_outcomeFailed);
+        }
+    }
+}
+
+// Whether a window other than the one in a slot shows a scene.
+static bool OthersShow(const mwinIOSPlatform* platform, uint32_t slot)
+{
+    for (uint32_t i = 0; i < platform->context->limits.windows; i++)
+    {
+        if (i != slot && platform->windows[i].window != nil && !platform->windows[i].gone)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void mwinIOSDestroyWindow(mwinContext* context, uint32_t slot)
@@ -221,20 +385,35 @@ void mwinIOSDestroyWindow(mwinContext* context, uint32_t slot)
     @autoreleasepool
     {
         mwinIOSCloseDialogs(platform, slot);
-        mwinIOSForgetView(window->view);
+        // A window whose creation failed or still waits has no view.
+        if (window->view != nil)
+        {
+            mwinIOSForgetView(window->view);
+        }
         window->window.hidden = YES;
         window->window.rootViewController = nil;
         [window->window release];
         [window->controller release];
         [window->view release];
-        // The scene stays connected: the next window takes it.
-        if (platform->waitingScene == nil)
+        // The last window's scene stays connected, and the next window
+        // takes it; another's is let go, unless the system let it go
+        // already.
+        UIWindowScene* scene = window->scene;
+        if (scene != nil && !window->gone && platform->waitingScene == nil &&
+            !OthersShow(platform, slot))
         {
-            platform->waitingScene = window->scene;
+            platform->waitingScene = scene;
         }
-        else
+        else if (scene != nil)
         {
-            [window->scene release];
+            // The backend stopping leaves the scenes as they are.
+            if (!window->gone && !platform->ending)
+            {
+                [UIApplication.sharedApplication requestSceneSessionDestruction:scene.session
+                                                                        options:nil
+                                                                   errorHandler:nil];
+            }
+            [scene release];
         }
     }
     *window = (mwinIOSWindow){.monitor = -1};
@@ -247,6 +426,11 @@ static int CarryOut(mwinContext* context, uint32_t slot, const mwinRequest* requ
     mwinIOSPlatform* platform = mwinIOSPlatformOf(context);
     mwinIOSWindow* window = &platform->windows[slot];
     mwinWindow* core = &context->windows[slot];
+    // A window not made, or whose scene the system let go, shows nothing.
+    if (window->window == nil || window->gone)
+    {
+        return mwin_outcomeFailed;
+    }
     switch (request->kind)
     {
     case mwin_requestTitle:

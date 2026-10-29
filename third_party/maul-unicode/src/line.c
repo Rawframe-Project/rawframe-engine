@@ -94,8 +94,8 @@ static bool IsAksara(uint8_t value, uint32_t codePoint)
 }
 
 // LB1, without a tailoring: AI, SG and XX are AL; SA is CM for marks and
-// AL otherwise; CJ is NS.
-static uint8_t Lookup(uint32_t codePoint)
+// AL otherwise; CJ is NS, or ID when the caller asked for it.
+static uint8_t Lookup(const muniSegmenter* segmenter, uint32_t codePoint)
 {
     uint8_t value = muniLookupLineBreak(codePoint);
     switch (value)
@@ -110,7 +110,7 @@ static uint8_t Lookup(uint32_t codePoint)
         return category == muni_gcMn || category == muni_gcMc ? muni_lbCm : muni_lbAl;
     }
     case muni_lbCj:
-        return muni_lbNs;
+        return (segmenter->options & muni_lineCjAsIdeographic) != 0 ? muni_lbId : muni_lbNs;
     default:
         return value;
     }

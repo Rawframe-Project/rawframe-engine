@@ -46,6 +46,7 @@ enum
     mwin_dbusTypeStruct = 'r',
     mwin_dbusTypeDictEntry = 'e',
     mwin_dbusTypeInt32 = 'i',
+    mwin_dbusTypeInt64 = 'x',
     mwin_dbusTypeObjectPath = 'o',
     mwin_dbusTypeString = 's',
     mwin_dbusTypeUint32 = 'u',
@@ -79,6 +80,7 @@ typedef struct mwinDBusApi
     void (*removeFilter)(DBusConnection* connection, mwinDBusFilter* filter, void* data);
     mwinDBusBool (*isSignal)(DBusMessage* message, const char* interface, const char* name);
     const char* (*path)(DBusMessage* message);
+    const char* (*sender)(DBusMessage* message);
     const char* (*uniqueName)(DBusConnection* connection);
     mwinDBusBool (*next)(mwinDBusIter* iter);
     void (*recurse)(mwinDBusIter* iter, mwinDBusIter* sub);

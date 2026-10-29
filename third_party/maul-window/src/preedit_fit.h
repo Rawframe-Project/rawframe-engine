@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Fits a composition's offsets to its text (mwin-0034): input methods
+// Fits a composition's offsets to its text: input methods
 // hand them in bytes, and some hand one inside a character, past the
 // text's end, or a selection backwards. The core fits every composition
 // a backend posts, so the program only ever sees offsets on character

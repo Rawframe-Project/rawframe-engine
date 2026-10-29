@@ -1,4 +1,4 @@
-# The Android backend (mwin-0026): NativeActivity's native surface, input
+# The Android backend: NativeActivity's native surface, input
 # queue and callbacks, and the choreographer's frames, all from libandroid;
 # keys through Linux's input codes, as on Linux (evdev.c).
 # The program's application also carries the library's Java activity

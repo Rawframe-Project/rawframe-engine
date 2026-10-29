@@ -141,6 +141,6 @@ muniTextResult muniToNfkcCasefold(const char* text, size_t length, muniConvertMo
     }
     muniNormalizerFlush(&normalizer);
     *neededOut = normalizer.writer.needed;
-    return (muniTextResult){normalizer.writer.needed > capacity ? muni_errorCapacity : muni_success,
+    return (muniTextResult){!muniWriterFits(&normalizer.writer) ? muni_errorCapacity : muni_success,
                             length};
 }

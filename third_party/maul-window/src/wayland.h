@@ -34,7 +34,7 @@ enum
     MWIN_FRAME_PARTS = 5,
 };
 
-// A frame the backend draws where the compositor draws none (mwin-0005): a
+// A frame the backend draws where the compositor draws none: a
 // subsurface per part, their buffers from one shared memory pool, and
 // the caption button under the pointer.
 typedef struct mwinWaylandFrame
@@ -99,7 +99,7 @@ typedef struct mwinWaylandWindow
     // A mode request waits for the compositor's next configure, or -1.
     int32_t modeRequest;
     // The cursor the program asked for over the window: a shape, or a
-    // cursor made from images when cursorImage is live (mwin-0027); and
+    // cursor made from images when cursorImage is live; and
     // the pointer constraint its mode needs.
     mwinCursorMode cursorMode;
     mwinCursorShape cursorShape;
@@ -209,7 +209,7 @@ typedef struct mwinWaylandCursorTheme
     struct wl_surface* surface;
 } mwinWaylandCursorTheme;
 
-// The surface cursors made from images show on (mwin-0027), its
+// The surface cursors made from images show on, its
 // viewport where there is a viewporter, and the buffer attached to it.
 typedef struct mwinWaylandImageCursor
 {
@@ -224,7 +224,7 @@ typedef struct mwinWaylandImageCursor
 // The most tablet tools followed at once.
 #define MWIN_WAYLAND_TOOLS 8
 
-// A tablet tool as a pen (mwin-0037): what it is, the window it is near
+// A tablet tool as a pen: what it is, the window it is near
 // (-1 for none) and the serial of its coming near, which cursor
 // requests quote; the pen as last posted, and the changes gathered until
 // the tool's frame event. Its cursor shape device and the surface theme
@@ -319,7 +319,7 @@ typedef struct mwinWaylandTypes
     uint16_t length;
 } mwinWaylandTypes;
 
-// The clipboard and the primary selection (mwin-0029). For the
+// The clipboard and the primary selection. For the
 // clipboard: the data device, the newest offer and its types until the
 // selection names it, the selection another client offers and its
 // types, and the source while the program owns it. For the primary

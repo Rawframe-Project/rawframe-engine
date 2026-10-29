@@ -162,8 +162,8 @@ extern "C"
     /// Returns the default application def: the default context def, the
     /// ABI version of the headers the program is built with, and no
     /// functions. Built in the program, so that the version is the
-    /// program's: mwinRun refuses a def built for another major or minor
-    /// version rather than read it in another layout.
+    /// program's: mwinRun refuses a def built for another release's binary
+    /// interface rather than read it in another layout.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety

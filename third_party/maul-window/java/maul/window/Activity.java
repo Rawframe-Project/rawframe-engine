@@ -25,7 +25,7 @@ import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 
 /**
- * The activity of a Maul Window program on Android (mwin-0026). The
+ * The activity of a Maul Window program on Android. The
  * platform's NativeActivity hands the library its window's surface and
  * input queue; this class adds what the library's C cannot do itself:
  * a view that input methods type into, the window drawn behind the
@@ -46,6 +46,9 @@ public class Activity extends NativeActivity {
     View field;
     private boolean keyboard;
     private int purpose;
+    // The keyboard was asked for before input started on the view, and
+    // the input method manager refused it.
+    private boolean refused;
     // The pointer icon asked for, which a view made later takes too.
     private PointerIcon pointer;
     // Counts the input method's starts: a connection from an earlier one
@@ -104,8 +107,13 @@ public class Activity extends NativeActivity {
         }
         if (shown) {
             field.requestFocus();
-            manager.showSoftInput(field, 0);
+            // Android 11 can keep a view it no longer serves and refuse the
+            // keyboard for the focused one; isActive() checks the focus
+            // first, as AndroidX does before Android 12L fixed it.
+            manager.isActive();
+            refused = !manager.showSoftInput(field, 0);
         } else {
+            refused = false;
             manager.hideSoftInputFromWindow(field.getWindowToken(), 0);
         }
     }
@@ -192,6 +200,15 @@ public class Activity extends NativeActivity {
         public InputConnection onCreateInputConnection(EditorInfo info) {
             info.inputType = typeOf(purpose);
             info.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN | EditorInfo.IME_FLAG_NO_EXTRACT_UI;
+            // Input starts on the view: a keyboard refused before it is
+            // asked for again once the start is done.
+            if (refused) {
+                post(() -> {
+                    if (keyboard && refused) {
+                        showKeyboard(true, purpose);
+                    }
+                });
+            }
             return new Connection(this);
         }
 

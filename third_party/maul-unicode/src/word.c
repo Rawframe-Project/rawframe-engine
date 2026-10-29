@@ -194,9 +194,11 @@ static void Absorb(muniSegmenter* segmenter, uint8_t value, uint32_t codePoint)
     state->actual = value;
 }
 
-static uint8_t Lookup(uint32_t codePoint)
+static uint8_t Lookup(const muniSegmenter* segmenter, uint32_t codePoint)
 {
-    return muniLookupWordBreak(codePoint);
+    uint8_t value = muniLookupWordBreak(codePoint);
+    uint32_t count = segmenter->rules.word.overrideCount;
+    return count == 0 ? value : muniOverrideClass(segmenter->overrides, count, codePoint, value);
 }
 
 muniResult muniNextWordSegment(muniSegmenter* segmenter, size_t* offsetOut)

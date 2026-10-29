@@ -105,15 +105,21 @@ EM_JS(bool, mwinPageClipboardReadData, (const mwinContext* context, uint32_t slo
     return true;
 });
 
+// The texts wait in a queue other scripts can reach: a read's record
+// with no text behind it, or one of another shape, is an empty text.
 EM_JS(uint32_t, mwinPageClipboardWaiting, (const mwinContext* context), {
-    return Module.mwinWeb.get(context).clipboardTexts[0].length;
+    const bytes = Module.mwinWeb.get(context).clipboardTexts[0];
+    return bytes instanceof Uint8Array ? bytes.length : 0;
 });
 
-// Takes the waiting text, into out unless it is NULL.
-EM_JS(void, mwinPageClipboardTake, (const mwinContext* context, char* out), {
-    const bytes = Module.mwinWeb.get(context).clipboardTexts.shift();
-    if (out) {
-        HEAPU8.set(bytes, out);
+// Takes the waiting text, into out unless it is NULL: exactly length
+// bytes, the length the backend made room for.
+EM_JS(void, mwinPageClipboardTake, (const mwinContext* context, char* out, uint32_t length), {
+    const taken = Module.mwinWeb.get(context).clipboardTexts.shift();
+    if (out && length > 0) {
+        const bytes = taken instanceof Uint8Array ? taken : new Uint8Array(0);
+        HEAPU8.fill(0, out, out + length);
+        HEAPU8.set(bytes.subarray(0, length), out);
     }
 });
 // clang-format on
@@ -167,7 +173,7 @@ static mwinOutcome Take(mwinContext* context, bool data)
     char* bytes = length > 0 && length <= context->limits.clipboardBytes
                       ? mwinAllocate(&context->allocator, length, 1)
                       : nullptr;
-    mwinPageClipboardTake(context, bytes);
+    mwinPageClipboardTake(context, bytes, bytes != nullptr ? length : 0);
     if (length > context->limits.clipboardBytes)
     {
         return mwin_outcomeTooLarge;
@@ -190,15 +196,21 @@ void mwinWebHandleClipboardRecord(mwinWebPlatform* platform, const mwinWebRecord
     mwinContext* context = platform->context;
     bool read = record->kind == mwin_webClipboardRead;
     bool data = record->x != 0.0f;
-    mwinOutcome outcome = (mwinOutcome)record->code;
+    mwinOutcome outcome = record->code >= 0 && record->code <= mwin_outcomeTooLarge
+                              ? (mwinOutcome)record->code
+                              : mwin_outcomeFailed;
     // A done read's bytes are taken even when its window went.
     if (read && outcome == mwin_outcomeDone)
     {
         outcome = Take(context, data);
     }
+    if (record->slot < 0)
+    {
+        return;
+    }
     uint32_t slot = (uint32_t)record->slot;
     const mwinWindow* window = &context->windows[slot];
-    if (window->status != mwin_slotLive || window->generation != (uint32_t)record->extra)
+    if (window->generation != (uint32_t)record->extra)
     {
         return;
     }

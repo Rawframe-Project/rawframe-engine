@@ -46,11 +46,20 @@ bool mwinBusConnect(mwinLinuxBus* bus);
 DBusMessage* mwinBusMethod(mwinLinuxBus* bus, const char* destination, const char* path,
                            const char* interface, const char* method);
 
-// Sends a method call and lets it go: false when it was not sent.
+// Sends a method call and lets it go: false when it was not sent. The
+// bus is pumped after, which dispatches what came: never from inside a
+// filter, or between taking an answer and using what it set.
 bool mwinBusSend(mwinLinuxBus* bus, DBusMessage* message, mwinBusCall* call, uint64_t nowNs);
 
-// Sends a method call whose answer does not matter, and lets it go.
+// Sends a method call whose answer does not matter, and lets it go; the
+// bus is pumped after, as by mwinBusSend.
 void mwinBusTell(mwinLinuxBus* bus, DBusMessage* message);
+
+// mwinBusSend and mwinBusTell without the pump: the call is queued, and
+// the next pump writes it. Nothing is dispatched, so a module's state
+// stays as it was.
+bool mwinBusQueue(mwinLinuxBus* bus, DBusMessage* message, mwinBusCall* call, uint64_t nowNs);
+void mwinBusQueueTell(mwinLinuxBus* bus, DBusMessage* message);
 
 // Reads and writes what the connection can, waiting up to waitMs for
 // something to come, and completes the calls answered.
@@ -63,6 +72,14 @@ DBusMessage* mwinBusAnswer(mwinLinuxBus* bus, mwinBusCall* call, uint64_t nowNs,
 
 // Lets a call go unanswered.
 void mwinBusDrop(mwinLinuxBus* bus, mwinBusCall* call);
+
+// Enters the dict entry an array's iterator is at: its key, when it is a
+// string, and the iterator of its value, whose type the caller checks
+// before reading it. False for an entry of another key or none: a reply
+// or a signal is whatever the bus name's owner sent, and libdbus ends the
+// process on a read of the wrong type.
+bool mwinBusEntry(const mwinDBusApi* api, mwinDBusIter* entries, const char** keyOut,
+                  mwinDBusIter* valueOut);
 
 // Closes the connection, which lets the calls on it go, and the library.
 void mwinBusClose(mwinLinuxBus* bus);

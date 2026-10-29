@@ -8,6 +8,7 @@
 #include "wayland_activation.h"
 #include "wayland_clipboard.h"
 #include "wayland_cursor.h"
+#include "wayland_drop.h"
 #include "wayland_frame.h"
 #include "wayland_icon.h"
 #include "wayland_keyboard.h"
@@ -242,6 +243,7 @@ static const struct xdg_toplevel_listener s_toplevelListener = {
 // The first configure: the window is made, and what it is follows.
 static void Establish(mwinWaylandWindow* window)
 {
+    MWIN_ASSERT(!window->configured);
     mwinContext* context = window->platform->context;
     mwinWindow* core = &context->windows[window->slot];
     window->configured = true;
@@ -257,6 +259,8 @@ static void Establish(mwinWaylandWindow* window)
     }
     int32_t request =
         mwinFindActiveRequest(core, context->limits.requestsPerWindow, mwin_requestCreate);
+    // Only this configure answers it, and no other request supersedes it.
+    MWIN_ASSERT(request >= 0);
     if (request >= 0)
     {
         mwinComplete(context, window->slot, (uint32_t)request, mwin_outcomeDone);
@@ -267,6 +271,7 @@ static void Establish(mwinWaylandWindow* window)
 // request is answered, done when the compositor granted the mode.
 static void Reconfigure(mwinWaylandWindow* window, bool resized)
 {
+    MWIN_ASSERT(window->configured);
     mwinContext* context = window->platform->context;
     const mwinWindow* core = &context->windows[window->slot];
     if (resized)
@@ -285,6 +290,9 @@ static void Reconfigure(mwinWaylandWindow* window, bool resized)
     if (window->modeRequest >= 0)
     {
         const mwinRequest* request = &core->requests[window->modeRequest];
+        // The mode request waiting for this configure: a newer one
+        // replaced or forgot it when it was superseded.
+        MWIN_ASSERT(request->status == mwin_requestActive && request->kind == mwin_requestMode);
         mwinComplete(context, window->slot, (uint32_t)window->modeRequest,
                      request->value.mode == window->proposedMode ? mwin_outcomeDone
                                                                  : mwin_outcomeDenied);
@@ -493,6 +501,7 @@ void mwinWaylandDestroyWindow(mwinContext* context, uint32_t slot)
     mwinWaylandForgetToolFocus(platform, slot);
     mwinWaylandDropCursor(platform, slot);
     mwinWaylandForgetTextFocus(platform, slot);
+    mwinWaylandForgetDrag(platform, slot);
     mwinWaylandDestroyFrame(platform, slot);
     mwinWaylandDropActivation(window);
     if (window->viewport != nullptr)
@@ -596,6 +605,16 @@ static int CarryOutPopup(mwinWaylandWindow* window, mwinWindow* core, const mwin
     }
 }
 
+// Minimized at once, as no configure reports it: a mode request still
+// waiting was superseded, and the next configure answers none.
+static mwinOutcome Minimize(mwinWaylandWindow* window)
+{
+    window->modeRequest = -1;
+    window->minimized = true;
+    PostMode(window, mwin_modeMinimized);
+    return mwin_outcomeDone;
+}
+
 static int CarryOut(mwinWaylandWindow* window, mwinWindow* core, uint32_t index)
 {
     const mwinRequest* request = &core->requests[index];
@@ -629,9 +648,7 @@ static int CarryOut(mwinWaylandWindow* window, mwinWindow* core, uint32_t index)
         RequestMode(window, request->value.mode);
         if (request->value.mode == mwin_modeMinimized)
         {
-            window->minimized = true;
-            PostMode(window, mwin_modeMinimized);
-            return mwin_outcomeDone;
+            return Minimize(window);
         }
         window->modeRequest = (int32_t)index;
         return -1;

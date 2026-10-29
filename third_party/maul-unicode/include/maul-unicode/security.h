@@ -8,7 +8,7 @@
 // Two strings are confusable when their skeletons are equal: "paypal"
 // written with a Cyrillic "а" has the skeleton of the Latin one. A
 // skeleton is not text to show; store it next to a name, compare it as
-// bytes, and recompute it when the library's Unicode version changes.
+// bytes, and recompute it when muniGetResultsVersion changes.
 // Skeletons follow the reading order bidi gives each string, so the
 // caller supplies bidi's workspace, and nothing allocates.
 //
@@ -24,6 +24,12 @@
 #include "maul-unicode/bidi.h"
 #include "maul-unicode/encoding.h"
 #include "maul-unicode/properties.h"
+
+// An array of this many scripts holds the resolved script set of any
+// text, for the Unicode version of this release. A release with a new
+// Unicode version may raise it; muniGetResolvedScripts still reports the
+// count it needs.
+#define MUNI_MAX_RESOLVED_SCRIPTS 64
 
 #ifdef __cplusplus
 extern "C"
@@ -69,16 +75,26 @@ extern "C"
     /// @param text        The text. May be NULL when length is 0.
     /// @param length      The number of bytes.
     /// @param direction   The paragraph direction.
-    /// @param workspace   Scratch memory of 2 * length bytes.
+    /// @param workspace   Scratch memory of at least 2 * length bytes. May
+    ///                    be NULL when workspaceSize is 0.
+    /// @param workspaceSize The number of bytes workspace holds.
     /// @param output      The output. May be NULL when capacity is 0.
     /// @param capacity    The number of bytes output can hold.
     /// @param neededOut   Receives the number of bytes the whole skeleton
-    ///                    needs, which may exceed capacity.
+    ///                    needs on success and when the output is too
+    ///                    small, where it may exceed capacity, or SIZE_MAX
+    ///                    when that does not fit in a size_t. 0 on every
+    ///                    other error, except `muni_errorInvalid`, which
+    ///                    leaves it as it was.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the skeleton does not fit (the bytes that fit are
-    ///         written); the first UTF-8 error and its offset;
-    ///         `muni_errorLimit` when a run of combining marks outgrows
-    ///         32, and the offset of the code point being read then;
+    ///         written), or with offset 0 and neededOut 0 when
+    ///         workspaceSize is less than 2 * length, before the text is
+    ///         read; the first UTF-8 error and its offset;
+    ///         `muni_errorLimit` when a segment outgrows
+    ///         MUNI_MAX_NORMALIZATION_SEGMENT, and the offset of the code
+    ///         point being read then, with part of the skeleton possibly
+    ///         written;
     ///         `muni_errorInvalid` for a NULL argument or an unknown
     ///         direction.
     /// @par Thread safety
@@ -86,8 +102,9 @@ extern "C"
     /// at a time.
     MUNI_NODISCARD MUNI_API muniTextResult muniGetSkeleton(const char* text, size_t length,
                                                            muniBidiDirection direction,
-                                                           uint8_t* workspace, char* output,
-                                                           size_t capacity, size_t* neededOut);
+                                                           uint8_t* workspace, size_t workspaceSize,
+                                                           char* output, size_t capacity,
+                                                           size_t* neededOut);
 
     /// Writes the resolved script set of UTF-8 text (UTS #39 section
     /// 5.1): the scripts every character can belong to, counting Han
@@ -101,8 +118,8 @@ extern "C"
     /// @param length    The number of bytes.
     /// @param scripts   The output, in ascending tag order. May be NULL
     ///                  when capacity is 0.
-    /// @param capacity  The number of scripts the output can hold; 64 is
-    ///                  always enough.
+    /// @param capacity  The number of scripts the output can hold;
+    ///                  MUNI_MAX_RESOLVED_SCRIPTS always suffice.
     /// @param countOut  Receives the number of scripts.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the scripts do not fit, and then none is written; the
@@ -119,7 +136,8 @@ extern "C"
     ///
     /// @param text     The text. May be NULL when length is 0.
     /// @param length   The number of bytes.
-    /// @param levelOut Receives one of the muni_restriction values.
+    /// @param levelOut Receives one of the muni_restriction values. Left as
+    ///                 it was on an error.
     /// @return `muni_success` and the length; the first UTF-8 error and
     ///         its offset; `muni_errorInvalid` for a NULL argument.
     /// @par Thread safety
@@ -133,7 +151,8 @@ extern "C"
     ///
     /// @param text     The text. May be NULL when length is 0.
     /// @param length   The number of bytes.
-    /// @param mixedOut Receives true when the digits mix systems.
+    /// @param mixedOut Receives true when the digits mix systems. Left as it
+    ///                 was on an error.
     /// @return `muni_success` and the length; the first UTF-8 error and
     ///         its offset; `muni_errorInvalid` for a NULL argument.
     /// @par Thread safety

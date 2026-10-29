@@ -4,8 +4,8 @@
 // Wayland outputs as monitors. An output's facts arrive one event at a
 // time and hold together at its done event, which adds or changes its
 // monitor. Wayland names no primary output, so none is primary. With
-// the color manager, an output's image description gives its HDR facts
-// (mwin-0036): its transfer function, its target luminances and the
+// the color manager, an output's image description gives its HDR facts:
+// its transfer function, its target luminances and the
 // luminance of SDR white.
 
 #ifndef MAUL_WINDOW_SRC_WAYLAND_OUTPUT_H

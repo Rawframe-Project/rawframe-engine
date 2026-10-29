@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The tables of the chords each platform keeps, from what the platforms
-// document and do (mwin-0031).
+// document and do.
 
 #include "key_reach.h"
 

@@ -67,6 +67,9 @@ static int Start(mwinX11Platform* platform, const mwinRequest* request)
             return mwin_outcomeFailed;
         }
     }
+    // The last read ended and gave its bytes back.
+    MWIN_ASSERT(!clipboard->incremental && clipboard->buffer == nullptr && clipboard->used == 0 &&
+                clipboard->capacity == 0);
     platform->api.convertSelection(platform->connection, clipboard->window,
                                    mwinX11SelectionAtom(platform, selection), target,
                                    platform->atoms[mwin_atomSelection], platform->inputTime);
@@ -102,6 +105,9 @@ static bool Append(mwinX11Platform* platform, const char* bytes, uint32_t length
 {
     mwinX11Clipboard* clipboard = &platform->clipboard;
     const mwinContext* context = platform->context;
+    MWIN_ASSERT(clipboard->reading && clipboard->used <= clipboard->capacity &&
+                clipboard->capacity <= context->limits.clipboardBytes &&
+                (clipboard->buffer != nullptr) == (clipboard->capacity > 0));
     if (length > context->limits.clipboardBytes - clipboard->used)
     {
         *outcomeOut = mwin_outcomeTooLarge;
@@ -133,6 +139,7 @@ static bool Append(mwinX11Platform* platform, const char* bytes, uint32_t length
         clipboard->buffer = grown;
         clipboard->capacity = capacity;
     }
+    MWIN_ASSERT(needed <= clipboard->capacity);
     if (length > 0)
     {
         memcpy(clipboard->buffer + clipboard->used, bytes, length);
@@ -160,6 +167,8 @@ static void TakePiece(mwinX11Platform* platform, bool answer)
 {
     mwinX11Clipboard* clipboard = &platform->clipboard;
     const mwinX11Api* api = &platform->api;
+    // The owner's answer comes first, once; pieces only after an INCR one.
+    MWIN_ASSERT(clipboard->reading && answer != clipboard->incremental);
     xcb_get_property_reply_t* reply = TakeProperty(platform);
     if (reply == nullptr)
     {
@@ -209,6 +218,7 @@ void mwinX11OnReadNotify(mwinX11Platform* platform, const xcb_selection_notify_e
 
 void mwinX11OnReadProperty(mwinX11Platform* platform, const xcb_property_notify_event_t* event)
 {
+    MWIN_ASSERT(!platform->clipboard.incremental || platform->clipboard.reading);
     if (platform->clipboard.incremental && event->state == XCB_PROPERTY_NEW_VALUE)
     {
         TakePiece(platform, false);

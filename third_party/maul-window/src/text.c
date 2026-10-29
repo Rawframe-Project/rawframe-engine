@@ -12,6 +12,9 @@
 
 void* mwinReserveText(mwinTextRing* ring, uint32_t size, uint32_t align)
 {
+    MWIN_ASSERT(align != 0 && (align & (align - 1)) == 0);
+    MWIN_ASSERT(ring->busy <= ring->capacity && ring->head <= ring->capacity &&
+                ring->tail <= ring->capacity);
     if (ring->busy == 0)
     {
         ring->head = 0;
@@ -42,6 +45,7 @@ void* mwinReserveText(mwinTextRing* ring, uint32_t size, uint32_t align)
     }
     ring->tail = start + size;
     ring->busy += skipped + size;
+    MWIN_ASSERT(ring->tail <= ring->capacity && ring->busy <= ring->capacity);
     return ring->bytes + start;
 }
 
@@ -50,8 +54,12 @@ void mwinDrainText(mwinTextRing* ring, const void* start, const void* end)
     uint32_t first = (uint32_t)((const char*)start - ring->bytes);
     uint32_t last = (uint32_t)((const char*)end - ring->bytes);
     uint32_t from = ring->reclaimBytes > 0 ? ring->reclaimHead : ring->head;
+    // A reservation never wraps, and records drain in the order their
+    // bytes were reserved: what is drained stays within what is busy.
+    MWIN_ASSERT(first <= last && last <= ring->capacity);
     ring->reclaimBytes += first >= from ? last - from : ring->capacity - from + last;
     ring->reclaimHead = last;
+    MWIN_ASSERT(ring->reclaimBytes <= ring->busy);
 }
 
 void mwinReclaimText(mwinTextRing* ring)

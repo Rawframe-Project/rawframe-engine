@@ -17,16 +17,15 @@
 #include "tables.h"
 #include "writer.h"
 
+#include "maul-unicode/normalize.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
-// The most code points a segment holds: a starter and the marks after it.
-#define MUNI_MAX_SEGMENT 32
-
 typedef struct muniNormalizer
 {
-    uint32_t segment[MUNI_MAX_SEGMENT];
-    uint8_t classes[MUNI_MAX_SEGMENT];
+    uint32_t segment[MUNI_MAX_NORMALIZATION_SEGMENT];
+    uint8_t classes[MUNI_MAX_NORMALIZATION_SEGMENT];
     size_t count;
     bool compose;
     muniWriter writer;
@@ -88,7 +87,7 @@ static inline void muniNormalizerFlush(muniNormalizer* normalizer)
 }
 
 // Adds one code point of a full decomposition; false when the segment
-// would outgrow MUNI_MAX_SEGMENT.
+// would outgrow MUNI_MAX_NORMALIZATION_SEGMENT.
 static inline bool muniNormalizerAdd(muniNormalizer* normalizer, uint32_t codePoint)
 {
     uint8_t markClass = codePoint < 0x300 ? 0 : muniLookupCombiningClass(codePoint);
@@ -113,7 +112,7 @@ static inline bool muniNormalizerAdd(muniNormalizer* normalizer, uint32_t codePo
         normalizer->count = 1;
         return true;
     }
-    if (normalizer->count == MUNI_MAX_SEGMENT)
+    if (normalizer->count == MUNI_MAX_NORMALIZATION_SEGMENT)
     {
         return false;
     }

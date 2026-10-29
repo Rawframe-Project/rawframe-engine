@@ -161,14 +161,24 @@ EM_JS(void, mwinWebDetach, (const mwinContext* context), {
     Module.mwinWeb.delete(context);
 });
 
+// Other scripts can reach the queue: an entry that is not an array of
+// numbers is read as one, each field not a number as 0, so every field
+// of out is written and nothing throws.
 EM_JS(bool, mwinWebNext, (const mwinContext* context, mwinWebRecord* out), {
-    const record = Module.mwinWeb.get(context).queue.shift();
-    if (!record) {
+    const queue = Module.mwinWeb.get(context).queue;
+    if (queue.length === 0) {
         return false;
     }
-    HEAP32.set(record.slice(0, 4), out >> 2);
-    HEAPF32.set(record.slice(4, 10), (out + 16) >> 2);
-    HEAPF64[(out + 40) >> 3] = record[10];
+    const record = queue.shift();
+    const fields = Array.isArray(record) ? record : [];
+    const number = i => typeof fields[i] === 'number' ? fields[i] : 0;
+    for (let i = 0; i < 4; i++) {
+        HEAP32[(out >> 2) + i] = number(i);
+    }
+    for (let i = 0; i < 6; i++) {
+        HEAPF32[((out + 16) >> 2) + i] = number(4 + i);
+    }
+    HEAPF64[(out + 40) >> 3] = number(10);
     return true;
 });
 EM_JS(int, mwinWebOpenCanvas, (const mwinContext* context, uint32_t slot, const char* selector,
@@ -318,8 +328,9 @@ EM_JS(int, mwinWebSetFullscreen, (const mwinContext* context, uint32_t slot, boo
     return 0;
 });
 
+// Anything but a number, which another script can make it, is 1.
 EM_JS(float, mwinWebScale, (void), {
-    return devicePixelRatio;
+    return typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
 });
 
 EM_JS(void, mwinWebCheckScale, (const mwinContext* context), {
@@ -342,8 +353,10 @@ EM_JS(bool, mwinWebReducedMotion, (void), {
     return matchMedia('(prefers-reduced-motion: reduce)').matches;
 });
 
+// Anything but a number is unknown, 0; the backend checks the number.
 EM_JS(int, mwinWebOnBattery, (const mwinContext* context), {
-    return Module.mwinWeb.get(context).onBattery;
+    const said = Module.mwinWeb.get(context).onBattery;
+    return typeof said === 'number' ? said : 0;
 });
 
 EM_JS(uint32_t, mwinWebLocales, (char* out, uint32_t capacity), {

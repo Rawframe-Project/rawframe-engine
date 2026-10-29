@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Input methods on Win32, through IMM32 (mwin-0032): every input method
+// Input methods on Win32, through IMM32: every input method
 // is a TSF text service, and TSF passes its compositions to a window
 // without a text store as IMM32 messages.
 

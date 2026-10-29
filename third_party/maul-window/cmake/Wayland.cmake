@@ -1,4 +1,4 @@
-# The Wayland backend (mwin-0005). The protocol code is
+# The Wayland backend. The protocol code is
 # generated from the protocol XML into the build tree with
 # wayland-scanner: a client header and the interface definitions of each
 # protocol, the core wayland.xml included. Every interface is renamed
@@ -176,5 +176,11 @@ function(mwin_add_wayland_server_test name)
     target_link_libraries(test_${name} PRIVATE mwin_wayland_test_protocols)
     # memfd_create is a GNU extension.
     target_compile_definitions(test_${name} PRIVATE _GNU_SOURCE)
-    set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
+    # Its compositor's socket goes into the build's runtime directory. The
+    # compositor runs on a thread of the test's own, over a real socket, so
+    # these are integration tests.
+    # hygiene: exit 77 is a missing platform, and CI fails any skipped test
+    set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77
+                         ENVIRONMENT "XDG_RUNTIME_DIR=${MWIN_TEST_RUNTIME};DBUS_SESSION_BUS_ADDRESS=unix:path=${MWIN_TEST_RUNTIME}/no-bus;DBUS_SYSTEM_BUS_ADDRESS=unix:path=${MWIN_TEST_RUNTIME}/no-bus")
+    set_property(TEST ${name} APPEND PROPERTY LABELS integration)
 endfunction()

@@ -9,6 +9,7 @@
 #include "decompose.h"
 
 #include "bits.h"
+#include "invariant.h"
 #include "tables.h"
 
 enum
@@ -254,7 +255,9 @@ static size_t CompatibilityMapping(uint32_t codePoint, uint32_t* out)
             return length;
         }
     }
-    return 0; // unreachable: the rank lies in the block
+    // A rank found in a block's bit map lies among that block's entries.
+    MUNI_ASSERT(false);
+    return 0;
 }
 
 // The work stack of the full decompositions: the most pending code

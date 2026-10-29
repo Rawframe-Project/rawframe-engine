@@ -32,6 +32,7 @@ mwinWindowDef mwinDefaultWindowDef(void)
 
 mwinWindowId mwinWindowIdOf(const mwinContext* context, uint32_t slot)
 {
+    MWIN_ASSERT(slot < context->limits.windows);
     return (mwinWindowId){slot + 1, context->windows[slot].generation};
 }
 
@@ -59,6 +60,7 @@ static bool IsPositive(mwinSize size)
 
 mwinRequestId mwinRequestIdOf(const mwinContext* context, uint32_t slot, uint32_t request)
 {
+    MWIN_ASSERT(slot < context->limits.windows && request < context->limits.requestsPerWindow);
     const mwinWindow* window = &context->windows[slot];
     return (mwinRequestId){slot * context->limits.requestsPerWindow + request + 1,
                            window->requests[request].generation};
@@ -120,6 +122,7 @@ static uint32_t FoundKindOf(mwinRequestKind kind)
 
 void mwinComplete(mwinContext* context, uint32_t slot, uint32_t request, mwinOutcome outcome)
 {
+    MWIN_ASSERT(slot < context->limits.windows && request < context->limits.requestsPerWindow);
     mwinRequest* entry = &context->windows[slot].requests[request];
     if (entry->status != mwin_requestActive)
     {
@@ -152,6 +155,10 @@ void mwinReleaseRequest(mwinContext* context, mwinRequestId request)
     uint32_t perWindow = context->limits.requestsPerWindow;
     uint32_t slot = (request.index1 - 1) / perWindow;
     mwinRequest* entry = &context->windows[slot].requests[(request.index1 - 1) % perWindow];
+    // Its completion was just drained, and only that frees the slot: it
+    // is answered, under the generation the completion names.
+    MWIN_ASSERT(slot < context->limits.windows && entry->status == mwin_requestAnswered &&
+                entry->generation == request.generation);
     if (entry->status == mwin_requestAnswered && entry->generation == request.generation)
     {
         entry->status = mwin_requestFree;
@@ -190,6 +197,7 @@ static int32_t TakeRequest(mwinContext* context, uint32_t slot, mwinRequestKind 
     if (older >= 0)
     {
         mwinComplete(context, slot, (uint32_t)older, mwin_outcomeSuperseded);
+        MWIN_ASSERT(window->requests[older].status == mwin_requestAnswered);
     }
     window->requests[free].status = mwin_requestActive;
     window->requests[free].kind = kind;
@@ -203,6 +211,8 @@ void mwinSubmitRequest(mwinContext* context, uint32_t slot, int32_t request,
     {
         *requestOut = mwinRequestIdOf(context, slot, (uint32_t)request);
     }
+    MWIN_ASSERT(request >= 0 && (uint32_t)request < context->limits.requestsPerWindow &&
+                context->windows[slot].requests[request].status == mwin_requestActive);
     mwinRequestKind kind = context->windows[slot].requests[request].kind;
     if (context->windows[slot].def.kind != mwin_windowNormal &&
         (kind == mwin_requestMode || kind == mwin_requestStyle))
@@ -261,6 +271,8 @@ mwinResult mwinCreateWindow(mwinContext* context, const mwinWindowDef* def, mwin
         memcpy(window->title, def->title, def->titleLength);
     }
     int32_t request = TakeRequest(context, slot, mwin_requestCreate);
+    // A slot is free only once its last completion was drained.
+    MWIN_ASSERT(request >= 0);
     *windowOut = mwinWindowIdOf(context, slot);
     if (requestOut != nullptr)
     {
@@ -299,6 +311,7 @@ mwinResult mwinDestroyWindow(mwinContext* context, mwinWindowId window)
     for (uint32_t i = 0; i < context->limits.requestsPerWindow; i++)
     {
         mwinComplete(context, slot, i, mwin_outcomeCancelled);
+        MWIN_ASSERT(found->requests[i].status != mwin_requestActive);
     }
     context->backend->destroyWindow(context, slot);
     mwinPostDestroyed(context, slot, context->backend->now(context));

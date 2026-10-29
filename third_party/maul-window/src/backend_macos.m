@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The macOS backend (mwin-0024). AppKit owns the loop: mwinRun calls
+// The macOS backend. AppKit owns the loop: mwinRun calls
 // init, then runs the application, whose run loop calls the program's
 // frames from a display link of the main screen (a timer at 60 Hz before
 // macOS 14, or without a screen); the frame that stops the program stops

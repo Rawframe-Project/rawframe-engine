@@ -3,7 +3,7 @@
 //
 // Windows. A window is created at once as an id; the platform makes it
 // real later and says so with mwin_eventWindowCreated. Every change to a
-// window is a request (family record 0018): the call returns a request
+// window is a request: the call returns a request
 // id, and exactly one mwin_eventRequestCompleted answers it, after the
 // notifications the change caused. A later request of the same kind on
 // the same window supersedes an earlier one still in flight.
@@ -190,7 +190,12 @@ extern "C"
 
     /// Creates a window. Its id is valid at once; mwin_eventWindowCreated
     /// follows when the platform has made it, then the completion of the
-    /// request.
+    /// request. On iPadOS a window with no scene free waits for the new
+    /// scene it asks the system for, up to ten seconds: past that, or when
+    /// the system refuses, the request completes `mwin_outcomeFailed` and
+    /// no mwin_eventWindowCreated comes. Without several scenes (an
+    /// iPhone, or an Info.plist without UIApplicationSupportsMultipleScenes)
+    /// such a window completes `mwin_outcomeUnsupported`.
     ///
     /// @param context    The context.
     /// @param def        The window: a valid cookie, a positive size, a

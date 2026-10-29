@@ -9,17 +9,6 @@
 
 #include <string.h>
 
-#define MESSAGE_BOX_COOKIE 0x6D776D62u
-
-mwinMessageBoxDef mwinDefaultMessageBoxDef(void)
-{
-    mwinMessageBoxDef def = {0};
-    def.cookie = MESSAGE_BOX_COOKIE;
-    def.kind = mwin_messageError;
-    def.buttons = mwin_buttonsOk;
-    return def;
-}
-
 static bool IsText(const char* text, size_t length, size_t limit)
 {
     return (text != nullptr || length == 0) && length <= limit &&
@@ -40,8 +29,14 @@ mwinResult mwinPlatformMessageBox(const mwinMessageBoxDef* def, bool* acceptedOu
 
 mwinResult mwinShowMessageBox(const mwinMessageBoxDef* def, bool* acceptedOut)
 {
-    if (def == nullptr || def->cookie != MESSAGE_BOX_COOKIE || def->kind > mwin_messageError ||
-        def->buttons > mwin_buttonsYesNo ||
+    // The cookie and the version come first in every version's layout.
+    if (def != nullptr && def->cookie == MWIN_MESSAGE_BOX_DEF_COOKIE &&
+        def->version != MWIN_ABI_VERSION)
+    {
+        return mwin_errorVersion;
+    }
+    if (def == nullptr || def->cookie != MWIN_MESSAGE_BOX_DEF_COOKIE ||
+        def->kind > mwin_messageError || def->buttons > mwin_buttonsYesNo ||
         !IsText(def->title, def->titleLength, MWIN_MESSAGE_TITLE_BYTES) ||
         !IsText(def->message, def->messageLength, MWIN_MESSAGE_BYTES))
     {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The clipboard's data by MIME type and the primary selection's text
-// (mwin-0029), as the core keeps them for the backends.
+// The clipboard's data by MIME type and the primary selection's text,
+// as the core keeps them for the backends.
 
 #ifndef MAUL_WINDOW_SRC_CLIPBOARD_DATA_H
 #define MAUL_WINDOW_SRC_CLIPBOARD_DATA_H

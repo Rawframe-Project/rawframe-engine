@@ -69,10 +69,13 @@ extern "C"
     ///
     /// @param bytes         The text. May be NULL when length is 0.
     /// @param length        The number of bytes available.
-    /// @param codePointOut  Receives the code point, or U+FFFD on an error.
+    /// @param codePointOut  Receives the code point, or U+FFFD on a UTF-8
+    ///                      error.
     /// @param sizeOut       Receives the bytes consumed: the sequence's
-    ///                      length, or on an error the length of its
+    ///                      length, or on a UTF-8 error the length of its
     ///                      maximal ill-formed subpart (at least 1).
+    ///                      `muni_errorInvalid` leaves both outputs as they
+    ///                      were.
     /// @return `muni_success`, one of the UTF-8 errors of
     ///         muniValidateUtf8, or `muni_errorInvalid` when length is 0 or
     ///         an out-parameter is NULL.
@@ -85,7 +88,8 @@ extern "C"
     ///
     /// @param codePoint  A Unicode scalar value.
     /// @param bytes      Receives 1 to 4 bytes; must hold 4.
-    /// @param sizeOut    Receives the number of bytes written.
+    /// @param sizeOut    Receives the number of bytes written. On an error,
+    ///                   it and bytes are left as they were.
     /// @return `muni_success`, or `muni_errorInvalid` for a surrogate, a
     ///         value past U+10FFFF or a NULL out-parameter.
     /// @par Thread safety
@@ -102,7 +106,9 @@ extern "C"
     /// @param capacity     The number of 16-bit units units can hold.
     /// @param neededOut    Receives the number of units the whole
     ///                     conversion needs, which may exceed capacity. In
-    ///                     strict mode, on an error, the units before it.
+    ///                     strict mode, on an error in the text, the units
+    ///                     before it, which units holds as far as they fit.
+    ///                     `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
     ///         not fit (the units that fit are written); in strict mode
     ///         the first UTF-8 error and its offset; `muni_errorInvalid`
@@ -122,8 +128,11 @@ extern "C"
     /// @param bytes        The output. May be NULL when capacity is 0.
     /// @param capacity     The number of bytes bytes can hold.
     /// @param neededOut    Receives the number of bytes the whole
-    ///                     conversion needs, which may exceed capacity. In
-    ///                     strict mode, on an error, the bytes before it.
+    ///                     conversion needs, which may exceed capacity, or
+    ///                     SIZE_MAX when that does not fit in a size_t. In
+    ///                     strict mode, on an error in the text, the bytes
+    ///                     before it, which bytes holds as far as they fit.
+    ///                     `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
     ///         not fit (the bytes that fit are written); in strict mode
     ///         `muni_errorUtf16Surrogate` and its offset;
@@ -146,7 +155,10 @@ extern "C"
     /// @param capacity     The number of code points codePoints can hold.
     /// @param neededOut    Receives the number of code points the whole
     ///                     conversion needs, which may exceed capacity. In
-    ///                     strict mode, on an error, the ones before it.
+    ///                     strict mode, on an error in the text, the ones
+    ///                     before it, which codePoints holds as far as they
+    ///                     fit. `muni_errorInvalid` leaves both as they
+    ///                     were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
     ///         not fit (the code points that fit are written); in strict
     ///         mode the first UTF-8 error and its offset;
@@ -170,7 +182,9 @@ extern "C"
     /// @param capacity     The number of bytes bytes can hold.
     /// @param neededOut    Receives the number of bytes the whole
     ///                     conversion needs, which may exceed capacity. In
-    ///                     strict mode, on an error, the bytes before it.
+    ///                     strict mode, on an error in the text, the bytes
+    ///                     before it, which bytes holds as far as they fit.
+    ///                     `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
     ///         not fit (the bytes that fit are written); in strict mode
     ///         `muni_errorUtf32Value` and its offset; `muni_errorInvalid`

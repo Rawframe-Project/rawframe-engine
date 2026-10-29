@@ -32,4 +32,9 @@ void mwinWaylandPumpDrag(mwinWaylandPlatform* platform, uint64_t nowNs);
 // Lets a drag and a drop go, as the seat does.
 void mwinWaylandEndDrag(mwinWaylandPlatform* platform);
 
+// Ends the drag over a window that goes, refused and no longer reported,
+// and lets a drop for it go unfinished, so a window that takes the slot
+// later never gets either.
+void mwinWaylandForgetDrag(mwinWaylandPlatform* platform, uint32_t slot);
+
 #endif // MAUL_WINDOW_SRC_WAYLAND_DROP_H

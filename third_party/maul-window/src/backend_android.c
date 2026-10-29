@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Android backend (mwin-0026). The platform begins the run: the
+// The Android backend. The platform begins the run: the
 // library's activity (maul.window.Activity, a NativeActivity) calls
 // ANativeActivity_onCreate, which asks the program for itself
 // (mwinAndroidMain) and runs it as mwinRun would, with the activity as
@@ -162,6 +162,9 @@ static void Detach(mwinAndroidPlatform* platform)
 // at once or by the frame callback that waits.
 static void Finish(mwinAndroidPlatform* platform)
 {
+    // An ended program's callbacks find no program and its frame frees
+    // it without stepping: nothing finishes it twice.
+    MWIN_ASSERT(!platform->ended);
     mwinContext* context = platform->context;
     SetProgram(platform, nullptr);
     (void)mwinEndProgram(context);
@@ -198,6 +201,7 @@ static void OnFrame(int64_t frameTimeNanos, void* data);
 
 static void PostFrame(mwinAndroidPlatform* platform)
 {
+    MWIN_ASSERT(!platform->ended);
     if (!platform->framePosted && platform->started)
     {
         AChoreographer_postFrameCallback64(platform->choreographer, OnFrame, platform);
@@ -209,6 +213,8 @@ static void OnFrame(int64_t frameTimeNanos, void* data)
 {
     (void)frameTimeNanos;
     mwinAndroidPlatform* platform = data;
+    // The choreographer calls back only the one frame callback posted.
+    MWIN_ASSERT(platform->framePosted);
     platform->framePosted = false;
     if (platform->ended)
     {
@@ -271,6 +277,7 @@ static void OnStart(ANativeActivity* activity)
     {
         return;
     }
+    mwinAndroidPostOcclusion(platform);
     PostFrame(platform);
 }
 
@@ -282,6 +289,8 @@ static void OnStop(ANativeActivity* activity)
         return;
     }
     platform->started = false;
+    // Told in the frame that tells of the stop.
+    mwinAndroidPostOcclusion(platform);
     (void)Lifecycle(platform, false);
 }
 
@@ -421,6 +430,7 @@ static void OnConfigurationChanged(ANativeActivity* activity)
 // program stopped meanwhile and has ended.
 static bool EndOld(mwinAndroidPlatform* platform)
 {
+    MWIN_ASSERT(platform->activity != nullptr);
     mwinContext* context = platform->context;
     if (platform->nativeWindow != nullptr)
     {
@@ -441,6 +451,8 @@ static bool EndOld(mwinAndroidPlatform* platform)
 // The program shows in the activity from now on.
 static void Attach(mwinAndroidPlatform* platform, ANativeActivity* activity)
 {
+    // The activity before it ended first, its surface let go.
+    MWIN_ASSERT(platform->activity == nullptr && platform->nativeWindow == nullptr);
     platform->activity = activity;
     activity->instance = platform;
     ANativeActivityCallbacks* callbacks = activity->callbacks;

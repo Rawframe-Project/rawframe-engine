@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What the iOS backend keeps (mwin-0025): per window slot its scene, its
+// What the iOS backend keeps: per window slot its scene, its
 // UIWindow, the view controller and the library's view with its
 // CAMetalLayer, and what the program was told of it; per monitor slot
 // the screen shown there and what was last said of it; the scene waiting
@@ -58,6 +58,15 @@ typedef struct mwinIOSWindow
     // was last posted.
     mwinDragContents dragContents;
     mwinPosition dragPosition;
+    // A window waiting for the scene asked for it: the number of the ask
+    // and when it gives up. Its scene let go by the system (gone): the
+    // window shows no more, and its scene is never taken again.
+    bool asking;
+    uint32_t ask;
+    uint64_t askDeadlineNs;
+    bool gone;
+    // Whether the window was told its scene is in the background.
+    bool occluded;
 } mwinIOSWindow;
 
 // Where a touch is in its life, as UIKit's touch methods tell.
@@ -78,14 +87,18 @@ struct mwinIOSPlatform
     id* screens;
     mwinMonitorInfo* screenInfo;
     // A scene of the application's role that has no window yet (held),
-    // which the next window takes; nil when none waits.
+    // which the next window takes; nil when none waits. The number of the
+    // last scene asked for.
     UIWindowScene* waitingScene;
+    uint32_t asks;
     // What calls the program's frames: the display link, and the object
     // it calls.
     CADisplayLink* link;
     id stepper;
     // Whether the program was told the application stopped running.
     bool suspended;
+    // Whether the backend stops, its windows' scenes left as they are.
+    bool ending;
     // What each printing key typed when last pressed under the current
     // layout (0 before), the keys held, and what tells of the on-screen
     // keyboard's frame and of the input mode's changes.
@@ -168,6 +181,7 @@ mwinModifiers mwinIOSModifiersOf(UIKeyModifierFlags flags);
 void mwinIOSTouches(mwinIOSPlatform* platform, uint32_t slot, NSSet<UITouch*>* touches,
                     UIEvent* event, mwinIOSTouchPhase phase);
 void mwinIOSHover(mwinIOSPlatform* platform, uint32_t slot, UIHoverGestureRecognizer* hover);
+void mwinIOSPencilHover(mwinIOSPlatform* platform, uint32_t slot, UIHoverGestureRecognizer* hover);
 void mwinIOSScroll(mwinIOSPlatform* platform, uint32_t slot, UIPanGestureRecognizer* pan);
 
 // Keys, text and the on-screen keyboard (ios_keys.m): a hardware
@@ -227,6 +241,23 @@ void mwinIOSLayout(mwinIOSPlatform* platform, uint32_t slot);
 
 // The slot of the window a scene shows, or -1.
 int32_t mwinIOSSlotOfScene(const mwinIOSPlatform* platform, UIScene* scene);
+
+// A scene of the application's role connected: the window that waits
+// longest for one takes it; else it waits for the next window, unless
+// one already does, and then its session is let go (ios_window.m).
+void mwinIOSSceneCame(mwinIOSPlatform* platform, UIWindowScene* scene);
+
+// The system let a scene go: one waiting is forgotten, and a window
+// showing it is asked to close and never shows again.
+void mwinIOSSceneWent(mwinIOSPlatform* platform, UIScene* scene);
+// A scene went to the background or comes to the foreground: its window,
+// if it has one, is occluded while the scene is in the background and
+// revealed in the foreground, where it shows at least in part (inactive
+// too, under Control Center or the app switcher).
+void mwinIOSSceneSeen(mwinIOSPlatform* platform, UIScene* scene, bool seen);
+
+// Fails the creation of a window whose scene did not come in time.
+void mwinIOSPumpScenes(mwinIOSPlatform* platform);
 
 // The backend's window operations (ios_window.m).
 void mwinIOSCreateWindow(mwinContext* context, uint32_t slot);
