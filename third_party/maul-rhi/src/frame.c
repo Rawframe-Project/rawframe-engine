@@ -131,7 +131,7 @@ void mrhiLoseDevice(mrhiDevice* device)
     Lose(device, nullptr);
 }
 
-mrhiResult mrhiSimulateDeviceLoss(mrhiDevice* device)
+mrhiResult mrhiDevice_SimulateLoss(mrhiDevice* device)
 {
     if (device == nullptr)
     {
@@ -145,7 +145,7 @@ mrhiResult mrhiSimulateDeviceLoss(mrhiDevice* device)
     {
         return device->state == mrhi_deviceLost ? mrhi_errorDeviceLost : mrhi_errorState;
     }
-    static const char message[] = "Lost through mrhiSimulateDeviceLoss";
+    static const char message[] = "Lost through mrhiDevice_SimulateLoss";
     mrhiDeviceLossReport report = {
         .reason = mrhi_lossSimulated,
         .messageLength = sizeof(message) - 1,
@@ -191,7 +191,7 @@ static void TakeFinished(mrhiDevice* device)
     }
 }
 
-mrhiResult mrhiBeginFrame(mrhiDevice* device, const mrhiFrameDef* def)
+mrhiResult mrhiDevice_BeginFrame(mrhiDevice* device, const mrhiFrameDef* def)
 {
     if (device == nullptr)
     {
@@ -243,7 +243,7 @@ mrhiResult mrhiBeginFrame(mrhiDevice* device, const mrhiFrameDef* def)
     return mrhi_success;
 }
 
-mrhiResult mrhiDropFrame(mrhiDevice* device)
+mrhiResult mrhiDevice_DropFrame(mrhiDevice* device)
 {
     if (device == nullptr)
     {
@@ -263,7 +263,7 @@ mrhiResult mrhiDropFrame(mrhiDevice* device)
     return mrhi_success;
 }
 
-mrhiResult mrhiSubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut)
+mrhiResult mrhiDevice_SubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut)
 {
     if (tokenOut != nullptr)
     {
@@ -288,7 +288,7 @@ mrhiResult mrhiSubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut)
     // A frame recorded while its device was lost never runs.
     if (device->state == mrhi_deviceLost)
     {
-        mrhiResult dropped = mrhiDropFrame(device);
+        mrhiResult dropped = mrhiDevice_DropFrame(device);
         return dropped == mrhi_success ? mrhi_errorDeviceLost : dropped;
     }
     mrhiResult compiled = device->frameCompiled ? mrhi_success : mrhiCompile(device);
@@ -342,7 +342,7 @@ mrhiResult mrhiSubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut)
     return mrhi_success;
 }
 
-mrhiResult mrhiGetFrameUsage(mrhiDevice* device, mrhiFrameUsage* usageOut)
+mrhiResult mrhiDevice_GetFrameUsage(mrhiDevice* device, mrhiFrameUsage* usageOut)
 {
     if (device == nullptr)
     {
@@ -379,7 +379,7 @@ mrhiResult mrhiGetFrameUsage(mrhiDevice* device, mrhiFrameUsage* usageOut)
     return mrhi_success;
 }
 
-mrhiResult mrhiWaitFrame(mrhiDevice* device, mrhiRequestId token, uint64_t timeoutNs)
+mrhiResult mrhiRequest_WaitFrame(mrhiDevice* device, mrhiRequestId token, uint64_t timeoutNs)
 {
     if (device == nullptr)
     {
@@ -408,7 +408,7 @@ mrhiResult mrhiWaitFrame(mrhiDevice* device, mrhiRequestId token, uint64_t timeo
                : mrhi_timeout;
 }
 
-mrhiResult mrhiNextDeviceNotification(mrhiDevice* device, mrhiDeviceNotification* notificationOut)
+mrhiResult mrhiDevice_TakeNotification(mrhiDevice* device, mrhiDeviceNotification* notificationOut)
 {
     if (device == nullptr)
     {
@@ -436,7 +436,7 @@ mrhiResult mrhiNextDeviceNotification(mrhiDevice* device, mrhiDeviceNotification
     return mrhi_success;
 }
 
-mrhiResult mrhiWaitDeviceNotification(mrhiDevice* device, uint64_t timeoutNs)
+mrhiResult mrhiDevice_WaitNotification(mrhiDevice* device, uint64_t timeoutNs)
 {
     if (device == nullptr)
     {

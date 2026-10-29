@@ -612,18 +612,22 @@ extern "C"
     /// driver's compiled pipelines in a checked envelope.
     ///
     /// @param device    The device.
-    /// @param bytes     Receives the cache, or NULL to learn its size.
+    /// @param bytesOut  Receives the cache, or NULL to learn its size; zeros,
+    ///                  as many as capacity, on any failure.
     /// @param capacity  The bytes it holds.
-    /// @param sizeOut   Receives the cache's size.
+    /// @param sizeOut   Receives the cache's size; 0 on any failure but
+    ///                  `mrhi_errorCapacity`, which gives the size the cache
+    ///                  needs.
     /// @return `mrhi_success` with the cache written, or only its size when
-    /// bytes is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut;
+    /// bytesOut is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut;
     /// `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity`
     /// when capacity is less than the size, which sizeOut receives;
     /// `mrhi_errorPlatform` when the driver fails to write it.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytes,
-                                                            size_t capacity, size_t* sizeOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetPipelineCache(mrhiDevice* device,
+                                                                   void* bytesOut, size_t capacity,
+                                                                   size_t* sizeOut);
 
     /// Reports what became of the pipeline cache the device's def gave. An
     /// unusable cache never fails a device; it only goes unused.
@@ -637,7 +641,7 @@ extern "C"
     /// device.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetPipelineCacheOutcome(mrhiDevice* device);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetPipelineCacheOutcome(mrhiDevice* device);
 
 #ifdef __cplusplus
 }

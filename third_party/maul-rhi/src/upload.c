@@ -55,8 +55,8 @@ static uint8_t* TakeStaging(mrhiDevice* device, mrhiFramePass* pass, uint64_t by
     return staging;
 }
 
-mrhiResult mrhiWriteBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
-                           uint64_t offset, const void* bytes, uint64_t size)
+mrhiResult mrhiPass_WriteBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
+                                uint64_t offset, const void* bytes, uint64_t size)
 {
     if (device == nullptr)
     {
@@ -132,9 +132,10 @@ static void Repack(uint8_t* staging, uint64_t pitch, const uint8_t* bytes,
     }
 }
 
-mrhiResult mrhiWriteTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureCopy* destination,
-                            const void* bytes, size_t byteCount, const mrhiTexelLayout* layout,
-                            const mrhiExtent3d* size)
+mrhiResult mrhiPass_WriteTexture(mrhiDevice* device, mrhiPassId id,
+                                 const mrhiTextureCopy* destination, const void* bytes,
+                                 size_t byteCount, const mrhiTexelLayout* layout,
+                                 const mrhiExtent3d* size)
 {
     if (device == nullptr)
     {

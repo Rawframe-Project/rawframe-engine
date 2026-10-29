@@ -9,6 +9,7 @@
 
 #include "bytes.h"
 #include "device_core.h"
+#include "outputs.h"
 #include "sha256.h"
 
 #include <string.h>
@@ -68,7 +69,7 @@ mrhiResult mrhiImportPipelineCache(mrhiDevice* device, const void* bytes, size_t
     return taken ? mrhi_success : mrhi_errorStale;
 }
 
-mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytes, size_t capacity, size_t* sizeOut)
+static mrhiResult ExportCache(mrhiDevice* device, void* bytes, size_t capacity, size_t* sizeOut)
 {
     if (device == nullptr)
     {
@@ -115,7 +116,15 @@ mrhiResult mrhiGetPipelineCache(mrhiDevice* device, void* bytes, size_t capacity
     return mrhi_success;
 }
 
-mrhiResult mrhiGetPipelineCacheOutcome(mrhiDevice* device)
+mrhiResult mrhiDevice_GetPipelineCache(mrhiDevice* device, void* bytesOut, size_t capacity,
+                                       size_t* sizeOut)
+{
+    // A failure also clears what a driver may have written of the cache.
+    return mrhiClearFailed(ExportCache(device, bytesOut, capacity, sizeOut), bytesOut, capacity,
+                           sizeOut);
+}
+
+mrhiResult mrhiDevice_GetPipelineCacheOutcome(mrhiDevice* device)
 {
     return device == nullptr ? mrhi_errorInvalid : device->cacheOutcome;
 }

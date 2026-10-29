@@ -42,8 +42,8 @@ static uint32_t DeclaredRange(mrhiDevice* device, const mrhiFramePass* pass, mrh
     return object;
 }
 
-mrhiResult mrhiSetVertexBuffer(mrhiDevice* device, mrhiPassId id, uint32_t slot,
-                               mrhiResourceId resource, uint64_t offset, uint64_t size)
+mrhiResult mrhiPass_SetVertexBuffer(mrhiDevice* device, mrhiPassId id, uint32_t slot,
+                                    mrhiResourceId resource, uint64_t offset, uint64_t size)
 {
     if (device == nullptr)
     {
@@ -91,8 +91,8 @@ mrhiResult mrhiSetVertexBuffer(mrhiDevice* device, mrhiPassId id, uint32_t slot,
     return mrhi_success;
 }
 
-mrhiResult mrhiSetIndexBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
-                              mrhiIndexFormat format, uint64_t offset, uint64_t size)
+mrhiResult mrhiPass_SetIndexBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
+                                   mrhiIndexFormat format, uint64_t offset, uint64_t size)
 {
     if (device == nullptr)
     {
@@ -237,8 +237,8 @@ static mrhiFramePass* DrawPass(mrhiDevice* device, mrhiPassId id, const mrhiPipe
     return *slotOut == nullptr ? nullptr : pass;
 }
 
-mrhiResult mrhiDraw(mrhiDevice* device, mrhiPassId id, uint32_t vertexCount, uint32_t instanceCount,
-                    uint32_t firstVertex, uint32_t firstInstance)
+mrhiResult mrhiPass_Draw(mrhiDevice* device, mrhiPassId id, uint32_t vertexCount,
+                         uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 {
     if (device == nullptr)
     {
@@ -274,9 +274,9 @@ mrhiResult mrhiDraw(mrhiDevice* device, mrhiPassId id, uint32_t vertexCount, uin
     return mrhi_success;
 }
 
-mrhiResult mrhiDrawIndexed(mrhiDevice* device, mrhiPassId id, uint32_t indexCount,
-                           uint32_t instanceCount, uint32_t firstIndex, int32_t baseVertex,
-                           uint32_t firstInstance)
+mrhiResult mrhiPass_DrawIndexed(mrhiDevice* device, mrhiPassId id, uint32_t indexCount,
+                                uint32_t instanceCount, uint32_t firstIndex, int32_t baseVertex,
+                                uint32_t firstInstance)
 {
     if (device == nullptr)
     {
@@ -321,7 +321,7 @@ mrhiResult mrhiDrawIndexed(mrhiDevice* device, mrhiPassId id, uint32_t indexCoun
     return mrhi_success;
 }
 
-mrhiResult mrhiDispatch(mrhiDevice* device, mrhiPassId id, uint32_t x, uint32_t y, uint32_t z)
+mrhiResult mrhiPass_Dispatch(mrhiDevice* device, mrhiPassId id, uint32_t x, uint32_t y, uint32_t z)
 {
     if (device == nullptr)
     {
@@ -405,8 +405,8 @@ static mrhiFramePass* IndirectPass(mrhiDevice* device, mrhiPassId id, bool index
     return *statusOut == mrhi_success ? pass : nullptr;
 }
 
-mrhiResult mrhiDrawIndirect(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
-                            uint64_t offset)
+mrhiResult mrhiPass_DrawIndirect(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
+                                 uint64_t offset)
 {
     if (device == nullptr)
     {
@@ -419,8 +419,8 @@ mrhiResult mrhiDrawIndirect(mrhiDevice* device, mrhiPassId id, mrhiResourceId re
                : RecordIndirect(device, pass, mrhiCommandDrawIndirect, resource, offset, 16);
 }
 
-mrhiResult mrhiDrawIndexedIndirect(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
-                                   uint64_t offset)
+mrhiResult mrhiPass_DrawIndexedIndirect(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
+                                        uint64_t offset)
 {
     if (device == nullptr)
     {
@@ -504,25 +504,25 @@ static mrhiResult RecordCounted(mrhiDevice* device, mrhiPassId id, bool indexed,
     return mrhi_success;
 }
 
-mrhiResult mrhiDrawIndirectCount(mrhiDevice* device, mrhiPassId pass, mrhiResourceId resource,
-                                 uint64_t offset, mrhiResourceId countResource,
-                                 uint64_t countOffset, uint32_t maxCount)
+mrhiResult mrhiPass_DrawIndirectCount(mrhiDevice* device, mrhiPassId pass, mrhiResourceId resource,
+                                      uint64_t offset, mrhiResourceId countResource,
+                                      uint64_t countOffset, uint32_t maxCount)
 {
     return RecordCounted(device, pass, false, resource, offset, countResource, countOffset,
                          maxCount);
 }
 
-mrhiResult mrhiDrawIndexedIndirectCount(mrhiDevice* device, mrhiPassId pass,
-                                        mrhiResourceId resource, uint64_t offset,
-                                        mrhiResourceId countResource, uint64_t countOffset,
-                                        uint32_t maxCount)
+mrhiResult mrhiPass_DrawIndexedIndirectCount(mrhiDevice* device, mrhiPassId pass,
+                                             mrhiResourceId resource, uint64_t offset,
+                                             mrhiResourceId countResource, uint64_t countOffset,
+                                             uint32_t maxCount)
 {
     return RecordCounted(device, pass, true, resource, offset, countResource, countOffset,
                          maxCount);
 }
 
-mrhiResult mrhiDispatchIndirect(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
-                                uint64_t offset)
+mrhiResult mrhiPass_DispatchIndirect(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
+                                     uint64_t offset)
 {
     if (device == nullptr)
     {

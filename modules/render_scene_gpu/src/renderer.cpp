@@ -690,47 +690,48 @@ struct SceneRenderer::State {
         }
         const Declared& now = *declared;
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiBeginPass(native, now.upload)) != mrhi_success ||
-            (outcome = mrhiWriteBuffer(native, now.upload, now.blockResource, 0, &now.block, sizeof(FrameBlock))) !=
-                mrhi_success ||
+            (outcome = mrhiPass_Begin(native, now.upload)) != mrhi_success ||
+            (outcome = mrhiPass_WriteBuffer(
+                 native, now.upload, now.blockResource, 0, &now.block, sizeof(FrameBlock))) != mrhi_success ||
             ((now.draws || now.casters) &&
-             (outcome = mrhiWriteBuffer(native,
-                                        now.upload,
-                                        now.instances,
-                                        0,
-                                        now.placed.instances.data(),
-                                        now.placed.instances.size() * sizeof(float))) != mrhi_success)) {
+             (outcome = mrhiPass_WriteBuffer(native,
+                                             now.upload,
+                                             now.instances,
+                                             0,
+                                             now.placed.instances.data(),
+                                             now.placed.instances.size() * sizeof(float))) != mrhi_success)) {
             return failed("the frame's placements could not be written", outcome);
         }
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiWriteBuffer(native,
-                                       now.upload,
-                                       now.lightsResource,
-                                       0,
-                                       now.lights.data(),
-                                       now.lights.size() * sizeof(LightBlock))) != mrhi_success ||
-            (outcome = mrhiWriteBuffer(native,
-                                       now.upload,
-                                       now.materialsResource,
-                                       0,
-                                       now.materials.data(),
-                                       now.materials.size() * sizeof(render_scene::MaterialBlob))) != mrhi_success ||
-            (outcome = mrhiWriteBuffer(native,
-                                       now.upload,
-                                       now.rangesResource,
-                                       0,
-                                       now.ranges.data(),
-                                       now.ranges.size() * sizeof(std::uint32_t))) != mrhi_success ||
-            (outcome = mrhiWriteBuffer(native,
-                                       now.upload,
-                                       now.indicesResource,
-                                       0,
-                                       now.indices.data(),
-                                       now.indices.size() * sizeof(std::uint32_t))) != mrhi_success) {
+            (outcome = mrhiPass_WriteBuffer(native,
+                                            now.upload,
+                                            now.lightsResource,
+                                            0,
+                                            now.lights.data(),
+                                            now.lights.size() * sizeof(LightBlock))) != mrhi_success ||
+            (outcome = mrhiPass_WriteBuffer(native,
+                                            now.upload,
+                                            now.materialsResource,
+                                            0,
+                                            now.materials.data(),
+                                            now.materials.size() * sizeof(render_scene::MaterialBlob))) !=
+                mrhi_success ||
+            (outcome = mrhiPass_WriteBuffer(native,
+                                            now.upload,
+                                            now.rangesResource,
+                                            0,
+                                            now.ranges.data(),
+                                            now.ranges.size() * sizeof(std::uint32_t))) != mrhi_success ||
+            (outcome = mrhiPass_WriteBuffer(native,
+                                            now.upload,
+                                            now.indicesResource,
+                                            0,
+                                            now.indices.data(),
+                                            now.indices.size() * sizeof(std::uint32_t))) != mrhi_success) {
             return failed("the frame's lights could not be written", outcome);
         }
         if (const mrhiResult kOutcome =
-                mrhiWriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock));
+                mrhiPass_WriteBuffer(native, now.upload, now.skyResource, 0, &now.sky, sizeof(SkyBlock));
             kOutcome != mrhi_success) {
             return failed("the sky's light could not be written", kOutcome);
         }
@@ -749,7 +750,7 @@ struct SceneRenderer::State {
         RAWFRAME_TRY(held->write(now.upload));
         RAWFRAME_TRY(skinning->write(now.upload));
         RAWFRAME_TRY(textures->write(render::requestKey(now.upload.index1, now.upload.generation)));
-        if (const mrhiResult kOutcome = mrhiEndPass(native, now.upload); kOutcome != mrhi_success) {
+        if (const mrhiResult kOutcome = mrhiPass_End(native, now.upload); kOutcome != mrhi_success) {
             return failed("the upload pass could not end", kOutcome);
         }
         RAWFRAME_TRY(decalAtlas->record(*pipelines));

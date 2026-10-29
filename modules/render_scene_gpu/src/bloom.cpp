@@ -109,11 +109,11 @@ result::Status BloomPass::record(const Pipelines& pipelines, mrhiResourceId scen
                         &pipelines](mrhiPassId pass, const Asked& pipeline, mrhiResourceId from) -> result::Status {
         const std::array<mrhiBinding, 2> kBindings = {textureAt(0, from), samplerAt(1, pipelines.filteredSampler)};
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiBeginPass(native_, pass)) != mrhi_success ||
-            (outcome = mrhiSetGraphicsPipeline(native_, pass, pipeline.pipeline)) != mrhi_success ||
-            (outcome = mrhiSetBindings(native_, pass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
-            (outcome = mrhiDraw(native_, pass, 3, 1, 0, 0)) != mrhi_success ||
-            (outcome = mrhiEndPass(native_, pass)) != mrhi_success) {
+            (outcome = mrhiPass_Begin(native_, pass)) != mrhi_success ||
+            (outcome = mrhiPass_SetGraphicsPipeline(native_, pass, pipeline.pipeline)) != mrhi_success ||
+            (outcome = mrhiPass_SetBindings(native_, pass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+            (outcome = mrhiPass_Draw(native_, pass, 3, 1, 0, 0)) != mrhi_success ||
+            (outcome = mrhiPass_End(native_, pass)) != mrhi_success) {
             return failed("the bloom could not be drawn", outcome);
         }
         return {};

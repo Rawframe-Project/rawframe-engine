@@ -35,8 +35,8 @@ extern "C"
     /// driver is not Metal; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetMetalDevice(mrhiDevice* device, void** deviceOut,
-                                                          void** queueOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetMetalDevice(mrhiDevice* device,
+                                                                 void** deviceOut, void** queueOut);
 
     /// Reads a device texture's id<MTLTexture>, borrowed with no reference
     /// added. Metal tracks its hazards, so a native pass needs no state.
@@ -49,13 +49,13 @@ extern "C"
     /// longer has; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetMetalTexture(mrhiDevice* device,
-                                                           mrhiTextureId texture,
-                                                           void** textureOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiTexture_GetMetalTexture(mrhiDevice* device,
+                                                                   mrhiTextureId texture,
+                                                                   void** textureOut);
 
     /// Hands a native pass the command buffer the program encoded for it: an
     /// id<MTLCommandBuffer> from the device's graphics queue
-    /// (mrhiGetMetalDevice), with no encoder open, neither enqueued nor
+    /// (mrhiDevice_GetMetalDevice), with no encoder open, neither enqueued nor
     /// committed. The library commits it at the pass's place in the frame,
     /// after the work the pass follows and before the work that follows it, and
     /// the frame is done only once it has completed too. The program keeps it
@@ -70,8 +70,9 @@ extern "C"
     /// buffer or a pass that is not native.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetMetalPassCommands(mrhiDevice* device, mrhiPassId pass,
-                                                                void* commandBuffer);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetMetalCommands(mrhiDevice* device,
+                                                                 mrhiPassId pass,
+                                                                 void* commandBuffer);
 
 #ifdef __cplusplus
 }

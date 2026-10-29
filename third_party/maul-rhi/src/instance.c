@@ -308,7 +308,7 @@ mrhiResult mrhiOverLimit(mrhiInstance* instance, mrhiDiagnosticCode code)
     return mrhi_errorLimit;
 }
 
-mrhiResult mrhiNextInstanceDiagnostic(mrhiInstance* instance, mrhiDiagnostic* diagnosticOut)
+mrhiResult mrhiInstance_TakeDiagnostic(mrhiInstance* instance, mrhiDiagnostic* diagnosticOut)
 {
     if (instance == nullptr)
     {
@@ -325,12 +325,12 @@ mrhiResult mrhiNextInstanceDiagnostic(mrhiInstance* instance, mrhiDiagnostic* di
     return mrhiTakeDiagnostic(&instance->diagnostics, diagnosticOut);
 }
 
-uint64_t mrhiGetInstanceMisuse(mrhiInstance* instance)
+uint64_t mrhiInstance_GetMisuse(mrhiInstance* instance)
 {
     return instance == nullptr ? 0 : instance->misuse;
 }
 
-uint64_t mrhiGetDriverFaults(const mrhiInstance* instance)
+uint64_t mrhiInstance_GetDriverFaults(const mrhiInstance* instance)
 {
     return instance == nullptr
                ? 0

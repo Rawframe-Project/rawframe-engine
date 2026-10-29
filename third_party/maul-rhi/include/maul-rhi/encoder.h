@@ -149,7 +149,7 @@ extern "C"
     } mrhiTexelLayout;
 
     /// Begins recording a kept pass of the compiled open frame. It records
-    /// until mrhiEndPass; a kept pass never begun records nothing.
+    /// until mrhiPass_End; a kept pass never begun records nothing.
     ///
     /// @param device  The device.
     /// @param pass    The pass.
@@ -159,7 +159,7 @@ extern "C"
     /// compiled.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiBeginPass(mrhiDevice* device, mrhiPassId pass);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_Begin(mrhiDevice* device, mrhiPassId pass);
 
     /// Ends recording a pass. Its debug groups must be closed.
     ///
@@ -171,7 +171,7 @@ extern "C"
     /// for a pass that is not recording.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiEndPass(mrhiDevice* device, mrhiPassId pass);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_End(mrhiDevice* device, mrhiPassId pass);
 
     /// Sets the graphics pipeline later draws use, in a pass with targets. It
     /// must be ready and fit the pass's targets: their formats and sample
@@ -190,8 +190,8 @@ extern "C"
     /// commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetGraphicsPipeline(mrhiDevice* device, mrhiPassId pass,
-                                                               mrhiGraphicsPipelineId pipeline);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetGraphicsPipeline(
+        mrhiDevice* device, mrhiPassId pass, mrhiGraphicsPipelineId pipeline);
 
     /// Sets the compute pipeline later dispatches use, in a pass without
     /// targets. A pipeline whose entry point reads a heap needs a pass that
@@ -208,8 +208,9 @@ extern "C"
     /// has; `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetComputePipeline(mrhiDevice* device, mrhiPassId pass,
-                                                              mrhiComputePipelineId pipeline);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetComputePipeline(mrhiDevice* device,
+                                                                   mrhiPassId pass,
+                                                                   mrhiComputePipelineId pipeline);
 
     /// Sets every slot of one binding table for later draws or dispatches,
     /// checked against the pass's pipeline and its declared accesses.
@@ -235,9 +236,10 @@ extern "C"
     /// within the adapter's, or when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId pass,
-                                                       uint32_t table, const mrhiBinding* bindings,
-                                                       uint32_t count);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetBindings(mrhiDevice* device, mrhiPassId pass,
+                                                            uint32_t table,
+                                                            const mrhiBinding* bindings,
+                                                            uint32_t count);
 
     /// Sets the buffer later draws read one of the pipeline's vertex buffers
     /// from.
@@ -262,9 +264,10 @@ extern "C"
     /// commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetVertexBuffer(mrhiDevice* device, mrhiPassId pass,
-                                                           uint32_t slot, mrhiResourceId resource,
-                                                           uint64_t offset, uint64_t size);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetVertexBuffer(mrhiDevice* device, mrhiPassId pass,
+                                                                uint32_t slot,
+                                                                mrhiResourceId resource,
+                                                                uint64_t offset, uint64_t size);
 
     /// Sets the buffer later indexed draws read indices from.
     ///
@@ -285,10 +288,10 @@ extern "C"
     /// recording; `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetIndexBuffer(mrhiDevice* device, mrhiPassId pass,
-                                                          mrhiResourceId resource,
-                                                          mrhiIndexFormat format, uint64_t offset,
-                                                          uint64_t size);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetIndexBuffer(mrhiDevice* device, mrhiPassId pass,
+                                                               mrhiResourceId resource,
+                                                               mrhiIndexFormat format,
+                                                               uint64_t offset, uint64_t size);
 
     /// Draws vertices with the pass's pipeline, tables and vertex buffers.
     ///
@@ -306,9 +309,9 @@ extern "C"
     /// `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDraw(mrhiDevice* device, mrhiPassId pass,
-                                                uint32_t vertexCount, uint32_t instanceCount,
-                                                uint32_t firstVertex, uint32_t firstInstance);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_Draw(mrhiDevice* device, mrhiPassId pass,
+                                                     uint32_t vertexCount, uint32_t instanceCount,
+                                                     uint32_t firstVertex, uint32_t firstInstance);
 
     /// Draws indexed vertices with the pass's pipeline, tables, vertex buffers
     /// and index buffer.
@@ -330,10 +333,11 @@ extern "C"
     /// full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDrawIndexed(mrhiDevice* device, mrhiPassId pass,
-                                                       uint32_t indexCount, uint32_t instanceCount,
-                                                       uint32_t firstIndex, int32_t baseVertex,
-                                                       uint32_t firstInstance);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_DrawIndexed(mrhiDevice* device, mrhiPassId pass,
+                                                            uint32_t indexCount,
+                                                            uint32_t instanceCount,
+                                                            uint32_t firstIndex, int32_t baseVertex,
+                                                            uint32_t firstInstance);
 
     /// Dispatches workgroups with the pass's compute pipeline and tables.
     ///
@@ -352,8 +356,8 @@ extern "C"
     /// frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDispatch(mrhiDevice* device, mrhiPassId pass, uint32_t x,
-                                                    uint32_t y, uint32_t z);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_Dispatch(mrhiDevice* device, mrhiPassId pass,
+                                                         uint32_t x, uint32_t y, uint32_t z);
 
     /// Draws with the pass's pipeline, tables and vertex buffers, the arguments
     /// read on the GPU: the vertices, the instances, the first vertex and the
@@ -376,8 +380,9 @@ extern "C"
     /// `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDrawIndirect(mrhiDevice* device, mrhiPassId pass,
-                                                        mrhiResourceId resource, uint64_t offset);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_DrawIndirect(mrhiDevice* device, mrhiPassId pass,
+                                                             mrhiResourceId resource,
+                                                             uint64_t offset);
 
     /// Draws indexed vertices with the pass's pipeline, tables, vertex and
     /// index buffers, the arguments read on the GPU: the indices, the
@@ -403,11 +408,12 @@ extern "C"
     /// the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDrawIndexedIndirect(mrhiDevice* device, mrhiPassId pass,
-                                                               mrhiResourceId resource,
-                                                               uint64_t offset);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_DrawIndexedIndirect(mrhiDevice* device,
+                                                                    mrhiPassId pass,
+                                                                    mrhiResourceId resource,
+                                                                    uint64_t offset);
 
-// The draws a counted multi-draw makes at most (mrhiDrawIndirectCount's
+// The draws a counted multi-draw makes at most (mrhiPass_DrawIndirectCount's
 // maxCount).
 #define MRHI_MAX_INDIRECT_DRAWS 65535
 
@@ -444,7 +450,7 @@ extern "C"
     /// frameIndirectDraws.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDrawIndirectCount(
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_DrawIndirectCount(
         mrhiDevice* device, mrhiPassId pass, mrhiResourceId resource, uint64_t offset,
         mrhiResourceId countResource, uint64_t countOffset, uint32_t maxCount);
 
@@ -483,7 +489,7 @@ extern "C"
     /// frameIndirectDraws.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDrawIndexedIndirectCount(
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_DrawIndexedIndirectCount(
         mrhiDevice* device, mrhiPassId pass, mrhiResourceId resource, uint64_t offset,
         mrhiResourceId countResource, uint64_t countOffset, uint32_t maxCount);
 
@@ -507,9 +513,10 @@ extern "C"
     /// frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDispatchIndirect(mrhiDevice* device, mrhiPassId pass,
-                                                            mrhiResourceId resource,
-                                                            uint64_t offset);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_DispatchIndirect(mrhiDevice* device,
+                                                                 mrhiPassId pass,
+                                                                 mrhiResourceId resource,
+                                                                 uint64_t offset);
 
     /// Begins an occlusion query of the pass's occlusion query set: the draws
     /// until its end write whether any sample passed. A query is written at
@@ -526,8 +533,9 @@ extern "C"
     /// when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiBeginOcclusionQuery(mrhiDevice* device, mrhiPassId pass,
-                                                               uint32_t query);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_BeginOcclusionQuery(mrhiDevice* device,
+                                                                    mrhiPassId pass,
+                                                                    uint32_t query);
 
     /// Ends the pass's open occlusion query. One refused for capacity still
     /// ends it, so the pass can end.
@@ -540,7 +548,8 @@ extern "C"
     /// `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiEndOcclusionQuery(mrhiDevice* device, mrhiPassId pass);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_EndOcclusionQuery(mrhiDevice* device,
+                                                                  mrhiPassId pass);
 
     /// Begins a pipeline statistics query: the pass's work until its end is
     /// counted. A query is written at most once in a frame.
@@ -559,8 +568,10 @@ extern "C"
     /// when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiBeginStatisticsQuery(mrhiDevice* device, mrhiPassId pass,
-                                                                mrhiQuerySetId set, uint32_t query);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_BeginStatisticsQuery(mrhiDevice* device,
+                                                                     mrhiPassId pass,
+                                                                     mrhiQuerySetId set,
+                                                                     uint32_t query);
 
     /// Ends the pass's open statistics query. One refused for capacity still
     /// ends it, so the pass can end.
@@ -573,7 +584,8 @@ extern "C"
     /// `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiEndStatisticsQuery(mrhiDevice* device, mrhiPassId pass);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_EndStatisticsQuery(mrhiDevice* device,
+                                                                   mrhiPassId pass);
 
     /// Writes queries of a set into a buffer as 64-bit values: an occlusion
     /// query's result, a timestamp in ticks, or a statistics query's eleven
@@ -599,10 +611,11 @@ extern "C"
     /// are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiResolveQueries(mrhiDevice* device, mrhiPassId pass,
-                                                          mrhiQuerySetId set, uint32_t first,
-                                                          uint32_t count, mrhiResourceId resource,
-                                                          uint64_t offset);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_ResolveQueries(mrhiDevice* device, mrhiPassId pass,
+                                                               mrhiQuerySetId set, uint32_t first,
+                                                               uint32_t count,
+                                                               mrhiResourceId resource,
+                                                               uint64_t offset);
 
     /// Copies bytes from one buffer of the frame to another.
     ///
@@ -622,10 +635,9 @@ extern "C"
     /// commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiCopyBuffer(mrhiDevice* device, mrhiPassId pass,
-                                                      mrhiResourceId source, uint64_t sourceOffset,
-                                                      mrhiResourceId destination,
-                                                      uint64_t destinationOffset, uint64_t size);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_CopyBuffer(
+        mrhiDevice* device, mrhiPassId pass, mrhiResourceId source, uint64_t sourceOffset,
+        mrhiResourceId destination, uint64_t destinationOffset, uint64_t size);
 
     /// Writes zeros into a range of a buffer of the frame.
     ///
@@ -644,9 +656,9 @@ extern "C"
     /// full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiClearBuffer(mrhiDevice* device, mrhiPassId pass,
-                                                       mrhiResourceId resource, uint64_t offset,
-                                                       uint64_t size);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_ClearBuffer(mrhiDevice* device, mrhiPassId pass,
+                                                            mrhiResourceId resource,
+                                                            uint64_t offset, uint64_t size);
 
     /// Copies texels from a buffer of the frame into a texture's mip.
     ///
@@ -667,10 +679,9 @@ extern "C"
     /// `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiCopyBufferToTexture(mrhiDevice* device, mrhiPassId pass,
-                                                               const mrhiBufferCopy* source,
-                                                               const mrhiTextureCopy* destination,
-                                                               const mrhiExtent3d* size);
+    MRHI_NODISCARD MRHI_API mrhiResult
+    mrhiPass_CopyBufferToTexture(mrhiDevice* device, mrhiPassId pass, const mrhiBufferCopy* source,
+                                 const mrhiTextureCopy* destination, const mrhiExtent3d* size);
 
     /// Copies texels from a texture's mip into a buffer of the frame.
     ///
@@ -691,10 +702,9 @@ extern "C"
     /// recording; `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiCopyTextureToBuffer(mrhiDevice* device, mrhiPassId pass,
-                                                               const mrhiTextureCopy* source,
-                                                               const mrhiBufferCopy* destination,
-                                                               const mrhiExtent3d* size);
+    MRHI_NODISCARD MRHI_API mrhiResult
+    mrhiPass_CopyTextureToBuffer(mrhiDevice* device, mrhiPassId pass, const mrhiTextureCopy* source,
+                                 const mrhiBufferCopy* destination, const mrhiExtent3d* size);
 
     /// Copies texels between textures of the frame, or between parts of one.
     ///
@@ -714,10 +724,10 @@ extern "C"
     /// full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiCopyTexture(mrhiDevice* device, mrhiPassId pass,
-                                                       const mrhiTextureCopy* source,
-                                                       const mrhiTextureCopy* destination,
-                                                       const mrhiExtent3d* size);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_CopyTexture(mrhiDevice* device, mrhiPassId pass,
+                                                            const mrhiTextureCopy* source,
+                                                            const mrhiTextureCopy* destination,
+                                                            const mrhiExtent3d* size);
 
     /// Uploads bytes into a buffer of the frame, copying them at the call.
     ///
@@ -738,9 +748,10 @@ extern "C"
     /// too.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiWriteBuffer(mrhiDevice* device, mrhiPassId pass,
-                                                       mrhiResourceId resource, uint64_t offset,
-                                                       const void* bytes, uint64_t size);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_WriteBuffer(mrhiDevice* device, mrhiPassId pass,
+                                                            mrhiResourceId resource,
+                                                            uint64_t offset, const void* bytes,
+                                                            uint64_t size);
 
     /// Uploads texels into a texture's mip, copying them at the call.
     ///
@@ -765,11 +776,11 @@ extern "C"
     /// which the frame's submission then refuses too.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiWriteTexture(mrhiDevice* device, mrhiPassId pass,
-                                                        const mrhiTextureCopy* destination,
-                                                        const void* bytes, size_t byteCount,
-                                                        const mrhiTexelLayout* layout,
-                                                        const mrhiExtent3d* size);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_WriteTexture(mrhiDevice* device, mrhiPassId pass,
+                                                             const mrhiTextureCopy* destination,
+                                                             const void* bytes, size_t byteCount,
+                                                             const mrhiTexelLayout* layout,
+                                                             const mrhiExtent3d* size);
 
     /// Reads bytes of a buffer of the frame back after the frame finishes.
     ///
@@ -791,9 +802,10 @@ extern "C"
     /// commands are.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId pass,
-                                                      mrhiResourceId resource, uint64_t offset,
-                                                      uint64_t size, mrhiRequestId* requestOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_ReadBuffer(mrhiDevice* device, mrhiPassId pass,
+                                                           mrhiResourceId resource, uint64_t offset,
+                                                           uint64_t size,
+                                                           mrhiRequestId* requestOut);
 
     /// Reads texels of a texture's mip back after the frame finishes, rows
     /// tightly packed.
@@ -816,19 +828,21 @@ extern "C"
     /// full, or the frame's commands are.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiReadTexture(mrhiDevice* device, mrhiPassId pass,
-                                                       const mrhiTextureCopy* source,
-                                                       const mrhiExtent3d* size,
-                                                       mrhiRequestId* requestOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_ReadTexture(mrhiDevice* device, mrhiPassId pass,
+                                                            const mrhiTextureCopy* source,
+                                                            const mrhiExtent3d* size,
+                                                            mrhiRequestId* requestOut);
 
     /// Copies an answered readback's bytes out and frees them; with no array,
     /// reports their size only.
     ///
     /// @param device    The device.
     /// @param request   The readback's request.
-    /// @param bytes     Where the bytes go, or NULL for the size only.
+    /// @param bytesOut  Where the bytes go, or NULL for the size only; zeros,
+    ///                  as many as capacity, on any failure.
     /// @param capacity  The bytes there.
-    /// @param sizeOut   The readback's bytes.
+    /// @param sizeOut   The readback's bytes; 0 on any failure but
+    ///                  `mrhi_errorCapacity`, which gives them.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device or size
     /// out, or an array NULL with a capacity; `mrhi_errorStale` for a request
     /// that is not a readback waiting to be taken; `mrhi_errorState` for a
@@ -837,9 +851,10 @@ extern "C"
     /// it; `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiTakeReadback(mrhiDevice* device, mrhiRequestId request,
-                                                        void* bytes, size_t capacity,
-                                                        size_t* sizeOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiRequest_TakeReadback(mrhiDevice* device,
+                                                                mrhiRequestId request,
+                                                                void* bytesOut, size_t capacity,
+                                                                size_t* sizeOut);
 
     /// Writes bytes of the root block later draws or dispatches read.
     ///
@@ -858,9 +873,9 @@ extern "C"
     /// commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetRootBlock(mrhiDevice* device, mrhiPassId pass,
-                                                        uint32_t offset, const void* bytes,
-                                                        size_t size);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetRootBlock(mrhiDevice* device, mrhiPassId pass,
+                                                             uint32_t offset, const void* bytes,
+                                                             size_t size);
 
     /// Sets where later draws land, in a pass with targets.
     ///
@@ -877,8 +892,8 @@ extern "C"
     /// adapter's, or when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetViewport(mrhiDevice* device, mrhiPassId pass,
-                                                       const mrhiViewport* viewport);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetViewport(mrhiDevice* device, mrhiPassId pass,
+                                                            const mrhiViewport* viewport);
 
     /// Sets the pixels later draws may write, in a pass with targets.
     ///
@@ -891,8 +906,8 @@ extern "C"
     /// recording; `mrhi_errorCapacity` when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetScissor(mrhiDevice* device, mrhiPassId pass,
-                                                      const mrhiScissorRect* rect);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetScissor(mrhiDevice* device, mrhiPassId pass,
+                                                           const mrhiScissorRect* rect);
 
     /// Sets the constant blend factors use, in a pass with targets.
     ///
@@ -906,8 +921,9 @@ extern "C"
     /// full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetBlendConstant(mrhiDevice* device, mrhiPassId pass,
-                                                            const mrhiColor* color);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetBlendConstant(mrhiDevice* device,
+                                                                 mrhiPassId pass,
+                                                                 const mrhiColor* color);
 
     /// Sets the reference stencil tests compare with, in a pass with targets.
     ///
@@ -920,8 +936,9 @@ extern "C"
     /// when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetStencilReference(mrhiDevice* device, mrhiPassId pass,
-                                                               uint32_t reference);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetStencilReference(mrhiDevice* device,
+                                                                    mrhiPassId pass,
+                                                                    uint32_t reference);
 
     /// Opens a named group of the pass's commands for debugging tools.
     ///
@@ -937,8 +954,9 @@ extern "C"
     /// commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiPushDebugGroup(mrhiDevice* device, mrhiPassId pass,
-                                                          const char* label, size_t labelLength);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_PushDebugGroup(mrhiDevice* device, mrhiPassId pass,
+                                                               const char* label,
+                                                               size_t labelLength);
 
     /// Closes the pass's innermost open debug group.
     ///
@@ -950,7 +968,7 @@ extern "C"
     /// when the frame's commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiPopDebugGroup(mrhiDevice* device, mrhiPassId pass);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_PopDebugGroup(mrhiDevice* device, mrhiPassId pass);
 
     /// Marks a point among the pass's commands for debugging tools.
     ///
@@ -966,8 +984,10 @@ extern "C"
     /// commands are full.
     /// @par Thread safety
     /// Safe from any thread; the pass is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiInsertDebugMarker(mrhiDevice* device, mrhiPassId pass,
-                                                             const char* label, size_t labelLength);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_InsertDebugMarker(mrhiDevice* device,
+                                                                  mrhiPassId pass,
+                                                                  const char* label,
+                                                                  size_t labelLength);
 
 #ifdef __cplusplus
 }

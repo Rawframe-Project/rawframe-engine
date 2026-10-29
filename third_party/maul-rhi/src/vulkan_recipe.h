@@ -5,7 +5,7 @@
 // compute, the floor's features and the granted ones, the swapchain
 // extensions offered, mutable descriptors for heterogeneous heaps, and the
 // def's own extensions (mrhiDeviceVulkanExtensions). The driver opens devices
-// from it, and mrhiDescribeVulkanDevice gives it to a program whose OpenXR
+// from it, and mrhiInstance_DescribeVulkanDevice gives it to a program whose OpenXR
 // runtime makes the device.
 
 #ifndef MAUL_RHI_SRC_VULKAN_RECIPE_H

@@ -239,7 +239,7 @@ static bool MarkWritten(mrhiDevice* device, const mrhiQuerySetSlot* set, uint32_
                                     memory_order_relaxed) != frame;
 }
 
-mrhiResult mrhiBeginOcclusionQuery(mrhiDevice* device, mrhiPassId id, uint32_t query)
+mrhiResult mrhiPass_BeginOcclusionQuery(mrhiDevice* device, mrhiPassId id, uint32_t query)
 {
     if (device == nullptr)
     {
@@ -275,7 +275,7 @@ mrhiResult mrhiBeginOcclusionQuery(mrhiDevice* device, mrhiPassId id, uint32_t q
     return mrhi_success;
 }
 
-mrhiResult mrhiEndOcclusionQuery(mrhiDevice* device, mrhiPassId id)
+mrhiResult mrhiPass_EndOcclusionQuery(mrhiDevice* device, mrhiPassId id)
 {
     if (device == nullptr)
     {
@@ -301,8 +301,8 @@ mrhiResult mrhiEndOcclusionQuery(mrhiDevice* device, mrhiPassId id)
     return mrhi_success;
 }
 
-mrhiResult mrhiBeginStatisticsQuery(mrhiDevice* device, mrhiPassId id, mrhiQuerySetId set,
-                                    uint32_t query)
+mrhiResult mrhiPass_BeginStatisticsQuery(mrhiDevice* device, mrhiPassId id, mrhiQuerySetId set,
+                                         uint32_t query)
 {
     if (device == nullptr)
     {
@@ -340,7 +340,7 @@ mrhiResult mrhiBeginStatisticsQuery(mrhiDevice* device, mrhiPassId id, mrhiQuery
     return mrhi_success;
 }
 
-mrhiResult mrhiEndStatisticsQuery(mrhiDevice* device, mrhiPassId id)
+mrhiResult mrhiPass_EndStatisticsQuery(mrhiDevice* device, mrhiPassId id)
 {
     if (device == nullptr)
     {
@@ -370,8 +370,9 @@ mrhiResult mrhiEndStatisticsQuery(mrhiDevice* device, mrhiPassId id)
     return mrhi_success;
 }
 
-mrhiResult mrhiResolveQueries(mrhiDevice* device, mrhiPassId id, mrhiQuerySetId set, uint32_t first,
-                              uint32_t count, mrhiResourceId resource, uint64_t offset)
+mrhiResult mrhiPass_ResolveQueries(mrhiDevice* device, mrhiPassId id, mrhiQuerySetId set,
+                                   uint32_t first, uint32_t count, mrhiResourceId resource,
+                                   uint64_t offset)
 {
     if (device == nullptr)
     {

@@ -52,9 +52,9 @@ extern "C"
         bool shaderInt64;
         // A first instance other than zero in indirect draws.
         bool indirectFirstInstance;
-        // Counted multi-draw indirect (mrhiDrawIndirectCount,
-        // mrhiDrawIndexedIndirectCount): up to a maximum of indirect draws, the
-        // number drawn written on the GPU.
+        // Counted multi-draw indirect (mrhiPass_DrawIndirectCount,
+        // mrhiPass_DrawIndexedIndirectCount): up to a maximum of indirect
+        // draws, the number drawn written on the GPU.
         bool multiDrawIndirectCount;
         // Rendering several views in one pass (mrhiPassDef's viewCount), each
         // into a layer of the targets.
@@ -331,9 +331,9 @@ extern "C"
     /// `mrhi_errorStale` for an adapter the instance no longer has.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetAdapterFeatures(mrhiInstance* instance,
-                                                              mrhiAdapterId adapter,
-                                                              mrhiFeatures* featuresOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiAdapter_GetFeatures(mrhiInstance* instance,
+                                                               mrhiAdapterId adapter,
+                                                               mrhiFeatures* featuresOut);
 
     /// Reads the limits an adapter can grant, each at least the floor.
     ///
@@ -344,9 +344,9 @@ extern "C"
     /// `mrhi_errorStale` for an adapter the instance no longer has.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetAdapterLimits(mrhiInstance* instance,
-                                                            mrhiAdapterId adapter,
-                                                            mrhiLimits* limitsOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiAdapter_GetLimits(mrhiInstance* instance,
+                                                             mrhiAdapterId adapter,
+                                                             mrhiLimits* limitsOut);
 
     /// Reads what a format can do on an adapter. A compressed format whose
     /// feature the adapter lacks can do nothing.
@@ -360,9 +360,10 @@ extern "C"
     /// instance no longer has.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetFormatCaps(mrhiInstance* instance,
-                                                         mrhiAdapterId adapter, mrhiFormat format,
-                                                         mrhiFormatCaps* capsOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiAdapter_GetFormatCaps(mrhiInstance* instance,
+                                                                 mrhiAdapterId adapter,
+                                                                 mrhiFormat format,
+                                                                 mrhiFormatCaps* capsOut);
 
 #ifdef __cplusplus
 }

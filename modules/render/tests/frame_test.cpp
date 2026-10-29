@@ -94,8 +94,8 @@ public:
 
     result::Status record(render::Frame& frame) override {
         log_.push_back(name_ + " records");
-        if (mrhiBeginPass(frame.device->native(), pass_) != mrhi_success ||
-            mrhiEndPass(frame.device->native(), pass_) != mrhi_success) {
+        if (mrhiPass_Begin(frame.device->native(), pass_) != mrhi_success ||
+            mrhiPass_End(frame.device->native(), pass_) != mrhi_success) {
             return std::unexpected<result::Error>{result::fail(result::ErrorClass::Unavailable,
                                                                render::kRenderDomain,
                                                                render::code(render::RenderError::Device),

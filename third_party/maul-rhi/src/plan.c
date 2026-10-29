@@ -10,6 +10,7 @@
 
 #include "device_core.h"
 #include "invariant.h"
+#include "outputs.h"
 
 #include "generated/out_copies.h"
 
@@ -920,8 +921,8 @@ void mrhiApplyFinalStates(mrhiDevice* device)
     }
 }
 
-mrhiResult mrhiGetFrameBarriers(mrhiDevice* device, mrhiBarrier* barriers, size_t capacity,
-                                size_t* countOut)
+static mrhiResult ListBarriers(mrhiDevice* device, mrhiBarrier* barriers, size_t capacity,
+                               size_t* countOut)
 {
     if (device == nullptr)
     {
@@ -944,8 +945,15 @@ mrhiResult mrhiGetFrameBarriers(mrhiDevice* device, mrhiBarrier* barriers, size_
     return mrhi_success;
 }
 
-mrhiResult mrhiGetResourcePlan(mrhiDevice* device, mrhiResourceId resource,
-                               mrhiResourcePlan* planOut)
+mrhiResult mrhiDevice_GetFrameBarriers(mrhiDevice* device, mrhiBarrier* barriersOut,
+                                       size_t capacity, size_t* countOut)
+{
+    return mrhiClearFailed(ListBarriers(device, barriersOut, capacity, countOut), barriersOut,
+                           capacity * sizeof(mrhiBarrier), countOut);
+}
+
+mrhiResult mrhiResource_GetPlan(mrhiDevice* device, mrhiResourceId resource,
+                                mrhiResourcePlan* planOut)
 {
     if (device == nullptr)
     {

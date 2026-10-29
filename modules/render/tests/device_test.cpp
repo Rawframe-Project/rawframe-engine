@@ -71,7 +71,7 @@ RAWFRAME_TEST(ADeviceClearsATargetAndReadsItBack) {
 
     constexpr std::uint32_t kSide = 8;
     const mrhiFrameDef kFrame = mrhiDefaultFrameDef();
-    RAWFRAME_EXPECT(mrhiBeginFrame(device, &kFrame) == mrhi_success);
+    RAWFRAME_EXPECT(mrhiDevice_BeginFrame(device, &kFrame) == mrhi_success);
     mrhiTextureDef targetDef = mrhiDefaultTextureDef();
     targetDef.format = mrhi_formatRgba8Unorm;
     targetDef.width = kSide;
@@ -96,18 +96,18 @@ RAWFRAME_TEST(ADeviceClearsATargetAndReadsItBack) {
     readDef.neverCull = true;
     mrhiPassId reading{};
     RAWFRAME_EXPECT(mrhiAddPass(device, &readDef, &reading) == mrhi_success);
-    RAWFRAME_EXPECT(mrhiCompileFrame(device) == mrhi_success);
-    RAWFRAME_EXPECT(mrhiBeginPass(device, clearing) == mrhi_success && mrhiEndPass(device, clearing) == mrhi_success);
+    RAWFRAME_EXPECT(mrhiDevice_CompileFrame(device) == mrhi_success);
+    RAWFRAME_EXPECT(mrhiPass_Begin(device, clearing) == mrhi_success && mrhiPass_End(device, clearing) == mrhi_success);
     mrhiTextureCopy source{};
     source.resource = target;
     const mrhiExtent3d kExtent{.width = kSide, .height = kSide, .depthOrLayers = 1};
     mrhiRequestId pixels{};
-    RAWFRAME_EXPECT(mrhiBeginPass(device, reading) == mrhi_success &&
-                    mrhiReadTexture(device, reading, &source, &kExtent, &pixels) == mrhi_success &&
-                    mrhiEndPass(device, reading) == mrhi_success);
+    RAWFRAME_EXPECT(mrhiPass_Begin(device, reading) == mrhi_success &&
+                    mrhiPass_ReadTexture(device, reading, &source, &kExtent, &pixels) == mrhi_success &&
+                    mrhiPass_End(device, reading) == mrhi_success);
     mrhiRequestId token{};
-    RAWFRAME_EXPECT(mrhiSubmitFrame(device, &token) == mrhi_success);
-    RAWFRAME_EXPECT(mrhiWaitFrame(device, token, 10'000'000'000ULL) == mrhi_success);
+    RAWFRAME_EXPECT(mrhiDevice_SubmitFrame(device, &token) == mrhi_success);
+    RAWFRAME_EXPECT(mrhiRequest_WaitFrame(device, token, 10'000'000'000ULL) == mrhi_success);
     // The readback is answered through the device's queue, taken by the
     // one that asked; the frame's own answer waits for its asker.
     kDevice->pump();
@@ -118,7 +118,7 @@ RAWFRAME_TEST(ADeviceClearsATargetAndReadsItBack) {
     RAWFRAME_EXPECT(kDone.has_value() && kDone->has_value() && !kDevice->lost());
     std::array<std::uint8_t, std::size_t{kSide} * kSide * 4> image{};
     std::size_t taken = 0;
-    RAWFRAME_EXPECT(mrhiTakeReadback(device, pixels, image.data(), image.size(), &taken) == mrhi_success &&
+    RAWFRAME_EXPECT(mrhiRequest_TakeReadback(device, pixels, image.data(), image.size(), &taken) == mrhi_success &&
                     taken == image.size());
     // A quarter, a half, and all of blue, opaque: 64, 128, 255, 255, give
     // or take the rounding of a quarter.

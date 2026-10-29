@@ -800,7 +800,7 @@ void mrhiEndConfigurations(mrhiDevice* device);
 void mrhiDestroyShaders(mrhiDevice* device);
 
 // Checks the pipeline cache a def gives and hands its blob to the
-// driver: what became of it, for mrhiGetPipelineCacheOutcome.
+// driver: what became of it, for mrhiDevice_GetPipelineCacheOutcome.
 mrhiResult mrhiImportPipelineCache(mrhiDevice* device, const void* bytes, size_t size);
 
 // Destroys every pipeline the device holds, answering none.

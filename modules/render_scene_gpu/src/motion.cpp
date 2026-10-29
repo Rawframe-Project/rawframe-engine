@@ -109,8 +109,8 @@ result::Status MotionBlurPass::addPasses(mrhiResourceId shown, mrhiResourceId mo
 
 result::Status MotionBlurPass::write(mrhiPassId upload) {
     if (mrhiResult outcome = mrhi_success;
-        enabled_ &&
-        (outcome = mrhiWriteBuffer(native_, upload, blockResource_, 0, &block_, sizeof(MotionBlock))) != mrhi_success) {
+        enabled_ && (outcome = mrhiPass_WriteBuffer(
+                         native_, upload, blockResource_, 0, &block_, sizeof(MotionBlock))) != mrhi_success) {
         return failed("the motion blur's settings could not be written", outcome);
     }
     return {};
@@ -130,11 +130,11 @@ result::Status MotionBlurPass::record(const Pipelines& pipelines) {
                                                       textureAt(3, kFound),
                                                       bufferAt(4, blockResource_, sizeof(MotionBlock))};
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiBeginPass(native_, kPass)) != mrhi_success ||
-            (outcome = mrhiSetGraphicsPipeline(native_, kPass, kPipeline)) != mrhi_success ||
-            (outcome = mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
-            (outcome = mrhiDraw(native_, kPass, 3, 1, 0, 0)) != mrhi_success ||
-            (outcome = mrhiEndPass(native_, kPass)) != mrhi_success) {
+            (outcome = mrhiPass_Begin(native_, kPass)) != mrhi_success ||
+            (outcome = mrhiPass_SetGraphicsPipeline(native_, kPass, kPipeline)) != mrhi_success ||
+            (outcome = mrhiPass_SetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+            (outcome = mrhiPass_Draw(native_, kPass, 3, 1, 0, 0)) != mrhi_success ||
+            (outcome = mrhiPass_End(native_, kPass)) != mrhi_success) {
             return failed("the motion blur could not be drawn", outcome);
         }
     }

@@ -8,7 +8,7 @@
 
 #include "maul-rhi/base.h"
 
-const char* mrhiResultName(mrhiResult result)
+const char* mrhiGetResultName(mrhiResult result)
 {
     switch (result)
     {

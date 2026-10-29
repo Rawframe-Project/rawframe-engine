@@ -137,11 +137,11 @@ result::Status DeviceSkinning::write(mrhiPassId upload) const {
         return {};
     }
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiWriteBuffer(native_, upload, paletteResource_, 0, palette_.data(), palette_.size() * 4)) !=
+        (outcome = mrhiPass_WriteBuffer(native_, upload, paletteResource_, 0, palette_.data(), palette_.size() * 4)) !=
             mrhi_success ||
-        (outcome = mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blocks_.size() * 4)) !=
+        (outcome = mrhiPass_WriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blocks_.size() * 4)) !=
             mrhi_success ||
-        (outcome = mrhiWriteBuffer(native_, upload, tableResource_, 0, table_.data(), table_.size() * 4)) !=
+        (outcome = mrhiPass_WriteBuffer(native_, upload, tableResource_, 0, table_.data(), table_.size() * 4)) !=
             mrhi_success) {
         return failed("the skinned models could not be written", outcome);
     }
@@ -153,8 +153,8 @@ result::Status DeviceSkinning::record(const Pipelines& pipelines, const DeviceMe
         return {};
     }
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiBeginPass(native_, pass_)) != mrhi_success ||
-        (outcome = mrhiSetComputePipeline(native_, pass_, pipelines.skin.compute)) != mrhi_success) {
+        (outcome = mrhiPass_Begin(native_, pass_)) != mrhi_success ||
+        (outcome = mrhiPass_SetComputePipeline(native_, pass_, pipelines.skin.compute)) != mrhi_success) {
         return failed("the skinning pass could not be recorded", outcome);
     }
     // A mesh bound once and dispatched once, a row of workgroups a palette.
@@ -171,14 +171,14 @@ result::Status DeviceSkinning::record(const Pipelines& pipelines, const DeviceMe
                                                       block,
                                                       bufferAt(5, tableResource_, table_.size() * 4)};
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiSetBindings(native_, pass_, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
-            (outcome = mrhiDispatch(
+            (outcome = mrhiPass_SetBindings(native_, pass_, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
+            (outcome = mrhiPass_Dispatch(
                  native_, pass_, static_cast<std::uint32_t>((kVertices + kGroup - 1) / kGroup), kMeshed.jobs, 1)) !=
                 mrhi_success) {
             return failed("the skinning pass could not be recorded", outcome);
         }
     }
-    if (const mrhiResult kOutcome = mrhiEndPass(native_, pass_); kOutcome != mrhi_success) {
+    if (const mrhiResult kOutcome = mrhiPass_End(native_, pass_); kOutcome != mrhi_success) {
         return failed("the skinning pass could not be recorded", kOutcome);
     }
     return {};

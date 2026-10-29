@@ -28,7 +28,7 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
     return std::unexpected<result::Error>{
         result::fail(result::ErrorClass::Unavailable, render::kRenderDomain, code(render::RenderError::Device), why)
             .error()
-            .withContext("outcome", std::string{mrhiResultName(outcome)})};
+            .withContext("outcome", std::string{mrhiGetResultName(outcome)})};
 }
 
 mrhiResourceId resourceOf(std::uint64_t key) noexcept {
@@ -634,31 +634,32 @@ struct UiRenderer::State {
             return {};
         }
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiBeginPass(native, upload)) != mrhi_success ||
-            (outcome = mrhiWriteBuffer(native, upload, viewResource, 0, view.data(), sizeof(view))) != mrhi_success ||
-            (outcome = mrhiWriteBuffer(
-                 native, upload, boxesResource, 0, blocks.data(), blocks.size() * sizeof(float))) != mrhi_success ||
-            (outcome = mrhiWriteBuffer(native, upload, clipsResource, 0, clips.data(), clips.size() * sizeof(float))) !=
+            (outcome = mrhiPass_Begin(native, upload)) != mrhi_success ||
+            (outcome = mrhiPass_WriteBuffer(native, upload, viewResource, 0, view.data(), sizeof(view))) !=
                 mrhi_success ||
-            (outcome = mrhiWriteBuffer(
+            (outcome = mrhiPass_WriteBuffer(
+                 native, upload, boxesResource, 0, blocks.data(), blocks.size() * sizeof(float))) != mrhi_success ||
+            (outcome = mrhiPass_WriteBuffer(
+                 native, upload, clipsResource, 0, clips.data(), clips.size() * sizeof(float))) != mrhi_success ||
+            (outcome = mrhiPass_WriteBuffer(
                  native, upload, imagesResource, 0, imageBlocks.data(), imageBlocks.size() * sizeof(float))) !=
                 mrhi_success ||
-            (outcome = mrhiWriteBuffer(
+            (outcome = mrhiPass_WriteBuffer(
                  native, upload, shadowsResource, 0, shadowBlocks.data(), shadowBlocks.size() * sizeof(float))) !=
                 mrhi_success ||
-            (outcome = mrhiWriteBuffer(
+            (outcome = mrhiPass_WriteBuffer(
                  native, upload, gradientsResource, 0, gradients.data(), gradients.size() * sizeof(float))) !=
                 mrhi_success ||
-            (outcome = mrhiWriteBuffer(
+            (outcome = mrhiPass_WriteBuffer(
                  native, upload, glyphsResource, 0, glyphBlocks.data(), glyphBlocks.size() * sizeof(float))) !=
                 mrhi_success) {
             return failed("the UI's boxes could not be written", outcome);
         }
         RAWFRAME_TRY(held->write(render::requestKey(upload.index1, upload.generation)));
-        if (const mrhiResult kOutcome = mrhiEndPass(native, upload); kOutcome != mrhi_success) {
+        if (const mrhiResult kOutcome = mrhiPass_End(native, upload); kOutcome != mrhi_success) {
             return failed("the UI's boxes could not be written", kOutcome);
         }
-        if (const mrhiResult kOutcome = mrhiBeginPass(native, drawing); kOutcome != mrhi_success) {
+        if (const mrhiResult kOutcome = mrhiPass_Begin(native, drawing); kOutcome != mrhi_success) {
             return failed("the UI could not be drawn", kOutcome);
         }
         // In paint order: each run of boxes, and each of shadows, one
@@ -692,11 +693,11 @@ struct UiRenderer::State {
                     const auto kDraw = [&](std::size_t pipeline, const std::array<mrhiBinding, 9>& kBindings) {
                         mrhiResult outcome = mrhi_success;
                         static_cast<void>(
-                            (outcome = mrhiSetGraphicsPipeline(native, drawing, pipelines.at(pipeline))) !=
+                            (outcome = mrhiPass_SetGraphicsPipeline(native, drawing, pipelines.at(pipeline))) !=
                                 mrhi_success ||
-                            (outcome = mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
+                            (outcome = mrhiPass_SetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
                                 mrhi_success ||
-                            (outcome = mrhiDraw(native, drawing, 6, kRun.count, 0, kRun.first)) != mrhi_success);
+                            (outcome = mrhiPass_Draw(native, drawing, 6, kRun.count, 0, kRun.first)) != mrhi_success);
                         return outcome;
                     };
                     if (mrhiResult outcome = mrhi_success;
@@ -724,10 +725,11 @@ struct UiRenderer::State {
                 const std::array<mrhiBinding, 9> kBindings = bindings(0);
                 const bool kBoxes = kCommand.kind == ui::DrawCommand::Kind::Box;
                 if (mrhiResult outcome = mrhi_success;
-                    (outcome = mrhiSetGraphicsPipeline(native, drawing, pipelines[kBoxes ? 0 : 2])) != mrhi_success ||
-                    (outcome = mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
+                    (outcome = mrhiPass_SetGraphicsPipeline(native, drawing, pipelines[kBoxes ? 0 : 2])) !=
                         mrhi_success ||
-                    (outcome = mrhiDraw(native, drawing, 6, kCount, 0, kCommand.index)) != mrhi_success) {
+                    (outcome = mrhiPass_SetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
+                        mrhi_success ||
+                    (outcome = mrhiPass_Draw(native, drawing, 6, kCount, 0, kCommand.index)) != mrhi_success) {
                     return failed("the UI's boxes could not be drawn", outcome);
                 }
                 (kBoxes ? boxes : statistics.shadows) += kCount;
@@ -738,16 +740,16 @@ struct UiRenderer::State {
             if (kTexture != 0) {
                 const std::array<mrhiBinding, 9> kBindings = bindings(kTexture);
                 if (mrhiResult outcome = mrhi_success;
-                    (outcome = mrhiSetGraphicsPipeline(native, drawing, pipelines[1])) != mrhi_success ||
-                    (outcome = mrhiSetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
+                    (outcome = mrhiPass_SetGraphicsPipeline(native, drawing, pipelines[1])) != mrhi_success ||
+                    (outcome = mrhiPass_SetBindings(native, drawing, 0, kBindings.data(), kBindings.size())) !=
                         mrhi_success ||
-                    (outcome = mrhiDraw(native, drawing, 6, 1, 0, kCommand.index)) != mrhi_success) {
+                    (outcome = mrhiPass_Draw(native, drawing, 6, 1, 0, kCommand.index)) != mrhi_success) {
                     return failed("a UI image could not be drawn", outcome);
                 }
             }
             ++at;
         }
-        if (const mrhiResult kOutcome = mrhiEndPass(native, drawing); kOutcome != mrhi_success) {
+        if (const mrhiResult kOutcome = mrhiPass_End(native, drawing); kOutcome != mrhi_success) {
             return failed("the UI could not be drawn", kOutcome);
         }
         ++statistics.frames;
