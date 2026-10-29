@@ -612,40 +612,40 @@ static void Settle(Network* n)
     n->ramp = false;
 }
 
-maudResult maudReverb_Process(maudReverb* reverb, const maudReverbParams* params, const float* in,
-                              float* const* bed, uint32_t frames)
+maudResult maudReverb_Process(maudReverb* reverb, const maudReverbParams* params,
+                              const float* samples, float* const* bed, uint32_t frameCount)
 {
     if (reverb == nullptr || params == nullptr || !ParamsValid(reverb, params) ||
-        (frames > 0 && (in == nullptr || bed == nullptr || bed[0] == nullptr || bed[1] == nullptr ||
-                        bed[2] == nullptr || bed[3] == nullptr)))
+        (frameCount > 0 && (samples == nullptr || bed == nullptr || bed[0] == nullptr ||
+                            bed[1] == nullptr || bed[2] == nullptr || bed[3] == nullptr)))
     {
         return maud_errorInvalid;
     }
-    if (frames == 0)
+    if (frameCount == 0)
     {
         return maud_success;
     }
     Network* first = &reverb->networks[0];
     Network* tail = &reverb->networks[1];
     Retarget(reverb, first, params->reverbTime, params->level);
-    bool tailed = RetargetTail(reverb, params, frames);
+    bool tailed = RetargetTail(reverb, params, frameCount);
     uint32_t delay = (uint32_t)lround((double)params->delay * reverb->rate);
     float x[CHUNK];
     float y[CHUNK];
-    for (uint32_t done = 0; done < frames; done += CHUNK)
+    for (uint32_t done = 0; done < frameCount; done += CHUNK)
     {
-        uint32_t count = frames - done < CHUNK ? frames - done : CHUNK;
-        Delay(reverb, in + done, delay, count, x);
+        uint32_t count = frameCount - done < CHUNK ? frameCount - done : CHUNK;
+        Delay(reverb, samples + done, delay, count, x);
         if (tailed)
         {
             memcpy(y, x, count * sizeof(float));
         }
-        Level(first, done, count, frames, x);
-        Render(first, x, bed, done, count, frames);
+        Level(first, done, count, frameCount, x);
+        Render(first, x, bed, done, count, frameCount);
         if (tailed)
         {
-            Level(tail, done, count, frames, y);
-            Render(tail, y, bed, done, count, frames);
+            Level(tail, done, count, frameCount, y);
+            Render(tail, y, bed, done, count, frameCount);
         }
     }
     Settle(first);

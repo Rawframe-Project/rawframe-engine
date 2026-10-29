@@ -103,11 +103,11 @@ extern "C"
     } maudRay;
 
     // Answers whether each of count rays hits anything within its
-    // distances, writing 1 or 0 to occluded[i]. A ray's answer must
+    // distances, writing 1 or 0 to occludedOut[i]. A ray's answer must
     // depend only on the ray and the host's geometry. Called from inside
     // a step, on its thread or on the host's tasks, never on the audio
     // thread, with at most 64 rays at a time.
-    typedef void maudAnyHitFunction(const maudRay* rays, uint32_t count, uint8_t* occluded,
+    typedef void maudAnyHitFunction(const maudRay* rays, uint32_t count, uint8_t* occludedOut,
                                     void* context);
 
     // A surface's acoustic properties per band, each 0 to 1.
@@ -133,9 +133,9 @@ extern "C"
         uint32_t material;
     } maudRayHit;
 
-    // Finds each of count rays' nearest hit, writing hits[i]; as
+    // Finds each of count rays' nearest hit, writing hitsOut[i]; as
     // maudAnyHitFunction, an answer depends only on the ray and the geometry.
-    typedef void maudClosestHitFunction(const maudRay* rays, uint32_t count, maudRayHit* hits,
+    typedef void maudClosestHitFunction(const maudRay* rays, uint32_t count, maudRayHit* hitsOut,
                                         void* context);
 
     // The task hooks: enqueueTask has the host run task over [0,
@@ -570,10 +570,10 @@ extern "C"
     /// @param spatializer  The spatializer.
     /// @param orientation  The listener's orientation at the call's end;
     ///                     the bed turns linearly from the last call's.
-    /// @param send         frames samples.
-    /// @param bed          (order + 1)^2 channels of frames samples, added
+    /// @param send         frameCount samples.
+    /// @param bed          (order + 1)^2 channels of frameCount samples, added
     ///                     to.
-    /// @param frames       The frames; 0 does nothing.
+    /// @param frameCount   The frames; 0 does nothing.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or
     ///         an orientation of zero length or not finite;
     ///         `maud_errorUnsupported` when the def asked for no reflections.
@@ -582,7 +582,7 @@ extern "C"
     /// used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudSpatializer_RenderReflections(
         maudSpatializer* spatializer, const maudQuaternion* orientation, const float* send,
-        float* const* bed, uint32_t frames);
+        float* const* bed, uint32_t frameCount);
 
     /// Reads the reverberation estimate the latched step published.
     ///
@@ -730,22 +730,24 @@ extern "C"
     ///
     /// @param spatializer  The spatializer.
     /// @param set          The set.
-    /// @param bytes        Receives the file, or NULL to ask its size.
-    /// @param capacity     The bytes bytes holds.
+    /// @param bytesOut     Receives the file, or NULL to ask its size. On
+    ///                     any failure its capacity bytes are zeros.
+    /// @param capacity     The bytes bytesOut holds.
     /// @param sizeOut      Receives the file's size, also when capacity is
     ///                     short of it; 0 on other failures.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer
     ///         or size, or a 0 or unknown id; `maud_errorStale` for a
     ///         destroyed set's id; `maud_errorCapacity` when capacity is
-    ///         short of the size (nothing written), a part of the file
-    ///         would pass the 4 GiB a field holds (the energy fields of
-    ///         about 55,800 probes at order 3 and 401 bins), or the size
-    ///         does not fit in size_t.
+    ///         short of the size, a part of the file would pass the 4 GiB
+    ///         a field holds (the energy fields of about 55,800 probes at
+    ///         order 3 and 401 bins), or the size does not fit in size_t.
+    ///         On failure bytesOut, unless NULL, is zeroed over capacity
+    ///         bytes, so it never holds an earlier save.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
     MAUD_NODISCARD MAUD_API maudResult maudProbeSet_Save(const maudSpatializer* spatializer,
-                                                         maudProbeSetId set, void* bytes,
+                                                         maudProbeSetId set, void* bytesOut,
                                                          size_t capacity, size_t* sizeOut);
 
     /// Loads a probe set from a `.maudbake` file, treated as hostile:

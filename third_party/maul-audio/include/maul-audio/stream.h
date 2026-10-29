@@ -409,16 +409,16 @@ extern "C"
 
     /// Reports how many frames a stream has moved to or from its device.
     ///
-    /// @param context    The context.
-    /// @param stream     The stream.
-    /// @param framesOut  Receives the frame count; 0 on failure.
+    /// @param context      The context.
+    /// @param stream       The stream.
+    /// @param positionOut  Receives the frame count; 0 on failure.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL pointer.
     /// @par Thread safety
     /// Safe from any thread.
     MAUD_NODISCARD MAUD_API maudResult maudStream_GetPosition(const maudContext* context,
                                                               maudStreamId stream,
-                                                              uint64_t* framesOut);
+                                                              uint64_t* positionOut);
 
     // Where a stream's frames meet the host clock, as the platform last
     // reported it.

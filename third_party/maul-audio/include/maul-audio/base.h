@@ -22,7 +22,7 @@ extern "C"
 #define MAUD_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MAUD_VERSION_MINOR 3
+#define MAUD_VERSION_MINOR 4
 // x-release-please-end
 // x-release-please-start-patch
 #define MAUD_VERSION_PATCH 0

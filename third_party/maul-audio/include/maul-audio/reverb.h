@@ -122,11 +122,11 @@ extern "C"
     /// filters then takes some tens of microseconds on the calling
     /// thread, bounded and without allocation.
     ///
-    /// @param reverb  The reverb.
-    /// @param params  This call's params.
-    /// @param in      frames samples of the send.
-    /// @param bed     Four channels of frames samples, added to.
-    /// @param frames  The frames; 0 does nothing.
+    /// @param reverb      The reverb.
+    /// @param params      This call's params.
+    /// @param samples     frameCount samples of the send.
+    /// @param bed         Four channels of frameCount samples, added to.
+    /// @param frameCount  The frames; 0 does nothing.
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer or
     ///         a time, level or delay out of range or not finite (a tail's
     ///         too); nothing is written then.
@@ -134,8 +134,8 @@ extern "C"
     /// Safe from any thread; the reverb is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudReverb_Process(maudReverb* reverb,
                                                           const maudReverbParams* params,
-                                                          const float* in, float* const* bed,
-                                                          uint32_t frames);
+                                                          const float* samples, float* const* bed,
+                                                          uint32_t frameCount);
 
     /// Silences a reverb's tail.
     ///

@@ -153,13 +153,13 @@ extern "C"
     /// hits when a triangle lies within [minDistance, maxDistance] along
     /// it. A ray through an edge or vertex shared by triangles hits.
     ///
-    /// @param rays      count rays.
-    /// @param count     The rays.
-    /// @param occluded  Receives 1 or 0 per ray.
-    /// @param scene     The scene.
+    /// @param rays         count rays.
+    /// @param count        The rays.
+    /// @param occludedOut  Receives 1 or 0 per ray.
+    /// @param scene        The scene.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API void maudFindAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded,
+    MAUD_API void maudFindAnyHit(const maudRay* rays, uint32_t count, uint8_t* occludedOut,
                                  void* scene);
 
     /// Answers closest-hit queries against a scene (a maudClosestHitFunction):
@@ -168,13 +168,13 @@ extern "C"
     /// triangles); its unit normal faces the side the triangle is wound
     /// counterclockwise from. A miss has distance INFINITY.
     ///
-    /// @param rays   count rays.
-    /// @param count  The rays.
-    /// @param hits   Receives a hit per ray.
-    /// @param scene  The scene.
+    /// @param rays     count rays.
+    /// @param count    The rays.
+    /// @param hitsOut  Receives a hit per ray.
+    /// @param scene    The scene.
     /// @par Thread safety
     /// Safe from any thread.
-    MAUD_API void maudFindClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits,
+    MAUD_API void maudFindClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hitsOut,
                                      void* scene);
 
     /// Makes an instance of one of the scene's instancing meshes. It is

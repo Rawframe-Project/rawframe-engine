@@ -369,8 +369,21 @@ static bool ParamsValid(const maudBinauralParams* params)
            isfinite(params->position.z) && isfinite(params->gain);
 }
 
-maudResult maudBinaural_Process(maudBinaural* effect, const maudBinauralParams* params,
-                                const float* in, float* const out[2], uint32_t frames)
+// Writes silence over each channel a caller gave, for a failed call: at
+// most what a successful call would have written.
+static void Silence(float* const* channels, uint32_t count, uint32_t frames)
+{
+    for (uint32_t c = 0; channels != nullptr && c < count; ++c)
+    {
+        if (channels[c] != nullptr)
+        {
+            memset(channels[c], 0, (size_t)frames * sizeof(float));
+        }
+    }
+}
+
+static maudResult Run(maudBinaural* effect, const maudBinauralParams* params, const float* in,
+                      float* const out[2], uint32_t frames)
 {
     if (effect == nullptr || params == nullptr || out == nullptr || !ParamsValid(params) ||
         (frames > 0 && (in == nullptr || out[0] == nullptr || out[1] == nullptr)))
@@ -415,4 +428,17 @@ maudResult maudBinaural_Process(maudBinaural* effect, const maudBinauralParams* 
                 ((size_t)effect->taps - 1) * sizeof(float));
     }
     return maud_success;
+}
+
+maudResult maudBinaural_Process(maudBinaural* effect, const maudBinauralParams* params,
+                                const float* samples, float* const samplesOut[2],
+                                uint32_t frameCount)
+{
+    maudResult result = Run(effect, params, samples, samplesOut, frameCount);
+    if (result != maud_success)
+    {
+        uint32_t most = effect != nullptr ? effect->maxFrames : MAUD_MAX_BINAURAL_FRAMES;
+        Silence(samplesOut, 2, frameCount < most ? frameCount : most);
+    }
+    return result;
 }

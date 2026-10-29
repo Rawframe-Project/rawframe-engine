@@ -272,10 +272,10 @@ static MAUD_NOINLINE void AnyHit(const maudRay* rays, uint32_t count, uint8_t* o
 
 // The queries enter too: a host may call them from its own threads, and
 // inside the spatializer's tasks entering costs two reads of the register.
-void maudFindAnyHit(const maudRay* rays, uint32_t count, uint8_t* occluded, void* scene)
+void maudFindAnyHit(const maudRay* rays, uint32_t count, uint8_t* occludedOut, void* scene)
 {
     uint64_t token = maudFloatEnvEnter();
-    AnyHit(rays, count, occluded, scene);
+    AnyHit(rays, count, occludedOut, scene);
     maudFloatEnvLeave(token);
 }
 
@@ -326,9 +326,9 @@ static MAUD_NOINLINE void ClosestHit(const maudRay* rays, uint32_t count, maudRa
     }
 }
 
-void maudFindClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hits, void* scene)
+void maudFindClosestHit(const maudRay* rays, uint32_t count, maudRayHit* hitsOut, void* scene)
 {
     uint64_t token = maudFloatEnvEnter();
-    ClosestHit(rays, count, hits, scene);
+    ClosestHit(rays, count, hitsOut, scene);
     maudFloatEnvLeave(token);
 }

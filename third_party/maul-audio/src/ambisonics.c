@@ -75,14 +75,14 @@ static inline void AddRamped(float* out, const float* in, float a, float step, u
 }
 
 maudResult maudEncodeAmbisonic(uint32_t order, const maudPanSource* from, const maudPanSource* to,
-                               const float* in, float* const* bed, uint32_t frames)
+                               const float* samples, float* const* bed, uint32_t frameCount)
 {
     if (order > MAUD_MAX_AMBISONIC_ORDER)
     {
         return maud_errorLimit;
     }
     uint32_t channels = maudGetAmbisonicChannelCount(order);
-    if (channels == 0 || !SourceValid(from) || !SourceValid(to) || in == nullptr ||
+    if (channels == 0 || !SourceValid(from) || !SourceValid(to) || samples == nullptr ||
         !BedValid(bed, channels))
     {
         return maud_errorInvalid;
@@ -99,14 +99,14 @@ maudResult maudEncodeAmbisonic(uint32_t order, const maudPanSource* from, const 
     for (uint32_t c = 0; c < channels; ++c)
     {
         float a = start[c] * from->gain;
-        float step = frames > 0 ? (end[c] * to->gain - a) / (float)frames : 0.0f;
-        if (maudRampSigned(frames))
+        float step = frameCount > 0 ? (end[c] * to->gain - a) / (float)frameCount : 0.0f;
+        if (maudRampSigned(frameCount))
         {
-            AddRamped(bed[c], in, a, step, frames, true);
+            AddRamped(bed[c], samples, a, step, frameCount, true);
         }
         else
         {
-            AddRamped(bed[c], in, a, step, frames, false);
+            AddRamped(bed[c], samples, a, step, frameCount, false);
         }
     }
     return maud_success;
@@ -180,7 +180,7 @@ static void RotateFrame(uint32_t order, const float* a, const float* b, float t,
     }
 }
 
-maudResult maudRotateAmbisonic(float* const* bed, uint32_t frames, uint32_t order,
+maudResult maudRotateAmbisonic(float* const* bed, uint32_t frameCount, uint32_t order,
                                const maudQuaternion* from, const maudQuaternion* to)
 {
     if (order > MAUD_MAX_AMBISONIC_ORDER)
@@ -201,13 +201,13 @@ maudResult maudRotateAmbisonic(float* const* bed, uint32_t frames, uint32_t orde
     maudAmbisonicRotation(order, end, b);
     bool still = from->x == to->x && from->y == to->y && from->z == to->z && from->w == to->w;
     float frame[MAUD_MAX_AMBISONIC_CHANNELS];
-    for (uint32_t n = 0; n < frames; ++n)
+    for (uint32_t n = 0; n < frameCount; ++n)
     {
         for (uint32_t c = 0; c < channels; ++c)
         {
             frame[c] = bed[c][n];
         }
-        RotateFrame(order, still ? b : a, still ? nullptr : b, (float)(n + 1) / (float)frames,
+        RotateFrame(order, still ? b : a, still ? nullptr : b, (float)(n + 1) / (float)frameCount,
                     frame);
         for (uint32_t c = 1; c < channels; ++c)
         {
