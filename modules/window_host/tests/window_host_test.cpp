@@ -48,6 +48,8 @@ struct Counted final : window::Program {
     }
 };
 
+// A shipping build refuses `host.drawing_ms`, which every use sets.
+#if !RAWFRAME_SHIPPING
 /// The frames a client of `text`'s configuration took to end.
 std::optional<int> framesOf(std::string_view text, std::chrono::milliseconds late) {
     auto configuration = composition::Configuration::parse(text);
@@ -63,6 +65,7 @@ std::optional<int> framesOf(std::string_view text, std::chrono::milliseconds lat
     RAWFRAME_EXPECT(player.exit() == std::optional{host::HostExit::Stopped});
     return counted.frames;
 }
+#endif
 
 } // namespace
 
