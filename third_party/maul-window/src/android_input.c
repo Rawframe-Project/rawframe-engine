@@ -289,7 +289,7 @@ static void PostText(mwinAndroidPlatform* platform, uint32_t typed, uint64_t tim
 {
     char bytes[4];
     size_t size = 0;
-    if (muniEncodeUtf8(typed, bytes, &size) != muni_success)
+    if (muniEncodeUtf8(typed, bytes, sizeof(bytes), &size) != muni_success)
     {
         return;
     }

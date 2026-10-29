@@ -12,6 +12,7 @@ set(MWIN_WIN32_SOURCES
     src/win32_accessibility.c
     src/win32_icon.c
     src/win32_ime.c
+    src/win32_scope.c
     src/win32_touch_keyboard.c
     src/win32_message_box.c
     src/win32_occlusion.c
@@ -24,7 +25,7 @@ set(MWIN_WIN32_SOURCES
 # Windows.Gaming.Input and XInput are loaded at run time: the gamepads
 # need no library to link.
 if(MAUL_WINDOW_GAMEPAD)
-    list(APPEND MWIN_WIN32_SOURCES src/win32_pad.c src/win32_hid.c src/win32_wgi.c
+    list(APPEND MWIN_WIN32_SOURCES src/win32_pad.c src/win32_hid.c src/hid_controls.c src/win32_wgi.c
         src/pad_db.c src/pad_map.c src/generated/pad_windows.c)
 endif()
 target_sources(maul-window PRIVATE ${MWIN_WIN32_SOURCES})

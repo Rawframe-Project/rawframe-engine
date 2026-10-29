@@ -11,7 +11,8 @@
 // know comes raw, as numbered buttons and axes, its hats as pairs of
 // axes. Each connection has its own id; mwin_eventGamepadAdded and
 // mwin_eventGamepadRemoved report hotplug, mwin_eventGamepadChanged a
-// change of its facts (its battery). Its buttons and axes come as
+// change of its facts (its battery, or a capability Android finds a
+// moment after the pad is added). Its buttons and axes come as
 // records in the stream, whatever window has the focus, and its state
 // can be read at any time. Values are the platform's own, with no dead
 // zone: sticks run from -1 to 1, right and down positive, and triggers

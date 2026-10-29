@@ -115,7 +115,7 @@ static void JNICALL Commit(JNIEnv* env, jclass type, jlong program, jstring text
 
 static void EndPreedit(mwinAndroidPlatform* platform)
 {
-    if (!platform->context->windows[platform->slot].state.composing)
+    if (!platform->context->windows[platform->slot].imeComposing)
     {
         return;
     }

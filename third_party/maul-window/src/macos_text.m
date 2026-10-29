@@ -28,13 +28,13 @@ static NSString* PlainOf(id string)
                                                              : (NSString*)string;
 }
 
-// Ends a composition the window shows.
+// Ends the input method's composition, when one runs.
 static void EndComposition(mwinMacPlatform* platform, uint32_t slot)
 {
     mwinMacWindow* window = &platform->windows[slot];
     [window->marked release];
     window->marked = nil;
-    if (!platform->context->windows[slot].state.composing)
+    if (!platform->context->windows[slot].imeComposing)
     {
         return;
     }

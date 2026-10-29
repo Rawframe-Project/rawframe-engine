@@ -73,7 +73,7 @@ int mwinLinuxOpenUrl(mwinLinuxServices* services, uint32_t slot, uint32_t reques
 // Opens the folder that holds a path.
 static int OpenFolder(mwinLinuxServices* services, const mwinRequest* entry, mwinServiceAnswer to)
 {
-    char folder[MWIN_ADDRESS_BYTES + 1];
+    char folder[MWIN_MAX_ADDRESS_BYTES + 1];
     const char* last = strrchr(entry->value.text.bytes, '/');
     size_t length = last > entry->value.text.bytes ? (size_t)(last - entry->value.text.bytes) : 1;
     memcpy(folder, entry->value.text.bytes, length);
@@ -118,7 +118,7 @@ static bool ShowItem(mwinLinuxServices* services, const mwinRequest* entry, mwin
     {
         return false;
     }
-    char uri[7 + 3 * MWIN_ADDRESS_BYTES + 1];
+    char uri[7 + 3 * MWIN_MAX_ADDRESS_BYTES + 1];
     FileUri(entry->value.text.bytes, entry->value.text.length, uri);
     const char* item = uri;
     const char* startup = "";

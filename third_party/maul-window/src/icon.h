@@ -25,9 +25,10 @@ typedef struct mwinIconCopy
     mwinIconCopyImage images[];
 } mwinIconCopy;
 
-// Whether an image has pixels, a size of at most most a side and a
-// stride its rows fit.
-bool mwinIsIconImage(const mwinIconImage* image, uint32_t most);
+// An image's status: mwin_errorLimit for a side past most, a named
+// bound; mwin_errorInvalid for no pixels, no width or height, or a
+// stride its rows do not fit.
+mwinResult mwinCheckIconImage(const mwinIconImage* image, uint32_t most);
 
 // Copies images into one block from the context's allocator, rows
 // packed: the copy, or NULL when the allocator fails.

@@ -11,17 +11,12 @@
 #include <limits.h>
 #include <linux/input.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
 
 #define LONG_BITS   (sizeof(unsigned long) * CHAR_BIT)
 #define LONGS(bits) (((bits) + LONG_BITS - 1) / LONG_BITS)
-
-#define STANDARD_GRAVITY   9.80665f
-#define RADIANS_PER_DEGREE 0.017453292f
-#define VENDOR_NINTENDO    0x057E
 
 static bool Has(const unsigned long* bits, unsigned bit)
 {
@@ -38,34 +33,19 @@ void mwinLinuxIdentityOf(int fd, mwinLinuxPadIdentity* identity)
     identity->vendor = id.vendor;
 }
 
-// Whether two devices are parts of one controller: the same unique id
-// where both have one (Bluetooth pads share the adapter's path), else
-// the same path.
-static bool SameController(const mwinLinuxPadIdentity* a, const mwinLinuxPadIdentity* b)
+// The axes' current values, and their factors from their resolutions:
+// false where one is missing or says nothing.
+static bool ReadAxes(int fd, mwinLinuxMotionEvents* events)
 {
-    if (a->uniq[0] != '\0' && b->uniq[0] != '\0')
-    {
-        return strcmp(a->uniq, b->uniq) == 0;
-    }
-    return a->uniq[0] == '\0' && b->uniq[0] == '\0' && a->phys[0] != '\0' &&
-           strcmp(a->phys, b->phys) == 0;
-}
-
-// The axes' factors from their resolutions: false where one is missing
-// or says nothing.
-static bool ReadScales(int fd, mwinLinuxMotion* motion)
-{
-    for (unsigned i = 0; i < 6; i++)
+    for (unsigned i = 0; i < MWIN_LINUX_MOTION_AXES; i++)
     {
         struct input_absinfo info;
         unsigned code = i < 3 ? ABS_X + i : ABS_RX + i - 3;
-        if (ioctl(fd, EVIOCGABS(code), &info) < 0 || info.resolution <= 0)
+        if (ioctl(fd, EVIOCGABS(code), &info) < 0 ||
+            !mwinLinuxMotionAxis(events, i, info.value, info.resolution))
         {
             return false;
         }
-        float unit = i < 3 ? STANDARD_GRAVITY : RADIANS_PER_DEGREE;
-        motion->scale[i] = unit / (float)info.resolution;
-        motion->raw[i] = info.value;
     }
     return true;
 }
@@ -83,9 +63,10 @@ bool mwinLinuxOpenMotion(mwinLinuxMotion* motion, int node, const mwinLinuxPadId
     (void)ioctl(fd, EVIOCGPROP(sizeof(props)), props);
     mwinLinuxPadIdentity identity;
     mwinLinuxIdentityOf(fd, &identity);
-    mwinLinuxMotion found = {.fd = fd, .node = node, .nintendo = pad->vendor == VENDOR_NINTENDO};
-    if (!Has(props, INPUT_PROP_ACCELEROMETER) || !SameController(pad, &identity) ||
-        !ReadScales(fd, &found))
+    mwinLinuxMotion found = {.fd = fd, .node = node};
+    mwinLinuxMotionStart(&found.events, pad);
+    if (!Has(props, INPUT_PROP_ACCELEROMETER) || !mwinLinuxSameController(pad, &identity) ||
+        !ReadAxes(fd, &found.events))
     {
         close(fd);
         return false;
@@ -117,29 +98,6 @@ bool mwinLinuxFindMotion(mwinLinuxMotion* motion, const mwinLinuxPadIdentity* pa
     return found;
 }
 
-// Posts the axes as one sample, in the contract's frame.
-static void Post(mwinLinuxMotion* motion, mwinContext* context, uint32_t slot, uint64_t timeNs)
-{
-    float values[6];
-    for (int i = 0; i < 6; i++)
-    {
-        values[i] = (float)motion->raw[i] * motion->scale[i];
-    }
-    float acceleration[3] = {values[0], values[1], values[2]};
-    float rate[3] = {values[3], values[4], values[5]};
-    if (motion->nintendo)
-    {
-        acceleration[0] = -values[1];
-        acceleration[1] = values[2];
-        acceleration[2] = -values[0];
-        rate[0] = -values[4];
-        rate[1] = values[5];
-        rate[2] = -values[3];
-    }
-    mwinPostGamepadMotion(context, slot, acceleration, rate,
-                          motion->stamped ? motion->timeNs : timeNs);
-}
-
 bool mwinLinuxReadMotion(mwinLinuxMotion* motion, mwinContext* context, uint32_t slot)
 {
     struct input_event events[32];
@@ -153,29 +111,21 @@ bool mwinLinuxReadMotion(mwinLinuxMotion* motion, mwinContext* context, uint32_t
         for (size_t i = 0; i < (size_t)bytes / sizeof(events[0]); i++)
         {
             const struct input_event* event = &events[i];
-            if (event->type == EV_ABS && event->code <= ABS_Z)
+            uint64_t timeNs = (uint64_t)event->input_event_sec * 1000000000u +
+                              (uint64_t)event->input_event_usec * 1000u;
+            mwinLinuxMotionSample sample;
+            switch (mwinLinuxMotionEvent(&motion->events, event->type, event->code, event->value,
+                                         timeNs, &sample))
             {
-                motion->raw[event->code - ABS_X] = event->value;
-            }
-            else if (event->type == EV_ABS && event->code >= ABS_RX && event->code <= ABS_RZ)
-            {
-                motion->raw[3 + event->code - ABS_RX] = event->value;
-            }
-            else if (event->type == EV_MSC && event->code == MSC_TIMESTAMP)
-            {
-                // Microseconds that wrap: the difference counts, the first
-                // stamp a start that is not 0, which would mean none.
-                uint32_t stamp = (uint32_t)event->value;
-                motion->timeNs +=
-                    motion->stamped ? (uint64_t)(stamp - motion->stamp) * 1000u : 1000u;
-                motion->stamp = stamp;
-                motion->stamped = true;
-            }
-            else if (event->type == EV_SYN && event->code == SYN_REPORT)
-            {
-                Post(motion, context, slot,
-                     (uint64_t)event->input_event_sec * 1000000000u +
-                         (uint64_t)event->input_event_usec * 1000u);
+            case mwin_motionSample:
+                mwinPostGamepadMotion(context, slot, sample.acceleration, sample.rate,
+                                      sample.timeNs);
+                break;
+            case mwin_motionResync:
+                (void)ReadAxes(motion->fd, &motion->events);
+                break;
+            case mwin_motionNothing:
+                break;
             }
         }
     }

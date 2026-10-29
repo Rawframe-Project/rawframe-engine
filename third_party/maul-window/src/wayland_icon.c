@@ -103,7 +103,7 @@ mwinOutcome mwinWaylandSetIcon(mwinWaylandWindow* window, const mwinRequest* req
     struct xdg_toplevel_icon_v1* icon =
         mwinWlCreateFor(api, platform->toplevelIcons, XDG_TOPLEVEL_ICON_MANAGER_V1_CREATE_ICON,
                         &xdg_toplevel_icon_v1_interface, nullptr);
-    struct wl_buffer* buffers[MWIN_ICON_IMAGES] = {nullptr};
+    struct wl_buffer* buffers[MWIN_MAX_ICON_IMAGES] = {nullptr};
     bool added = AddBuffers(platform, copy, icon, buffers);
     if (added)
     {

@@ -16,9 +16,9 @@
 static bool Wide(const mwinRequest* request, WCHAR* units, bool path)
 {
     size_t count = 0;
-    muniTextResult result =
-        muniConvertUtf8ToUtf16(request->value.text.bytes, request->value.text.length,
-                               muni_convertStrict, (uint16_t*)units, MWIN_ADDRESS_BYTES, &count);
+    muniTextResult result = muniConvertUtf8ToUtf16(
+        request->value.text.bytes, request->value.text.length, muni_convertStrict, (uint16_t*)units,
+        MWIN_MAX_ADDRESS_BYTES, &count);
     if (result.status != muni_success)
     {
         return false;
@@ -33,7 +33,7 @@ static bool Wide(const mwinRequest* request, WCHAR* units, bool path)
 
 mwinOutcome mwinWin32OpenUrl(const mwinWin32Window* window, const mwinRequest* request)
 {
-    WCHAR address[MWIN_ADDRESS_BYTES + 1];
+    WCHAR address[MWIN_MAX_ADDRESS_BYTES + 1];
     if (!Wide(request, address, false))
     {
         return mwin_outcomeFailed;
@@ -52,7 +52,7 @@ mwinOutcome mwinWin32OpenUrl(const mwinWin32Window* window, const mwinRequest* r
 
 mwinOutcome mwinWin32RevealFile(const mwinRequest* request)
 {
-    WCHAR path[MWIN_ADDRESS_BYTES + 1];
+    WCHAR path[MWIN_MAX_ADDRESS_BYTES + 1];
     PIDLIST_ABSOLUTE item = nullptr;
     if (!Wide(request, path, true) || FAILED(SHParseDisplayName(path, nullptr, &item, 0, nullptr)))
     {

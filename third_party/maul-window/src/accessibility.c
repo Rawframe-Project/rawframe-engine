@@ -10,6 +10,10 @@
 mwinResult mwinRequestAccessibilityRoot(mwinContext* context, mwinWindowId window, void* root,
                                         mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     uint32_t slot = 0;
     int32_t request = 0;
     mwinResult status =

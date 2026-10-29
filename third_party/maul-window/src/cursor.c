@@ -14,25 +14,49 @@ mwinCursorDef mwinDefaultCursorDef(void)
     return (mwinCursorDef){.cookie = CURSOR_DEF_COOKIE};
 }
 
-// Whether a def's images are cursor images, each wider than the one
-// before, with the hotspot on the first.
-static bool IsDefValid(const mwinCursorDef* def)
+// A def's status: its images cursor images, each wider than the one
+// before, with the hotspot on the first; mwin_errorLimit for more images
+// or a larger side than the named bounds.
+static mwinResult CheckDef(const mwinCursorDef* def)
 {
-    bool valid = def->cookie == CURSOR_DEF_COOKIE && def->images != nullptr &&
-                 def->imageCount > 0 && def->imageCount <= MWIN_CURSOR_IMAGES;
-    for (uint32_t i = 0; valid && i < def->imageCount; i++)
+    if (def->cookie != CURSOR_DEF_COOKIE || def->images == nullptr || def->imageCount == 0)
     {
-        valid = mwinIsIconImage(&def->images[i], MWIN_CURSOR_SIZE) &&
-                (i == 0 || def->images[i].width > def->images[i - 1].width);
+        return mwin_errorInvalid;
     }
-    return valid && def->hotspotX < def->images[0].width && def->hotspotY < def->images[0].height;
+    if (def->imageCount > MWIN_MAX_CURSOR_IMAGES)
+    {
+        return mwin_errorLimit;
+    }
+    for (uint32_t i = 0; i < def->imageCount; i++)
+    {
+        mwinResult status = mwinCheckIconImage(&def->images[i], MWIN_MAX_CURSOR_SIZE);
+        if (status != mwin_success)
+        {
+            return status;
+        }
+        if (i > 0 && def->images[i].width <= def->images[i - 1].width)
+        {
+            return mwin_errorInvalid;
+        }
+    }
+    bool onFirst = def->hotspotX < def->images[0].width && def->hotspotY < def->images[0].height;
+    return onFirst ? mwin_success : mwin_errorInvalid;
 }
 
 mwinResult mwinCreateCursor(mwinContext* context, const mwinCursorDef* def, mwinCursorId* cursorOut)
 {
-    if (context == nullptr || def == nullptr || cursorOut == nullptr || !IsDefValid(def))
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
+    if (context == nullptr || def == nullptr || cursorOut == nullptr)
     {
         return mwinMisuse(context);
+    }
+    mwinResult status = CheckDef(def);
+    if (status != mwin_success)
+    {
+        return mwinRefuse(context, status);
     }
     uint32_t slot = 0;
     while (slot < context->limits.cursors && context->cursors[slot].images != nullptr)
@@ -84,6 +108,10 @@ static void Release(mwinContext* context, uint32_t slot)
 
 mwinResult mwinDestroyCursor(mwinContext* context, mwinCursorId cursor)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (context == nullptr)
     {
         return mwin_errorInvalid;
@@ -110,6 +138,10 @@ void mwinReleaseCursors(mwinContext* context)
 mwinResult mwinRequestCursorImage(mwinContext* context, mwinWindowId window, mwinCursorId cursor,
                                   mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (context == nullptr)
     {
         return mwin_errorInvalid;

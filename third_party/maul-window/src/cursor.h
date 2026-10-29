@@ -19,8 +19,8 @@ typedef struct mwinCursor
     mwinIconCopy* images;
     uint32_t hotspotX;
     uint32_t hotspotY;
-    void* native[MWIN_CURSOR_IMAGES];
-    uint32_t nativeId[MWIN_CURSOR_IMAGES];
+    void* native[MWIN_MAX_CURSOR_IMAGES];
+    uint32_t nativeId[MWIN_MAX_CURSOR_IMAGES];
 } mwinCursor;
 
 // The cursor a live id names, or NULL.

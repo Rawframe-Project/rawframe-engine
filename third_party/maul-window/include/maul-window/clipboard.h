@@ -23,7 +23,7 @@
 //
 // Beside text, the clipboard takes data by MIME type, its bytes passed
 // through as they are: an image as image/png the program
-// encodes itself. A write offers up to MWIN_CLIPBOARD_ITEMS items, one
+// encodes itself. A write offers up to MWIN_MAX_CLIPBOARD_ITEMS items, one
 // of which may be text/plain, offered as the platform's text and read
 // with the text calls; a text write replaces the data, a data write the
 // text. X11 and Wayland also keep the primary selection, the text last
@@ -98,13 +98,13 @@ extern "C"
                                                             mwinRequestId request, char* buffer,
                                                             size_t capacity, size_t* lengthOut);
 
-#define MWIN_CLIPBOARD_ITEMS 4
-#define MWIN_CLIPBOARD_MIME  63
+#define MWIN_MAX_CLIPBOARD_ITEMS 4
+#define MWIN_MAX_CLIPBOARD_MIME  63
 
     // An item of a clipboard data write: a MIME type and its bytes.
     typedef struct mwinClipboardItem
     {
-        // ASCII from 1 to MWIN_CLIPBOARD_MIME bytes, a type and a subtype
+        // ASCII from 1 to MWIN_MAX_CLIPBOARD_MIME bytes, a type and a subtype
         // ("image/png"), not NUL-terminated.
         const char* mime;
         size_t mimeLength;
@@ -119,16 +119,17 @@ extern "C"
     /// @param context     The context.
     /// @param window      The window asking, which should have focus.
     /// @param items       The items, each of a different type.
-    /// @param count       Their number, 1 to MWIN_CLIPBOARD_ITEMS.
+    /// @param count       Their number, 1 to MWIN_MAX_CLIPBOARD_ITEMS.
     /// @param requestOut  Receives the request's id. May be NULL.
     /// @return `mwin_success`; `mwin_errorCapacity` for bytes past the
     ///         clipboardBytes limit in all, when the context cannot hold
     ///         them, or when the window has its limit of requests in
     ///         flight; `mwin_errorStale` for a window that no longer
-    ///         exists; `mwin_errorInvalid` for a NULL context or items, a
-    ///         count outside 1 to MWIN_CLIPBOARD_ITEMS, a type that is not
-    ///         a MIME type or comes twice, or a text/plain item that is not
-    ///         UTF-8.
+    ///         exists; `mwin_errorLimit` for more than
+    ///         MWIN_MAX_CLIPBOARD_ITEMS items or a type longer than
+    ///         MWIN_MAX_CLIPBOARD_MIME; `mwin_errorInvalid` for a NULL context
+    ///         or items, no items, a type that is not a MIME type or comes
+    ///         twice, or a text/plain item that is not UTF-8.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinRequestClipboardWriteData(mwinContext* context,
@@ -148,8 +149,10 @@ extern "C"
     ///                    text/plain, which mwinRequestClipboardRead reads.
     /// @param mimeLength  Its bytes.
     /// @param requestOut  Receives the request's id. May be NULL.
-    /// @return As mwinRequestClipboardRead, with `mwin_errorInvalid` for a
-    ///         type that is not a MIME type, or text/plain.
+    /// @return As mwinRequestClipboardRead, with `mwin_errorLimit` for a
+    ///         type longer than MWIN_MAX_CLIPBOARD_MIME, and
+    ///         `mwin_errorInvalid` for a type that is not a MIME type, or
+    ///         text/plain.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinRequestClipboardReadData(mwinContext* context,

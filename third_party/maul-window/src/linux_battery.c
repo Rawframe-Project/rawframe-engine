@@ -50,6 +50,11 @@ int8_t mwinLinuxReadBattery(const mwinLinuxBattery* battery)
     {
         (void)fclose(file);
     }
+    return mwinLinuxBatteryPercent(text, length);
+}
+
+int8_t mwinLinuxBatteryPercent(const char* text, size_t length)
+{
     int percent = 0;
     size_t digits = 0;
     while (digits < length && digits < 3 && text[digits] >= '0' && text[digits] <= '9')

@@ -83,7 +83,7 @@ int mwinAndroidAskDialog(mwinAndroidPlatform* platform, uint32_t slot, uint32_t 
     uint32_t before = documents->number & 0xFFu;
     documents->number += 1;
     // Every filter's extensions, ';' between them.
-    char extensions[MWIN_DIALOG_FILTERS * (MWIN_DIALOG_FILTER_BYTES + 1) + 1] = {0};
+    char extensions[MWIN_MAX_DIALOG_FILTERS * (MWIN_MAX_DIALOG_FILTER_BYTES + 1) + 1] = {0};
     size_t length = 0;
     for (uint32_t i = 0; i < copy->filterCount; i++)
     {

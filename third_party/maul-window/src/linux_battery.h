@@ -11,6 +11,7 @@
 #define MAUL_WINDOW_SRC_LINUX_BATTERY_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 // Room for the capacity file's path.
@@ -30,5 +31,11 @@ bool mwinLinuxFindBattery(const char* root, int node, mwinLinuxBattery* batteryO
 // The battery's charge in percent, or -1 when it has none or the file
 // says no number from 0 to 100.
 int8_t mwinLinuxReadBattery(const mwinLinuxBattery* battery);
+
+// A capacity file's text, as many bytes as it holds, read as a charge
+// in percent: a number of one to three digits from 0 to 100, ending the
+// text or followed by a newline or a NUL, whatever comes after that;
+// else -1.
+int8_t mwinLinuxBatteryPercent(const char* text, size_t length);
 
 #endif // MAUL_WINDOW_SRC_LINUX_BATTERY_H

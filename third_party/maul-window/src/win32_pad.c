@@ -251,6 +251,7 @@ static void Read(mwinWin32Pads* pads, DWORD user, uint64_t nowNs)
 
 void mwinWin32PadsPump(mwinWin32Pads* pads, uint64_t nowNs)
 {
+    mwinWin32HidPump(&pads->hid, nowNs);
     if (pads->runtime)
     {
         mwinPadTrackerPump(&pads->xbox, nowNs);

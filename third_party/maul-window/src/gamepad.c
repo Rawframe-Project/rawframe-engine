@@ -90,6 +90,10 @@ static bool IsStrength(float value)
 mwinResult mwinSetGamepadRumble(mwinContext* context, mwinGamepadId gamepad, float low, float high,
                                 uint32_t durationMs)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (context == nullptr || !IsStrength(low) || !IsStrength(high))
     {
         return mwinMisuse(context);
@@ -109,6 +113,10 @@ mwinResult mwinSetGamepadRumble(mwinContext* context, mwinGamepadId gamepad, flo
 mwinResult mwinSetGamepadTriggerRumble(mwinContext* context, mwinGamepadId gamepad, float left,
                                        float right, uint32_t durationMs)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (context == nullptr || !IsStrength(left) || !IsStrength(right))
     {
         return mwinMisuse(context);
@@ -128,6 +136,10 @@ mwinResult mwinSetGamepadTriggerRumble(mwinContext* context, mwinGamepadId gamep
 
 mwinResult mwinSetGamepadMotion(mwinContext* context, mwinGamepadId gamepad, bool enabled)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (context == nullptr)
     {
         return mwinMisuse(context);
@@ -154,6 +166,10 @@ mwinResult mwinSetGamepadMotion(mwinContext* context, mwinGamepadId gamepad, boo
 mwinResult mwinGetGamepadMotion(mwinContext* context, mwinGamepadId gamepad,
                                 mwinGamepadMotion* motionOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     if (context == nullptr || motionOut == nullptr)
     {
         return mwinMisuse(context);

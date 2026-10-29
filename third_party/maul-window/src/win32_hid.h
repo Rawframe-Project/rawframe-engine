@@ -7,13 +7,15 @@
 // and removals, and their input reports are read as they come. Their
 // controls are numbered as SDL numbers DirectInput's, so the Windows
 // entries of SDL_GameControllerDB apply; a device the database lacks is
-// raw. The functions are a table, so a test can stand in for a device.
+// raw. The numbering and the reading of reports are hid_controls.c's,
+// from the plain values the parser gives. The functions are a table, so
+// a test can stand in for a device.
 
 #ifndef MAUL_WINDOW_SRC_WIN32_HID_H
 #define MAUL_WINDOW_SRC_WIN32_HID_H
 
 #include "core.h"
-#include "pad_map.h"
+#include "hid_controls.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -59,15 +61,6 @@ typedef struct mwinHidApi
     BOOLEAN(NTAPI* productString)(HANDLE file, PVOID buffer, ULONG length);
 } mwinHidApi;
 
-// A value control: an axis or a hat, its usage, and its range and size.
-typedef struct mwinHidValue
-{
-    USAGE usage;
-    USHORT bits;
-    LONG minimum;
-    LONG maximum;
-} mwinHidValue;
-
 typedef struct mwinHidPad
 {
     // The device, NULL for a free entry, and the core's gamepad slot.
@@ -76,12 +69,8 @@ typedef struct mwinHidPad
     // The HID parser's data of the device, the context's memory.
     PHIDP_PREPARSED_DATA preparsed;
     size_t preparsedBytes;
-    // The Button page's usages in the numbering's order, and the axes and
-    // hats in theirs.
-    USAGE buttons[MWIN_PAD_NUMBERED_BUTTONS];
-    mwinHidValue axes[MWIN_PAD_NUMBERED_AXES];
-    mwinHidValue hats[MWIN_PAD_NUMBERED_HATS];
-    mwinPadControls controls;
+    // Its controls, numbered.
+    mwinHidControls hid;
 } mwinHidPad;
 
 typedef struct mwinWin32Hid
@@ -89,6 +78,9 @@ typedef struct mwinWin32Hid
     mwinContext* context;
     mwinHidApi api;
     mwinHidPad pads[MWIN_WIN32_HID_PADS];
+    // A gamepad was turned away for want of room: the devices are found
+    // again once there is room.
+    bool refused;
 } mwinWin32Hid;
 
 // Loads the HID parser and finds the devices present; without it there
@@ -97,6 +89,10 @@ void mwinWin32HidStart(mwinWin32Hid* hid, mwinContext* context, uint64_t timeNs)
 
 // Finds the devices present, through the table as it is.
 void mwinWin32HidFind(mwinWin32Hid* hid, uint64_t timeNs);
+
+// Finds the devices again once there is room for a gamepad turned away:
+// Windows tells of a device's arrival once.
+void mwinWin32HidPump(mwinWin32Hid* hid, uint64_t timeNs);
 
 // A device came or went (WM_INPUT_DEVICE_CHANGE), or sent a report
 // (WM_INPUT).

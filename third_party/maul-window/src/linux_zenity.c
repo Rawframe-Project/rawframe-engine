@@ -24,7 +24,7 @@ extern char** environ;
 #define SEPARATOR '\x1e'
 
 // The most arguments: the fixed ones and one per filter.
-#define ARGUMENTS (8 + MWIN_DIALOG_FILTERS)
+#define ARGUMENTS (8 + MWIN_MAX_DIALOG_FILTERS)
 
 // The bytes of a filter argument's start: "--file-filter=" and " |".
 #define FILTER_BYTES 32

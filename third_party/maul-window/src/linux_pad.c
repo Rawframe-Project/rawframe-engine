@@ -6,6 +6,7 @@
 #include "linux_pad.h"
 
 #include "allocator.h"
+#include "linux_evdev_drop.h"
 #include "monotonic.h"
 
 #include <dirent.h>
@@ -204,14 +205,16 @@ static void OnKey(mwinLinuxPad* pad, unsigned code, int32_t value)
     }
 }
 
-// Reads the device's whole state, as after events were dropped.
-static void Resync(mwinLinuxPad* pad)
+// Reads the device's whole state, as after events were dropped: false,
+// changing nothing, when its buttons cannot be read.
+static bool Resync(mwinLinuxPad* pad)
 {
-    unsigned long keys[LONGS(KEY_CNT)] = {0};
-    (void)ioctl(pad->fd, EVIOCGKEY(sizeof(keys)), keys);
-    for (uint8_t i = 0; i < pad->controls.buttonCount; i++)
+    unsigned long keys[MWIN_EVDEV_KEY_LONGS] = {0};
+    bool read = ioctl(pad->fd, EVIOCGKEY(sizeof(keys)), keys) >= 0;
+    if (!mwinEvdevResyncButtons(keys, read, pad->buttonCodes, pad->controls.buttonCount,
+                                pad->controls.buttons))
     {
-        pad->controls.buttons[i] = Has(keys, pad->buttonCodes[i]);
+        return false;
     }
     for (unsigned code = 0; code <= ABS_HAT3Y; code++)
     {
@@ -223,6 +226,7 @@ static void Resync(mwinLinuxPad* pad)
             OnAxis(pad, code, info.value);
         }
     }
+    return true;
 }
 
 // The pad's facts in the core, with motion as it has it now.
@@ -283,6 +287,7 @@ static void Open(mwinLinuxPads* pads, int node)
     if (pad == nullptr || !IsGamepad(&bits))
     {
         close(fd);
+        pads->refused = pads->refused || IsGamepad(&bits);
         if (Has(bits.props, INPUT_PROP_ACCELEROMETER))
         {
             OpenMotion(pads, node);
@@ -321,13 +326,16 @@ static void Open(mwinLinuxPads* pads, int node)
     int32_t slot = mwinAddGamepad(pads->context, &info, mwinMonotonicNow());
     if (slot < 0)
     {
+        // The core's slot is still taken by a pad whose removal the
+        // program has not read.
         mwinLinuxCloseMotion(&pad->motion);
         close(fd);
         pad->fd = -1;
+        pads->refused = true;
         return;
     }
     pad->slot = (uint32_t)slot;
-    Resync(pad);
+    (void)Resync(pad);
     mwinPostPadControls(pads->context, pad->slot, &pad->controls, mwinMonotonicNow());
 }
 
@@ -363,17 +371,27 @@ static bool Read(mwinLinuxPads* pads, mwinLinuxPad* pad)
             const struct input_event* event = &events[i];
             uint64_t timeNs = (uint64_t)event->input_event_sec * 1000000000u +
                               (uint64_t)event->input_event_usec * 1000u;
-            if (event->type == EV_KEY)
+            mwinEvdevStep step = mwinEvdevDropStep(&pad->dropping, event->type, event->code);
+            if (step == mwin_evdevResync)
+            {
+                // A state that cannot be read posts nothing; the read
+                // error that follows closes the device.
+                if (Resync(pad))
+                {
+                    mwinPostPadControls(pads->context, pad->slot, &pad->controls, timeNs);
+                }
+            }
+            else if (step == mwin_evdevSkip)
+            {
+                continue;
+            }
+            else if (event->type == EV_KEY)
             {
                 OnKey(pad, event->code, event->value);
             }
             else if (event->type == EV_ABS)
             {
                 OnAxis(pad, event->code, event->value);
-            }
-            else if (event->type == EV_SYN && event->code == SYN_DROPPED)
-            {
-                Resync(pad);
             }
             else if (event->type == EV_SYN && event->code == SYN_REPORT)
             {
@@ -407,6 +425,39 @@ static void Watch(mwinLinuxPads* pads)
     }
 }
 
+// Opens every device in /dev/input that is not open yet.
+static void Scan(mwinLinuxPads* pads)
+{
+    DIR* directory = opendir("/dev/input");
+    for (struct dirent* entry = directory != nullptr ? readdir(directory) : nullptr;
+         entry != nullptr; entry = readdir(directory))
+    {
+        int node = NodeOf(entry->d_name);
+        if (node >= 0)
+        {
+            Open(pads, node);
+        }
+    }
+    if (directory != nullptr)
+    {
+        closedir(directory);
+    }
+}
+
+// Whether a gamepad that comes now can be added: a free pad and a free
+// slot of the core's.
+static bool HasRoom(const mwinLinuxPads* pads)
+{
+    bool pad = false;
+    bool slot = false;
+    for (uint32_t i = 0; i < pads->context->limits.gamepads; i++)
+    {
+        pad = pad || pads->pads[i].fd < 0;
+        slot = slot || pads->context->gamepads[i].status == mwin_slotFree;
+    }
+    return pad && slot;
+}
+
 bool mwinLinuxPadsStart(mwinLinuxPads* pads, mwinContext* context)
 {
     *pads = (mwinLinuxPads){.context = context, .watch = -1};
@@ -436,20 +487,7 @@ bool mwinLinuxPadsStart(mwinLinuxPads* pads, mwinContext* context)
         close(pads->watch);
         pads->watch = -1;
     }
-    DIR* directory = opendir("/dev/input");
-    for (struct dirent* entry = directory != nullptr ? readdir(directory) : nullptr;
-         entry != nullptr; entry = readdir(directory))
-    {
-        int node = NodeOf(entry->d_name);
-        if (node >= 0)
-        {
-            Open(pads, node);
-        }
-    }
-    if (directory != nullptr)
-    {
-        closedir(directory);
-    }
+    Scan(pads);
     return true;
 }
 
@@ -515,6 +553,12 @@ void mwinLinuxPadsPump(mwinLinuxPads* pads)
     if (pads->watch >= 0)
     {
         Watch(pads);
+    }
+    // A gamepad turned away is still there: it comes once there is room.
+    if (pads->refused && HasRoom(pads))
+    {
+        pads->refused = false;
+        Scan(pads);
     }
     // A device that is gone reads as such; its node's removal needs no
     // watching.

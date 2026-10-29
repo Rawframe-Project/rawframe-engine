@@ -48,6 +48,8 @@ typedef struct mwinLinuxPad
     int32_t maximum[MWIN_LINUX_PAD_AXES];
     // The rumble effect uploaded, or -1.
     int16_t effect;
+    // Skipping what is left of a report the kernel's drop cut.
+    bool dropping;
     // Who it is, its motion device (fd -1 for none) and its battery.
     mwinLinuxPadIdentity identity;
     mwinLinuxMotion motion;
@@ -63,6 +65,9 @@ typedef struct mwinLinuxPads
     uint64_t batteryNs;
     // One per gamepad slot of the context.
     mwinLinuxPad* pads;
+    // A gamepad was turned away for want of room: /dev/input is scanned
+    // again once there is room.
+    bool refused;
 } mwinLinuxPads;
 
 // Finds the gamepads connected and starts watching for more; false only

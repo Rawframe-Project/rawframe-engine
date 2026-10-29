@@ -81,10 +81,10 @@ static void Post(mwinIOSPlatform* platform, uint32_t slot, mwinEvent* event)
     mwinPost(platform->context, slot, event);
 }
 
-// Ends a composition the program was shown.
+// Ends the input method's composition, when one runs.
 static void EndPreedit(mwinIOSPlatform* platform, uint32_t slot)
 {
-    if (!platform->context->windows[slot].state.composing)
+    if (!platform->context->windows[slot].imeComposing)
     {
         return;
     }

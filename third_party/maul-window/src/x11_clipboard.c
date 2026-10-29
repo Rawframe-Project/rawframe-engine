@@ -19,7 +19,7 @@
 
 // The most targets a selection offers: TARGETS, TIMESTAMP, the two text
 // targets and the data's types.
-#define MAX_TARGETS (4 + MWIN_CLIPBOARD_ITEMS)
+#define MAX_TARGETS (4 + MWIN_MAX_CLIPBOARD_ITEMS)
 
 bool mwinX11EnsureClipboardWindow(mwinX11Platform* platform)
 {
@@ -63,7 +63,7 @@ static bool InternTypes(mwinX11Platform* platform)
     const mwinX11Api* api = &platform->api;
     const mwinClipboardCopy* copy = platform->context->clipboardData;
     uint32_t count = copy != nullptr ? copy->count : 0;
-    xcb_intern_atom_cookie_t cookies[MWIN_CLIPBOARD_ITEMS];
+    xcb_intern_atom_cookie_t cookies[MWIN_MAX_CLIPBOARD_ITEMS];
     memset(platform->clipboard.types, 0, sizeof(platform->clipboard.types));
     for (uint32_t i = 0; i < count; i++)
     {

@@ -588,7 +588,7 @@ void mwinWaylandReleaseCursor(mwinContext* context, uint32_t slot)
         }
     }
     mwinCursor* cursor = &context->cursors[slot];
-    for (uint32_t i = 0; i < MWIN_CURSOR_IMAGES; i++)
+    for (uint32_t i = 0; i < MWIN_MAX_CURSOR_IMAGES; i++)
     {
         if (cursor->native[i] == nullptr)
         {

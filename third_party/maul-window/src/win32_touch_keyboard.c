@@ -5,18 +5,10 @@
 
 #include "win32_touch_keyboard.h"
 
+#include "win32_scope.h"
+
 #include <shobjidl.h>
 #include <string.h>
-
-// The input scopes of inputscope.h the purposes map to.
-enum
-{
-    scopeDefault = 0,
-    scopeUrl = 1,
-    scopeEmail = 5,
-    scopeNumber = 29,
-    scopePassword = 31,
-};
 
 // The first six methods of every runtime interface: IUnknown's, then
 // IInspectable's, which nothing here calls.
@@ -94,23 +86,6 @@ static void LoadOnce(mwinWin32Platform* platform)
               sizeof(platform->deleteString)))
     {
         platform->activate = nullptr;
-    }
-}
-
-static int ScopeOf(mwinInputPurpose purpose)
-{
-    switch (purpose)
-    {
-    case mwin_purposeNumber:
-        return scopeNumber;
-    case mwin_purposeEmail:
-        return scopeEmail;
-    case mwin_purposePassword:
-        return scopePassword;
-    case mwin_purposeUrl:
-        return scopeUrl;
-    default:
-        return scopeDefault;
     }
 }
 
@@ -258,7 +233,7 @@ mwinOutcome mwinWin32SetTouchKeyboard(mwinWin32Window* window, bool visible,
     Advise(window);
     if (platform->setInputScope != nullptr)
     {
-        (void)platform->setInputScope(window->hwnd, ScopeOf(purpose));
+        (void)platform->setInputScope(window->hwnd, mwinWin32ScopeOf(purpose));
     }
     InputPane* pane = PaneOf(platform, window->hwnd);
     if (pane == nullptr)

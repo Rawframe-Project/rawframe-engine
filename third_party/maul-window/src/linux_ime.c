@@ -110,7 +110,7 @@ static void TellCaret(mwinLinuxIme* ime)
 // The window's composition ends, when one runs.
 static void EndComposition(mwinLinuxIme* ime, int32_t slot)
 {
-    if (slot < 0 || !ime->context->windows[slot].state.composing)
+    if (slot < 0 || !ime->context->windows[slot].imeComposing)
     {
         return;
     }

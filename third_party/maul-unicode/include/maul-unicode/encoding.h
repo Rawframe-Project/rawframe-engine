@@ -87,15 +87,21 @@ extern "C"
     /// Encodes one code point as UTF-8.
     ///
     /// @param codePoint  A Unicode scalar value.
-    /// @param bytes      Receives 1 to 4 bytes; must hold 4.
-    /// @param sizeOut    Receives the number of bytes written. On an error,
-    ///                   it and bytes are left as they were.
-    /// @return `muni_success`, or `muni_errorInvalid` for a surrogate, a
-    ///         value past U+10FFFF or a NULL out-parameter.
+    /// @param bytes      Receives 1 to 4 bytes. May be NULL when capacity
+    ///                   is 0.
+    /// @param capacity   The number of bytes bytes can hold.
+    /// @param sizeOut    Receives the length of the encoding, 1 to 4, on
+    ///                   success and when it does not fit.
+    ///                   `muni_errorInvalid` leaves it and bytes as they
+    ///                   were.
+    /// @return `muni_success`; `muni_errorCapacity` when the encoding does
+    ///         not fit, and then no byte is written; `muni_errorInvalid`
+    ///         for a surrogate, a value past U+10FFFF, a NULL sizeOut or
+    ///         NULL bytes with a nonzero capacity.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniResult muniEncodeUtf8(uint32_t codePoint, char* bytes,
-                                                      size_t* sizeOut);
+                                                      size_t capacity, size_t* sizeOut);
 
     /// Converts UTF-8 to UTF-16.
     ///

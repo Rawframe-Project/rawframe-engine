@@ -15,7 +15,7 @@
 // where its bytes lie after the items.
 typedef struct mwinClipboardDataItem
 {
-    char mime[MWIN_CLIPBOARD_MIME + 1];
+    char mime[MWIN_MAX_CLIPBOARD_MIME + 1];
     uint32_t mimeLength;
     uint32_t offset;
     uint32_t length;
@@ -28,7 +28,7 @@ typedef struct mwinClipboardCopy
 {
     size_t size;
     uint32_t count;
-    mwinClipboardDataItem items[MWIN_CLIPBOARD_ITEMS];
+    mwinClipboardDataItem items[MWIN_MAX_CLIPBOARD_ITEMS];
 } mwinClipboardCopy;
 
 // The bytes of an item of the data written.

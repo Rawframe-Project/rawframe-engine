@@ -22,10 +22,10 @@ extern "C"
 #define MWIN_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MWIN_VERSION_MINOR 5
+#define MWIN_VERSION_MINOR 6
 // x-release-please-end
 // x-release-please-start-patch
-#define MWIN_VERSION_PATCH 1
+#define MWIN_VERSION_PATCH 0
 // x-release-please-end
 
 // The binary interface a program is built for: the whole version before
@@ -87,8 +87,10 @@ extern "C"
         mwin_success = 0,
         // There is nothing to return: the event stream is drained.
         mwin_empty = 1,
-        // An argument is invalid: a null pointer where one is required, a
-        // value out of range, text that is not UTF-8.
+        // An argument a correct program never passes: a null pointer where
+        // one is required, a value outside its parameter's documented
+        // range, text that is not UTF-8. A bound with a named constant is
+        // mwin_errorLimit.
         mwin_errorInvalid = -1,
         // A caller buffer, a named limit or the allocator is too small for
         // the result.
@@ -99,12 +101,21 @@ extern "C"
         mwin_errorUnsupported = -4,
         // The platform failed a call the library made.
         mwin_errorPlatform = -5,
-        // The call is not allowed now: before the context exists, or from
-        // inside a function the library itself is running.
+        // The call is not allowed in the object's current state, which
+        // the program sees change only through its own calls, as through
+        // the events it reads.
         mwin_errorState = -6,
         // A def was built from headers of another binary interface than
         // the library's (MWIN_ABI_VERSION).
         mwin_errorVersion = -7,
+        // An argument, or its content, passes a fixed bound of the
+        // library, published as a named constant (MWIN_*): more room in
+        // mwinLimits would not help.
+        mwin_errorLimit = -9,
+        // The context is inside the program's allocator, which calls no
+        // function that changes it; the same call succeeds once the
+        // allocator returns.
+        mwin_errorBusy = -10,
     };
 
     // A yes or no the platform may not know.
@@ -119,7 +130,8 @@ extern "C"
 
     // The allocator an owner object takes in its def and keeps for its
     // lifetime. Alignment is a power of two. A zeroed allocator means the C
-    // library's allocation functions.
+    // library's allocation functions. It calls no function that changes
+    // the object it serves: such a call returns mwin_errorBusy.
     typedef struct mwinAllocator
     {
         void* (*alloc)(size_t size, size_t alignment, void* context);

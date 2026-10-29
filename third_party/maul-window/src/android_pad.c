@@ -8,9 +8,15 @@
 //   the gamepad or the joystick (a keyboard's or a remote's arrows alone
 //   are not one); they are looked for every half second, as the other
 //   backends' runtimes are, and at once when an event comes from one not
-//   followed. A device gone from the list is removed. Their batteries
-//   are read when they are looked for (Android 12 and later), a change
-//   told as the gamepad's.
+//   followed. A device is read only at the look after the one that first
+//   lists it, unless its own gamepad event brought the look: Android 11
+//   keeps an app's first copy of a device whose kernel devices are still
+//   being merged into it. A device gone from the list is removed. Their
+//   batteries (Android 12 and later) and what they can do are read when
+//   they are looked for, a change told as the gamepad's: Android merges a
+//   pad's kernel devices (a DualShock 4's pad, touchpad and motion
+//   sensors) into one as each appears, so a pad listed before its motion
+//   device gains its sensors a moment later.
 // - Their keys and joystick motions come through the activity's input
 //   queue, while the window has the focus, and are taken: Android's
 //   fallbacks (B as Back) do not follow. A key is a gamepad's by its
@@ -18,8 +24,12 @@
 //   (Android 11 and 15 count BTN_TRIGGER and up as keyboard keys).
 //   android_pad_map.c turns them into records.
 // - Rumble runs the device's motors (two, heavy then light, where
-//   Android 12 lists them; else its one at the stronger): Android times
-//   the effect, and the latest call replaces it.
+//   Android 12 lists them, played as one combined effect, since each
+//   motor's own effect would play on both; else its one at the
+//   stronger): Android times the effect, and the latest call replaces
+//   it. Java keeps the vibrator that started a rumble for its stop:
+//   Android cancels only what the same one started, and a device it has
+//   changed since (its motion sensors found) hands out a new one.
 // - Motion is the device's accelerometer and gyroscope (Android 12 and
 //   later), whose listener hands each sample to the library on the main
 //   thread, in m/s^2 and rad/s and in the frame the kernel's driver
@@ -80,13 +90,13 @@ bool mwinAndroidFindPads(mwinAndroidPlatform* platform, ANativeActivity* activit
     (*env)->SetIntArrayRegion(env, keys, 0, MWIN_ANDROID_PAD_KEYS, mwinAndroidPadKeys);
     pads->type = (*env)->NewGlobalRef(env, type);
     pads->keys = (*env)->NewGlobalRef(env, keys);
-    pads->list = (*env)->GetStaticMethodID(env, type, "list", "()[I");
+    pads->list = (*env)->GetStaticMethodID(env, type, "list", "(I)[I");
     pads->name = (*env)->GetStaticMethodID(env, type, "name", "(II)[B");
     pads->describe = (*env)->GetStaticMethodID(env, type, "describe", "(I[I)[I");
     pads->ranges = (*env)->GetStaticMethodID(env, type, "ranges", "(I[I)[F");
     pads->battery = (*env)->GetStaticMethodID(env, type, "battery", "(I)I");
     pads->rumble = (*env)->GetStaticMethodID(env, type, "rumble", "(IFFI)Z");
-    pads->hasMotion = (*env)->GetStaticMethodID(env, type, "hasMotion", "(I)Z");
+    pads->capabilities = (*env)->GetStaticMethodID(env, type, "capabilities", "(I)I");
     pads->motion = (*env)->GetStaticMethodID(env, type, "motion", "(IZ)Z");
     static const JNINativeMethod natives[] = {
         {"nativeMotion", "(JIZFFFJ)V", (void*)MotionSample},
@@ -97,7 +107,7 @@ bool mwinAndroidFindPads(mwinAndroidPlatform* platform, ANativeActivity* activit
     (*env)->DeleteLocalRef(env, keys);
     return pads->type != nullptr && pads->keys != nullptr && pads->list != nullptr &&
            pads->name != nullptr && pads->describe != nullptr && pads->ranges != nullptr &&
-           pads->battery != nullptr && pads->rumble != nullptr && pads->hasMotion != nullptr &&
+           pads->battery != nullptr && pads->rumble != nullptr && pads->capabilities != nullptr &&
            pads->motion != nullptr && registered;
 }
 
@@ -114,6 +124,21 @@ static int8_t BatteryOf(const mwinAndroidPlatform* platform, int32_t device)
     return charge >= 0 && charge <= 100 ? (int8_t)charge : -1;
 }
 
+// What a gamepad can do now: none when it is gone or Java failed.
+static mwinGamepadCapabilities CapabilitiesOf(const mwinAndroidPlatform* platform, int32_t device)
+{
+    JNIEnv* env = platform->java.env;
+    jint bits = (*env)->CallStaticIntMethod(env, platform->pads.type, platform->pads.capabilities,
+                                            (jint)device);
+    if ((*env)->ExceptionCheck(env))
+    {
+        (*env)->ExceptionClear(env);
+        return 0;
+    }
+    return (mwinGamepadCapabilities)(((bits & 1) != 0 ? mwin_padRumble : 0u) |
+                                     ((bits & 2) != 0 ? mwin_padMotion : 0u));
+}
+
 // Reads what a gamepad is into its layout and facts: false when it is
 // gone.
 static bool Describe(const mwinAndroidPlatform* platform, int32_t device,
@@ -128,17 +153,17 @@ static bool Describe(const mwinAndroidPlatform* platform, int32_t device,
                                                            (jint)device, MWIN_GAMEPAD_NAME_BYTES)
                           : nullptr;
     jsize count = facts != nullptr ? (*env)->GetArrayLength(env, facts) : 0;
-    bool described = name != nullptr && count >= 5 && !(*env)->ExceptionCheck(env);
+    bool described = name != nullptr && count >= 4 && !(*env)->ExceptionCheck(env);
     if (described)
     {
-        jint head[5];
-        (*env)->GetIntArrayRegion(env, facts, 0, 5, head);
-        jsize axes = count - 5 < MWIN_ANDROID_PAD_AXES ? count - 5 : MWIN_ANDROID_PAD_AXES;
+        jint head[4];
+        (*env)->GetIntArrayRegion(env, facts, 0, 4, head);
+        jsize axes = count - 4 < MWIN_ANDROID_PAD_AXES ? count - 4 : MWIN_ANDROID_PAD_AXES;
         *layout = (mwinAndroidPadLayout){
-            .keys = (uint64_t)(uint32_t)head[3] | (uint64_t)(uint32_t)head[4] << 32,
+            .keys = (uint64_t)(uint32_t)head[2] | (uint64_t)(uint32_t)head[3] << 32,
             .axisCount = (uint32_t)axes,
         };
-        (*env)->GetIntArrayRegion(env, facts, 5, axes, layout->axes);
+        (*env)->GetIntArrayRegion(env, facts, 4, axes, layout->axes);
         jintArray asked = (*env)->NewIntArray(env, axes);
         (*env)->SetIntArrayRegion(env, asked, 0, axes, layout->axes);
         jfloatArray ranges =
@@ -158,12 +183,7 @@ static bool Describe(const mwinAndroidPlatform* platform, int32_t device,
                 (uint32_t)(length < MWIN_GAMEPAD_NAME_BYTES ? length : MWIN_GAMEPAD_NAME_BYTES),
             .vendor = (uint16_t)head[0],
             .product = (uint16_t)head[1],
-            .capabilities = head[2] > 0 ? mwin_padRumble : 0,
         };
-        if ((*env)->CallStaticBooleanMethod(env, pads->type, pads->hasMotion, (jint)device))
-        {
-            info->capabilities |= mwin_padMotion;
-        }
         (*env)->GetByteArrayRegion(env, name, 0, (jsize)info->nameLength, (jbyte*)info->name);
         mwinAndroidPadLayoutOf(layout, info);
         described = !(*env)->ExceptionCheck(env);
@@ -188,6 +208,7 @@ static void Add(mwinAndroidPlatform* platform, int32_t device, uint64_t nowNs)
         return;
     }
     info.battery = BatteryOf(platform, device);
+    info.capabilities = CapabilitiesOf(platform, device);
     int32_t slot = mwinAddGamepad(platform->context, &info, nowNs);
     if (slot >= 0)
     {
@@ -209,12 +230,35 @@ static bool Sense(const mwinAndroidPlatform* platform, int32_t device, bool on)
     return done && !thrown;
 }
 
+// Runs a device's motors: false when it has none or Java failed.
+static bool Vibrate(const mwinAndroidPlatform* platform, int32_t device, float low, float high,
+                    uint32_t durationMs)
+{
+    JNIEnv* env = platform->java.env;
+    // As values: floats through the variadic call would become doubles.
+    jvalue arguments[4] = {{.i = device},
+                           {.f = low},
+                           {.f = high},
+                           {.i = durationMs > INT32_MAX ? INT32_MAX : (jint)durationMs}};
+    jboolean ran = (*env)->CallStaticBooleanMethodA(env, platform->pads.type, platform->pads.rumble,
+                                                    arguments);
+    bool thrown = (*env)->ExceptionCheck(env);
+    (*env)->ExceptionClear(env);
+    return ran && !thrown;
+}
+
 static void Remove(mwinAndroidPlatform* platform, uint32_t index, uint64_t nowNs)
 {
     mwinAndroidPads* pads = &platform->pads;
     if (platform->context->gamepads[pads->pads[index].slot].motionOn)
     {
         (void)Sense(platform, pads->pads[index].device, false);
+    }
+    // Java keeps what started a rumble until it is stopped.
+    if ((platform->context->gamepads[pads->pads[index].slot].info.capabilities & mwin_padRumble) !=
+        0)
+    {
+        (void)Vibrate(platform, pads->pads[index].device, 0.0f, 0.0f, 0);
     }
     mwinRemoveGamepad(platform->context, pads->pads[index].slot, nowNs);
     pads->count -= 1;
@@ -234,13 +278,15 @@ static bool Listed(const jint* ids, jsize count, int32_t device)
 }
 
 // The gamepads connected now: the gone removed, the new added, a changed
-// battery told.
-static void Look(mwinAndroidPlatform* platform, uint64_t nowNs)
+// battery or a capability gained told. Capabilities are only gained: a
+// pad's merged devices stay with it, and a failed read is no loss. A
+// device whose gamepad event brought the look is sending, else -1.
+static void Look(mwinAndroidPlatform* platform, int32_t sending, uint64_t nowNs)
 {
     JNIEnv* env = platform->java.env;
     mwinAndroidPads* pads = &platform->pads;
     pads->lookedNs = nowNs;
-    jintArray list = (*env)->CallStaticObjectMethod(env, pads->type, pads->list);
+    jintArray list = (*env)->CallStaticObjectMethod(env, pads->type, pads->list, (jint)sending);
     if (list == nullptr || (*env)->ExceptionCheck(env))
     {
         (*env)->ExceptionClear(env);
@@ -268,11 +314,14 @@ static void Look(mwinAndroidPlatform* platform, uint64_t nowNs)
             continue;
         }
         int8_t battery = BatteryOf(platform, pad->device);
-        if (battery != pad->battery)
+        mwinGamepadInfo info = platform->context->gamepads[pad->slot].info;
+        mwinGamepadCapabilities capabilities =
+            (mwinGamepadCapabilities)(info.capabilities | CapabilitiesOf(platform, pad->device));
+        if (battery != pad->battery || capabilities != info.capabilities)
         {
             pad->battery = battery;
-            mwinGamepadInfo info = platform->context->gamepads[pad->slot].info;
             info.battery = battery;
+            info.capabilities = capabilities;
             mwinChangeGamepad(platform->context, pad->slot, &info, nowNs);
         }
     }
@@ -282,7 +331,7 @@ void mwinAndroidPumpPads(mwinAndroidPlatform* platform, uint64_t nowNs)
 {
     if (nowNs - platform->pads.lookedNs >= LOOK_NS)
     {
-        Look(platform, nowNs);
+        Look(platform, -1, nowNs);
     }
 }
 
@@ -327,7 +376,7 @@ bool mwinAndroidPadInput(mwinAndroidPlatform* platform, const AInputEvent* event
     if (pad == nullptr && FromPad(source))
     {
         // A gamepad that came since the last look.
-        Look(platform, mwinAndroidNow());
+        Look(platform, device, mwinAndroidNow());
         pad = PadOf(&platform->pads, device);
     }
     if (pad == nullptr)
@@ -352,23 +401,6 @@ bool mwinAndroidPadInput(mwinAndroidPlatform* platform, const AInputEvent* event
         return true;
     }
     return false;
-}
-
-// Runs a device's motors: false when it has none or Java failed.
-static bool Vibrate(const mwinAndroidPlatform* platform, int32_t device, float low, float high,
-                    uint32_t durationMs)
-{
-    JNIEnv* env = platform->java.env;
-    // As values: floats through the variadic call would become doubles.
-    jvalue arguments[4] = {{.i = device},
-                           {.f = low},
-                           {.f = high},
-                           {.i = durationMs > INT32_MAX ? INT32_MAX : (jint)durationMs}};
-    jboolean ran = (*env)->CallStaticBooleanMethodA(env, platform->pads.type, platform->pads.rumble,
-                                                    arguments);
-    bool thrown = (*env)->ExceptionCheck(env);
-    (*env)->ExceptionClear(env);
-    return ran && !thrown;
 }
 
 mwinResult mwinAndroidRumble(mwinAndroidPlatform* platform, uint32_t slot, float low, float high,

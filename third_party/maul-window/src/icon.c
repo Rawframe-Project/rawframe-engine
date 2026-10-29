@@ -10,11 +10,17 @@
 #include <stdckdint.h>
 #include <string.h>
 
-bool mwinIsIconImage(const mwinIconImage* image, uint32_t most)
+mwinResult mwinCheckIconImage(const mwinIconImage* image, uint32_t most)
 {
-    return image->pixels != nullptr && image->width > 0 && image->height > 0 &&
-           image->width <= most && image->height <= most &&
-           image->stride >= (size_t)image->width * 4;
+    if (image->pixels == nullptr || image->width == 0 || image->height == 0)
+    {
+        return mwin_errorInvalid;
+    }
+    if (image->width > most || image->height > most)
+    {
+        return mwin_errorLimit;
+    }
+    return image->stride >= (size_t)image->width * 4 ? mwin_success : mwin_errorInvalid;
 }
 
 mwinIconCopy* mwinCopyIconImages(const mwinContext* context, const mwinIconImage* images,
@@ -56,15 +62,22 @@ mwinIconCopy* mwinCopyIconImages(const mwinContext* context, const mwinIconImage
 mwinResult mwinRequestIcon(mwinContext* context, mwinWindowId window, const mwinIconImage* images,
                            uint32_t count, mwinRequestId* requestOut)
 {
-    bool valid =
-        context != nullptr && count <= MWIN_ICON_IMAGES && (images != nullptr || count == 0);
-    for (uint32_t i = 0; valid && i < count; i++)
+    if (mwinIsBusy(context))
     {
-        valid = mwinIsIconImage(&images[i], MWIN_ICON_SIZE);
+        return mwinBusy(context);
     }
-    if (!valid)
+    if (context == nullptr || (images == nullptr && count != 0))
     {
         return mwinMisuse(context);
+    }
+    mwinResult status = count > MWIN_MAX_ICON_IMAGES ? mwin_errorLimit : mwin_success;
+    for (uint32_t i = 0; status == mwin_success && i < count; i++)
+    {
+        status = mwinCheckIconImage(&images[i], MWIN_MAX_ICON_SIZE);
+    }
+    if (status != mwin_success)
+    {
+        return mwinRefuse(context, status);
     }
     mwinIconCopy* icon = mwinCopyIconImages(context, images, count);
     if (icon == nullptr)
@@ -73,7 +86,7 @@ mwinResult mwinRequestIcon(mwinContext* context, mwinWindowId window, const mwin
     }
     uint32_t slot = 0;
     int32_t request = 0;
-    mwinResult status = mwinBeginRequest(context, window, mwin_requestIcon, &slot, &request);
+    status = mwinBeginRequest(context, window, mwin_requestIcon, &slot, &request);
     if (status != mwin_success)
     {
         mwinRelease(&context->allocator, icon, icon->size, alignof(max_align_t));

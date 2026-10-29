@@ -60,7 +60,7 @@ static UINT FormatOf(const char* mime, size_t length)
 {
     static const wchar_t png[] = L"PNG";
     static const wchar_t html[] = L"HTML Format";
-    wchar_t name[MWIN_CLIPBOARD_MIME + 1];
+    wchar_t name[MWIN_MAX_CLIPBOARD_MIME + 1];
     for (size_t i = 0; i < length; i++)
     {
         name[i] = (wchar_t)mime[i];

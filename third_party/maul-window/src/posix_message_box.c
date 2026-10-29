@@ -56,8 +56,8 @@ static int Zenity(const mwinMessageBoxDef* def)
     static char* const accepts[] = {"--ok-label=OK", "--ok-label=OK", "--ok-label=Yes"};
     static char* const refuses[] = {"--cancel-label=Cancel", "--cancel-label=Cancel",
                                     "--cancel-label=No"};
-    char title[MWIN_MESSAGE_TITLE_BYTES + 16];
-    char text[MWIN_MESSAGE_BYTES + 16];
+    char title[MWIN_MAX_MESSAGE_TITLE_BYTES + 16];
+    char text[MWIN_MAX_MESSAGE_BYTES + 16];
     bool question = def->buttons != mwin_buttonsOk;
     char* arguments[] = {
         "zenity",
@@ -77,8 +77,8 @@ static int Kdialog(const mwinMessageBoxDef* def)
     static char* const kinds[] = {"--msgbox", "--sorry", "--error"};
     static char* const accepts[] = {"OK", "OK", "Yes"};
     static char* const refuses[] = {"Cancel", "Cancel", "No"};
-    char title[MWIN_MESSAGE_TITLE_BYTES + 1];
-    char text[MWIN_MESSAGE_BYTES + 1];
+    char title[MWIN_MAX_MESSAGE_TITLE_BYTES + 1];
+    char text[MWIN_MAX_MESSAGE_BYTES + 1];
     bool question = def->buttons != mwin_buttonsOk;
     char* arguments[] = {
         "kdialog",

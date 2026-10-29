@@ -113,10 +113,10 @@ static void Post(mwinWebPlatform* platform, uint32_t slot, mwinEvent* event, dou
     mwinPost(platform->context, slot, event);
 }
 
-// Ends a composition the window shows.
+// Ends the input method's composition, when one runs.
 static void EndComposition(mwinWebPlatform* platform, uint32_t slot, double timeMs)
 {
-    if (!platform->context->windows[slot].state.composing)
+    if (!platform->context->windows[slot].imeComposing)
     {
         return;
     }

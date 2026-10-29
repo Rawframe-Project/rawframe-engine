@@ -7,16 +7,13 @@
 
 #include "allocator.h"
 #include "core.h"
-
-#include "maul-unicode/encoding.h"
+#include "utf8.h"
 
 #include <string.h>
 
-static bool IsText(const char* text, size_t length)
+static mwinResult CheckText(const char* text, size_t length)
 {
-    return (text != nullptr || length == 0) && length <= MWIN_ADDRESS_BYTES &&
-           muniValidateUtf8(text, length).status == muni_success &&
-           (length == 0 || memchr(text, '\0', length) == nullptr);
+    return mwinCheckText(text, length, MWIN_MAX_ADDRESS_BYTES, mwin_errorLimit, false);
 }
 
 // Whether text begins with a prefix, in any case.
@@ -40,11 +37,12 @@ static bool Begins(const char* text, size_t length, const char* prefix)
 
 // An address this opens: web or mail, something after the scheme, and
 // no space or control character another program could split it at.
-static bool IsAddress(const char* url, size_t length)
+static mwinResult CheckAddress(const char* url, size_t length)
 {
-    if (!IsText(url, length))
+    mwinResult status = CheckText(url, length);
+    if (status != mwin_success)
     {
-        return false;
+        return status;
     }
     size_t scheme = Begins(url, length, "https://")  ? 8
                     : Begins(url, length, "http://") ? 7
@@ -52,17 +50,17 @@ static bool IsAddress(const char* url, size_t length)
                                                      : 0;
     if (scheme == 0 || length == scheme)
     {
-        return false;
+        return mwin_errorInvalid;
     }
     for (size_t i = 0; i < length; i++)
     {
         unsigned char c = (unsigned char)url[i];
         if (c <= ' ' || c == 0x7F)
         {
-            return false;
+            return mwin_errorInvalid;
         }
     }
-    return true;
+    return mwin_success;
 }
 
 // An absolute path on the platform built for.
@@ -134,9 +132,18 @@ bool mwinWantsAwake(const mwinContext* context)
 mwinResult mwinRequestOpenUrl(mwinContext* context, mwinWindowId window, const char* url,
                               size_t length, mwinRequestId* requestOut)
 {
-    if (context == nullptr || !IsAddress(url, length))
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
+    if (context == nullptr)
     {
         return mwinMisuse(context);
+    }
+    mwinResult status = CheckAddress(url, length);
+    if (status != mwin_success)
+    {
+        return mwinRefuse(context, status);
     }
     return RequestText(context, window, mwin_requestOpenUrl, url, length, requestOut);
 }
@@ -144,9 +151,22 @@ mwinResult mwinRequestOpenUrl(mwinContext* context, mwinWindowId window, const c
 mwinResult mwinRequestRevealFile(mwinContext* context, mwinWindowId window, const char* path,
                                  size_t length, mwinRequestId* requestOut)
 {
-    if (context == nullptr || !IsText(path, length) || !IsAbsolute(path, length))
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
+    if (context == nullptr)
     {
         return mwinMisuse(context);
+    }
+    mwinResult status = CheckText(path, length);
+    if (status == mwin_success && !IsAbsolute(path, length))
+    {
+        status = mwin_errorInvalid;
+    }
+    if (status != mwin_success)
+    {
+        return mwinRefuse(context, status);
     }
     return RequestText(context, window, mwin_requestRevealFile, path, length, requestOut);
 }
@@ -154,6 +174,10 @@ mwinResult mwinRequestRevealFile(mwinContext* context, mwinWindowId window, cons
 mwinResult mwinRequestKeepAwake(mwinContext* context, mwinWindowId window, bool awake,
                                 mwinRequestId* requestOut)
 {
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
     uint32_t slot = 0;
     int32_t request = 0;
     mwinResult status = mwinBeginRequest(context, window, mwin_requestKeepAwake, &slot, &request);

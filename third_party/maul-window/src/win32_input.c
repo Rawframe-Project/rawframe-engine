@@ -152,7 +152,7 @@ static void OnCharacter(mwinWin32Window* window, WPARAM unit)
     char text[4];
     size_t length = 0;
     if (character < 0x20 || character == 0x7F ||
-        muniEncodeUtf8(character, text, &length) != muni_success)
+        muniEncodeUtf8(character, text, sizeof(text), &length) != muni_success)
     {
         return;
     }
@@ -583,7 +583,7 @@ void mwinWin32ReleaseCursor(mwinContext* context, uint32_t slot)
         }
     }
     mwinCursor* cursor = &context->cursors[slot];
-    for (uint32_t i = 0; i < MWIN_CURSOR_IMAGES; i++)
+    for (uint32_t i = 0; i < MWIN_MAX_CURSOR_IMAGES; i++)
     {
         if (cursor->native[i] != nullptr)
         {

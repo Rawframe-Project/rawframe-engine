@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What the test backend keeps, shared by backend_test.c and the
-// services it plays (backend_test_services.c).
+// What the test backend keeps, shared by backend_test.c, its gamepads
+// (backend_test_pads.c) and the services it plays
+// (backend_test_services.c).
 
 #ifndef MAUL_WINDOW_SRC_BACKEND_TEST_H
 #define MAUL_WINDOW_SRC_BACKEND_TEST_H
@@ -112,7 +113,7 @@ typedef struct mwinTestPlatform
     // A drop gathered in the context waits for its report.
     bool dropWaiting;
     // The last address opened and path revealed.
-    char opened[2][MWIN_ADDRESS_BYTES];
+    char opened[2][MWIN_MAX_ADDRESS_BYTES];
     uint32_t openedLength[2];
     char dialogFiles[MWIN_TEST_DIALOG_BYTES];
     uint32_t dialogFilesLength;
