@@ -18,6 +18,19 @@
 # of these tools; the containers are committed, and this is run again
 # whenever a source changes. spirv-cross and dxc must be on the path.
 #
+# Each directory of containers has a stamp, containers.stamp: the Maul RHI
+# release whose tools cooked them, the flags its DXC compiles passed, and
+# each container's SHA-256. The container format has no place for them,
+# and DXIL compiled without -Gis cannot be told apart by its bytes. DXC
+# without -Gis marks every float operation fast and folds the math, so
+# D3D12 would compute other than the source and the other APIs; this
+# refuses to cook, a game's material too, when Maul RHI's mrhi_dxil.py
+# passes no -Gis. `--check`, which the check runs and which needs no
+# tool, refuses a stamp without -Gis or with other flags than the
+# vendored mrhi_dxil.py passes, one of another Maul RHI release than the
+# vendored one, and a container that is missing, unstamped or not the
+# bytes stamped. A move of Maul RHI therefore cooks the containers again.
+#
 # With `--material`, the three containers of each container linked with a
 # material, the scene's and the shadow's, are built linked with the
 # material module given in place of the engine's own, and written to the
@@ -30,7 +43,10 @@
 #
 # usage: tools/gen_shaders.py
 #        tools/gen_shaders.py --material <material.slang> <directory>
+#        tools/gen_shaders.py --check [root]
 
+import ast
+import hashlib
 import json
 import os
 import re
@@ -98,6 +114,123 @@ CONTAINERS = (
     ("particles_gpu", "spawn"),
     ("particles_gpu", "particle"),
 )
+
+
+# The stamp beside each directory of containers, and the containers a
+# source gives: SPIR-V and WGSL, with Metal, with DXIL.
+STAMP = "containers.stamp"
+SUFFIXES = ("", ".metal", ".d3d12")
+
+
+def dxcFlags(root):
+    """The DXC_FLAGS the vendored mrhi_dxil.py assigns, read from its
+    source without running it; None when it assigns no tuple of strings."""
+    script = os.path.join(root, "third_party", "maul-rhi", "tools", "mrhi_dxil.py")
+    with open(script, encoding="utf-8") as file:
+        tree = ast.parse(file.read())
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and
+                node.targets[0].id == "DXC_FLAGS"):
+            try:
+                flags = ast.literal_eval(node.value)
+            except ValueError:
+                return None
+            if isinstance(flags, tuple) and all(isinstance(flag, str) for flag in flags):
+                return flags
+            return None
+    return None
+
+
+def rhiRelease(root):
+    """The vendored Maul RHI's release, from its version macros."""
+    with open(os.path.join(root, "third_party", "maul-rhi", "include", "maul-rhi", "base.h"), encoding="utf-8") as file:
+        text = file.read()
+    parts = [re.search(rf"^#define MRHI_VERSION_{part} (\d+)$", text, re.M) for part in ("MAJOR", "MINOR", "PATCH")]
+    return ".".join(part.group(1) for part in parts) if all(parts) else None
+
+
+def strictFlags():
+    """The vendored DXC flags, when they keep the float math strict."""
+    flags = dxcFlags(ROOT)
+    if flags is None or "-Gis" not in flags:
+        sys.exit(f"{DXIL} compiles DXIL without -Gis: D3D12 would fold the float math the other APIs keep")
+    return flags
+
+
+def containers(root):
+    """Each directory of containers and the names of those it holds."""
+    held = {}
+    for module, name in TEST_MATERIALS:
+        directory = os.path.join(root, "modules", module, "tests", "generated")
+        held.setdefault(directory, []).extend(f"{name}.{linked}{suffix}.mrsc" for linked in LINKED
+                                              for suffix in SUFFIXES)
+    for module, name in CONTAINERS:
+        directory = os.path.join(root, "modules", module, "src", "generated")
+        held.setdefault(directory, []).extend(f"{name}{suffix}.mrsc" for suffix in SUFFIXES)
+    return held
+
+
+def digest(path):
+    with open(path, "rb") as file:
+        return hashlib.sha256(file.read()).hexdigest()
+
+
+def stamp(directory, names, flags):
+    lines = [
+        "# Written by tools/gen_shaders.py and read by its --check: the Maul RHI",
+        "# release whose tools cooked these containers, the flags its DXC",
+        "# compiles passed, and each container's SHA-256.",
+        f"maul-rhi {rhiRelease(ROOT)}",
+        f"dxc-flags {' '.join(flags)}",
+    ]
+    lines += [f"container {name} {digest(os.path.join(directory, name))}" for name in sorted(names)]
+    with open(os.path.join(directory, STAMP), "w", encoding="utf-8", newline="\n") as file:
+        file.write("\n".join(lines) + "\n")
+
+
+def problems(root):
+    """What in root's containers no longer matches their stamps; empty
+    when every one is current."""
+    found = []
+    flags = dxcFlags(root)
+    release = rhiRelease(root)
+    for directory, names in containers(root).items():
+        path = os.path.join(directory, STAMP)
+        shown = os.path.relpath(path, root)
+        if not os.path.isfile(path):
+            found.append(f"{shown}: missing; run tools/gen_shaders.py")
+            continue
+        with open(path, encoding="utf-8") as file:
+            text = file.read()
+        stamped = re.search(r"^maul-rhi (\S+)$", text, re.M)
+        if stamped is None or stamped.group(1) != release:
+            found.append(f"{shown}: cooked with Maul RHI {stamped.group(1) if stamped else 'of no release'}, "
+                         f"the vendored one is {release}")
+        cooked = re.search(r"^dxc-flags (.*)$", text, re.M)
+        if cooked is None or "-Gis" not in cooked.group(1).split():
+            found.append(f"{shown}: its DXIL was compiled without -Gis")
+        elif flags is None or cooked.group(1) != " ".join(flags):
+            found.append(f"{shown}: its DXIL was compiled with {cooked.group(1)}, the vendored mrhi_dxil.py "
+                         f"passes {' '.join(flags) if flags else 'no flags it states'}")
+        hashes = dict(re.findall(r"^container (\S+) ([0-9a-f]{64})$", text, re.M))
+        for name in names:
+            held = os.path.join(directory, name)
+            if not os.path.isfile(held):
+                found.append(f"{os.path.relpath(held, root)}: missing")
+            elif name not in hashes:
+                found.append(f"{os.path.relpath(held, root)}: not in {STAMP}")
+            elif hashes[name] != digest(held):
+                found.append(f"{os.path.relpath(held, root)}: not the bytes {STAMP} names")
+        for name in sorted(set(hashes) - set(names)):
+            found.append(f"{shown}: names {name}, which no source gives")
+    return found
+
+
+def check(root):
+    found = problems(root)
+    for problem in found:
+        print(f"gen_shaders --check: {problem}")
+    return 1 if found else 0
 
 
 def run(*command, cwd=None):
@@ -260,6 +393,9 @@ def build(work, shaders, name, material=None):
 
 
 def main():
+    if len(sys.argv) in (2, 3) and sys.argv[1] == "--check":
+        sys.exit(check(os.path.abspath(sys.argv[2]) if len(sys.argv) == 3 else ROOT))
+    flags = strictFlags()
     checkSlang()
     # `--material <source> <directory>`: each linked container built with
     # that material, written to the directory, as the cook asks for a
@@ -295,6 +431,8 @@ def main():
                 with open(target, "wb") as file:
                     file.write(data)
                 print(f"{target}: {len(data)} bytes")
+    for directory, names in containers(ROOT).items():
+        stamp(directory, names, flags)
 
 
 if __name__ == "__main__":

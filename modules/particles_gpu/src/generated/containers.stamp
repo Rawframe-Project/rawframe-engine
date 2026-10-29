@@ -1,0 +1,11 @@
+# Written by tools/gen_shaders.py and read by its --check: the Maul RHI
+# release whose tools cooked these containers, the flags its DXC
+# compiles passed, and each container's SHA-256.
+maul-rhi 0.13.0
+dxc-flags -Gis -Qstrip_reflect -Qstrip_debug
+container particle.d3d12.mrsc a877004879e623fc5cbcf0258cfcf911191cdda91e7c70998b7a8a33325f7b5f
+container particle.metal.mrsc 25b6aa11d14d4ef0154594a0a7627c40a2ce1fd98516c645201aa9a5c08e7cd1
+container particle.mrsc c25aac00e871b4c662359365e2234f62a8377b7a1571af311377da7a9ba31065
+container spawn.d3d12.mrsc 2ef5012965f7114275e6eca903a4224c1b60baa37437a2bf9c03ea01cd80be4f
+container spawn.metal.mrsc a8ce5a7cb0e31ce13737b4d927a401d0835d27a068dd39e96756ef614ff72541
+container spawn.mrsc db47110f294612c364a5c0981f13152f56e80966b4f2a31d57b4c4e224a5f040
