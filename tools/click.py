@@ -68,10 +68,11 @@
 # whose iterations only bound it, and waits for the process it
 # watches to end; half a second, where the last argument waited for a
 # record that came, since what the test asked for has been seen. A step
-# that fails stops it too, at once. One still running thirty seconds
-# after (longer on a loaded machine) is killed with the process group it
-# leads, which a script that starts it with setsid gives it, so the
-# programs it started go with it.
+# that fails stops it too, at once. A program a script started with
+# setsid leads a process group, which holds the programs it starts: then
+# click.py waits for the whole group, and kills what is left of it thirty
+# seconds after (longer on a loaded machine; CLICK_STOP_SECONDS to change
+# it), even when the program itself stopped.
 #
 # usage: click.py <watched pid> <log> <ready code> <pid file>
 #                 <x>,<y>[:<text>] | @<name>[#<n>][:<text>] | keys=<key>[,<key>...]
@@ -681,34 +682,60 @@ def main():
     time.sleep(0.5 if seen else 5)
 
 
-def finish(pid, pid_file):
+def leads(pid):
+    """The process group `pid` leads, or None: one a script started with
+    setsid leads its own, which holds the programs it starts."""
+    try:
+        return pid if os.getpgid(pid) == pid else None
+    except OSError:
+        return None
+
+
+def finish(pid, pid_file, group):
     """Stops the program, thawed first, since a frozen program never sees
     the signal, and waits for the process it watches to end, however the
     steps ended: a step that failed fails the test at once with its logs,
-    not at its timeout."""
+    not at its timeout. With the `group` it leads, it waits for every
+    process in it, so a played server and client write their logs as they
+    stop, and then kills what is left of the group, even when the program
+    itself stopped: a child that ignores its stop stays on no one's
+    machine."""
     try:
         with open(pid_file, encoding="utf-8") as told:
             os.kill(int(told.read().strip()), signal.SIGCONT)
     except (OSError, ValueError):
         pass
     stop(pid_file)
-    deadline = time.monotonic() + stretched(30)
-    while alive(pid) and time.monotonic() < deadline:
-        time.sleep(0.25)
-    if alive(pid):
-        print(f"click.py: {pid} still running after it was asked to stop, killed")
+
+    def running():
+        if group is None:
+            return alive(pid)
         try:
-            if os.getpgid(pid) == pid:
-                os.killpg(pid, signal.SIGKILL)
-            else:
-                os.kill(pid, signal.SIGKILL)
+            os.killpg(group, 0)
         except OSError:
-            pass
+            return False
+        return True
+
+    deadline = time.monotonic() + stretched(float(os.environ.get("CLICK_STOP_SECONDS", "30")))
+    while running() and time.monotonic() < deadline:
+        time.sleep(0.25)
+    if running():
+        print(f"click.py: {pid} or what it started still running after it was asked to stop, killed")
+    try:
+        if group is not None:
+            os.killpg(group, signal.SIGKILL)
+        elif alive(pid):
+            os.kill(pid, signal.SIGKILL)
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":
+    # Asked now, while the program runs: once it has ended, no one can
+    # tell which group it led.
+    group = leads(int(sys.argv[1])) if len(sys.argv) > 4 else None
     try:
         main()
     finally:
         if len(sys.argv) > 4:
-            finish(int(sys.argv[1]), sys.argv[4])
+            finish(int(sys.argv[1]), sys.argv[4], group)
