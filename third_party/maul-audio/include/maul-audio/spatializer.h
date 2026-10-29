@@ -9,6 +9,16 @@
 // or waiting; a step is published whole, never torn. The host passes the
 // results to the direct effect and to the binaural effect or a panner.
 //
+// The simulation side's calls that compute or check floats (creating a
+// spatializer or a source, setting poses and materials, steps, probe
+// sets and bakes, loading a bake) and every task they hand the task
+// hooks run in round to nearest with subnormals kept, and leave
+// the thread's floating-point mode as they found it: a host's
+// flush-to-zero, denormals-are-zero or rounding mode changes no result.
+// The ray queries are called in the library's mode too, not the
+// thread's; the allocator and the task hooks' enqueueTask and finishTask
+// run in the thread's own. The rendering side never changes the mode.
+//
 // Positions are in metres in the host's world, right-handed with +y up;
 // an orientation turns the frame of the listener or a source (+x right,
 // +y up, -z ahead) into the world's.
@@ -26,6 +36,22 @@
 extern "C"
 {
 #endif
+
+// The bounds of a spatializer def's counts; a def past one is refused
+// with maud_errorLimit.
+#define MAUD_MAX_SOURCES           65536u
+#define MAUD_MAX_OCCLUSION_SAMPLES 1024u
+#define MAUD_MAX_SURFACES          16u
+#define MAUD_MAX_MATERIALS         65536u
+#define MAUD_MIN_REVERB_RAYS       64u
+#define MAUD_MAX_REVERB_RAYS       16384u
+#define MAUD_MAX_REFLECTION_ORDER  3u
+#define MAUD_MAX_PROBE_SETS        64u
+#define MAUD_MAX_PROBES            65536u
+#define MAUD_MAX_PROBE_PAIRS       16777216u
+#define MAUD_MAX_PATHS             4096u
+// The most columns a probe set's generation walks: 4096 by 4096.
+#define MAUD_MAX_PROBE_COLUMNS 16777216u
 
     // A spatializer.
     typedef struct maudSpatializer maudSpatializer;
@@ -115,7 +141,8 @@ extern "C"
     // The task hooks: enqueueTask has the host run task over [0,
     // itemCount) in ranges of at least minRange items, each exactly once,
     // on any threads in any order, and returns a handle that finishTask
-    // waits on. Results do not depend on the split.
+    // waits on. Results do not depend on the split, nor on the threads'
+    // floating-point modes.
     typedef void maudTaskFn(uint32_t start, uint32_t end, void* taskContext);
     typedef void* maudEnqueueTaskFn(maudTaskFn* task, uint32_t itemCount, uint32_t minRange,
                                     void* taskContext, void* userContext);
@@ -126,7 +153,7 @@ extern "C"
     // its rendering side (maudLatchResults, maudGetDirectResult,
     // maudGetReverbResult, maudRenderReflections), which is built to run
     // during a step, and maudGetSpatializerMisuse. Any other call that
-    // changes it is refused with maud_errorState and counted as misuse,
+    // changes it is refused with maud_errorBusy and counted as misuse,
     // from whichever thread the host runs them on.
 
     // How to create a spatializer. Build it with
@@ -137,10 +164,10 @@ extern "C"
         // MAUD_ABI_VERSION of the headers the program was built with; the
         // cookie and this stay the first two fields in every version.
         uint32_t version;
-        // The most sources at once, 1 to 65,536.
+        // The most sources at once, 1 to MAUD_MAX_SOURCES.
         uint32_t sourceCapacity;
         // The most occlusion points a volumetric source may have, 1 to
-        // 1,024.
+        // MAUD_MAX_OCCLUSION_SAMPLES.
         uint32_t maxOcclusionSamples;
         // The host's any-hit query; NULL leaves every path clear.
         maudAnyHitFn* anyHit;
@@ -148,35 +175,38 @@ extern "C"
         // pass nothing.
         maudClosestHitFn* closestHit;
         void* rayContext;
-        // The most surfaces a transmission path counts, 1 to 16.
+        // The most surfaces a transmission path counts, 1 to
+        // MAUD_MAX_SURFACES.
         uint32_t maxSurfaces;
-        // The material table's capacity, 1 to 65,536.
+        // The material table's capacity, 1 to MAUD_MAX_MATERIALS.
         uint32_t materialCapacity;
-        // The rays a reverberation estimate traces, 64 to 16,384, or 0
-        // for no estimates. Diffuse rooms are within 2 % at 1024; a
+        // The rays a reverberation estimate traces, MAUD_MIN_REVERB_RAYS
+        // to MAUD_MAX_REVERB_RAYS, or 0 for no estimates. Diffuse rooms are within 2 % at 1024; a
         // smooth room with one absorbent surface needs about 8000.
         uint32_t reverbRays;
         // The air's amplitude exponent per metre and band, for the
         // estimate (as the direct effect's def).
         float airAbsorption[MAUD_DIRECT_BANDS];
         // Geometric reflections: the bed's order (0 for none, else 1 to
-        // 3; they need reverbRays), the response's length in seconds
+        // MAUD_MAX_REFLECTION_ORDER; they need reverbRays), the response's length in seconds
         // (0.05 to 4) and the rate rendering runs at (44,100 to
         // 384,000 Hz). Memory grows with all three: four responses of
         // (order + 1)^2 channels.
         uint32_t reflectionOrder;
         float reflectionDuration;
         float reflectionRate;
-        // Probe sets for pathing: how many at once (0 to 64), the most
-        // probes one holds (1 to 65,536) and the most probe pairs within
-        // range one tests (1 to 16,777,216). A set takes its memory when
+        // Probe sets for pathing: how many at once (0 to
+        // MAUD_MAX_PROBE_SETS), the most probes one holds (1 to
+        // MAUD_MAX_PROBES) and the most probe pairs within range one tests
+        // (1 to MAUD_MAX_PROBE_PAIRS). A set takes its memory when
         // made: 12 bytes a probe and 16 a link, with 9 bytes a pair and
         // 5 a column while it is built.
         uint32_t probeSetCapacity;
         uint32_t maxProbes;
         uint32_t maxProbePairs;
         // The most occluded sources a direct step looks for paths for,
-        // in slot order (0 to 4,096; 0 for no pathing): 780 bytes each.
+        // in slot order (0 to MAUD_MAX_PATHS; 0 for no pathing): 780 bytes
+        // each.
         uint32_t maxPaths;
         // The task hooks; both NULL runs queries on the step's thread.
         maudEnqueueTaskFn* enqueueTask;
@@ -220,8 +250,9 @@ extern "C"
         // box's top by the closest-hit query; a probe goes at height
         // (0.1 to 10 m) above each horizontal surface (its normal within
         // 45 degrees of vertical) with that height free above it, at
-        // most 8 a column. y is up. A slab thicker than the height may
-        // hold a probe inside it; give such scenes points.
+        // most 8 a column, and at most MAUD_MAX_PROBE_COLUMNS columns.
+        // y is up. A slab thicker than the height may hold a probe inside
+        // it; give such scenes points.
         maudVector3 boxMin;
         maudVector3 boxMax;
         float spacing;
@@ -349,12 +380,13 @@ extern "C"
     /// @param spatializerOut  Receives the spatializer; NULL on failure.
     /// @return `maud_success`; `maud_errorVersion` for a def stamped with
     ///         another binary interface than the library's, checked
-    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a
-    ///         def without its cookie, a capacity or ray count out of
-    ///         range, an air absorption below 0 or not finite, a
-    ///         reflection order, duration or rate out of range (or
-    ///         reflections without reverberation rays), or one task hook
-    ///         without the other; `maud_errorCapacity` when the
+    ///         before anything else of it; `maud_errorLimit` for a count
+    ///         past its MAUD_MAX_* bound or a ray count below
+    ///         MAUD_MIN_REVERB_RAYS; `maud_errorInvalid` for a NULL pointer, a
+    ///         def without its cookie, a capacity or limit of 0, an air
+    ///         absorption below 0 or not finite, a reflection duration or
+    ///         rate out of range (or reflections without reverberation
+    ///         rays), or one task hook without the other; `maud_errorCapacity` when the
     ///         allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
@@ -393,7 +425,7 @@ extern "C"
     ///         without its cookie, an invalid directivity pattern, an unknown
     ///         occlusion method, or a volumetric radius or point count out of
     ///         range; `maud_errorCapacity` when the spatializer has its
-    ///         capacity of sources; `maud_errorState` when host code the
+    ///         capacity of sources; `maud_errorBusy` when host code the
     ///         spatializer is running (its hooks or allocator) makes the call,
     ///         which counts as misuse.
     /// @par Thread safety
@@ -410,7 +442,7 @@ extern "C"
     /// @param source       The source.
     /// @return `maud_success`, `maud_errorInvalid` for a NULL spatializer or a
     ///         0 or unknown id, or `maud_errorStale` for a destroyed source's
-    ///         id; `maud_errorState` when host code the spatializer is running
+    ///         id; `maud_errorBusy` when host code the spatializer is running
     ///         (its hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
@@ -425,7 +457,7 @@ extern "C"
     /// @param pose         The pose.
     /// @return `maud_success`, `maud_errorInvalid` for a NULL pointer, a 0 or
     ///         unknown id, a value that is not finite or a zero orientation, or
-    ///         `maud_errorStale` for a destroyed source's id; `maud_errorState`
+    ///         `maud_errorStale` for a destroyed source's id; `maud_errorBusy`
     ///         when host code the spatializer is running (its hooks or
     ///         allocator) makes the call, which counts as misuse.
     /// @par Thread safety
@@ -445,7 +477,7 @@ extern "C"
     /// @param listener     The listener's pose.
     /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer, a
     ///         value that is not finite or a zero orientation;
-    ///         `maud_errorState` when host code the spatializer is running (its
+    ///         `maud_errorBusy` when host code the spatializer is running (its
     ///         hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
@@ -461,7 +493,7 @@ extern "C"
     /// @param count        Up to the def's materialCapacity.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
     ///         value outside 0 to 1; `maud_errorCapacity` for more than the
-    ///         capacity; `maud_errorState` when host code the spatializer is
+    ///         capacity; `maud_errorBusy` when host code the spatializer is
     ///         running (its hooks or allocator) makes the call, which counts as
     ///         misuse. Nothing changes on failure.
     /// @par Thread safety
@@ -475,8 +507,9 @@ extern "C"
     /// the scene: rays from the listener in batches of 64, each hit lit
     /// back toward it through the any-hit query, energy per band in 10 ms
     /// bins, a fit of the decay from -5 to -25 dB. The batches go through
-    /// the task hooks if set; the times do not depend on how the tasks
-    /// split them. Without a closest-hit query there is nothing to
+    /// the task hooks if set. The estimate is the same bits on every
+    /// platform, however the tasks split the batches and whatever the
+    /// threads' floating-point modes. Without a closest-hit query there is nothing to
     /// reflect and the times are 0.1 s. The next direct step publishes
     /// the times with its results. If the def asks for reflections, the
     /// same rays' energy, on spherical harmonics of its arrival
@@ -486,8 +519,9 @@ extern "C"
     /// @param spatializer  The spatializer.
     /// @param listener     The listener's pose.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a value
-    ///         that is not finite or a zero orientation; `maud_errorState` when
-    ///         the def asked for no estimates; `maud_errorState` when host code
+    ///         that is not finite or a zero orientation;
+    ///         `maud_errorUnsupported` when the def asked for no estimates;
+    ///         `maud_errorBusy` when host code
     ///         the spatializer is running (its hooks or allocator) makes the
     ///         call, which counts as misuse.
     /// @par Thread safety
@@ -543,7 +577,7 @@ extern "C"
     /// @param frames       The frames; 0 does nothing.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or
     ///         an orientation of zero length or not finite;
-    ///         `maud_errorState` when the def asked for no reflections.
+    ///         `maud_errorUnsupported` when the def asked for no reflections.
     /// @par Thread safety
     /// Real-time safe: no allocation, lock or wait. The rendering side is
     /// used by one thread at a time.
@@ -583,11 +617,13 @@ extern "C"
     /// @param setOut       Receives the set; 0 on failure.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer, a def
     ///         without its cookie, a value out of range or not finite, or
-    ///         neither points nor a box (one with height); `maud_errorState` to
-    ///         generate without a closest-hit query; `maud_errorCapacity` when
-    ///         the spatializer has its capacity of sets, past maxProbes or
-    ///         maxProbePairs, past 4,194,304 columns, or when memory runs out;
-    ///         `maud_errorState` when host code the spatializer is running (its
+    ///         neither points nor a box (one with height);
+    ///         `maud_errorUnsupported` to generate on a spatializer without a
+    ///         closest-hit query; `maud_errorLimit` for a
+    ///         box of more than MAUD_MAX_PROBE_COLUMNS (16,777,216) columns;
+    ///         `maud_errorCapacity` when the spatializer has its capacity of
+    ///         sets, past maxProbes or maxProbePairs, or when memory runs out;
+    ///         `maud_errorBusy` when host code the spatializer is running (its
     ///         hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
@@ -602,7 +638,7 @@ extern "C"
     /// @param set          The set.
     /// @return `maud_success`, `maud_errorInvalid` for a NULL spatializer or a
     ///         0 or unknown id, or `maud_errorStale` for a destroyed set's id;
-    ///         `maud_errorState` when host code the spatializer is running (its
+    ///         `maud_errorBusy` when host code the spatializer is running (its
     ///         hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
@@ -637,7 +673,7 @@ extern "C"
     /// @param set          The set, or 0.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer or an
     ///         unknown id; `maud_errorStale` for a destroyed set's id;
-    ///         `maud_errorState` when host code the spatializer is running (its
+    ///         `maud_errorBusy` when host code the spatializer is running (its
     ///         hooks or allocator) makes the call, which counts as misuse.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
@@ -649,7 +685,8 @@ extern "C"
     /// maudSimulateReverb makes one there, with the energy field when the
     /// spatializer renders reflections; it replaces an earlier bake. The
     /// rays go through the task hooks, and the bake's values are the same
-    /// bits on every platform and however the tasks run. Its memory: 24
+    /// bits on every platform, however the tasks run and whatever the
+    /// threads' floating-point modes. Its memory: 24
     /// bytes a probe, and with reflections 12 times the bed's channels
     /// times the response's 10 ms bins in bytes more.
     ///
@@ -657,9 +694,10 @@ extern "C"
     /// @param set          The set.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer or a
     ///         0 or unknown id; `maud_errorStale` for a destroyed set's id;
-    ///         `maud_errorState` without reverberation rays or a closest-hit
-    ///         query; `maud_errorCapacity` when memory runs out (an earlier
-    ///         bake is then gone); `maud_errorState` when host code the
+    ///         `maud_errorUnsupported` on a spatializer without reverberation
+    ///         rays or a closest-hit query; `maud_errorCapacity` when memory
+    ///         runs out (an earlier
+    ///         bake is then gone); `maud_errorBusy` when host code the
     ///         spatializer is running (its hooks or allocator) makes the call,
     ///         which counts as misuse.
     /// @par Thread safety
@@ -679,7 +717,7 @@ extern "C"
     /// @param set          The set, or 0.
     /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer or an
     ///         unknown id; `maud_errorStale` for a destroyed set's id;
-    ///         `maud_errorState` for a set without a bake; `maud_errorState`
+    ///         `maud_errorState` for a set without a bake; `maud_errorBusy`
     ///         when host code the spatializer is running (its hooks or
     ///         allocator) makes the call, which counts as misuse.
     /// @par Thread safety
@@ -701,8 +739,10 @@ extern "C"
     /// @return `maud_success`; `maud_errorInvalid` for a NULL spatializer
     ///         or size, or a 0 or unknown id; `maud_errorStale` for a
     ///         destroyed set's id; `maud_errorCapacity` when capacity is
-    ///         short of the size (nothing written) or the size does not
-    ///         fit in size_t.
+    ///         short of the size (nothing written), a part of the file
+    ///         would pass the 4 GiB a field holds (the energy fields of
+    ///         about 55,800 probes at order 3 and 401 bins), or the size
+    ///         does not fit in size_t.
     /// @par Thread safety
     /// Safe from any thread; the simulation side is used by one thread at
     /// a time.
@@ -720,11 +760,14 @@ extern "C"
     /// @param bytes        The file.
     /// @param size         Its size in bytes.
     /// @param setOut       Receives the set; 0 on failure.
-    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a file
-    ///         not well formed; `maud_errorUnsupported` for another version or
-    ///         fields that do not match; `maud_errorCapacity` past maxProbes or
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer;
+    ///         `maud_errorFormat` for a file not well formed;
+    ///         `maud_errorVersion` for another format
+    ///         version or a field only a later version writes;
+    ///         `maud_errorUnsupported` for energy fields that do not match;
+    ///         `maud_errorCapacity` past maxProbes or
     ///         maxProbePairs, with the spatializer's sets all taken or none
-    ///         asked for, or when memory runs out; `maud_errorState` when host
+    ///         asked for, or when memory runs out; `maud_errorBusy` when host
     ///         code the spatializer is running (its hooks or allocator) makes
     ///         the call, which counts as misuse.
     /// @par Thread safety

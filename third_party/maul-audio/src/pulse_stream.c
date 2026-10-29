@@ -288,6 +288,12 @@ static maudResult Connect(maudContext* context, maudStreamSlot* slot)
     maudPulse* pulse = context->native;
     maudPulseStream* entry = EntryOf(context, slot);
     *entry = (maudPulseStream){.api = &pulse->api, .core = &slot->core};
+    // An input that ran on another connection, before a move or the
+    // server's restart, starts its next block afresh.
+    if (slot->core.def.direction != maud_directionOutput)
+    {
+        maudRestartInputPeriod(&slot->core.period);
+    }
     if (pulse->server.context == nullptr)
     {
         return maud_success;

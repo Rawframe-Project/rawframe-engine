@@ -36,16 +36,46 @@ static maudAlsaStream* EntryOf(maudContext* context, const maudStreamSlot* slot)
 // not: playback fills samples, capture empties them.
 // Stamps the clock from the frames between the application and the
 // device: ahead of a rendered buffer, or behind a captured one, which
-// adds its own length back to its first frame.
-static void Stamp(maudAlsaStream* entry, uint32_t frames, bool output)
+// adds its own length back to its first frame. A running output whose
+// PCM has had its frames and has none of them left queued played a gap
+// without them: an underrun, counted once, by the write that ends it.
+// ALSA's PulseAudio plugin plays silence there and reports no -EPIPE; a
+// PCM in an xrun fails the delay instead, and its -EPIPE is counted. A
+// queue reported empty before the last write's frames could have played
+// out is not believed: a gap needs the time to drain, and the frames
+// still owed play out after this write's, however long the PCM goes on
+// reporting none. Nor is a queue reported with frames in it a period
+// after every frame owed could have played out, once the PCM was taking
+// them: it played a gap. Through pipewire-pulse a starved stream stops,
+// and the plugin's delay stays at the sink's latency and what was left
+// queued (#60). A fill into an empty queue sets no such time: the sink
+// may start taking frames late, as a resuming or Bluetooth one does.
+static void Stamp(maudAlsaStream* entry, uint32_t frames, bool output, bool running)
 {
     snd_pcm_sframes_t delay = 0;
-    if (entry->api->pcmDelay(entry->pcm, &delay) != 0 || delay < 0)
+    bool known = entry->api->pcmDelay(entry->pcm, &delay) == 0;
+    int64_t now = entry->now();
+    uint32_t rate = entry->core->format.sampleRate;
+    int64_t period = (int64_t)((uint64_t)entry->core->format.periodFrames * 1000000000u / rate);
+    bool empty = output && entry->primed && known && delay <= 0;
+    bool early = empty && now < entry->drainAt;
+    bool dry = output && entry->primed && entry->playing && known && now > entry->drainAt + period;
+    if (running && ((empty && !early) || dry))
+    {
+        maudCountXrun(entry->core);
+    }
+    entry->playing = known && delay > 0;
+    if (!known || delay < 0)
     {
         delay = 0;
     }
+    if (output)
+    {
+        entry->drainAt = early ? entry->drainAt + (int64_t)((uint64_t)frames * 1000000000u / rate)
+                               : now + (int64_t)(((uint64_t)delay + frames) * 1000000000u / rate);
+    }
     uint64_t behind = (uint64_t)delay + (output ? 0u : frames);
-    int64_t latency = (int64_t)(behind * 1000000000u / entry->core->format.sampleRate);
+    int64_t latency = (int64_t)(behind * 1000000000u / rate);
     if (output)
     {
         maudStampOutputClock(entry->core, latency);
@@ -75,7 +105,11 @@ static void Render(maudAlsaStream* entry, float* samples, uint32_t frames, bool 
         maudPushPeriod(&core->period, samples, frames);
     }
     atomic_store_explicit(&core->renderingThread, 0, memory_order_release);
-    Stamp(entry, frames, output);
+    Stamp(entry, frames, output, running);
+    // The PCM takes these frames before the next render: from then on, an
+    // empty queue is a gap in the stream's own frames, never in silence
+    // written while it did not run.
+    entry->primed = running;
     atomic_fetch_add_explicit(&core->position, frames, memory_order_release);
 }
 
@@ -146,8 +180,13 @@ bool maudAlsaTransfer(maudAlsaStream* entry)
     {
         result = output ? WriteOut(entry, result) : ReadIn(entry, result);
     }
-    return result >= 0 || result == -EAGAIN ||
-           maudAlsaRecover(api, entry->pcm, entry->core, result);
+    if (result >= 0 || result == -EAGAIN)
+    {
+        return true;
+    }
+    // A recovered PCM is prepared again, empty until the next write.
+    entry->primed = false;
+    return maudAlsaRecover(api, entry->pcm, entry->core, result);
 }
 
 bool maudAlsaRecover(const maudAlsaApi* api, snd_pcm_t* pcm, maudStreamCore* core,
@@ -385,7 +424,7 @@ maudResult maudAlsaAttachStream(maudContext* context, maudStreamSlot* slot)
 {
     maudAlsa* alsa = context->native;
     maudAlsaStream* entry = EntryOf(context, slot);
-    *entry = (maudAlsaStream){.api = &alsa->api, .core = &slot->core};
+    *entry = (maudAlsaStream){.api = &alsa->api, .core = &slot->core, .now = maudNowNanoseconds};
     snd_local_error_handler_t previous = maudAlsaQuiet(&alsa->api);
     maudResult result = Open(context, entry);
     alsa->api.libErrorSetLocal(previous);
@@ -440,6 +479,7 @@ void maudAlsaSetStreamActive(maudContext* context, maudStreamSlot* slot, bool ac
     snd_local_error_handler_t previous = maudAlsaQuiet(entry->api);
     entry->api->pcmPrepare(entry->pcm);
     entry->api->libErrorSetLocal(previous);
+    entry->primed = false;
     entry->threadRunning = true;
     if (!maudStartWorker(&entry->worker, RunStream, entry, "maud-alsa"))
     {

@@ -297,6 +297,8 @@ void maudWebEnded(maudContext* context, int slotIndex)
     }
     maudWebStream* entry = &web->streams[slotIndex];
     maudWebCloseCapture(entry->node);
+    // The new track's frames start the next block afresh.
+    maudRestartInputPeriod(&slot->core.period);
     entry->node = maudWebOpenCapture(context, slot, web->handle, entry->chunk);
 }
 

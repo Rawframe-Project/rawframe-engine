@@ -90,7 +90,11 @@ static void Process(maudPipewireStream* entry)
     struct spa_data* plane = &buffer->buffer->datas[0];
     uint32_t stride = core->period.channelCount * (uint32_t)sizeof(float);
     bool output = core->def.direction == maud_directionOutput;
-    uint32_t frames = output ? plane->maxsize / stride : plane->chunk->size / stride;
+    uint32_t offset = 0;
+    uint32_t bytes = output ? plane->maxsize
+                            : maudPipewireChunkBytes(plane->chunk->offset, plane->chunk->size,
+                                                     plane->maxsize, &offset);
+    uint32_t frames = bytes / stride;
     if (output && buffer->requested != 0 && buffer->requested < frames)
     {
         frames = (uint32_t)buffer->requested;
@@ -101,7 +105,7 @@ static void Process(maudPipewireStream* entry)
             atomic_load_explicit(&core->state, memory_order_acquire) == maud_streamRunning;
         atomic_store_explicit(&core->renderingThread, maudCurrentThread(), memory_order_release);
         core->period.sampleRate = atomic_load_explicit(&core->blockRate, memory_order_acquire);
-        float* samples = (float*)((uint8_t*)plane->data + (output ? 0 : plane->chunk->offset));
+        float* samples = (float*)((uint8_t*)plane->data + offset);
         if (output && running)
         {
             maudPullPeriod(&core->period, samples, frames);
@@ -242,6 +246,12 @@ static maudResult ConnectStream(maudContext* context, maudStreamSlot* slot, bool
         return maud_errorPlatform;
     }
     *entry = (maudPipewireStream){.owner = pipewire, .core = core};
+    // An input that ran on another pw_stream, before a move or the
+    // daemon's restart, starts its next block afresh.
+    if (core->def.direction != maud_directionOutput)
+    {
+        maudRestartInputPeriod(&core->period);
+    }
     entry->stream = pipewire->api.streamNew(pipewire->connection.core, "Maul Audio", props);
     if (entry->stream == nullptr)
     {

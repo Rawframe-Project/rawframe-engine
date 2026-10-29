@@ -3,21 +3,29 @@
 //
 // The bake file (bake_file.h). Every number is written and read byte by
 // byte in little-endian order, so the bytes do not depend on the host;
-// reading checks the header, the exact size, the checksum, then every
-// probe, row, neighbour (in range, rising, listed from both ends) and
-// value, and allocates only once all of it holds. Link lengths are the
-// probes' distances, computed as the graph's builder computes them.
+// reading checks the header, the checksum, the fields (file_fields.h)
+// and each one's exact length, then every probe, row, neighbour (in
+// range, rising, listed from both ends) and value, and allocates only
+// once all of it holds. Link lengths are the probes' distances, computed
+// as the graph's builder computes them.
 
 #include "bake_file.h"
 
 #include "allocator.h"
 #include "crc32.h"
+#include "file_fields.h"
 
 #include <math.h>
 #include <string.h>
 
-// The one version written and read.
-#define VERSION      2u
+// The one version written and read, and the header before the fields:
+// the magic, the version and the checksum of every byte after it.
+#define VERSION      3u
+#define HEADER_BYTES 16u
+// The head field: probe count, link count, range.
+#define HEAD_BYTES 12u
+// The energy fields' layout field: order and bins.
+#define LAYOUT_BYTES 8u
 #define LAYER_REVERB 1u
 #define LAYER_FIELDS 2u
 #define MIN_RANGE    0.1f
@@ -31,6 +39,28 @@
 
 static const uint8_t MAGIC[8] = {'M', 'A', 'U', 'D', 'B', 'A', 'K', 'E'};
 
+// The fields, in the order a writer puts them. The estimates and the
+// energy fields (their layout, then their values) are the layers: a
+// file has the estimates, or the estimates and the fields, or neither.
+enum
+{
+    PART_HEAD,
+    PART_PROBES,
+    PART_ROWS,
+    PART_NEIGHBOURS,
+    PART_REVERB,
+    PART_LAYOUT,
+    PART_FIELDS,
+    PART_COUNT
+};
+
+static const uint32_t s_tags[PART_COUNT] = {
+    MAUD_FIELD_TAG('h', 'e', 'a', 'd'), MAUD_FIELD_TAG('p', 'r', 'o', 'b'),
+    MAUD_FIELD_TAG('r', 'o', 'w', 's'), MAUD_FIELD_TAG('n', 'b', 'r', 's'),
+    MAUD_FIELD_TAG('r', 'e', 'v', 'b'), MAUD_FIELD_TAG('f', 'h', 'd', 'r'),
+    MAUD_FIELD_TAG('f', 'l', 'd', 's'),
+};
+
 typedef struct Header
 {
     uint32_t version;
@@ -42,7 +72,7 @@ typedef struct Header
     uint32_t bins;
 } Header;
 
-// Where each section starts, and the end.
+// Where each part's values start, and the end.
 typedef struct Layout
 {
     uint64_t probes;
@@ -91,27 +121,61 @@ static uint64_t FieldFloats(const Header* h)
                : 0;
 }
 
-static void Measure(const Header* h, Layout* l)
+// Each part's length in bytes, 0 for a layer the file does not have.
+static void PartBytes(const Header* h, uint64_t bytes[PART_COUNT])
 {
-    uint64_t at = MAUD_BAKE_HEADER;
-    l->probes = at;
-    at += (uint64_t)h->probes * 12;
-    l->rows = at;
-    at += ((uint64_t)h->probes + 1) * 4;
-    l->neighbours = at;
-    at += (uint64_t)h->links * 8;
     bool reverb = (h->layers & LAYER_REVERB) != 0;
-    l->times = at;
-    at += reverb ? (uint64_t)h->probes * 12 : 0;
-    l->levels = at;
-    at += reverb ? (uint64_t)h->probes * 12 : 0;
-    l->tailTimes = at;
-    at += reverb ? (uint64_t)h->probes * 12 : 0;
-    l->tailLevels = at;
-    at += reverb ? (uint64_t)h->probes * 12 : 0;
-    l->fields = at;
-    at += (uint64_t)h->probes * FieldFloats(h) * 4;
-    l->end = at;
+    bool fields = (h->layers & LAYER_FIELDS) != 0;
+    bytes[PART_HEAD] = HEAD_BYTES;
+    bytes[PART_PROBES] = (uint64_t)h->probes * 12;
+    bytes[PART_ROWS] = ((uint64_t)h->probes + 1) * 4;
+    bytes[PART_NEIGHBOURS] = (uint64_t)h->links * 8;
+    bytes[PART_REVERB] = reverb ? (uint64_t)h->probes * 12 * 4 : 0;
+    bytes[PART_LAYOUT] = fields ? LAYOUT_BYTES : 0;
+    bytes[PART_FIELDS] = (uint64_t)h->probes * FieldFloats(h) * 4;
+}
+
+// Whether the file has a part: the head, probes, rows and neighbours
+// always, the layers as it has them.
+static bool HasPart(const Header* h, int part)
+{
+    return part == PART_REVERB   ? (h->layers & LAYER_REVERB) != 0
+           : part == PART_LAYOUT ? (h->layers & LAYER_FIELDS) != 0
+           : part == PART_FIELDS ? (h->layers & LAYER_FIELDS) != 0
+                                 : true;
+}
+
+// Points the layout at the parts' payloads, at their offsets in at.
+static void Place(const Header* h, const uint64_t at[PART_COUNT], Layout* l)
+{
+    l->probes = at[PART_PROBES];
+    l->rows = at[PART_ROWS];
+    l->neighbours = at[PART_NEIGHBOURS];
+    l->times = at[PART_REVERB];
+    l->levels = l->times + (uint64_t)h->probes * 12;
+    l->tailTimes = l->levels + (uint64_t)h->probes * 12;
+    l->tailLevels = l->tailTimes + (uint64_t)h->probes * 12;
+    l->fields = at[PART_FIELDS];
+}
+
+// Where the parts' values lie: each after the one before, framed and
+// padded, from the header on; at gets each payload's offset.
+static void Measure(const Header* h, Layout* l, uint64_t at[PART_COUNT])
+{
+    uint64_t bytes[PART_COUNT];
+    PartBytes(h, bytes);
+    uint64_t end = HEADER_BYTES;
+    for (int part = 0; part < PART_COUNT; ++part)
+    {
+        at[part] = 0;
+        if (HasPart(h, part))
+        {
+            at[part] = end + MAUD_FIELD_FRAME;
+            end += maudFieldSize(bytes[part]);
+        }
+    }
+    Place(h, at, l);
+    l->end = end;
 }
 
 static Header HeaderOf(const maudProbeGraph* graph, const maudProbeBake* bake, uint32_t order,
@@ -133,7 +197,18 @@ size_t maudBakeFileBytes(const maudProbeGraph* graph, const maudProbeBake* bake,
 {
     Header h = HeaderOf(graph, bake, fieldOrder, fieldBins);
     Layout l;
-    Measure(&h, &l);
+    uint64_t at[PART_COUNT];
+    Measure(&h, &l, at);
+    // A part's length is a uint32 in its frame.
+    uint64_t bytes[PART_COUNT];
+    PartBytes(&h, bytes);
+    for (int part = 0; part < PART_COUNT; ++part)
+    {
+        if (bytes[part] > UINT32_MAX)
+        {
+            return 0;
+        }
+    }
     return l.end <= (uint64_t)SIZE_MAX ? (size_t)l.end : 0;
 }
 
@@ -150,15 +225,29 @@ void maudWriteBakeFile(const maudProbeGraph* graph, const maudProbeBake* bake, u
 {
     Header h = HeaderOf(graph, bake, fieldOrder, fieldBins);
     Layout l;
-    Measure(&h, &l);
+    uint64_t at[PART_COUNT];
+    Measure(&h, &l, at);
+    uint64_t bytes[PART_COUNT];
+    PartBytes(&h, bytes);
     memcpy(out, MAGIC, sizeof(MAGIC));
     PutU32(out + 8, VERSION);
-    PutU32(out + 12, h.probes);
-    PutU32(out + 16, h.links);
-    PutF32(out + 20, h.range);
-    PutU32(out + 24, h.layers);
-    PutU32(out + 28, h.order);
-    PutU32(out + 32, h.bins);
+    // A layer the bake does not have is left out, as its default.
+    for (int part = 0; part < PART_COUNT; ++part)
+    {
+        if (at[part] != 0)
+        {
+            maudPutFieldFrame(out + at[part] - MAUD_FIELD_FRAME, s_tags[part],
+                              (uint32_t)bytes[part]);
+        }
+    }
+    PutU32(out + at[PART_HEAD], h.probes);
+    PutU32(out + at[PART_HEAD] + 4, h.links);
+    PutF32(out + at[PART_HEAD] + 8, h.range);
+    if (h.layers & LAYER_FIELDS)
+    {
+        PutU32(out + at[PART_LAYOUT], h.order);
+        PutU32(out + at[PART_LAYOUT] + 4, h.bins);
+    }
     for (uint64_t i = 0; i < h.probes; ++i)
     {
         PutF32(out + l.probes + 12 * i, graph->points[i].x);
@@ -184,7 +273,7 @@ void maudWriteBakeFile(const maudProbeGraph* graph, const maudProbeBake* bake, u
     {
         PutFloats(out + l.fields, bake->fields, (uint64_t)h.probes * FieldFloats(&h));
     }
-    PutU32(out + 36, maudCrc32(out + MAUD_BAKE_HEADER, (size_t)l.end - MAUD_BAKE_HEADER));
+    PutU32(out + 12, maudCrc32(out + HEADER_BYTES, (size_t)l.end - HEADER_BYTES));
 }
 
 static maudVector3 Point(const uint8_t* data, const Layout* l, uint32_t i)
@@ -230,32 +319,70 @@ static bool Lists(const uint8_t* data, const Layout* l, uint32_t j, uint32_t i)
     return false;
 }
 
-static bool HeaderValid(const uint8_t* data, size_t size, Header* h, Layout* l, maudResult* why)
+// Reads the header and the fields into h and l: maud_errorVersion for
+// another version or a field only a later one writes, maud_errorFormat
+// for anything malformed. The layers are the parts present: the
+// estimates alone, or with the energy fields' layout and values, or
+// neither.
+static maudResult HeaderValid(const uint8_t* data, size_t size, Header* h, Layout* l)
 {
-    *why = maud_errorInvalid;
-    if (size < MAUD_BAKE_HEADER || memcmp(data, MAGIC, sizeof(MAGIC)) != 0)
+    if (size < HEADER_BYTES || memcmp(data, MAGIC, sizeof(MAGIC)) != 0)
     {
-        return false;
+        return maud_errorFormat;
     }
-    uint32_t version = U32(data + 8);
-    if (version != VERSION)
+    if (U32(data + 8) != VERSION)
     {
-        *why = maud_errorUnsupported;
-        return false;
+        return maud_errorVersion;
     }
-    *h = (Header){version,        U32(data + 12), U32(data + 16), F32(data + 20),
-                  U32(data + 24), U32(data + 28), U32(data + 32)};
-    bool fields = h->layers == (LAYER_REVERB | LAYER_FIELDS);
+    if (maudCrc32(data + HEADER_BYTES, size - HEADER_BYTES) != U32(data + 12))
+    {
+        return maud_errorFormat;
+    }
+    maudField parts[PART_COUNT];
+    maudResult read = maudReadFields(data, size, HEADER_BYTES, s_tags, PART_COUNT, parts);
+    if (read != maud_success)
+    {
+        return read;
+    }
+    bool fields = parts[PART_FIELDS].present;
+    if (!parts[PART_HEAD].present || parts[PART_HEAD].length != HEAD_BYTES ||
+        !parts[PART_PROBES].present || !parts[PART_ROWS].present ||
+        !parts[PART_NEIGHBOURS].present || parts[PART_LAYOUT].present != fields ||
+        (fields && (!parts[PART_REVERB].present || parts[PART_LAYOUT].length != LAYOUT_BYTES)))
+    {
+        return maud_errorFormat;
+    }
+    const uint8_t* head = parts[PART_HEAD].bytes;
+    const uint8_t* layout = parts[PART_LAYOUT].bytes;
+    *h = (Header){
+        .version = VERSION,
+        .probes = U32(head),
+        .links = U32(head + 4),
+        .range = F32(head + 8),
+        .layers = (parts[PART_REVERB].present ? LAYER_REVERB : 0) | (fields ? LAYER_FIELDS : 0),
+        .order = fields ? U32(layout) : 0,
+        .bins = fields ? U32(layout + 4) : 0,
+    };
     if (!(h->range >= MIN_RANGE && h->range <= MAX_RANGE) ||
-        (h->layers != 0 && h->layers != LAYER_REVERB && !fields) ||
-        (fields ? (h->order < 1 || h->order > MAX_ORDER || h->bins < 1 || h->bins > MAX_BINS)
-                : (h->order != 0 || h->bins != 0)))
+        (fields && (h->order < 1 || h->order > MAX_ORDER || h->bins < 1 || h->bins > MAX_BINS)))
     {
-        return false;
+        return maud_errorFormat;
     }
-    Measure(h, l);
-    return l->end == (uint64_t)size &&
-           maudCrc32(data + MAUD_BAKE_HEADER, size - MAUD_BAKE_HEADER) == U32(data + 36);
+    // Every length the counts give fits in 64 bits: the counts are 32.
+    uint64_t bytes[PART_COUNT];
+    PartBytes(h, bytes);
+    uint64_t at[PART_COUNT];
+    for (int part = 0; part < PART_COUNT; ++part)
+    {
+        if (parts[part].present && parts[part].length != bytes[part])
+        {
+            return maud_errorFormat;
+        }
+        at[part] = parts[part].present ? (uint64_t)(parts[part].bytes - data) : 0;
+    }
+    Place(h, at, l);
+    l->end = size;
+    return maud_success;
 }
 
 static bool LinksValid(const uint8_t* data, const Header* h, const Layout* l)
@@ -366,14 +493,14 @@ maudResult maudReadBakeFile(const uint8_t* data, size_t size, const maudBakeLimi
     *bake = (maudProbeBake){0};
     Header h;
     Layout l;
-    maudResult why = maud_errorInvalid;
-    if (data == nullptr || !HeaderValid(data, size, &h, &l, &why))
+    maudResult read = data != nullptr ? HeaderValid(data, size, &h, &l) : maud_errorInvalid;
+    if (read != maud_success)
     {
-        return why;
+        return read;
     }
     if (!LinksValid(data, &h, &l) || !ValuesValid(data, &h, &l))
     {
-        return maud_errorInvalid;
+        return maud_errorFormat;
     }
     if (h.probes > limits->maxProbes || h.links > limits->maxLinks)
     {

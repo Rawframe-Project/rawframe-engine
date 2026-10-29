@@ -45,7 +45,7 @@ void maudPostNotification(maudContext* context, const maudNotification* record)
 
 maudResult maudNextNotification(maudContext* context, maudNotification* notificationOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (notificationOut != nullptr)
     {
         memset(notificationOut, 0, sizeof(*notificationOut));
@@ -56,7 +56,7 @@ maudResult maudNextNotification(maudContext* context, maudNotification* notifica
     }
     if (maudRefuseControl(context))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (context->backend->pump != nullptr)
     {

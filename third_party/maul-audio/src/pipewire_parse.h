@@ -3,8 +3,8 @@
 //
 // What the PipeWire backend reads out of the daemon's objects and says
 // to it, apart from the connection: a format choice's default, a node's
-// card, a default's node name, the graph's rate, and a stream's format
-// and media properties.
+// card, a default's node name, the graph's rate, a captured chunk's
+// bytes, and a stream's format and media properties.
 
 #ifndef MAUL_AUDIO_SRC_PIPEWIRE_PARSE_H
 #define MAUL_AUDIO_SRC_PIPEWIRE_PARSE_H
@@ -32,6 +32,13 @@ void maudPipewireParseDefaultName(const char* value, char* name, size_t nameByte
 
 // The graph's rate: the forced rate, else the clock's, else fallback.
 uint32_t maudPipewireGraphRate(uint32_t forceRate, uint32_t clockRate, uint32_t fallback);
+
+// The bytes of a captured buffer that its chunk names, read as
+// PipeWire's own clients read them: the chunk's offset and size, each
+// within the data's maxsize. Returns the size, and the offset in
+// offsetOut.
+uint32_t maudPipewireChunkBytes(uint32_t offset, uint32_t size, uint32_t maxsize,
+                                uint32_t* offsetOut);
 
 // Builds a stream's format into buffer, of bytes: interleaved 32-bit
 // float at rate, with the layout's positions; a mono stream is MONO.

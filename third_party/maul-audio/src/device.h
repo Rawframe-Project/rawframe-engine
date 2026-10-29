@@ -9,6 +9,16 @@
 
 #include "context_core.h"
 
+// The rates a stream runs at. A platform's rate outside them is taken
+// as one it cannot tell, 0.
+#define MAUD_DEVICE_MIN_RATE 8000u
+#define MAUD_DEVICE_MAX_RATE 384000u
+
+// A platform's rate, rounded, when a stream can run at it; else 0, as
+// for a rate the platform cannot tell. Checked before it is converted,
+// so a rate past uint32_t or not a number gives 0.
+uint32_t maudDeviceRate(double rate);
+
 // A device as a backend describes it. The default flags of info are
 // ignored.
 typedef struct maudDeviceSpec

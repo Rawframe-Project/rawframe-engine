@@ -94,7 +94,13 @@ maudResult maudCreateStream(maudContext* context, const maudStreamDef* def, maud
     }
     if (maudRefuseControl(context))
     {
-        return maud_errorState;
+        return maud_errorBusy;
+    }
+    if (def != nullptr && streamOut != nullptr && def->cookie == STREAM_DEF_COOKIE &&
+        def->objectCount > MAUD_MAX_STREAM_OBJECTS)
+    {
+        maudCountMisuse(context);
+        return maud_errorLimit;
     }
     if (def == nullptr || streamOut == nullptr || !DefValid(def))
     {
@@ -141,7 +147,7 @@ static maudResult FindForControl(maudContext* context, maudStreamId stream,
     }
     if (maudRefuseControl(context))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     *slotOut = maudFindStream(context, stream);
     return *slotOut != nullptr ? maud_success : maud_errorStale;
@@ -161,7 +167,7 @@ maudResult maudDestroyStream(maudContext* context, maudStreamId stream)
         atomic_load_explicit(&slot->core.renderingThread, memory_order_acquire) != 0)
     {
         maudCountMisuse(context);
-        return maud_errorState;
+        return maud_errorBusy;
     }
     maudReleaseStream(context, slot);
     return maud_success;
@@ -204,7 +210,7 @@ static bool SharesClock(const maudContext* context, const maudDuplex* duplex)
 maudResult maudGetStreamStatus(const maudContext* context, maudStreamId stream,
                                maudStreamStatus* statusOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (statusOut != nullptr)
     {
         memset(statusOut, 0, sizeof(*statusOut));
@@ -245,7 +251,7 @@ maudResult maudGetStreamStatus(const maudContext* context, maudStreamId stream,
 maudResult maudGetStreamFormat(const maudContext* context, maudStreamId stream,
                                maudStreamFormat* formatOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (formatOut != nullptr)
     {
         memset(formatOut, 0, sizeof(*formatOut));
@@ -266,7 +272,7 @@ maudResult maudGetStreamFormat(const maudContext* context, maudStreamId stream,
 maudResult maudGetStreamPosition(const maudContext* context, maudStreamId stream,
                                  uint64_t* framesOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (framesOut != nullptr)
     {
         *framesOut = 0;
@@ -287,7 +293,7 @@ maudResult maudGetStreamPosition(const maudContext* context, maudStreamId stream
 maudResult maudGetStreamClock(const maudContext* context, maudStreamId stream,
                               maudStreamClock* clockOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (clockOut != nullptr)
     {
         memset(clockOut, 0, sizeof(*clockOut));
@@ -327,7 +333,7 @@ static maudResult BeginRender(maudContext* context, maudStreamId stream, maudDir
     if (maudIsAllocatingThread(context))
     {
         maudCountMisuse(context);
-        return maud_errorState;
+        return maud_errorBusy;
     }
     maudStreamSlot* slot = maudFindStream(context, stream);
     if (slot == nullptr)
@@ -370,7 +376,7 @@ static maudResult BeginRender(maudContext* context, maudStreamId stream, maudDir
         {
             maudCountMisuse(context);
         }
-        return maud_errorState;
+        return maud_errorBusy;
     }
     core->period.sampleRate = atomic_load_explicit(&core->blockRate, memory_order_acquire);
     *coreOut = core;

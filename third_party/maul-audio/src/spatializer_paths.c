@@ -6,6 +6,7 @@
 // direct step hands its occluded sources to the pathing.
 
 #include "bake_file.h"
+#include "fpenv.h"
 #include "spatializer_state.h"
 
 #include <string.h>
@@ -66,8 +67,8 @@ maudProbeSetDef maudDefaultProbeSetDef(void)
     };
 }
 
-maudResult maudCreateProbeSet(maudSpatializer* spatializer, const maudProbeSetDef* def,
-                              maudProbeSetId* setOut)
+static MAUD_NOINLINE maudResult CreateProbeSet(maudSpatializer* spatializer,
+                                               const maudProbeSetDef* def, maudProbeSetId* setOut)
 {
     if (setOut != nullptr)
     {
@@ -79,7 +80,7 @@ maudResult maudCreateProbeSet(maudSpatializer* spatializer, const maudProbeSetDe
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (def == nullptr || setOut == nullptr || def->cookie != PROBE_SET_DEF_COOKIE ||
         !maudProbeSetDefValid(def))
@@ -98,6 +99,15 @@ maudResult maudCreateProbeSet(maudSpatializer* spatializer, const maudProbeSetDe
     return result;
 }
 
+maudResult maudCreateProbeSet(maudSpatializer* spatializer, const maudProbeSetDef* def,
+                              maudProbeSetId* setOut)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = CreateProbeSet(spatializer, def, setOut);
+    maudFloatEnvLeave(token);
+    return result;
+}
+
 maudResult maudDestroyProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
 {
     if (spatializer == nullptr)
@@ -106,7 +116,7 @@ maudResult maudDestroyProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     maudSpatializerRunHost(spatializer, true);
     maudResult result = maudRemoveProbeSet(spatializer->probeSets, set);
@@ -136,7 +146,7 @@ maudResult maudSetPathing(maudSpatializer* spatializer, maudProbeSetId set)
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (set.index1 != 0 || set.generation != 0)
     {
@@ -159,7 +169,7 @@ maudResult maudGetProbeSet(const maudSpatializer* spatializer, maudProbeSetId se
                            maudProbeSetInfo* infoOut, uint32_t first, uint32_t count,
                            maudVector3* points)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (infoOut != nullptr)
     {
         memset(infoOut, 0, sizeof(*infoOut));
@@ -230,7 +240,7 @@ static bool Bake(maudSpatializer* s, const maudProbeGraph* graph, maudProbeBake*
     return true;
 }
 
-maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
+static MAUD_NOINLINE maudResult BakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
 {
     if (spatializer == nullptr)
     {
@@ -238,7 +248,7 @@ maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     maudSpatializer* s = spatializer;
     const maudProbeGraph* graph = nullptr;
@@ -254,12 +264,20 @@ maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
     }
     if (s->trace.rays == 0 || s->closestHit == nullptr)
     {
-        return maud_errorState;
+        return maud_errorUnsupported;
     }
     maudSpatializerRunHost(s, true);
     bool baked = Bake(s, graph, bake);
     maudSpatializerRunHost(s, false);
     return baked ? maud_success : maud_errorCapacity;
+}
+
+maudResult maudBakeProbeSet(maudSpatializer* spatializer, maudProbeSetId set)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = BakeProbeSet(spatializer, set);
+    maudFloatEnvLeave(token);
+    return result;
 }
 
 maudResult maudUseBakedReverb(maudSpatializer* spatializer, maudProbeSetId set)
@@ -270,7 +288,7 @@ maudResult maudUseBakedReverb(maudSpatializer* spatializer, maudProbeSetId set)
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (set.index1 != 0 || set.generation != 0)
     {
@@ -320,7 +338,7 @@ bool maudBakedReverb(maudSpatializer* s, maudVector3 position)
 maudResult maudSaveProbeSet(const maudSpatializer* spatializer, maudProbeSetId set, void* bytes,
                             size_t capacity, size_t* sizeOut)
 {
-    // Cleared first: a failure leaves zero (conventions section 8).
+    // Cleared first, so a failure leaves zero.
     if (sizeOut != nullptr)
     {
         *sizeOut = 0;
@@ -355,8 +373,8 @@ maudResult maudSaveProbeSet(const maudSpatializer* spatializer, maudProbeSetId s
     return maud_success;
 }
 
-maudResult maudLoadProbeSet(maudSpatializer* spatializer, const void* bytes, size_t size,
-                            maudProbeSetId* setOut)
+static MAUD_NOINLINE maudResult LoadProbeSet(maudSpatializer* spatializer, const void* bytes,
+                                             size_t size, maudProbeSetId* setOut)
 {
     if (setOut != nullptr)
     {
@@ -368,7 +386,7 @@ maudResult maudLoadProbeSet(maudSpatializer* spatializer, const void* bytes, siz
     }
     if (maudSpatializerBusy(spatializer))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (bytes == nullptr || setOut == nullptr)
     {
@@ -397,5 +415,16 @@ maudResult maudLoadProbeSet(maudSpatializer* spatializer, const void* bytes, siz
         }
     }
     maudSpatializerRunHost(s, false);
+    return result;
+}
+
+// The links' lengths are checked against the range, which a rounding
+// mode would move.
+maudResult maudLoadProbeSet(maudSpatializer* spatializer, const void* bytes, size_t size,
+                            maudProbeSetId* setOut)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = LoadProbeSet(spatializer, bytes, size, setOut);
+    maudFloatEnvLeave(token);
     return result;
 }

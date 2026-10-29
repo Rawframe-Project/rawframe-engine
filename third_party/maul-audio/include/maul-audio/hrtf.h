@@ -19,6 +19,10 @@ extern "C"
 {
 #endif
 
+// The most frames one call of a binaural effect or binaural decoder may
+// process; a def past it is refused with maud_errorLimit.
+#define MAUD_MAX_BINAURAL_FRAMES 16384u
+
     // A loaded HRTF set, at the rate it was loaded for.
     typedef struct maudHrtf maudHrtf;
 
@@ -94,11 +98,12 @@ extern "C"
     /// @param hrtfOut  Receives the set; NULL on failure.
     /// @return `maud_success`; `maud_errorVersion` for a def stamped with
     ///         another binary interface than the library's, checked
-    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, a def
-    ///         without its cookie or out of range, or bytes that are not a
-    ///         well-formed file (a wrong magic, size, ring layout, text or
-    ///         checksum); `maud_errorUnsupported` for a format version this
-    ///         library does not read; `maud_errorCapacity` when the set
+    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer, or a def
+    ///         without its cookie or out of range; `maud_errorFormat` for
+    ///         bytes that are not a well-formed file (a wrong magic, field,
+    ///         size, ring layout, text or checksum); `maud_errorVersion` also for another format
+    ///         version, or a field only a later version writes;
+    ///         `maud_errorCapacity` when the set
     ///         passes the def's limits or the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.

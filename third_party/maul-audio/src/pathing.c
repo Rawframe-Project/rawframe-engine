@@ -8,6 +8,8 @@
 
 #include "allocator.h"
 #include "direct_step.h"
+#include "fpenv.h"
+#include "host_tasks.h"
 
 #include <math.h>
 
@@ -206,7 +208,7 @@ static void Feed(const maudPathing* p, const maudPathJob* job, const maudVector3
     r->pathed = true;
 }
 
-static void RefineJobs(uint32_t start, uint32_t end, void* context)
+static MAUD_NOINLINE void RefineJobs(uint32_t start, uint32_t end, void* context)
 {
     const maudPathing* p = context;
     for (uint32_t j = start; j < end; ++j)
@@ -239,13 +241,6 @@ void maudRunPathing(maudPathing* pathing, const maudProbeGraph* graph,
     {
         p->counts[j] = Find(p, graph, &end, j);
     }
-    if (queries->enqueueTask != nullptr)
-    {
-        void* task = queries->enqueueTask(RefineJobs, p->jobCount, 1, p, queries->userTaskContext);
-        queries->finishTask(task, queries->userTaskContext);
-    }
-    else
-    {
-        RefineJobs(0, p->jobCount, p);
-    }
+    maudHostTasks hooks = {queries->enqueueTask, queries->finishTask, queries->userTaskContext};
+    maudRunHostTasks(&hooks, RefineJobs, p->jobCount, p);
 }

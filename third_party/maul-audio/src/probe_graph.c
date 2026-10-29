@@ -11,6 +11,8 @@
 #include "probe_graph.h"
 
 #include "allocator.h"
+#include "fpenv.h"
+#include "host_tasks.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -109,19 +111,8 @@ bool maudProbeSetDefValid(const maudProbeSetDef* def)
 
 static void Run(const maudProbeQueries* q, maudTaskFn* task, uint32_t items, void* context)
 {
-    if (items == 0)
-    {
-        return;
-    }
-    if (q->enqueueTask != nullptr)
-    {
-        void* handle = q->enqueueTask(task, items, 1, context, q->userTaskContext);
-        q->finishTask(handle, q->userTaskContext);
-    }
-    else
-    {
-        task(0, items, context);
-    }
+    maudHostTasks hooks = {q->enqueueTask, q->finishTask, q->userTaskContext};
+    maudRunHostTasks(&hooks, task, items, context);
 }
 
 static maudVector3 ColumnTop(const Columns* c, uint32_t column)
@@ -199,7 +190,7 @@ static void WalkColumns(const Columns* c, uint32_t first, uint32_t n)
     }
 }
 
-static void ColumnBatches(uint32_t start, uint32_t end, void* context)
+static MAUD_NOINLINE void ColumnBatches(uint32_t start, uint32_t end, void* context)
 {
     const Columns* c = context;
     for (uint32_t b = start; b < end; ++b)
@@ -216,7 +207,7 @@ static uint32_t Across(float low, float high, float spacing, float* first)
 {
     double count = fmax(1.0, floor(((double)high - (double)low) / (double)spacing));
     *first = (float)(((double)low + (double)high) * 0.5 - (count - 1.0) * 0.5 * (double)spacing);
-    return count > (double)MAUD_MAX_COLUMNS ? MAUD_MAX_COLUMNS + 1 : (uint32_t)count;
+    return count > (double)MAUD_MAX_PROBE_COLUMNS ? MAUD_MAX_PROBE_COLUMNS + 1 : (uint32_t)count;
 }
 
 // Generates the probes into *points (allocated here, *count of them).
@@ -226,9 +217,9 @@ static maudResult Generate(const maudProbeQueries* q, const maudProbeSetDef* def
     Columns c = {.queries = q, .def = def};
     c.across = Across(def->boxMin.x, def->boxMax.x, def->spacing, &c.x0);
     uint32_t along = Across(def->boxMin.z, def->boxMax.z, def->spacing, &c.z0);
-    if ((uint64_t)c.across * along > MAUD_MAX_COLUMNS)
+    if ((uint64_t)c.across * along > MAUD_MAX_PROBE_COLUMNS)
     {
-        return maud_errorCapacity;
+        return maud_errorLimit;
     }
     c.count = c.across * along;
     size_t bytes = (size_t)c.count * (sizeof(uint8_t) + sizeof(uint32_t));
@@ -322,7 +313,7 @@ static uint64_t Sweep(const Key* keys, const maudVector3* points, uint32_t count
     return total;
 }
 
-static void LinkBatches(uint32_t start, uint32_t end, void* context)
+static MAUD_NOINLINE void LinkBatches(uint32_t start, uint32_t end, void* context)
 {
     const Links* l = context;
     maudRay rays[MAUD_PROBE_BATCH];
@@ -524,7 +515,7 @@ maudResult maudBuildProbeGraph(const maudProbeQueries* queries, const maudProbeS
     {
         if (queries->closestHit == nullptr)
         {
-            return maud_errorState;
+            return maud_errorUnsupported;
         }
         maudResult result = Generate(queries, def, &generated, &count);
         if (result != maud_success)

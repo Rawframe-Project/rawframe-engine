@@ -43,7 +43,7 @@ static maudResult CheckOffline(maudContext* context)
     }
     if (maudRefuseControl(context))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     return maud_success;
 }

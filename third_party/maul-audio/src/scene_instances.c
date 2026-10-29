@@ -12,6 +12,7 @@
 // are the world's.
 
 #include "allocator.h"
+#include "fpenv.h"
 #include "scene_state.h"
 
 #include <math.h>
@@ -89,9 +90,9 @@ static maudResult Invalid(maudAcousticScene* scene)
     return maud_errorInvalid;
 }
 
-maudResult maudCreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
-                                   const maudInstanceTransform* transform,
-                                   maudSceneInstanceId* instanceOut)
+static MAUD_NOINLINE maudResult CreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
+                                                    const maudInstanceTransform* transform,
+                                                    maudSceneInstanceId* instanceOut)
 {
     if (instanceOut != nullptr)
     {
@@ -119,6 +120,18 @@ maudResult maudCreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
     return maud_success;
 }
 
+// Checking a transform squares its orientation, which flush-to-zero
+// would take to 0: the host's mode must not decide what is accepted.
+maudResult maudCreateSceneInstance(maudAcousticScene* scene, uint32_t mesh,
+                                   const maudInstanceTransform* transform,
+                                   maudSceneInstanceId* instanceOut)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = CreateSceneInstance(scene, mesh, transform, instanceOut);
+    maudFloatEnvLeave(token);
+    return result;
+}
+
 static maudResult Find(maudAcousticScene* scene, maudSceneInstanceId id, maudSceneInstance** out)
 {
     if (scene == nullptr)
@@ -138,8 +151,9 @@ static maudResult Find(maudAcousticScene* scene, maudSceneInstanceId id, maudSce
     return maud_success;
 }
 
-maudResult maudMoveSceneInstance(maudAcousticScene* scene, maudSceneInstanceId instance,
-                                 const maudInstanceTransform* transform)
+static MAUD_NOINLINE maudResult MoveSceneInstance(maudAcousticScene* scene,
+                                                  maudSceneInstanceId instance,
+                                                  const maudInstanceTransform* transform)
 {
     maudSceneInstance* slot = nullptr;
     maudResult result = Find(scene, instance, &slot);
@@ -153,6 +167,15 @@ maudResult maudMoveSceneInstance(maudAcousticScene* scene, maudSceneInstanceId i
     }
     slot->transform = *transform;
     return maud_success;
+}
+
+maudResult maudMoveSceneInstance(maudAcousticScene* scene, maudSceneInstanceId instance,
+                                 const maudInstanceTransform* transform)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = MoveSceneInstance(scene, instance, transform);
+    maudFloatEnvLeave(token);
+    return result;
 }
 
 maudResult maudDestroySceneInstance(maudAcousticScene* scene, maudSceneInstanceId instance)
@@ -222,7 +245,7 @@ static maudTriangle WorldBox(const maudPlacedInstance* p, float scale, const mau
     return box;
 }
 
-maudResult maudCommitAcousticScene(maudAcousticScene* scene)
+static MAUD_NOINLINE maudResult CommitAcousticScene(maudAcousticScene* scene)
 {
     if (scene == nullptr)
     {
@@ -246,6 +269,14 @@ maudResult maudCommitAcousticScene(maudAcousticScene* scene)
         maudBuildBvh(scene->boxes, n, scene->top);
     }
     return maud_success;
+}
+
+maudResult maudCommitAcousticScene(maudAcousticScene* scene)
+{
+    uint64_t token = maudFloatEnvEnter();
+    maudResult result = CommitAcousticScene(scene);
+    maudFloatEnvLeave(token);
+    return result;
 }
 
 // A ray in an instance's frame.

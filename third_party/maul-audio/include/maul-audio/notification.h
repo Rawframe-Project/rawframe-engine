@@ -84,7 +84,7 @@ extern "C"
     /// @param notificationOut  Receives the record; all zero when the
     ///                         queue is empty and on failure.
     /// @return `maud_success`; `maud_empty` when the queue is drained;
-    ///         `maud_errorInvalid` for a NULL pointer; `maud_errorState` on a
+    ///         `maud_errorInvalid` for a NULL pointer; `maud_errorBusy` on a
     ///         thread rendering one of the context's streams or running its
     ///         allocator.
     /// @par Thread safety

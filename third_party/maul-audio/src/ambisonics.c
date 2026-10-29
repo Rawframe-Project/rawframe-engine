@@ -27,6 +27,10 @@ static bool Finite(maudVector3 v)
 
 maudResult maudGetAmbisonicGains(uint32_t order, maudVector3 direction, float* gainsOut)
 {
+    if (order > MAUD_MAX_AMBISONIC_ORDER)
+    {
+        return maud_errorLimit;
+    }
     if (maudGetAmbisonicChannelCount(order) == 0 || gainsOut == nullptr || !Finite(direction))
     {
         return maud_errorInvalid;
@@ -73,6 +77,10 @@ static inline void AddRamped(float* out, const float* in, float a, float step, u
 maudResult maudEncodeAmbisonic(uint32_t order, const maudPanSource* from, const maudPanSource* to,
                                const float* in, float* const* bed, uint32_t frames)
 {
+    if (order > MAUD_MAX_AMBISONIC_ORDER)
+    {
+        return maud_errorLimit;
+    }
     uint32_t channels = maudGetAmbisonicChannelCount(order);
     if (channels == 0 || !SourceValid(from) || !SourceValid(to) || in == nullptr ||
         !BedValid(bed, channels))
@@ -162,8 +170,8 @@ static void RotateFrame(uint32_t order, const float* a, const float* b, float t,
             float sb = 0.0f;
             for (uint32_t j = 0; j < size; ++j)
             {
-                sa += a[at + i * size + j] * in[first + j];
-                sb += b != nullptr ? b[at + i * size + j] * in[first + j] : 0.0f;
+                sa += a[at + (size_t)i * size + j] * in[first + j];
+                sb += b != nullptr ? b[at + (size_t)i * size + j] * in[first + j] : 0.0f;
             }
             frame[first + i] = b != nullptr ? sa + t * (sb - sa) : sa;
         }
@@ -175,6 +183,10 @@ static void RotateFrame(uint32_t order, const float* a, const float* b, float t,
 maudResult maudRotateAmbisonic(uint32_t order, const maudQuaternion* from, const maudQuaternion* to,
                                float* const* bed, uint32_t frames)
 {
+    if (order > MAUD_MAX_AMBISONIC_ORDER)
+    {
+        return maud_errorLimit;
+    }
     uint32_t channels = maudGetAmbisonicChannelCount(order);
     double start[3][3];
     double end[3][3];

@@ -52,7 +52,7 @@ extern "C"
     ///         is required, a def without its cookie, or a value out of range;
     ///         `maud_errorCapacity` past the device limit or the name and key
     ///         limit; `maud_errorUnsupported` on a context that is not offline;
-    ///         `maud_errorState` on a thread rendering one of the context's
+    ///         `maud_errorBusy` on a thread rendering one of the context's
     ///         streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -68,7 +68,7 @@ extern "C"
     /// @param device   The device.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL context; `maud_errorUnsupported` on a context that is not
-    ///         offline; `maud_errorState` on a thread rendering one of the
+    ///         offline; `maud_errorBusy` on a thread rendering one of the
     ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -83,7 +83,7 @@ extern "C"
     /// @param device   The device.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL context or an unknown role; `maud_errorUnsupported` on a
-    ///         context that is not offline; `maud_errorState` on a thread
+    ///         context that is not offline; `maud_errorBusy` on a thread
     ///         rendering one of the context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -99,7 +99,7 @@ extern "C"
     /// @param form     Its new form.
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL context or an unknown form; `maud_errorUnsupported` on a
-    ///         context that is not offline; `maud_errorState` on a thread
+    ///         context that is not offline; `maud_errorBusy` on a thread
     ///         rendering one of the context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -119,7 +119,7 @@ extern "C"
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL context, an unknown layout or a rate out of range;
     ///         `maud_errorUnsupported` on a context that is not offline;
-    ///         `maud_errorState` on a thread rendering one of the context's
+    ///         `maud_errorBusy` on a thread rendering one of the context's
     ///         streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -140,7 +140,7 @@ extern "C"
     /// @return `maud_success`; `maud_errorStale`; `maud_errorInvalid` for a
     ///         NULL context, an unknown state, objects while not on, or an
     ///         input device; `maud_errorUnsupported` on a context that is not
-    ///         offline; `maud_errorState` on a thread rendering one of the
+    ///         offline; `maud_errorBusy` on a thread rendering one of the
     ///         context's streams or running its allocator.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.

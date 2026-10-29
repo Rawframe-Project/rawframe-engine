@@ -64,4 +64,13 @@ void maudPullPeriod(maudPeriod* period, float* out, uint32_t frames);
 // completed period. Real-time safe.
 void maudPushPeriod(maudPeriod* period, const float* in, uint32_t frames);
 
+// Drops the frames an input period has gathered toward its next block,
+// and moves the next block's position past them, so that the position
+// still counts the frames the platform delivered. A backend calls it
+// before it connects a new platform stream to a stream that ran on
+// another, as after a move: a block never joins frames of two platform
+// streams, and so never brings the old device's sound to the new one.
+// Not on the audio thread: while no platform callback of the stream runs.
+void maudRestartInputPeriod(maudPeriod* period);
+
 #endif // MAUL_AUDIO_SRC_PERIOD_H

@@ -158,6 +158,12 @@ static maudResult Open(maudContext* context, maudStreamSlot* slot)
     maudStreamCore* core = &slot->core;
     *entry = (maudAaudioStream){.core = core};
     atomic_init(&entry->lost, false);
+    // An input that ran on another AAudio stream, before its reopen
+    // after a disconnect, starts its next block afresh.
+    if (core->def.direction != maud_directionOutput)
+    {
+        maudRestartInputPeriod(&core->period);
+    }
     int32_t device = DeviceIdOf(context, core);
     if (device < 0)
     {

@@ -18,7 +18,7 @@ maudResult maudSetContextSuspended(maudContext* context, bool suspended)
     }
     if (maudRefuseControl(context))
     {
-        return maud_errorState;
+        return maud_errorBusy;
     }
     if (context->hostSuspended == suspended)
     {

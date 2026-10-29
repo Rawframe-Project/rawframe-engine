@@ -83,7 +83,8 @@ static bool IdOf(IMMDevice* device, char* out)
 }
 
 // Reads the audio engine's device format into info, if the store has
-// one: its rate, and the layout of its channel count. Each layout has a
+// one: its rate (0 outside the rates a stream runs at), and the layout
+// of its channel count. Each layout has a
 // count of its own, so the speaker mask would name no other.
 static void ReadFormat(IPropertyStore* store, maudDeviceInfo* info)
 {
@@ -93,9 +94,10 @@ static void ReadFormat(IPropertyStore* store, maudDeviceInfo* info)
         value.blob.cbSize >= sizeof(WAVEFORMATEX))
     {
         const WAVEFORMATEX* format = (const WAVEFORMATEX*)value.blob.pBlobData;
-        info->nativeSampleRate = format->nSamplesPerSec;
-        info->minSampleRate = format->nSamplesPerSec;
-        info->maxSampleRate = format->nSamplesPerSec;
+        uint32_t rate = maudDeviceRate(format->nSamplesPerSec);
+        info->nativeSampleRate = rate;
+        info->minSampleRate = rate;
+        info->maxSampleRate = rate;
         info->nativeLayout = maudLayoutWithChannels(format->nChannels);
     }
     PropVariantClear(&value);

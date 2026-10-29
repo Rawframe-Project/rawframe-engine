@@ -33,7 +33,8 @@ extern "C"
         // The set the effect renders through, at the rate the effect runs
         // at. It must outlive the effect.
         const maudHrtf* hrtf;
-        // The most frames one call processes, 1 to 16,384.
+        // The most frames one call processes, 1 to
+        // MAUD_MAX_BINAURAL_FRAMES.
         uint32_t maxFrames;
         // Whether the source's distance counts: each ear filtered for the
         // head's near field (a rigid sphere of headRadius, against the
@@ -94,7 +95,8 @@ extern "C"
     /// @param effectOut  Receives the effect; NULL on failure.
     /// @return `maud_success`; `maud_errorVersion` for a def stamped with
     ///         another binary interface than the library's, checked
-    ///         before anything else of it; `maud_errorInvalid` for a NULL pointer or a
+    ///         before anything else of it; `maud_errorLimit` for a
+    ///         maxFrames past MAUD_MAX_BINAURAL_FRAMES; `maud_errorInvalid` for a NULL pointer or a
     ///         def without its cookie, without a set or out of range;
     ///         `maud_errorCapacity` when the allocator fails.
     /// @par Thread safety
@@ -121,9 +123,10 @@ extern "C"
     /// @param in      frames samples.
     /// @param out     Two channels of frames samples each, apart from in.
     /// @param frames  0 to the def's maxFrames; 0 does nothing.
-    /// @return `maud_success`, or `maud_errorInvalid` for a NULL pointer,
-    ///         too many frames or a parameter that is not finite; nothing
-    ///         is written then.
+    /// @return `maud_success`; `maud_errorInvalid` for a NULL pointer or a
+    ///         parameter that is not finite; `maud_errorCapacity` for more
+    ///         frames than the def's maxFrames. Nothing is written on
+    ///         failure.
     /// @par Thread safety
     /// Safe from any thread; the effect is used by one thread at a time.
     MAUD_NODISCARD MAUD_API maudResult maudProcessBinaural(maudBinaural* effect,
