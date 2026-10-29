@@ -15,3 +15,7 @@ target_include_directories(rawframe_render SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/th
 target_link_libraries(rawframe_render PRIVATE ${CMAKE_DL_LIBS})
 
 rawframe_module_tests(NAME render SOURCES tests/capture_test.cpp tests/device_test.cpp tests/frame_test.cpp tests/output_test.cpp tests/textures_test.cpp)
+# The device tests play an OpenXR runtime that makes the Vulkan objects.
+if(TARGET rawframe_render_tests)
+    target_include_directories(rawframe_render_tests SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_party/maul-rhi/khronos)
+endif()
