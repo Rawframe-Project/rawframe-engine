@@ -384,6 +384,42 @@ RAWFRAME_TEST(ASensorIsToldWhatPassesThroughIt) {
     RAWFRAME_EXPECT(scene.physics->statistics().overlapsBegun == 1 && scene.physics->statistics().contactsBegun == 0);
 }
 
+RAWFRAME_TEST(ASensorEnteredByTwoInOneStepKeepsTheFirstInShapeOrder) {
+    // Two balls dropped side by side enter the zone in the same step. The
+    // zone's one visitor is the ball whose shape comes first in Maul2D's
+    // shape order, whichever side it is on; with no slot reused here, that
+    // is the ball made first. Each ball's visitor is the zone.
+    for (const bool kRightFirst : {false, true}) {
+        Scene scene;
+        Body2D zone = kGround;
+        zone.sensor = true;
+        zone.height = 1;
+        const world::EntityHandle kZone = scene.body(zone, {.x = 0, .y = 5});
+        world::EntityHandle left;
+        world::EntityHandle right;
+        if (kRightFirst) {
+            right = scene.body(kBall, {.x = 1, .y = 8});
+            left = scene.body(kBall, {.x = -1, .y = 8});
+        } else {
+            left = scene.body(kBall, {.x = -1, .y = 8});
+            right = scene.body(kBall, {.x = 1, .y = 8});
+        }
+        bool told = false;
+        for (int tick = 0; tick < 120 && !told; ++tick) {
+            scene.run(1);
+            const Contact2D kZoneContact = scene.contact(kZone);
+            if (kZoneContact.entered == 0) {
+                continue;
+            }
+            told = true;
+            RAWFRAME_EXPECT(kZoneContact.entered == 2);
+            RAWFRAME_EXPECT(kZoneContact.visitor == (kRightFirst ? right : left));
+            RAWFRAME_EXPECT(scene.contact(left).visitor == kZone && scene.contact(right).visitor == kZone);
+        }
+        RAWFRAME_EXPECT(told);
+    }
+}
+
 RAWFRAME_TEST(ARayFindsTheClosestBody) {
     Scene scene;
     const world::EntityHandle kGroundEntity = scene.body(kGround, {.x = 0, .y = 0});
