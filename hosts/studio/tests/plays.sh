@@ -99,8 +99,12 @@ for step in "${@:7}"; do
     steps+=("${step//\{game\}/$work/game}")
 done
 python3 "$here/../../../tools/click.py" "$studio" "$work/studio.log" studio_shown "$work/studio.pid" "${steps[@]}"
+clicks=$?
 wait "$studio"
 status=$?
+# Clicks that failed fail the test, though Studio stopped cleanly when
+# click.py stopped it.
+[ "$status" -ne 0 ] || status=$clicks
 if [ -n "${watcher:-}" ]; then
     kill "$watcher" 2>/dev/null
     wait "$watcher" 2>/dev/null

@@ -96,8 +96,12 @@ grep -q '^studio.preferences' "$work/studio.conf" ||
 studio=$!
 echo "$studio" >"$work/studio.pid"
 python3 "$here/../../../tools/click.py" "$studio" "$work/log" studio_shown "$work/studio.pid" "${@:4}"
+clicks=$?
 wait "$studio"
 status=$?
+# Clicks that failed fail the test, though Studio stopped cleanly when
+# click.py stopped it.
+[ "$status" -ne 0 ] || status=$clicks
 if cmp -s "$(dirname "$2")/$3" "$work/game/$3"; then
     echo "$3 written: no"
 else

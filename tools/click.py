@@ -680,5 +680,29 @@ def main():
         time.sleep(0.25)
 
 
+def stop_after_failure(pid, pid_file):
+    """Stops the program a step that failed left running, thawed first,
+    since a frozen program never sees the signal: so the test fails at once
+    with its logs, not at its timeout. One that ignores the request for
+    thirty seconds is killed."""
+    if not alive(pid):
+        return
+    try:
+        with open(pid_file, encoding="utf-8") as told:
+            os.kill(int(told.read().strip()), signal.SIGCONT)
+    except (OSError, ValueError):
+        pass
+    stop(pid_file)
+    deadline = time.monotonic() + 30
+    while alive(pid) and time.monotonic() < deadline:
+        time.sleep(0.25)
+    if alive(pid):
+        os.kill(pid, signal.SIGKILL)
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        if len(sys.argv) > 4:
+            stop_after_failure(int(sys.argv[1]), sys.argv[4])
