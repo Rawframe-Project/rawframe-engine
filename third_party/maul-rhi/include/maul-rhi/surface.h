@@ -286,10 +286,10 @@ extern "C"
     /// `mrhi_errorStale` for a surface or adapter the instance no longer has.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetSurfaceCaps(mrhiInstance* instance,
-                                                          mrhiSurfaceId surface,
-                                                          mrhiAdapterId adapter,
-                                                          mrhiSurfaceCaps* capsOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiSurface_GetCaps(mrhiInstance* instance,
+                                                           mrhiSurfaceId surface,
+                                                           mrhiAdapterId adapter,
+                                                           mrhiSurfaceCaps* capsOut);
 
     /// Suggests the color to configure a surface with, from what its caps
     /// report, in the library's fallback order: the color asked for, then half
@@ -373,8 +373,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the device and its instance are used by one thread
     /// at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiConfigureSurface(mrhiDevice* device,
-                                                            const mrhiSurfaceConfig* config);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_ConfigureSurface(mrhiDevice* device,
+                                                                   const mrhiSurfaceConfig* config);
 
     /// Ends a surface's configuration on a device. Its images are retired after
     /// the frames that used them.
@@ -389,8 +389,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the device and its instance are used by one thread
     /// at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiUnconfigureSurface(mrhiDevice* device,
-                                                              mrhiSurfaceId surface);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiSurface_Unconfigure(mrhiDevice* device,
+                                                               mrhiSurfaceId surface);
 
 #ifdef __cplusplus
 }

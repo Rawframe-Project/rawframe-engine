@@ -111,7 +111,7 @@ extern "C"
         const char* label;
         // The label's bytes.
         size_t labelLength;
-        // The adapter to open, from mrhiGetAdapters.
+        // The adapter to open, from mrhiInstance_GetAdapters.
         mrhiAdapterId adapter;
         // The optional features asked for.
         mrhiFeatures features;
@@ -119,8 +119,8 @@ extern "C"
         mrhiLimits limits;
         mrhiDeviceBudgets budgets;
         mrhiAllocator allocator;
-        // A pipeline cache mrhiGetPipelineCache wrote, or NULL: checked as
-        // hostile input, it is used when it came from this ABI version
+        // A pipeline cache mrhiDevice_GetPipelineCache wrote, or NULL: checked
+        // as hostile input, it is used when it came from this ABI version
         // (MRHI_ABI_VERSION), driver and adapter, and otherwise ignored. Only
         // read during the call.
         const void* pipelineCache;
@@ -181,7 +181,7 @@ extern "C"
     /// @return The state; mrhi_deviceFailed for a NULL device.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_API mrhiDeviceState mrhiGetDeviceState(mrhiDevice* device);
+    MRHI_API mrhiDeviceState mrhiDevice_GetState(mrhiDevice* device);
 
     /// Reads the optional features a device was granted.
     ///
@@ -190,8 +190,8 @@ extern "C"
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceFeatures(mrhiDevice* device,
-                                                             mrhiFeatures* featuresOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetFeatures(mrhiDevice* device,
+                                                              mrhiFeatures* featuresOut);
 
     /// Reads the limits a device was granted.
     ///
@@ -200,8 +200,8 @@ extern "C"
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceLimits(mrhiDevice* device,
-                                                           mrhiLimits* limitsOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetLimits(mrhiDevice* device,
+                                                            mrhiLimits* limitsOut);
 
     /// Reads the budgets of its own bookkeeping a device was made with, as
     /// asked: object counts, frame command and upload bytes, readbacks,
@@ -213,8 +213,8 @@ extern "C"
     /// NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceBudgets(mrhiDevice* device,
-                                                            mrhiDeviceBudgets* budgetsOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetBudgets(mrhiDevice* device,
+                                                             mrhiDeviceBudgets* budgetsOut);
 
     /// Reads the nanoseconds one tick of the device's timestamps takes: 1 where
     /// the API reports nanoseconds already.
@@ -227,8 +227,8 @@ extern "C"
     /// feature.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceTimestampPeriod(mrhiDevice* device,
-                                                                    double* periodOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetTimestampPeriod(mrhiDevice* device,
+                                                                     double* periodOut);
 
     /// Returns how many calls the device has refused as invalid input
     /// (mrhi_errorInvalid), past a fixed bound (mrhi_errorLimit) or from inside
@@ -238,7 +238,7 @@ extern "C"
     /// @return The count; 0 for a NULL device.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_API uint64_t mrhiGetDeviceMisuse(mrhiDevice* device);
+    MRHI_API uint64_t mrhiDevice_GetMisuse(mrhiDevice* device);
 
     /// Takes the oldest record from the device's diagnostic queue, which holds
     /// a record for each call the device refused as invalid input or bad data,
@@ -255,8 +255,8 @@ extern "C"
     /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiNextDeviceDiagnostic(mrhiDevice* device,
-                                                                mrhiDiagnostic* diagnosticOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_TakeDiagnostic(mrhiDevice* device,
+                                                                 mrhiDiagnostic* diagnosticOut);
 
     // Why a device was lost.
     typedef uint8_t mrhiDeviceLossReason;
@@ -273,7 +273,7 @@ extern "C"
         mrhi_lossRemoved = 3,
         // The GPU's driver failed.
         mrhi_lossDriverFault = 4,
-        // The program lost the device through mrhiSimulateDeviceLoss; the GPU
+        // The program lost the device through mrhiDevice_SimulateLoss; the GPU
         // is fine.
         mrhi_lossSimulated = 5,
     };
@@ -311,8 +311,8 @@ extern "C"
     /// `mrhi_errorState` for a device that is not lost.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceLossReport(mrhiDevice* device,
-                                                               mrhiDeviceLossReport* reportOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetLossReport(mrhiDevice* device,
+                                                                mrhiDeviceLossReport* reportOut);
 
     /// Loses a ready device as a driver's report of a loss would: the notice,
     /// then every running frame, its readbacks and every pending pipeline
@@ -328,7 +328,7 @@ extern "C"
     /// device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSimulateDeviceLoss(mrhiDevice* device);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_SimulateLoss(mrhiDevice* device);
 
 #ifdef __cplusplus
 }

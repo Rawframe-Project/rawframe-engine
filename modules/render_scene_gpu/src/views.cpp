@@ -221,8 +221,8 @@ result::Status TextureView::declare(render::Frame& frame) {
 result::Status TextureView::record(render::Frame& frame) {
     State& state = *state_;
     if (mrhiResult outcome = mrhi_success;
-        state.clearing.has_value() && ((outcome = mrhiBeginPass(state.native, *state.clearing)) != mrhi_success ||
-                                       (outcome = mrhiEndPass(state.native, *state.clearing)) != mrhi_success)) {
+        state.clearing.has_value() && ((outcome = mrhiPass_Begin(state.native, *state.clearing)) != mrhi_success ||
+                                       (outcome = mrhiPass_End(state.native, *state.clearing)) != mrhi_success)) {
         return failed("the frame's picture could not be cleared", outcome);
     }
     if (state.frame != nullptr) {
@@ -237,9 +237,9 @@ result::Status TextureView::record(render::Frame& frame) {
         const mrhiTextureCopy kTo{.resource = resourceOf(frame.picture), .x = state.placed->x, .y = state.placed->y};
         const mrhiExtent3d kExtent{.width = state.copyWidth, .height = state.copyHeight, .depthOrLayers = 1};
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiBeginPass(state.native, *state.copying)) != mrhi_success ||
-            (outcome = mrhiCopyTexture(state.native, *state.copying, &kFrom, &kTo, &kExtent)) != mrhi_success ||
-            (outcome = mrhiEndPass(state.native, *state.copying)) != mrhi_success) {
+            (outcome = mrhiPass_Begin(state.native, *state.copying)) != mrhi_success ||
+            (outcome = mrhiPass_CopyTexture(state.native, *state.copying, &kFrom, &kTo, &kExtent)) != mrhi_success ||
+            (outcome = mrhiPass_End(state.native, *state.copying)) != mrhi_success) {
             return failed("a view's picture could not be placed", outcome);
         }
     }

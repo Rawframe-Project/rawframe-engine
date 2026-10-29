@@ -215,7 +215,7 @@ static mrhiResult Record(mrhiDevice* device, mrhiFramePass* pass, mrhiCommand co
     return mrhi_success;
 }
 
-mrhiResult mrhiBeginPass(mrhiDevice* device, mrhiPassId id)
+mrhiResult mrhiPass_Begin(mrhiDevice* device, mrhiPassId id)
 {
     if (device == nullptr)
     {
@@ -239,7 +239,7 @@ mrhiResult mrhiBeginPass(mrhiDevice* device, mrhiPassId id)
     return mrhi_success;
 }
 
-mrhiResult mrhiEndPass(mrhiDevice* device, mrhiPassId id)
+mrhiResult mrhiPass_End(mrhiDevice* device, mrhiPassId id)
 {
     if (device == nullptr)
     {
@@ -294,8 +294,8 @@ static const mrhiPipelineSlot* ReadyPipeline(const mrhiDevice* device, mrhiPipel
     return slot;
 }
 
-mrhiResult mrhiSetGraphicsPipeline(mrhiDevice* device, mrhiPassId id,
-                                   mrhiGraphicsPipelineId pipeline)
+mrhiResult mrhiPass_SetGraphicsPipeline(mrhiDevice* device, mrhiPassId id,
+                                        mrhiGraphicsPipelineId pipeline)
 {
     if (device == nullptr)
     {
@@ -330,7 +330,8 @@ mrhiResult mrhiSetGraphicsPipeline(mrhiDevice* device, mrhiPassId id,
     return Record(device, pass, command, nullptr, 0);
 }
 
-mrhiResult mrhiSetComputePipeline(mrhiDevice* device, mrhiPassId id, mrhiComputePipelineId pipeline)
+mrhiResult mrhiPass_SetComputePipeline(mrhiDevice* device, mrhiPassId id,
+                                       mrhiComputePipelineId pipeline)
 {
     if (device == nullptr)
     {
@@ -363,8 +364,8 @@ mrhiResult mrhiSetComputePipeline(mrhiDevice* device, mrhiPassId id, mrhiCompute
     return Record(device, pass, command, nullptr, 0);
 }
 
-mrhiResult mrhiSetRootBlock(mrhiDevice* device, mrhiPassId id, uint32_t offset, const void* bytes,
-                            size_t size)
+mrhiResult mrhiPass_SetRootBlock(mrhiDevice* device, mrhiPassId id, uint32_t offset,
+                                 const void* bytes, size_t size)
 {
     if (device == nullptr)
     {
@@ -436,7 +437,7 @@ static size_t ViewportPast(const mrhiViewport* viewport, uint32_t textureDimensi
     return fits ? MRHI_WITHIN_LIMITS : offsetof(mrhiLimits, textureDimension2d);
 }
 
-mrhiResult mrhiSetViewport(mrhiDevice* device, mrhiPassId id, const mrhiViewport* viewport)
+mrhiResult mrhiPass_SetViewport(mrhiDevice* device, mrhiPassId id, const mrhiViewport* viewport)
 {
     if (device == nullptr)
     {
@@ -466,7 +467,7 @@ mrhiResult mrhiSetViewport(mrhiDevice* device, mrhiPassId id, const mrhiViewport
     return Record(device, pass, command, viewport, sizeof(*viewport));
 }
 
-mrhiResult mrhiSetScissor(mrhiDevice* device, mrhiPassId id, const mrhiScissorRect* rect)
+mrhiResult mrhiPass_SetScissor(mrhiDevice* device, mrhiPassId id, const mrhiScissorRect* rect)
 {
     if (device == nullptr)
     {
@@ -497,7 +498,7 @@ mrhiResult mrhiSetScissor(mrhiDevice* device, mrhiPassId id, const mrhiScissorRe
     return Record(device, pass, command, nullptr, 0);
 }
 
-mrhiResult mrhiSetBlendConstant(mrhiDevice* device, mrhiPassId id, const mrhiColor* color)
+mrhiResult mrhiPass_SetBlendConstant(mrhiDevice* device, mrhiPassId id, const mrhiColor* color)
 {
     if (device == nullptr)
     {
@@ -522,7 +523,7 @@ mrhiResult mrhiSetBlendConstant(mrhiDevice* device, mrhiPassId id, const mrhiCol
     return Record(device, pass, command, color, sizeof(*color));
 }
 
-mrhiResult mrhiSetStencilReference(mrhiDevice* device, mrhiPassId id, uint32_t reference)
+mrhiResult mrhiPass_SetStencilReference(mrhiDevice* device, mrhiPassId id, uint32_t reference)
 {
     if (device == nullptr)
     {
@@ -571,19 +572,19 @@ static mrhiResult Label(mrhiDevice* device, mrhiPassId id, mrhiCommandType type,
                : mrhi_success;
 }
 
-mrhiResult mrhiPushDebugGroup(mrhiDevice* device, mrhiPassId pass, const char* label,
-                              size_t labelLength)
+mrhiResult mrhiPass_PushDebugGroup(mrhiDevice* device, mrhiPassId pass, const char* label,
+                                   size_t labelLength)
 {
     return Label(device, pass, mrhiCommandPushDebugGroup, label, labelLength);
 }
 
-mrhiResult mrhiInsertDebugMarker(mrhiDevice* device, mrhiPassId pass, const char* label,
-                                 size_t labelLength)
+mrhiResult mrhiPass_InsertDebugMarker(mrhiDevice* device, mrhiPassId pass, const char* label,
+                                      size_t labelLength)
 {
     return Label(device, pass, mrhiCommandDebugMarker, label, labelLength);
 }
 
-mrhiResult mrhiPopDebugGroup(mrhiDevice* device, mrhiPassId id)
+mrhiResult mrhiPass_PopDebugGroup(mrhiDevice* device, mrhiPassId id)
 {
     if (device == nullptr)
     {

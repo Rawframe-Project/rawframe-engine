@@ -232,8 +232,8 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
     const mrhiGraphicsPipelineId kEngine = (samples_ > 1 ? many : single).pipeline;
     mrhiGraphicsPipelineId set = kEngine;
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiSetGraphicsPipeline(native_, pass, set)) != mrhi_success ||
-        (outcome = mrhiSetVertexBuffer(native_, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE)) != mrhi_success) {
+        (outcome = mrhiPass_SetGraphicsPipeline(native_, pass, set)) != mrhi_success ||
+        (outcome = mrhiPass_SetVertexBuffer(native_, pass, 1, with.instances, 0, MRHI_WHOLE_SIZE)) != mrhi_success) {
         return failed("the models could not be set up", outcome);
     }
     // The table set again where a run samples another texture than the one
@@ -250,7 +250,8 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
             wanted = kOwn->pipeline;
         }
         if (wanted.index1 != set.index1 || wanted.generation != set.generation) {
-            if (const mrhiResult kOutcome = mrhiSetGraphicsPipeline(native_, pass, wanted); kOutcome != mrhi_success) {
+            if (const mrhiResult kOutcome = mrhiPass_SetGraphicsPipeline(native_, pass, wanted);
+                kOutcome != mrhi_success) {
                 return failed("a material's program could not be set", kOutcome);
             }
             set = wanted;
@@ -261,7 +262,7 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
             bindTexture(*with.textures, *with.pipelines, table[12], table[13], run.texture.packed);
             bindTexture(*with.textures, *with.pipelines, table[14], table[15], run.texture.emission);
             bindTexture(*with.textures, *with.pipelines, table[16], table[17], run.texture.normal);
-            if (const mrhiResult kOutcome = mrhiSetBindings(native_, pass, 0, table.data(), table.size());
+            if (const mrhiResult kOutcome = mrhiPass_SetBindings(native_, pass, 0, table.data(), table.size());
                 kOutcome != mrhi_success) {
                 return failed("a material's texture could not be bound", kOutcome);
             }
@@ -270,7 +271,7 @@ result::Status ModelPasses::drawRuns(const Drawing& with,
         RAWFRAME_TRY(with.held->bind(pass, *run.mesh, posedOf(with.skinning, run)));
         RAWFRAME_TRY(with.held->bindBefore(pass, *run.mesh, posedBeforeOf(with.skinning, run)));
         if (const mrhiResult kOutcome =
-                mrhiDrawIndexed(native_, pass, run.indexCount, run.count, run.firstIndex, 0, run.first);
+                mrhiPass_DrawIndexed(native_, pass, run.indexCount, run.count, run.firstIndex, 0, run.first);
             kOutcome != mrhi_success) {
             return failed("a model could not be drawn", kOutcome);
         }
@@ -287,7 +288,7 @@ result::Status ModelPasses::recordPrepass(const Drawing& with) {
     for (const std::uint32_t kSlot : {21U, 22U, 23U}) {
         table[kSlot] = textureAt(kSlot, resourceOf(with.textures->resource(0)));
     }
-    if (const mrhiResult kOutcome = mrhiBeginPass(native_, prepass_); kOutcome != mrhi_success) {
+    if (const mrhiResult kOutcome = mrhiPass_Begin(native_, prepass_); kOutcome != mrhi_success) {
         return failed("a scene pass could not begin", kOutcome);
     }
     // A material's program cuts its masked models and gives its surfaces;
@@ -321,13 +322,13 @@ result::Status ModelPasses::recordPrepass(const Drawing& with) {
                                       kMany.cutout,
                                       with.placed->maskedRuns,
                                       Shaded{.shade = Shade::Cut}));
-    if (const mrhiResult kOutcome = mrhiEndPass(native_, prepass_); kOutcome != mrhi_success) {
+    if (const mrhiResult kOutcome = mrhiPass_End(native_, prepass_); kOutcome != mrhi_success) {
         return failed("a scene pass could not end", kOutcome);
     }
     // The resolve, unless nothing reads the depth it leaves.
     bool resolved = false;
     if (mrhiResult outcome = mrhi_success;
-        samples_ > 1 && (outcome = mrhiIsPassKept(native_, resolve_, &resolved)) != mrhi_success) {
+        samples_ > 1 && (outcome = mrhiPass_IsKept(native_, resolve_, &resolved)) != mrhi_success) {
         return failed("the depth's resolve could not be looked at", outcome);
     }
     if (!resolved) {
@@ -335,11 +336,11 @@ result::Status ModelPasses::recordPrepass(const Drawing& with) {
     }
     const std::array<mrhiBinding, 1> kSamples = {depthAt(0, sampledDepth_)};
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiBeginPass(native_, resolve_)) != mrhi_success ||
-        (outcome = mrhiSetGraphicsPipeline(native_, resolve_, kMany.resolveDepth.pipeline)) != mrhi_success ||
-        (outcome = mrhiSetBindings(native_, resolve_, 0, kSamples.data(), kSamples.size())) != mrhi_success ||
-        (outcome = mrhiDraw(native_, resolve_, 3, 1, 0, 0)) != mrhi_success ||
-        (outcome = mrhiEndPass(native_, resolve_)) != mrhi_success) {
+        (outcome = mrhiPass_Begin(native_, resolve_)) != mrhi_success ||
+        (outcome = mrhiPass_SetGraphicsPipeline(native_, resolve_, kMany.resolveDepth.pipeline)) != mrhi_success ||
+        (outcome = mrhiPass_SetBindings(native_, resolve_, 0, kSamples.data(), kSamples.size())) != mrhi_success ||
+        (outcome = mrhiPass_Draw(native_, resolve_, 3, 1, 0, 0)) != mrhi_success ||
+        (outcome = mrhiPass_End(native_, resolve_)) != mrhi_success) {
         return failed("the depth could not be resolved", outcome);
     }
     return {};
@@ -349,7 +350,7 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
     const Pipelines& pipelines = *with.pipelines;
     const Multisampled& kMany = pipelines.multisampled;
     std::array<mrhiBinding, kTableSlots> table = with.table;
-    if (const mrhiResult kOutcome = mrhiBeginPass(native_, lit_); kOutcome != mrhi_success) {
+    if (const mrhiResult kOutcome = mrhiPass_Begin(native_, lit_); kOutcome != mrhi_success) {
         return failed("a scene pass could not begin", kOutcome);
     }
     const Shaded kLit{.shade = Shade::Lit, .decaled = decaled};
@@ -367,10 +368,10 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
                            kMasked)
                 : drawRuns(with, table, lit_, pipelines.maskedLit, kMany.maskedLit, with.placed->maskedRuns, kMasked));
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiSetGraphicsPipeline(native_, lit_, (samples_ > 1 ? kMany.sky : pipelines.sky).pipeline)) !=
+        (outcome = mrhiPass_SetGraphicsPipeline(native_, lit_, (samples_ > 1 ? kMany.sky : pipelines.sky).pipeline)) !=
             mrhi_success ||
-        (outcome = mrhiSetBindings(native_, lit_, 0, sky.data(), sky.size())) != mrhi_success ||
-        (outcome = mrhiDraw(native_, lit_, 3, 1, 0, 0)) != mrhi_success) {
+        (outcome = mrhiPass_SetBindings(native_, lit_, 0, sky.data(), sky.size())) != mrhi_success ||
+        (outcome = mrhiPass_Draw(native_, lit_, 3, 1, 0, 0)) != mrhi_success) {
         return failed("the sky could not be drawn", outcome);
     }
     // Where a model transmits, the translucent are drawn in a pass of their
@@ -378,16 +379,16 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
     // reads.
     mrhiPassId translucent = lit_;
     if (transmits_) {
-        if (const mrhiResult kOutcome = mrhiEndPass(native_, lit_); kOutcome != mrhi_success) {
+        if (const mrhiResult kOutcome = mrhiPass_End(native_, lit_); kOutcome != mrhi_success) {
             return failed("a scene pass could not end", kOutcome);
         }
         const mrhiTextureCopy kFrom{.resource = scene_};
         const mrhiTextureCopy kTo{.resource = behind_};
         const mrhiExtent3d kExtent{.width = width_, .height = height_, .depthOrLayers = 1};
         if (mrhiResult outcome = mrhi_success;
-            (outcome = mrhiBeginPass(native_, copying_)) != mrhi_success ||
-            (outcome = mrhiCopyTexture(native_, copying_, &kFrom, &kTo, &kExtent)) != mrhi_success ||
-            (outcome = mrhiEndPass(native_, copying_)) != mrhi_success) {
+            (outcome = mrhiPass_Begin(native_, copying_)) != mrhi_success ||
+            (outcome = mrhiPass_CopyTexture(native_, copying_, &kFrom, &kTo, &kExtent)) != mrhi_success ||
+            (outcome = mrhiPass_End(native_, copying_)) != mrhi_success) {
             return failed("the opaque models' light could not be copied", outcome);
         }
         for (std::size_t at = 0; at < halving_.size(); ++at) {
@@ -396,17 +397,17 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
             before.range.mipCount = 1;
             const std::array<mrhiBinding, 2> kBindings = {before, samplerAt(1, pipelines.filteredSampler)};
             if (mrhiResult outcome = mrhi_success;
-                (outcome = mrhiBeginPass(native_, halving_[at])) != mrhi_success ||
-                (outcome = mrhiSetGraphicsPipeline(native_, halving_[at], pipelines.bloomDown.pipeline)) !=
+                (outcome = mrhiPass_Begin(native_, halving_[at])) != mrhi_success ||
+                (outcome = mrhiPass_SetGraphicsPipeline(native_, halving_[at], pipelines.bloomDown.pipeline)) !=
                     mrhi_success ||
-                (outcome = mrhiSetBindings(native_, halving_[at], 0, kBindings.data(), kBindings.size())) !=
+                (outcome = mrhiPass_SetBindings(native_, halving_[at], 0, kBindings.data(), kBindings.size())) !=
                     mrhi_success ||
-                (outcome = mrhiDraw(native_, halving_[at], 3, 1, 0, 0)) != mrhi_success ||
-                (outcome = mrhiEndPass(native_, halving_[at])) != mrhi_success) {
+                (outcome = mrhiPass_Draw(native_, halving_[at], 3, 1, 0, 0)) != mrhi_success ||
+                (outcome = mrhiPass_End(native_, halving_[at])) != mrhi_success) {
                 return failed("the opaque models' light could not be halved", outcome);
             }
         }
-        if (const mrhiResult kOutcome = mrhiBeginPass(native_, glass_); kOutcome != mrhi_success) {
+        if (const mrhiResult kOutcome = mrhiPass_Begin(native_, glass_); kOutcome != mrhi_success) {
             return failed("a scene pass could not begin", kOutcome);
         }
         translucent = glass_;
@@ -423,7 +424,7 @@ result::Status ModelPasses::recordLit(const Drawing& with, bool decaled, std::sp
                        with.placed->translucentRuns,
                        kGlass)
             : drawRuns(with, table, translucent, pipelines.glass, kMany.glass, with.placed->translucentRuns, kGlass));
-    if (const mrhiResult kOutcome = mrhiEndPass(native_, translucent); kOutcome != mrhi_success) {
+    if (const mrhiResult kOutcome = mrhiPass_End(native_, translucent); kOutcome != mrhi_success) {
         return failed("a scene pass could not end", kOutcome);
     }
     return {};

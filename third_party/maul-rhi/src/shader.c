@@ -297,7 +297,7 @@ mrhiResult mrhiDestroyShader(mrhiDevice* device, mrhiShaderId shader)
     return mrhi_success;
 }
 
-mrhiResult mrhiGetShaderInfo(mrhiDevice* device, mrhiShaderId shader, mrhiShaderInfo* infoOut)
+mrhiResult mrhiShader_GetInfo(mrhiDevice* device, mrhiShaderId shader, mrhiShaderInfo* infoOut)
 {
     if (device == nullptr)
     {

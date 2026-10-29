@@ -320,7 +320,7 @@
         },
         {
           "kind": "function",
-          "name": "result_name",
+          "name": "get_result_name",
           "doc": "Returns the name of a result code, for diagnostics.",
           "returns": {
             "type": "static_cstring",
@@ -342,7 +342,7 @@
           "kind": "enum",
           "name": "diagnostic_code",
           "width": "uint16",
-          "doc": "The check a diagnostic record reports: one check of the core that refused a call as invalid input, one budget a frame call reached or driver budget a submission ran out of, or, in a build with the validation layer, one rule of the driver SPI that the driver broke (the driver codes, recorded in the instance's queue). mrhiDiagnosticText gives each one's text.",
+          "doc": "The check a diagnostic record reports: one check of the core that refused a call as invalid input, one budget a frame call reached or driver budget a submission ran out of, or, in a build with the validation layer, one rule of the driver SPI that the driver broke (the driver codes, recorded in the instance's queue). mrhiGetDiagnosticText gives each one's text.",
           "values": [
             {
               "name": "diagnostic_null_argument",
@@ -1062,7 +1062,7 @@
         },
         {
           "kind": "function",
-          "name": "diagnostic_text",
+          "name": "get_diagnostic_text",
           "doc": "Returns the text of a diagnostic code, for people; programs compare codes, never texts.",
           "returns": {
             "type": "static_cstring",
@@ -1345,7 +1345,7 @@
             {
               "name": "instance_adapters_found",
               "value": 0,
-              "doc": "An adapter request is answered: its outcome is mrhi_success, and mrhiGetAdapters lists the adapters, mrhi_errorStale when its compatible surface ended before the answer, or another error."
+              "doc": "An adapter request is answered: its outcome is mrhi_success, and mrhiInstance_GetAdapters lists the adapters, mrhi_errorStale when its compatible surface ended before the answer, or another error."
             },
             {
               "name": "instance_device_ready",
@@ -1585,7 +1585,8 @@
         },
         {
           "kind": "function",
-          "name": "get_instance_misuse",
+          "name": "instance_get_misuse",
+          "object": "instance",
           "doc": "Returns how many calls the instance has refused as invalid input (mrhi_errorInvalid), past a fixed bound (mrhi_errorLimit) or from inside its allocator (mrhi_errorBusy): a count release builds can watch to catch a caller's bugs. Stale ids are not misuse.",
           "returns": {
             "type": "uint64",
@@ -1607,7 +1608,8 @@
         },
         {
           "kind": "function",
-          "name": "next_instance_diagnostic",
+          "name": "instance_take_diagnostic",
+          "object": "instance",
           "doc": "Takes the oldest record from the instance's diagnostic queue, which holds a record for each call the instance refused as invalid input and, in a build with the validation layer, for each rule of the driver SPI its driver or its devices' drivers broke, up to the diagnostics limit; those past it are counted but not recorded.",
           "returns": {
             "type": "result",
@@ -1635,7 +1637,8 @@
         },
         {
           "kind": "function",
-          "name": "get_driver_faults",
+          "name": "instance_get_driver_faults",
+          "object": "instance",
           "doc": "Returns how many breaches of the driver SPI the validation layer has found on the instance and its devices: frames no driver could translate, and driver answers no core could trust. Builds without the layer (MAUL_RHI_VALIDATION) find none.",
           "returns": {
             "type": "uint64",
@@ -1670,8 +1673,9 @@
         },
         {
           "kind": "function",
-          "name": "request_adapters",
-          "doc": "Asks the instance's drivers for adapters. The request is answered by one mrhi_instanceAdaptersFound record; until then, mrhiGetAdapters lists the adapters found before.",
+          "name": "instance_request_adapters",
+          "object": "instance",
+          "doc": "Asks the instance's drivers for adapters. The request is answered by one mrhi_instanceAdaptersFound record; until then, mrhiInstance_GetAdapters lists the adapters found before.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success` with the request accepted; `mrhi_errorInvalid` for a NULL argument or a def without its cookie; `mrhi_errorStale` for a compatible surface the instance no longer has; `mrhi_errorUnsupported` for a critical extension the library does not know; `mrhi_errorCapacity` when the notification queue has no room for the answer; `mrhi_errorBusy` for a call from inside the instance's allocator."
@@ -1721,7 +1725,8 @@
         },
         {
           "kind": "function",
-          "name": "next_instance_notification",
+          "name": "instance_take_notification",
+          "object": "instance",
           "doc": "Takes the oldest record from the instance's notification queue, first polling its drivers for finished work.",
           "returns": {
             "type": "result",
@@ -1749,7 +1754,8 @@
         },
         {
           "kind": "function",
-          "name": "get_adapters",
+          "name": "instance_get_adapters",
+          "object": "instance",
           "doc": "Lists the adapters the last answered request found, best first by its preference.",
           "returns": {
             "type": "result",
@@ -1763,10 +1769,10 @@
               "doc": "The instance."
             },
             {
-              "name": "adapters",
+              "name": "adapters_out",
               "type": "id.adapter_id",
               "pointer": "mutable",
-              "doc": "Receives up to capacity ids. May be NULL when capacity is 0."
+              "doc": "Receives up to capacity ids; zeros, as many as capacity, on any failure. May be NULL when capacity is 0."
             },
             {
               "name": "capacity",
@@ -1777,7 +1783,7 @@
               "name": "count_out",
               "type": "size",
               "pointer": "mutable",
-              "doc": "Receives the number of adapters, which may exceed capacity."
+              "doc": "Receives the number of adapters, which may exceed capacity; 0 on any failure."
             }
           ],
           "thread_safety": {
@@ -1788,7 +1794,8 @@
         },
         {
           "kind": "function",
-          "name": "get_adapter_info",
+          "name": "adapter_get_info",
+          "object": "adapter",
           "doc": "Reads what an adapter is.",
           "returns": {
             "type": "result",
@@ -2136,7 +2143,7 @@
             {
               "name": "multi_draw_indirect_count",
               "type": "bool",
-              "doc": "Counted multi-draw indirect (mrhiDrawIndirectCount, mrhiDrawIndexedIndirectCount): up to a maximum of indirect draws, the number drawn written on the GPU.",
+              "doc": "Counted multi-draw indirect (mrhiPass_DrawIndirectCount, mrhiPass_DrawIndexedIndirectCount): up to a maximum of indirect draws, the number drawn written on the GPU.",
               "mapping": {
                 "vulkan": {
                   "class": "direct",
@@ -6375,7 +6382,8 @@
         },
         {
           "kind": "function",
-          "name": "get_adapter_features",
+          "name": "adapter_get_features",
+          "object": "adapter",
           "doc": "Reads the optional features an adapter can grant.",
           "returns": {
             "type": "result",
@@ -6425,7 +6433,8 @@
         },
         {
           "kind": "function",
-          "name": "get_adapter_limits",
+          "name": "adapter_get_limits",
+          "object": "adapter",
           "doc": "Reads the limits an adapter can grant, each at least the floor.",
           "returns": {
             "type": "result",
@@ -6475,7 +6484,8 @@
         },
         {
           "kind": "function",
-          "name": "get_format_caps",
+          "name": "adapter_get_format_caps",
+          "object": "adapter",
           "doc": "Reads what a format can do on an adapter. A compressed format whose feature the adapter lacks can do nothing.",
           "returns": {
             "type": "result",
@@ -6704,7 +6714,7 @@
             {
               "name": "adapter",
               "type": "id.adapter_id",
-              "doc": "The adapter to open, from mrhiGetAdapters."
+              "doc": "The adapter to open, from mrhiInstance_GetAdapters."
             },
             {
               "name": "features",
@@ -6728,7 +6738,7 @@
               "name": "pipeline_cache",
               "type": "void",
               "pointer": "const",
-              "doc": "A pipeline cache mrhiGetPipelineCache wrote, or NULL: checked as hostile input, it is used when it came from this ABI version (MRHI_ABI_VERSION), driver and adapter, and otherwise ignored. Only read during the call."
+              "doc": "A pipeline cache mrhiDevice_GetPipelineCache wrote, or NULL: checked as hostile input, it is used when it came from this ABI version (MRHI_ABI_VERSION), driver and adapter, and otherwise ignored. Only read during the call."
             },
             {
               "name": "pipeline_cache_bytes",
@@ -6864,7 +6874,8 @@
         },
         {
           "kind": "function",
-          "name": "get_device_state",
+          "name": "device_get_state",
+          "object": "device",
           "doc": "Returns where a device is in its life. Draining the instance's queue is what moves an opening device on.",
           "returns": {
             "type": "enum.device_state",
@@ -6886,7 +6897,8 @@
         },
         {
           "kind": "function",
-          "name": "get_device_features",
+          "name": "device_get_features",
+          "object": "device",
           "doc": "Reads the optional features a device was granted.",
           "returns": {
             "type": "result",
@@ -6914,7 +6926,8 @@
         },
         {
           "kind": "function",
-          "name": "get_device_limits",
+          "name": "device_get_limits",
+          "object": "device",
           "doc": "Reads the limits a device was granted.",
           "returns": {
             "type": "result",
@@ -6942,7 +6955,8 @@
         },
         {
           "kind": "function",
-          "name": "get_device_budgets",
+          "name": "device_get_budgets",
+          "object": "device",
           "doc": "Reads the budgets of its own bookkeeping a device was made with, as asked: object counts, frame command and upload bytes, readbacks, diagnostics. A library given a device learns them here.",
           "returns": {
             "type": "result",
@@ -6970,7 +6984,8 @@
         },
         {
           "kind": "function",
-          "name": "get_device_timestamp_period",
+          "name": "device_get_timestamp_period",
+          "object": "device",
           "doc": "Reads the nanoseconds one tick of the device's timestamps takes: 1 where the API reports nanoseconds already.",
           "returns": {
             "type": "result",
@@ -7016,7 +7031,8 @@
         },
         {
           "kind": "function",
-          "name": "get_device_misuse",
+          "name": "device_get_misuse",
+          "object": "device",
           "doc": "Returns how many calls the device has refused as invalid input (mrhi_errorInvalid), past a fixed bound (mrhi_errorLimit) or from inside its allocator (mrhi_errorBusy).",
           "returns": {
             "type": "uint64",
@@ -7038,7 +7054,8 @@
         },
         {
           "kind": "function",
-          "name": "next_device_diagnostic",
+          "name": "device_take_diagnostic",
+          "object": "device",
           "doc": "Takes the oldest record from the device's diagnostic queue, which holds a record for each call the device refused as invalid input or bad data, for each frame call refused at one of its budgets, for each call refused past one of the device's limits (mrhiLimits) under that limit's code, and for each submission its driver refused for a budget it names, up to the diagnostics budget; refusals past it are counted but not recorded.",
           "returns": {
             "type": "result",
@@ -7189,26 +7206,26 @@
             {
               "name": "loss_simulated",
               "value": 5,
-              "doc": "The program lost the device through mrhiSimulateDeviceLoss; the GPU is fine.",
+              "doc": "The program lost the device through mrhiDevice_SimulateLoss; the GPU is fine.",
               "mapping": {
                 "vulkan": {
                   "class": "emulated",
-                  "note": "lost by mrhiSimulateDeviceLoss, the API told nothing",
+                  "note": "lost by mrhiDevice_SimulateLoss, the API told nothing",
                   "cost": "none: a flag in the core"
                 },
                 "d3d12": {
                   "class": "emulated",
-                  "note": "lost by mrhiSimulateDeviceLoss, the API told nothing",
+                  "note": "lost by mrhiDevice_SimulateLoss, the API told nothing",
                   "cost": "none: a flag in the core"
                 },
                 "metal": {
                   "class": "emulated",
-                  "note": "lost by mrhiSimulateDeviceLoss, the API told nothing",
+                  "note": "lost by mrhiDevice_SimulateLoss, the API told nothing",
                   "cost": "none: a flag in the core"
                 },
                 "web_gpu": {
                   "class": "emulated",
-                  "note": "lost by mrhiSimulateDeviceLoss, the API told nothing",
+                  "note": "lost by mrhiDevice_SimulateLoss, the API told nothing",
                   "cost": "none: a flag in the core"
                 }
               }
@@ -7284,7 +7301,8 @@
         },
         {
           "kind": "function",
-          "name": "get_device_loss_report",
+          "name": "device_get_loss_report",
+          "object": "device",
           "doc": "Reads what is known about a lost device's loss.",
           "returns": {
             "type": "result",
@@ -7312,7 +7330,8 @@
         },
         {
           "kind": "function",
-          "name": "simulate_device_loss",
+          "name": "device_simulate_loss",
+          "object": "device",
           "doc": "Loses a ready device as a driver's report of a loss would: the notice, then every running frame, its readbacks and every pending pipeline answered `mrhi_errorDeviceLost`, which every call that needs the GPU answers afterwards. The driver is told nothing; its work finishes unseen. The report's reason is `mrhi_lossSimulated`. For testing a program's recovery.",
           "returns": {
             "type": "result",
@@ -10353,7 +10372,8 @@
         },
         {
           "kind": "function",
-          "name": "set_heap_entry",
+          "name": "heap_set_entry",
+          "object": "heap",
           "doc": "Writes an empty resource entry, which frames submitted later read at its index. Destroying the view or buffer it names empties it.",
           "returns": {
             "type": "result",
@@ -10408,7 +10428,8 @@
         },
         {
           "kind": "function",
-          "name": "clear_heap_entry",
+          "name": "heap_clear_entry",
+          "object": "heap",
           "doc": "Empties a resource entry. Its index can be written again once the frames submitted before now finish.",
           "returns": {
             "type": "result",
@@ -10440,7 +10461,8 @@
         },
         {
           "kind": "function",
-          "name": "set_heap_sampler",
+          "name": "heap_set_sampler",
+          "object": "heap",
           "doc": "Writes an empty sampler entry, which frames submitted later read at its index. Destroying the sampler empties it.",
           "returns": {
             "type": "result",
@@ -10494,7 +10516,8 @@
         },
         {
           "kind": "function",
-          "name": "clear_heap_sampler",
+          "name": "heap_clear_sampler",
+          "object": "heap",
           "doc": "Empties a sampler entry. Its index can be written again once the frames submitted before now finish.",
           "returns": {
             "type": "result",
@@ -11455,7 +11478,8 @@
         },
         {
           "kind": "function",
-          "name": "get_surface_caps",
+          "name": "surface_get_caps",
+          "object": "surface",
           "doc": "Reads what a surface can do on an adapter.",
           "returns": {
             "type": "result",
@@ -11751,7 +11775,8 @@
         },
         {
           "kind": "function",
-          "name": "configure_surface",
+          "name": "device_configure_surface",
+          "object": "device",
           "doc": "Configures a surface on a ready device, or reconfigures one the device holds. A refused reconfiguration keeps the surface configured as it was, unless the platform's call failed after retiring the old swapchain, which leaves the surface unconfigured.",
           "returns": {
             "type": "result",
@@ -11797,7 +11822,8 @@
         },
         {
           "kind": "function",
-          "name": "unconfigure_surface",
+          "name": "surface_unconfigure",
+          "object": "surface",
           "doc": "Ends a surface's configuration on a device. Its images are retired after the frames that used them.",
           "returns": {
             "type": "result",
@@ -11894,7 +11920,7 @@
             {
               "name": "device_readback_ready",
               "value": 2,
-              "doc": "A readback's frame finished: its outcome is mrhi_success, and mrhiTakeReadback copies its bytes out, or the error that ended the frame."
+              "doc": "A readback's frame finished: its outcome is mrhi_success, and mrhiRequest_TakeReadback copies its bytes out, or the error that ended the frame."
             },
             {
               "name": "device_lost_notice",
@@ -11942,7 +11968,8 @@
         },
         {
           "kind": "function",
-          "name": "begin_frame",
+          "name": "device_begin_frame",
+          "object": "device",
           "doc": "Opens a frame on a ready device, first taking in the frames the GPU finished. One frame is open at a time.",
           "returns": {
             "type": "result",
@@ -11987,7 +12014,8 @@
         },
         {
           "kind": "function",
-          "name": "drop_frame",
+          "name": "device_drop_frame",
+          "object": "device",
           "doc": "Closes the open frame without running it. It gets no token.",
           "returns": {
             "type": "result",
@@ -12009,7 +12037,8 @@
         },
         {
           "kind": "function",
-          "name": "submit_frame",
+          "name": "device_submit_frame",
+          "object": "device",
           "doc": "Submits the open frame to the GPU, compiling it first if it is not, and closes it. Its token is answered by one mrhi_deviceFrameDone record.",
           "returns": {
             "type": "result",
@@ -12054,7 +12083,8 @@
         },
         {
           "kind": "function",
-          "name": "wait_frame",
+          "name": "request_wait_frame",
+          "object": "request",
           "doc": "Waits until a submitted frame finishes on the GPU, or the deadline passes. On the web, where nothing may block, a frame not yet finished times out at once.",
           "returns": {
             "type": "result",
@@ -12104,8 +12134,9 @@
         },
         {
           "kind": "function",
-          "name": "next_device_notification",
-          "doc": "Takes the oldest record from the device's notification queue, first taking in the frames the GPU finished. mrhiWaitDeviceNotification waits for one.",
+          "name": "device_take_notification",
+          "object": "device",
+          "doc": "Takes the oldest record from the device's notification queue, first taking in the frames the GPU finished. mrhiDevice_WaitNotification waits for one.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success` with a record; `mrhi_empty` when the queue is drained; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorBusy` for a call from inside the device's allocator."
@@ -12132,8 +12163,9 @@
         },
         {
           "kind": "function",
-          "name": "wait_device_notification",
-          "doc": "Waits until the device's notification queue holds a record, or the deadline passes, without taking it; the record is then taken with mrhiNextDeviceNotification. It first takes in what the driver finished, and then waits for the oldest running frame, whose end is the next answer GPU work brings. On the web, where nothing may block, it only takes in what the browser has settled: with nothing settled it times out at once, whatever the deadline, and a program keeps yielding to the browser between calls.",
+          "name": "device_wait_notification",
+          "object": "device",
+          "doc": "Waits until the device's notification queue holds a record, or the deadline passes, without taking it; the record is then taken with mrhiDevice_TakeNotification. It first takes in what the driver finished, and then waits for the oldest running frame, whose end is the next answer GPU work brings. On the web, where nothing may block, it only takes in what the browser has settled: with nothing settled it times out at once, whatever the deadline, and a program keeps yielding to the browser between calls.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success` once the queue holds a record, a lost device's notice included; `mrhi_timeout` when the deadline passed first, or at once on the web; `mrhi_empty` at once when the queue is empty and the device owes no answer, with no pipeline pending and no frame running (a readback is owed only once its frame is submitted); `mrhi_errorInvalid` for a NULL device; `mrhi_errorBusy` for a call from inside the device's allocator."
@@ -12402,7 +12434,8 @@
         },
         {
           "kind": "function",
-          "name": "seal_resource",
+          "name": "resource_seal",
+          "object": "resource",
           "doc": "Ends an imported texture or buffer of the open frame sealed: after the frame's passes it moves to the sealed state, the frame that uploads it sealing it without a frame of its own. From the next frame on any pass may read it through a heap without declaring it, and a frame that imports it may declare only the reads the sealed state allows (a texture sampled; a buffer as uniforms, vertices, indices, indirect arguments or storage read) until it is unsealed. Writing it through a heap while it is sealed is invalid, with undefined results. Sealing it again does nothing. Needs the bindless_sampling feature.",
           "returns": {
             "type": "result",
@@ -12429,7 +12462,8 @@
         },
         {
           "kind": "function",
-          "name": "unseal_resource",
+          "name": "resource_unseal",
+          "object": "resource",
           "doc": "Returns an imported texture or buffer of the open frame to the graph's tracking: passes added after it may declare any use of it, and it leaves the frame in its last use's state. Undoes a seal made earlier in the frame; sealing it after unsealing ends it sealed again. Unsealing a resource that is not sealed does nothing. Needs the bindless_sampling feature.",
           "returns": {
             "type": "result",
@@ -13371,7 +13405,8 @@
         },
         {
           "kind": "function",
-          "name": "compile_frame",
+          "name": "device_compile_frame",
+          "object": "device",
           "doc": "Compiles the open frame: culls the passes nothing kept needs, checks each declared resource's derived usages against its format, and plans the barriers between uses. After it, nothing more is declared; submitting compiles a frame not yet compiled.",
           "returns": {
             "type": "result",
@@ -13393,7 +13428,8 @@
         },
         {
           "kind": "function",
-          "name": "is_pass_kept",
+          "name": "pass_is_kept",
+          "object": "pass",
           "doc": "Reads whether the compiled frame keeps a pass; a culled pass is never recorded.",
           "returns": {
             "type": "result",
@@ -13942,7 +13978,8 @@
         },
         {
           "kind": "function",
-          "name": "get_frame_barriers",
+          "name": "device_get_frame_barriers",
+          "object": "device",
           "doc": "Copies the barriers of the compiled frame, in the order they run.",
           "returns": {
             "type": "result",
@@ -13956,10 +13993,10 @@
               "doc": "The device."
             },
             {
-              "name": "barriers",
+              "name": "barriers_out",
               "type": "struct.barrier",
               "pointer": "mutable",
-              "doc": "Receives up to capacity barriers; NULL when capacity is 0."
+              "doc": "Receives up to capacity barriers; zeros, as many as capacity, on any failure. NULL when capacity is 0."
             },
             {
               "name": "capacity",
@@ -13970,7 +14007,7 @@
               "name": "count_out",
               "type": "size",
               "pointer": "mutable",
-              "doc": "Receives how many barriers there are."
+              "doc": "Receives how many barriers there are; 0 on any failure."
             }
           ],
           "thread_safety": {
@@ -13981,7 +14018,8 @@
         },
         {
           "kind": "function",
-          "name": "get_resource_plan",
+          "name": "resource_get_plan",
+          "object": "resource",
           "doc": "Reads what the compiled frame does with a resource.",
           "returns": {
             "type": "result",
@@ -14043,7 +14081,8 @@
         },
         {
           "kind": "function",
-          "name": "get_pass_plan",
+          "name": "pass_get_plan",
+          "object": "pass",
           "doc": "Reads what the compiled frame does with a pass.",
           "returns": {
             "type": "result",
@@ -14124,8 +14163,9 @@
         },
         {
           "kind": "function",
-          "name": "get_frame_usage",
-          "doc": "Reads what the frame begun last has taken of each frame budget: while it is open, once compiled, after a call its budgets refused, and after it is submitted or dropped, until the next frame begins. Before the first frame, everything is 0. A program compares it with mrhiGetDeviceBudgets to learn its headroom.",
+          "name": "device_get_frame_usage",
+          "object": "device",
+          "doc": "Reads what the frame begun last has taken of each frame budget: while it is open, once compiled, after a call its budgets refused, and after it is submitted or dropped, until the next frame begins. Before the first frame, everything is 0. A program compares it with mrhiDevice_GetBudgets to learn its headroom.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument."
@@ -15648,7 +15688,8 @@
         },
         {
           "kind": "function",
-          "name": "get_shader_info",
+          "name": "shader_get_info",
+          "object": "shader",
           "doc": "Reads what a shader container holds.",
           "returns": {
             "type": "result",
@@ -18802,11 +18843,12 @@
         },
         {
           "kind": "function",
-          "name": "get_pipeline_cache",
+          "name": "device_get_pipeline_cache",
+          "object": "device",
           "doc": "Writes the device's pipeline cache, for a later device's def: the driver's compiled pipelines in a checked envelope.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success` with the cache written, or only its size when bytes is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut; `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity` when capacity is less than the size, which sizeOut receives; `mrhi_errorPlatform` when the driver fails to write it."
+            "doc": "`mrhi_success` with the cache written, or only its size when bytesOut is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut; `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity` when capacity is less than the size, which sizeOut receives; `mrhi_errorPlatform` when the driver fails to write it."
           },
           "args": [
             {
@@ -18816,10 +18858,10 @@
               "doc": "The device."
             },
             {
-              "name": "bytes",
+              "name": "bytes_out",
               "type": "void",
               "pointer": "mutable",
-              "doc": "Receives the cache, or NULL to learn its size."
+              "doc": "Receives the cache, or NULL to learn its size; zeros, as many as capacity, on any failure."
             },
             {
               "name": "capacity",
@@ -18830,7 +18872,7 @@
               "name": "size_out",
               "type": "size",
               "pointer": "mutable",
-              "doc": "Receives the cache's size."
+              "doc": "Receives the cache's size; 0 on any failure but `mrhi_errorCapacity`, which gives the size the cache needs."
             }
           ],
           "thread_safety": {
@@ -18858,7 +18900,8 @@
         },
         {
           "kind": "function",
-          "name": "get_pipeline_cache_outcome",
+          "name": "device_get_pipeline_cache_outcome",
+          "object": "device",
           "doc": "Reports what became of the pipeline cache the device's def gave. An unusable cache never fails a device; it only goes unused.",
           "returns": {
             "type": "result",
@@ -19223,8 +19266,9 @@
         },
         {
           "kind": "function",
-          "name": "begin_pass",
-          "doc": "Begins recording a kept pass of the compiled open frame. It records until mrhiEndPass; a kept pass never begun records nothing.",
+          "name": "pass_begin",
+          "object": "pass",
+          "doc": "Begins recording a kept pass of the compiled open frame. It records until mrhiPass_End; a kept pass never begun records nothing.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device; `mrhi_errorStale` for a pass of another frame or none; `mrhi_errorState` for a pass that is culled, begun already, or a frame that is not compiled."
@@ -19267,7 +19311,8 @@
         },
         {
           "kind": "function",
-          "name": "end_pass",
+          "name": "pass_end",
+          "object": "pass",
           "doc": "Ends recording a pass. Its debug groups must be closed.",
           "returns": {
             "type": "result",
@@ -19311,7 +19356,8 @@
         },
         {
           "kind": "function",
-          "name": "set_graphics_pipeline",
+          "name": "pass_set_graphics_pipeline",
+          "object": "pass",
           "doc": "Sets the graphics pipeline later draws use, in a pass with targets. It must be ready and fit the pass's targets: their formats and sample count, and no depth or stencil writes to a read-only depth target. A pipeline whose entry points read a heap needs a pass that names one.",
           "returns": {
             "type": "result",
@@ -19360,7 +19406,8 @@
         },
         {
           "kind": "function",
-          "name": "set_compute_pipeline",
+          "name": "pass_set_compute_pipeline",
+          "object": "pass",
           "doc": "Sets the compute pipeline later dispatches use, in a pass without targets. A pipeline whose entry point reads a heap needs a pass that names one.",
           "returns": {
             "type": "result",
@@ -19409,7 +19456,8 @@
         },
         {
           "kind": "function",
-          "name": "set_bindings",
+          "name": "pass_set_bindings",
+          "object": "pass",
           "doc": "Sets every slot of one binding table for later draws or dispatches, checked against the pass's pipeline and its declared accesses.",
           "returns": {
             "type": "result",
@@ -19469,7 +19517,8 @@
         },
         {
           "kind": "function",
-          "name": "set_vertex_buffer",
+          "name": "pass_set_vertex_buffer",
+          "object": "pass",
           "doc": "Sets the buffer later draws read one of the pipeline's vertex buffers from.",
           "returns": {
             "type": "result",
@@ -19533,7 +19582,8 @@
         },
         {
           "kind": "function",
-          "name": "set_index_buffer",
+          "name": "pass_set_index_buffer",
+          "object": "pass",
           "doc": "Sets the buffer later indexed draws read indices from.",
           "returns": {
             "type": "result",
@@ -19597,7 +19647,8 @@
         },
         {
           "kind": "function",
-          "name": "draw",
+          "name": "pass_draw",
+          "object": "pass",
           "doc": "Draws vertices with the pass's pipeline, tables and vertex buffers.",
           "returns": {
             "type": "result",
@@ -19661,7 +19712,8 @@
         },
         {
           "kind": "function",
-          "name": "draw_indexed",
+          "name": "pass_draw_indexed",
+          "object": "pass",
           "doc": "Draws indexed vertices with the pass's pipeline, tables, vertex buffers and index buffer.",
           "returns": {
             "type": "result",
@@ -19730,7 +19782,8 @@
         },
         {
           "kind": "function",
-          "name": "dispatch",
+          "name": "pass_dispatch",
+          "object": "pass",
           "doc": "Dispatches workgroups with the pass's compute pipeline and tables.",
           "returns": {
             "type": "result",
@@ -19789,7 +19842,8 @@
         },
         {
           "kind": "function",
-          "name": "draw_indirect",
+          "name": "pass_draw_indirect",
+          "object": "pass",
           "doc": "Draws with the pass's pipeline, tables and vertex buffers, the arguments read on the GPU: the vertices, the instances, the first vertex and the first instance, 32-bit each. A first instance other than zero without the indirect_first_instance feature makes the draw do nothing.",
           "returns": {
             "type": "result",
@@ -19844,7 +19898,8 @@
         },
         {
           "kind": "function",
-          "name": "draw_indexed_indirect",
+          "name": "pass_draw_indexed_indirect",
+          "object": "pass",
           "doc": "Draws indexed vertices with the pass's pipeline, tables, vertex and index buffers, the arguments read on the GPU: the indices, the instances, the first index, the base vertex (signed) and the first instance, 32-bit each. A first instance other than zero without the indirect_first_instance feature makes the draw do nothing.",
           "returns": {
             "type": "result",
@@ -19901,11 +19956,12 @@
           "kind": "constant",
           "name": "max_indirect_draws",
           "value": 65535,
-          "doc": "The draws a counted multi-draw makes at most (mrhiDrawIndirectCount's maxCount)."
+          "doc": "The draws a counted multi-draw makes at most (mrhiPass_DrawIndirectCount's maxCount)."
         },
         {
           "kind": "function",
-          "name": "draw_indirect_count",
+          "name": "pass_draw_indirect_count",
+          "object": "pass",
           "doc": "Draws up to maxCount non-indexed draws with the pass's pipeline, tables and buffers, each from its own record of the single indirect draw's layout (16 bytes, packed one after another), the number drawn read on the GPU from a 32-bit count and clamped to maxCount. Each record follows the single draw's rules. Needs the multi_draw_indirect_count feature.",
           "returns": {
             "type": "result",
@@ -19976,7 +20032,8 @@
         },
         {
           "kind": "function",
-          "name": "draw_indexed_indirect_count",
+          "name": "pass_draw_indexed_indirect_count",
+          "object": "pass",
           "doc": "Draws up to maxCount indexed draws with the pass's pipeline, tables and buffers, each from its own record of the single indirect draw's layout (20 bytes, packed one after another), the number drawn read on the GPU from a 32-bit count and clamped to maxCount. Each record follows the single draw's rules. Needs the multi_draw_indirect_count feature.",
           "returns": {
             "type": "result",
@@ -20047,7 +20104,8 @@
         },
         {
           "kind": "function",
-          "name": "dispatch_indirect",
+          "name": "pass_dispatch_indirect",
+          "object": "pass",
           "doc": "Dispatches workgroups with the pass's compute pipeline and tables, the counts in x, y and z read on the GPU, 32-bit each. A count past the device's workgroupsPerDimension makes the dispatch do nothing.",
           "returns": {
             "type": "result",
@@ -20101,7 +20159,8 @@
         },
         {
           "kind": "function",
-          "name": "begin_occlusion_query",
+          "name": "pass_begin_occlusion_query",
+          "object": "pass",
           "doc": "Begins an occlusion query of the pass's occlusion query set: the draws until its end write whether any sample passed. A query is written at most once in a frame.",
           "returns": {
             "type": "result",
@@ -20150,7 +20209,8 @@
         },
         {
           "kind": "function",
-          "name": "end_occlusion_query",
+          "name": "pass_end_occlusion_query",
+          "object": "pass",
           "doc": "Ends the pass's open occlusion query. One refused for capacity still ends it, so the pass can end.",
           "returns": {
             "type": "result",
@@ -20194,7 +20254,8 @@
         },
         {
           "kind": "function",
-          "name": "begin_statistics_query",
+          "name": "pass_begin_statistics_query",
+          "object": "pass",
           "doc": "Begins a pipeline statistics query: the pass's work until its end is counted. A query is written at most once in a frame.",
           "returns": {
             "type": "result",
@@ -20248,7 +20309,8 @@
         },
         {
           "kind": "function",
-          "name": "end_statistics_query",
+          "name": "pass_end_statistics_query",
+          "object": "pass",
           "doc": "Ends the pass's open statistics query. One refused for capacity still ends it, so the pass can end.",
           "returns": {
             "type": "result",
@@ -20292,7 +20354,8 @@
         },
         {
           "kind": "function",
-          "name": "resolve_queries",
+          "name": "pass_resolve_queries",
+          "object": "pass",
           "doc": "Writes queries of a set into a buffer as 64-bit values: an occlusion query's result, a timestamp in ticks, or a statistics query's eleven counters. A query not written earlier in the frame reads zeros.",
           "returns": {
             "type": "result",
@@ -20362,7 +20425,8 @@
         },
         {
           "kind": "function",
-          "name": "copy_buffer",
+          "name": "pass_copy_buffer",
+          "object": "pass",
           "doc": "Copies bytes from one buffer of the frame to another.",
           "returns": {
             "type": "result",
@@ -20431,7 +20495,8 @@
         },
         {
           "kind": "function",
-          "name": "clear_buffer",
+          "name": "pass_clear_buffer",
+          "object": "pass",
           "doc": "Writes zeros into a range of a buffer of the frame.",
           "returns": {
             "type": "result",
@@ -20491,7 +20556,8 @@
         },
         {
           "kind": "function",
-          "name": "copy_buffer_to_texture",
+          "name": "pass_copy_buffer_to_texture",
+          "object": "pass",
           "doc": "Copies texels from a buffer of the frame into a texture's mip.",
           "returns": {
             "type": "result",
@@ -20553,7 +20619,8 @@
         },
         {
           "kind": "function",
-          "name": "copy_texture_to_buffer",
+          "name": "pass_copy_texture_to_buffer",
+          "object": "pass",
           "doc": "Copies texels from a texture's mip into a buffer of the frame.",
           "returns": {
             "type": "result",
@@ -20615,7 +20682,8 @@
         },
         {
           "kind": "function",
-          "name": "copy_texture",
+          "name": "pass_copy_texture",
+          "object": "pass",
           "doc": "Copies texels between textures of the frame, or between parts of one.",
           "returns": {
             "type": "result",
@@ -20677,7 +20745,8 @@
         },
         {
           "kind": "function",
-          "name": "write_buffer",
+          "name": "pass_write_buffer",
+          "object": "pass",
           "doc": "Uploads bytes into a buffer of the frame, copying them at the call.",
           "returns": {
             "type": "result",
@@ -20742,7 +20811,8 @@
         },
         {
           "kind": "function",
-          "name": "write_texture",
+          "name": "pass_write_texture",
+          "object": "pass",
           "doc": "Uploads texels into a texture's mip, copying them at the call.",
           "returns": {
             "type": "result",
@@ -20815,7 +20885,8 @@
         },
         {
           "kind": "function",
-          "name": "read_buffer",
+          "name": "pass_read_buffer",
+          "object": "pass",
           "doc": "Reads bytes of a buffer of the frame back after the frame finishes.",
           "returns": {
             "type": "result",
@@ -20880,7 +20951,8 @@
         },
         {
           "kind": "function",
-          "name": "read_texture",
+          "name": "pass_read_texture",
+          "object": "pass",
           "doc": "Reads texels of a texture's mip back after the frame finishes, rows tightly packed.",
           "returns": {
             "type": "result",
@@ -20942,7 +21014,8 @@
         },
         {
           "kind": "function",
-          "name": "take_readback",
+          "name": "request_take_readback",
+          "object": "request",
           "doc": "Copies an answered readback's bytes out and frees them; with no array, reports their size only.",
           "returns": {
             "type": "result",
@@ -20961,10 +21034,10 @@
               "doc": "The readback's request."
             },
             {
-              "name": "bytes",
+              "name": "bytes_out",
               "type": "void",
               "pointer": "mutable",
-              "doc": "Where the bytes go, or NULL for the size only."
+              "doc": "Where the bytes go, or NULL for the size only; zeros, as many as capacity, on any failure."
             },
             {
               "name": "capacity",
@@ -20975,7 +21048,7 @@
               "name": "size_out",
               "type": "size",
               "pointer": "mutable",
-              "doc": "The readback's bytes."
+              "doc": "The readback's bytes; 0 on any failure but `mrhi_errorCapacity`, which gives them."
             }
           ],
           "thread_safety": {
@@ -20986,7 +21059,8 @@
         },
         {
           "kind": "function",
-          "name": "set_root_block",
+          "name": "pass_set_root_block",
+          "object": "pass",
           "doc": "Writes bytes of the root block later draws or dispatches read.",
           "returns": {
             "type": "result",
@@ -21046,7 +21120,8 @@
         },
         {
           "kind": "function",
-          "name": "set_viewport",
+          "name": "pass_set_viewport",
+          "object": "pass",
           "doc": "Sets where later draws land, in a pass with targets.",
           "returns": {
             "type": "result",
@@ -21096,7 +21171,8 @@
         },
         {
           "kind": "function",
-          "name": "set_scissor",
+          "name": "pass_set_scissor",
+          "object": "pass",
           "doc": "Sets the pixels later draws may write, in a pass with targets.",
           "returns": {
             "type": "result",
@@ -21146,7 +21222,8 @@
         },
         {
           "kind": "function",
-          "name": "set_blend_constant",
+          "name": "pass_set_blend_constant",
+          "object": "pass",
           "doc": "Sets the constant blend factors use, in a pass with targets.",
           "returns": {
             "type": "result",
@@ -21196,7 +21273,8 @@
         },
         {
           "kind": "function",
-          "name": "set_stencil_reference",
+          "name": "pass_set_stencil_reference",
+          "object": "pass",
           "doc": "Sets the reference stencil tests compare with, in a pass with targets.",
           "returns": {
             "type": "result",
@@ -21245,7 +21323,8 @@
         },
         {
           "kind": "function",
-          "name": "push_debug_group",
+          "name": "pass_push_debug_group",
+          "object": "pass",
           "doc": "Opens a named group of the pass's commands for debugging tools.",
           "returns": {
             "type": "result",
@@ -21300,7 +21379,8 @@
         },
         {
           "kind": "function",
-          "name": "pop_debug_group",
+          "name": "pass_pop_debug_group",
+          "object": "pass",
           "doc": "Closes the pass's innermost open debug group.",
           "returns": {
             "type": "result",
@@ -21344,7 +21424,8 @@
         },
         {
           "kind": "function",
-          "name": "insert_debug_marker",
+          "name": "pass_insert_debug_marker",
+          "object": "pass",
           "doc": "Marks a point among the pass's commands for debugging tools.",
           "returns": {
             "type": "result",
@@ -21502,7 +21583,7 @@
           "kind": "struct",
           "name": "device_vulkan_adopt",
           "chained": true,
-          "doc": "A VkDevice made from the instance's last description (mrhiDescribeVulkanDevice) of an equal device def, which the device adopts and never destroys, chained on a device def with the type mrhi_structDeviceVulkanAdopt. Vulkan only. Without such a description the def is refused with mrhi_errorInvalid; on another driver's adapter with mrhi_errorUnsupported.",
+          "doc": "A VkDevice made from the instance's last description (mrhiInstance_DescribeVulkanDevice) of an equal device def, which the device adopts and never destroys, chained on a device def with the type mrhi_structDeviceVulkanAdopt. Vulkan only. Without such a description the def is refused with mrhi_errorInvalid; on another driver's adapter with mrhi_errorUnsupported.",
           "members": [
             {
               "name": "device",
@@ -21607,7 +21688,8 @@
         },
         {
           "kind": "function",
-          "name": "describe_vulkan_device",
+          "name": "instance_describe_vulkan_device",
+          "object": "instance",
           "doc": "Describes the Vulkan device a device def would make: the VkDeviceCreateInfo and the VkPhysicalDevice the driver would pass to vkCreateDevice, for a program whose OpenXR runtime makes the device (xrCreateVulkanDeviceKHR). The description stays valid until the instance's next description, refused or not, or its end; a device made from it is adopted with mrhiDeviceVulkanAdopt.",
           "returns": {
             "type": "result",
@@ -21664,7 +21746,8 @@
         },
         {
           "kind": "function",
-          "name": "get_vulkan_physical_device",
+          "name": "adapter_get_vulkan_physical_device",
+          "object": "adapter",
           "doc": "Reads an adapter's VkPhysicalDevice, to find the adapter an OpenXR runtime names (xrGetVulkanGraphicsDevice2KHR).",
           "returns": {
             "type": "result",
@@ -21714,7 +21797,8 @@
         },
         {
           "kind": "function",
-          "name": "get_vulkan_queue",
+          "name": "device_get_vulkan_queue",
+          "object": "device",
           "doc": "Reads the queue family and index a Vulkan device submits on, for XrGraphicsBindingVulkan2KHR.",
           "returns": {
             "type": "result",
@@ -21765,7 +21849,8 @@
         },
         {
           "kind": "function",
-          "name": "get_vulkan_device",
+          "name": "device_get_vulkan_device",
+          "object": "device",
           "doc": "Reads a Vulkan device's native objects, borrowed for the device's life: what an upscaler's context is made from (XeSS's xessVKCreateContext, Streamline's Vulkan setup).",
           "returns": {
             "type": "result",
@@ -21891,7 +21976,8 @@
         },
         {
           "kind": "function",
-          "name": "get_vulkan_texture",
+          "name": "texture_get_vulkan_texture",
+          "object": "texture",
           "doc": "Reads a device texture's Vulkan image. In a native pass the texture is in the layout its access puts it in: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL for mrhi_accessSampled, VK_IMAGE_LAYOUT_GENERAL for the storage accesses, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL and VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL for the copies.",
           "returns": {
             "type": "result",
@@ -21941,8 +22027,9 @@
         },
         {
           "kind": "function",
-          "name": "set_vulkan_pass_commands",
-          "doc": "Hands a native pass the command buffer the program recorded for it: a primary VkCommandBuffer from the program's own pool on the device's queue family, ended and not submitted. The library submits it at the pass's place in the frame, after the library's commands before it and before those after it; it must leave every declared resource in its access's layout (mrhiGetVulkanTexture), and may change any other state. The program keeps it alive until the frame is done.",
+          "name": "pass_set_vulkan_commands",
+          "object": "pass",
+          "doc": "Hands a native pass the command buffer the program recorded for it: a primary VkCommandBuffer from the program's own pool on the device's queue family, ended and not submitted. The library submits it at the pass's place in the frame, after the library's commands before it and before those after it; it must leave every declared resource in its access's layout (mrhiTexture_GetVulkanTexture), and may change any other state. The program keeps it alive until the frame is done.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Vulkan; `mrhi_errorState` outside the pass's recording, or for a pass that already has one; `mrhi_errorInvalid` for a NULL command buffer or a pass that is not native."
@@ -22000,7 +22087,8 @@
       "items": [
         {
           "kind": "function",
-          "name": "get_d3d12_device",
+          "name": "device_get_d3d12_device",
+          "object": "device",
           "doc": "Reads a D3D12 device's native objects, borrowed for the device's life with no reference added: what an upscaler's context is made from (the FidelityFX SDK's backend, XeSS's xessD3D12CreateContext).",
           "returns": {
             "type": "result",
@@ -22051,7 +22139,8 @@
         },
         {
           "kind": "function",
-          "name": "get_d3d12_texture",
+          "name": "texture_get_d3d12_texture",
+          "object": "texture",
           "doc": "Reads a device texture's ID3D12Resource, borrowed with no reference added. In a native pass the texture is in the state its access puts it in: D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE for mrhi_accessSampled, D3D12_RESOURCE_STATE_UNORDERED_ACCESS for the storage accesses, D3D12_RESOURCE_STATE_COPY_SOURCE and D3D12_RESOURCE_STATE_COPY_DEST for the copies; a buffer is in D3D12_RESOURCE_STATE_COMMON, promoted on its first use, as buffers decay between command lists.",
           "returns": {
             "type": "result",
@@ -22101,8 +22190,9 @@
         },
         {
           "kind": "function",
-          "name": "set_d3d12_pass_commands",
-          "doc": "Hands a native pass the command list the program recorded for it: an ID3D12GraphicsCommandList of the direct type, closed and not executed. The library executes it at the pass's place in the frame, after the library's lists before it and before those after it, each in its own ExecuteCommandLists; it must leave every declared texture in its access's state (mrhiGetD3d12Texture), and may change any other state, its descriptor heaps and root signatures included. The program keeps it alive until the frame is done.",
+          "name": "pass_set_d3d12_commands",
+          "object": "pass",
+          "doc": "Hands a native pass the command list the program recorded for it: an ID3D12GraphicsCommandList of the direct type, closed and not executed. The library executes it at the pass's place in the frame, after the library's lists before it and before those after it, each in its own ExecuteCommandLists; it must leave every declared texture in its access's state (mrhiTexture_GetD3d12Texture), and may change any other state, its descriptor heaps and root signatures included. The program keeps it alive until the frame is done.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not D3D12; `mrhi_errorState` outside the pass's recording, or for a pass that already has one; `mrhi_errorInvalid` for a NULL list or a pass that is not native."
@@ -22160,7 +22250,8 @@
       "items": [
         {
           "kind": "function",
-          "name": "get_metal_device",
+          "name": "device_get_metal_device",
+          "object": "device",
           "doc": "Reads a Metal device's native objects, borrowed for the device's life with no reference added: what an upscaler is made from (MetalFX's MTLFXTemporalScalerDescriptor makes its scaler from the MTLDevice).",
           "returns": {
             "type": "result",
@@ -22211,7 +22302,8 @@
         },
         {
           "kind": "function",
-          "name": "get_metal_texture",
+          "name": "texture_get_metal_texture",
+          "object": "texture",
           "doc": "Reads a device texture's id<MTLTexture>, borrowed with no reference added. Metal tracks its hazards, so a native pass needs no state.",
           "returns": {
             "type": "result",
@@ -22261,8 +22353,9 @@
         },
         {
           "kind": "function",
-          "name": "set_metal_pass_commands",
-          "doc": "Hands a native pass the command buffer the program encoded for it: an id<MTLCommandBuffer> from the device's graphics queue (mrhiGetMetalDevice), with no encoder open, neither enqueued nor committed. The library commits it at the pass's place in the frame, after the work the pass follows and before the work that follows it, and the frame is done only once it has completed too. The program keeps it alive until then.",
+          "name": "pass_set_metal_commands",
+          "object": "pass",
+          "doc": "Hands a native pass the command buffer the program encoded for it: an id<MTLCommandBuffer> from the device's graphics queue (mrhiDevice_GetMetalDevice), with no encoder open, neither enqueued nor committed. The library commits it at the pass's place in the frame, after the work the pass follows and before the work that follows it, and the frame is done only once it has completed too. The program keeps it alive until then.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success`; `mrhi_errorUnsupported` where the device's driver is not Metal; `mrhi_errorState` outside the pass's recording, or for a pass that already has one; `mrhi_errorInvalid` for a NULL command buffer or a pass that is not native."
@@ -22575,5 +22668,5 @@
       ]
     }
   ],
-  "contract_version": 22
+  "contract_version": 23
 }

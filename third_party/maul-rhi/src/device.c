@@ -565,7 +565,7 @@ void mrhiDestroyDevice(mrhiDevice* device)
     mrhiRelease(&allocator, device, device->bytes, alignof(mrhiDevice));
 }
 
-mrhiDeviceState mrhiGetDeviceState(mrhiDevice* device)
+mrhiDeviceState mrhiDevice_GetState(mrhiDevice* device)
 {
     return device == nullptr ? mrhi_deviceFailed : device->state;
 }
@@ -656,7 +656,7 @@ mrhiResult mrhiDeviceUsable(const mrhiDevice* device)
     return device->state == mrhi_deviceReady ? mrhi_success : mrhi_errorState;
 }
 
-mrhiResult mrhiGetDeviceFeatures(mrhiDevice* device, mrhiFeatures* featuresOut)
+mrhiResult mrhiDevice_GetFeatures(mrhiDevice* device, mrhiFeatures* featuresOut)
 {
     if (device == nullptr || featuresOut == nullptr)
     {
@@ -667,7 +667,7 @@ mrhiResult mrhiGetDeviceFeatures(mrhiDevice* device, mrhiFeatures* featuresOut)
     return mrhi_success;
 }
 
-mrhiResult mrhiGetDeviceLimits(mrhiDevice* device, mrhiLimits* limitsOut)
+mrhiResult mrhiDevice_GetLimits(mrhiDevice* device, mrhiLimits* limitsOut)
 {
     if (device == nullptr || limitsOut == nullptr)
     {
@@ -678,7 +678,7 @@ mrhiResult mrhiGetDeviceLimits(mrhiDevice* device, mrhiLimits* limitsOut)
     return mrhi_success;
 }
 
-mrhiResult mrhiGetDeviceBudgets(mrhiDevice* device, mrhiDeviceBudgets* budgetsOut)
+mrhiResult mrhiDevice_GetBudgets(mrhiDevice* device, mrhiDeviceBudgets* budgetsOut)
 {
     if (device == nullptr || budgetsOut == nullptr)
     {
@@ -689,7 +689,7 @@ mrhiResult mrhiGetDeviceBudgets(mrhiDevice* device, mrhiDeviceBudgets* budgetsOu
     return mrhi_success;
 }
 
-mrhiResult mrhiGetDeviceTimestampPeriod(mrhiDevice* device, double* periodOut)
+mrhiResult mrhiDevice_GetTimestampPeriod(mrhiDevice* device, double* periodOut)
 {
     if (device == nullptr || periodOut == nullptr)
     {
@@ -709,7 +709,7 @@ mrhiResult mrhiGetDeviceTimestampPeriod(mrhiDevice* device, double* periodOut)
     return mrhi_success;
 }
 
-mrhiResult mrhiGetDeviceLossReport(mrhiDevice* device, mrhiDeviceLossReport* reportOut)
+mrhiResult mrhiDevice_GetLossReport(mrhiDevice* device, mrhiDeviceLossReport* reportOut)
 {
     if (device == nullptr || reportOut == nullptr)
     {
@@ -724,12 +724,12 @@ mrhiResult mrhiGetDeviceLossReport(mrhiDevice* device, mrhiDeviceLossReport* rep
     return mrhi_success;
 }
 
-uint64_t mrhiGetDeviceMisuse(mrhiDevice* device)
+uint64_t mrhiDevice_GetMisuse(mrhiDevice* device)
 {
     return device == nullptr ? 0 : atomic_load_explicit(&device->misuse, memory_order_relaxed);
 }
 
-mrhiResult mrhiNextDeviceDiagnostic(mrhiDevice* device, mrhiDiagnostic* diagnosticOut)
+mrhiResult mrhiDevice_TakeDiagnostic(mrhiDevice* device, mrhiDiagnostic* diagnosticOut)
 {
     if (device == nullptr)
     {

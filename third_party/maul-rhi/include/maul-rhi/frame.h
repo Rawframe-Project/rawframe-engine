@@ -44,8 +44,8 @@ extern "C"
         // error that ended it, or mrhi_errorStale when it was destroyed first.
         mrhi_devicePipelineReady = 1,
         // A readback's frame finished: its outcome is mrhi_success, and
-        // mrhiTakeReadback copies its bytes out, or the error that ended the
-        // frame.
+        // mrhiRequest_TakeReadback copies its bytes out, or the error that
+        // ended the frame.
         mrhi_deviceReadbackReady = 2,
         // The device was lost; its request id is null and its outcome
         // mrhi_errorDeviceLost. Every answer still owed follows with that
@@ -84,7 +84,8 @@ extern "C"
     /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiBeginFrame(mrhiDevice* device, const mrhiFrameDef* def);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_BeginFrame(mrhiDevice* device,
+                                                             const mrhiFrameDef* def);
 
     /// Closes the open frame without running it. It gets no token.
     ///
@@ -94,7 +95,7 @@ extern "C"
     /// for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiDropFrame(mrhiDevice* device);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_DropFrame(mrhiDevice* device);
 
     /// Submits the open frame to the GPU, compiling it first if it is not, and
     /// closes it. Its token is answered by one mrhi_deviceFrameDone record.
@@ -112,7 +113,8 @@ extern "C"
     /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_SubmitFrame(mrhiDevice* device,
+                                                              mrhiRequestId* tokenOut);
 
     /// Waits until a submitted frame finishes on the GPU, or the deadline
     /// passes. On the web, where nothing may block, a frame not yet finished
@@ -127,11 +129,12 @@ extern "C"
     /// device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiWaitFrame(mrhiDevice* device, mrhiRequestId token,
-                                                     uint64_t timeoutNs);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiRequest_WaitFrame(mrhiDevice* device,
+                                                             mrhiRequestId token,
+                                                             uint64_t timeoutNs);
 
     /// Takes the oldest record from the device's notification queue, first
-    /// taking in the frames the GPU finished. mrhiWaitDeviceNotification waits
+    /// taking in the frames the GPU finished. mrhiDevice_WaitNotification waits
     /// for one.
     ///
     /// @param device           The device.
@@ -142,11 +145,11 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult
-    mrhiNextDeviceNotification(mrhiDevice* device, mrhiDeviceNotification* notificationOut);
+    mrhiDevice_TakeNotification(mrhiDevice* device, mrhiDeviceNotification* notificationOut);
 
     /// Waits until the device's notification queue holds a record, or the
     /// deadline passes, without taking it; the record is then taken with
-    /// mrhiNextDeviceNotification. It first takes in what the driver finished,
+    /// mrhiDevice_TakeNotification. It first takes in what the driver finished,
     /// and then waits for the oldest running frame, whose end is the next
     /// answer GPU work brings. On the web, where nothing may block, it only
     /// takes in what the browser has settled: with nothing settled it times out
@@ -164,8 +167,8 @@ extern "C"
     /// allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiWaitDeviceNotification(mrhiDevice* device,
-                                                                  uint64_t timeoutNs);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_WaitNotification(mrhiDevice* device,
+                                                                   uint64_t timeoutNs);
 
     // A resource of the open frame: a declared texture or buffer, or an
     // imported one. It ends with the frame.
@@ -306,8 +309,8 @@ extern "C"
     /// inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSealResource(mrhiDevice* device,
-                                                        mrhiResourceId resource);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiResource_Seal(mrhiDevice* device,
+                                                         mrhiResourceId resource);
 
     /// Returns an imported texture or buffer of the open frame to the graph's
     /// tracking: passes added after it may declare any use of it, and it leaves
@@ -326,8 +329,8 @@ extern "C"
     /// has; `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiUnsealResource(mrhiDevice* device,
-                                                          mrhiResourceId resource);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiResource_Unseal(mrhiDevice* device,
+                                                           mrhiResourceId resource);
 
 // The native passes a frame holds at most (mrhiPassDef's native).
 #define MRHI_MAX_NATIVE_PASSES 8
@@ -616,7 +619,7 @@ extern "C"
     /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiCompileFrame(mrhiDevice* device);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_CompileFrame(mrhiDevice* device);
 
     /// Reads whether the compiled frame keeps a pass; a culled pass is never
     /// recorded.
@@ -629,8 +632,8 @@ extern "C"
     /// frame not compiled.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiIsPassKept(mrhiDevice* device, mrhiPassId pass,
-                                                      bool* keptOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_IsKept(mrhiDevice* device, mrhiPassId pass,
+                                                       bool* keptOut);
 
     // The state a compiled frame leaves a part of a resource in, from the use
     // that made it.
@@ -727,19 +730,21 @@ extern "C"
 
     /// Copies the barriers of the compiled frame, in the order they run.
     ///
-    /// @param device    The device.
-    /// @param barriers  Receives up to capacity barriers; NULL when capacity is
-    ///                  0.
-    /// @param capacity  The array's length.
-    /// @param countOut  Receives how many barriers there are.
+    /// @param device       The device.
+    /// @param barriersOut  Receives up to capacity barriers; zeros, as many as
+    ///                     capacity, on any failure. NULL when capacity is 0.
+    /// @param capacity     The array's length.
+    /// @param countOut     Receives how many barriers there are; 0 on any
+    ///                     failure.
     /// @return `mrhi_success` with the total in countOut, which may exceed the
     /// capacity; `mrhi_errorInvalid` for a NULL device or count, or a NULL
     /// array with a capacity; `mrhi_errorState` for a frame not compiled.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetFrameBarriers(mrhiDevice* device,
-                                                            mrhiBarrier* barriers, size_t capacity,
-                                                            size_t* countOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetFrameBarriers(mrhiDevice* device,
+                                                                   mrhiBarrier* barriersOut,
+                                                                   size_t capacity,
+                                                                   size_t* countOut);
 
     /// Reads what the compiled frame does with a resource.
     ///
@@ -751,9 +756,9 @@ extern "C"
     /// a frame not compiled.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetResourcePlan(mrhiDevice* device,
-                                                           mrhiResourceId resource,
-                                                           mrhiResourcePlan* planOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiResource_GetPlan(mrhiDevice* device,
+                                                            mrhiResourceId resource,
+                                                            mrhiResourcePlan* planOut);
 
     // What a compiled frame does with a pass.
     typedef struct mrhiPassPlan
@@ -779,8 +784,8 @@ extern "C"
     /// frame not compiled.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetPassPlan(mrhiDevice* device, mrhiPassId pass,
-                                                       mrhiPassPlan* planOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_GetPlan(mrhiDevice* device, mrhiPassId pass,
+                                                        mrhiPassPlan* planOut);
 
     // What a frame has taken of each budget a frame has, each member named
     // after the mrhiDeviceBudgets member it is measured against, and the memory
@@ -817,7 +822,7 @@ extern "C"
     /// Reads what the frame begun last has taken of each frame budget: while it
     /// is open, once compiled, after a call its budgets refused, and after it
     /// is submitted or dropped, until the next frame begins. Before the first
-    /// frame, everything is 0. A program compares it with mrhiGetDeviceBudgets
+    /// frame, everything is 0. A program compares it with mrhiDevice_GetBudgets
     /// to learn its headroom.
     ///
     /// @param device    The device.
@@ -825,8 +830,8 @@ extern "C"
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetFrameUsage(mrhiDevice* device,
-                                                         mrhiFrameUsage* usageOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetFrameUsage(mrhiDevice* device,
+                                                                mrhiFrameUsage* usageOut);
 
 #ifdef __cplusplus
 }

@@ -26,7 +26,7 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
     return std::unexpected<result::Error>{
         result::fail(result::ErrorClass::Unavailable, kRenderDomain, code(RenderError::Device), why)
             .error()
-            .withContext("outcome", std::string{mrhiResultName(outcome)})};
+            .withContext("outcome", std::string{mrhiGetResultName(outcome)})};
 }
 
 /// A picture's sides at most.
@@ -122,7 +122,7 @@ struct Framer::State {
                 kAnswer.has_value() && kAnswer->has_value()) {
                 std::vector<std::byte> bytes(readbackBytes);
                 std::size_t taken = 0;
-                if (mrhiTakeReadback(native, *readback, bytes.data(), bytes.size(), &taken) == mrhi_success &&
+                if (mrhiRequest_TakeReadback(native, *readback, bytes.data(), bytes.size(), &taken) == mrhi_success &&
                     taken == bytes.size()) {
                     pixels = std::move(bytes);
                 }
@@ -134,7 +134,8 @@ struct Framer::State {
                 kAnswer.has_value() && kAnswer->has_value()) {
                 std::vector<std::uint64_t> ticks(2 * timesNamed.size());
                 std::size_t taken = 0;
-                if (mrhiTakeReadback(native, *timesRead, ticks.data(), ticks.size() * 8, &taken) == mrhi_success &&
+                if (mrhiRequest_TakeReadback(native, *timesRead, ticks.data(), ticks.size() * 8, &taken) ==
+                        mrhi_success &&
                     taken == ticks.size() * 8) {
                     passTimes.clear();
                     for (std::size_t at = 0; at < timesNamed.size(); ++at) {
@@ -155,7 +156,7 @@ struct Framer::State {
     std::optional<std::string_view> takeLimit() noexcept {
         std::optional<std::string_view> named;
         mrhiDiagnostic diagnostic{};
-        while (mrhiNextDeviceDiagnostic(native, &diagnostic) == mrhi_success) {
+        while (mrhiDevice_TakeDiagnostic(native, &diagnostic) == mrhi_success) {
             if (const std::optional<std::string_view> kLimit = limitOf(diagnostic.code); kLimit.has_value()) {
                 named = kLimit;
             }
@@ -167,7 +168,7 @@ struct Framer::State {
     /// most yet.
     void measure() noexcept {
         mrhiFrameUsage usage{};
-        if (mrhiGetFrameUsage(native, &usage) != mrhi_success) {
+        if (mrhiDevice_GetFrameUsage(native, &usage) != mrhi_success) {
             return;
         }
         FrameUsage& most = statistics.mostUsed;
@@ -193,7 +194,7 @@ struct Framer::State {
     /// Drops the open frame: every recorder that declared learns it.
     std::unexpected<result::Error> drop(std::span<FrameRecorder* const> recorders, result::Error error) {
         error = named(std::move(error));
-        static_cast<void>(mrhiDropFrame(native));
+        static_cast<void>(mrhiDevice_DropFrame(native));
         for (FrameRecorder* recorder : recorders) {
             recorder->ended(false);
         }
@@ -221,7 +222,7 @@ struct Framer::State {
         // so the queue has room for this frame's and names nothing older.
         static_cast<void>(takeLimit());
         const mrhiFrameDef kFrameDef = mrhiDefaultFrameDef();
-        if (const mrhiResult kBegun = mrhiBeginFrame(native, &kFrameDef); kBegun != mrhi_success) {
+        if (const mrhiResult kBegun = mrhiDevice_BeginFrame(native, &kFrameDef); kBegun != mrhi_success) {
             return std::unexpected<result::Error>{named(failed("a frame could not begin", kBegun).error())};
         }
         mrhiTextureDef pictureDef = mrhiDefaultTextureDef();
@@ -247,7 +248,7 @@ struct Framer::State {
                 def.count = static_cast<std::uint32_t>(2 * kMostTimedPasses);
                 mrhiQuerySetId made{};
                 if (mrhiCreateQuerySet(native, &def, &made) == mrhi_success &&
-                    mrhiGetDeviceTimestampPeriod(native, &period) == mrhi_success) {
+                    mrhiDevice_GetTimestampPeriod(native, &period) == mrhi_success) {
                     timestamps = made;
                 }
             }
@@ -460,22 +461,22 @@ struct Framer::State {
             }
             reading = made;
         }
-        if (const mrhiResult kCompiled = mrhiCompileFrame(native); kCompiled != mrhi_success) {
+        if (const mrhiResult kCompiled = mrhiDevice_CompileFrame(native); kCompiled != mrhi_success) {
             return drop(recorders, failed("the frame could not be compiled", kCompiled).error());
         }
         if (mrhiResult outcome = mrhi_success;
-            clearing.has_value() && ((outcome = mrhiBeginPass(native, *clearing)) != mrhi_success ||
-                                     (outcome = mrhiEndPass(native, *clearing)) != mrhi_success)) {
+            clearing.has_value() && ((outcome = mrhiPass_Begin(native, *clearing)) != mrhi_success ||
+                                     (outcome = mrhiPass_End(native, *clearing)) != mrhi_success)) {
             return drop(recorders, failed("the picture could not be cleared", outcome).error());
         }
         if (mrhiResult outcome = mrhi_success;
-            panelClearing.has_value() && ((outcome = mrhiBeginPass(native, *panelClearing)) != mrhi_success ||
-                                          (outcome = mrhiEndPass(native, *panelClearing)) != mrhi_success)) {
+            panelClearing.has_value() && ((outcome = mrhiPass_Begin(native, *panelClearing)) != mrhi_success ||
+                                          (outcome = mrhiPass_End(native, *panelClearing)) != mrhi_success)) {
             return drop(recorders, failed("the panel could not be cleared", outcome).error());
         }
         for (const mrhiPassId kCleared : asidesClearing) {
-            if (mrhiResult outcome = mrhi_success; (outcome = mrhiBeginPass(native, kCleared)) != mrhi_success ||
-                                                   (outcome = mrhiEndPass(native, kCleared)) != mrhi_success) {
+            if (mrhiResult outcome = mrhi_success; (outcome = mrhiPass_Begin(native, kCleared)) != mrhi_success ||
+                                                   (outcome = mrhiPass_End(native, kCleared)) != mrhi_success) {
                 return drop(recorders, failed("an aside could not be cleared", outcome).error());
             }
         }
@@ -504,13 +505,14 @@ struct Framer::State {
             const auto kCount = static_cast<std::uint32_t>(2 * open.timed.size());
             mrhiRequestId request{};
             if (mrhiResult outcome = mrhi_success;
-                (outcome = mrhiBeginPass(native, *resolving)) != mrhi_success ||
-                (outcome = mrhiResolveQueries(native, *resolving, *timestamps, 0, kCount, *times, 0)) != mrhi_success ||
-                (outcome = mrhiEndPass(native, *resolving)) != mrhi_success ||
-                (outcome = mrhiBeginPass(native, *timesReading)) != mrhi_success ||
-                (outcome = mrhiReadBuffer(native, *timesReading, *times, 0, std::uint64_t{kCount} * 8, &request)) !=
+                (outcome = mrhiPass_Begin(native, *resolving)) != mrhi_success ||
+                (outcome = mrhiPass_ResolveQueries(native, *resolving, *timestamps, 0, kCount, *times, 0)) !=
                     mrhi_success ||
-                (outcome = mrhiEndPass(native, *timesReading)) != mrhi_success) {
+                (outcome = mrhiPass_End(native, *resolving)) != mrhi_success ||
+                (outcome = mrhiPass_Begin(native, *timesReading)) != mrhi_success ||
+                (outcome = mrhiPass_ReadBuffer(
+                     native, *timesReading, *times, 0, std::uint64_t{kCount} * 8, &request)) != mrhi_success ||
+                (outcome = mrhiPass_End(native, *timesReading)) != mrhi_success) {
                 return drop(recorders, failed("the passes' times could not be read back", outcome).error());
             }
             timesRead = request;
@@ -523,16 +525,16 @@ struct Framer::State {
             const mrhiExtent3d kExtent{.width = target.width, .height = target.height, .depthOrLayers = 1};
             mrhiRequestId request{};
             if (mrhiResult outcome = mrhi_success;
-                (outcome = mrhiBeginPass(native, *reading)) != mrhi_success ||
-                (outcome = mrhiReadTexture(native, *reading, &kSource, &kExtent, &request)) != mrhi_success ||
-                (outcome = mrhiEndPass(native, *reading)) != mrhi_success) {
+                (outcome = mrhiPass_Begin(native, *reading)) != mrhi_success ||
+                (outcome = mrhiPass_ReadTexture(native, *reading, &kSource, &kExtent, &request)) != mrhi_success ||
+                (outcome = mrhiPass_End(native, *reading)) != mrhi_success) {
                 return drop(recorders, failed("the picture could not be read back", outcome).error());
             }
             readback = request;
             readbackBytes = std::size_t{target.width} * target.height * 4;
         }
         mrhiRequestId token{};
-        if (const mrhiResult kSubmitted = mrhiSubmitFrame(native, &token); kSubmitted != mrhi_success) {
+        if (const mrhiResult kSubmitted = mrhiDevice_SubmitFrame(native, &token); kSubmitted != mrhi_success) {
             for (FrameRecorder* recorder : recorders) {
                 recorder->ended(false);
             }
@@ -571,7 +573,7 @@ result::Result<std::unique_ptr<Framer>> Framer::create(Device& device) {
     auto state = std::make_unique<State>();
     state->device = &device;
     state->native = device.native();
-    if (mrhiDeviceBudgets budgets{}; mrhiGetDeviceBudgets(state->native, &budgets) == mrhi_success) {
+    if (mrhiDeviceBudgets budgets{}; mrhiDevice_GetBudgets(state->native, &budgets) == mrhi_success) {
         state->statistics.limits = FrameUsage{.resources = budgets.frameResources,
                                               .passes = budgets.framePasses,
                                               .accesses = budgets.frameAccesses,
@@ -598,7 +600,8 @@ result::Status Framer::finish(std::uint64_t nanoseconds) {
     }
     const mrhiRequestId kToken{.index1 = static_cast<std::uint32_t>(*state_->frame >> 32U),
                                .generation = static_cast<std::uint32_t>(*state_->frame)};
-    if (const mrhiResult kWaited = mrhiWaitFrame(state_->native, kToken, nanoseconds); kWaited != mrhi_success) {
+    if (const mrhiResult kWaited = mrhiRequest_WaitFrame(state_->native, kToken, nanoseconds);
+        kWaited != mrhi_success) {
         return failed("the frame did not finish", kWaited);
     }
     state_->takeDone();

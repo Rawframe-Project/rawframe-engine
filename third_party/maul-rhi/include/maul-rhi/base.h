@@ -26,7 +26,7 @@ extern "C"
 #define MRHI_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MRHI_VERSION_MINOR 11
+#define MRHI_VERSION_MINOR 12
 // x-release-please-end
 // x-release-please-start-patch
 #define MRHI_VERSION_PATCH 0
@@ -237,13 +237,13 @@ extern "C"
     /// @return A static, NUL-terminated string such as "mrhi_errorCapacity".
     /// @par Thread safety
     /// Safe from any thread.
-    MRHI_API const char* mrhiResultName(mrhiResult result);
+    MRHI_API const char* mrhiGetResultName(mrhiResult result);
 
     // The check a diagnostic record reports: one check of the core that refused
     // a call as invalid input, one budget a frame call reached or driver budget
     // a submission ran out of, or, in a build with the validation layer, one
     // rule of the driver SPI that the driver broke (the driver codes, recorded
-    // in the instance's queue). mrhiDiagnosticText gives each one's text.
+    // in the instance's queue). mrhiGetDiagnosticText gives each one's text.
     typedef uint16_t mrhiDiagnosticCode;
 
     enum
@@ -703,7 +703,7 @@ extern "C"
     /// @return A static, NUL-terminated English sentence.
     /// @par Thread safety
     /// Safe from any thread.
-    MRHI_API const char* mrhiDiagnosticText(mrhiDiagnosticCode code);
+    MRHI_API const char* mrhiGetDiagnosticText(mrhiDiagnosticCode code);
 
 #ifdef __cplusplus
 }

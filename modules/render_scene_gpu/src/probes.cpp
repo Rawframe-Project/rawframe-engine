@@ -148,7 +148,8 @@ result::Status ProbeAtlas::addPasses() {
 }
 
 result::Status ProbeAtlas::write(mrhiPassId upload) {
-    if (const mrhiResult kOutcome = mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blockBytes());
+    if (const mrhiResult kOutcome =
+            mrhiPass_WriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blockBytes());
         kOutcome != mrhi_success) {
         return failed("the reflection probes could not be written", kOutcome);
     }
@@ -164,11 +165,13 @@ result::Status ProbeAtlas::record(const Pipelines& pipelines) {
         for (std::uint32_t at = 0; at < kFill.passes.size(); ++at) {
             const mrhiPassId kPass = kFill.passes[at];
             if (mrhiResult outcome = mrhi_success;
-                (outcome = mrhiBeginPass(native_, kPass)) != mrhi_success ||
-                (outcome = mrhiSetGraphicsPipeline(native_, kPass, pipelines.probeFill.pipeline)) != mrhi_success ||
-                (outcome = mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
-                (outcome = mrhiDraw(native_, kPass, 3, 1, 0, at)) != mrhi_success ||
-                (outcome = mrhiEndPass(native_, kPass)) != mrhi_success) {
+                (outcome = mrhiPass_Begin(native_, kPass)) != mrhi_success ||
+                (outcome = mrhiPass_SetGraphicsPipeline(native_, kPass, pipelines.probeFill.pipeline)) !=
+                    mrhi_success ||
+                (outcome = mrhiPass_SetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) !=
+                    mrhi_success ||
+                (outcome = mrhiPass_Draw(native_, kPass, 3, 1, 0, at)) != mrhi_success ||
+                (outcome = mrhiPass_End(native_, kPass)) != mrhi_success) {
                 return failed("a reflection probe's picture could not be drawn into the atlas", outcome);
             }
         }

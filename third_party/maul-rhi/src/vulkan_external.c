@@ -21,8 +21,8 @@
 #include "generated/out_copies.h"
 #endif
 
-mrhiResult mrhiDescribeVulkanDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
-                                    void** createInfoOut, void** physicalDeviceOut)
+mrhiResult mrhiInstance_DescribeVulkanDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
+                                             void** createInfoOut, void** physicalDeviceOut)
 {
     if (instance == nullptr)
     {
@@ -61,8 +61,8 @@ mrhiResult mrhiDescribeVulkanDevice(mrhiInstance* instance, const mrhiDeviceDef*
 #endif
 }
 
-mrhiResult mrhiGetVulkanPhysicalDevice(mrhiInstance* instance, mrhiAdapterId adapter,
-                                       void** physicalDeviceOut)
+mrhiResult mrhiAdapter_GetVulkanPhysicalDevice(mrhiInstance* instance, mrhiAdapterId adapter,
+                                               void** physicalDeviceOut)
 {
     if (instance == nullptr)
     {
@@ -91,7 +91,7 @@ mrhiResult mrhiGetVulkanPhysicalDevice(mrhiInstance* instance, mrhiAdapterId ada
 #endif
 }
 
-mrhiResult mrhiGetVulkanQueue(mrhiDevice* device, uint32_t* familyOut, uint32_t* indexOut)
+mrhiResult mrhiDevice_GetVulkanQueue(mrhiDevice* device, uint32_t* familyOut, uint32_t* indexOut)
 {
     if (device == nullptr)
     {
@@ -110,9 +110,9 @@ mrhiResult mrhiGetVulkanQueue(mrhiDevice* device, uint32_t* familyOut, uint32_t*
 #endif
 }
 
-mrhiResult mrhiGetVulkanDevice(mrhiDevice* device, void** instanceOut, void** physicalDeviceOut,
-                               void** deviceOut, void** getInstanceProcAddrOut,
-                               void** getDeviceProcAddrOut)
+mrhiResult mrhiDevice_GetVulkanDevice(mrhiDevice* device, void** instanceOut,
+                                      void** physicalDeviceOut, void** deviceOut,
+                                      void** getInstanceProcAddrOut, void** getDeviceProcAddrOut)
 {
     if (device == nullptr)
     {
@@ -142,8 +142,8 @@ mrhiResult mrhiGetVulkanDevice(mrhiDevice* device, void** instanceOut, void** ph
 #endif
 }
 
-mrhiResult mrhiGetVulkanTexture(mrhiDevice* device, mrhiTextureId texture,
-                                mrhiVulkanTextureInfo* textureOut)
+mrhiResult mrhiTexture_GetVulkanTexture(mrhiDevice* device, mrhiTextureId texture,
+                                        mrhiVulkanTextureInfo* textureOut)
 {
     if (device == nullptr)
     {
@@ -176,7 +176,7 @@ mrhiResult mrhiGetVulkanTexture(mrhiDevice* device, mrhiTextureId texture,
 #endif
 }
 
-mrhiResult mrhiSetVulkanPassCommands(mrhiDevice* device, mrhiPassId pass, void* commandBuffer)
+mrhiResult mrhiPass_SetVulkanCommands(mrhiDevice* device, mrhiPassId pass, void* commandBuffer)
 {
     if (device == nullptr)
     {

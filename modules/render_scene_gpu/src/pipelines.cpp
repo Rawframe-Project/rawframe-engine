@@ -33,7 +33,7 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
     return std::unexpected<result::Error>{
         result::fail(result::ErrorClass::Unavailable, kSceneGpuDomain, code(SceneGpuError::Device), why)
             .error()
-            .withContext("outcome", std::string{mrhiResultName(outcome)})};
+            .withContext("outcome", std::string{mrhiGetResultName(outcome)})};
 }
 
 Pipelines::~Pipelines() {
@@ -146,8 +146,8 @@ result::Status Pipelines::refused(mrhiResult outcome, const char* label, std::si
     }
     // Maul RHI's own word on an input it refused.
     mrhiDiagnostic diagnostic{};
-    if (mrhiNextDeviceDiagnostic(native, &diagnostic) == mrhi_success) {
-        error = std::move(error).withContext("diagnostic", mrhiDiagnosticText(diagnostic.code));
+    if (mrhiDevice_TakeDiagnostic(native, &diagnostic) == mrhi_success) {
+        error = std::move(error).withContext("diagnostic", mrhiGetDiagnosticText(diagnostic.code));
     }
     return std::unexpected<result::Error>{std::move(error)};
 }

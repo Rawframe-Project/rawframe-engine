@@ -346,8 +346,8 @@ extern "C"
     /// `mrhi_errorStale` for a shader the device no longer has.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetShaderInfo(mrhiDevice* device, mrhiShaderId shader,
-                                                         mrhiShaderInfo* infoOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiShader_GetInfo(mrhiDevice* device, mrhiShaderId shader,
+                                                          mrhiShaderInfo* infoOut);
 
 #ifdef __cplusplus
 }

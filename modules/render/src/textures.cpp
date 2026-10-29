@@ -22,7 +22,7 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
     return std::unexpected<result::Error>{
         result::fail(result::ErrorClass::Unavailable, kRenderDomain, code(RenderError::Device), why)
             .error()
-            .withContext("outcome", std::string{mrhiResultName(outcome)})};
+            .withContext("outcome", std::string{mrhiGetResultName(outcome)})};
 }
 
 mrhiFormat formatOf(texture::Format format) noexcept {
@@ -278,13 +278,13 @@ result::Status DeviceTextures::write(std::uint64_t pass) {
             // A cube's faces a layer each.
             for (std::uint32_t face = 0; face < texture.source->faces; ++face) {
                 const mrhiTextureCopy kPlace{.resource = resourceOf(resource(kId)), .mip = mip, .z = face};
-                if (const mrhiResult kWritten = mrhiWriteTexture(state_->native,
-                                                                 kPass,
-                                                                 &kPlace,
-                                                                 level.bytes.data() + (face * kFaceBytes),
-                                                                 kFaceBytes,
-                                                                 &kLayout,
-                                                                 &kExtent);
+                if (const mrhiResult kWritten = mrhiPass_WriteTexture(state_->native,
+                                                                      kPass,
+                                                                      &kPlace,
+                                                                      level.bytes.data() + (face * kFaceBytes),
+                                                                      kFaceBytes,
+                                                                      &kLayout,
+                                                                      &kExtent);
                     kWritten != mrhi_success) {
                     return failed("a texture's level could not be written", kWritten);
                 }

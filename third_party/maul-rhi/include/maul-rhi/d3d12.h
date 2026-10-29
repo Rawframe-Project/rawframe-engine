@@ -34,8 +34,8 @@ extern "C"
     /// driver is not D3D12; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetD3d12Device(mrhiDevice* device, void** deviceOut,
-                                                          void** queueOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetD3d12Device(mrhiDevice* device,
+                                                                 void** deviceOut, void** queueOut);
 
     /// Reads a device texture's ID3D12Resource, borrowed with no reference
     /// added. In a native pass the texture is in the state its access puts it
@@ -54,18 +54,18 @@ extern "C"
     /// longer has; `mrhi_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetD3d12Texture(mrhiDevice* device,
-                                                           mrhiTextureId texture,
-                                                           void** resourceOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiTexture_GetD3d12Texture(mrhiDevice* device,
+                                                                   mrhiTextureId texture,
+                                                                   void** resourceOut);
 
     /// Hands a native pass the command list the program recorded for it: an
     /// ID3D12GraphicsCommandList of the direct type, closed and not executed.
     /// The library executes it at the pass's place in the frame, after the
     /// library's lists before it and before those after it, each in its own
     /// ExecuteCommandLists; it must leave every declared texture in its
-    /// access's state (mrhiGetD3d12Texture), and may change any other state,
-    /// its descriptor heaps and root signatures included. The program keeps it
-    /// alive until the frame is done.
+    /// access's state (mrhiTexture_GetD3d12Texture), and may change any other
+    /// state, its descriptor heaps and root signatures included. The program
+    /// keeps it alive until the frame is done.
     ///
     /// @param device       The device.
     /// @param pass         The native pass, begun.
@@ -76,8 +76,9 @@ extern "C"
     /// a pass that is not native.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiSetD3d12PassCommands(mrhiDevice* device, mrhiPassId pass,
-                                                                void* commandList);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_SetD3d12Commands(mrhiDevice* device,
+                                                                 mrhiPassId pass,
+                                                                 void* commandList);
 
 #ifdef __cplusplus
 }

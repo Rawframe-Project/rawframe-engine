@@ -56,9 +56,9 @@ result::Status LightCapturing::record(mrhiResourceId scene) {
     const mrhiExtent3d kExtent{.width = frameWidth_, .height = frameHeight_, .depthOrLayers = 1};
     mrhiRequestId request{};
     if (mrhiResult outcome = mrhi_success;
-        (outcome = mrhiBeginPass(native, *pass_)) != mrhi_success ||
-        (outcome = mrhiReadTexture(native, *pass_, &kSource, &kExtent, &request)) != mrhi_success ||
-        (outcome = mrhiEndPass(native, *pass_)) != mrhi_success) {
+        (outcome = mrhiPass_Begin(native, *pass_)) != mrhi_success ||
+        (outcome = mrhiPass_ReadTexture(native, *pass_, &kSource, &kExtent, &request)) != mrhi_success ||
+        (outcome = mrhiPass_End(native, *pass_)) != mrhi_success) {
         return failed("the light could not be read back", outcome);
     }
     reading_ = request;
@@ -96,7 +96,7 @@ std::optional<LightCapture> LightCapturing::taken() {
     }
     std::vector<std::byte> bytes(std::size_t{width_} * height_ * 8);
     std::size_t read = 0;
-    if (mrhiTakeReadback(device_->native(), kReading, bytes.data(), bytes.size(), &read) != mrhi_success ||
+    if (mrhiRequest_TakeReadback(device_->native(), kReading, bytes.data(), bytes.size(), &read) != mrhi_success ||
         read != bytes.size()) {
         return std::nullopt;
     }

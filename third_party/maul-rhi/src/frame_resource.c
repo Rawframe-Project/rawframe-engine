@@ -227,7 +227,7 @@ static mrhiFrameResource* FindSealable(mrhiDevice* device, mrhiResourceId id, mr
     return *statusOut == mrhi_success ? resource : nullptr;
 }
 
-mrhiResult mrhiSealResource(mrhiDevice* device, mrhiResourceId resource)
+mrhiResult mrhiResource_Seal(mrhiDevice* device, mrhiResourceId resource)
 {
     if (device == nullptr)
     {
@@ -253,7 +253,7 @@ mrhiResult mrhiSealResource(mrhiDevice* device, mrhiResourceId resource)
     return mrhi_success;
 }
 
-mrhiResult mrhiUnsealResource(mrhiDevice* device, mrhiResourceId resource)
+mrhiResult mrhiResource_Unseal(mrhiDevice* device, mrhiResourceId resource)
 {
     if (device == nullptr)
     {

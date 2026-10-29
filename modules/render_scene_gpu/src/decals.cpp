@@ -182,7 +182,8 @@ result::Status DecalAtlas::addPasses() {
 }
 
 result::Status DecalAtlas::write(mrhiPassId upload) {
-    if (const mrhiResult kOutcome = mrhiWriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blockBytes());
+    if (const mrhiResult kOutcome =
+            mrhiPass_WriteBuffer(native_, upload, blocksResource_, 0, blocks_.data(), blockBytes());
         kOutcome != mrhi_success) {
         return failed("the decals could not be written", kOutcome);
     }
@@ -196,11 +197,12 @@ result::Status DecalAtlas::record(const Layers& layers, const Asked& fill, const
             samplerAt(1, pipelines.materialSamplers[samplerOf(material::Filter::Linear, material::Address::Clamp)])};
         for (const mrhiPassId kPass : kFill.passes) {
             if (mrhiResult outcome = mrhi_success;
-                (outcome = mrhiBeginPass(native_, kPass)) != mrhi_success ||
-                (outcome = mrhiSetGraphicsPipeline(native_, kPass, fill.pipeline)) != mrhi_success ||
-                (outcome = mrhiSetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) != mrhi_success ||
-                (outcome = mrhiDraw(native_, kPass, 3, 1, 0, 0)) != mrhi_success ||
-                (outcome = mrhiEndPass(native_, kPass)) != mrhi_success) {
+                (outcome = mrhiPass_Begin(native_, kPass)) != mrhi_success ||
+                (outcome = mrhiPass_SetGraphicsPipeline(native_, kPass, fill.pipeline)) != mrhi_success ||
+                (outcome = mrhiPass_SetBindings(native_, kPass, 0, kBindings.data(), kBindings.size())) !=
+                    mrhi_success ||
+                (outcome = mrhiPass_Draw(native_, kPass, 3, 1, 0, 0)) != mrhi_success ||
+                (outcome = mrhiPass_End(native_, kPass)) != mrhi_success) {
                 return failed("a decal's texture could not be drawn into the atlas", outcome);
             }
         }

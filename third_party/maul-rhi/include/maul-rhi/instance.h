@@ -126,7 +126,7 @@ extern "C"
     enum
     {
         // An adapter request is answered: its outcome is mrhi_success, and
-        // mrhiGetAdapters lists the adapters, mrhi_errorStale when its
+        // mrhiInstance_GetAdapters lists the adapters, mrhi_errorStale when its
         // compatible surface ended before the answer, or another error.
         mrhi_instanceAdaptersFound = 0,
         // A device finished opening: its outcome is mrhi_success and the device
@@ -257,7 +257,7 @@ extern "C"
     /// @return The count; 0 for a NULL instance.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_API uint64_t mrhiGetInstanceMisuse(mrhiInstance* instance);
+    MRHI_API uint64_t mrhiInstance_GetMisuse(mrhiInstance* instance);
 
     /// Takes the oldest record from the instance's diagnostic queue, which
     /// holds a record for each call the instance refused as invalid input and,
@@ -273,8 +273,8 @@ extern "C"
     /// `mrhi_errorBusy` for a call from inside the instance's allocator.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiNextInstanceDiagnostic(mrhiInstance* instance,
-                                                                  mrhiDiagnostic* diagnosticOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiInstance_TakeDiagnostic(mrhiInstance* instance,
+                                                                   mrhiDiagnostic* diagnosticOut);
 
     /// Returns how many breaches of the driver SPI the validation layer has
     /// found on the instance and its devices: frames no driver could translate,
@@ -285,7 +285,7 @@ extern "C"
     /// @return The count; 0 for a NULL instance or a build without the layer.
     /// @par Thread safety
     /// Safe from any thread.
-    MRHI_API uint64_t mrhiGetDriverFaults(const mrhiInstance* instance);
+    MRHI_API uint64_t mrhiInstance_GetDriverFaults(const mrhiInstance* instance);
 
     /// Returns the default adapter request def: the driver's own order,
     /// software rasterizers allowed.
@@ -296,8 +296,8 @@ extern "C"
     MRHI_API mrhiAdapterRequestDef mrhiDefaultAdapterRequestDef(void);
 
     /// Asks the instance's drivers for adapters. The request is answered by one
-    /// mrhi_instanceAdaptersFound record; until then, mrhiGetAdapters lists the
-    /// adapters found before.
+    /// mrhi_instanceAdaptersFound record; until then, mrhiInstance_GetAdapters
+    /// lists the adapters found before.
     ///
     /// @param instance    The instance.
     /// @param def         The adapters to look for.
@@ -311,9 +311,8 @@ extern "C"
     /// for a call from inside the instance's allocator.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiRequestAdapters(mrhiInstance* instance,
-                                                           const mrhiAdapterRequestDef* def,
-                                                           mrhiRequestId* requestOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiInstance_RequestAdapters(
+        mrhiInstance* instance, const mrhiAdapterRequestDef* def, mrhiRequestId* requestOut);
 
     /// Takes the oldest record from the instance's notification queue, first
     /// polling its drivers for finished work.
@@ -325,25 +324,26 @@ extern "C"
     /// call from inside the instance's allocator.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult
-    mrhiNextInstanceNotification(mrhiInstance* instance, mrhiInstanceNotification* notificationOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiInstance_TakeNotification(
+        mrhiInstance* instance, mrhiInstanceNotification* notificationOut);
 
     /// Lists the adapters the last answered request found, best first by its
     /// preference.
     ///
-    /// @param instance  The instance.
-    /// @param adapters  Receives up to capacity ids. May be NULL when capacity
-    ///                  is 0.
-    /// @param capacity  The ids adapters holds.
-    /// @param countOut  Receives the number of adapters, which may exceed
-    ///                  capacity.
+    /// @param instance     The instance.
+    /// @param adaptersOut  Receives up to capacity ids; zeros, as many as
+    ///                     capacity, on any failure. May be NULL when capacity
+    ///                     is 0.
+    /// @param capacity     The ids adapters holds.
+    /// @param countOut     Receives the number of adapters, which may exceed
+    ///                     capacity; 0 on any failure.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL instance or
     /// count, or a NULL array with a capacity.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetAdapters(mrhiInstance* instance,
-                                                       mrhiAdapterId* adapters, size_t capacity,
-                                                       size_t* countOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiInstance_GetAdapters(mrhiInstance* instance,
+                                                                mrhiAdapterId* adaptersOut,
+                                                                size_t capacity, size_t* countOut);
 
     /// Reads what an adapter is.
     ///
@@ -354,9 +354,9 @@ extern "C"
     /// `mrhi_errorStale` for an adapter the instance no longer has.
     /// @par Thread safety
     /// Safe from any thread; the instance is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetAdapterInfo(mrhiInstance* instance,
-                                                          mrhiAdapterId adapter,
-                                                          mrhiAdapterInfo* infoOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiAdapter_GetInfo(mrhiInstance* instance,
+                                                           mrhiAdapterId adapter,
+                                                           mrhiAdapterInfo* infoOut);
 
 #ifdef __cplusplus
 }
