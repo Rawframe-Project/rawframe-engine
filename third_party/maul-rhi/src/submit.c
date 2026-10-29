@@ -115,7 +115,7 @@ void mrhiViewFrame(mrhiDevice* device, mrhiDriverFrame* frameOut)
     }
     // A pass that found the arena or the staging full refused the frame
     // before this, so neither counter is past its room.
-    uint64_t room = device->deviceLimits.frameUploadBytes;
+    uint64_t room = device->budgets.frameUploadBytes;
     uint64_t staged = atomic_load_explicit(&device->stagingTaken, memory_order_relaxed);
     uint32_t chunks = atomic_load_explicit(&device->frameChunksTaken, memory_order_relaxed);
     MRHI_ASSERT(staged <= room && chunks <= device->frameChunkCount);
@@ -131,7 +131,7 @@ void mrhiViewFrame(mrhiDevice* device, mrhiDriverFrame* frameOut)
         .staging = device->frameStaging + (size_t)device->stagingRegion * room,
         .stagingBytes = staged,
         .readbackRing = device->readbackRing,
-        .readbackBytes = device->deviceLimits.readbackBytes,
+        .readbackBytes = device->budgets.readbackBytes,
         .memoryBytes = device->frameMemory,
     };
 }

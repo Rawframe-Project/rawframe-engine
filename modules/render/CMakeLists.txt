@@ -6,7 +6,7 @@ if(NOT TARGET maul-rhi)
     return()
 endif()
 
-rawframe_module(NAME render SOURCES src/capture.cpp src/device.cpp src/display.cpp src/frame.cpp src/frames.cpp src/output.cpp src/participant.cpp src/textures.cpp DEPS texture window composition diagnostics result base)
+rawframe_module(NAME render SOURCES src/capture.cpp src/device.cpp src/display.cpp src/frame.cpp src/frames.cpp src/output.cpp src/participant.cpp src/present.cpp src/textures.cpp DEPS texture window composition diagnostics result base)
 rawframe_shader_containers(TARGET rawframe_render NAMES display)
 target_link_libraries(rawframe_render PUBLIC maul-rhi)
 # Vulkan's headers as Maul RHI vendors them, for the objects an OpenXR

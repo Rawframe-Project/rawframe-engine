@@ -87,11 +87,11 @@ typedef struct mrhiD3d12PipelineRoom
     size_t slots;
 } mrhiD3d12PipelineRoom;
 
-// Adds the tables a device's limits need to its layout, and sets them
+// Adds the tables a device's budgets need to its layout, and sets them
 // up in its block.
-mrhiD3d12PipelineRoom mrhiD3d12PlanPipelines(mrhiLayout* layout, const mrhiDeviceLimits* limits);
+mrhiD3d12PipelineRoom mrhiD3d12PlanPipelines(mrhiLayout* layout, const mrhiDeviceBudgets* limits);
 void mrhiD3d12LayPipelines(mrhiD3d12Pipelines* pipelines, unsigned char* block,
-                           const mrhiD3d12PipelineRoom* room, const mrhiDeviceLimits* limits);
+                           const mrhiD3d12PipelineRoom* room, const mrhiDeviceBudgets* limits);
 
 // Makes a shader: success with its handle, mrhi_errorUnsupported for a
 // container without DXIL or whose root signature passes D3D12's 64

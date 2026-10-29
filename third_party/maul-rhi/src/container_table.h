@@ -11,10 +11,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// The sections a table lists at most, and the section types the library
-// knows, 1 to MRHI_CONTAINER_TYPES.
-#define MRHI_CONTAINER_SECTIONS 64
-#define MRHI_CONTAINER_TYPES    15
+// The section types the library knows, 1 to MRHI_CONTAINER_TYPES.
+#define MRHI_CONTAINER_TYPES 15
 
 // A section as the table gives it.
 typedef struct mrhiContainerSection

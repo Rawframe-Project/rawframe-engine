@@ -508,7 +508,7 @@ static void SetState(const mrhiVulkanRecording* recording, const mrhiCommand* co
     }
     case mrhiCommandBlendConstant:
     {
-        mrhiClearColor color;
+        mrhiColor color;
         memcpy(&color, &command[1], sizeof(color));
         const float constants[4] = {color.red, color.green, color.blue, color.alpha};
         api->vkCmdSetBlendConstants(commands, constants);

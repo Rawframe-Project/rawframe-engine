@@ -705,7 +705,7 @@ static const mrhiDeviceDriverVtable s_vtable = {
 mrhiResult mrhiCreateWebGpuDevice(const mrhiAllocator* allocator, int instanceState, uint32_t slot,
                                   const mrhiDeviceDef* def, mrhiDeviceDriver* deviceOut)
 {
-    uint32_t pipelines = def->deviceLimits.pipelines;
+    uint32_t pipelines = def->budgets.pipelines;
     mrhiLayout layout = {.size = sizeof(WebGpuDevice)};
     size_t pendingAt = mrhiLayoutAdd(&layout, pipelines, sizeof(Pending), alignof(Pending));
     uint32_t frames = def->limits.framesInFlight;

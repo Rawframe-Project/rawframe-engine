@@ -18,8 +18,12 @@
 #include "maul-rhi/pipeline.h"
 
 // The SPI version a driver's vtable must carry. Any change to the SPI
-// headers raises it; 4 is the first installed.
-#define MRHI_SPI_VERSION 10
+// headers or to a public type they reach, or to what a driver must do or
+// may assume, raises it; 4 is the first installed.
+#define MRHI_SPI_VERSION 11
+// What a driver sees at this version, as tools/check_spi_version.py
+// digests it; --write records it.
+// SPI digest: 63f70e3726e023bb247df46ca22c90de35b64f5886db4e3292c548fa0f9ab27a
 
 // The pass classes (mrhiPassClass): graphics, async compute and transfer.
 #define MRHI_PASS_CLASSES 3

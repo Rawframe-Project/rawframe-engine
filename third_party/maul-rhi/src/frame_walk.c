@@ -209,6 +209,11 @@ static void WalkCommands(Walk* walk, const mrhiDriverPass* pass)
             CheckCommand(walk, command);
             ++walk->counts.commands;
             walk->counts.records += 1u + command->payload;
+            const uint8_t* bytes = (const uint8_t*)command;
+            for (size_t b = 0; b < (1u + command->payload) * sizeof(mrhiCommand); ++b)
+            {
+                walk->counts.recordSum += bytes[b];
+            }
             i += 1u + command->payload;
         }
         ++walk->counts.chunks;

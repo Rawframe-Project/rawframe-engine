@@ -22,12 +22,6 @@ mrhiSurfaceConfig mrhiDefaultSurfaceConfig(void)
     return config;
 }
 
-// Whether a mode is one known bit.
-static bool IsOneOf(uint32_t mode, uint32_t known)
-{
-    return mode != 0 && (mode & (mode - 1)) == 0 && (mode & ~known) == 0;
-}
-
 // Whether the config's own values are well formed.
 static bool IsWellFormed(const mrhiSurfaceConfig* config)
 {
@@ -46,8 +40,8 @@ static bool IsWellFormed(const mrhiSurfaceConfig* config)
     mrhiTextureUsage usage = config->usage;
     return known && usage != 0 && (usage & ~mrhiTextureUsageKnown) == 0 &&
            (usage & mrhi_textureTransient) == 0 && config->width > 0 && config->height > 0 &&
-           IsOneOf(config->presentMode, mrhiPresentModesKnown) &&
-           IsOneOf(config->alphaMode, mrhiAlphaModesKnown);
+           config->presentMode <= mrhi_presentImmediate &&
+           config->alphaMode <= mrhi_alphaPremultiplied;
 }
 
 // Whether the surface reports the color.
@@ -95,8 +89,8 @@ static bool IsSupported(const mrhiDevice* device, const mrhiSurfaceCaps* caps,
 {
     return caps->presentable && IsColorTaken(caps, config) &&
            (config->usage & ~caps->usages) == 0 &&
-           (config->presentMode & caps->presentModes) != 0 &&
-           (config->alphaMode & caps->alphaModes) != 0 &&
+           (caps->presentModes & (1u << config->presentMode)) != 0 &&
+           (caps->alphaModes & (1u << config->alphaMode)) != 0 &&
            mrhiFormatTakes(device, config->color.format, config->usage);
 }
 

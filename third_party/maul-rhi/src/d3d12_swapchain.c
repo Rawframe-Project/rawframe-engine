@@ -23,7 +23,7 @@
 // The longest an acquire waits for DXGI to take a present.
 #define WAIT_MS 1000
 
-mrhiD3d12SwapchainRoom mrhiD3d12PlanSwapchains(mrhiLayout* layout, const mrhiDeviceLimits* limits)
+mrhiD3d12SwapchainRoom mrhiD3d12PlanSwapchains(mrhiLayout* layout, const mrhiDeviceBudgets* limits)
 {
     return (mrhiD3d12SwapchainRoom){
         .swapchains = mrhiLayoutAdd(layout, limits->surfaces, sizeof(mrhiD3d12Swapchain),
@@ -33,7 +33,7 @@ mrhiD3d12SwapchainRoom mrhiD3d12PlanSwapchains(mrhiLayout* layout, const mrhiDev
 }
 
 void mrhiD3d12LaySwapchains(mrhiD3d12Swapchains* swapchains, unsigned char* block,
-                            const mrhiD3d12SwapchainRoom* room, const mrhiDeviceLimits* limits)
+                            const mrhiD3d12SwapchainRoom* room, const mrhiDeviceBudgets* limits)
 {
     swapchains->swapchains = (mrhiD3d12Swapchain*)(block + room->swapchains);
     // Free entries hold nothing, which the device's end relies on.

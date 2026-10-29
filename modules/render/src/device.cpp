@@ -1,5 +1,6 @@
 #include "rawframe/render/device.h"
 
+#include "present.h"
 #include "rawframe/render/errors.h"
 
 #include <array>
@@ -179,36 +180,6 @@ bool standardColor(const mrhiSurfaceColor& color) noexcept {
     return (color.format == mrhi_formatRgba8Unorm || color.format == mrhi_formatBgra8Unorm) &&
            color.primaries == mrhi_primariesBt709 && color.transfer == mrhi_transferSrgb &&
            color.range == mrhi_rangeStandard;
-}
-
-/// A policy's present modes, first choice first; fifo ends every chain.
-std::span<const mrhiPresentModes> chainOf(PresentPolicy policy) noexcept {
-    static constexpr std::array<mrhiPresentModes, 1> kVsync = {mrhi_presentFifo};
-    static constexpr std::array<mrhiPresentModes, 2> kLowLatency = {mrhi_presentMailbox, mrhi_presentFifo};
-    static constexpr std::array<mrhiPresentModes, 3> kImmediate = {
-        mrhi_presentImmediate, mrhi_presentMailbox, mrhi_presentFifo};
-    switch (policy) {
-    case PresentPolicy::LowLatencyVsync:
-        return kLowLatency;
-    case PresentPolicy::Immediate:
-        return kImmediate;
-    case PresentPolicy::Vsync:
-    case PresentPolicy::AdaptiveVsync:
-        // Maul RHI has no relaxed fifo: adaptive vsync is vsync.
-        break;
-    }
-    return kVsync;
-}
-
-PresentPolicy policyOf(mrhiPresentModes mode) noexcept {
-    switch (mode) {
-    case mrhi_presentMailbox:
-        return PresentPolicy::LowLatencyVsync;
-    case mrhi_presentImmediate:
-        return PresentPolicy::Immediate;
-    default:
-        return PresentPolicy::Vsync;
-    }
 }
 
 /// Maul RHI's source for a window's handles, chained on `def`; the
@@ -444,14 +415,14 @@ struct Device::State {
         def.adapter = chosen;
         def.features.textureCompressionBc = features.textureCompressionBc;
         def.features.timestampQuery = features.timestampQuery;
-        def.deviceLimits.frameUploadBytes = kFrameUploadBytes;
-        def.deviceLimits.readbackBytes = kReadbackBytes;
-        def.deviceLimits.framePasses = settings.framePasses;
-        def.deviceLimits.frameCommandBytes = settings.frameCommandBytes;
+        def.budgets.frameUploadBytes = kFrameUploadBytes;
+        def.budgets.readbackBytes = kReadbackBytes;
+        def.budgets.framePasses = settings.framePasses;
+        def.budgets.frameCommandBytes = settings.frameCommandBytes;
         // Where Maul RHI says which check or limit refused a call: a frame's
         // failure names its limit, a pipeline's refusal its check. Maul RHI
         // keeps none unless asked; frames take what is there as each begins.
-        def.deviceLimits.diagnostics = kDiagnostics;
+        def.budgets.diagnostics = kDiagnostics;
         constexpr std::string_view kLabel = "rawframe.render";
         def.label = kLabel.data();
         def.labelLength = kLabel.size();
@@ -728,12 +699,7 @@ Device::prepare(std::uint64_t surface, const window::SurfaceState& window, Prese
                 break;
             }
         }
-        for (const mrhiPresentModes kMode : chainOf(policy)) {
-            if ((caps.presentModes & kMode) != 0) {
-                config.presentMode = kMode;
-                break;
-            }
-        }
+        config.presentMode = presentModeFor(policy, caps.presentModes);
         config.width = window.pixelSize.width;
         config.height = window.pixelSize.height;
         const mrhiResult kConfigured = mrhiConfigureSurface(state.device, &config);

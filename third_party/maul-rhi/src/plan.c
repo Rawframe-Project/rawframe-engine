@@ -11,6 +11,8 @@
 #include "device_core.h"
 #include "invariant.h"
 
+#include "generated/out_copies.h"
+
 bool mrhiStateWrites(mrhiResourceState state)
 {
     return state == mrhi_stateStorageWrite || state == mrhi_stateStorageReadWrite ||
@@ -178,7 +180,7 @@ static void Push(Map* map, mrhiBox box)
 static bool IsProgramBudgetFull(const mrhiDevice* device)
 {
     return device->frameBarrierCount - device->frameLibraryBarriers ==
-           device->deviceLimits.frameBarriers;
+           device->budgets.frameBarriers;
 }
 
 static void Emit(Map* map, uint32_t pass, const mrhiBox* part, mrhiResourceState after)
@@ -936,7 +938,7 @@ mrhiResult mrhiGetFrameBarriers(mrhiDevice* device, mrhiBarrier* barriers, size_
     size_t count = device->frameBarrierCount;
     for (size_t i = 0; i < count && i < capacity; ++i)
     {
-        barriers[i] = device->frameBarriers[i];
+        mrhiOutBarrier(&barriers[i], &device->frameBarriers[i]);
     }
     *countOut = count;
     return mrhi_success;
@@ -964,7 +966,7 @@ mrhiResult mrhiGetResourcePlan(mrhiDevice* device, mrhiResourceId resource,
     }
     const mrhiFrameResource* planned = &device->frameResources[resource.index1 - 1];
     uint32_t serial = device->frameSerial;
-    *planOut = (mrhiResourcePlan){
+    const mrhiResourcePlan plan = {
         .usage = planned->usage,
         .transient = planned->transient,
         .firstPass = {planned->firstPass, planned->firstPass == 0 ? 0 : serial},
@@ -972,5 +974,6 @@ mrhiResult mrhiGetResourcePlan(mrhiDevice* device, mrhiResourceId resource,
         .memoryOffset = planned->memoryOffset,
         .memoryBytes = planned->memoryBytes,
     };
+    mrhiOutResourcePlan(planOut, &plan);
     return mrhi_success;
 }

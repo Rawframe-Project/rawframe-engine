@@ -351,7 +351,7 @@ typedef struct Room
     uint32_t retireeLimit;
 } Room;
 
-static Room RoomOf(const mrhiDeviceLimits* limits)
+static Room RoomOf(const mrhiDeviceBudgets* limits)
 {
     Room room = {.layout = {.size = sizeof(MetalDevice)}};
     mrhiLayout* layout = &room.layout;
@@ -381,7 +381,7 @@ static Room RoomOf(const mrhiDeviceLimits* limits)
 
 // Lays out a device's parts in its block, around its Metal device and
 // queue.
-static void Lay(MetalDevice* made, const Room* room, const mrhiDeviceLimits* limits)
+static void Lay(MetalDevice* made, const Room* room, const mrhiDeviceBudgets* limits)
 {
     unsigned char* block = (unsigned char*)made;
     made->pipelines = (mrhiMetalPipelines){
@@ -418,7 +418,7 @@ static void Lay(MetalDevice* made, const Room* room, const mrhiDeviceLimits* lim
 mrhiResult mrhiCreateMetalDevice(const mrhiAllocator* allocator, id<MTLDevice> device,
                                  const mrhiDeviceDef* def, mrhiDeviceDriver* deviceOut)
 {
-    Room room = RoomOf(&def->deviceLimits);
+    Room room = RoomOf(&def->budgets);
     MetalDevice* made = room.layout.overflow
                             ? nullptr
                             : mrhiAllocate(allocator, room.layout.size, alignof(MetalDevice));
@@ -447,7 +447,7 @@ mrhiResult mrhiCreateMetalDevice(const mrhiAllocator* allocator, id<MTLDevice> d
             .queue = queue,
         };
     }
-    Lay(made, &room, &def->deviceLimits);
+    Lay(made, &room, &def->budgets);
     made->frames.counted = def->features.multiDrawIndirectCount;
     if (!mrhiMetalOpenLanes(&made->frames.lanes, made->device, made->queue, made->queue.label) ||
         mrhiMetalOpenFrames(&made->frames) != mrhi_success)

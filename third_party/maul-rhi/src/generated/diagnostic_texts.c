@@ -160,8 +160,8 @@ const char* mrhiDiagnosticText(mrhiDiagnosticCode code)
         return "A graphics pipeline's fragment input has no vertex output of the same location, type and interpolation, or a point list leaves no room for its point size.";
     case mrhi_diagnosticChainedStruct:
         return "A chained struct the def carries is malformed: an adopted Vulkan object that is NULL, or an extension list that is not a list of names.";
-    case mrhi_diagnosticDeviceLimits:
-        return "A device def's device limits include a zero, fewer than 2 notifications, a command arena under one chunk, or readback bytes not a multiple of 512.";
+    case mrhi_diagnosticDeviceBudgets:
+        return "A device def's budgets include a zero, fewer than 2 notifications, a command arena under one chunk, or readback bytes not a multiple of 512.";
     case mrhi_diagnosticLimitsFloor:
         return "A device def asks for limits below the floor every adapter reaches, or for an alignment that is not a power of two.";
     case mrhi_diagnosticAllocator:
@@ -193,21 +193,21 @@ const char* mrhiDiagnosticText(mrhiDiagnosticCode code)
     case mrhi_diagnosticPassUses:
         return "A pass def's accesses or targets do not fit: a kind the resource's usage lacks, a range past it, a write to a sealed resource, targets whose sizes, samples, mips or layers disagree, uses that conflict within the pass, or a read of a declared resource no earlier pass wrote.";
     case mrhi_diagnosticFrameResources:
-        return "A frame reached the device's frameResources limit: a resource declared, imported or acquired past it.";
+        return "A frame reached the device's frameResources budget: a resource declared, imported or acquired past it.";
     case mrhi_diagnosticFramePasses:
-        return "A frame reached the device's framePasses limit: a pass added past it.";
+        return "A frame reached the device's framePasses budget: a pass added past it.";
     case mrhi_diagnosticFrameAccesses:
-        return "A pass whose accesses, with two for each color target and one for the depth target, could take the frame past the device's frameAccesses limit; or a compile that split a resource's parts into more than that limit leaves room for.";
+        return "A pass whose accesses, with two for each color target and one for the depth target, could take the frame past the device's frameAccesses budget; or a compile that split a resource's parts into more than that limit leaves room for.";
     case mrhi_diagnosticFrameBarriers:
-        return "A compile that planned more barriers than the device's frameBarriers limit.";
+        return "A compile that planned more barriers than the device's frameBarriers budget.";
     case mrhi_diagnosticFrameCommandBytes:
-        return "A command past the device's frameCommandBytes limit: the call that found the arena full, the later calls of its pass and the frame's submission.";
+        return "A command past the device's frameCommandBytes budget: the call that found the arena full, the later calls of its pass and the frame's submission.";
     case mrhi_diagnosticFrameUploadBytes:
-        return "An upload past the device's frameUploadBytes limit: the call that found the staging full, the later calls of its pass and the frame's submission.";
+        return "An upload past the device's frameUploadBytes budget: the call that found the staging full, the later calls of its pass and the frame's submission.";
     case mrhi_diagnosticFrameIndirectDraws:
-        return "A counted multi-draw whose maxCount takes the frame past the device's frameIndirectDraws limit.";
+        return "A counted multi-draw whose maxCount takes the frame past the device's frameIndirectDraws budget.";
     case mrhi_diagnosticReadbacks:
-        return "A readback recorded while the device's readbacks limit of them wait to be taken.";
+        return "A readback recorded while the device's readbacks budget of them wait to be taken.";
     case mrhi_diagnosticReadbackBytes:
         return "A readback whose bytes do not fit the room of the device's readbackBytes ring that readbacks not yet taken leave.";
     case mrhi_diagnosticFramesInFlight:

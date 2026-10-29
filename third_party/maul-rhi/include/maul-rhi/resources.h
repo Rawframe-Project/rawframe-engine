@@ -561,9 +561,9 @@ extern "C"
     /// `mrhi_errorUnsupported` for a critical extension the library does not
     /// know, timestamps without the timestamp_query feature, or pipeline
     /// statistics without the pipeline_statistics_query feature;
-    /// `mrhi_errorCapacity` when the device's querySets limit is reached or its
-    /// queries limit lacks a run of count queries; `mrhi_errorBusy` for a call
-    /// from inside the device's allocator.
+    /// `mrhi_errorCapacity` when the device's querySets budget is reached or
+    /// its queries budget lacks a run of count queries; `mrhi_errorBusy` for a
+    /// call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiCreateQuerySet(mrhiDevice* device,

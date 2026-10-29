@@ -443,7 +443,7 @@ struct mrhiDevice
     // adapter lacks.
     mrhiLimits limits;
     mrhiLimits adapterLimits;
-    mrhiDeviceLimits deviceLimits;
+    mrhiDeviceBudgets budgets;
     mrhiDeviceState state;
     // The open request, answered when the device leaves opening.
     uint32_t request;
@@ -580,7 +580,7 @@ struct mrhiDevice
     uint32_t lastSubmitted;
     uint32_t lastFinished;
     mrhiDeviceLossReport lossReport;
-    // A ring of deviceLimits.notifications records.
+    // A ring of budgets.notifications records.
     mrhiDeviceNotification* queue;
     uint32_t queueHead;
     uint32_t queueCount;

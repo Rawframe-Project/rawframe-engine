@@ -9,6 +9,8 @@
 #include "device_core.h"
 #include "invariant.h"
 
+#include "generated/out_copies.h"
+
 #include <stdatomic.h>
 #include <string.h>
 
@@ -31,8 +33,8 @@ uint32_t mrhiAnswerRoom(const mrhiDevice* device)
     uint64_t used = (uint64_t)device->queueCount + device->runningCount + device->pendingCount +
                     device->readbackPending + kept;
     // Every answer is reserved before it is owed, so none overfills it.
-    MRHI_ASSERT(used <= device->deviceLimits.notifications);
-    return (uint32_t)(device->deviceLimits.notifications - used);
+    MRHI_ASSERT(used <= device->budgets.notifications);
+    return (uint32_t)(device->budgets.notifications - used);
 }
 
 bool mrhiHasAnswerRoom(const mrhiDevice* device)
@@ -43,7 +45,7 @@ bool mrhiHasAnswerRoom(const mrhiDevice* device)
 void mrhiQueueAnswer(mrhiDevice* device, mrhiDeviceNotificationKind kind, uint32_t request,
                      mrhiResult outcome)
 {
-    uint32_t tail = (device->queueHead + device->queueCount) % device->deviceLimits.notifications;
+    uint32_t tail = (device->queueHead + device->queueCount) % device->budgets.notifications;
     device->queue[tail] = (mrhiDeviceNotification){
         .kind = kind,
         // Request 0, a loss notice's, is the null id.
@@ -350,7 +352,7 @@ mrhiResult mrhiGetFrameUsage(mrhiDevice* device, mrhiFrameUsage* usageOut)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
-    const mrhiDeviceLimits* limits = &device->deviceLimits;
+    const mrhiDeviceBudgets* limits = &device->budgets;
     // Before the first frame no pass is counted, not even the library's.
     // A refused take may have counted past the room, which was then full.
     // Once the frame compiled, the library's own pass had recorded first,
@@ -361,7 +363,7 @@ mrhiResult mrhiGetFrameUsage(mrhiDevice* device, mrhiFrameUsage* usageOut)
     uint32_t libraryChunks =
         device->frameCompiled ? device->frameChunkLimit - device->frameProgramChunks : 0;
     chunks = chunks < device->frameChunkLimit ? chunks : device->frameChunkLimit;
-    *usageOut = (mrhiFrameUsage){
+    const mrhiFrameUsage usage = {
         .frameResources = device->frameResourceCount,
         .framePasses = device->framePassCount - libraryPasses,
         .frameAccesses = device->frameUseCount,
@@ -371,7 +373,9 @@ mrhiResult mrhiGetFrameUsage(mrhiDevice* device, mrhiFrameUsage* usageOut)
             (uint32_t)(staged < limits->frameUploadBytes ? staged : limits->frameUploadBytes),
         .frameIndirectDraws =
             (uint32_t)atomic_load_explicit(&device->countedTaken, memory_order_relaxed),
+        .frameMemoryBytes = device->frameCompiled ? device->frameMemory : 0,
     };
+    mrhiOutFrameUsage(usageOut, &usage);
     return mrhi_success;
 }
 
@@ -426,8 +430,8 @@ mrhiResult mrhiNextDeviceNotification(mrhiDevice* device, mrhiDeviceNotification
     {
         return mrhi_empty;
     }
-    *notificationOut = device->queue[device->queueHead];
-    device->queueHead = (device->queueHead + 1) % device->deviceLimits.notifications;
+    mrhiOutDeviceNotification(notificationOut, &device->queue[device->queueHead]);
+    device->queueHead = (device->queueHead + 1) % device->budgets.notifications;
     --device->queueCount;
     return mrhi_success;
 }

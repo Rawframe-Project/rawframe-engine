@@ -77,7 +77,7 @@ public:
         def.colorTargets[0].load = mrhi_loadClear;
         def.colorTargets[0].store = mrhi_storeKeep;
         def.colorTargets[0].clear =
-            mrhiClearColor{.red = color_[0], .green = color_[1], .blue = color_[2], .alpha = color_[3]};
+            mrhiColor{.red = color_[0], .green = color_[1], .blue = color_[2], .alpha = color_[3]};
         def.colorTargetCount = 1;
         def.neverCull = true;
         // Timed by its name, where the frame times its passes.

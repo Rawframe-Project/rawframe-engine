@@ -27,12 +27,7 @@
 #define D3D12_HEAD_BYTES  32
 #define D3D12_ENTRY_BYTES 16
 #define D3D12_RANGE_BYTES 16
-#define MAX_ROOT_BLOCK    256
-#define MAX_NAME          256
-// The records an array section holds at most, which also bounds the
-// uniqueness checks' work.
-#define MAX_RECORDS 4096
-#define SPIRV_MAGIC 0x07230203u
+#define SPIRV_MAGIC       0x07230203u
 
 enum
 {
@@ -81,7 +76,7 @@ static const uint8_t* FindSection(const uint8_t* bytes, const mrhiContainerSecti
 }
 
 // Takes an array section: false when its size is not a whole number of
-// records, or holds more than MAX_RECORDS.
+// records, or holds more than MRHI_MAX_CONTAINER_RECORDS.
 static bool TakeArray(const uint8_t* bytes, const mrhiContainerSection* sections, uint32_t count,
                       uint32_t type, uint32_t recordBytes, const uint8_t** arrayOut,
                       uint32_t* countOut)
@@ -89,7 +84,7 @@ static bool TakeArray(const uint8_t* bytes, const mrhiContainerSection* sections
     uint64_t size = 0;
     *arrayOut = FindSection(bytes, sections, count, type, &size);
     *countOut = (uint32_t)(size / recordBytes);
-    return size % recordBytes == 0 && size / recordBytes <= MAX_RECORDS;
+    return size % recordBytes == 0 && size / recordBytes <= MRHI_MAX_CONTAINER_RECORDS;
 }
 
 // Whether a record lies inside the section given. The accessors read
@@ -297,7 +292,7 @@ static bool IsEntryValid(const mrhiContainer* container, uint32_t index)
                 : entry.workgroup[0] == 0 && entry.workgroup[1] == 0 && entry.workgroup[2] == 0 &&
                       entry.workgroupStorageBytes == 0;
     bool name =
-        entry.nameLength > 0 && entry.nameLength <= MAX_NAME &&
+        entry.nameLength > 0 && entry.nameLength <= MRHI_MAX_CONTAINER_NAME_BYTES &&
         (uint64_t)entry.nameOffset + entry.nameLength <= container->stringBytes &&
         mrhiIsTextValid((const char*)container->strings + entry.nameOffset, entry.nameLength);
     bool inputs = InArray(entry.firstInput, entry.inputCount, container->inputCount) &&
@@ -713,7 +708,7 @@ static bool IsD3d12Valid(const mrhiContainer* container)
     uint64_t size = D3D12_HEAD_BYTES + (uint64_t)container->entryCount * D3D12_ENTRY_BYTES +
                     (uint64_t)container->bindingCount * 8 + (uint64_t)ranges * D3D12_RANGE_BYTES +
                     container->constantCount;
-    if (ranges > MAX_RECORDS || container->d3d12MapBytes != size ||
+    if (ranges > MRHI_MAX_CONTAINER_RECORDS || container->d3d12MapBytes != size ||
         !mrhiIsZero(container->d3d12Map + 28, 4) || !AreD3d12HeapRangesValid(container))
     {
         return false;
@@ -839,8 +834,9 @@ static bool TakeParts(const uint8_t* bytes, const mrhiContainerSection* sections
     container->dxil = FindSection(bytes, sections, count, SECTION_DXIL, &size);
     container->dxilBytes = size;
     container->dxil = size > 0 ? container->dxil : nullptr;
-    return container->rootBlockBytes % 4 == 0 && container->rootBlockBytes <= MAX_ROOT_BLOCK &&
-           strings && spirv && wgsl && metallib;
+    return container->rootBlockBytes % 4 == 0 &&
+           container->rootBlockBytes <= MRHI_MAX_CONTAINER_ROOT_BLOCK_BYTES && strings && spirv &&
+           wgsl && metallib;
 }
 
 // Whether every offset the library follows after the parse lies inside
@@ -881,7 +877,7 @@ mrhiResult mrhiParseContainer(const void* bytes, size_t size, mrhiContainer* con
 {
     const uint8_t* data = bytes;
     uint32_t count = 0;
-    mrhiContainerSection sections[MRHI_CONTAINER_SECTIONS];
+    mrhiContainerSection sections[MRHI_MAX_CONTAINER_SECTIONS];
     mrhiResult status = mrhiReadContainerTable(data, size, sections, &count);
     if (status != mrhi_success)
     {

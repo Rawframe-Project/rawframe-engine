@@ -28,7 +28,7 @@ mrhiQuerySetDef mrhiDefaultQuerySetDef(void)
 // or false when the device's marks lack one.
 static bool FindRun(const mrhiDevice* device, uint32_t count, uint32_t* firstOut)
 {
-    uint32_t sets = device->deviceLimits.querySets;
+    uint32_t sets = device->budgets.querySets;
     uint32_t start = 0;
     bool moved = true;
     while (moved)
@@ -44,12 +44,12 @@ static bool FindRun(const mrhiDevice* device, uint32_t count, uint32_t* firstOut
                 moved = true;
             }
         }
-        if (start > device->deviceLimits.queries - count)
+        if (start > device->budgets.queries - count)
         {
             return false;
         }
     }
-    MRHI_ASSERT(start + count <= device->deviceLimits.queries);
+    MRHI_ASSERT(start + count <= device->budgets.queries);
     *firstOut = start;
     return true;
 }
@@ -100,7 +100,7 @@ mrhiResult mrhiCreateQuerySet(mrhiDevice* device, const mrhiQuerySetDef* def,
     uint32_t first = 0;
     uint32_t index1 = 0;
     uint32_t generation = 0;
-    if (def->count > device->deviceLimits.queries || !FindRun(device, def->count, &first) ||
+    if (def->count > device->budgets.queries || !FindRun(device, def->count, &first) ||
         !mrhiPoolAcquire(&device->querySets, &index1, &generation))
     {
         return mrhi_errorCapacity;

@@ -124,7 +124,7 @@ static mrhiAdapterInfo InfoOf(const DXGI_ADAPTER_DESC1* desc, ID3D12Device* devi
     {
         memcpy(info.name, name, length);
     }
-    info.nameLength = (uint32_t)length;
+    info.nameLength = length;
     return info;
 }
 

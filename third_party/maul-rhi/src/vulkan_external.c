@@ -17,6 +17,8 @@
 #ifdef MAUL_RHI_VULKAN_DRIVER
 #include "driver_vulkan.h"
 #include "vulkan_device.h"
+
+#include "generated/out_copies.h"
 #endif
 
 mrhiResult mrhiDescribeVulkanDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
@@ -161,10 +163,13 @@ mrhiResult mrhiGetVulkanTexture(mrhiDevice* device, mrhiTextureId texture,
         return mrhi_errorStale;
     }
     const mrhiTextureSlot* slot = &device->textureSlots[texture.index1 - 1];
-    return mrhiVulkanDeviceTexture(mrhiInnerDevice(&device->driver), slot->handle, &slot->def,
-                                   textureOut)
-               ? mrhi_success
-               : mrhi_errorUnsupported;
+    mrhiVulkanTextureInfo info = {0};
+    if (!mrhiVulkanDeviceTexture(mrhiInnerDevice(&device->driver), slot->handle, &slot->def, &info))
+    {
+        return mrhi_errorUnsupported;
+    }
+    mrhiOutVulkanTextureInfo(textureOut, &info);
+    return mrhi_success;
 #else
     (void)texture;
     return mrhi_errorUnsupported;

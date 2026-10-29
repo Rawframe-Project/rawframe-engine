@@ -88,7 +88,7 @@ namespace {
 
 /// A target cleared to `clear`; multisampled, its samples resolved into
 /// its one-sample twin as its pass ends, which keeps them no longer.
-void target(mrhiColorTarget& into, mrhiResourceId many, mrhiResourceId single, mrhiClearColor clear) noexcept {
+void target(mrhiColorTarget& into, mrhiResourceId many, mrhiResourceId single, mrhiColor clear) noexcept {
     const bool kSampled = many.index1 != 0;
     into.resource = kSampled ? many : single;
     into.resolve = kSampled ? single : mrhiResourceId{};

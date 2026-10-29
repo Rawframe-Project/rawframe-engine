@@ -76,28 +76,54 @@ extern "C"
     } mrhiSurfaceColor;
 
     // How presented images reach the display.
-    typedef uint32_t mrhiPresentModes;
+    typedef uint8_t mrhiPresentMode;
 
     enum
     {
         // In order, one per refresh, never torn; always offered.
-        mrhi_presentFifo = 0x1u,
+        mrhi_presentFifo = 0,
         // The newest image at each refresh, never torn; older ones are dropped.
-        mrhi_presentMailbox = 0x2u,
+        mrhi_presentMailbox = 1,
         // At once, and may tear.
-        mrhi_presentImmediate = 0x4u,
+        mrhi_presentImmediate = 2,
+    };
+
+    // A set of mrhiPresentMode values, one bit each: the bit of a mode is 1
+    // shifted left by its value.
+    typedef uint32_t mrhiPresentModes;
+
+    enum
+    {
+        // The bit of mrhi_presentFifo.
+        mrhi_presentFifoBit = 0x1u,
+        // The bit of mrhi_presentMailbox.
+        mrhi_presentMailboxBit = 0x2u,
+        // The bit of mrhi_presentImmediate.
+        mrhi_presentImmediateBit = 0x4u,
     };
 
     // How a surface's alpha blends with what is behind the window.
-    typedef uint32_t mrhiAlphaModes;
+    typedef uint8_t mrhiAlphaMode;
 
     enum
     {
         // Alpha is ignored; always offered.
-        mrhi_alphaOpaque = 0x1u,
+        mrhi_alphaOpaque = 0,
         // Colors are premultiplied by alpha, and the window shows what is
         // behind it.
-        mrhi_alphaPremultiplied = 0x2u,
+        mrhi_alphaPremultiplied = 1,
+    };
+
+    // A set of mrhiAlphaMode values, one bit each: the bit of a mode is 1
+    // shifted left by its value.
+    typedef uint32_t mrhiAlphaModes;
+
+    enum
+    {
+        // The bit of mrhi_alphaOpaque.
+        mrhi_alphaOpaqueBit = 0x1u,
+        // The bit of mrhi_alphaPremultiplied.
+        mrhi_alphaPremultipliedBit = 0x2u,
     };
 
 // The color combinations one surface reports at most.
@@ -113,9 +139,9 @@ extern "C"
         mrhiSurfaceColor colors[MRHI_SURFACE_COLORS];
         // How many colors are filled, at least 1.
         uint32_t colorCount;
-        // Its present modes, mrhi_presentFifo among them.
+        // Its present modes, mrhi_presentFifoBit among them.
         mrhiPresentModes presentModes;
-        // Its alpha modes, mrhi_alphaOpaque among them.
+        // Its alpha modes, mrhi_alphaOpaqueBit among them.
         mrhiAlphaModes alphaModes;
         // The usages its images may have, mrhi_textureRenderTarget among them.
         mrhiTextureUsage usages;
@@ -305,10 +331,10 @@ extern "C"
         uint32_t width;
         // Texels down, not zero, at most the device's textureDimension2d.
         uint32_t height;
-        // One present mode the surface reports.
-        mrhiPresentModes presentMode;
-        // One alpha mode the surface reports.
-        mrhiAlphaModes alphaMode;
+        // A present mode the surface reports.
+        mrhiPresentMode presentMode;
+        // An alpha mode the surface reports.
+        mrhiAlphaMode alphaMode;
     } mrhiSurfaceConfig;
 
     /// Returns the default surface config: fifo, opaque alpha and render

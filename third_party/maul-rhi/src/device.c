@@ -14,6 +14,7 @@
 #include "invariant.h"
 #include "label.h"
 
+#include "generated/out_copies.h"
 #include "maul-rhi/vulkan.h"
 
 #include <stdalign.h>
@@ -27,26 +28,26 @@ mrhiDeviceDef mrhiDefaultDeviceDef(void)
     mrhiDeviceDef def = {0};
     def.cookie = DEVICE_DEF_COOKIE;
     def.limits = mrhiDefaultLimits();
-    def.deviceLimits.notifications = 256;
-    def.deviceLimits.samplers = 256;
-    def.deviceLimits.buffers = 4096;
-    def.deviceLimits.textures = 4096;
-    def.deviceLimits.views = 8192;
-    def.deviceLimits.surfaces = 8;
-    def.deviceLimits.frameResources = 1024;
-    def.deviceLimits.framePasses = 256;
-    def.deviceLimits.frameAccesses = 4096;
-    def.deviceLimits.frameBarriers = 4096;
-    def.deviceLimits.shaders = 256;
-    def.deviceLimits.pipelines = 1024;
-    def.deviceLimits.frameCommandBytes = 1u << 20;
-    def.deviceLimits.frameUploadBytes = 1u << 20;
-    def.deviceLimits.readbackBytes = 1u << 20;
-    def.deviceLimits.readbacks = 64;
-    def.deviceLimits.querySets = 16;
-    def.deviceLimits.queries = 4096;
-    def.deviceLimits.heaps = 4;
-    def.deviceLimits.frameIndirectDraws = 1u << 18;
+    def.budgets.notifications = 256;
+    def.budgets.samplers = 256;
+    def.budgets.buffers = 4096;
+    def.budgets.textures = 4096;
+    def.budgets.views = 8192;
+    def.budgets.surfaces = 8;
+    def.budgets.frameResources = 1024;
+    def.budgets.framePasses = 256;
+    def.budgets.frameAccesses = 4096;
+    def.budgets.frameBarriers = 4096;
+    def.budgets.shaders = 256;
+    def.budgets.pipelines = 1024;
+    def.budgets.frameCommandBytes = 1u << 20;
+    def.budgets.frameUploadBytes = 1u << 20;
+    def.budgets.readbackBytes = 1u << 20;
+    def.budgets.readbacks = 64;
+    def.budgets.querySets = 16;
+    def.budgets.queries = 4096;
+    def.budgets.heaps = 4;
+    def.budgets.frameIndirectDraws = 1u << 18;
     return def;
 }
 
@@ -70,17 +71,17 @@ static bool AreVulkanStructsValid(const mrhiDeviceDef* def)
            (extra == nullptr || mrhiIsNameList(extra->extensions, extra->extensionsLength));
 }
 
-// Whether the def's own limits on the device's bookkeeping are usable.
-static bool AreDeviceLimitsValid(const mrhiDeviceLimits* limits)
+// Whether the def's budgets for the device's bookkeeping are usable.
+static bool AreBudgetsValid(const mrhiDeviceBudgets* budgets)
 {
-    return limits->notifications >= 2 && limits->samplers != 0 && limits->buffers != 0 &&
-           limits->textures != 0 && limits->views != 0 && limits->surfaces != 0 &&
-           limits->frameResources != 0 && limits->framePasses != 0 &&
-           limits->framePasses <= UINT32_MAX - MRHI_LIBRARY_PASSES && limits->frameAccesses != 0 &&
-           limits->frameBarriers != 0 &&
-           limits->frameBarriers <= UINT32_MAX - limits->frameResources && limits->shaders != 0 &&
-           limits->pipelines != 0 && limits->frameCommandBytes >= MRHI_CHUNK_BYTES &&
-           limits->readbackBytes % 512 == 0;
+    return budgets->notifications >= 2 && budgets->samplers != 0 && budgets->buffers != 0 &&
+           budgets->textures != 0 && budgets->views != 0 && budgets->surfaces != 0 &&
+           budgets->frameResources != 0 && budgets->framePasses != 0 &&
+           budgets->framePasses <= UINT32_MAX - MRHI_LIBRARY_PASSES &&
+           budgets->frameAccesses != 0 && budgets->frameBarriers != 0 &&
+           budgets->frameBarriers <= UINT32_MAX - budgets->frameResources &&
+           budgets->shaders != 0 && budgets->pipelines != 0 &&
+           budgets->frameCommandBytes >= MRHI_CHUNK_BYTES && budgets->readbackBytes % 512 == 0;
 }
 
 // The check a device def fails first, or 0 when it is well formed.
@@ -96,9 +97,9 @@ static mrhiDiagnosticCode DeviceDefFault(const mrhiDeviceDef* def, mrhiResult ch
     {
         return mrhi_diagnosticChainedStruct;
     }
-    if (!AreDeviceLimitsValid(&def->deviceLimits))
+    if (!AreBudgetsValid(&def->budgets))
     {
-        return mrhi_diagnosticDeviceLimits;
+        return mrhi_diagnosticDeviceBudgets;
     }
     if (!mrhiLimitsWithin(&floor, &def->limits) || !mrhiAlignmentsValid(&def->limits))
     {
@@ -206,7 +207,7 @@ typedef struct ObjectParts
 
 static ObjectParts AddObjectParts(mrhiLayout* layout, const mrhiDeviceDef* def)
 {
-    const mrhiDeviceLimits* limits = &def->deviceLimits;
+    const mrhiDeviceBudgets* limits = &def->budgets;
     ObjectParts parts;
     parts.samplers =
         AddTable(layout, limits->samplers, sizeof(mrhiSamplerSlot), alignof(mrhiSamplerSlot));
@@ -234,7 +235,7 @@ static ObjectParts AddObjectParts(mrhiLayout* layout, const mrhiDeviceDef* def)
 // Starts the device's object tables in its block, zeroing the slots
 // whose fields are read while free.
 static void PlaceObjectParts(mrhiDevice* device, unsigned char* block, const ObjectParts* parts,
-                             const mrhiDeviceLimits* limits)
+                             const mrhiDeviceBudgets* limits)
 {
     device->samplerSlots = InitTable(block, parts->samplers, &device->samplers, limits->samplers);
     device->bufferSlots = InitTable(block, parts->buffers, &device->buffers, limits->buffers);
@@ -291,10 +292,10 @@ typedef struct FrameParts
     uint32_t programChunks;
 } FrameParts;
 
-// Lays out the tables of the open frame, sized by the device's limits.
+// Lays out the tables of the open frame, sized by the device's budgets.
 static FrameParts AddFrameParts(mrhiLayout* layout, const mrhiDeviceDef* def)
 {
-    const mrhiDeviceLimits* limits = &def->deviceLimits;
+    const mrhiDeviceBudgets* limits = &def->budgets;
     size_t passes = (size_t)limits->framePasses + MRHI_LIBRARY_PASSES;
     // The first pass's use and clear of each fresh buffer a frame imports,
     // at most one a resource.
@@ -359,7 +360,7 @@ static void PlaceFrameParts(mrhiDevice* device, unsigned char* block, const Fram
 // The device's block: the struct, then its tables, sized by its limits.
 static mrhiDevice* Allocate(const mrhiDeviceDef* def)
 {
-    const mrhiDeviceLimits* limits = &def->deviceLimits;
+    const mrhiDeviceBudgets* limits = &def->budgets;
     mrhiLayout layout = {.size = sizeof(mrhiDevice)};
     ObjectParts objects = AddObjectParts(&layout, def);
     size_t runningAt =
@@ -422,8 +423,8 @@ static mrhiResult OpenDriver(mrhiInstance* instance, const mrhiDriverAdapter* ad
     mrhiDropLabel(&driverDef.label, &driverDef.labelLength);
     // A frame holds the library's passes and their barriers beside the
     // program's.
-    driverDef.deviceLimits.framePasses += MRHI_LIBRARY_PASSES;
-    driverDef.deviceLimits.frameBarriers += def->deviceLimits.frameResources;
+    driverDef.budgets.framePasses += MRHI_LIBRARY_PASSES;
+    driverDef.budgets.frameBarriers += def->budgets.frameResources;
     instance->allocatorGuard.busy = true;
     mrhiResult status = instance->driver.vtable->createDevice(
         instance->driver.self, adapter->handle, &driverDef, device->request, &device->driver);
@@ -486,7 +487,7 @@ mrhiResult mrhiCreateDevice(mrhiInstance* instance, const mrhiDeviceDef* def,
     device->features = def->features;
     device->limits = def->limits;
     device->adapterLimits = adapter->limits;
-    device->deviceLimits = def->deviceLimits;
+    device->budgets = def->budgets;
     device->state = mrhi_deviceOpening;
     // Taken once the driver opens, so a refused device takes no id.
     device->request = mrhiPeekRequest(instance);
@@ -662,7 +663,7 @@ mrhiResult mrhiGetDeviceFeatures(mrhiDevice* device, mrhiFeatures* featuresOut)
         return device == nullptr ? mrhi_errorInvalid
                                  : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
-    *featuresOut = device->features;
+    mrhiOutFeatures(featuresOut, &device->features);
     return mrhi_success;
 }
 
@@ -673,18 +674,18 @@ mrhiResult mrhiGetDeviceLimits(mrhiDevice* device, mrhiLimits* limitsOut)
         return device == nullptr ? mrhi_errorInvalid
                                  : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
-    *limitsOut = device->limits;
+    mrhiOutLimits(limitsOut, &device->limits);
     return mrhi_success;
 }
 
-mrhiResult mrhiGetDeviceOwnLimits(mrhiDevice* device, mrhiDeviceLimits* limitsOut)
+mrhiResult mrhiGetDeviceBudgets(mrhiDevice* device, mrhiDeviceBudgets* budgetsOut)
 {
-    if (device == nullptr || limitsOut == nullptr)
+    if (device == nullptr || budgetsOut == nullptr)
     {
         return device == nullptr ? mrhi_errorInvalid
                                  : mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
     }
-    *limitsOut = device->deviceLimits;
+    mrhiOutDeviceBudgets(budgetsOut, &device->budgets);
     return mrhi_success;
 }
 
@@ -719,7 +720,7 @@ mrhiResult mrhiGetDeviceLossReport(mrhiDevice* device, mrhiDeviceLossReport* rep
     {
         return mrhi_errorState;
     }
-    *reportOut = device->lossReport;
+    mrhiOutDeviceLossReport(reportOut, &device->lossReport);
     return mrhi_success;
 }
 

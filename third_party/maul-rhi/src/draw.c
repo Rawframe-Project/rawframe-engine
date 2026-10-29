@@ -483,7 +483,7 @@ static mrhiResult RecordCounted(mrhiDevice* device, mrhiPassId id, bool indexed,
     uint64_t taken = atomic_load_explicit(&device->countedTaken, memory_order_relaxed);
     do
     {
-        if (maxCount > device->deviceLimits.frameIndirectDraws - taken)
+        if (maxCount > device->budgets.frameIndirectDraws - taken)
         {
             return mrhiDeviceFull(device, mrhi_diagnosticFrameIndirectDraws);
         }

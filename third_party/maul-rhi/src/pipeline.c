@@ -303,7 +303,7 @@ mrhiResult mrhiDestroyComputePipeline(mrhiDevice* device, mrhiComputePipelineId 
 
 void mrhiLosePipelines(mrhiDevice* device)
 {
-    for (uint32_t i = 0; i < device->deviceLimits.pipelines && device->pendingCount > 0; ++i)
+    for (uint32_t i = 0; i < device->budgets.pipelines && device->pendingCount > 0; ++i)
     {
         // A free slot is zeroed, which reads as pending.
         mrhiPipelineSlot* slot = &device->pipelineSlots[i];
@@ -322,7 +322,7 @@ void mrhiFinishPipeline(mrhiDevice* device, uint64_t tag, mrhiResult outcome)
     uint32_t index1 = (uint32_t)(tag >> 32);
     uint32_t request = (uint32_t)tag;
     // The driver reports only pipelines it was not asked to destroy.
-    MRHI_ASSERT(index1 <= device->deviceLimits.pipelines);
+    MRHI_ASSERT(index1 <= device->budgets.pipelines);
     mrhiPipelineSlot* slot = &device->pipelineSlots[index1 - 1];
     MRHI_ASSERT(slot->state == mrhiPipelinePending && slot->request == request);
     slot->state = outcome == mrhi_success ? mrhiPipelineReady : mrhiPipelineFailed;
@@ -332,7 +332,7 @@ void mrhiFinishPipeline(mrhiDevice* device, uint64_t tag, mrhiResult outcome)
 
 void mrhiDestroyPipelines(mrhiDevice* device)
 {
-    for (uint32_t i = 0; i < device->deviceLimits.pipelines; ++i)
+    for (uint32_t i = 0; i < device->budgets.pipelines; ++i)
     {
         mrhiPipelineSlot* slot = &device->pipelineSlots[i];
         if (slot->reflection != nullptr)

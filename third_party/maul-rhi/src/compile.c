@@ -26,7 +26,7 @@ void mrhiBeginZeroPass(mrhiDevice* device)
 {
     device->framePasses[0] = (mrhiFramePass){
         .passClass = mrhi_passTransfer,
-        .firstUse = device->deviceLimits.frameAccesses,
+        .firstUse = device->budgets.frameAccesses,
         .labelLength = MAUL_RHI_LABELS ? (uint32_t)(sizeof(s_zeroLabel) - 1) : 0,
     };
     if (MAUL_RHI_LABELS)
@@ -40,7 +40,7 @@ void mrhiZeroOnFirstUse(mrhiDevice* device, uint32_t resource)
 {
     mrhiFramePass* pass = &device->framePasses[0];
     // A frame imports each object once, so its fresh ones fit.
-    MRHI_ASSERT(pass->useCount < device->deviceLimits.frameResources);
+    MRHI_ASSERT(pass->useCount < device->budgets.frameResources);
     const mrhiFrameResource* object = &device->frameResources[resource - 1];
     const mrhiTextureDef* def = &object->texture;
     bool texture = object->kind == mrhiImportedTexture;

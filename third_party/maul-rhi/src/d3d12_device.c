@@ -328,7 +328,7 @@ typedef struct Room
     mrhiD3d12FrameRoom frames;
 } Room;
 
-static Room RoomOf(const mrhiDeviceLimits* limits)
+static Room RoomOf(const mrhiDeviceBudgets* limits)
 {
     Room room = {.layout = {.size = sizeof(D3d12Device)}};
     room.objects = mrhiD3d12PlanObjects(&room.layout, limits);
@@ -342,7 +342,7 @@ static Room RoomOf(const mrhiDeviceLimits* limits)
 // queue.
 static void Lay(D3d12Device* made, const Room* room, const mrhiDeviceDef* def)
 {
-    const mrhiDeviceLimits* limits = &def->deviceLimits;
+    const mrhiDeviceBudgets* limits = &def->budgets;
     bool heaps = def->features.bindlessSampling;
     unsigned char* block = (unsigned char*)made;
     made->objects = (mrhiD3d12Objects){.device = made->device};
@@ -373,13 +373,12 @@ mrhiResult mrhiCreateD3d12Device(const mrhiAllocator* allocator, const mrhiD3d12
                                  const mrhiDeviceDef* def, mrhiDeviceDriver* deviceOut)
 {
     if (def->features.bindlessSampling &&
-        !mrhiD3d12HeapsFit(def->deviceLimits.heaps, def->limits.heapSize,
-                           def->limits.samplerHeapSize))
+        !mrhiD3d12HeapsFit(def->budgets.heaps, def->limits.heapSize, def->limits.samplerHeapSize))
     {
         ID3D12Device_Release(device);
         return mrhi_errorUnsupported;
     }
-    Room room = RoomOf(&def->deviceLimits);
+    Room room = RoomOf(&def->budgets);
     D3d12Device* made = room.layout.overflow
                             ? nullptr
                             : mrhiAllocate(allocator, room.layout.size, alignof(D3d12Device));

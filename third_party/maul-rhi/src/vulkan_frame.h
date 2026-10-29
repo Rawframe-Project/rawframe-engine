@@ -198,7 +198,7 @@ typedef struct mrhiVulkanFrames
 // limits whose textures are at most `widest` texels across: mrhi_success,
 // or the error.
 mrhiResult mrhiVulkanFramesInit(mrhiVulkanFrames* frames, uint32_t family,
-                                const mrhiDeviceLimits* limits, uint32_t widest);
+                                const mrhiDeviceBudgets* limits, uint32_t widest);
 
 // Destroys everything the frames hold, the retiring objects included,
 // on an idle device.

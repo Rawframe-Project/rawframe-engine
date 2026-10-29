@@ -11,6 +11,8 @@
 #include "invariant.h"
 #include "label.h"
 
+#include "generated/out_copies.h"
+
 #define SURFACE_DEF_COOKIE 0x6D727366u
 
 // The chained structs a surface def accepts: the sources.
@@ -233,13 +235,15 @@ mrhiResult mrhiGetSurfaceCaps(mrhiInstance* instance, mrhiSurfaceId surface, mrh
     }
     mrhiSurfaceCaps caps = {0};
     instance->driver.vtable->getSurfaceCaps(instance->driver.self, handle, found->handle, &caps);
-    MRHI_ASSERT(
-        !caps.presentable ||
-        (caps.colorCount >= 1 && caps.colorCount <= MRHI_SURFACE_COLORS &&
-         (caps.presentModes & mrhi_presentFifo) != 0 && (caps.alphaModes & mrhi_alphaOpaque) != 0 &&
-         (caps.usages & mrhi_textureRenderTarget) != 0 && (caps.twinViews || caps.twinImages)));
+    MRHI_ASSERT(!caps.presentable ||
+                (caps.colorCount >= 1 && caps.colorCount <= MRHI_SURFACE_COLORS &&
+                 (caps.presentModes & mrhi_presentFifoBit) != 0 &&
+                 (caps.alphaModes & mrhi_alphaOpaqueBit) != 0 &&
+                 (caps.usages & mrhi_textureRenderTarget) != 0 &&
+                 (caps.twinViews || caps.twinImages)));
     // Nothing a driver fills for an adapter that cannot present is passed on.
-    *capsOut = caps.presentable ? caps : (mrhiSurfaceCaps){0};
+    const mrhiSurfaceCaps none = {0};
+    mrhiOutSurfaceCaps(capsOut, caps.presentable ? &caps : &none);
     return mrhi_success;
 }
 
@@ -280,7 +284,7 @@ mrhiResult mrhiSuggestSurfaceColor(const mrhiSurfaceCaps* caps, const mrhiSurfac
                                     : IsSrgb8(color);
             if (fits)
             {
-                *colorOut = *color;
+                mrhiOutSurfaceColor(colorOut, color);
                 return mrhi_success;
             }
         }

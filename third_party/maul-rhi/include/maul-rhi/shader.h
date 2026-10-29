@@ -61,6 +61,23 @@ extern "C"
 // recording fits one chunk of the frame's commands.
 #define MRHI_MAX_TABLE_BINDINGS 126
 
+// The sections a shader container's table lists at most. A container listing
+// more is malformed (mrhi_errorFormat).
+#define MRHI_MAX_CONTAINER_SECTIONS 64
+
+// The records an array section of a shader container holds at most: entries,
+// bindings, interface records, constants and the D3D12 map's ranges. A section
+// holding more is malformed (mrhi_errorFormat).
+#define MRHI_MAX_CONTAINER_RECORDS 4096
+
+// The bytes of an entry point's name in a shader container at most. A longer
+// name is malformed (mrhi_errorFormat).
+#define MRHI_MAX_CONTAINER_NAME_BYTES 256
+
+// The bytes of the root block a shader container's meta section gives at most.
+// A larger root block is malformed (mrhi_errorFormat).
+#define MRHI_MAX_CONTAINER_ROOT_BLOCK_BYTES 256
+
     // The samplers a sampler slot takes.
     typedef uint8_t mrhiSamplerBinding;
 

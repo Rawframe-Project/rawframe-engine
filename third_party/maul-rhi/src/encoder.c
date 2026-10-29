@@ -12,6 +12,8 @@
 
 #include <math.h>
 #include <stdatomic.h>
+#include <stdckdint.h>
+#include <stddef.h>
 #include <string.h>
 
 mrhiPassWork mrhiWorkOf(const mrhiFramePass* pass)
@@ -151,7 +153,46 @@ mrhiCommand* mrhiTakeCommands(mrhiDevice* device, mrhiFramePass* pass, uint32_t 
     mrhiCommand* records = &chunk->commands[chunk->count];
     chunk->count += count;
     MRHI_ASSERT(chunk->count <= MRHI_CHUNK_COMMANDS);
+    // Drivers read every record, so what a payload leaves of its records
+    // holds zeros, never what the memory held before.
+    memset(records, 0, count * sizeof(mrhiCommand));
     return records;
+}
+
+// Copies one field of a payload struct to its offset in a record.
+#define PUT(record, type, from, field)                                                             \
+    memcpy((uint8_t*)(record) + offsetof(type, field), &(from)->field, sizeof((from)->field))
+
+void mrhiPutBufferSide(mrhiCommand* record, const mrhiCommandBufferSide* side)
+{
+    PUT(record, mrhiCommandBufferSide, side, object);
+    PUT(record, mrhiCommandBufferSide, side, bytesPerRow);
+    PUT(record, mrhiCommandBufferSide, side, offset);
+    PUT(record, mrhiCommandBufferSide, side, rowsPerImage);
+}
+
+void mrhiPutTextureSide(mrhiCommand* record, const mrhiCommandTextureSide* side)
+{
+    PUT(record, mrhiCommandTextureSide, side, object);
+    PUT(record, mrhiCommandTextureSide, side, mip);
+    PUT(record, mrhiCommandTextureSide, side, x);
+    PUT(record, mrhiCommandTextureSide, side, y);
+    PUT(record, mrhiCommandTextureSide, side, z);
+    PUT(record, mrhiCommandTextureSide, side, aspect);
+}
+
+void mrhiPutBinding(mrhiCommand* record, const mrhiCommandBinding* binding)
+{
+    PUT(record, mrhiCommandBinding, binding, slot);
+    PUT(record, mrhiCommandBinding, binding, object);
+    PUT(record, mrhiCommandBinding, binding, offset);
+    PUT(record, mrhiCommandBinding, binding, size);
+    PUT(record, mrhiCommandBinding, binding, viewFormat);
+    PUT(record, mrhiCommandBinding, binding, viewKind);
+    PUT(record, mrhiCommandBinding, binding, aspect);
+    PUT(record, mrhiCommandBinding, binding, baseMip);
+    PUT(record, mrhiCommandBinding, binding, mipCount);
+    PUT(record, mrhiCommandBinding, binding, kind);
 }
 
 // Records a command with bytes of payload after it: success, or
@@ -323,7 +364,7 @@ mrhiResult mrhiSetComputePipeline(mrhiDevice* device, mrhiPassId id, mrhiCompute
 }
 
 mrhiResult mrhiSetRootBlock(mrhiDevice* device, mrhiPassId id, uint32_t offset, const void* bytes,
-                            uint32_t size)
+                            size_t size)
 {
     if (device == nullptr)
     {
@@ -343,12 +384,19 @@ mrhiResult mrhiSetRootBlock(mrhiDevice* device, mrhiPassId id, uint32_t offset, 
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticRootBlock);
     }
-    status = MRHI_DEVICE_LIMIT(device, rootBlockBytes, (uint64_t)offset + size);
+    // An end past 64 bits is past any root block.
+    uint64_t end = 0;
+    if (ckd_add(&end, (uint64_t)offset, size))
+    {
+        end = UINT64_MAX;
+    }
+    status = MRHI_DEVICE_LIMIT(device, rootBlockBytes, end);
     if (status != mrhi_success)
     {
         return status;
     }
-    mrhiCommand command = {.type = mrhiCommandRootBlock, .a = offset, .b = size};
+    // Within the root block, the size fits 32 bits.
+    mrhiCommand command = {.type = mrhiCommandRootBlock, .a = offset, .b = (uint32_t)size};
     return Record(device, pass, command, bytes, size);
 }
 
@@ -449,7 +497,7 @@ mrhiResult mrhiSetScissor(mrhiDevice* device, mrhiPassId id, const mrhiScissorRe
     return Record(device, pass, command, nullptr, 0);
 }
 
-mrhiResult mrhiSetBlendConstant(mrhiDevice* device, mrhiPassId id, const mrhiClearColor* color)
+mrhiResult mrhiSetBlendConstant(mrhiDevice* device, mrhiPassId id, const mrhiColor* color)
 {
     if (device == nullptr)
     {

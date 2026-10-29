@@ -132,7 +132,7 @@ static VkImageView TargetView(mrhiVulkanRecording* recording, uint32_t index1, u
     return MakeView(recording, texture.image, &shape);
 }
 
-static VkClearColorValue ClearOf(const mrhiClearColor* clear, mrhiFormat format)
+static VkClearColorValue ClearOf(const mrhiColor* clear, mrhiFormat format)
 {
     VkClearColorValue value;
     switch (mrhiGetFormatTarget(format).scalar)

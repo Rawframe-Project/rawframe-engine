@@ -193,7 +193,7 @@ mrhiResult mrhiDestroyHeap(mrhiDevice* device, mrhiHeapId heap)
 
 void mrhiDestroyHeaps(mrhiDevice* device)
 {
-    for (uint32_t i = 0; i < device->deviceLimits.heaps; ++i)
+    for (uint32_t i = 0; i < device->budgets.heaps; ++i)
     {
         if (device->heapSlots[i].table != nullptr)
         {
@@ -408,7 +408,7 @@ mrhiResult mrhiClearHeapSampler(mrhiDevice* device, mrhiHeapId heap, uint32_t in
 
 void mrhiForgetHeapObject(mrhiDevice* device, mrhiHeapObject kind, uint32_t index1)
 {
-    for (uint32_t h = 0; h < device->deviceLimits.heaps; ++h)
+    for (uint32_t h = 0; h < device->budgets.heaps; ++h)
     {
         mrhiHeapSlot* slot = &device->heapSlots[h];
         bool sampler = kind == mrhiHeapObjectSampler;

@@ -103,11 +103,11 @@ typedef struct mrhiD3d12ObjectRoom
     size_t slots;
 } mrhiD3d12ObjectRoom;
 
-// Adds the tables a device's limits need to its layout, and sets them
+// Adds the tables a device's budgets need to its layout, and sets them
 // up in its block, every slot free.
-mrhiD3d12ObjectRoom mrhiD3d12PlanObjects(mrhiLayout* layout, const mrhiDeviceLimits* limits);
+mrhiD3d12ObjectRoom mrhiD3d12PlanObjects(mrhiLayout* layout, const mrhiDeviceBudgets* limits);
 void mrhiD3d12LayObjects(mrhiD3d12Objects* objects, unsigned char* block,
-                         const mrhiD3d12ObjectRoom* room, const mrhiDeviceLimits* limits);
+                         const mrhiD3d12ObjectRoom* room, const mrhiDeviceBudgets* limits);
 
 // Makes the descriptor heaps of the laid out tables: success, or
 // mrhi_errorCapacity when D3D12 makes none.

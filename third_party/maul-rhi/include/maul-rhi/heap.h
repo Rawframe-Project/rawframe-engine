@@ -104,7 +104,7 @@ extern "C"
     /// samplers past the adapter's heapSize or samplerHeapSize;
     /// `mrhi_errorCapacity` for entries or samplers past the device's heapSize
     /// or samplerHeapSize within the adapter's, or when the device's heaps
-    /// limit is reached or the allocator fails; `mrhi_errorBusy` for a call
+    /// budget is reached or the allocator fails; `mrhi_errorBusy` for a call
     /// from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.

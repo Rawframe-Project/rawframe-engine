@@ -104,7 +104,7 @@ mrhiPassDef drawingInto(mrhiResourceId into, bool clears, const std::vector<mrhi
     def.colorTargets[0].resource = into;
     def.colorTargets[0].load = clears ? mrhi_loadClear : mrhi_loadKeep;
     def.colorTargets[0].store = mrhi_storeKeep;
-    def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+    def.colorTargets[0].clear = mrhiColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
     def.colorTargetCount = 1;
     def.neverCull = true;
     def.accesses = reads.data();

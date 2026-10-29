@@ -26,7 +26,7 @@ extern "C"
 #define MRHI_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MRHI_VERSION_MINOR 10
+#define MRHI_VERSION_MINOR 11
 // x-release-please-end
 // x-release-please-start-patch
 #define MRHI_VERSION_PATCH 0
@@ -47,10 +47,6 @@ extern "C"
 #if MRHI_VERSION_MAJOR == 0 && (MRHI_VERSION_MINOR > 0xFF || MRHI_VERSION_PATCH > 0xFF)
 #error "before 1.0, MRHI_VERSION_MINOR and MRHI_VERSION_PATCH must fit 8 bits each"
 #endif
-
-// The revision of the contract the headers are generated from
-// (contract/mrhi.json).
-#define MRHI_CONTRACT_VERSION 21
 
 // MRHI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_rhi_EXPORTS is defined while building
@@ -244,7 +240,7 @@ extern "C"
     MRHI_API const char* mrhiResultName(mrhiResult result);
 
     // The check a diagnostic record reports: one check of the core that refused
-    // a call as invalid input, one limit a frame call reached or driver budget
+    // a call as invalid input, one budget a frame call reached or driver budget
     // a submission ran out of, or, in a build with the validation layer, one
     // rule of the driver SPI that the driver broke (the driver codes, recorded
     // in the instance's queue). mrhiDiagnosticText gives each one's text.
@@ -472,10 +468,10 @@ extern "C"
         // object that is NULL, or an extension list that is not a list of
         // names.
         mrhi_diagnosticChainedStruct = 91,
-        // A device def's device limits include a zero, fewer than 2
-        // notifications, a command arena under one chunk, or readback bytes not
-        // a multiple of 512.
-        mrhi_diagnosticDeviceLimits = 92,
+        // A device def's budgets include a zero, fewer than 2 notifications, a
+        // command arena under one chunk, or readback bytes not a multiple of
+        // 512.
+        mrhi_diagnosticDeviceBudgets = 92,
         // A device def asks for limits below the floor every adapter reaches,
         // or for an alignment that is not a power of two.
         mrhi_diagnosticLimitsFloor = 93,
@@ -520,31 +516,32 @@ extern "C"
         // within the pass, or a read of a declared resource no earlier pass
         // wrote.
         mrhi_diagnosticPassUses = 107,
-        // A frame reached the device's frameResources limit: a resource
+        // A frame reached the device's frameResources budget: a resource
         // declared, imported or acquired past it.
         mrhi_diagnosticFrameResources = 108,
-        // A frame reached the device's framePasses limit: a pass added past it.
+        // A frame reached the device's framePasses budget: a pass added past
+        // it.
         mrhi_diagnosticFramePasses = 109,
         // A pass whose accesses, with two for each color target and one for the
         // depth target, could take the frame past the device's frameAccesses
-        // limit; or a compile that split a resource's parts into more than that
-        // limit leaves room for.
+        // budget; or a compile that split a resource's parts into more than
+        // that limit leaves room for.
         mrhi_diagnosticFrameAccesses = 110,
         // A compile that planned more barriers than the device's frameBarriers
-        // limit.
+        // budget.
         mrhi_diagnosticFrameBarriers = 111,
-        // A command past the device's frameCommandBytes limit: the call that
+        // A command past the device's frameCommandBytes budget: the call that
         // found the arena full, the later calls of its pass and the frame's
         // submission.
         mrhi_diagnosticFrameCommandBytes = 112,
-        // An upload past the device's frameUploadBytes limit: the call that
+        // An upload past the device's frameUploadBytes budget: the call that
         // found the staging full, the later calls of its pass and the frame's
         // submission.
         mrhi_diagnosticFrameUploadBytes = 113,
         // A counted multi-draw whose maxCount takes the frame past the device's
-        // frameIndirectDraws limit.
+        // frameIndirectDraws budget.
         mrhi_diagnosticFrameIndirectDraws = 114,
-        // A readback recorded while the device's readbacks limit of them wait
+        // A readback recorded while the device's readbacks budget of them wait
         // to be taken.
         mrhi_diagnosticReadbacks = 115,
         // A readback whose bytes do not fit the room of the device's

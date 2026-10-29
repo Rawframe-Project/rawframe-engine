@@ -9,6 +9,8 @@
 #include "chain.h"
 #include "instance_core.h"
 
+#include "generated/out_copies.h"
+
 #define ADAPTER_REQUEST_DEF_COOKIE 0x6D726172u
 
 mrhiAdapterRequestDef mrhiDefaultAdapterRequestDef(void)
@@ -272,7 +274,7 @@ mrhiResult mrhiGetAdapterInfo(mrhiInstance* instance, mrhiAdapterId adapter,
     {
         return mrhi_errorStale;
     }
-    *infoOut = found->info;
+    mrhiOutAdapterInfo(infoOut, &found->info);
     return mrhi_success;
 }
 
@@ -289,7 +291,7 @@ mrhiResult mrhiGetAdapterFeatures(mrhiInstance* instance, mrhiAdapterId adapter,
     {
         return mrhi_errorStale;
     }
-    *featuresOut = found->features;
+    mrhiOutFeatures(featuresOut, &found->features);
     return mrhi_success;
 }
 
@@ -306,7 +308,7 @@ mrhiResult mrhiGetAdapterLimits(mrhiInstance* instance, mrhiAdapterId adapter,
     {
         return mrhi_errorStale;
     }
-    *limitsOut = found->limits;
+    mrhiOutLimits(limitsOut, &found->limits);
     return mrhi_success;
 }
 
@@ -323,6 +325,7 @@ mrhiResult mrhiGetFormatCaps(mrhiInstance* instance, mrhiAdapterId adapter, mrhi
     {
         return mrhi_errorStale;
     }
-    *capsOut = mrhiAdapterFormatCaps(instance, found, format);
+    const mrhiFormatCaps caps = mrhiAdapterFormatCaps(instance, found, format);
+    mrhiOutFormatCaps(capsOut, &caps);
     return mrhi_success;
 }
