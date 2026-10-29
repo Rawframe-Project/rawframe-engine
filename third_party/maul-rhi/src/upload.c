@@ -24,7 +24,7 @@
 static uint8_t* TakeStaging(mrhiDevice* device, mrhiFramePass* pass, uint64_t bytes,
                             uint64_t* offsetOut)
 {
-    uint64_t room = device->deviceLimits.frameUploadBytes;
+    uint64_t room = device->budgets.frameUploadBytes;
     uint64_t at = atomic_load_explicit(&device->stagingTaken, memory_order_relaxed);
     bool fits = pass->overflow == 0 && bytes <= room && at <= room - bytes;
     uint64_t rounded = 0;
@@ -109,8 +109,8 @@ mrhiResult mrhiWriteBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId res
         {.offset = staged},
         {.object = object, .offset = offset},
     };
-    memcpy(&records[1], &sides[0], sizeof(sides[0]));
-    memcpy(&records[2], &sides[1], sizeof(sides[1]));
+    mrhiPutBufferSide(&records[1], &sides[0]);
+    mrhiPutBufferSide(&records[2], &sides[1]);
     return mrhi_success;
 }
 
@@ -211,7 +211,7 @@ mrhiResult mrhiWriteTexture(mrhiDevice* device, mrhiPassId id, const mrhiTexture
         .z = destination->z,
         .aspect = destination->aspect,
     };
-    memcpy(&records[1], &from, sizeof(from));
-    memcpy(&records[2], &to, sizeof(to));
+    mrhiPutBufferSide(&records[1], &from);
+    mrhiPutTextureSide(&records[2], &to);
     return mrhi_success;
 }

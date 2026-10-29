@@ -107,7 +107,7 @@ result::Result<mrhiResourceId> PostProcessPass::addStage(material::Insertion ins
         def.colorTargets[0].resource = target;
         def.colorTargets[0].load = kOwn ? mrhi_loadDiscard : clears ? mrhi_loadClear : mrhi_loadKeep;
         def.colorTargets[0].store = mrhi_storeKeep;
-        def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+        def.colorTargets[0].clear = mrhiColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
         def.colorTargetCount = 1;
         def.neverCull = !kOwn;
         def.accesses = kReads.data();

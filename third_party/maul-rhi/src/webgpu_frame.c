@@ -644,7 +644,7 @@ static void AddTargets(int state, const mrhiDriverFrame* frame, const mrhiDriver
             mrhiJsAddNoTarget(state);
             continue;
         }
-        const mrhiClearColor* clear = &target->clear;
+        const mrhiColor* clear = &target->clear;
         mrhiJsAddColorTarget(state, target->resource.index1, target->mip, target->layer,
                              TextureOf(frame, target->resource.index1)->kind == mrhi_texture3d,
                              mrhiWebGpuFormat(target->viewFormat), target->load == mrhi_loadKeep,
@@ -742,7 +742,7 @@ static void SetState(int state, const mrhiCommand* command)
         break;
     case mrhiCommandBlendConstant:
     {
-        mrhiClearColor color;
+        mrhiColor color;
         memcpy(&color, &command[1], sizeof(color));
         mrhiJsBlendConstant(state, color.red, color.green, color.blue, color.alpha);
         break;

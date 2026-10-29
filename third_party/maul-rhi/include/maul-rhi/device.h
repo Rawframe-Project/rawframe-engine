@@ -39,8 +39,8 @@ extern "C"
         mrhi_deviceLost = 3,
     };
 
-    // The named limits of a device's own bookkeeping.
-    typedef struct mrhiDeviceLimits
+    // The named budgets of a device's own bookkeeping.
+    typedef struct mrhiDeviceBudgets
     {
         // Records the device's notification queue holds, at least 2, one kept
         // for the loss notice; 256 by default.
@@ -96,7 +96,7 @@ extern "C"
         uint32_t frameIndirectDraws;
         // Records the diagnostic queue holds; 0 by default, keeping none.
         uint32_t diagnostics;
-    } mrhiDeviceLimits;
+    } mrhiDeviceBudgets;
 
     // How a device is made. Build it with mrhiDefaultDeviceDef and set the
     // adapter.
@@ -117,7 +117,7 @@ extern "C"
         mrhiFeatures features;
         // The limits asked for, at least the floor.
         mrhiLimits limits;
-        mrhiDeviceLimits deviceLimits;
+        mrhiDeviceBudgets budgets;
         mrhiAllocator allocator;
         // A pipeline cache mrhiGetPipelineCache wrote, or NULL: checked as
         // hostile input, it is used when it came from this ABI version
@@ -148,7 +148,7 @@ extern "C"
     ///                    on any failure.
     /// @return `mrhi_success` with the device opening; `mrhi_errorInvalid` for
     /// a NULL argument, a def without its cookie, a label that is not UTF-8
-    /// without NUL, a zero limit, limits below the floor, an alignment that is
+    /// without NUL, a zero budget, limits below the floor, an alignment that is
     /// not a power of two or an allocator with one function; `mrhi_errorLimit`
     /// for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorStale` for an adapter
     /// the instance no longer has; `mrhi_errorUnsupported` for features or
@@ -203,18 +203,18 @@ extern "C"
     MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceLimits(mrhiDevice* device,
                                                            mrhiLimits* limitsOut);
 
-    /// Reads the limits of its own bookkeeping a device was made with, as
+    /// Reads the budgets of its own bookkeeping a device was made with, as
     /// asked: object counts, frame command and upload bytes, readbacks,
-    /// diagnostics. A library given a device learns its budgets here.
+    /// diagnostics. A library given a device learns them here.
     ///
-    /// @param device     The device.
-    /// @param limitsOut  Receives the limits.
+    /// @param device      The device.
+    /// @param budgetsOut  Receives the budgets.
     /// @return `mrhi_success`, in any device state; `mrhi_errorInvalid` for a
     /// NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
-    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceOwnLimits(mrhiDevice* device,
-                                                              mrhiDeviceLimits* limitsOut);
+    MRHI_NODISCARD MRHI_API mrhiResult mrhiGetDeviceBudgets(mrhiDevice* device,
+                                                            mrhiDeviceBudgets* budgetsOut);
 
     /// Reads the nanoseconds one tick of the device's timestamps takes: 1 where
     /// the API reports nanoseconds already.
@@ -242,10 +242,10 @@ extern "C"
 
     /// Takes the oldest record from the device's diagnostic queue, which holds
     /// a record for each call the device refused as invalid input or bad data,
-    /// for each frame call refused at one of its limits, for each call refused
+    /// for each frame call refused at one of its budgets, for each call refused
     /// past one of the device's limits (mrhiLimits) under that limit's code,
     /// and for each submission its driver refused for a budget it names, up to
-    /// the diagnostics limit; refusals past it are counted but not recorded.
+    /// the diagnostics budget; refusals past it are counted but not recorded.
     ///
     /// @param device         The device.
     /// @param diagnosticOut  Receives the record; untouched unless one is
@@ -300,7 +300,7 @@ extern "C"
         // The driver's message: UTF-8 without NUL, messageLength bytes.
         char message[MRHI_LOSS_MESSAGE_BYTES];
         // Its bytes.
-        uint32_t messageLength;
+        size_t messageLength;
     } mrhiDeviceLossReport;
 
     /// Reads what is known about a lost device's loss.

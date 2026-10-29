@@ -10,6 +10,8 @@
 #include "device_core.h"
 #include "invariant.h"
 
+#include "generated/out_copies.h"
+
 #include <stdckdint.h>
 
 // Whether two resources' kept passes meet.
@@ -240,32 +242,15 @@ mrhiResult mrhiGetPassPlan(mrhiDevice* device, mrhiPassId pass, mrhiPassPlan* pl
         return mrhi_errorStale;
     }
     const mrhiFramePass* planned = &device->framePasses[pass.index1 - 1];
-    *planOut = (mrhiPassPlan){
+    mrhiPassPlan plan = {
         .kept = planned->kept,
         .depthStore = planned->depthStore,
         .stencilStore = planned->stencilStore,
     };
     for (uint32_t i = 0; i < planned->colorTargetCount; ++i)
     {
-        planOut->colorStores[i] = planned->colorStores[i];
+        plan.colorStores[i] = planned->colorStores[i];
     }
-    return mrhi_success;
-}
-
-mrhiResult mrhiGetFrameMemory(mrhiDevice* device, uint64_t* bytesOut)
-{
-    if (device == nullptr)
-    {
-        return mrhi_errorInvalid;
-    }
-    if (bytesOut == nullptr)
-    {
-        return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
-    }
-    if (!device->frameOpen || !device->frameCompiled)
-    {
-        return mrhi_errorState;
-    }
-    *bytesOut = device->frameMemory;
+    mrhiOutPassPlan(planOut, &plan);
     return mrhi_success;
 }

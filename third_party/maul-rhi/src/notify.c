@@ -7,6 +7,8 @@
 #include "instance_core.h"
 #include "invariant.h"
 
+#include "generated/out_copies.h"
+
 // Driver events a poll moves at a time.
 #define POLL_BATCH 8
 
@@ -125,7 +127,7 @@ mrhiResult mrhiNextInstanceNotification(mrhiInstance* instance,
     {
         return mrhi_empty;
     }
-    *notificationOut = instance->queue[instance->queueHead];
+    mrhiOutInstanceNotification(notificationOut, &instance->queue[instance->queueHead]);
     instance->queueHead = (instance->queueHead + 1) % instance->limits.notifications;
     --instance->queueCount;
     return mrhi_success;

@@ -4,6 +4,7 @@
 // RAWFRAME_REQUIRE_GPU is set, as the check sets it where lavapipe is, and
 // makes lavapipe the only driver the Vulkan loader sees.
 
+#include "../src/present.h"
 #include "rawframe/render/device.h"
 #include "rawframe/render/errors.h"
 #include "rawframe/test/test.h"
@@ -14,6 +15,7 @@
 #include <maul-rhi/device.h>
 #include <maul-rhi/encoder.h>
 #include <maul-rhi/frame.h>
+#include <maul-rhi/surface.h>
 #include <memory>
 
 using namespace rawframe;
@@ -80,7 +82,7 @@ RAWFRAME_TEST(ADeviceClearsATargetAndReadsItBack) {
     clearDef.colorTargets[0].resource = target;
     clearDef.colorTargets[0].load = mrhi_loadClear;
     clearDef.colorTargets[0].store = mrhi_storeKeep;
-    clearDef.colorTargets[0].clear = mrhiClearColor{.red = 0.25F, .green = 0.5F, .blue = 1.0F, .alpha = 1.0F};
+    clearDef.colorTargets[0].clear = mrhiColor{.red = 0.25F, .green = 0.5F, .blue = 1.0F, .alpha = 1.0F};
     clearDef.colorTargetCount = 1;
     mrhiPassId clearing{};
     RAWFRAME_EXPECT(mrhiAddPass(device, &clearDef, &clearing) == mrhi_success);
@@ -144,4 +146,31 @@ RAWFRAME_TEST(NoHardwareAdapterIsNotASoftwareOne) {
         }
     }
     RAWFRAME_EXPECT(false);
+}
+
+RAWFRAME_TEST(APolicyPresentsByTheFirstModeOfItsChainTheSurfaceOffers) {
+    using render::PresentPolicy;
+    // A set holds a mode as the bit its value shifts 1 by: mailbox is mode
+    // 1 and bit 2. Read as a mode, a bit names the wrong one.
+    constexpr mrhiPresentModes kFifo = mrhi_presentFifoBit;
+    constexpr mrhiPresentModes kMailbox = mrhi_presentFifoBit | mrhi_presentMailboxBit;
+    constexpr mrhiPresentModes kImmediate = mrhi_presentFifoBit | mrhi_presentImmediateBit;
+    constexpr mrhiPresentModes kAll = kMailbox | kImmediate;
+
+    RAWFRAME_EXPECT(render::presentModeFor(PresentPolicy::Immediate, kMailbox) == mrhi_presentMailbox);
+    RAWFRAME_EXPECT(render::presentModeFor(PresentPolicy::LowLatencyVsync, kMailbox) == mrhi_presentMailbox);
+    RAWFRAME_EXPECT(render::presentModeFor(PresentPolicy::Immediate, kImmediate) == mrhi_presentImmediate);
+    RAWFRAME_EXPECT(render::presentModeFor(PresentPolicy::LowLatencyVsync, kImmediate) == mrhi_presentFifo);
+    RAWFRAME_EXPECT(render::presentModeFor(PresentPolicy::Immediate, kAll) == mrhi_presentImmediate);
+    RAWFRAME_EXPECT(render::presentModeFor(PresentPolicy::LowLatencyVsync, kAll) == mrhi_presentMailbox);
+    for (const PresentPolicy kPolicy : {PresentPolicy::Vsync, PresentPolicy::AdaptiveVsync}) {
+        RAWFRAME_EXPECT(render::presentModeFor(kPolicy, kAll) == mrhi_presentFifo);
+    }
+    for (const PresentPolicy kPolicy : {PresentPolicy::LowLatencyVsync, PresentPolicy::Immediate}) {
+        RAWFRAME_EXPECT(render::presentModeFor(kPolicy, kFifo) == mrhi_presentFifo);
+    }
+    // And the policy a configured mode presents by.
+    RAWFRAME_EXPECT(render::policyOf(mrhi_presentFifo) == PresentPolicy::Vsync);
+    RAWFRAME_EXPECT(render::policyOf(mrhi_presentMailbox) == PresentPolicy::LowLatencyVsync);
+    RAWFRAME_EXPECT(render::policyOf(mrhi_presentImmediate) == PresentPolicy::Immediate);
 }

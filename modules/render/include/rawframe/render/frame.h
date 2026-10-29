@@ -163,7 +163,7 @@ struct FrameTarget {
 };
 
 /// What a frame takes of each of the device's frame limits, each named
-/// after the Maul RHI limit (`mrhiDeviceLimits`) it is measured against;
+/// after the Maul RHI budget (`mrhiDeviceBudgets`) it is measured against;
 /// command bytes count in whole 4 KiB chunks.
 struct FrameUsage {
     std::uint32_t resources = 0;

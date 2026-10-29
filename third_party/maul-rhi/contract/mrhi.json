@@ -342,7 +342,7 @@
           "kind": "enum",
           "name": "diagnostic_code",
           "width": "uint16",
-          "doc": "The check a diagnostic record reports: one check of the core that refused a call as invalid input, one limit a frame call reached or driver budget a submission ran out of, or, in a build with the validation layer, one rule of the driver SPI that the driver broke (the driver codes, recorded in the instance's queue). mrhiDiagnosticText gives each one's text.",
+          "doc": "The check a diagnostic record reports: one check of the core that refused a call as invalid input, one budget a frame call reached or driver budget a submission ran out of, or, in a build with the validation layer, one rule of the driver SPI that the driver broke (the driver codes, recorded in the instance's queue). mrhiDiagnosticText gives each one's text.",
           "values": [
             {
               "name": "diagnostic_null_argument",
@@ -715,9 +715,9 @@
               "doc": "A chained struct the def carries is malformed: an adopted Vulkan object that is NULL, or an extension list that is not a list of names."
             },
             {
-              "name": "diagnostic_device_limits",
+              "name": "diagnostic_device_budgets",
               "value": 92,
-              "doc": "A device def's device limits include a zero, fewer than 2 notifications, a command arena under one chunk, or readback bytes not a multiple of 512."
+              "doc": "A device def's budgets include a zero, fewer than 2 notifications, a command arena under one chunk, or readback bytes not a multiple of 512."
             },
             {
               "name": "diagnostic_limits_floor",
@@ -797,42 +797,42 @@
             {
               "name": "diagnostic_frame_resources",
               "value": 108,
-              "doc": "A frame reached the device's frameResources limit: a resource declared, imported or acquired past it."
+              "doc": "A frame reached the device's frameResources budget: a resource declared, imported or acquired past it."
             },
             {
               "name": "diagnostic_frame_passes",
               "value": 109,
-              "doc": "A frame reached the device's framePasses limit: a pass added past it."
+              "doc": "A frame reached the device's framePasses budget: a pass added past it."
             },
             {
               "name": "diagnostic_frame_accesses",
               "value": 110,
-              "doc": "A pass whose accesses, with two for each color target and one for the depth target, could take the frame past the device's frameAccesses limit; or a compile that split a resource's parts into more than that limit leaves room for."
+              "doc": "A pass whose accesses, with two for each color target and one for the depth target, could take the frame past the device's frameAccesses budget; or a compile that split a resource's parts into more than that limit leaves room for."
             },
             {
               "name": "diagnostic_frame_barriers",
               "value": 111,
-              "doc": "A compile that planned more barriers than the device's frameBarriers limit."
+              "doc": "A compile that planned more barriers than the device's frameBarriers budget."
             },
             {
               "name": "diagnostic_frame_command_bytes",
               "value": 112,
-              "doc": "A command past the device's frameCommandBytes limit: the call that found the arena full, the later calls of its pass and the frame's submission."
+              "doc": "A command past the device's frameCommandBytes budget: the call that found the arena full, the later calls of its pass and the frame's submission."
             },
             {
               "name": "diagnostic_frame_upload_bytes",
               "value": 113,
-              "doc": "An upload past the device's frameUploadBytes limit: the call that found the staging full, the later calls of its pass and the frame's submission."
+              "doc": "An upload past the device's frameUploadBytes budget: the call that found the staging full, the later calls of its pass and the frame's submission."
             },
             {
               "name": "diagnostic_frame_indirect_draws",
               "value": 114,
-              "doc": "A counted multi-draw whose maxCount takes the frame past the device's frameIndirectDraws limit."
+              "doc": "A counted multi-draw whose maxCount takes the frame past the device's frameIndirectDraws budget."
             },
             {
               "name": "diagnostic_readbacks",
               "value": 115,
-              "doc": "A readback recorded while the device's readbacks limit of them wait to be taken."
+              "doc": "A readback recorded while the device's readbacks budget of them wait to be taken."
             },
             {
               "name": "diagnostic_readback_bytes",
@@ -1269,7 +1269,7 @@
             },
             {
               "name": "name_length",
-              "type": "uint32"
+              "type": "size"
             }
           ],
           "mapping": {
@@ -6573,8 +6573,8 @@
         },
         {
           "kind": "struct",
-          "name": "device_limits",
-          "doc": "The named limits of a device's own bookkeeping.",
+          "name": "device_budgets",
+          "doc": "The named budgets of a device's own bookkeeping.",
           "members": [
             {
               "name": "notifications",
@@ -6717,8 +6717,8 @@
               "doc": "The limits asked for, at least the floor."
             },
             {
-              "name": "device_limits",
-              "type": "struct.device_limits"
+              "name": "budgets",
+              "type": "struct.device_budgets"
             },
             {
               "name": "allocator",
@@ -6775,7 +6775,7 @@
           "doc": "Makes a device on an adapter. It returns at once with the device opening, and the instance's queue answers the request with mrhi_instanceDeviceReady.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success` with the device opening; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, a zero limit, limits below the floor, an alignment that is not a power of two or an allocator with one function; `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorStale` for an adapter the instance no longer has; `mrhi_errorUnsupported` for features or limits beyond the adapter's, or a critical extension the library does not know; `mrhi_errorCapacity` when the instance's queue has no room for the answer or an allocator fails; `mrhi_errorBusy` for a call from inside the instance's allocator."
+            "doc": "`mrhi_success` with the device opening; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, a zero budget, limits below the floor, an alignment that is not a power of two or an allocator with one function; `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorStale` for an adapter the instance no longer has; `mrhi_errorUnsupported` for features or limits beyond the adapter's, or a critical extension the library does not know; `mrhi_errorCapacity` when the instance's queue has no room for the answer or an allocator fails; `mrhi_errorBusy` for a call from inside the instance's allocator."
           },
           "args": [
             {
@@ -6942,8 +6942,8 @@
         },
         {
           "kind": "function",
-          "name": "get_device_own_limits",
-          "doc": "Reads the limits of its own bookkeeping a device was made with, as asked: object counts, frame command and upload bytes, readbacks, diagnostics. A library given a device learns its budgets here.",
+          "name": "get_device_budgets",
+          "doc": "Reads the budgets of its own bookkeeping a device was made with, as asked: object counts, frame command and upload bytes, readbacks, diagnostics. A library given a device learns them here.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success`, in any device state; `mrhi_errorInvalid` for a NULL argument."
@@ -6956,10 +6956,10 @@
               "doc": "The device."
             },
             {
-              "name": "limits_out",
-              "type": "struct.device_limits",
+              "name": "budgets_out",
+              "type": "struct.device_budgets",
               "pointer": "mutable",
-              "doc": "Receives the limits."
+              "doc": "Receives the budgets."
             }
           ],
           "thread_safety": {
@@ -7039,7 +7039,7 @@
         {
           "kind": "function",
           "name": "next_device_diagnostic",
-          "doc": "Takes the oldest record from the device's diagnostic queue, which holds a record for each call the device refused as invalid input or bad data, for each frame call refused at one of its limits, for each call refused past one of the device's limits (mrhiLimits) under that limit's code, and for each submission its driver refused for a budget it names, up to the diagnostics limit; refusals past it are counted but not recorded.",
+          "doc": "Takes the oldest record from the device's diagnostic queue, which holds a record for each call the device refused as invalid input or bad data, for each frame call refused at one of its budgets, for each call refused past one of the device's limits (mrhiLimits) under that limit's code, and for each submission its driver refused for a budget it names, up to the diagnostics budget; refusals past it are counted but not recorded.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success` with a record; `mrhi_empty` when the queue is drained or keeps none; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorBusy` for a call from inside the device's allocator."
@@ -7259,7 +7259,7 @@
             },
             {
               "name": "message_length",
-              "type": "uint32",
+              "type": "size",
               "doc": "Its bytes."
             }
           ],
@@ -9813,7 +9813,7 @@
           "doc": "Makes a query set on a ready device.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, an unknown type, or a count of 0; `mrhi_errorLimit` for a count past MRHI_MAX_QUERY_SET_QUERIES or a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorState` for a device that is not ready; `mrhi_errorUnsupported` for a critical extension the library does not know, timestamps without the timestamp_query feature, or pipeline statistics without the pipeline_statistics_query feature; `mrhi_errorCapacity` when the device's querySets limit is reached or its queries limit lacks a run of count queries; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, an unknown type, or a count of 0; `mrhi_errorLimit` for a count past MRHI_MAX_QUERY_SET_QUERIES or a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorState` for a device that is not ready; `mrhi_errorUnsupported` for a critical extension the library does not know, timestamps without the timestamp_query feature, or pipeline statistics without the pipeline_statistics_query feature; `mrhi_errorCapacity` when the device's querySets budget is reached or its queries budget lacks a run of count queries; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -10262,7 +10262,7 @@
           "doc": "Makes a bindless heap on a ready device, every entry empty.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, or 0 entries; `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorState` for a device that is not ready; `mrhi_errorUnsupported` for a critical extension the library does not know, a device without the bindless_sampling feature, or entries or samplers past the adapter's heapSize or samplerHeapSize; `mrhi_errorCapacity` for entries or samplers past the device's heapSize or samplerHeapSize within the adapter's, or when the device's heaps limit is reached or the allocator fails; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, or 0 entries; `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorState` for a device that is not ready; `mrhi_errorUnsupported` for a critical extension the library does not know, a device without the bindless_sampling feature, or entries or samplers past the adapter's heapSize or samplerHeapSize; `mrhi_errorCapacity` for entries or samplers past the device's heapSize or samplerHeapSize within the adapter's, or when the device's heaps budget is reached or the allocator fails; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -10845,15 +10845,15 @@
           ]
         },
         {
-          "kind": "bitflags",
-          "name": "present_modes",
-          "width": "uint32",
+          "kind": "enum",
+          "name": "present_mode",
+          "width": "uint8",
           "mapped": true,
           "doc": "How presented images reach the display.",
           "values": [
             {
               "name": "present_fifo",
-              "value": 1,
+              "value": 0,
               "doc": "In order, one per refresh, never torn; always offered.",
               "mapping": {
                 "vulkan": {
@@ -10876,7 +10876,7 @@
             },
             {
               "name": "present_mailbox",
-              "value": 2,
+              "value": 1,
               "doc": "The newest image at each refresh, never torn; older ones are dropped.",
               "mapping": {
                 "vulkan": {
@@ -10899,7 +10899,7 @@
             },
             {
               "name": "present_immediate",
-              "value": 4,
+              "value": 2,
               "doc": "At once, and may tear.",
               "mapping": {
                 "vulkan": {
@@ -10924,14 +10924,38 @@
         },
         {
           "kind": "bitflags",
-          "name": "alpha_modes",
+          "name": "present_modes",
           "width": "uint32",
+          "doc": "A set of mrhiPresentMode values, one bit each: the bit of a mode is 1 shifted left by its value.",
+          "library": "a set of the mrhiPresentMode values a surface reports",
+          "values": [
+            {
+              "name": "present_fifo_bit",
+              "value": 1,
+              "doc": "The bit of mrhi_presentFifo."
+            },
+            {
+              "name": "present_mailbox_bit",
+              "value": 2,
+              "doc": "The bit of mrhi_presentMailbox."
+            },
+            {
+              "name": "present_immediate_bit",
+              "value": 4,
+              "doc": "The bit of mrhi_presentImmediate."
+            }
+          ]
+        },
+        {
+          "kind": "enum",
+          "name": "alpha_mode",
+          "width": "uint8",
           "mapped": true,
           "doc": "How a surface's alpha blends with what is behind the window.",
           "values": [
             {
               "name": "alpha_opaque",
-              "value": 1,
+              "value": 0,
               "doc": "Alpha is ignored; always offered.",
               "mapping": {
                 "vulkan": {
@@ -10954,7 +10978,7 @@
             },
             {
               "name": "alpha_premultiplied",
-              "value": 2,
+              "value": 1,
               "doc": "Colors are premultiplied by alpha, and the window shows what is behind it.",
               "mapping": {
                 "vulkan": {
@@ -10974,6 +10998,25 @@
                   "note": "premultiplied"
                 }
               }
+            }
+          ]
+        },
+        {
+          "kind": "bitflags",
+          "name": "alpha_modes",
+          "width": "uint32",
+          "doc": "A set of mrhiAlphaMode values, one bit each: the bit of a mode is 1 shifted left by its value.",
+          "library": "a set of the mrhiAlphaMode values a surface reports",
+          "values": [
+            {
+              "name": "alpha_opaque_bit",
+              "value": 1,
+              "doc": "The bit of mrhi_alphaOpaque."
+            },
+            {
+              "name": "alpha_premultiplied_bit",
+              "value": 2,
+              "doc": "The bit of mrhi_alphaPremultiplied."
             }
           ]
         },
@@ -11007,12 +11050,12 @@
             {
               "name": "present_modes",
               "type": "bitflags.present_modes",
-              "doc": "Its present modes, mrhi_presentFifo among them."
+              "doc": "Its present modes, mrhi_presentFifoBit among them."
             },
             {
               "name": "alpha_modes",
               "type": "bitflags.alpha_modes",
-              "doc": "Its alpha modes, mrhi_alphaOpaque among them."
+              "doc": "Its alpha modes, mrhi_alphaOpaqueBit among them."
             },
             {
               "name": "usages",
@@ -11646,8 +11689,8 @@
             },
             {
               "name": "present_mode",
-              "type": "bitflags.present_modes",
-              "doc": "One present mode the surface reports.",
+              "type": "enum.present_mode",
+              "doc": "A present mode the surface reports.",
               "mapping": {
                 "vulkan": {
                   "class": "direct",
@@ -11669,8 +11712,8 @@
             },
             {
               "name": "alpha_mode",
-              "type": "bitflags.alpha_modes",
-              "doc": "One alpha mode the surface reports.",
+              "type": "enum.alpha_mode",
+              "doc": "An alpha mode the surface reports.",
               "mapping": {
                 "vulkan": {
                   "class": "direct",
@@ -12143,7 +12186,7 @@
           "doc": "Declares a texture the open frame's graph makes, aliases and ends with the frame. Its usages are derived from the passes that use it, and checked against its format when the frame is compiled. A pass may read it, or load a target of it, only after an earlier pass wrote it; texels no pass wrote, beside a write to part of it, are undefined and differ by backend.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, a usage other than 0, or a shape mrhiCreateTexture refuses as invalid; `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorUnsupported` for a size past the adapter's limits, a compressed format without its feature, or a critical extension the library does not know; `mrhi_errorState` for a device without an open frame; `mrhi_errorCapacity` for a size past the device's limits within the adapter's, or when the device's frameResources limit is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, a usage other than 0, or a shape mrhiCreateTexture refuses as invalid; `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorUnsupported` for a size past the adapter's limits, a compressed format without its feature, or a critical extension the library does not know; `mrhi_errorState` for a device without an open frame; `mrhi_errorCapacity` for a size past the device's limits within the adapter's, or when the device's frameResources budget is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -12195,7 +12238,7 @@
           "doc": "Declares a buffer the open frame's graph makes, aliases and ends with the frame. Its usages are derived from the passes that use it. A pass may read it only after an earlier pass wrote it; bytes no pass wrote, beside a write to part of it, are undefined and differ by backend.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, a usage other than 0, or a size that is zero or not a multiple of 4; `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorUnsupported` for a size past the adapter's bufferBytes, or a critical extension the library does not know; `mrhi_errorState` for a device without an open frame; `mrhi_errorCapacity` for a size past the device's bufferBytes within the adapter's, or when the device's frameResources limit is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a label that is not UTF-8 without NUL, a usage other than 0, or a size that is zero or not a multiple of 4; `mrhi_errorLimit` for a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorUnsupported` for a size past the adapter's bufferBytes, or a critical extension the library does not know; `mrhi_errorState` for a device without an open frame; `mrhi_errorCapacity` for a size past the device's bufferBytes within the adapter's, or when the device's frameResources budget is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -12247,7 +12290,7 @@
           "doc": "Brings a device texture into the open frame, whose graph tracks it and never aliases it. Importing it again returns the same id.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorStale` for a texture the device no longer has; `mrhi_errorState` for a device without an open frame; `mrhi_errorCapacity` when the device's frameResources limit is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorStale` for a texture the device no longer has; `mrhi_errorState` for a device without an open frame; `mrhi_errorCapacity` when the device's frameResources budget is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -12280,7 +12323,7 @@
           "doc": "Brings a device buffer into the open frame, whose graph tracks it and never aliases it. Importing it again returns the same id.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorStale` for a buffer the device no longer has; `mrhi_errorState` for a device without an open frame; `mrhi_errorCapacity` when the device's frameResources limit is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorStale` for a buffer the device no longer has; `mrhi_errorState` for a device without an open frame; `mrhi_errorCapacity` when the device's frameResources budget is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -12313,7 +12356,7 @@
           "doc": "Acquires the next image of a surface configured on the device into the open frame, as a texture of the configured format, size, usages and view formats that begins undefined and is presented when the frame is submitted. Acquiring it again in the frame gives the same answer and image.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success` or `mrhi_suboptimal` with an image; `mrhi_occluded` without one, the window hidden or without size; `mrhi_errorOutOfDate` without one, the surface to be configured again first; `mrhi_errorDeviceLost`; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorStale` for a surface the instance no longer has; `mrhi_errorState` for a device without an open frame, a frame already compiled, or a surface not configured on the device; `mrhi_errorCapacity` when the device's frameResources limit is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success` or `mrhi_suboptimal` with an image; `mrhi_occluded` without one, the window hidden or without size; `mrhi_errorOutOfDate` without one, the surface to be configured again first; `mrhi_errorDeviceLost`; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorStale` for a surface the instance no longer has; `mrhi_errorState` for a device without an open frame, a frame already compiled, or a surface not configured on the device; `mrhi_errorCapacity` when the device's frameResources budget is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -12975,8 +13018,8 @@
         },
         {
           "kind": "struct",
-          "name": "clear_color",
-          "doc": "A color target's clear value.",
+          "name": "color",
+          "doc": "Four color channels: a color target's clear value, or the blend constant.",
           "members": [
             {
               "name": "red",
@@ -13046,7 +13089,7 @@
             },
             {
               "name": "clear",
-              "type": "struct.clear_color",
+              "type": "struct.color",
               "doc": "The clear value, for mrhi_loadClear."
             },
             {
@@ -13298,7 +13341,7 @@
           "doc": "Declares a pass of the open frame, after the passes declared before it in its class.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a bad label, an unknown class, kind, aspect or operation, an access or target its resource cannot take (a kind for the other resource type, a range outside the texture, a use an imported object was not made with, a target that does not render or depth-test, a use of a sealed resource other than the reads its sealed state allows), targets of different sizes or sample counts, views past one on a native pass or one without targets, targets without a layer for each view or of a 3D texture with views past one, a resolve that does not match, a subresource written and used otherwise in the pass, an access the class does not allow, a declared resource read before any pass wrote it, an occlusion query set that is not one or is named by a pass without targets, or timestamps of a set that is not a timestamp set, without a set, with neither query, with both the same, or with a query past the set's count or already written in this frame; `mrhi_errorLimit` for more than MRHI_MAX_COLOR_TARGETS color targets, a native pass past MRHI_MAX_NATIVE_PASSES in the frame or a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorStale` for a resource of another frame, an imported object destroyed since, or a query set or heap the device no longer has; `mrhi_errorUnsupported` for a critical extension the library does not know, or views past one without the multiview feature or past the adapter's limit; `mrhi_errorState` for a device without an open frame, or a frame already compiled; `mrhi_errorCapacity` for views past the device's limit within the adapter's, or when the device's framePasses or frameAccesses limit is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument, a def without its cookie, a bad label, an unknown class, kind, aspect or operation, an access or target its resource cannot take (a kind for the other resource type, a range outside the texture, a use an imported object was not made with, a target that does not render or depth-test, a use of a sealed resource other than the reads its sealed state allows), targets of different sizes or sample counts, views past one on a native pass or one without targets, targets without a layer for each view or of a 3D texture with views past one, a resolve that does not match, a subresource written and used otherwise in the pass, an access the class does not allow, a declared resource read before any pass wrote it, an occlusion query set that is not one or is named by a pass without targets, or timestamps of a set that is not a timestamp set, without a set, with neither query, with both the same, or with a query past the set's count or already written in this frame; `mrhi_errorLimit` for more than MRHI_MAX_COLOR_TARGETS color targets, a native pass past MRHI_MAX_NATIVE_PASSES in the frame or a label past MRHI_MAX_LABEL_BYTES; `mrhi_errorStale` for a resource of another frame, an imported object destroyed since, or a query set or heap the device no longer has; `mrhi_errorUnsupported` for a critical extension the library does not know, or views past one without the multiview feature or past the adapter's limit; `mrhi_errorState` for a device without an open frame, or a frame already compiled; `mrhi_errorCapacity` for views past the device's limit within the adapter's, or when the device's framePasses or frameAccesses budget is reached; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -14032,37 +14075,9 @@
           "library": "reads the library's plan"
         },
         {
-          "kind": "function",
-          "name": "get_frame_memory",
-          "doc": "Reads the bytes the compiled frame's declared resources take together, aliased by lifetime.",
-          "returns": {
-            "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorState` for a frame not compiled."
-          },
-          "args": [
-            {
-              "name": "device",
-              "type": "opaque.device",
-              "pointer": "mutable",
-              "doc": "The device."
-            },
-            {
-              "name": "bytes_out",
-              "type": "uint64",
-              "pointer": "mutable",
-              "doc": "Receives the bytes."
-            }
-          ],
-          "thread_safety": {
-            "class": "any_exclusive",
-            "object": "the device"
-          },
-          "library": "reads the library's plan"
-        },
-        {
           "kind": "struct",
           "name": "frame_usage",
-          "doc": "What a frame has taken of each limit a frame has, each member named after the mrhiDeviceLimits member it is measured against.",
+          "doc": "What a frame has taken of each budget a frame has, each member named after the mrhiDeviceBudgets member it is measured against, and the memory its transient resources take, which no budget bounds.",
           "members": [
             {
               "name": "frame_resources",
@@ -14098,6 +14113,11 @@
               "name": "frame_indirect_draws",
               "type": "uint32",
               "doc": "The maxCounts of its counted multi-draws, in all."
+            },
+            {
+              "name": "frame_memory_bytes",
+              "type": "uint64",
+              "doc": "The bytes its declared resources take together, placed by lifetime so resources whose uses do not overlap share bytes: 0 until its compile succeeds."
             }
           ],
           "library": "a record of the library's own bookkeeping"
@@ -14105,7 +14125,7 @@
         {
           "kind": "function",
           "name": "get_frame_usage",
-          "doc": "Reads what the frame begun last has taken of each frame limit: while it is open, once compiled, after a call its limits refused, and after it is submitted or dropped, until the next frame begins. Before the first frame, everything is 0. A program compares it with mrhiGetDeviceOwnLimits to learn its headroom.",
+          "doc": "Reads what the frame begun last has taken of each frame budget: while it is open, once compiled, after a call its budgets refused, and after it is submitted or dropped, until the next frame begins. Before the first frame, everything is 0. A program compares it with mrhiGetDeviceBudgets to learn its headroom.",
           "returns": {
             "type": "result",
             "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL argument."
@@ -14375,6 +14395,30 @@
           "name": "max_table_bindings",
           "value": 126,
           "doc": "The bindings one table of a container holds at most: a table set while recording fits one chunk of the frame's commands."
+        },
+        {
+          "kind": "constant",
+          "name": "max_container_sections",
+          "value": 64,
+          "doc": "The sections a shader container's table lists at most. A container listing more is malformed (mrhi_errorFormat)."
+        },
+        {
+          "kind": "constant",
+          "name": "max_container_records",
+          "value": 4096,
+          "doc": "The records an array section of a shader container holds at most: entries, bindings, interface records, constants and the D3D12 map's ranges. A section holding more is malformed (mrhi_errorFormat)."
+        },
+        {
+          "kind": "constant",
+          "name": "max_container_name_bytes",
+          "value": 256,
+          "doc": "The bytes of an entry point's name in a shader container at most. A longer name is malformed (mrhi_errorFormat)."
+        },
+        {
+          "kind": "constant",
+          "name": "max_container_root_block_bytes",
+          "value": 256,
+          "doc": "The bytes of the root block a shader container's meta section gives at most. A larger root block is malformed (mrhi_errorFormat)."
         },
         {
           "kind": "enum",
@@ -20973,7 +21017,7 @@
             },
             {
               "name": "size",
-              "type": "uint32",
+              "type": "size",
               "doc": "How many, a multiple of 4 and at least 4, ending within the device's root block."
             }
           ],
@@ -21122,7 +21166,7 @@
             },
             {
               "name": "color",
-              "type": "struct.clear_color",
+              "type": "struct.color",
               "pointer": "const",
               "doc": "The constant, finite."
             }
@@ -22269,7 +22313,7 @@
     },
     {
       "name": "test",
-      "doc": "The test driver (MAUL_RHI_TEST_DRIVER): a driver without a GPU whose adapters a test describes, for the library's tests and a program's own.",
+      "doc": "The test driver (MAUL_RHI_TEST_DRIVER): a driver without a GPU whose adapters a test describes, for the library's tests and a program's own. Test-only, and outside the 1.x promise: its structs may change in any release, a patch release too.",
       "includes": [
         "encoder"
       ],
@@ -22373,6 +22417,11 @@
               "name": "staging_sum",
               "type": "uint64",
               "doc": "The sum of every byte of its staging, the room between and after its uploads' rows among them."
+            },
+            {
+              "name": "record_sum",
+              "type": "uint64",
+              "doc": "The sum of every byte of its command records, payloads among them."
             },
             {
               "name": "memory_bytes",
@@ -22526,5 +22575,5 @@
       ]
     }
   ],
-  "contract_version": 21
+  "contract_version": 22
 }

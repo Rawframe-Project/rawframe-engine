@@ -314,9 +314,9 @@ static mrhiPresentModes ModesOf(const VkPresentModeKHR* modes, uint32_t count)
     mrhiPresentModes found = 0;
     for (uint32_t i = 0; i < count; ++i)
     {
-        found |= modes[i] == VK_PRESENT_MODE_FIFO_KHR        ? mrhi_presentFifo
-                 : modes[i] == VK_PRESENT_MODE_MAILBOX_KHR   ? mrhi_presentMailbox
-                 : modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR ? mrhi_presentImmediate
+        found |= modes[i] == VK_PRESENT_MODE_FIFO_KHR        ? mrhi_presentFifoBit
+                 : modes[i] == VK_PRESENT_MODE_MAILBOX_KHR   ? mrhi_presentMailboxBit
+                 : modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR ? mrhi_presentImmediateBit
                                                              : 0u;
     }
     return found;
@@ -378,15 +378,15 @@ void mrhiVulkanCapsOf(const mrhiVulkanSurfaceFacts* facts, mrhiSurfaceCaps* caps
     VkCompositeAlphaFlagsKHR alpha = facts->alpha;
     caps.alphaModes |=
         (alpha & (VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR | VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)) != 0
-            ? mrhi_alphaOpaque
+            ? mrhi_alphaOpaqueBit
             : 0u;
     caps.alphaModes |=
-        (alpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) != 0 ? mrhi_alphaPremultiplied : 0u;
+        (alpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) != 0 ? mrhi_alphaPremultipliedBit : 0u;
     caps.usages = UsagesOf(facts->usages);
     // The floors: a color, FIFO, opaque alpha, render targets and a way to
     // sRGB.
-    caps.presentable = caps.colorCount > 0 && (caps.presentModes & mrhi_presentFifo) != 0 &&
-                       (caps.alphaModes & mrhi_alphaOpaque) != 0 &&
+    caps.presentable = caps.colorCount > 0 && (caps.presentModes & mrhi_presentFifoBit) != 0 &&
+                       (caps.alphaModes & mrhi_alphaOpaqueBit) != 0 &&
                        (caps.usages & mrhi_textureRenderTarget) != 0 &&
                        (caps.twinViews || caps.twinImages);
     if (caps.presentable)

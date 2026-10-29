@@ -33,7 +33,7 @@ std::unexpected<result::Error> failed(std::string_view why, mrhiResult outcome) 
 constexpr std::uint32_t kMaximumSide = 8192;
 
 /// The limit a refusal's diagnostic names: a frame limit after its
-/// `mrhiDeviceLimits` member, or the budget a driver ran out of. None for
+/// `mrhiDeviceBudgets` member, or the budget a driver ran out of. None for
 /// any other check.
 std::optional<std::string_view> limitOf(mrhiDiagnosticCode code) noexcept {
     switch (code) {
@@ -326,7 +326,7 @@ struct Framer::State {
             def.colorTargets[0].resource = asides[at];
             def.colorTargets[0].load = mrhi_loadClear;
             def.colorTargets[0].store = mrhi_storeKeep;
-            def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+            def.colorTargets[0].clear = mrhiColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
             def.colorTargetCount = 1;
             def.neverCull = true;
             mrhiPassId cleared{};
@@ -341,7 +341,7 @@ struct Framer::State {
             def.colorTargets[0].resource = picture;
             def.colorTargets[0].load = mrhi_loadClear;
             def.colorTargets[0].store = mrhi_storeKeep;
-            def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+            def.colorTargets[0].clear = mrhiColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
             def.colorTargetCount = 1;
             def.neverCull = true;
             mrhiPassId cleared{};
@@ -359,7 +359,7 @@ struct Framer::State {
             def.colorTargets[0].resource = *panel;
             def.colorTargets[0].load = mrhi_loadClear;
             def.colorTargets[0].store = mrhi_storeKeep;
-            def.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 0};
+            def.colorTargets[0].clear = mrhiColor{.red = 0, .green = 0, .blue = 0, .alpha = 0};
             def.colorTargetCount = 1;
             def.neverCull = true;
             mrhiPassId cleared{};
@@ -571,14 +571,14 @@ result::Result<std::unique_ptr<Framer>> Framer::create(Device& device) {
     auto state = std::make_unique<State>();
     state->device = &device;
     state->native = device.native();
-    if (mrhiDeviceLimits limits{}; mrhiGetDeviceOwnLimits(state->native, &limits) == mrhi_success) {
-        state->statistics.limits = FrameUsage{.resources = limits.frameResources,
-                                              .passes = limits.framePasses,
-                                              .accesses = limits.frameAccesses,
-                                              .barriers = limits.frameBarriers,
-                                              .commandBytes = limits.frameCommandBytes,
-                                              .uploadBytes = limits.frameUploadBytes,
-                                              .indirectDraws = limits.frameIndirectDraws};
+    if (mrhiDeviceBudgets budgets{}; mrhiGetDeviceBudgets(state->native, &budgets) == mrhi_success) {
+        state->statistics.limits = FrameUsage{.resources = budgets.frameResources,
+                                              .passes = budgets.framePasses,
+                                              .accesses = budgets.frameAccesses,
+                                              .barriers = budgets.frameBarriers,
+                                              .commandBytes = budgets.frameCommandBytes,
+                                              .uploadBytes = budgets.frameUploadBytes,
+                                              .indirectDraws = budgets.frameIndirectDraws};
     }
     return std::unique_ptr<Framer>{new Framer{std::move(state)}};
 }

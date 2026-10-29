@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // A Vulkan device's objects: buffers, textures, views, samplers and
-// query sets in tables sized from the device limits, each handle its
+// query sets in tables sized from the device's budgets, each handle its
 // slot's index plus one.
 
 #ifndef MAUL_RHI_SRC_VULKAN_OBJECT_H

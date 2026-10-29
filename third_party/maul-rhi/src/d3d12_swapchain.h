@@ -52,11 +52,11 @@ typedef struct mrhiD3d12SwapchainRoom
     size_t slots;
 } mrhiD3d12SwapchainRoom;
 
-// Adds the table a device's limits need to its layout, and sets it up in
+// Adds the table a device's budgets need to its layout, and sets it up in
 // its block.
-mrhiD3d12SwapchainRoom mrhiD3d12PlanSwapchains(mrhiLayout* layout, const mrhiDeviceLimits* limits);
+mrhiD3d12SwapchainRoom mrhiD3d12PlanSwapchains(mrhiLayout* layout, const mrhiDeviceBudgets* limits);
 void mrhiD3d12LaySwapchains(mrhiD3d12Swapchains* swapchains, unsigned char* block,
-                            const mrhiD3d12SwapchainRoom* room, const mrhiDeviceLimits* limits);
+                            const mrhiD3d12SwapchainRoom* room, const mrhiDeviceBudgets* limits);
 
 // Makes a surface's swapchain: success with its handle, mrhi_errorUnsupported
 // for a color the swapchain cannot show, mrhi_errorCapacity when the

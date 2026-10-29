@@ -336,7 +336,10 @@ mrhiResult mrhiSetBindings(mrhiDevice* device, mrhiPassId id, uint32_t table,
     {
         return mrhi_errorCapacity;
     }
-    memcpy(&records[1], recorded, count * sizeof(recorded[0]));
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        mrhiPutBinding(&records[1 + i], &recorded[i]);
+    }
     pass->tablesSet |= (uint8_t)(1u << table);
     memcpy(pass->tableDigests[table], reflection->digest, MRHI_DIGEST_BYTES);
     records[0] = (mrhiCommand){

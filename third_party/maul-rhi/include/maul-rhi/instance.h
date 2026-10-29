@@ -95,7 +95,7 @@ extern "C"
         uint32_t deviceId;
         // The adapter's name in UTF-8, nameLength bytes, not NUL-terminated.
         char name[MRHI_ADAPTER_NAME_BYTES];
-        uint32_t nameLength;
+        size_t nameLength;
     } mrhiAdapterInfo;
 
     // A surface of an instance: a window's drawable area, for one generation of

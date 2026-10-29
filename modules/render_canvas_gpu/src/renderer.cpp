@@ -469,10 +469,10 @@ struct CanvasRenderer::State {
         drawDef.colorTargets[0].resource = resourceOf(open.picture);
         drawDef.colorTargets[0].load = kClears && !barsClearing.has_value() ? mrhi_loadClear : mrhi_loadKeep;
         drawDef.colorTargets[0].store = mrhi_storeKeep;
-        drawDef.colorTargets[0].clear = mrhiClearColor{.red = render::linearOf(bars[0]),
-                                                       .green = render::linearOf(bars[1]),
-                                                       .blue = render::linearOf(bars[2]),
-                                                       .alpha = 1};
+        drawDef.colorTargets[0].clear = mrhiColor{.red = render::linearOf(bars[0]),
+                                                  .green = render::linearOf(bars[1]),
+                                                  .blue = render::linearOf(bars[2]),
+                                                  .alpha = 1};
         drawDef.colorTargetCount = 1;
         drawDef.accesses = reads.data();
         drawDef.accessCount = static_cast<std::uint32_t>(reads.size());
@@ -508,10 +508,10 @@ struct CanvasRenderer::State {
             def.colorTargets[0].resource = resourceOf(open.picture);
             def.colorTargets[0].load = mrhi_loadClear;
             def.colorTargets[0].store = mrhi_storeKeep;
-            def.colorTargets[0].clear = mrhiClearColor{.red = render::linearOf(bars[0]),
-                                                       .green = render::linearOf(bars[1]),
-                                                       .blue = render::linearOf(bars[2]),
-                                                       .alpha = 1};
+            def.colorTargets[0].clear = mrhiColor{.red = render::linearOf(bars[0]),
+                                                  .green = render::linearOf(bars[1]),
+                                                  .blue = render::linearOf(bars[2]),
+                                                  .alpha = 1};
             def.colorTargetCount = 1;
             def.neverCull = true;
             mrhiPassId made{};
@@ -532,7 +532,7 @@ struct CanvasRenderer::State {
         clearDef.colorTargets[0].resource = ground;
         clearDef.colorTargets[0].load = mrhi_loadClear;
         clearDef.colorTargets[0].store = mrhi_storeKeep;
-        clearDef.colorTargets[0].clear = mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
+        clearDef.colorTargets[0].clear = mrhiColor{.red = 0, .green = 0, .blue = 0, .alpha = 1};
         clearDef.colorTargetCount = 1;
         mrhiPassId cleared{};
         if (const mrhiResult kAdded = mrhiAddPass(native, &clearDef, &cleared); kAdded != mrhi_success) {

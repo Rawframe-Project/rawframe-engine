@@ -48,7 +48,7 @@ void mrhiD3d12SetState(const mrhiD3d12Recorder* recorder, const mrhiCommand* com
     }
     case mrhiCommandBlendConstant:
     {
-        mrhiClearColor color;
+        mrhiColor color;
         memcpy(&color, &command[1], sizeof(color));
         const FLOAT factor[4] = {color.red, color.green, color.blue, color.alpha};
         ID3D12GraphicsCommandList_OMSetBlendFactor(list, factor);

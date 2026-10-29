@@ -115,9 +115,9 @@ void mrhiD3d12SurfaceCaps(IDXGIFactory4* factory, uint64_t surface, mrhiSurfaceC
     }
     capsOut->presentable = true;
     capsOut->colorCount = count;
-    capsOut->presentModes = mrhi_presentFifo | mrhi_presentMailbox |
-                            (mrhiD3d12Tears(factory) ? mrhi_presentImmediate : 0u);
-    capsOut->alphaModes = mrhi_alphaOpaque;
+    capsOut->presentModes = mrhi_presentFifoBit | mrhi_presentMailboxBit |
+                            (mrhiD3d12Tears(factory) ? mrhi_presentImmediateBit : 0u);
+    capsOut->alphaModes = mrhi_alphaOpaqueBit;
     capsOut->usages = mrhi_textureRenderTarget | mrhi_textureSampled | mrhi_textureCopySource |
                       mrhi_textureCopyDestination;
     // The flip model takes no sRGB buffer, only sRGB views of one.

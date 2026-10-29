@@ -20,7 +20,7 @@
 #include <stddef.h>
 #include <string.h>
 
-mrhiD3d12PipelineRoom mrhiD3d12PlanPipelines(mrhiLayout* layout, const mrhiDeviceLimits* limits)
+mrhiD3d12PipelineRoom mrhiD3d12PlanPipelines(mrhiLayout* layout, const mrhiDeviceBudgets* limits)
 {
     uint64_t slots = (uint64_t)limits->shaders + limits->pipelines;
     return (mrhiD3d12PipelineRoom){
@@ -37,7 +37,7 @@ mrhiD3d12PipelineRoom mrhiD3d12PlanPipelines(mrhiLayout* layout, const mrhiDevic
 }
 
 void mrhiD3d12LayPipelines(mrhiD3d12Pipelines* pipelines, unsigned char* block,
-                           const mrhiD3d12PipelineRoom* room, const mrhiDeviceLimits* limits)
+                           const mrhiD3d12PipelineRoom* room, const mrhiDeviceBudgets* limits)
 {
     pipelines->shaders = (mrhiD3d12Shader*)(block + room->shaders);
     pipelines->pipelines = (mrhiD3d12Pipeline*)(block + room->pipelines);

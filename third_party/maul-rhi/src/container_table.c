@@ -33,7 +33,8 @@ static mrhiResult CheckHeader(const uint8_t* bytes, size_t size, uint32_t* count
     }
     uint32_t count = mrhiRead32(bytes + 48);
     if (mrhiRead64(bytes + 8) != size || !mrhiIsZero(bytes + 52, 12) ||
-        count > MRHI_CONTAINER_SECTIONS || count * (uint64_t)SECTION_BYTES > size - HEADER_BYTES)
+        count > MRHI_MAX_CONTAINER_SECTIONS ||
+        count * (uint64_t)SECTION_BYTES > size - HEADER_BYTES)
     {
         return mrhi_errorFormat;
     }
@@ -74,7 +75,7 @@ static mrhiResult ReadSections(const uint8_t* bytes, size_t size, uint32_t count
         }
     }
     // The table's records in the order of their offsets.
-    uint32_t order[MRHI_CONTAINER_SECTIONS];
+    uint32_t order[MRHI_MAX_CONTAINER_SECTIONS];
     for (uint32_t i = 0; i < count; ++i)
     {
         const uint8_t* record = bytes + HEADER_BYTES + (size_t)i * SECTION_BYTES;

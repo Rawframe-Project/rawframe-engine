@@ -42,6 +42,12 @@ mrhiFramePass* mrhiOpenPass(mrhiDevice* device, mrhiPassId id, mrhiResult* statu
 // that its frame is never submitted without the command.
 mrhiCommand* mrhiTakeCommands(mrhiDevice* device, mrhiFramePass* pass, uint32_t count);
 
+// Write a payload struct into a record the pass took, field by field,
+// so the struct's padding keeps the record's zeros.
+void mrhiPutBufferSide(mrhiCommand* record, const mrhiCommandBufferSide* side);
+void mrhiPutTextureSide(mrhiCommand* record, const mrhiCommandTextureSide* side);
+void mrhiPutBinding(mrhiCommand* record, const mrhiCommandBinding* binding);
+
 // The access kinds as bits, for the kinds a command accepts.
 #define MRHI_KIND(kind) (1u << (kind))
 

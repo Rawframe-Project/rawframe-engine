@@ -22,7 +22,7 @@
 
 static const D3D12_HEAP_PROPERTIES s_defaultHeap = {.Type = D3D12_HEAP_TYPE_DEFAULT};
 
-mrhiD3d12ObjectRoom mrhiD3d12PlanObjects(mrhiLayout* layout, const mrhiDeviceLimits* limits)
+mrhiD3d12ObjectRoom mrhiD3d12PlanObjects(mrhiLayout* layout, const mrhiDeviceBudgets* limits)
 {
     uint64_t slots = (uint64_t)limits->buffers + limits->textures + limits->views +
                      limits->samplers + limits->querySets + limits->heaps;
@@ -40,7 +40,7 @@ mrhiD3d12ObjectRoom mrhiD3d12PlanObjects(mrhiLayout* layout, const mrhiDeviceLim
 }
 
 void mrhiD3d12LayObjects(mrhiD3d12Objects* objects, unsigned char* block,
-                         const mrhiD3d12ObjectRoom* room, const mrhiDeviceLimits* limits)
+                         const mrhiD3d12ObjectRoom* room, const mrhiDeviceBudgets* limits)
 {
     objects->buffers = (mrhiD3d12Buffer*)(block + room->buffers);
     objects->textures = (mrhiD3d12Texture*)(block + room->textures);

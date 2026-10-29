@@ -21,7 +21,7 @@
 // The record a count of records taken names.
 static mrhiReadback* RecordAt(mrhiDevice* device, uint32_t count)
 {
-    return &device->readbacks[count % device->deviceLimits.readbacks];
+    return &device->readbacks[count % device->budgets.readbacks];
 }
 
 void mrhiMarkReadbacks(mrhiDevice* device)
@@ -61,7 +61,7 @@ void mrhiAnswerReadbacks(mrhiDevice* device, uint32_t first, uint32_t count, mrh
 // are free at once, so an empty ring holds a readback of its whole size.
 static bool TakeRing(mrhiDevice* device, uint64_t bytes, uint64_t* positionOut)
 {
-    uint64_t ring = device->deviceLimits.readbackBytes;
+    uint64_t ring = device->budgets.readbackBytes;
     uint64_t at = device->ringHead;
     if (bytes == 0)
     {
@@ -108,7 +108,7 @@ static mrhiReadback* Reserve(mrhiDevice* device, uint64_t ringBytes, uint64_t si
     uint64_t position = 0;
     mrhiReadback* readback = nullptr;
     mrhiDiagnosticCode full = 0;
-    if (device->readbackHead - device->readbackTail >= device->deviceLimits.readbacks)
+    if (device->readbackHead - device->readbackTail >= device->budgets.readbacks)
     {
         full = mrhi_diagnosticReadbacks;
     }
@@ -146,7 +146,7 @@ static mrhiReadback* Reserve(mrhiDevice* device, uint64_t ringBytes, uint64_t si
 // The offset in the ring of a readback's bytes.
 static uint64_t RingOffset(const mrhiDevice* device, const mrhiReadback* readback)
 {
-    uint64_t ring = device->deviceLimits.readbackBytes;
+    uint64_t ring = device->budgets.readbackBytes;
     return ring == 0 ? 0 : readback->position % ring;
 }
 
@@ -203,8 +203,8 @@ mrhiResult mrhiReadBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId reso
         {.object = object, .offset = offset},
         {.offset = RingOffset(device, readback)},
     };
-    memcpy(&records[1], &sides[0], sizeof(sides[0]));
-    memcpy(&records[2], &sides[1], sizeof(sides[1]));
+    mrhiPutBufferSide(&records[1], &sides[0]);
+    mrhiPutBufferSide(&records[2], &sides[1]);
     *requestOut = (mrhiRequestId){readback->request, 1};
     return mrhi_success;
 }
@@ -282,8 +282,8 @@ mrhiResult mrhiReadTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
         .offset = RingOffset(device, readback),
         .rowsPerImage = (uint32_t)rows,
     };
-    memcpy(&records[1], &from, sizeof(from));
-    memcpy(&records[2], &to, sizeof(to));
+    mrhiPutTextureSide(&records[1], &from);
+    mrhiPutBufferSide(&records[2], &to);
     *requestOut = (mrhiRequestId){readback->request, 1};
     return mrhi_success;
 }
@@ -360,8 +360,7 @@ mrhiResult mrhiTakeReadback(mrhiDevice* device, mrhiRequestId request, void* byt
         return mrhi_errorCapacity;
     }
     MRHI_ASSERT(readback->size <= readback->bytes &&
-                RingOffset(device, readback) + readback->bytes <=
-                    device->deviceLimits.readbackBytes);
+                RingOffset(device, readback) + readback->bytes <= device->budgets.readbackBytes);
     const uint8_t* ring = device->readbackRing + RingOffset(device, readback);
     // A buffer's bytes, or rows of none, which have no pitch either.
     if (readback->pitch == 0)

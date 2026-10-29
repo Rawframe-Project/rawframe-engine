@@ -600,8 +600,7 @@ struct UiRenderer::State {
                 ? mrhi_loadClear
                 : mrhi_loadKeep;
         drawDef.colorTargets[0].store = mrhi_storeKeep;
-        drawDef.colorTargets[0].clear =
-            mrhiClearColor{.red = 0, .green = 0, .blue = 0, .alpha = kOnPanel ? 0.0F : 1.0F};
+        drawDef.colorTargets[0].clear = mrhiColor{.red = 0, .green = 0, .blue = 0, .alpha = kOnPanel ? 0.0F : 1.0F};
         drawDef.colorTargetCount = 1;
         drawDef.accesses = reads.data();
         drawDef.accessCount = static_cast<std::uint32_t>(reads.size());

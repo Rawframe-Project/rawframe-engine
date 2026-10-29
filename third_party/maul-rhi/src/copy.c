@@ -157,8 +157,8 @@ mrhiResult mrhiCopyBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId sour
         {.object = from, .offset = sourceOffset},
         {.object = to, .offset = destinationOffset},
     };
-    memcpy(&records[1], &sides[0], sizeof(sides[0]));
-    memcpy(&records[2], &sides[1], sizeof(sides[1]));
+    mrhiPutBufferSide(&records[1], &sides[0]);
+    mrhiPutBufferSide(&records[2], &sides[1]);
     return mrhi_success;
 }
 
@@ -385,8 +385,8 @@ static mrhiResult CopyBufferTexture(mrhiDevice* device, mrhiPassId id, const mrh
         .z = texture->z,
         .aspect = texture->aspect,
     };
-    memcpy(&records[fromTexture ? 2 : 1], &bufferSide, sizeof(bufferSide));
-    memcpy(&records[fromTexture ? 1 : 2], &textureSide, sizeof(textureSide));
+    mrhiPutBufferSide(&records[fromTexture ? 2 : 1], &bufferSide);
+    mrhiPutTextureSide(&records[fromTexture ? 1 : 2], &textureSide);
     return mrhi_success;
 }
 
@@ -481,7 +481,7 @@ mrhiResult mrhiCopyTexture(mrhiDevice* device, mrhiPassId id, const mrhiTextureC
          .z = destination->z,
          .aspect = destination->aspect},
     };
-    memcpy(&records[1], &sides[0], sizeof(sides[0]));
-    memcpy(&records[2], &sides[1], sizeof(sides[1]));
+    mrhiPutTextureSide(&records[1], &sides[0]);
+    mrhiPutTextureSide(&records[2], &sides[1]);
     return mrhi_success;
 }

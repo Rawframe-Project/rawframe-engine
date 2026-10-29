@@ -481,7 +481,7 @@ static void SetState(mrhiMetalEncoder* encoder, const mrhiCommand* command)
         break;
     case mrhiCommandBlendConstant:
     {
-        mrhiClearColor color;
+        mrhiColor color;
         memcpy(&color, &command[1], sizeof(color));
         [encoder->render setBlendColorRed:color.red
                                     green:color.green

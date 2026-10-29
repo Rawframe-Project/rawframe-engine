@@ -8,6 +8,8 @@
 #include "device_core.h"
 #include "label.h"
 
+#include "generated/out_copies.h"
+
 #include <string.h>
 
 #define SHADER_DEF_COOKIE 0x6D727368u
@@ -310,19 +312,20 @@ mrhiResult mrhiGetShaderInfo(mrhiDevice* device, mrhiShaderId shader, mrhiShader
         return mrhi_errorStale;
     }
     const mrhiReflection* reflection = device->shaderSlots[shader.index1 - 1].reflection;
-    *infoOut = (mrhiShaderInfo){
+    mrhiShaderInfo info = {
         .entryCount = reflection->entryCount,
         .bindingCount = reflection->bindingCount,
         .rootBlockBytes = reflection->rootBlockBytes,
         .heapUses = reflection->heapUses,
     };
-    memcpy(infoOut->digest, reflection->digest, MRHI_DIGEST_BYTES);
+    memcpy(info.digest, reflection->digest, MRHI_DIGEST_BYTES);
+    mrhiOutShaderInfo(infoOut, &info);
     return mrhi_success;
 }
 
 void mrhiDestroyShaders(mrhiDevice* device)
 {
-    for (uint32_t i = 0; i < device->deviceLimits.shaders; ++i)
+    for (uint32_t i = 0; i < device->budgets.shaders; ++i)
     {
         mrhiShaderSlot* slot = &device->shaderSlots[i];
         if (slot->reflection != nullptr)

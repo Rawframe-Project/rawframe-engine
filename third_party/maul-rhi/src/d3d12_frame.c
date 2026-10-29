@@ -98,17 +98,17 @@ bool mrhiD3d12HeapsFit(uint32_t count, uint32_t entries, uint32_t samplers)
 // The batches a frame runs at most: each pass opens one at most, beside
 // the frame's last. Each batch takes a list on its lane, and each native
 // pass one more on the direct lane, besides its own.
-static uint32_t BatchLimit(const mrhiDeviceLimits* limits)
+static uint32_t BatchLimit(const mrhiDeviceBudgets* limits)
 {
     return limits->framePasses + 2;
 }
 
-static uint32_t ListLimit(const mrhiDeviceLimits* limits, mrhiD3d12Lane lane)
+static uint32_t ListLimit(const mrhiDeviceBudgets* limits, mrhiD3d12Lane lane)
 {
     return BatchLimit(limits) + (lane == mrhiD3d12LaneDirect ? MRHI_MAX_NATIVE_PASSES : 0);
 }
 
-static uint32_t SlotLists(const mrhiDeviceLimits* limits)
+static uint32_t SlotLists(const mrhiDeviceBudgets* limits)
 {
     uint32_t lists = 0;
     for (int lane = 0; lane < mrhiD3d12LaneCount; ++lane)
@@ -118,7 +118,7 @@ static uint32_t SlotLists(const mrhiDeviceLimits* limits)
     return lists;
 }
 
-mrhiD3d12FrameRoom mrhiD3d12PlanFrames(mrhiLayout* layout, const mrhiDeviceLimits* limits,
+mrhiD3d12FrameRoom mrhiD3d12PlanFrames(mrhiLayout* layout, const mrhiDeviceBudgets* limits,
                                        uint32_t slots)
 {
     mrhiD3d12FrameRoom room = {0};
@@ -151,7 +151,7 @@ mrhiD3d12FrameRoom mrhiD3d12PlanFrames(mrhiLayout* layout, const mrhiDeviceLimit
 }
 
 void mrhiD3d12LayFrames(mrhiD3d12Frames* frames, unsigned char* block,
-                        const mrhiD3d12FrameRoom* room, const mrhiDeviceLimits* limits,
+                        const mrhiD3d12FrameRoom* room, const mrhiDeviceBudgets* limits,
                         uint32_t slots)
 {
     frames->slots = (mrhiD3d12Slot*)(block + room->slots);
@@ -958,7 +958,7 @@ bool mrhiD3d12WaitFrame(mrhiD3d12Frames* frames, uint64_t tag, uint64_t timeoutN
 }
 
 // The message of a loss: D3D12's reason as eight hex digits.
-static uint32_t Describe(char* message, HRESULT result)
+static size_t Describe(char* message, HRESULT result)
 {
     static const char text[] = "D3D12 removed the device: HRESULT 0x";
     static const char digits[] = "0123456789ABCDEF";
@@ -969,7 +969,7 @@ static uint32_t Describe(char* message, HRESULT result)
     {
         message[sizeof(text) - 1 + i] = digits[(bits >> (28 - 4 * i)) & 0xF];
     }
-    return (uint32_t)(sizeof(text) - 1 + 8);
+    return sizeof(text) - 1 + 8;
 }
 
 void mrhiD3d12LossReport(const mrhiD3d12Frames* frames, mrhiDeviceLossReport* reportOut)

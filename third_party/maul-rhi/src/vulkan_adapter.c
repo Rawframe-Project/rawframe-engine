@@ -187,7 +187,7 @@ static mrhiAdapterInfo InfoOf(const VkPhysicalDeviceProperties* properties)
         end != nullptr ? (size_t)(end - properties->deviceName) : VK_MAX_PHYSICAL_DEVICE_NAME_SIZE;
     length = length < MRHI_ADAPTER_NAME_BYTES ? length : MRHI_ADAPTER_NAME_BYTES;
     memcpy(info.name, properties->deviceName, length);
-    info.nameLength = (uint32_t)length;
+    info.nameLength = length;
     return info;
 }
 

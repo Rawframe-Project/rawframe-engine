@@ -151,12 +151,12 @@ typedef struct mrhiD3d12FrameRoom
 // rings their floor.
 bool mrhiD3d12HeapsFit(uint32_t count, uint32_t entries, uint32_t samplers);
 
-// Adds the tables a device's limits need to its layout, and sets them
+// Adds the tables a device's budgets need to its layout, and sets them
 // up in its block.
-mrhiD3d12FrameRoom mrhiD3d12PlanFrames(mrhiLayout* layout, const mrhiDeviceLimits* limits,
+mrhiD3d12FrameRoom mrhiD3d12PlanFrames(mrhiLayout* layout, const mrhiDeviceBudgets* limits,
                                        uint32_t slots);
 void mrhiD3d12LayFrames(mrhiD3d12Frames* frames, unsigned char* block,
-                        const mrhiD3d12FrameRoom* room, const mrhiDeviceLimits* limits,
+                        const mrhiD3d12FrameRoom* room, const mrhiDeviceBudgets* limits,
                         uint32_t slots);
 
 // Makes the compute and copy queues, the fences, each slot's

@@ -7,6 +7,8 @@
 
 #include "invariant.h"
 
+#include "generated/out_copies.h"
+
 void mrhiInitDiagnostics(mrhiDiagnosticQueue* queue, mrhiDiagnostic* records, uint32_t capacity)
 {
     queue->records = capacity == 0 ? nullptr : records;
@@ -65,7 +67,7 @@ mrhiResult mrhiTakeDiagnostic(mrhiDiagnosticQueue* queue, mrhiDiagnostic* record
     mrhiResult status = mrhi_empty;
     if (queue->count > 0)
     {
-        *recordOut = records[queue->head];
+        mrhiOutDiagnostic(recordOut, &records[queue->head]);
         queue->head = (queue->head + 1) % queue->capacity;
         --queue->count;
         status = mrhi_success;

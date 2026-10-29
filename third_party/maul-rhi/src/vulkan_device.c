@@ -558,7 +558,7 @@ typedef struct Layout
 
 // Adds each slot's command buffers, submits, batches and their
 // submissions and semaphores, and the frames' marks by pass.
-static void LayoutBatches(Layout* at, const mrhiDeviceLimits* limits, uint32_t slots)
+static void LayoutBatches(Layout* at, const mrhiDeviceBudgets* limits, uint32_t slots)
 {
     mrhiLayout* layout = &at->layout;
     // With one lane a frame is one batch; with more, a pass opens one at
@@ -585,7 +585,7 @@ static void LayoutBatches(Layout* at, const mrhiDeviceLimits* limits, uint32_t s
 
 static Layout LayoutOf(const mrhiDeviceDef* def)
 {
-    const mrhiDeviceLimits* limits = &def->deviceLimits;
+    const mrhiDeviceBudgets* limits = &def->budgets;
     uint32_t slots = def->limits.framesInFlight;
     Layout at = {.layout = {.size = sizeof(VulkanDevice)}};
     mrhiVulkanMemoryCounts(limits->buffers + limits->textures, &at.blockCount, &at.nodeCount);
@@ -654,7 +654,7 @@ static Layout LayoutOf(const mrhiDeviceDef* def)
 
 // Sets up the memory and the object tables in the device's block, all
 // entries empty.
-static void PlaceTables(VulkanDevice* device, const Layout* at, const mrhiDeviceLimits* limits,
+static void PlaceTables(VulkanDevice* device, const Layout* at, const mrhiDeviceBudgets* limits,
                         const VkPhysicalDeviceMemoryProperties* properties)
 {
     unsigned char* block = (unsigned char*)device;
@@ -735,7 +735,7 @@ static void PlaceSwapchains(VulkanDevice* device, const Layout* at, uint32_t sur
 static void PlaceFrames(VulkanDevice* device, const Layout* at, const mrhiDeviceDef* def)
 {
     unsigned char* block = (unsigned char*)device;
-    const mrhiDeviceLimits* limits = &def->deviceLimits;
+    const mrhiDeviceBudgets* limits = &def->budgets;
     mrhiVulkanFrames* frames = &device->frames;
     *frames = (mrhiVulkanFrames){
         .api = &device->api,
@@ -787,7 +787,7 @@ static void PlaceFrames(VulkanDevice* device, const Layout* at, const mrhiDevice
 static bool WithRetiring(const mrhiDeviceDef* def, mrhiDeviceDef* heldOut)
 {
     *heldOut = *def;
-    mrhiDeviceLimits* limits = &heldOut->deviceLimits;
+    mrhiDeviceBudgets* limits = &heldOut->budgets;
     return !ckd_mul(&limits->buffers, limits->buffers, 2u) &&
            !ckd_mul(&limits->textures, limits->textures, 2u) &&
            !ckd_mul(&limits->views, limits->views, 2u) &&
@@ -829,8 +829,8 @@ mrhiResult mrhiCreateVulkanDevice(const mrhiAllocator* allocator, const mrhiVulk
         mrhiResult status = StatusOf(result);
         return status == mrhi_errorDeviceLost ? mrhi_errorPlatform : status;
     }
-    PlaceTables(device, &at, &def->deviceLimits, &properties);
-    PlaceSwapchains(device, &at, def->deviceLimits.surfaces);
+    PlaceTables(device, &at, &def->budgets, &properties);
+    PlaceSwapchains(device, &at, def->budgets.surfaces);
     PlaceFrames(device, &at, def);
     // A device without bindless sampling has no heap layout.
     bool sampling = def->features.bindlessSampling;
@@ -845,7 +845,7 @@ mrhiResult mrhiCreateVulkanDevice(const mrhiAllocator* allocator, const mrhiVulk
     }
     if (status == mrhi_success)
     {
-        status = mrhiVulkanFramesInit(&device->frames, device->family, &def->deviceLimits,
+        status = mrhiVulkanFramesInit(&device->frames, device->family, &def->budgets,
                                       def->limits.textureDimension2d);
     }
     if (status != mrhi_success)

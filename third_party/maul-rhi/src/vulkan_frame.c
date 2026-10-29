@@ -64,7 +64,7 @@ static VkResult MakeMapped(mrhiVulkanFrames* frames, VkDeviceSize size, VkBuffer
 }
 
 static VkResult MakeSlot(mrhiVulkanFrames* frames, mrhiVulkanSlot* slot, uint32_t family,
-                         const mrhiDeviceLimits* limits)
+                         const mrhiDeviceBudgets* limits)
 {
     const VkCommandPoolCreateInfo pool = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -114,7 +114,7 @@ static VkResult MakeLanes(mrhiVulkanFrames* frames)
 }
 
 mrhiResult mrhiVulkanFramesInit(mrhiVulkanFrames* frames, uint32_t family,
-                                const mrhiDeviceLimits* limits, uint32_t widest)
+                                const mrhiDeviceBudgets* limits, uint32_t widest)
 {
     VkResult result = MakeLanes(frames);
     for (uint32_t i = 0; i < frames->slotCount && result == VK_SUCCESS; ++i)
