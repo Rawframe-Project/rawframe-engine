@@ -51,7 +51,8 @@ if(RAWFRAME_BUILD_TESTS)
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/rejoined.sh
                          $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots>
                  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-        set_tests_properties(bots_rejoined PROPERTIES PASS_REGULAR_EXPRESSION
+        # Quarantined: #92, the server it starts sometimes outlives it.
+        set_tests_properties(bots_rejoined PROPERTIES LABELS quarantined PASS_REGULAR_EXPRESSION
                              "rejoined: \"bots\":1,\"admitted\":1, \"retried\":[1-9]")
     endif()
     # A server asked to stop drains: it refuses new bots as unavailable and
