@@ -17,6 +17,9 @@ target_compile_definitions(rawframe_ui PRIVATE RAWFRAME_UI_ATSPI=$<BOOL:${MAUL_U
 rawframe_module_tests(NAME ui SOURCES tests/access_test.cpp tests/edit_test.cpp tests/text_test.cpp tests/tree_test.cpp tests/scroll_test.cpp tests/range_test.cpp tests/style_test.cpp tests/styles_test.cpp tests/document_test.cpp tests/node_look_test.cpp)
 if(TARGET rawframe_ui_tests)
     target_compile_definitions(rawframe_ui_tests PRIVATE RAWFRAME_UI_FONTS="${RAWFRAME_TEST_FILES}/modules/ui/tests/fonts/")
+    # Maul UI's answers are read as the module reads them, from its own
+    # header.
+    target_link_libraries(rawframe_ui_tests PRIVATE maul-ui)
 endif()
 rawframe_module_fuzz(NAME ui TARGET styles RUNS 20000 SEEDS tests/seeds/styles SOURCES tests/fuzz_styles.cpp)
 rawframe_module_fuzz(NAME ui TARGET document RUNS 20000 SEEDS tests/seeds/document SOURCES tests/fuzz_document.cpp)

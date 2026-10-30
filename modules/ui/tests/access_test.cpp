@@ -1,9 +1,11 @@
 // A UI tree as assistive technology reads it: a root's subtree given
 // to a copy of the tree, its nodes' roles and names as their owner set
 // them, a name changed and a node removed reaching the copy with the next
-// update, and nothing given for a root no access reads; and a checkable
-// node's checked state read from its states.
+// update, and nothing given for a root no access reads; a checkable node's
+// checked state read from its states; and a platform's refusal read as
+// the platform unavailable.
 
+#include "../src/tree_state.h"
 #include "rawframe/test/test.h"
 #include "rawframe/ui/access.h"
 #include "rawframe/ui/errors.h"
@@ -222,4 +224,15 @@ RAWFRAME_TEST(ACheckableReadsItsCheckedStateFromItsStates) {
     // No longer checkable, it says nothing of it.
     RAWFRAME_EXPECT(ui.setRole(kBox, Role::Button).has_value() && ui.layOut(kRoot, 100, 100).has_value() &&
                     (*access)->update().has_value() && !holds((*access)->written(), "flags=65568"));
+}
+
+// A platform's refusal of its adapter, UI Automation's off a thread in a
+// COM apartment or Android's without its provider's class, is the platform
+// unavailable, as no adapter built is. No adapter of this platform's
+// refuses so where the tree reaches it, so Maul UI's answer is read as the
+// module reads it.
+RAWFRAME_TEST(APlatformsRefusalIsUnavailable) {
+    const result::Status kRefused = checked(mui_errorPlatform, "an adapter was refused");
+    RAWFRAME_EXPECT(!kRefused.has_value() && kRefused.error().code() == code(UiError::Unavailable) &&
+                    kRefused.error().errorClass() == result::ErrorClass::Unavailable);
 }
