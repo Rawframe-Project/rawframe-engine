@@ -36,10 +36,10 @@
    kinds and no other, keeps its budgets (fourteen panels, eight
    viewport modes, ten toolbar commands), and gives every surface a
    headless path, "none needed" where the contract says so.
-11. The Python a tracked shell script runs as `python3 -c '...'`
-   compiles: an apostrophe in it ends the shell's quote and leaves Python
-   a broken program, which only shows when the script runs, perhaps only
-   at night.
+11. The Python a tracked shell script or a workflow's `run:` block runs as
+   `python3 -c '...'` compiles: an apostrophe in it ends the shell's quote
+   and leaves Python a broken program, which only shows when the script
+   runs, perhaps only at night.
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -94,8 +94,16 @@ AUTHORING_TOOLING = {"authoring", "authoring_session", "studio"}
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 SOURCE_ROOTS = ("modules", "hosts", "launcher")
 TLS_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]openssl/(ssl|tls1)\.h', re.MULTILINE)
-# A single-quoted shell string holds no quote, so one ends the program.
-INLINE_PYTHON = re.compile(r"\bpython3?(?:\s+-[A-Za-z]+)*\s+-c\s+'([^']*)'")
+# A single-quoted shell string holds no quote, so one ends the program,
+# unless it is spelled as the shell spells one there: '\'' or '"'"', the
+# string ended, a quote quoted another way, and the string begun again.
+INLINE_PYTHON = re.compile(r"""\bpython3?(?:\s+-[A-Za-z]+)*\s+-c\s+'((?:[^']|'\\''|'"'"')*)'""")
+QUOTED_QUOTE = re.compile(r"""'\\''|'"'"'""")
+# A workflow step's script: its `run:` key and a literal block.
+RUN_BLOCK = re.compile(r"^(\s*(?:-\s+)?)run:\s*\|[-+]?\s*$")
+# A workflow expression, which GitHub replaces with its value before the
+# shell reads the script; a number stands in for it.
+EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 
 
 def repository_files():
@@ -328,18 +336,55 @@ def inline_python_in(text):
     broken = []
     for found in INLINE_PYTHON.finditer(text):
         try:
-            compile(found.group(1), "<inline>", "exec")
+            compile(QUOTED_QUOTE.sub("'", found.group(1)), "<inline>", "exec")
         except SyntaxError as error:
             broken.append((text.count("\n", 0, found.start()) + 1, error.msg))
     return broken
 
 
+def run_blocks(text):
+    """Each `run: |` block of a workflow's text as the shell is given it:
+    the number of its first line and its lines without the block's
+    indentation, the first of its lines with text setting it."""
+    lines = text.splitlines()
+    blocks = []
+    at = 0
+    while at < len(lines):
+        found = RUN_BLOCK.match(lines[at])
+        at += 1
+        if not found:
+            continue
+        key = len(found.group(1))
+        first = at + 1
+        indent = None
+        body = []
+        while at < len(lines):
+            line = lines[at]
+            if line.strip():
+                width = len(line) - len(line.lstrip(" "))
+                # The block ends at the first line no deeper than its key.
+                if width <= key:
+                    break
+                if indent is None:
+                    indent = width
+            body.append(line[indent:] if line.strip() else "")
+            at += 1
+        blocks.append((first, "\n".join(body)))
+    return blocks
+
+
 def check_inline_python(files, findings):
     for path in files:
-        if path.suffix != ".sh" or path.relative_to(ROOT).parts[0] == "third_party":
+        relative = path.relative_to(ROOT)
+        if path.suffix == ".sh" and relative.parts[0] != "third_party":
+            scripts = [(1, path.read_text())]
+        elif relative.parts[:2] == (".github", "workflows") and path.suffix in {".yml", ".yaml"}:
+            scripts = [(first, EXPRESSION.sub("0", block)) for first, block in run_blocks(path.read_text())]
+        else:
             continue
-        for line, error in inline_python_in(path.read_text()):
-            findings.append(f"{path.relative_to(ROOT)}:{line}: inline Python does not compile: {error}")
+        for first, script in scripts:
+            for line, error in inline_python_in(script):
+                findings.append(f"{relative}:{first + line - 1}: inline Python does not compile: {error}")
 
 
 def attribution_in(message):
