@@ -28,7 +28,8 @@ class Stamp(unittest.TestCase):
     def setUpClass(cls):
         cls.work = tempfile.TemporaryDirectory()
         cls.copy = Path(cls.work.name)
-        listings = [path.relative_to(ROOT) for path in ROOT.glob("modules/*/CMakeLists.txt")]
+        listings = [path.relative_to(ROOT) for pattern in ("modules/**/CMakeLists.txt", "modules/**/*.cmake")
+                    for path in ROOT.glob(pattern)]
         for path in (Path("tools/gen_shaders.py"), DXIL, BASE, *listings):
             (cls.copy / path).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / path, cls.copy / path)
@@ -87,6 +88,33 @@ class Stamp(unittest.TestCase):
             target.write_text(target.read_text().replace("NAMES display", "NAMES display extra", 1))
         self.assertRefused(self.changed(Path("modules/render/CMakeLists.txt"), embeds),
                            "embeds extra, which tools/gen_shaders.py does not make")
+
+    def test_an_embedded_name_is_read_as_cmake_reads_the_call(self):
+        # The command in any case, space before its parenthesis, NAMES
+        # before TARGET, and a call in a file the module includes.
+        listing = Path("modules/render/CMakeLists.txt")
+        spellings = ("RAWFRAME_SHADER_CONTAINERS (TARGET rawframe_render NAMES display extra)",
+                     "rawframe_shader_containers(NAMES extra TARGET rawframe_render)",
+                     "rawframe_shader_containers(\n    TARGET rawframe_render\n    NAMES display\n          extra)")
+        for spelling in spellings:
+            with self.subTest(spelling=spelling):
+                def embeds(target):
+                    target.write_text(target.read_text() + spelling + "\n")
+                self.assertRefused(self.changed(listing, embeds), "embeds extra, which tools/gen_shaders.py")
+        included = self.copy / "modules/render/cmake/shaders.cmake"
+        included.parent.mkdir(exist_ok=True)
+        included.write_text("rawframe_shader_containers(TARGET rawframe_render NAMES extra)\n")
+        try:
+            result = self.check()
+        finally:
+            shutil.rmtree(included.parent)
+        self.assertRefused(result, "modules/render/cmake/shaders.cmake: embeds extra")
+
+    def test_a_commented_out_call_embeds_nothing(self):
+        def commented(target):
+            target.write_text(target.read_text() + "# rawframe_shader_containers(TARGET rawframe_render NAMES extra)\n")
+        result = self.changed(Path("modules/render/CMakeLists.txt"), commented)
+        self.assertEqual(result.returncode, 0, result.stdout)
 
     def test_a_stamp_without_gis_is_refused(self):
         def without(target):
