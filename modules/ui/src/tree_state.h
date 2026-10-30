@@ -42,6 +42,10 @@ inline result::Status checked(muiResult outcome, std::string_view why) {
         return refuse(UiError::Capacity, why);
     case mui_errorStale:
         return refuse(UiError::Stale, why);
+    // The platform refused, as UI Automation does off a thread in a COM
+    // apartment: what it refused is not there to have, not misasked.
+    case mui_errorPlatform:
+        return refuse(UiError::Unavailable, why);
     // A font Maul UI does not take, such as a web font, is as much not a
     // font the tree reads as damaged bytes are.
     case mui_errorFormat:
