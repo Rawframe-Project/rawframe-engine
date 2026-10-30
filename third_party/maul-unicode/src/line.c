@@ -110,7 +110,7 @@ static uint8_t Lookup(const muniSegmenter* segmenter, uint32_t codePoint)
         return category == muni_gcMn || category == muni_gcMc ? muni_lbCm : muni_lbAl;
     }
     case muni_lbCj:
-        return (segmenter->options & muni_lineCjAsIdeographic) != 0 ? muni_lbId : muni_lbNs;
+        return segmenter->cjAsIdeographic ? muni_lbId : muni_lbNs;
     default:
         return value;
     }

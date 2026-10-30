@@ -475,19 +475,20 @@ extern "C"
     /// it is used with. A code point without listed extensions has its
     /// Script alone, so there is always at least one.
     ///
-    /// @param codePoint  Any value.
-    /// @param scripts    The output. May be NULL when capacity is 0.
-    /// @param capacity   The number of scripts the output can hold;
-    ///                   MUNI_MAX_SCRIPT_EXTENSIONS always suffice.
-    /// @param countOut   Receives the number of scripts.
+    /// @param codePoint   Any value.
+    /// @param scriptsOut  The output. May be NULL when capacity is 0.
+    /// @param capacity    The number of scripts the output can hold;
+    ///                    MUNI_MAX_SCRIPT_EXTENSIONS always suffice.
+    /// @param countOut    Receives the number of scripts. `muni_errorInvalid`
+    ///                    leaves both as they were.
     /// @return `muni_success`, `muni_errorCapacity` when they do not all
     ///         fit (the ones that fit are written), or `muni_errorInvalid`
     ///         for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniResult muniGetScriptExtensions(uint32_t codePoint,
-                                                               muniScript* scripts, size_t capacity,
-                                                               size_t* countOut);
+                                                               muniScript* scriptsOut,
+                                                               size_t capacity, size_t* countOut);
 
 #ifdef __cplusplus
 }

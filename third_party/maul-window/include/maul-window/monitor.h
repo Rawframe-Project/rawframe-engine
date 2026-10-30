@@ -80,33 +80,34 @@ extern "C"
 
     /// Lists the monitors connected now.
     ///
-    /// @param context   The context.
-    /// @param monitors  Receives up to capacity ids, the primary monitor
-    ///                  first. May be NULL when capacity is 0.
-    /// @param capacity  The ids monitors holds.
-    /// @param countOut  Receives the number of monitors connected, which
-    ///                  may exceed capacity.
-    /// @return `mwin_success`; `mwin_errorCapacity` when they do not all
-    ///         fit (the first capacity are written); `mwin_errorInvalid`
-    ///         for a NULL argument.
+    /// @param context      The context.
+    /// @param monitorsOut  Receives up to capacity ids, the primary monitor
+    ///                     first. May be NULL when capacity is 0. Zeroed
+    ///                     over capacity on failure.
+    /// @param capacity     The ids monitorsOut holds.
+    /// @param countOut     Receives the number of monitors connected, which
+    ///                     may exceed capacity. 0 on failure.
+    /// @return `mwin_success`, also when they do not all fit, with the
+    ///         first capacity written and the total in countOut;
+    ///         `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGetMonitors(const mwinContext* context,
-                                                       mwinMonitorId* monitors, size_t capacity,
-                                                       size_t* countOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinContext_GetMonitors(const mwinContext* context,
+                                                               mwinMonitorId* monitorsOut,
+                                                               size_t capacity, size_t* countOut);
 
     /// Reads what the platform tells about a monitor.
     ///
     /// @param context  The context.
     /// @param monitor  The monitor.
-    /// @param infoOut  Receives the facts.
+    /// @param infoOut  Receives the facts. Zeroed on failure.
     /// @return `mwin_success`; `mwin_errorStale` for a monitor no longer
     ///         connected; `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGetMonitorInfo(const mwinContext* context,
-                                                          mwinMonitorId monitor,
-                                                          mwinMonitorInfo* infoOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinMonitor_GetInfo(const mwinContext* context,
+                                                           mwinMonitorId monitor,
+                                                           mwinMonitorInfo* infoOut);
 
 #ifdef __cplusplus
 }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Laid-out text as boxes (record mui-0006): a node's lines as hit
-// testing and caret movement read them.
+// Laid-out text as boxes: a node's lines as hit testing and caret movement
+// read them.
 
 #ifndef MAUL_UI_SRC_TEXT_BOXES_H
 #define MAUL_UI_SRC_TEXT_BOXES_H
@@ -63,8 +63,9 @@ muiResult muiLayText(const muiTextHost* host, muiNodeId nodeId, float width, mui
 // laid width and a height: from where it was, just far enough that the
 // caret shows, then no further than the text reaches, so a shorter text
 // comes back; the lines and the paragraph laid out scrolled with it.
-// Text not editing stays where it is.
-void muiFollowCaret(muiLaidText* laid, float height);
+// Text not editing stays where it is. False when memory runs out, the
+// text then left unscrolled.
+bool muiFollowCaret(muiLaidText* laid, float height);
 
 // Writes a line's boxes left to right into the service's scratch, valid
 // until the next call; false when memory runs out.

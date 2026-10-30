@@ -57,7 +57,7 @@ extern "C"
     /// @return The lowercase code point, or codePoint when it has none.
     /// @par Thread safety
     /// Safe from any thread.
-    MUNI_API uint32_t muniToLower(uint32_t codePoint);
+    MUNI_API uint32_t muniGetLowercase(uint32_t codePoint);
 
     /// Returns the simple uppercase mapping of a code point.
     ///
@@ -65,7 +65,7 @@ extern "C"
     /// @return The uppercase code point, or codePoint when it has none.
     /// @par Thread safety
     /// Safe from any thread.
-    MUNI_API uint32_t muniToUpper(uint32_t codePoint);
+    MUNI_API uint32_t muniGetUppercase(uint32_t codePoint);
 
     /// Returns the simple titlecase mapping of a code point, which differs
     /// from the uppercase one for digraphs such as "ǆ", which titlecases
@@ -75,7 +75,7 @@ extern "C"
     /// @return The titlecase code point, or codePoint when it has none.
     /// @par Thread safety
     /// Safe from any thread.
-    MUNI_API uint32_t muniToTitle(uint32_t codePoint);
+    MUNI_API uint32_t muniGetTitlecase(uint32_t codePoint);
 
     /// Returns the simple case folding of a code point (statuses C and S
     /// of CaseFolding.txt).
@@ -97,21 +97,20 @@ extern "C"
 
     /// Applies a full case operation to UTF-8 text.
     ///
-    /// @param text        The text. May be NULL when length is 0.
-    /// @param length      The number of bytes.
-    /// @param operation   muni_caseLower, muni_caseUpper, muni_caseTitle or
-    ///                    muni_caseFold.
-    /// @param language    muni_caseDefault, muni_caseTurkic or
-    ///                    muni_caseLithuanian.
-    /// @param mode        What to do with ill-formed input.
-    /// @param output      The output. May be NULL when capacity is 0.
-    /// @param capacity    The number of bytes output can hold.
-    /// @param neededOut   Receives the number of bytes the whole result
-    ///                    needs, which may exceed capacity, or SIZE_MAX
-    ///                    when that does not fit in a size_t. On another
-    ///                    error, the bytes before it, which output holds
-    ///                    as far as they fit. `muni_errorInvalid` leaves
-    ///                    both as they were.
+    /// @param text       The text. May be NULL when length is 0.
+    /// @param length     The number of bytes.
+    /// @param operation  muni_caseLower, muni_caseUpper, muni_caseTitle or
+    ///                   muni_caseFold.
+    /// @param language   muni_caseDefault, muni_caseTurkic or
+    ///                   muni_caseLithuanian.
+    /// @param mode       What to do with ill-formed input.
+    /// @param textOut    The output. May be NULL when capacity is 0.
+    /// @param capacity   The number of bytes textOut can hold.
+    /// @param neededOut  Receives the number of bytes the whole result needs,
+    ///                   which may exceed capacity, or SIZE_MAX when that does
+    ///                   not fit in a size_t. On another error, the bytes
+    ///                   before it, which textOut holds as far as they fit.
+    ///                   `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the result does not fit (the bytes that fit are written); in
     ///         strict mode the first UTF-8 error and its offset;
@@ -122,7 +121,7 @@ extern "C"
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertCase(const char* text, size_t length,
                                                            muniCaseOperation operation,
                                                            muniCaseLanguage language,
-                                                           muniConvertMode mode, char* output,
+                                                           muniConvertMode mode, char* textOut,
                                                            size_t capacity, size_t* neededOut);
 
     /// Maps UTF-8 text to NFKC_Casefold: compatibility forms to their
@@ -132,19 +131,18 @@ extern "C"
     /// UAX #31 uses it to compare identifiers. It needs both the case
     /// and the normalization components.
     ///
-    /// @param text        The text. May be NULL when length is 0.
-    /// @param length      The number of bytes.
-    /// @param mode        What to do with ill-formed input.
-    /// @param output      The output. May be NULL when capacity is 0.
-    /// @param capacity    The number of bytes output can hold.
-    /// @param neededOut   Receives the number of bytes the whole result
-    ///                    needs, which may exceed capacity, or SIZE_MAX
-    ///                    when that does not fit in a size_t. On a UTF-8
-    ///                    error, the bytes before it, which output holds
-    ///                    as far as they fit. On `muni_errorLimit`, the
-    ///                    same for the text before the starter whose run
-    ///                    of combining marks hit the limit.
-    ///                    `muni_errorInvalid` leaves both as they were.
+    /// @param text       The text. May be NULL when length is 0.
+    /// @param length     The number of bytes.
+    /// @param mode       What to do with ill-formed input.
+    /// @param textOut    The output. May be NULL when capacity is 0.
+    /// @param capacity   The number of bytes textOut can hold.
+    /// @param neededOut  Receives the number of bytes the whole result needs,
+    ///                   which may exceed capacity, or SIZE_MAX when that does
+    ///                   not fit in a size_t. On a UTF-8 error, the bytes
+    ///                   before it, which textOut holds as far as they fit. On
+    ///                   `muni_errorLimit`, the same for the text before the
+    ///                   starter whose run of combining marks hit the limit.
+    ///                   `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the result does not fit (the bytes that fit are written); in
     ///         strict mode the first UTF-8 error and its offset;
@@ -154,9 +152,9 @@ extern "C"
     ///         an unknown mode.
     /// @par Thread safety
     /// Safe from any thread.
-    MUNI_NODISCARD MUNI_API muniTextResult muniToNfkcCasefold(const char* text, size_t length,
-                                                              muniConvertMode mode, char* output,
-                                                              size_t capacity, size_t* neededOut);
+    MUNI_NODISCARD MUNI_API muniTextResult muniGetNfkcCasefold(const char* text, size_t length,
+                                                               muniConvertMode mode, char* textOut,
+                                                               size_t capacity, size_t* neededOut);
 
 #ifdef __cplusplus
 }

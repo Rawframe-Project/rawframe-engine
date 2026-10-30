@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The flex algorithm for a container's in-flow children (record
-// mui-0003).
+// The flex algorithm for a container's in-flow children.
 
 #ifndef MAUL_UI_SRC_FLEX_H
 #define MAUL_UI_SRC_FLEX_H

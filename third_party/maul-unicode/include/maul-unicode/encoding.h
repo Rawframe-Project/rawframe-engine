@@ -87,120 +87,124 @@ extern "C"
     /// Encodes one code point as UTF-8.
     ///
     /// @param codePoint  A Unicode scalar value.
-    /// @param bytes      Receives 1 to 4 bytes. May be NULL when capacity
-    ///                   is 0.
-    /// @param capacity   The number of bytes bytes can hold.
+    /// @param bytesOut   Receives 1 to 4 bytes. May be NULL when capacity is 0.
+    /// @param capacity   The number of bytes bytesOut can hold.
     /// @param sizeOut    Receives the length of the encoding, 1 to 4, on
-    ///                   success and when it does not fit.
-    ///                   `muni_errorInvalid` leaves it and bytes as they
-    ///                   were.
+    ///                   success and when it does not fit. `muni_errorInvalid`
+    ///                   leaves it and bytesOut as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the encoding does
     ///         not fit, and then no byte is written; `muni_errorInvalid`
     ///         for a surrogate, a value past U+10FFFF, a NULL sizeOut or
-    ///         NULL bytes with a nonzero capacity.
+    ///         a NULL bytesOut with a nonzero capacity.
     /// @par Thread safety
     /// Safe from any thread.
-    MUNI_NODISCARD MUNI_API muniResult muniEncodeUtf8(uint32_t codePoint, char* bytes,
+    MUNI_NODISCARD MUNI_API muniResult muniEncodeUtf8(uint32_t codePoint, char* bytesOut,
                                                       size_t capacity, size_t* sizeOut);
 
     /// Converts UTF-8 to UTF-16.
     ///
-    /// @param bytes        The text. May be NULL when length is 0.
-    /// @param length       The number of bytes.
-    /// @param mode         What to do with ill-formed input.
-    /// @param units        The output. May be NULL when capacity is 0.
-    /// @param capacity     The number of 16-bit units units can hold.
-    /// @param neededOut    Receives the number of units the whole
-    ///                     conversion needs, which may exceed capacity. In
-    ///                     strict mode, on an error in the text, the units
-    ///                     before it, which units holds as far as they fit.
-    ///                     `muni_errorInvalid` leaves both as they were.
+    /// @param bytes      The text. May be NULL when length is 0.
+    /// @param length     The number of bytes.
+    /// @param mode       What to do with ill-formed input.
+    /// @param unitsOut   The output. May be NULL when capacity is 0.
+    /// @param capacity   The number of 16-bit units unitsOut can hold.
+    /// @param neededOut  Receives the number of units the whole conversion
+    ///                   needs, which may exceed capacity. In strict mode, on
+    ///                   an error in the text, the units before it, which unitsOut
+    ///                   holds as far as they fit. `muni_errorInvalid` leaves
+    ///                   both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
     ///         not fit (the units that fit are written); in strict mode
     ///         the first UTF-8 error and its offset; `muni_errorInvalid`
-    ///         for a NULL pointer with a nonzero length.
+    ///         for a NULL neededOut, a NULL input with a nonzero length, a
+    ///         NULL output with a nonzero capacity, or a mode other than
+    ///         `muni_convertStrict` and `muni_convertReplace`.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf8ToUtf16(const char* bytes, size_t length,
                                                                   muniConvertMode mode,
-                                                                  uint16_t* units, size_t capacity,
+                                                                  uint16_t* unitsOut,
+                                                                  size_t capacity,
                                                                   size_t* neededOut);
 
     /// Converts UTF-16 to UTF-8.
     ///
-    /// @param units        The text. May be NULL when length is 0.
-    /// @param length       The number of 16-bit units.
-    /// @param mode         What to do with unpaired surrogates.
-    /// @param bytes        The output. May be NULL when capacity is 0.
-    /// @param capacity     The number of bytes bytes can hold.
-    /// @param neededOut    Receives the number of bytes the whole
-    ///                     conversion needs, which may exceed capacity, or
-    ///                     SIZE_MAX when that does not fit in a size_t. In
-    ///                     strict mode, on an error in the text, the bytes
-    ///                     before it, which bytes holds as far as they fit.
-    ///                     `muni_errorInvalid` leaves both as they were.
+    /// @param units      The text. May be NULL when length is 0.
+    /// @param length     The number of 16-bit units.
+    /// @param mode       What to do with unpaired surrogates.
+    /// @param bytesOut   The output. May be NULL when capacity is 0.
+    /// @param capacity   The number of bytes bytesOut can hold.
+    /// @param neededOut  Receives the number of bytes the whole conversion
+    ///                   needs, which may exceed capacity, or SIZE_MAX when
+    ///                   that does not fit in a size_t. In strict mode, on an
+    ///                   error in the text, the bytes before it, which bytesOut
+    ///                   holds as far as they fit. `muni_errorInvalid` leaves
+    ///                   both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
     ///         not fit (the bytes that fit are written); in strict mode
-    ///         `muni_errorUtf16Surrogate` and its offset;
-    ///         `muni_errorInvalid` for a NULL pointer with a nonzero
-    ///         length.
+    ///         `muni_errorUtf16Surrogate` and its offset; `muni_errorInvalid`
+    ///         for a NULL neededOut, a NULL input with a nonzero length, a
+    ///         NULL output with a nonzero capacity, or a mode other than
+    ///         `muni_convertStrict` and `muni_convertReplace`.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf16ToUtf8(const uint16_t* units,
                                                                   size_t length,
-                                                                  muniConvertMode mode, char* bytes,
-                                                                  size_t capacity,
+                                                                  muniConvertMode mode,
+                                                                  char* bytesOut, size_t capacity,
                                                                   size_t* neededOut);
 
     /// Converts UTF-8 to UTF-32.
     ///
-    /// @param bytes        The text. May be NULL when length is 0.
-    /// @param length       The number of bytes.
-    /// @param mode         What to do with ill-formed input.
-    /// @param codePoints   The output. May be NULL when capacity is 0.
-    /// @param capacity     The number of code points codePoints can hold.
-    /// @param neededOut    Receives the number of code points the whole
-    ///                     conversion needs, which may exceed capacity. In
-    ///                     strict mode, on an error in the text, the ones
-    ///                     before it, which codePoints holds as far as they
-    ///                     fit. `muni_errorInvalid` leaves both as they
-    ///                     were.
+    /// @param bytes          The text. May be NULL when length is 0.
+    /// @param length         The number of bytes.
+    /// @param mode           What to do with ill-formed input.
+    /// @param codePointsOut  The output. May be NULL when capacity is 0.
+    /// @param capacity       The number of code points codePointsOut can hold.
+    /// @param neededOut      Receives the number of code points the whole
+    ///                       conversion needs, which may exceed capacity. In
+    ///                       strict mode, on an error in the text, the ones
+    ///                       before it, which codePointsOut holds as far as they
+    ///                       fit. `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
     ///         not fit (the code points that fit are written); in strict
-    ///         mode the first UTF-8 error and its offset;
-    ///         `muni_errorInvalid` for a NULL pointer with a nonzero
-    ///         length.
+    ///         mode the first UTF-8 error and its offset; `muni_errorInvalid`
+    ///         for a NULL neededOut, a NULL input with a nonzero length, a
+    ///         NULL output with a nonzero capacity, or a mode other than
+    ///         `muni_convertStrict` and `muni_convertReplace`.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf8ToUtf32(const char* bytes, size_t length,
                                                                   muniConvertMode mode,
-                                                                  uint32_t* codePoints,
+                                                                  uint32_t* codePointsOut,
                                                                   size_t capacity,
                                                                   size_t* neededOut);
 
     /// Converts UTF-32 to UTF-8.
     ///
-    /// @param codePoints   The text. May be NULL when length is 0.
-    /// @param length       The number of code points.
-    /// @param mode         What to do with values that are no scalar
-    ///                     value: surrogates and those past U+10FFFF.
-    /// @param bytes        The output. May be NULL when capacity is 0.
-    /// @param capacity     The number of bytes bytes can hold.
-    /// @param neededOut    Receives the number of bytes the whole
-    ///                     conversion needs, which may exceed capacity. In
-    ///                     strict mode, on an error in the text, the bytes
-    ///                     before it, which bytes holds as far as they fit.
-    ///                     `muni_errorInvalid` leaves both as they were.
+    /// @param codePoints  The text. May be NULL when length is 0.
+    /// @param length      The number of code points.
+    /// @param mode        What to do with values that are no scalar value:
+    ///                    surrogates and those past U+10FFFF.
+    /// @param bytesOut    The output. May be NULL when capacity is 0.
+    /// @param capacity    The number of bytes bytesOut can hold.
+    /// @param neededOut   Receives the number of bytes the whole conversion
+    ///                    needs, which may exceed capacity. In strict mode, on
+    ///                    an error in the text, the bytes before it, which
+    ///                    bytesOut holds as far as they fit. `muni_errorInvalid`
+    ///                    leaves both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
     ///         not fit (the bytes that fit are written); in strict mode
     ///         `muni_errorUtf32Value` and its offset; `muni_errorInvalid`
-    ///         for a NULL pointer with a nonzero length.
+    ///         for a NULL neededOut, a NULL input with a nonzero length, a
+    ///         NULL output with a nonzero capacity, or a mode other than
+    ///         `muni_convertStrict` and `muni_convertReplace`.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf32ToUtf8(const uint32_t* codePoints,
                                                                   size_t length,
-                                                                  muniConvertMode mode, char* bytes,
-                                                                  size_t capacity,
+                                                                  muniConvertMode mode,
+                                                                  char* bytesOut, size_t capacity,
                                                                   size_t* neededOut);
 
 #ifdef __cplusplus

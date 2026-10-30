@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Layers (record mui-0007): the nodes that root one, in paint order from
-// the bottom: activation layers in the order they became layers or were
-// raised, then the overlay band in the same order.
+// Layers: the nodes that root one, in paint order from the bottom:
+// activation layers in the order they became layers or were raised, then
+// the overlay band in the same order.
 
 #ifndef MAUL_UI_SRC_LAYER_H
 #define MAUL_UI_SRC_LAYER_H

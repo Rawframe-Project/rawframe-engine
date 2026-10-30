@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Layers (record mui-0007). The store holds the nodes that root a layer,
-// in paint order from the bottom; entries of nodes destroyed since are
-// passed over, and taken out when room is needed.
+// Layers. The store holds the nodes that root a layer, in paint order from
+// the bottom; entries of nodes destroyed since are passed over, and taken
+// out when room is needed.
 
 #include "layer.h"
 
@@ -145,7 +145,7 @@ uint32_t muiLayerAt(const muiContext* context, uint32_t place)
     return IsLive(context, entry) ? entry->slot : 0;
 }
 
-muiResult muiNode_RaiseLayer(muiContext* context, muiNodeId nodeId)
+static muiResult NodeRaiseLayer(muiContext* context, muiNodeId nodeId)
 {
     if (context == nullptr)
     {
@@ -170,4 +170,15 @@ muiResult muiNode_RaiseLayer(muiContext* context, muiNodeId nodeId)
     Insert(context, slot, openers);
     muiTreeMark(&context->tree, slot, mui_stagePaint);
     return mui_success;
+}
+
+muiResult muiNode_RaiseLayer(muiContext* context, muiNodeId nodeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeRaiseLayer(context, nodeId);
+        muiLeave(context);
+    }
+    return status;
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Colour bitmap glyphs (record mui-0006): a glyph's PNG found in a font's
-// CBLC and CBDT tables, or its sbix table, read in place, from the strike
-// that suits a size.
+// Colour bitmap glyphs: a glyph's PNG found in a font's CBLC and CBDT
+// tables, or its sbix table, read in place, from the strike that suits a
+// size.
 
 #ifndef MAUL_UI_SRC_BITMAP_GLYPH_H
 #define MAUL_UI_SRC_BITMAP_GLYPH_H

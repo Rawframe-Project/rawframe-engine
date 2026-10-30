@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The event stream. The program drains it in frame with mwinNextEvent,
+// The event stream. The program drains it in frame with mwinContext_NextEvent,
 // which returns every record in the order it arrived, across windows.
 // Records wait in storage per window, each with its own limit, so one
 // busy window cannot push out another's records. Notifications that
@@ -32,7 +32,7 @@
 // full merges into the newest waiting record of that axis.
 //
 // An input method composes text in place before it commits it. While a
-// window accepts text (mwinRequestTextInput), mwin_eventImePreedit
+// window accepts text (mwinWindow_RequestTextInput), mwin_eventImePreedit
 // reports the text being composed, with its caret, its selection and
 // styled segments; an empty preedit ends the composition. Committed text
 // arrives as mwin_eventTextInput. While the input method composes, the
@@ -88,7 +88,7 @@ extern "C"
         // Forget every key and button held, and drop any composition shown:
         // focus was lost or input was.
         // About a gamepad (the null window, data.gamepad), read its state
-        // again (mwinGetGamepadState).
+        // again (mwinGamepad_GetState).
         mwin_eventInputStateReset = 16,
         // A key went down or up (data.key).
         mwin_eventKeyDown = 17,
@@ -146,14 +146,14 @@ extern "C"
         // An on-screen keyboard now covers data.rect of the window.
         mwin_eventVirtualKeyboardChanged = 47,
         // The system's look changed: its theme, accent color, reduced
-        // motion or text scale (mwinGetSystemFacts).
+        // motion or text scale (mwinContext_GetSystemFacts).
         mwin_eventThemeChanged = 48,
-        // The power source or power mode changed (mwinGetSystemFacts).
+        // The power source or power mode changed (mwinContext_GetSystemFacts).
         mwin_eventPowerChanged = 49,
-        // The user's preferred locales changed (mwinGetPreferredLocales).
+        // The user's preferred locales changed (mwinContext_GetPreferredLocales).
         mwin_eventLocaleChanged = 50,
-        // The keyboard layout changed (mwinGetKeyboardLayout,
-        // mwinMapKeyCode).
+        // The keyboard layout changed (mwinContext_GetKeyboardLayout,
+        // mwinContext_MapKeyCode).
         mwin_eventKeyboardLayoutChanged = 51,
         // An input method's composition changed (data.preedit).
         mwin_eventImePreedit = 52,
@@ -173,7 +173,7 @@ extern "C"
         mwin_eventDragMoved = 60,
         mwin_eventDragLeft = 61,
         // Something was dropped on the window (data.drop):
-        // mwinGetDroppedFiles and mwinGetDroppedText have it.
+        // mwinContext_GetDroppedFiles and mwinContext_GetDroppedText have it.
         mwin_eventDropped = 62,
         // An accessibility client asked the window for its tree for the
         // first time: the program's adapter may start its updates. Once
@@ -453,12 +453,14 @@ extern "C"
     /// Takes the next record of the stream.
     ///
     /// @param context   The context.
-    /// @param eventOut  Receives the record.
+    /// @param eventOut  Receives the record. Zeroed on `mwin_empty` and on
+    ///                  failure.
     /// @return `mwin_success`; `mwin_empty` when the stream is drained;
     ///         `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinNextEvent(mwinContext* context, mwinEvent* eventOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinContext_NextEvent(mwinContext* context,
+                                                             mwinEvent* eventOut);
 
 #ifdef __cplusplus
 }

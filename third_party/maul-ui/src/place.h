@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Where nodes are on the surface (record mui-0005): their laid-out places,
-// their parents' scrolling and their local scales, as per-axis affines in
-// doubles. With no scale, each is a sum of the places, added as before.
+// Where nodes are on the surface: their laid-out places, their parents'
+// scrolling and their local scales, as per-axis affines in doubles. With
+// no scale, each is a sum of the places, added as before.
 
 #ifndef MAUL_UI_SRC_PLACE_H
 #define MAUL_UI_SRC_PLACE_H

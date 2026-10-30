@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Text style (record mui-0004): the values a text service reads to lay
-// out and draw a node's text, set through the same classes, variants,
-// conditions, tokens, themes, transitions and direct writes as every
-// property. They are inherited as CSS inherits them: a property no
-// layer gives a node takes its parent's value, and a root the defaults.
-// The core draws no text; a change marks a node with host content to be
-// measured or painted again.
+// Text style: the values a text service reads to lay out and draw a node's
+// text, set through the same classes, variants, conditions, tokens,
+// themes, transitions and direct writes as every property. They are
+// inherited as CSS inherits them: a property no layer gives a node takes
+// its parent's value, and a root the defaults. The core draws no text; a
+// change marks a node with host content to be measured or painted again.
 
 #ifndef MAUL_UI_TEXT_STYLE_H
 #define MAUL_UI_TEXT_STYLE_H
@@ -71,7 +70,7 @@ extern "C"
     };
 
     // Lines drawn with text, as bits, solid, where the font's metrics put
-    // them: under it, over it and through it (record mui-0006).
+    // them: under it, over it and through it.
     typedef uint8_t muiTextDecoration;
 
     enum
@@ -102,7 +101,7 @@ extern "C"
         // From 1 to 1000; 400 is regular and 700 bold. Maul UI's text
         // service sets a variable font's axes from the weight, the slant
         // and the size, and makes bold from 600 and an oblique where the
-        // font cannot (record mui-0006).
+        // font cannot.
         float weight;
         muiFontSlant slant;
         muiTextAlign align;
@@ -116,7 +115,7 @@ extern "C"
         // negative: scale times the node's size, plus offset. CSS's sub is
         // {-0.2, 0} and its super {1/3, 0}, the drops CSS gives them
         // without font data. Not inherited, and a node's own does nothing,
-        // as CSS's baseline-shift on a block container (record mui-0006).
+        // as CSS's baseline-shift on a block container.
         muiDimension baselineShift;
         // The faces the text service may make (muiFontSynthesis).
         // Inherited; spans take their node's.
@@ -129,7 +128,8 @@ extern "C"
         muiColor color;
         uint64_t font;
         float size;
-        // 0 when the line height is the font's own.
+        // 0 when the line height is the font's own, and when it is
+        // written as 0, which automaticLineHeight tells apart.
         float lineHeight;
         float letterSpacing;
         float weight;
@@ -164,12 +164,12 @@ extern "C"
     /// @param values   The values; those mask names must be as
     ///                 muiTextStyle describes, and finite.
     /// @param mask     The properties, within MUI_TEXT_PROPERTIES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, an unknown variant or property bit, a value
-    ///         outside the above or a call from a measure or paint function, which
-    ///         changes nothing; `mui_errorStale` for an id whose class is
-    ///         gone; `mui_errorCapacity` when the variant had no values and
-    ///         the context's limit of property sets is reached.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, an unknown variant or property bit or a value outside the
+    ///         above, which changes nothing; `mui_errorBusy` while the context
+    ///         is busy; `mui_errorStale` for an id whose class is gone;
+    ///         `mui_errorCapacity` when the variant had no values and the
+    ///         context's limit of property sets is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiStyle_SetTextValues(muiContext* context, muiStyleId styleId,
@@ -182,9 +182,9 @@ extern "C"
     /// @param context    The context.
     /// @param styleId    The class.
     /// @param variant    The variant.
-    /// @param valuesOut  Receives the set values, and muiDefaultTextStyle's
-    ///                   for the rest.
-    /// @param maskOut    Receives which properties are set.
+    /// @param valuesOut  Receives the set values, and muiDefaultTextStyle's for
+    ///                   the rest. Zeroed on failure.
+    /// @param maskOut    Receives which properties are set. 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id or an unknown variant; `mui_errorStale` for an id
     ///         whose class is gone.
@@ -197,16 +197,16 @@ extern "C"
 
     /// Writes text values to a node directly, over its classes, as
     /// muiNode_SetLayoutValues writes layout ones. Its children inherit
-    /// them at the next muiComputeLayout.
+    /// them at the next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param values   The values; those mask names must be as
     ///                 muiTextStyle describes, and finite.
     /// @param mask     The properties, within MUI_TEXT_PROPERTIES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, an unknown property bit, a value outside the above
-    ///         or a call from a measure or paint function, which changes nothing;
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, an unknown property bit or a value outside the above, which
+    ///         changes nothing; `mui_errorBusy` while the context is busy;
     ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -215,11 +215,11 @@ extern "C"
                                                           muiPropertyMask mask);
 
     /// Reads a node's computed text style, as of its last
-    /// muiComputeLayout; a measure or paint function may read it.
+    /// muiNode_ComputeLayout; a measure or paint function may read it.
     ///
     /// @param context   The context.
     /// @param nodeId    The node.
-    /// @param styleOut  Receives the computed values.
+    /// @param styleOut  Receives the computed values. Zeroed on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
     ///         null id; `mui_errorStale` for a node that is gone.
     /// @par Thread safety

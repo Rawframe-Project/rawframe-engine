@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What deleting from an offset removes (record mui-0006): a grapheme
-// cluster forward; back, a code point, but emoji, flags and keycaps whole,
-// as Blink's and Android's Backspace delete.
+// What deleting from an offset removes: a grapheme cluster forward; back,
+// a code point, but emoji, flags and keycaps whole, as Blink's and
+// Android's Backspace delete.
 
+#include "fpenv.h"
 #include "text_block.h"
 #include "text_service.h"
 
@@ -27,7 +28,7 @@ static void ClusterAround(const muiTextBlock* block, uint32_t offset, uint32_t* 
     (void)muniInitGraphemeIterator(&iterator, block->text.data, block->length, false);
     uint32_t before = 0;
     size_t at = 0;
-    while (muniNextSegmentBreak(&iterator, &at) == muni_success && at <= offset)
+    while (muniSegmentIterator_NextBreak(&iterator, &at) == muni_success && at <= offset)
     {
         before = (uint32_t)at;
     }
@@ -72,10 +73,19 @@ static uint32_t BackspaceStart(const char* text, uint32_t start, uint32_t end)
     return IsVariationSelector(lastPoint) ? previous : last;
 }
 
-muiResult muiTextBlock_FindDeletion(const muiTextService* service, muiTextBlockId blockId,
-                                    uint32_t offset, muiTextDeletion deletion, uint32_t* startOut,
-                                    uint32_t* endOut)
+static MUI_NOINLINE muiResult TextBlockFindDeletionWorker(const muiTextService* service,
+                                                          muiTextBlockId blockId, uint32_t offset,
+                                                          muiTextDeletion deletion,
+                                                          uint32_t* startOut, uint32_t* endOut)
 {
+    if (startOut != nullptr)
+    {
+        *startOut = 0;
+    }
+    if (endOut != nullptr)
+    {
+        *endOut = 0;
+    }
     if (service == nullptr || blockId.index1 == 0 || deletion > mui_deleteForward ||
         startOut == nullptr || endOut == nullptr)
     {
@@ -109,4 +119,15 @@ muiResult muiTextBlock_FindDeletion(const muiTextService* service, muiTextBlockI
     *startOut = start;
     *endOut = offset;
     return mui_success;
+}
+
+muiResult muiTextBlock_FindDeletion(const muiTextService* service, muiTextBlockId blockId,
+                                    uint32_t offset, muiTextDeletion deletion, uint32_t* startOut,
+                                    uint32_t* endOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result =
+        TextBlockFindDeletionWorker(service, blockId, offset, deletion, startOut, endOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

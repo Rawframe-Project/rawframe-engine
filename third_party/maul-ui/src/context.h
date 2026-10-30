@@ -94,21 +94,41 @@ struct muiContext
     muiAnimationStore animations;
     uint64_t lastTimeNs;
     uint64_t misuse;
-    // The work done since the context was made (muiGetWorkCounts).
+    // The work done since the context was made (muiContext_GetWorkCounts).
     muiWorkCounts work;
-    // Set while a measure or paint function runs; edits are refused then.
-    bool inHostCall;
+    // Set while one of the context's functions that change it runs: host
+    // code it calls then may not call back in (Maul conventions, Threads).
+    // Dispatch clears it while the event function runs.
+    bool busy;
 };
 
 // Counts one refused call and returns mui_errorInvalid for it.
 muiResult muiRefuse(muiContext* context);
 
-// Whether an edit must be refused because a measure function is running.
-bool muiIsInHostCall(const muiContext* context);
+// Counts one argument past a fixed bound and returns mui_errorLimit for
+// it.
+muiResult muiRefuseLimit(muiContext* context);
+
+// Counts one refused argument and returns status, mui_errorInvalid or
+// mui_errorLimit, for it.
+static inline muiResult muiRefuseAs(muiContext* context, muiResult status)
+{
+    return status == mui_errorLimit ? muiRefuseLimit(context) : muiRefuse(context);
+}
+
+// Counts one call back in and returns mui_errorBusy for it.
+muiResult muiRefuseBusy(muiContext* context);
+
+// Marks the context busy for one of its functions that change it:
+// mui_success, or mui_errorBusy with one misuse counted when it is busy
+// already. A NULL context is left to the function.
+muiResult muiEnter(muiContext* context);
+
+// Ends what muiEnter began.
+void muiLeave(muiContext* context);
 
 // The slot of a live node for an edit, or 0 with the status to return in
-// statusOut: misuse for the null id or an edit from a measure function,
-// stale for a gone node.
+// statusOut: misuse for the null id, stale for a gone node.
 uint32_t muiResolveEdit(muiContext* context, muiNodeId nodeId, muiResult* statusOut);
 
 // Marks a node for the accessibility tree after a change no other stage

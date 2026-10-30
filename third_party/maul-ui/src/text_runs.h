@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Run styles (record mui-0006): where a block's spans set a font, size,
-// weight, slant or baseline shift, its text is shaped and placed in runs
-// of those apart from the node's style. A block's run styles are the node's and each distinct
-// one its spans make, each byte with its own; a paragraph's chains are
-// every face of every run style, the node's first, each style trying its
-// own in its own order.
+// Run styles: where a block's spans set a font, size, weight, slant or baseline shift, its
+// text is shaped and placed in runs of those apart from the node's style. A block's run
+// styles are the node's and each distinct one its spans make, each byte with its own; a
+// paragraph's chains are every face of every run style, the node's first, each style trying
+// its own in its own order.
 
 #ifndef MAUL_UI_SRC_TEXT_RUNS_H
 #define MAUL_UI_SRC_TEXT_RUNS_H

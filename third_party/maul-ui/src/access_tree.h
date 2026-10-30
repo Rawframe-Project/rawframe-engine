@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The accessibility tree's consumer (record mui-0008): the index of held
-// nodes by id, which applying updates edits.
+// The accessibility tree's consumer: the index of held nodes by id, which
+// applying updates edits.
 
 #ifndef MAUL_UI_SRC_ACCESS_TREE_H
 #define MAUL_UI_SRC_ACCESS_TREE_H

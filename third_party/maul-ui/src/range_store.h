@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Range values (record mui-0007): the context's table of ranges, one
-// entry per node that is one, and what a pointer on it began with.
+// Range values: the context's table of ranges, one entry per node that is
+// one, and what a pointer on it began with.
 
 #ifndef MAUL_UI_SRC_RANGE_STORE_H
 #define MAUL_UI_SRC_RANGE_STORE_H

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A skyline bottom-left rectangle packer for one plot of a glyph atlas
-// (record mui-0006): the lower edge of what is placed, as segments from
-// left to right; each rectangle goes where it sits highest up, then
-// furthest left. Coordinates grow down from the plot's top.
+// A skyline bottom-left rectangle packer for one plot of a glyph atlas:
+// the lower edge of what is placed, as segments from left to right; each
+// rectangle goes where it sits highest up, then furthest left. Coordinates
+// grow down from the plot's top.
 
 #ifndef MAUL_UI_SRC_SKYLINE_H
 #define MAUL_UI_SRC_SKYLINE_H

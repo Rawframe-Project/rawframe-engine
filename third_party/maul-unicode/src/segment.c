@@ -77,8 +77,8 @@ muniResult muniInitLineIterator(muniSegmentIterator* iterator, const char* text,
     return Init(iterator, muni_segmentLine, text, length, moreFollows);
 }
 
-muniResult muniSetComplexBreaker(muniSegmentIterator* iterator, muniComplexBreakFunction breaker,
-                                 void* context)
+muniResult muniSegmentIterator_SetComplexBreaker(muniSegmentIterator* iterator,
+                                                 muniComplexBreakFunction breaker, void* context)
 {
     if (iterator == nullptr)
     {
@@ -125,8 +125,9 @@ static bool ValidOverrides(const muniBreakClassOverride* overrides, size_t count
     return true;
 }
 
-muniResult muniSetBreakClassOverrides(muniSegmentIterator* iterator,
-                                      const muniBreakClassOverride* overrides, size_t count)
+muniResult muniSegmentIterator_SetBreakClassOverrides(muniSegmentIterator* iterator,
+                                                      const muniBreakClassOverride* overrides,
+                                                      size_t count)
 {
     if (iterator == nullptr || (overrides == nullptr && count != 0) || count > MAX_OVERRIDES)
     {
@@ -163,9 +164,9 @@ muniResult muniSetBreakClassOverrides(muniSegmentIterator* iterator,
     return muni_success;
 }
 
-muniResult muniSetLineOptions(muniSegmentIterator* iterator, uint32_t options)
+muniResult muniSegmentIterator_EnableCjAsIdeographic(muniSegmentIterator* iterator, bool enable)
 {
-    if (iterator == nullptr || (options & ~(uint32_t)muni_lineCjAsIdeographic) != 0)
+    if (iterator == nullptr)
     {
         return muni_errorInvalid;
     }
@@ -182,13 +183,23 @@ muniResult muniSetLineOptions(muniSegmentIterator* iterator, uint32_t options)
     {
         return muni_errorState;
     }
-    segmenter.options = (uint8_t)options;
+    segmenter.cjAsIdeographic = enable;
     Store(iterator, &segmenter);
     return muni_success;
 }
 
-muniResult muniFeedSegmentIterator(muniSegmentIterator* iterator, const char* text, size_t length,
-                                   bool moreFollows)
+bool muniSegmentIterator_IsCjAsIdeographicEnabled(const muniSegmentIterator* iterator)
+{
+    if (iterator == nullptr)
+    {
+        return false;
+    }
+    muniSegmenter segmenter = Load(iterator);
+    return segmenter.kind == muni_segmentLine && segmenter.cjAsIdeographic;
+}
+
+muniResult muniSegmentIterator_Feed(muniSegmentIterator* iterator, const char* text, size_t length,
+                                    bool moreFollows)
 {
     if (iterator == nullptr || (text == nullptr && length != 0))
     {
@@ -226,7 +237,7 @@ static muniResult Next(muniSegmenter* segmenter, size_t* offsetOut)
     }
 }
 
-muniResult muniNextSegmentBreak(muniSegmentIterator* iterator, size_t* offsetOut)
+muniResult muniSegmentIterator_NextBreak(muniSegmentIterator* iterator, size_t* offsetOut)
 {
     if (iterator == nullptr || offsetOut == nullptr)
     {
@@ -244,7 +255,8 @@ muniResult muniNextSegmentBreak(muniSegmentIterator* iterator, size_t* offsetOut
     return status;
 }
 
-muniResult muniNextLineBreak(muniSegmentIterator* iterator, size_t* offsetOut, bool* mandatoryOut)
+muniResult muniSegmentIterator_NextLineBreak(muniSegmentIterator* iterator, size_t* offsetOut,
+                                             bool* mandatoryOut)
 {
     if (iterator == nullptr || offsetOut == nullptr || mandatoryOut == nullptr)
     {
@@ -297,26 +309,26 @@ static muniResult Find(uint8_t kind, const char* text, size_t length, size_t* of
     return count > capacity ? muni_errorCapacity : muni_success;
 }
 
-muniResult muniFindGraphemeBreaks(const char* text, size_t length, size_t* offsets, size_t capacity,
-                                  size_t* countOut)
+muniResult muniFindGraphemeBreaks(const char* text, size_t length, size_t* offsetsOut,
+                                  size_t capacity, size_t* countOut)
 {
-    return Find(muni_segmentGrapheme, text, length, offsets, nullptr, capacity, countOut);
+    return Find(muni_segmentGrapheme, text, length, offsetsOut, nullptr, capacity, countOut);
 }
 
-muniResult muniFindWordBreaks(const char* text, size_t length, size_t* offsets, size_t capacity,
+muniResult muniFindWordBreaks(const char* text, size_t length, size_t* offsetsOut, size_t capacity,
                               size_t* countOut)
 {
-    return Find(muni_segmentWord, text, length, offsets, nullptr, capacity, countOut);
+    return Find(muni_segmentWord, text, length, offsetsOut, nullptr, capacity, countOut);
 }
 
-muniResult muniFindSentenceBreaks(const char* text, size_t length, size_t* offsets, size_t capacity,
-                                  size_t* countOut)
+muniResult muniFindSentenceBreaks(const char* text, size_t length, size_t* offsetsOut,
+                                  size_t capacity, size_t* countOut)
 {
-    return Find(muni_segmentSentence, text, length, offsets, nullptr, capacity, countOut);
+    return Find(muni_segmentSentence, text, length, offsetsOut, nullptr, capacity, countOut);
 }
 
-muniResult muniFindLineBreaks(const char* text, size_t length, size_t* offsets, bool* mandatory,
-                              size_t capacity, size_t* countOut)
+muniResult muniFindLineBreaks(const char* text, size_t length, size_t* offsetsOut,
+                              bool* mandatoryOut, size_t capacity, size_t* countOut)
 {
-    return Find(muni_segmentLine, text, length, offsets, mandatory, capacity, countOut);
+    return Find(muni_segmentLine, text, length, offsetsOut, mandatoryOut, capacity, countOut);
 }

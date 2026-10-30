@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Inherited text style (record mui-0004). The size scales the parent's
-// computed size; the line height and letter spacing scale the node's own
-// size and are inherited as written, as a unitless CSS line-height is.
+// Inherited text style. The size scales the parent's computed size; the
+// line height and letter spacing scale the node's own size and are
+// inherited as written, as a unitless CSS line-height is.
 
 #include "inherit.h"
 

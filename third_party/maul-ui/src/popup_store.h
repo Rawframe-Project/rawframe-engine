@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Popups (record mui-0007): the context's table of popups, one entry per
-// node that is one.
+// Popups: the context's table of popups, one entry per node that is one.
 
 #ifndef MAUL_UI_SRC_POPUP_STORE_H
 #define MAUL_UI_SRC_POPUP_STORE_H

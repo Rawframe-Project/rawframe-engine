@@ -9,6 +9,7 @@
 #include "animation.h"
 #include "context.h"
 #include "exit.h"
+#include "fpenv.h"
 #include "layout_bound.h"
 #include "layout_node.h"
 #include "popup.h"
@@ -22,6 +23,7 @@
 #include "maul-ui/style.h"
 
 #include <math.h>
+#include <string.h>
 
 muiLayoutStyle muiDefaultLayoutStyle(void)
 {
@@ -33,14 +35,13 @@ static bool IsLength(float value)
     return isfinite(value) && value >= 0.0f;
 }
 
-muiResult muiNode_SetLayoutStyle(muiContext* context, muiNodeId nodeId, const muiLayoutStyle* style)
-{
-    return muiNode_SetLayoutValues(context, nodeId, style, MUI_LAYOUT_PROPERTIES);
-}
-
 muiResult muiNode_GetLayoutStyle(const muiContext* context, muiNodeId nodeId,
                                  muiLayoutStyle* styleOut)
 {
+    if (styleOut != nullptr)
+    {
+        memset(styleOut, 0, sizeof *styleOut);
+    }
     if (context == nullptr || styleOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -63,16 +64,16 @@ bool muiNode_IsRightToLeft(const muiContext* context, muiNodeId nodeId)
     for (uint32_t at = muiTreeResolve(&context->tree, nodeId); at != 0;
          at = muiTreeAt(&context->tree, at)->links.parent)
     {
-        muiTextDirection direction = context->layout[at - 1].style.textDirection;
-        if (direction != mui_textInherit)
+        muiInlineDirection direction = context->layout[at - 1].style.textDirection;
+        if (direction != mui_inlineInherit)
         {
-            return direction == mui_textRightToLeft;
+            return direction == mui_inlineRightToLeft;
         }
     }
     return false;
 }
 
-muiResult muiNode_MarkContentChanged(muiContext* context, muiNodeId nodeId)
+static muiResult NodeMarkContentChanged(muiContext* context, muiNodeId nodeId)
 {
     if (context == nullptr)
     {
@@ -83,6 +84,17 @@ muiResult muiNode_MarkContentChanged(muiContext* context, muiNodeId nodeId)
     if (slot != 0)
     {
         muiTreeMarkLayout(&context->tree, slot);
+    }
+    return status;
+}
+
+muiResult muiNode_MarkContentChanged(muiContext* context, muiNodeId nodeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeMarkContentChanged(context, nodeId);
+        muiLeave(context);
     }
     return status;
 }
@@ -126,6 +138,23 @@ static void Invalidate(muiContext* context, uint32_t root)
     }
 }
 
+// Marks host content that could not be measured to be measured again by
+// the next layout, as a change of content is; visits the subtree only
+// when some could not be.
+static void MarkUnmeasured(muiContext* context, uint32_t root, uint32_t unmeasured)
+{
+    muiTree* tree = &context->tree;
+    for (uint32_t at = root; at != 0 && unmeasured != 0; at = muiTreeNextIn(tree, root, at))
+    {
+        if (context->layout[at - 1].unmeasured)
+        {
+            context->layout[at - 1].unmeasured = false;
+            muiTreeMarkLayout(tree, at);
+            unmeasured--;
+        }
+    }
+}
+
 // Sizes the root in the host's space and lays its subtree out: a change
 // its subtree's answers bound is laid out there; any other clears every
 // owing node's cache.
@@ -134,7 +163,6 @@ static muiSize SolveRoot(muiContext* context, const muiSolver* solver, uint32_t 
 {
     muiSizingInput sizingInput = muiRootInput(&context->layout[root - 1].style, &input->safeArea,
                                               input->availableWidth, input->availableHeight);
-    context->inHostCall = true;
     if (!muiBoundLayout(solver, root))
     {
         Invalidate(context, root);
@@ -151,11 +179,10 @@ static muiSize SolveRoot(muiContext* context, const muiSolver* solver, uint32_t 
     sizingInput.width = (muiMeasureAxis){size.width, mui_measureExact};
     sizingInput.height = (muiMeasureAxis){size.height, mui_measureExact};
     (void)muiSolveNode(solver, root, &sizingInput, true);
-    context->inHostCall = false;
     return size;
 }
 
-muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayoutInput* input)
+static muiResult ComputeLayout(muiContext* context, muiNodeId rootId, const muiLayoutInput* input)
 {
     if (context == nullptr)
     {
@@ -191,11 +218,12 @@ muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayou
     // Exits whose transitions have ended, or never began, are reported.
     muiExitAdvance(context, root);
     NoteSafeArea(context, root, &input->safeArea);
+    uint32_t unmeasured = 0;
     muiSolver solver = {
         .tree = &context->tree,
         .nodes = context->layout,
         .measure = input->measure,
-        .measureUser = input->measureUser,
+        .user = input->user,
         .measureBaseline = input->baseline,
         .solve = muiSolveNode,
         .baseline = muiSolveBaseline,
@@ -206,6 +234,7 @@ muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayou
         .work = &context->work,
         .paddings = context->paddings,
         .safeArea = input->safeArea,
+        .unmeasured = &unmeasured,
     };
     muiSize size = SolveRoot(context, &solver, root, input);
     const muiRect rect = {0.0f, 0.0f, size.width, size.height};
@@ -222,7 +251,28 @@ muiResult muiComputeLayout(muiContext* context, muiNodeId rootId, const muiLayou
     muiVirtualWindows(context, root);
     // Popups go beside their anchors where layout and scrolling left them.
     muiPlacePopups(context, root);
-    return mui_success;
+    MarkUnmeasured(context, root, unmeasured);
+    return unmeasured != 0 ? mui_errorCapacity : mui_success;
+}
+
+static MUI_NOINLINE muiResult ComputeLayoutWorker(muiContext* context, muiNodeId rootId,
+                                                  const muiLayoutInput* input)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = ComputeLayout(context, rootId, input);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_ComputeLayout(muiContext* context, muiNodeId rootId, const muiLayoutInput* input)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = ComputeLayoutWorker(context, rootId, input);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 muiRect muiNode_GetRect(const muiContext* context, muiNodeId nodeId)
@@ -231,14 +281,22 @@ muiRect muiNode_GetRect(const muiContext* context, muiNodeId nodeId)
     return slot != 0 ? context->layout[slot - 1].rect : (muiRect){0.0f, 0.0f, 0.0f, 0.0f};
 }
 
-muiRect muiNode_GetContentRect(const muiContext* context, muiNodeId nodeId)
+static MUI_NOINLINE muiRect NodeGetContentRectWorker(const muiContext* context, muiNodeId nodeId)
 {
     uint32_t slot = context != nullptr ? muiTreeResolve(&context->tree, nodeId) : 0;
     return slot != 0 ? muiContentBoxOf(&context->layout[slot - 1], &context->paddings[slot - 1])
                      : (muiRect){0.0f, 0.0f, 0.0f, 0.0f};
 }
 
-bool muiIsUpdatePending(const muiContext* context, muiNodeId rootId)
+muiRect muiNode_GetContentRect(const muiContext* context, muiNodeId nodeId)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiRect result = NodeGetContentRectWorker(context, nodeId);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+bool muiNode_IsUpdatePending(const muiContext* context, muiNodeId rootId)
 {
     uint32_t slot = context != nullptr ? muiTreeResolve(&context->tree, rootId) : 0;
     return slot != 0 && ((muiTreeAt(&context->tree, slot)->dirty.subtree &

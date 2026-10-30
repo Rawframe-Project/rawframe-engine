@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Accessibility (record mui-0008): what the builder and the actions read
-// of the host's data and the enabled roots.
+// Accessibility: what the builder and the actions read of the host's data
+// and the enabled roots.
 
 #ifndef MAUL_UI_SRC_ACCESS_H
 #define MAUL_UI_SRC_ACCESS_H

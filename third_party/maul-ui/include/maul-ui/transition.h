@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Transitions: specs of how a property moves to a new value (timed with
-// an easing, or a spring), shared by the classes whose variants name
-// them, and run against the time the host passes to muiComputeLayout
-// (record mui-0004). The spec for a change is resolved through the same
-// layers as values, from the state after the change. Numbers, insets,
-// dimensions and radii that are Scale+Offset on both sides, colors (in
-// premultiplied Oklab) and shadows move, ending exactly on their target;
-// enumerators, flags, image keys, gradients, changes to or from
-// automatic, direct writes, and every change under reduced motion apply
-// at once.
+// Transitions: specs of how a property moves to a new value (timed with an
+// easing, or a spring), shared by the classes whose variants name them,
+// and run against the time the host passes to muiNode_ComputeLayout. The spec
+// for a change is resolved through the same layers as values, from the
+// state after the change. Numbers, insets, dimensions and radii that are
+// Scale+Offset on both sides, colors (in premultiplied Oklab) and shadows
+// move, ending exactly on their target; enumerators, flags, image keys,
+// gradients, changes to or from automatic, direct writes, and every change
+// under reduced motion apply at once.
 
 #ifndef MAUL_UI_TRANSITION_H
 #define MAUL_UI_TRANSITION_H
@@ -32,7 +31,7 @@ extern "C"
         MUI_MAX_VARIANT_TRANSITIONS = 4
     };
 
-    // A transition spec, in the shape of every id (family record 0016).
+    // A transition spec, in the shape of every id.
     typedef struct muiTransitionId
     {
         uint32_t index1;
@@ -102,10 +101,9 @@ extern "C"
     ///                         easing, bezier x from 0 to 1 and finite y,
     ///                         and a finite frequency and damping ratio
     ///                         above 0.
-    /// @param transitionOut  Receives the spec; set to the null id on
-    ///                         failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a def
-    ///         outside the above or a call from a measure or paint function;
+    /// @param transitionOut  Receives the spec. The null id on failure.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a def
+    ///         outside the above; `mui_errorBusy` while the context is busy;
     ///         `mui_errorCapacity` when the context's transition limit is
     ///         reached.
     /// @par Thread safety
@@ -119,8 +117,8 @@ extern "C"
     ///
     /// @param context       The context.
     /// @param transitionId  The spec.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function; `mui_errorStale`
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
     ///         for an id whose spec is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -136,13 +134,13 @@ extern "C"
     /// @param transitionId  The spec, or the null id.
     /// @param group         The properties' group.
     /// @param mask          The properties, within the group's.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null class id, an unknown variant, group or property bit or a
-    ///         call from a measure or paint function; `mui_errorStale` for a class or a
-    ///         spec that is gone; `mui_errorCapacity` when the variant
-    ///         already names MUI_MAX_VARIANT_TRANSITIONS specs, or has no
-    ///         values yet and the context's limit of property sets is
-    ///         reached.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         class id, an unknown variant, group or property bit;
+    ///         `mui_errorBusy` while the context is busy; `mui_errorStale` for
+    ///         a class or a spec that is gone; `mui_errorLimit` when the
+    ///         variant already names MUI_MAX_VARIANT_TRANSITIONS specs;
+    ///         `mui_errorCapacity` when it has no values yet and the context's
+    ///         limit of property sets is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiStyle_SetTransition(muiContext* context, muiStyleId styleId,
@@ -157,7 +155,8 @@ extern "C"
     /// @param styleId          The class.
     /// @param variant          The variant.
     /// @param property         The property.
-    /// @param transitionOut  Receives the spec; the null id for none.
+    /// @param transitionOut  Receives the spec; the null id for none. The null
+    ///                       id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id, an unknown variant or property; `mui_errorStale`
     ///         for an id whose class is gone.

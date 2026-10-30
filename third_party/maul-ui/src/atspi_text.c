@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The AT-SPI adapter's Text interface (record mui-0008, I123): a node's
-// value text by character, word, line and paragraph, its caret and its
-// selection. AT-SPI counts characters (code points); the tree's marks
-// count bytes. Sentences are not given: an empty answer, which Orca
-// reads as no sentence support.
+// The AT-SPI adapter's Text interface: a node's value text by character,
+// word, line and paragraph, its caret and its selection. AT-SPI counts
+// characters (code points); the tree's marks count bytes. Sentences are
+// not given: an empty answer, which Orca reads as no sentence support.
 
 #include "access_text.h"
 #include "allocator.h"
 #include "atspi.h"
+#include "host_call.h"
 
 #include <string.h>
 
@@ -108,7 +108,7 @@ static Span SpanAt(const muiAccessText* text, uint32_t at, uint32_t grain)
 static bool AppendSpan(muiAtspiApp* app, muiDBusIter* iter, const muiAccessText* text, Span span)
 {
     uint32_t size = span.end - span.start;
-    char* copy = muiAllocate(&app->allocator, (size_t)size + 1, 1);
+    char* copy = muiAllocateMarked(&app->busy, &app->allocator, (size_t)size + 1, 1);
     if (copy == nullptr)
     {
         return false;
@@ -120,7 +120,7 @@ static bool AppendSpan(muiAtspiApp* app, muiDBusIter* iter, const muiAccessText*
     bool ok = muiAtspiAppendString(app, iter, copy) &&
               app->dbus.appendBasic(iter, mui_dbusTypeInt32, &start) &&
               app->dbus.appendBasic(iter, mui_dbusTypeInt32, &end);
-    muiRelease(&app->allocator, copy, (size_t)size + 1, 1);
+    muiReleaseMarked(&app->busy, &app->allocator, copy, (size_t)size + 1, 1);
     return ok;
 }
 
@@ -232,14 +232,14 @@ static bool AppendRead(muiAtspiApp* app, muiDBusIter* iter, DBusMessage* call,
         uint32_t end = args[1] < 0 ? text->length : ByteOf(text, args[1]);
         Span span = {start, end > start ? end : start};
         uint32_t size = span.end - span.start;
-        char* copy = muiAllocate(&app->allocator, (size_t)size + 1, 1);
+        char* copy = muiAllocateMarked(&app->busy, &app->allocator, (size_t)size + 1, 1);
         *ok = *ok && copy != nullptr;
         if (copy != nullptr)
         {
             memcpy(copy, text->bytes + span.start, size);
             copy[size] = '\0';
             *ok = *ok && muiAtspiAppendString(app, iter, copy);
-            muiRelease(&app->allocator, copy, (size_t)size + 1, 1);
+            muiReleaseMarked(&app->busy, &app->allocator, copy, (size_t)size + 1, 1);
         }
     }
     else if (strcmp(member, "GetCharacterAtOffset") == 0)
@@ -266,7 +266,8 @@ static bool AppendRead(muiAtspiApp* app, muiDBusIter* iter, DBusMessage* call,
 static bool Ask(const muiAtspiObject* object, const muiAccessRequest* request)
 {
     return (object->node->actions & (1u << request->action)) != 0 &&
-           object->adapter->action(object->adapter->user, request);
+           muiActMarked(&object->adapter->app->busy, object->adapter->action, object->adapter->user,
+                        request);
 }
 
 // Asks the host to select from one character to another, the caret at

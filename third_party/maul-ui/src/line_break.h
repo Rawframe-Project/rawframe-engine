@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Breaking a shaped text block into lines (record mui-0006): greedy, at
-// line break opportunities, from the block's sums of advances, so that
-// measuring and painting break the same lines at the same width.
+// Breaking a shaped text block into lines: greedy, at line break
+// opportunities, from the block's sums of advances, so that measuring and
+// painting break the same lines at the same width.
 
 #ifndef MAUL_UI_SRC_LINE_BREAK_H
 #define MAUL_UI_SRC_LINE_BREAK_H

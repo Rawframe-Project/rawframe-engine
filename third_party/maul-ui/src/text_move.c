@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Moving positions through laid-out text (record mui-0006): by grapheme
-// cluster in the text or on screen, by word, and by line.
+// Moving positions through laid-out text: by grapheme cluster in the text
+// or on screen, by word, and by line.
 
+#include "fpenv.h"
+#include "invariant.h"
+#include "text_blocks.h"
 #include "text_boxes.h"
+#include "text_entry.h"
+#include "text_host.h"
 #include "text_mask.h"
 
 #include "maul-ui/text_edit.h"
@@ -24,15 +29,19 @@ static uint32_t ClusterBoundary(const muiTextBlock* block, uint32_t offset, bool
     (void)muniInitGraphemeIterator(&iterator, block->text.data, block->length, false);
     uint32_t before = 0;
     size_t at = 0;
-    while (muniNextSegmentBreak(&iterator, &at) == muni_success)
+    while (muniSegmentIterator_NextBreak(&iterator, &at) == muni_success)
     {
         if (next ? at > offset : at >= offset)
         {
-            return next ? (uint32_t)at : before;
+            uint32_t boundary = next ? (uint32_t)at : before;
+            // A cluster boundary is a character's start within the text.
+            MUI_ASSERT(muiIsCharacterStart(block, boundary));
+            return boundary;
         }
         before = (uint32_t)at;
     }
     // Past the last boundary, the text's end, for either direction.
+    MUI_ASSERT(before == block->length);
     return before;
 }
 
@@ -46,7 +55,8 @@ static uint32_t WordBoundary(const muiTextBlock* block, uint32_t offset, muiText
     uint32_t found = back ? 0 : block->length;
     size_t start = 0;
     size_t end = 0;
-    while ((!back || start < offset) && muniNextSegmentBreak(&iterator, &end) == muni_success)
+    while ((!back || start < offset) &&
+           muniSegmentIterator_NextBreak(&iterator, &end) == muni_success)
     {
         if (muiIsWordSegment(text, start, end))
         {
@@ -167,7 +177,7 @@ static bool Move(const muiLaidText* laid, muiTextPosition from, muiTextMovement 
     }
 }
 
-muiResult muiTextMove(const muiTextHost* host, muiNodeId nodeId, float width, muiTextPosition from,
+muiResult muiMoveText(const muiTextHost* host, muiNodeId nodeId, float width, muiTextPosition from,
                       muiTextMovement movement, float preferredX, muiTextPosition* positionOut)
 {
     if (!muiIsTextHostValid(host) || positionOut == nullptr || movement > mui_moveTextEnd)
@@ -203,4 +213,28 @@ muiResult muiTextMove(const muiTextHost* host, muiNodeId nodeId, float width, mu
     }
     positionOut->offset = muiUnmaskOffset(source, positionOut->offset);
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult TextMoveWorker(const muiTextHost* host, muiNodeId nodeId, float width,
+                                             muiTextPosition from, muiTextMovement movement,
+                                             float preferredX, muiTextPosition* positionOut)
+{
+    bool held = false;
+    muiResult status = muiEnterTextHost(host, &held);
+    if (status == mui_success)
+    {
+        status = muiMoveText(host, nodeId, width, from, movement, preferredX, positionOut);
+        muiLeaveTextHost(host, held);
+    }
+    return status;
+}
+
+muiResult muiNode_MoveTextPosition(const muiTextHost* host, muiNodeId nodeId, float width,
+                                   muiTextPosition from, muiTextMovement movement, float preferredX,
+                                   muiTextPosition* positionOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextMoveWorker(host, nodeId, width, from, movement, preferredX, positionOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

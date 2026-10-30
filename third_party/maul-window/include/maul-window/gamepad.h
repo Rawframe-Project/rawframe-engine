@@ -87,11 +87,12 @@ extern "C"
 
     enum
     {
-        // Low and high frequency motors (mwinSetGamepadRumble).
+        // Low and high frequency motors (mwinGamepad_SetRumble).
         mwin_padRumble = 1,
-        // Motors in the triggers (mwinSetGamepadTriggerRumble).
+        // Motors in the triggers (mwinGamepad_SetTriggerRumble).
         mwin_padTriggerRumble = 2,
-        // Motion sensors (mwinSetGamepadMotion, mwinGetGamepadMotion).
+        // Motion sensors (mwinGamepad_EnableMotion, mwinGamepad_IsMotionEnabled,
+        // mwinGamepad_GetMotion).
         mwin_padMotion = 4,
     };
 
@@ -164,33 +165,33 @@ extern "C"
 
     /// Lists the gamepads connected now, in the order they came.
     ///
-    /// @param context   The context.
-    /// @param gamepads  Receives up to capacity ids. May be NULL when
-    ///                  capacity is 0.
-    /// @param capacity  The ids gamepads holds.
-    /// @param countOut  Receives the number connected, which may exceed
-    ///                  capacity.
-    /// @return `mwin_success`; `mwin_errorCapacity` when they do not all
-    ///         fit (the first capacity are written); `mwin_errorInvalid`
-    ///         for a NULL argument.
+    /// @param context      The context.
+    /// @param gamepadsOut  Receives up to capacity ids. May be NULL when
+    ///                     capacity is 0. Zeroed over capacity on failure.
+    /// @param capacity     The ids gamepadsOut holds.
+    /// @param countOut     Receives the number connected, which may exceed
+    ///                     capacity. 0 on failure.
+    /// @return `mwin_success`, also when they do not all fit, with the
+    ///         first capacity written and the total in countOut;
+    ///         `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGetGamepads(const mwinContext* context,
-                                                       mwinGamepadId* gamepads, size_t capacity,
-                                                       size_t* countOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinContext_GetGamepads(const mwinContext* context,
+                                                               mwinGamepadId* gamepadsOut,
+                                                               size_t capacity, size_t* countOut);
 
     /// Reads what the platform tells about a gamepad.
     ///
     /// @param context  The context.
     /// @param gamepad  The gamepad.
-    /// @param infoOut  Receives its facts.
+    /// @param infoOut  Receives its facts. Zeroed on failure.
     /// @return `mwin_success`; `mwin_errorStale` for a gamepad no longer
     ///         connected; `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGetGamepadInfo(const mwinContext* context,
-                                                          mwinGamepadId gamepad,
-                                                          mwinGamepadInfo* infoOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_GetInfo(const mwinContext* context,
+                                                           mwinGamepadId gamepad,
+                                                           mwinGamepadInfo* infoOut);
 
     /// Reads a gamepad's controls as the platform last reported them,
     /// which may be ahead of the records not yet drained. After a
@@ -199,13 +200,13 @@ extern "C"
     ///
     /// @param context   The context.
     /// @param gamepad   The gamepad.
-    /// @param stateOut  Receives its state.
-    /// @return As mwinGetGamepadInfo.
+    /// @param stateOut  Receives its state. Zeroed on failure.
+    /// @return As mwinGamepad_GetInfo.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGetGamepadState(const mwinContext* context,
-                                                           mwinGamepadId gamepad,
-                                                           mwinGamepadState* stateOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_GetState(const mwinContext* context,
+                                                            mwinGamepadId gamepad,
+                                                            mwinGamepadState* stateOut);
 
     /// Runs a gamepad's motors, the low frequency (heavy) one and the high
     /// frequency (light) one, each from 0 (still) to 1, for a time or
@@ -224,12 +225,12 @@ extern "C"
     ///         strength outside 0 to 1.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinSetGamepadRumble(mwinContext* context,
-                                                            mwinGamepadId gamepad, float low,
-                                                            float high, uint32_t durationMs);
+    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_SetRumble(mwinContext* context,
+                                                             mwinGamepadId gamepad, float low,
+                                                             float high, uint32_t durationMs);
 
     /// Runs the motors in a gamepad's triggers, each from 0 (still) to 1,
-    /// for a time or until the next call, as mwinSetGamepadRumble runs the
+    /// for a time or until the next call, as mwinGamepad_SetRumble runs the
     /// others: the latest call wins, a duration of 0 stops them, and the
     /// two calls do not touch each other's motors.
     ///
@@ -238,14 +239,14 @@ extern "C"
     /// @param left        The left trigger's motor's strength.
     /// @param right       The right trigger's motor's strength.
     /// @param durationMs  How long, in milliseconds.
-    /// @return As mwinSetGamepadRumble, with `mwin_errorUnsupported` for a
+    /// @return As mwinGamepad_SetRumble, with `mwin_errorUnsupported` for a
     ///         gamepad without mwin_padTriggerRumble.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinSetGamepadTriggerRumble(mwinContext* context,
-                                                                   mwinGamepadId gamepad,
-                                                                   float left, float right,
-                                                                   uint32_t durationMs);
+    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_SetTriggerRumble(mwinContext* context,
+                                                                    mwinGamepadId gamepad,
+                                                                    float left, float right,
+                                                                    uint32_t durationMs);
 
     /// Turns a gamepad's motion sensors on or off. They are off when it
     /// connects, as they cost its battery and its link; turning them
@@ -260,8 +261,25 @@ extern "C"
     ///         connected; `mwin_errorInvalid` for a NULL context.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinSetGamepadMotion(mwinContext* context,
-                                                            mwinGamepadId gamepad, bool enabled);
+    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_EnableMotion(mwinContext* context,
+                                                                mwinGamepadId gamepad,
+                                                                bool enabled);
+
+    /// Reads whether a gamepad's motion sensors are on: turned on with
+    /// mwinGamepad_EnableMotion and not off since. A gamepad without
+    /// mwin_padMotion reads off.
+    ///
+    /// @param context     The context.
+    /// @param gamepad     The gamepad.
+    /// @param enabledOut  Receives true while they are on. False on
+    ///                    failure.
+    /// @return `mwin_success`; `mwin_errorStale` for a gamepad no longer
+    ///         connected; `mwin_errorInvalid` for a NULL argument.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_IsMotionEnabled(const mwinContext* context,
+                                                                   mwinGamepadId gamepad,
+                                                                   bool* enabledOut);
 
     /// Reads a gamepad's motion and starts the angle turned anew: the
     /// latest acceleration and rotation rate, and the angle turned since
@@ -270,15 +288,15 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param gamepad    The gamepad.
-    /// @param motionOut  Receives its motion.
+    /// @param motionOut  Receives its motion. Zeroed on failure.
     /// @return `mwin_success`; `mwin_errorUnsupported` for a gamepad
     ///         without mwin_padMotion; `mwin_errorStale` for a gamepad no
     ///         longer connected; `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGetGamepadMotion(mwinContext* context,
-                                                            mwinGamepadId gamepad,
-                                                            mwinGamepadMotion* motionOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_GetMotion(mwinContext* context,
+                                                             mwinGamepadId gamepad,
+                                                             mwinGamepadMotion* motionOut);
 
 #ifdef __cplusplus
 }

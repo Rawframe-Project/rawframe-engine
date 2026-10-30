@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Placing a container's absolute children by their insets in its
-// padding box (record mui-0003).
+// Placing a container's absolute children by their insets in its padding
+// box.
 
 #ifndef MAUL_UI_SRC_ABSOLUTE_H
 #define MAUL_UI_SRC_ABSOLUTE_H

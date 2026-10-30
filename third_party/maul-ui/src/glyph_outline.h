@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A glyph's outline as FreeType loads it for images (record mui-0006):
-// the font of a key, its instance set, the outline at a size unhinted and
-// without embedded bitmaps, synthetic oblique and bold made, and coverage
-// rasterized into a box of whole pixels. Glyph images and colour glyphs
-// share it.
+// A glyph's outline as FreeType loads it for images: the font of a key,
+// its instance set, the outline at a size unhinted and without embedded
+// bitmaps, synthetic oblique and bold made, and coverage rasterized into a
+// box of whole pixels. Glyph images and colour glyphs share it.
 
 #ifndef MAUL_UI_SRC_GLYPH_OUTLINE_H
 #define MAUL_UI_SRC_GLYPH_OUTLINE_H
@@ -35,8 +34,15 @@ typedef struct muiPixelBox
 // format.
 muiResult muiGlyphFailed(FT_Error error);
 
-// Whether an em in pixels is one images are rendered at.
-bool muiIsGlyphSizeValid(float pixelSize);
+// Whether an em in pixels is one images are rendered at: mui_success,
+// mui_errorInvalid for one that is not a finite number above 0, or
+// mui_errorLimit for one outside MUI_MIN_GLYPH_PIXEL_SIZE to
+// MUI_MAX_GLYPH_PIXEL_SIZE.
+muiResult muiGlyphSizeStatus(float pixelSize);
+
+// Whether a field's spread is in MUI_MIN_FIELD_SPREAD to
+// MUI_MAX_FIELD_SPREAD: mui_success, or mui_errorLimit.
+muiResult muiFieldSpreadStatus(uint32_t spread);
 
 // The font of a key, checked to have the glyph: NULL with the result
 // otherwise; keyOut receives the key with its default resolved.

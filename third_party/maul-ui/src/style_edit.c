@@ -14,7 +14,7 @@ void muiRestyleAll(muiContext* context)
 
 uint32_t muiResolveClassEdit(muiContext* context, muiStyleId styleId, muiResult* statusOut)
 {
-    if (styleId.index1 == 0 || muiIsInHostCall(context))
+    if (styleId.index1 == 0)
     {
         *statusOut = muiRefuse(context);
         return 0;
@@ -26,8 +26,9 @@ uint32_t muiResolveClassEdit(muiContext* context, muiStyleId styleId, muiResult*
 
 bool muiHasVariant(const muiStyleClass* class, muiVariant variant)
 {
-    return variant < mui_variantCondition0 ||
-           (uint32_t)(variant - mui_variantCondition0) < class->conditionCount;
+    return variant <= mui_variantExiting ||
+           (variant >= mui_variantCondition0 &&
+            (uint32_t)(variant - mui_variantCondition0) < class->conditionCount);
 }
 
 muiPropertySet* muiTakeVariantSet(muiStyleStore* store, muiStyleClass* class, muiVariant variant)

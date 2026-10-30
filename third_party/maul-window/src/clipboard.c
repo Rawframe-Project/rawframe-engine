@@ -100,9 +100,11 @@ void mwinReleaseClipboard(mwinContext* context)
     mwinReleaseClipboardExtras(context);
 }
 
-mwinResult mwinRequestClipboardWrite(mwinContext* context, mwinWindowId window, const char* text,
-                                     size_t length, mwinRequestId* requestOut)
+mwinResult mwinWindow_RequestClipboardWrite(mwinContext* context, mwinWindowId window,
+                                            const char* text, size_t length,
+                                            mwinRequestId* requestOut)
 {
+    mwinClearOut(requestOut, sizeof *requestOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);
@@ -143,9 +145,10 @@ mwinResult mwinRequestClipboardWrite(mwinContext* context, mwinWindowId window, 
     return mwin_success;
 }
 
-mwinResult mwinRequestClipboardRead(mwinContext* context, mwinWindowId window,
-                                    mwinRequestId* requestOut)
+mwinResult mwinWindow_RequestClipboardRead(mwinContext* context, mwinWindowId window,
+                                           mwinRequestId* requestOut)
 {
+    mwinClearOut(requestOut, sizeof *requestOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);
@@ -161,10 +164,12 @@ mwinResult mwinRequestClipboardRead(mwinContext* context, mwinWindowId window,
     return status;
 }
 
-mwinResult mwinGetClipboardText(const mwinContext* context, mwinRequestId request, char* buffer,
-                                size_t capacity, size_t* lengthOut)
+mwinResult mwinRequest_GetClipboardText(const mwinContext* context, mwinRequestId request,
+                                        char* bufferOut, size_t capacity, size_t* lengthOut)
 {
+    mwinClearOut(bufferOut, capacity);
+    mwinClearOut(lengthOut, sizeof *lengthOut);
     return mwinCopyFound(
         context, request, mwin_foundText, context != nullptr ? context->clipboardFound : nullptr,
-        context != nullptr ? context->clipboardFoundLength : 0, buffer, capacity, lengthOut);
+        context != nullptr ? context->clipboardFoundLength : 0, bufferOut, capacity, lengthOut);
 }

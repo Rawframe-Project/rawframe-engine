@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UI Automation adapter's text ranges (record mui-0008, research
-// 143): two byte offsets into a node's value text, normalized and moved
-// by unit through the boundaries every adapter shares, read as UTF-16,
-// and selected through the host. The text may change while a client
-// holds a range: each use keeps the offsets within it.
+// The UI Automation adapter's text ranges: two byte offsets into a node's
+// value text, normalized and moved by unit through the boundaries every
+// adapter shares, read as UTF-16, and selected through the host. The text
+// may change while a client holds a range: each use keeps the offsets
+// within it.
 
 #include "access_text.h"
+#include "fpenv.h"
 #include "uia.h"
 
 #include <string.h>
@@ -398,7 +399,7 @@ static HRESULT PutRects(const muiUiaAdapter* adapter, const muiRect* rects, uint
 
 // A rectangle each line the range lies on; the node's bounds for text
 // without clusters; none for an empty range.
-static HRESULT STDMETHODCALLTYPE GetBoundingRectangles(muiUiaRange* self, SAFEARRAY** out)
+static MUI_NOINLINE HRESULT GetBoundingRectanglesWorker(muiUiaRange* self, SAFEARRAY** out)
 {
     muiAccessText text;
     if (out == nullptr)
@@ -425,6 +426,14 @@ static HRESULT STDMETHODCALLTYPE GetBoundingRectangles(muiUiaRange* self, SAFEAR
     HRESULT result = status == mui_empty ? PutRects(adapter, &whole, asWhole ? 1 : 0, out)
                                          : PutRects(adapter, got.rects, got.count, out);
     muiAccessFreeRects(&got);
+    return result;
+}
+
+static HRESULT STDMETHODCALLTYPE GetBoundingRectangles(muiUiaRange* self, SAFEARRAY** out)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    HRESULT result = GetBoundingRectanglesWorker(self, out);
+    muiFloatEnvLeave(floatEnv);
     return result;
 }
 

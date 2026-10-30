@@ -17,12 +17,11 @@ import android.view.accessibility.AccessibilityNodeProvider;
 import java.util.Collections;
 
 /**
- * Maul UI's accessibility tree shown to Android (record mui-0008): the
- * provider of a host view, whose virtual views are the tree's shown
- * nodes. The native adapter (maul-ui/access_android.h) makes it and
- * answers its questions; each node comes back as packed numbers and
- * texts, filled in here. The host builds this file into its
- * application. Called on the main thread only.
+ * Maul UI's accessibility tree shown to Android: the provider of a host
+ * view, whose virtual views are the tree's shown nodes. The native adapter
+ * (maul-ui/access_android.h) makes it and answers its questions; each node
+ * comes back as packed numbers and texts, filled in here. The host builds
+ * this file into its application. Called on the main thread only.
  */
 public class AccessProvider extends AccessibilityNodeProvider {
     // A node's packed numbers, as src/android.h writes them.

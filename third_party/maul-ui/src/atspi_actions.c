@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The AT-SPI adapter's Action and Value interfaces (record mui-0008): a
-// node's actions listed by name and done by index, each asked of the
-// host, and a range's numbers, its value set through the host.
+// The AT-SPI adapter's Action and Value interfaces: a node's actions
+// listed by name and done by index, each asked of the host, and a range's
+// numbers, its value set through the host.
 
 #include "atspi.h"
+#include "host_call.h"
 
 #include <string.h>
 
@@ -50,7 +51,8 @@ uint32_t muiAtspiActionCount(const muiAccessNode* node)
 static bool Perform(const muiAtspiObject* object, muiAccessAction action, float value)
 {
     const muiAccessRequest request = {.action = action, .target = object->node->id, .value = value};
-    return object->adapter->action(object->adapter->user, &request);
+    return muiActMarked(&object->adapter->app->busy, object->adapter->action, object->adapter->user,
+                        &request);
 }
 
 // Reads a call's index argument; NULL for none, or an index past the
@@ -186,7 +188,6 @@ bool muiAtspiAppendValueProperty(muiAtspiApp* app, muiDBusIter* iter, const muiA
 bool muiAtspiSetValue(const muiAtspiObject* object, double value)
 {
     const muiAccessNode* node = object->node;
-    return value >= (double)node->minimum && value <= (double)node->maximum &&
-           (node->actions & (1u << mui_actionSetValue)) != 0 &&
+    return muiAccessValueFits(node, value) && (node->actions & (1u << mui_actionSetValue)) != 0 &&
            Perform(object, mui_actionSetValue, (float)value);
 }

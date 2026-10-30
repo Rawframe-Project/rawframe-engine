@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// COLR version 1 composite modes (record mui-0006). Porter-Duff: co = cs
-// Fa + cb Fb, ao = as Fa + ab Fb, premultiplied. Plus adds, held at 1:
-// the specification leaves it unclamped, but a premultiplied channel
-// past 1 would make every later source over wrong. A blend mode blends
-// the colours unpremultiplied and composites source over: co = cs (1 -
-// ab) + cb (1 - as) + as ab B(Cb, Cs), ao = as + ab - as ab. Surfaces
-// are in linear light, as all of the painter's compositing is.
+// COLR version 1 composite modes. Porter-Duff: co = cs Fa + cb Fb, ao = as
+// Fa + ab Fb, premultiplied. Plus adds, held at 1: the specification
+// leaves it unclamped, but a premultiplied channel past 1 would make every
+// later source over wrong. A blend mode blends the colours unpremultiplied
+// and composites source over: co = cs (1 - ab) + cb (1 - as) + as ab B(Cb,
+// Cs), ao = as + ab - as ab. Surfaces are in linear light, as all of the
+// painter's compositing is.
 
 #include "colr_composite.h"
 

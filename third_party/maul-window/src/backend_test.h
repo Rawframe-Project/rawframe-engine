@@ -24,7 +24,7 @@
 
 // A request waiting for the next pump. The generations tell it from a
 // later window or request in the same slots.
-// A chord's reach, as mwinTestSetKeyReach set it.
+// A chord's reach, as mwinContext_SetTestKeyReach set it.
 typedef struct mwinTestKeyReach
 {
     mwinKeyCode code;
@@ -147,7 +147,7 @@ mwinOutcome mwinTestUseClipboard(mwinContext* context, const mwinRequest* reques
 // Opens an address or reveals a path as a platform would: it keeps it.
 void mwinTestOpen(mwinContext* context, const mwinRequest* request);
 
-// What mwinGetKeyReach answers: the reach a test set, else delivered.
+// What mwinContext_GetKeyReach answers: the reach a test set, else delivered.
 mwinKeyReach mwinTestKeyReachOf(const mwinContext* context, mwinKeyCode code,
                                 mwinModifiers modifiers);
 
@@ -160,7 +160,7 @@ mwinOutcome mwinTestAnswerDialog(mwinContext* context, uint32_t slot, uint32_t r
                                  mwinOutcome outcome);
 
 // Carries out a text input or on-screen keyboard request, keeping what
-// it asked for where mwinTestGetTextInput and mwinTestGetVirtualKeyboard
+// it asked for where mwinWindow_GetTestTextInput and mwinWindow_GetTestVirtualKeyboard
 // read it.
 void mwinTestCarryOutText(mwinContext* context, uint32_t slot, const mwinRequest* request);
 

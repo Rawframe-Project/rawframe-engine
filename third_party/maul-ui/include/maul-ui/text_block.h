@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Text blocks (record mui-0006): UTF-8 text the text service lays out as
-// a node's host content. A node whose host key is a block's key, and
-// whose content is the host's, is measured by muiMeasureText and painted
-// by muiPaintText in its computed text style: lines broken where Unicode
-// allows (UAX #14), runs ordered by the Unicode bidirectional algorithm
-// (UAX #9), glyphs shaped by HarfBuzz. White space is kept as written,
-// line breaks in the text end lines, and spaces ending a wrapped line
-// hang past it.
+// Text blocks: UTF-8 text the text service lays out as a node's host
+// content. A node whose host key is a block's key, and whose content is
+// the host's, is measured by muiMeasureText and painted by muiPaintText in
+// its computed text style: lines broken where Unicode allows (UAX
+// #14), runs ordered by the Unicode bidirectional algorithm (UAX #9),
+// glyphs shaped by HarfBuzz. White space is kept as written, line breaks
+// in the text end lines, and spaces ending a wrapped line hang past it.
 
 #ifndef MAUL_UI_TEXT_BLOCK_H
 #define MAUL_UI_TEXT_BLOCK_H
@@ -31,7 +30,7 @@ extern "C"
 {
 #endif
 
-    // A text block, in the shape of every id (family record 0016).
+    // A text block, in the shape of every id.
     typedef struct muiTextBlockId
     {
         uint32_t index1;
@@ -51,10 +50,11 @@ extern "C"
     typedef struct muiTextBlockDef
     {
         uint32_t cookie;
-        // UTF-8 text, copied; ill-formed sequences are laid out as
-        // U+FFFD. May be NULL when length is 0.
+        // UTF-8 text, copied; an ill-formed sequence is laid out as one
+        // U+FFFD for each maximal subpart, as browsers decode it. May be
+        // NULL when length is 0.
         const char* text;
-        // Its length in bytes, below 2^31.
+        // Its length in bytes, at most MUI_MAX_TEXT_BYTES.
         size_t length;
     } muiTextBlockDef;
 
@@ -69,11 +69,12 @@ extern "C"
     ///
     /// @param service  The service.
     /// @param def      The block: a valid cookie and its text.
-    /// @param blockOut Receives the block's id; the null id on failure.
+    /// @param blockOut Receives the block's id. The null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
-    ///         cookie, text NULL with a length or a length of 2^31 or more;
-    ///         `mui_errorCapacity` when the service's limit of blocks is
-    ///         reached or memory runs out.
+    ///         cookie or text NULL with a length; `mui_errorLimit` for a length
+    ///         past MUI_MAX_TEXT_BYTES; `mui_errorCapacity` when the service's limit of blocks is
+    ///         reached or memory runs out; `mui_errorBusy` while the service
+    ///         is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateTextBlock(muiTextService* service,
@@ -84,8 +85,9 @@ extern "C"
     ///
     /// @param service  The service.
     /// @param blockId  The block.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service or the
-    ///         null id; `mui_errorStale` for a block that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service or the null
+    ///         id; `mui_errorStale` for a block that is gone; `mui_errorBusy`
+    ///         while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiDestroyTextBlock(muiTextService* service,
@@ -98,12 +100,12 @@ extern "C"
     /// @param service  The service.
     /// @param blockId  The block.
     /// @param text     The text; may be NULL when length is 0.
-    /// @param length   Its length in bytes, below 2^31.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the
-    ///         null id, a NULL text with a length or a length of 2^31 or
-    ///         more; `mui_errorStale` for a block that is gone;
-    ///         `mui_errorCapacity` when memory runs out, which keeps the
-    ///         old text.
+    /// @param length   Its length in bytes, at most MUI_MAX_TEXT_BYTES.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the null
+    ///         id or a NULL text with a length; `mui_errorLimit` for a length
+    ///         past MUI_MAX_TEXT_BYTES; `mui_errorStale` for a block that is
+    ///         gone; `mui_errorCapacity` when memory runs out, which keeps the
+    ///         old text; `mui_errorBusy` while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_SetText(muiTextService* service,
@@ -113,7 +115,7 @@ extern "C"
     /// Replaces the bytes of a block's text from start up to end with a
     /// text, as editing does; its nodes are measured and painted anew
     /// once marked changed. Offsets inside a UTF-8 sequence leave bytes
-    /// that read as U+FFFD; muiTextBlock_FindDeletion and muiTextMove give
+    /// that read as U+FFFD; muiTextBlock_FindDeletion and muiNode_MoveTextPosition give
     /// offsets on grapheme cluster boundaries.
     ///
     /// @param service  The service.
@@ -123,12 +125,12 @@ extern "C"
     /// @param text     The text put in its place, UTF-8. May be NULL when
     ///                 length is 0, and may be part of the block's text.
     /// @param length   Its length in bytes.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the
-    ///         null id, a NULL text with a length, start after end, end
-    ///         past the text, or a result of 2^31 bytes or more;
-    ///         `mui_errorStale` for a block that is gone;
-    ///         `mui_errorCapacity` when memory runs out, which keeps the
-    ///         old text.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the null
+    ///         id, a NULL text with a length, start after end, or end past the
+    ///         text; `mui_errorLimit` for a result past MUI_MAX_TEXT_BYTES;
+    ///         `mui_errorStale` for a block that is gone; `mui_errorCapacity` when memory runs out,
+    ///         which keeps the old text; `mui_errorBusy` while the service is
+    ///         busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_Replace(muiTextService* service,
@@ -161,7 +163,7 @@ extern "C"
     /// font, size, weight and slant their runs are shaped in, the node's
     /// synthesis kept: a size is
     /// against the node's, as a child's text is against its parent's, and
-    /// a line is as tall as the runs on it reach (record mui-0006). A block
+    /// a line is as tall as the runs on it reach. A block
     /// takes up to 31 run styles apart from the node's; a span making more
     /// is shaped in the style under it. Setting the text drops them; replacing
     /// a range moves those after it, a span growing with text put strictly
@@ -174,13 +176,14 @@ extern "C"
     /// @param blockId  The block.
     /// @param spans    The spans; NULL when count is 0.
     /// @param count    How many, at most MUI_MAX_TEXT_SPANS; 0 clears them.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the
-    ///         null id, NULL spans with a count, too many, a span empty,
-    ///         past the text or with an edge inside a UTF-8 sequence, a mask
-    ///         naming another property, or a value not valid for its
-    ///         property; `mui_errorStale` for a block that is gone;
-    ///         `mui_errorCapacity` when memory runs out, which keeps the old
-    ///         spans.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the null
+    ///         id, NULL spans with a count, a span empty, past the text or
+    ///         with an edge inside a UTF-8 sequence, a mask naming another
+    ///         property, or a value not valid for its property;
+    ///         `mui_errorLimit` for more than MUI_MAX_TEXT_SPANS;
+    ///         `mui_errorStale` for a block that is gone; `mui_errorCapacity`
+    ///         when memory runs out, which keeps the old spans;
+    ///         `mui_errorBusy` while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_SetSpans(muiTextService* service,
@@ -192,12 +195,12 @@ extern "C"
     ///
     /// @param service    The service.
     /// @param blockId    The block.
-    /// @param spansOut   Receives them, valid until its spans or text
-    ///                   change or the block is destroyed; NULL for none.
-    /// @param countOut   Receives how many.
+    /// @param spansOut   Receives them, valid until its spans or text change or
+    ///                   the block is destroyed; NULL for none and on
+    ///                   failure.
+    /// @param countOut   Receives how many. 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
-    ///         null id; `mui_errorStale` for a block that is gone. Nothing
-    ///         is written on failure.
+    ///         null id; `mui_errorStale` for a block that is gone.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_GetSpans(const muiTextService* service,
@@ -210,11 +213,11 @@ extern "C"
     /// @param service    The service.
     /// @param blockId    The block.
     /// @param textOut    Receives its bytes, valid until its text is set,
-    ///                   replaced or the block destroyed; never NULL.
-    /// @param lengthOut  Receives its length in bytes.
+    ///                   replaced or the block destroyed; never NULL but on
+    ///                   failure, which gives NULL.
+    /// @param lengthOut  Receives its length in bytes. 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
-    ///         null id; `mui_errorStale` for a block that is gone. Nothing
-    ///         is written on failure.
+    ///         null id; `mui_errorStale` for a block that is gone.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_GetText(const muiTextService* service,
@@ -257,10 +260,12 @@ extern "C"
     /// @param service  The service.
     /// @param fontId   The font, or the null id.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL service;
-    ///         `mui_errorStale` for a font that is gone.
+    ///         `mui_errorStale` for a font that is gone; `mui_errorBusy` while
+    ///         the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiSetDefaultFont(muiTextService* service, muiFontId fontId);
+    MUI_NODISCARD MUI_API muiResult muiTextService_SetDefaultFont(muiTextService* service,
+                                                                  muiFontId fontId);
 
     /// Sets the fonts tried, in order, for characters a style's font or
     /// family, and its family's fallbacks, lack: each grapheme cluster is
@@ -271,24 +276,28 @@ extern "C"
     /// @param service  The service.
     /// @param keys     Keys of fonts and families; may be NULL when count
     ///                 is 0.
-    /// @param count    Up to 8; 0 for none.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, NULL
-    ///         keys with a count, a count past 8 or a key that is no
-    ///         font's or family's; `mui_errorStale` for one that is gone.
-    ///         On failure the fallbacks stay as they were.
+    /// @param count    Up to MUI_MAX_FALLBACKS; 0 for none.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, NULL keys
+    ///         with a count or a key that is no font's or family's;
+    ///         `mui_errorLimit` for more than MUI_MAX_FALLBACKS;
+    ///         `mui_errorStale` for one that is gone. On failure the
+    ///         fallbacks stay as they were; `mui_errorBusy` while the service
+    ///         is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiSetFallbackFonts(muiTextService* service,
-                                                        const uint64_t* keys, uint32_t count);
+    MUI_NODISCARD MUI_API muiResult muiTextService_SetFallbackFonts(muiTextService* service,
+                                                                    const uint64_t* keys,
+                                                                    uint32_t count);
 
-    /// Counts the times a block could not be laid out for want of memory,
-    /// and so measured as empty and painted nothing.
+    /// Counts the times a block could not be laid out for want of memory.
+    /// Its measure then answers NaN and its painting calls
+    /// muiDrawSink_Fail, so that layout and the next build ask again.
     ///
     /// @param service  The service; NULL gives 0.
     /// @return The count.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_API uint64_t muiGetTextServiceFailures(const muiTextService* service);
+    MUI_API uint64_t muiTextService_GetFailures(const muiTextService* service);
 
     /// Measures a text block's lines, as a muiMeasureFunction: user is a
     /// muiTextHost, and hostKey a block's key. The width breaks lines:
@@ -303,7 +312,9 @@ extern "C"
     /// @param hostKey  The block's key.
     /// @param width    The width request.
     /// @param height   The height request, which the text does not use.
-    /// @return The content box size.
+    /// @return The content box size; NaN by NaN when memory runs out,
+    ///         which layout measures again (muiMeasureFunction); 0 by 0, with
+    ///         one misuse counted, while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service and context are used by one
     /// thread at a time.
@@ -320,7 +331,9 @@ extern "C"
     /// @param hostKey  The block's key.
     /// @param width    The content box's width.
     /// @param height   The content box's height.
-    /// @param sink     Where the runs go.
+    /// @param sink     Where the runs go. Nothing goes there, and one misuse
+    ///                 is counted, while the service is busy. When memory
+    ///                 runs out the text is told failed (muiDrawSink_Fail).
     /// @par Thread safety
     /// Safe from any thread; the service and context are used by one
     /// thread at a time.
@@ -345,16 +358,18 @@ extern "C"
     ///                    NULL to read neither lines nor words.
     /// @param contentOut  Receives the text, its selection, lines, words
     ///                    and clusters, valid until the block is edited
-    ///                    or destroyed, or read again.
+    ///                    or destroyed, or read again; unchanged when the
+    ///                    call gives false.
     /// @return Whether the key names a block; false, too, when memory
-    ///         for a password's bullets runs out, or for a NULL
-    ///         contentOut. Lines and words that cannot be read for want
-    ///         of memory or a font are left out.
+    ///         for a password's bullets runs out, for a NULL contentOut
+    ///         or while the service is busy, which counts one misuse.
+    ///         Lines and words that cannot be read for want of memory or
+    ///         a font are left out.
     /// @par Thread safety
     /// Safe from any thread; the service and context are used by one
     /// thread at a time.
-    MUI_API bool muiAccessTextOf(void* user, muiNodeId nodeId, uint64_t hostKey,
-                                 const muiRect* shown, muiAccessContent* contentOut);
+    MUI_API bool muiReadAccessText(void* user, muiNodeId nodeId, uint64_t hostKey,
+                                   const muiRect* shown, muiAccessContent* contentOut);
 
     /// muiBaselineFunction: user is a muiTextHost, and hostKey a block's
     /// key. Lines are a line height apart from the content box's top, so
@@ -367,13 +382,15 @@ extern "C"
     ///                 use.
     /// @param height   The content box's height, which it does not use.
     /// @return The baseline's distance down from the content box's top;
-    ///         NaN for empty text, which has no lines, and where
-    ///         muiMeasureText measures nothing.
+    ///         NaN for empty text, which has no lines, where
+    ///         muiMeasureText measures nothing, and while the service is
+    ///         busy, which counts one misuse; +infinity when memory runs
+    ///         out, which layout asks again (muiBaselineFunction).
     /// @par Thread safety
     /// Safe from any thread; the service and context are used by one
     /// thread at a time.
-    MUI_API float muiTextBaseline(void* user, muiNodeId nodeId, uint64_t hostKey, float width,
-                                  float height);
+    MUI_API float muiMeasureTextBaseline(void* user, muiNodeId nodeId, uint64_t hostKey,
+                                         float width, float height);
 
 #ifdef __cplusplus
 }

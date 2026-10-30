@@ -2,10 +2,10 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Tokens: typed values that class variants name in place of a property's
-// value, so that a theme is a change of token values (record mui-0004).
-// A token holds a literal of its type, or an alias to another token of
-// that type; aliases never form a cycle. Changing a token restyles every
-// node, as a class edit does, and named transitions move the change.
+// value, so that a theme is a change of token values. A token holds a
+// literal of its type, or an alias to another token of that type; aliases
+// never form a cycle. Changing a token restyles every node, as a class
+// edit does, and named transitions move the change.
 
 #ifndef MAUL_UI_TOKEN_H
 #define MAUL_UI_TOKEN_H
@@ -21,7 +21,7 @@ extern "C"
 {
 #endif
 
-    // A token, in the shape of every id (family record 0016).
+    // A token, in the shape of every id.
     typedef struct muiTokenId
     {
         uint32_t index1;
@@ -81,10 +81,11 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param def         The token: a valid cookie and its value.
-    /// @param tokenOut  Receives the token; set to the null id on failure.
+    /// @param tokenOut  Receives the token. The null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
-    ///         cookie, a value outside the def's or a call from a measure or
-    ///         paint function; `mui_errorCapacity` when the context's token
+    ///         cookie or a value outside the def's; `mui_errorLimit` for a gradient of more than
+    ///         MUI_MAX_GRADIENT_STOPS stops; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorCapacity` when the context's token
     ///         limit is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -96,8 +97,8 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param tokenId  The token.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function; `mui_errorStale`
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
     ///         for an id whose token is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -110,14 +111,16 @@ extern "C"
     /// @param tokenId  The token.
     /// @param value    The value, of the token's type, as muiCreateToken
     ///                 takes it.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, a value of another type or outside muiCreateToken's
-    ///         or a call from a measure or paint function; `mui_errorStale` for an
-    ///         id whose token is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, a value of another type or outside muiCreateToken's;
+    ///         `mui_errorLimit` for a gradient of more than
+    ///         MUI_MAX_GRADIENT_STOPS stops; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for
+    ///         an id whose token is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiSetTokenValue(muiContext* context, muiTokenId tokenId,
-                                                     const muiTokenValue* value);
+    MUI_NODISCARD MUI_API muiResult muiToken_SetValue(muiContext* context, muiTokenId tokenId,
+                                                      const muiTokenValue* value);
 
     /// Makes a token an alias of another of its type, so that it gives
     /// that token's value, and restyles every node.
@@ -125,31 +128,33 @@ extern "C"
     /// @param context  The context.
     /// @param tokenId  The token.
     /// @param target   The token it gives the value of.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, a null
-    ///         id, a target of another type, an alias that would lead back
-    ///         to the token or a call from a measure or paint function;
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, a null id,
+    ///         a target of another type or an alias that would lead back to the
+    ///         token; `mui_errorBusy` while the context is busy;
     ///         `mui_errorStale` for a token or a target that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiSetTokenAlias(muiContext* context, muiTokenId tokenId,
-                                                     muiTokenId target);
+    MUI_NODISCARD MUI_API muiResult muiToken_SetAlias(muiContext* context, muiTokenId tokenId,
+                                                      muiTokenId target);
 
     /// Reads a token's value, through its aliases, and what it aliases.
     ///
     /// @param context     The context.
     /// @param tokenId     The token.
-    /// @param valueOut    Receives the value, with the token's type; its
-    ///                    member is zero when the result is `mui_empty`.
-    /// @param aliasOut    Receives the token it aliases, or the null id for
-    ///                    a literal; may be NULL.
+    /// @param valueOut    Receives the value, with the token's type; its member
+    ///                    is zero when the result is `mui_empty`. Zeroed on
+    ///                    failure.
+    /// @param aliasOut    Receives the token it aliases, or the null id for a
+    ///                    literal; may be NULL. The null id on failure.
     /// @return `mui_success`; `mui_empty` when an alias leads to a token
     ///         that is gone; `mui_errorInvalid` for a NULL context or
     ///         value, or the null id; `mui_errorStale` for an id whose
     ///         token is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiGetTokenValue(const muiContext* context, muiTokenId tokenId,
-                                                     muiTokenValue* valueOut, muiTokenId* aliasOut);
+    MUI_NODISCARD MUI_API muiResult muiToken_GetValue(const muiContext* context, muiTokenId tokenId,
+                                                      muiTokenValue* valueOut,
+                                                      muiTokenId* aliasOut);
 
     /// Names a token for a property in one variant of a class, in place
     /// of a value: resolution reads the token there. A value the property
@@ -165,14 +170,13 @@ extern "C"
     ///                  above, which a condition of the variant does not
     ///                  read.
     /// @param tokenId   The token, of the property's type, or the null id.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null class id, an unknown variant or property, a property
-    ///         of no token type or another type than the token's, one the
-    ///         variant's condition reads, or a call from a measure
-    ///         function; `mui_errorStale` for a class or a token that is
-    ///         gone; `mui_errorCapacity` when the context's limit of token
-    ///         names, or of property sets for a variant with nothing set,
-    ///         is reached.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         class id, an unknown variant or property, a property of no token
+    ///         type or another type than the token's or one the variant's
+    ///         condition reads; `mui_errorBusy` while the context is busy;
+    ///         `mui_errorStale` for a class or a token that is gone;
+    ///         `mui_errorCapacity` when the context's limit of token names, or
+    ///         of property sets for a variant with nothing set, is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiStyle_SetToken(muiContext* context, muiStyleId styleId,
@@ -185,7 +189,8 @@ extern "C"
     /// @param styleId     The class.
     /// @param variant     The variant.
     /// @param property    The property.
-    /// @param tokenOut  Receives the token; the null id for none.
+    /// @param tokenOut  Receives the token; the null id for none. The null id
+    ///                  on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id, an unknown variant or property; `mui_errorStale`
     ///         for an id whose class is gone.

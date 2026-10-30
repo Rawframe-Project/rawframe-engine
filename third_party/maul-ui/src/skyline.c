@@ -6,6 +6,8 @@
 
 #include "skyline.h"
 
+#include "invariant.h"
+
 #include <string.h>
 
 void muiSkylineReset(muiSkyline* skyline)
@@ -64,10 +66,14 @@ bool muiSkylineInsert(muiSkyline* skyline, uint32_t width, uint32_t height, uint
     uint32_t next = best;
     while (next < skyline->count && nodes[next].x + nodes[next].width <= right)
     {
+        // The rectangle sits on or above every segment it covers, so it
+        // overlaps nothing placed before.
+        MUI_ASSERT(nodes[next].y <= bestY);
         next++;
     }
     if (next < skyline->count && nodes[next].x < right)
     {
+        MUI_ASSERT(nodes[next].y <= bestY);
         nodes[next].width = (uint16_t)(nodes[next].x + nodes[next].width - right);
         nodes[next].x = (uint16_t)right;
     }
@@ -90,6 +96,14 @@ bool muiSkylineInsert(muiSkyline* skyline, uint32_t width, uint32_t height, uint
         memmove(&nodes[best], &nodes[best + 1],
                 (skyline->count - best - 1) * sizeof(muiSkylineNode));
         skyline->count--;
+    }
+    // The segments still span the plot from edge to edge, each beginning
+    // where the one before it ends, so no column has two depths.
+    MUI_ASSERT(nodes[0].x == 0 &&
+               nodes[skyline->count - 1].x + nodes[skyline->count - 1].width == skyline->width);
+    for (uint32_t i = 1; i < skyline->count; i++)
+    {
+        MUI_ASSERT(nodes[i].x == nodes[i - 1].x + nodes[i - 1].width && nodes[i].width != 0);
     }
     *xOut = x;
     *yOut = bestY;

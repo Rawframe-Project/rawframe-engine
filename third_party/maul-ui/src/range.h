@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Range values (record mui-0007): the defaults input reaches them by.
+// Range values: the defaults input reaches them by.
 
 #ifndef MAUL_UI_SRC_RANGE_H
 #define MAUL_UI_SRC_RANGE_H

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Paragraphs (record mui-0006): a node's text block laid out in its
-// style, as measuring, painting and hit testing share it.
+// Paragraphs: a node's text block laid out in its style, as measuring,
+// painting and hit testing share it.
 
 #ifndef MAUL_UI_SRC_TEXT_PARAGRAPH_H
 #define MAUL_UI_SRC_TEXT_PARAGRAPH_H

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Accessibility (record mui-0008): the platform-neutral accessibility
-// tree. Every node of a root's tree is a node of it, with a role, text,
-// flags and actions; most come from what the library already holds
-// (rectangles, scrolling, focus, states, value ranges, virtual lists),
-// the rest from the host. The library builds updates in the shape
-// AccessKit uses: the nodes that changed, each sent whole, the focus
-// with every update, the root with the first. The host hands them to
-// the adapters, which keep their own copies, and applies on its thread
-// the requests the adapters queued. Nothing is built until the host
-// enables a root, as when Maul Window reports that an assistive
-// technology asked for one.
+// Accessibility: the platform-neutral accessibility tree. Every node of a
+// root's tree is a node of it, with a role, text, flags and actions; most
+// come from what the library already holds (rectangles, scrolling, focus,
+// states, value ranges, virtual lists), the rest from the host. The
+// library builds updates in the shape AccessKit uses: the nodes that
+// changed, each sent whole, the focus with every update, the root with the
+// first. The host hands them to the adapters, which keep their own copies,
+// and applies on its thread the requests the adapters queued. Nothing is
+// built until the host enables a root, as when Maul Window reports that an
+// assistive technology asked for one.
 
 #ifndef MAUL_UI_ACCESS_H
 #define MAUL_UI_ACCESS_H
@@ -242,8 +241,8 @@ extern "C"
         mui_actionSetScrollOffset = 13,
         // A value text's selection set, or a range of it replaced with
         // text: offered while the host's text function gives a selection,
-        // and applied by the host, not muiPerformAccessAction (the text
-        // component's muiTextPerformAccessAction, maul-ui/text_editor.h).
+        // and applied by the host, not muiContext_PerformAccessAction (the text
+        // component's muiPerformTextAccessAction, maul-ui/text_editor.h).
         mui_actionSetSelection = 14,
         mui_actionReplaceText = 15,
     };
@@ -266,7 +265,9 @@ extern "C"
 
     enum
     {
-        MUI_ACCESS_RELATIONS = 8
+        MUI_ACCESS_RELATIONS = 8,
+        // The most nodes a relation names.
+        MUI_MAX_RELATION_TARGETS = 65535
     };
 
     // One node a relation names.
@@ -291,12 +292,12 @@ extern "C"
 
     enum
     {
-        mui_popupNone = 0,
-        mui_popupMenu = 1,
-        mui_popupListBox = 2,
-        mui_popupTree = 3,
-        mui_popupGrid = 4,
-        mui_popupDialog = 5,
+        mui_hasPopupNone = 0,
+        mui_hasPopupMenu = 1,
+        mui_hasPopupListBox = 2,
+        mui_hasPopupTree = 3,
+        mui_hasPopupGrid = 4,
+        mui_hasPopupDialog = 5,
     };
 
     // Which way a node's items or values run; none says nothing.
@@ -433,7 +434,7 @@ extern "C"
     typedef struct muiAccessNode
     {
         // Its node's id, generation in the high half and index in the
-        // low (muiAccessIdOf).
+        // low (muiNode_GetAccessId).
         uint64_t id;
         muiRole role;
         muiAccessFlags flags;
@@ -506,6 +507,12 @@ extern "C"
         uint32_t length;
     } muiAccessRequest;
 
+    // Performs an action a client asked for, by muiContext_PerformAccessAction or
+    // its own means; true when it did. Each adapter's def says when it is
+    // called. It may call the context, not the adapter's functions that
+    // change it.
+    typedef bool (*muiAccessActionFunction)(void* user, const muiAccessRequest* request);
+
     // What host content reads as: its text, and where it is selected and
     // where its lines and words are.
     typedef struct muiAccessContent
@@ -521,11 +528,12 @@ extern "C"
     /// its scrolling ancestors, in its own space, its lines, words and
     /// clusters too, valid as long; clusters may be left out of lines far
     /// from shown, so a long text costs what is near the screen. It runs
-    /// inside muiBuildAccessUpdate, as the measure function runs inside
-    /// layout, and may not change the context; shown is given only for a
+    /// inside muiNode_BuildAccessUpdate, as the measure function runs inside
+    /// layout, and may read the context, not change it (a function that
+    /// would answers mui_errorBusy); shown is given only for a
     /// node the update sends, NULL otherwise. The text must be well-formed
-    /// UTF-8 below 2^31 bytes; other text is left out, and marks out of
-    /// order or past it are.
+    /// UTF-8 of at most MUI_MAX_TEXT_BYTES; other text is left out, and
+    /// marks out of order or past it are.
     typedef bool (*muiAccessTextFunction)(void* user, muiNodeId nodeId, uint64_t hostKey,
                                           const muiRect* shown, muiAccessContent* contentOut);
 
@@ -535,7 +543,7 @@ extern "C"
     /// @return Its id.
     /// @par Thread safety
     /// Safe from any thread.
-    MUI_API uint64_t muiAccessIdOf(muiNodeId nodeId);
+    MUI_API uint64_t muiNode_GetAccessId(muiNodeId nodeId);
 
     /// The node of an accessibility id.
     ///
@@ -543,7 +551,7 @@ extern "C"
     /// @return Its node.
     /// @par Thread safety
     /// Safe from any thread.
-    MUI_API muiNodeId muiNodeIdOfAccess(uint64_t id);
+    MUI_API muiNodeId muiGetNodeOfAccessId(uint64_t id);
 
     /// Sets the function host content's text comes from: a node whose
     /// content is the host's (maul-ui/layout.h's mui_contentHost) and
@@ -553,13 +561,13 @@ extern "C"
     /// @param context   The context.
     /// @param function  The function, or NULL.
     /// @param user      Passed to it.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or a
-    ///         call from a measure or paint function.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context;
+    ///         `mui_errorBusy` while the context is busy.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiSetAccessTextFunction(muiContext* context,
-                                                             muiAccessTextFunction function,
-                                                             void* user);
+    MUI_NODISCARD MUI_API muiResult muiContext_SetAccessTextFunction(muiContext* context,
+                                                                     muiAccessTextFunction function,
+                                                                     void* user);
 
     /// Tells the accessibility tree what the host's text function gives
     /// for a node changed while its content did not: its selection
@@ -569,41 +577,42 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function;
-    ///         `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
+    ///         for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_MarkAccessChanged(muiContext* context,
                                                               muiNodeId nodeId);
 
-    /// Builds updates for a root's tree from now on, the next one whole.
-    /// Enabling an enabled root makes its next update whole again, as
-    /// when an adapter starts over. The first root enabled allocates a
-    /// copy of each node as last sent and the update's buffers.
+    /// Starts or stops building updates for a root's tree. Started, the
+    /// next update is whole; starting a started root makes its next update
+    /// whole again, as when an adapter starts over. The first root started
+    /// allocates a copy of each node as last sent and the update's
+    /// buffers, and the last root stopped frees them.
     ///
     /// @param context  The context.
     /// @param rootId   A node without a parent.
-    /// @return `mui_success`; `mui_errorCapacity` when
-    ///         `limits.accessRoots` roots are enabled or memory runs out;
-    ///         `mui_errorInvalid` for a NULL context, the null id, a node
-    ///         with a parent, or a call from a measure or paint
-    ///         function; `mui_errorStale` for a node that is gone.
+    /// @param enable   Whether to build its updates.
+    /// @return `mui_success`; `mui_empty` when stopping a root not started;
+    ///         `mui_errorCapacity` when starting one while `limits.accessRoots`
+    ///         roots are, or when memory runs out; `mui_errorInvalid` for a
+    ///         NULL context, the null id, or starting a node with a parent;
+    ///         `mui_errorBusy` while the context is busy; `mui_errorStale` when
+    ///         starting a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiAccess_Enable(muiContext* context, muiNodeId rootId);
+    MUI_NODISCARD MUI_API muiResult muiNode_EnableAccess(muiContext* context, muiNodeId rootId,
+                                                         bool enable);
 
-    /// Stops building updates for a root; the last root disabled frees
-    /// what enabling allocated.
+    /// Returns whether updates are built for a root's tree.
     ///
     /// @param context  The context.
     /// @param rootId   The root.
-    /// @return `mui_success`; `mui_empty` for a root not enabled;
-    ///         `mui_errorInvalid` for a NULL context, the null id or a call
-    ///         from a measure or paint function.
+    /// @return Whether they are; false for a NULL context or a stale id.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiAccess_Disable(muiContext* context, muiNodeId rootId);
+    MUI_API bool muiNode_IsAccessEnabled(const muiContext* context, muiNodeId rootId);
 
     /// Builds the update for an enabled root after its layout: the nodes
     /// whose role, texts, flags, actions, bounds, transform, values or
@@ -611,45 +620,46 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param rootId     The root.
-    /// @param updateOut  Receives the update.
+    /// @param updateOut  Receives the update. Zeroed on failure.
     /// @return `mui_success`; `mui_empty` for a root not enabled;
-    ///         `mui_errorInvalid` for a NULL argument, the null id, or a
-    ///         call from a measure or paint function;
-    ///         `mui_errorStale` for a root that is gone.
+    ///         `mui_errorInvalid` for a NULL argument or the null id;
+    ///         `mui_errorBusy` while the context is busy; `mui_errorStale` for
+    ///         a root that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiBuildAccessUpdate(muiContext* context, muiNodeId rootId,
-                                                         muiAccessUpdate* updateOut);
+    MUI_NODISCARD MUI_API muiResult muiNode_BuildAccessUpdate(muiContext* context, muiNodeId rootId,
+                                                              muiAccessUpdate* updateOut);
 
     /// Applies a request to a node that takes its action.
     ///
     /// @param context     The context.
     /// @param request     The request.
-    /// @param handledOut  Receives whether it did anything: a click a
-    ///                    widget handled, a focus or value or offset that
-    ///                    moved, a request posted. May be NULL.
-    /// @return `mui_success`; `mui_empty` for a node that does not take
-    ///         the action, and for the text actions, which the host
-    ///         applies; `mui_errorInvalid` for a NULL context or
-    ///         request, an unknown action, a value that is not finite, or
-    ///         a call from a measure, paint or event function;
-    ///         `mui_errorStale` for a node that is gone.
+    /// @param handledOut  Receives whether it did anything: a click a widget
+    ///                    handled, a focus or value or offset that moved, a
+    ///                    request posted. May be NULL. False on failure.
+    /// @return `mui_success`; `mui_empty` for a node that does not take the
+    ///         action, and for the text actions, which the host applies;
+    ///         `mui_errorInvalid` for a NULL context or request or an unknown
+    ///         action, counted as misuse; `mui_errorFormat` for a value or
+    ///         point that is not finite, counted as none, since a client
+    ///         sends it;
+    ///         `mui_errorBusy` while the context is busy or its event function
+    ///         runs; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiPerformAccessAction(muiContext* context,
-                                                           const muiAccessRequest* request,
-                                                           bool* handledOut);
+    MUI_NODISCARD MUI_API muiResult muiContext_PerformAccessAction(muiContext* context,
+                                                                   const muiAccessRequest* request,
+                                                                   bool* handledOut);
 
     /// Sets a node's role.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param role     The role, at most MUI_ROLE_LAST.
-    /// @return `mui_success`; `mui_errorCapacity` when
-    ///         `limits.accessNodes` nodes have accessibility data;
-    ///         `mui_errorInvalid` for a NULL context, the null id, an
-    ///         unknown role, or a call from a measure or paint
-    ///         function; `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorCapacity` when `limits.accessNodes`
+    ///         nodes have accessibility data; `mui_errorInvalid` for a NULL
+    ///         context, the null id or an unknown role; `mui_errorBusy` while
+    ///         the context is busy; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetAccessRole(muiContext* context, muiNodeId nodeId,
@@ -659,7 +669,7 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @param roleOut  Receives the role.
+    /// @param roleOut  Receives the role. 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or
     ///         the null id; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
@@ -674,13 +684,14 @@ extern "C"
     /// @param nodeId   The node.
     /// @param kind     Which text.
     /// @param text     UTF-8, non-NULL when length is not 0, without NUL.
-    /// @param length   Its length in bytes, below 2^31.
-    /// @return `mui_success`; `mui_errorCapacity` when
-    ///         `limits.accessNodes` nodes have accessibility data or memory
-    ///         runs out; `mui_errorInvalid` for a NULL context, the null
-    ///         id, an unknown kind, text that is not UTF-8 or holds a NUL,
-    ///         or a call from a measure or paint function;
-    ///         `mui_errorStale` for a node that is gone.
+    /// @param length   Its length in bytes, at most MUI_MAX_TEXT_BYTES.
+    /// @return `mui_success`; `mui_errorCapacity` when `limits.accessNodes`
+    ///         nodes have accessibility data or memory runs out;
+    ///         `mui_errorInvalid` for a NULL context, the null id, an unknown
+    ///         kind, or text that is not UTF-8 or holds a NUL; `mui_errorLimit`
+    ///         for a length past MUI_MAX_TEXT_BYTES; `mui_errorBusy`
+    ///         while the context is busy; `mui_errorStale` for a node that is
+    ///         gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetAccessText(muiContext* context, muiNodeId nodeId,
@@ -692,9 +703,9 @@ extern "C"
     /// @param context    The context.
     /// @param nodeId     The node.
     /// @param kind       Which text.
-    /// @param textOut    Receives it, NUL-terminated, valid until it is
-    ///                   set again or the node is destroyed.
-    /// @param lengthOut  Receives its length.
+    /// @param textOut    Receives it, NUL-terminated, valid until it is set
+    ///                   again or the node is destroyed. NULL on failure.
+    /// @param lengthOut  Receives its length. 0 on failure.
     /// @return `mui_success`; `mui_empty` for none; `mui_errorInvalid` for
     ///         a NULL argument, the null id or an unknown kind;
     ///         `mui_errorStale` for a node that is gone.
@@ -709,11 +720,11 @@ extern "C"
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param flags    Within MUI_ACCESS_HOST_FLAGS.
-    /// @return `mui_success`; `mui_errorCapacity` when
-    ///         `limits.accessNodes` nodes have accessibility data;
-    ///         `mui_errorInvalid` for a NULL context, the null id, a flag
-    ///         outside those, or a call from a measure or paint
-    ///         function; `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorCapacity` when `limits.accessNodes`
+    ///         nodes have accessibility data; `mui_errorInvalid` for a NULL
+    ///         context, the null id or a flag outside those; `mui_errorBusy`
+    ///         while the context is busy; `mui_errorStale` for a node that is
+    ///         gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetAccessFlags(muiContext* context, muiNodeId nodeId,
@@ -723,7 +734,7 @@ extern "C"
     ///
     /// @param context   The context.
     /// @param nodeId    The node.
-    /// @param flagsOut  Receives them, 0 for none.
+    /// @param flagsOut  Receives them; 0 for none and on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or
     ///         the null id; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
@@ -741,13 +752,14 @@ extern "C"
     /// @param nodeId   The node.
     /// @param kind     The relation.
     /// @param targets  The nodes, non-NULL when count is not 0.
-    /// @param count    How many, below 2^16.
-    /// @return `mui_success`; `mui_errorCapacity` when
-    ///         `limits.accessNodes` nodes have accessibility data or memory
-    ///         runs out; `mui_errorInvalid` for a NULL context, the null id
-    ///         as the node or a target, an unknown kind, or a call from a
-    ///         measure or paint function; `mui_errorStale` for a node or a
-    ///         target that is gone.
+    /// @param count    How many, at most MUI_MAX_RELATION_TARGETS.
+    /// @return `mui_success`; `mui_errorCapacity` when `limits.accessNodes`
+    ///         nodes have accessibility data or memory runs out;
+    ///         `mui_errorInvalid` for a NULL context, the null id as the node
+    ///         or a target or an unknown kind; `mui_errorLimit` for more than
+    ///         MUI_MAX_RELATION_TARGETS targets; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for a node or a target that is
+    ///         gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetAccessRelation(muiContext* context, muiNodeId nodeId,
@@ -760,10 +772,12 @@ extern "C"
     /// @param context     The context.
     /// @param nodeId      The node.
     /// @param kind        The relation.
-    /// @param targetsOut  Receives the nodes, up to capacity; may be NULL
-    ///                    when capacity is 0.
+    /// @param targetsOut  Receives the nodes, up to capacity; may be NULL when
+    ///                    capacity is 0. Nothing is written to it on any other
+    ///                    failure.
     /// @param capacity    Room in targetsOut.
-    /// @param countOut    Receives how many it names, whatever the room.
+    /// @param countOut    Receives how many it names, whatever the room. 0 on
+    ///                    any other failure.
     /// @return `mui_success`; `mui_errorCapacity` when they do not fit,
     ///         those that fit written; `mui_errorInvalid` for a NULL
     ///         argument, the null id or an unknown kind; `mui_errorStale`
@@ -786,11 +800,11 @@ extern "C"
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param values   The values, each enum within its own.
-    /// @return `mui_success`; `mui_errorCapacity` when
-    ///         `limits.accessNodes` nodes have accessibility data;
-    ///         `mui_errorInvalid` for a NULL argument, the null id, an enum
-    ///         outside its values, or a call from a measure or paint
-    ///         function; `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorCapacity` when `limits.accessNodes`
+    ///         nodes have accessibility data; `mui_errorInvalid` for a NULL
+    ///         argument, the null id or an enum outside its values;
+    ///         `mui_errorBusy` while the context is busy; `mui_errorStale` for
+    ///         a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetAccessValues(muiContext* context, muiNodeId nodeId,
@@ -800,7 +814,8 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param nodeId     The node.
-    /// @param valuesOut  Receives them; the defaults for none.
+    /// @param valuesOut  Receives them; the defaults for none. Zeroed on
+    ///                   failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or
     ///         the null id; `mui_errorStale` for a node that is gone.
     /// @par Thread safety

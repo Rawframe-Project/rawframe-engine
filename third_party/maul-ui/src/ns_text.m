@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The NSAccessibility adapter's text (record mui-0008, research 143): a
-// text input's or an edited text's characters, selection, lines and
-// ranges, in UTF-16 as AppKit counts, through the boundaries every
-// adapter shares; the selection and the text set through the host; where
-// its characters are, from the tree's clusters, or the node's frame for
-// text without them.
+// The NSAccessibility adapter's text: a text input's or an edited text's
+// characters, selection, lines and ranges, in UTF-16 as AppKit counts,
+// through the boundaries every adapter shares; the selection and the text
+// set through the host; where its characters are, from the tree's
+// clusters, or the node's frame for text without them.
 
 #include "access_text.h"
+#include "fpenv.h"
+#include "host_call.h"
 #include "ns.h"
 
 #include <string.h>
@@ -63,7 +64,8 @@ static NSInteger LineOf(const muiAccessText* text, uint32_t at)
 static bool Ask(const MUIAccessibilityNode* object, const muiAccessRequest* request)
 {
     const muiNsAdapter* adapter = object->adapter;
-    return adapter != nullptr && adapter->action(adapter->user, request);
+    return adapter != nullptr &&
+           muiActMarked(&adapter->busy, adapter->action, adapter->user, request);
 }
 
 bool muiNsIsTextSelector(SEL selector)
@@ -286,6 +288,15 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
 // range of text with clusters.
 - (NSRect)accessibilityFrameForRange:(NSRange)range
 {
+    uint64_t floatEnv = muiFloatEnvEnter();
+    NSRect result = [self muiWorkerAccessibilityFrameForRange:range];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityFrameForRange's work, called through the runtime.
+- (NSRect)muiWorkerAccessibilityFrameForRange:(NSRange)range
+{
     const muiAccessNode* node = TextNodeOf(self);
     uint32_t start = 0;
     uint32_t end = 0;
@@ -306,6 +317,15 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
 // The character at a point on the screen, or the nearest; the text's
 // first without clusters; none for no text.
 - (NSRange)accessibilityRangeForPosition:(NSPoint)point
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    NSRange result = [self muiWorkerAccessibilityRangeForPosition:point];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityRangeForPosition's work, called through the runtime.
+- (NSRange)muiWorkerAccessibilityRangeForPosition:(NSPoint)point
 {
     const muiAccessNode* node = TextNodeOf(self);
     if (node == nullptr)

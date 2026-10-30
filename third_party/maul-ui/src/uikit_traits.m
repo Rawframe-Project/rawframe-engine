@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UIAccessibility adapter's traits (record mui-0008): a node's traits
-// from its role and flags, as Flutter gives them; whether it is an
-// element; its container's type; and VoiceOver's scroll directions as
-// Maul UI's actions. UIKit's traits are variables, not constants, so the
-// role table holds the adapter's own bits, translated at the call.
+// The UIAccessibility adapter's traits: a node's traits from its role and
+// flags, as Flutter gives them; whether it is an element; its container's
+// type; and VoiceOver's scroll directions as Maul UI's actions. UIKit's
+// traits are variables, not constants, so the role table holds the
+// adapter's own bits, translated at the call.
 
 #include "uikit.h"
 

@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Measuring and painting text blocks (record mui-0006): a node's
-// paragraph broken into lines, and for painting reordered by UAX #9
-// rules L1 and L2, aligned, and drawn as a glyph run per line, item and
-// stretch of one ink (the color and decorations the node's style and the
-// block's spans give), an input method's composition underlined after.
+// Measuring and painting text blocks: a node's paragraph broken into
+// lines, and for painting reordered by UAX #9 rules L1 and L2, aligned,
+// and drawn as a glyph run per line, item and stretch of one ink (the
+// color and decorations the node's style and the block's spans give), an
+// input method's composition underlined after.
 
+#include "fpenv.h"
 #include "text_boxes.h"
+#include "text_host.h"
 #include "text_lines.h"
 #include "text_paragraph.h"
 #include "text_runs.h"
@@ -17,20 +19,54 @@
 
 #include <math.h>
 
-muiSize muiMeasureText(void* user, muiNodeId nodeId, uint64_t hostKey, muiMeasureAxis width,
-                       muiMeasureAxis height)
+// The failures the host's service has counted, to tell memory that ran
+// out from text with nothing to lay out.
+static uint64_t FailuresOf(const void* user)
+{
+    const muiTextHost* host = user;
+    return host != nullptr && host->service != nullptr ? host->service->failures : 0;
+}
+
+static muiSize MeasureText(void* user, muiNodeId nodeId, uint64_t hostKey, muiMeasureAxis width,
+                           muiMeasureAxis height)
 {
     (void)height;
     muiParagraph paragraph;
     float widest = 0.0f;
     float tall = 0.0f;
+    uint64_t failures = FailuresOf(user);
     if (!muiPrepareParagraph(user, nodeId, hostKey, &paragraph) ||
         !muiMeasureLines(&paragraph, muiParagraphBreakMode(&paragraph, width.mode), width.size,
                          &widest, &tall))
     {
-        return (muiSize){0.0f, 0.0f};
+        // Text that could not be measured is measured again by the next
+        // layout (muiMeasureFunction).
+        return FailuresOf(user) != failures ? (muiSize){NAN, NAN} : (muiSize){0.0f, 0.0f};
     }
     return (muiSize){width.mode == mui_measureExact ? width.size : widest, tall};
+}
+
+static MUI_NOINLINE muiSize MeasureTextWorker(void* user, muiNodeId nodeId, uint64_t hostKey,
+                                              muiMeasureAxis width, muiMeasureAxis height)
+{
+    const muiTextHost* host = user;
+    bool held = false;
+    if (muiEnterTextHost(host, &held) != mui_success)
+    {
+        return (muiSize){0.0f, 0.0f};
+    }
+    muiSize result = MeasureText(user, nodeId, hostKey, width, height);
+    muiLeaveTextHost(host, held);
+    return result;
+}
+
+muiSize muiMeasureText(void* user, muiNodeId nodeId, uint64_t hostKey, muiMeasureAxis width,
+                       muiMeasureAxis height)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiSize result = MeasureTextWorker(user, nodeId, hostKey, width, height);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // What paints a stretch of text.
@@ -250,13 +286,16 @@ static void PaintLine(const muiParagraph* paragraph, const muiTextLine* line, fl
     }
 }
 
-float muiTextBaseline(void* user, muiNodeId nodeId, uint64_t hostKey, float width, float height)
+static float TextBaseline(void* user, muiNodeId nodeId, uint64_t hostKey, float width, float height)
 {
     (void)height;
     muiParagraph paragraph;
+    uint64_t failures = FailuresOf(user);
     if (!muiPrepareParagraph(user, nodeId, hostKey, &paragraph) || paragraph.block->length == 0)
     {
-        return NAN;
+        // A baseline that could not be found is found again by the next
+        // layout (muiBaselineFunction).
+        return FailuresOf(user) != failures ? INFINITY : NAN;
     }
     // Spans may make the first line taller: its own baseline, broken at
     // the width.
@@ -266,9 +305,32 @@ float muiTextBaseline(void* user, muiNodeId nodeId, uint64_t hostKey, float widt
                            &count) ||
         count == 0)
     {
-        return paragraph.baseline;
+        return FailuresOf(user) != failures ? INFINITY : paragraph.baseline;
     }
     return ((const muiTextLine*)paragraph.service->lines.data)[0].baseline;
+}
+
+static MUI_NOINLINE float TextBaselineWorker(void* user, muiNodeId nodeId, uint64_t hostKey,
+                                             float width, float height)
+{
+    const muiTextHost* host = user;
+    bool held = false;
+    if (muiEnterTextHost(host, &held) != mui_success)
+    {
+        return NAN;
+    }
+    float result = TextBaseline(user, nodeId, hostKey, width, height);
+    muiLeaveTextHost(host, held);
+    return result;
+}
+
+float muiMeasureTextBaseline(void* user, muiNodeId nodeId, uint64_t hostKey, float width,
+                             float height)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    float result = TextBaselineWorker(user, nodeId, hostKey, width, height);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Underlines a block's composition on a line: each segment's stretches,
@@ -339,8 +401,8 @@ static void SeenLines(const muiTextLine* lines, uint32_t count, const muiRect* s
     *end = high < count ? high + 1 : count;
 }
 
-void muiPaintText(void* user, muiNodeId nodeId, uint64_t hostKey, float width, float height,
-                  muiDrawSink* sink)
+static void PaintText(void* user, muiNodeId nodeId, uint64_t hostKey, float width, float height,
+                      muiDrawSink* sink)
 {
     muiLaidText laid;
     uint32_t count = 0;
@@ -353,8 +415,14 @@ void muiPaintText(void* user, muiNodeId nodeId, uint64_t hostKey, float width, f
     laid.lines = laid.paragraph.service->lines.data;
     laid.lineCount = count;
     laid.width = width;
-    // An editing block is drawn scrolled to its caret.
-    muiFollowCaret(&laid, height);
+    // An editing block is drawn scrolled to its caret; one that cannot be,
+    // for want of memory, is not drawn, its failure counted once.
+    uint64_t failures = laid.paragraph.service->failures;
+    if (!muiFollowCaret(&laid, height))
+    {
+        laid.paragraph.service->failures = failures + 1;
+        return;
+    }
     const muiTextLine* lines = laid.lines;
     uint32_t first = 0;
     uint32_t end = count;
@@ -371,4 +439,31 @@ void muiPaintText(void* user, muiNodeId nodeId, uint64_t hostKey, float width, f
     {
         PaintComposition(&laid, i, sink);
     }
+}
+
+static MUI_NOINLINE void PaintTextWorker(void* user, muiNodeId nodeId, uint64_t hostKey,
+                                         float width, float height, muiDrawSink* sink)
+{
+    const muiTextHost* host = user;
+    bool held = false;
+    if (muiEnterTextHost(host, &held) == mui_success)
+    {
+        // Text that could not be painted all is painted again by the next
+        // build.
+        uint64_t failures = FailuresOf(user);
+        PaintText(user, nodeId, hostKey, width, height, sink);
+        if (FailuresOf(user) != failures)
+        {
+            (void)muiDrawSink_Fail(sink);
+        }
+        muiLeaveTextHost(host, held);
+    }
+}
+
+void muiPaintText(void* user, muiNodeId nodeId, uint64_t hostKey, float width, float height,
+                  muiDrawSink* sink)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    PaintTextWorker(user, nodeId, hostKey, width, height, sink);
+    muiFloatEnvLeave(floatEnv);
 }

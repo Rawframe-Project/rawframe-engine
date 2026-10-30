@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Fonts of a text service (record mui-0006): TrueType and OpenType fonts
-// and collections, from memory. Font files are hostile input: a font is
-// validated when it is created, and compressed web fonts (WOFF, WOFF2)
-// are refused.
+// Fonts of a text service: TrueType and OpenType fonts and collections,
+// from memory. Font files are hostile input: a font is validated when it
+// is created, and compressed web fonts (WOFF, WOFF2) are refused as
+// unsupported.
 
 #ifndef MAUL_UI_FONT_H
 #define MAUL_UI_FONT_H
 
 #include "maul-ui/base.h"
 #include "maul-ui/text.h"
+#include "maul-ui/text_style.h"
 
 #include <stdbool.h>
 
@@ -19,7 +20,7 @@ extern "C"
 {
 #endif
 
-    // A font, in the shape of every id (family record 0016).
+    // A font, in the shape of every id.
     typedef struct muiFontId
     {
         uint32_t index1;
@@ -91,9 +92,10 @@ extern "C"
     /// @param size        Their count.
     /// @param countOut    Receives the count; 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument;
-    ///         `mui_errorFormat` for data that is not a TrueType or
-    ///         OpenType font or collection, or a collection whose header
-    ///         does not fit in size.
+    ///         `mui_errorUnsupported` for a compressed web font (WOFF,
+    ///         WOFF2); `mui_errorFormat` for other data that is not a
+    ///         TrueType or OpenType font or collection, or a collection whose
+    ///         header does not fit in size.
     /// @par Thread safety
     /// Safe from any thread.
     MUI_NODISCARD MUI_API muiResult muiCountFontFaces(const void* data, size_t size,
@@ -102,15 +104,17 @@ extern "C"
     /// Creates a font from a face of a font file, validating it.
     ///
     /// @param service  The service.
-    /// @param def      The font: a valid cookie, data and a size from 12 to
-    ///                 2^31 - 1, and a data mode above.
-    /// @param fontOut  Receives the font; the null id on failure.
+    /// @param def      The font: a valid cookie, data, and a data mode above.
+    /// @param fontOut  Receives the font. The null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
-    ///         cookie, a size out of range or an unknown data mode;
-    ///         `mui_errorFormat` for data that is not a font the service
-    ///         reads, a face index past the file's faces, or a font that
-    ///         fails validation; `mui_errorCapacity` past the font limit or
-    ///         when memory runs out.
+    ///         cookie or an unknown data mode, each counted as misuse;
+    ///         `mui_errorFormat`, counted as none, for data that is not a font
+    ///         the service reads (shorter than a header, longer than 2^31 - 1
+    ///         bytes, or malformed), a face index past the file's faces, or a
+    ///         font that fails validation; `mui_errorUnsupported` for a
+    ///         compressed web font (WOFF, WOFF2); `mui_errorCapacity` past
+    ///         the font limit or when memory runs out; `mui_errorBusy` while
+    ///         the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateFont(muiTextService* service, const muiFontDef* def,
@@ -121,8 +125,9 @@ extern "C"
     ///
     /// @param service  The service.
     /// @param fontId   The font.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service or the
-    ///         null id; `mui_errorStale` for a font that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service or the null
+    ///         id; `mui_errorStale` for a font that is gone; `mui_errorBusy`
+    ///         while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiDestroyFont(muiTextService* service, muiFontId fontId);
@@ -140,7 +145,7 @@ extern "C"
     ///
     /// @param service     The service.
     /// @param fontId      The font.
-    /// @param metricsOut  Receives the metrics; unchanged on failure.
+    /// @param metricsOut  Receives the metrics. Zeroed on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
     ///         null id; `mui_errorStale` for a font that is gone.
     /// @par Thread safety
@@ -156,6 +161,14 @@ extern "C"
         uint32_t generation;
     } muiFontFamilyId;
 
+    enum
+    {
+        // The most faces a family has.
+        MUI_MAX_FAMILY_FACES = 256,
+        // The most fallbacks a family, or the service, has.
+        MUI_MAX_FALLBACKS = 8
+    };
+
     // How a family is made. Build it with muiDefaultFontFamilyDef.
     typedef struct muiFontFamilyDef
     {
@@ -165,7 +178,7 @@ extern "C"
         const muiFontId* faces;
         uint32_t faceCount;
         // Keys of fonts and families tried, in order, for characters the
-        // face lacks, before the service's (muiSetFallbackFonts); a
+        // face lacks, before the service's (muiTextService_SetFallbackFonts); a
         // family's face is matched to the style, its own fallbacks not
         // tried.
         const uint64_t* fallbacks;
@@ -187,17 +200,18 @@ extern "C"
     /// of it they make. A face destroyed later is passed over.
     ///
     /// @param service    The service.
-    /// @param def        The family: a valid cookie, from 1 to 256 faces and
-    ///                   up to 8 fallbacks, each the key of a font or a
-    ///                   family.
-    /// @param familyOut  Receives the family; the null id on failure.
+    /// @param def        The family: a valid cookie, from 1 to
+    ///                   MUI_MAX_FAMILY_FACES faces and up to
+    ///                   MUI_MAX_FALLBACKS fallbacks, each the key of a font
+    ///                   or a family.
+    /// @param familyOut  Receives the family. The null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
-    ///         cookie, NULL faces or fallbacks with a count, a count out of
-    ///         range, or a fallback that is no font's or family's key;
+    ///         cookie, NULL faces or fallbacks with a count, no faces, or a
+    ///         fallback that is no font's or family's key; `mui_errorLimit`
+    ///         for more faces or fallbacks than the maximum;
     ///         `mui_errorStale` for a face or fallback that is gone, or the
-    ///         null id;
-    ///         `mui_errorCapacity` past the family limit or when memory
-    ///         runs out.
+    ///         null id; `mui_errorCapacity` past the family limit or when
+    ///         memory runs out; `mui_errorBusy` while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateFontFamily(muiTextService* service,
@@ -208,8 +222,9 @@ extern "C"
     ///
     /// @param service   The service.
     /// @param familyId  The family.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service or the
-    ///         null id; `mui_errorStale` for a family that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service or the null
+    ///         id; `mui_errorStale` for a family that is gone; `mui_errorBusy`
+    ///         while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiDestroyFontFamily(muiTextService* service,
@@ -231,8 +246,8 @@ extern "C"
     /// @param service   The service.
     /// @param familyId  The family.
     /// @param weight    From 1 to 1000.
-    /// @param slant     A muiFontSlant (maul-ui/text_style.h).
-    /// @param faceOut   Receives the face; unchanged on failure.
+    /// @param slant     The slant.
+    /// @param faceOut   Receives the face. The null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id, or a weight or slant out of range;
     ///         `mui_errorStale` for a family that is gone or whose faces
@@ -241,7 +256,7 @@ extern "C"
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiFontFamily_MatchFace(const muiTextService* service,
                                                             muiFontFamilyId familyId, float weight,
-                                                            uint8_t slant, muiFontId* faceOut);
+                                                            muiFontSlant slant, muiFontId* faceOut);
 
 #ifdef __cplusplus
 }

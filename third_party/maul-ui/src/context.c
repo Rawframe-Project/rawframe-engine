@@ -16,8 +16,8 @@
 #include <string.h>
 
 // Slots are 1-based uint32_t values with room for a parent link count.
-#define MAX_SLOTS 0x7FFFFFFFu
-static_assert(MAX_SLOTS < MUI_TRANSFORM_SCALE, "a transform's owner has its slot and a flag");
+static_assert((uint32_t)MUI_MAX_CONTEXT_LIMIT + 1 < MUI_TRANSFORM_SCALE,
+              "a transform's owner has its slot and a flag");
 
 // Every part after the context starts on a cache line, so a record whose
 // size is a multiple of one never has a field split across two, wherever
@@ -31,20 +31,24 @@ static_assert(alignof(max_align_t) <= CACHE_LINE, "a cache line aligns every par
 static_assert(sizeof(muiLimits) % sizeof(uint32_t) == 0 && alignof(muiLimits) == alignof(uint32_t),
               "the limits are counts");
 
-static bool AreLimitsValid(const muiLimits* limits)
+// mui_success, mui_errorInvalid for no nodes, or mui_errorLimit for a
+// limit past MUI_MAX_CONTEXT_LIMIT or pointers past MUI_MAX_POINTERS.
+static muiResult LimitsStatus(const muiLimits* limits)
 {
+    if (limits->nodes == 0)
+    {
+        return mui_errorInvalid;
+    }
     uint32_t counts[sizeof(muiLimits) / sizeof(uint32_t)];
     memcpy(counts, limits, sizeof counts);
     for (size_t i = 0; i < sizeof counts / sizeof counts[0]; i++)
     {
-        if (counts[i] > MAX_SLOTS)
+        if (counts[i] > MUI_MAX_CONTEXT_LIMIT)
         {
-            return false;
+            return mui_errorLimit;
         }
     }
-    return limits->nodes != 0 && limits->drawClips < MAX_SLOTS &&
-           limits->drawGradients < MAX_SLOTS && limits->drawTransforms < MAX_SLOTS &&
-           limits->pointers <= MUI_MAX_POINTERS;
+    return limits->pointers <= MUI_MAX_POINTERS ? mui_success : mui_errorLimit;
 }
 
 // Where each part of the context's block starts.
@@ -367,13 +371,18 @@ muiResult muiCreateContext(const muiContextDef* def, muiContext** contextOut)
     }
     // Another version's def may be of another layout: nothing past the
     // version is read.
-    if (def->version != MUI_DEF_VERSION)
+    if (def->version != MUI_ABI_VERSION)
     {
         return mui_errorVersion;
     }
-    if (!muiIsAllocatorValid(&def->allocator) || !AreLimitsValid(&def->limits))
+    if (!muiIsAllocatorValid(&def->allocator))
     {
         return mui_errorInvalid;
+    }
+    muiResult limits = LimitsStatus(&def->limits);
+    if (limits != mui_success)
+    {
+        return limits;
     }
     muiLayout layout = {0};
     Parts parts = LayOut(&layout, &def->limits);
@@ -395,7 +404,9 @@ muiResult muiCreateContext(const muiContextDef* def, muiContext** contextOut)
     }
     memset(block, 0, size);
     unsigned char* base = block + (CACHE_LINE - (uintptr_t)block % CACHE_LINE) % CACHE_LINE;
-    MUI_ASSERT(base - block <= (ptrdiff_t)(CACHE_LINE - alignof(max_align_t)));
+    MUI_ASSERT((uintptr_t)base % CACHE_LINE == 0 &&
+               base - block <= (ptrdiff_t)(CACHE_LINE - alignof(max_align_t)) &&
+               base + layout.size <= block + size);
     muiContext* context = (muiContext*)block;
     context->allocator = def->allocator;
     context->blockSize = size;
@@ -410,17 +421,28 @@ void muiDestroyContext(muiContext* context)
     {
         return;
     }
+    // Refused from host code and from the event function; busy to the
+    // end, as the allocator's free runs.
+    if (context->events.dispatching)
+    {
+        (void)muiRefuseBusy(context);
+        return;
+    }
+    if (muiEnter(context) != mui_success)
+    {
+        return;
+    }
     const muiAllocator allocator = context->allocator;
     muiAccessRelease(&context->access, &allocator);
     muiRelease(&allocator, context, context->blockSize, alignof(max_align_t));
 }
 
-uint64_t muiGetContextMisuse(const muiContext* context)
+uint64_t muiContext_GetMisuse(const muiContext* context)
 {
     return context != nullptr ? context->misuse : 0;
 }
 
-muiWorkCounts muiGetWorkCounts(const muiContext* context)
+muiWorkCounts muiContext_GetWorkCounts(const muiContext* context)
 {
     return context != nullptr ? context->work : (muiWorkCounts){0};
 }
@@ -431,14 +453,43 @@ muiResult muiRefuse(muiContext* context)
     return mui_errorInvalid;
 }
 
-bool muiIsInHostCall(const muiContext* context)
+muiResult muiRefuseLimit(muiContext* context)
 {
-    return context->inHostCall;
+    context->misuse++;
+    return mui_errorLimit;
+}
+
+muiResult muiRefuseBusy(muiContext* context)
+{
+    context->misuse++;
+    return mui_errorBusy;
+}
+
+muiResult muiEnter(muiContext* context)
+{
+    if (context == nullptr)
+    {
+        return mui_success;
+    }
+    if (context->busy)
+    {
+        return muiRefuseBusy(context);
+    }
+    context->busy = true;
+    return mui_success;
+}
+
+void muiLeave(muiContext* context)
+{
+    if (context != nullptr)
+    {
+        context->busy = false;
+    }
 }
 
 uint32_t muiResolveEdit(muiContext* context, muiNodeId nodeId, muiResult* statusOut)
 {
-    if (nodeId.index1 == 0 || muiIsInHostCall(context))
+    if (nodeId.index1 == 0)
     {
         *statusOut = muiRefuse(context);
         return 0;
@@ -448,11 +499,26 @@ uint32_t muiResolveEdit(muiContext* context, muiNodeId nodeId, muiResult* status
     return slot;
 }
 
-muiResult muiNextNotification(muiContext* context, muiNotification* notificationOut)
+static muiResult NextNotification(muiContext* context, muiNotification* notificationOut)
 {
     if (context == nullptr || notificationOut == nullptr)
     {
         return mui_errorInvalid;
     }
     return muiNotifyTake(&context->notifications, notificationOut) ? mui_success : mui_empty;
+}
+
+muiResult muiContext_TakeNotification(muiContext* context, muiNotification* notificationOut)
+{
+    if (notificationOut != nullptr)
+    {
+        memset(notificationOut, 0, sizeof *notificationOut);
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NextNotification(context, notificationOut);
+        muiLeave(context);
+    }
+    return status;
 }

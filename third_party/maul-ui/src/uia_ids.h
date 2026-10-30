@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UI Automation adapter's ids of properties, events, control types
-// and patterns, and the constants of UIAutomationCoreApi.h it uses (record
-// mui-0008). The Windows SDK's UIAutomationClient.h and
-// UIAutomationCoreApi.h define some of theirs as const variables, which
-// in C every file including them defines again, so the adapter writes
-// the values it uses here and includes neither.
+// The UI Automation adapter's ids of properties, events, control types and
+// patterns, and the constants of UIAutomationCoreApi.h it uses. The
+// Windows SDK's UIAutomationClient.h and UIAutomationCoreApi.h define some
+// of theirs as const variables, which in C every file including them
+// defines again, so the adapter writes the values it uses here and
+// includes neither.
 
 #ifndef MAUL_UI_SRC_UIA_IDS_H
 #define MAUL_UI_SRC_UIA_IDS_H

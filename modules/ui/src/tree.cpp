@@ -104,7 +104,7 @@ muiSize measureText(void* user, muiNodeId node, std::uint64_t, muiMeasureAxis wi
     // drawn down a line from its top, half a line low.
     if (kText->editable && kMeasured.height <= 0) {
         muiTextCaret caret{};
-        if (muiTextGetCaret(&state->host, node, kMeasured.width, muiTextPosition{}, &caret) == mui_success) {
+        if (muiNode_GetTextCaret(&state->host, node, kMeasured.width, muiTextPosition{}, &caret) == mui_success) {
             return muiSize{.width = kMeasured.width, .height = caret.height};
         }
     }
@@ -247,16 +247,17 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
     if (state_->textOf(idOf(node)) != nullptr) {
         style.content = mui_contentHost;
     }
-    return checked(muiNode_SetLayoutStyle(state_->context, idOf(node), &style), "a UI node's layout was refused");
+    return checked(muiNode_SetLayoutValues(state_->context, idOf(node), &style, MUI_LAYOUT_PROPERTIES),
+                   "a UI node's layout was refused");
 }
 
 result::Status Tree::layOut(Node root, float width, float height, double seconds) {
     const muiLayoutInput kInput{.availableWidth = width,
                                 .availableHeight = height,
                                 .measure = measureText,
-                                .measureUser = state_.get(),
+                                .user = state_.get(),
                                 .timeNs = seconds > 0 ? static_cast<std::uint64_t>(seconds * 1e9) : 0};
-    return checked(muiComputeLayout(state_->context, idOf(root), &kInput), "a UI tree could not be laid out");
+    return checked(muiNode_ComputeLayout(state_->context, idOf(root), &kInput), "a UI tree could not be laid out");
 }
 
 Rect Tree::rectOf(Node node) const noexcept {
@@ -357,7 +358,8 @@ result::Result<bool> Tree::wheel(Node root, float x, float y, float deltaX, floa
                                .modifiers = 0,
                                .player = 0};
     bool handled = false;
-    RAWFRAME_TRY(checked(muiWheelInput(state_->context, idOf(root), &kEvent, &handled), "a wheel turn was refused"));
+    RAWFRAME_TRY(
+        checked(muiNode_RouteWheel(state_->context, idOf(root), &kEvent, &handled), "a wheel turn was refused"));
     return handled;
 }
 
@@ -373,7 +375,7 @@ std::array<float, 2> Tree::scrollOf(Node node) const noexcept {
 
 result::Result<Hit> Tree::hit(Node root, float x, float y) const {
     muiHit found{};
-    RAWFRAME_TRY(checked(muiHitTest(state_->context, idOf(root), x, y, &found), "a UI point could not be hit"));
+    RAWFRAME_TRY(checked(muiNode_HitTest(state_->context, idOf(root), x, y, &found), "a UI point could not be hit"));
     Hit made{.x = found.x, .y = found.y, .passThrough = found.passThrough};
     if (found.node.index1 != 0) {
         made.node = Node{.index1 = found.node.index1, .generation = found.node.generation};
@@ -390,7 +392,8 @@ result::Result<Font> Tree::addFont(std::span<const std::byte> bytes, std::uint32
     muiFontId made{};
     RAWFRAME_TRY(checked(muiCreateFont(state_->text, &def, &made), "a font could not be read"));
     if (state_->fonts.empty()) {
-        RAWFRAME_TRY(checked(muiSetDefaultFont(state_->text, made), "a font could not be made the default"));
+        RAWFRAME_TRY(
+            checked(muiTextService_SetDefaultFont(state_->text, made), "a font could not be made the default"));
     }
     const Font kFont{.key = muiFont_GetKey(made)};
     state_->fonts.emplace(kFont.key, made);
@@ -413,7 +416,8 @@ result::Status Tree::setDefaultFont(Font font) {
     if (kFound == state_->fonts.end()) {
         return refuse(UiError::Stale, "a font not in the tree could not be made the default");
     }
-    RAWFRAME_TRY(checked(muiSetDefaultFont(state_->text, kFound->second), "a font could not be made the default"));
+    RAWFRAME_TRY(
+        checked(muiTextService_SetDefaultFont(state_->text, kFound->second), "a font could not be made the default"));
     // The atlas keys the null font's images by the default's own key.
     return {};
 }
@@ -478,7 +482,7 @@ result::Status Tree::clearText(Node node) {
 }
 
 std::uint64_t Tree::textFailures() const noexcept {
-    return muiGetTextServiceFailures(state_->text);
+    return muiTextService_GetFailures(state_->text);
 }
 
 namespace {
@@ -511,9 +515,9 @@ Rect shifted(const muiRect& rect, const std::array<float, 2>& shift) {
 
 result::Status Tree::draw(Node root, float scale, DrawList& into) {
     const muiDrawInput kInput{.surface = 0, .scale = scale, .paint = paintText, .paintUser = state_.get()};
-    RAWFRAME_TRY(checked(muiBuildDrawList(state_->context, idOf(root), &kInput), "a UI tree could not be drawn"));
+    RAWFRAME_TRY(checked(muiNode_BuildDrawList(state_->context, idOf(root), &kInput), "a UI tree could not be drawn"));
     muiDrawList list{};
-    RAWFRAME_TRY(checked(muiGetDrawList(state_->context, &list), "a UI tree's drawing could not be read"));
+    RAWFRAME_TRY(checked(muiContext_GetDrawList(state_->context, &list), "a UI tree's drawing could not be read"));
     into.boxes.clear();
     into.images.clear();
     into.shadows.clear();
@@ -532,7 +536,7 @@ result::Status Tree::draw(Node root, float scale, DrawList& into) {
         const muiDrawGradient& kGradient = list.gradients[at];
         Gradient made{.kind = static_cast<GradientLook::Kind>(kGradient.kind),
                       .angle = kGradient.angle,
-                      .stops = std::min<std::uint32_t>(kGradient.stopCount, MUI_MAX_DRAW_STOPS)};
+                      .stops = std::min<std::uint32_t>(kGradient.stopCount, MUI_MAX_GRADIENT_STOPS)};
         for (std::uint32_t stop = 0; stop < made.stops; ++stop) {
             made.colors.at(stop) = linearOf(kGradient.colors[stop]);
             made.positions.at(stop) = kGradient.positions[stop];

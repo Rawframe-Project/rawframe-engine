@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Popups (record mui-0007): a node placed beside an anchor node after
-// each layout. Its layer kind (maul-ui/interaction.h) says how it paints,
-// usually mui_layerOverlay; this says where. From the anchor's border box
-// on the surface, through scrolling, the popup's border box goes to the
-// side asked, aligned along it, then on each axis flips to the opposite
-// side when it overflows the root's box and the other side has more
-// room, and is clamped into the root's box, its start edge kept when it
-// cannot fit. Layout gives its size; an absolutely placed popup takes no
-// room where it sits in the tree.
+// Popups: a node placed beside an anchor node after each layout. Its layer
+// kind (maul-ui/interaction.h) says how it paints, usually
+// mui_layerOverlay; this says where. From the anchor's border box on the
+// surface, through scrolling, the popup's border box goes to the side
+// asked, aligned along it, then on each axis flips to the opposite side
+// when it overflows the root's box and the other side has more room, and
+// is clamped into the root's box, its start edge kept when it cannot fit.
+// Layout gives its size; an absolutely placed popup takes no room where it
+// sits in the tree.
 //
 // A popup record stands for an open popup: the host sets it when it
 // opens one and clears it, or destroys the node, when it closes. Light
@@ -106,11 +106,11 @@ extern "C"
     /// @param nodeId   The node.
     /// @param popup    The popup: a live anchor other than the node, a
     ///                 known side and alignment, gap and margin as above.
-    /// @return `mui_success`; `mui_errorCapacity` when the context holds
-    ///         its limit of popups; `mui_errorInvalid` for a NULL argument,
-    ///         the null id, a popup outside the above, or a call from a
-    ///         measure or paint function; `mui_errorStale` for a node or
-    ///         anchor that is gone.
+    /// @return `mui_success`; `mui_errorCapacity` when the context holds its
+    ///         limit of popups; `mui_errorInvalid` for a NULL argument, the
+    ///         null id or a popup outside the above; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for a node or anchor that is
+    ///         gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetPopup(muiContext* context, muiNodeId nodeId,
@@ -120,7 +120,7 @@ extern "C"
     ///
     /// @param context   The context.
     /// @param nodeId    The node.
-    /// @param popupOut  Receives the popup.
+    /// @param popupOut  Receives the popup. Zeroed on failure.
     /// @return `mui_success`; `mui_empty` for a node that is not a popup;
     ///         `mui_errorInvalid` for a NULL argument or the null id;
     ///         `mui_errorStale` for a node that is gone.
@@ -134,7 +134,7 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @param sideOut  Receives the side.
+    /// @param sideOut  Receives the side. 0 on failure.
     /// @return `mui_success`; `mui_empty` for a node that is not a popup or
     ///         has not been placed since it was set; `mui_errorInvalid`
     ///         for a NULL argument or the null id; `mui_errorStale` for a
@@ -149,10 +149,9 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @return `mui_success`, whether or not it was one;
-    ///         `mui_errorInvalid` for a NULL context, the null id or a call
-    ///         from a measure or paint function; `mui_errorStale` for a
-    ///         node that is gone.
+    /// @return `mui_success`, whether or not it was one; `mui_errorInvalid` for
+    ///         a NULL context or the null id; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_ClearPopup(muiContext* context, muiNodeId nodeId);

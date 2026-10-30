@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The layer store (record mui-0007): the nodes that root a layer, which
-// the context holds and src/layer.c keeps in paint order.
+// The layer store: the nodes that root a layer, which the context holds
+// and src/layer.c keeps in paint order.
 
 #ifndef MAUL_UI_SRC_LAYER_STORE_H
 #define MAUL_UI_SRC_LAYER_STORE_H

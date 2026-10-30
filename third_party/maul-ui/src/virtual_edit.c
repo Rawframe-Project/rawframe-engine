@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Virtualization (record mui-0007): items inserted, removed and moved by
-// index, their extents and bound nodes following them, and the offset
-// moved along so that what the viewport shows stays put.
+// Virtualization: items inserted, removed and moved by index, their
+// extents and bound nodes following them, and the offset moved along so
+// that what the viewport shows stays put.
 
 #include "context.h"
+#include "fpenv.h"
 #include "tree.h"
 #include "virtual.h"
 #include "virtual_store.h"
@@ -15,8 +16,13 @@
 #include <math.h>
 #include <string.h>
 
-muiResult muiNode_GetItem(const muiContext* context, muiNodeId nodeId, uint32_t* indexOut)
+muiResult muiNode_GetBoundVirtualItem(const muiContext* context, muiNodeId nodeId,
+                                      uint32_t* indexOut)
 {
+    if (indexOut != nullptr)
+    {
+        *indexOut = 0;
+    }
     if (context == nullptr || indexOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -102,8 +108,8 @@ static void Rebind(muiContext* context, uint32_t slot, uint32_t first, uint32_t 
     }
 }
 
-muiResult muiNode_InsertVirtualItems(muiContext* context, muiNodeId nodeId, uint32_t index,
-                                     uint32_t count)
+static muiResult NodeInsertVirtualItems(muiContext* context, muiNodeId nodeId, uint32_t index,
+                                        uint32_t count)
 {
     if (context == nullptr)
     {
@@ -117,10 +123,13 @@ muiResult muiNode_InsertVirtualItems(muiContext* context, muiNodeId nodeId, uint
         return status;
     }
     uint32_t total = entry->list.count;
-    // Bound indices plus 1 stay below MUI_ITEM_REMOVED.
-    if (index > total || count == 0 || count > MUI_ITEM_REMOVED - 1 - total)
+    if (index > total || count == 0)
     {
         return muiRefuse(context);
+    }
+    if (count > MUI_MAX_VIRTUAL_ITEMS - total)
+    {
+        return muiRefuseLimit(context);
     }
     // Read before the storage moves.
     muiVirtualStore* store = &context->lists;
@@ -154,8 +163,29 @@ muiResult muiNode_InsertVirtualItems(muiContext* context, muiNodeId nodeId, uint
     return mui_success;
 }
 
-muiResult muiNode_RemoveVirtualItems(muiContext* context, muiNodeId nodeId, uint32_t index,
+static MUI_NOINLINE muiResult NodeInsertVirtualItemsWorker(muiContext* context, muiNodeId nodeId,
+                                                           uint32_t index, uint32_t count)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeInsertVirtualItems(context, nodeId, index, count);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_InsertVirtualItems(muiContext* context, muiNodeId nodeId, uint32_t index,
                                      uint32_t count)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeInsertVirtualItemsWorker(context, nodeId, index, count);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult NodeRemoveVirtualItems(muiContext* context, muiNodeId nodeId, uint32_t index,
+                                        uint32_t count)
 {
     if (context == nullptr)
     {
@@ -198,7 +228,29 @@ muiResult muiNode_RemoveVirtualItems(muiContext* context, muiNodeId nodeId, uint
     return mui_success;
 }
 
-muiResult muiNode_MoveVirtualItem(muiContext* context, muiNodeId nodeId, uint32_t from, uint32_t to)
+static MUI_NOINLINE muiResult NodeRemoveVirtualItemsWorker(muiContext* context, muiNodeId nodeId,
+                                                           uint32_t index, uint32_t count)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeRemoveVirtualItems(context, nodeId, index, count);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_RemoveVirtualItems(muiContext* context, muiNodeId nodeId, uint32_t index,
+                                     uint32_t count)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeRemoveVirtualItemsWorker(context, nodeId, index, count);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult NodeMoveVirtualItem(muiContext* context, muiNodeId nodeId, uint32_t from,
+                                     uint32_t to)
 {
     if (context == nullptr)
     {
@@ -269,4 +321,24 @@ muiResult muiNode_MoveVirtualItem(muiContext* context, muiNodeId nodeId, uint32_
     }
     muiTreeMarkLayout(&context->tree, slot);
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult NodeMoveVirtualItemWorker(muiContext* context, muiNodeId nodeId,
+                                                        uint32_t from, uint32_t to)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeMoveVirtualItem(context, nodeId, from, to);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_MoveVirtualItem(muiContext* context, muiNodeId nodeId, uint32_t from, uint32_t to)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeMoveVirtualItemWorker(context, nodeId, from, to);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

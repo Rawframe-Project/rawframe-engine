@@ -3,7 +3,7 @@
 //
 // Sizing a node: answered from its cache when it can be, measured for a
 // leaf, laid out by the flex algorithm for a container, with absolute
-// children placed after it (record mui-0003).
+// children placed after it.
 
 #ifndef MAUL_UI_SRC_SOLVE_H
 #define MAUL_UI_SRC_SOLVE_H

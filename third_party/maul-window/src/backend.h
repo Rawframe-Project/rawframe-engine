@@ -30,7 +30,9 @@ typedef struct mwinBackendOps
     uint64_t (*now)(const mwinContext* context);
     // What a physical key means under the current layout.
     mwinKey (*mapKeyCode)(const mwinContext* context, mwinKeyCode code);
-    // The current layout's name, as mwinGetKeyboardLayout reports it.
+    // The current layout's name, as mwinContext_GetKeyboardLayout reports it.
+    // The core zeroes the buffer after a failure, so a backend that wrote
+    // part of the name before it failed leaves nothing behind.
     mwinResult (*keyboardLayout)(const mwinContext* context, char* buffer, size_t capacity,
                                  size_t* lengthOut);
     // The handles of the surface of the window in a slot, which has one.
@@ -48,7 +50,7 @@ typedef struct mwinBackendOps
     mwinResult (*triggerRumble)(mwinContext* context, uint32_t slot, float left, float right,
                                 uint32_t durationMs);
     mwinResult (*setMotion)(mwinContext* context, uint32_t slot, bool enabled);
-    // What mwinGetKeyReach answers for a chord, a valid code with the
+    // What mwinContext_GetKeyReach answers for a chord, a valid code with the
     // modifiers held.
     mwinKeyReach (*keyReach)(const mwinContext* context, mwinKeyCode code, mwinModifiers modifiers);
 } mwinBackendOps;

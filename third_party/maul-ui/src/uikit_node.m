@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UIAccessibility adapter's objects (record mui-0008), answered from
-// the tree at each call. VoiceOver never looks inside an element, so a
-// shown node with shown children is a container, not an element, whose
-// first element is the node's own, as Flutter splits them; the
-// container's frame is the view's, so that a child outside its parent's
-// box is still found by touch. The label is the name; the value a
-// toggle's state, a range's text or number, or the node's value text;
-// the actions are asked of the host.
+// The UIAccessibility adapter's objects, answered from the tree at each
+// call. VoiceOver never looks inside an element, so a shown node with
+// shown children is a container, not an element, whose first element is
+// the node's own, as Flutter splits them; the container's frame is the
+// view's, so that a child outside its parent's box is still found by
+// touch. The label is the name; the value a toggle's state, a range's text
+// or number, or the node's value text; the actions are asked of the host.
 
+#include "fpenv.h"
 #include "uikit.h"
 
 static NSString* StringOf(const char* text)
@@ -69,6 +69,15 @@ static NSString* RangeValueOf(const muiAccessNode* node)
 
 - (CGRect)accessibilityFrame
 {
+    uint64_t floatEnv = muiFloatEnvEnter();
+    CGRect result = [self muiWorkerAccessibilityFrame];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityFrame's work, called through the runtime.
+- (CGRect)muiWorkerAccessibilityFrame
+{
     return Find(adapter, nodeId) != nullptr ? muiUikitScreenRectOf(adapter, nodeId) : CGRectZero;
 }
 
@@ -86,6 +95,15 @@ static NSString* RangeValueOf(const muiAccessNode* node)
 // A toggle's state, 1 or 0, as UIKit's switches give it; a range's
 // value; else the value text, but for a label, whose name it is.
 - (NSString*)accessibilityValue
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    NSString* result = [self muiWorkerAccessibilityValue];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityValue's work, called through the runtime.
+- (NSString*)muiWorkerAccessibilityValue
 {
     const muiAccessNode* node = Find(adapter, nodeId);
     if (node == nullptr || node->role == mui_roleLabel)

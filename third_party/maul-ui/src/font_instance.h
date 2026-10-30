@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Font keys and the instances they name (record mui-0006). A key's low 16
-// bits are its font's slot less one, the next 24 the slot's generation,
-// and the top 24 an instance of the font: what a text style's weight,
-// slant and size made of it, already decided against the font's axes and
-// styles, so that whoever holds the key rebuilds the same axes and
-// synthesis. Instance 0 is the font as it is.
+// Font keys and the instances they name. A key's low 16 bits are its
+// font's slot less one, the next 24 the slot's generation, and the top 24
+// an instance of the font: what a text style's weight, slant and size made
+// of it, already decided against the font's axes and styles, so that
+// whoever holds the key rebuilds the same axes and synthesis. Instance 0
+// is the font as it is.
 
 #ifndef MAUL_UI_SRC_FONT_INSTANCE_H
 #define MAUL_UI_SRC_FONT_INSTANCE_H

@@ -1,4 +1,4 @@
-# The ARIA adapter's page side without Emscripten (record mui-0009). Its
+# The ARIA adapter's page side without Emscripten. Its
 # JavaScript is in its C files (EM_JS): with Emscripten the program's
 # link takes it in and nothing else is needed. Without Emscripten
 # (wasm32-wasi) the same functions are imports, and the build writes

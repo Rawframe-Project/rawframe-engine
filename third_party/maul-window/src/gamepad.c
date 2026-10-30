@@ -10,10 +10,12 @@
 
 #include <math.h>
 
-mwinResult mwinGetGamepads(const mwinContext* context, mwinGamepadId* gamepads, size_t capacity,
-                           size_t* countOut)
+mwinResult mwinContext_GetGamepads(const mwinContext* context, mwinGamepadId* gamepadsOut,
+                                   size_t capacity, size_t* countOut)
 {
-    if (context == nullptr || countOut == nullptr || (gamepads == nullptr && capacity != 0))
+    mwinClearArray(gamepadsOut, capacity, sizeof *gamepadsOut);
+    mwinClearOut(countOut, sizeof *countOut);
+    if (context == nullptr || countOut == nullptr || (gamepadsOut == nullptr && capacity != 0))
     {
         return mwinMisuse(context);
     }
@@ -40,19 +42,20 @@ mwinResult mwinGetGamepads(const mwinContext* context, mwinGamepadId* gamepads, 
         }
         if (count < capacity)
         {
-            gamepads[count] = mwinGamepadIdOf(context, (uint32_t)next);
+            gamepadsOut[count] = mwinGamepadIdOf(context, (uint32_t)next);
         }
         count += 1;
         after = context->gamepads[next].arrival;
         first = false;
     }
     *countOut = count;
-    return count > capacity ? mwin_errorCapacity : mwin_success;
+    return mwin_success;
 }
 
-mwinResult mwinGetGamepadInfo(const mwinContext* context, mwinGamepadId gamepad,
-                              mwinGamepadInfo* infoOut)
+mwinResult mwinGamepad_GetInfo(const mwinContext* context, mwinGamepadId gamepad,
+                               mwinGamepadInfo* infoOut)
 {
+    mwinClearOut(infoOut, sizeof *infoOut);
     if (context == nullptr || infoOut == nullptr)
     {
         return mwinMisuse(context);
@@ -66,9 +69,10 @@ mwinResult mwinGetGamepadInfo(const mwinContext* context, mwinGamepadId gamepad,
     return mwin_success;
 }
 
-mwinResult mwinGetGamepadState(const mwinContext* context, mwinGamepadId gamepad,
-                               mwinGamepadState* stateOut)
+mwinResult mwinGamepad_GetState(const mwinContext* context, mwinGamepadId gamepad,
+                                mwinGamepadState* stateOut)
 {
+    mwinClearOut(stateOut, sizeof *stateOut);
     if (context == nullptr || stateOut == nullptr)
     {
         return mwinMisuse(context);
@@ -87,8 +91,8 @@ static bool IsStrength(float value)
     return isfinite(value) && value >= 0.0f && value <= 1.0f;
 }
 
-mwinResult mwinSetGamepadRumble(mwinContext* context, mwinGamepadId gamepad, float low, float high,
-                                uint32_t durationMs)
+mwinResult mwinGamepad_SetRumble(mwinContext* context, mwinGamepadId gamepad, float low, float high,
+                                 uint32_t durationMs)
 {
     if (mwinIsBusy(context))
     {
@@ -110,8 +114,8 @@ mwinResult mwinSetGamepadRumble(mwinContext* context, mwinGamepadId gamepad, flo
     return context->backend->rumble(context, (uint32_t)slot, low, high, durationMs);
 }
 
-mwinResult mwinSetGamepadTriggerRumble(mwinContext* context, mwinGamepadId gamepad, float left,
-                                       float right, uint32_t durationMs)
+mwinResult mwinGamepad_SetTriggerRumble(mwinContext* context, mwinGamepadId gamepad, float left,
+                                        float right, uint32_t durationMs)
 {
     if (mwinIsBusy(context))
     {
@@ -134,7 +138,7 @@ mwinResult mwinSetGamepadTriggerRumble(mwinContext* context, mwinGamepadId gamep
     return context->backend->triggerRumble(context, (uint32_t)slot, left, right, durationMs);
 }
 
-mwinResult mwinSetGamepadMotion(mwinContext* context, mwinGamepadId gamepad, bool enabled)
+mwinResult mwinGamepad_EnableMotion(mwinContext* context, mwinGamepadId gamepad, bool enabled)
 {
     if (mwinIsBusy(context))
     {
@@ -163,9 +167,27 @@ mwinResult mwinSetGamepadMotion(mwinContext* context, mwinGamepadId gamepad, boo
     return status;
 }
 
-mwinResult mwinGetGamepadMotion(mwinContext* context, mwinGamepadId gamepad,
-                                mwinGamepadMotion* motionOut)
+mwinResult mwinGamepad_IsMotionEnabled(const mwinContext* context, mwinGamepadId gamepad,
+                                       bool* enabledOut)
 {
+    mwinClearOut(enabledOut, sizeof *enabledOut);
+    if (context == nullptr || enabledOut == nullptr)
+    {
+        return mwinMisuse(context);
+    }
+    int32_t slot = mwinFindGamepad(context, gamepad);
+    if (slot < 0)
+    {
+        return mwin_errorStale;
+    }
+    *enabledOut = context->gamepads[slot].motionOn;
+    return mwin_success;
+}
+
+mwinResult mwinGamepad_GetMotion(mwinContext* context, mwinGamepadId gamepad,
+                                 mwinGamepadMotion* motionOut)
+{
+    mwinClearOut(motionOut, sizeof *motionOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);

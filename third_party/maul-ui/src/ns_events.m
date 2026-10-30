@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The NSAccessibility adapter's notifications (record mui-0008), as
-// AccessKit posts them: a title or a value changed on the node's object,
-// the focused element changed on the one focused, an element destroyed
-// when its node goes, the layout changed when the shown tree may have,
-// an announcement on the window for a live node's new name, with a high
-// priority when it is assertive, and the selected text changed when an
-// edited text's selection or caret moves.
+// The NSAccessibility adapter's notifications, as AccessKit posts them: a
+// title or a value changed on the node's object, the focused element
+// changed on the one focused, an element destroyed when its node goes, the
+// layout changed when the shown tree may have, an announcement on the
+// window for a live node's new name, with a high priority when it is
+// assertive, and the selected text changed when an edited text's selection
+// or caret moves.
 
 #include "access_record.h"
 #include "ns.h"

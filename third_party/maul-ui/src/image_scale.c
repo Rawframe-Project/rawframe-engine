@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Images scaled (record mui-0006). Shrinking, an output pixel is the
-// average of the source over its area, each source pixel weighed by how
-// much of it falls inside, the area outside the source clear. Growing,
-// an output pixel is the source sampled bilinearly at its centre, pixels
-// past the source's edge clear, so a factor of 1 at whole pixels copies
-// the source exactly.
+// Images scaled. Shrinking, an output pixel is the average of the source
+// over its area, each source pixel weighed by how much of it falls inside,
+// the area outside the source clear. Growing, an output pixel is the
+// source sampled bilinearly at its centre, pixels past the source's edge
+// clear, so a factor of 1 at whole pixels copies the source exactly.
 
 #include "image_scale.h"
 

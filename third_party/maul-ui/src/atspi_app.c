@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The AT-SPI adapter's application and windows (record mui-0008):
-// joining the accessibility bus, registering the root with the
-// registry, pumping the connection without waiting, and the windows'
-// adapters.
+// The AT-SPI adapter's application and windows: joining the accessibility
+// bus, registering the root with the registry, pumping the connection
+// without waiting, and the windows' adapters.
 
 #include "allocator.h"
 #include "atspi.h"
+#include "fpenv.h"
+#include "host_call.h"
 
 #include <stdalign.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define APP_DEF_COOKIE     0x6D756170u // "muap"
 #define ADAPTER_DEF_COOKIE 0x6D756177u // "muaw"
 
 // How long making the application waits for the session bus to give the
@@ -25,11 +25,6 @@
 
 // Room for the accessibility bus's address.
 #define ADDRESS_SIZE 1024
-
-muiAtspiAppDef muiDefaultAtspiAppDef(void)
-{
-    return (muiAtspiAppDef){.cookie = APP_DEF_COOKIE, .windows = 16};
-}
 
 muiAtspiAdapterDef muiDefaultAtspiAdapterDef(void)
 {
@@ -153,8 +148,8 @@ static void TakeEmbedding(muiAtspiApp* app)
 
 static bool IsValidApp(const muiAtspiAppDef* def)
 {
-    return def->cookie == APP_DEF_COOKIE && muiIsAllocatorValid(&def->allocator) &&
-           def->name != nullptr && def->windows != 0 && def->windows <= 4096;
+    return muiIsAllocatorValid(&def->allocator) && def->name != nullptr && def->windows != 0 &&
+           def->windows <= 4096;
 }
 
 // Joins the bus and serves the root; false when it cannot.
@@ -181,13 +176,23 @@ static size_t AppSize(uint32_t windows, size_t nameLength)
     return sizeof(muiAtspiApp) + windows * sizeof(muiAtspiAdapter*) + nameLength + 1;
 }
 
-muiResult muiCreateAtspiApp(const muiAtspiAppDef* def, muiAtspiApp** appOut)
+static MUI_NOINLINE muiResult CreateAtspiAppWorker(const muiAtspiAppDef* def, muiAtspiApp** appOut)
 {
     if (appOut != nullptr)
     {
         *appOut = nullptr;
     }
-    if (def == nullptr || appOut == nullptr || !IsValidApp(def))
+    if (def == nullptr || appOut == nullptr || def->cookie != MUI_ATSPI_APP_DEF_COOKIE)
+    {
+        return mui_errorInvalid;
+    }
+    // Another version's def may be of another layout: nothing past the
+    // version is read.
+    if (def->version != MUI_ABI_VERSION)
+    {
+        return mui_errorVersion;
+    }
+    if (!IsValidApp(def))
     {
         return mui_errorInvalid;
     }
@@ -217,7 +222,15 @@ muiResult muiCreateAtspiApp(const muiAtspiAppDef* def, muiAtspiApp** appOut)
     return mui_success;
 }
 
-void muiDestroyAtspiApp(muiAtspiApp* app)
+muiResult muiCreateAtspiApp(const muiAtspiAppDef* def, muiAtspiApp** appOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = CreateAtspiAppWorker(def, appOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static void DestroyAtspiApp(muiAtspiApp* app)
 {
     if (app == nullptr)
     {
@@ -240,6 +253,25 @@ void muiDestroyAtspiApp(muiAtspiApp* app)
                alignof(max_align_t));
 }
 
+void muiDestroyAtspiApp(muiAtspiApp* app)
+{
+    if (app == nullptr)
+    {
+        DestroyAtspiApp(app);
+        return;
+    }
+    if (!muiEnterMarked(&app->busy, &app->misuse))
+    {
+        return;
+    }
+    DestroyAtspiApp(app);
+}
+
+uint64_t muiAtspiApp_GetMisuse(const muiAtspiApp* app)
+{
+    return app != nullptr ? app->misuse : 0;
+}
+
 int muiAtspiApp_GetDescriptor(const muiAtspiApp* app)
 {
     int descriptor = -1;
@@ -250,7 +282,7 @@ int muiAtspiApp_GetDescriptor(const muiAtspiApp* app)
     return descriptor;
 }
 
-void muiAtspiApp_Pump(muiAtspiApp* app)
+static void AtspiAppPump(muiAtspiApp* app)
 {
     if (app == nullptr)
     {
@@ -265,6 +297,28 @@ void muiAtspiApp_Pump(muiAtspiApp* app)
     (void)dbus->readWrite(app->connection, 0);
 }
 
+static MUI_NOINLINE void AtspiAppPumpWorker(muiAtspiApp* app)
+{
+    if (app == nullptr)
+    {
+        AtspiAppPump(app);
+        return;
+    }
+    if (!muiEnterMarked(&app->busy, &app->misuse))
+    {
+        return;
+    }
+    AtspiAppPump(app);
+    app->busy = false;
+}
+
+void muiAtspiApp_Pump(muiAtspiApp* app)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    AtspiAppPumpWorker(app);
+    muiFloatEnvLeave(floatEnv);
+}
+
 bool muiAtspiApp_IsRegistered(const muiAtspiApp* app)
 {
     return app != nullptr && app->registered;
@@ -272,8 +326,8 @@ bool muiAtspiApp_IsRegistered(const muiAtspiApp* app)
 
 static bool IsValidAdapter(const muiAtspiAdapterDef* def)
 {
-    return def->cookie == ADAPTER_DEF_COOKIE && def->nodes != 0 &&
-           def->nodes <= ((uint32_t)1 << 24) && def->action != nullptr && def->scale > 0.0f;
+    return def->cookie == ADAPTER_DEF_COOKIE && def->nodes != 0 && def->action != nullptr &&
+           def->scale > 0.0f;
 }
 
 // The told records' map is at most half full.
@@ -318,23 +372,24 @@ static void Lay(muiAtspiAdapter* adapter, unsigned char* block, uint32_t nodes)
     adapter->freeCount = nodes;
 }
 
-muiResult muiCreateAtspiAdapter(muiAtspiApp* app, const muiAtspiAdapterDef* def,
-                                muiAtspiAdapter** adapterOut)
+static muiResult CreateAtspiAdapter(muiAtspiApp* app, const muiAtspiAdapterDef* def,
+                                    muiAtspiAdapter** adapterOut)
 {
-    if (adapterOut != nullptr)
-    {
-        *adapterOut = nullptr;
-    }
     if (app == nullptr || def == nullptr || adapterOut == nullptr || !IsValidAdapter(def))
     {
         return mui_errorInvalid;
+    }
+    if (def->nodes > MUI_MAX_ACCESS_NODES)
+    {
+        return mui_errorLimit;
     }
     if (app->windowCount == app->windowCapacity)
     {
         return mui_errorCapacity;
     }
     size_t size = AdapterSize(def->nodes);
-    unsigned char* block = muiAllocate(&app->allocator, size, alignof(max_align_t));
+    unsigned char* block =
+        muiAllocateMarked(&app->busy, &app->allocator, size, alignof(max_align_t));
     if (block == nullptr)
     {
         return mui_errorCapacity;
@@ -356,7 +411,7 @@ muiResult muiCreateAtspiAdapter(muiAtspiApp* app, const muiAtspiAdapterDef* def,
     muiResult status = muiCreateAccessTree(&treeDef, &adapter->tree);
     if (status != mui_success)
     {
-        muiRelease(&app->allocator, block, size, alignof(max_align_t));
+        muiReleaseMarked(&app->busy, &app->allocator, block, size, alignof(max_align_t));
         return status;
     }
     app->nextWindow++;
@@ -365,7 +420,38 @@ muiResult muiCreateAtspiAdapter(muiAtspiApp* app, const muiAtspiAdapterDef* def,
     return mui_success;
 }
 
-void muiDestroyAtspiAdapter(muiAtspiAdapter* adapter)
+static MUI_NOINLINE muiResult CreateAtspiAdapterWorker(muiAtspiApp* app,
+                                                       const muiAtspiAdapterDef* def,
+                                                       muiAtspiAdapter** adapterOut)
+{
+    if (adapterOut != nullptr)
+    {
+        *adapterOut = nullptr;
+    }
+    if (app == nullptr)
+    {
+        return CreateAtspiAdapter(app, def, adapterOut);
+    }
+    if (!muiEnterMarked(&app->busy, &app->misuse))
+    {
+        return mui_errorBusy;
+    }
+    muiResult result = CreateAtspiAdapter(app, def, adapterOut);
+    app->misuse += result == mui_errorInvalid;
+    app->busy = false;
+    return result;
+}
+
+muiResult muiCreateAtspiAdapter(muiAtspiApp* app, const muiAtspiAdapterDef* def,
+                                muiAtspiAdapter** adapterOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = CreateAtspiAdapterWorker(app, def, adapterOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static void DestroyAtspiAdapter(muiAtspiAdapter* adapter)
 {
     if (adapter == nullptr)
     {
@@ -384,7 +470,25 @@ void muiDestroyAtspiAdapter(muiAtspiAdapter* adapter)
     }
     app->windowCount--;
     muiDestroyAccessTree(adapter->tree);
-    muiRelease(&app->allocator, adapter, adapter->blockSize, alignof(max_align_t));
+    muiReleaseMarked(&app->busy, &app->allocator, adapter, adapter->blockSize,
+                     alignof(max_align_t));
+}
+
+void muiDestroyAtspiAdapter(muiAtspiAdapter* adapter)
+{
+    if (adapter == nullptr)
+    {
+        DestroyAtspiAdapter(adapter);
+        return;
+    }
+    // The app outlives its adapter.
+    muiAtspiApp* app = adapter->app;
+    if (!muiEnterMarked(&app->busy, &app->misuse))
+    {
+        return;
+    }
+    DestroyAtspiAdapter(adapter);
+    app->busy = false;
 }
 
 const muiAccessTree* muiAtspiAdapter_GetTree(const muiAtspiAdapter* adapter)
@@ -392,7 +496,7 @@ const muiAccessTree* muiAtspiAdapter_GetTree(const muiAtspiAdapter* adapter)
     return adapter != nullptr ? adapter->tree : nullptr;
 }
 
-muiResult muiAtspiAdapter_SetScale(muiAtspiAdapter* adapter, float scale)
+static muiResult AtspiAdapterSetScale(muiAtspiAdapter* adapter, float scale)
 {
     if (adapter == nullptr || !(scale > 0.0f))
     {
@@ -402,11 +506,50 @@ muiResult muiAtspiAdapter_SetScale(muiAtspiAdapter* adapter, float scale)
     return mui_success;
 }
 
-void muiAtspiAdapter_SetPlace(muiAtspiAdapter* adapter, int32_t x, int32_t y)
+static MUI_NOINLINE muiResult AtspiAdapterSetScaleWorker(muiAtspiAdapter* adapter, float scale)
+{
+    if (adapter == nullptr)
+    {
+        return AtspiAdapterSetScale(adapter, scale);
+    }
+    if (!muiEnterMarked(&adapter->app->busy, &adapter->app->misuse))
+    {
+        return mui_errorBusy;
+    }
+    muiResult result = AtspiAdapterSetScale(adapter, scale);
+    adapter->app->misuse += result == mui_errorInvalid;
+    adapter->app->busy = false;
+    return result;
+}
+
+muiResult muiAtspiAdapter_SetScale(muiAtspiAdapter* adapter, float scale)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = AtspiAdapterSetScaleWorker(adapter, scale);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static void AtspiAdapterSetPlace(muiAtspiAdapter* adapter, int32_t x, int32_t y)
 {
     if (adapter != nullptr)
     {
         adapter->x = x;
         adapter->y = y;
     }
+}
+
+void muiAtspiAdapter_SetPlace(muiAtspiAdapter* adapter, int32_t x, int32_t y)
+{
+    if (adapter == nullptr)
+    {
+        AtspiAdapterSetPlace(adapter, x, y);
+        return;
+    }
+    if (!muiEnterMarked(&adapter->app->busy, &adapter->app->misuse))
+    {
+        return;
+    }
+    AtspiAdapterSetPlace(adapter, x, y);
+    adapter->app->busy = false;
 }

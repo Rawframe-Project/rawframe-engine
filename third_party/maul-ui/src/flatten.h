@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// FreeType outlines as line segments (record mui-0006): curves are cut
-// into as many segments as Wang's formula asks for them to stay within
-// MUI_FLATTEN_TOLERANCE of the curve.
+// FreeType outlines as line segments: curves are cut into as many segments
+// as Wang's formula asks for them to stay within MUI_FLATTEN_TOLERANCE of
+// the curve.
 
 #ifndef MAUL_UI_SRC_FLATTEN_H
 #define MAUL_UI_SRC_FLATTEN_H

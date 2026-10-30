@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Hit testing (record mui-0007). Layers are tried from the top, then the
-// content they are not in. Each walk is preorder, as painting's, so the
-// last node whose rounded border box holds the point is the topmost; a
-// subtree whose hit mode is none, or below a clipping node the point is
-// outside, is passed over whole. The point goes into each node's space as
-// the walk goes down, in doubles, and back out as it comes up: places
-// alone are taken off and added back exactly, and a local scale is
-// divided out and multiplied back (record mui-0005).
+// Hit testing. Layers are tried from the top, then the content they are
+// not in. Each walk is preorder, as painting's, so the last node whose
+// rounded border box holds the point is the topmost; a subtree whose hit
+// mode is none, or below a clipping node the point is outside, is passed
+// over whole. The point goes into each node's space as the walk goes down,
+// in doubles, and back out as it comes up: places alone are taken off and
+// added back exactly, and a local scale is divided out and multiplied
+// back.
 
 #include "context.h"
+#include "fpenv.h"
 #include "layer.h"
 #include "layout_node.h"
 #include "paint.h"
@@ -20,6 +21,7 @@
 #include "maul-ui/interaction.h"
 
 #include <math.h>
+#include <string.h>
 
 // Whether a point, from a rounded box's top left, is in it: in the box,
 // half open, and inside the circle of any corner whose square it is in.
@@ -197,8 +199,13 @@ static bool WalkLayers(Walk* walk, uint32_t root, bool* blockedOut)
     return false;
 }
 
-muiResult muiHitTest(const muiContext* context, muiNodeId rootId, float x, float y, muiHit* hitOut)
+static MUI_NOINLINE muiResult HitTestWorker(const muiContext* context, muiNodeId rootId, float x,
+                                            float y, muiHit* hitOut)
 {
+    if (hitOut != nullptr)
+    {
+        memset(hitOut, 0, sizeof *hitOut);
+    }
     if (context == nullptr || hitOut == nullptr || rootId.index1 == 0 || !isfinite(x) ||
         !isfinite(y))
     {
@@ -225,9 +232,26 @@ muiResult muiHitTest(const muiContext* context, muiNodeId rootId, float x, float
     return mui_success;
 }
 
-muiResult muiNode_MapToRoot(const muiContext* context, muiNodeId nodeId, float x, float y,
-                            float* xOut, float* yOut)
+muiResult muiNode_HitTest(const muiContext* context, muiNodeId rootId, float x, float y,
+                          muiHit* hitOut)
 {
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = HitTestWorker(context, rootId, x, y, hitOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static MUI_NOINLINE muiResult NodeMapToRootWorker(const muiContext* context, muiNodeId nodeId,
+                                                  float x, float y, float* xOut, float* yOut)
+{
+    if (xOut != nullptr)
+    {
+        *xOut = 0.0f;
+    }
+    if (yOut != nullptr)
+    {
+        *yOut = 0.0f;
+    }
     if (context == nullptr || xOut == nullptr || yOut == nullptr || !isfinite(x) || !isfinite(y))
     {
         return mui_errorInvalid;
@@ -243,4 +267,13 @@ muiResult muiNode_MapToRoot(const muiContext* context, muiNodeId nodeId, float x
     *xOut = (float)muiPlaceX(&place, (double)x);
     *yOut = (float)muiPlaceY(&place, (double)y);
     return mui_success;
+}
+
+muiResult muiNode_MapToRoot(const muiContext* context, muiNodeId nodeId, float x, float y,
+                            float* xOut, float* yOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeMapToRootWorker(context, nodeId, x, y, xOut, yOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

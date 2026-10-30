@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Accessibility (record mui-0008): requests from assistive technology,
-// performed by the library where it owns what they change, routed to
-// the node as activation for a click, posted to the host otherwise.
+// Accessibility: requests from assistive technology, performed by the
+// library where it owns what they change, routed to the node as activation
+// for a click, posted to the host otherwise.
 
 #include "access.h"
 #include "context.h"
 #include "event.h"
+#include "focus.h"
+#include "fpenv.h"
 #include "layout_node.h"
 #include "notify.h"
 #include "range.h"
+#include "scroll.h"
 #include "scroll_store.h"
 #include "tree.h"
 
@@ -39,7 +42,7 @@ static bool Page(muiContext* context, uint32_t slot, muiAccessAction action)
     float oldX = scroll->x;
     float oldY = scroll->y;
     muiNodeId nodeId = muiTreeIdOf(&context->tree, slot);
-    (void)muiNode_SetScroll(context, nodeId, x, y);
+    (void)muiSetNodeScroll(context, nodeId, x, y);
     return scroll->x != oldX || scroll->y != oldY;
 }
 
@@ -60,16 +63,16 @@ static bool Perform(muiContext* context, uint32_t slot, const muiAccessRequest* 
         return muiRouteTo(context, slot, &event);
     }
     case mui_actionFocus:
-        return muiFocus_Set(context, 0, nodeId, mui_focusByNavigation) == mui_success;
+        return muiSetFocus(context, 0, nodeId, mui_focusByNavigation) == mui_success;
     case mui_actionBlur:
-        return muiFocus_Set(context, 0, (muiNodeId){0, 0}, mui_focusByCode) == mui_success;
+        return muiSetFocus(context, 0, (muiNodeId){0, 0}, mui_focusByCode) == mui_success;
     case mui_actionIncrement:
     case mui_actionDecrement:
         return muiRangeStep(context, slot, request->action == mui_actionIncrement);
     case mui_actionSetValue:
         return muiRangeSet(context, slot, request->value);
     case mui_actionScrollIntoView:
-        return muiNode_ScrollIntoView(context, nodeId) == mui_success;
+        return muiScrollNodeIntoView(context, nodeId) == mui_success;
     case mui_actionScrollUp:
     case mui_actionScrollDown:
     case mui_actionScrollLeft:
@@ -80,7 +83,7 @@ static bool Perform(muiContext* context, uint32_t slot, const muiAccessRequest* 
         float x = 0.0f;
         float y = 0.0f;
         (void)muiNode_GetScroll(context, nodeId, &x, &y);
-        (void)muiNode_SetScroll(context, nodeId, request->x, request->y);
+        (void)muiSetNodeScroll(context, nodeId, request->x, request->y);
         float movedX = 0.0f;
         float movedY = 0.0f;
         (void)muiNode_GetScroll(context, nodeId, &movedX, &movedY);
@@ -96,8 +99,8 @@ static bool Perform(muiContext* context, uint32_t slot, const muiAccessRequest* 
     }
 }
 
-muiResult muiPerformAccessAction(muiContext* context, const muiAccessRequest* request,
-                                 bool* handledOut)
+static muiResult PerformAccessAction(muiContext* context, const muiAccessRequest* request,
+                                     bool* handledOut)
 {
     if (context == nullptr)
     {
@@ -107,14 +110,23 @@ muiResult muiPerformAccessAction(muiContext* context, const muiAccessRequest* re
     {
         *handledOut = false;
     }
-    if (request == nullptr || request->action > mui_actionReplaceText ||
-        !isfinite(request->value) || !isfinite(request->x) || !isfinite(request->y) ||
-        !muiMayFeed(context))
+    if (muiIsRouting(context))
+    {
+        return muiRefuseBusy(context);
+    }
+    if (request == nullptr || request->action > mui_actionReplaceText)
     {
         return muiRefuse(context);
     }
+    // The numbers come from an accessibility client, another program: a
+    // number that is not finite is its bad data, refused as such without
+    // misuse, which counts only what a correct host never passes.
+    if (!isfinite(request->value) || !isfinite(request->x) || !isfinite(request->y))
+    {
+        return mui_errorFormat;
+    }
     muiResult status = mui_success;
-    uint32_t slot = muiResolveEdit(context, muiNodeIdOfAccess(request->target), &status);
+    uint32_t slot = muiResolveEdit(context, muiGetNodeOfAccessId(request->target), &status);
     if (slot == 0)
     {
         return status;
@@ -134,4 +146,30 @@ muiResult muiPerformAccessAction(muiContext* context, const muiAccessRequest* re
         *handledOut = handled;
     }
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult PerformAccessActionWorker(muiContext* context,
+                                                        const muiAccessRequest* request,
+                                                        bool* handledOut)
+{
+    if (handledOut != nullptr)
+    {
+        *handledOut = false;
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = PerformAccessAction(context, request, handledOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiContext_PerformAccessAction(muiContext* context, const muiAccessRequest* request,
+                                         bool* handledOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = PerformAccessActionWorker(context, request, handledOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

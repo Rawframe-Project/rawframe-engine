@@ -1,4 +1,4 @@
-# The text component (record mui-0006): its modules, built into maul-ui
+# The text component: its modules, built into maul-ui
 # together with the objects of FreeType, HarfBuzz and Maul Unicode, so
 # the library carries what it needs, installs as one archive and links
 # with the C linker (HarfBuzz needs no C++ runtime). Only the text

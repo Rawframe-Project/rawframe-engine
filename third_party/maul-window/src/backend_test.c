@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The test backend: a platform with no screen. What mwinTestPost reports
+// The test backend: a platform with no screen. What mwinContext_PostTestEvent reports
 // and the requests the program makes wait until the next pump, as a
 // platform's messages would; the pump delivers the reports in order,
 // then answers the requests in order as the answer set for their kind
@@ -209,7 +209,7 @@ static int32_t PrimaryMonitor(const mwinContext* context)
 {
     mwinMonitorId primary = {0};
     size_t count = 0;
-    (void)mwinGetMonitors(context, &primary, 1, &count);
+    (void)mwinContext_GetMonitors(context, &primary, 1, &count);
     return count > 0 ? (int32_t)(primary.index1 - 1) : -1;
 }
 
@@ -447,12 +447,7 @@ static mwinResult KeyboardLayout(const mwinContext* context, char* buffer, size_
     (void)context;
     static const char name[] = "English (US)";
     size_t length = sizeof(name) - 1;
-    if (capacity > 0)
-    {
-        memcpy(buffer, name, length < capacity ? length : capacity);
-    }
-    *lengthOut = length;
-    return length > capacity ? mwin_errorCapacity : mwin_success;
+    return mwinGiveBytes(name, length, buffer, capacity, lengthOut);
 }
 
 static void NativeHandles(const mwinContext* context, uint32_t slot, mwinNativeHandles* out)
@@ -502,7 +497,8 @@ const mwinBackendOps mwinTestBackend = {
     mwinTestKeyReachOf,
 };
 
-mwinResult mwinTestSetAnswer(mwinContext* context, mwinRequestKind kind, mwinOutcome outcome)
+mwinResult mwinContext_SetTestAnswer(mwinContext* context, mwinRequestKind kind,
+                                     mwinOutcome outcome)
 {
     if (mwinIsBusy(context))
     {
@@ -523,7 +519,7 @@ mwinResult mwinTestSetAnswer(mwinContext* context, mwinRequestKind kind, mwinOut
     return mwin_success;
 }
 
-mwinResult mwinTestHold(mwinContext* context, bool hold)
+mwinResult mwinContext_HoldTestRequests(mwinContext* context, bool hold)
 {
     if (mwinIsBusy(context))
     {
@@ -543,7 +539,7 @@ mwinResult mwinTestHold(mwinContext* context, bool hold)
 }
 
 // Whether a record type is one a test may report: not the core's own,
-// and not what the mwinTest setters report.
+// and not what the test platform's setters report.
 static bool IsReportable(mwinEventType type)
 {
     return type != mwin_eventNone && type != mwin_eventWindowCreated &&
@@ -617,7 +613,7 @@ mwinResult mwinTestQueueReport(mwinTestPlatform* platform, const mwinEvent* even
     return mwin_success;
 }
 
-mwinResult mwinTestPost(mwinContext* context, const mwinEvent* event)
+mwinResult mwinContext_PostTestEvent(mwinContext* context, const mwinEvent* event)
 {
     if (mwinIsBusy(context))
     {
@@ -646,7 +642,7 @@ mwinResult mwinTestPost(mwinContext* context, const mwinEvent* event)
     return mwinTestQueueReport(platform, event);
 }
 
-mwinResult mwinTestSetTime(mwinContext* context, uint64_t timeNs)
+mwinResult mwinContext_SetTestTime(mwinContext* context, uint64_t timeNs)
 {
     if (mwinIsBusy(context))
     {
@@ -665,7 +661,7 @@ mwinResult mwinTestSetTime(mwinContext* context, uint64_t timeNs)
     return mwin_success;
 }
 
-mwinResult mwinTestSetScale(mwinContext* context, float scale)
+mwinResult mwinContext_SetTestScale(mwinContext* context, float scale)
 {
     if (mwinIsBusy(context))
     {
@@ -684,10 +680,12 @@ mwinResult mwinTestSetScale(mwinContext* context, float scale)
     return mwin_success;
 }
 
-mwinResult mwinTestGetTitle(const mwinContext* context, mwinWindowId window, char* buffer,
-                            size_t capacity, size_t* lengthOut)
+mwinResult mwinWindow_GetTestTitle(const mwinContext* context, mwinWindowId window, char* bufferOut,
+                                   size_t capacity, size_t* lengthOut)
 {
-    if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity != 0))
+    mwinClearOut(bufferOut, capacity);
+    mwinClearOut(lengthOut, sizeof *lengthOut);
+    if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity != 0))
     {
         return mwinMisuse(context);
     }
@@ -701,17 +699,13 @@ mwinResult mwinTestGetTitle(const mwinContext* context, mwinWindowId window, cha
         return mwin_errorStale;
     }
     size_t length = found->titleLength;
-    if (capacity > 0)
-    {
-        memcpy(buffer, found->title, length < capacity ? length : capacity);
-    }
-    *lengthOut = length;
-    return length > capacity ? mwin_errorCapacity : mwin_success;
+    return mwinGiveBytes(found->title, length, bufferOut, capacity, lengthOut);
 }
 
-mwinResult mwinTestAddMonitor(mwinContext* context, const mwinMonitorInfo* info,
+mwinResult mwinAddTestMonitor(mwinContext* context, const mwinMonitorInfo* info,
                               mwinMonitorId* monitorOut)
 {
+    mwinClearOut(monitorOut, sizeof *monitorOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);
@@ -733,8 +727,8 @@ mwinResult mwinTestAddMonitor(mwinContext* context, const mwinMonitorInfo* info,
     return mwin_success;
 }
 
-mwinResult mwinTestChangeMonitor(mwinContext* context, mwinMonitorId monitor,
-                                 const mwinMonitorInfo* info)
+mwinResult mwinMonitor_SetTestInfo(mwinContext* context, mwinMonitorId monitor,
+                                   const mwinMonitorInfo* info)
 {
     if (mwinIsBusy(context))
     {
@@ -757,7 +751,7 @@ mwinResult mwinTestChangeMonitor(mwinContext* context, mwinMonitorId monitor,
     return mwin_success;
 }
 
-mwinResult mwinTestRemoveMonitor(mwinContext* context, mwinMonitorId monitor)
+mwinResult mwinRemoveTestMonitor(mwinContext* context, mwinMonitorId monitor)
 {
     if (mwinIsBusy(context))
     {
@@ -780,7 +774,7 @@ mwinResult mwinTestRemoveMonitor(mwinContext* context, mwinMonitorId monitor)
     return mwin_success;
 }
 
-mwinResult mwinTestSetSystemFacts(mwinContext* context, const mwinSystemFacts* facts)
+mwinResult mwinContext_SetTestSystemFacts(mwinContext* context, const mwinSystemFacts* facts)
 {
     if (mwinIsBusy(context))
     {
@@ -798,7 +792,7 @@ mwinResult mwinTestSetSystemFacts(mwinContext* context, const mwinSystemFacts* f
     return mwin_success;
 }
 
-mwinResult mwinTestSetLocales(mwinContext* context, const char* locales, size_t length)
+mwinResult mwinContext_SetTestLocales(mwinContext* context, const char* locales, size_t length)
 {
     if (mwinIsBusy(context))
     {
@@ -820,9 +814,11 @@ mwinResult mwinTestSetLocales(mwinContext* context, const char* locales, size_t 
                                                                   : mwinMisuse(context);
 }
 
-mwinResult mwinTestGetCursor(const mwinContext* context, mwinWindowId window,
-                             mwinCursorId* cursorOut, uint32_t* imageOut)
+mwinResult mwinWindow_GetTestCursor(const mwinContext* context, mwinWindowId window,
+                                    mwinCursorId* cursorOut, uint32_t* imageOut)
 {
+    mwinClearOut(cursorOut, sizeof *cursorOut);
+    mwinClearOut(imageOut, sizeof *imageOut);
     if (context == nullptr || cursorOut == nullptr)
     {
         return mwin_errorInvalid;

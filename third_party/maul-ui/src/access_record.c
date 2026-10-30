@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Comparing two records of a node (record mui-0008).
+// Comparing two records of a node.
 
 #include "access_record.h"
 

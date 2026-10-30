@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The context's tokens: each a typed value or an alias to a token of its
-// type, never in a cycle (record mui-0004).
+// type, never in a cycle.
 
 #ifndef MAUL_UI_SRC_TOKEN_STORE_H
 #define MAUL_UI_SRC_TOKEN_STORE_H

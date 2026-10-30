@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Font records (record mui-0006).
+// Font records.
 
 #include "font_store.h"
 

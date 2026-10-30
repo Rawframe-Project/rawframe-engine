@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Virtualization (record mui-0007), within the library.
+// Virtualization, within the library.
 
 #ifndef MAUL_UI_SRC_VIRTUAL_H
 #define MAUL_UI_SRC_VIRTUAL_H

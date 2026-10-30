@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Colors as transitions move them: premultiplied Oklab, as CSS Color 4
-// interpolates colors where no legacy result is owed (record mui-0004).
+// interpolates colors where no legacy result is owed.
 
 #ifndef MAUL_UI_SRC_COLOR_H
 #define MAUL_UI_SRC_COLOR_H

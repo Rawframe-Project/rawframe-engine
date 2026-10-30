@@ -17,7 +17,7 @@
 
 muiCondition muiDefaultCondition(void)
 {
-    const muiRange all = {0.0f, INFINITY};
+    const muiInterval all = {0.0f, INFINITY};
     return (muiCondition){
         .width = all,
         .height = all,
@@ -26,7 +26,7 @@ muiCondition muiDefaultCondition(void)
         .viewports = VIEWPORTS,
         .inputs = INPUTS,
         .motion = mui_motionAny,
-        .direction = mui_directionAny,
+        .direction = mui_inlineInherit,
     };
 }
 
@@ -40,21 +40,22 @@ muiEnvironment muiDefaultEnvironment(void)
     };
 }
 
-static bool IsRangeValid(muiRange range)
+static bool IsIntervalValid(muiInterval interval)
 {
-    return isfinite(range.min) && range.min >= 0.0f && !isnan(range.max) && range.max >= range.min;
+    return isfinite(interval.min) && interval.min >= 0.0f && !isnan(interval.max) &&
+           interval.max >= interval.min;
 }
 
-// Whether a range is the default one, which holds for every value.
-static bool IsEverything(muiRange range)
+// Whether an interval is the default one, which holds for every value.
+static bool IsEverything(muiInterval interval)
 {
-    return range.min == 0.0f && range.max == INFINITY;
+    return interval.min == 0.0f && interval.max == INFINITY;
 }
 
-// An unbounded range holds an infinite value too.
-static bool IsIn(muiRange range, float value)
+// An unbounded interval holds an infinite value too.
+static bool IsIn(muiInterval interval, float value)
 {
-    return value >= range.min && (value < range.max || range.max == INFINITY);
+    return value >= interval.min && (value < interval.max || interval.max == INFINITY);
 }
 
 // A single bit of mask.
@@ -65,11 +66,10 @@ static bool IsOneOf(uint8_t value, uint8_t mask)
 
 bool muiIsConditionValid(const muiCondition* condition)
 {
-    return IsRangeValid(condition->width) && IsRangeValid(condition->height) &&
-           IsRangeValid(condition->aspect) && IsRangeValid(condition->textScale) &&
+    return IsIntervalValid(condition->width) && IsIntervalValid(condition->height) &&
+           IsIntervalValid(condition->aspect) && IsIntervalValid(condition->textScale) &&
            (condition->viewports & ~VIEWPORTS) == 0 && (condition->inputs & ~INPUTS) == 0 &&
-           condition->motion <= mui_motionReduced &&
-           condition->direction <= mui_directionRightToLeft;
+           condition->motion <= mui_motionReduced && condition->direction <= mui_inlineRightToLeft;
 }
 
 bool muiIsEnvironmentValid(const muiEnvironment* environment)
@@ -86,7 +86,7 @@ muiConditionReads muiConditionReadsOf(const muiCondition* condition)
     {
         reads |= mui_readsSize;
     }
-    if (condition->direction != mui_directionAny)
+    if (condition->direction != mui_inlineInherit)
     {
         reads |= mui_readsDirection;
     }
@@ -106,7 +106,7 @@ muiPropertyBits muiForbiddenProperties(const muiCondition* condition)
     {
         forbidden |= HEIGHT_PROPERTIES;
     }
-    if (condition->direction != mui_directionAny)
+    if (condition->direction != mui_inlineInherit)
     {
         forbidden |= MUI_PROPERTY_BIT(mui_propertyTextDirection);
     }
@@ -123,9 +123,9 @@ static float AspectOf(float width, float height)
     return width > 0.0f ? INFINITY : 0.0f;
 }
 
-static bool MatchesDirection(muiDirectionMatch match, bool rtl)
+static bool MatchesDirection(muiInlineDirection match, bool rtl)
 {
-    return match == mui_directionAny || (match == mui_directionRightToLeft) == rtl;
+    return match == mui_inlineInherit || (match == mui_inlineRightToLeft) == rtl;
 }
 
 static bool MatchesMotion(muiMotionMatch match, bool reduced)

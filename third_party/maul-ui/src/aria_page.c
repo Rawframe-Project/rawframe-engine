@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The ARIA adapter's calls into the page (record mui-0008), through
-// Emscripten's EM_JS, or imports without Emscripten (mui-0009). Each
-// adapter's elements are kept in Module.muiAria under a handle: the host
-// element, the adapter's container in it, the enabling button, and the
-// elements by slot. The container is invisible as Flutter makes its
-// semantics (filter: opacity(0%), transparent text): visibility or
-// display would hide it from screen readers too.
+// The ARIA adapter's calls into the page, through Emscripten's EM_JS, or
+// imports without Emscripten. Each adapter's elements are kept in
+// Module.muiAria under a handle: the host element, the adapter's container
+// in it, the enabling button, and the elements by slot. The container is
+// invisible as Flutter makes its semantics (filter: opacity(0%),
+// transparent text): visibility or display would hide it from screen
+// readers too.
 
 #include "allocator.h"
 #include "aria.h"
+#include "host_call.h"
 #include "web_js.h"
 
 // The enabling button was pressed.
@@ -29,7 +30,9 @@ void muiAriaEventFromPage(muiAriaAdapter* adapter, int kind, uint32_t slot, doub
 MUI_WEB_EXPORT(muiAriaTextRoomFromPage)
 char* muiAriaTextRoomFromPage(muiAriaAdapter* adapter, uint32_t length)
 {
-    return length < UINT32_MAX ? muiAllocate(&adapter->allocator, (size_t)length + 1, 1) : nullptr;
+    return length < UINT32_MAX
+               ? muiAllocateMarked(&adapter->busy, &adapter->allocator, (size_t)length + 1, 1)
+               : nullptr;
 }
 
 // A client typed into a field, or selected in it; the text, if any, from
@@ -41,7 +44,7 @@ void muiAriaTextFromPage(muiAriaAdapter* adapter, uint32_t slot, uint32_t start,
     muiAriaPerformText(adapter, slot, start, end, text, length);
     if (text != nullptr)
     {
-        muiRelease(&adapter->allocator, text, (size_t)length + 1, 1);
+        muiReleaseMarked(&adapter->busy, &adapter->allocator, text, (size_t)length + 1, 1);
     }
 }
 

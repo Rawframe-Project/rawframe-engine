@@ -2,9 +2,9 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The node store: one reserved slot array, children as intrusive sibling
-// links, and two dirty flags per pipeline stage (record mui-0002). Slots
-// are 1-based; 0 means none. Callers resolve ids and check edits before
-// they reach these functions.
+// links, and two dirty flags per pipeline stage. Slots are 1-based; 0
+// means none. Callers resolve ids and check edits before they reach these
+// functions.
 
 #ifndef MAUL_UI_SRC_TREE_H
 #define MAUL_UI_SRC_TREE_H
@@ -25,8 +25,8 @@ enum
     mui_stageLayout = 2,
     mui_stagePaint = 4,
     // The accessibility tree's: every mark of another stage carries it,
-    // since what any stage changes may change what a node is to
-    // assistive technology (record mui-0008).
+    // since what any stage changes may change what a node is to assistive
+    // technology.
     mui_stageAccess = 8,
     mui_stageAll = 15,
 };
@@ -59,8 +59,8 @@ typedef struct muiTreeNode
     muiTreeDirty dirty;
     bool live;
     // MUI_TREE_ bits: whether the node roots a layer, painted and hit
-    // apart from the content around it (record mui-0007), which
-    // src/layer.c keeps; whether it exits (src/exit.c).
+    // apart from the content around it, which src/layer.c keeps; whether
+    // it exits (src/exit.c).
     uint8_t flags;
 } muiTreeNode;
 

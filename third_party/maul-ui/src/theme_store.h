@@ -2,8 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The context's themes: each a table from token slots to override records,
-// so that finding a theme's override of a token is one read (record
-// mui-0004).
+// so that finding a theme's override of a token is one read.
 
 #ifndef MAUL_UI_SRC_THEME_STORE_H
 #define MAUL_UI_SRC_THEME_STORE_H

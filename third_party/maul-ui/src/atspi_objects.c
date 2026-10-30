@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The AT-SPI adapter's objects (record mui-0008): the application's root
-// and every node of its windows, found from their paths, written as
-// references, and answering the Accessible interface and introspection.
+// The AT-SPI adapter's objects: the application's root and every node of
+// its windows, found from their paths, written as references, and
+// answering the Accessible interface and introspection.
 
 #include "allocator.h"
 #include "atspi.h"

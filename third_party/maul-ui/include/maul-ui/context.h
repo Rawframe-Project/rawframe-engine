@@ -3,6 +3,15 @@
 //
 // The context: the root object that owns a tree of nodes and every
 // result computed over it.
+//
+// A context is busy while one of its functions that changes it runs. Host
+// code it calls then (the measure, baseline, paint and access text
+// functions, the allocator) may read it, and a function that changes it
+// answers mui_errorBusy and counts one misuse; muiDestroyContext does
+// nothing. The event function is the exception: the context is not busy
+// while it runs, and it may call all but the functions muiEventFunction
+// names. A text call given a muiTextHost (maul-ui/text.h) keeps the
+// context busy in the same way while it runs.
 
 #ifndef MAUL_UI_CONTEXT_H
 #define MAUL_UI_CONTEXT_H
@@ -16,6 +25,15 @@ extern "C"
 
     // The owner of every node. A context is used by one thread at a time.
     typedef struct muiContext muiContext;
+
+    enum
+    {
+        // The largest value of a context's limit: 2^31 - 2, so a table with
+        // a placeholder entry still counts in 31 bits.
+        MUI_MAX_CONTEXT_LIMIT = 0x7FFFFFFE,
+        // The most pointers a context knows at once.
+        MUI_MAX_POINTERS = 32
+    };
 
     // The named limits of a context. A request past one is refused with
     // mui_errorCapacity.
@@ -53,7 +71,8 @@ extern "C"
         uint32_t drawGlyphs;
         // Nodes that root a layer at once.
         uint32_t layers;
-        // Pointers known at once (at most 32), and pointer records
+        // Pointers known at once (at most MUI_MAX_POINTERS), and pointer
+        // records
         // waiting to be taken; past it, they are counted in a
         // mui_pointerRecordDropped record.
         uint32_t pointers;
@@ -98,12 +117,14 @@ extern "C"
     /// types, 1,024 property sets, 64 notifications, 64 transitions, 256
     /// running transitions, 256 tokens, 1,024 token names, 16 themes, 512
     /// theme overrides, draw lists of 8,192 commands, 256 clips, 256
-    /// gradients and 16,384 glyphs, 64 layers, 16 popups, 64 exits, 8 virtual lists of
-    /// 16,384 estimated items together, and the C library's
-    /// allocator.
+    /// gradients, 16,384 glyphs and 64 transforms, 64 layers, 16 pointers
+    /// and 64 pointer records, 256 neighbors, 64 ranges, 16 popups, 64
+    /// exits, 8 virtual lists of 16,384 estimated items together, 512
+    /// nodes with accessibility data and 4 accessibility roots, and the C
+    /// library's allocator.
     ///
     /// Built in the program from the headers it includes, so it carries
-    /// their version (MUI_DEF_VERSION), which the context checks.
+    /// their version (MUI_ABI_VERSION), which the context checks.
     ///
     /// @return The def, with a valid cookie.
     /// @par Thread safety
@@ -116,7 +137,7 @@ extern "C"
     muiContextDef def = {0};
 #endif
         def.cookie = MUI_CONTEXT_DEF_COOKIE;
-        def.version = MUI_DEF_VERSION;
+        def.version = MUI_ABI_VERSION;
         def.limits.nodes = 4096;
         def.limits.styles = 256;
         def.limits.nodeTypes = 64;
@@ -150,20 +171,25 @@ extern "C"
     /// Creates a context and reserves the memory its limits name.
     ///
     /// @param def         The context: a valid cookie, an allocator with both
-    ///                    functions or neither, a node limit from 1 to
-    ///                    2^31 - 1 and other limits from 0 to 2^31 - 1.
+    ///                    functions or neither, a node limit of 1 or more,
+    ///                    and limits up to MUI_MAX_CONTEXT_LIMIT, pointers up
+    ///                    to MUI_MAX_POINTERS.
     /// @param contextOut  Receives the context; set to NULL on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
-    ///         cookie, a half-set allocator or a limit out of range;
-    ///         `mui_errorCapacity` when the allocator cannot give the
-    ///         memory.
+    /// @return `mui_success`; `mui_errorVersion` for a def built against
+    ///         headers of another binary interface (MUI_ABI_VERSION), before
+    ///         the rest of the def is read; `mui_errorInvalid` for a NULL
+    ///         argument, a bad cookie, a half-set allocator or a node limit of
+    ///         0; `mui_errorLimit` for a limit past its maximum;
+    ///         `mui_errorCapacity` when the allocator cannot give the memory.
     /// @par Thread safety
     /// Safe from any thread.
     MUI_NODISCARD MUI_API muiResult muiCreateContext(const muiContextDef* def,
                                                      muiContext** contextOut);
 
     /// Destroys a context, every node in it and its memory. Every id it gave
-    /// out becomes meaningless.
+    /// out becomes meaningless. A call while the context is busy, as from
+    /// host code it runs, or from its event function, destroys nothing and
+    /// counts one misuse.
     ///
     /// @param context  The context, or NULL for nothing.
     /// @par Thread safety
@@ -178,17 +204,17 @@ extern "C"
         // A node's conditions flipped back and forth with its own layout,
         // the same two sizes in turn; its conditions are held at their
         // last outcome until the host edits the node or its size leaves
-        // those two (record mui-0004).
+        // those two.
         mui_notificationOscillation = 1,
-        // count notifications were dropped here, past the limit.
+        // detail notifications were dropped here, past the limit.
         mui_notificationDropped = 2,
-        // A player's focus came to the node, or left it; count is the
+        // A player's focus came to the node, or left it; detail is the
         // player.
         mui_notificationFocusGained = 3,
         mui_notificationFocusLost = 4,
         // Input changed a range's value (maul-ui/range.h).
         mui_notificationRangeChanged = 5,
-        // A popup should close (maul-ui/popup.h); count is the reason, a
+        // A popup should close (maul-ui/popup.h); detail is the reason, a
         // muiDismissReason.
         mui_notificationPopupDismissed = 6,
         // The node's exit (maul-ui/exit.h) has no transition running in
@@ -198,42 +224,46 @@ extern "C"
         // (maul-ui/virtual.h).
         mui_notificationWindowChanged = 8,
         // Assistive technology asked the node to do what the host does
-        // (maul-ui/access.h); count is the muiAccessAction.
+        // (maul-ui/access.h); detail is the muiAccessAction.
         mui_notificationAccessAction = 9,
     };
 
-    // A record of something the host learns after the call that caused
-    // it, in the order it happened (family record 0018).
+    // A record of something the host learns after the call that caused it,
+    // in the order it happened.
     typedef struct muiNotification
     {
         muiNotificationKind kind;
         // The node it is about; the null id for mui_notificationDropped.
         muiNodeId node;
-        // For mui_notificationDropped, how many were dropped; for focus,
-        // the player; for a popup, the reason.
-        uint32_t count;
+        // What its kind says above: how many were dropped, the player, the
+        // reason or the action; 0 for the other kinds.
+        uint32_t detail;
     } muiNotification;
 
     /// Takes the oldest notification.
     ///
     /// @param context          The context.
-    /// @param notificationOut  Receives it.
+    /// @param notificationOut  Receives it. Zeroed on failure.
     /// @return `mui_success`; `mui_empty` when none is waiting;
-    ///         `mui_errorInvalid` for a NULL argument.
+    ///         `mui_errorInvalid` for a NULL argument; `mui_errorBusy` while
+    ///         the context is busy.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiNextNotification(muiContext* context,
-                                                        muiNotification* notificationOut);
+    MUI_NODISCARD MUI_API muiResult muiContext_TakeNotification(muiContext* context,
+                                                                muiNotification* notificationOut);
 
     /// Returns how many calls the context has refused as invalid input
-    /// (`mui_errorInvalid`): a count release builds can watch to catch a
-    /// host's bugs. Stale ids are not misuse.
+    /// (`mui_errorInvalid`) or as calls back in while it was busy
+    /// (`mui_errorBusy`): a count release builds can watch to catch a
+    /// host's bugs. Stale ids are not misuse, data another program
+    /// controls (`mui_errorFormat`) is not, and queries taking the context
+    /// as const count nothing.
     ///
     /// @param context  The context.
     /// @return The count; 0 for a NULL context.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_API uint64_t muiGetContextMisuse(const muiContext* context);
+    MUI_API uint64_t muiContext_GetMisuse(const muiContext* context);
 
     // The work a context has done since it was made, counted where it is
     // done rather than skipped: a host reads it before and after a frame
@@ -258,7 +288,7 @@ extern "C"
     /// @return The counts; all 0 for a NULL context.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_API muiWorkCounts muiGetWorkCounts(const muiContext* context);
+    MUI_API muiWorkCounts muiContext_GetWorkCounts(const muiContext* context);
 
 #ifdef __cplusplus
 }

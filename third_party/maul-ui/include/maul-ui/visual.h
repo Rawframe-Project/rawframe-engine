@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Visual values: what the draw-command list paints for a node, set
-// through the same classes, variants, conditions, transitions and direct
-// writes as layout values (record mui-0004). A change to one marks the
-// node's paint, never its layout.
+// Visual values: what the draw-command list paints for a node, set through
+// the same classes, variants, conditions, transitions and direct writes as
+// layout values. A change to one marks the node's paint, never its layout.
 
 #ifndef MAUL_UI_VISUAL_H
 #define MAUL_UI_VISUAL_H
@@ -109,7 +108,7 @@ extern "C"
     // A scale of a node and its subtree after layout: drawn, hit tested
     // and reported through it, about an origin in its border box, while
     // layout and what places by layout (scrolling, popups, directional
-    // navigation) keep its laid-out box (record mui-0005).
+    // navigation) keep its laid-out box.
     typedef struct muiLocalScale
     {
         // Per axis, finite and 0 or more; 1 leaves it as laid out, and 0
@@ -195,10 +194,11 @@ extern "C"
     ///                 radii and slice insets of 0 or more, shadows with finite offsets and
     ///                 spread and a blur of 0 or more, opacity from 0 to 1.
     /// @param mask     The properties, within MUI_VISUAL_PROPERTIES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, an unknown variant or property bit, a value outside
-    ///         the above or a call from a measure or paint function, which changes
-    ///         nothing; `mui_errorStale` for an id whose class is gone;
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, an unknown variant or property bit or a value outside the
+    ///         above, which changes nothing; `mui_errorLimit` for a gradient of more than
+    ///         MUI_MAX_GRADIENT_STOPS stops; `mui_errorBusy` while the context
+    ///         is busy; `mui_errorStale` for an id whose class is gone;
     ///         `mui_errorCapacity` when the variant had no values and the
     ///         context's limit of property sets is reached.
     /// @par Thread safety
@@ -214,8 +214,9 @@ extern "C"
     /// @param styleId    The class.
     /// @param variant    The variant.
     /// @param valuesOut  Receives the set values, and muiDefaultVisualStyle's
-    ///                   for the rest.
-    /// @param maskOut    Receives which visual properties are set.
+    ///                   for the rest. Zeroed on failure.
+    /// @param maskOut    Receives which visual properties are set. 0 on
+    ///                   failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id or an unknown variant; `mui_errorStale` for an id
     ///         whose class is gone.
@@ -234,9 +235,10 @@ extern "C"
     /// @param nodeId   The node.
     /// @param values   The values, as muiStyle_SetVisualValues takes them.
     /// @param mask     The properties, within MUI_VISUAL_PROPERTIES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, an unknown property bit, a value outside the above
-    ///         or a call from a measure or paint function, which changes nothing;
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, an unknown property bit or a value outside the above, which
+    ///         changes nothing; `mui_errorLimit` for a gradient of more than
+    ///         MUI_MAX_GRADIENT_STOPS stops; `mui_errorBusy` while the context is busy;
     ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -246,11 +248,11 @@ extern "C"
 
     /// Reads a node's resolved visual values: its direct writes, and for the
     /// other properties what its classes and states gave at the last
-    /// muiComputeLayout that reached it, where its transitions have them.
+    /// muiNode_ComputeLayout that reached it, where its transitions have them.
     ///
     /// @param context    The context.
     /// @param nodeId     The node.
-    /// @param valuesOut  Receives the values.
+    /// @param valuesOut  Receives the values. Zeroed on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
     ///         null id; `mui_errorStale` for an id whose node is gone.
     /// @par Thread safety

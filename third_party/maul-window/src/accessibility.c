@@ -7,9 +7,10 @@
 
 #include "maul-window/accessibility.h"
 
-mwinResult mwinRequestAccessibilityRoot(mwinContext* context, mwinWindowId window, void* root,
-                                        mwinRequestId* requestOut)
+mwinResult mwinWindow_RequestAccessibilityRoot(mwinContext* context, mwinWindowId window,
+                                               void* root, mwinRequestId* requestOut)
 {
+    mwinClearOut(requestOut, sizeof *requestOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);

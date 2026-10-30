@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Layout: the authored values that size and place a node, the solver
-// that computes rectangles from them (CSS Flexbox, record mui-0003), and
-// the rectangles it publishes. Lengths are logical units; a node's
-// rectangle is relative to its parent's border box, and a root's
-// rectangle starts at 0, 0.
+// Layout: the authored values that size and place a node, the solver that
+// computes rectangles from them (CSS Flexbox), and the rectangles it
+// publishes. Lengths are logical units; a node's rectangle is relative to
+// its parent's border box, and a root's rectangle starts at 0, 0.
 
 #ifndef MAUL_UI_LAYOUT_H
 #define MAUL_UI_LAYOUT_H
@@ -219,16 +218,16 @@ extern "C"
     } muiPlacement;
 
     // The inline direction of a node and the nodes below it that inherit.
-    typedef uint8_t muiTextDirection;
+    typedef uint8_t muiInlineDirection;
 
     enum
     {
         // The parent's direction; left to right for a root.
-        mui_textInherit = 0,
-        mui_textLeftToRight = 1,
+        mui_inlineInherit = 0,
+        mui_inlineLeftToRight = 1,
         // Start is on the right: rows run right to left and every start and
         // end edge, inset and anchor mirrors.
-        mui_textRightToLeft = 2,
+        mui_inlineRightToLeft = 2,
     };
 
     // What a node without children holds.
@@ -239,8 +238,18 @@ extern "C"
         // Nothing: its content box is empty.
         mui_contentNone = 0,
         // The host's content, sized by the measure function given to
-        // muiComputeLayout. A node with children ignores it.
+        // muiNode_ComputeLayout. A node with children ignores it.
         mui_contentHost = 1,
+    };
+
+    // One of the two axes on screen: which way a range, a list or a
+    // scrollbar runs.
+    typedef uint8_t muiAxis;
+
+    enum
+    {
+        mui_axisHorizontal = 0,
+        mui_axisVertical = 1,
     };
 
     // The axes a node scrolls its children along. A node that scrolls in
@@ -272,7 +281,7 @@ extern "C"
         muiEdges border;
         muiEdges padding;
         muiPlacement placement;
-        muiTextDirection textDirection;
+        muiInlineDirection textDirection;
         muiContentKind content;
         muiScrollAxes scrollAxes;
         // The edges whose padding is at least the surface's safe-area
@@ -324,25 +333,30 @@ extern "C"
     } muiMeasureAxis;
 
     // Returns the content-box size of a node's host content. It runs inside
-    // muiComputeLayout, on the calling thread, and may not change the
-    // context; a call that would is refused as misuse. It is never asked
+    // muiNode_ComputeLayout, on the calling thread, and may read the context,
+    // not change it: a function that would answers mui_errorBusy and
+    // counts one misuse. It is never asked
     // with both axes exact, as the size is then decided: a host lays its
     // content out for painting at the node's rectangle. Its answer is to
     // depend on the request alone, and content that fits within a size is
     // to measure the same within any smaller one it still fits, as text
     // broken greedily into lines does: layout keeps answers and gives them
-    // again to such requests.
+    // again to such requests. A width or height of NaN is content that
+    // could not be measured now, as when memory ran out: it is laid out as
+    // empty, not kept, and measured again by the next layout, and
+    // muiNode_ComputeLayout answers mui_errorCapacity.
     typedef muiSize (*muiMeasureFunction)(void* user, muiNodeId nodeId, uint64_t hostKey,
                                           muiMeasureAxis width, muiMeasureAxis height);
 
     // Returns the first baseline of a node's host content laid out at a
     // content-box size: its distance down from the content box's top, or
-    // NaN when the content has none. It runs as the measure function does,
-    // with the same user pointer.
+    // NaN when the content has none, or +infinity when it could not be
+    // found now, which layout takes as a measure function's NaN. It runs as
+    // the measure function does, with the same user pointer.
     typedef float (*muiBaselineFunction)(void* user, muiNodeId nodeId, uint64_t hostKey,
                                          float width, float height);
 
-    // What muiComputeLayout lays a root out in.
+    // What muiNode_ComputeLayout lays a root out in.
     typedef struct muiLayoutInput
     {
         // The space the root fits into, at least 0.
@@ -350,14 +364,15 @@ extern "C"
         float availableHeight;
         // Sizes host content; NULL sizes it as empty.
         muiMeasureFunction measure;
-        void* measureUser;
+        // Handed to the measure and baseline functions.
+        void* user;
         // Now, in nanoseconds on a monotonic clock, as Maul Window stamps
         // events: running transitions move to it. A time before the last
         // counts as no time passed.
         uint64_t timeNs;
-        // Gives host content's baseline, for baseline alignment, with
-        // measureUser; NULL gives none, and a baseline is then the bottom
-        // of the node's border box, as CSS synthesizes one.
+        // Gives host content's baseline, for baseline alignment; NULL
+        // gives none, and a baseline is then the bottom of the node's
+        // border box, as CSS synthesizes one.
         muiBaselineFunction baseline;
         // The surface's safe-area insets, physical, finite and 0 or more:
         // what a display's cutouts, rounded corners and system bars cover,
@@ -377,32 +392,13 @@ extern "C"
     /// Safe from any thread.
     MUI_API muiLayoutStyle muiDefaultLayoutStyle(void);
 
-    /// Writes every layout property of a node directly, so that they win
-    /// over its style classes until reset (muiNode_SetLayoutValues in
-    /// maul-ui/style.h writes some). The node and its parent are laid out
-    /// again at the next muiComputeLayout.
-    ///
-    /// @param context  The context.
-    /// @param nodeId   The node.
-    /// @param style    The values: finite numbers, grow and shrink, padding,
-    ///                 border and gaps at least 0, known enumerators and
-    ///                 edge bits, alignItems not mui_alignAuto, and anchors
-    ///                 from 0 to 1, and an aspect ratio of 0 or more.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, a value outside the above, or a call from a measure
-    ///         function; `mui_errorStale` for an id whose node is gone.
-    /// @par Thread safety
-    /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiNode_SetLayoutStyle(muiContext* context, muiNodeId nodeId,
-                                                           const muiLayoutStyle* style);
-
     /// Reads a node's resolved layout values: its direct writes, and for
     /// the other properties what its classes and states gave at the last
-    /// muiComputeLayout that reached it.
+    /// muiNode_ComputeLayout that reached it.
     ///
     /// @param context   The context.
     /// @param nodeId    The node.
-    /// @param styleOut  Receives the values.
+    /// @param styleOut  Receives the values. Zeroed on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
     ///         null id; `mui_errorStale` for an id whose node is gone.
     /// @par Thread safety
@@ -425,13 +421,13 @@ extern "C"
     MUI_API bool muiNode_IsRightToLeft(const muiContext* context, muiNodeId nodeId);
 
     /// Tells the solver a node's host content changed size, so it is
-    /// measured again at the next muiComputeLayout.
+    /// measured again at the next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
-    ///         id or a call from a measure or paint function; `mui_errorStale` for an
-    ///         id whose node is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
+    ///         for an id whose node is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_MarkContentChanged(muiContext* context,
@@ -443,16 +439,18 @@ extern "C"
     /// @param context  The context.
     /// @param rootId   A root: a node without a parent.
     /// @param input    The space and the measure function.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, a node with a parent, a negative or non-finite
-    ///         space, or a call from a measure or paint function; `mui_errorStale`
-    ///         for an id whose node is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, a node with a parent or a negative or non-finite space;
+    ///         `mui_errorBusy` while the context is busy; `mui_errorStale` for
+    ///         an id whose node is gone; `mui_errorCapacity` when host content
+    ///         could not be measured (muiMeasureFunction), which is laid out
+    ///         as empty and measured again by the next call.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiComputeLayout(muiContext* context, muiNodeId rootId,
-                                                     const muiLayoutInput* input);
+    MUI_NODISCARD MUI_API muiResult muiNode_ComputeLayout(muiContext* context, muiNodeId rootId,
+                                                          const muiLayoutInput* input);
 
-    /// Returns whether muiComputeLayout on a root has work to do: an edit
+    /// Returns whether muiNode_ComputeLayout on a root has work to do: an edit
     /// below it since its last run, a node whose conditions read a size or
     /// direction that run changed, which a following run styles again, a
     /// transition running below it, or a scroll step easing below it
@@ -464,9 +462,9 @@ extern "C"
     ///         context.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_API bool muiIsUpdatePending(const muiContext* context, muiNodeId rootId);
+    MUI_API bool muiNode_IsUpdatePending(const muiContext* context, muiNodeId rootId);
 
-    /// Returns a node's border box from the last muiComputeLayout that
+    /// Returns a node's border box from the last muiNode_ComputeLayout that
     /// reached it, relative to its parent's border box.
     ///
     /// @param context  The context.
@@ -477,7 +475,7 @@ extern "C"
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_API muiRect muiNode_GetRect(const muiContext* context, muiNodeId nodeId);
 
-    /// Returns a node's content box from the last muiComputeLayout that
+    /// Returns a node's content box from the last muiNode_ComputeLayout that
     /// reached it, relative to its border box: inside its border and
     /// padding, the start's on the right in a right-to-left node, as its
     /// paint function and its text's carets are given it.
@@ -493,7 +491,7 @@ extern "C"
     /// Carries a point of a node's border box into the space its topmost
     /// ancestor's rectangle is in, where pointer events are given, through
     /// its own and its ancestors' places, local scales and scroll
-    /// containers' offsets as the last muiComputeLayout, styling and
+    /// containers' offsets as the last muiNode_ComputeLayout, styling and
     /// scrolling left them: so a host places a
     /// window's candidate box at a caret, or its own popup beside a node.
     ///
@@ -501,8 +499,8 @@ extern "C"
     /// @param nodeId   The node.
     /// @param x        The point, from the border box's top left.
     /// @param y        Likewise.
-    /// @param xOut     Receives the point's x there; unchanged on failure.
-    /// @param yOut     Likewise its y.
+    /// @param xOut     Receives the point's x there. 0 on failure.
+    /// @param yOut     Likewise its y. 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
     ///         point not finite; `mui_errorStale` for a node that is gone.
     /// @par Thread safety

@@ -227,10 +227,10 @@ static uint32_t TagOf(unsigned index)
     return index >= IndexHanb ? s_writingSystems[index - IndexHanb] : muniScriptTags[index];
 }
 
-muniTextResult muniGetResolvedScripts(const char* text, size_t length, muniScript* scripts,
+muniTextResult muniGetResolvedScripts(const char* text, size_t length, muniScript* scriptsOut,
                                       size_t capacity, size_t* countOut)
 {
-    if ((text == nullptr && length != 0) || (scripts == nullptr && capacity != 0) ||
+    if ((text == nullptr && length != 0) || (scriptsOut == nullptr && capacity != 0) ||
         countOut == nullptr)
     {
         return (muniTextResult){muni_errorInvalid, 0};
@@ -270,7 +270,7 @@ muniTextResult muniGetResolvedScripts(const char* text, size_t length, muniScrip
     }
     if (count > 0)
     {
-        memcpy(scripts, tags, sizeof(uint32_t) * count);
+        memcpy(scriptsOut, tags, sizeof(uint32_t) * count);
     }
     return (muniTextResult){muni_success, length};
 }

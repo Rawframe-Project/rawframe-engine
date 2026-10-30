@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Building font chains (record mui-0006).
+// Building font chains.
 
 #include "font_chain.h"
 

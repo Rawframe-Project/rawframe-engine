@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The event store (record mui-0007): the host's event function and the
-// route of the event being dispatched, which the context holds and
-// src/event.c keeps.
+// The event store: the host's event function and the route of the event
+// being dispatched, which the context holds and src/event.c keeps.
 
 #ifndef MAUL_UI_SRC_EVENT_STORE_H
 #define MAUL_UI_SRC_EVENT_STORE_H

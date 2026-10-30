@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Building draw lists (records mui-0005, mui-0007). The walk is preorder
-// over the tree's links, each node reading what its parent left in its
-// paint state, so it needs no stack; layers are walked after, from the
-// bottom. A list is built from the last one: a subtree no paint request
-// reaches, at the origin and opacity it was painted at, copies its
-// commands, clips, gradients and glyphs and renumbers them; a build with
-// nothing to repaint keeps the last list as it is.
+// Building draw lists. The walk is preorder over the tree's links, each
+// node reading what its parent left in its paint state, so it needs no
+// stack; layers are walked after, from the bottom. A list is built from
+// the last one: a subtree no paint request reaches, at the origin and
+// opacity it was painted at, copies its commands, clips, gradients and
+// glyphs and renumbers them; a build with nothing to repaint keeps the
+// last list as it is.
 
 #include "maul-ui/draw.h"
 
 #include "context.h"
 #include "draw_store.h"
 #include "draw_transform.h"
+#include "fpenv.h"
 #include "layer.h"
 #include "paint.h"
 #include "paint_host.h"
@@ -37,6 +38,8 @@ typedef struct Build
     muiPaintState top;
     // The nodes painted rather than copied (muiWorkCounts).
     uint64_t painted;
+    // The nodes whose host content could not be painted.
+    uint32_t unpainted;
 } Build;
 
 // Where a copied subtree's indices land: its own clips, gradients and
@@ -265,10 +268,13 @@ static bool Visit(Build* build, const muiPaintState* top, uint32_t root, uint32_
     state->transform = transform;
     state->inner = transform;
     state->transforms = (muiDrawRange){out->transformCount, 0};
+    state->unpainted = false;
     bool painted = muiPaintNode(&build->painter, at, state);
-    if (painted && build->painter.paint != nullptr)
+    if (painted && build->painter.paint != nullptr &&
+        !muiPaintHostContent(&build->painter, at, state))
     {
-        muiPaintHostContent(&build->painter, at, state);
+        state->unpainted = true;
+        build->unpainted++;
     }
     // Drawn through its scale, it is painted in its parent's: the state
     // keeps that one, as a copy of it does.
@@ -431,6 +437,22 @@ static void Empty(muiDrawTables* tables)
     tables->transformCount = 1;
 }
 
+// Marks host content that could not be painted to be painted again by
+// the next build; visits the subtree only when some could not be.
+static void MarkUnpainted(muiContext* context, uint32_t root, uint32_t unpainted)
+{
+    muiTree* tree = &context->tree;
+    for (uint32_t at = root; at != 0 && unpainted != 0; at = muiTreeNextIn(tree, root, at))
+    {
+        if (context->draw.states[at - 1].unpainted)
+        {
+            context->draw.states[at - 1].unpainted = false;
+            muiTreeMark(tree, at, mui_stagePaint);
+            unpainted--;
+        }
+    }
+}
+
 // Whether the last list stands for this build: of this root, surface and
 // scale, with no paint requested below the root, nor scrolling where
 // host content culled to what was visible. A failed build left a header
@@ -445,14 +467,13 @@ static bool IsUnchanged(const muiContext* context, uint32_t root, const muiDrawI
            (!context->scrolled || store->culled == 0);
 }
 
-muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawInput* input)
+static muiResult BuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawInput* input)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (input == nullptr || rootId.index1 == 0 || !isfinite(input->scale) || input->scale <= 0.0f ||
-        muiIsInHostCall(context))
+    if (input == nullptr || rootId.index1 == 0 || !isfinite(input->scale) || input->scale <= 0.0f)
     {
         return muiRefuse(context);
     }
@@ -500,10 +521,7 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
     build.build = store->header.generation + 1;
     build.top.opacity = 1.0f;
     Empty(build.painter.out);
-    // The host's paint function may read the context, not edit it.
-    context->inHostCall = true;
     WalkAll(&build, root);
-    context->inHostCall = false;
     context->misuse += build.painter.misuse;
     context->work.painted += build.painted;
     store->current = next;
@@ -526,11 +544,36 @@ muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawI
     muiSetTransforms(context, root, build.painter.out, input->scale);
     context->scrolled = false;
     (void)muiTreeSweep(&context->tree, root, mui_stagePaint);
-    return mui_success;
+    MarkUnpainted(context, root, build.unpainted);
+    return build.unpainted != 0 ? mui_errorCapacity : mui_success;
 }
 
-muiResult muiGetDrawList(const muiContext* context, muiDrawList* listOut)
+static MUI_NOINLINE muiResult BuildDrawListWorker(muiContext* context, muiNodeId rootId,
+                                                  const muiDrawInput* input)
 {
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = BuildDrawList(context, rootId, input);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_BuildDrawList(muiContext* context, muiNodeId rootId, const muiDrawInput* input)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = BuildDrawListWorker(context, rootId, input);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+muiResult muiContext_GetDrawList(const muiContext* context, muiDrawList* listOut)
+{
+    if (listOut != nullptr)
+    {
+        memset(listOut, 0, sizeof *listOut);
+    }
     if (context == nullptr || listOut == nullptr)
     {
         return mui_errorInvalid;

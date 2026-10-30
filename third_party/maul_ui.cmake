@@ -3,9 +3,11 @@
 # D374), its node tree, flex layout, style, and draw-command list, and its
 # text component (D383): fonts, shaping, line breaking, and bidi order over
 # FreeType and HarfBuzz at the releases Maul UI pins and Maul Unicode, each
-# vendored, which its FetchContent finds here and never fetches. Portable C
-# (HarfBuzz is C++) with no platform backend, so it builds everywhere; only
-# a client's UI links it, never the dedicated server's closure.
+# vendored, which its FetchContent finds here and never fetches, as it finds
+# Maul Tween, the family's easing curves and springs, built into the core.
+# Portable C (HarfBuzz is C++) with no platform backend, so it builds
+# everywhere; only a client's UI links it, never the dedicated server's
+# closure.
 #
 # Included before Maul Window, which brings Maul Unicode too: Maul UI's
 # needs Maul Unicode's HarfBuzz functions, so it is the one that configures
@@ -15,6 +17,7 @@ set(FETCHCONTENT_SOURCE_DIR_MAUL_UI_FREETYPE "${CMAKE_CURRENT_LIST_DIR}/freetype
 set(FETCHCONTENT_SOURCE_DIR_MAUL_UI_HARFBUZZ "${CMAKE_CURRENT_LIST_DIR}/harfbuzz")
 set(FETCHCONTENT_SOURCE_DIR_MAUL-UNICODE "${CMAKE_CURRENT_LIST_DIR}/maul-unicode")
 set(MAUL_UNICODE_INSTALL OFF CACHE BOOL "" FORCE)
+set(FETCHCONTENT_SOURCE_DIR_MAUL-TWEEN "${CMAKE_CURRENT_LIST_DIR}/maul-tween")
 set(MAUL_UI_TEXT ON CACHE BOOL "" FORCE)
 set(MAUL_UI_TEXT_SYSTEM_LIBRARIES OFF CACHE BOOL "" FORCE)
 # Its accessibility tree (record mui-0008), which the engine's UI hands its

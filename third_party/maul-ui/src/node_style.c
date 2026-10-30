@@ -8,6 +8,7 @@
 #include "animation.h"
 #include "context.h"
 #include "focus.h"
+#include "fpenv.h"
 #include "inherit.h"
 #include "layer.h"
 #include "layout_node.h"
@@ -21,7 +22,9 @@
 #include "maul-ui/text_style.h"
 #include "maul-ui/visual.h"
 
-muiResult muiNode_SetType(muiContext* context, muiNodeId nodeId, muiNodeTypeId typeId)
+#include <string.h>
+
+static muiResult NodeSetType(muiContext* context, muiNodeId nodeId, muiNodeTypeId typeId)
 {
     if (context == nullptr)
     {
@@ -44,16 +47,28 @@ muiResult muiNode_SetType(muiContext* context, muiNodeId nodeId, muiNodeTypeId t
     return mui_success;
 }
 
-muiResult muiNode_SetClasses(muiContext* context, muiNodeId nodeId, const muiStyleId* classes,
-                             uint32_t count)
+muiResult muiNode_SetType(muiContext* context, muiNodeId nodeId, muiNodeTypeId typeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetType(context, nodeId, typeId);
+        muiLeave(context);
+    }
+    return status;
+}
+
+static muiResult NodeSetClasses(muiContext* context, muiNodeId nodeId, const muiStyleId* classes,
+                                uint32_t count)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (!muiIsClassListValid(classes, count))
+    muiResult listStatus = muiClassListStatus(classes, count);
+    if (listStatus != mui_success)
     {
-        return muiRefuse(context);
+        return muiRefuseAs(context, listStatus);
     }
     muiResult status = mui_success;
     uint32_t slot = muiResolveEdit(context, nodeId, &status);
@@ -66,11 +81,27 @@ muiResult muiNode_SetClasses(muiContext* context, muiNodeId nodeId, const muiSty
     return status;
 }
 
-muiResult muiNode_SetStates(muiContext* context, muiNodeId nodeId, muiState states)
+muiResult muiNode_SetClasses(muiContext* context, muiNodeId nodeId, const muiStyleId* classes,
+                             uint32_t count)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetClasses(context, nodeId, classes, count);
+        muiLeave(context);
+    }
+    return status;
+}
+
+static muiResult NodeSetStates(muiContext* context, muiNodeId nodeId, muiState states)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
+    }
+    if ((states & ~MUI_KNOWN_STATES) != 0)
+    {
+        return muiRefuse(context);
     }
     muiResult status = mui_success;
     uint32_t slot = muiResolveEdit(context, nodeId, &status);
@@ -83,6 +114,17 @@ muiResult muiNode_SetStates(muiContext* context, muiNodeId nodeId, muiState stat
         context->style.nodes[slot - 1].states = states;
         context->style.nodes[slot - 1].edited = true;
         muiTreeMark(&context->tree, slot, mui_stageStyle);
+    }
+    return status;
+}
+
+muiResult muiNode_SetStates(muiContext* context, muiNodeId nodeId, muiState states)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetStates(context, nodeId, states);
+        muiLeave(context);
     }
     return status;
 }
@@ -104,9 +146,14 @@ static muiResult SetDirect(muiContext* context, muiNodeId nodeId, muiConstValues
         return mui_errorInvalid;
     }
     const muiPropertyBits properties = muiPropertiesOf(group, mask);
-    if ((mask & ~allowed) != 0 || !muiArePropertiesValid(values, properties))
+    if ((mask & ~allowed) != 0)
     {
         return muiRefuse(context);
+    }
+    muiResult valuesStatus = muiPropertiesStatus(values, properties);
+    if (valuesStatus != mui_success)
+    {
+        return muiRefuseAs(context, valuesStatus);
     }
     muiResult status = mui_success;
     uint32_t slot = muiResolveEdit(context, nodeId, &status);
@@ -158,8 +205,8 @@ static muiResult SetDirect(muiContext* context, muiNodeId nodeId, muiConstValues
     return status;
 }
 
-muiResult muiNode_SetLayoutValues(muiContext* context, muiNodeId nodeId,
-                                  const muiLayoutStyle* values, muiPropertyMask mask)
+static muiResult NodeSetLayoutValues(muiContext* context, muiNodeId nodeId,
+                                     const muiLayoutStyle* values, muiPropertyMask mask)
 {
     if (values == nullptr)
     {
@@ -169,8 +216,30 @@ muiResult muiNode_SetLayoutValues(muiContext* context, muiNodeId nodeId,
                      mui_groupLayout, mask, MUI_LAYOUT_PROPERTIES);
 }
 
-muiResult muiNode_SetVisualValues(muiContext* context, muiNodeId nodeId,
-                                  const muiVisualStyle* values, muiPropertyMask mask)
+static MUI_NOINLINE muiResult NodeSetLayoutValuesWorker(muiContext* context, muiNodeId nodeId,
+                                                        const muiLayoutStyle* values,
+                                                        muiPropertyMask mask)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetLayoutValues(context, nodeId, values, mask);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_SetLayoutValues(muiContext* context, muiNodeId nodeId,
+                                  const muiLayoutStyle* values, muiPropertyMask mask)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeSetLayoutValuesWorker(context, nodeId, values, mask);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult NodeSetVisualValues(muiContext* context, muiNodeId nodeId,
+                                     const muiVisualStyle* values, muiPropertyMask mask)
 {
     if (values == nullptr)
     {
@@ -180,8 +249,30 @@ muiResult muiNode_SetVisualValues(muiContext* context, muiNodeId nodeId,
                      mui_groupVisual, mask, MUI_VISUAL_PROPERTIES);
 }
 
-muiResult muiNode_SetTextValues(muiContext* context, muiNodeId nodeId, const muiTextStyle* values,
-                                muiPropertyMask mask)
+static MUI_NOINLINE muiResult NodeSetVisualValuesWorker(muiContext* context, muiNodeId nodeId,
+                                                        const muiVisualStyle* values,
+                                                        muiPropertyMask mask)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetVisualValues(context, nodeId, values, mask);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_SetVisualValues(muiContext* context, muiNodeId nodeId,
+                                  const muiVisualStyle* values, muiPropertyMask mask)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeSetVisualValuesWorker(context, nodeId, values, mask);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult NodeSetTextValues(muiContext* context, muiNodeId nodeId,
+                                   const muiTextStyle* values, muiPropertyMask mask)
 {
     if (values == nullptr)
     {
@@ -191,8 +282,30 @@ muiResult muiNode_SetTextValues(muiContext* context, muiNodeId nodeId, const mui
                      mui_groupText, mask, MUI_TEXT_PROPERTIES);
 }
 
-muiResult muiNode_SetInteractionValues(muiContext* context, muiNodeId nodeId,
-                                       const muiInteractionStyle* values, muiPropertyMask mask)
+static MUI_NOINLINE muiResult NodeSetTextValuesWorker(muiContext* context, muiNodeId nodeId,
+                                                      const muiTextStyle* values,
+                                                      muiPropertyMask mask)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetTextValues(context, nodeId, values, mask);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_SetTextValues(muiContext* context, muiNodeId nodeId, const muiTextStyle* values,
+                                muiPropertyMask mask)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeSetTextValuesWorker(context, nodeId, values, mask);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult NodeSetInteractionValues(muiContext* context, muiNodeId nodeId,
+                                          const muiInteractionStyle* values, muiPropertyMask mask)
 {
     if (values == nullptr)
     {
@@ -202,9 +315,35 @@ muiResult muiNode_SetInteractionValues(muiContext* context, muiNodeId nodeId,
                      mui_groupInteraction, mask, MUI_INTERACTION_PROPERTIES);
 }
 
+static MUI_NOINLINE muiResult NodeSetInteractionValuesWorker(muiContext* context, muiNodeId nodeId,
+                                                             const muiInteractionStyle* values,
+                                                             muiPropertyMask mask)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetInteractionValues(context, nodeId, values, mask);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_SetInteractionValues(muiContext* context, muiNodeId nodeId,
+                                       const muiInteractionStyle* values, muiPropertyMask mask)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeSetInteractionValuesWorker(context, nodeId, values, mask);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 muiResult muiNode_GetInteractionStyle(const muiContext* context, muiNodeId nodeId,
                                       muiInteractionStyle* valuesOut)
 {
+    if (valuesOut != nullptr)
+    {
+        memset(valuesOut, 0, sizeof *valuesOut);
+    }
     if (context == nullptr || valuesOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -221,6 +360,10 @@ muiResult muiNode_GetInteractionStyle(const muiContext* context, muiNodeId nodeI
 muiResult muiNode_GetTextStyle(const muiContext* context, muiNodeId nodeId,
                                muiComputedTextStyle* styleOut)
 {
+    if (styleOut != nullptr)
+    {
+        memset(styleOut, 0, sizeof *styleOut);
+    }
     if (context == nullptr || styleOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -237,6 +380,10 @@ muiResult muiNode_GetTextStyle(const muiContext* context, muiNodeId nodeId,
 muiResult muiNode_GetVisualStyle(const muiContext* context, muiNodeId nodeId,
                                  muiVisualStyle* valuesOut)
 {
+    if (valuesOut != nullptr)
+    {
+        memset(valuesOut, 0, sizeof *valuesOut);
+    }
     if (context == nullptr || valuesOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -250,8 +397,8 @@ muiResult muiNode_GetVisualStyle(const muiContext* context, muiNodeId nodeId,
     return mui_success;
 }
 
-muiResult muiNode_ResetProperties(muiContext* context, muiNodeId nodeId, muiPropertyGroup group,
-                                  muiPropertyMask mask)
+static muiResult NodeResetProperties(muiContext* context, muiNodeId nodeId, muiPropertyGroup group,
+                                     muiPropertyMask mask)
 {
     if (context == nullptr)
     {
@@ -272,6 +419,18 @@ muiResult muiNode_ResetProperties(muiContext* context, muiNodeId nodeId, muiProp
         // Its classes may name none of them: the defaults they go back to.
         context->style.reach = muiUnion(context->style.reach, properties);
         muiTreeMark(&context->tree, slot, mui_stageStyle);
+    }
+    return status;
+}
+
+muiResult muiNode_ResetProperties(muiContext* context, muiNodeId nodeId, muiPropertyGroup group,
+                                  muiPropertyMask mask)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeResetProperties(context, nodeId, group, mask);
+        muiLeave(context);
     }
     return status;
 }

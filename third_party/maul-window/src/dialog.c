@@ -155,9 +155,10 @@ static mwinDialogCopy* Copy(const mwinContext* context, const mwinFileDialogDef*
     return copy;
 }
 
-mwinResult mwinRequestFileDialog(mwinContext* context, mwinWindowId window,
-                                 const mwinFileDialogDef* def, mwinRequestId* requestOut)
+mwinResult mwinWindow_RequestFileDialog(mwinContext* context, mwinWindowId window,
+                                        const mwinFileDialogDef* def, mwinRequestId* requestOut)
 {
+    mwinClearOut(requestOut, sizeof *requestOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);
@@ -258,10 +259,14 @@ void mwinReleaseDialogs(mwinContext* context)
     mwinListRelease(&context->dialogFiles, &context->allocator);
 }
 
-mwinResult mwinGetDialogFiles(const mwinContext* context, mwinRequestId request, char* buffer,
-                              size_t capacity, size_t* lengthOut, uint32_t* countOut)
+mwinResult mwinRequest_GetDialogFiles(const mwinContext* context, mwinRequestId request,
+                                      char* bufferOut, size_t capacity, size_t* lengthOut,
+                                      uint32_t* countOut)
 {
-    if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
+    mwinClearOut(bufferOut, capacity);
+    mwinClearOut(lengthOut, sizeof *lengthOut);
+    mwinClearOut(countOut, sizeof *countOut);
+    if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity > 0))
     {
         return mwinMisuse(context);
     }
@@ -271,14 +276,9 @@ mwinResult mwinGetDialogFiles(const mwinContext* context, mwinRequestId request,
     {
         return mwin_errorStale;
     }
-    if (files->length > 0 && capacity > 0)
-    {
-        memcpy(buffer, files->bytes, files->length < capacity ? files->length : capacity);
-    }
-    *lengthOut = files->length;
     if (countOut != nullptr)
     {
         *countOut = files->count;
     }
-    return files->length > capacity ? mwin_errorCapacity : mwin_success;
+    return mwinGiveBytes(files->bytes, files->length, bufferOut, capacity, lengthOut);
 }

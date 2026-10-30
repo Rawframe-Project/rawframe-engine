@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Font families (record mui-0006): faces matched as CSS Fonts 4 matches
-// them, narrowing by width (toward normal), then style, then weight, a
-// variable face matching every value its axes reach.
+// Font families: faces matched as CSS Fonts 4 matches them, narrowing by
+// width (toward normal), then style, then weight, a variable face matching
+// every value its axes reach.
 
 #include "font_family.h"
 
 #include "allocator.h"
 #include "font_instance.h"
+#include "fpenv.h"
 #include "text_service.h"
 
 #include "maul-ui/text_block.h"
@@ -20,7 +21,6 @@
 
 enum
 {
-    MAX_FACES = 256,
     // The width CSS asks for when none is given, in percent.
     NORMAL_WIDTH = 100,
 };
@@ -173,7 +173,7 @@ static float WeightScore(const muiFont* font, float weight)
 const muiFont* muiMatchFamily(const muiTextService* service, const muiFontFamily* family,
                               float weight, muiFontSlant slant, muiFontId* faceOut)
 {
-    Face faces[MAX_FACES];
+    Face faces[MUI_MAX_FAMILY_FACES];
     uint32_t count = 0;
     for (uint32_t i = 0; i < family->faceCount; i++)
     {
@@ -236,9 +236,13 @@ static muiResult CheckKey(const muiTextService* service, uint64_t key)
 // Checks keys as fallbacks: up to MUI_MAX_FALLBACKS, each live.
 static muiResult CheckFallbacks(const muiTextService* service, const uint64_t* keys, uint32_t count)
 {
-    if ((keys == nullptr && count != 0) || count > MUI_MAX_FALLBACKS)
+    if (keys == nullptr && count != 0)
     {
         return mui_errorInvalid;
+    }
+    if (count > MUI_MAX_FALLBACKS)
+    {
+        return mui_errorLimit;
     }
     muiResult result = mui_success;
     for (uint32_t i = 0; i < count && result == mui_success; i++)
@@ -248,7 +252,7 @@ static muiResult CheckFallbacks(const muiTextService* service, const uint64_t* k
     return result;
 }
 
-muiResult muiSetFallbackFonts(muiTextService* service, const uint64_t* keys, uint32_t count)
+static muiResult SetFallbackFonts(muiTextService* service, const uint64_t* keys, uint32_t count)
 {
     if (service == nullptr)
     {
@@ -266,6 +270,18 @@ muiResult muiSetFallbackFonts(muiTextService* service, const uint64_t* keys, uin
     return result;
 }
 
+muiResult muiTextService_SetFallbackFonts(muiTextService* service, const uint64_t* keys,
+                                          uint32_t count)
+{
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = SetFallbackFonts(service, keys, count);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
 muiFontFamilyDef muiDefaultFontFamilyDef(void)
 {
     return (muiFontFamilyDef){.cookie = FONT_FAMILY_DEF_COOKIE};
@@ -276,18 +292,17 @@ static uint32_t ResolveFamily(const muiTextService* service, muiFontFamilyId fam
     return muiPoolResolve(&service->families.pool, familyId.index1, familyId.generation);
 }
 
-muiResult muiCreateFontFamily(muiTextService* service, const muiFontFamilyDef* def,
-                              muiFontFamilyId* familyOut)
+static muiResult CreateFontFamily(muiTextService* service, const muiFontFamilyDef* def,
+                                  muiFontFamilyId* familyOut)
 {
-    if (familyOut != nullptr)
-    {
-        *familyOut = (muiFontFamilyId){0};
-    }
     if (service == nullptr || def == nullptr || familyOut == nullptr ||
-        def->cookie != FONT_FAMILY_DEF_COOKIE || def->faces == nullptr || def->faceCount == 0 ||
-        def->faceCount > MAX_FACES)
+        def->cookie != FONT_FAMILY_DEF_COOKIE || def->faces == nullptr || def->faceCount == 0)
     {
         return muiRefuseText(service);
+    }
+    if (def->faceCount > MUI_MAX_FAMILY_FACES)
+    {
+        return muiCountText(service, mui_errorLimit);
     }
     for (uint32_t i = 0; i < def->faceCount; i++)
     {
@@ -327,7 +342,23 @@ muiResult muiCreateFontFamily(muiTextService* service, const muiFontFamilyDef* d
     return mui_success;
 }
 
-muiResult muiDestroyFontFamily(muiTextService* service, muiFontFamilyId familyId)
+muiResult muiCreateFontFamily(muiTextService* service, const muiFontFamilyDef* def,
+                              muiFontFamilyId* familyOut)
+{
+    if (familyOut != nullptr)
+    {
+        memset(familyOut, 0, sizeof *familyOut);
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = CreateFontFamily(service, def, familyOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+static muiResult DestroyFontFamily(muiTextService* service, muiFontFamilyId familyId)
 {
     if (service == nullptr || familyId.index1 == 0)
     {
@@ -343,14 +374,30 @@ muiResult muiDestroyFontFamily(muiTextService* service, muiFontFamilyId familyId
     return mui_success;
 }
 
+muiResult muiDestroyFontFamily(muiTextService* service, muiFontFamilyId familyId)
+{
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = DestroyFontFamily(service, familyId);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
 bool muiFontFamily_IsValid(const muiTextService* service, muiFontFamilyId familyId)
 {
     return service != nullptr && familyId.index1 != 0 && ResolveFamily(service, familyId) != 0;
 }
 
-muiResult muiFontFamily_MatchFace(const muiTextService* service, muiFontFamilyId familyId,
-                                  float weight, uint8_t slant, muiFontId* faceOut)
+static MUI_NOINLINE muiResult FontFamilyMatchFaceWorker(const muiTextService* service,
+                                                        muiFontFamilyId familyId, float weight,
+                                                        muiFontSlant slant, muiFontId* faceOut)
 {
+    if (faceOut != nullptr)
+    {
+        memset(faceOut, 0, sizeof *faceOut);
+    }
     if (service == nullptr || faceOut == nullptr || familyId.index1 == 0 ||
         !(weight >= 1.0f && weight <= 1000.0f) || slant > mui_slantOblique)
     {
@@ -369,4 +416,49 @@ muiResult muiFontFamily_MatchFace(const muiTextService* service, muiFontFamilyId
     }
     *faceOut = face;
     return mui_success;
+}
+
+muiResult muiFontFamily_MatchFace(const muiTextService* service, muiFontFamilyId familyId,
+                                  float weight, muiFontSlant slant, muiFontId* faceOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = FontFamilyMatchFaceWorker(service, familyId, weight, slant, faceOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+uint64_t muiFont_GetKey(muiFontId fontId)
+{
+    return fontId.index1 != 0 ? muiKeyOf(fontId.index1, fontId.generation) : 0;
+}
+
+uint64_t muiFontFamily_GetKey(muiFontFamilyId familyId)
+{
+    return familyId.index1 != 0 ? MUI_FAMILY_BIT | muiKeyOf(familyId.index1, familyId.generation)
+                                : 0;
+}
+
+static muiResult SetDefaultFont(muiTextService* service, muiFontId fontId)
+{
+    if (service == nullptr)
+    {
+        return mui_errorInvalid;
+    }
+    if (fontId.index1 != 0 && !muiFont_IsValid(service, fontId))
+    {
+        return mui_errorStale;
+    }
+    service->defaultFont = fontId;
+    return mui_success;
+}
+
+muiResult muiTextService_SetDefaultFont(muiTextService* service, muiFontId fontId)
+{
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = SetDefaultFont(service, fontId);
+        muiLeaveText(service);
+    }
+    return status;
 }

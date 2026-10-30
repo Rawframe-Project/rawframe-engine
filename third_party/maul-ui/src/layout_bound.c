@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Layout bounded by the change (record mui-0003). A parent reads of a
-// child its answers to the sizing queries it asked, each kept in the
-// child's cache, and its baseline where one is aligned by. So a node
-// layout was requested on is solved again under the queries its cache
-// held; when every answer holds and no baseline is read through it, it
-// is laid out alone at its last size and its parent is left as it is.
-// When one does not, its parent is cleared and checked the same way,
-// up to the root, which the whole solve then takes.
+// Layout bounded by the change. A parent reads of a child its answers to
+// the sizing queries it asked, each kept in the child's cache, and its
+// baseline where one is aligned by. So a node layout was requested on is
+// solved again under the queries its cache held; when every answer holds
+// and no baseline is read through it, it is laid out alone at its last
+// size and its parent is left as it is. When one does not, its parent is
+// cleared and checked the same way, up to the root, which the whole solve
+// then takes.
 
 #include "layout_bound.h"
 
@@ -167,6 +167,7 @@ static void LayOutAlone(const muiSolver* solver, const Checked* checked)
         .rtl = checked->old.finalRtl,
         .contentHeight = checked->old.finalContentHeight,
         .ratioPercent = checked->old.finalRatioPercent,
+        .ratioLines = checked->old.finalRatioLines,
         .looseHeight = checked->old.finalLooseHeight,
         .earlyHeight = checked->old.finalEarlyHeight,
     };

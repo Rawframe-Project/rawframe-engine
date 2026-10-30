@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A password's mask (record mui-0006).
+// A password's mask.
 
 #include "text_mask.h"
 
@@ -25,7 +25,7 @@ enum
 
 bool muiIsMasked(const muiTextBlock* block)
 {
-    return block->editing.on && (block->editing.def.flags & mui_editPassword) != 0;
+    return block->editing.on && (block->editing.rules.flags & mui_editPassword) != 0;
 }
 
 // The clusters of a text that end at or before an offset: the index of
@@ -40,7 +40,7 @@ static uint32_t ClustersBefore(const muiTextBlock* block, uint32_t offset)
     }
     uint32_t count = 0;
     size_t at = 0;
-    while (muniNextSegmentBreak(&iterator, &at) == muni_success && at <= offset)
+    while (muniSegmentIterator_NextBreak(&iterator, &at) == muni_success && at <= offset)
     {
         count += at != 0 ? 1u : 0u;
     }
@@ -58,7 +58,7 @@ static uint32_t ClusterStart(const muiTextBlock* block, uint32_t index)
         return 0;
     }
     size_t at = 0;
-    while (index != 0 && muniNextSegmentBreak(&iterator, &at) == muni_success)
+    while (index != 0 && muniSegmentIterator_NextBreak(&iterator, &at) == muni_success)
     {
         index -= at != 0 ? 1u : 0u;
     }

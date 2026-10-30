@@ -5,10 +5,13 @@
 
 #include "id_map.h"
 
+#include "invariant.h"
+
 #include <string.h>
 
 void muiIdMapInit(muiIdMap* map, uint64_t* keys, void** values, uint32_t size)
 {
+    MUI_ASSERT(size != 0 && (size & (size - 1)) == 0);
     memset(keys, 0, size * sizeof(uint64_t));
     *map = (muiIdMap){keys, values, size - 1, 0};
 }
@@ -42,6 +45,8 @@ bool muiIdMapInsert(muiIdMap* map, uint64_t id, void* value)
         return false;
     }
     uint32_t at = PlaceOf(map, id);
+    // Callers insert only ids the map does not hold.
+    MUI_ASSERT(map->keys[at] == 0);
     map->count++;
     map->keys[at] = id;
     map->values[at] = value;

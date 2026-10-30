@@ -9,6 +9,7 @@
 #include "absolute.h"
 #include "condition.h"
 #include "flex.h"
+#include "fpenv.h"
 #include "invariant.h"
 #include "sizing.h"
 
@@ -141,6 +142,36 @@ static float SaneLength(float value)
     return isfinite(value) && value > 0.0f ? value : 0.0f;
 }
 
+// The host's measure function, run in the host's floating-point
+// environment.
+static MUI_NOINLINE muiSize HostMeasure(const muiSolver* solver, muiNodeId id, uint64_t hostKey,
+                                        muiMeasureAxis width, muiMeasureAxis height)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    muiSize size = solver->measure(solver->user, id, hostKey, width, height);
+    muiFloatHostLeave(host);
+    return size;
+}
+
+// Notes host content that could not be measured: laid out as empty now,
+// and measured again by the next layout.
+static void Unmeasured(const muiSolver* solver, uint32_t node)
+{
+    solver->nodes[node - 1].unmeasured = true;
+    (*solver->unmeasured)++;
+}
+
+// The host's baseline function, run in the host's floating-point
+// environment.
+static MUI_NOINLINE float HostBaseline(const muiSolver* solver, muiNodeId id, uint64_t hostKey,
+                                       float width, float height)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    float baseline = solver->measureBaseline(solver->user, id, hostKey, width, height);
+    muiFloatHostLeave(host);
+    return baseline;
+}
+
 static muiSize SizeLeaf(const muiSolver* solver, uint32_t node, const muiSizingInput* input)
 {
     const muiLayoutStyle* style = &solver->nodes[node - 1].style;
@@ -176,8 +207,12 @@ static muiSize SizeLeaf(const muiSolver* solver, uint32_t node, const muiSizingI
         muiNodeId id = muiTreeIdOf(solver->tree, node);
         uint64_t hostKey = muiTreeAt(solver->tree, node)->hostKey;
         solver->work->measured++;
-        content = solver->measure(solver->measureUser, id, hostKey, ContentAxis(across, boxWidth),
-                                  ContentAxis(input->height, boxHeight));
+        content = HostMeasure(solver, id, hostKey, ContentAxis(across, boxWidth),
+                              ContentAxis(input->height, boxHeight));
+        if (isnan(content.width) || isnan(content.height))
+        {
+            Unmeasured(solver, node);
+        }
         content.width = SaneLength(content.width);
         content.height = SaneLength(content.height);
     }
@@ -403,7 +438,7 @@ void muiMeasureExtentAbove(const muiSolver* solver, uint32_t root, uint32_t node
 }
 
 // Lays a container out in logical coordinates, start on the left, and
-// mirrors it when its direction is right to left (record mui-0003).
+// mirrors it when its direction is right to left.
 static muiSize SizeContainer(const muiSolver* solver, uint32_t node, const muiSizingInput* input,
                              bool perform)
 {
@@ -588,10 +623,9 @@ static bool IsSameSize(muiSize a, muiSize b)
 }
 
 // Records the direction a node was laid out in and, when its conditions
-// read a size or direction this layout changed, requests its style for
-// the next pass: conditions read the state before the pass (record
-// mui-0004). A held node is styled again only when its size leaves the
-// two it oscillated between.
+// read a size or direction this layout changed, requests its style for the
+// next pass: conditions read the state before the pass. A held node is
+// styled again only when its size leaves the two it oscillated between.
 static void Published(const muiSolver* solver, uint32_t node, muiSize size, bool rtl)
 {
     muiLayoutNode* layout = &solver->nodes[node - 1];
@@ -632,6 +666,7 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
         if (cache->finalValid && cache->finalRtl == input->rtl &&
             cache->finalContentHeight == input->contentHeight &&
             cache->finalRatioPercent == input->ratioPercent &&
+            cache->finalRatioLines == input->ratioLines &&
             cache->finalLooseHeight == input->looseHeight &&
             cache->finalEarlyHeight == input->earlyHeight &&
             cache->finalSize.width == input->width.size &&
@@ -679,6 +714,7 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
         cache->finalRtl = input->rtl;
         cache->finalContentHeight = input->contentHeight;
         cache->finalRatioPercent = input->ratioPercent;
+        cache->finalRatioLines = input->ratioLines;
         cache->finalLooseHeight = input->looseHeight;
         cache->finalEarlyHeight = input->earlyHeight;
         cache->finalSize = size;
@@ -705,7 +741,13 @@ static float LeafBaseline(const muiSolver* solver, uint32_t node, const muiSizin
     float height = fmaxf(input->height.size - muiBoxSum(&padding, style, false), 0.0f);
     muiNodeId id = muiTreeIdOf(solver->tree, node);
     uint64_t hostKey = muiTreeAt(solver->tree, node)->hostKey;
-    return top + solver->measureBaseline(solver->measureUser, id, hostKey, width, height);
+    float baseline = HostBaseline(solver, id, hostKey, width, height);
+    if (baseline == INFINITY)
+    {
+        Unmeasured(solver, node);
+        return NAN;
+    }
+    return top + baseline;
 }
 
 // A scroll container's baseline is held within its border box (CSS Box

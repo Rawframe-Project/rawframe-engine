@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Fonts (record mui-0006). FreeType opens and validates a face; HarfBuzz
-// reads the same bytes for shaping. Metrics are read once, from the
-// OpenType tables, in integers divided by the units per em.
+// Fonts. FreeType opens and validates a face; HarfBuzz reads the same
+// bytes for shaping. Metrics are read once, from the OpenType tables, in
+// integers divided by the units per em.
 
 #include "maul-ui/font.h"
 
 #include "allocator.h"
 #include "font_store.h"
+#include "fpenv.h"
 #include "pool.h"
 #include "text_service.h"
 
@@ -73,6 +74,12 @@ muiResult muiCountFontFaces(const void* data, size_t size, uint32_t* countOut)
     {
         *countOut = 1;
         return mui_success;
+    }
+    // Compressed web fonts are well formed, but the library does not
+    // decompress them.
+    if (tag == Tag('w', 'O', 'F', 'F') || tag == Tag('w', 'O', 'F', '2'))
+    {
+        return mui_errorUnsupported;
     }
     if (tag != Tag('t', 't', 'c', 'f'))
     {
@@ -297,17 +304,19 @@ static muiResult Open(muiTextService* service, const muiFontDef* def, muiFont* f
     return ReadStyle(service->freetype, font) ? mui_success : mui_errorCapacity;
 }
 
-muiResult muiCreateFont(muiTextService* service, const muiFontDef* def, muiFontId* fontOut)
+static muiResult CreateFont(muiTextService* service, const muiFontDef* def, muiFontId* fontOut)
 {
-    if (fontOut != nullptr)
-    {
-        *fontOut = (muiFontId){0};
-    }
     if (service == nullptr || def == nullptr || fontOut == nullptr ||
-        def->cookie != FONT_DEF_COOKIE || def->data == nullptr || def->size < HEADER_SIZE ||
-        def->size > INT32_MAX || def->dataMode > mui_fontDataBorrow)
+        def->cookie != FONT_DEF_COOKIE || def->data == nullptr ||
+        def->dataMode > mui_fontDataBorrow)
     {
         return muiRefuseText(service);
+    }
+    // A file too short for a header or too long for FreeType is bad data,
+    // refused without misuse, as any other malformed font.
+    if (def->size > INT32_MAX)
+    {
+        return mui_errorFormat;
     }
     uint32_t faces = 0;
     muiResult counted = muiCountFontFaces(def->data, def->size, &faces);
@@ -337,12 +346,36 @@ muiResult muiCreateFont(muiTextService* service, const muiFontDef* def, muiFontI
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult CreateFontWorker(muiTextService* service, const muiFontDef* def,
+                                               muiFontId* fontOut)
+{
+    if (fontOut != nullptr)
+    {
+        memset(fontOut, 0, sizeof *fontOut);
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = CreateFont(service, def, fontOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiCreateFont(muiTextService* service, const muiFontDef* def, muiFontId* fontOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = CreateFontWorker(service, def, fontOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 static uint32_t Resolve(const muiTextService* service, muiFontId fontId)
 {
     return muiPoolResolve(&service->fonts.pool, fontId.index1, fontId.generation);
 }
 
-muiResult muiDestroyFont(muiTextService* service, muiFontId fontId)
+static muiResult DestroyFont(muiTextService* service, muiFontId fontId)
 {
     if (service == nullptr || fontId.index1 == 0)
     {
@@ -358,6 +391,25 @@ muiResult muiDestroyFont(muiTextService* service, muiFontId fontId)
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult DestroyFontWorker(muiTextService* service, muiFontId fontId)
+{
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = DestroyFont(service, fontId);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiDestroyFont(muiTextService* service, muiFontId fontId)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = DestroyFontWorker(service, fontId);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 bool muiFont_IsValid(const muiTextService* service, muiFontId fontId)
 {
     return service != nullptr && fontId.index1 != 0 && Resolve(service, fontId) != 0;
@@ -366,6 +418,10 @@ bool muiFont_IsValid(const muiTextService* service, muiFontId fontId)
 muiResult muiFont_GetMetrics(const muiTextService* service, muiFontId fontId,
                              muiFontMetrics* metricsOut)
 {
+    if (metricsOut != nullptr)
+    {
+        memset(metricsOut, 0, sizeof *metricsOut);
+    }
     if (service == nullptr || metricsOut == nullptr || fontId.index1 == 0)
     {
         return mui_errorInvalid;

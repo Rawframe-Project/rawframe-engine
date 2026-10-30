@@ -7,7 +7,11 @@
 // join the run around them; a character used with a few scripts
 // (Script_Extensions, UAX #24) narrows the run to those it shares; a
 // closing bracket takes the script of its opening bracket. Leading
-// Common characters take the script of the first run.
+// Common characters take the script of the first run. A run that could
+// still be several scripts takes the first Script of its own, among its
+// characters, that the run could still be when that character came,
+// while the run can still be that script, and otherwise the script whose
+// tag comes first alphabetically.
 //
 // Like the segment iterators, a script iterator is a fixed-size struct
 // the caller keeps, takes text in pieces cut anywhere, and asks for the
@@ -65,9 +69,9 @@ extern "C"
     ///         `muni_errorInvalid` is reported before `muni_errorState`.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
-    MUNI_NODISCARD MUNI_API muniResult muniFeedScriptIterator(muniScriptIterator* iterator,
-                                                              const char* text, size_t length,
-                                                              bool moreFollows);
+    MUNI_NODISCARD MUNI_API muniResult muniScriptIterator_Feed(muniScriptIterator* iterator,
+                                                               const char* text, size_t length,
+                                                               bool moreFollows);
 
     /// Finds the next script run.
     ///
@@ -82,23 +86,24 @@ extern "C"
     ///         text not yet fed; `muni_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
-    MUNI_NODISCARD MUNI_API muniResult muniNextScriptRun(muniScriptIterator* iterator,
-                                                         muniScriptRun* runOut);
+    MUNI_NODISCARD MUNI_API muniResult muniScriptIterator_NextRun(muniScriptIterator* iterator,
+                                                                  muniScriptRun* runOut);
 
     /// Writes the script runs of a whole UTF-8 text into a caller array.
     ///
     /// @param text      The text. May be NULL when length is 0.
     /// @param length    The number of bytes.
-    /// @param runs      The output. May be NULL when capacity is 0.
+    /// @param runsOut   The output. May be NULL when capacity is 0.
     /// @param capacity  The number of runs the output can hold.
-    /// @param countOut  Receives the number of runs, which may exceed
-    ///                  capacity; the ones that fit are written.
+    /// @param countOut  Receives the number of runs, which may exceed capacity;
+    ///                  the ones that fit are written. `muni_errorInvalid`
+    ///                  leaves both as they were.
     /// @return `muni_success`, `muni_errorCapacity` when they do not all
     ///         fit, or `muni_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniResult muniFindScriptRuns(const char* text, size_t length,
-                                                          muniScriptRun* runs, size_t capacity,
+                                                          muniScriptRun* runsOut, size_t capacity,
                                                           size_t* countOut);
 
 #ifdef __cplusplus

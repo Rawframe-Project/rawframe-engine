@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Glyph images (record mui-0006): a glyph of a text service's font
-// rendered for a renderer to draw, as 8-bit coverage or as a signed
-// distance field that scales. Outlines are rendered unhinted, as text is
-// laid out, so an image sits where its glyph run places it at every
-// size; images are the same on every platform.
+// Glyph images: a glyph of a text service's font rendered for a renderer
+// to draw, as 8-bit coverage or as a signed distance field that scales.
+// Outlines are rendered unhinted, as text is laid out, so an image sits
+// where its glyph run places it at every size; images are the same on
+// every platform.
 
 #ifndef MAUL_UI_GLYPH_IMAGE_H
 #define MAUL_UI_GLYPH_IMAGE_H
@@ -19,7 +19,9 @@ extern "C"
 {
 #endif
 
-    // The largest em a glyph image is rendered at, in device pixels.
+    // The smallest and largest em a glyph image is rendered at, in device
+    // pixels.
+#define MUI_MIN_GLYPH_PIXEL_SIZE 0.015625f
 #define MUI_MAX_GLYPH_PIXEL_SIZE 4096.0f
 
     // The range of a distance field's spread, in pixels of its image.
@@ -49,32 +51,33 @@ extern "C"
     /// @param font       A font key, as a glyph run carries; 0 for the
     ///                   default font.
     /// @param glyph      A glyph id of the font.
-    /// @param pixelSize  The em in device pixels, from 1/64 to
-    ///                   MUI_MAX_GLYPH_PIXEL_SIZE.
+    /// @param pixelSize  The em in device pixels, from
+    ///                   MUI_MIN_GLYPH_PIXEL_SIZE to MUI_MAX_GLYPH_PIXEL_SIZE.
     /// @param offsetX    How far the pen is right of a pixel boundary,
     ///                   from 0 up to 1; the image's left is counted
     ///                   from that boundary.
-    /// @param imageOut   Receives the image's place and size, also when
-    ///                   pixels hold too few bytes.
-    /// @param pixels     Receives width * height bytes; may be NULL when
+    /// @param imageOut   Receives the image's place and size, also when pixelsOut
+    ///                   holds too few bytes. Zeroed on any other failure.
+    /// @param pixelsOut  Receives width * height bytes; may be NULL when
     ///                   capacity is 0.
-    /// @param capacity   How many bytes pixels holds.
-    /// @return `mui_success`; `mui_errorCapacity` when pixels hold fewer
-    ///         bytes than imageOut asks for, or memory runs out;
-    ///         `mui_errorInvalid` for a NULL service or imageOut, NULL
-    ///         pixels with a capacity, a size or offset outside the above,
-    ///         or a glyph id the font does not have; `mui_errorStale` for
-    ///         a key that names no font; `mui_errorFormat` for a glyph
-    ///         whose outline cannot be read or is too large to render.
+    /// @param capacity   How many bytes pixelsOut holds.
+    /// @return `mui_success`; `mui_errorCapacity` when pixelsOut holds fewer bytes
+    ///         than imageOut asks for, or memory runs out; `mui_errorInvalid`
+    ///         for a NULL service or imageOut, NULL pixelsOut with a capacity, a
+    ///         size that is not a finite number above 0, an offset outside the
+    ///         above, or a glyph id the font does not have; `mui_errorLimit`
+    ///         for a size outside the above; `mui_errorStale` for a key that
+    ///         names no font; `mui_errorFormat` for a glyph whose outline
+    ///         cannot be read or is too large to render; `mui_errorBusy`
+    ///         while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiRenderGlyph(muiTextService* service, uint64_t font,
-                                                   uint32_t glyph, float pixelSize, float offsetX,
-                                                   muiGlyphImage* imageOut, unsigned char* pixels,
-                                                   size_t capacity);
+    MUI_NODISCARD MUI_API muiResult muiTextService_RenderGlyph(
+        muiTextService* service, uint64_t font, uint32_t glyph, float pixelSize, float offsetX,
+        muiGlyphImage* imageOut, unsigned char* pixelsOut, size_t capacity);
 
     /// Renders a colour glyph (COLR, with its CPAL palettes) at a size,
-    /// placed as muiRenderGlyph places coverage: four bytes a pixel, rows
+    /// placed as muiTextService_RenderGlyph places coverage: four bytes a pixel, rows
     /// from the top, red, green, blue and alpha. A version 1 glyph's paint
     /// graph is drawn where the glyph has one: its layers, solid fills,
     /// gradients, glyph outlines, other colour glyphs, transforms,
@@ -92,30 +95,30 @@ extern "C"
     /// @param font        A font key, as a glyph run carries; 0 for the
     ///                    default font.
     /// @param glyph       A glyph id of the font.
-    /// @param pixelSize   The em in device pixels, from 1/64 to
-    ///                    MUI_MAX_GLYPH_PIXEL_SIZE.
+    /// @param pixelSize   The em in device pixels, from
+    ///                    MUI_MIN_GLYPH_PIXEL_SIZE to MUI_MAX_GLYPH_PIXEL_SIZE.
     /// @param offsetX     How far the pen is right of a pixel boundary,
-    ///                    from 0 up to 1, as muiRenderGlyph takes it.
+    ///                    from 0 up to 1, as muiTextService_RenderGlyph takes it.
     /// @param palette     The font's palette to fill from; the first for one
     ///                    the font does not have.
     /// @param foreground  The text's colour, linear and premultiplied.
-    /// @param imageOut    Receives the image's place and size, also when
-    ///                    pixels hold too few bytes.
-    /// @param pixels      Receives width * height * 4 bytes; may be NULL
+    /// @param imageOut    Receives the image's place and size, also when pixelsOut
+    ///                    holds too few bytes. Zeroed on any other failure.
+    /// @param pixelsOut   Receives width * height * 4 bytes; may be NULL
     ///                    when capacity is 0.
-    /// @param capacity    How many bytes pixels holds.
+    /// @param capacity    How many bytes pixelsOut holds.
     /// @return `mui_success`; `mui_empty` for a glyph without colour;
-    ///         `mui_errorFormat` for a paint graph more than 64 paints
-    ///         deep, as one that paints itself is; otherwise as
-    ///         muiRenderGlyph.
+    ///         `mui_errorFormat` for a paint graph more than 64 paints deep, as
+    ///         one that paints itself is, a clip box whose maximum is below
+    ///         its minimum, or a bitmap of 2^28 pixels or more, as 16384 by
+    ///         16384 is; otherwise as muiTextService_RenderGlyph;
+    ///         `mui_errorBusy` while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiRenderColorGlyph(muiTextService* service, uint64_t font,
-                                                        uint32_t glyph, float pixelSize,
-                                                        float offsetX, uint32_t palette,
-                                                        muiLinearColor foreground,
-                                                        muiGlyphImage* imageOut,
-                                                        unsigned char* pixels, size_t capacity);
+    MUI_NODISCARD MUI_API muiResult muiTextService_RenderColorGlyph(
+        muiTextService* service, uint64_t font, uint32_t glyph, float pixelSize, float offsetX,
+        uint32_t palette, muiLinearColor foreground, muiGlyphImage* imageOut,
+        unsigned char* pixelsOut, size_t capacity);
 
     /// Renders a glyph as a signed distance field, which a renderer scales
     /// to any size: a byte per pixel, rows from the top, 128 at the
@@ -130,62 +133,64 @@ extern "C"
     /// @param font       A font key, as a glyph run carries; 0 for the
     ///                   default font.
     /// @param glyph      A glyph id of the font.
-    /// @param pixelSize  The em in pixels of the image, from 1/64 to
-    ///                   MUI_MAX_GLYPH_PIXEL_SIZE.
+    /// @param pixelSize  The em in pixels of the image, from
+    ///                   MUI_MIN_GLYPH_PIXEL_SIZE to MUI_MAX_GLYPH_PIXEL_SIZE.
     /// @param spread     How far the field reaches past the outline, from
     ///                   MUI_MIN_FIELD_SPREAD to MUI_MAX_FIELD_SPREAD
     ///                   pixels.
-    /// @param imageOut   Receives the image's place and size, from the pen
-    ///                   and baseline at pixelSize, also when pixels hold
-    ///                   too few bytes.
-    /// @param pixels     Receives width * height bytes; may be NULL when
+    /// @param imageOut   Receives the image's place and size, from the pen and
+    ///                   baseline at pixelSize, also when pixelsOut holds too few
+    ///                   bytes. Zeroed on any other failure.
+    /// @param pixelsOut  Receives width * height bytes; may be NULL when
     ///                   capacity is 0.
-    /// @param capacity   How many bytes pixels holds.
-    /// @return `mui_success`; `mui_errorCapacity` when pixels hold fewer
-    ///         bytes than imageOut asks for, or memory runs out;
-    ///         `mui_errorInvalid` for a NULL service or imageOut, NULL
-    ///         pixels with a capacity, a size or spread outside the above,
-    ///         or a glyph id the font does not have; `mui_errorStale` for
-    ///         a key that names no font; `mui_errorFormat` for a glyph
-    ///         whose outline cannot be read or is too large to render.
+    /// @param capacity   How many bytes pixelsOut holds.
+    /// @return `mui_success`; `mui_errorCapacity` when pixelsOut holds fewer bytes
+    ///         than imageOut asks for, or memory runs out; `mui_errorInvalid`
+    ///         for a NULL service or imageOut, NULL pixelsOut with a capacity, a
+    ///         size that is not a finite number above 0, or a glyph id the
+    ///         font does not have; `mui_errorLimit` for a size or spread
+    ///         outside the above; `mui_errorStale` for a key that names no
+    ///         font; `mui_errorFormat` for a glyph whose outline cannot be read
+    ///         or is too large to render; `mui_errorBusy` while the service is
+    ///         busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiRenderGlyphField(muiTextService* service, uint64_t font,
-                                                        uint32_t glyph, float pixelSize,
-                                                        uint32_t spread, muiGlyphImage* imageOut,
-                                                        unsigned char* pixels, size_t capacity);
+    MUI_NODISCARD MUI_API muiResult muiTextService_RenderGlyphField(
+        muiTextService* service, uint64_t font, uint32_t glyph, float pixelSize, uint32_t spread,
+        muiGlyphImage* imageOut, unsigned char* pixelsOut, size_t capacity);
 
     /// Renders a glyph's multi-channel signed distance field (MTSDF) for a
     /// renderer that scales it: four bytes a pixel. Red, green and blue
     /// are three distances, each to the outline's edges of one colour, and
     /// their median is the distance with the outline's corners kept sharp
     /// at any scale (Chlumský's method, as msdfgen's); alpha is the field
-    /// muiRenderGlyphField renders, byte for byte, for outlines, glows and
+    /// muiTextService_RenderGlyphField renders, byte for byte, for outlines, glows and
     /// shadows. Each channel is 128 at its distance's 0 and 128 / spread
     /// more for each pixel inside, less outside, held within 0 and 255.
-    /// The image is placed and sized as muiRenderGlyphField places it, and
+    /// The image is placed and sized as muiTextService_RenderGlyphField places it, and
     /// overlapping contours are their union.
     ///
     /// @param service    The service.
     /// @param font       A font key, as a glyph run carries; 0 for the
     ///                   default font.
     /// @param glyph      A glyph id of the font.
-    /// @param pixelSize  The em in pixels of the image, from 1/64 to
-    ///                   MUI_MAX_GLYPH_PIXEL_SIZE.
+    /// @param pixelSize  The em in pixels of the image, from
+    ///                   MUI_MIN_GLYPH_PIXEL_SIZE to MUI_MAX_GLYPH_PIXEL_SIZE.
     /// @param spread     How far the field reaches past the outline, from
     ///                   MUI_MIN_FIELD_SPREAD to MUI_MAX_FIELD_SPREAD
     ///                   pixels.
-    /// @param imageOut   Receives the image's place and size, also when
-    ///                   pixels hold too few bytes.
-    /// @param pixels     Receives width * height * 4 bytes, red, green, blue
+    /// @param imageOut   Receives the image's place and size, also when pixelsOut
+    ///                   holds too few bytes. Zeroed on any other failure.
+    /// @param pixelsOut  Receives width * height * 4 bytes, red, green, blue
     ///                   and alpha a pixel; may be NULL when capacity is 0.
-    /// @param capacity   How many bytes pixels holds.
-    /// @return As muiRenderGlyphField.
+    /// @param capacity   How many bytes pixelsOut holds.
+    /// @return As muiTextService_RenderGlyphField; `mui_errorBusy` while the service is
+    ///         busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiRenderGlyphMultiField(
+    MUI_NODISCARD MUI_API muiResult muiTextService_RenderGlyphMultiField(
         muiTextService* service, uint64_t font, uint32_t glyph, float pixelSize, uint32_t spread,
-        muiGlyphImage* imageOut, unsigned char* pixels, size_t capacity);
+        muiGlyphImage* imageOut, unsigned char* pixelsOut, size_t capacity);
 
 #ifdef __cplusplus
 }

@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
 
 using namespace rawframe;
 using namespace rawframe::ui;
@@ -107,6 +108,12 @@ RAWFRAME_TEST(FontsAndTextLooksOutOfRangeAreRefused) {
     // A font cut short before its header is refused, not read past.
     const auto kCut = ui.addFont(bytesOf(kAhem.substr(0, 4096)));
     RAWFRAME_EXPECT(!kCut.has_value() && kCut.error().code() == code(UiError::Format));
+    // A web font, which Maul UI does not take, is refused as not a font.
+    for (const std::string_view kSignature : {std::string_view{"wOFF"}, std::string_view{"wOF2"}}) {
+        const std::string kWeb = std::string{kSignature} + kAhem.substr(4, 4092);
+        const auto kWebRefused = ui.addFont(bytesOf(kWeb));
+        RAWFRAME_EXPECT(!kWebRefused.has_value() && kWebRefused.error().code() == code(UiError::Format));
+    }
     const auto kFont = ui.addFont(bytesOf(kAhem));
     RAWFRAME_EXPECT(kFont.has_value());
     RAWFRAME_EXPECT(ui.addFont(bytesOf(kAhem)).has_value());

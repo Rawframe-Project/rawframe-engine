@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Interaction properties and hit testing (record mui-0007): whether a node
-// and its children are hit by a point, whether input it leaves unused
-// passes through to what lies behind the UI, whether it roots a layer,
-// and which node is topmost at a point, in reverse paint order.
+// Interaction properties and hit testing: whether a node and its children
+// are hit by a point, whether input it leaves unused passes through to
+// what lies behind the UI, whether it roots a layer, and which node is
+// topmost at a point, in reverse paint order.
 
 #ifndef MAUL_UI_INTERACTION_H
 #define MAUL_UI_INTERACTION_H
@@ -116,7 +116,7 @@ extern "C"
         // threshold (maul-ui/pointer.h).
         bool drags;
         // The kinds of thing dropped on the node it takes: a drag offering
-        // a kind in this mask (muiPointer_Offer) over the node, or over a
+        // a kind in this mask (muiContext_OfferDrop) over the node, or over a
         // node below it that takes none of that kind, may drop here. The
         // bits are the application's; 0 takes nothing.
         uint32_t accepts;
@@ -142,12 +142,12 @@ extern "C"
     /// @param values   The values; only the fields mask names are read: a
     ///                 known hit mode, layer kind and focus mode.
     /// @param mask     The properties, within MUI_INTERACTION_PROPERTIES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, an unknown variant or property bit, a value outside
-    ///         the above or a call from a measure or paint function, which
-    ///         changes nothing; `mui_errorStale` for an id whose class is
-    ///         gone; `mui_errorCapacity` when the variant had no values and
-    ///         the context's limit of property sets is reached.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, an unknown variant or property bit or a value outside the
+    ///         above, which changes nothing; `mui_errorBusy` while the context
+    ///         is busy; `mui_errorStale` for an id whose class is gone;
+    ///         `mui_errorCapacity` when the variant had no values and the
+    ///         context's limit of property sets is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiStyle_SetInteractionValues(muiContext* context,
@@ -162,8 +162,10 @@ extern "C"
     /// @param styleId    The class.
     /// @param variant    The variant.
     /// @param valuesOut  Receives the set values, and
-    ///                   muiDefaultInteractionStyle's for the rest.
-    /// @param maskOut    Receives which interaction properties are set.
+    ///                   muiDefaultInteractionStyle's for the rest. Zeroed on
+    ///                   failure.
+    /// @param maskOut    Receives which interaction properties are set. 0 on
+    ///                   failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id or an unknown variant; `mui_errorStale` for an id
     ///         whose class is gone.
@@ -184,10 +186,10 @@ extern "C"
     /// @param values   The values, as muiStyle_SetInteractionValues takes
     ///                 them.
     /// @param mask     The properties, within MUI_INTERACTION_PROPERTIES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, an unknown property bit, a value outside the above
-    ///         or a call from a measure or paint function, which changes
-    ///         nothing; `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, an unknown property bit or a value outside the above, which
+    ///         changes nothing; `mui_errorBusy` while the context is busy;
+    ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetInteractionValues(muiContext* context,
@@ -197,11 +199,11 @@ extern "C"
 
     /// Reads a node's resolved interaction values: its direct writes, and
     /// for the other properties what its classes and states gave at the
-    /// last muiComputeLayout that reached it.
+    /// last muiNode_ComputeLayout that reached it.
     ///
     /// @param context    The context.
     /// @param nodeId     The node.
-    /// @param valuesOut  Receives the values.
+    /// @param valuesOut  Receives the values. Zeroed on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
     ///         null id; `mui_errorStale` for an id whose node is gone.
     /// @par Thread safety
@@ -223,7 +225,7 @@ extern "C"
     } muiHit;
 
     /// Finds the topmost node of a root's subtree at a point, as its last
-    /// muiComputeLayout left it: the last in paint order whose rounded
+    /// muiNode_ComputeLayout left it: the last in paint order whose rounded
     /// border box holds the point, inside the rounded clips of every
     /// ancestor that clips and of no node whose hit mode leaves it out.
     /// Layers are tried from the top down, then the content they are
@@ -237,14 +239,14 @@ extern "C"
     /// @param rootId   The root of the subtree.
     /// @param x        The point, in the space the root's rectangle is in.
     /// @param y        Likewise.
-    /// @param hitOut   Receives what the point hits; unchanged on failure.
+    /// @param hitOut   Receives what the point hits. Zeroed on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id or a point not finite; `mui_errorStale` for a root
     ///         that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiHitTest(const muiContext* context, muiNodeId rootId, float x,
-                                               float y, muiHit* hitOut);
+    MUI_NODISCARD MUI_API muiResult muiNode_HitTest(const muiContext* context, muiNodeId rootId,
+                                                    float x, float y, muiHit* hitOut);
 
     /// Raises a layer above the others of its band, as activating a
     /// window brings it to the front: it becomes the latest activated.
@@ -252,10 +254,9 @@ extern "C"
     /// @param context  The context.
     /// @param nodeId   A node that roots a layer, as its last style
     ///                 resolution or direct write left it.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id, a node that roots no layer or a call from a
-    ///         measure or paint function; `mui_errorStale` for a node that
-    ///         is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         id or a node that roots no layer; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_RaiseLayer(muiContext* context, muiNodeId nodeId);

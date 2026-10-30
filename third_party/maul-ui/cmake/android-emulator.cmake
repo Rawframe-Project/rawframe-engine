@@ -1,5 +1,4 @@
-# The Android emulator, for the tests, as Maul Window's (record
-# mui-0008):
+# The Android emulator, for the tests, as Maul Window's:
 #
 #   cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/android-emulator.cmake
 #

@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Multi-channel distance fields of outlines made of line segments
-// (record mui-0006): four channels, red, green and blue whose median is
-// the distance with corners kept sharp, and alpha the one-channel field
-// (distance_field.h). The union's edge, as the one-channel field finds
-// it, is cut into edges at corners and where its chains end; edges are
-// coloured as msdfgen colours them, and each colour channel holds the
-// signed pseudo-distance to the nearest edge of its colour. Only correctly
-// rounded float operations are used, so fields are the same bytes on
-// every platform.
+// Multi-channel distance fields of outlines made of line segments: four
+// channels, red, green and blue whose median is the distance with corners
+// kept sharp, and alpha the one-channel field (distance_field.h). The
+// union's edge, as the one-channel field finds it, is cut into edges at
+// corners and where its chains end; edges are coloured as msdfgen colours
+// them, and each colour channel holds the signed pseudo-distance to the
+// nearest edge of its colour. Only correctly rounded float operations are
+// used, so fields are the same bytes on every platform.
 
 #ifndef MAUL_UI_SRC_MULTI_FIELD_H
 #define MAUL_UI_SRC_MULTI_FIELD_H

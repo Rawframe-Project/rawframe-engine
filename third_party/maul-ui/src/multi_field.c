@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Multi-channel distance fields (record mui-0006), after Chlumský's
-// "Shape Decomposition for Multi-channel Distance Fields" and msdfgen.
-// The edge segments come in contour order; those joined end to start
-// make chains, and a chain is cut into edges at corners: where it ends
-// (the union leaving one contour for another), and where two lines or
-// curves of the outline meet turning past msdfgen's threshold. Flattened
-// pieces of one curve never make a corner, however tightly it turns.
-// Edges are coloured so the two at a corner share one channel; past an
-// edge's end at a corner, its distance is to its line, so the median of
-// the channels keeps the corner. Where the median's sign is not the true
-// inside's, the channels take the true distance.
+// Multi-channel distance fields, after Chlumský's "Shape Decomposition for
+// Multi-channel Distance Fields" and msdfgen. The edge segments come in
+// contour order; those joined end to start make chains, and a chain is cut
+// into edges at corners: where it ends (the union leaving one contour for
+// another), and where two lines or curves of the outline meet turning past
+// msdfgen's threshold. Flattened pieces of one curve never make a corner,
+// however tightly it turns. Edges are coloured so the two at a corner
+// share one channel; past an edge's end at a corner, its distance is to
+// its line, so the median of the channels keeps the corner. Where the
+// median's sign is not the true inside's, the channels take the true
+// distance.
 
 #include "multi_field.h"
 

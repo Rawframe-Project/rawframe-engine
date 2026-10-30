@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A block's lines kept between layouts, per break mode (record
-// mui-0006): an edit's paragraphs are broken again, the lines after them
-// moved; a new shaping, line scale or wrapping width breaks them whole.
+// A block's lines kept between layouts, per break mode: an edit's
+// paragraphs are broken again, the lines after them moved; a new shaping,
+// line scale or wrapping width breaks them whole.
 
 #ifndef MAUL_UI_SRC_TEXT_LINES_H
 #define MAUL_UI_SRC_TEXT_LINES_H

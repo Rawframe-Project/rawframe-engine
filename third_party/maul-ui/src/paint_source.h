@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What colour glyphs of either COLR version are painted with (record
-// mui-0006): the font and size, the palette, the text's colour, and the
-// colours of palette entries in premultiplied linear light.
+// What colour glyphs of either COLR version are painted with: the font and
+// size, the palette, the text's colour, and the colours of palette entries
+// in premultiplied linear light.
 
 #ifndef MAUL_UI_SRC_PAINT_SOURCE_H
 #define MAUL_UI_SRC_PAINT_SOURCE_H

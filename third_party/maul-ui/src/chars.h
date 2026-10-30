@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Text built in a fixed buffer, and numbers written into it, without the
-// C library's printf (record mui-0001).
+// Text built in a fixed buffer, and numbers written into it, without the C
+// library's printf.
 
 #ifndef MAUL_UI_SRC_CHARS_H
 #define MAUL_UI_SRC_CHARS_H

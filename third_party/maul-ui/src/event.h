@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Routed input (record mui-0007): routing an event to a node for the
-// modules that deliver input of their own.
+// Routed input: routing an event to a node for the modules that deliver
+// input of their own.
 
 #ifndef MAUL_UI_SRC_EVENT_H
 #define MAUL_UI_SRC_EVENT_H
@@ -14,9 +14,10 @@
 
 typedef struct muiContext muiContext;
 
-// Whether input may be fed now: not from a measure, paint or event
-// function.
-bool muiMayFeed(const muiContext* context);
+// Whether the event function is running: what feeds input, dispatches,
+// performs an access action, sets the event function or destroys the
+// context is refused then with mui_errorBusy.
+bool muiIsRouting(const muiContext* context);
 
 // Routes an event to the node at target, down from the top of its tree
 // and back up; whether the host handled it.

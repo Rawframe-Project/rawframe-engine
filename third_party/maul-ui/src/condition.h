@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Conditions as data: whether one is well formed, what it reads, what
-// its values may therefore not set, and whether it holds for a sample of
-// a node's last layout and the environment (record mui-0004).
+// Conditions as data: whether one is well formed, what it reads, what its
+// values may therefore not set, and whether it holds for a sample of a
+// node's last layout and the environment.
 
 #ifndef MAUL_UI_SRC_CONDITION_H
 #define MAUL_UI_SRC_CONDITION_H

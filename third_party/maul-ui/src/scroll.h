@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Scrolling (record mui-0007): what input, focus and layout ask of it.
+// Scrolling: what input, focus and layout ask of it.
 
 #ifndef MAUL_UI_SRC_SCROLL_H
 #define MAUL_UI_SRC_SCROLL_H
@@ -15,7 +15,7 @@
 
 typedef struct muiContext muiContext;
 
-// The default of an unhandled wheel turn over hit (muiWheelInput), under
+// The default of an unhandled wheel turn over hit (muiNode_RouteWheel), under
 // root: whether a scroll container took it.
 bool muiScrollWheel(muiContext* context, uint32_t root, muiNodeId hit, const muiWheelEvent* event);
 
@@ -43,6 +43,9 @@ bool muiScrollPage(muiContext* context, uint32_t container, muiKeyCode code, boo
 // panned.
 bool muiScrollPointer(muiContext* context, const muiPointerRecord* record);
 
+// Stops what moves the node at slot, and takes back its overscroll.
+void muiScrollCancel(muiContext* context, uint32_t slot);
+
 // Stops the flings of the node at slot and the scroll containers above
 // it, as a press there at timeNs does; one past a limit springs back.
 void muiScrollStopFlings(muiContext* context, uint32_t slot, uint64_t timeNs);
@@ -62,5 +65,10 @@ bool muiScrollIsEasingUnder(const muiContext* context, uint32_t root);
 // Scrolls a node's scrolling ancestors to bring it into view, as
 // muiNode_ScrollIntoView does.
 void muiScrollReveal(muiContext* context, uint32_t slot);
+
+// muiNode_SetScroll and muiNode_ScrollIntoView without the busy mark, for
+// the library's own calls from inside a call that holds it.
+muiResult muiSetNodeScroll(muiContext* context, muiNodeId nodeId, float x, float y);
+muiResult muiScrollNodeIntoView(muiContext* context, muiNodeId nodeId);
 
 #endif // MAUL_UI_SRC_SCROLL_H

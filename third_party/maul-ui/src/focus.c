@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Focus (record mui-0007). Each player focuses at most one node; the node
-// keeps the players focusing it, and those showing it, as bits its
-// states read. Sequential navigation walks the layer holding the focus
-// once, keeping the nearest node on each side of it in the order.
+// Focus. Each player focuses at most one node; the node keeps the players
+// focusing it, and those showing it, as bits its states read. Sequential
+// navigation walks the layer holding the focus once, keeping the nearest
+// node on each side of it in the order.
 
 #include "maul-ui/focus.h"
 
 #include "context.h"
 #include "focus.h"
+#include "fpenv.h"
 #include "layer.h"
 #include "notify.h"
 #include "popup.h"
@@ -126,13 +127,13 @@ void muiFocusAssign(muiContext* context, uint8_t player, uint32_t slot, bool sho
     }
 }
 
-muiResult muiFocus_Set(muiContext* context, uint8_t player, muiNodeId nodeId, muiFocusCause cause)
+muiResult muiSetFocus(muiContext* context, uint8_t player, muiNodeId nodeId, muiFocusCause cause)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (player >= MUI_MAX_PLAYERS || cause > mui_focusByNavigation || muiIsInHostCall(context))
+    if (player >= MUI_MAX_PLAYERS || cause > mui_focusByNavigation)
     {
         return muiRefuse(context);
     }
@@ -164,7 +165,19 @@ muiResult muiFocus_Set(muiContext* context, uint8_t player, muiNodeId nodeId, mu
     return mui_success;
 }
 
-muiNodeId muiFocus_Get(const muiContext* context, uint8_t player)
+muiResult muiContext_SetFocus(muiContext* context, uint8_t player, muiNodeId nodeId,
+                              muiFocusCause cause)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = muiSetFocus(context, player, nodeId, cause);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiNodeId muiContext_GetFocus(const muiContext* context, uint8_t player)
 {
     if (context == nullptr || player >= MUI_MAX_PLAYERS)
     {
@@ -330,13 +343,13 @@ void muiFocusNavigate(muiContext* context, uint8_t player, uint32_t slot)
     muiScrollReveal(context, slot);
 }
 
-muiResult muiFocus_Move(muiContext* context, muiNodeId rootId, uint8_t player, bool backward)
+muiResult muiMoveFocus(muiContext* context, muiNodeId rootId, uint8_t player, bool backward)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (IsNull(rootId) || player >= MUI_MAX_PLAYERS || muiIsInHostCall(context))
+    if (IsNull(rootId) || player >= MUI_MAX_PLAYERS)
     {
         return muiRefuse(context);
     }
@@ -357,6 +370,26 @@ muiResult muiFocus_Move(muiContext* context, muiNodeId rootId, uint8_t player, b
     }
     muiFocusNavigate(context, player, next);
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult FocusMoveWorker(muiContext* context, muiNodeId rootId, uint8_t player,
+                                              bool backward)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = muiMoveFocus(context, rootId, player, backward);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_MoveFocus(muiContext* context, muiNodeId rootId, uint8_t player, bool backward)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = FocusMoveWorker(context, rootId, player, backward);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 void muiFocusPress(muiContext* context, uint8_t player, uint32_t slot)

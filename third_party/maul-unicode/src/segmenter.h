@@ -115,15 +115,15 @@ typedef struct muniSegmenter
 {
     muniCursor cursor;
     muniComplexRun complex;
-    size_t heldOffset; // the offset of the undecided boundary
-    uint8_t kind;      // a muni_segment value
-    bool started;      // a code point has been read
-    bool endReported;  // the boundary at the end has been reported
-    bool holding;      // a boundary at heldOffset is undecided
-    uint8_t phase;     // a muni_phase value
-    bool mandatory;    // the last boundary reported must be taken
-    uint8_t holdKind;  // the kind of the open hold
-    uint8_t options;   // a line iterator's muni_line options
+    size_t heldOffset;    // the offset of the undecided boundary
+    uint8_t kind;         // a muni_segment value
+    bool started;         // a code point has been read
+    bool endReported;     // the boundary at the end has been reported
+    bool holding;         // a boundary at heldOffset is undecided
+    uint8_t phase;        // a muni_phase value
+    bool mandatory;       // the last boundary reported must be taken
+    uint8_t holdKind;     // the kind of the open hold
+    bool cjAsIdeographic; // a line iterator resolves CJ as ID
 
     union
     {

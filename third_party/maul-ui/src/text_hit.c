@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Hit testing laid-out text (record mui-0006): points to positions,
-// positions to carets, and ranges to rectangles, over a node's lines read
-// as boxes of grapheme clusters.
+// Hit testing laid-out text: points to positions, positions to carets, and
+// ranges to rectangles, over a node's lines read as boxes of grapheme
+// clusters.
 
+#include "fpenv.h"
 #include "text_boxes.h"
+#include "text_entry.h"
+#include "text_host.h"
 #include "text_mask.h"
 
 #include "maul-ui/text_edit.h"
 
 #include <math.h>
 
-muiResult muiTextHitTest(const muiTextHost* host, muiNodeId nodeId, float width, float x, float y,
-                         muiTextPosition* positionOut)
+muiResult muiHitText(const muiTextHost* host, muiNodeId nodeId, float width, float x, float y,
+                     muiTextPosition* positionOut)
 {
     if (!muiIsTextHostValid(host) || positionOut == nullptr || !isfinite(x) || !isfinite(y))
     {
@@ -39,8 +42,31 @@ muiResult muiTextHitTest(const muiTextHost* host, muiNodeId nodeId, float width,
     return mui_success;
 }
 
-muiResult muiTextGetCaret(const muiTextHost* host, muiNodeId nodeId, float width,
-                          muiTextPosition position, muiTextCaret* caretOut)
+static MUI_NOINLINE muiResult TextHitTestWorker(const muiTextHost* host, muiNodeId nodeId,
+                                                float width, float x, float y,
+                                                muiTextPosition* positionOut)
+{
+    bool held = false;
+    muiResult status = muiEnterTextHost(host, &held);
+    if (status == mui_success)
+    {
+        status = muiHitText(host, nodeId, width, x, y, positionOut);
+        muiLeaveTextHost(host, held);
+    }
+    return status;
+}
+
+muiResult muiNode_HitTestText(const muiTextHost* host, muiNodeId nodeId, float width, float x,
+                              float y, muiTextPosition* positionOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextHitTestWorker(host, nodeId, width, x, y, positionOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+muiResult muiCaretOf(const muiTextHost* host, muiNodeId nodeId, float width,
+                     muiTextPosition position, muiTextCaret* caretOut)
 {
     if (!muiIsTextHostValid(host) || caretOut == nullptr)
     {
@@ -73,6 +99,29 @@ muiResult muiTextGetCaret(const muiTextHost* host, muiNodeId nodeId, float width
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult TextGetCaretWorker(const muiTextHost* host, muiNodeId nodeId,
+                                                 float width, muiTextPosition position,
+                                                 muiTextCaret* caretOut)
+{
+    bool held = false;
+    muiResult status = muiEnterTextHost(host, &held);
+    if (status == mui_success)
+    {
+        status = muiCaretOf(host, nodeId, width, position, caretOut);
+        muiLeaveTextHost(host, held);
+    }
+    return status;
+}
+
+muiResult muiNode_GetTextCaret(const muiTextHost* host, muiNodeId nodeId, float width,
+                               muiTextPosition position, muiTextCaret* caretOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextGetCaretWorker(host, nodeId, width, position, caretOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 // Adds a rectangle for each stretch of a line's boxes from start up to
 // end, those past capacity counted only; returns the count after them.
 static uint32_t AddStretches(const muiTextBoxes* boxes, uint32_t start, uint32_t end, float top,
@@ -92,9 +141,9 @@ static uint32_t AddStretches(const muiTextBoxes* boxes, uint32_t start, uint32_t
     return count;
 }
 
-muiResult muiTextGetRangeRects(const muiTextHost* host, muiNodeId nodeId, float width,
-                               uint32_t start, uint32_t end, muiRect* rects, uint32_t capacity,
-                               uint32_t* countOut)
+static muiResult TextGetRangeRects(const muiTextHost* host, muiNodeId nodeId, float width,
+                                   uint32_t start, uint32_t end, muiRect* rects, uint32_t capacity,
+                                   uint32_t* countOut)
 {
     if (!muiIsTextHostValid(host) || countOut == nullptr || (rects == nullptr && capacity != 0))
     {
@@ -125,4 +174,30 @@ muiResult muiTextGetRangeRects(const muiTextHost* host, muiNodeId nodeId, float 
     }
     *countOut = count;
     return count <= capacity ? mui_success : mui_errorCapacity;
+}
+
+static MUI_NOINLINE muiResult TextGetRangeRectsWorker(const muiTextHost* host, muiNodeId nodeId,
+                                                      float width, uint32_t start, uint32_t end,
+                                                      muiRect* rects, uint32_t capacity,
+                                                      uint32_t* countOut)
+{
+    bool held = false;
+    muiResult status = muiEnterTextHost(host, &held);
+    if (status == mui_success)
+    {
+        status = TextGetRangeRects(host, nodeId, width, start, end, rects, capacity, countOut);
+        muiLeaveTextHost(host, held);
+    }
+    return status;
+}
+
+muiResult muiNode_GetTextRangeRects(const muiTextHost* host, muiNodeId nodeId, float width,
+                                    uint32_t start, uint32_t end, muiRect* rectsOut,
+                                    uint32_t capacity, uint32_t* countOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result =
+        TextGetRangeRectsWorker(host, nodeId, width, start, end, rectsOut, capacity, countOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

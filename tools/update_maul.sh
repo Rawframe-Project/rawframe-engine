@@ -2,10 +2,10 @@
 # Replaces third_party/<library> with the library sources of one exact Maul
 # revision, taken from a checkout's object store, never from its working
 # tree. Maul2D and Maul3D keep the build file we write beside their sources;
-# Maul Unicode and Maul Window bring their own CMake, which the engine
-# configures with its options (third_party/maul_window.cmake).
+# the other libraries bring their own CMake, which the engine configures
+# with its options (third_party/maul_*.cmake).
 #
-#   tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window|maul-rhi|maul-ui|maul-nav|maul-audio> <checkout> <revision>
+#   tools/update_maul.sh <maul2d|maul3d|maul-unicode|maul-window|maul-rhi|maul-ui|maul-tween|maul-nav|maul-audio> <checkout> <revision>
 #
 # Files are extracted with the time they are written, not their commit's,
 # so a build that already ran builds everything from them again.
@@ -18,11 +18,12 @@ maul2d | maul3d) paths=(include src LICENSE) ;;
 maul-unicode) paths=(include src cmake CMakeLists.txt LICENSE) ;;
 maul-window) paths=(include src cmake protocols java tools/gen_web_glue.py CMakeLists.txt LICENSE) ;;
 maul-rhi) paths=(include src khronos directx cmake tools/mrhi_container.py tools/mrhi_msl.py tools/mrhi_dxil.py tools/gen_web_glue.py contract/mrhi.json CMakeLists.txt LICENSE) ;;
-maul-ui) paths=(include src cmake java tools/gen_web_glue.py CMakeLists.txt LICENSE THIRD_PARTY.md) ;;
+maul-ui) paths=(include src cmake java tools/gen_web_glue.py CMakeLists.txt LICENSE docs/user/licenses.md) ;;
+maul-tween) paths=(include src cmake CMakeLists.txt LICENSE) ;;
 maul-nav) paths=(include src cmake CMakeLists.txt LICENSE) ;;
 maul-audio) paths=(include src cmake CMakeLists.txt LICENSE) ;;
 *)
-    echo "update_maul.sh: the library is maul2d, maul3d, maul-unicode, maul-window, maul-rhi, maul-ui, maul-nav, or maul-audio" >&2
+    echo "update_maul.sh: the library is maul2d, maul3d, maul-unicode, maul-window, maul-rhi, maul-ui, maul-tween, maul-nav, or maul-audio" >&2
     exit 2
     ;;
 esac

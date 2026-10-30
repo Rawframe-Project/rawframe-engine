@@ -71,16 +71,16 @@ extern "C"
     /// @param context    The context.
     /// @param window     The window.
     /// @param root       The root, or NULL for none.
-    /// @param requestOut Receives the request's id. May be NULL.
+    /// @param requestOut Receives the request's id. May be NULL. The null
+    ///                   request on failure.
     /// @return `mwin_success`; `mwin_errorCapacity` when the window has its
     ///         limit of requests in flight; `mwin_errorStale` for a window
     ///         that no longer exists; `mwin_errorInvalid` for a NULL
     ///         context.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinRequestAccessibilityRoot(mwinContext* context,
-                                                                    mwinWindowId window, void* root,
-                                                                    mwinRequestId* requestOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinWindow_RequestAccessibilityRoot(
+        mwinContext* context, mwinWindowId window, void* root, mwinRequestId* requestOut);
 
 #ifdef __cplusplus
 }

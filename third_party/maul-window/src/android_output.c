@@ -17,7 +17,8 @@
 #include <math.h>
 #include <string.h>
 
-#define READ_NS 2000000000ull
+#define READ_NS    2000000000ull
+#define RECHECK_NS 100000000ull
 
 // Where the facts go in Screen.facts's answer.
 enum
@@ -175,9 +176,27 @@ void mwinAndroidReadScreen(mwinAndroidPlatform* platform)
     }
 }
 
+// Whether the window fits in the display as last read. An activity that
+// starts turned can have its window before Android has turned the
+// display's facts too (seen on Android 11), so until it fits they are
+// read again every tenth of a second rather than every two seconds.
+static bool Fits(const mwinAndroidPlatform* platform)
+{
+    int32_t monitor = platform->screen.monitor;
+    if (platform->slot < 0 || monitor < 0)
+    {
+        return true;
+    }
+    const mwinContext* context = platform->context;
+    mwinPixelSize size = context->windows[platform->slot].state.pixelSize;
+    mwinPixelRect bounds = context->monitors[monitor].info.bounds;
+    return size.width <= bounds.width && size.height <= bounds.height;
+}
+
 void mwinAndroidPumpScreen(mwinAndroidPlatform* platform, uint64_t nowNs)
 {
-    if (nowNs - platform->screen.readNs >= READ_NS)
+    uint64_t since = nowNs - platform->screen.readNs;
+    if (since >= READ_NS || (since >= RECHECK_NS && !Fits(platform)))
     {
         mwinAndroidReadScreen(platform);
     }

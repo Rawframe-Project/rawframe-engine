@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The NSAccessibility adapter's node objects (record mui-0008): the
-// protocol answered from the tree at each call. A node's name is its
-// title, or its value for static text; a check box's value is its state,
-// a range's its number; the actions are asked of the host. Which methods
-// apply is answered per node, as AccessKit does, so that clients offer
-// only what a node has.
+// The NSAccessibility adapter's node objects: the protocol answered from
+// the tree at each call. A node's name is its title, or its value for
+// static text; a check box's value is its state, a range's its number; the
+// actions are asked of the host. Which methods apply is answered per node,
+// as AccessKit does, so that clients offer only what a node has.
 
 #include "access_record.h"
 #include "access_text.h"
 #include "allocator.h"
+#include "fpenv.h"
+#include "host_call.h"
 #include "ns.h"
 
 // A node's text as a string, nil for none.
@@ -38,7 +39,7 @@ NSString* muiNsNameOf(const muiNsAdapter* adapter, uint64_t id)
     {
         return nil;
     }
-    char* name = muiAllocate(&adapter->allocator, length + 1, 1);
+    char* name = muiAllocateMarked(&adapter->busy, &adapter->allocator, length + 1, 1);
     NSString* string = nil;
     if (name != nullptr &&
         muiAccessTree_GetName(adapter->tree, id, name, length + 1, &length) == mui_success)
@@ -47,7 +48,7 @@ NSString* muiNsNameOf(const muiNsAdapter* adapter, uint64_t id)
     }
     if (name != nullptr)
     {
-        muiRelease(&adapter->allocator, name, length + 1, 1);
+        muiReleaseMarked(&adapter->busy, &adapter->allocator, name, length + 1, 1);
     }
     return string;
 }
@@ -97,6 +98,15 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
 }
 
 - (NSRect)accessibilityFrame
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    NSRect result = [self muiWorkerAccessibilityFrame];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityFrame's work, called through the runtime.
+- (NSRect)muiWorkerAccessibilityFrame
 {
     return NodeOf(self) != nullptr ? muiNsScreenRectOf(adapter, nodeId) : NSZeroRect;
 }
@@ -157,6 +167,15 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
 // range's number; else the node's value text.
 - (id)accessibilityValue
 {
+    uint64_t floatEnv = muiFloatEnvEnter();
+    id result = [self muiWorkerAccessibilityValue];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityValue's work, called through the runtime.
+- (id)muiWorkerAccessibilityValue
+{
     const muiAccessNode* node = NodeOf(self);
     if (node == nullptr)
     {
@@ -182,6 +201,14 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
 // A range's number, or an edited text's whole text, as the host takes it.
 - (void)setAccessibilityValue:(id)value
 {
+    uint64_t floatEnv = muiFloatEnvEnter();
+    [self muiWorkerSetAccessibilityValue:value];
+    muiFloatEnvLeave(floatEnv);
+}
+
+// setAccessibilityValue's work, called through the runtime.
+- (void)muiWorkerSetAccessibilityValue:(id)value
+{
     const muiAccessNode* node = NodeOf(self);
     if (node != nullptr && Has(node, mui_actionReplaceText) &&
         [value isKindOfClass:[NSString class]])
@@ -189,13 +216,23 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
         (void)muiNsReplaceAll(self, value);
     }
     else if (node != nullptr && Has(node, mui_actionSetValue) &&
-             [value respondsToSelector:@selector(floatValue)])
+             [value respondsToSelector:@selector(doubleValue)] &&
+             muiAccessValueFits(node, [value doubleValue]))
     {
-        (void)muiNsAct(adapter, mui_actionSetValue, nodeId, [value floatValue]);
+        (void)muiNsAct(adapter, mui_actionSetValue, nodeId, (float)[value doubleValue]);
     }
 }
 
 - (id)accessibilityMinValue
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    id result = [self muiWorkerAccessibilityMinValue];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityMinValue's work, called through the runtime.
+- (id)muiWorkerAccessibilityMinValue
 {
     const muiAccessNode* node = NodeOf(self);
     return node != nullptr && (node->flags & mui_accessNumeric) != 0
@@ -204,6 +241,15 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
 }
 
 - (id)accessibilityMaxValue
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    id result = [self muiWorkerAccessibilityMaxValue];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityMaxValue's work, called through the runtime.
+- (id)muiWorkerAccessibilityMaxValue
 {
     const muiAccessNode* node = NodeOf(self);
     return node != nullptr && (node->flags & mui_accessNumeric) != 0
@@ -307,6 +353,15 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
 }
 
 - (id)accessibilityHitTest:(NSPoint)point
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    id result = [self muiWorkerAccessibilityHitTest:point];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// accessibilityHitTest's work, called through the runtime.
+- (id)muiWorkerAccessibilityHitTest:(NSPoint)point
 {
     if (NodeOf(self) == nullptr)
     {

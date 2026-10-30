@@ -13,10 +13,10 @@
 #include <string.h>
 
 muniResult muniResolveBidi(const char* text, size_t length, muniBidiDirection direction,
-                           uint8_t* levels, uint8_t* workspace, size_t* paragraphLengthOut,
+                           uint8_t* levelsOut, uint8_t* workspace, size_t* paragraphLengthOut,
                            uint8_t* paragraphLevelOut)
 {
-    bool missing = (text == nullptr || levels == nullptr || workspace == nullptr) && length != 0;
+    bool missing = (text == nullptr || levelsOut == nullptr || workspace == nullptr) && length != 0;
     if (missing || paragraphLengthOut == nullptr || paragraphLevelOut == nullptr ||
         direction > muni_bidiRightToLeft)
     {
@@ -29,8 +29,8 @@ muniResult muniResolveBidi(const char* text, size_t length, muniBidiDirection di
         return muni_success;
     }
     const uint8_t* bytes = (const uint8_t*)text;
-    muniBidiParagraph paragraph = {bytes, muniBidiParagraphLength(bytes, length), levels, workspace,
-                                   0};
+    muniBidiParagraph paragraph = {bytes, muniBidiParagraphLength(bytes, length), levelsOut,
+                                   workspace, 0};
     if (direction == muni_bidiAuto)
     {
         paragraph.level = muniBidiFirstStrongLevel(&paragraph, 0, false, 0);
@@ -45,7 +45,7 @@ muniResult muniResolveBidi(const char* text, size_t length, muniBidiDirection di
     }
     else
     {
-        memset(levels, 0, paragraph.length);
+        memset(levelsOut, 0, paragraph.length);
     }
     *paragraphLengthOut = paragraph.length;
     *paragraphLevelOut = paragraph.level;

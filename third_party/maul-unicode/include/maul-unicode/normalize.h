@@ -56,20 +56,19 @@ extern "C"
 
     /// Normalizes UTF-8 text into a normal form.
     ///
-    /// @param text        The text. May be NULL when length is 0.
-    /// @param length      The number of bytes.
-    /// @param form        muni_nfc, muni_nfd, muni_nfkc or muni_nfkd.
-    /// @param mode        What to do with ill-formed input.
-    /// @param output      The output. May be NULL when capacity is 0.
-    /// @param capacity    The number of bytes output can hold.
-    /// @param neededOut   Receives the number of bytes the whole result
-    ///                    needs, which may exceed capacity, or SIZE_MAX
-    ///                    when that does not fit in a size_t. On a UTF-8
-    ///                    error, the bytes before it, which output holds
-    ///                    as far as they fit. On `muni_errorLimit`, the
-    ///                    same for the text before the starter whose run
-    ///                    of combining marks hit the limit.
-    ///                    `muni_errorInvalid` leaves both as they were.
+    /// @param text       The text. May be NULL when length is 0.
+    /// @param length     The number of bytes.
+    /// @param form       muni_nfc, muni_nfd, muni_nfkc or muni_nfkd.
+    /// @param mode       What to do with ill-formed input.
+    /// @param textOut    The output. May be NULL when capacity is 0.
+    /// @param capacity   The number of bytes textOut can hold.
+    /// @param neededOut  Receives the number of bytes the whole result needs,
+    ///                   which may exceed capacity, or SIZE_MAX when that does
+    ///                   not fit in a size_t. On a UTF-8 error, the bytes
+    ///                   before it, which textOut holds as far as they fit. On
+    ///                   `muni_errorLimit`, the same for the text before the
+    ///                   starter whose run of combining marks hit the limit.
+    ///                   `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the result does not fit (the bytes that fit are written); in
     ///         strict mode the first UTF-8 error and its offset;
@@ -80,7 +79,7 @@ extern "C"
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniNormalize(const char* text, size_t length,
                                                          muniNormalForm form, muniConvertMode mode,
-                                                         char* output, size_t capacity,
+                                                         char* textOut, size_t capacity,
                                                          size_t* neededOut);
 
     /// Tells quickly whether UTF-8 text is in a normal form, without

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The fonts a text style draws with, in the order they are tried for
-// each character (record mui-0006): the face its font or family gives,
-// then the family's fallbacks, then the service's, each a font or a
-// family's face, in the instance the style makes of it.
+// The fonts a text style draws with, in the order they are tried for each
+// character: the face its font or family gives, then the family's
+// fallbacks, then the service's, each a font or a family's face, in the
+// instance the style makes of it.
 
 #ifndef MAUL_UI_SRC_FONT_CHAIN_H
 #define MAUL_UI_SRC_FONT_CHAIN_H

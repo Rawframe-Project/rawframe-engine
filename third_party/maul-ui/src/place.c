@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Where nodes are on the surface (record mui-0005).
+// Where nodes are on the surface.
 
 #include "place.h"
 

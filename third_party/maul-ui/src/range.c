@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Range values (record mui-0007): the table of ranges, values kept on
-// their steps, and the defaults keys and pointer records reach them by.
+// Range values: the table of ranges, values kept on their steps, and the
+// defaults keys and pointer records reach them by.
 
 #include "maul-ui/range.h"
 
 #include "context.h"
+#include "fpenv.h"
 #include "notify.h"
 #include "range.h"
 #include "range_store.h"
 #include "tree.h"
 
 #include <math.h>
+#include <string.h>
 
 static bool IsNull(muiNodeId nodeId)
 {
@@ -68,7 +70,7 @@ static bool IsValid(const muiValueRange* range)
 {
     return isfinite(range->minimum) && isfinite(range->maximum) && isfinite(range->value) &&
            range->maximum >= range->minimum && isfinite(range->step) && range->step >= 0.0f &&
-           isfinite(range->page) && range->page >= 0.0f && range->axis <= mui_rangeVertical;
+           isfinite(range->page) && range->page >= 0.0f && range->axis <= mui_axisVertical;
 }
 
 muiValueRange muiDefaultValueRange(void)
@@ -76,7 +78,8 @@ muiValueRange muiDefaultValueRange(void)
     return (muiValueRange){.maximum = 100.0f, .step = 1.0f, .page = 10.0f};
 }
 
-muiResult muiNode_SetValueRange(muiContext* context, muiNodeId nodeId, const muiValueRange* range)
+static muiResult NodeSetValueRange(muiContext* context, muiNodeId nodeId,
+                                   const muiValueRange* range)
 {
     if (context == nullptr)
     {
@@ -116,6 +119,26 @@ muiResult muiNode_SetValueRange(muiContext* context, muiNodeId nodeId, const mui
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult NodeSetValueRangeWorker(muiContext* context, muiNodeId nodeId,
+                                                      const muiValueRange* range)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetValueRange(context, nodeId, range);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_SetValueRange(muiContext* context, muiNodeId nodeId, const muiValueRange* range)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeSetValueRangeWorker(context, nodeId, range);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 // The entry of a node an argument names, with the status to return when
 // there is none.
 static muiRangeEntry* Find(const muiContext* context, muiNodeId nodeId, muiResult* statusOut)
@@ -134,6 +157,10 @@ static muiRangeEntry* Find(const muiContext* context, muiNodeId nodeId, muiResul
 muiResult muiNode_GetValueRange(const muiContext* context, muiNodeId nodeId,
                                 muiValueRange* rangeOut)
 {
+    if (rangeOut != nullptr)
+    {
+        memset(rangeOut, 0, sizeof *rangeOut);
+    }
     if (context == nullptr || rangeOut == nullptr)
     {
         return mui_errorInvalid;
@@ -147,13 +174,13 @@ muiResult muiNode_GetValueRange(const muiContext* context, muiNodeId nodeId,
     return status;
 }
 
-muiResult muiNode_SetRangeValue(muiContext* context, muiNodeId nodeId, float value)
+static muiResult NodeSetRangeValue(muiContext* context, muiNodeId nodeId, float value)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (!isfinite(value) || muiIsInHostCall(context))
+    if (!isfinite(value))
     {
         return muiRefuse(context);
     }
@@ -171,15 +198,31 @@ muiResult muiNode_SetRangeValue(muiContext* context, muiNodeId nodeId, float val
     return status;
 }
 
-muiResult muiNode_ClearValueRange(muiContext* context, muiNodeId nodeId)
+static MUI_NOINLINE muiResult NodeSetRangeValueWorker(muiContext* context, muiNodeId nodeId,
+                                                      float value)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetRangeValue(context, nodeId, value);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_SetRangeValue(muiContext* context, muiNodeId nodeId, float value)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeSetRangeValueWorker(context, nodeId, value);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult NodeClearValueRange(muiContext* context, muiNodeId nodeId)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
-    }
-    if (muiIsInHostCall(context))
-    {
-        return muiRefuse(context);
     }
     muiResult status = mui_success;
     muiRangeEntry* entry = Find(context, nodeId, &status);
@@ -193,6 +236,17 @@ muiResult muiNode_ClearValueRange(muiContext* context, muiNodeId nodeId)
         *entry = context->ranges.entries[--context->ranges.count];
     }
     return status == mui_empty ? mui_success : status;
+}
+
+muiResult muiNode_ClearValueRange(muiContext* context, muiNodeId nodeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeClearValueRange(context, nodeId);
+        muiLeave(context);
+    }
+    return status;
 }
 
 // Moves a range's value for input, on a step, reporting a change;
@@ -246,7 +300,7 @@ bool muiRangeKey(muiContext* context, uint32_t slot, muiKeyCode code)
     float small = SmallStep(range);
     // Right to left, the minimum is on the right.
     float right = context->layout[slot - 1].rtl ? -small : small;
-    bool horizontal = range->axis == mui_rangeHorizontal;
+    bool horizontal = range->axis == mui_axisHorizontal;
     float value = range->value;
     switch (code)
     {
@@ -323,7 +377,7 @@ static float Share(const muiContext* context, uint32_t slot, const muiValueRange
 {
     float span = range->maximum - range->minimum;
     float share = span > 0.0f ? (range->value - range->minimum) / span : 0.0f;
-    bool forward = range->axis == mui_rangeHorizontal && !context->layout[slot - 1].rtl;
+    bool forward = range->axis == mui_axisHorizontal && !context->layout[slot - 1].rtl;
     return forward ? share : 1.0f - share;
 }
 
@@ -332,7 +386,7 @@ static Track TrackOf(const muiContext* context, uint32_t slot, const muiValueRan
     const muiLayoutNode* layout = &context->layout[slot - 1];
     const muiLayoutStyle* style = &layout->style;
     const muiEdges* padding = &context->paddings[slot - 1];
-    bool horizontal = range->axis == mui_rangeHorizontal;
+    bool horizontal = range->axis == mui_axisHorizontal;
     Track track = {0};
     if (horizontal)
     {
@@ -368,7 +422,7 @@ static void Press(muiContext* context, muiRangeEntry* entry, uint32_t slot, uint
                   const muiPointerRecord* record)
 {
     const muiValueRange* range = &entry->range;
-    bool horizontal = range->axis == mui_rangeHorizontal;
+    bool horizontal = range->axis == mui_axisHorizontal;
     const Track track = TrackOf(context, slot, range);
     float point = Along(context, slot, node, record->x, record->y, horizontal);
     float center = track.thumb + track.length / 2.0f;
@@ -391,7 +445,7 @@ static void Follow(muiContext* context, muiRangeEntry* entry, uint32_t slot, flo
                    const muiPointerRecord* record)
 {
     const muiValueRange* range = &entry->range;
-    bool horizontal = range->axis == mui_rangeHorizontal;
+    bool horizontal = range->axis == mui_axisHorizontal;
     const Track track = TrackOf(context, slot, range);
     if (record->kind == mui_pointerRecordDragStart)
     {
@@ -444,7 +498,7 @@ bool muiRangePointer(muiContext* context, const muiPointerRecord* record)
     }
     else if (record->kind != mui_pointerRecordDragEnd)
     {
-        bool horizontal = entry->range.axis == mui_rangeHorizontal;
+        bool horizontal = entry->range.axis == mui_axisHorizontal;
         Follow(context, entry, slot, Along(context, slot, node, record->x, record->y, horizontal),
                record);
     }

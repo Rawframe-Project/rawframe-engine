@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UI Automation adapter's property values (record mui-0008): control
-// types from roles, texts as BSTRs, and states, positions and landmarks
-// from a node's flags and values.
+// The UI Automation adapter's property values: control types from roles,
+// texts as BSTRs, and states, positions and landmarks from a node's flags
+// and values.
 
 #include "access_record.h"
 #include "allocator.h"
+#include "host_call.h"
 #include "uia.h"
 
 #include <string.h>
@@ -166,14 +167,14 @@ static HRESULT SetNodeText(VARIANT* out, const muiAccessNode* node, muiAccessTex
     return muiUiaSetText(out, node->text[kind], node->textLength[kind]);
 }
 
-static HRESULT SetName(VARIANT* out, const muiUiaAdapter* adapter, uint64_t id)
+static HRESULT SetName(VARIANT* out, muiUiaAdapter* adapter, uint64_t id)
 {
     size_t length = 0;
     if (muiAccessTree_GetName(adapter->tree, id, nullptr, 0, &length) != mui_errorCapacity)
     {
         return S_OK;
     }
-    char* name = muiAllocate(&adapter->allocator, length + 1, 1);
+    char* name = muiAllocateMarked(&adapter->busy, &adapter->allocator, length + 1, 1);
     if (name == nullptr)
     {
         return E_OUTOFMEMORY;
@@ -182,7 +183,7 @@ static HRESULT SetName(VARIANT* out, const muiUiaAdapter* adapter, uint64_t id)
         muiAccessTree_GetName(adapter->tree, id, name, length + 1, &length) == mui_success
             ? muiUiaSetText(out, name, length)
             : S_OK;
-    muiRelease(&adapter->allocator, name, length + 1, 1);
+    muiReleaseMarked(&adapter->busy, &adapter->allocator, name, length + 1, 1);
     return result;
 }
 

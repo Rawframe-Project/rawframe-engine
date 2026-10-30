@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The values of a list's transforms (records mui-0005, mui-0007): each
-// its owner's scale or scroll after its parent entry's, from the
-// context, so a build can give them once its walk is done and a paint
-// function can ask for one before.
+// The values of a list's transforms: each its owner's scale or scroll
+// after its parent entry's, from the context, so a build can give them
+// once its walk is done and a paint function can ask for one before.
 
 #include "draw_transform.h"
 

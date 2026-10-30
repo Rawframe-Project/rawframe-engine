@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The focus store (record mui-0007): each player's focused node and
-// whether its focus is shown, which the context holds and src/focus.c
-// keeps.
+// The focus store: each player's focused node and whether its focus is
+// shown, which the context holds and src/focus.c keeps.
 
 #ifndef MAUL_UI_SRC_FOCUS_STORE_H
 #define MAUL_UI_SRC_FOCUS_STORE_H

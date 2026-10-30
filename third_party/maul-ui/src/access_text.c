@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A value text's marks, checked, and its boundaries and offsets (record
-// mui-0008, I123, research 143).
+// A value text's marks, checked, and its boundaries and offsets.
 
 #include "access_text.h"
 

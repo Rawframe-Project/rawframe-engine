@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Popups (record mui-0007): the table of popups and their placement
-// beside their anchors after layout, flipping then clamping per axis as
-// Wayland's positioner does without resizing.
+// Popups: the table of popups and their placement beside their anchors
+// after layout, flipping then clamping per axis as Wayland's positioner
+// does without resizing.
 
 #include "maul-ui/popup.h"
 
 #include "context.h"
+#include "fpenv.h"
 #include "layout_node.h"
 #include "notify.h"
 #include "popup.h"
@@ -16,6 +17,7 @@
 #include "tree.h"
 
 #include <math.h>
+#include <string.h>
 
 // The entry of the node at slot; NULL for a node that is no popup.
 static muiPopupEntry* EntryOf(const muiContext* context, uint32_t slot)
@@ -69,7 +71,7 @@ muiPopup muiDefaultPopup(void)
     return (muiPopup){.side = mui_popupBelow, .align = mui_popupAlignStart, .lightDismiss = true};
 }
 
-muiResult muiNode_SetPopup(muiContext* context, muiNodeId nodeId, const muiPopup* popup)
+static muiResult NodeSetPopup(muiContext* context, muiNodeId nodeId, const muiPopup* popup)
 {
     if (context == nullptr)
     {
@@ -114,8 +116,32 @@ muiResult muiNode_SetPopup(muiContext* context, muiNodeId nodeId, const muiPopup
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult NodeSetPopupWorker(muiContext* context, muiNodeId nodeId,
+                                                 const muiPopup* popup)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetPopup(context, nodeId, popup);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_SetPopup(muiContext* context, muiNodeId nodeId, const muiPopup* popup)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeSetPopupWorker(context, nodeId, popup);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 muiResult muiNode_GetPopup(const muiContext* context, muiNodeId nodeId, muiPopup* popupOut)
 {
+    if (popupOut != nullptr)
+    {
+        memset(popupOut, 0, sizeof *popupOut);
+    }
     if (context == nullptr || popupOut == nullptr)
     {
         return mui_errorInvalid;
@@ -131,6 +157,10 @@ muiResult muiNode_GetPopup(const muiContext* context, muiNodeId nodeId, muiPopup
 
 muiResult muiNode_GetPopupSide(const muiContext* context, muiNodeId nodeId, muiPopupSide* sideOut)
 {
+    if (sideOut != nullptr)
+    {
+        *sideOut = 0;
+    }
     if (context == nullptr || sideOut == nullptr)
     {
         return mui_errorInvalid;
@@ -145,15 +175,11 @@ muiResult muiNode_GetPopupSide(const muiContext* context, muiNodeId nodeId, muiP
     return mui_success;
 }
 
-muiResult muiNode_ClearPopup(muiContext* context, muiNodeId nodeId)
+static muiResult NodeClearPopup(muiContext* context, muiNodeId nodeId)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
-    }
-    if (muiIsInHostCall(context))
-    {
-        return muiRefuse(context);
     }
     muiResult status = mui_success;
     muiPopupEntry* entry = Find(context, nodeId, &status);
@@ -166,6 +192,17 @@ muiResult muiNode_ClearPopup(muiContext* context, muiNodeId nodeId)
         *entry = context->popups.entries[--context->popups.count];
     }
     return status == mui_empty ? mui_success : status;
+}
+
+muiResult muiNode_ClearPopup(muiContext* context, muiNodeId nodeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeClearPopup(context, nodeId);
+        muiLeave(context);
+    }
+    return status;
 }
 
 // One axis of a box on the surface.

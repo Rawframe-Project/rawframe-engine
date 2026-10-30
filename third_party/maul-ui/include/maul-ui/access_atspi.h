@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The AT-SPI adapter (record mui-0008), the component MAUL_UI_ATSPI
-// builds on Linux: the accessibility tree's consumer shown to AT-SPI,
-// the accessibility service of Linux desktops. An application joins the
-// accessibility bus and registers its root, whose children are its
-// windows; each window is an adapter owning a consumer tree, applying
-// the core's updates. Clients' actions come back through a function of
-// the host's.
+// The AT-SPI adapter, the component MAUL_UI_ATSPI builds on Linux: the
+// accessibility tree's consumer shown to AT-SPI, the accessibility service
+// of Linux desktops. An application joins the accessibility bus and
+// registers its root, whose children are its windows; each window is an
+// adapter owning a consumer tree, applying the core's updates. Clients'
+// actions come back through a function of the host's.
 //
 // Nothing here starts a thread or waits on the bus after the
 // application is made: the host polls the application's descriptor for
 // reading, with its other sources, and pumps it when it is readable and
 // once a frame. Every function here is used on the thread that made the
 // application, which "main thread" below means.
+//
+// An application and its adapters are busy while one of the functions
+// that change them runs, or their allocator or an action function runs:
+// a call back into one answers mui_errorBusy, NULL or false, or does
+// nothing where it returns no status, as muiAtspiApp_Pump and the
+// destroys do.
 
 #ifndef MAUL_UI_ACCESS_ATSPI_H
 #define MAUL_UI_ACCESS_ATSPI_H
@@ -33,15 +38,11 @@ extern "C"
     typedef struct muiAtspiApp muiAtspiApp;
     typedef struct muiAtspiAdapter muiAtspiAdapter;
 
-    // Performs an action a client asked for, by muiPerformAccessAction or
-    // its own means; true when it did. Called while the application is
-    // pumped.
-    typedef bool (*muiAtspiActionFunction)(void* user, const muiAccessRequest* request);
-
     // How an application is made. Build it with muiDefaultAtspiAppDef.
     typedef struct muiAtspiAppDef
     {
         uint32_t cookie;
+        uint32_t version;
         muiAllocator allocator;
         // The application's name, UTF-8, NUL-terminated; copied.
         const char* name;
@@ -49,26 +50,47 @@ extern "C"
         uint32_t windows;
     } muiAtspiAppDef;
 
+// The cookie of an AT-SPI application def, which muiDefaultAtspiAppDef sets and
+// muiCreateAtspiApp checks.
+#define MUI_ATSPI_APP_DEF_COOKIE 0x6D756170u
+
     // How a window's adapter is made. Build it with
     // muiDefaultAtspiAdapterDef.
     typedef struct muiAtspiAdapterDef
     {
         uint32_t cookie;
-        // The most nodes its tree holds, at least 1.
+        // The most nodes its tree holds, from 1 to MUI_MAX_ACCESS_NODES.
         uint32_t nodes;
         // Pixels per Maul UI unit, above 0.
         float scale;
-        muiAtspiActionFunction action;
+        // What a client asks of a node (muiAccessActionFunction), called
+        // while the application is pumped. It may not call the
+        // application's functions that change it either.
+        muiAccessActionFunction action;
         void* user;
     } muiAtspiAdapterDef;
 
     /// The default def: the C library's allocation, no name and 16
     /// windows.
     ///
+    /// Built in the program from the headers it includes, so it carries
+    /// their version (MUI_ABI_VERSION), which muiCreateAtspiApp checks.
+    ///
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    MUI_API muiAtspiAppDef muiDefaultAtspiAppDef(void);
+    static inline muiAtspiAppDef muiDefaultAtspiAppDef(void)
+    {
+#ifdef __cplusplus
+        muiAtspiAppDef def = {};
+#else
+    muiAtspiAppDef def = {0};
+#endif
+        def.cookie = MUI_ATSPI_APP_DEF_COOKIE;
+        def.version = MUI_ABI_VERSION;
+        def.windows = 16;
+        return def;
+    }
 
     /// Joins the accessibility bus (the address AT_SPI_BUS_ADDRESS names,
     /// else the one the session bus's org.a11y.Bus gives) and serves the
@@ -78,10 +100,12 @@ extern "C"
     ///
     /// @param def     The def, from muiDefaultAtspiAppDef.
     /// @param appOut  Receives the application; NULL on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a
-    ///         def not from muiDefaultAtspiAppDef, a half-set allocator,
-    ///         no name or no windows; `mui_errorPlatform` when libdbus-1
-    ///         or the accessibility bus cannot be reached;
+    /// @return `mui_success`; `mui_errorVersion` for a def built against
+    ///         headers of another binary interface (MUI_ABI_VERSION), before
+    ///         the rest of the def is read; `mui_errorInvalid` for a NULL
+    ///         argument, a def not from muiDefaultAtspiAppDef, a half-set
+    ///         allocator, no name or no windows; `mui_errorPlatform` when
+    ///         libdbus-1 or the accessibility bus cannot be reached;
     ///         `mui_errorCapacity` when memory runs out.
     /// @par Thread safety
     /// Main thread only.
@@ -95,6 +119,17 @@ extern "C"
     /// @par Thread safety
     /// Main thread only.
     MUI_API void muiDestroyAtspiApp(muiAtspiApp* app);
+
+    /// Returns how many calls the application and its adapters refused as invalid input
+    /// (`mui_errorInvalid`) or as calls back in while busy
+    /// (`mui_errorBusy`): a count release builds can watch to catch a
+    /// host's bugs. Queries taking it as const count nothing.
+    ///
+    /// @param app  The application.
+    /// @return The count; 0 for a NULL application.
+    /// @par Thread safety
+    /// Main thread only.
+    MUI_API uint64_t muiAtspiApp_GetMisuse(const muiAtspiApp* app);
 
     /// The descriptor to poll for reading.
     ///
@@ -134,12 +169,13 @@ extern "C"
     ///
     /// @param app         The application.
     /// @param def         The def, from muiDefaultAtspiAdapterDef.
-    /// @param adapterOut  Receives the adapter; NULL on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a
-    ///         def not from muiDefaultAtspiAdapterDef, no nodes, no
-    ///         action function or a scale not above 0;
-    ///         `mui_errorCapacity` when the application has its windows
-    ///         or memory runs out.
+    /// @param adapterOut  Receives the adapter. NULL on failure.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a def not
+    ///         from muiDefaultAtspiAdapterDef, no nodes, no action function or
+    ///         a scale not above 0; `mui_errorLimit` for more than
+    ///         MUI_MAX_ACCESS_NODES nodes; `mui_errorCapacity` when the application
+    ///         has its windows or memory runs out; `mui_errorBusy` while the
+    ///         application is busy.
     /// @par Thread safety
     /// Main thread only.
     MUI_NODISCARD MUI_API muiResult muiCreateAtspiAdapter(muiAtspiApp* app,
@@ -158,8 +194,8 @@ extern "C"
     ///
     /// @param adapter  The adapter.
     /// @param update   The update.
-    /// @return As muiAccessTree_Apply; `mui_errorInvalid` for a NULL
-    ///         adapter.
+    /// @return As muiAccessTree_Apply; `mui_errorInvalid` for a NULL adapter;
+    ///         `mui_errorBusy` while the application is busy.
     /// @par Thread safety
     /// Main thread only.
     MUI_NODISCARD MUI_API muiResult muiAtspiAdapter_Apply(muiAtspiAdapter* adapter,
@@ -177,8 +213,8 @@ extern "C"
     ///
     /// @param adapter  The adapter.
     /// @param scale    The scale, above 0.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL adapter or a
-    ///         scale not above 0.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL adapter or a scale
+    ///         not above 0; `mui_errorBusy` while the application is busy.
     /// @par Thread safety
     /// Main thread only.
     MUI_NODISCARD MUI_API muiResult muiAtspiAdapter_SetScale(muiAtspiAdapter* adapter, float scale);

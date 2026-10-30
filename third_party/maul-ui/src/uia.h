@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UI Automation adapter (record mui-0008): the adapter, its provider
-// objects, and the UI Automation functions it loads.
+// The UI Automation adapter: the adapter, its provider objects, and the UI
+// Automation functions it loads.
 
 #ifndef MAUL_UI_SRC_UIA_H
 #define MAUL_UI_SRC_UIA_H
@@ -70,7 +70,7 @@ struct muiUiaAdapter
     muiAccessTree* tree;
     HWND window;
     float scale;
-    muiUiaActionFunction action;
+    muiAccessActionFunction action;
     void* user;
     muiUiaFunctions uia;
     // Whether a client listened when the apply under way began, and the
@@ -83,6 +83,11 @@ struct muiUiaAdapter
     // Room for any node's shown children.
     uint64_t* scratch;
     uint32_t nodes;
+    // Set while one of its functions that change it runs, or host code it
+    // calls (the allocator, an action function) runs: a call back in is
+    // refused (Maul conventions, Threads), and counted.
+    bool busy;
+    uint64_t misuse;
 };
 
 // A new provider object with one reference, or NULL when the process

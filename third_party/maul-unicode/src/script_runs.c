@@ -292,8 +292,8 @@ muniResult muniInitScriptIterator(muniScriptIterator* iterator, const char* text
     return muni_success;
 }
 
-muniResult muniFeedScriptIterator(muniScriptIterator* iterator, const char* text, size_t length,
-                                  bool moreFollows)
+muniResult muniScriptIterator_Feed(muniScriptIterator* iterator, const char* text, size_t length,
+                                   bool moreFollows)
 {
     if (iterator == nullptr || (text == nullptr && length != 0))
     {
@@ -310,7 +310,7 @@ muniResult muniFeedScriptIterator(muniScriptIterator* iterator, const char* text
     return muni_success;
 }
 
-muniResult muniNextScriptRun(muniScriptIterator* iterator, muniScriptRun* runOut)
+muniResult muniScriptIterator_NextRun(muniScriptIterator* iterator, muniScriptRun* runOut)
 {
     if (iterator == nullptr || runOut == nullptr)
     {
@@ -323,10 +323,10 @@ muniResult muniNextScriptRun(muniScriptIterator* iterator, muniScriptRun* runOut
     return status;
 }
 
-muniResult muniFindScriptRuns(const char* text, size_t length, muniScriptRun* runs, size_t capacity,
-                              size_t* countOut)
+muniResult muniFindScriptRuns(const char* text, size_t length, muniScriptRun* runsOut,
+                              size_t capacity, size_t* countOut)
 {
-    if ((text == nullptr && length != 0) || (runs == nullptr && capacity != 0) ||
+    if ((text == nullptr && length != 0) || (runsOut == nullptr && capacity != 0) ||
         countOut == nullptr)
     {
         return muni_errorInvalid;
@@ -339,7 +339,7 @@ muniResult muniFindScriptRuns(const char* text, size_t length, muniScriptRun* ru
     {
         if (count < capacity)
         {
-            runs[count] = run;
+            runsOut[count] = run;
         }
         count += 1;
     }

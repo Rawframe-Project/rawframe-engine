@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Keys, typed text and the pointer for an editing block (record
-// mui-0006): a key's action by the keymap, PC's after Windows and the
-// desktop toolkits of Linux, Mac's after AppKit's standard bindings.
-// Shortcuts want exactly their modifier, so AltGr's Control and Alt,
-// which types on many layouts, takes none. Letters are read from what
-// the key means under the layout, as browsers read shortcuts.
+// Keys, typed text and the pointer for an editing block: a key's action by
+// the keymap, PC's after Windows and the desktop toolkits of Linux, Mac's
+// after AppKit's standard bindings. Shortcuts want exactly their modifier,
+// so AltGr's Control and Alt, which types on many layouts, takes none.
+// Letters are read from what the key means under the layout, as browsers
+// read shortcuts.
 
+#include "fpenv.h"
 #include "text_block.h"
 #include "text_editing.h"
+#include "text_entry.h"
+#include "text_host.h"
 
 #include "maul-ui/layout.h"
 #include "maul-ui/text_edit.h"
@@ -187,6 +190,16 @@ static muiTextBlockId BlockOf(const muiTextHost* host, muiNodeId nodeId)
     return (muiTextBlockId){(uint32_t)key, (uint32_t)(key >> 32)};
 }
 
+// The host's clipboard function, run in the host's floating-point
+// environment.
+static MUI_NOINLINE void HostWriteClipboard(const muiTextEditInput* input, const char* text,
+                                            size_t length)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    input->writeClipboard(input->user, text, length);
+    muiFloatHostLeave(host);
+}
+
 // Writes the selected text to the clipboard.
 static muiResult Copy(const muiTextService* service, muiTextBlockId blockId,
                       const muiTextEditInput* input)
@@ -196,7 +209,7 @@ static muiResult Copy(const muiTextService* service, muiTextBlockId blockId,
     muiResult result = muiTextBlock_GetSelectedText(service, blockId, &text, &length);
     if (result == mui_success && length != 0 && input->writeClipboard != nullptr)
     {
-        input->writeClipboard(input->user, text, length);
+        HostWriteClipboard(input, text, length);
     }
     return result;
 }
@@ -210,11 +223,10 @@ static muiResult EraseToward(const muiTextHost* host, muiNodeId nodeId, muiTextB
     float width = muiNode_GetContentRect(host->context, nodeId).width;
     muiResult result = muiTextBlock_GetSelection(host->service, blockId, &selection);
     result = result == mui_success
-                 ? muiTextMove(host, nodeId, width, selection.caret, movement, 0.0f, &to)
+                 ? muiMoveText(host, nodeId, width, selection.caret, movement, 0.0f, &to)
                  : result;
-    return result == mui_success
-               ? muiTextBlock_EraseTo(host->service, blockId, to.offset, changedOut)
-               : result;
+    return result == mui_success ? muiEraseTextTo(host->service, blockId, to.offset, changedOut)
+                                 : result;
 }
 
 // Cuts the selection: copied, then deleted; nothing on a read-only or
@@ -223,14 +235,14 @@ static muiResult Cut(const muiTextHost* host, muiTextBlockId blockId, const muiT
                      const muiTextEditInput* input, bool* changedOut)
 {
     const muiTextSelection* selection = &block->editing.selection;
-    if ((block->editing.def.flags & (mui_editReadOnly | mui_editPassword)) != 0 ||
+    if ((block->editing.rules.flags & (mui_editReadOnly | mui_editPassword)) != 0 ||
         selection->anchor == selection->caret.offset)
     {
         return mui_success;
     }
     muiResult result = Copy(host->service, blockId, input);
     return result == mui_success
-               ? muiTextBlock_Erase(host->service, blockId, mui_deleteBackward, changedOut)
+               ? muiEraseText(host->service, blockId, mui_deleteBackward, changedOut)
                : result;
 }
 
@@ -242,27 +254,27 @@ static muiResult Act(const muiTextHost* host, muiNodeId nodeId, muiTextBlockId b
     switch (action.op)
     {
     case OP_MOVE:
-        return muiTextEditMove(host, nodeId, action.movement, extend);
+        return muiEditMove(host, nodeId, action.movement, extend);
     case OP_ERASE:
-        return muiTextBlock_Erase(service, blockId, action.deletion, &outcome->changed);
+        return muiEraseText(service, blockId, action.deletion, &outcome->changed);
     case OP_ERASE_TO:
         return EraseToward(host, nodeId, blockId, action.movement, &outcome->changed);
     case OP_ENTER:
-        return muiTextBlock_Type(service, blockId, "\n", 1, &outcome->changed);
+        return muiTypeText(service, blockId, "\n", 1, &outcome->changed);
     case OP_ALL:
-        return muiTextBlock_Select(service, blockId,
-                                   (muiTextSelection){0, {block->length, mui_affinityDownstream}});
+        return muiSelectText(service, blockId,
+                             (muiTextSelection){0, {block->length, mui_affinityDownstream}});
     case OP_COPY:
         return Copy(service, blockId, input);
     case OP_CUT:
         return Cut(host, blockId, block, input, &outcome->changed);
     case OP_PASTE:
-        outcome->paste = (block->editing.def.flags & mui_editReadOnly) == 0;
+        outcome->paste = (block->editing.rules.flags & mui_editReadOnly) == 0;
         return mui_success;
     case OP_UNDO:
-        return muiTextBlock_Undo(service, blockId, &outcome->changed);
+        return muiUndoText(service, blockId, &outcome->changed);
     default:
-        return muiTextBlock_Redo(service, blockId, &outcome->changed);
+        return muiRedoText(service, blockId, &outcome->changed);
     }
 }
 
@@ -276,19 +288,19 @@ static muiResult Point(const muiTextHost* host, muiNodeId nodeId, const muiEvent
     if (record->kind == mui_pointerRecordPress && record->button == 0)
     {
         outcome->handled = true;
-        return muiTextEditPress(host, nodeId, record->x, record->y, record->clickCount, shift);
+        return muiEditPress(host, nodeId, record->x, record->y, record->clickCount, shift);
     }
     if (record->kind == mui_pointerRecordDragStart || record->kind == mui_pointerRecordDragMove ||
         record->kind == mui_pointerRecordMove)
     {
         outcome->handled = true;
-        return muiTextEditDrag(host, nodeId, record->x, record->y);
+        return muiEditDrag(host, nodeId, record->x, record->y);
     }
     return mui_success;
 }
 
-muiResult muiTextEditEvent(const muiTextHost* host, muiNodeId nodeId, const muiEvent* event,
-                           const muiTextEditInput* input, muiTextEditOutcome* outcomeOut)
+static muiResult TextEditEvent(const muiTextHost* host, muiNodeId nodeId, const muiEvent* event,
+                               const muiTextEditInput* input, muiTextEditOutcome* outcomeOut)
 {
     if (host == nullptr || host->service == nullptr || host->context == nullptr ||
         event == nullptr || input == nullptr || outcomeOut == nullptr ||
@@ -307,14 +319,14 @@ muiResult muiTextEditEvent(const muiTextHost* host, muiNodeId nodeId, const muiE
         // Control characters are the keys' to act on.
         unsigned char first = event->length != 0 ? (unsigned char)event->text[0] : 0;
         outcome.handled = first >= 0x20 && first != 0x7F;
-        result = outcome.handled ? muiTextBlock_Type(host->service, blockId, event->text,
-                                                     event->length, &outcome.changed)
+        result = outcome.handled ? muiTypeText(host->service, blockId, event->text, event->length,
+                                               &outcome.changed)
                                  : result;
     }
     else if (result == mui_success && event->kind == mui_eventKeyDown)
     {
         Action action =
-            ActionOf(event, input->keymap, (block->editing.def.flags & mui_editMultiline) != 0);
+            ActionOf(event, input->keymap, (block->editing.rules.flags & mui_editMultiline) != 0);
         outcome.handled = action.op != OP_NONE;
         result = outcome.handled ? Act(host, nodeId, blockId, block, action,
                                        (event->modifiers & mui_modShift) != 0, input, &outcome)
@@ -332,5 +344,29 @@ muiResult muiTextEditEvent(const muiTextHost* host, muiNodeId nodeId, const muiE
                            after->caret.affinity != before.caret.affinity;
         *outcomeOut = outcome;
     }
+    return result;
+}
+
+static MUI_NOINLINE muiResult TextEditEventWorker(const muiTextHost* host, muiNodeId nodeId,
+                                                  const muiEvent* event,
+                                                  const muiTextEditInput* input,
+                                                  muiTextEditOutcome* outcomeOut)
+{
+    bool held = false;
+    muiResult status = muiEnterTextHost(host, &held);
+    if (status == mui_success)
+    {
+        status = TextEditEvent(host, nodeId, event, input, outcomeOut);
+        muiLeaveTextHost(host, held);
+    }
+    return status;
+}
+
+muiResult muiNode_HandleEditEvent(const muiTextHost* host, muiNodeId nodeId, const muiEvent* event,
+                                  const muiTextEditInput* input, muiTextEditOutcome* outcomeOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextEditEventWorker(host, nodeId, event, input, outcomeOut);
+    muiFloatEnvLeave(floatEnv);
     return result;
 }

@@ -23,30 +23,31 @@ result::Status run(Program& program, const RunSettings& settings) {
 
 result::Status post(Windows& windows, const Event& event) {
     RAWFRAME_TRY_ASSIGN(const mwinEvent record, toMaul(event));
-    return checked(mwinTestPost(Platform::contextOf(windows), &record), "a test report");
+    return checked(mwinContext_PostTestEvent(Platform::contextOf(windows), &record), "a test report");
 }
 
 result::Status drop(Windows& windows, WindowId window, Position position, std::string_view paths) {
-    return checked(mwinTestDrop(Platform::contextOf(windows),
-                                toMaul(window),
-                                mwinPosition{.x = position.x, .y = position.y},
-                                paths.data(),
-                                paths.size(),
-                                nullptr,
-                                0),
+    return checked(mwinWindow_PostTestDrop(Platform::contextOf(windows),
+                                           toMaul(window),
+                                           mwinPosition{.x = position.x, .y = position.y},
+                                           paths.data(),
+                                           paths.size(),
+                                           nullptr,
+                                           0),
                    "a test drop");
 }
 
 result::Status hold(Windows& windows, bool held) {
-    return checked(mwinTestHold(Platform::contextOf(windows), held), "holding test requests");
+    return checked(mwinContext_HoldTestRequests(Platform::contextOf(windows), held), "holding test requests");
 }
 
 result::Status answer(Windows& windows, RequestKind kind, Outcome outcome) {
-    return checked(mwinTestSetAnswer(Platform::contextOf(windows), toMaul(kind), toMaul(outcome)), "a test answer");
+    return checked(mwinContext_SetTestAnswer(Platform::contextOf(windows), toMaul(kind), toMaul(outcome)),
+                   "a test answer");
 }
 
 result::Status setTime(Windows& windows, std::uint64_t timeNs) {
-    return checked(mwinTestSetTime(Platform::contextOf(windows), timeNs), "the test clock");
+    return checked(mwinContext_SetTestTime(Platform::contextOf(windows), timeNs), "the test clock");
 }
 
 namespace {
@@ -71,13 +72,13 @@ mwinMonitorInfo monitorOf(const DisplayFacts& facts) noexcept {
 result::Result<MonitorId> addMonitor(Windows& windows, const DisplayFacts& facts) {
     const mwinMonitorInfo kInfo = monitorOf(facts);
     mwinMonitorId monitor{};
-    RAWFRAME_TRY(checked(mwinTestAddMonitor(Platform::contextOf(windows), &kInfo, &monitor), "a test monitor"));
+    RAWFRAME_TRY(checked(mwinAddTestMonitor(Platform::contextOf(windows), &kInfo, &monitor), "a test monitor"));
     return fromMaul(monitor);
 }
 
 result::Status changeMonitor(Windows& windows, MonitorId monitor, const DisplayFacts& facts) {
     const mwinMonitorInfo kInfo = monitorOf(facts);
-    return checked(mwinTestChangeMonitor(Platform::contextOf(windows), toMaul(monitor), &kInfo),
+    return checked(mwinMonitor_SetTestInfo(Platform::contextOf(windows), toMaul(monitor), &kInfo),
                    "changing a test monitor");
 }
 
@@ -87,34 +88,34 @@ result::Result<GamepadId> addGamepad(Windows& windows) {
     info.capabilities = mwin_padRumble;
     info.battery = -1;
     mwinGamepadId gamepad{};
-    RAWFRAME_TRY(checked(mwinTestAddGamepad(Platform::contextOf(windows), &info, &gamepad), "a test gamepad"));
+    RAWFRAME_TRY(checked(mwinAddTestGamepad(Platform::contextOf(windows), &info, &gamepad), "a test gamepad"));
     return fromMaul(gamepad);
 }
 
 result::Status removeGamepad(Windows& windows, GamepadId gamepad) {
-    return checked(mwinTestRemoveGamepad(Platform::contextOf(windows), toMaul(gamepad)), "removing a test gamepad");
+    return checked(mwinRemoveTestGamepad(Platform::contextOf(windows), toMaul(gamepad)), "removing a test gamepad");
 }
 
 result::Status pressGamepad(Windows& windows, GamepadId gamepad, GamepadButton button, bool down) {
-    return checked(
-        mwinTestGamepadButton(Platform::contextOf(windows), toMaul(gamepad), static_cast<std::uint8_t>(button), down),
-        "a test gamepad button");
+    return checked(mwinGamepad_SetTestButton(
+                       Platform::contextOf(windows), toMaul(gamepad), static_cast<std::uint8_t>(button), down),
+                   "a test gamepad button");
 }
 
 result::Status moveGamepad(Windows& windows, GamepadId gamepad, GamepadAxis axis, float value) {
     return checked(
-        mwinTestGamepadAxis(Platform::contextOf(windows), toMaul(gamepad), static_cast<std::uint8_t>(axis), value),
+        mwinGamepad_SetTestAxis(Platform::contextOf(windows), toMaul(gamepad), static_cast<std::uint8_t>(axis), value),
         "a test gamepad axis");
 }
 
 result::Result<Rumble> rumbleOf(Windows& windows, GamepadId gamepad) {
     Rumble rumble;
-    RAWFRAME_TRY(checked(mwinTestGetRumble(Platform::contextOf(windows),
-                                           toMaul(gamepad),
-                                           &rumble.low,
-                                           &rumble.high,
-                                           &rumble.milliseconds,
-                                           &rumble.count),
+    RAWFRAME_TRY(checked(mwinGamepad_GetTestRumble(Platform::contextOf(windows),
+                                                   toMaul(gamepad),
+                                                   &rumble.low,
+                                                   &rumble.high,
+                                                   &rumble.milliseconds,
+                                                   &rumble.count),
                          "a test gamepad's rumble"));
     return rumble;
 }

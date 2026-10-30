@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Glyph images (record mui-0006): FreeType loads a glyph's outline at a
-// size, unhinted and without the font's embedded bitmaps; its smooth
-// rasterizer renders coverage straight into the caller's bytes, and
-// distance fields are drawn from the outline cut into segments.
+// Glyph images: FreeType loads a glyph's outline at a size, unhinted and
+// without the font's embedded bitmaps; its smooth rasterizer renders
+// coverage straight into the caller's bytes, and distance fields are drawn
+// from the outline cut into segments.
 
 #include "maul-ui/glyph_image.h"
 
 #include "distance_field.h"
 #include "flatten.h"
+#include "fpenv.h"
 #include "glyph_outline.h"
 #include "multi_field.h"
 #include "text_service.h"
@@ -18,14 +19,19 @@
 #include <stddef.h>
 #include <string.h>
 
-muiResult muiRenderGlyph(muiTextService* service, uint64_t font, uint32_t glyph, float pixelSize,
-                         float offsetX, muiGlyphImage* imageOut, unsigned char* pixels,
-                         size_t capacity)
+static muiResult RenderGlyph(muiTextService* service, uint64_t font, uint32_t glyph,
+                             float pixelSize, float offsetX, muiGlyphImage* imageOut,
+                             unsigned char* pixels, size_t capacity)
 {
     if (service == nullptr || imageOut == nullptr || (pixels == nullptr && capacity != 0) ||
-        !muiIsGlyphSizeValid(pixelSize) || !(offsetX >= 0.0f && offsetX < 1.0f))
+        !(offsetX >= 0.0f && offsetX < 1.0f))
     {
         return muiRefuseText(service);
+    }
+    muiResult size = muiGlyphSizeStatus(pixelSize);
+    if (size != mui_success)
+    {
+        return muiCountText(service, size);
     }
     muiResult result = mui_success;
     uint64_t key = 0;
@@ -62,6 +68,35 @@ muiResult muiRenderGlyph(muiTextService* service, uint64_t font, uint32_t glyph,
     // The rasterizer writes only what the outline covers.
     memset(pixels, 0, bytes);
     return muiRasterizeOutline(service, outline, &box, pixels, (int)box.width);
+}
+
+static MUI_NOINLINE muiResult RenderGlyphWorker(muiTextService* service, uint64_t font,
+                                                uint32_t glyph, float pixelSize, float offsetX,
+                                                muiGlyphImage* imageOut, unsigned char* pixels,
+                                                size_t capacity)
+{
+    if (imageOut != nullptr)
+    {
+        memset(imageOut, 0, sizeof *imageOut);
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = RenderGlyph(service, font, glyph, pixelSize, offsetX, imageOut, pixels, capacity);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextService_RenderGlyph(muiTextService* service, uint64_t font, uint32_t glyph,
+                                     float pixelSize, float offsetX, muiGlyphImage* imageOut,
+                                     unsigned char* pixelsOut, size_t capacity)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result =
+        RenderGlyphWorker(service, font, glyph, pixelSize, offsetX, imageOut, pixelsOut, capacity);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Cuts the loaded outline into segments, then pieces, and reserves the
@@ -154,11 +189,15 @@ static muiResult RenderField(muiTextService* service, uint64_t font, uint32_t gl
                              float pixelSize, uint32_t spread, muiGlyphImage* imageOut,
                              unsigned char* pixels, size_t capacity, bool multi)
 {
-    if (service == nullptr || imageOut == nullptr || (pixels == nullptr && capacity != 0) ||
-        !muiIsGlyphSizeValid(pixelSize) || spread < MUI_MIN_FIELD_SPREAD ||
-        spread > MUI_MAX_FIELD_SPREAD)
+    if (service == nullptr || imageOut == nullptr || (pixels == nullptr && capacity != 0))
     {
         return muiRefuseText(service);
+    }
+    muiResult bounds = muiGlyphSizeStatus(pixelSize);
+    bounds = bounds == mui_success ? muiFieldSpreadStatus(spread) : bounds;
+    if (bounds != mui_success)
+    {
+        return muiCountText(service, bounds);
     }
     muiResult result = mui_success;
     uint64_t key = 0;
@@ -219,16 +258,77 @@ static muiResult RenderField(muiTextService* service, uint64_t font, uint32_t gl
     return mui_success;
 }
 
-muiResult muiRenderGlyphField(muiTextService* service, uint64_t font, uint32_t glyph,
-                              float pixelSize, uint32_t spread, muiGlyphImage* imageOut,
-                              unsigned char* pixels, size_t capacity)
+static muiResult RenderGlyphField(muiTextService* service, uint64_t font, uint32_t glyph,
+                                  float pixelSize, uint32_t spread, muiGlyphImage* imageOut,
+                                  unsigned char* pixels, size_t capacity)
 {
     return RenderField(service, font, glyph, pixelSize, spread, imageOut, pixels, capacity, false);
 }
 
-muiResult muiRenderGlyphMultiField(muiTextService* service, uint64_t font, uint32_t glyph,
-                                   float pixelSize, uint32_t spread, muiGlyphImage* imageOut,
-                                   unsigned char* pixels, size_t capacity)
+static MUI_NOINLINE muiResult RenderGlyphFieldWorker(muiTextService* service, uint64_t font,
+                                                     uint32_t glyph, float pixelSize,
+                                                     uint32_t spread, muiGlyphImage* imageOut,
+                                                     unsigned char* pixels, size_t capacity)
+{
+    if (imageOut != nullptr)
+    {
+        memset(imageOut, 0, sizeof *imageOut);
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status =
+            RenderGlyphField(service, font, glyph, pixelSize, spread, imageOut, pixels, capacity);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextService_RenderGlyphField(muiTextService* service, uint64_t font, uint32_t glyph,
+                                          float pixelSize, uint32_t spread, muiGlyphImage* imageOut,
+                                          unsigned char* pixelsOut, size_t capacity)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = RenderGlyphFieldWorker(service, font, glyph, pixelSize, spread, imageOut,
+                                              pixelsOut, capacity);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult RenderGlyphMultiField(muiTextService* service, uint64_t font, uint32_t glyph,
+                                       float pixelSize, uint32_t spread, muiGlyphImage* imageOut,
+                                       unsigned char* pixels, size_t capacity)
 {
     return RenderField(service, font, glyph, pixelSize, spread, imageOut, pixels, capacity, true);
+}
+
+static MUI_NOINLINE muiResult RenderGlyphMultiFieldWorker(muiTextService* service, uint64_t font,
+                                                          uint32_t glyph, float pixelSize,
+                                                          uint32_t spread, muiGlyphImage* imageOut,
+                                                          unsigned char* pixels, size_t capacity)
+{
+    if (imageOut != nullptr)
+    {
+        memset(imageOut, 0, sizeof *imageOut);
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = RenderGlyphMultiField(service, font, glyph, pixelSize, spread, imageOut, pixels,
+                                       capacity);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextService_RenderGlyphMultiField(muiTextService* service, uint64_t font,
+                                               uint32_t glyph, float pixelSize, uint32_t spread,
+                                               muiGlyphImage* imageOut, unsigned char* pixelsOut,
+                                               size_t capacity)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = RenderGlyphMultiFieldWorker(service, font, glyph, pixelSize, spread,
+                                                   imageOut, pixelsOut, capacity);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

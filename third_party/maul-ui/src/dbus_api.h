@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// libdbus-1, opened at run time into a table the AT-SPI application
-// loads for itself (record mui-0008), as Maul Window opens it: every
-// Linux desktop has it, and a program that never makes the application
-// never loads it. The library's headers are not needed to build: its
-// types are declared here as the stable ABI it has kept since 1.0, with
-// only what the adapter and its tests use.
+// libdbus-1, opened at run time into a table the AT-SPI application loads
+// for itself, as Maul Window opens it: every Linux desktop has it, and a
+// program that never makes the application never loads it. The library's
+// headers are not needed to build: its types are declared here as the
+// stable ABI it has kept since 1.0, with only what the adapter and its
+// tests use.
 
 #ifndef MAUL_UI_SRC_DBUS_API_H
 #define MAUL_UI_SRC_DBUS_API_H

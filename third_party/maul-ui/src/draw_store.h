@@ -3,8 +3,7 @@
 //
 // The context's draw lists: two of each table, the last list and the one
 // being built from it, reserved by the context's limits, and what each
-// node was last painted as, so that a clean subtree copies its commands
-// (record mui-0005).
+// node was last painted as, so that a clean subtree copies its commands.
 
 #ifndef MAUL_UI_SRC_DRAW_STORE_H
 #define MAUL_UI_SRC_DRAW_STORE_H
@@ -21,13 +20,13 @@ typedef struct muiDrawRange
     uint32_t end;
 } muiDrawRange;
 
-// A node as the build numbered build painted it: its border box
-// relative to its parent, its origin on the surface, the opacity it was
-// painted in, and the spans of the tables its subtree filled; and,
-// during the build that paints it, the clip and opacity it passes to its
-// children; the transform its commands go through and the one its
-// children's do, a scroll container's own (record mui-0007). A copied
-// node's clip and opacity are not set, as its children are not visited.
+// A node as the build numbered build painted it: its border box relative
+// to its parent, its origin on the surface, the opacity it was painted in,
+// and the spans of the tables its subtree filled; and, during the build
+// that paints it, the clip and opacity it passes to its children; the
+// transform its commands go through and the one its children's do, a
+// scroll container's own. A copied node's clip and opacity are not set, as
+// its children are not visited.
 typedef struct muiPaintState
 {
     uint64_t build;
@@ -48,6 +47,9 @@ typedef struct muiPaintState
     // during its build, how many had before it.
     uint32_t culled;
     uint32_t culledBefore;
+    // Set when its host content could not be painted in the last build,
+    // which then marks it to be painted again.
+    bool unpainted;
 } muiPaintState;
 
 // One list's tables. Entry 0 of the clips and gradients is the

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Android accessibility adapter's internals (record mui-0008): the
-// adapter, its virtual ids, and the packed record its provider
-// (java/maul/ui/AccessProvider.java) reads, whose layout and bits are
-// that file's.
+// The Android accessibility adapter's internals: the adapter, its virtual
+// ids, and the packed record its provider
+// (java/maul/ui/AccessProvider.java) reads, whose layout and bits are that
+// file's.
 
 #ifndef MAUL_UI_SRC_ANDROID_H
 #define MAUL_UI_SRC_ANDROID_H
@@ -130,7 +130,7 @@ struct muiAndroidAdapter
     jmethodID send;
     jmethodID sendText;
     float scale;
-    muiAndroidActionFunction action;
+    muiAccessActionFunction action;
     void* user;
     uint32_t nodes;
     // Room for any node's shown children.
@@ -153,6 +153,11 @@ struct muiAndroidAdapter
     bool focusMoved;
     // The focus shown last: the tree's, or its active descendant.
     uint64_t toldFocus;
+    // Set while one of its functions that change it runs, or host code it
+    // calls (the allocator, an action function) runs: a call back in is
+    // refused (Maul conventions, Threads), and counted.
+    bool busy;
+    uint64_t misuse;
 };
 
 // The JNIEnv of this thread.

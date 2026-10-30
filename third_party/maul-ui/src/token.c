@@ -1,20 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The public functions over tokens and the class variants that name them
-// (record mui-0004). A cycle is refused when an alias is set, by walking
-// from its target. A set keeps its names as a list; a property is in the
-// set's values or its names, never both.
+// The public functions over tokens and the class variants that name them.
+// A cycle is refused when an alias is set, by walking from its target. A
+// set keeps its names as a list; a property is in the set's values or its
+// names, never both.
 
 #include "maul-ui/token.h"
 
 #include "condition.h"
 #include "context.h"
+#include "fpenv.h"
 #include "pool.h"
 #include "property.h"
 #include "style_edit.h"
 #include "style_store.h"
 #include "token_store.h"
+
+#include <string.h>
 
 #define TOKEN_DEF_COOKIE 0x6D75746Bu // "mutk"
 
@@ -37,20 +40,20 @@ muiTokenDef muiDefaultTokenDef(void)
     return (muiTokenDef){.cookie = TOKEN_DEF_COOKIE, .value = {.type = mui_tokenNumber}};
 }
 
-muiResult muiCreateToken(muiContext* context, const muiTokenDef* def, muiTokenId* tokenOut)
+static muiResult CreateToken(muiContext* context, const muiTokenDef* def, muiTokenId* tokenOut)
 {
-    if (tokenOut != nullptr)
-    {
-        *tokenOut = (muiTokenId){0, 0};
-    }
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (def == nullptr || tokenOut == nullptr || def->cookie != TOKEN_DEF_COOKIE ||
-        !muiIsTokenValueValid(&def->value) || muiIsInHostCall(context))
+    if (def == nullptr || tokenOut == nullptr || def->cookie != TOKEN_DEF_COOKIE)
     {
         return muiRefuse(context);
+    }
+    muiResult valueStatus = muiTokenValueStatus(&def->value);
+    if (valueStatus != mui_success)
+    {
+        return muiRefuseAs(context, valueStatus);
     }
     muiTokenStore* store = &context->tokens;
     uint32_t slot = muiPoolTake(&store->pool);
@@ -64,10 +67,34 @@ muiResult muiCreateToken(muiContext* context, const muiTokenDef* def, muiTokenId
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult CreateTokenWorker(muiContext* context, const muiTokenDef* def,
+                                                muiTokenId* tokenOut)
+{
+    if (tokenOut != nullptr)
+    {
+        memset(tokenOut, 0, sizeof *tokenOut);
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = CreateToken(context, def, tokenOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiCreateToken(muiContext* context, const muiTokenDef* def, muiTokenId* tokenOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = CreateTokenWorker(context, def, tokenOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 // The slot of a live token for an edit, or 0 with the status.
 static uint32_t ResolveEdit(muiContext* context, muiTokenId tokenId, muiResult* statusOut)
 {
-    if (tokenId.index1 == 0 || muiIsInHostCall(context))
+    if (tokenId.index1 == 0)
     {
         *statusOut = muiRefuse(context);
         return 0;
@@ -77,7 +104,7 @@ static uint32_t ResolveEdit(muiContext* context, muiTokenId tokenId, muiResult* 
     return slot;
 }
 
-muiResult muiDestroyToken(muiContext* context, muiTokenId tokenId)
+static muiResult DestroyToken(muiContext* context, muiTokenId tokenId)
 {
     if (context == nullptr)
     {
@@ -93,15 +120,31 @@ muiResult muiDestroyToken(muiContext* context, muiTokenId tokenId)
     return status;
 }
 
-muiResult muiSetTokenValue(muiContext* context, muiTokenId tokenId, const muiTokenValue* value)
+muiResult muiDestroyToken(muiContext* context, muiTokenId tokenId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = DestroyToken(context, tokenId);
+        muiLeave(context);
+    }
+    return status;
+}
+
+static muiResult SetTokenValue(muiContext* context, muiTokenId tokenId, const muiTokenValue* value)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (value == nullptr || !muiIsTokenValueValid(value))
+    if (value == nullptr)
     {
         return muiRefuse(context);
+    }
+    muiResult valueStatus = muiTokenValueStatus(value);
+    if (valueStatus != mui_success)
+    {
+        return muiRefuseAs(context, valueStatus);
     }
     muiResult status = mui_success;
     uint32_t slot = ResolveEdit(context, tokenId, &status);
@@ -119,7 +162,27 @@ muiResult muiSetTokenValue(muiContext* context, muiTokenId tokenId, const muiTok
     return mui_success;
 }
 
-muiResult muiSetTokenAlias(muiContext* context, muiTokenId tokenId, muiTokenId target)
+static MUI_NOINLINE muiResult SetTokenValueWorker(muiContext* context, muiTokenId tokenId,
+                                                  const muiTokenValue* value)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = SetTokenValue(context, tokenId, value);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiToken_SetValue(muiContext* context, muiTokenId tokenId, const muiTokenValue* value)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = SetTokenValueWorker(context, tokenId, value);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult SetTokenAlias(muiContext* context, muiTokenId tokenId, muiTokenId target)
 {
     if (context == nullptr)
     {
@@ -152,9 +215,28 @@ muiResult muiSetTokenAlias(muiContext* context, muiTokenId tokenId, muiTokenId t
     return mui_success;
 }
 
-muiResult muiGetTokenValue(const muiContext* context, muiTokenId tokenId, muiTokenValue* valueOut,
-                           muiTokenId* aliasOut)
+muiResult muiToken_SetAlias(muiContext* context, muiTokenId tokenId, muiTokenId target)
 {
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = SetTokenAlias(context, tokenId, target);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiToken_GetValue(const muiContext* context, muiTokenId tokenId, muiTokenValue* valueOut,
+                            muiTokenId* aliasOut)
+{
+    if (valueOut != nullptr)
+    {
+        memset(valueOut, 0, sizeof *valueOut);
+    }
+    if (aliasOut != nullptr)
+    {
+        memset(aliasOut, 0, sizeof *aliasOut);
+    }
     if (context == nullptr || valueOut == nullptr || tokenId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -226,8 +308,8 @@ static bool MayName(const muiContext* context, const muiStyleClass* class, muiVa
     return slot == 0 || context->tokens.tokens[slot - 1].value.type == type;
 }
 
-muiResult muiStyle_SetToken(muiContext* context, muiStyleId styleId, muiVariant variant,
-                            muiProperty property, muiTokenId tokenId)
+static muiResult StyleSetToken(muiContext* context, muiStyleId styleId, muiVariant variant,
+                               muiProperty property, muiTokenId tokenId)
 {
     if (context == nullptr)
     {
@@ -280,9 +362,35 @@ muiResult muiStyle_SetToken(muiContext* context, muiStyleId styleId, muiVariant 
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult StyleSetTokenWorker(muiContext* context, muiStyleId styleId,
+                                                  muiVariant variant, muiProperty property,
+                                                  muiTokenId tokenId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = StyleSetToken(context, styleId, variant, property, tokenId);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiStyle_SetToken(muiContext* context, muiStyleId styleId, muiVariant variant,
+                            muiProperty property, muiTokenId tokenId)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = StyleSetTokenWorker(context, styleId, variant, property, tokenId);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 muiResult muiStyle_GetToken(const muiContext* context, muiStyleId styleId, muiVariant variant,
                             muiProperty property, muiTokenId* tokenOut)
 {
+    if (tokenOut != nullptr)
+    {
+        memset(tokenOut, 0, sizeof *tokenOut);
+    }
     if (context == nullptr || tokenOut == nullptr || styleId.index1 == 0 ||
         !muiIsPropertyKnown(property))
     {
