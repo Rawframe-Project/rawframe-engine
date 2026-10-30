@@ -29,7 +29,10 @@
 # tool, refuses a stamp without -Gis or with other flags than the
 # vendored mrhi_dxil.py passes, one of another Maul RHI release than the
 # vendored one, and a container that is missing, unstamped or not the
-# bytes stamped. A move of Maul RHI therefore cooks the containers again.
+# bytes stamped. It also refuses a container in a module's generated
+# directory that no source gives, and a name a module's CMakeLists.txt
+# embeds that this does not make. A move of Maul RHI therefore cooks the
+# containers again.
 #
 # With `--material`, the three containers of each container linked with a
 # material, the scene's and the shadow's, are built linked with the
@@ -46,6 +49,7 @@
 #        tools/gen_shaders.py --check [root]
 
 import ast
+import glob
 import hashlib
 import json
 import os
@@ -223,6 +227,24 @@ def problems(root):
                 found.append(f"{os.path.relpath(held, root)}: not the bytes {STAMP} names")
         for name in sorted(set(hashes) - set(names)):
             found.append(f"{shown}: names {name}, which no source gives")
+    # A container on disk that no source gives is stamped by nothing; the
+    # build would embed it all the same if CMake named it.
+    held = containers(root)
+    for path in sorted(glob.glob(os.path.join(root, "modules", "*", "*", "generated", "*.mrsc"))):
+        if os.path.basename(path) not in held.get(os.path.dirname(path), ()):
+            found.append(f"{os.path.relpath(path, root)}: no source gives it, so no stamp vouches for it")
+    # What each module's build embeds (rawframe_shader_containers in
+    # cmake/rawframe.cmake) is a container this makes.
+    made = set(CONTAINERS)
+    for listing in sorted(glob.glob(os.path.join(root, "modules", "*", "CMakeLists.txt"))):
+        module = os.path.basename(os.path.dirname(listing))
+        with open(listing, encoding="utf-8") as file:
+            text = file.read()
+        for call in re.finditer(r"rawframe_shader_containers\(\s*TARGET\s+\S+\s+NAMES\s+([^)]*)\)", text):
+            for name in call.group(1).split():
+                if (module, name) not in made:
+                    found.append(f"{os.path.relpath(listing, root)}: embeds {name}, which tools/gen_shaders.py "
+                                 f"does not make")
     return found
 
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Tests of gen_shaders.py's stamp: on a copy of the containers, their
 stamps and what --check compares them with, the current tree passes, and
-each way a container can stop being the cook the stamp names fails, as does
-a cook with a Maul RHI whose mrhi_dxil.py passes no -Gis. None needs a
+each way a container can stop being the cook the stamp names fails, as do a
+container no source gives, a name a module embeds that no source gives,
+and a cook with a Maul RHI whose mrhi_dxil.py passes no -Gis. None needs a
 shader tool."""
 
 import os
@@ -27,7 +28,8 @@ class Stamp(unittest.TestCase):
     def setUpClass(cls):
         cls.work = tempfile.TemporaryDirectory()
         cls.copy = Path(cls.work.name)
-        for path in (Path("tools/gen_shaders.py"), DXIL, BASE):
+        listings = [path.relative_to(ROOT) for path in ROOT.glob("modules/*/CMakeLists.txt")]
+        for path in (Path("tools/gen_shaders.py"), DXIL, BASE, *listings):
             (cls.copy / path).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / path, cls.copy / path)
         for directory in ROOT.glob("modules/*/*/generated"):
@@ -70,6 +72,21 @@ class Stamp(unittest.TestCase):
 
     def test_a_missing_container_is_refused(self):
         self.assertRefused(self.changed(CONTAINER, os.remove), "display.d3d12.mrsc: missing")
+
+    def test_an_unlisted_container_is_refused(self):
+        extra = self.copy / "modules/render/src/generated/extra.d3d12.mrsc"
+        shutil.copy2(self.copy / CONTAINER, extra)
+        try:
+            result = self.check()
+        finally:
+            extra.unlink()
+        self.assertRefused(result, "extra.d3d12.mrsc: no source gives it")
+
+    def test_an_embedded_name_no_source_gives_is_refused(self):
+        def embeds(target):
+            target.write_text(target.read_text().replace("NAMES display", "NAMES display extra", 1))
+        self.assertRefused(self.changed(Path("modules/render/CMakeLists.txt"), embeds),
+                           "embeds extra, which tools/gen_shaders.py does not make")
 
     def test_a_stamp_without_gis_is_refused(self):
         def without(target):
