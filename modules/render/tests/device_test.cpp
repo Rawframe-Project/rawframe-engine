@@ -33,6 +33,15 @@ bool required() {
     return value != nullptr && value[0] != '\0';
 }
 
+/// Whether a Vulkan adapter is required: a device is, and the run names
+/// the Vulkan driver, as the check names lavapipe. Elsewhere the device
+/// required may be the platform's own (Metal, Direct3D 12), with no Vulkan
+/// driver to answer.
+bool vulkanRequired() {
+    const char* drivers = std::getenv("VK_DRIVER_FILES");
+    return required() && drivers != nullptr && drivers[0] != '\0';
+}
+
 /// A device opened, or none where no adapter answers and none is required.
 std::unique_ptr<render::Device> opened() {
     auto device = render::Device::request({.allowSoftware = true});
@@ -265,12 +274,13 @@ RAWFRAME_TEST(ARuntimesDeviceOpensOnItsOwnAdapterAmongThoseListed) {
     // The device layer lists the adapters Maul RHI found and opens the one
     // whose Vulkan device the runtime presents from; a device the runtime
     // names that is not among them finds no adapter. Where there is no
-    // Vulkan loader or no adapter answers, it skips unless one is required.
+    // Vulkan loader or no adapter answers, it skips unless a Vulkan adapter
+    // is required.
     Runtime runtime(true);
     auto device = render::Device::request({.allowSoftware = true, .vulkan = &runtime});
     const std::optional<bool> kOpened = device.has_value() ? openToTheEnd(**device) : std::optional<bool>{false};
     if (kOpened != true) {
-        RAWFRAME_EXPECT(!required());
+        RAWFRAME_EXPECT(!vulkanRequired());
         std::puts("skip: no Vulkan adapter");
         return;
     }
