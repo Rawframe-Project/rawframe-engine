@@ -76,8 +76,12 @@ option(MAUL_WINDOW_GAMEPAD "Build the gamepad component" ON)
 # Maul Unicode validates every string that crosses the library: the
 # installed package when there is one, otherwise the pinned release,
 # built and installed along. It comes before the family modules below,
-# whose copies then serve this project.
-set(MAUL_WINDOW_UNICODE_VERSION 0.6.0)
+# whose copies then serve this project. The version is also in the cache,
+# so a project that builds Maul Window from source (add_subdirectory or
+# FetchContent) can read the one it is built and tested with.
+set(MAUL_WINDOW_UNICODE_VERSION 0.8.0)
+set(MAUL_WINDOW_UNICODE_VERSION ${MAUL_WINDOW_UNICODE_VERSION}
+    CACHE INTERNAL "the Maul Unicode version Maul Window is built and tested with")
 find_package(maul-unicode ${MAUL_WINDOW_UNICODE_VERSION} CONFIG QUIET)
 if(NOT maul-unicode_FOUND)
     include(FetchContent)
@@ -195,7 +199,11 @@ endif()
 if(MAUL_WINDOW_WEB)
     include(cmake/Web.cmake)
 endif()
-set(MAUL_PACKAGE_DEPENDENCIES "find_dependency(maul-unicode ${MAUL_WINDOW_UNICODE_VERSION})")
+# The installed package names the Maul Unicode version too, before it
+# looks for it, so that a program reads it even when its own differs.
+set(MAUL_PACKAGE_DEPENDENCIES
+    "set(maul-window_UNICODE_VERSION ${MAUL_WINDOW_UNICODE_VERSION})
+find_dependency(maul-unicode ${MAUL_WINDOW_UNICODE_VERSION})")
 set(MAUL_PKG_REQUIRES_PRIVATE "maul-unicode >= ${MAUL_WINDOW_UNICODE_VERSION}")
 
 if(MAUL_WINDOW_BUILD_TESTS)
@@ -264,6 +272,20 @@ if(MAUL_WINDOW_BUILD_TESTS)
         set_property(TEST ${ARGN} APPEND PROPERTY LABELS integration)
     endfunction()
     maul_add_test(base)
+    # A program reads the Maul Unicode version from an installed package
+    # and from a Maul Window it builds from source. Run where the build can
+    # run CMake itself: not when cross-compiling.
+    if(MAUL_WINDOW_INSTALL AND NOT CMAKE_CROSSCOMPILING)
+        add_test(NAME unicode_version
+                 COMMAND ${CMAKE_COMMAND} -DSOURCE=${PROJECT_SOURCE_DIR}
+                         -DBINARY=${PROJECT_BINARY_DIR}
+                         -DEXPECTED=${MAUL_WINDOW_UNICODE_VERSION}
+                         -DGENERATOR=${CMAKE_GENERATOR} -DTOOLSET=${CMAKE_GENERATOR_TOOLSET}
+                         -DPLATFORM=${CMAKE_GENERATOR_PLATFORM} -DCOMPILER=${CMAKE_C_COMPILER}
+                         -DCONFIG=$<CONFIG>
+                         -P ${PROJECT_SOURCE_DIR}/test/test_unicode_version.cmake)
+        set_tests_properties(unicode_version PROPERTIES LABELS package)
+    endif()
     # The guide's opening program, built only, since it waits for its user
     # to close the window.
     maul_add_test(guide_hello MANUAL)
@@ -276,6 +298,12 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(busy)
         if(TARGET test_busy AND MAUL_WINDOW_GAMEPAD)
             target_compile_definitions(test_busy PRIVATE MWIN_TEST_GAMEPAD)
+        endif()
+        # What a failed call leaves in its outputs; with the gamepad
+        # component, the gamepad's calls among them.
+        maul_add_test(outputs)
+        if(TARGET test_outputs AND MAUL_WINDOW_GAMEPAD)
+            target_compile_definitions(test_outputs PRIVATE MWIN_TEST_GAMEPAD)
         endif()
         maul_add_test(monitor)
         maul_add_test(system)
@@ -623,7 +651,7 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # without Gradle and run by tools/run_android_app.sh.
         set(MWIN_ANDROID_TESTS android android_input android_cursor android_ime android_pad
             android_services android_dialog android_drop android_system android_access
-            android_pad_ds4)
+            android_pad_ds4 android_touch)
         foreach(name ${MWIN_ANDROID_TESTS})
             set(package maul.window.tests.${name})
             add_library(test_${name} SHARED test/test_${name}.c)

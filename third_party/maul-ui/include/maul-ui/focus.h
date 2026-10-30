@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Focus (record mui-0007): the node each player's keys and gamepad go to,
-// one per player slot for local multiplayer, moved by code, pointer
-// presses and sequential navigation, and shown as the input that moved
-// it calls for.
+// Focus: the node each player's keys and gamepad go to, one per player
+// slot for local multiplayer, moved by code, pointer presses and
+// sequential navigation, and shown as the input that moved it calls for.
 
 #ifndef MAUL_UI_FOCUS_H
 #define MAUL_UI_FOCUS_H
@@ -54,14 +53,14 @@ extern "C"
     /// @param player   The player, below MUI_MAX_PLAYERS.
     /// @param nodeId   The node; the null id takes the focus away.
     /// @param cause    What moved it.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, a
-    ///         player or cause outside the above, a node that takes no
-    ///         focus or a call from a measure or paint function, which
-    ///         changes nothing; `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, a player
+    ///         or cause outside the above or a node that takes no focus, which
+    ///         changes nothing; `mui_errorBusy` while the context is busy;
+    ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiFocus_Set(muiContext* context, uint8_t player,
-                                                 muiNodeId nodeId, muiFocusCause cause);
+    MUI_NODISCARD MUI_API muiResult muiContext_SetFocus(muiContext* context, uint8_t player,
+                                                        muiNodeId nodeId, muiFocusCause cause);
 
     /// Returns the node a player focuses.
     ///
@@ -71,7 +70,7 @@ extern "C"
     ///         past MUI_MAX_PLAYERS.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_API muiNodeId muiFocus_Get(const muiContext* context, uint8_t player);
+    MUI_API muiNodeId muiContext_GetFocus(const muiContext* context, uint8_t player);
 
     /// Moves a player's focus to the next or previous node in sequential
     /// order (Tab and Shift+Tab), shown. The order runs over the nodes
@@ -86,15 +85,14 @@ extern "C"
     /// @param rootId    The root of the subtree the player navigates.
     /// @param player    The player.
     /// @param backward  Whether to go to the previous node.
-    /// @return `mui_success`; `mui_empty` when no node there takes focus,
-    ///         which leaves it; `mui_errorInvalid` for a NULL context, the
-    ///         null id, a player past MUI_MAX_PLAYERS or a call from a
-    ///         measure or paint function; `mui_errorStale` for a root that
-    ///         is gone.
+    /// @return `mui_success`; `mui_empty` when no node there takes focus, which
+    ///         leaves it; `mui_errorInvalid` for a NULL context, the null id or
+    ///         a player past MUI_MAX_PLAYERS; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for a root that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiFocus_Move(muiContext* context, muiNodeId rootId,
-                                                  uint8_t player, bool backward);
+    MUI_NODISCARD MUI_API muiResult muiNode_MoveFocus(muiContext* context, muiNodeId rootId,
+                                                      uint8_t player, bool backward);
 
     // A direction on the screen.
     typedef uint8_t muiDirection;
@@ -116,9 +114,9 @@ extern "C"
     /// layer: nodes overlapping the focus across the direction first, then
     /// the least of 13 times the square of the gap along the direction
     /// plus the square of the distance between centers across it, ties to
-    /// the earlier in tree order. Boxes are as the last muiComputeLayout
+    /// the earlier in tree order. Boxes are as the last muiNode_ComputeLayout
     /// left them. With no focus under the root, or one a modal layer
-    /// covers, it moves as muiFocus_Move does forward.
+    /// covers, it moves as muiNode_MoveFocus does forward.
     ///
     /// @param context    The context.
     /// @param rootId     The root of the subtree the player navigates.
@@ -126,13 +124,13 @@ extern "C"
     /// @param direction  The direction.
     /// @return `mui_success`; `mui_empty` when nothing lies that way, which
     ///         leaves the focus; `mui_errorInvalid` for a NULL context, the
-    ///         null id, a player past MUI_MAX_PLAYERS, an unknown direction
-    ///         or a call from a measure or paint function;
-    ///         `mui_errorStale` for a root that is gone.
+    ///         null id, a player past MUI_MAX_PLAYERS or an unknown direction;
+    ///         `mui_errorBusy` while the context is busy; `mui_errorStale` for
+    ///         a root that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiFocus_MoveToward(muiContext* context, muiNodeId rootId,
-                                                        uint8_t player, muiDirection direction);
+    MUI_NODISCARD MUI_API muiResult muiNode_MoveFocusToward(muiContext* context, muiNodeId rootId,
+                                                            uint8_t player, muiDirection direction);
 
     /// Links a node to the node directional navigation moves to from it
     /// in a direction, over what geometry would find; the node itself
@@ -143,11 +141,10 @@ extern "C"
     /// @param nodeId     The node.
     /// @param direction  The direction.
     /// @param targetId   The node to move to; the null id removes the link.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id as the node, an unknown direction or a call from a
-    ///         measure or paint function; `mui_errorStale` for a node or
-    ///         target that is gone; `mui_errorCapacity` past the context's
-    ///         neighbors limit.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         id as the node or an unknown direction; `mui_errorBusy` while
+    ///         the context is busy; `mui_errorStale` for a node or target that
+    ///         is gone; `mui_errorCapacity` past the context's neighbors limit.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetNeighbor(muiContext* context, muiNodeId nodeId,

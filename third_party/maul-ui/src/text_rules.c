@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A field's rules over text going in (record mui-0006). Control
-// characters other than tab and line breaks go, as keys' text a platform
-// delivers would otherwise type them; a single line takes each line
-// break as a space, as Firefox's paste does; a number filter keeps the
-// value a sign at the start then digits, with at most one point for a
-// decimal, dropping the characters going in that would break it; a
-// maximum length counts grapheme clusters, as Flutter's does, cutting
-// what goes in to fit.
+// A field's rules over text going in. Control characters other than tab
+// and line breaks go, as keys' text a platform delivers would otherwise
+// type them; a single line takes each line break as a space, as Firefox's
+// paste does; a number filter keeps the value a sign at the start then
+// digits, with at most one point for a decimal, dropping the characters
+// going in that would break it; a maximum length counts grapheme clusters,
+// as Flutter's does, cutting what goes in to fit.
 
 #include "text_rules.h"
 
@@ -91,7 +90,7 @@ static uint32_t CountClusters(const char* text, uint32_t length)
     uint32_t count = 0;
     size_t at = 0;
     // Every boundary ends a cluster: the text's start is never one.
-    while (muniNextSegmentBreak(&iterator, &at) == muni_success)
+    while (muniSegmentIterator_NextBreak(&iterator, &at) == muni_success)
     {
         count++;
     }
@@ -108,7 +107,7 @@ static uint32_t ClustersLength(const char* text, uint32_t length, uint32_t clust
         return 0;
     }
     size_t at = 0;
-    while (clusters != 0 && muniNextSegmentBreak(&iterator, &at) == muni_success)
+    while (clusters != 0 && muniSegmentIterator_NextBreak(&iterator, &at) == muni_success)
     {
         clusters -= at != 0 ? 1u : 0u;
     }
@@ -119,8 +118,8 @@ static uint32_t ClustersLength(const char* text, uint32_t length, uint32_t clust
 static uint32_t Filter(const muiTextBlock* block, uint32_t start, uint32_t end, const char* text,
                        size_t length, char* out)
 {
-    const muiTextEditDef* def = &block->editing.def;
-    bool multiline = (def->flags & mui_editMultiline) != 0;
+    const muiTextEditRules* rules = &block->editing.rules;
+    bool multiline = (rules->flags & mui_editMultiline) != 0;
     Number number = NumberAround(block, start, end);
     uint32_t written = 0;
     for (size_t at = 0; at < length;)
@@ -136,9 +135,9 @@ static uint32_t Filter(const muiTextBlock* block, uint32_t start, uint32_t end, 
             size += point == '\r' && at + 1 < length && text[at + 1] == '\n' ? 1u : 0u;
             point = ' ';
         }
-        if (keep && def->filter != mui_filterNone)
+        if (keep && rules->filter != mui_filterNone)
         {
-            keep = KeepsNumber(&number, def->filter, point);
+            keep = KeepsNumber(&number, rules->filter, point);
         }
         if (keep && space)
         {
@@ -165,7 +164,7 @@ bool muiApplyEditRules(muiTextService* service, const muiTextBlock* block, uint3
     }
     char* kept = out->data;
     uint32_t written = Filter(block, start, end, text, length, kept);
-    uint32_t limit = block->editing.def.maxLength;
+    uint32_t limit = block->editing.rules.maxLength;
     if (limit != 0 && written != 0)
     {
         const char* old = block->text.data;

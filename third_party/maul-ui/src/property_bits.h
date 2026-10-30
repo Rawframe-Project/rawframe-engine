@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Sets of properties across every group (record mui-0004): one 64-bit
-// word per group, as the public masks are, so a group's mask is a word.
+// Sets of properties across every group: one 64-bit word per group, as the
+// public masks are, so a group's mask is a word.
 
 #ifndef MAUL_UI_SRC_PROPERTY_BITS_H
 #define MAUL_UI_SRC_PROPERTY_BITS_H

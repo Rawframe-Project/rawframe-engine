@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Accessibility (record mui-0008): what each node is, read from the
-// host's data and what the library holds, and updates of the nodes whose
-// record changed since it was last sent.
+// Accessibility: what each node is, read from the host's data and what the
+// library holds, and updates of the nodes whose record changed since it
+// was last sent.
 
 #include "access.h"
 #include "access_store.h"
 #include "access_text.h"
 #include "context.h"
 #include "focus.h"
+#include "fpenv.h"
 #include "layer.h"
 #include "place.h"
 #include "range.h"
@@ -22,6 +23,7 @@
 #include "maul-ui/access.h"
 
 #include <math.h>
+#include <string.h>
 
 // Roles that take a click without saying so.
 static bool IsClicked(muiRole role)
@@ -164,8 +166,8 @@ static void PlaceOf(const muiContext* context, uint32_t slot, muiAccessNode* nod
     }
     if (range != nullptr && values->orientation == mui_orientationNone)
     {
-        values->orientation = range->axis == mui_rangeHorizontal ? mui_orientationHorizontal
-                                                                 : mui_orientationVertical;
+        values->orientation =
+            range->axis == mui_axisHorizontal ? mui_orientationHorizontal : mui_orientationVertical;
     }
 }
 
@@ -213,7 +215,7 @@ uint32_t muiAccessDerive(const muiContext* context, uint32_t slot, muiAccessNode
 {
     const muiAccessEntry* entry = muiAccessEntryOf(context, slot);
     *nodeOut = (muiAccessNode){
-        .id = muiAccessIdOf(muiTreeIdOf(&context->tree, slot)),
+        .id = muiNode_GetAccessId(muiTreeIdOf(&context->tree, slot)),
         .role = entry != nullptr ? entry->role : mui_roleGeneric,
         .values = entry != nullptr ? entry->values : muiDefaultAccessValues(),
         .links = entry != nullptr ? entry->links : nullptr,
@@ -230,7 +232,7 @@ uint32_t muiAccessDerive(const muiContext* context, uint32_t slot, muiAccessNode
     // A password input's value is never the host's own text, which would
     // be the password and would also keep the text service's mask from
     // being read: assistive technology reads only the mask, a bullet a
-    // cluster, as the input shows it (mui-0006, mui-0008).
+    // cluster, as the input shows it.
     if (nodeOut->role == mui_rolePasswordInput)
     {
         nodeOut->text[mui_accessValue] = nullptr;
@@ -367,6 +369,18 @@ static muiRect ShownOf(const muiContext* context, uint32_t slot)
     return (muiRect){(float)left, (float)top, (float)(right - left), (float)(bottom - top)};
 }
 
+// The host's access text function, run in the host's floating-point
+// environment.
+static MUI_NOINLINE bool HostAccessText(const muiAccessStore* store, muiNodeId nodeId,
+                                        uint64_t hostKey, const muiRect* shown,
+                                        muiAccessContent* contentOut)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    bool read = store->textFunction(store->textUser, nodeId, hostKey, shown, contentOut);
+    muiFloatHostLeave(host);
+    return read;
+}
+
 // Reads host content's text from the host's text function into a node
 // whose value the host did not set, labelling a node the host gave no
 // role, with its selection, and its lines, words and clusters when
@@ -384,17 +398,14 @@ static uint64_t ReadContent(muiContext* context, uint32_t slot, bool boundaries,
         return 0;
     }
     muiAccessContent content = {0};
-    // As the measure function, it may not edit the context.
-    context->inHostCall = true;
     const muiRect shown = boundaries ? ShownOf(context, slot) : (muiRect){0};
-    bool read = store->textFunction(store->textUser, muiTreeIdOf(&context->tree, slot),
-                                    muiTreeAt(&context->tree, slot)->hostKey,
-                                    boundaries ? &shown : nullptr, &content);
-    context->inHostCall = false;
+    bool read = HostAccessText(store, muiTreeIdOf(&context->tree, slot),
+                               muiTreeAt(&context->tree, slot)->hostKey,
+                               boundaries ? &shown : nullptr, &content);
     // Empty text is none, unless it is being edited: an empty field.
     bool edited = content.marks.selected && content.length == 0;
     if (!read || content.text == nullptr || (content.length == 0 && !edited) ||
-        content.length > INT32_MAX ||
+        content.length > MUI_MAX_TEXT_BYTES ||
         !muiAccessIsUtf8((const unsigned char*)content.text, content.length))
     {
         return 0;
@@ -496,7 +507,7 @@ static void Visit(Build* build, uint32_t slot)
     for (uint32_t i = 0; i < count; i++)
     {
         store->children[build->childCount++] =
-            muiAccessIdOf(muiTreeIdOf(&context->tree, children[i]));
+            muiNode_GetAccessId(muiTreeIdOf(&context->tree, children[i]));
     }
     *copy = node;
     store->nodes[build->nodeCount++] = copy;
@@ -544,7 +555,7 @@ static uint64_t LayersOf(const muiContext* context, uint32_t root)
         {
             continue;
         }
-        uint64_t word = muiAccessIdOf(muiTreeIdOf(tree, layer)) ^
+        uint64_t word = muiNode_GetAccessId(muiTreeIdOf(tree, layer)) ^
                         (uint64_t)context->interaction[layer - 1].layer << 56 ^
                         (uint64_t)muiTreeIsExiting(tree, layer) << 60;
         print = FoldWord(print, word);
@@ -552,14 +563,15 @@ static uint64_t LayersOf(const muiContext* context, uint32_t root)
     return print;
 }
 
-muiResult muiBuildAccessUpdate(muiContext* context, muiNodeId rootId, muiAccessUpdate* updateOut)
+static muiResult BuildAccessUpdate(muiContext* context, muiNodeId rootId,
+                                   muiAccessUpdate* updateOut)
 {
     if (context == nullptr || updateOut == nullptr)
     {
         return mui_errorInvalid;
     }
     *updateOut = (muiAccessUpdate){0};
-    if (rootId.index1 == 0 || muiIsInHostCall(context))
+    if (rootId.index1 == 0)
     {
         return muiRefuse(context);
     }
@@ -602,9 +614,34 @@ muiResult muiBuildAccessUpdate(muiContext* context, muiNodeId rootId, muiAccessU
         .nodes = context->access.nodes,
         .nodeCount = build.nodeCount,
         .children = context->access.children,
-        .root = build.whole ? muiAccessIdOf(rootId) : 0,
-        .focus = muiAccessIdOf(muiTreeIdOf(tree, focus)),
+        .root = build.whole ? muiNode_GetAccessId(rootId) : 0,
+        .focus = muiNode_GetAccessId(muiTreeIdOf(tree, focus)),
     };
     entry->whole = false;
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult BuildAccessUpdateWorker(muiContext* context, muiNodeId rootId,
+                                                      muiAccessUpdate* updateOut)
+{
+    if (updateOut != nullptr)
+    {
+        memset(updateOut, 0, sizeof *updateOut);
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = BuildAccessUpdate(context, rootId, updateOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_BuildAccessUpdate(muiContext* context, muiNodeId rootId,
+                                    muiAccessUpdate* updateOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = BuildAccessUpdateWorker(context, rootId, updateOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

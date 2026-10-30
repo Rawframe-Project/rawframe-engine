@@ -1,6 +1,6 @@
 # The iOS simulator's toolchain, as Maul Window's: arm64, iOS 15, tests
 # run through simctl spawn on the device MUI_IOS_DEVICE names, or the
-# booted one (record mui-0008).
+# booted one.
 set(CMAKE_SYSTEM_NAME iOS)
 set(CMAKE_OSX_SYSROOT iphonesimulator)
 if(NOT CMAKE_OSX_ARCHITECTURES)

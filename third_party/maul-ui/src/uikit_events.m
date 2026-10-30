@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UIAccessibility adapter's notifications (record mui-0008), as UIKit
-// has them and Flutter posts them. UIKit has none for a name or a value
-// changing: VoiceOver reads them again when it reaches the element. A
-// new screen (the root changing, or a node turning modal) is told with
-// the element VoiceOver should move to; else a layout change, with the
-// focused element when the focus moved, or none. A live node's new name
-// is announced, queued behind current speech when polite. A text
-// element's input delegate is told of its text and selection changing.
+// The UIAccessibility adapter's notifications, as UIKit has them and
+// Flutter posts them. UIKit has none for a name or a value changing:
+// VoiceOver reads them again when it reaches the element. A new screen
+// (the root changing, or a node turning modal) is told with the element
+// VoiceOver should move to; else a layout change, with the focused element
+// when the focus moved, or none. A live node's new name is announced,
+// queued behind current speech when polite. A text element's input
+// delegate is told of its text and selection changing.
 
 #include "access_record.h"
 #include "uikit.h"

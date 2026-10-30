@@ -180,7 +180,7 @@ result::Status Windows::destroy(WindowId window) {
 
 result::Result<WindowState> Windows::state(WindowId window) const {
     mwinWindowState state{};
-    const mwinResult status = mwinGetWindowState(platform_->context, toMaul(window), &state);
+    const mwinResult status = mwinWindow_GetState(platform_->context, toMaul(window), &state);
     if (status != mwin_success) {
         return failure(status, "a window's state");
     }
@@ -222,62 +222,62 @@ result::Result<WindowState> Windows::state(WindowId window) const {
 result::Result<RequestId> Windows::requestTitle(WindowId window, std::string_view title) {
     mwinRequestId request{};
     const mwinResult kStatus =
-        mwinRequestTitle(platform_->context, toMaul(window), title.data(), title.size(), &request);
+        mwinWindow_RequestTitle(platform_->context, toMaul(window), title.data(), title.size(), &request);
     return requested(kStatus, request, "a title request");
 }
 
 result::Result<RequestId> Windows::requestSize(WindowId window, LogicalSize size) {
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestSize(
+    const mwinResult kStatus = mwinWindow_RequestSize(
         platform_->context, toMaul(window), mwinSize{.width = size.width, .height = size.height}, &request);
     return requested(kStatus, request, "a size request");
 }
 
 result::Result<RequestId> Windows::requestPosition(WindowId window, Position position) {
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestPosition(
+    const mwinResult kStatus = mwinWindow_RequestPosition(
         platform_->context, toMaul(window), mwinPosition{.x = position.x, .y = position.y}, &request);
     return requested(kStatus, request, "a position request");
 }
 
 result::Result<RequestId> Windows::requestMode(WindowId window, Mode mode) {
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestMode(platform_->context, toMaul(window), toMaul(mode), &request);
+    const mwinResult kStatus = mwinWindow_RequestMode(platform_->context, toMaul(window), toMaul(mode), &request);
     return requested(kStatus, request, "a mode request");
 }
 
 result::Result<RequestId> Windows::requestVisible(WindowId window, bool visible) {
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestVisible(platform_->context, toMaul(window), visible, &request);
+    const mwinResult kStatus = mwinWindow_RequestVisible(platform_->context, toMaul(window), visible, &request);
     return requested(kStatus, request, "a visibility request");
 }
 
 result::Result<RequestId> Windows::requestFocus(WindowId window) {
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestFocus(platform_->context, toMaul(window), &request);
+    const mwinResult kStatus = mwinWindow_RequestFocus(platform_->context, toMaul(window), &request);
     return requested(kStatus, request, "a focus request");
 }
 
 result::Result<RequestId> Windows::requestCursorMode(WindowId window, CursorMode mode) {
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestCursorMode(platform_->context, toMaul(window), toMaul(mode), &request);
+    const mwinResult kStatus = mwinWindow_RequestCursorMode(platform_->context, toMaul(window), toMaul(mode), &request);
     return requested(kStatus, request, "a cursor mode request");
 }
 
 result::Result<RequestId> Windows::requestTextInput(WindowId window, bool enabled, Rect caret) {
     mwinRequestId request{};
     const mwinResult kStatus =
-        mwinRequestTextInput(platform_->context,
-                             toMaul(window),
-                             enabled,
-                             mwinRect{.x = caret.x, .y = caret.y, .width = caret.width, .height = caret.height},
-                             &request);
+        mwinWindow_RequestTextInput(platform_->context,
+                                    toMaul(window),
+                                    enabled,
+                                    mwinRect{.x = caret.x, .y = caret.y, .width = caret.width, .height = caret.height},
+                                    &request);
     return requested(kStatus, request, "a text input request");
 }
 
 result::Result<RequestId> Windows::requestAccessibilityRoot(WindowId window, void* root) {
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestAccessibilityRoot(platform_->context, toMaul(window), root, &request);
+    const mwinResult kStatus = mwinWindow_RequestAccessibilityRoot(platform_->context, toMaul(window), root, &request);
     return requested(kStatus, request, "an accessibility root request");
 }
 
@@ -303,7 +303,7 @@ result::Result<RequestId> Windows::requestFileDialog(WindowId window, const File
     def.filters = filters.data();
     def.filterCount = static_cast<std::uint32_t>(filters.size());
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestFileDialog(platform_->context, toMaul(window), &def, &request);
+    const mwinResult kStatus = mwinWindow_RequestFileDialog(platform_->context, toMaul(window), &def, &request);
     return requested(kStatus, request, "a file dialog request");
 }
 
@@ -316,7 +316,7 @@ result::Result<RequestId> Windows::requestIcon(WindowId window, std::span<const 
                                      .pixels = kImage.pixels.data()});
     }
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestIcon(
+    const mwinResult kStatus = mwinWindow_RequestIcon(
         platform_->context, toMaul(window), made.data(), static_cast<std::uint32_t>(made.size()), &request);
     return requested(kStatus, request, "an icon request");
 }
@@ -324,25 +324,25 @@ result::Result<RequestId> Windows::requestIcon(WindowId window, std::span<const 
 result::Result<RequestId> Windows::requestClipboardWrite(WindowId window, std::string_view text) {
     mwinRequestId request{};
     const mwinResult kStatus =
-        mwinRequestClipboardWrite(platform_->context, toMaul(window), text.data(), text.size(), &request);
+        mwinWindow_RequestClipboardWrite(platform_->context, toMaul(window), text.data(), text.size(), &request);
     return requested(kStatus, request, "a clipboard write");
 }
 
 result::Result<RequestId> Windows::requestClipboardRead(WindowId window) {
     mwinRequestId request{};
-    const mwinResult kStatus = mwinRequestClipboardRead(platform_->context, toMaul(window), &request);
+    const mwinResult kStatus = mwinWindow_RequestClipboardRead(platform_->context, toMaul(window), &request);
     return requested(kStatus, request, "a clipboard read");
 }
 
 result::Result<std::string> Windows::clipboardText(RequestId request) const {
     const mwinRequestId kRequest{.index1 = request.index, .generation = request.generation};
     std::size_t length = 0;
-    mwinResult status = mwinGetClipboardText(platform_->context, kRequest, nullptr, 0, &length);
+    mwinResult status = mwinRequest_GetClipboardText(platform_->context, kRequest, nullptr, 0, &length);
     if (status != mwin_success && status != mwin_errorCapacity) {
         return failure(status, "the clipboard's text");
     }
     std::string text(length, '\0');
-    status = mwinGetClipboardText(platform_->context, kRequest, text.data(), text.size(), &length);
+    status = mwinRequest_GetClipboardText(platform_->context, kRequest, text.data(), text.size(), &length);
     if (status != mwin_success) {
         return failure(status, "the clipboard's text");
     }
@@ -353,12 +353,12 @@ result::Result<std::string> Windows::clipboardText(RequestId request) const {
 result::Result<std::vector<std::string>> Windows::dialogFiles(RequestId request) const {
     const mwinRequestId kRequest{.index1 = request.index, .generation = request.generation};
     std::size_t length = 0;
-    mwinResult status = mwinGetDialogFiles(platform_->context, kRequest, nullptr, 0, &length, nullptr);
+    mwinResult status = mwinRequest_GetDialogFiles(platform_->context, kRequest, nullptr, 0, &length, nullptr);
     if (status != mwin_success && status != mwin_errorCapacity) {
         return failure(status, "a file dialog's paths");
     }
     std::string bytes(length, '\0');
-    status = mwinGetDialogFiles(platform_->context, kRequest, bytes.data(), bytes.size(), &length, nullptr);
+    status = mwinRequest_GetDialogFiles(platform_->context, kRequest, bytes.data(), bytes.size(), &length, nullptr);
     if (status != mwin_success) {
         return failure(status, "a file dialog's paths");
     }
@@ -378,11 +378,11 @@ result::Result<std::vector<std::string>> Windows::dialogFiles(RequestId request)
 
 DisplayFacts Windows::display(WindowId window) const {
     mwinWindowState state{};
-    if (mwinGetWindowState(platform_->context, toMaul(window), &state) != mwin_success || state.monitor.index1 == 0) {
+    if (mwinWindow_GetState(platform_->context, toMaul(window), &state) != mwin_success || state.monitor.index1 == 0) {
         return {};
     }
     mwinMonitorInfo info{};
-    if (mwinGetMonitorInfo(platform_->context, state.monitor, &info) != mwin_success || !info.hdr.known) {
+    if (mwinMonitor_GetInfo(platform_->context, state.monitor, &info) != mwin_success || !info.hdr.known) {
         return {};
     }
     return DisplayFacts{.reported = true,
@@ -393,7 +393,7 @@ DisplayFacts Windows::display(WindowId window) const {
 
 result::Result<HandleBundle> Windows::handles(WindowId window) const {
     mwinNativeHandles native{};
-    const mwinResult status = mwinGetNativeHandles(platform_->context, toMaul(window), &native);
+    const mwinResult status = mwinWindow_GetNativeHandles(platform_->context, toMaul(window), &native);
     if (status != mwin_success) {
         return failure(status, "a window's native handles");
     }
@@ -431,7 +431,7 @@ result::Result<HandleBundle> Windows::handles(WindowId window) const {
 }
 
 result::Status Windows::rumble(GamepadId gamepad, float low, float high, std::uint32_t milliseconds) {
-    const mwinResult status = mwinSetGamepadRumble(platform_->context, toMaul(gamepad), low, high, milliseconds);
+    const mwinResult status = mwinGamepad_SetRumble(platform_->context, toMaul(gamepad), low, high, milliseconds);
     if (status != mwin_success) {
         return failure(status, "a gamepad's rumble");
     }
@@ -440,7 +440,7 @@ result::Status Windows::rumble(GamepadId gamepad, float low, float high, std::ui
 
 std::optional<Event> Windows::next() {
     mwinEvent record{};
-    while (mwinNextEvent(platform_->context, &record) == mwin_success) {
+    while (mwinContext_NextEvent(platform_->context, &record) == mwin_success) {
         if (std::optional<Event> event = fromMaul(*platform_->context, record)) {
             return event;
         }

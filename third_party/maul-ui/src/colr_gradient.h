@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// COLR version 1 gradients (record mui-0006): linear, radial and sweep,
-// each pixel's centre taken back into font units and given its colour
-// on the gradient's colour line, interpolated in premultiplied linear
-// light as CPAL's "Interpolation of colors" asks.
+// COLR version 1 gradients: linear, radial and sweep, each pixel's centre
+// taken back into font units and given its colour on the gradient's colour
+// line, interpolated in premultiplied linear light as CPAL's
+// "Interpolation of colors" asks.
 
 #ifndef MAUL_UI_SRC_COLR_GRADIENT_H
 #define MAUL_UI_SRC_COLR_GRADIENT_H

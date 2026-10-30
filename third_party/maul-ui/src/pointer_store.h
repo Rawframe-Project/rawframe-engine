@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The pointer store (record mui-0007): the pointers a context knows and
-// the ring of records they posted, which the context holds and
-// src/pointer.c keeps.
+// The pointer store: the pointers a context knows and the ring of records
+// they posted, which the context holds and src/pointer.c keeps.
 
 #ifndef MAUL_UI_SRC_POINTER_STORE_H
 #define MAUL_UI_SRC_POINTER_STORE_H
@@ -12,12 +11,8 @@
 
 #include <stdint.h>
 
-// The most pointers a context knows at once: an edit's pointers fit a
-// mask.
-enum
-{
-    MUI_MAX_POINTERS = 32
-};
+// An edit's pointers fit a mask.
+static_assert(MUI_MAX_POINTERS <= 32, "a mask holds the pointers");
 
 // A pointer the context knows. hovered and pressed are counted in their
 // chains' nodes; captured is in hovered's place while it lives.

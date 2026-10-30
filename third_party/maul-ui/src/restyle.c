@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Resolution in the fixed layers of record mui-0004: the defaults, every
-// class's base values in order, the state variants (states weakest
-// first, classes in order within each), the conditions that hold, then
-// the direct writes, which the node's resolved values already hold.
+// Resolution in fixed layers: the defaults, every class's base values in
+// order, the state variants (states weakest first, classes in order within
+// each), the conditions that hold, then the direct writes, which the
+// node's resolved values already hold.
 
 #include "restyle.h"
 
@@ -198,8 +198,8 @@ static bool IsSameSize(const muiConditionRun* a, const muiConditionRun* b)
 
 // Adds a styling to the node's history and reports an oscillation: the
 // last four stylings, none the host's but perhaps the first, read two
-// sizes in turn and their outcomes flipped with them. Its conditions
-// are then held at this outcome (record mui-0004).
+// sizes in turn and their outcomes flipped with them. Its conditions are
+// then held at this outcome.
 static void Watch(muiContext* context, uint32_t slot, const muiConditionRun* run)
 {
     muiNodeStyle* node = &context->style.nodes[slot - 1];

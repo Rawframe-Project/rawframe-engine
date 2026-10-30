@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Glyph outlines for images (record mui-0006): FreeType loads a glyph's
-// outline at a size, unhinted and without the font's embedded bitmaps,
-// and its smooth rasterizer renders coverage.
+// Glyph outlines for images: FreeType loads a glyph's outline at a size,
+// unhinted and without the font's embedded bitmaps, and its smooth
+// rasterizer renders coverage.
 
 #include "glyph_outline.h"
 
@@ -13,6 +13,8 @@
 
 #include FT_MULTIPLE_MASTERS_H
 #include FT_OUTLINE_H
+
+#include <math.h>
 
 muiResult muiGlyphFailed(FT_Error error)
 {
@@ -120,9 +122,21 @@ muiFont* muiGlyphFontOf(const muiTextService* service, uint64_t font, uint32_t g
     return *result == mui_success ? record : nullptr;
 }
 
-bool muiIsGlyphSizeValid(float pixelSize)
+muiResult muiGlyphSizeStatus(float pixelSize)
 {
-    return pixelSize >= 1.0f / 64.0f && pixelSize <= MUI_MAX_GLYPH_PIXEL_SIZE;
+    if (!isfinite(pixelSize) || pixelSize <= 0.0f)
+    {
+        return mui_errorInvalid;
+    }
+    return pixelSize >= MUI_MIN_GLYPH_PIXEL_SIZE && pixelSize <= MUI_MAX_GLYPH_PIXEL_SIZE
+               ? mui_success
+               : mui_errorLimit;
+}
+
+muiResult muiFieldSpreadStatus(uint32_t spread)
+{
+    return spread >= MUI_MIN_FIELD_SPREAD && spread <= MUI_MAX_FIELD_SPREAD ? mui_success
+                                                                            : mui_errorLimit;
 }
 
 muiPixelBox muiPixelBoxOf(FT_BBox box)

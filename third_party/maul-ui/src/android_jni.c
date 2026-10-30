@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Android accessibility adapter's native methods (record mui-0008),
-// which maul.ui.AccessProvider calls with the adapter as a handle, bound
-// with RegisterNatives so that no JNI name is exported. Texts go to Java
-// as UTF-16: the JNI's own UTF-8 is a modified one, which a character
-// past the Basic Multilingual Plane breaks.
+// The Android accessibility adapter's native methods, which
+// maul.ui.AccessProvider calls with the adapter as a handle, bound with
+// RegisterNatives so that no JNI name is exported. Texts go to Java as
+// UTF-16: the JNI's own UTF-8 is a modified one, which a character past
+// the Basic Multilingual Plane breaks.
 
 #include "access_record.h"
 #include "access_text.h"
 #include "allocator.h"
 #include "android.h"
+#include "fpenv.h"
+#include "host_call.h"
 
 #include <math.h>
 #include <stdalign.h>
@@ -39,7 +41,7 @@ static jint RootOf(JNIEnv* env, jclass type, jlong handle)
     return root != 0 ? muiAndroidVirtualOf(adapter, root) : MUI_ANDROID_NO_ID;
 }
 
-static jintArray NodeOf(JNIEnv* env, jclass type, jlong handle, jint virtualId)
+static MUI_NOINLINE jintArray NodeOfWorker(JNIEnv* env, jclass type, jlong handle, jint virtualId)
 {
     (void)type;
     muiAndroidAdapter* adapter = AdapterOf(handle);
@@ -55,6 +57,14 @@ static jintArray NodeOf(JNIEnv* env, jclass type, jlong handle, jint virtualId)
         (*env)->SetIntArrayRegion(env, packed, 0, (jsize)count, adapter->packed);
     }
     return packed;
+}
+
+static jintArray NodeOf(JNIEnv* env, jclass type, jlong handle, jint virtualId)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    jintArray result = NodeOfWorker(env, type, handle, virtualId);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // UTF-8, which the tree holds valid, as UTF-16: never more units than
@@ -96,14 +106,16 @@ jstring muiAndroidStringOf(JNIEnv* env, const muiAndroidAdapter* adapter, const 
     {
         return nullptr;
     }
-    jchar* units = muiAllocate(&adapter->allocator, length * sizeof(jchar), alignof(jchar));
+    jchar* units = muiAllocateMarked(&adapter->busy, &adapter->allocator, length * sizeof(jchar),
+                                     alignof(jchar));
     if (units == nullptr)
     {
         return nullptr;
     }
     jstring string =
         (*env)->NewString(env, units, Utf16Of((const unsigned char*)text, length, units));
-    muiRelease(&adapter->allocator, units, length * sizeof(jchar), alignof(jchar));
+    muiReleaseMarked(&adapter->busy, &adapter->allocator, units, length * sizeof(jchar),
+                     alignof(jchar));
     return string;
 }
 
@@ -121,7 +133,7 @@ static jstring NameOf(JNIEnv* env, const muiAndroidAdapter* adapter, uint64_t id
     {
         return nullptr;
     }
-    char* name = muiAllocate(&adapter->allocator, length + 1, 1);
+    char* name = muiAllocateMarked(&adapter->busy, &adapter->allocator, length + 1, 1);
     jstring string = nullptr;
     if (name != nullptr &&
         muiAccessTree_GetName(adapter->tree, id, name, length + 1, &length) == mui_success)
@@ -130,7 +142,7 @@ static jstring NameOf(JNIEnv* env, const muiAndroidAdapter* adapter, uint64_t id
     }
     if (name != nullptr)
     {
-        muiRelease(&adapter->allocator, name, length + 1, 1);
+        muiReleaseMarked(&adapter->busy, &adapter->allocator, name, length + 1, 1);
     }
     return string;
 }
@@ -153,14 +165,23 @@ static jstring TextOf(JNIEnv* env, jclass type, jlong handle, jint virtualId, ji
     return muiAndroidStringOf(env, adapter, source.text, strlen(source.text));
 }
 
-static jboolean Act(JNIEnv* env, jclass type, jlong handle, jint virtualId, jint action,
-                    jfloat value)
+static MUI_NOINLINE jboolean ActWorker(JNIEnv* env, jclass type, jlong handle, jint virtualId,
+                                       jint action, jfloat value)
 {
     (void)env;
     (void)type;
     const muiAndroidAdapter* adapter = AdapterOf(handle);
     const muiAccessNode* node = ShownOf(adapter, virtualId);
     return node != nullptr && muiAndroidAct(adapter, node, action, value) ? JNI_TRUE : JNI_FALSE;
+}
+
+static jboolean Act(JNIEnv* env, jclass type, jlong handle, jint virtualId, jint action,
+                    jfloat value)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    jboolean result = ActWorker(env, type, handle, virtualId, action, value);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 static jint FocusOf(JNIEnv* env, jclass type, jlong handle)
@@ -172,7 +193,7 @@ static jint FocusOf(JNIEnv* env, jclass type, jlong handle)
     return focus != 0 ? muiAndroidVirtualOf(adapter, focus) : MUI_ANDROID_NO_ID;
 }
 
-static jint NodeAt(JNIEnv* env, jclass type, jlong handle, jfloat x, jfloat y)
+static MUI_NOINLINE jint NodeAtWorker(JNIEnv* env, jclass type, jlong handle, jfloat x, jfloat y)
 {
     (void)env;
     (void)type;
@@ -181,10 +202,19 @@ static jint NodeAt(JNIEnv* env, jclass type, jlong handle, jfloat x, jfloat y)
     return at != 0 ? muiAndroidVirtualOf(adapter, at) : MUI_ANDROID_NO_ID;
 }
 
+static jint NodeAt(JNIEnv* env, jclass type, jlong handle, jfloat x, jfloat y)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    jint result = NodeAtWorker(env, type, handle, x, y);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 // A move through a node's text: the segment passed and the selection
 // after, in UTF-16, or nullptr.
-static jintArray Traverse(JNIEnv* env, jclass type, jlong handle, jint virtualId, jint granularity,
-                          jboolean forward, jboolean extend, jint cursor)
+static MUI_NOINLINE jintArray TraverseWorker(JNIEnv* env, jclass type, jlong handle, jint virtualId,
+                                             jint granularity, jboolean forward, jboolean extend,
+                                             jint cursor)
 {
     (void)type;
     const muiAndroidAdapter* adapter = AdapterOf(handle);
@@ -203,7 +233,18 @@ static jintArray Traverse(JNIEnv* env, jclass type, jlong handle, jint virtualId
     return out;
 }
 
-static jboolean Select(JNIEnv* env, jclass type, jlong handle, jint virtualId, jint start, jint end)
+static jintArray Traverse(JNIEnv* env, jclass type, jlong handle, jint virtualId, jint granularity,
+                          jboolean forward, jboolean extend, jint cursor)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    jintArray result =
+        TraverseWorker(env, type, handle, virtualId, granularity, forward, extend, cursor);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static MUI_NOINLINE jboolean SelectWorker(JNIEnv* env, jclass type, jlong handle, jint virtualId,
+                                          jint start, jint end)
 {
     (void)env;
     (void)type;
@@ -212,8 +253,17 @@ static jboolean Select(JNIEnv* env, jclass type, jlong handle, jint virtualId, j
     return node != nullptr && muiAndroidSelect(adapter, node, start, end) ? JNI_TRUE : JNI_FALSE;
 }
 
+static jboolean Select(JNIEnv* env, jclass type, jlong handle, jint virtualId, jint start, jint end)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    jboolean result = SelectWorker(env, type, handle, virtualId, start, end);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 // The new text read as UTF-16, past the JNI's modified UTF-8.
-static jboolean SetText(JNIEnv* env, jclass type, jlong handle, jint virtualId, jstring text)
+static MUI_NOINLINE jboolean SetTextWorker(JNIEnv* env, jclass type, jlong handle, jint virtualId,
+                                           jstring text)
 {
     (void)type;
     const muiAndroidAdapter* adapter = AdapterOf(handle);
@@ -224,23 +274,31 @@ static jboolean SetText(JNIEnv* env, jclass type, jlong handle, jint virtualId, 
     }
     jsize count = (*env)->GetStringLength(env, text);
     size_t size = ((size_t)count + 1) * sizeof(jchar);
-    jchar* units = muiAllocate(&adapter->allocator, size, alignof(jchar));
+    jchar* units = muiAllocateMarked(&adapter->busy, &adapter->allocator, size, alignof(jchar));
     if (units == nullptr)
     {
         return JNI_FALSE;
     }
     (*env)->GetStringRegion(env, text, 0, count, units);
     bool done = muiAndroidSetText(adapter, node, units, count);
-    muiRelease(&adapter->allocator, units, size, alignof(jchar));
+    muiReleaseMarked(&adapter->busy, &adapter->allocator, units, size, alignof(jchar));
     return done ? JNI_TRUE : JNI_FALSE;
+}
+
+static jboolean SetText(JNIEnv* env, jclass type, jlong handle, jint virtualId, jstring text)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    jboolean result = SetTextWorker(env, type, handle, virtualId, text);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Where each UTF-16 unit of a node's text from a start up to a length
 // is, in the view's pixels: left, top, right and bottom each, NaN for a
 // unit with none; nullptr for text without clusters, a length past
 // Android's most or memory run out.
-static jfloatArray CharacterBoxes(JNIEnv* env, jclass type, jlong handle, jint virtualId,
-                                  jint start, jint length)
+static MUI_NOINLINE jfloatArray CharacterBoxesWorker(JNIEnv* env, jclass type, jlong handle,
+                                                     jint virtualId, jint start, jint length)
 {
     (void)type;
     const muiAndroidAdapter* adapter = AdapterOf(handle);
@@ -250,13 +308,13 @@ static jfloatArray CharacterBoxes(JNIEnv* env, jclass type, jlong handle, jint v
         return nullptr;
     }
     size_t size = (size_t)length * sizeof(muiRect);
-    muiRect* rects = muiAllocate(&adapter->allocator, size, alignof(muiRect));
-    jfloat* boxes =
-        muiAllocate(&adapter->allocator, (size_t)length * 4 * sizeof(jfloat), alignof(jfloat));
+    muiRect* rects = muiAllocateMarked(&adapter->busy, &adapter->allocator, size, alignof(muiRect));
+    jfloat* boxes = muiAllocateMarked(&adapter->busy, &adapter->allocator,
+                                      (size_t)length * 4 * sizeof(jfloat), alignof(jfloat));
     jfloatArray out = nullptr;
     if (rects != nullptr && boxes != nullptr &&
         muiAccessUnitRects(adapter->tree, node->id, (uint32_t)start, (uint32_t)length,
-                           &adapter->allocator, rects))
+                           &adapter->allocator, &adapter->busy, rects))
     {
         float scale = adapter->scale;
         for (jint i = 0; i < length; i++)
@@ -276,14 +334,23 @@ static jfloatArray CharacterBoxes(JNIEnv* env, jclass type, jlong handle, jint v
     }
     if (rects != nullptr)
     {
-        muiRelease(&adapter->allocator, rects, size, alignof(muiRect));
+        muiReleaseMarked(&adapter->busy, &adapter->allocator, rects, size, alignof(muiRect));
     }
     if (boxes != nullptr)
     {
-        muiRelease(&adapter->allocator, boxes, (size_t)length * 4 * sizeof(jfloat),
-                   alignof(jfloat));
+        muiReleaseMarked(&adapter->busy, &adapter->allocator, boxes,
+                         (size_t)length * 4 * sizeof(jfloat), alignof(jfloat));
     }
     return out;
+}
+
+static jfloatArray CharacterBoxes(JNIEnv* env, jclass type, jlong handle, jint virtualId,
+                                  jint start, jint length)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    jfloatArray result = CharacterBoxesWorker(env, type, handle, virtualId, start, length);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 bool muiAndroidRegister(JNIEnv* env, jclass providerClass)

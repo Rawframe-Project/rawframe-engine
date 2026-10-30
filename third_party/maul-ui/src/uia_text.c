@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UI Automation adapter's Text pattern (record mui-0008, research
-// 143): ITextProvider2 on a text input or a text being edited, giving
-// the document, the selection and the caret as ranges (src/uia_range.c),
-// and the range at a point. Embedded objects have no ranges of their own
-// yet.
+// The UI Automation adapter's Text pattern: ITextProvider2 on a text input
+// or a text being edited, giving the document, the selection and the caret
+// as ranges (src/uia_range.c), and the range at a point. Embedded objects
+// have no ranges of their own yet.
 
 #include "access_record.h"
+#include "fpenv.h"
 #include "uia.h"
 
 #include <stddef.h>
@@ -136,8 +136,8 @@ static HRESULT STDMETHODCALLTYPE RangeFromChild(muiUiaText* self, muiUiaSimple* 
 
 // The degenerate range before the character at a point, or nearest it;
 // the text's start without clusters.
-static HRESULT STDMETHODCALLTYPE RangeFromPoint(muiUiaText* self, muiUiaPoint point,
-                                                muiUiaRange** out)
+static MUI_NOINLINE HRESULT RangeFromPointWorker(muiUiaText* self, muiUiaPoint point,
+                                                 muiUiaRange** out)
 {
     muiUiaNode* node = FromText(self);
     const muiAccessNode* held = muiUiaNodeFor(node);
@@ -153,6 +153,15 @@ static HRESULT STDMETHODCALLTYPE RangeFromPoint(muiUiaText* self, muiUiaPoint po
         }
     }
     return Give(node, at, at, out);
+}
+
+static HRESULT STDMETHODCALLTYPE RangeFromPoint(muiUiaText* self, muiUiaPoint point,
+                                                muiUiaRange** out)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    HRESULT result = RangeFromPointWorker(self, point, out);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 static HRESULT STDMETHODCALLTYPE SupportedSelection(muiUiaText* self, int* out)

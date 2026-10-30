@@ -22,7 +22,7 @@ extern "C"
 #define MWIN_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MWIN_VERSION_MINOR 6
+#define MWIN_VERSION_MINOR 7
 // x-release-please-end
 // x-release-please-start-patch
 #define MWIN_VERSION_PATCH 0
@@ -186,7 +186,7 @@ extern "C"
     /// @return A static, NUL-terminated string such as "mwin_errorCapacity".
     /// @par Thread safety
     /// Safe from any thread.
-    MWIN_API const char* mwinResultName(mwinResult result);
+    MWIN_API const char* mwinGetResultName(mwinResult result);
 
 #ifdef __cplusplus
 }

@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The NSAccessibility adapter (record mui-0008): making it, applying
-// updates, the node objects it holds by id, and where nodes lie on the
-// screen. Objects are made when first asked for; one whose node goes is
-// let go, its adapter cleared, so that a client still holding it gets
-// nothing.
+// The NSAccessibility adapter: making it, applying updates, the node
+// objects it holds by id, and where nodes lie on the screen. Objects are
+// made when first asked for; one whose node goes is let go, its adapter
+// cleared, so that a client still holding it gets nothing.
 
 #include "access_record.h"
 #include "allocator.h"
+#include "fpenv.h"
+#include "host_call.h"
 #include "ns.h"
 
 #include <stdalign.h>
-
-#define DEF_COOKIE 0x6D756E73u // "muns"
 
 static void Post(id element, NSAccessibilityNotificationName name, NSDictionary* info)
 {
@@ -27,16 +26,10 @@ static void Post(id element, NSAccessibilityNotificationName name, NSDictionary*
     }
 }
 
-muiNsAdapterDef muiDefaultNsAdapterDef(void)
-{
-    return (muiNsAdapterDef){.cookie = DEF_COOKIE, .nodes = 4096, .scale = 1.0f};
-}
-
 static bool IsValid(const muiNsAdapterDef* def)
 {
-    return def->cookie == DEF_COOKIE && muiIsAllocatorValid(&def->allocator) && def->nodes != 0 &&
-           def->nodes <= ((uint32_t)1 << 24) && def->view != nullptr && def->action != nullptr &&
-           def->scale > 0.0f;
+    return muiIsAllocatorValid(&def->allocator) && def->nodes != 0 && def->view != nullptr &&
+           def->action != nullptr && def->scale > 0.0f;
 }
 
 // The objects' map is at most half full.
@@ -57,15 +50,30 @@ static size_t SizeOf(uint32_t nodes)
            map * (sizeof(uint64_t) + sizeof(void*));
 }
 
-muiResult muiCreateNsAdapter(const muiNsAdapterDef* def, muiNsAdapter** adapterOut)
+static MUI_NOINLINE muiResult CreateNsAdapterWorker(const muiNsAdapterDef* def,
+                                                    muiNsAdapter** adapterOut)
 {
     if (adapterOut != nullptr)
     {
         *adapterOut = nullptr;
     }
-    if (def == nullptr || adapterOut == nullptr || !IsValid(def))
+    if (def == nullptr || adapterOut == nullptr || def->cookie != MUI_NS_ADAPTER_DEF_COOKIE)
     {
         return mui_errorInvalid;
+    }
+    // Another version's def may be of another layout: nothing past the
+    // version is read.
+    if (def->version != MUI_ABI_VERSION)
+    {
+        return mui_errorVersion;
+    }
+    if (!IsValid(def))
+    {
+        return mui_errorInvalid;
+    }
+    if (def->nodes > MUI_MAX_ACCESS_NODES)
+    {
+        return mui_errorLimit;
     }
     size_t size = SizeOf(def->nodes);
     unsigned char* block = muiAllocate(&def->allocator, size, alignof(max_align_t));
@@ -101,6 +109,14 @@ muiResult muiCreateNsAdapter(const muiNsAdapterDef* def, muiNsAdapter** adapterO
     return mui_success;
 }
 
+muiResult muiCreateNsAdapter(const muiNsAdapterDef* def, muiNsAdapter** adapterOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = CreateNsAdapterWorker(def, adapterOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 // Lets an object go: it answers nothing from then on.
 static void Forget(MUIAccessibilityNode* object)
 {
@@ -108,7 +124,7 @@ static void Forget(MUIAccessibilityNode* object)
     [object release];
 }
 
-void muiDestroyNsAdapter(muiNsAdapter* adapter)
+static void DestroyNsAdapter(muiNsAdapter* adapter)
 {
     if (adapter == nullptr)
     {
@@ -126,6 +142,25 @@ void muiDestroyNsAdapter(muiNsAdapter* adapter)
     muiDestroyAccessTree(adapter->tree);
     const muiAllocator allocator = adapter->allocator;
     muiRelease(&allocator, adapter, adapter->blockSize, alignof(max_align_t));
+}
+
+void muiDestroyNsAdapter(muiNsAdapter* adapter)
+{
+    if (adapter == nullptr)
+    {
+        DestroyNsAdapter(adapter);
+        return;
+    }
+    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return;
+    }
+    DestroyNsAdapter(adapter);
+}
+
+uint64_t muiNsAdapter_GetMisuse(const muiNsAdapter* adapter)
+{
+    return adapter != nullptr ? adapter->misuse : 0;
 }
 
 MUIAccessibilityNode* muiNsObjectOf(muiNsAdapter* adapter, uint64_t id)
@@ -149,12 +184,21 @@ MUIAccessibilityNode* muiNsObjectOf(muiNsAdapter* adapter, uint64_t id)
     return object;
 }
 
-static void Updated(void* user, const muiAccessTree* tree, const muiAccessNode* old)
+static MUI_NOINLINE void UpdatedWorker(void* user, const muiAccessTree* tree,
+                                       const muiAccessNode* old)
 {
     muiNsTellUpdated(user, old, muiAccessTree_Find(tree, old->id));
 }
 
-static void Removed(void* user, const muiAccessTree* tree, const muiAccessNode* old)
+static void Updated(void* user, const muiAccessTree* tree, const muiAccessNode* old)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    UpdatedWorker(user, tree, old);
+    muiFloatEnvLeave(floatEnv);
+}
+
+static MUI_NOINLINE void RemovedWorker(void* user, const muiAccessTree* tree,
+                                       const muiAccessNode* old)
 {
     (void)tree;
     muiNsAdapter* adapter = user;
@@ -166,13 +210,28 @@ static void Removed(void* user, const muiAccessTree* tree, const muiAccessNode* 
     }
 }
 
-static void ShownChanged(void* user, const muiAccessTree* tree)
+static void Removed(void* user, const muiAccessTree* tree, const muiAccessNode* old)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    RemovedWorker(user, tree, old);
+    muiFloatEnvLeave(floatEnv);
+}
+
+static MUI_NOINLINE void ShownChangedWorker(void* user, const muiAccessTree* tree)
 {
     (void)tree;
     ((muiNsAdapter*)user)->reshaped = true;
 }
 
-static void FocusMoved(void* user, const muiAccessTree* tree, uint64_t old, uint64_t focus)
+static void ShownChanged(void* user, const muiAccessTree* tree)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    ShownChangedWorker(user, tree);
+    muiFloatEnvLeave(floatEnv);
+}
+
+static MUI_NOINLINE void FocusMovedWorker(void* user, const muiAccessTree* tree, uint64_t old,
+                                          uint64_t focus)
 {
     (void)tree;
     (void)old;
@@ -180,7 +239,14 @@ static void FocusMoved(void* user, const muiAccessTree* tree, uint64_t old, uint
     ((muiNsAdapter*)user)->focusMoved = true;
 }
 
-muiResult muiNsAdapter_Apply(muiNsAdapter* adapter, const muiAccessUpdate* update)
+static void FocusMoved(void* user, const muiAccessTree* tree, uint64_t old, uint64_t focus)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    FocusMovedWorker(user, tree, old, focus);
+    muiFloatEnvLeave(floatEnv);
+}
+
+static muiResult NsAdapterApply(muiNsAdapter* adapter, const muiAccessUpdate* update)
 {
     if (adapter == nullptr)
     {
@@ -212,12 +278,37 @@ muiResult muiNsAdapter_Apply(muiNsAdapter* adapter, const muiAccessUpdate* updat
     return status;
 }
 
+static MUI_NOINLINE muiResult NsAdapterApplyWorker(muiNsAdapter* adapter,
+                                                   const muiAccessUpdate* update)
+{
+    if (adapter == nullptr)
+    {
+        return NsAdapterApply(adapter, update);
+    }
+    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return mui_errorBusy;
+    }
+    muiResult result = NsAdapterApply(adapter, update);
+    adapter->misuse += result == mui_errorInvalid;
+    adapter->busy = false;
+    return result;
+}
+
+muiResult muiNsAdapter_Apply(muiNsAdapter* adapter, const muiAccessUpdate* update)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NsAdapterApplyWorker(adapter, update);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 const muiAccessTree* muiNsAdapter_GetTree(const muiNsAdapter* adapter)
 {
     return adapter != nullptr ? adapter->tree : nullptr;
 }
 
-muiResult muiNsAdapter_SetScale(muiNsAdapter* adapter, float scale)
+static muiResult NsAdapterSetScale(muiNsAdapter* adapter, float scale)
 {
     if (adapter == nullptr || !(scale > 0.0f))
     {
@@ -227,16 +318,55 @@ muiResult muiNsAdapter_SetScale(muiNsAdapter* adapter, float scale)
     return mui_success;
 }
 
-void* muiNsAdapter_GetRoot(muiNsAdapter* adapter)
+static MUI_NOINLINE muiResult NsAdapterSetScaleWorker(muiNsAdapter* adapter, float scale)
+{
+    if (adapter == nullptr)
+    {
+        return NsAdapterSetScale(adapter, scale);
+    }
+    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return mui_errorBusy;
+    }
+    muiResult result = NsAdapterSetScale(adapter, scale);
+    adapter->misuse += result == mui_errorInvalid;
+    adapter->busy = false;
+    return result;
+}
+
+muiResult muiNsAdapter_SetScale(muiNsAdapter* adapter, float scale)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NsAdapterSetScaleWorker(adapter, scale);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static void* NsAdapterGetRoot(muiNsAdapter* adapter)
 {
     return adapter != nullptr ? muiNsObjectOf(adapter, muiAccessTree_GetRoot(adapter->tree))
                               : nullptr;
 }
 
+void* muiNsAdapter_GetRoot(muiNsAdapter* adapter)
+{
+    if (adapter == nullptr)
+    {
+        return NsAdapterGetRoot(adapter);
+    }
+    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return nullptr;
+    }
+    void* result = NsAdapterGetRoot(adapter);
+    adapter->busy = false;
+    return result;
+}
+
 bool muiNsAct(const muiNsAdapter* adapter, muiAccessAction action, uint64_t id, float value)
 {
     const muiAccessRequest request = {.action = action, .target = id, .value = value};
-    return adapter->action(adapter->user, &request);
+    return muiActMarked(&adapter->busy, adapter->action, adapter->user, &request);
 }
 
 // A box in units, in the view's points, flipped or not.

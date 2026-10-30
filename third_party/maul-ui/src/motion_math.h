@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The exponential, sine and cosine that springs need, the logarithm,
-// power and cube root that colors need, and the angle a sweep gradient
-// needs, written here so that they give
-// the same bits on every platform (record mui-0001): only arithmetic,
-// floor, sqrt and the exact scaling of a double by a power of two.
+// The sine, cosine and angle that a colour font's rotations and sweep
+// gradients need, the exponential, logarithm, power and cube root that
+// colors need, and the logarithm that a fling's decay rate takes, written
+// here so that they give the same bits on every platform: only
+// arithmetic, floor, sqrt and the exact scaling of a double by a power of
+// two.
 
 #ifndef MAUL_UI_SRC_MOTION_MATH_H
 #define MAUL_UI_SRC_MOTION_MATH_H
@@ -15,7 +16,7 @@
 double muiExp(double x);
 
 // The sine and cosine of x, within 1e-14 for |x| up to 2000 and exact
-// reduction up to 2^20; larger arguments lose accuracy. A spring's argument
+// reduction up to 2^20; larger arguments lose accuracy. A colour font's angle
 // stays far below.
 void muiSinCos(double x, double* sineOut, double* cosineOut);
 

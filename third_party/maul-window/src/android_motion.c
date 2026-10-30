@@ -292,9 +292,11 @@ static void Cursor(mwinContext* context, uint32_t slot, mwinAndroidPointers* poi
     {
         return;
     }
+    bool entered = false;
     if (!pointers->cursorInside && motion->action != mwin_androidHoverExit)
     {
         pointers->cursorInside = true;
+        entered = true;
         PostCursor(context, slot, pointers, motion, mwin_eventCursorEntered, 0, 0);
     }
     switch (motion->action)
@@ -302,6 +304,14 @@ static void Cursor(mwinContext* context, uint32_t slot, mwinAndroidPointers* poi
     case mwin_androidMove:
     case mwin_androidHoverMove:
         PostCursor(context, slot, pointers, motion, mwin_eventCursorMoved, 0, 0);
+        break;
+    case mwin_androidHoverEnter:
+        // Android 11 can end a mouse's hover between two of its moves and
+        // send the second as an enter; the cursor never left, so it moved.
+        if (!entered)
+        {
+            PostCursor(context, slot, pointers, motion, mwin_eventCursorMoved, 0, 0);
+        }
         break;
     case mwin_androidButtonPress:
     case mwin_androidButtonRelease:

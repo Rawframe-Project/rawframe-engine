@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A value text's marks (record mui-0008, I123): its selection, lines and
-// words, checked against the text the build reads and the tree takes;
-// and the boundaries of its units and its offsets in the units platforms
-// count, which the adapters share (research 143).
+// A value text's marks: its selection, lines and words, checked against
+// the text the build reads and the tree takes; and the boundaries of its
+// units and its offsets in the units platforms count, which the adapters
+// share.
 
 #ifndef MAUL_UI_SRC_ACCESS_TEXT_H
 #define MAUL_UI_SRC_ACCESS_TEXT_H
@@ -62,9 +62,10 @@ void muiAccessFreeRects(muiAccessRects* rects);
 // The rectangle of each UTF-16 unit of a node's value text from one up
 // to a count, where the root is placed: its cluster's, a line high; a
 // width of -1 for a unit no cluster holds or past the text. False for a
-// node not held, text without clusters, or memory run out.
+// node not held, text without clusters, or memory run out. The allocator
+// is its owner's, which busy marks while it runs.
 bool muiAccessUnitRects(const muiAccessTree* tree, uint64_t id, uint32_t first, uint32_t count,
-                        const muiAllocator* allocator, muiRect* rectsOut);
+                        const muiAllocator* allocator, const bool* busy, muiRect* rectsOut);
 
 // The box around a range's rectangles where the root is placed: the
 // node's bounds when its text has no clusters and the range is not

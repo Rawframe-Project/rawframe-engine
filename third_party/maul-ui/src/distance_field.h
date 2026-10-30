@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Signed distance fields of outlines made of line segments (record
-// mui-0006). Whether each pixel's center is inside comes from the winding
-// of the segments its row crosses left of it, so overlapping contours are
-// their union. Its distance is to the nearest part of a segment on that
-// union's edge: segments are cut into pieces of at most a pixel, and the
-// places where pieces cross or touch others are found among those nearby.
-// Between such places a contour is on the edge or within the union
-// throughout, which the windings just either side of it tell; a piece
-// others cross is cut there and each part told apart. Only correctly
-// rounded float operations are used, so fields are the same bytes on
-// every platform.
+// Signed distance fields of outlines made of line segments. Whether each
+// pixel's center is inside comes from the winding of the segments its row
+// crosses left of it, so overlapping contours are their union. Its
+// distance is to the nearest part of a segment on that union's edge:
+// segments are cut into pieces of at most a pixel, and the places where
+// pieces cross or touch others are found among those nearby. Between such
+// places a contour is on the edge or within the union throughout, which
+// the windings just either side of it tell; a piece others cross is cut
+// there and each part told apart. Only correctly rounded float operations
+// are used, so fields are the same bytes on every platform.
 
 #ifndef MAUL_UI_SRC_DISTANCE_FIELD_H
 #define MAUL_UI_SRC_DISTANCE_FIELD_H

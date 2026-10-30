@@ -272,7 +272,7 @@ static void DestroyContext(mwinContext* context)
     mwinRelease(&host, context, context->memorySize, alignof(max_align_t));
 }
 
-uint64_t mwinGetContextMisuse(const mwinContext* context)
+uint64_t mwinContext_GetMisuse(const mwinContext* context)
 {
     return context != nullptr ? *context->misuse : 0;
 }

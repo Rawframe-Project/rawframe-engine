@@ -21,7 +21,7 @@ uint32_t muniGetResultsVersion(void)
     return MUNI_RESULTS_VERSION;
 }
 
-const char* muniResultName(muniResult result)
+const char* muniGetResultName(muniResult result)
 {
     switch (result)
     {

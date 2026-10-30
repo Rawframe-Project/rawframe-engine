@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Popups (record mui-0007), within the library.
+// Popups, within the library.
 
 #ifndef MAUL_UI_SRC_POPUP_H
 #define MAUL_UI_SRC_POPUP_H

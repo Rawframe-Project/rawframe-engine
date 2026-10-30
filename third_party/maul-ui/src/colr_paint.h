@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// COLR version 1 paint graphs (record mui-0006): a glyph's graph walked
-// from its root, each paint evaluated into a premultiplied linear-light
-// surface over the glyph's box of pixels, transforms composed on the way
-// down from font units, a PaintGlyph's outline a FreeType coverage mask
-// over its child, layers composited source over. At most
-// MUI_MAX_PAINT_DEPTH paints deep, so a cycle in a damaged font ends, and
-// at most MUI_MAX_PAINT_VISITS paints in all, so a graph that reaches one
-// paint by many paths, which depth alone lets double at each level, ends
-// too.
+// COLR version 1 paint graphs: a glyph's graph walked from its root, each
+// paint evaluated into a premultiplied linear-light surface over the
+// glyph's box of pixels, transforms composed on the way down from font
+// units, a PaintGlyph's outline a FreeType coverage mask over its child,
+// layers composited source over. At most MUI_MAX_PAINT_DEPTH paints deep,
+// so a cycle in a damaged font ends, and at most MUI_MAX_PAINT_VISITS
+// paints in all, so a graph that reaches one paint by many paths, which
+// depth alone lets double at each level, ends too.
 
 #ifndef MAUL_UI_SRC_COLR_PAINT_H
 #define MAUL_UI_SRC_COLR_PAINT_H

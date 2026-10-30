@@ -72,20 +72,20 @@ extern "C"
     /// Text without right-to-left characters has the same skeleton in
     /// both automatic and left-to-right paragraphs.
     ///
-    /// @param text        The text. May be NULL when length is 0.
-    /// @param length      The number of bytes.
-    /// @param direction   The paragraph direction.
-    /// @param workspace   Scratch memory of at least 2 * length bytes. May
-    ///                    be NULL when workspaceSize is 0.
-    /// @param workspaceSize The number of bytes workspace holds.
-    /// @param output      The output. May be NULL when capacity is 0.
-    /// @param capacity    The number of bytes output can hold.
-    /// @param neededOut   Receives the number of bytes the whole skeleton
-    ///                    needs on success and when the output is too
-    ///                    small, where it may exceed capacity, or SIZE_MAX
-    ///                    when that does not fit in a size_t. 0 on every
-    ///                    other error, except `muni_errorInvalid`, which
-    ///                    leaves it as it was.
+    /// @param text           The text. May be NULL when length is 0.
+    /// @param length         The number of bytes.
+    /// @param direction      The paragraph direction.
+    /// @param workspace      Scratch memory of at least 2 * length bytes. May
+    ///                       be NULL when workspaceSize is 0.
+    /// @param workspaceSize  The number of bytes workspace holds.
+    /// @param textOut        The output. May be NULL when capacity is 0.
+    /// @param capacity       The number of bytes textOut can hold.
+    /// @param neededOut      Receives the number of bytes the whole skeleton
+    ///                       needs on success and when the output is too small,
+    ///                       where it may exceed capacity, or SIZE_MAX when
+    ///                       that does not fit in a size_t. 0 on every other
+    ///                       error, except `muni_errorInvalid`, which leaves it
+    ///                       as it was.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the skeleton does not fit (the bytes that fit are
     ///         written), or with offset 0 and neededOut 0 when
@@ -98,12 +98,12 @@ extern "C"
     ///         `muni_errorInvalid` for a NULL argument or an unknown
     ///         direction.
     /// @par Thread safety
-    /// Safe from any thread; the workspace and output are used by one thread
+    /// Safe from any thread; the workspace and textOut are used by one thread
     /// at a time.
     MUNI_NODISCARD MUNI_API muniTextResult muniGetSkeleton(const char* text, size_t length,
                                                            muniBidiDirection direction,
                                                            uint8_t* workspace, size_t workspaceSize,
-                                                           char* output, size_t capacity,
+                                                           char* textOut, size_t capacity,
                                                            size_t* neededOut);
 
     /// Writes the resolved script set of UTF-8 text (UTS #39 section
@@ -114,13 +114,13 @@ extern "C"
     /// text mixes scripts. Text of Common and Inherited characters alone,
     /// which fits any script, gives the single script Zyyy.
     ///
-    /// @param text      The text. May be NULL when length is 0.
-    /// @param length    The number of bytes.
-    /// @param scripts   The output, in ascending tag order. May be NULL
-    ///                  when capacity is 0.
-    /// @param capacity  The number of scripts the output can hold;
-    ///                  MUNI_MAX_RESOLVED_SCRIPTS always suffice.
-    /// @param countOut  Receives the number of scripts.
+    /// @param text        The text. May be NULL when length is 0.
+    /// @param length      The number of bytes.
+    /// @param scriptsOut  The output, in ascending tag order. May be NULL when
+    ///                    capacity is 0.
+    /// @param capacity    The number of scripts the output can hold;
+    ///                    MUNI_MAX_RESOLVED_SCRIPTS always suffice.
+    /// @param countOut    Receives the number of scripts.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the scripts do not fit, and then none is written; the
     ///         first UTF-8 error and its offset; `muni_errorInvalid` for
@@ -128,7 +128,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniGetResolvedScripts(const char* text, size_t length,
-                                                                  muniScript* scripts,
+                                                                  muniScript* scriptsOut,
                                                                   size_t capacity,
                                                                   size_t* countOut);
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// An editing block's undo history (record mui-0006): the edits made, with
-// the bytes each removed and inserted, a run of typing joined word by
-// word and a run of deletions one way joined whole.
+// An editing block's undo history: the edits made, with the bytes each
+// removed and inserted, a run of typing joined word by word and a run of
+// deletions one way joined whole.
 
 #ifndef MAUL_UI_SRC_TEXT_HISTORY_H
 #define MAUL_UI_SRC_TEXT_HISTORY_H

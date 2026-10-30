@@ -106,7 +106,7 @@ bool readText(void* user, muiNodeId node, std::uint64_t, const muiRect* shown, m
         contentOut->marks.selected = true;
         return true;
     }
-    if (!muiAccessTextOf(&state->host, node, muiTextBlock_GetKey(kText->block), shown, contentOut)) {
+    if (!muiReadAccessText(&state->host, node, muiTextBlock_GetKey(kText->block), shown, contentOut)) {
         return false;
     }
     if (kText->editable) {
@@ -122,10 +122,10 @@ bool readText(void* user, muiNodeId node, std::uint64_t, const muiRect* shown, m
 } // namespace
 
 result::Status Tree::focus(std::optional<Node> node, bool navigated) {
-    return checked(muiFocus_Set(state_->context,
-                                0,
-                                node.has_value() ? idOf(*node) : muiNodeId{},
-                                navigated ? mui_focusByNavigation : mui_focusByPointer),
+    return checked(muiContext_SetFocus(state_->context,
+                                       0,
+                                       node.has_value() ? idOf(*node) : muiNodeId{},
+                                       navigated ? mui_focusByNavigation : mui_focusByPointer),
                    "a node could not take focus");
 }
 
@@ -226,7 +226,7 @@ struct Access::State {
 #endif
         muiDestroyAccessTree(copy);
         if (tree != nullptr) {
-            static_cast<void>(muiAccess_Disable(context(), root));
+            static_cast<void>(muiNode_EnableAccess(context(), root, false));
         }
     }
 };
@@ -238,7 +238,7 @@ namespace {
 /// scroll, and a range stepped or set, done by the tree, as a drag
 /// of the range is.
 bool act(Access::State& state, const muiAccessRequest& request) {
-    const muiNodeId kId = muiNodeIdOfAccess(request.target);
+    const muiNodeId kId = muiGetNodeOfAccessId(request.target);
     const Node kNode{.index1 = kId.index1, .generation = kId.generation};
     const auto kKind = [&]() -> std::optional<AccessRequest::Kind> {
         switch (request.action) {
@@ -270,7 +270,8 @@ bool act(Access::State& state, const muiAccessRequest& request) {
     const bool kScroll = request.action >= mui_actionScrollIntoView && request.action <= mui_actionSetScrollOffset;
     const bool kRange = request.action >= mui_actionIncrement && request.action <= mui_actionSetValue;
     bool handled = false;
-    return (kScroll || kRange) && muiPerformAccessAction(state.context(), &request, &handled) == mui_success && handled;
+    return (kScroll || kRange) && muiContext_PerformAccessAction(state.context(), &request, &handled) == mui_success &&
+           handled;
 }
 
 #if RAWFRAME_UI_ATSPI || RAWFRAME_UI_ANDROID || RAWFRAME_UI_UIA || RAWFRAME_UI_APPKIT || RAWFRAME_UI_UIKIT ||          \
@@ -295,9 +296,10 @@ result::Result<std::unique_ptr<Access>> Access::create(Tree& tree, Node root, co
         return refuse(UiError::Invalid, "an accessibility needs a scale above nought and room for a node");
     }
     auto state = std::make_unique<State>();
-    RAWFRAME_TRY(checked(muiSetAccessTextFunction(tree.state_->context, &readText, tree.state_.get()),
+    RAWFRAME_TRY(checked(muiContext_SetAccessTextFunction(tree.state_->context, &readText, tree.state_.get()),
                          "a tree's texts could not be read"));
-    RAWFRAME_TRY(checked(muiAccess_Enable(tree.state_->context, idOf(root)), "a root's accessibility was refused"));
+    RAWFRAME_TRY(
+        checked(muiNode_EnableAccess(tree.state_->context, idOf(root), true), "a root's accessibility was refused"));
     state->tree = &tree;
     state->root = idOf(root);
 #if RAWFRAME_UI_ATSPI
@@ -417,7 +419,7 @@ result::Result<std::unique_ptr<Access>> Access::create(Tree& tree, Node root, co
 
 result::Status Access::update() {
     muiAccessUpdate update{};
-    const muiResult kBuilt = muiBuildAccessUpdate(state_->context(), state_->root, &update);
+    const muiResult kBuilt = muiNode_BuildAccessUpdate(state_->context(), state_->root, &update);
     if (kBuilt != mui_empty) {
         RAWFRAME_TRY(checked(kBuilt, "the tree's accessibility could not be read"));
     }
@@ -609,7 +611,7 @@ std::optional<Node> Access::focused() const {
     if (kFocus == 0 || kFocus == muiAccessTree_GetRoot(kRead)) {
         return std::nullopt;
     }
-    const muiNodeId kId = muiNodeIdOfAccess(kFocus);
+    const muiNodeId kId = muiGetNodeOfAccessId(kFocus);
     return Node{.index1 = kId.index1, .generation = kId.generation};
 }
 
@@ -622,7 +624,7 @@ bool Access::ask(const AccessRequest& request) {
         mui_actionClick, mui_actionFocus, mui_actionSetSelection, mui_actionReplaceText};
     const muiAccessRequest kRequest{
         .action = kActions[static_cast<std::size_t>(request.kind)],
-        .target = muiAccessIdOf(idOf(request.node)),
+        .target = muiNode_GetAccessId(idOf(request.node)),
         .anchor = request.anchor,
         .focus = request.focus,
         .text = request.text.data(),

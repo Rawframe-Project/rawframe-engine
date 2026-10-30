@@ -130,6 +130,8 @@ void muiTreeInsert(muiTree* tree, uint32_t parent, uint32_t child, uint32_t befo
     muiTreeNode* parentNode = muiTreeAt(tree, parent);
     muiTreeNode* childNode = muiTreeAt(tree, child);
     MUI_ASSERT(childNode->links.parent == 0 && !muiTreeIsAncestor(tree, child, parent));
+    // A child goes before a sibling under the same parent, or last.
+    MUI_ASSERT(before == 0 || muiTreeAt(tree, before)->links.parent == parent);
     uint32_t previous =
         before != 0 ? muiTreeAt(tree, before)->links.previous : parentNode->links.lastChild;
     childNode->links.parent = parent;
@@ -167,6 +169,13 @@ void muiTreeDetach(muiTree* tree, uint32_t node)
         return;
     }
     muiTreeNode* parentNode = muiTreeAt(tree, parent);
+    // Its neighbors and its parent point back at it.
+    MUI_ASSERT(parentNode->links.childCount != 0 &&
+               (entry->links.previous != 0
+                    ? muiTreeAt(tree, entry->links.previous)->links.next == node
+                    : parentNode->links.firstChild == node) &&
+               (entry->links.next != 0 ? muiTreeAt(tree, entry->links.next)->links.previous == node
+                                       : parentNode->links.lastChild == node));
     if (entry->links.previous != 0)
     {
         muiTreeAt(tree, entry->links.previous)->links.next = entry->links.next;

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Accessibility (record mui-0008): the host's data per node, and the
-// roots updates are built for.
+// Accessibility: the host's data per node, and the roots updates are built
+// for.
 
 #include "maul-ui/access.h"
 
@@ -10,20 +10,20 @@
 #include "access_store.h"
 #include "allocator.h"
 #include "context.h"
+#include "fpenv.h"
 #include "tree.h"
 
 #include <stdalign.h>
 #include <string.h>
 
 // Texts are below 2^31 bytes, so a length and its NUL fit 32 bits.
-#define MAX_TEXT ((size_t)INT32_MAX)
 
-uint64_t muiAccessIdOf(muiNodeId nodeId)
+uint64_t muiNode_GetAccessId(muiNodeId nodeId)
 {
     return ((uint64_t)nodeId.generation << 32) | nodeId.index1;
 }
 
-muiNodeId muiNodeIdOfAccess(uint64_t id)
+muiNodeId muiGetNodeOfAccessId(uint64_t id)
 {
     return (muiNodeId){(uint32_t)id, (uint32_t)(id >> 32)};
 }
@@ -151,7 +151,7 @@ bool muiAccessIsUtf8(const unsigned char* text, size_t length)
     return true;
 }
 
-muiResult muiNode_SetAccessRole(muiContext* context, muiNodeId nodeId, muiRole role)
+static muiResult NodeSetAccessRole(muiContext* context, muiNodeId nodeId, muiRole role)
 {
     if (context == nullptr)
     {
@@ -180,8 +180,23 @@ muiResult muiNode_SetAccessRole(muiContext* context, muiNodeId nodeId, muiRole r
     return mui_success;
 }
 
+muiResult muiNode_SetAccessRole(muiContext* context, muiNodeId nodeId, muiRole role)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetAccessRole(context, nodeId, role);
+        muiLeave(context);
+    }
+    return status;
+}
+
 muiResult muiNode_GetAccessRole(const muiContext* context, muiNodeId nodeId, muiRole* roleOut)
 {
+    if (roleOut != nullptr)
+    {
+        *roleOut = 0;
+    }
     if (context == nullptr || roleOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -196,14 +211,18 @@ muiResult muiNode_GetAccessRole(const muiContext* context, muiNodeId nodeId, mui
     return mui_success;
 }
 
-muiResult muiNode_SetAccessText(muiContext* context, muiNodeId nodeId, muiAccessTextKind kind,
-                                const char* text, size_t length)
+static muiResult NodeSetAccessText(muiContext* context, muiNodeId nodeId, muiAccessTextKind kind,
+                                   const char* text, size_t length)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (kind >= MUI_ACCESS_TEXTS || (text == nullptr && length != 0) || length > MAX_TEXT ||
+    if (length > MUI_MAX_TEXT_BYTES)
+    {
+        return muiRefuseLimit(context);
+    }
+    if (kind >= MUI_ACCESS_TEXTS || (text == nullptr && length != 0) ||
         !muiAccessIsUtf8((const unsigned char*)text, length))
     {
         return muiRefuse(context);
@@ -248,9 +267,39 @@ muiResult muiNode_SetAccessText(muiContext* context, muiNodeId nodeId, muiAccess
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult NodeSetAccessTextWorker(muiContext* context, muiNodeId nodeId,
+                                                      muiAccessTextKind kind, const char* text,
+                                                      size_t length)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetAccessText(context, nodeId, kind, text, length);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_SetAccessText(muiContext* context, muiNodeId nodeId, muiAccessTextKind kind,
+                                const char* text, size_t length)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NodeSetAccessTextWorker(context, nodeId, kind, text, length);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 muiResult muiNode_GetAccessText(const muiContext* context, muiNodeId nodeId, muiAccessTextKind kind,
                                 const char** textOut, size_t* lengthOut)
 {
+    if (textOut != nullptr)
+    {
+        *textOut = nullptr;
+    }
+    if (lengthOut != nullptr)
+    {
+        *lengthOut = 0;
+    }
     if (context == nullptr || textOut == nullptr || lengthOut == nullptr || nodeId.index1 == 0 ||
         kind >= MUI_ACCESS_TEXTS)
     {
@@ -271,7 +320,7 @@ muiResult muiNode_GetAccessText(const muiContext* context, muiNodeId nodeId, mui
     return mui_success;
 }
 
-muiResult muiNode_SetAccessFlags(muiContext* context, muiNodeId nodeId, muiAccessFlags flags)
+static muiResult NodeSetAccessFlags(muiContext* context, muiNodeId nodeId, muiAccessFlags flags)
 {
     if (context == nullptr)
     {
@@ -300,9 +349,24 @@ muiResult muiNode_SetAccessFlags(muiContext* context, muiNodeId nodeId, muiAcces
     return mui_success;
 }
 
+muiResult muiNode_SetAccessFlags(muiContext* context, muiNodeId nodeId, muiAccessFlags flags)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetAccessFlags(context, nodeId, flags);
+        muiLeave(context);
+    }
+    return status;
+}
+
 muiResult muiNode_GetAccessFlags(const muiContext* context, muiNodeId nodeId,
                                  muiAccessFlags* flagsOut)
 {
+    if (flagsOut != nullptr)
+    {
+        *flagsOut = 0;
+    }
     if (context == nullptr || flagsOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -377,7 +441,7 @@ static bool AllocateBuffers(muiContext* context)
     return true;
 }
 
-muiResult muiAccess_Enable(muiContext* context, muiNodeId rootId)
+static muiResult AccessEnable(muiContext* context, muiNodeId rootId)
 {
     if (context == nullptr)
     {
@@ -411,13 +475,13 @@ muiResult muiAccess_Enable(muiContext* context, muiNodeId rootId)
     return mui_success;
 }
 
-muiResult muiAccess_Disable(muiContext* context, muiNodeId rootId)
+static muiResult AccessDisable(muiContext* context, muiNodeId rootId)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (rootId.index1 == 0 || muiIsInHostCall(context))
+    if (rootId.index1 == 0)
     {
         return muiRefuse(context);
     }
@@ -436,6 +500,23 @@ muiResult muiAccess_Disable(muiContext* context, muiNodeId rootId)
         muiAccessFreeBuffers(store, &context->allocator);
     }
     return entry != nullptr ? mui_success : mui_empty;
+}
+
+muiResult muiNode_EnableAccess(muiContext* context, muiNodeId rootId, bool enable)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = enable ? AccessEnable(context, rootId) : AccessDisable(context, rootId);
+        muiLeave(context);
+    }
+    return status;
+}
+
+bool muiNode_IsAccessEnabled(const muiContext* context, muiNodeId rootId)
+{
+    uint32_t slot = context != nullptr ? muiTreeResolve(&context->tree, rootId) : 0;
+    return slot != 0 && muiAccessRootOf(context, slot) != nullptr;
 }
 
 // How many of an entry's links are of a kind, and where they begin.
@@ -466,7 +547,7 @@ static bool HasLinks(const muiAccessEntry* entry, muiAccessRelation kind, const 
     }
     for (uint32_t i = 0; i < count; i++)
     {
-        if (entry->links[first + i].target != muiAccessIdOf(targets[i]))
+        if (entry->links[first + i].target != muiNode_GetAccessId(targets[i]))
         {
             return false;
         }
@@ -492,16 +573,21 @@ static muiResult CheckTargets(muiContext* context, const muiNodeId* targets, uin
     return mui_success;
 }
 
-muiResult muiNode_SetAccessRelation(muiContext* context, muiNodeId nodeId, muiAccessRelation kind,
-                                    const muiNodeId* targets, uint32_t count)
+static muiResult NodeSetAccessRelation(muiContext* context, muiNodeId nodeId,
+                                       muiAccessRelation kind, const muiNodeId* targets,
+                                       uint32_t count)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (kind >= MUI_ACCESS_RELATIONS || (targets == nullptr && count != 0) || count > UINT16_MAX)
+    if (kind >= MUI_ACCESS_RELATIONS || (targets == nullptr && count != 0))
     {
         return muiRefuse(context);
+    }
+    if (count > MUI_MAX_RELATION_TARGETS)
+    {
+        return muiRefuseLimit(context);
     }
     muiResult status = mui_success;
     uint32_t slot = muiResolveEdit(context, nodeId, &status);
@@ -548,7 +634,7 @@ muiResult muiNode_SetAccessRelation(muiContext* context, muiNodeId nodeId, muiAc
         }
         for (uint32_t i = 0; i < count; i++)
         {
-            links[first + i] = (muiAccessLink){muiAccessIdOf(targets[i]), kind};
+            links[first + i] = (muiAccessLink){muiNode_GetAccessId(targets[i]), kind};
         }
         for (uint32_t i = first + old; i < entry->linkCount; i++)
         {
@@ -562,10 +648,26 @@ muiResult muiNode_SetAccessRelation(muiContext* context, muiNodeId nodeId, muiAc
     return mui_success;
 }
 
+muiResult muiNode_SetAccessRelation(muiContext* context, muiNodeId nodeId, muiAccessRelation kind,
+                                    const muiNodeId* targets, uint32_t count)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetAccessRelation(context, nodeId, kind, targets, count);
+        muiLeave(context);
+    }
+    return status;
+}
+
 muiResult muiNode_GetAccessRelation(const muiContext* context, muiNodeId nodeId,
                                     muiAccessRelation kind, muiNodeId* targetsOut,
                                     uint32_t capacity, uint32_t* countOut)
 {
+    if (countOut != nullptr)
+    {
+        *countOut = 0;
+    }
     if (context == nullptr || countOut == nullptr || (targetsOut == nullptr && capacity != 0) ||
         nodeId.index1 == 0 || kind >= MUI_ACCESS_RELATIONS)
     {
@@ -581,7 +683,7 @@ muiResult muiNode_GetAccessRelation(const muiContext* context, muiNodeId nodeId,
     uint32_t count = entry != nullptr ? LinksOf(entry, kind, &first) : 0;
     for (uint32_t i = 0; i < count && i < capacity; i++)
     {
-        targetsOut[i] = muiNodeIdOfAccess(entry->links[first + i].target);
+        targetsOut[i] = muiGetNodeOfAccessId(entry->links[first + i].target);
     }
     *countOut = count;
     return count <= capacity ? mui_success : mui_errorCapacity;
@@ -594,7 +696,7 @@ muiAccessValues muiDefaultAccessValues(void)
 
 static bool AreValuesValid(const muiAccessValues* values)
 {
-    return values->live <= mui_liveAssertive && values->popup <= mui_popupDialog &&
+    return values->live <= mui_liveAssertive && values->popup <= mui_hasPopupDialog &&
            values->orientation <= mui_orientationVertical && values->sort <= mui_sortOther &&
            values->invalid <= mui_invalidSpelling && values->current <= mui_currentTime;
 }
@@ -609,8 +711,8 @@ bool muiAccessSameValues(const muiAccessValues* a, const muiAccessValues* b)
            a->invalid == b->invalid && a->current == b->current;
 }
 
-muiResult muiNode_SetAccessValues(muiContext* context, muiNodeId nodeId,
-                                  const muiAccessValues* values)
+static muiResult NodeSetAccessValues(muiContext* context, muiNodeId nodeId,
+                                     const muiAccessValues* values)
 {
     if (context == nullptr)
     {
@@ -639,9 +741,25 @@ muiResult muiNode_SetAccessValues(muiContext* context, muiNodeId nodeId,
     return mui_success;
 }
 
+muiResult muiNode_SetAccessValues(muiContext* context, muiNodeId nodeId,
+                                  const muiAccessValues* values)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetAccessValues(context, nodeId, values);
+        muiLeave(context);
+    }
+    return status;
+}
+
 muiResult muiNode_GetAccessValues(const muiContext* context, muiNodeId nodeId,
                                   muiAccessValues* valuesOut)
 {
+    if (valuesOut != nullptr)
+    {
+        memset(valuesOut, 0, sizeof *valuesOut);
+    }
     if (context == nullptr || valuesOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -656,15 +774,12 @@ muiResult muiNode_GetAccessValues(const muiContext* context, muiNodeId nodeId,
     return mui_success;
 }
 
-muiResult muiSetAccessTextFunction(muiContext* context, muiAccessTextFunction function, void* user)
+static muiResult SetAccessTextFunction(muiContext* context, muiAccessTextFunction function,
+                                       void* user)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
-    }
-    if (muiIsInHostCall(context))
-    {
-        return muiRefuse(context);
     }
     context->access.textFunction = function;
     context->access.textUser = user;
@@ -676,7 +791,19 @@ muiResult muiSetAccessTextFunction(muiContext* context, muiAccessTextFunction fu
     return mui_success;
 }
 
-muiResult muiNode_MarkAccessChanged(muiContext* context, muiNodeId nodeId)
+muiResult muiContext_SetAccessTextFunction(muiContext* context, muiAccessTextFunction function,
+                                           void* user)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = SetAccessTextFunction(context, function, user);
+        muiLeave(context);
+    }
+    return status;
+}
+
+static muiResult NodeMarkAccessChanged(muiContext* context, muiNodeId nodeId)
 {
     if (context == nullptr)
     {
@@ -687,6 +814,17 @@ muiResult muiNode_MarkAccessChanged(muiContext* context, muiNodeId nodeId)
     if (slot != 0)
     {
         muiNoteAccess(context, slot);
+    }
+    return status;
+}
+
+muiResult muiNode_MarkAccessChanged(muiContext* context, muiNodeId nodeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeMarkAccessChanged(context, nodeId);
+        muiLeave(context);
     }
     return status;
 }

@@ -32,9 +32,10 @@ static mwinResult FindTestGamepad(const mwinContext* context, mwinGamepadId game
     return *slotOut < 0 ? mwin_errorStale : mwin_success;
 }
 
-mwinResult mwinTestAddGamepad(mwinContext* context, const mwinGamepadInfo* info,
+mwinResult mwinAddTestGamepad(mwinContext* context, const mwinGamepadInfo* info,
                               mwinGamepadId* gamepadOut)
 {
+    mwinClearOut(gamepadOut, sizeof *gamepadOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);
@@ -57,8 +58,8 @@ mwinResult mwinTestAddGamepad(mwinContext* context, const mwinGamepadInfo* info,
     return mwin_success;
 }
 
-mwinResult mwinTestChangeGamepad(mwinContext* context, mwinGamepadId gamepad,
-                                 const mwinGamepadInfo* info)
+mwinResult mwinGamepad_SetTestInfo(mwinContext* context, mwinGamepadId gamepad,
+                                   const mwinGamepadInfo* info)
 {
     if (mwinIsBusy(context))
     {
@@ -74,7 +75,7 @@ mwinResult mwinTestChangeGamepad(mwinContext* context, mwinGamepadId gamepad,
     return status;
 }
 
-mwinResult mwinTestRemoveGamepad(mwinContext* context, mwinGamepadId gamepad)
+mwinResult mwinRemoveTestGamepad(mwinContext* context, mwinGamepadId gamepad)
 {
     if (mwinIsBusy(context))
     {
@@ -89,8 +90,8 @@ mwinResult mwinTestRemoveGamepad(mwinContext* context, mwinGamepadId gamepad)
     return status;
 }
 
-mwinResult mwinTestGamepadButton(mwinContext* context, mwinGamepadId gamepad, uint8_t button,
-                                 bool down)
+mwinResult mwinGamepad_SetTestButton(mwinContext* context, mwinGamepadId gamepad, uint8_t button,
+                                     bool down)
 {
     if (mwinIsBusy(context))
     {
@@ -105,8 +106,8 @@ mwinResult mwinTestGamepadButton(mwinContext* context, mwinGamepadId gamepad, ui
     return status;
 }
 
-mwinResult mwinTestGamepadAxis(mwinContext* context, mwinGamepadId gamepad, uint8_t axis,
-                               float value)
+mwinResult mwinGamepad_SetTestAxis(mwinContext* context, mwinGamepadId gamepad, uint8_t axis,
+                                   float value)
 {
     if (mwinIsBusy(context))
     {
@@ -126,6 +127,10 @@ static mwinResult GetRumble(const mwinContext* context, mwinGamepadId gamepad, b
                             float* lowOut, float* highOut, uint32_t* durationMsOut,
                             uint32_t* countOut)
 {
+    mwinClearOut(lowOut, sizeof *lowOut);
+    mwinClearOut(highOut, sizeof *highOut);
+    mwinClearOut(durationMsOut, sizeof *durationMsOut);
+    mwinClearOut(countOut, sizeof *countOut);
     if (lowOut == nullptr || highOut == nullptr || durationMsOut == nullptr || countOut == nullptr)
     {
         return mwinMisuse(context);
@@ -144,21 +149,24 @@ static mwinResult GetRumble(const mwinContext* context, mwinGamepadId gamepad, b
     return status;
 }
 
-mwinResult mwinTestGetRumble(const mwinContext* context, mwinGamepadId gamepad, float* lowOut,
-                             float* highOut, uint32_t* durationMsOut, uint32_t* countOut)
+mwinResult mwinGamepad_GetTestRumble(const mwinContext* context, mwinGamepadId gamepad,
+                                     float* lowOut, float* highOut, uint32_t* durationMsOut,
+                                     uint32_t* countOut)
 {
     return GetRumble(context, gamepad, false, lowOut, highOut, durationMsOut, countOut);
 }
 
-mwinResult mwinTestGetTriggerRumble(const mwinContext* context, mwinGamepadId gamepad,
-                                    float* leftOut, float* rightOut, uint32_t* durationMsOut,
-                                    uint32_t* countOut)
+mwinResult mwinGamepad_GetTestTriggerRumble(const mwinContext* context, mwinGamepadId gamepad,
+                                            float* leftOut, float* rightOut,
+                                            uint32_t* durationMsOut, uint32_t* countOut)
 {
     return GetRumble(context, gamepad, true, leftOut, rightOut, durationMsOut, countOut);
 }
 
-mwinResult mwinTestGetMotionOn(const mwinContext* context, mwinGamepadId gamepad, bool* onOut)
+mwinResult mwinGamepad_IsTestMotionEnabled(const mwinContext* context, mwinGamepadId gamepad,
+                                           bool* onOut)
 {
+    mwinClearOut(onOut, sizeof *onOut);
     if (onOut == nullptr)
     {
         return mwinMisuse(context);
@@ -172,9 +180,9 @@ mwinResult mwinTestGetMotionOn(const mwinContext* context, mwinGamepadId gamepad
     return status;
 }
 
-mwinResult mwinTestGamepadMotion(mwinContext* context, mwinGamepadId gamepad,
-                                 const float acceleration[3], const float rotationRate[3],
-                                 uint64_t timeNs)
+mwinResult mwinGamepad_PostTestMotion(mwinContext* context, mwinGamepadId gamepad,
+                                      const float acceleration[3], const float rotationRate[3],
+                                      uint64_t timeNs)
 {
     if (mwinIsBusy(context))
     {

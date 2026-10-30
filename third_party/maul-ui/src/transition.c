@@ -2,19 +2,20 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The public functions over transition specs and the variants that name
-// them (record mui-0004).
+// them.
 
 #include "maul-ui/transition.h"
 
 #include "animation.h"
 #include "context.h"
-#include "easing.h"
+#include "fpenv.h"
 #include "pool.h"
 #include "property.h"
 #include "style_edit.h"
 #include "style_store.h"
 
 #include <math.h>
+#include <string.h>
 
 #define TRANSITION_DEF_COOKIE 0x6D757472u // "mutr"
 
@@ -45,34 +46,51 @@ static bool IsDefValid(const muiTransitionDef* def)
            def->dampingRatio > 0.0f;
 }
 
-// The curve of an easing, from CSS Easing Functions' keywords.
-static muiCurve CurveOf(const muiTransitionDef* def)
+// A def's easing and spring, made by Maul Tween: the easing from CSS
+// Easing Functions' keywords or the def's curve. Whether Maul Tween takes
+// them, as it does every def IsDefValid passes.
+static bool MakeMotion(const muiTransitionDef* def, muiTransitionSpec* spec)
 {
     static const double keywords[][4] = {
-        {0.0, 0.0, 1.0, 1.0},  {0.25, 0.1, 0.25, 1.0}, {0.42, 0.0, 1.0, 1.0},
-        {0.0, 0.0, 0.58, 1.0}, {0.42, 0.0, 0.58, 1.0},
+        {0.25, 0.1, 0.25, 1.0},
+        {0.42, 0.0, 1.0, 1.0},
+        {0.0, 0.0, 0.58, 1.0},
+        {0.42, 0.0, 0.58, 1.0},
     };
-    if (def->easing == mui_easingCubicBezier)
+    mtwnResult easing = mtwn_success;
+    if (def->easing == mui_easingLinear)
     {
-        return muiMakeCurve((double)def->bezier[0], (double)def->bezier[1], (double)def->bezier[2],
-                            (double)def->bezier[3]);
+        spec->easing = mtwnMakeLinearEasing();
     }
-    const double* p = keywords[def->easing];
-    return muiMakeCurve(p[0], p[1], p[2], p[3]);
+    else if (def->easing == mui_easingCubicBezier)
+    {
+        easing = mtwnMakeCubicBezierEasing((double)def->bezier[0], (double)def->bezier[1],
+                                           (double)def->bezier[2], (double)def->bezier[3],
+                                           &spec->easing);
+    }
+    else
+    {
+        const double* p = keywords[def->easing - 1];
+        easing = mtwnMakeCubicBezierEasing(p[0], p[1], p[2], p[3], &spec->easing);
+    }
+    return easing == mtwn_success &&
+           mtwnMakeSpringFromFrequency((double)def->frequency, (double)def->dampingRatio,
+                                       &spec->spring) == mtwn_success;
 }
 
-muiResult muiCreateTransition(muiContext* context, const muiTransitionDef* def,
-                              muiTransitionId* transitionOut)
+static muiResult CreateTransition(muiContext* context, const muiTransitionDef* def,
+                                  muiTransitionId* transitionOut)
 {
-    if (transitionOut != nullptr)
-    {
-        *transitionOut = (muiTransitionId){0, 0};
-    }
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (def == nullptr || transitionOut == nullptr || !IsDefValid(def) || muiIsInHostCall(context))
+    if (def == nullptr || transitionOut == nullptr || !IsDefValid(def))
+    {
+        return muiRefuse(context);
+    }
+    muiTransitionSpec spec = {.def = *def};
+    if (!MakeMotion(def, &spec))
     {
         return muiRefuse(context);
     }
@@ -82,18 +100,44 @@ muiResult muiCreateTransition(muiContext* context, const muiTransitionDef* def,
     {
         return mui_errorCapacity;
     }
-    store->specs[slot - 1] = (muiTransitionSpec){.def = *def, .curve = CurveOf(def)};
+    store->specs[slot - 1] = spec;
     *transitionOut = (muiTransitionId){slot, muiPoolGeneration(&store->specPool, slot)};
     return mui_success;
 }
 
-muiResult muiDestroyTransition(muiContext* context, muiTransitionId transitionId)
+static MUI_NOINLINE muiResult CreateTransitionWorker(muiContext* context,
+                                                     const muiTransitionDef* def,
+                                                     muiTransitionId* transitionOut)
+{
+    if (transitionOut != nullptr)
+    {
+        memset(transitionOut, 0, sizeof *transitionOut);
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = CreateTransition(context, def, transitionOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiCreateTransition(muiContext* context, const muiTransitionDef* def,
+                              muiTransitionId* transitionOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = CreateTransitionWorker(context, def, transitionOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult DestroyTransition(muiContext* context, muiTransitionId transitionId)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (transitionId.index1 == 0 || muiIsInHostCall(context))
+    if (transitionId.index1 == 0)
     {
         return muiRefuse(context);
     }
@@ -107,6 +151,17 @@ muiResult muiDestroyTransition(muiContext* context, muiTransitionId transitionId
     // find it gone.
     muiPoolGive(&store->specPool, slot);
     return mui_success;
+}
+
+muiResult muiDestroyTransition(muiContext* context, muiTransitionId transitionId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = DestroyTransition(context, transitionId);
+        muiLeave(context);
+    }
+    return status;
 }
 
 // Takes properties away from every binding of a set, dropping empty
@@ -171,14 +226,14 @@ static muiResult SetBinding(muiContext* context, muiStyleClass* class, muiVarian
     // A set that is full of bindings existed already, so none is wasted.
     if (!Bind(set, transition, properties))
     {
-        return mui_errorCapacity;
+        return muiRefuseLimit(context);
     }
     return mui_success;
 }
 
-muiResult muiStyle_SetTransition(muiContext* context, muiStyleId styleId, muiVariant variant,
-                                 muiTransitionId transitionId, muiPropertyGroup group,
-                                 muiPropertyMask mask)
+static muiResult StyleSetTransition(muiContext* context, muiStyleId styleId, muiVariant variant,
+                                    muiTransitionId transitionId, muiPropertyGroup group,
+                                    muiPropertyMask mask)
 {
     if (context == nullptr)
     {
@@ -211,9 +266,26 @@ muiResult muiStyle_SetTransition(muiContext* context, muiStyleId styleId, muiVar
     return status;
 }
 
+muiResult muiStyle_SetTransition(muiContext* context, muiStyleId styleId, muiVariant variant,
+                                 muiTransitionId transitionId, muiPropertyGroup group,
+                                 muiPropertyMask mask)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = StyleSetTransition(context, styleId, variant, transitionId, group, mask);
+        muiLeave(context);
+    }
+    return status;
+}
+
 muiResult muiStyle_GetTransition(const muiContext* context, muiStyleId styleId, muiVariant variant,
                                  muiProperty property, muiTransitionId* transitionOut)
 {
+    if (transitionOut != nullptr)
+    {
+        memset(transitionOut, 0, sizeof *transitionOut);
+    }
     if (context == nullptr || transitionOut == nullptr || styleId.index1 == 0 ||
         !muiIsPropertyKnown(property))
     {

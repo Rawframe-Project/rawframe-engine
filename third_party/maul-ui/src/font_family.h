@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Finding font families by key and matching their faces (record
-// mui-0006).
+// Finding font families by key and matching their faces.
 
 #ifndef MAUL_UI_SRC_FONT_FAMILY_H
 #define MAUL_UI_SRC_FONT_FAMILY_H

@@ -51,7 +51,7 @@ bool mwinXkbUpdateState(mwinXkbKeyboard* keyboard, uint32_t depressed, uint32_t 
 // layout: its code point, or MWIN_KEY_NAMED with its code.
 mwinKey mwinXkbKeyOf(const mwinXkbKeyboard* keyboard, uint32_t evdev, mwinKeyCode code);
 
-// The same for a key code, as mwinMapKeyCode answers.
+// The same for a key code, as mwinContext_MapKeyCode answers.
 mwinKey mwinXkbMapKeyCode(const mwinXkbKeyboard* keyboard, mwinKeyCode code);
 
 // The text a key typed as it went down: through a compose sequence
@@ -64,7 +64,7 @@ uint32_t mwinXkbType(mwinXkbKeyboard* keyboard, uint32_t evdev, bool compose,
 bool mwinXkbRepeats(const mwinXkbKeyboard* keyboard, uint32_t evdev);
 void mwinXkbResetCompose(mwinXkbKeyboard* keyboard);
 
-// The current layout's name, as mwinGetKeyboardLayout reports it.
+// The current layout's name, as mwinContext_GetKeyboardLayout reports it.
 mwinResult mwinXkbLayoutName(const mwinXkbKeyboard* keyboard, char* buffer, size_t capacity,
                              size_t* lengthOut);
 

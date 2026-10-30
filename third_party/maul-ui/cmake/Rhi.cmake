@@ -1,9 +1,9 @@
-# The reference renderer (record mui-0005), maul-ui-rhi: a static
+# The reference renderer, maul-ui-rhi: a static
 # library beside maul-ui, drawing its lists with Maul RHI, found installed
 # or fetched at its release tag as Maul Unicode is. The core and the text
 # component never depend on it.
 
-set(MAUL_UI_RHI_VERSION 0.7.0)
+set(MAUL_UI_RHI_VERSION 0.13.0)
 find_package(maul-rhi ${MAUL_UI_RHI_VERSION} QUIET)
 if(NOT maul-rhi_FOUND)
     set(MAUL_RHI_BUILD_TESTS OFF)

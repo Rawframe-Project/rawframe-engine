@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The AT-SPI adapter (record mui-0008): the application, its windows,
-// and what answering clients shares: finding the object a path names,
-// writing references, texts and variants, and AT-SPI's roles and states.
+// The AT-SPI adapter: the application, its windows, and what answering
+// clients shares: finding the object a path names, writing references,
+// texts and variants, and AT-SPI's roles and states.
 
 #ifndef MAUL_UI_SRC_ATSPI_H
 #define MAUL_UI_SRC_ATSPI_H
@@ -48,6 +48,11 @@ struct muiAtspiApp
     bool registered;
     // The id the registry gives through the Application interface.
     int32_t id;
+    // Set while one of its functions that change it runs, or host code it
+    // calls (the allocator, an action function) runs: a call back in is
+    // refused (Maul conventions, Threads), and counted.
+    bool busy;
+    uint64_t misuse;
 };
 
 // What clients were last told of a shown node: its shown parent, 0 for
@@ -81,7 +86,7 @@ struct muiAtspiAdapter
     float scale;
     int32_t x;
     int32_t y;
-    muiAtspiActionFunction action;
+    muiAccessActionFunction action;
     void* user;
     // Room for any node's shown children.
     uint64_t* scratch;

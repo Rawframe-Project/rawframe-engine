@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Placing an editing block's selection through a node's laid-out text
-// (record mui-0006): moves, presses and drags. A press selects a cluster
-// edge, a word or a paragraph by its click count, as every platform's
-// double and triple click; a drag extends by the same unit, keeping what
-// the press selected. A move without Shift over a selection collapses it
-// to the edge that way instead of moving on, as every platform's arrows.
+// Placing an editing block's selection through a node's laid-out text:
+// moves, presses and drags. A press selects a cluster edge, a word or a
+// paragraph by its click count, as every platform's double and triple
+// click; a drag extends by the same unit, keeping what the press selected.
+// A move without Shift over a selection collapses it to the edge that way
+// instead of moving on, as every platform's arrows.
 
 #include "maul-ui/text_editor.h"
 
+#include "fpenv.h"
 #include "text_editing.h"
+#include "text_entry.h"
+#include "text_host.h"
 #include "text_service.h"
 
 #include "maul-ui/layout.h"
@@ -52,9 +55,9 @@ static muiResult EdgeOf(const muiTextHost* host, muiNodeId nodeId, float width,
     {
         muiTextCaret a;
         muiTextCaret b;
-        muiResult result = muiTextGetCaret(host, nodeId, width, anchor, &a);
-        result = result == mui_success ? muiTextGetCaret(host, nodeId, width, selection->caret, &b)
-                                       : result;
+        muiResult result = muiCaretOf(host, nodeId, width, anchor, &a);
+        result =
+            result == mui_success ? muiCaretOf(host, nodeId, width, selection->caret, &b) : result;
         if (result != mui_success)
         {
             return result;
@@ -68,8 +71,8 @@ static muiResult EdgeOf(const muiTextHost* host, muiNodeId nodeId, float width,
     return mui_success;
 }
 
-muiResult muiTextEditMove(const muiTextHost* host, muiNodeId nodeId, muiTextMovement movement,
-                          bool extend)
+muiResult muiEditMove(const muiTextHost* host, muiNodeId nodeId, muiTextMovement movement,
+                      bool extend)
 {
     muiTextBlock* block = nullptr;
     muiRect content;
@@ -94,11 +97,11 @@ muiResult muiTextEditMove(const muiTextHost* host, muiNodeId nodeId, muiTextMove
         muiTextCaret caret;
         if (vertical && editing->preferredX < 0.0f)
         {
-            result = muiTextGetCaret(host, nodeId, content.width, selection.caret, &caret);
+            result = muiCaretOf(host, nodeId, content.width, selection.caret, &caret);
             editing->preferredX = result == mui_success ? caret.x : -1.0f;
         }
         result = result == mui_success
-                     ? muiTextMove(host, nodeId, content.width, selection.caret, movement,
+                     ? muiMoveText(host, nodeId, content.width, selection.caret, movement,
                                    fmaxf(editing->preferredX, 0.0f), &moved)
                      : result;
     }
@@ -116,6 +119,28 @@ muiResult muiTextEditMove(const muiTextHost* host, muiNodeId nodeId, muiTextMove
     return mui_success;
 }
 
+static MUI_NOINLINE muiResult TextEditMoveWorker(const muiTextHost* host, muiNodeId nodeId,
+                                                 muiTextMovement movement, bool extend)
+{
+    bool held = false;
+    muiResult status = muiEnterTextHost(host, &held);
+    if (status == mui_success)
+    {
+        status = muiEditMove(host, nodeId, movement, extend);
+        muiLeaveTextHost(host, held);
+    }
+    return status;
+}
+
+muiResult muiNode_MoveEditCaret(const muiTextHost* host, muiNodeId nodeId, muiTextMovement movement,
+                                bool extend)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextEditMoveWorker(host, nodeId, movement, extend);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 // The word, or the white space between words, at an offset: a segment of
 // Unicode's word boundaries; at the text's end, the one before it.
 static void WordAround(const muiTextBlock* block, uint32_t at, uint32_t* startOut, uint32_t* endOut)
@@ -126,7 +151,7 @@ static void WordAround(const muiTextBlock* block, uint32_t at, uint32_t* startOu
     if (muniInitWordIterator(&iterator, block->text.data, block->length, false) == muni_success)
     {
         size_t next = 0;
-        while (muniNextSegmentBreak(&iterator, &next) == muni_success)
+        while (muniSegmentIterator_NextBreak(&iterator, &next) == muni_success)
         {
             if (next > at || next == block->length)
             {
@@ -188,7 +213,7 @@ static void ParagraphAround(const muiTextBlock* block, uint32_t at, uint32_t* st
 static void UnitAround(const muiTextBlock* block, uint8_t grain, uint32_t at, uint32_t* startOut,
                        uint32_t* endOut)
 {
-    if (grain == MUI_GRAIN_WORD && (block->editing.def.flags & mui_editPassword) != 0)
+    if (grain == MUI_GRAIN_WORD && (block->editing.rules.flags & mui_editPassword) != 0)
     {
         // A password is one word: its words stay unseen.
         *startOut = 0;
@@ -243,13 +268,13 @@ static void ExtendTo(muiTextBlock* block, muiTextPosition position)
 static muiResult PositionAt(const muiTextHost* host, muiNodeId nodeId, const muiRect* content,
                             float x, float y, muiTextPosition* positionOut)
 {
-    return isfinite(x) && isfinite(y) ? muiTextHitTest(host, nodeId, content->width, x - content->x,
-                                                       y - content->y, positionOut)
+    return isfinite(x) && isfinite(y) ? muiHitText(host, nodeId, content->width, x - content->x,
+                                                   y - content->y, positionOut)
                                       : muiRefuseText(host->service);
 }
 
-muiResult muiTextEditPress(const muiTextHost* host, muiNodeId nodeId, float x, float y,
-                           uint32_t clickCount, bool extend)
+muiResult muiEditPress(const muiTextHost* host, muiNodeId nodeId, float x, float y,
+                       uint32_t clickCount, bool extend)
 {
     muiTextBlock* block = nullptr;
     muiRect content;
@@ -280,7 +305,30 @@ muiResult muiTextEditPress(const muiTextHost* host, muiNodeId nodeId, float x, f
     return mui_success;
 }
 
-muiResult muiTextEditDrag(const muiTextHost* host, muiNodeId nodeId, float x, float y)
+static MUI_NOINLINE muiResult TextEditPressWorker(const muiTextHost* host, muiNodeId nodeId,
+                                                  float x, float y, uint32_t clickCount,
+                                                  bool extend)
+{
+    bool held = false;
+    muiResult status = muiEnterTextHost(host, &held);
+    if (status == mui_success)
+    {
+        status = muiEditPress(host, nodeId, x, y, clickCount, extend);
+        muiLeaveTextHost(host, held);
+    }
+    return status;
+}
+
+muiResult muiNode_HandleEditPress(const muiTextHost* host, muiNodeId nodeId, float x, float y,
+                                  uint32_t clickCount, bool extend)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextEditPressWorker(host, nodeId, x, y, clickCount, extend);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+muiResult muiEditDrag(const muiTextHost* host, muiNodeId nodeId, float x, float y)
 {
     muiTextBlock* block = nullptr;
     muiRect content;
@@ -292,5 +340,26 @@ muiResult muiTextEditDrag(const muiTextHost* host, muiNodeId nodeId, float x, fl
         block->editing.preferredX = -1.0f;
         ExtendTo(block, position);
     }
+    return result;
+}
+
+static MUI_NOINLINE muiResult TextEditDragWorker(const muiTextHost* host, muiNodeId nodeId, float x,
+                                                 float y)
+{
+    bool held = false;
+    muiResult status = muiEnterTextHost(host, &held);
+    if (status == mui_success)
+    {
+        status = muiEditDrag(host, nodeId, x, y);
+        muiLeaveTextHost(host, held);
+    }
+    return status;
+}
+
+muiResult muiNode_HandleEditDrag(const muiTextHost* host, muiNodeId nodeId, float x, float y)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextEditDragWorker(host, nodeId, x, y);
+    muiFloatEnvLeave(floatEnv);
     return result;
 }

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Text style as nodes inherit it (record mui-0004): what a node's text
-// computes to, from its own values where a layer gives them and its
-// parent's where not, and the line height and letter spacing as written,
-// which its children inherit as written.
+// Text style as nodes inherit it: what a node's text computes to, from its
+// own values where a layer gives them and its parent's where not, and the
+// line height and letter spacing as written, which its children inherit as
+// written.
 
 #ifndef MAUL_UI_SRC_INHERIT_H
 #define MAUL_UI_SRC_INHERIT_H

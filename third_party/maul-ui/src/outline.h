@@ -3,8 +3,8 @@
 //
 // MUI_SIZE_OUTLINE marks a small helper a header defines inline and many
 // sources call. A build optimized for size (-Os, -Oz) keeps it out of
-// line, a copy a source rather than one a call (record mui-0001's size
-// budget); any other build inlines it as before.
+// line, a copy a source rather than one a call, for the size budget
+// (docs/internals/overview.md); any other build inlines it as before.
 
 #ifndef MAUL_UI_SRC_OUTLINE_H
 #define MAUL_UI_SRC_OUTLINE_H

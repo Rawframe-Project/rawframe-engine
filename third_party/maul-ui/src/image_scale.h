@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Images scaled for colour bitmap glyphs (record mui-0006): premultiplied
-// pixels in linear light, averaged over each output pixel's area when
-// shrinking and sampled bilinearly when growing, placed to a fraction of
-// a pixel.
+// Images scaled for colour bitmap glyphs: premultiplied pixels in linear
+// light, averaged over each output pixel's area when shrinking and sampled
+// bilinearly when growing, placed to a fraction of a pixel.
 
 #ifndef MAUL_UI_SRC_IMAGE_SCALE_H
 #define MAUL_UI_SRC_IMAGE_SCALE_H

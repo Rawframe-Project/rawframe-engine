@@ -16,17 +16,37 @@ extern "C"
 {
 #endif
 
-// The library version. CMake reads it from here.
+// The library version. CMake reads it from here, and release-please
+// moves it between the markers.
+// x-release-please-start-major
 #define MUI_VERSION_MAJOR 0
-#define MUI_VERSION_MINOR 5
-#define MUI_VERSION_PATCH 11
+// x-release-please-end
+// x-release-please-start-minor
+#define MUI_VERSION_MINOR 4
+// x-release-please-end
+// x-release-please-start-patch
+#define MUI_VERSION_PATCH 0
+// x-release-please-end
 
-// The version a root def (muiContextDef, muiTextServiceDef) carries, set
-// by its default as the program is built: the headers' major and minor.
-// The creation refuses a def of another with mui_errorVersion before it
-// reads the rest, whose layout that version may not share (family
-// record 0044).
-#define MUI_DEF_VERSION ((uint32_t)(MUI_VERSION_MAJOR << 16 | MUI_VERSION_MINOR))
+// The binary interface a program is built for: the whole version before
+// 1.0, when any release may break it, and the major and minor version from
+// 1.0 on. The top bit is always set, so a zeroed def never matches. The
+// root defs carry it: the context's, the text service's, the access
+// tree's, the AT-SPI application's, and the ARIA, Android,
+// NSAccessibility, UI Automation and UIKit adapters'. Their creations
+// refuse a def built for another with mui_errorVersion before they read
+// the rest, whose layout that version may not share; every other def is
+// used under an object one of them made.
+#define MUI_ABI_VERSION                                                                            \
+    (UINT32_C(0x80000000) | ((uint32_t)MUI_VERSION_MAJOR << 16) |                                  \
+     (MUI_VERSION_MAJOR == 0 ? (((uint32_t)MUI_VERSION_MINOR << 8) | (uint32_t)MUI_VERSION_PATCH)  \
+                             : (uint32_t)MUI_VERSION_MINOR))
+#if MUI_VERSION_MAJOR > 0x7FFF || MUI_VERSION_MINOR > 0xFFFF
+#error "MUI_VERSION_MAJOR or MUI_VERSION_MINOR does not fit MUI_ABI_VERSION"
+#endif
+#if MUI_VERSION_MAJOR == 0 && (MUI_VERSION_MINOR > 0xFF || MUI_VERSION_PATCH > 0xFF)
+#error "before 1.0, MUI_VERSION_MINOR and MUI_VERSION_PATCH must fit 8 bits each"
+#endif
 
 // MUI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_ui_EXPORTS is defined while building
@@ -68,28 +88,62 @@ extern "C"
         mui_success = 0,
         // A queue had nothing to take.
         mui_empty = 1,
-        // An argument is invalid: a null pointer where one is required, a
-        // value out of range.
+        // An argument is invalid: a null pointer where one is required, an
+        // object of the wrong kind, a value outside the range its parameter
+        // documents. A correct program never passes one, so a live owner
+        // object counts it as misuse, but for a query that takes the object
+        // as const.
         mui_errorInvalid = -1,
-        // A caller buffer or a named limit is too small for the result.
+        // A caller buffer, a named limit of a def or the allocator gives too
+        // little room for the result; more room would succeed.
         mui_errorCapacity = -2,
         // An id names an object that no longer exists.
         mui_errorStale = -3,
-        // Data is damaged, or in a format the call does not take, such as
-        // a font that fails validation or a compressed web font.
-        mui_errorFormat = -4,
+        // The object was created without what the call needs, such as a
+        // glyph atlas of another format, or the library does not take the
+        // data, such as a compressed web font. No later call adds it.
+        mui_errorUnsupported = -4,
         // The platform refused: a call of its failed, or its state does
         // not allow the call, such as a thread outside the apartment the
         // platform requires.
         mui_errorPlatform = -5,
-        // A root def was built against headers of another major or minor
-        // version than the library's (MUI_DEF_VERSION).
-        mui_errorVersion = -6,
+        // The call is not allowed in the object's state, which only another
+        // call of the program changes, such as an editor call on a text
+        // block not opted into editing. It counts no misuse.
+        mui_errorState = -6,
+        // A root def was built against headers of a release whose binary
+        // interface differs from the library's (MUI_ABI_VERSION).
+        mui_errorVersion = -7,
+        // Data is damaged, such as a font that fails validation, or a
+        // request another program sent does not fit what it names, such as
+        // a number that is not finite. Another program controls such data,
+        // so it counts no misuse.
+        mui_errorFormat = -8,
+        // An argument, or its content, passes a fixed bound of the library
+        // that a MUI_MAX_ or MUI_MIN_ constant names, such as
+        // MUI_MAX_TEXT_SPANS; more room would not help. It counts as misuse,
+        // as an invalid argument does.
+        mui_errorLimit = -9,
+        // The object is busy: host code it is running (a measure, paint or
+        // access text function, the allocator, an action function, the
+        // clipboard writer) called one of its functions that changes it,
+        // or an event function called one it may not (muiEventFunction).
+        // The same call succeeds once that code returns.
+        mui_errorBusy = -10,
+    };
+
+    // The longest text the library holds, in bytes: a text block's text, an
+    // accessibility text. Offsets, one past the end included, fit 32 bits.
+    enum
+    {
+        MUI_MAX_TEXT_BYTES = 0x7FFFFFFF
     };
 
     // The allocator an owner object takes in its def and keeps for its
     // lifetime. Alignment is a power of two. A zeroed allocator means the C
-    // library's allocation functions.
+    // library's allocation functions. Its functions run inside the object's
+    // calls and call no function that changes it: one answers
+    // mui_errorBusy and counts one misuse.
     typedef struct muiAllocator
     {
         void* (*alloc)(size_t size, size_t alignment, void* context);
@@ -97,9 +151,9 @@ extern "C"
         void* context;
     } muiAllocator;
 
-    // Ids name what a context owns (family record 0016): a 1-based slot,
-    // 0 for the null id, and a generation that tells a live object from
-    // the earlier occupants of its slot.
+    // Ids name what a context owns: a 1-based slot, 0 for the null id, and
+    // a generation that tells a live object from the earlier occupants of
+    // its slot.
     typedef struct muiNodeId
     {
         uint32_t index1;
@@ -128,7 +182,7 @@ extern "C"
     /// @return A static, NUL-terminated string such as "mui_errorCapacity".
     /// @par Thread safety
     /// Safe from any thread.
-    MUI_API const char* muiResultName(muiResult result);
+    MUI_API const char* muiGetResultName(muiResult result);
 
 #ifdef __cplusplus
 }

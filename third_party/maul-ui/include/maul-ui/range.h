@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Range values (record mui-0007): a value between a minimum and a
-// maximum on a node, as a slider, a scrollbar or a volume control holds
-// one. Unhandled input changes it by default: keys by ARIA's slider
-// pattern along the range's axis (muiKeyInput, muiNavigationInput),
-// and pointer records a host dispatches (muiDispatchPointerRecord): a
-// press on the track pages toward the point, and a drag of the range
-// (its node takes drags, maul-ui/interaction.h) moves the value with
-// the pointer, keeping where the thumb was grabbed. A change made so is
-// reported by mui_notificationRangeChanged; a change by code is not.
+// Range values: a value between a minimum and a maximum on a node, as a
+// slider, a scrollbar or a volume control holds one. Unhandled input
+// changes it by default: keys by ARIA's slider pattern along the range's
+// axis (muiNode_RouteKey, muiNode_RouteNavigation), and pointer records a host
+// dispatches (muiContext_DispatchPointerRecord): a press on the track pages toward
+// the point, and a drag of the range (its node takes drags,
+// maul-ui/interaction.h) moves the value with the pointer, keeping where
+// the thumb was grabbed. A change made so is reported by
+// mui_notificationRangeChanged; a change by code is not.
 
 #ifndef MAUL_UI_RANGE_H
 #define MAUL_UI_RANGE_H
 
 #include "maul-ui/base.h"
 #include "maul-ui/context.h"
+#include "maul-ui/layout.h"
 #include "maul-ui/node.h"
 
 #include <stdbool.h>
@@ -24,18 +25,6 @@
 extern "C"
 {
 #endif
-
-    // Which way a range runs.
-    typedef uint8_t muiRangeAxis;
-
-    enum
-    {
-        // The minimum at the inline start: on the left, or on the right
-        // under right to left.
-        mui_rangeHorizontal = 0,
-        // The minimum at the bottom.
-        mui_rangeVertical = 1,
-    };
 
     typedef struct muiValueRange
     {
@@ -52,7 +41,10 @@ extern "C"
         // What page keys and a press on the track move. Finite and at
         // least 0.
         float page;
-        muiRangeAxis axis;
+        // Which way the range runs. Horizontal puts the minimum at the
+        // inline start: on the left, or on the right under right to left.
+        // Vertical puts it at the bottom.
+        muiAxis axis;
         // The node inside the range the pointer grabs, whose length along
         // the axis the value's travel leaves room for; the null id for
         // none, the value then following the pointer.
@@ -73,11 +65,11 @@ extern "C"
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param range    The range: finite numbers as described above.
-    /// @return `mui_success`; `mui_errorCapacity` when the context holds
-    ///         its limit of ranges; `mui_errorInvalid` for a NULL
-    ///         argument, the null id, a range outside the above, or a call
-    ///         from a measure or paint function; `mui_errorStale` for a
-    ///         node or thumb that is gone.
+    /// @return `mui_success`; `mui_errorCapacity` when the context holds its
+    ///         limit of ranges; `mui_errorInvalid` for a NULL argument, the
+    ///         null id or a range outside the above; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for a node or thumb that is
+    ///         gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetValueRange(muiContext* context, muiNodeId nodeId,
@@ -87,7 +79,7 @@ extern "C"
     ///
     /// @param context   The context.
     /// @param nodeId    The node.
-    /// @param rangeOut  Receives the range.
+    /// @param rangeOut  Receives the range. Zeroed on failure.
     /// @return `mui_success`; `mui_empty` for a node that is not a range;
     ///         `mui_errorInvalid` for a NULL argument or the null id;
     ///         `mui_errorStale` for a node that is gone.
@@ -104,8 +96,8 @@ extern "C"
     /// @param nodeId   The node.
     /// @param value    The value, finite.
     /// @return `mui_success`; `mui_empty` for a node that is not a range;
-    ///         `mui_errorInvalid` for a NULL context, the null id, a value
-    ///         not finite or a call from a measure or paint function;
+    ///         `mui_errorInvalid` for a NULL context, the null id or a value
+    ///         not finite; `mui_errorBusy` while the context is busy;
     ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -116,10 +108,9 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @return `mui_success`, whether or not it was one;
-    ///         `mui_errorInvalid` for a NULL context, the null id or a call
-    ///         from a measure or paint function; `mui_errorStale` for a
-    ///         node that is gone.
+    /// @return `mui_success`, whether or not it was one; `mui_errorInvalid` for
+    ///         a NULL context or the null id; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_ClearValueRange(muiContext* context, muiNodeId nodeId);

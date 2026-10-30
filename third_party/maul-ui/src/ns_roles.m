@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The NSAccessibility adapter's roles (record mui-0008): each Maul UI
-// role's AppKit role and subrole, as AccessKit maps them, by the strings
-// the accessibility API defines (NSAccessibilityButtonRole is "AXButton");
-// the roles AppKit names only by their strings are WebKit's.
+// The NSAccessibility adapter's roles: each Maul UI role's AppKit role and
+// subrole, as AccessKit maps them, by the strings the accessibility API
+// defines (NSAccessibilityButtonRole is "AXButton"); the roles AppKit
+// names only by their strings are WebKit's.
 
 #include "ns.h"
 

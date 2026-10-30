@@ -1,8 +1,9 @@
-# The text component's dependencies (record mui-0006): FreeType and
+# The text component's dependencies: FreeType and
 # HarfBuzz at pinned releases, fetched by hash and built here in reduced
 # configurations, or the installed ones with
-# MAUL_UI_TEXT_SYSTEM_LIBRARIES; and Maul Unicode at its tag, its
-# HarfBuzz functions built against the HarfBuzz chosen here.
+# MAUL_UI_TEXT_SYSTEM_LIBRARIES; and Maul Unicode at its tag
+# (cmake/Unicode.cmake), its HarfBuzz functions built against the
+# HarfBuzz chosen here.
 #
 # Included before the family modules: Maul Unicode brings its own
 # copies of them, and ours, included after, then serve this project.
@@ -13,7 +14,6 @@ include(FetchContent)
 
 set(MAUL_UI_FREETYPE_VERSION 2.14.3)
 set(MAUL_UI_HARFBUZZ_VERSION 14.5.1)
-set(MAUL_UI_UNICODE_VERSION 0.3.0)
 
 if(MAUL_UI_TEXT_SYSTEM_LIBRARIES)
     find_package(Freetype REQUIRED)
@@ -136,4 +136,9 @@ FetchContent_Declare(maul-unicode
 FetchContent_MakeAvailable(maul-unicode)
 if(NOT TARGET maul-unicode::maul-unicode-harfbuzz)
     message(FATAL_ERROR "The text component needs Maul Unicode configured with MAUL_UNICODE_HARFBUZZ ON")
+endif()
+# tools/size_report.py reads the public headers of the fetched tree; a
+# release that moved them fails here rather than in a size report.
+if(DEFINED maul-unicode_SOURCE_DIR AND NOT EXISTS ${maul-unicode_SOURCE_DIR}/include/maul-unicode/base.h)
+    message(FATAL_ERROR "Maul Unicode ${MAUL_UI_UNICODE_VERSION} has no include/maul-unicode/base.h")
 endif()

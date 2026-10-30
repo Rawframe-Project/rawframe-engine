@@ -31,6 +31,10 @@ typedef struct muiFlexFrame
     muiMeasureAxis crossIn;
     muiAxisSizing mainLimits;
     muiAxisSizing crossLimits;
+    // The maximum main size its style gives, where a wrapping column
+    // breaks its lines, also when its content alone is asked
+    // (muiSizingInput.contentOnly) and mainLimits leave it out.
+    float lineMaximum;
     // The children's percentage bases along each axis, negative when
     // indefinite: a size not given exactly, or a height that is the
     // container's content height (muiSizingInput.contentHeight).
@@ -124,42 +128,8 @@ static inline muiEdges muiFlexChildPadding(const muiFlexFrame* frame, const muiL
 // size is definite, not its content height, and for a container whose
 // ratio gives its height the ratio's, before its content floor (as
 // Chrome and Firefox); otherwise fit-content within the container.
-static inline muiMeasureAxis muiFlexCrossConstraint(const muiFlexFrame* frame,
-                                                    const muiLayoutStyle* child,
-                                                    const muiAxisSizing* cross, bool stretch)
-{
-    const muiEdges padding = muiFlexChildPadding(frame, child);
-    float boxCross = muiBoxSum(&padding, child, !frame->row);
-    muiEdges margins = muiMarginsOf(child, frame->rtl);
-    float margin = muiEdgeSum(&margins, !frame->row);
-    if (cross->definite)
-    {
-        return muiExact(muiClampSize(cross->size, cross->minimum, cross->maximum, boxCross));
-    }
-    if (frame->crossIn.mode == mui_measureExact)
-    {
-        float space = fmaxf(frame->innerCross - margin, 0.0f);
-        // Only a single line's size is known before the lines are.
-        if (stretch && !frame->multiLine && frame->extentCross >= 0.0f &&
-            muiFlexIsStretched(frame, child))
-        {
-            float line = fmaxf(frame->extentCross - margin, 0.0f);
-            return muiExact(muiClampSize(line, cross->minimum, cross->maximum, boxCross));
-        }
-        return (muiMeasureAxis){space, mui_measureAtMost};
-    }
-    if (frame->crossIn.mode == mui_measureAtMost)
-    {
-        float space = frame->crossIn.size - frame->boxCross - margin;
-        return (muiMeasureAxis){fmaxf(space, 0.0f), mui_measureAtMost};
-    }
-    // A height's min-content size is its max-content one (CSS Sizing 3):
-    // a row asked it lays its items out at theirs.
-    muiMeasureMode mode = frame->row && frame->crossIn.mode == mui_measureMinContent
-                              ? mui_measureMaxContent
-                              : frame->crossIn.mode;
-    return (muiMeasureAxis){0.0f, mode};
-}
+muiMeasureAxis muiFlexCrossConstraint(const muiFlexFrame* frame, const muiLayoutStyle* child,
+                                      const muiAxisSizing* cross, bool stretch);
 
 // CSS Flexbox section 4.5: for any item but a scroll container, the
 // smaller of the specified size and the min-content size, each within

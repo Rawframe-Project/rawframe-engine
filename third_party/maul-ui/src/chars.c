@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Text built in a fixed buffer, numbers written by the library itself
-// (record mui-0001): libc's printf would be 8 KB of the core's wasm for
-// a handful of calls. A float is written as "%g" writes it, its digits
-// rounded to nearest, ties to even, on the exact binary value: scaled by
-// an exact power of ten, the scaling's own error found exactly by
-// Dekker's product decides a tie it made. Beyond 10^22 either way the
-// scaling rounds more than once, and the last digit may differ from
-// printf's.
+// Text built in a fixed buffer, numbers written by the library itself:
+// libc's printf would be 8 KB of the core's wasm for a handful of calls. A
+// float is written as "%g" writes it, its digits rounded to nearest, ties
+// to even, on the exact binary value: scaled by an exact power of ten, the
+// scaling's own error found exactly by Dekker's product decides a tie it
+// made. Beyond 10^22 either way the scaling rounds more than once, and the
+// last digit may differ from printf's.
 
 #include "chars.h"
 

@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Colour glyphs (record mui-0006): a COLR version 1 glyph's paint graph
-// (colr_paint.c) where it has one, else its version 0 layers, each another
-// glyph's outline, rendered as FreeType's coverage over the layers' joint
-// box and composited in order, source over, in premultiplied linear
-// light; a layer's colour is its palette entry, sRGB with straight alpha,
-// or for entry 0xFFFF the text's colour. A glyph without COLR colour is
-// drawn from its colour bitmap where the font has one (bitmap_glyph.c),
-// its PNG decoded and scaled from its strike to the size in linear light.
-// The result is stored as an sRGB texture holds premultiplied colour: red,
+// Colour glyphs: a COLR version 1 glyph's paint graph (colr_paint.c) where
+// it has one, else its version 0 layers, each another glyph's outline,
+// rendered as FreeType's coverage over the layers' joint box and
+// composited in order, source over, in premultiplied linear light; a
+// layer's colour is its palette entry, sRGB with straight alpha, or for
+// entry 0xFFFF the text's colour. A glyph without COLR colour is drawn
+// from its colour bitmap where the font has one (bitmap_glyph.c), its PNG
+// decoded and scaled from its strike to the size in linear light. The
+// result is stored as an sRGB texture holds premultiplied colour: red,
 // green and blue encoded with sRGB's transfer function, alpha linear.
 
 #include "bitmap_glyph.h"
 #include "color.h"
 #include "colr_paint.h"
+#include "fpenv.h"
 #include "image_scale.h"
 #include "png.h"
 #include "text_service.h"
@@ -184,7 +185,10 @@ static muiResult Prepare(muiTextService* service, const muiPixelBox* box, muiGly
                          size_t capacity, float** accumulatedOut)
 {
     *accumulatedOut = nullptr;
-    if (box->width > MUI_MAX_IMAGE_EXTENT || box->height > MUI_MAX_IMAGE_EXTENT)
+    // A clip box's corners are the font's, and FreeType keeps them in the
+    // order given: one whose maximum is below its minimum is refused.
+    if (box->width < 0 || box->height < 0 || box->width > MUI_MAX_IMAGE_EXTENT ||
+        box->height > MUI_MAX_IMAGE_EXTENT)
     {
         return mui_errorFormat;
     }
@@ -247,6 +251,13 @@ static muiResult DecodeBitmap(muiTextService* service, const muiBitmapGlyph* bit
     if (result != mui_errorCapacity)
     {
         return result == mui_success ? mui_errorFormat : result;
+    }
+    // The image is kept in linear light, 16 bytes a pixel: one of more
+    // than 4 GiB is refused as malformed on every platform, before its
+    // size would wrap where a size_t is 32 bits.
+    if ((uint64_t)width * height > UINT32_MAX / (4 * sizeof(float)))
+    {
+        return mui_errorFormat;
     }
     size_t count = (size_t)width * height;
     if (!muiReserve(&service->allocator, &service->bitmapRgba, count * 4) ||
@@ -317,15 +328,20 @@ static muiResult RenderBitmap(muiTextService* service, const muiBitmapGlyph* bit
     return mui_success;
 }
 
-muiResult muiRenderColorGlyph(muiTextService* service, uint64_t font, uint32_t glyph,
-                              float pixelSize, float offsetX, uint32_t palette,
-                              muiLinearColor foreground, muiGlyphImage* imageOut,
-                              unsigned char* pixels, size_t capacity)
+static muiResult RenderColorGlyph(muiTextService* service, uint64_t font, uint32_t glyph,
+                                  float pixelSize, float offsetX, uint32_t palette,
+                                  muiLinearColor foreground, muiGlyphImage* imageOut,
+                                  unsigned char* pixels, size_t capacity)
 {
     if (service == nullptr || imageOut == nullptr || (pixels == nullptr && capacity != 0) ||
-        !muiIsGlyphSizeValid(pixelSize) || !(offsetX >= 0.0f && offsetX < 1.0f))
+        !(offsetX >= 0.0f && offsetX < 1.0f))
     {
         return muiRefuseText(service);
+    }
+    muiResult size = muiGlyphSizeStatus(pixelSize);
+    if (size != mui_success)
+    {
+        return muiCountText(service, size);
     }
     muiResult result = mui_success;
     ColorGlyph color = {.glyph = glyph};
@@ -349,4 +365,36 @@ muiResult muiRenderColorGlyph(muiTextService* service, uint64_t font, uint32_t g
         return RenderBitmap(service, &bitmap, pixelSize, offsetX, imageOut, pixels, capacity);
     }
     return mui_empty;
+}
+
+static MUI_NOINLINE muiResult RenderColorGlyphWorker(muiTextService* service, uint64_t font,
+                                                     uint32_t glyph, float pixelSize, float offsetX,
+                                                     uint32_t palette, muiLinearColor foreground,
+                                                     muiGlyphImage* imageOut, unsigned char* pixels,
+                                                     size_t capacity)
+{
+    if (imageOut != nullptr)
+    {
+        memset(imageOut, 0, sizeof *imageOut);
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = RenderColorGlyph(service, font, glyph, pixelSize, offsetX, palette, foreground,
+                                  imageOut, pixels, capacity);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextService_RenderColorGlyph(muiTextService* service, uint64_t font, uint32_t glyph,
+                                          float pixelSize, float offsetX, uint32_t palette,
+                                          muiLinearColor foreground, muiGlyphImage* imageOut,
+                                          unsigned char* pixelsOut, size_t capacity)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = RenderColorGlyphWorker(service, font, glyph, pixelSize, offsetX, palette,
+                                              foreground, imageOut, pixelsOut, capacity);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

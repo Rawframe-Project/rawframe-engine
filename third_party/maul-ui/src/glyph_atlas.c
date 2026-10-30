@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Glyph atlases (record mui-0006): pages made as needed, cut into plots
-// each packed by a skyline; whole plots are evicted, least recently used
-// first, never one the current frame uses. Each image keeps a pixel of
-// empty gutter on every side, so filtering never reads a neighbor.
+// Glyph atlases: pages made as needed, cut into plots each packed by a
+// skyline; whole plots are evicted, least recently used first, never one
+// the current frame uses. Each image keeps a pixel of empty gutter on
+// every side, so filtering never reads a neighbor.
 
 #include "maul-ui/glyph_atlas.h"
 
@@ -12,7 +12,10 @@
 #include "bitmap_glyph.h"
 #include "color.h"
 #include "font_store.h"
+#include "fpenv.h"
+#include "glyph_outline.h"
 #include "glyph_table.h"
+#include "invariant.h"
 #include "skyline.h"
 #include "text_service.h"
 
@@ -26,21 +29,12 @@
 
 enum
 {
-    MIN_PAGE = 64,
-    MAX_PAGE = 16384,
-    MIN_PLOT = 16,
-    MAX_PLOT = 4096,
-    MAX_PLOTS_PER_PAGE = 4096,
-    MAX_PAGES = 64,
     // A pixel on each side of an image.
     GUTTER = 2,
     // A key's form: a field's spread above its size and position.
     SPREAD_SHIFT = 24,
     SIZE_MASK = (1 << SPREAD_SHIFT) - 1
 };
-
-// The largest pen coordinate, so pixel positions stay exact.
-static const float MAX_PEN = 16777216.0f;
 
 typedef struct Plot
 {
@@ -89,7 +83,37 @@ struct muiGlyphAtlas
     // A rendered image before it is copied into its page.
     unsigned char* scratch;
     muiGlyphTable table;
+    // Set while one of the atlas's functions that change it runs: its
+    // allocator may not call back in (Maul conventions, Threads).
+    bool busy;
 };
+
+// Marks the atlas busy for one of its functions that change it:
+// mui_success, or mui_errorBusy with one misuse counted on its service
+// when it is busy already. A NULL atlas is left to the function.
+static muiResult EnterAtlas(muiGlyphAtlas* atlas)
+{
+    if (atlas == nullptr)
+    {
+        return mui_success;
+    }
+    if (atlas->busy)
+    {
+        atlas->service->misuse++;
+        return mui_errorBusy;
+    }
+    atlas->busy = true;
+    return mui_success;
+}
+
+// Ends what EnterAtlas began.
+static void LeaveAtlas(muiGlyphAtlas* atlas)
+{
+    if (atlas != nullptr)
+    {
+        atlas->busy = false;
+    }
+}
 
 muiGlyphAtlasDef muiDefaultGlyphAtlasDef(void)
 {
@@ -104,33 +128,45 @@ muiGlyphAtlasDef muiDefaultGlyphAtlasDef(void)
     };
 }
 
-static bool IsDefValid(const muiGlyphAtlasDef* def)
+// mui_success; mui_errorLimit for sides, plots or pages past their
+// bounds; mui_errorInvalid for plots that do not divide the pages, no
+// pages or an unknown format.
+static muiResult DefStatus(const muiGlyphAtlasDef* def)
 {
-    bool pages = def->pageWidth >= MIN_PAGE && def->pageWidth <= MAX_PAGE &&
-                 def->pageHeight >= MIN_PAGE && def->pageHeight <= MAX_PAGE;
-    bool plots = def->plotWidth >= MIN_PLOT && def->plotWidth <= MAX_PLOT &&
-                 def->plotHeight >= MIN_PLOT && def->plotHeight <= MAX_PLOT;
-    return pages && plots && def->plotWidth <= def->pageWidth &&
-           def->plotHeight <= def->pageHeight && def->pageWidth % def->plotWidth == 0 &&
-           def->pageHeight % def->plotHeight == 0 &&
-           (def->pageWidth / def->plotWidth) * (def->pageHeight / def->plotHeight) <=
-               MAX_PLOTS_PER_PAGE &&
-           def->maxPages >= 1 && def->maxPages <= MAX_PAGES &&
-           (def->format == mui_atlasOneChannel || def->format == mui_atlasFourChannel ||
-            def->format == mui_atlasColor);
+    bool pages = def->pageWidth >= MUI_MIN_ATLAS_PAGE && def->pageWidth <= MUI_MAX_ATLAS_PAGE &&
+                 def->pageHeight >= MUI_MIN_ATLAS_PAGE && def->pageHeight <= MUI_MAX_ATLAS_PAGE;
+    bool plots = def->plotWidth >= MUI_MIN_ATLAS_PLOT && def->plotWidth <= MUI_MAX_ATLAS_PLOT &&
+                 def->plotHeight >= MUI_MIN_ATLAS_PLOT && def->plotHeight <= MUI_MAX_ATLAS_PLOT;
+    if (!pages || !plots || def->maxPages > MUI_MAX_ATLAS_PAGES)
+    {
+        return mui_errorLimit;
+    }
+    if (def->plotWidth > def->pageWidth || def->plotHeight > def->pageHeight ||
+        def->pageWidth % def->plotWidth != 0 || def->pageHeight % def->plotHeight != 0 ||
+        def->maxPages == 0 ||
+        (def->format != mui_atlasOneChannel && def->format != mui_atlasFourChannel &&
+         def->format != mui_atlasColor))
+    {
+        return mui_errorInvalid;
+    }
+    return (def->pageWidth / def->plotWidth) * (def->pageHeight / def->plotHeight) <=
+                   MUI_MAX_ATLAS_PLOTS
+               ? mui_success
+               : mui_errorLimit;
 }
 
-muiResult muiCreateGlyphAtlas(muiTextService* service, const muiGlyphAtlasDef* def,
-                              muiGlyphAtlas** atlasOut)
+static muiResult CreateGlyphAtlas(muiTextService* service, const muiGlyphAtlasDef* def,
+                                  muiGlyphAtlas** atlasOut)
 {
-    if (atlasOut != nullptr)
-    {
-        *atlasOut = nullptr;
-    }
     if (service == nullptr || def == nullptr || atlasOut == nullptr ||
-        def->cookie != GLYPH_ATLAS_DEF_COOKIE || !IsDefValid(def))
+        def->cookie != GLYPH_ATLAS_DEF_COOKIE)
     {
         return muiRefuseText(service);
+    }
+    muiResult defStatus = DefStatus(def);
+    if (defStatus != mui_success)
+    {
+        return muiCountText(service, defStatus);
     }
     uint32_t plotsPerPage = (def->pageWidth / def->plotWidth) * (def->pageHeight / def->plotHeight);
     size_t plots = (size_t)plotsPerPage * def->maxPages;
@@ -178,6 +214,22 @@ muiResult muiCreateGlyphAtlas(muiTextService* service, const muiGlyphAtlasDef* d
     return mui_success;
 }
 
+muiResult muiCreateGlyphAtlas(muiTextService* service, const muiGlyphAtlasDef* def,
+                              muiGlyphAtlas** atlasOut)
+{
+    if (atlasOut != nullptr)
+    {
+        *atlasOut = nullptr;
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = CreateGlyphAtlas(service, def, atlasOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
 static size_t PageBytes(const muiGlyphAtlas* atlas)
 {
     return (size_t)atlas->pageWidth * atlas->pageHeight * atlas->channels;
@@ -188,7 +240,7 @@ static size_t NodeBytes(const muiGlyphAtlas* atlas)
     return (size_t)atlas->plotsPerPage * atlas->plotWidth * sizeof(muiSkylineNode);
 }
 
-void muiDestroyGlyphAtlas(muiGlyphAtlas* atlas)
+static void DestroyGlyphAtlas(muiGlyphAtlas* atlas)
 {
     if (atlas == nullptr)
     {
@@ -204,11 +256,28 @@ void muiDestroyGlyphAtlas(muiGlyphAtlas* atlas)
     muiRelease(&allocator, atlas, atlas->blockSize, alignof(muiGlyphAtlas));
 }
 
-void muiGlyphAtlas_NextFrame(muiGlyphAtlas* atlas)
+void muiDestroyGlyphAtlas(muiGlyphAtlas* atlas)
+{
+    if (EnterAtlas(atlas) == mui_success)
+    {
+        DestroyGlyphAtlas(atlas);
+    }
+}
+
+static void GlyphAtlasNextFrame(muiGlyphAtlas* atlas)
 {
     if (atlas != nullptr)
     {
         atlas->frame++;
+    }
+}
+
+void muiGlyphAtlas_BeginFrame(muiGlyphAtlas* atlas)
+{
+    if (EnterAtlas(atlas) == mui_success)
+    {
+        GlyphAtlasNextFrame(atlas);
+        LeaveAtlas(atlas);
     }
 }
 
@@ -284,6 +353,8 @@ static bool TryPlot(muiGlyphAtlas* atlas, uint32_t plot, uint32_t width, uint32_
     {
         return false;
     }
+    // Inside its plot, so it overlaps no image of a neighboring one.
+    MUI_ASSERT(x + width <= atlas->plotWidth && y + height <= atlas->plotHeight);
     uint32_t originX = 0;
     uint32_t originY = 0;
     PlotOrigin(atlas, plot, &originX, &originY);
@@ -409,17 +480,18 @@ static muiResult Render(muiGlyphAtlas* atlas, const muiGlyphKey* key, muiGlyphIm
     switch (atlas->format)
     {
     case mui_atlasColor:
-        return muiRenderColorGlyph(atlas->service, key->font, key->glyph, size, offset,
-                                   key->palette, UnpackTint(key->tint), imageOut, atlas->scratch,
-                                   capacity);
+        return muiTextService_RenderColorGlyph(atlas->service, key->font, key->glyph, size, offset,
+                                               key->palette, UnpackTint(key->tint), imageOut,
+                                               atlas->scratch, capacity);
     case mui_atlasFourChannel:
-        return muiRenderGlyphMultiField(atlas->service, key->font, key->glyph, size, spread,
-                                        imageOut, atlas->scratch, capacity);
+        return muiTextService_RenderGlyphMultiField(atlas->service, key->font, key->glyph, size,
+                                                    spread, imageOut, atlas->scratch, capacity);
     default:
-        return spread != 0 ? muiRenderGlyphField(atlas->service, key->font, key->glyph, size,
-                                                 spread, imageOut, atlas->scratch, capacity)
-                           : muiRenderGlyph(atlas->service, key->font, key->glyph, size, offset,
-                                            imageOut, atlas->scratch, capacity);
+        return spread != 0
+                   ? muiTextService_RenderGlyphField(atlas->service, key->font, key->glyph, size,
+                                                     spread, imageOut, atlas->scratch, capacity)
+                   : muiTextService_RenderGlyph(atlas->service, key->font, key->glyph, size, offset,
+                                                imageOut, atlas->scratch, capacity);
     }
 }
 
@@ -430,8 +502,10 @@ static muiResult Add(muiGlyphAtlas* atlas, const muiGlyphKey* key, muiAtlasEntry
     muiGlyphImage image = {0, 0, 0, 0};
     // A glyph without colour layers is empty, to be drawn as coverage.
     muiResult result = Render(atlas, key, &image);
+    // Compared without a sum, which a width near UINT32_MAX would wrap; a
+    // plot is wider and taller than its gutter.
     bool tooLarge =
-        image.width + GUTTER > atlas->plotWidth || image.height + GUTTER > atlas->plotHeight;
+        image.width > atlas->plotWidth - GUTTER || image.height > atlas->plotHeight - GUTTER;
     if ((result == mui_success || result == mui_errorCapacity) && tooLarge)
     {
         glyphOut->width = image.width;
@@ -542,9 +616,15 @@ static muiResult Find(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, uint3
     return mui_success;
 }
 
-static bool IsSizeValid(float pixelSize)
+// mui_success for an atlas of a format; mui_errorInvalid, counted, for
+// NULL; mui_errorUnsupported for an atlas created with another format.
+static muiResult FormatStatus(const muiGlyphAtlas* atlas, muiAtlasFormat format)
 {
-    return pixelSize >= 1.0f / 64.0f && pixelSize <= MUI_MAX_GLYPH_PIXEL_SIZE;
+    if (atlas == nullptr)
+    {
+        return muiRefuseText(nullptr);
+    }
+    return atlas->format == format ? mui_success : mui_errorUnsupported;
 }
 
 // The size as the renderers round it.
@@ -559,10 +639,18 @@ static muiResult GetAt(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, floa
                        float penX, float baselineY, uint32_t palette, uint32_t tint,
                        muiAtlasGlyph* glyphOut)
 {
-    if (glyphOut == nullptr || !IsSizeValid(pixelSize) || !(fabsf(penX) <= MAX_PEN) ||
-        !(fabsf(baselineY) <= MAX_PEN))
+    if (glyphOut == nullptr || !isfinite(penX) || !isfinite(baselineY))
     {
         return muiRefuseText(atlas->service);
+    }
+    if (fabsf(penX) > MUI_MAX_ATLAS_PEN || fabsf(baselineY) > MUI_MAX_ATLAS_PEN)
+    {
+        return muiCountText(atlas->service, mui_errorLimit);
+    }
+    muiResult size = muiGlyphSizeStatus(pixelSize);
+    if (size != mui_success)
+    {
+        return muiCountText(atlas->service, size);
     }
     // The pen to the nearest quarter pixel.
     int64_t quarters = FloorToInteger(penX * 4.0f + 0.5f);
@@ -579,32 +667,98 @@ static muiResult GetAt(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, floa
     return result;
 }
 
-muiResult muiGlyphAtlas_Get(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, float pixelSize,
-                            float penX, float baselineY, muiAtlasGlyph* glyphOut)
+static muiResult GlyphAtlasGet(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, float pixelSize,
+                               float penX, float baselineY, muiAtlasGlyph* glyphOut)
 {
-    return atlas != nullptr && atlas->format == mui_atlasOneChannel
+    muiResult status = FormatStatus(atlas, mui_atlasOneChannel);
+    return status == mui_success
                ? GetAt(atlas, font, glyph, pixelSize, penX, baselineY, 0, 0, glyphOut)
-               : muiRefuseText(atlas != nullptr ? atlas->service : nullptr);
+               : status;
 }
 
-muiResult muiGlyphAtlas_GetColor(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
-                                 float pixelSize, float penX, float baselineY, uint32_t palette,
-                                 muiLinearColor foreground, muiAtlasGlyph* glyphOut)
+static MUI_NOINLINE muiResult GlyphAtlasGetWorker(muiGlyphAtlas* atlas, uint64_t font,
+                                                  uint32_t glyph, float pixelSize, float penX,
+                                                  float baselineY, muiAtlasGlyph* glyphOut)
 {
-    return atlas != nullptr && atlas->format == mui_atlasColor
-               ? GetAt(atlas, font, glyph, pixelSize, penX, baselineY, palette,
-                       PackTint(foreground), glyphOut)
-               : muiRefuseText(atlas != nullptr ? atlas->service : nullptr);
+    if (glyphOut != nullptr)
+    {
+        memset(glyphOut, 0, sizeof *glyphOut);
+    }
+    muiResult status = EnterAtlas(atlas);
+    if (status == mui_success)
+    {
+        status = GlyphAtlasGet(atlas, font, glyph, pixelSize, penX, baselineY, glyphOut);
+        LeaveAtlas(atlas);
+    }
+    return status;
+}
+
+muiResult muiGlyphAtlas_GetGlyph(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
+                                 float pixelSize, float penX, float baselineY,
+                                 muiAtlasGlyph* glyphOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result =
+        GlyphAtlasGetWorker(atlas, font, glyph, pixelSize, penX, baselineY, glyphOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult GlyphAtlasGetColor(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
+                                    float pixelSize, float penX, float baselineY, uint32_t palette,
+                                    muiLinearColor foreground, muiAtlasGlyph* glyphOut)
+{
+    muiResult status = FormatStatus(atlas, mui_atlasColor);
+    return status == mui_success ? GetAt(atlas, font, glyph, pixelSize, penX, baselineY, palette,
+                                         PackTint(foreground), glyphOut)
+                                 : status;
+}
+
+static MUI_NOINLINE muiResult GlyphAtlasGetColorWorker(muiGlyphAtlas* atlas, uint64_t font,
+                                                       uint32_t glyph, float pixelSize, float penX,
+                                                       float baselineY, uint32_t palette,
+                                                       muiLinearColor foreground,
+                                                       muiAtlasGlyph* glyphOut)
+{
+    if (glyphOut != nullptr)
+    {
+        memset(glyphOut, 0, sizeof *glyphOut);
+    }
+    muiResult status = EnterAtlas(atlas);
+    if (status == mui_success)
+    {
+        status = GlyphAtlasGetColor(atlas, font, glyph, pixelSize, penX, baselineY, palette,
+                                    foreground, glyphOut);
+        LeaveAtlas(atlas);
+    }
+    return status;
+}
+
+muiResult muiGlyphAtlas_GetColorGlyph(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
+                                      float pixelSize, float penX, float baselineY,
+                                      uint32_t palette, muiLinearColor foreground,
+                                      muiAtlasGlyph* glyphOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = GlyphAtlasGetColorWorker(atlas, font, glyph, pixelSize, penX, baselineY,
+                                                palette, foreground, glyphOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Gets a field, of one channel or of four as the atlas is.
 static muiResult GetField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, float pixelSize,
                           uint32_t spread, muiAtlasGlyph* glyphOut)
 {
-    if (glyphOut == nullptr || !IsSizeValid(pixelSize) || spread < MUI_MIN_FIELD_SPREAD ||
-        spread > MUI_MAX_FIELD_SPREAD)
+    if (glyphOut == nullptr)
     {
         return muiRefuseText(atlas->service);
+    }
+    muiResult bounds = muiGlyphSizeStatus(pixelSize);
+    bounds = bounds == mui_success ? muiFieldSpreadStatus(spread) : bounds;
+    if (bounds != mui_success)
+    {
+        return muiCountText(atlas->service, bounds);
     }
     const muiAtlasEntry* entry = nullptr;
     muiResult result =
@@ -617,20 +771,75 @@ static muiResult GetField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph, f
     return result;
 }
 
-muiResult muiGlyphAtlas_GetField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
-                                 float pixelSize, uint32_t spread, muiAtlasGlyph* glyphOut)
+static muiResult GlyphAtlasGetField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
+                                    float pixelSize, uint32_t spread, muiAtlasGlyph* glyphOut)
 {
-    return atlas != nullptr && atlas->format == mui_atlasOneChannel
-               ? GetField(atlas, font, glyph, pixelSize, spread, glyphOut)
-               : muiRefuseText(atlas != nullptr ? atlas->service : nullptr);
+    muiResult status = FormatStatus(atlas, mui_atlasOneChannel);
+    return status == mui_success ? GetField(atlas, font, glyph, pixelSize, spread, glyphOut)
+                                 : status;
 }
 
-muiResult muiGlyphAtlas_GetMultiField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
+static MUI_NOINLINE muiResult GlyphAtlasGetFieldWorker(muiGlyphAtlas* atlas, uint64_t font,
+                                                       uint32_t glyph, float pixelSize,
+                                                       uint32_t spread, muiAtlasGlyph* glyphOut)
+{
+    if (glyphOut != nullptr)
+    {
+        memset(glyphOut, 0, sizeof *glyphOut);
+    }
+    muiResult status = EnterAtlas(atlas);
+    if (status == mui_success)
+    {
+        status = GlyphAtlasGetField(atlas, font, glyph, pixelSize, spread, glyphOut);
+        LeaveAtlas(atlas);
+    }
+    return status;
+}
+
+muiResult muiGlyphAtlas_GetGlyphField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
                                       float pixelSize, uint32_t spread, muiAtlasGlyph* glyphOut)
 {
-    return atlas != nullptr && atlas->format == mui_atlasFourChannel
-               ? GetField(atlas, font, glyph, pixelSize, spread, glyphOut)
-               : muiRefuseText(atlas != nullptr ? atlas->service : nullptr);
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = GlyphAtlasGetFieldWorker(atlas, font, glyph, pixelSize, spread, glyphOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult GlyphAtlasGetMultiField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
+                                         float pixelSize, uint32_t spread, muiAtlasGlyph* glyphOut)
+{
+    muiResult status = FormatStatus(atlas, mui_atlasFourChannel);
+    return status == mui_success ? GetField(atlas, font, glyph, pixelSize, spread, glyphOut)
+                                 : status;
+}
+
+static MUI_NOINLINE muiResult GlyphAtlasGetMultiFieldWorker(muiGlyphAtlas* atlas, uint64_t font,
+                                                            uint32_t glyph, float pixelSize,
+                                                            uint32_t spread,
+                                                            muiAtlasGlyph* glyphOut)
+{
+    if (glyphOut != nullptr)
+    {
+        memset(glyphOut, 0, sizeof *glyphOut);
+    }
+    muiResult status = EnterAtlas(atlas);
+    if (status == mui_success)
+    {
+        status = GlyphAtlasGetMultiField(atlas, font, glyph, pixelSize, spread, glyphOut);
+        LeaveAtlas(atlas);
+    }
+    return status;
+}
+
+muiResult muiGlyphAtlas_GetGlyphMultiField(muiGlyphAtlas* atlas, uint64_t font, uint32_t glyph,
+                                           float pixelSize, uint32_t spread,
+                                           muiAtlasGlyph* glyphOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result =
+        GlyphAtlasGetMultiFieldWorker(atlas, font, glyph, pixelSize, spread, glyphOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 uint32_t muiGlyphAtlas_GetPageCount(const muiGlyphAtlas* atlas)
@@ -640,6 +849,10 @@ uint32_t muiGlyphAtlas_GetPageCount(const muiGlyphAtlas* atlas)
 
 muiResult muiGlyphAtlas_GetPage(const muiGlyphAtlas* atlas, uint32_t page, muiAtlasPage* pageOut)
 {
+    if (pageOut != nullptr)
+    {
+        memset(pageOut, 0, sizeof *pageOut);
+    }
     if (atlas == nullptr || pageOut == nullptr || page >= atlas->pageCount)
     {
         return mui_errorInvalid;
@@ -649,8 +862,8 @@ muiResult muiGlyphAtlas_GetPage(const muiGlyphAtlas* atlas, uint32_t page, muiAt
     return mui_success;
 }
 
-muiResult muiGlyphAtlas_TakeUpdates(muiGlyphAtlas* atlas, muiAtlasUpdate* updates,
-                                    uint32_t capacity, uint32_t* countOut)
+static muiResult GlyphAtlasTakeUpdates(muiGlyphAtlas* atlas, muiAtlasUpdate* updates,
+                                       uint32_t capacity, uint32_t* countOut)
 {
     if (atlas == nullptr || countOut == nullptr || (updates == nullptr && capacity != 0))
     {
@@ -671,4 +884,20 @@ muiResult muiGlyphAtlas_TakeUpdates(muiGlyphAtlas* atlas, muiAtlasUpdate* update
     }
     atlas->dirtyCount = 0;
     return mui_success;
+}
+
+muiResult muiGlyphAtlas_TakeUpdates(muiGlyphAtlas* atlas, muiAtlasUpdate* updatesOut,
+                                    uint32_t capacity, uint32_t* countOut)
+{
+    if (countOut != nullptr)
+    {
+        *countOut = 0;
+    }
+    muiResult status = EnterAtlas(atlas);
+    if (status == mui_success)
+    {
+        status = GlyphAtlasTakeUpdates(atlas, updatesOut, capacity, countOut);
+        LeaveAtlas(atlas);
+    }
+    return status;
 }

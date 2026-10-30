@@ -5,11 +5,10 @@
 // EM_JS functions. Emscripten compiles it into the program. A build
 // without Emscripten (wasm32-wasi) imports each of those functions under
 // its own name from the module "env", and the page passes what
-// tools/gen_web_glue.py wrote from the same files (record mui-0009, as
-// Maul Window's mwin-0022). The functions the page calls back are the
-// program's exports, under the names the JavaScript calls them by less
-// Emscripten's leading underscore. This is the one file of the library
-// that includes Emscripten's headers.
+// tools/gen_web_glue.py wrote from the same files, as Maul Window does.
+// The functions the page calls back are the program's exports, under the
+// names the JavaScript calls them by less Emscripten's leading underscore.
+// This is the one file of the library that includes Emscripten's headers.
 
 #ifndef MAUL_UI_SRC_WEB_JS_H
 #define MAUL_UI_SRC_WEB_JS_H

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Shaping a text block (record mui-0006): bidi levels per paragraph from
-// the base direction, the font of each grapheme cluster, items of one
-// level, script and font, each shaped by HarfBuzz at its font's units per
-// em with the whole text as context, and running sums of advances and
-// clusters per byte for line breaking.
+// Shaping a text block: bidi levels per paragraph from the base direction,
+// the font of each grapheme cluster, items of one level, script and font,
+// each shaped by HarfBuzz at its font's units per em with the whole text
+// as context, and running sums of advances and clusters per byte for line
+// breaking.
 
 #ifndef MAUL_UI_SRC_TEXT_SHAPE_H
 #define MAUL_UI_SRC_TEXT_SHAPE_H

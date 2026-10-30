@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// COLR version 1 gradients (record mui-0006). A colour line's stops are
-// sorted by offset, stably, so of stops at one offset the first colours
-// below it and the last above it; outside the first and last offsets
-// the line is padded, repeated or reflected. A linear gradient runs from
-// p0 to p3, p1 projected onto the line through p0 perpendicular to p0p2;
-// a radial one is the two-point conical gradient of CSS and canvas, each
-// point given the largest t whose circle, of a radius not below 0, passes
-// through it, and none where no circle does; a sweep's angles run
-// counter-clockwise from the positive x axis, as the specification has
-// it, stored with a bias of a half turn so that 360 degrees can be
-// written (fontTools' BiasedAngle), which FreeType hands on as stored.
-// Geometry without extent paints nothing.
+// COLR version 1 gradients. A colour line's stops are sorted by offset,
+// stably, so of stops at one offset the first colours below it and the
+// last above it; outside the first and last offsets the line is padded,
+// repeated or reflected. A linear gradient runs from p0 to p3, p1
+// projected onto the line through p0 perpendicular to p0p2; a radial one
+// is the two-point conical gradient of CSS and canvas, each point given
+// the largest t whose circle, of a radius not below 0, passes through it,
+// and none where no circle does; a sweep's angles run counter-clockwise
+// from the positive x axis, as the specification has it, stored with a
+// bias of a half turn so that 360 degrees can be written (fontTools'
+// BiasedAngle), which FreeType hands on as stored. Geometry without extent
+// paints nothing.
 
 #include "colr_gradient.h"
 

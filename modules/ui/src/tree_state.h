@@ -38,10 +38,14 @@ inline result::Status checked(muiResult outcome, std::string_view why) {
     case mui_success:
         return {};
     case mui_errorCapacity:
+    case mui_errorLimit:
         return refuse(UiError::Capacity, why);
     case mui_errorStale:
         return refuse(UiError::Stale, why);
+    // A font Maul UI does not take, such as a web font, is as much not a
+    // font the tree reads as damaged bytes are.
     case mui_errorFormat:
+    case mui_errorUnsupported:
         return refuse(UiError::Format, why);
     default:
         return refuse(UiError::Invalid, why);
@@ -137,7 +141,8 @@ struct Tree::State {
         RAWFRAME_TRY(checked(muiNode_GetLayoutStyle(context, node, &style), "a UI node's layout could not be read"));
         if (style.content != content) {
             style.content = content;
-            RAWFRAME_TRY(checked(muiNode_SetLayoutStyle(context, node, &style), "a UI node's layout was refused"));
+            RAWFRAME_TRY(checked(muiNode_SetLayoutValues(context, node, &style, MUI_LAYOUT_PROPERTIES),
+                                 "a UI node's layout was refused"));
         }
         return checked(muiNode_MarkContentChanged(context, node), "a UI node's text could not be marked");
     }
@@ -173,9 +178,9 @@ struct Tree::State {
             }
             return;
         }
-        muiGlyphAtlas_NextFrame(glyphs);
-        muiGlyphAtlas_NextFrame(fieldGlyphs);
-        muiGlyphAtlas_NextFrame(colorGlyphs);
+        muiGlyphAtlas_BeginFrame(glyphs);
+        muiGlyphAtlas_BeginFrame(fieldGlyphs);
+        muiGlyphAtlas_BeginFrame(colorGlyphs);
         for (GlyphRun& run : list.glyphRuns) {
             const float kPixelSize = run.size * list.scale;
             run.field = kPixelSize >= kFieldsFrom;
@@ -191,7 +196,7 @@ struct Tree::State {
                 muiAtlasGlyph got{};
                 // Its colors first: a font without them answers at once.
                 const muiLinearColor kText{run.color[0], run.color[1], run.color[2], run.color[3]};
-                const muiResult kColored = muiGlyphAtlas_GetColor(
+                const muiResult kColored = muiGlyphAtlas_GetColorGlyph(
                     colorGlyphs, run.font.key, glyph.id, kPixelSize, kPenX, kPenY, 0, kText, &got);
                 if (kColored != mui_success && kColored != mui_empty) {
                     ++list.glyphsLeftOut;
@@ -212,9 +217,9 @@ struct Tree::State {
                     continue;
                 }
                 const muiResult kGot =
-                    run.field ? muiGlyphAtlas_GetMultiField(
+                    run.field ? muiGlyphAtlas_GetGlyphMultiField(
                                     fieldGlyphs, run.font.key, glyph.id, kFieldSize, kFieldSpread, &got)
-                              : muiGlyphAtlas_Get(glyphs, run.font.key, glyph.id, kPixelSize, kPenX, kPenY, &got);
+                              : muiGlyphAtlas_GetGlyph(glyphs, run.font.key, glyph.id, kPixelSize, kPenX, kPenY, &got);
                 if (kGot != mui_success) {
                     ++list.glyphsLeftOut;
                     continue;

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Creating and destroying text services (record mui-0006).
+// Creating and destroying text services.
 
 #include "text_service.h"
 
 #include "allocator.h"
 #include "font_instance.h"
+#include "fpenv.h"
 #include "pool.h"
 
 #include "maul-unicode/harfbuzz.h"
@@ -16,13 +17,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-
-enum
-{
-    MAX_FONTS = 65536,
-    MAX_FAMILIES = 65536,
-    MAX_BLOCKS = 1 << 24,
-};
 
 // FreeType's memory through the service's allocator. FreeType does not
 // give a block's size when it frees it, so each block starts with a
@@ -132,6 +126,7 @@ static void Release(muiTextService* service)
     muiFreeBuffer(&service->allocator, &service->runs);
     muiFreeBuffer(&service->allocator, &service->glyphs);
     muiFreeBuffer(&service->allocator, &service->workspace);
+    muiFreeBuffer(&service->allocator, &service->shapePoints);
     muiFreeBuffer(&service->allocator, &service->lineItems);
     muiFreeBuffer(&service->allocator, &service->lineGlyphs);
     muiFreeBuffer(&service->allocator, &service->hitBoxes);
@@ -171,7 +166,8 @@ static void Release(muiTextService* service)
     muiRelease(&allocator, service, service->blockSize, alignof(max_align_t));
 }
 
-muiResult muiCreateTextService(const muiTextServiceDef* def, muiTextService** serviceOut)
+static MUI_NOINLINE muiResult CreateTextServiceWorker(const muiTextServiceDef* def,
+                                                      muiTextService** serviceOut)
 {
     if (serviceOut != nullptr)
     {
@@ -183,15 +179,18 @@ muiResult muiCreateTextService(const muiTextServiceDef* def, muiTextService** se
     }
     // Another version's def may be of another layout: nothing past the
     // version is read.
-    if (def->version != MUI_DEF_VERSION)
+    if (def->version != MUI_ABI_VERSION)
     {
         return mui_errorVersion;
     }
-    if (!muiIsAllocatorValid(&def->allocator) || def->limits.fonts == 0 ||
-        def->limits.fonts > MAX_FONTS || def->limits.textBlocks > MAX_BLOCKS ||
-        def->limits.fontFamilies > MAX_FAMILIES)
+    if (!muiIsAllocatorValid(&def->allocator) || def->limits.fonts == 0)
     {
         return mui_errorInvalid;
+    }
+    if (def->limits.fonts > MUI_MAX_FONTS || def->limits.textBlocks > MUI_MAX_TEXT_BLOCKS ||
+        def->limits.fontFamilies > MUI_MAX_FONT_FAMILIES)
+    {
+        return mui_errorLimit;
     }
     muiLayout layout = {0};
     Parts parts = LayOut(&layout, &def->limits);
@@ -248,12 +247,20 @@ muiResult muiCreateTextService(const muiTextServiceDef* def, muiTextService** se
     return mui_success;
 }
 
-uint64_t muiGetTextServiceMisuse(const muiTextService* service)
+muiResult muiCreateTextService(const muiTextServiceDef* def, muiTextService** serviceOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = CreateTextServiceWorker(def, serviceOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+uint64_t muiTextService_GetMisuse(const muiTextService* service)
 {
     return service != nullptr ? service->misuse : 0;
 }
 
-void muiDestroyTextService(muiTextService* service)
+static void DestroyTextService(muiTextService* service)
 {
     if (service == nullptr)
     {
@@ -281,6 +288,21 @@ void muiDestroyTextService(muiTextService* service)
         }
     }
     Release(service);
+}
+
+static MUI_NOINLINE void DestroyTextServiceWorker(muiTextService* service)
+{
+    if (muiEnterText(service) == mui_success)
+    {
+        DestroyTextService(service);
+    }
+}
+
+void muiDestroyTextService(muiTextService* service)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    DestroyTextServiceWorker(service);
+    muiFloatEnvLeave(floatEnv);
 }
 
 muiFont* muiFindFont(const muiTextService* service, uint64_t key, uint64_t* keyOut)

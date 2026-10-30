@@ -1,4 +1,4 @@
-# The web without Emscripten (mui-0009, as Maul Window's mwin-0022):
+# The web without Emscripten, as Maul Window builds it:
 # Clang's wasm32-wasi and wasi-libc, as a program built with a plain
 # WebAssembly toolchain has.
 #

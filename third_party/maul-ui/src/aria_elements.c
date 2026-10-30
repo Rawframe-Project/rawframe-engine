@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The ARIA adapter's attributes (record mui-0008): each Maul UI role's
-// ARIA role, and every attribute of a node's element from its record,
-// written whole or where an old record and the new one differ.
+// The ARIA adapter's attributes: each Maul UI role's ARIA role, and every
+// attribute of a node's element from its record, written whole or where an
+// old record and the new one differ.
 
 #include "access_text.h"
 #include "aria.h"

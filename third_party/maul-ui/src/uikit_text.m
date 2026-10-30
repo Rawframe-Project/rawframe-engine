@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UIAccessibility adapter's text element (record mui-0008, research
-// 144): a node being edited adopts UITextInput, through which VoiceOver
-// reads its text and moves by character, word and line, in UTF-16 as
-// UIKit counts, on the boundaries every adapter shares (the tokenizer is
-// the adapter's own); the selection and the text are set through the
-// host. The keyboard edits the host's view, the first responder: marked
-// text is not the element's. Where characters are comes from the tree's
-// clusters, in the host's view; text without them answers the node's
-// rectangle and its start.
+// The UIAccessibility adapter's text element: a node being edited adopts
+// UITextInput, through which VoiceOver reads its text and moves by
+// character, word and line, in UTF-16 as UIKit counts, on the boundaries
+// every adapter shares (the tokenizer is the adapter's own); the selection
+// and the text are set through the host. The keyboard edits the host's
+// view, the first responder: marked text is not the element's. Where
+// characters are comes from the tree's clusters, in the host's view; text
+// without them answers the node's rectangle and its start.
 
 #include "access_record.h"
 #include "access_text.h"
+#include "fpenv.h"
+#include "host_call.h"
 #include "uikit.h"
 
 #include <string.h>
@@ -318,7 +319,8 @@ static bool Replace(const MUIAccessibilityElement* element, const muiAccessNode*
                                       .focus = end,
                                       .text = bytes,
                                       .length = (uint32_t)strlen(bytes)};
-    return element->adapter->action(element->adapter->user, &request);
+    return muiActMarked(&element->adapter->busy, element->adapter->action, element->adapter->user,
+                        &request);
 }
 
 // The selection's bytes, in order.
@@ -455,7 +457,7 @@ static uint32_t ByteAtPoint(const MUIAccessibilityElement* element, CGPoint poin
     {
         const muiAccessRequest request = {
             .action = mui_actionSetSelection, .target = node->id, .anchor = start, .focus = end};
-        (void)adapter->action(adapter->user, &request);
+        (void)muiActMarked(&adapter->busy, adapter->action, adapter->user, &request);
     }
 }
 
@@ -641,6 +643,15 @@ static uint32_t ByteAtPoint(const MUIAccessibilityElement* element, CGPoint poin
 // for text without clusters; none for an empty range.
 - (CGRect)firstRectForRange:(UITextRange*)range
 {
+    uint64_t floatEnv = muiFloatEnvEnter();
+    CGRect result = [self muiWorkerFirstRectForRange:range];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// firstRectForRange's work, called through the runtime.
+- (CGRect)muiWorkerFirstRectForRange:(UITextRange*)range
+{
     const muiAccessNode* node = TextNodeOf(self);
     uint32_t start = 0;
     uint32_t end = 0;
@@ -669,6 +680,15 @@ static uint32_t ByteAtPoint(const MUIAccessibilityElement* element, CGPoint poin
 // rectangle for text without clusters.
 - (CGRect)caretRectForPosition:(UITextPosition*)position
 {
+    uint64_t floatEnv = muiFloatEnvEnter();
+    CGRect result = [self muiWorkerCaretRectForPosition:position];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// caretRectForPosition's work, called through the runtime.
+- (CGRect)muiWorkerCaretRectForPosition:(UITextPosition*)position
+{
     const muiAccessNode* node = TextNodeOf(self);
     uint32_t at = 0;
     if (node == nullptr)
@@ -696,6 +716,15 @@ static uint32_t ByteAtPoint(const MUIAccessibilityElement* element, CGPoint poin
 
 // Each line's part of a range in the view.
 - (NSArray*)selectionRectsForRange:(UITextRange*)range
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    NSArray* result = [self muiWorkerSelectionRectsForRange:range];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// selectionRectsForRange's work, called through the runtime.
+- (NSArray*)muiWorkerSelectionRectsForRange:(UITextRange*)range
 {
     const muiAccessNode* node = TextNodeOf(self);
     uint32_t start = 0;
@@ -728,6 +757,15 @@ static uint32_t ByteAtPoint(const MUIAccessibilityElement* element, CGPoint poin
 
 - (UITextPosition*)closestPositionToPoint:(CGPoint)point
 {
+    uint64_t floatEnv = muiFloatEnvEnter();
+    UITextPosition* result = [self muiWorkerClosestPositionToPoint:point];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// closestPositionToPoint's work, called through the runtime.
+- (UITextPosition*)muiWorkerClosestPositionToPoint:(CGPoint)point
+{
     const muiAccessNode* node = TextNodeOf(self);
     if (node == nullptr)
     {
@@ -752,6 +790,15 @@ static uint32_t ByteAtPoint(const MUIAccessibilityElement* element, CGPoint poin
 }
 
 - (UITextRange*)characterRangeAtPoint:(CGPoint)point
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    UITextRange* result = [self muiWorkerCharacterRangeAtPoint:point];
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+// characterRangeAtPoint's work, called through the runtime.
+- (UITextRange*)muiWorkerCharacterRangeAtPoint:(CGPoint)point
 {
     const muiAccessNode* node = TextNodeOf(self);
     if (node == nullptr)

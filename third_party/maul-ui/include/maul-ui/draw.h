@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The draw-command list (record mui-0005): what a renderer draws for a
-// subtree, as fixed-size records in paint order, each with an index into
-// a clip table and a transform table, so that a renderer evaluates clips
-// per command and batches across them. Coordinates are logical units;
-// colors are linear light with premultiplied alpha. Identical trees give
+// The draw-command list: what a renderer draws for a subtree, as
+// fixed-size records in paint order, each with an index into a clip table
+// and a transform table, so that a renderer evaluates clips per command
+// and batches across them. Coordinates are logical units; colors are
+// linear light with premultiplied alpha. Identical trees give
 // byte-identical lists.
 
 #ifndef MAUL_UI_DRAW_H
@@ -65,12 +65,6 @@ extern "C"
         mui_interpolateOklab = 1,
     };
 
-    enum
-    {
-        // The stops of a gradient in the list.
-        MUI_MAX_DRAW_STOPS = 4
-    };
-
     // A gradient of the gradient table. kind is mui_gradientLinear,
     // mui_gradientRadial or mui_gradientConic (maul-ui/visual.h); angle is
     // in degrees clockwise from toward the top, for a linear one and where
@@ -81,8 +75,8 @@ extern "C"
         uint32_t stopCount;
         muiDrawInterpolation interpolation;
         float angle;
-        muiLinearColor colors[MUI_MAX_DRAW_STOPS];
-        float positions[MUI_MAX_DRAW_STOPS];
+        muiLinearColor colors[MUI_MAX_GRADIENT_STOPS];
+        float positions[MUI_MAX_GRADIENT_STOPS];
     } muiDrawGradient;
 
     // A rounded box: rect is its border box. The gradient, an index into
@@ -94,7 +88,6 @@ extern "C"
         muiCorners radii;
         muiLinearColor fill;
         uint32_t gradient;
-        uint32_t reserved;
         muiSides borderWidths;
         // Top, right, bottom and left.
         muiLinearColor borderColors[4];
@@ -132,7 +125,6 @@ extern "C"
         muiLinearColor tint;
         muiImageRepeat repeatX;
         muiImageRepeat repeatY;
-        uint8_t reserved[6];
     } muiDrawImage;
 
     // A run of glyphs of the glyph table: firstGlyph and glyphCount name
@@ -147,7 +139,6 @@ extern "C"
         float size;
         uint32_t firstGlyph;
         uint32_t glyphCount;
-        uint32_t reserved;
         muiLinearColor color;
     } muiDrawGlyphRun;
 
@@ -168,7 +159,6 @@ extern "C"
         muiDrawKind kind;
         uint32_t clip;
         uint32_t transform;
-        uint32_t reserved;
         union
         {
             muiDrawBox box;
@@ -213,7 +203,6 @@ extern "C"
         float height;
         // Device pixels per logical unit.
         float scale;
-        uint32_t reserved;
     } muiDrawHeader;
 
     // A list, valid until the context's next build. Index 0 of the clip
@@ -233,7 +222,6 @@ extern "C"
         const muiDrawGradient* gradients;
         const muiGlyph* glyphs;
         uint32_t glyphCount;
-        uint32_t reserved;
     } muiDrawList;
 
     // Where a paint function adds what it draws, valid during the call.
@@ -253,9 +241,10 @@ extern "C"
     } muiGlyphRun;
 
     // Paints a node's host content into sink: called during
-    // muiBuildDrawList for each node whose content is the host's, with its
-    // host key and its content box's size. The context refuses edits made
-    // from it; reads, such as muiNode_GetTextStyle, are allowed.
+    // muiNode_BuildDrawList for each node whose content is the host's, with its
+    // host key and its content box's size. It may read the context, such
+    // as muiNode_GetTextStyle; a function that changes it answers
+    // mui_errorBusy and counts one misuse.
     typedef void (*muiPaintFunction)(void* user, muiNodeId nodeId, uint64_t hostKey, float width,
                                      float height, muiDrawSink* sink);
 
@@ -313,6 +302,18 @@ extern "C"
     MUI_NODISCARD MUI_API muiResult muiDrawSink_AddRect(muiDrawSink* sink, muiRect rect,
                                                         muiColor color);
 
+    /// Tells the build that the paint function could not paint all it had
+    /// to, as when memory ran out: muiNode_BuildDrawList keeps what it added
+    /// and answers mui_errorCapacity, and the next build paints the node
+    /// again rather than copying it.
+    ///
+    /// @param sink  The sink the paint function was given.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL sink.
+    /// @par Thread safety
+    /// Safe from any thread; the sink is used by one thread at a time, and
+    /// only during the call of the paint function given it.
+    MUI_NODISCARD MUI_API muiResult muiDrawSink_Fail(muiDrawSink* sink);
+
     /// Gives the part of the content box's plane the paint function's
     /// content can be seen in: within the surface and every clip it is
     /// drawn in, through the scales and scroll offsets above it. Rounded
@@ -326,16 +327,17 @@ extern "C"
     /// gains, one that paints little need not ask.
     ///
     /// @param sink     The sink the paint function was given.
-    /// @param rectOut  Receives the part, relative to the content box's
-    ///                 top left; of width and height 0 when nothing of it
-    ///                 can be seen. It may reach past the content box.
+    /// @param rectOut  Receives the part, relative to the content box's top
+    ///                 left; of width and height 0 when nothing of it can be
+    ///                 seen. It may reach past the content box. Zeroed on
+    ///                 failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the sink is used by one thread at a time, and
     /// only during the call of the paint function given it.
     MUI_NODISCARD MUI_API muiResult muiDrawSink_GetVisibleRect(muiDrawSink* sink, muiRect* rectOut);
 
-    /// Paints a root's subtree, as its last muiComputeLayout left it, into
+    /// Paints a root's subtree, as its last muiNode_ComputeLayout left it, into
     /// the context's list, and clears the subtree's paint requests. When
     /// nothing below the root asked for paint since the last build of the
     /// same root, surface and scale, the list stays as it is, generation
@@ -351,25 +353,29 @@ extern "C"
     /// @param context  The context.
     /// @param rootId   The root.
     /// @param input    The surface, the scale and the paint function.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, a scale that is not a finite number above 0, or a
-    ///         call from a measure or paint function; `mui_errorStale` for a root that
-    ///         is gone; `mui_errorCapacity` when the list needs more commands,
-    ///         clips, gradients or glyphs than the context's limits, which
-    ///         leaves the list empty.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id or a scale that is not a finite number above 0;
+    ///         `mui_errorBusy` while the context is busy; `mui_errorStale` for
+    ///         a root that is gone; `mui_errorCapacity` when the list needs
+    ///         more commands, clips, gradients or glyphs than the context's
+    ///         limits, which leaves the list empty, or when a paint function
+    ///         could not paint (muiDrawSink_Fail), which leaves the rest of the
+    ///         list and paints that node again in the next build.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiBuildDrawList(muiContext* context, muiNodeId rootId,
-                                                     const muiDrawInput* input);
+    MUI_NODISCARD MUI_API muiResult muiNode_BuildDrawList(muiContext* context, muiNodeId rootId,
+                                                          const muiDrawInput* input);
 
     /// Shows the context's last list.
     ///
     /// @param context  The context.
-    /// @param listOut  Receives the list; empty before any build.
+    /// @param listOut  Receives the list; empty before any build. Zeroed on
+    ///                 failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiGetDrawList(const muiContext* context, muiDrawList* listOut);
+    MUI_NODISCARD MUI_API muiResult muiContext_GetDrawList(const muiContext* context,
+                                                           muiDrawList* listOut);
 
 #ifdef __cplusplus
 }

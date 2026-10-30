@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UI Automation adapter's provider objects (record mui-0008): one
-// object with three interfaces, muiUiaSimple,
-// muiUiaFragment and, for the root, its FragmentRoot.
+// The UI Automation adapter's provider objects: one object with three
+// interfaces, muiUiaSimple, muiUiaFragment and, for the root, its
+// FragmentRoot.
 
 #include "access_record.h"
+#include "fpenv.h"
 #include "uia.h"
 
 #include <stddef.h>
@@ -147,7 +148,7 @@ static HRESULT STDMETHODCALLTYPE Pattern(muiUiaSimple* simple, int pattern, IUnk
     return held != nullptr ? S_OK : ELEMENT_GONE;
 }
 
-static HRESULT STDMETHODCALLTYPE Property(muiUiaSimple* simple, int property, VARIANT* out)
+static MUI_NOINLINE HRESULT PropertyWorker(muiUiaSimple* simple, int property, VARIANT* out)
 {
     if (out == nullptr)
     {
@@ -157,6 +158,14 @@ static HRESULT STDMETHODCALLTYPE Property(muiUiaSimple* simple, int property, VA
     muiUiaNode* node = FromSimple(simple);
     const muiAccessNode* held = muiUiaNodeFor(node);
     return held != nullptr ? muiUiaPropertyValue(node->adapter, held, property, out) : ELEMENT_GONE;
+}
+
+static HRESULT STDMETHODCALLTYPE Property(muiUiaSimple* simple, int property, VARIANT* out)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    HRESULT result = PropertyWorker(simple, property, out);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // The window's own provider hosts the root; other nodes have no host.
@@ -304,7 +313,7 @@ static HRESULT STDMETHODCALLTYPE RuntimeId(muiUiaFragment* fragment, SAFEARRAY**
     return S_OK;
 }
 
-static HRESULT STDMETHODCALLTYPE FragmentBounds(muiUiaFragment* fragment, muiUiaRect* out)
+static MUI_NOINLINE HRESULT FragmentBoundsWorker(muiUiaFragment* fragment, muiUiaRect* out)
 {
     if (out == nullptr)
     {
@@ -319,6 +328,14 @@ static HRESULT STDMETHODCALLTYPE FragmentBounds(muiUiaFragment* fragment, muiUia
     }
     *out = muiUiaScreenRect(node->adapter, held->id);
     return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE FragmentBounds(muiUiaFragment* fragment, muiUiaRect* out)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    HRESULT result = FragmentBoundsWorker(fragment, out);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 static HRESULT STDMETHODCALLTYPE EmbeddedRoots(muiUiaFragment* fragment, SAFEARRAY** out)
@@ -412,8 +429,8 @@ static uint64_t NodeAt(muiUiaAdapter* adapter, double x, double y)
     return at;
 }
 
-static HRESULT STDMETHODCALLTYPE FromPoint(muiUiaFragmentRoot* fragmentRoot, double x, double y,
-                                           muiUiaFragment** out)
+static MUI_NOINLINE HRESULT FromPointWorker(muiUiaFragmentRoot* fragmentRoot, double x, double y,
+                                            muiUiaFragment** out)
 {
     if (out == nullptr)
     {
@@ -426,6 +443,15 @@ static HRESULT STDMETHODCALLTYPE FromPoint(muiUiaFragmentRoot* fragmentRoot, dou
         return ELEMENT_GONE;
     }
     return GiveFragment(node->adapter, NodeAt(node->adapter, x, y), out);
+}
+
+static HRESULT STDMETHODCALLTYPE FromPoint(muiUiaFragmentRoot* fragmentRoot, double x, double y,
+                                           muiUiaFragment** out)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    HRESULT result = FromPointWorker(fragmentRoot, x, y, out);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // The focus within the root; none when the root itself has it.

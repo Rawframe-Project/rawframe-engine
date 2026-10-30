@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Directional navigation (record mui-0007). A link the focused node has
-// for the direction decides first; otherwise every node sequential
-// navigation reaches in the focus's layer is compared with the best so
-// far as Android's focus search compares them: in the direction, in the
-// focus's beam, then by a distance weighted toward the direction's axis.
+// Directional navigation. A link the focused node has for the direction
+// decides first; otherwise every node sequential navigation reaches in the
+// focus's layer is compared with the best so far as Android's focus search
+// compares them: in the direction, in the focus's beam, then by a distance
+// weighted toward the direction's axis.
 
 #include "navigate.h"
 
 #include "context.h"
 #include "focus.h"
+#include "fpenv.h"
 #include "scroll.h"
 #include "tree.h"
 
@@ -217,15 +218,14 @@ uint32_t muiNavigateFind(const muiContext* context, uint32_t scope, uint32_t foc
     return next != focus ? next : 0;
 }
 
-muiResult muiFocus_MoveToward(muiContext* context, muiNodeId rootId, uint8_t player,
-                              muiDirection direction)
+muiResult muiMoveFocusToward(muiContext* context, muiNodeId rootId, uint8_t player,
+                             muiDirection direction)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (IsNull(rootId) || player >= MUI_MAX_PLAYERS || direction > mui_directionRight ||
-        muiIsInHostCall(context))
+    if (IsNull(rootId) || player >= MUI_MAX_PLAYERS || direction > mui_directionRight)
     {
         return muiRefuse(context);
     }
@@ -239,7 +239,7 @@ muiResult muiFocus_MoveToward(muiContext* context, muiNodeId rootId, uint8_t pla
     uint32_t scope = muiFocusScope(context, root, player, &focus);
     if (focus == 0)
     {
-        return muiFocus_Move(context, rootId, player, false);
+        return muiMoveFocus(context, rootId, player, false);
     }
     uint32_t next = muiNavigateFind(context, scope, focus, direction);
     if (next == 0)
@@ -248,6 +248,27 @@ muiResult muiFocus_MoveToward(muiContext* context, muiNodeId rootId, uint8_t pla
     }
     muiFocusNavigate(context, player, next);
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult FocusMoveTowardWorker(muiContext* context, muiNodeId rootId,
+                                                    uint8_t player, muiDirection direction)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = muiMoveFocusToward(context, rootId, player, direction);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_MoveFocusToward(muiContext* context, muiNodeId rootId, uint8_t player,
+                                  muiDirection direction)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = FocusMoveTowardWorker(context, rootId, player, direction);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Takes out the links of nodes destroyed since.
@@ -264,14 +285,14 @@ static void Purge(muiContext* context)
     }
 }
 
-muiResult muiNode_SetNeighbor(muiContext* context, muiNodeId nodeId, muiDirection direction,
-                              muiNodeId targetId)
+static muiResult NodeSetNeighbor(muiContext* context, muiNodeId nodeId, muiDirection direction,
+                                 muiNodeId targetId)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (direction > mui_directionRight || muiIsInHostCall(context))
+    if (direction > mui_directionRight)
     {
         return muiRefuse(context);
     }
@@ -309,6 +330,18 @@ muiResult muiNode_SetNeighbor(muiContext* context, muiNodeId nodeId, muiDirectio
     }
     *link = (muiNeighbor){slot, muiTreeIdOf(&context->tree, slot).generation, direction, targetId};
     return mui_success;
+}
+
+muiResult muiNode_SetNeighbor(muiContext* context, muiNodeId nodeId, muiDirection direction,
+                              muiNodeId targetId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetNeighbor(context, nodeId, direction, targetId);
+        muiLeave(context);
+    }
+    return status;
 }
 
 muiNodeId muiNode_GetNeighbor(const muiContext* context, muiNodeId nodeId, muiDirection direction)

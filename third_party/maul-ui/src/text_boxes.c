@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Laid-out text as boxes (record mui-0006): each line laid out as
-// painting lays it out, as boxes of grapheme clusters left to right, a
-// glyph several clusters share cut into equal parts; positions are box
-// edges.
+// Laid-out text as boxes: each line laid out as painting lays it out, as
+// boxes of grapheme clusters left to right, a glyph several clusters share
+// cut into equal parts; positions are box edges.
 
 #include "text_boxes.h"
 
@@ -33,8 +32,9 @@ muiResult muiLayText(const muiTextHost* host, muiNodeId nodeId, float width, mui
     }
     out->lines = paragraph->service->lines.data;
     out->width = width;
-    muiFollowCaret(out, muiNode_GetContentRect(host->context, nodeId).height);
-    return mui_success;
+    return muiFollowCaret(out, muiNode_GetContentRect(host->context, nodeId).height)
+               ? mui_success
+               : mui_errorCapacity;
 }
 
 // A scroll kept between the least and the most a text needs.
@@ -54,14 +54,14 @@ static float Show(float scroll, float start, float end, float box)
     return end > scroll + box ? end - box : scroll;
 }
 
-void muiFollowCaret(muiLaidText* laid, float height)
+bool muiFollowCaret(muiLaidText* laid, float height)
 {
     muiParagraph* paragraph = &laid->paragraph;
     muiTextEditing* editing = &paragraph->source->editing;
     paragraph->scrollX = 0.0f;
     if (!editing->on || laid->lineCount == 0)
     {
-        return;
+        return true;
     }
     muiTextPosition caret = editing->selection.caret;
     caret.offset = muiMaskOffset(paragraph->source, caret.offset);
@@ -70,7 +70,7 @@ void muiFollowCaret(muiLaidText* laid, float height)
     bool rtl = false;
     if (!muiCaretX(laid, index, caret, &x, &rtl))
     {
-        return;
+        return false;
     }
     // The text's reach across, unscrolled: a line may start left of the
     // box, as a right-to-left one overflowing does.
@@ -100,6 +100,7 @@ void muiFollowCaret(muiLaidText* laid, float height)
         lines[i].top -= scrollY;
         lines[i].baseline -= scrollY;
     }
+    return true;
 }
 
 enum
@@ -184,9 +185,16 @@ bool muiGetLineBoxes(const muiLaidText* laid, uint32_t index, muiTextBoxes* out)
     size_t runCount = 0;
     // A box for each byte at most, as each holds one or more.
     size_t capacity = (size_t)(line->end - line->start) + 1u;
-    if (!muiGetLineGlyphs(paragraph, line, &source) ||
-        !muiReserve(&service->allocator, &service->hitBoxes, capacity * sizeof(muiTextBox)) ||
-        !muiReorderLine(paragraph, line, &runCount))
+    if (!muiGetLineGlyphs(paragraph, line, &source))
+    {
+        return false;
+    }
+    if (!muiReserve(&service->allocator, &service->hitBoxes, capacity * sizeof(muiTextBox)))
+    {
+        service->failures++;
+        return false;
+    }
+    if (!muiReorderLine(paragraph, line, &runCount))
     {
         return false;
     }

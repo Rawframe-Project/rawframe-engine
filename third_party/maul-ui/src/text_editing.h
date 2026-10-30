@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A block's editing state as the editor's commands share it (record
-// mui-0006): the block of an id, brought up to date with changes made
-// elsewhere, and its selection placed.
+// A block's editing state as the editor's commands share it: the block of
+// an id, brought up to date with changes made elsewhere, and its selection
+// placed.
 
 #ifndef MAUL_UI_SRC_TEXT_EDITING_H
 #define MAUL_UI_SRC_TEXT_EDITING_H

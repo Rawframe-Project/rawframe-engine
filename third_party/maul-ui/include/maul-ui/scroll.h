@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Scrolling (record mui-0007): a scroll container's offset (layout.h's
-// scrollAxes) and the extent its children reach. Offsets are logical: x
-// runs from the inline start, so under right to left it grows leftward.
-// Painting moves the children by the offset through a transform, and
-// hit testing and navigation follow them.
+// Scrolling: a scroll container's offset (layout.h's scrollAxes) and the
+// extent its children reach. Offsets are logical: x runs from the inline
+// start, so under right to left it grows leftward. Painting moves the
+// children by the offset through a transform, and hit testing and
+// navigation follow them.
 
 #ifndef MAUL_UI_SCROLL_H
 #define MAUL_UI_SCROLL_H
@@ -22,7 +22,7 @@ extern "C"
 
     /// Scrolls a node to an offset at once, stopping any step easing it:
     /// within 0 and its extent less its padding box along each axis it
-    /// scrolls (0 along any other), as its last muiComputeLayout measured
+    /// scrolls (0 along any other), as its last muiNode_ComputeLayout measured
     /// them; layout keeps it within them as sizes change. The next draw
     /// list moves the children.
     ///
@@ -30,9 +30,9 @@ extern "C"
     /// @param nodeId   The node.
     /// @param x        The offset from the inline start, finite.
     /// @param y        The offset from the top, finite.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id, an offset not finite or a call from a measure or
-    ///         paint function; `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         id or an offset not finite; `mui_errorBusy` while the context
+    ///         is busy; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetScroll(muiContext* context, muiNodeId nodeId,
@@ -43,8 +43,8 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @param xOut     Receives the offset from the inline start.
-    /// @param yOut     Receives the offset from the top.
+    /// @param xOut     Receives the offset from the inline start. 0 on failure.
+    /// @param yOut     Receives the offset from the top. 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or
     ///         the null id; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
@@ -53,7 +53,7 @@ extern "C"
                                                       float* xOut, float* yOut);
 
     /// Reads the extent a scroll container's children reach, as its last
-    /// muiComputeLayout measured it: from its padding box's start to the
+    /// muiNode_ComputeLayout measured it: from its padding box's start to the
     /// furthest end of its in-flow children's margin boxes plus its end
     /// padding, or of any border box below it with an area that no nested
     /// scroll container clips, at least its padding box, as CSS's scrollable
@@ -62,8 +62,9 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param nodeId     The node.
-    /// @param extentOut  Receives the extent; 0 by 0 for a node that does
-    ///                   not scroll or was not laid out since it does.
+    /// @param extentOut  Receives the extent; 0 by 0 for a node that does not
+    ///                   scroll or was not laid out since it does. Zeroed on
+    ///                   failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or
     ///         the null id; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
@@ -82,14 +83,14 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function;
-    ///         `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
+    ///         for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_ScrollIntoView(muiContext* context, muiNodeId nodeId);
 
-    // How input scrolls (muiWheelInput, muiKeyInput, muiNavigationInput).
+    // How input scrolls (muiNode_RouteWheel, muiNode_RouteKey, muiNode_RouteNavigation).
     typedef struct muiScrollRule
     {
         // The distance a wheel detent scrolls, finite and at least 0.
@@ -129,13 +130,12 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param rule     The rule, as described above.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a
-    ///         rule outside the above, or a call from a measure or paint
-    ///         function.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a rule
+    ///         outside the above; `mui_errorBusy` while the context is busy.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiSetScrollRule(muiContext* context,
-                                                     const muiScrollRule* rule);
+    MUI_NODISCARD MUI_API muiResult muiContext_SetScrollRule(muiContext* context,
+                                                             const muiScrollRule* rule);
 
     // A scrollbar thumb along its track.
     typedef struct muiScrollThumb
@@ -146,24 +146,24 @@ extern "C"
     } muiScrollThumb;
 
     /// Places a scrollbar thumb for a node along an axis, as its last
-    /// muiComputeLayout and its offset leave it: the track times the
+    /// muiNode_ComputeLayout and its offset leave it: the track times the
     /// padding box over the extent, at least minimum (at most the track),
     /// and placed as the offset is between 0 and its limit. A node that
     /// cannot scroll that way fills the track.
     ///
-    /// @param context     The context.
-    /// @param nodeId      The node.
-    /// @param horizontal  The axis: true for x.
-    /// @param track       The track's length, finite and at least 0.
-    /// @param minimum     The shortest thumb, finite and at least 0.
-    /// @param thumbOut    Receives the thumb.
+    /// @param context   The context.
+    /// @param nodeId    The node.
+    /// @param axis      The axis.
+    /// @param track     The track's length, finite and at least 0.
+    /// @param minimum   The shortest thumb, finite and at least 0.
+    /// @param thumbOut  Receives the thumb. Zeroed on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id or a length outside the above; `mui_errorStale` for
-    ///         a node that is gone.
+    ///         null id, an unknown axis or a length outside the above;
+    ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_GetScrollThumb(const muiContext* context,
-                                                           muiNodeId nodeId, bool horizontal,
+                                                           muiNodeId nodeId, muiAxis axis,
                                                            float track, float minimum,
                                                            muiScrollThumb* thumbOut);
 

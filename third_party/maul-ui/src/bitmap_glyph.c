@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Colour bitmap glyphs (record mui-0006), in CBLC and CBDT as OpenType has
-// them. A strike's index subtables name glyph ranges; each of the five
-// index formats finds a glyph's image in CBDT, one of image formats 17
-// (small metrics), 18 (big metrics) or 19 (the index's metrics), each a
-// PNG. Every offset and length is checked against its table.
+// Colour bitmap glyphs, in CBLC and CBDT as OpenType has them. A strike's
+// index subtables name glyph ranges; each of the five index formats finds
+// a glyph's image in CBDT, one of image formats 17 (small metrics), 18
+// (big metrics) or 19 (the index's metrics), each a PNG. Every offset and
+// length is checked against its table.
 
 #include "bitmap_glyph.h"
 

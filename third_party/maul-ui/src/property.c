@@ -126,7 +126,7 @@ static const Row s_layoutRows[] = {
     DIMENSION(placement.inset.bottom),
     NUMBER(placement.anchorX, kindFraction),
     NUMBER(placement.anchorY, kindFraction),
-    ENUM(textDirection, mui_textInherit, mui_textRightToLeft),
+    ENUM(textDirection, mui_inlineInherit, mui_inlineRightToLeft),
     ENUM(content, mui_contentNone, mui_contentHost),
     ENUM(scrollAxes, mui_scrollNone, mui_scrollBoth),
     ENUM(safeArea, 0, mui_edgeStart | mui_edgeEnd | mui_edgeTop | mui_edgeBottom),
@@ -405,6 +405,12 @@ static bool IsDimensionValid(muiDimension value)
     return value.kind <= mui_dimensionValue && isfinite(value.scale) && isfinite(value.offset);
 }
 
+// Whether a gradient names more stops than MUI_MAX_GRADIENT_STOPS.
+static bool HasTooManyStops(const muiGradient* gradient)
+{
+    return gradient->kind != mui_gradientNone && gradient->stopCount > MUI_MAX_GRADIENT_STOPS;
+}
+
 // None with no stops, or a linear, radial or conic gradient with 2 or
 // more stops in order from 0 to 1.
 static bool IsGradientValid(const muiGradient* gradient)
@@ -609,6 +615,37 @@ bool muiArePropertiesValid(muiConstValuesRef values, muiPropertyBits properties)
         }
     }
     return true;
+}
+
+muiResult muiPropertiesStatus(muiConstValuesRef values, muiPropertyBits properties)
+{
+    if (muiArePropertiesValid(values, properties))
+    {
+        return mui_success;
+    }
+    if (muiAnyProperty(muiWithout(properties, s_known)))
+    {
+        return mui_errorInvalid;
+    }
+    for (uint32_t group = 0; group < MUI_PROPERTY_GROUPS; group++)
+    {
+        const Row* rows = s_groups[group].rows;
+        const unsigned char* base = GroupOf(values, group);
+        for (uint64_t left = properties.words[group]; left != 0; left &= left - 1)
+        {
+            const Row* row = &rows[LowestBit(left)];
+            muiGradient gradient;
+            if (row->kind == kindGradient)
+            {
+                memcpy(&gradient, base + row->offset, sizeof gradient);
+                if (HasTooManyStops(&gradient))
+                {
+                    return mui_errorLimit;
+                }
+            }
+        }
+    }
+    return mui_errorInvalid;
 }
 
 // Copies one property.
@@ -868,6 +905,16 @@ bool muiIsTokenValueValid(const muiTokenValue* value)
     default:
         return false;
     }
+}
+
+muiResult muiTokenValueStatus(const muiTokenValue* value)
+{
+    if (muiIsTokenValueValid(value))
+    {
+        return mui_success;
+    }
+    return value->type == mui_tokenGradient && HasTooManyStops(&value->gradient) ? mui_errorLimit
+                                                                                 : mui_errorInvalid;
 }
 
 // The bytes of a token's member, which have the size of the property's

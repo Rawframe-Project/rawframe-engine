@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Exit transitions (record mui-0007): a node the host removes plays its
-// way out before it goes. Beginning an exit gives the node the exiting
-// state, so its classes' exiting variants and their transitions apply;
-// the node and its subtree leave hit testing, focus and navigation at
-// once, and focus inside it is given up: back to what the player focused
-// when the outermost layer around it in the subtree became one, if that
-// can still take it (record mui-0007). When no transition runs in the
-// subtree any more, at a layout, mui_notificationExitFinished reports it,
-// once; the library never destroys the node. The host destroys it then,
-// or earlier, which ends the exit, or cancels the exit to bring it back.
+// Exit transitions: a node the host removes plays its way out before it
+// goes. Beginning an exit gives the node the exiting state, so its
+// classes' exiting variants and their transitions apply; the node and its
+// subtree leave hit testing, focus and navigation at once, and focus
+// inside it is given up: back to what the player focused when the
+// outermost layer around it in the subtree became one, if that can still
+// take it. When no transition runs in the subtree any more, at a layout,
+// mui_notificationExitFinished reports it, once; the library never
+// destroys the node. The host destroys it then, or earlier, which ends the
+// exit, or cancels the exit to bring it back.
 
 #ifndef MAUL_UI_EXIT_H
 #define MAUL_UI_EXIT_H
@@ -28,9 +28,9 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @return `mui_success`; `mui_errorCapacity` when the context holds
-    ///         its limit of exits; `mui_errorInvalid` for a NULL context,
-    ///         the null id or a call from a measure or paint function;
+    /// @return `mui_success`; `mui_errorCapacity` when the context holds its
+    ///         limit of exits; `mui_errorInvalid` for a NULL context or the
+    ///         null id; `mui_errorBusy` while the context is busy;
     ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -41,9 +41,9 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function;
-    ///         `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
+    ///         for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_CancelExit(muiContext* context, muiNodeId nodeId);

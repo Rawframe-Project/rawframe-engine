@@ -1,36 +1,25 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The ARIA adapter (record mui-0008): making it, applying updates, and
-// keeping the page's elements to the shown tree. After an update that
-// may reshape the shown tree, one walk of it removes the elements of
-// nodes no longer shown, then makes and places the others in the walk's
-// order, so each parent's in rising index; nodes whose box changed are
-// placed again with what they hold, as each element's place is relative
-// to its parent's.
+// The ARIA adapter: making it, applying updates, and keeping the page's
+// elements to the shown tree. After an update that may reshape the shown
+// tree, one walk of it removes the elements of nodes no longer shown, then
+// makes and places the others in the walk's order, so each parent's in
+// rising index; nodes whose box changed are placed again with what they
+// hold, as each element's place is relative to its parent's.
 
 #include "access_text.h"
 #include "allocator.h"
 #include "aria.h"
+#include "fpenv.h"
+#include "host_call.h"
 
 #include <stdalign.h>
 #include <string.h>
 
-#define DEF_COOKIE 0x6D756172u // "muar"
-
-muiAriaAdapterDef muiDefaultAriaAdapterDef(void)
-{
-    return (muiAriaAdapterDef){.cookie = DEF_COOKIE,
-                               .nodes = 4096,
-                               .scale = 1.0f,
-                               .deferred = true,
-                               .enableLabel = "Enable accessibility"};
-}
-
 static bool IsValid(const muiAriaAdapterDef* def)
 {
-    return def->cookie == DEF_COOKIE && muiIsAllocatorValid(&def->allocator) && def->nodes != 0 &&
-           def->nodes <= ((uint32_t)1 << 24) && def->host != nullptr &&
+    return muiIsAllocatorValid(&def->allocator) && def->nodes != 0 && def->host != nullptr &&
            def->enableLabel != nullptr && def->action != nullptr && def->scale > 0.0f;
 }
 
@@ -75,15 +64,30 @@ static void Lay(muiAriaAdapter* adapter, unsigned char* block, uint32_t nodes)
     adapter->freeCount = nodes;
 }
 
-muiResult muiCreateAriaAdapter(const muiAriaAdapterDef* def, muiAriaAdapter** adapterOut)
+static MUI_NOINLINE muiResult CreateAriaAdapterWorker(const muiAriaAdapterDef* def,
+                                                      muiAriaAdapter** adapterOut)
 {
     if (adapterOut != nullptr)
     {
         *adapterOut = nullptr;
     }
-    if (def == nullptr || adapterOut == nullptr || !IsValid(def))
+    if (def == nullptr || adapterOut == nullptr || def->cookie != MUI_ARIA_ADAPTER_DEF_COOKIE)
     {
         return mui_errorInvalid;
+    }
+    // Another version's def may be of another layout: nothing past the
+    // version is read.
+    if (def->version != MUI_ABI_VERSION)
+    {
+        return mui_errorVersion;
+    }
+    if (!IsValid(def))
+    {
+        return mui_errorInvalid;
+    }
+    if (def->nodes > MUI_MAX_ACCESS_NODES)
+    {
+        return mui_errorLimit;
     }
     size_t size = SizeOf(def->nodes);
     unsigned char* block = muiAllocate(&def->allocator, size, alignof(max_align_t));
@@ -121,7 +125,15 @@ muiResult muiCreateAriaAdapter(const muiAriaAdapterDef* def, muiAriaAdapter** ad
     return mui_success;
 }
 
-void muiDestroyAriaAdapter(muiAriaAdapter* adapter)
+muiResult muiCreateAriaAdapter(const muiAriaAdapterDef* def, muiAriaAdapter** adapterOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = CreateAriaAdapterWorker(def, adapterOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static void DestroyAriaAdapter(muiAriaAdapter* adapter)
 {
     if (adapter == nullptr)
     {
@@ -134,6 +146,25 @@ void muiDestroyAriaAdapter(muiAriaAdapter* adapter)
     muiDestroyAccessTree(adapter->tree);
     const muiAllocator allocator = adapter->allocator;
     muiRelease(&allocator, adapter, adapter->blockSize, alignof(max_align_t));
+}
+
+void muiDestroyAriaAdapter(muiAriaAdapter* adapter)
+{
+    if (adapter == nullptr)
+    {
+        DestroyAriaAdapter(adapter);
+        return;
+    }
+    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return;
+    }
+    DestroyAriaAdapter(adapter);
+}
+
+uint64_t muiAriaAdapter_GetMisuse(const muiAriaAdapter* adapter)
+{
+    return adapter != nullptr ? adapter->misuse : 0;
 }
 
 uint32_t muiAriaSlotOf(const muiAriaAdapter* adapter, uint64_t id)
@@ -317,7 +348,7 @@ static void Announce(muiAriaAdapter* adapter, const muiAccessNode* node)
         muiAccessTree_GetName(adapter->tree, node->id, small, sizeof(small), &length);
     if (status == mui_errorCapacity)
     {
-        name = muiAllocate(&adapter->allocator, length + 1, 1);
+        name = muiAllocateMarked(&adapter->busy, &adapter->allocator, length + 1, 1);
         status = name != nullptr
                      ? muiAccessTree_GetName(adapter->tree, node->id, name, length + 1, &length)
                      : mui_errorCapacity;
@@ -328,7 +359,7 @@ static void Announce(muiAriaAdapter* adapter, const muiAccessNode* node)
     }
     if (name != small && name != nullptr)
     {
-        muiRelease(&adapter->allocator, name, length + 1, 1);
+        muiReleaseMarked(&adapter->busy, &adapter->allocator, name, length + 1, 1);
     }
 }
 
@@ -431,6 +462,11 @@ void muiAriaPerform(muiAriaAdapter* adapter, muiAriaEvent event, uint32_t slot, 
     }
     else if (event == mui_ariaRangeSet)
     {
+        // The page's number, which a script or a client may have set.
+        if (!muiAccessValueFits(node, value))
+        {
+            return;
+        }
         request.action = mui_actionSetValue;
         request.value = (float)value;
     }
@@ -448,7 +484,7 @@ void muiAriaPerform(muiAriaAdapter* adapter, muiAriaEvent event, uint32_t slot, 
     {
         return;
     }
-    (void)adapter->action(adapter->user, &request);
+    (void)muiActMarked(&adapter->busy, adapter->action, adapter->user, &request);
 }
 
 void muiAriaPerformText(muiAriaAdapter* adapter, uint32_t slot, uint32_t start, uint32_t end,
@@ -475,10 +511,10 @@ void muiAriaPerformText(muiAriaAdapter* adapter, uint32_t slot, uint32_t start, 
         request.text = text;
         request.length = length;
     }
-    (void)adapter->action(adapter->user, &request);
+    (void)muiActMarked(&adapter->busy, adapter->action, adapter->user, &request);
 }
 
-muiResult muiAriaAdapter_Apply(muiAriaAdapter* adapter, const muiAccessUpdate* update)
+static muiResult AriaAdapterApply(muiAriaAdapter* adapter, const muiAccessUpdate* update)
 {
     if (adapter == nullptr)
     {
@@ -515,12 +551,37 @@ muiResult muiAriaAdapter_Apply(muiAriaAdapter* adapter, const muiAccessUpdate* u
     return status;
 }
 
+static MUI_NOINLINE muiResult AriaAdapterApplyWorker(muiAriaAdapter* adapter,
+                                                     const muiAccessUpdate* update)
+{
+    if (adapter == nullptr)
+    {
+        return AriaAdapterApply(adapter, update);
+    }
+    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return mui_errorBusy;
+    }
+    muiResult result = AriaAdapterApply(adapter, update);
+    adapter->misuse += result == mui_errorInvalid;
+    adapter->busy = false;
+    return result;
+}
+
+muiResult muiAriaAdapter_Apply(muiAriaAdapter* adapter, const muiAccessUpdate* update)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = AriaAdapterApplyWorker(adapter, update);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
 const muiAccessTree* muiAriaAdapter_GetTree(const muiAriaAdapter* adapter)
 {
     return adapter != nullptr ? adapter->tree : nullptr;
 }
 
-muiResult muiAriaAdapter_SetScale(muiAriaAdapter* adapter, float scale)
+static muiResult AriaAdapterSetScale(muiAriaAdapter* adapter, float scale)
 {
     if (adapter == nullptr || !(scale > 0.0f))
     {
@@ -532,6 +593,30 @@ muiResult muiAriaAdapter_SetScale(muiAriaAdapter* adapter, float scale)
         PlaceUnder(adapter, muiAccessTree_GetRoot(adapter->tree));
     }
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult AriaAdapterSetScaleWorker(muiAriaAdapter* adapter, float scale)
+{
+    if (adapter == nullptr)
+    {
+        return AriaAdapterSetScale(adapter, scale);
+    }
+    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return mui_errorBusy;
+    }
+    muiResult result = AriaAdapterSetScale(adapter, scale);
+    adapter->misuse += result == mui_errorInvalid;
+    adapter->busy = false;
+    return result;
+}
+
+muiResult muiAriaAdapter_SetScale(muiAriaAdapter* adapter, float scale)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = AriaAdapterSetScaleWorker(adapter, scale);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Builds the elements; the DOM focus goes on to the program's focused
@@ -548,9 +633,31 @@ static void Enable(muiAriaAdapter* adapter, bool pressed)
     TellFocus(adapter, focused || pressed);
 }
 
-void muiAriaAdapter_Enable(muiAriaAdapter* adapter)
+static void AriaAdapterEnable(muiAriaAdapter* adapter)
 {
     Enable(adapter, false);
+}
+
+static MUI_NOINLINE void AriaAdapterEnableWorker(muiAriaAdapter* adapter)
+{
+    if (adapter == nullptr)
+    {
+        AriaAdapterEnable(adapter);
+        return;
+    }
+    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return;
+    }
+    AriaAdapterEnable(adapter);
+    adapter->busy = false;
+}
+
+void muiAriaAdapter_Enable(muiAriaAdapter* adapter)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    AriaAdapterEnableWorker(adapter);
+    muiFloatEnvLeave(floatEnv);
 }
 
 void muiAriaEnablePressed(muiAriaAdapter* adapter)

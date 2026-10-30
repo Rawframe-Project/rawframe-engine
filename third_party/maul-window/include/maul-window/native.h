@@ -95,7 +95,7 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param window      The window.
-    /// @param handlesOut  Receives the bundle.
+    /// @param handlesOut  Receives the bundle. Zeroed on failure.
     /// @return `mwin_success`; `mwin_errorState` while the window has no
     ///         surface (before mwin_eventWindowCreated, or between
     ///         mwin_eventSurfaceLost and mwin_eventSurfaceRestored): the
@@ -105,9 +105,9 @@ extern "C"
     ///         `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGetNativeHandles(const mwinContext* context,
-                                                            mwinWindowId window,
-                                                            mwinNativeHandles* handlesOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinWindow_GetNativeHandles(const mwinContext* context,
+                                                                   mwinWindowId window,
+                                                                   mwinNativeHandles* handlesOut);
 
 #ifdef __cplusplus
 }

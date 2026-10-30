@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A block's lines kept between layouts (record mui-0006). Lines never
-// cross a mandatory break, and a paragraph's sums start from its own
-// start, so its lines, their widths and their glyphs' widths are its
-// own: an edit breaks again the paragraphs it reached, as shaping
-// shapes them again. A block whose spans set run styles has lines of
-// their own heights and is broken whole each time, as it is shaped.
+// A block's lines kept between layouts. Lines never cross a mandatory
+// break, and a paragraph's sums start from its own start, so its lines,
+// their widths and their glyphs' widths are its own: an edit breaks again
+// the paragraphs it reached, as shaping shapes them again. A block whose
+// spans set run styles has lines of their own heights and is broken whole
+// each time, as it is shaped.
 
 #include "text_lines.h"
 

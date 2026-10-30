@@ -28,7 +28,7 @@ result::Status Tree::setRange(Node node, const Range& range) {
     made.value = range.value;
     made.step = range.step;
     made.page = range.page;
-    made.axis = range.vertical ? mui_rangeVertical : mui_rangeHorizontal;
+    made.axis = range.vertical ? mui_axisVertical : mui_axisHorizontal;
     made.thumb = range.thumb.has_value() ? idOf(*range.thumb) : muiNodeId{};
     return checked(muiNode_SetValueRange(state_->context, idOf(node), &made), "a UI node's range was refused");
 }
@@ -47,7 +47,7 @@ std::optional<Range> Tree::rangeOf(Node node) const {
                 .value = held.value,
                 .step = held.step,
                 .page = held.page,
-                .vertical = held.axis == mui_rangeVertical,
+                .vertical = held.axis == mui_axisVertical,
                 .thumb = std::nullopt};
     if (held.thumb.index1 != 0) {
         range.thumb = Node{.index1 = held.thumb.index1, .generation = held.thumb.generation};
@@ -98,15 +98,15 @@ result::Result<bool> Tree::point(Node root, const PointerEvent& event) {
                                  .x = event.x,
                                  .y = event.y,
                                  .player = 0};
-    RAWFRAME_TRY(checked(muiPointerInput(state_->context, idOf(root), &kEvent), "a pointer's event was refused"));
+    RAWFRAME_TRY(checked(muiNode_RoutePointer(state_->context, idOf(root), &kEvent), "a pointer's event was refused"));
     // Each record routed now, so a press pages and a drag moves its range
     // before the next layout.
     bool taken = false;
     muiPointerRecord record{};
-    while (muiNextPointerRecord(state_->context, &record) == mui_success) {
+    while (muiContext_TakePointerRecord(state_->context, &record) == mui_success) {
         bool handled = false;
-        RAWFRAME_TRY(
-            checked(muiDispatchPointerRecord(state_->context, &record, &handled), "a pointer's record was refused"));
+        RAWFRAME_TRY(checked(muiContext_DispatchPointerRecord(state_->context, &record, &handled),
+                             "a pointer's record was refused"));
         taken = taken || handled;
     }
     return taken;

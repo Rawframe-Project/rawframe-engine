@@ -41,7 +41,7 @@ extern const mwinKeyRules mwinKeyRulesLinux;
 extern const mwinKeyRules mwinKeyRulesChromium;
 extern const mwinKeyRules mwinKeyRulesBrowser;
 
-// What a table answers for a chord: a key code mwinGetKeyReach accepted,
+// What a table answers for a chord: a key code mwinContext_GetKeyReach accepted,
 // and any modifiers, the lock bits ignored.
 mwinKeyReach mwinFindKeyReach(const mwinKeyRules* rules, mwinKeyCode code, mwinModifiers modifiers);
 

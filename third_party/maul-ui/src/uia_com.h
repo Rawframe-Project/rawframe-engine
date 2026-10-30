@@ -2,13 +2,12 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The UI Automation interfaces the adapter implements, the providers and
-// their control patterns (record mui-0008), declared here rather than
-// taken from uiautomationcore.h: the Windows
-// SDK's UI Automation headers define const variables, which in C every
-// file including them defines again, so a program including them too
-// could not link. Their names are the adapter's own; their layouts and
-// values are UI Automation's, which test_uia.c checks against the
-// headers at compile time.
+// their control patterns, declared here rather than taken from
+// uiautomationcore.h: the Windows SDK's UI Automation headers define const
+// variables, which in C every file including them defines again, so a
+// program including them too could not link. Their names are the adapter's
+// own; their layouts and values are UI Automation's, which test_uia.c
+// checks against the headers at compile time.
 
 #ifndef MAUL_UI_SRC_UIA_COM_H
 #define MAUL_UI_SRC_UIA_COM_H

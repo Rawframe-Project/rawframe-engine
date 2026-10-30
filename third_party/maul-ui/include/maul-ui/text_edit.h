@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Editing primitives over laid-out text (record mui-0006): positions in a
-// node's text, from points, to carets and moved by cluster, word or line,
-// the rectangles a range of it covers, the text laid out as muiPaintText
-// paints it, what a deletion removes, and an input method's composition
-// held in a block. maul-ui/text_editor.h builds selection and undo on
-// them.
+// Editing primitives over laid-out text: positions in a node's text, from
+// points, to carets and moved by cluster, word or line, the rectangles a
+// range of it covers, the text laid out as muiPaintText paints it, what a
+// deletion removes, and an input method's composition held in a block.
+// maul-ui/text_editor.h builds selection and undo on them.
 
 #ifndef MAUL_UI_TEXT_EDIT_H
 #define MAUL_UI_TEXT_EDIT_H
@@ -153,15 +152,16 @@ extern "C"
     /// @param x            The point, from the content box's top left.
     /// @param y            Likewise.
     /// @param positionOut  Receives the position; unchanged on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
-    ///         point not finite; `mui_errorStale` for a node, block or font
-    ///         that is gone; `mui_errorCapacity` when memory runs out.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a point
+    ///         not finite; `mui_errorStale` for a node, block or font that is
+    ///         gone; `mui_errorCapacity` when memory runs out; `mui_errorBusy`
+    ///         while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the host's context and service are used by
     /// one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiTextHitTest(const muiTextHost* host, muiNodeId nodeId,
-                                                   float width, float x, float y,
-                                                   muiTextPosition* positionOut);
+    MUI_NODISCARD MUI_API muiResult muiNode_HitTestText(const muiTextHost* host, muiNodeId nodeId,
+                                                        float width, float x, float y,
+                                                        muiTextPosition* positionOut);
 
     /// Finds where the caret of a position is drawn: at the leading edge
     /// of the cluster after it for downstream, the trailing edge of the
@@ -174,13 +174,13 @@ extern "C"
     /// @param width     The node's content box width.
     /// @param position  The position; an offset past the text is its end.
     /// @param caretOut  Receives the caret; unchanged on failure.
-    /// @return As muiTextHitTest.
+    /// @return As muiNode_HitTestText; `mui_errorBusy` while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the host's context and service are used by
     /// one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiTextGetCaret(const muiTextHost* host, muiNodeId nodeId,
-                                                    float width, muiTextPosition position,
-                                                    muiTextCaret* caretOut);
+    MUI_NODISCARD MUI_API muiResult muiNode_GetTextCaret(const muiTextHost* host, muiNodeId nodeId,
+                                                         float width, muiTextPosition position,
+                                                         muiTextCaret* caretOut);
 
     /// Finds the rectangles a range of a node's text covers: on each line,
     /// one for each stretch of side by side clusters in the range, left to
@@ -193,21 +193,22 @@ extern "C"
     /// @param start     The range's first byte.
     /// @param end       The byte after it; no rectangles when not after
     ///                  start.
-    /// @param rects     Receives the rectangles, from the content box's top
+    /// @param rectsOut  Receives the rectangles, from the content box's top
     ///                  left; may be NULL when capacity is 0.
-    /// @param capacity  How many rects holds.
+    /// @param capacity  How many rectsOut holds.
     /// @param countOut  Receives how many rectangles there are, also when
-    ///                  rects holds fewer.
-    /// @return `mui_success`; `mui_errorCapacity` when rects holds fewer,
+    ///                  rectsOut holds fewer; unchanged on any other failure.
+    /// @return `mui_success`; `mui_errorCapacity` when rectsOut holds fewer,
     ///         writing those that fit, or memory runs out; otherwise as
-    ///         muiTextHitTest.
+    ///         muiNode_HitTestText; `mui_errorBusy` while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the host's context and service are used by
     /// one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiTextGetRangeRects(const muiTextHost* host, muiNodeId nodeId,
-                                                         float width, uint32_t start, uint32_t end,
-                                                         muiRect* rects, uint32_t capacity,
-                                                         uint32_t* countOut);
+    MUI_NODISCARD MUI_API muiResult muiNode_GetTextRangeRects(const muiTextHost* host,
+                                                              muiNodeId nodeId, float width,
+                                                              uint32_t start, uint32_t end,
+                                                              muiRect* rectsOut, uint32_t capacity,
+                                                              uint32_t* countOut);
 
     /// Moves a position through a node's text, laid out as muiPaintText
     /// paints it. Positions moved to are on grapheme cluster boundaries;
@@ -224,30 +225,30 @@ extern "C"
     /// @param positionOut  Receives the position; unchanged on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
     ///         movement out of range; `mui_errorStale` for a node, block or
-    ///         font that is gone; `mui_errorCapacity` when memory runs out.
+    ///         font that is gone; `mui_errorCapacity` when memory runs out;
+    ///         `mui_errorBusy` while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the host's context and service are used by
     /// one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiTextMove(const muiTextHost* host, muiNodeId nodeId,
-                                                float width, muiTextPosition from,
-                                                muiTextMovement movement, float preferredX,
-                                                muiTextPosition* positionOut);
+    MUI_NODISCARD MUI_API muiResult muiNode_MoveTextPosition(
+        const muiTextHost* host, muiNodeId nodeId, float width, muiTextPosition from,
+        muiTextMovement movement, float preferredX, muiTextPosition* positionOut);
 
     /// Finds the bytes a deletion from an offset of a block's text
     /// removes, for muiTextBlock_Replace; words are deleted by moving
-    /// with muiTextMove and replacing what lies between. Nothing at the
+    /// with muiNode_MoveTextPosition and replacing what lies between. Nothing at the
     /// text's start going back or its end going forward.
     ///
     /// @param service   The service.
     /// @param blockId   The block.
     /// @param offset    The offset; past the text is its end.
     /// @param deletion  Which way.
-    /// @param startOut  Receives the first byte to remove.
-    /// @param endOut    Receives the byte after the last; startOut's value
-    ///                  when there is nothing.
+    /// @param startOut  Receives the first byte to remove. 0 on failure.
+    /// @param endOut    Receives the byte after the last; startOut's value when
+    ///                  there is nothing. 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id or a deletion out of range; `mui_errorStale` for a
-    ///         block that is gone. Nothing is written on failure.
+    ///         block that is gone.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_FindDeletion(const muiTextService* service,
@@ -274,12 +275,15 @@ extern "C"
     /// @param segments      Its styled parts, within it. May be NULL when
     ///                      segmentCount is 0.
     /// @param segmentCount  How many, at most MUI_MAX_COMPOSITION_SEGMENTS.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the
-    ///         null id, a NULL text or segments with a count, too many
-    ///         segments, one past the text or of an unknown style, or a
-    ///         text of 2^31 bytes or more; `mui_errorStale` for a block
-    ///         that is gone; `mui_errorCapacity` when memory runs out,
-    ///         which keeps the old text and composition.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service, the null
+    ///         id, a NULL text or segments with a count, a segment past the
+    ///         text or of an unknown style; `mui_errorLimit` for more than
+    ///         MUI_MAX_COMPOSITION_SEGMENTS segments, or a text past
+    ///         MUI_MAX_TEXT_BYTES alone or with the block's;
+    ///         `mui_errorStale` for a block that is gone;
+    ///         `mui_errorCapacity` when memory runs out, which keeps the old
+    ///         text and composition; `mui_errorBusy` while the service is
+    ///         busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_SetComposition(
@@ -288,12 +292,16 @@ extern "C"
 
     /// Ends a block's composition, keeping its text as typed text: what an
     /// input method that commits the composition as it is asks. Nothing
-    /// without one.
+    /// without one. For an editing block the kept text is a change made
+    /// outside the editor, which empties its undo history; to commit
+    /// text undo can take back, take the composition out with
+    /// muiTextBlock_Compose and type what the method commits.
     ///
     /// @param service  The service.
     /// @param blockId  The block.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL service or the
-    ///         null id; `mui_errorStale` for a block that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL service or the null
+    ///         id; `mui_errorStale` for a block that is gone; `mui_errorBusy`
+    ///         while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_EndComposition(muiTextService* service,
@@ -303,11 +311,11 @@ extern "C"
     ///
     /// @param service    The service.
     /// @param blockId    The block.
-    /// @param startOut   Receives its first byte in the text.
-    /// @param lengthOut  Receives its length; 0 when there is none.
+    /// @param startOut   Receives its first byte in the text. 0 on failure.
+    /// @param lengthOut  Receives its length; 0 when there is none and on
+    ///                   failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or the
-    ///         null id; `mui_errorStale` for a block that is gone. Nothing
-    ///         is written on failure.
+    ///         null id; `mui_errorStale` for a block that is gone.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_GetComposition(const muiTextService* service,

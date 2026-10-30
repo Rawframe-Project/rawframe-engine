@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Routed input (record mui-0007). The route is the target and its
-// ancestors, written down before the first call; the host's function
-// hears it from the top down, then from the target up, until it handles
-// it. Unhandled keys and navigation then do what the library does by
-// default: move the focus.
+// Routed input. The route is the target and its ancestors, written down
+// before the first call; the host's function hears it from the top down,
+// then from the target up, until it handles it. Unhandled keys and
+// navigation then do what the library does by default: move the focus.
 
 #include "maul-ui/event.h"
 
 #include "context.h"
 #include "event.h"
 #include "focus.h"
+#include "fpenv.h"
 #include "navigate.h"
 #include "pointer.h"
 #include "popup.h"
@@ -29,9 +29,20 @@ static bool IsNull(muiNodeId nodeId)
     return nodeId.index1 == 0;
 }
 
-bool muiMayFeed(const muiContext* context)
+bool muiIsRouting(const muiContext* context)
 {
-    return !muiIsInHostCall(context) && !context->events.dispatching;
+    return context->events.dispatching;
+}
+
+// The host's event function, run in the host's floating-point
+// environment.
+static MUI_NOINLINE bool HostEvent(const muiEventStore* store, muiNodeId nodeId, muiPhase phase,
+                                   const muiEvent* event)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    bool handled = store->function(store->user, nodeId, phase, event);
+    muiFloatHostLeave(host);
+    return handled;
 }
 
 bool muiRouteTo(muiContext* context, uint32_t target, const muiEvent* event)
@@ -49,22 +60,26 @@ bool muiRouteTo(muiContext* context, uint32_t target, const muiEvent* event)
         store->route[count++] = muiTreeIdOf(tree, at);
     }
     store->dispatching = true;
+    // The event function may call the context (muiEventFunction): the
+    // input call routing this is not busy while it runs.
+    context->busy = false;
     bool handled = false;
     for (uint32_t i = count; i > 0 && !handled; i--)
     {
         if (muiTreeResolve(tree, store->route[i - 1]) != 0)
         {
-            handled = store->function(store->user, store->route[i - 1], mui_phaseTunnel, event);
+            handled = HostEvent(store, store->route[i - 1], mui_phaseTunnel, event);
         }
     }
     for (uint32_t i = 0; i < count && !handled; i++)
     {
         if (muiTreeResolve(tree, store->route[i]) != 0)
         {
-            handled = store->function(store->user, store->route[i], mui_phaseBubble, event);
+            handled = HostEvent(store, store->route[i], mui_phaseBubble, event);
         }
     }
     store->dispatching = false;
+    context->busy = true;
     return handled;
 }
 
@@ -82,7 +97,12 @@ static uint32_t TargetOf(const muiContext* context, uint32_t root, uint8_t playe
 static uint32_t Admit(muiContext* context, muiNodeId rootId, uint8_t player, bool valid,
                       muiResult* statusOut)
 {
-    if (!valid || IsNull(rootId) || player >= MUI_MAX_PLAYERS || !muiMayFeed(context))
+    if (muiIsRouting(context))
+    {
+        *statusOut = muiRefuseBusy(context);
+        return 0;
+    }
+    if (!valid || IsNull(rootId) || player >= MUI_MAX_PLAYERS)
     {
         *statusOut = muiRefuse(context);
         return 0;
@@ -92,19 +112,30 @@ static uint32_t Admit(muiContext* context, muiNodeId rootId, uint8_t player, boo
     return root;
 }
 
-muiResult muiSetEventFunction(muiContext* context, muiEventFunction function, void* user)
+static muiResult SetEventFunction(muiContext* context, muiEventFunction function, void* user)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (!muiMayFeed(context))
+    if (muiIsRouting(context))
     {
-        return muiRefuse(context);
+        return muiRefuseBusy(context);
     }
     context->events.function = function;
     context->events.user = user;
     return mui_success;
+}
+
+muiResult muiContext_SetEventFunction(muiContext* context, muiEventFunction function, void* user)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = SetEventFunction(context, function, user);
+        muiLeave(context);
+    }
+    return status;
 }
 
 // Moves a player's focus as an unhandled key or action asks: sequentially
@@ -112,17 +143,17 @@ muiResult muiSetEventFunction(muiContext* context, muiEventFunction function, vo
 static bool MoveFocus(muiContext* context, muiNodeId rootId, uint8_t player, bool sequential,
                       bool backward, muiDirection direction)
 {
-    muiResult result = sequential ? muiFocus_Move(context, rootId, player, backward)
-                                  : muiFocus_MoveToward(context, rootId, player, direction);
+    muiResult result = sequential ? muiMoveFocus(context, rootId, player, backward)
+                                  : muiMoveFocusToward(context, rootId, player, direction);
     return result == mui_success;
 }
 
-// The direction an arrow key names, or 4 for another key.
-// A direction's default: inside a scroll container along its axis,
-// Android's ScrollView rule, a focus move to a candidate within half a
-// scrollport of the visible part (or one a link leads out to), else a
-// line's step while the container can move; otherwise, or at its end, a
-// focus move as muiFocus_MoveToward makes (record mui-0007).
+// The direction an arrow key names, or 4 for another key. A direction's
+// default: inside a scroll container along its axis, Android's ScrollView
+// rule, a focus move to a candidate within half a scrollport of the
+// visible part (or one a link leads out to), else a line's step while the
+// container can move; otherwise, or at its end, a focus move as
+// muiNode_MoveFocusToward makes.
 static bool Toward(muiContext* context, muiNodeId rootId, uint32_t root, uint8_t player,
                    muiDirection direction, uint64_t timeNs)
 {
@@ -175,8 +206,8 @@ static uint32_t ArrowOf(muiKeyCode code)
     }
 }
 
-muiResult muiKeyInput(muiContext* context, muiNodeId rootId, const muiKeyEvent* event,
-                      bool* handledOut)
+static muiResult KeyInput(muiContext* context, muiNodeId rootId, const muiKeyEvent* event,
+                          bool* handledOut)
 {
     if (context == nullptr)
     {
@@ -243,8 +274,33 @@ muiResult muiKeyInput(muiContext* context, muiNodeId rootId, const muiKeyEvent* 
     return mui_success;
 }
 
-muiResult muiTextInput(muiContext* context, muiNodeId rootId, const muiTextEvent* event,
-                       bool* handledOut)
+static MUI_NOINLINE muiResult KeyInputWorker(muiContext* context, muiNodeId rootId,
+                                             const muiKeyEvent* event, bool* handledOut)
+{
+    if (handledOut != nullptr)
+    {
+        *handledOut = false;
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = KeyInput(context, rootId, event, handledOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_RouteKey(muiContext* context, muiNodeId rootId, const muiKeyEvent* event,
+                           bool* handledOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = KeyInputWorker(context, rootId, event, handledOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult TextInput(muiContext* context, muiNodeId rootId, const muiTextEvent* event,
+                           bool* handledOut)
 {
     if (context == nullptr)
     {
@@ -271,8 +327,24 @@ muiResult muiTextInput(muiContext* context, muiNodeId rootId, const muiTextEvent
     return mui_success;
 }
 
-muiResult muiNavigationInput(muiContext* context, muiNodeId rootId, const muiNavigationEvent* event,
-                             bool* handledOut)
+muiResult muiNode_RouteText(muiContext* context, muiNodeId rootId, const muiTextEvent* event,
+                            bool* handledOut)
+{
+    if (handledOut != nullptr)
+    {
+        *handledOut = false;
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = TextInput(context, rootId, event, handledOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+static muiResult NavigationInput(muiContext* context, muiNodeId rootId,
+                                 const muiNavigationEvent* event, bool* handledOut)
 {
     if (context == nullptr)
     {
@@ -311,8 +383,34 @@ muiResult muiNavigationInput(muiContext* context, muiNodeId rootId, const muiNav
     return mui_success;
 }
 
-muiResult muiWheelInput(muiContext* context, muiNodeId rootId, const muiWheelEvent* event,
-                        bool* handledOut)
+static MUI_NOINLINE muiResult NavigationInputWorker(muiContext* context, muiNodeId rootId,
+                                                    const muiNavigationEvent* event,
+                                                    bool* handledOut)
+{
+    if (handledOut != nullptr)
+    {
+        *handledOut = false;
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NavigationInput(context, rootId, event, handledOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_RouteNavigation(muiContext* context, muiNodeId rootId,
+                                  const muiNavigationEvent* event, bool* handledOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = NavigationInputWorker(context, rootId, event, handledOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult WheelInput(muiContext* context, muiNodeId rootId, const muiWheelEvent* event,
+                            bool* handledOut)
 {
     if (context == nullptr)
     {
@@ -327,7 +425,7 @@ muiResult muiWheelInput(muiContext* context, muiNodeId rootId, const muiWheelEve
         return status;
     }
     muiHit hit = {0};
-    (void)muiHitTest(context, rootId, event->x, event->y, &hit);
+    (void)muiNode_HitTest(context, rootId, event->x, event->y, &hit);
     uint32_t target = muiTreeResolve(&context->tree, hit.node);
     bool handled = false;
     if (target != 0)
@@ -347,14 +445,43 @@ muiResult muiWheelInput(muiContext* context, muiNodeId rootId, const muiWheelEve
     return mui_success;
 }
 
-muiResult muiDispatchPointerRecord(muiContext* context, const muiPointerRecord* record,
-                                   bool* handledOut)
+static MUI_NOINLINE muiResult WheelInputWorker(muiContext* context, muiNodeId rootId,
+                                               const muiWheelEvent* event, bool* handledOut)
+{
+    if (handledOut != nullptr)
+    {
+        *handledOut = false;
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = WheelInput(context, rootId, event, handledOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiNode_RouteWheel(muiContext* context, muiNodeId rootId, const muiWheelEvent* event,
+                             bool* handledOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = WheelInputWorker(context, rootId, event, handledOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static muiResult DispatchPointerRecord(muiContext* context, const muiPointerRecord* record,
+                                       bool* handledOut)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (record == nullptr || handledOut == nullptr || !muiMayFeed(context))
+    if (muiIsRouting(context))
+    {
+        return muiRefuseBusy(context);
+    }
+    if (record == nullptr || handledOut == nullptr)
     {
         return muiRefuse(context);
     }
@@ -368,4 +495,30 @@ muiResult muiDispatchPointerRecord(muiContext* context, const muiPointerRecord* 
     *handledOut = muiRouteTo(context, target, &routed) || muiRangePointer(context, record) ||
                   muiScrollPointer(context, record);
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult DispatchPointerRecordWorker(muiContext* context,
+                                                          const muiPointerRecord* record,
+                                                          bool* handledOut)
+{
+    if (handledOut != nullptr)
+    {
+        *handledOut = false;
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = DispatchPointerRecord(context, record, handledOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiContext_DispatchPointerRecord(muiContext* context, const muiPointerRecord* record,
+                                           bool* handledOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = DispatchPointerRecordWorker(context, record, handledOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

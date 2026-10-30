@@ -202,17 +202,17 @@ static void OrderRuns(muniBidiRun* runs, size_t count)
 }
 
 muniResult muniReorderBidiLine(const char* line, const uint8_t* levels, size_t length,
-                               uint8_t paragraphLevel, muniBidiRun* runs, size_t capacity,
+                               uint8_t paragraphLevel, muniBidiRun* runsOut, size_t capacity,
                                size_t* countOut)
 {
     if (((line == nullptr || levels == nullptr) && length != 0) ||
-        (runs == nullptr && capacity != 0) || countOut == nullptr || paragraphLevel > 1 ||
+        (runsOut == nullptr && capacity != 0) || countOut == nullptr || paragraphLevel > 1 ||
         !LevelsInRange(levels, length))
     {
         return muni_errorInvalid;
     }
     // Every run holds at least one byte, so with a capacity of length
-    // they fit; with less, they are counted first, so that runs which do
+    // they fit; with less, they are counted first, so that runsOut which do
     // not fit leave the output as it was.
     if (capacity < length)
     {
@@ -224,10 +224,10 @@ muniResult muniReorderBidiLine(const char* line, const uint8_t* levels, size_t l
             return muni_errorCapacity;
         }
     }
-    Runs collected = {runs, capacity, 0, 0, 0};
+    Runs collected = {runsOut, capacity, 0, 0, 0};
     CollectRuns(&collected, (const uint8_t*)line, levels, length, paragraphLevel);
     *countOut = collected.count;
-    OrderRuns(runs, collected.count);
+    OrderRuns(runsOut, collected.count);
     return muni_success;
 }
 

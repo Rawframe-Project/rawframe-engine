@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The text service (record mui-0006): one block of its own and its font
-// records, a FreeType library whose memory is the service's allocator,
-// and HarfBuzz's Unicode functions from Maul Unicode.
+// The text service: one block of its own and its font records, a FreeType
+// library whose memory is the service's allocator, and HarfBuzz's Unicode
+// functions from Maul Unicode.
 
 #ifndef MAUL_UI_SRC_TEXT_SERVICE_H
 #define MAUL_UI_SRC_TEXT_SERVICE_H
@@ -42,12 +42,19 @@ struct muiTextService
     uint64_t failures;
     // Calls refused as invalid input against the service or its atlases.
     uint64_t misuse;
+    // Set while one of the service's functions that use it runs: host code
+    // it calls then (the allocator, the clipboard writer) may not call
+    // back in (Maul conventions, Threads).
+    bool busy;
     // Scratch for laying out and painting: lines, bidi runs, glyphs and
     // bidi resolution's workspace.
     muiBuffer lines;
     muiBuffer runs;
     muiBuffer glyphs;
     muiBuffer workspace;
+    // The code points of an item being shaped and its context, and the
+    // byte each starts at.
+    muiBuffer shapePoints;
     // A line shaped on its own: its items and glyphs.
     muiBuffer lineItems;
     muiBuffer lineGlyphs;
@@ -107,11 +114,42 @@ static inline muiResult muiRefuseText(muiTextService* service)
     return mui_errorInvalid;
 }
 
+// Marks the service busy for one of its functions that use it:
+// mui_success, or mui_errorBusy with one misuse counted when it is busy
+// already. A NULL service is left to the function.
+static inline muiResult muiEnterText(muiTextService* service)
+{
+    if (service == nullptr)
+    {
+        return mui_success;
+    }
+    if (service->busy)
+    {
+        service->misuse++;
+        return mui_errorBusy;
+    }
+    service->busy = true;
+    return mui_success;
+}
+
+// Ends what muiEnterText began.
+static inline void muiLeaveText(muiTextService* service)
+{
+    if (service != nullptr)
+    {
+        service->busy = false;
+    }
+}
+
 // A status passed on from a check that could not count: invalid input
 // counted as the service's misuse.
 static inline muiResult muiCountText(muiTextService* service, muiResult status)
 {
-    return status == mui_errorInvalid ? muiRefuseText(service) : status;
+    if (status == mui_errorInvalid || status == mui_errorLimit)
+    {
+        (void)muiRefuseText(service);
+    }
+    return status;
 }
 
 #endif // MAUL_UI_SRC_TEXT_SERVICE_H

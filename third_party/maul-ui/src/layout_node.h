@@ -100,6 +100,7 @@ typedef struct muiLayoutCache
     bool finalRtl : 1;
     bool finalContentHeight : 1;
     bool finalRatioPercent : 1;
+    bool finalRatioLines : 1;
     bool finalLooseHeight : 1;
     bool finalEarlyHeight : 1;
     muiSize finalSize;
@@ -175,6 +176,9 @@ typedef struct muiLayoutNode
     // the flow, stretched across the list, placed along it by
     // src/virtual.c. In padding too.
     bool listed;
+    // Set when the node's host content could not be measured in the last
+    // layout, which then marks it to be measured again. In padding too.
+    bool unmeasured;
     muiSize heldSizes[2];
 } muiLayoutNode;
 
@@ -194,27 +198,7 @@ static inline bool muiIsScaled(muiDimension dimension)
 // those sizes indefinite where an exact or limited one may give them, so
 // a content size then answers content queries alone. Kept in the cache
 // and cleared with it, as any change below clears it.
-static inline bool muiScaledBelow(const muiTree* tree, muiLayoutNode* nodes, uint32_t node)
-{
-    muiLayoutCache* cache = &nodes[node - 1].cache;
-    if (cache->scaledBelow == 0)
-    {
-        bool scaled = false;
-        for (uint32_t c = muiTreeAt(tree, node)->links.firstChild; c != 0 && !scaled;
-             c = muiTreeAt(tree, c)->links.next)
-        {
-            const muiLayoutStyle* style = &nodes[c - 1].style;
-            const muiSizing* sizing = &style->sizing;
-            scaled = muiIsScaled(sizing->width) || muiIsScaled(sizing->height) ||
-                     muiIsScaled(sizing->minWidth) || muiIsScaled(sizing->maxWidth) ||
-                     muiIsScaled(sizing->minHeight) || muiIsScaled(sizing->maxHeight) ||
-                     muiIsScaled(style->item.basis) || sizing->aspectRatio != 0.0f ||
-                     muiScaledBelow(tree, nodes, c);
-        }
-        cache->scaledBelow = scaled ? 2 : 1;
-    }
-    return cache->scaledBelow == 2;
-}
+bool muiScaledBelow(const muiTree* tree, muiLayoutNode* nodes, uint32_t node);
 
 // A node's content box in its border box, as layout sized it: inside the
 // border and the padding it was laid out with, whose start is the right in

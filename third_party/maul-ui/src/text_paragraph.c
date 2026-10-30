@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Paragraphs (record mui-0006): the block and font chain a node's host
-// key and text style name, shaped for the node's direction, broken into
-// lines, each line's glyphs, alignment and visual runs, as measuring,
-// painting and hit testing share them.
+// Paragraphs: the block and font chain a node's host key and text style
+// name, shaped for the node's direction, broken into lines, each line's
+// glyphs, alignment and visual runs, as measuring, painting and hit
+// testing share them.
 
 #include "text_paragraph.h"
 

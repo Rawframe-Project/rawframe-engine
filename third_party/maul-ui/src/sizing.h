@@ -106,8 +106,8 @@ static inline float muiEdgeSum(const muiEdges* edges, bool horizontal)
 // sides, as CSS Logical maps a box's properties by its own direction.
 static inline MUI_SIZE_OUTLINE bool muiAgainstParent(const muiLayoutStyle* style, bool parentRtl)
 {
-    return style->textDirection != mui_textInherit &&
-           (style->textDirection == mui_textRightToLeft) != parentRtl;
+    return style->textDirection != mui_inlineInherit &&
+           (style->textDirection == mui_inlineRightToLeft) != parentRtl;
 }
 
 // Whether the start or end margin along an axis is automatic, in the
@@ -149,13 +149,14 @@ static inline MUI_SIZE_OUTLINE muiEdges muiMarginsOf(const muiLayoutStyle* style
 // it inherits.
 static inline MUI_SIZE_OUTLINE bool muiIsRtl(const muiLayoutStyle* style, bool inherited)
 {
-    return style->textDirection == mui_textInherit ? inherited
-                                                   : style->textDirection == mui_textRightToLeft;
+    return style->textDirection == mui_inlineInherit
+               ? inherited
+               : style->textDirection == mui_inlineRightToLeft;
 }
 
 // A node's padding with the safe area it asks for: on each edge its mask
-// names, at least the inset on the physical side that edge falls on in
-// its direction (record mui-0003).
+// names, at least the inset on the physical side that edge falls on in its
+// direction.
 static inline MUI_SIZE_OUTLINE muiEdges muiPaddingOf(const muiLayoutStyle* style,
                                                      const muiSides* safe, bool rtl)
 {

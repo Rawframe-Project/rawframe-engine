@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Editing a text block (record mui-0006): its rules, its selection, and
-// the edits typing, pasting, deleting, undoing and redoing make, each
-// recorded before the text changes and dropped again if it cannot.
+// Editing a text block: its rules, its selection, and the edits typing,
+// pasting, deleting, undoing and redoing make, each recorded before the
+// text changes and dropped again if it cannot.
 
 #include "text_editing.h"
 
+#include "fpenv.h"
+#include "invariant.h"
 #include "text_blocks.h"
+#include "text_entry.h"
 #include "text_history.h"
 #include "text_rules.h"
 #include "text_service.h"
@@ -22,9 +25,9 @@ enum
     DEFAULT_UNDO_LIMIT = 100
 };
 
-muiTextEditDef muiDefaultTextEditDef(void)
+muiTextEditRules muiDefaultTextEditRules(void)
 {
-    return (muiTextEditDef){0, mui_filterNone, mui_purposeText, 0, DEFAULT_UNDO_LIMIT};
+    return (muiTextEditRules){0, mui_filterNone, mui_purposeText, 0, DEFAULT_UNDO_LIMIT};
 }
 
 // An offset kept within a block's text, at a character's start.
@@ -34,6 +37,17 @@ static uint32_t Within(const muiTextBlock* block, uint32_t at)
     while (!muiIsCharacterStart(block, at))
     {
         at--;
+    }
+    return at;
+}
+
+// The first character start at or after an offset: bytes put beside
+// others can join them into one character around it.
+static uint32_t Onward(const muiTextBlock* block, uint32_t at)
+{
+    while (!muiIsCharacterStart(block, at))
+    {
+        at++;
     }
     return at;
 }
@@ -50,8 +64,19 @@ void muiEndPress(muiTextEditing* editing)
     editing->pressEnd = editing->selection.anchor;
 }
 
+// Read only by MUI_ASSERT, which Release builds compile out.
+// Whether a selection's ends are offsets of the block's text at a
+// character's start, as every edit and placement leaves them. They need
+// not be cluster boundaries: a host may place them inside a cluster.
+[[maybe_unused]] static bool EndsAtCharacters(const muiTextBlock* block, muiTextSelection selection)
+{
+    return muiIsCharacterStart(block, selection.anchor) &&
+           muiIsCharacterStart(block, selection.caret.offset);
+}
+
 void muiPlaceSelection(muiTextBlock* block, muiTextSelection selection)
 {
+    MUI_ASSERT(EndsAtCharacters(block, selection));
     block->editing.selection = selection;
     block->editing.open = 0;
 }
@@ -71,7 +96,7 @@ muiResult muiEditingBlock(const muiTextService* service, muiTextBlockId blockId,
     muiTextEditing* editing = &block->editing;
     if (!editing->on)
     {
-        return mui_errorInvalid;
+        return mui_errorState;
     }
     if (editing->revision != block->revision)
     {
@@ -96,13 +121,12 @@ muiResult muiRefuseEdit(muiTextService* service)
     return muiRefuseText(service);
 }
 
-muiResult muiTextBlock_SetEditing(muiTextService* service, muiTextBlockId blockId,
-                                  const muiTextEditDef* def)
+static muiResult TextBlockSetEditing(muiTextService* service, muiTextBlockId blockId,
+                                     const muiTextEditRules* rules)
 {
-    if (service == nullptr || blockId.index1 == 0 ||
-        (def != nullptr &&
-         ((def->flags & ~(mui_editMultiline | mui_editReadOnly | mui_editPassword)) != 0 ||
-          def->filter > mui_filterDecimal || def->purpose > mui_purposeUrl)))
+    if (service == nullptr || blockId.index1 == 0 || rules == nullptr ||
+        (rules->flags & ~(mui_editMultiline | mui_editReadOnly | mui_editPassword)) != 0 ||
+        rules->filter > mui_filterDecimal || rules->purpose > mui_purposeUrl)
     {
         return muiRefuseText(service);
     }
@@ -113,15 +137,8 @@ muiResult muiTextBlock_SetEditing(muiTextService* service, muiTextBlockId blockI
     }
     muiTextEditing* editing = &block->editing;
     muiClearHistory(editing);
-    if (def == nullptr)
-    {
-        muiFreeBuffer(&service->allocator, &editing->entries);
-        muiFreeBuffer(&service->allocator, &editing->bytes);
-        *editing = (muiTextEditing){0};
-        return mui_success;
-    }
     editing->on = true;
-    editing->def = *def;
+    editing->rules = *rules;
     editing->selection = Collapsed(block->length);
     editing->preferredX = -1.0f;
     muiEndPress(editing);
@@ -129,9 +146,56 @@ muiResult muiTextBlock_SetEditing(muiTextService* service, muiTextBlockId blockI
     return mui_success;
 }
 
-muiResult muiTextBlock_GetSelection(const muiTextService* service, muiTextBlockId blockId,
-                                    muiTextSelection* selectionOut)
+muiResult muiTextBlock_SetEditing(muiTextService* service, muiTextBlockId blockId,
+                                  const muiTextEditRules* rules)
 {
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = TextBlockSetEditing(service, blockId, rules);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+static muiResult TextBlockClearEditing(muiTextService* service, muiTextBlockId blockId)
+{
+    if (service == nullptr || blockId.index1 == 0)
+    {
+        return muiRefuseText(service);
+    }
+    muiTextBlock* block = muiResolveTextBlock(service, blockId);
+    if (block == nullptr)
+    {
+        return mui_errorStale;
+    }
+    muiTextEditing* editing = &block->editing;
+    muiClearHistory(editing);
+    muiFreeBuffer(&service->allocator, &editing->entries);
+    muiFreeBuffer(&service->allocator, &editing->bytes);
+    *editing = (muiTextEditing){0};
+    return mui_success;
+}
+
+muiResult muiTextBlock_ClearEditing(muiTextService* service, muiTextBlockId blockId)
+{
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = TextBlockClearEditing(service, blockId);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+static MUI_NOINLINE muiResult TextBlockGetSelectionWorker(const muiTextService* service,
+                                                          muiTextBlockId blockId,
+                                                          muiTextSelection* selectionOut)
+{
+    if (selectionOut != nullptr)
+    {
+        memset(selectionOut, 0, sizeof *selectionOut);
+    }
     muiTextBlock* block = nullptr;
     muiResult result =
         selectionOut != nullptr ? muiEditingBlock(service, blockId, &block) : mui_errorInvalid;
@@ -142,8 +206,16 @@ muiResult muiTextBlock_GetSelection(const muiTextService* service, muiTextBlockI
     return result;
 }
 
-muiResult muiTextBlock_Select(muiTextService* service, muiTextBlockId blockId,
-                              muiTextSelection selection)
+muiResult muiTextBlock_GetSelection(const muiTextService* service, muiTextBlockId blockId,
+                                    muiTextSelection* selectionOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockGetSelectionWorker(service, blockId, selectionOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+muiResult muiSelectText(muiTextService* service, muiTextBlockId blockId, muiTextSelection selection)
 {
     muiTextBlock* block = nullptr;
     muiResult result = muiEditBlock(service, blockId, &block);
@@ -161,6 +233,27 @@ muiResult muiTextBlock_Select(muiTextService* service, muiTextBlockId blockId,
     block->editing.preferredX = -1.0f;
     muiEndPress(&block->editing);
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult TextBlockSelectWorker(muiTextService* service, muiTextBlockId blockId,
+                                                    muiTextSelection selection)
+{
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = muiSelectText(service, blockId, selection);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextBlock_Select(muiTextService* service, muiTextBlockId blockId,
+                              muiTextSelection selection)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockSelectWorker(service, blockId, selection);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 static uint32_t SelectionStart(const muiTextSelection* selection)
@@ -185,9 +278,10 @@ static muiResult Edit(muiTextService* service, muiTextBlock* block, uint32_t sta
     {
         return mui_success;
     }
-    if (!muiFitsBlockText(block, start, end, length))
+    muiResult fits = muiBlockTextStatus(block, start, end, length);
+    if (fits != mui_success)
     {
-        return muiRefuseText(service);
+        return muiCountText(service, fits);
     }
     const muiTextEdit edit = {
         start, end - start, length, 0, editing->selection, Collapsed(start + length), kind};
@@ -204,7 +298,22 @@ static muiResult Edit(muiTextService* service, muiTextBlock* block, uint32_t sta
         muiClearHistory(editing);
         return result;
     }
-    editing->selection = edit.after;
+    // An ill-formed end of what went in can join the bytes after it into
+    // one character, or a deletion join the bytes on either side: the
+    // caret goes after that character, as typing leaves it after what was
+    // typed, and the history keeps that place. The run ends there, as the
+    // next edit would not start where this one ended.
+    uint32_t caret = Onward(block, start + length);
+    if (caret != start + length)
+    {
+        editing->open = 0;
+        if (editing->done != 0)
+        {
+            ((muiTextEdit*)editing->entries.data)[editing->done - 1].after = Collapsed(caret);
+        }
+    }
+    editing->selection = Collapsed(caret);
+    MUI_ASSERT(EndsAtCharacters(block, editing->selection));
     editing->preferredX = -1.0f;
     muiEndPress(editing);
     editing->revision = block->revision;
@@ -217,7 +326,8 @@ static muiResult Edit(muiTextService* service, muiTextBlock* block, uint32_t sta
 
 // Takes an input method's composition out of the text, the caret where it
 // began, so an edit lands where the history expects: what the method
-// commits comes as typing.
+// commits comes as typing. The bytes on its two sides can join into one
+// character around that place, and the caret then goes after it.
 static muiResult EndComposing(muiTextService* service, muiTextBlockId blockId, muiTextBlock* block)
 {
     if (block->compositionLength == 0)
@@ -225,11 +335,11 @@ static muiResult EndComposing(muiTextService* service, muiTextBlockId blockId, m
         return mui_success;
     }
     uint32_t start = block->compositionStart;
-    muiResult result = muiTextBlock_SetComposition(service, blockId, start, nullptr, 0, nullptr, 0);
-    result = result == mui_success ? muiTextBlock_EndComposition(service, blockId) : result;
+    muiResult result = muiSetComposition(service, blockId, start, nullptr, 0, nullptr, 0);
+    result = result == mui_success ? muiEndComposition(service, blockId) : result;
     if (result == mui_success)
     {
-        muiPlaceSelection(block, Collapsed(start));
+        muiPlaceSelection(block, Collapsed(Onward(block, start)));
         muiEndPress(&block->editing);
         block->editing.revision = block->revision;
     }
@@ -247,7 +357,7 @@ static muiResult Put(muiTextService* service, muiTextBlockId blockId, const char
     muiTextBlock* block = nullptr;
     muiResult result = text != nullptr || length == 0 ? muiEditBlock(service, blockId, &block)
                                                       : muiRefuseText(service);
-    if (result != mui_success || (block->editing.def.flags & mui_editReadOnly) != 0)
+    if (result != mui_success || (block->editing.rules.flags & mui_editReadOnly) != 0)
     {
         return result;
     }
@@ -272,23 +382,74 @@ static muiResult Put(muiTextService* service, muiTextBlockId blockId, const char
     return Edit(service, block, start, end, service->editScratch.data, kept, kind, changedOut);
 }
 
+muiResult muiTypeText(muiTextService* service, muiTextBlockId blockId, const char* text,
+                      size_t length, bool* changedOut)
+{
+    return Put(service, blockId, text, length, MUI_EDIT_TYPING, changedOut);
+}
+
+static MUI_NOINLINE muiResult TextBlockTypeWorker(muiTextService* service, muiTextBlockId blockId,
+                                                  const char* text, size_t length, bool* changedOut)
+{
+    if (changedOut != nullptr)
+    {
+        *changedOut = false;
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = muiTypeText(service, blockId, text, length, changedOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
 muiResult muiTextBlock_Type(muiTextService* service, muiTextBlockId blockId, const char* text,
                             size_t length, bool* changedOut)
 {
-    return Put(service, blockId, text, length, MUI_EDIT_TYPING, changedOut);
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockTypeWorker(service, blockId, text, length, changedOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+muiResult muiPasteText(muiTextService* service, muiTextBlockId blockId, const char* text,
+                       size_t length, bool* changedOut)
+{
+    return Put(service, blockId, text, length, MUI_EDIT_OTHER, changedOut);
+}
+
+static MUI_NOINLINE muiResult TextBlockPasteWorker(muiTextService* service, muiTextBlockId blockId,
+                                                   const char* text, size_t length,
+                                                   bool* changedOut)
+{
+    if (changedOut != nullptr)
+    {
+        *changedOut = false;
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = muiPasteText(service, blockId, text, length, changedOut);
+        muiLeaveText(service);
+    }
+    return status;
 }
 
 muiResult muiTextBlock_Paste(muiTextService* service, muiTextBlockId blockId, const char* text,
                              size_t length, bool* changedOut)
 {
-    return Put(service, blockId, text, length, MUI_EDIT_OTHER, changedOut);
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockPasteWorker(service, blockId, text, length, changedOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Deletes the selection, or with none, the bytes from start up to end.
 static muiResult Remove(muiTextService* service, muiTextBlock* block, uint32_t start, uint32_t end,
                         uint8_t kind, bool* changedOut)
 {
-    if ((block->editing.def.flags & mui_editReadOnly) != 0)
+    if ((block->editing.rules.flags & mui_editReadOnly) != 0)
     {
         return mui_success;
     }
@@ -302,8 +463,8 @@ static muiResult Remove(muiTextService* service, muiTextBlock* block, uint32_t s
     return Edit(service, block, start, end, nullptr, 0, kind, changedOut);
 }
 
-muiResult muiTextBlock_Erase(muiTextService* service, muiTextBlockId blockId,
-                             muiTextDeletion deletion, bool* changedOut)
+muiResult muiEraseText(muiTextService* service, muiTextBlockId blockId, muiTextDeletion deletion,
+                       bool* changedOut)
 {
     if (changedOut != nullptr)
     {
@@ -314,7 +475,7 @@ muiResult muiTextBlock_Erase(muiTextService* service, muiTextBlockId blockId,
                                                      : muiRefuseText(service);
     uint32_t start = 0;
     uint32_t end = 0;
-    result = result == mui_success && (block->editing.def.flags & mui_editReadOnly) == 0
+    result = result == mui_success && (block->editing.rules.flags & mui_editReadOnly) == 0
                  ? EndComposing(service, blockId, block)
                  : result;
     if (result == mui_success)
@@ -330,8 +491,33 @@ muiResult muiTextBlock_Erase(muiTextService* service, muiTextBlockId blockId,
     return Remove(service, block, start, end, kind, changedOut);
 }
 
-muiResult muiTextBlock_EraseTo(muiTextService* service, muiTextBlockId blockId, uint32_t offset,
-                               bool* changedOut)
+static MUI_NOINLINE muiResult TextBlockEraseWorker(muiTextService* service, muiTextBlockId blockId,
+                                                   muiTextDeletion deletion, bool* changedOut)
+{
+    if (changedOut != nullptr)
+    {
+        *changedOut = false;
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = muiEraseText(service, blockId, deletion, changedOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextBlock_Erase(muiTextService* service, muiTextBlockId blockId,
+                             muiTextDeletion deletion, bool* changedOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockEraseWorker(service, blockId, deletion, changedOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+muiResult muiEraseTextTo(muiTextService* service, muiTextBlockId blockId, uint32_t offset,
+                         bool* changedOut)
 {
     if (changedOut != nullptr)
     {
@@ -358,9 +544,45 @@ muiResult muiTextBlock_EraseTo(muiTextService* service, muiTextBlockId blockId, 
                   MUI_EDIT_OTHER, changedOut);
 }
 
-muiResult muiTextBlock_GetSelectedText(const muiTextService* service, muiTextBlockId blockId,
-                                       const char** textOut, size_t* lengthOut)
+static MUI_NOINLINE muiResult TextBlockEraseToWorker(muiTextService* service,
+                                                     muiTextBlockId blockId, uint32_t offset,
+                                                     bool* changedOut)
 {
+    if (changedOut != nullptr)
+    {
+        *changedOut = false;
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = muiEraseTextTo(service, blockId, offset, changedOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextBlock_EraseTo(muiTextService* service, muiTextBlockId blockId, uint32_t offset,
+                               bool* changedOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockEraseToWorker(service, blockId, offset, changedOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static MUI_NOINLINE muiResult TextBlockGetSelectedTextWorker(const muiTextService* service,
+                                                             muiTextBlockId blockId,
+                                                             const char** textOut,
+                                                             size_t* lengthOut)
+{
+    if (textOut != nullptr)
+    {
+        *textOut = nullptr;
+    }
+    if (lengthOut != nullptr)
+    {
+        *lengthOut = 0;
+    }
     muiTextBlock* block = nullptr;
     muiResult result = textOut != nullptr && lengthOut != nullptr
                            ? muiEditingBlock(service, blockId, &block)
@@ -371,10 +593,19 @@ muiResult muiTextBlock_GetSelectedText(const muiTextService* service, muiTextBlo
     }
     const muiTextSelection* selection = &block->editing.selection;
     uint32_t start = SelectionStart(selection);
-    bool hidden = (block->editing.def.flags & mui_editPassword) != 0;
+    bool hidden = (block->editing.rules.flags & mui_editPassword) != 0;
     *textOut = (const char*)block->text.data + start;
     *lengthOut = hidden ? 0 : SelectionEnd(selection) - start;
     return mui_success;
+}
+
+muiResult muiTextBlock_GetSelectedText(const muiTextService* service, muiTextBlockId blockId,
+                                       const char** textOut, size_t* lengthOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockGetSelectedTextWorker(service, blockId, textOut, lengthOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Undoes or redoes an edit: back to what it removed, or on to what it
@@ -388,7 +619,7 @@ static muiResult Step(muiTextService* service, muiTextBlockId blockId, bool back
     muiTextBlock* block = nullptr;
     muiResult result = muiEditBlock(service, blockId, &block);
     muiTextEditing* editing = result == mui_success ? &block->editing : nullptr;
-    if (editing == nullptr || (editing->def.flags & mui_editReadOnly) != 0 ||
+    if (editing == nullptr || (editing->rules.flags & mui_editReadOnly) != 0 ||
         block->compositionLength != 0 ||
         (back ? editing->done == 0 : editing->done == editing->entryCount))
     {
@@ -424,28 +655,115 @@ static muiResult Step(muiTextService* service, muiTextBlockId blockId, bool back
     return mui_success;
 }
 
-muiResult muiTextBlock_Undo(muiTextService* service, muiTextBlockId blockId, bool* changedOut)
+muiResult muiUndoText(muiTextService* service, muiTextBlockId blockId, bool* changedOut)
 {
     return Step(service, blockId, true, changedOut);
 }
 
-muiResult muiTextBlock_Redo(muiTextService* service, muiTextBlockId blockId, bool* changedOut)
+static MUI_NOINLINE muiResult TextBlockUndoWorker(muiTextService* service, muiTextBlockId blockId,
+                                                  bool* changedOut)
+{
+    if (changedOut != nullptr)
+    {
+        *changedOut = false;
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = muiUndoText(service, blockId, changedOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextBlock_Undo(muiTextService* service, muiTextBlockId blockId, bool* changedOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockUndoWorker(service, blockId, changedOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+muiResult muiRedoText(muiTextService* service, muiTextBlockId blockId, bool* changedOut)
 {
     return Step(service, blockId, false, changedOut);
 }
 
-muiResult muiTextBlock_GetInputPurpose(const muiTextService* service, muiTextBlockId blockId,
-                                       muiInputPurpose* purposeOut)
+static MUI_NOINLINE muiResult TextBlockRedoWorker(muiTextService* service, muiTextBlockId blockId,
+                                                  bool* changedOut)
 {
+    if (changedOut != nullptr)
+    {
+        *changedOut = false;
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = muiRedoText(service, blockId, changedOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextBlock_Redo(muiTextService* service, muiTextBlockId blockId, bool* changedOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockRedoWorker(service, blockId, changedOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static MUI_NOINLINE muiResult TextBlockGetInputPurposeWorker(const muiTextService* service,
+                                                             muiTextBlockId blockId,
+                                                             muiInputPurpose* purposeOut)
+{
+    if (purposeOut != nullptr)
+    {
+        *purposeOut = 0;
+    }
     muiTextBlock* block = nullptr;
     muiResult result =
         purposeOut != nullptr ? muiEditingBlock(service, blockId, &block) : mui_errorInvalid;
     if (result == mui_success)
     {
-        const muiTextEditDef* def = &block->editing.def;
-        *purposeOut = (def->flags & mui_editPassword) != 0 ? mui_purposePassword
-                      : def->filter != mui_filterNone      ? mui_purposeNumber
-                                                           : def->purpose;
+        const muiTextEditRules* rules = &block->editing.rules;
+        *purposeOut = (rules->flags & mui_editPassword) != 0 ? mui_purposePassword
+                      : rules->filter != mui_filterNone      ? mui_purposeNumber
+                                                             : rules->purpose;
+    }
+    return result;
+}
+
+muiResult muiTextBlock_GetInputPurpose(const muiTextService* service, muiTextBlockId blockId,
+                                       muiInputPurpose* purposeOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockGetInputPurposeWorker(service, blockId, purposeOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
+}
+
+static MUI_NOINLINE muiResult TextBlockGetUndoStateWorker(const muiTextService* service,
+                                                          muiTextBlockId blockId, bool* undoOut,
+                                                          bool* redoOut)
+{
+    if (undoOut != nullptr)
+    {
+        *undoOut = false;
+    }
+    if (redoOut != nullptr)
+    {
+        *redoOut = false;
+    }
+    muiTextBlock* block = nullptr;
+    muiResult result = undoOut != nullptr && redoOut != nullptr
+                           ? muiEditingBlock(service, blockId, &block)
+                           : mui_errorInvalid;
+    if (result == mui_success)
+    {
+        bool open = (block->editing.rules.flags & mui_editReadOnly) == 0;
+        *undoOut = open && block->editing.done != 0;
+        *redoOut = open && block->editing.done != block->editing.entryCount;
     }
     return result;
 }
@@ -453,27 +771,17 @@ muiResult muiTextBlock_GetInputPurpose(const muiTextService* service, muiTextBlo
 muiResult muiTextBlock_GetUndoState(const muiTextService* service, muiTextBlockId blockId,
                                     bool* undoOut, bool* redoOut)
 {
-    muiTextBlock* block = nullptr;
-    muiResult result = undoOut != nullptr && redoOut != nullptr
-                           ? muiEditingBlock(service, blockId, &block)
-                           : mui_errorInvalid;
-    if (result == mui_success)
-    {
-        bool open = (block->editing.def.flags & mui_editReadOnly) == 0;
-        *undoOut = open && block->editing.done != 0;
-        *redoOut = open && block->editing.done != block->editing.entryCount;
-    }
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockGetUndoStateWorker(service, blockId, undoOut, redoOut);
+    muiFloatEnvLeave(floatEnv);
     return result;
 }
 
-muiResult muiTextBlock_Compose(muiTextService* service, muiTextBlockId blockId, const char* text,
-                               size_t length, uint32_t caret, const muiCompositionSegment* segments,
-                               uint32_t segmentCount, bool* changedOut)
+static muiResult TextBlockCompose(muiTextService* service, muiTextBlockId blockId, const char* text,
+                                  size_t length, uint32_t caret,
+                                  const muiCompositionSegment* segments, uint32_t segmentCount,
+                                  bool* changedOut)
 {
-    if (changedOut != nullptr)
-    {
-        *changedOut = false;
-    }
     muiTextBlock* block = nullptr;
     muiResult result = (text != nullptr || length == 0) && caret <= length
                            ? muiEditBlock(service, blockId, &block)
@@ -481,7 +789,7 @@ muiResult muiTextBlock_Compose(muiTextService* service, muiTextBlockId blockId, 
     // A password takes no composition, as platforms turn input methods
     // off in one.
     if (result != mui_success ||
-        (block->editing.def.flags & (mui_editReadOnly | mui_editPassword)) != 0)
+        (block->editing.rules.flags & (mui_editReadOnly | mui_editPassword)) != 0)
     {
         return result;
     }
@@ -507,15 +815,16 @@ muiResult muiTextBlock_Compose(muiTextService* service, muiTextBlockId blockId, 
         result = Edit(service, block, SelectionStart(selection), SelectionEnd(selection), nullptr,
                       0, MUI_EDIT_OTHER, nullptr);
     }
-    result = result == mui_success
-                 ? muiTextBlock_SetComposition(service, blockId, selection->caret.offset, text,
-                                               length, segments, segmentCount)
-                 : result;
+    result = result == mui_success ? muiSetComposition(service, blockId, selection->caret.offset,
+                                                       text, length, segments, segmentCount)
+                                   : result;
     if (result != mui_success)
     {
         return result;
     }
-    muiPlaceSelection(block, Collapsed(block->compositionStart + caret));
+    // A caret at the composition's end can be inside a character its last
+    // bytes make with those after it: it goes after that character.
+    muiPlaceSelection(block, Collapsed(Onward(block, block->compositionStart + caret)));
     muiEndPress(&block->editing);
     block->editing.revision = block->revision;
     if (changedOut != nullptr)
@@ -523,4 +832,35 @@ muiResult muiTextBlock_Compose(muiTextService* service, muiTextBlockId blockId, 
         *changedOut = true;
     }
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult TextBlockComposeWorker(muiTextService* service,
+                                                     muiTextBlockId blockId, const char* text,
+                                                     size_t length, uint32_t caret,
+                                                     const muiCompositionSegment* segments,
+                                                     uint32_t segmentCount, bool* changedOut)
+{
+    if (changedOut != nullptr)
+    {
+        *changedOut = false;
+    }
+    muiResult status = muiEnterText(service);
+    if (status == mui_success)
+    {
+        status = TextBlockCompose(service, blockId, text, length, caret, segments, segmentCount,
+                                  changedOut);
+        muiLeaveText(service);
+    }
+    return status;
+}
+
+muiResult muiTextBlock_Compose(muiTextService* service, muiTextBlockId blockId, const char* text,
+                               size_t length, uint32_t caret, const muiCompositionSegment* segments,
+                               uint32_t segmentCount, bool* changedOut)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = TextBlockComposeWorker(service, blockId, text, length, caret, segments,
+                                              segmentCount, changedOut);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

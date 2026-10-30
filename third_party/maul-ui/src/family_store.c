@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Font family records (record mui-0006).
+// Font family records.
 
 #include "family_store.h"
 

@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The accessibility tree's consumer (record mui-0008), the component
-// MAUL_UI_ACCESS_TREE builds: the copy of a root's accessibility tree
-// that platform adapters read, kept from the updates muiBuildAccessUpdate
-// gives (maul-ui/access.h). Applying an update reports what it changed,
-// so an adapter can raise its platform's events. A tree is used on one
-// thread, the one its platform calls on: the window's, with UI
-// Automation's COM threading on an STA thread.
+// The accessibility tree's consumer, the component MAUL_UI_ACCESS_TREE
+// builds: the copy of a root's accessibility tree that platform adapters
+// read, kept from the updates muiNode_BuildAccessUpdate gives
+// (maul-ui/access.h). Applying an update reports what it changed, so an
+// adapter can raise its platform's events. A tree is used on one thread,
+// the one its platform calls on: the window's, with UI Automation's COM
+// threading on an STA thread.
+//
+// A tree is busy while one of its functions that change it runs or its
+// allocator runs, from those or from its const queries: a call back into
+// one that changes it answers mui_errorBusy, or does nothing where it
+// returns no status.
 
 #ifndef MAUL_UI_ACCESS_TREE_H
 #define MAUL_UI_ACCESS_TREE_H
@@ -27,24 +32,36 @@ extern "C"
 
     typedef struct muiAccessTree muiAccessTree;
 
+    // The most nodes a tree holds.
+    enum
+    {
+        MUI_MAX_ACCESS_NODES = 16777216
+    };
+
     // How a tree is made. Build it with muiDefaultAccessTreeDef.
     typedef struct muiAccessTreeDef
     {
         uint32_t cookie;
+        uint32_t version;
         muiAllocator allocator;
-        // The most nodes it holds at once, at least 1.
+        // The most nodes it holds at once, from 1 to MUI_MAX_ACCESS_NODES.
         uint32_t nodes;
     } muiAccessTreeDef;
+
+// The cookie of an access tree def, which muiDefaultAccessTreeDef sets and
+// muiCreateAccessTree checks.
+#define MUI_ACCESS_TREE_DEF_COOKIE 0x6D756174u
 
     // What applying an update changed, reported once the tree holds all
     // of it: nodes added, in the update's order; nodes updated, with
     // what they were; nodes let go, with their subtrees, each with what
     // it was; then shownChanged, once, when the tree as platforms see it
     // (muiAccessTree_GetShownChildren) may differ: nodes came or went,
-    // the root or the focus moved, or a record changed a node's children
-    // or what the view's rules read (hidden, clipping, a generic node's
-    // role or label, a box where it or its parent clips); then the
-    // focus, when it moved. Any of the functions may be NULL. The
+    // the root moved, the focus moved to or from a node shown only for
+    // holding it, or a record changed a node's children or what the
+    // view's rules read (hidden, clipping, a generic node's role or
+    // label, a box where it or its parent clips); then the focus, when
+    // it moved. Any of the functions may be NULL. The
     // records they are given are valid during the call.
     typedef struct muiAccessChanges
     {
@@ -59,18 +76,35 @@ extern "C"
     /// The default def: the C library's allocation, 4096 nodes, as many as
     /// a default context's.
     ///
+    /// Built in the program from the headers it includes, so it carries
+    /// their version (MUI_ABI_VERSION), which muiCreateAccessTree checks.
+    ///
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    MUI_API muiAccessTreeDef muiDefaultAccessTreeDef(void);
+    static inline muiAccessTreeDef muiDefaultAccessTreeDef(void)
+    {
+#ifdef __cplusplus
+        muiAccessTreeDef def = {};
+#else
+    muiAccessTreeDef def = {0};
+#endif
+        def.cookie = MUI_ACCESS_TREE_DEF_COOKIE;
+        def.version = MUI_ABI_VERSION;
+        def.nodes = 4096;
+        return def;
+    }
 
     /// Creates an empty tree.
     ///
     /// @param def      The def, from muiDefaultAccessTreeDef.
     /// @param treeOut  Receives the tree; NULL on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a
-    ///         def not from muiDefaultAccessTreeDef, a half-set allocator
-    ///         or no nodes; `mui_errorCapacity` when memory runs out.
+    /// @return `mui_success`; `mui_errorVersion` for a def built against
+    ///         headers of another binary interface (MUI_ABI_VERSION), before
+    ///         the rest of the def is read; `mui_errorInvalid` for a NULL
+    ///         argument, a def not from muiDefaultAccessTreeDef, a half-set
+    ///         allocator or no nodes; `mui_errorLimit` for more than
+    ///         MUI_MAX_ACCESS_NODES; `mui_errorCapacity` when memory runs out.
     /// @par Thread safety
     /// Safe from any thread.
     MUI_NODISCARD MUI_API muiResult muiCreateAccessTree(const muiAccessTreeDef* def,
@@ -83,6 +117,17 @@ extern "C"
     /// Safe from any thread; the tree is used by one thread at a time.
     MUI_API void muiDestroyAccessTree(muiAccessTree* tree);
 
+    /// Returns how many calls the tree refused as invalid input
+    /// (`mui_errorInvalid`) or as calls back in while busy
+    /// (`mui_errorBusy`): a count release builds can watch to catch a
+    /// host's bugs. Queries taking it as const count nothing.
+    ///
+    /// @param tree  The tree.
+    /// @return The count; 0 for a NULL tree.
+    /// @par Thread safety
+    /// Safe from any thread; the tree is used by one thread at a time.
+    MUI_API uint64_t muiAccessTree_GetMisuse(const muiAccessTree* tree);
+
     /// Applies an update whole, or nothing of it: the nodes sent replace
     /// those held, new ones join, and a node a parent sent no longer
     /// lists, which no other node sent lists, leaves with its subtree, as
@@ -94,17 +139,17 @@ extern "C"
     /// @param tree     The tree.
     /// @param update   The update.
     /// @param changes  Told what changed; may be NULL.
-    /// @return `mui_success`; `mui_errorCapacity` when the nodes would not
-    ///         fit or memory runs out, which changes nothing;
-    ///         `mui_errorInvalid` for a NULL tree or update, or an update
-    ///         that does not fit the tree: no root for an empty tree, a
-    ///         node with the id 0 or sent twice, a child neither held nor
-    ///         sent, a root, or focus, that is neither, or lists that do
-    ///         not leave a tree: a child listed twice, or by a node sent
-    ///         while a node not sent lists it, the root listed, or a node
-    ///         under itself; or a node whose marks do not fit its value
-    ///         text: offsets past it or inside a character, lines not
-    ///         ascending from 0, words out of order or empty.
+    /// @return `mui_success`; `mui_errorCapacity` when the nodes would not fit
+    ///         or memory runs out, which changes nothing; `mui_errorInvalid`
+    ///         for a NULL tree or update, or an update that does not fit the
+    ///         tree: no root for an empty tree, a node with the id 0 or sent
+    ///         twice, a child neither held nor sent, a root, or focus, that is
+    ///         neither, or lists that do not leave a tree: a child listed
+    ///         twice, or by a node sent while a node not sent lists it, the
+    ///         root listed, or a node under itself; or a node whose marks do
+    ///         not fit its value text: offsets past it or inside a character,
+    ///         lines not ascending from 0, words out of order or empty;
+    ///         `mui_errorBusy` while the tree is busy.
     /// @par Thread safety
     /// Safe from any thread; the tree is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiAccessTree_Apply(muiAccessTree* tree,
@@ -133,7 +178,7 @@ extern "C"
     /// @return The count; 0 for NULL.
     /// @par Thread safety
     /// Safe from any thread; the tree is used by one thread at a time.
-    MUI_API uint32_t muiAccessTree_Count(const muiAccessTree* tree);
+    MUI_API uint32_t muiAccessTree_GetNodeCount(const muiAccessTree* tree);
 
     /// A node the tree holds: its texts and links are the tree's copies,
     /// valid until an update replaces or removes it; its firstChild is 0,
@@ -160,7 +205,8 @@ extern "C"
     ///
     /// @param tree      The tree.
     /// @param id        The node's id.
-    /// @param countOut  Receives how many; 0 for a node not held.
+    /// @param countOut  Receives how many; 0 for a node not held or a NULL
+    ///                  tree.
     /// @return Their ids; NULL for none.
     /// @par Thread safety
     /// Safe from any thread; the tree is used by one thread at a time.
@@ -178,10 +224,12 @@ extern "C"
     ///
     /// @param tree        The tree.
     /// @param id          A node shown.
-    /// @param childrenOut Receives the ids, up to capacity; may be NULL
-    ///                    when capacity is 0.
+    /// @param childrenOut Receives the ids, up to capacity; may be NULL when
+    ///                    capacity is 0. Nothing is written to it on any other
+    ///                    failure.
     /// @param capacity    Room in childrenOut.
-    /// @param countOut    Receives how many there are, whatever the room.
+    /// @param countOut    Receives how many there are, whatever the room. 0 on
+    ///                    any other failure.
     /// @return `mui_success`; `mui_errorCapacity` when they do not fit,
     ///         those that fit written; `mui_empty` for a node not held;
     ///         `mui_errorInvalid` for a NULL tree or count.
@@ -221,18 +269,18 @@ extern "C"
     ///
     /// @param tree       The tree.
     /// @param id         The node's id.
-    /// @param buffer     Receives the name, NUL-terminated; may be NULL
+    /// @param bufferOut  Receives the name, NUL-terminated; may be NULL
     ///                   when capacity is 0.
     /// @param capacity   Its size in bytes.
-    /// @param lengthOut  Receives the name's length.
+    /// @param lengthOut  Receives the name's length. 0 on any other failure.
     /// @return `mui_success`; `mui_empty` for no name or a node not held;
     ///         `mui_errorCapacity` when it does not fit, as much written
     ///         as fits on a whole character; `mui_errorInvalid` for a NULL
-    ///         tree or length, or a NULL buffer with room.
+    ///         tree or length, or a NULL bufferOut with room.
     /// @par Thread safety
     /// Safe from any thread; the tree is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiAccessTree_GetName(const muiAccessTree* tree, uint64_t id,
-                                                          char* buffer, size_t capacity,
+                                                          char* bufferOut, size_t capacity,
                                                           size_t* lengthOut);
 
     /// A node's bounds where the root is placed (the window's client area,
@@ -242,7 +290,7 @@ extern "C"
     ///
     /// @param tree       The tree.
     /// @param id         The node's id.
-    /// @param boundsOut  Receives the bounds.
+    /// @param boundsOut  Receives the bounds. Zeroed on failure.
     /// @return `mui_success`; `mui_empty` for a node not held;
     ///         `mui_errorInvalid` for a NULL argument.
     /// @par Thread safety
@@ -260,10 +308,11 @@ extern "C"
     /// @param id        The node's id.
     /// @param start     The range's first byte.
     /// @param end       The byte after its last.
-    /// @param rectsOut  Receives the rectangles, as many as capacity; NULL
-    ///                  with a capacity of 0 to count them.
+    /// @param rectsOut  Receives the rectangles, as many as capacity; NULL with
+    ///                  a capacity of 0 to count them. Nothing is written to it
+    ///                  on any other failure.
     /// @param capacity  How many rectsOut holds.
-    /// @param countOut  Receives how many there are.
+    /// @param countOut  Receives how many there are. 0 on any other failure.
     /// @return `mui_success`; `mui_empty` for a node not held or whose text
     ///         has no clusters (none given), the count 0;
     ///         `mui_errorCapacity` when there are more than capacity;
@@ -286,7 +335,7 @@ extern "C"
     /// @param id         The node's id.
     /// @param x          The point's x.
     /// @param y          The point's y.
-    /// @param offsetOut  Receives the character's first byte.
+    /// @param offsetOut  Receives the character's first byte. 0 on failure.
     /// @return `mui_success`; `mui_empty` for a node not held, whose text
     ///         has no clusters (none given), or whose transforms flatten it;
     ///         `mui_errorInvalid` for a NULL argument or a point not finite.
@@ -302,16 +351,17 @@ extern "C"
     /// it has them. Tests compare it.
     ///
     /// @param tree       The tree.
-    /// @param buffer     Receives the text, NUL-terminated; may be NULL
+    /// @param bufferOut  Receives the text, NUL-terminated; may be NULL
     ///                   when capacity is 0.
     /// @param capacity   Its size in bytes.
-    /// @param lengthOut  Receives the text's length without its NUL.
+    /// @param lengthOut  Receives the text's length without its NUL. 0 on any
+    ///                   other failure.
     /// @return `mui_success`; `mui_errorCapacity` when it does not fit,
     ///         as much written as fits; `mui_errorInvalid` for a NULL tree
-    ///         or length, or a NULL buffer with room.
+    ///         or length, or a NULL bufferOut with room.
     /// @par Thread safety
     /// Safe from any thread; the tree is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiAccessTree_Write(const muiAccessTree* tree, char* buffer,
+    MUI_NODISCARD MUI_API muiResult muiAccessTree_Write(const muiAccessTree* tree, char* bufferOut,
                                                         size_t capacity, size_t* lengthOut);
 
     /// A role's name, as its constant's after mui_role with a lower-case
@@ -321,7 +371,7 @@ extern "C"
     /// @return The name; "unknown" for a role past MUI_ROLE_LAST.
     /// @par Thread safety
     /// Safe from any thread.
-    MUI_API const char* muiAccessRoleName(muiRole role);
+    MUI_API const char* muiGetAccessRoleName(muiRole role);
 
 #ifdef __cplusplus
 }

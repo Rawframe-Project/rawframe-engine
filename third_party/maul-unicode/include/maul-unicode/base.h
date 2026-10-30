@@ -23,7 +23,7 @@ extern "C"
 #define MUNI_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MUNI_VERSION_MINOR 6
+#define MUNI_VERSION_MINOR 8
 // x-release-please-end
 // x-release-please-start-patch
 #define MUNI_VERSION_PATCH 0
@@ -35,7 +35,7 @@ extern "C"
 #define MUNI_UNICODE_VERSION_PATCH 0
 
 // The results version: it moves up with every change to what
-// muniNormalize, muniToNfkcCasefold, muniConvertCase or muniGetSkeleton
+// muniNormalize, muniGetNfkcCasefold, muniConvertCase or muniGetSkeleton
 // give for some text, or to the verdict of muniCheckIdentifier,
 // muniGetRestrictionLevel, muniCheckMixedNumbers or
 // muniGetResolvedScripts, a new Unicode version included, and with
@@ -161,7 +161,7 @@ extern "C"
 
     /// Returns the results version of the library that was linked: it
     /// moves up with every change to what muniNormalize,
-    /// muniToNfkcCasefold, muniConvertCase or muniGetSkeleton give for
+    /// muniGetNfkcCasefold, muniConvertCase or muniGetSkeleton give for
     /// some text, or to the verdict of muniCheckIdentifier,
     /// muniGetRestrictionLevel, muniCheckMixedNumbers or
     /// muniGetResolvedScripts, in any release, and stays the same
@@ -179,7 +179,7 @@ extern "C"
     /// @return A static, NUL-terminated string such as "muni_errorCapacity".
     /// @par Thread safety
     /// Safe from any thread.
-    MUNI_API const char* muniResultName(muniResult result);
+    MUNI_API const char* muniGetResultName(muniResult result);
 
 #ifdef __cplusplus
 }

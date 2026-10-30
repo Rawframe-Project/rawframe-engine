@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Exit transitions (record mui-0007): the table of nodes exiting, their
-// state and flag, and the reports of exits no transition runs in.
+// Exit transitions: the table of nodes exiting, their state and flag, and
+// the reports of exits no transition runs in.
 
 #include "maul-ui/exit.h"
 
@@ -63,7 +63,7 @@ static void SetExiting(muiContext* context, uint32_t slot, bool exiting)
     muiTreeMark(&context->tree, slot, mui_stageStyle);
 }
 
-muiResult muiNode_BeginExit(muiContext* context, muiNodeId nodeId)
+static muiResult NodeBeginExit(muiContext* context, muiNodeId nodeId)
 {
     if (context == nullptr)
     {
@@ -101,7 +101,18 @@ muiResult muiNode_BeginExit(muiContext* context, muiNodeId nodeId)
     return mui_success;
 }
 
-muiResult muiNode_CancelExit(muiContext* context, muiNodeId nodeId)
+muiResult muiNode_BeginExit(muiContext* context, muiNodeId nodeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeBeginExit(context, nodeId);
+        muiLeave(context);
+    }
+    return status;
+}
+
+static muiResult NodeCancelExit(muiContext* context, muiNodeId nodeId)
 {
     if (context == nullptr)
     {
@@ -121,6 +132,17 @@ muiResult muiNode_CancelExit(muiContext* context, muiNodeId nodeId)
         SetExiting(context, slot, false);
     }
     return mui_success;
+}
+
+muiResult muiNode_CancelExit(muiContext* context, muiNodeId nodeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeCancelExit(context, nodeId);
+        muiLeave(context);
+    }
+    return status;
 }
 
 void muiExitAdvance(muiContext* context, uint32_t root)

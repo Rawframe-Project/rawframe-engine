@@ -68,7 +68,7 @@ result::Result<TextPosition> Tree::textAt(Node node, float x, float y) const {
     RAWFRAME_TRY_ASSIGN(const auto kEditable, editable(*state_, node));
     muiTextPosition found{};
     RAWFRAME_TRY(checked(
-        muiTextHitTest(
+        muiNode_HitTestText(
             &state_->host, idOf(node), kEditable.second.width, x - kEditable.second.x, y - kEditable.second.y, &found),
         "a point in a node's text could not be found"));
     return positionOf(found);
@@ -78,7 +78,7 @@ result::Result<Rect> Tree::caretOf(Node node, TextPosition position) const {
     RAWFRAME_TRY_ASSIGN(const auto kEditable, editable(*state_, node));
     muiTextCaret caret{};
     RAWFRAME_TRY(
-        checked(muiTextGetCaret(&state_->host, idOf(node), kEditable.second.width, positionOf(position), &caret),
+        checked(muiNode_GetTextCaret(&state_->host, idOf(node), kEditable.second.width, positionOf(position), &caret),
                 "a caret in a node's text could not be found"));
     return Rect{
         .x = kEditable.second.x + caret.x, .y = kEditable.second.y + caret.y, .width = 0, .height = caret.height};
@@ -89,13 +89,13 @@ result::Result<TextPosition> Tree::moved(Node node, TextPosition from, TextMove 
     // Kept in the content box, as Maul UI keeps it.
     const float kPreferred = std::isnan(preferredX) ? preferredX : preferredX - kEditable.second.x;
     muiTextPosition to{};
-    RAWFRAME_TRY(checked(muiTextMove(&state_->host,
-                                     idOf(node),
-                                     kEditable.second.width,
-                                     positionOf(from),
-                                     static_cast<muiTextMovement>(move),
-                                     kPreferred,
-                                     &to),
+    RAWFRAME_TRY(checked(muiNode_MoveTextPosition(&state_->host,
+                                                  idOf(node),
+                                                  kEditable.second.width,
+                                                  positionOf(from),
+                                                  static_cast<muiTextMovement>(move),
+                                                  kPreferred,
+                                                  &to),
                          "a position in a node's text could not be moved"));
     return positionOf(to);
 }
@@ -104,17 +104,17 @@ result::Result<std::vector<Rect>> Tree::rangeRects(Node node, TextRange range) c
     RAWFRAME_TRY_ASSIGN(const auto kEditable, editable(*state_, node));
     std::uint32_t count = 0;
     std::vector<muiRect> found(4);
-    muiResult outcome = muiTextGetRangeRects(&state_->host,
-                                             idOf(node),
-                                             kEditable.second.width,
-                                             range.start,
-                                             range.end,
-                                             found.data(),
-                                             static_cast<std::uint32_t>(found.size()),
-                                             &count);
+    muiResult outcome = muiNode_GetTextRangeRects(&state_->host,
+                                                  idOf(node),
+                                                  kEditable.second.width,
+                                                  range.start,
+                                                  range.end,
+                                                  found.data(),
+                                                  static_cast<std::uint32_t>(found.size()),
+                                                  &count);
     if (outcome == mui_errorCapacity && count > found.size()) {
         found.resize(count);
-        outcome = muiTextGetRangeRects(
+        outcome = muiNode_GetTextRangeRects(
             &state_->host, idOf(node), kEditable.second.width, range.start, range.end, found.data(), count, &count);
     }
     RAWFRAME_TRY(checked(outcome, "the rectangles of a node's text could not be found"));

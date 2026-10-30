@@ -18,16 +18,17 @@ static bool IsForm(muniNormalForm form)
 }
 
 muniTextResult muniNormalize(const char* text, size_t length, muniNormalForm form,
-                             muniConvertMode mode, char* output, size_t capacity, size_t* neededOut)
+                             muniConvertMode mode, char* textOut, size_t capacity,
+                             size_t* neededOut)
 {
-    if ((text == nullptr && length != 0) || (output == nullptr && capacity != 0) ||
+    if ((text == nullptr && length != 0) || (textOut == nullptr && capacity != 0) ||
         neededOut == nullptr || !IsForm(form) ||
         (mode != muni_convertStrict && mode != muni_convertReplace))
     {
         return (muniTextResult){muni_errorInvalid, 0};
     }
     muniNormalizer normalizer;
-    muniNormalizerInit(&normalizer, form == muni_nfc || form == muni_nfkc, output, capacity);
+    muniNormalizerInit(&normalizer, form == muni_nfc || form == muni_nfkc, textOut, capacity);
     bool compatibility = form == muni_nfkc || form == muni_nfkd;
     const uint8_t* bytes = (const uint8_t*)text;
     size_t offset = 0;

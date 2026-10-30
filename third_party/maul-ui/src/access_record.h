@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Comparing two records of a node, for the adapters that tell what an
-// update changed (record mui-0008).
+// update changed.
 
 #ifndef MAUL_UI_SRC_ACCESS_RECORD_H
 #define MAUL_UI_SRC_ACCESS_RECORD_H

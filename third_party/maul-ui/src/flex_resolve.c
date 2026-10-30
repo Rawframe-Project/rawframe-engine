@@ -109,19 +109,22 @@ static float Distribute(const muiTree* tree, muiLayoutNode* nodes, uint32_t firs
 
 // Freezes every unfrozen child when the total violation is zero, the
 // ones raised to their minimum when it is positive, and the ones lowered
-// to their maximum when it is negative.
-static void FreezeViolators(const muiTree* tree, muiLayoutNode* nodes, uint32_t first,
+// to their maximum when it is negative. Returns whether it froze one.
+static bool FreezeViolators(const muiTree* tree, muiLayoutNode* nodes, uint32_t first,
                             uint32_t count, float violation)
 {
     int8_t sign = violation > 0.0f ? 1 : (violation < 0.0f ? -1 : 0);
+    bool froze = false;
     for (uint32_t c = first, i = 0; i < count; c = muiNextFlowChild(tree, nodes, c), i++)
     {
         muiFlexItemState* item = &nodes[c - 1].item;
         if (!item->frozen && (sign == 0 || item->violation == sign))
         {
             item->frozen = true;
+            froze = true;
         }
     }
+    return froze;
 }
 
 // The relative excess a line's float sum may carry and still fit.
@@ -178,7 +181,14 @@ void muiResolveFlexibleLengths(const muiTree* tree, muiLayoutNode* nodes, uint32
         }
         float violation = Distribute(tree, nodes, first, count, freeSpace, growing, &totals);
         bool cancels = fabsf(violation) <= fmaxf(fabsf(available), 1.0f) * VIOLATION_SLACK;
-        FreezeViolators(tree, nodes, first, count, cancels ? 0.0f : violation);
+        // The loop ends because each pass freezes a child. A total past the
+        // line's slack whose every clamp is within its child's own (a base
+        // so large its float steps exceed the line) violates nothing, as
+        // Distribute counts it, and freezes them all.
+        if (!FreezeViolators(tree, nodes, first, count, cancels ? 0.0f : violation))
+        {
+            (void)FreezeViolators(tree, nodes, first, count, 0.0f);
+        }
     }
 }
 

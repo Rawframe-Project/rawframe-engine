@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Style: classes of typed property values, the node types and node
-// states that pick them, and a node's direct writes (record mui-0004).
-// A node's values resolve in fixed layers, each later one winning: the
-// defaults, every class's base values in order, the state variants (the
-// states in the order of muiState, weakest first, and the classes in
-// order within each), the conditions that hold (classes in order, then
-// each class's conditions in order), and the node's direct writes. A
-// node's classes are its type's, then its own.
+// Style: classes of typed property values, the node types and node states
+// that pick them, and a node's direct writes. A node's values resolve in
+// fixed layers, each later one winning: the defaults, every class's base
+// values in order, the state variants (the states in the order of
+// muiState, weakest first, and the classes in order within each), the
+// conditions that hold (classes in order, then each class's conditions in
+// order), and the node's direct writes. A node's classes are its type's,
+// then its own.
 
 #ifndef MAUL_UI_STYLE_H
 #define MAUL_UI_STYLE_H
@@ -24,7 +24,7 @@ extern "C"
 {
 #endif
 
-    // A style class, in the shape of every id (family record 0016).
+    // A style class, in the shape of every id.
     typedef struct muiStyleId
     {
         uint32_t index1;
@@ -195,8 +195,10 @@ extern "C"
 #define MUI_INTERACTION_PROPERTIES ((muiPropertyMask)0xFFull)
 
     // The states a node can be in, as bits, weakest first: a later
-    // state's variant wins over an earlier one's.
-    typedef uint8_t muiState;
+    // state's variant wins over an earlier one's. Sixteen bits, of which
+    // eight are states, so that a state can be added without changing
+    // the type.
+    typedef uint16_t muiState;
 
     enum
     {
@@ -228,8 +230,11 @@ extern "C"
         mui_variantDisabled = 7,
         mui_variantExiting = 8,
         // The values of the class's first condition; condition i has
-        // mui_variantCondition0 + i.
-        mui_variantCondition0 = 9,
+        // mui_variantCondition0 + i. The conditions follow the variants of
+        // all sixteen state bits, so a state added later moves none of
+        // them; the variants between the states and the conditions are
+        // refused.
+        mui_variantCondition0 = 17,
     };
 
     enum
@@ -276,41 +281,32 @@ extern "C"
         mui_motionReduced = 2,
     };
 
-    // What a condition asks of a node's resolved text direction.
-    typedef uint8_t muiDirectionMatch;
-
-    enum
-    {
-        mui_directionAny = 0,
-        mui_directionLeftToRight = 1,
-        mui_directionRightToLeft = 2,
-    };
-
     // Values from min up to, but not including, max; max may be infinite.
-    typedef struct muiRange
+    typedef struct muiInterval
     {
         float min;
         float max;
-    } muiRange;
+    } muiInterval;
 
     // When a class's conditional values apply: when every clause holds. A
-    // clause at its default (the range [0, inf), every bit, any) holds
+    // clause at its default (the interval [0, inf), every bit, any) holds
     // always and reads nothing. Build it with muiDefaultCondition.
     typedef struct muiCondition
     {
         // The node's border box from its last layout. Aspect is width over
         // height: infinite for a zero height, 0 for an empty box.
-        muiRange width;
-        muiRange height;
-        muiRange aspect;
+        muiInterval width;
+        muiInterval height;
+        muiInterval aspect;
         // The environment's text scale.
-        muiRange textScale;
+        muiInterval textScale;
         // The viewport classes and input modalities it holds for.
         muiViewportClass viewports;
         muiInputModality inputs;
         muiMotionMatch motion;
-        // The node's resolved direction from its last layout.
-        muiDirectionMatch direction;
+        // The node's resolved direction from its last layout; inherit
+        // holds for either.
+        muiInlineDirection direction;
     } muiCondition;
 
     // What the host tells the context about where its UI is shown.
@@ -341,17 +337,17 @@ extern "C"
     MUI_API muiEnvironment muiDefaultEnvironment(void);
 
     /// Sets the environment conditions read. Every node is styled again at
-    /// the next muiComputeLayout when it changes.
+    /// the next muiNode_ComputeLayout when it changes.
     ///
     /// @param context      The context.
     /// @param environment  One viewport class bit, one input modality bit
     ///                     and a finite text scale above 0.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a
-    ///         value outside the above or a call from a measure or paint function.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a value
+    ///         outside the above; `mui_errorBusy` while the context is busy.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_NODISCARD MUI_API muiResult muiSetContextEnvironment(muiContext* context,
-                                                             const muiEnvironment* environment);
+    MUI_NODISCARD MUI_API muiResult muiContext_SetEnvironment(muiContext* context,
+                                                              const muiEnvironment* environment);
 
     /// Returns the environment conditions read.
     ///
@@ -359,7 +355,7 @@ extern "C"
     /// @return The environment; muiDefaultEnvironment's for a NULL context.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MUI_API muiEnvironment muiGetContextEnvironment(const muiContext* context);
+    MUI_API muiEnvironment muiContext_GetEnvironment(const muiContext* context);
 
     // How a style class is made. Build it with muiDefaultStyleDef.
     typedef struct muiStyleDef
@@ -378,9 +374,9 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param def         The class: a valid cookie.
-    /// @param styleOut  Receives the class; set to the null id on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
-    ///         cookie or a call from a measure or paint function;
+    /// @param styleOut  Receives the class. The null id on failure.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a bad
+    ///         cookie; `mui_errorBusy` while the context is busy;
     ///         `mui_errorCapacity` when the context's style limit is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -388,32 +384,35 @@ extern "C"
                                                    muiStyleId* styleOut);
 
     /// Destroys a style class. Nodes and node types that list it skip it,
-    /// and every node is styled again at the next muiComputeLayout.
+    /// and every node is styled again at the next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param styleId  The class.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function; `mui_errorStale`
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
     ///         for an id whose class is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiDestroyStyle(muiContext* context, muiStyleId styleId);
 
     /// Sets layout properties in one variant of a class from the fields of
-    /// values. Every node is styled again at the next muiComputeLayout.
+    /// values. Every node is styled again at the next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param styleId  The class.
     /// @param variant  The variant.
-    /// @param values   The values; only the fields mask names are read, and
-    ///                 each must be one muiNode_SetLayoutStyle allows.
+    /// @param values   The values; only the fields mask names are read:
+    ///                 finite numbers, grow and shrink, padding, border and
+    ///                 gaps at least 0, known enumerators and edge bits,
+    ///                 alignItems not mui_alignAuto, anchors from 0 to 1, and
+    ///                 an aspect ratio of 0 or more.
     /// @param mask     The properties, within MUI_LAYOUT_PROPERTIES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, an unknown variant or property bit, a value outside
-    ///         the above, a property the variant's condition reads (its
-    ///         axis's sizes and limits, the aspect ratio, the text
-    ///         direction) or a call from a measure or paint function, which changes
-    ///         nothing; `mui_errorStale` for an id whose class is gone;
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, an unknown variant or property bit, a value outside the
+    ///         above or a property the variant's condition reads (its axis's
+    ///         sizes and limits, the aspect ratio or the text direction), which
+    ///         changes nothing; `mui_errorBusy` while the context is busy;
+    ///         `mui_errorStale` for an id whose class is gone;
     ///         `mui_errorCapacity` when the variant had no values and the
     ///         context's limit of property sets is reached.
     /// @par Thread safety
@@ -425,16 +424,16 @@ extern "C"
 
     /// Unsets properties in one variant of a class: their values and the
     /// tokens named for them. Every node is styled again at the next
-    /// muiComputeLayout.
+    /// muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param styleId  The class.
     /// @param variant  The variant.
     /// @param group    The properties' group.
     /// @param mask     The properties, within the group's.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id, an unknown variant, group or property bit or a call
-    ///         from a measure or paint function; `mui_errorStale` for an id whose
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         id, an unknown variant, group or property bit; `mui_errorBusy`
+    ///         while the context is busy; `mui_errorStale` for an id whose
     ///         class is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -449,8 +448,8 @@ extern "C"
     /// @param styleId    The class.
     /// @param variant    The variant.
     /// @param valuesOut  Receives the set values, and muiDefaultLayoutStyle's
-    ///                   for the rest.
-    /// @param maskOut    Receives which properties are set.
+    ///                   for the rest. Zeroed on failure.
+    /// @param maskOut    Receives which properties are set. 0 on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id or an unknown variant; `mui_errorStale` for an id
     ///         whose class is gone.
@@ -463,19 +462,18 @@ extern "C"
 
     /// Adds a condition to a class, after its others. Its values are then
     /// set through the variant it gives. Every node is styled again at the
-    /// next muiComputeLayout.
+    /// next muiNode_ComputeLayout.
     ///
     /// @param context     The context.
     /// @param styleId     The class.
-    /// @param condition   Ranges with a finite minimum of 0 or more and a
+    /// @param condition   Intervals with a finite minimum of 0 or more and a
     ///                    maximum not below it, known bits and choices.
-    /// @param variantOut  Receives the condition's variant; set to
-    ///                    mui_variantBase on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, a condition outside the above or a call from a
-    ///         measure or paint function; `mui_errorStale` for an id whose class is
-    ///         gone; `mui_errorCapacity` when the class has
-    ///         MUI_MAX_CONDITIONS.
+    /// @param variantOut  Receives the condition's variant; mui_variantBase
+    ///                    on failure.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id or a condition outside the above; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for an id whose class is gone;
+    ///         `mui_errorLimit` when the class has MUI_MAX_CONDITIONS.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiStyle_AddCondition(muiContext* context, muiStyleId styleId,
@@ -483,18 +481,17 @@ extern "C"
                                                           muiVariant* variantOut);
 
     /// Replaces one of a class's conditions, keeping its values. Every node
-    /// is styled again at the next muiComputeLayout.
+    /// is styled again at the next muiNode_ComputeLayout.
     ///
     /// @param context    The context.
     /// @param styleId    The class.
     /// @param variant    The condition's variant.
     /// @param condition  As muiStyle_AddCondition takes it, reading nothing
     ///                   the condition's values set.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, a variant that is not one of the class's
-    ///         conditions, a condition outside the above or a call from a
-    ///         measure or paint function; `mui_errorStale` for an id whose class is
-    ///         gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, a variant that is not one of the class's conditions or a
+    ///         condition outside the above; `mui_errorBusy` while the context
+    ///         is busy; `mui_errorStale` for an id whose class is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiStyle_SetCondition(muiContext* context, muiStyleId styleId,
@@ -506,7 +503,7 @@ extern "C"
     /// @param context       The context.
     /// @param styleId       The class.
     /// @param variant       The condition's variant.
-    /// @param conditionOut  Receives the condition.
+    /// @param conditionOut  Receives the condition. Zeroed on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
     ///         null id or a variant that is not one of the class's
     ///         conditions; `mui_errorStale` for an id whose class is gone.
@@ -517,12 +514,12 @@ extern "C"
                                                           muiCondition* conditionOut);
 
     /// Removes every condition of a class and its values. Every node is
-    /// styled again at the next muiComputeLayout.
+    /// styled again at the next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param styleId  The class.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function; `mui_errorStale`
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
     ///         for an id whose class is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -551,11 +548,12 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param def        The type: a valid cookie and its classes.
-    /// @param typeOut  Receives the type; set to the null id on failure.
+    /// @param typeOut  Receives the type. The null id on failure.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a bad
-    ///         cookie, classes NULL with a count, a count over the limit or a
-    ///         call from a measure or paint function; `mui_errorCapacity`
-    ///         when the context's node type limit is reached.
+    ///         cookie or classes NULL with a count; `mui_errorLimit` for more
+    ///         than MUI_MAX_CLASSES classes; `mui_errorBusy` while the context
+    ///         is busy; `mui_errorCapacity` when the context's node type limit
+    ///         is reached.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiCreateNodeType(muiContext* context,
@@ -563,28 +561,28 @@ extern "C"
                                                       muiNodeTypeId* typeOut);
 
     /// Destroys a node type. Its nodes are left with no type, and every
-    /// node is styled again at the next muiComputeLayout.
+    /// node is styled again at the next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param typeId   The type.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function; `mui_errorStale`
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         id; `mui_errorBusy` while the context is busy; `mui_errorStale`
     ///         for an id whose type is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiDestroyNodeType(muiContext* context, muiNodeTypeId typeId);
 
     /// Replaces a node type's classes. Every node is styled again at the
-    /// next muiComputeLayout.
+    /// next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param typeId   The type.
     /// @param classes  count classes, as muiCreateNodeType takes them.
     /// @param count    At most MUI_MAX_CLASSES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id, NULL classes with a count, a count over the limit or
-    ///         a call from a measure or paint function; `mui_errorStale` for an id
-    ///         whose type is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         id or NULL classes with a count; `mui_errorLimit` for a count
+    ///         over MUI_MAX_CLASSES; `mui_errorBusy` while the context is busy;
+    ///         `mui_errorStale` for an id whose type is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNodeType_SetClasses(muiContext* context,
@@ -593,13 +591,13 @@ extern "C"
                                                            uint32_t count);
 
     /// Sets a node's type. The node is styled again at the next
-    /// muiComputeLayout.
+    /// muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param typeId   The type; the null id for none.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null node id or a call from a measure or paint function;
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context or the null
+    ///         node id; `mui_errorBusy` while the context is busy;
     ///         `mui_errorStale` for a node or a type that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -607,42 +605,42 @@ extern "C"
                                                     muiNodeTypeId typeId);
 
     /// Replaces a node's own classes, which follow its type's. The node is
-    /// styled again at the next muiComputeLayout.
+    /// styled again at the next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param classes  count classes, kept as given; a class destroyed later
     ///                 is skipped. NULL when count is 0.
     /// @param count    At most MUI_MAX_CLASSES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id, NULL classes with a count, a count over the limit or
-    ///         a call from a measure or paint function; `mui_errorStale` for a node
-    ///         that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         id or NULL classes with a count; `mui_errorLimit` for a count
+    ///         over MUI_MAX_CLASSES; `mui_errorBusy` while the context is busy;
+    ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetClasses(muiContext* context, muiNodeId nodeId,
                                                        const muiStyleId* classes, uint32_t count);
 
     /// Sets the states a node is in. The node is styled again at the next
-    /// muiComputeLayout when they change. Pointer input's hover and press,
+    /// muiNode_ComputeLayout when they change. Pointer input's hover and press,
     /// and the players' focus, join them, apart: setting states leaves
     /// those. The exiting bit is the exits' (maul-ui/exit.h): setting
     /// states keeps it as it is.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @param states   muiState bits.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id or a call from a measure or paint function;
-    ///         `mui_errorStale` for a node that is gone.
+    /// @param states   muiState bits, each one of the states above.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         id or a bit that names no state; `mui_errorBusy` while the
+    ///         context is busy; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_SetStates(muiContext* context, muiNodeId nodeId,
                                                       muiState states);
 
     /// Returns the states a node is in: those the host set, hover and
-    /// press from pointer input (muiPointerInput), and focus and its
-    /// showing from the players' focus (muiFocus_Set).
+    /// press from pointer input (muiNode_RoutePointer), and focus and its
+    /// showing from the players' focus (muiContext_SetFocus).
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
@@ -653,17 +651,16 @@ extern "C"
 
     /// Writes layout properties of a node directly from the fields of
     /// values: they win over every class until reset, at once. The node and
-    /// its parent are laid out again at the next muiComputeLayout.
-    /// muiNode_SetLayoutStyle writes every layout property.
+    /// its parent are laid out again at the next muiNode_ComputeLayout.
+    /// MUI_LAYOUT_PROPERTIES as the mask writes every layout property.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
-    /// @param values   The values; only the fields mask names are read, and
-    ///                 each must be one muiNode_SetLayoutStyle allows.
+    /// @param values   The values, as muiStyle_SetLayoutValues takes them.
     /// @param mask     The properties, within MUI_LAYOUT_PROPERTIES.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the
-    ///         null id, an unknown property bit, a value outside the above
-    ///         or a call from a measure or paint function, which changes nothing;
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
+    ///         id, an unknown property bit or a value outside the above, which
+    ///         changes nothing; `mui_errorBusy` while the context is busy;
     ///         `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -672,15 +669,15 @@ extern "C"
                                                             muiPropertyMask mask);
 
     /// Ends direct writes of a node's properties: they take their classes'
-    /// values again at the next muiComputeLayout.
+    /// values again at the next muiNode_ComputeLayout.
     ///
     /// @param context  The context.
     /// @param nodeId   The node.
     /// @param group    The properties' group.
     /// @param mask     The properties, within the group's.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the
-    ///         null id, an unknown group or property bit or a call from a
-    ///         measure or paint function; `mui_errorStale` for a node that is gone.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL context, the null
+    ///         id or an unknown group or property bit; `mui_errorBusy` while
+    ///         the context is busy; `mui_errorStale` for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_ResetProperties(muiContext* context, muiNodeId nodeId,

@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The Android accessibility adapter's events (record mui-0008), for the
-// nodes clients have seen: a content change of a node whose record
-// changed (its text or content description when only its name or value
-// text did, else unsaid), which also makes Android speak a live node; a
-// content change of the subtree when the shown tree may have changed;
-// the view focused when the focus moved. Text being edited tells its
-// text changed, as a common prefix and suffix in UTF-16, and its
-// selection.
+// The Android accessibility adapter's events, for the nodes clients have
+// seen: a content change of a node whose record changed (its text or
+// content description when only its name or value text did, else unsaid),
+// which also makes Android speak a live node; a content change of the
+// subtree when the shown tree may have changed; the view focused when the
+// focus moved. Text being edited tells its text changed, as a common
+// prefix and suffix in UTF-16, and its selection.
 
 #include "access_record.h"
 #include "access_text.h"

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Text block records and the buffers they grow (record mui-0006).
+// Text block records and the buffers they grow.
 
 #include "text_block.h"
 

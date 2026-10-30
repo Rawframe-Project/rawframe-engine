@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Pointer input (record mui-0007): what tree edits tell it, so the hover
-// and press counts along pointers' chains follow the tree.
+// Pointer input: what tree edits tell it, so the hover and press counts
+// along pointers' chains follow the tree.
 
 #ifndef MAUL_UI_SRC_POINTER_H
 #define MAUL_UI_SRC_POINTER_H

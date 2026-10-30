@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The accessibility tree's consumer (record mui-0008): the nodes a tree
-// holds, found by id, and what applying an update stages and retires.
+// The accessibility tree's consumer: the nodes a tree holds, found by id,
+// and what applying an update stages and retires.
 
 #ifndef MAUL_UI_SRC_ACCESS_TREE_STORE_H
 #define MAUL_UI_SRC_ACCESS_TREE_STORE_H
@@ -82,16 +82,26 @@ struct muiAccessTree
     uint32_t* walk;
     uint64_t root;
     uint64_t focus;
+    // Set while one of its functions that change it runs, or host code it
+    // calls (the allocator, an action function) runs: a call back in is
+    // refused (Maul conventions, Threads), and counted.
+    bool busy;
+    uint64_t misuse;
 };
 
 // The slot holding a node, or 0.
 uint32_t muiHeldSlotOf(const muiAccessTree* tree, uint64_t id);
 
 // Frees what a held node owns.
-void muiFreeHeld(const muiAccessTree* tree, const muiHeldNode* held);
+void muiFreeHeld(muiAccessTree* tree, const muiHeldNode* held);
 
 // Whether a node's new record, held now, may show the tree otherwise than
 // its old one did, by what the view's rules read (access_view.c).
 bool muiViewDiffers(const muiAccessTree* tree, const muiHeldNode* old, const muiHeldNode* now);
+
+// Whether the view shows a node only while it holds the focus: hidden,
+// a generic node without a label, or it or a node above it clipped out.
+// False for a node the tree does not hold.
+bool muiShownForFocus(const muiAccessTree* tree, uint64_t id);
 
 #endif // MAUL_UI_SRC_ACCESS_TREE_STORE_H

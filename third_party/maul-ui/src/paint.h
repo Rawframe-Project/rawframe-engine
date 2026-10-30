@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // Painting one node into a list's tables: its shadows, box and image,
-// snapped per kind, and the clip it gives its children (record mui-0005).
+// snapped per kind, and the clip it gives its children.
 
 #ifndef MAUL_UI_SRC_PAINT_H
 #define MAUL_UI_SRC_PAINT_H

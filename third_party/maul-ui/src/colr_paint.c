@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// COLR version 1 paint graphs (record mui-0006). A paint renders into the
-// surface of its level, cleared first: level 0 is the caller's pixels,
-// deeper levels are the service's, kept as the stack grows, so a surface
-// is found again by its level after any deeper paint. Layers render each
-// child a level down and composite it over; a glyph renders its child at
-// its own level and masks it by its outline. Transforms follow fontTools'
-// reading of the specification: x' = xx x + xy y + dx, y' = yx x + yy y +
-// dy; rotations counter-clockwise; a skew of x angle a and y angle b maps
-// x to x - tan(a) y and y to y + tan(b) x.
+// COLR version 1 paint graphs. A paint renders into the surface of its
+// level, cleared first: level 0 is the caller's pixels, deeper levels are
+// the service's, kept as the stack grows, so a surface is found again by
+// its level after any deeper paint. Layers render each child a level down
+// and composite it over; a glyph renders its child at its own level and
+// masks it by its outline. Transforms follow fontTools' reading of the
+// specification: x' = xx x + xy y + dx, y' = yx x + yy y + dy; rotations
+// counter-clockwise; a skew of x angle a and y angle b maps x to x -
+// tan(a) y and y to y + tan(b) x.
 //
 // Gradients are colr_gradient.c's and composite modes colr_composite.c's:
 // a composite renders its backdrop at its own level and its source a

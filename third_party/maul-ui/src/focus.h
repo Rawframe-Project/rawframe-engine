@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Focus (record mui-0007): what pointer input and edits tell it.
+// Focus: what pointer input and edits tell it.
 
 #ifndef MAUL_UI_SRC_FOCUS_H
 #define MAUL_UI_SRC_FOCUS_H
@@ -56,9 +56,8 @@ static inline MUI_SIZE_OUTLINE void muiNoteFocus(muiContext* context, uint32_t s
 }
 
 // Before a subtree begins to exit or is destroyed: for each player whose
-// focus is inside it, the opener of the outermost layer between the
-// focus and the subtree's root, both included (record mui-0007); the
-// null id for the others.
+// focus is inside it, the opener of the outermost layer between the focus
+// and the subtree's root, both included; the null id for the others.
 void muiFocusReturns(const muiContext* context, uint32_t closing,
                      muiNodeId returns[MUI_MAX_PLAYERS]);
 
@@ -77,5 +76,10 @@ static inline void muiNoteDestroyed(muiContext* context)
         muiFocusForgetDestroyed(context);
     }
 }
+
+// muiContext_SetFocus and muiNode_MoveFocus without the busy mark, for the library's
+// own calls from inside a call that holds it.
+muiResult muiSetFocus(muiContext* context, uint8_t player, muiNodeId nodeId, muiFocusCause cause);
+muiResult muiMoveFocus(muiContext* context, muiNodeId rootId, uint8_t player, bool backward);
 
 #endif // MAUL_UI_SRC_FOCUS_H

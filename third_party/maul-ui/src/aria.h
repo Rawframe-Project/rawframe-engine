@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The ARIA adapter's internals (record mui-0008): the adapter, the
-// record of the elements the page holds, and the page's calls.
+// The ARIA adapter's internals: the adapter, the record of the elements
+// the page holds, and the page's calls.
 
 #ifndef MAUL_UI_SRC_ARIA_H
 #define MAUL_UI_SRC_ARIA_H
@@ -51,7 +51,7 @@ struct muiAriaAdapter
     bool enabled;
     // Whether the update being applied may have changed the shown tree.
     bool reshaped;
-    muiAriaActionFunction action;
+    muiAccessActionFunction action;
     void* user;
     uint32_t nodes;
     // Room for any node's shown children, and the walk of the shown tree.
@@ -69,6 +69,11 @@ struct muiAriaAdapter
     uint32_t movedCount;
     // Whether the focus moved in the update being applied.
     bool focusMoved;
+    // Set while one of its functions that change it runs, or host code it
+    // calls (the allocator, an action function) runs: a call back in is
+    // refused (Maul conventions, Threads), and counted.
+    bool busy;
+    uint64_t misuse;
 };
 
 // The element showing a node, ARIA_NO_SLOT for none.
@@ -90,8 +95,8 @@ void muiAriaIdOf(int page, uint64_t id, char out[ARIA_ID_SIZE]);
 bool muiAriaIsRange(const muiAccessNode* node);
 
 // The element a node is shown by: a div; an input of type range, for a
-// range the host sets; an input, or a textarea, for a text being edited
-// (research 154, I138).
+// range the host sets; an input, or a textarea, for a text being edited,
+// since only those give screen readers a browser's editing.
 typedef enum muiAriaKind
 {
     mui_ariaDiv = 0,

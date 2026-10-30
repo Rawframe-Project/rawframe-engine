@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// PNG images (record mui-0006), as the PNG specification (third edition)
-// has them. The image data's chunks are joined in scratch, inflated after
-// them into their filtered rows, pass by pass where interlaced, the rows
-// unfiltered in place, and each pixel expanded to RGBA: samples below 8
-// bits scaled by repeating their bits, 16-bit samples by their high byte,
-// tRNS compared with the full sample. A chunk out of the specification's
-// order, an unknown critical chunk, a palette index past the palette, or
-// a CRC or checksum that does not match is mui_errorFormat.
+// PNG images, as the PNG specification (third edition) has them. The image
+// data's chunks are joined in scratch, inflated after them into their
+// filtered rows, pass by pass where interlaced, the rows unfiltered in
+// place, and each pixel expanded to RGBA: samples below 8 bits scaled by
+// repeating their bits, 16-bit samples by their high byte, tRNS compared
+// with the full sample. A chunk out of the specification's order, an
+// unknown critical chunk, a palette index past the palette, or a CRC or
+// checksum that does not match is mui_errorFormat.
 
 #include "png.h"
 
@@ -165,14 +165,16 @@ static size_t RowBytes(const Header* h, uint32_t width)
     return ((size_t)width * h->channels * h->depth + 7) / 8;
 }
 
-// The filtered rows' bytes, a filter byte a row.
-static size_t RawSize(const Header* h)
+// The filtered rows' bytes, a filter byte a row, counted in 64 bits: where
+// a size_t is 32 bits, a large image's rows do not fit one.
+static uint64_t RawSize(const Header* h)
 {
-    size_t size = 0;
+    uint64_t size = 0;
     for (uint32_t pass = 0; pass < (h->interlaced ? 7u : 1u); pass++)
     {
         Pass p = PassOf(h, pass);
-        size += p.width > 0 ? (size_t)p.height * (1 + RowBytes(h, p.width)) : 0;
+        uint64_t row = ((uint64_t)p.width * h->channels * h->depth + 7) / 8;
+        size += p.width > 0 ? (uint64_t)p.height * (1 + row) : 0;
     }
     return size;
 }
@@ -353,7 +355,8 @@ static bool Develop(const Header* h, const Colors* c, uint8_t* raw, uint8_t* pix
             const uint8_t* row = raw + (size_t)y * (1 + rowBytes) + 1;
             for (uint32_t x = 0; x < p.width; x++)
             {
-                size_t at = ((size_t)(p.y + y * p.dy) * h->width + p.x + x * p.dx) * 4;
+                size_t at =
+                    (((size_t)p.y + (size_t)y * p.dy) * h->width + p.x + (size_t)x * p.dx) * 4;
                 if (!Expand(h, c, row, x, pixels + at))
                 {
                     return false;
@@ -497,13 +500,18 @@ muiResult muiDecodePng(const muiAllocator* allocator, muiBuffer* scratch, const 
     const Header* h = &r.header;
     *widthOut = h->width;
     *heightOut = h->height;
-    size_t bytes = (size_t)h->width * h->height * 4;
+    uint64_t bytes = (uint64_t)h->width * h->height * 4;
     if (pixels == nullptr || bytes > capacity)
     {
         return mui_errorCapacity;
     }
-    size_t raw = RawSize(h);
-    if (r.dataSize > SIZE_MAX - raw || !muiReserve(allocator, scratch, r.dataSize + raw))
+    uint64_t rawSize = RawSize(h);
+    if (rawSize > SIZE_MAX || r.dataSize > SIZE_MAX - (size_t)rawSize)
+    {
+        return mui_errorCapacity;
+    }
+    size_t raw = (size_t)rawSize;
+    if (!muiReserve(allocator, scratch, r.dataSize + raw))
     {
         return mui_errorCapacity;
     }

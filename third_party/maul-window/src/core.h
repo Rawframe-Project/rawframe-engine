@@ -22,6 +22,9 @@
 #include "maul-window/monitor.h"
 #include "maul-window/system.h"
 
+#include <stdckdint.h>
+#include <string.h>
+
 // Checks an internal invariant, a state that cannot occur unless the
 // library itself is wrong: never an argument, a platform's report or
 // another program's bytes, which are validated in every build. On in
@@ -453,6 +456,47 @@ static inline mwinResult mwinMisuse(const mwinContext* context)
         ++*context->misuse;
     }
     return mwin_errorInvalid;
+}
+
+// Zeroes an output a call writes, when the caller passed one. A call on
+// the context clears every output first, before any check, so that a
+// failure leaves zero, the null id or the null request there, never a
+// value from before; the call writes it again when it succeeds.
+static inline void mwinClearOut(void* out, size_t size)
+{
+    if (out != nullptr && size > 0)
+    {
+        memset(out, 0, size);
+    }
+}
+
+// Zeroes an output array of count items, as mwinClearOut does; a count
+// whose bytes overflow cannot be the caller's array and is left alone.
+static inline void mwinClearArray(void* out, size_t count, size_t itemSize)
+{
+    size_t bytes = 0;
+    if (!ckd_mul(&bytes, count, itemSize))
+    {
+        mwinClearOut(out, bytes);
+    }
+}
+
+// Gives bytes to a caller's buffer: their length, and the bytes only
+// when they all fit. A short buffer gets none of them, so it holds no
+// text cut inside a character; the call cleared it on entry.
+static inline mwinResult mwinGiveBytes(const void* bytes, size_t length, void* buffer,
+                                       size_t capacity, size_t* lengthOut)
+{
+    *lengthOut = length;
+    if (length > capacity)
+    {
+        return mwin_errorCapacity;
+    }
+    if (length > 0)
+    {
+        memcpy(buffer, bytes, length);
+    }
+    return mwin_success;
 }
 
 // Whether the context is inside the program's allocator, where a call

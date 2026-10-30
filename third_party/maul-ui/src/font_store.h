@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The fonts of a text service (record mui-0006): each font's bytes, the
-// faces FreeType and HarfBuzz read from them, and the metrics read when
-// it was made.
+// The fonts of a text service: each font's bytes, the faces FreeType and
+// HarfBuzz read from them, and the metrics read when it was made.
 
 #ifndef MAUL_UI_SRC_FONT_STORE_H
 #define MAUL_UI_SRC_FONT_STORE_H

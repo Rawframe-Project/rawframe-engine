@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The values of a list's transforms (records mui-0005, mui-0007).
+// The values of a list's transforms.
 
 #ifndef MAUL_UI_SRC_DRAW_TRANSFORM_H
 #define MAUL_UI_SRC_DRAW_TRANSFORM_H

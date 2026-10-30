@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Greedy line breaking (record mui-0006). A line takes opportunities
-// while its visible text fits; one that does not fit even alone
-// overflows. A width read back from layout may differ from the measured
-// one in its last bits, so a line fits within a 256th of a unit.
+// Greedy line breaking. A line takes opportunities while its visible text
+// fits; one that does not fit even alone overflows. A width read back from
+// layout may differ from the measured one in its last bits, so a line fits
+// within a 256th of a unit.
 
 #include "line_break.h"
 

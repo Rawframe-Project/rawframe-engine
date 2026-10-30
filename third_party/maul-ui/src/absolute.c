@@ -10,6 +10,7 @@
 
 #include "absolute.h"
 
+#include "invariant.h"
 #include "sizing.h"
 
 #include <math.h>
@@ -413,6 +414,7 @@ static void PlaceChild(const muiSolver* solver, const muiLayoutStyle* container,
     x -= style->placement.anchorX * width;
     y -= style->placement.anchorY * height;
     layout->rect = (muiRect){x, y, width, height};
+    MUI_ASSERT(!(width < 0.0f) && !(height < 0.0f));
     input.width = muiExact(width);
     input.height = muiExact(height);
     // A height neither given nor set by both insets is its content's,

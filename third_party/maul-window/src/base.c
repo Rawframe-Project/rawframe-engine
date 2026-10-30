@@ -10,7 +10,7 @@ mwinVersion mwinGetVersion(void)
     return (mwinVersion){MWIN_VERSION_MAJOR, MWIN_VERSION_MINOR, MWIN_VERSION_PATCH};
 }
 
-const char* mwinResultName(mwinResult result)
+const char* mwinGetResultName(mwinResult result)
 {
     switch (result)
     {

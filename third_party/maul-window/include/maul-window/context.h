@@ -35,7 +35,7 @@ extern "C"
         // The platform's own window system.
         mwin_backendNative = 0,
         // A headless backend for tests: it applies requests at the next
-        // pump and takes platform records from mwinTest functions. It
+        // pump and takes platform records from the calls of test.h. It
         // exists only in builds with MAUL_WINDOW_TEST_BACKEND.
         mwin_backendTest = 1,
     };
@@ -237,7 +237,7 @@ extern "C"
     /// @return The count; 0 for a NULL context.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_API uint64_t mwinGetContextMisuse(const mwinContext* context);
+    MWIN_API uint64_t mwinContext_GetMisuse(const mwinContext* context);
 
 #ifdef __cplusplus
 }

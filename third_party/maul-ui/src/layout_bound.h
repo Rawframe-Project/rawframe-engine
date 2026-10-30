@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Layout bounded by the change (record mui-0003).
+// Layout bounded by the change.
 
 #ifndef MAUL_UI_SRC_LAYOUT_BOUND_H
 #define MAUL_UI_SRC_LAYOUT_BOUND_H

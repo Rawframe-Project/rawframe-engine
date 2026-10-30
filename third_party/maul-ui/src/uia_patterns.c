@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The UI Automation adapter's control patterns (record mui-0008): which
-// a node has, and Invoke, Toggle, ExpandCollapse, ScrollItem and
-// SelectionItem, each turned into the host's actions; Text's are in
-// src/uia_text.c.
+// The UI Automation adapter's control patterns: which a node has, and
+// Invoke, Toggle, ExpandCollapse, ScrollItem and SelectionItem, each
+// turned into the host's actions; Text's are in src/uia_text.c.
 
 #include "access_text.h"
 #include "uia.h"

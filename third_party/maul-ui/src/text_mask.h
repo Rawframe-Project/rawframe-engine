@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A password's mask (record mui-0006): an editing block with the password
-// rule is laid out, painted, hit and read by accessibility as a bullet
-// (U+2022, as Chrome and AppKit draw one) per grapheme cluster, its mask
-// made again whenever its text changes. Offsets of the text and of the
-// mask match by cluster.
+// A password's mask: an editing block with the password rule is laid out,
+// painted, hit and read by accessibility as a bullet (U+2022, as Chrome
+// and AppKit draw one) per grapheme cluster, its mask made again whenever
+// its text changes. Offsets of the text and of the mask match by cluster.
 
 #ifndef MAUL_UI_SRC_TEXT_MASK_H
 #define MAUL_UI_SRC_TEXT_MASK_H

@@ -17,8 +17,7 @@
 void muiRestyleAll(muiContext* context);
 
 // The slot of a live class for an edit, or 0 with the status in
-// statusOut: misuse for the null id or an edit from a measure function,
-// stale for a gone class.
+// statusOut: misuse for the null id, stale for a gone class.
 uint32_t muiResolveClassEdit(muiContext* context, muiStyleId styleId, muiResult* statusOut);
 
 // Whether variant is the base, a state or one of the class's conditions.

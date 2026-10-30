@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The NSAccessibility adapter's internals (record mui-0008), for its
-// Objective-C files: the adapter, the node objects, and what they share.
+// The NSAccessibility adapter's internals, for its Objective-C files: the
+// adapter, the node objects, and what they share.
 
 #ifndef MAUL_UI_SRC_NS_H
 #define MAUL_UI_SRC_NS_H
@@ -36,7 +36,7 @@ struct muiNsAdapter
     muiAccessTree* tree;
     NSView* view;
     float scale;
-    muiNsActionFunction action;
+    muiAccessActionFunction action;
     void* user;
     uint32_t nodes;
     // Room for any node's shown children.
@@ -49,6 +49,11 @@ struct muiNsAdapter
     bool focusMoved;
     // The focus shown last: the tree's, or its active descendant.
     uint64_t toldFocus;
+    // Set while one of its functions that change it runs, or host code it
+    // calls (the allocator, an action function) runs: a call back in is
+    // refused (Maul conventions, Threads), and counted.
+    bool busy;
+    uint64_t misuse;
 };
 
 // The object of a held node, made when first asked for; nil for none.

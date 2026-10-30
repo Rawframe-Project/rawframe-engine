@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The public functions over themes and the nodes they are set on (record
-// mui-0004). A cycle through a theme's own aliases and the context's is
-// refused when an alias is set; one that only nested themes close is
-// bounded when a token is read.
+// The public functions over themes and the nodes they are set on. A cycle
+// through a theme's own aliases and the context's is refused when an alias
+// is set; one that only nested themes close is bounded when a token is
+// read.
 
 #include "maul-ui/theme.h"
 
 #include "context.h"
+#include "fpenv.h"
 #include "pool.h"
 #include "property.h"
 #include "restyle.h"
@@ -18,6 +19,8 @@
 #include "token_store.h"
 #include "tree.h"
 
+#include <string.h>
+
 #define THEME_DEF_COOKIE 0x6D757468u // "muth"
 
 muiThemeDef muiDefaultThemeDef(void)
@@ -25,18 +28,13 @@ muiThemeDef muiDefaultThemeDef(void)
     return (muiThemeDef){.cookie = THEME_DEF_COOKIE};
 }
 
-muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def, muiThemeId* themeOut)
+static muiResult CreateTheme(muiContext* context, const muiThemeDef* def, muiThemeId* themeOut)
 {
-    if (themeOut != nullptr)
-    {
-        *themeOut = (muiThemeId){0, 0};
-    }
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (def == nullptr || themeOut == nullptr || def->cookie != THEME_DEF_COOKIE ||
-        muiIsInHostCall(context))
+    if (def == nullptr || themeOut == nullptr || def->cookie != THEME_DEF_COOKIE)
     {
         return muiRefuse(context);
     }
@@ -51,10 +49,25 @@ muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def, muiThemeId
     return mui_success;
 }
 
+muiResult muiCreateTheme(muiContext* context, const muiThemeDef* def, muiThemeId* themeOut)
+{
+    if (themeOut != nullptr)
+    {
+        memset(themeOut, 0, sizeof *themeOut);
+    }
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = CreateTheme(context, def, themeOut);
+        muiLeave(context);
+    }
+    return status;
+}
+
 // The slot of a live theme for an edit, or 0 with the status.
 static uint32_t ResolveEdit(muiContext* context, muiThemeId themeId, muiResult* statusOut)
 {
-    if (themeId.index1 == 0 || muiIsInHostCall(context))
+    if (themeId.index1 == 0)
     {
         *statusOut = muiRefuse(context);
         return 0;
@@ -64,7 +77,7 @@ static uint32_t ResolveEdit(muiContext* context, muiThemeId themeId, muiResult* 
     return slot;
 }
 
-muiResult muiDestroyTheme(muiContext* context, muiThemeId themeId)
+static muiResult DestroyTheme(muiContext* context, muiThemeId themeId)
 {
     if (context == nullptr)
     {
@@ -89,6 +102,17 @@ muiResult muiDestroyTheme(muiContext* context, muiThemeId themeId)
     muiPoolGive(&store->pool, slot);
     muiRestyleAll(context);
     return mui_success;
+}
+
+muiResult muiDestroyTheme(muiContext* context, muiThemeId themeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = DestroyTheme(context, themeId);
+        muiLeave(context);
+    }
+    return status;
 }
 
 // The theme's override record for a live token, made if it has none; the
@@ -126,16 +150,21 @@ static uint32_t TakeOverride(muiContext* context, muiThemeId themeId, muiTokenId
     return *entry;
 }
 
-muiResult muiTheme_SetTokenValue(muiContext* context, muiThemeId themeId, muiTokenId tokenId,
-                                 const muiTokenValue* value)
+static muiResult ThemeSetTokenValue(muiContext* context, muiThemeId themeId, muiTokenId tokenId,
+                                    const muiTokenValue* value)
 {
     if (context == nullptr)
     {
         return mui_errorInvalid;
     }
-    if (value == nullptr || !muiIsTokenValueValid(value))
+    if (value == nullptr)
     {
         return muiRefuse(context);
+    }
+    muiResult valueStatus = muiTokenValueStatus(value);
+    if (valueStatus != mui_success)
+    {
+        return muiRefuseAs(context, valueStatus);
     }
     uint32_t token = muiFindToken(&context->tokens, tokenId);
     if (token != 0 && context->tokens.tokens[token - 1].value.type != value->type)
@@ -151,6 +180,28 @@ muiResult muiTheme_SetTokenValue(muiContext* context, muiThemeId themeId, muiTok
     context->themes.overrides[record - 1] = (muiThemeOverride){.token = tokenId, .value = *value};
     muiRestyleAll(context);
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult ThemeSetTokenValueWorker(muiContext* context, muiThemeId themeId,
+                                                       muiTokenId tokenId,
+                                                       const muiTokenValue* value)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = ThemeSetTokenValue(context, themeId, tokenId, value);
+        muiLeave(context);
+    }
+    return status;
+}
+
+muiResult muiTheme_SetTokenValue(muiContext* context, muiThemeId themeId, muiTokenId tokenId,
+                                 const muiTokenValue* value)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = ThemeSetTokenValueWorker(context, themeId, tokenId, value);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 // Whether the aliases from target, read through one theme and the
@@ -180,8 +231,8 @@ static bool LeadsTo(const muiContext* context, uint32_t theme, muiTokenId target
     return true;
 }
 
-muiResult muiTheme_SetTokenAlias(muiContext* context, muiThemeId themeId, muiTokenId tokenId,
-                                 muiTokenId target)
+static muiResult ThemeSetTokenAlias(muiContext* context, muiThemeId themeId, muiTokenId tokenId,
+                                    muiTokenId target)
 {
     if (context == nullptr)
     {
@@ -219,7 +270,19 @@ muiResult muiTheme_SetTokenAlias(muiContext* context, muiThemeId themeId, muiTok
     return mui_success;
 }
 
-muiResult muiTheme_ResetToken(muiContext* context, muiThemeId themeId, muiTokenId tokenId)
+muiResult muiTheme_SetTokenAlias(muiContext* context, muiThemeId themeId, muiTokenId tokenId,
+                                 muiTokenId target)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = ThemeSetTokenAlias(context, themeId, tokenId, target);
+        muiLeave(context);
+    }
+    return status;
+}
+
+static muiResult ThemeResetToken(muiContext* context, muiThemeId themeId, muiTokenId tokenId)
 {
     if (context == nullptr)
     {
@@ -250,9 +313,28 @@ muiResult muiTheme_ResetToken(muiContext* context, muiThemeId themeId, muiTokenI
     return mui_success;
 }
 
+muiResult muiTheme_ResetToken(muiContext* context, muiThemeId themeId, muiTokenId tokenId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = ThemeResetToken(context, themeId, tokenId);
+        muiLeave(context);
+    }
+    return status;
+}
+
 muiResult muiTheme_GetToken(const muiContext* context, muiThemeId themeId, muiTokenId tokenId,
                             muiTokenValue* valueOut, muiTokenId* aliasOut)
 {
+    if (valueOut != nullptr)
+    {
+        memset(valueOut, 0, sizeof *valueOut);
+    }
+    if (aliasOut != nullptr)
+    {
+        memset(aliasOut, 0, sizeof *aliasOut);
+    }
     if (context == nullptr || valueOut == nullptr || themeId.index1 == 0 || tokenId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -274,7 +356,7 @@ muiResult muiTheme_GetToken(const muiContext* context, muiThemeId themeId, muiTo
     return found != nullptr ? mui_success : mui_empty;
 }
 
-muiResult muiNode_SetTheme(muiContext* context, muiNodeId nodeId, muiThemeId themeId)
+static muiResult NodeSetTheme(muiContext* context, muiNodeId nodeId, muiThemeId themeId)
 {
     if (context == nullptr)
     {
@@ -298,8 +380,23 @@ muiResult muiNode_SetTheme(muiContext* context, muiNodeId nodeId, muiThemeId the
     return mui_success;
 }
 
+muiResult muiNode_SetTheme(muiContext* context, muiNodeId nodeId, muiThemeId themeId)
+{
+    muiResult status = muiEnter(context);
+    if (status == mui_success)
+    {
+        status = NodeSetTheme(context, nodeId, themeId);
+        muiLeave(context);
+    }
+    return status;
+}
+
 muiResult muiNode_GetTheme(const muiContext* context, muiNodeId nodeId, muiThemeId* themeOut)
 {
+    if (themeOut != nullptr)
+    {
+        memset(themeOut, 0, sizeof *themeOut);
+    }
     if (context == nullptr || themeOut == nullptr || nodeId.index1 == 0)
     {
         return mui_errorInvalid;
@@ -316,6 +413,10 @@ muiResult muiNode_GetTheme(const muiContext* context, muiNodeId nodeId, muiTheme
 muiResult muiNode_GetTokenValue(const muiContext* context, muiNodeId nodeId, muiTokenId tokenId,
                                 muiTokenValue* valueOut)
 {
+    if (valueOut != nullptr)
+    {
+        memset(valueOut, 0, sizeof *valueOut);
+    }
     if (context == nullptr || valueOut == nullptr || nodeId.index1 == 0 || tokenId.index1 == 0)
     {
         return mui_errorInvalid;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// What one muiComputeLayout works with. Layout algorithms reach their
+// What one muiNode_ComputeLayout works with. Layout algorithms reach their
 // children through solve, so that the modules that size a node and the
 // algorithms that call back into it do not include each other.
 
@@ -36,7 +36,7 @@ struct muiSolver
     const muiTree* tree;
     muiLayoutNode* nodes;
     muiMeasureFunction measure;
-    void* measureUser;
+    void* user;
     muiBaselineFunction measureBaseline;
     muiSolveFunction solve;
     muiBaselineSolveFunction baseline;
@@ -49,13 +49,15 @@ struct muiSolver
     const muiPaintState* painted;
     // Each node's scroll state, whose extents layout measures.
     muiScrollState* scrolls;
-    // Each node's padding as laid out, with the safe area (record
-    // mui-0003), which the solver writes as it sizes a node and its
-    // parent reads; and the safe area.
+    // Each node's padding as laid out, with the safe area, which the
+    // solver writes as it sizes a node and its parent reads; and the safe
+    // area.
     muiEdges* paddings;
     muiSides safeArea;
     // Where sizes solved and measure calls are counted.
     muiWorkCounts* work;
+    // Where host content that could not be measured is counted.
+    uint32_t* unmeasured;
 };
 
 #endif // MAUL_UI_SRC_SOLVER_H

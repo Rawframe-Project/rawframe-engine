@@ -142,10 +142,10 @@ muniScript muniGetScript(uint32_t codePoint)
     return muniScriptTags[muniLookupScript(codePoint)];
 }
 
-muniResult muniGetScriptExtensions(uint32_t codePoint, muniScript* scripts, size_t capacity,
+muniResult muniGetScriptExtensions(uint32_t codePoint, muniScript* scriptsOut, size_t capacity,
                                    size_t* countOut)
 {
-    if ((scripts == nullptr && capacity != 0) || countOut == nullptr)
+    if ((scriptsOut == nullptr && capacity != 0) || countOut == nullptr)
     {
         return muni_errorInvalid;
     }
@@ -154,7 +154,7 @@ muniResult muniGetScriptExtensions(uint32_t codePoint, muniScript* scripts, size
     {
         if (capacity > 0)
         {
-            scripts[0] = muniGetScript(codePoint);
+            scriptsOut[0] = muniGetScript(codePoint);
         }
         *countOut = 1;
         return capacity > 0 ? muni_success : muni_errorCapacity;
@@ -163,7 +163,7 @@ muniResult muniGetScriptExtensions(uint32_t codePoint, muniScript* scripts, size
     size_t count = muniScriptSetStarts[set] - start;
     for (size_t i = 0; i < count && i < capacity; i++)
     {
-        scripts[i] = muniScriptTags[muniScriptSetMembers[start + i]];
+        scriptsOut[i] = muniScriptTags[muniScriptSetMembers[start + i]];
     }
     *countOut = count;
     return count <= capacity ? muni_success : muni_errorCapacity;

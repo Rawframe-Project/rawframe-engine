@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Exit transitions (record mui-0007): the context's table of nodes
-// exiting.
+// Exit transitions: the context's table of nodes exiting.
 
 #ifndef MAUL_UI_SRC_EXIT_STORE_H
 #define MAUL_UI_SRC_EXIT_STORE_H

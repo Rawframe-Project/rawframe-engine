@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The glyph atlas's lookups (record mui-0006): entries keyed by font,
-// glyph, size and subpixel position or field spread, in an
-// open-addressing table with linear probing, at most half full. An entry
-// names the plot it is in and that plot's generation; evicting a plot
-// raises its generation, so its entries go stale at once and are dropped
-// when the table is rebuilt.
+// The glyph atlas's lookups: entries keyed by font, glyph, size and
+// subpixel position or field spread, in an open-addressing table with
+// linear probing, at most half full. An entry names the plot it is in and
+// that plot's generation; evicting a plot raises its generation, so its
+// entries go stale at once and are dropped when the table is rebuilt.
 
 #ifndef MAUL_UI_SRC_GLYPH_TABLE_H
 #define MAUL_UI_SRC_GLYPH_TABLE_H

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Run styles (record mui-0006).
+// Run styles.
 
 #include "text_runs.h"
 

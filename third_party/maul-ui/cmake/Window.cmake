@@ -1,9 +1,9 @@
-# The Maul Window glue (record mui-0007), maul-ui-window: a static library
+# The Maul Window glue, maul-ui-window: a static library
 # beside maul-ui that feeds a window's records to a context, Maul Window
 # found installed or fetched at its release tag as Maul RHI is. The core
 # and the text component never depend on it.
 
-set(MAUL_UI_WINDOW_VERSION 0.13.0)
+set(MAUL_UI_WINDOW_VERSION 0.7.0)
 find_package(maul-window ${MAUL_UI_WINDOW_VERSION} QUIET)
 if(NOT maul-window_FOUND)
     set(MAUL_WINDOW_BUILD_TESTS OFF)
@@ -23,6 +23,26 @@ if(NOT maul-window_FOUND)
         GIT_TAG v${MAUL_UI_WINDOW_VERSION}
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(maul-window)
+endif()
+
+# Maul Window names the Maul Unicode release it is built and tested with.
+# Fetched beside the text component, it is built against ours instead,
+# and without it, against its own: two pins that differ would build it
+# against a release it was never tested with, or give the cells without
+# text another Unicode than the rest.
+if(DEFINED maul-window_UNICODE_VERSION)
+    set(window_unicode ${maul-window_UNICODE_VERSION})
+elseif(DEFINED MAUL_WINDOW_UNICODE_VERSION)
+    set(window_unicode ${MAUL_WINDOW_UNICODE_VERSION})
+else()
+    message(FATAL_ERROR "Maul Window ${MAUL_UI_WINDOW_VERSION} names no Maul Unicode release "
+        "(MAUL_WINDOW_UNICODE_VERSION or maul-window_UNICODE_VERSION), so Maul UI cannot "
+        "check it against its own pin, Maul Unicode ${MAUL_UI_UNICODE_VERSION}")
+endif()
+if(NOT window_unicode VERSION_EQUAL MAUL_UI_UNICODE_VERSION)
+    message(FATAL_ERROR "Maul Window ${MAUL_UI_WINDOW_VERSION} is built with Maul Unicode "
+        "${window_unicode}, and Maul UI pins Maul Unicode ${MAUL_UI_UNICODE_VERSION}: move "
+        "the pins in cmake/Window.cmake and cmake/Unicode.cmake to releases that agree")
 endif()
 
 add_library(maul-ui-window STATIC window/src/allocator.c window/src/gamepads.c window/src/glue.c)

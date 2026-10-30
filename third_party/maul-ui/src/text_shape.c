@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Shaping a text block (record mui-0006). Buffers carry no language, so
-// the result does not depend on the process's locale.
+// Shaping a text block. Buffers carry no language, so the result does not
+// depend on the process's locale.
 
 #include "text_shape.h"
 
 #include "font_instance.h"
+#include "invariant.h"
+#include "text_blocks.h"
 
 #include "maul-unicode/bidi.h"
 #include "maul-unicode/encoding.h"
@@ -19,7 +21,11 @@
 enum
 {
     // The characters of a cluster whose fonts are looked at.
-    MAX_CLUSTER_POINTS = 32
+    MAX_CLUSTER_POINTS = 32,
+    // The characters HarfBuzz reads as context on each side of an item,
+    // its HB_BUFFER_CONTEXT_LENGTH, and the bytes they can take.
+    CONTEXT_POINTS = 5,
+    CONTEXT_BYTES = CONTEXT_POINTS * 4
 };
 
 // The bidi levels of a paragraph's bytes from start up to end, each of
@@ -201,7 +207,7 @@ static bool ChooseFaces(const muiTextBlock* block, const muiRunChains* chains, u
     int64_t before = -1;
     size_t start = 0;
     size_t end = 0;
-    while (muniNextSegmentBreak(&graphemes, &end) == muni_success)
+    while (muniSegmentIterator_NextBreak(&graphemes, &end) == muni_success)
     {
         if (end == 0)
         {
@@ -241,6 +247,26 @@ typedef struct Output
     uint8_t* unsafe;
 } Output;
 
+// Decodes at most most characters of a text from at up to end as the
+// rest of the library reads them, an ill-formed sequence's maximal
+// subpart as one U+FFFD as the Encoding Standard has it, into points and
+// the byte each starts at into starts; their count.
+static uint32_t Decode(const char* text, uint32_t at, uint32_t end, uint32_t most, uint32_t* points,
+                       uint32_t* starts)
+{
+    uint32_t count = 0;
+    while (at < end && count < most)
+    {
+        uint32_t point = 0;
+        size_t size = 1;
+        (void)muniDecodeUtf8(text + at, end - at, &point, &size);
+        points[count] = point;
+        starts[count++] = at;
+        at += (uint32_t)size;
+    }
+    return count;
+}
+
 // Shapes bytes from to up to to of a piece of text as one item of the
 // level and script, the piece being the context, and appends its glyphs
 // with clusters as offsets in the whole text, which starts offset bytes
@@ -259,9 +285,30 @@ static bool ShapeWithin(muiTextService* service, hb_buffer_t* buffer, hb_font_t*
     flags |= range->start == begins ? HB_BUFFER_FLAG_BOT : 0u;
     flags |= range->end == ends ? HB_BUFFER_FLAG_EOT : 0u;
     hb_buffer_set_flags(buffer, (hb_buffer_flags_t)flags);
+    // HarfBuzz's own UTF-8 decoding would make each byte of an ill-formed
+    // sequence a U+FFFD and a cluster of its own, so the item goes in as
+    // the code points the rest of the library reads, with the context
+    // before and after it that the piece has.
+    uint32_t itemBytes = range->end - range->start;
+    if (!muiReserve(&service->allocator, &service->shapePoints,
+                    ((size_t)itemBytes + CONTEXT_BYTES + CONTEXT_POINTS) * 2u * sizeof(uint32_t)))
+    {
+        return false;
+    }
+    uint32_t* points = service->shapePoints.data;
+    uint32_t* starts = points + itemBytes + CONTEXT_BYTES + CONTEXT_POINTS;
+    uint32_t first = range->start - offset < CONTEXT_BYTES ? offset : range->start - CONTEXT_BYTES;
+    while (first < range->start && !muiIsCharacterStart(block, first))
+    {
+        first++;
+    }
     const char* text = block->text.data;
-    hb_buffer_add_utf8(buffer, text + offset, (int)length, range->start - offset,
-                       (int)(range->end - range->start));
+    uint32_t before = Decode(text, first, range->start, CONTEXT_BYTES, points, starts);
+    uint32_t inside =
+        Decode(text, range->start, range->end, itemBytes, points + before, starts + before);
+    uint32_t after = Decode(text, range->end, offset + length, CONTEXT_POINTS,
+                            points + before + inside, starts + before + inside);
+    hb_buffer_add_codepoints(buffer, points, (int)(before + inside + after), before, (int)inside);
     hb_shape(font, buffer, nullptr, 0);
     if (!hb_buffer_allocation_successful(buffer))
     {
@@ -282,7 +329,10 @@ static bool ShapeWithin(muiTextService* service, hb_buffer_t* buffer, hb_font_t*
     unsigned int glyphCount = hb_face_get_glyph_count(hb_font_get_face(font));
     for (unsigned int i = 0; i < count; i++)
     {
-        uint32_t cluster = infos[i].cluster + offset;
+        // HarfBuzz's clusters are the indexes of the item's code points,
+        // never of its context's.
+        MUI_ASSERT(infos[i].cluster >= before && infos[i].cluster < before + inside);
+        uint32_t cluster = starts[infos[i].cluster];
         uint32_t glyph = infos[i].codepoint < glyphCount ? infos[i].codepoint : 0;
         glyphs[i] = (muiShapedGlyph){glyph, cluster, positions[i].x_advance, positions[i].x_offset,
                                      positions[i].y_offset};

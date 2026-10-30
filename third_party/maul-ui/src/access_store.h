@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Accessibility (record mui-0008): the host's data per node, the roots
-// updates are built for, and while any is, what was last sent of each
-// node.
+// Accessibility: the host's data per node, the roots updates are built
+// for, and while any is, what was last sent of each node.
 
 #ifndef MAUL_UI_SRC_ACCESS_STORE_H
 #define MAUL_UI_SRC_ACCESS_STORE_H

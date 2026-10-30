@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Palette colours for colour glyphs (record mui-0006): CPAL entries are
-// sRGB with straight alpha, made linear and premultiplied here.
+// Palette colours for colour glyphs: CPAL entries are sRGB with straight
+// alpha, made linear and premultiplied here.
 
 #include "paint_source.h"
 

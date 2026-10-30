@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Text blocks (record mui-0006): a block's text, what was found in it
-// when it was set (line break opportunities and script runs), and its
-// shaping for one font chain and direction, kept until either changes.
+// Text blocks: a block's text, what was found in it when it was set (line
+// break opportunities and script runs), and its shaping for one font chain
+// and direction, kept until either changes.
 
 #ifndef MAUL_UI_SRC_TEXT_BLOCK_H
 #define MAUL_UI_SRC_TEXT_BLOCK_H
@@ -107,7 +107,7 @@ typedef struct muiTextEdit
 typedef struct muiTextEditing
 {
     bool on;
-    muiTextEditDef def;
+    muiTextEditRules rules;
     muiTextSelection selection;
     float preferredX;
     // How far the text is scrolled in the content box, the caret kept

@@ -104,6 +104,10 @@ bool muiIsGroupMaskKnown(muiPropertyGroup group, muiPropertyMask mask);
 // known properties are named.
 bool muiArePropertiesValid(muiConstValuesRef values, muiPropertyBits properties);
 
+// muiArePropertiesValid as a status: mui_success, mui_errorLimit for a
+// gradient of more than MUI_MAX_GRADIENT_STOPS stops, or mui_errorInvalid.
+muiResult muiPropertiesStatus(muiConstValuesRef values, muiPropertyBits properties);
+
 // Copies the properties named from source to target.
 void muiApplyProperties(muiValuesRef target, muiConstValuesRef source, muiPropertyBits properties);
 
@@ -145,6 +149,10 @@ muiTokenType muiPropertyTokenType(muiProperty property);
 
 // Whether a token's literal is valid for its type.
 bool muiIsTokenValueValid(const muiTokenValue* value);
+
+// muiIsTokenValueValid as a status: mui_success, mui_errorLimit for a
+// gradient of more than MUI_MAX_GRADIENT_STOPS stops, or mui_errorInvalid.
+muiResult muiTokenValueStatus(const muiTokenValue* value);
 
 // Writes a token's value, of the property's type, to the property when
 // the property allows it; false, writing nothing, when it does not.

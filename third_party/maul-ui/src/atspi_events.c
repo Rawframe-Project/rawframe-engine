@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The AT-SPI adapter's events (record mui-0008): signals of
-// org.a11y.atspi.Event.Object for what an update changed. States and
-// properties come from comparing each replaced record with its new one;
-// the structure from a walk of the shown tree, compared with what
-// clients were last told; the focus last, so a node is added before it
-// is focused.
+// The AT-SPI adapter's events: signals of org.a11y.atspi.Event.Object for
+// what an update changed. States and properties come from comparing each
+// replaced record with its new one; the structure from a walk of the shown
+// tree, compared with what clients were last told; the focus last, so a
+// node is added before it is focused.
 
 #include "access_record.h"
 #include "access_text.h"
 #include "allocator.h"
 #include "atspi.h"
+#include "fpenv.h"
+#include "host_call.h"
 
 #include <string.h>
 
@@ -110,7 +111,7 @@ static void TellName(muiAtspiApp* app, const muiAtspiObject* object)
     muiResult status = muiAccessTree_GetName(tree, id, small, sizeof(small), &length);
     if (status == mui_errorCapacity)
     {
-        name = muiAllocate(&app->allocator, length + 1, 1);
+        name = muiAllocateMarked(&app->busy, &app->allocator, length + 1, 1);
         status = name != nullptr ? muiAccessTree_GetName(tree, id, name, length + 1, &length)
                                  : mui_errorCapacity;
     }
@@ -134,7 +135,7 @@ static void TellName(muiAtspiApp* app, const muiAtspiObject* object)
     }
     if (name != small && name != nullptr)
     {
-        muiRelease(&app->allocator, name, length + 1, 1);
+        muiReleaseMarked(&app->busy, &app->allocator, name, length + 1, 1);
     }
 }
 
@@ -176,7 +177,7 @@ static bool IsLead(char byte)
 static void TellEdit(muiAtspiApp* app, const muiAtspiObject* object, const char* kind,
                      const char* text, uint32_t start, uint32_t end)
 {
-    char* copy = muiAllocate(&app->allocator, (size_t)(end - start) + 1, 1);
+    char* copy = muiAllocateMarked(&app->busy, &app->allocator, (size_t)(end - start) + 1, 1);
     if (copy == nullptr)
     {
         return;
@@ -187,7 +188,7 @@ static void TellEdit(muiAtspiApp* app, const muiAtspiObject* object, const char*
     const int32_t details[2] = {first, (int32_t)muiAccessPointsBefore(text, end) - first};
     const Any any = {mui_dbusTypeString, (const void*)&copy, nullptr};
     EmitOf(app, object, INTERFACE_EVENT, "TextChanged", kind, details, &any);
-    muiRelease(&app->allocator, copy, (size_t)(end - start) + 1, 1);
+    muiReleaseMarked(&app->busy, &app->allocator, copy, (size_t)(end - start) + 1, 1);
 }
 
 // A value text changed: what was deleted, then what was inserted, the
@@ -286,7 +287,8 @@ static void TellText(muiAtspiApp* app, const muiAtspiObject* object, const muiAc
     }
 }
 
-static void Updated(void* user, const muiAccessTree* tree, const muiAccessNode* old)
+static MUI_NOINLINE void UpdatedWorker(void* user, const muiAccessTree* tree,
+                                       const muiAccessNode* old)
 {
     muiAtspiAdapter* adapter = user;
     const muiAtspiObject object = {adapter, muiAccessTree_Find(tree, old->id)};
@@ -295,10 +297,24 @@ static void Updated(void* user, const muiAccessTree* tree, const muiAccessNode* 
     TellText(adapter->app, &object, old);
 }
 
-static void ShownChanged(void* user, const muiAccessTree* tree)
+static void Updated(void* user, const muiAccessTree* tree, const muiAccessNode* old)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    UpdatedWorker(user, tree, old);
+    muiFloatEnvLeave(floatEnv);
+}
+
+static MUI_NOINLINE void ShownChangedWorker(void* user, const muiAccessTree* tree)
 {
     (void)tree;
     ((muiAtspiAdapter*)user)->reshaped = true;
+}
+
+static void ShownChanged(void* user, const muiAccessTree* tree)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    ShownChangedWorker(user, tree);
+    muiFloatEnvLeave(floatEnv);
 }
 
 // The window root's index among the application root's children.
@@ -533,7 +549,7 @@ static void TellFocus(muiAtspiAdapter* adapter)
     }
 }
 
-muiResult muiAtspiAdapter_Apply(muiAtspiAdapter* adapter, const muiAccessUpdate* update)
+static muiResult AtspiAdapterApply(muiAtspiAdapter* adapter, const muiAccessUpdate* update)
 {
     if (adapter == nullptr)
     {
@@ -554,6 +570,31 @@ muiResult muiAtspiAdapter_Apply(muiAtspiAdapter* adapter, const muiAccessUpdate*
         TellFocus(adapter);
     }
     return status;
+}
+
+static MUI_NOINLINE muiResult AtspiAdapterApplyWorker(muiAtspiAdapter* adapter,
+                                                      const muiAccessUpdate* update)
+{
+    if (adapter == nullptr)
+    {
+        return AtspiAdapterApply(adapter, update);
+    }
+    if (!muiEnterMarked(&adapter->app->busy, &adapter->app->misuse))
+    {
+        return mui_errorBusy;
+    }
+    muiResult result = AtspiAdapterApply(adapter, update);
+    adapter->app->misuse += result == mui_errorInvalid;
+    adapter->app->busy = false;
+    return result;
+}
+
+muiResult muiAtspiAdapter_Apply(muiAtspiAdapter* adapter, const muiAccessUpdate* update)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = AtspiAdapterApplyWorker(adapter, update);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }
 
 void muiAtspiTellGone(muiAtspiAdapter* adapter)

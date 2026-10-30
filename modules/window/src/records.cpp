@@ -160,12 +160,12 @@ std::optional<Event> droppedFiles(const mwinContext& context, const mwinDropEven
         return std::nullopt;
     }
     std::size_t length = 0;
-    mwinResult status = mwinGetDroppedFiles(&context, drop.drop, nullptr, 0, &length);
+    mwinResult status = mwinContext_GetDroppedFiles(&context, drop.drop, nullptr, 0, &length);
     if (status != mwin_errorCapacity && status != mwin_success) {
         return std::nullopt;
     }
     std::string paths(length, '\0');
-    status = mwinGetDroppedFiles(&context, drop.drop, paths.data(), paths.size(), &length);
+    status = mwinContext_GetDroppedFiles(&context, drop.drop, paths.data(), paths.size(), &length);
     if (status != mwin_success) {
         return std::nullopt;
     }

@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The accessibility tree's consumer (record mui-0008): applying an
-// update whole or not at all. It is checked, then copied, then put in
-// place; nodes no node lists any more leave with their subtrees; then
-// the changes are reported and what was replaced is freed.
+// The accessibility tree's consumer: applying an update whole or not at
+// all. It is checked, then copied, then put in place; nodes no node lists
+// any more leave with their subtrees; then the changes are reported and
+// what was replaced is freed.
 
 #include "access_text.h"
 #include "access_tree.h"
 #include "access_tree_store.h"
 #include "allocator.h"
+#include "fpenv.h"
+#include "host_call.h"
 
 #include "maul-ui/access_tree.h"
 
@@ -229,8 +231,7 @@ static muiResult Check(muiAccessTree* tree, const muiAccessUpdate* update)
     return tree->count + added <= tree->capacity ? mui_success : mui_errorCapacity;
 }
 
-static void FreeStaged(const muiAccessTree* tree, const muiAccessNode* node,
-                       const muiStagedNode* staged)
+static void FreeStaged(muiAccessTree* tree, const muiAccessNode* node, const muiStagedNode* staged)
 {
     muiHeldNode owned = {
         .node = {.linkCount = node->linkCount, .childCount = node->childCount},
@@ -254,14 +255,13 @@ static void FreeStaged(const muiAccessTree* tree, const muiAccessNode* node,
 
 // A copy of size bytes, NULL for none; when memory runs out, NULL and
 // fits made false. Nothing is copied once fits is false.
-static void* Copy(const muiAccessTree* tree, const void* from, size_t size, size_t align,
-                  bool* fits)
+static void* Copy(muiAccessTree* tree, const void* from, size_t size, size_t align, bool* fits)
 {
     if (!*fits || size == 0)
     {
         return nullptr;
     }
-    void* copy = muiAllocate(&tree->allocator, size, align);
+    void* copy = muiAllocateMarked(&tree->busy, &tree->allocator, size, align);
     *fits = copy != nullptr;
     if (copy != nullptr)
     {
@@ -272,7 +272,7 @@ static void* Copy(const muiAccessTree* tree, const void* from, size_t size, size
 
 // Copies what a node sent points at; false when memory runs out, with
 // nothing kept.
-static bool Stage(const muiAccessTree* tree, const muiAccessNode* node, const uint64_t* children,
+static bool Stage(muiAccessTree* tree, const muiAccessNode* node, const uint64_t* children,
                   muiStagedNode* staged)
 {
     *staged = (muiStagedNode){0};
@@ -282,7 +282,7 @@ static bool Stage(const muiAccessTree* tree, const muiAccessNode* node, const ui
         if (node->text[kind] != nullptr)
         {
             size_t length = node->textLength[kind];
-            staged->text[kind] = muiAllocate(&tree->allocator, length + 1, 1);
+            staged->text[kind] = muiAllocateMarked(&tree->busy, &tree->allocator, length + 1, 1);
             fits = staged->text[kind] != nullptr;
             if (fits)
             {
@@ -402,46 +402,100 @@ static uint32_t Commit(muiAccessTree* tree, const muiAccessUpdate* update, uint3
 }
 
 // Tells the host what changed, then frees what was replaced.
+// The host's change functions, each run in the host's floating-point
+// environment.
+static MUI_NOINLINE void HostAdded(const muiAccessChanges* changes, const muiAccessTree* tree,
+                                   uint64_t id)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    changes->added(changes->user, tree, id);
+    muiFloatHostLeave(host);
+}
+
+static MUI_NOINLINE void HostReport(void (*report)(void*, const muiAccessTree*,
+                                                   const muiAccessNode*),
+                                    void* user, const muiAccessTree* tree, const muiAccessNode* old)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    report(user, tree, old);
+    muiFloatHostLeave(host);
+}
+
+static MUI_NOINLINE void HostShownChanged(const muiAccessChanges* changes,
+                                          const muiAccessTree* tree)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    changes->shownChanged(changes->user, tree);
+    muiFloatHostLeave(host);
+}
+
+static MUI_NOINLINE void HostFocusMoved(const muiAccessChanges* changes, const muiAccessTree* tree,
+                                        uint64_t old, uint64_t focus)
+{
+    muiFloatHost host = muiFloatHostEnter();
+    changes->focusMoved(changes->user, tree, old, focus);
+    muiFloatHostLeave(host);
+}
+
+// Tells the host of the nodes added, in the update's order.
+static void ReportAdded(const muiAccessTree* tree, const muiAccessChanges* changes, uint32_t added)
+{
+    for (uint32_t i = 0; i < added && changes->added != nullptr; i++)
+    {
+        const muiHeldNode* held = &tree->held[tree->added[i] - 1];
+        if (held->node.id != 0)
+        {
+            HostAdded(changes, tree, held->node.id);
+        }
+    }
+}
+
+// Tells the host of the nodes updated and let go, each with what it was;
+// whether an updated one changed what the view reads.
+static bool ReportRetired(const muiAccessTree* tree, const muiAccessChanges* changes,
+                          uint32_t retired)
+{
+    bool reshaped = false;
+    for (uint32_t i = 0; i < retired; i++)
+    {
+        const muiRetiredNode* node = &tree->retired[i];
+        void (*report)(void*, const muiAccessTree*, const muiAccessNode*) =
+            node->removed ? changes->removed : changes->updated;
+        if (report != nullptr)
+        {
+            HostReport(report, changes->user, tree, &node->held.node);
+        }
+        reshaped =
+            reshaped || (!node->removed &&
+                         muiViewDiffers(tree, &node->held,
+                                        &tree->held[muiHeldSlotOf(tree, node->held.node.id) - 1]));
+    }
+    return reshaped;
+}
+
 static void Report(muiAccessTree* tree, const muiAccessChanges* changes, uint32_t added,
                    uint32_t retired, uint64_t oldRoot, uint64_t oldFocus)
 {
     if (changes != nullptr)
     {
-        // The root or the focus moves, or a record changes its children or
-        // what the view reads. Nodes come and go only so: a node added is
-        // listed by a parent whose children changed, or is the new root;
-        // one let go was left out by its parent, or went with the old
-        // root; a stray sent and let go was never shown.
-        bool shown = tree->root != oldRoot || tree->focus != oldFocus;
-        for (uint32_t i = 0; i < added && changes->added != nullptr; i++)
-        {
-            const muiHeldNode* held = &tree->held[tree->added[i] - 1];
-            if (held->node.id != 0)
-            {
-                changes->added(changes->user, tree, held->node.id);
-            }
-        }
-        for (uint32_t i = 0; i < retired; i++)
-        {
-            const muiRetiredNode* node = &tree->retired[i];
-            void (*report)(void*, const muiAccessTree*, const muiAccessNode*) =
-                node->removed ? changes->removed : changes->updated;
-            if (report != nullptr)
-            {
-                report(changes->user, tree, &node->held.node);
-            }
-            shown =
-                shown || (!node->removed &&
-                          muiViewDiffers(tree, &node->held,
-                                         &tree->held[muiHeldSlotOf(tree, node->held.node.id) - 1]));
-        }
+        // The root moves, the focus moves to or from a node shown only
+        // for holding it, or a record changes its children or what the
+        // view reads. Nodes come and go only so: a node added is listed
+        // by a parent whose children changed, or is the new root; one let
+        // go was left out by its parent, or went with the old root; a
+        // stray sent and let go was never shown.
+        bool shown = tree->root != oldRoot ||
+                     (tree->focus != oldFocus &&
+                      (muiShownForFocus(tree, oldFocus) || muiShownForFocus(tree, tree->focus)));
+        ReportAdded(tree, changes, added);
+        shown = ReportRetired(tree, changes, retired) || shown;
         if (shown && changes->shownChanged != nullptr)
         {
-            changes->shownChanged(changes->user, tree);
+            HostShownChanged(changes, tree);
         }
         if (changes->focusMoved != nullptr && tree->focus != oldFocus)
         {
-            changes->focusMoved(changes->user, tree, oldFocus, tree->focus);
+            HostFocusMoved(changes, tree, oldFocus, tree->focus);
         }
     }
     for (uint32_t i = 0; i < retired; i++)
@@ -484,8 +538,8 @@ static void Prune(muiAccessTree* tree, const muiAccessUpdate* update, uint32_t r
     }
 }
 
-muiResult muiAccessTree_Apply(muiAccessTree* tree, const muiAccessUpdate* update,
-                              const muiAccessChanges* changes)
+static muiResult AccessTreeApply(muiAccessTree* tree, const muiAccessUpdate* update,
+                                 const muiAccessChanges* changes)
 {
     if (tree == nullptr || update == nullptr)
     {
@@ -526,4 +580,31 @@ muiResult muiAccessTree_Apply(muiAccessTree* tree, const muiAccessUpdate* update
                                                                                 : tree->root;
     Report(tree, changes, added, retired, oldRoot, oldFocus);
     return mui_success;
+}
+
+static MUI_NOINLINE muiResult AccessTreeApplyWorker(muiAccessTree* tree,
+                                                    const muiAccessUpdate* update,
+                                                    const muiAccessChanges* changes)
+{
+    if (tree == nullptr)
+    {
+        return AccessTreeApply(tree, update, changes);
+    }
+    if (!muiEnterMarked(&tree->busy, &tree->misuse))
+    {
+        return mui_errorBusy;
+    }
+    muiResult result = AccessTreeApply(tree, update, changes);
+    tree->misuse += result == mui_errorInvalid;
+    tree->busy = false;
+    return result;
+}
+
+muiResult muiAccessTree_Apply(muiAccessTree* tree, const muiAccessUpdate* update,
+                              const muiAccessChanges* changes)
+{
+    uint64_t floatEnv = muiFloatEnvEnter();
+    muiResult result = AccessTreeApplyWorker(tree, update, changes);
+    muiFloatEnvLeave(floatEnv);
+    return result;
 }

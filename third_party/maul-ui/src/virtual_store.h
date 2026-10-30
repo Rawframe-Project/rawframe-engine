@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Virtualization (record mui-0007): the context's virtual lists, their
-// items' extents and the prefix sums over them, and each node's item.
+// Virtualization: the context's virtual lists, their items' extents and
+// the prefix sums over them, and each node's item.
 
 #ifndef MAUL_UI_SRC_VIRTUAL_STORE_H
 #define MAUL_UI_SRC_VIRTUAL_STORE_H
@@ -33,6 +33,7 @@ typedef struct muiVirtualEntry
 
 // A node bound to an item since removed: out of the flow, placed nowhere.
 #define MUI_ITEM_REMOVED UINT32_MAX
+static_assert(MUI_MAX_VIRTUAL_ITEMS == MUI_ITEM_REMOVED - 1, "an item's index plus 1 is no mark");
 
 typedef struct muiVirtualStore
 {

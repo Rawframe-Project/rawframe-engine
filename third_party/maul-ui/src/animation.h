@@ -1,32 +1,33 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Running transitions (record mui-0004): one record per moving property
-// of a node, in a pool reserved at creation, linked from the node. A
-// record holds where the property started and is going; the node's
-// resolved values hold where it is now, which advancing moves.
+// Running transitions: one record per moving property of a node, in a pool
+// reserved at creation, linked from the node. A record holds where the
+// property started and is going; the node's resolved values hold where it
+// is now, which advancing moves.
 
 #ifndef MAUL_UI_SRC_ANIMATION_H
 #define MAUL_UI_SRC_ANIMATION_H
 
-#include "easing.h"
 #include "inherit.h"
 #include "layout_node.h"
 #include "pool.h"
-#include "spring.h"
 #include "style_store.h"
 #include "tree.h"
 
+#include "maul-tween/easing.h"
+#include "maul-tween/spring.h"
 #include "maul-ui/layout.h"
 #include "maul-ui/transition.h"
 
 #include <stdbool.h>
 
-// A spec as created, with its curve worked out.
+// A spec as created, with its easing and spring made by Maul Tween.
 typedef struct muiTransitionSpec
 {
     muiTransitionDef def;
-    muiCurve curve;
+    mtwnEasing easing;
+    mtwnSpring spring;
 } muiTransitionSpec;
 
 typedef struct muiAnimation
@@ -51,10 +52,10 @@ typedef struct muiAnimation
     double seconds;
     float reversingStart[MUI_MAX_CHANNELS];
     double shortening;
-    // For a spring: its shape, each channel's start from to, and how close
-    // to rest each channel counts as at rest.
-    muiSpringShape shape;
-    muiSpringStart starts[MUI_MAX_CHANNELS];
+    // For a spring: each channel's start, its offset from to and its
+    // velocity, and how close to rest it counts as at rest.
+    double offsets[MUI_MAX_CHANNELS];
+    double velocities[MUI_MAX_CHANNELS];
     float rest[MUI_MAX_CHANNELS];
 } muiAnimation;
 

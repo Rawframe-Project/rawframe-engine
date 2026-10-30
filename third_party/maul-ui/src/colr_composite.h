@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// COLR version 1 composite modes (record mui-0006), as W3C Compositing
-// and Blending Level 1 defines them, on premultiplied surfaces: the
-// twelve Porter-Duff operators, plus, and the fifteen blend modes, each
-// blended and then composited source over.
+// COLR version 1 composite modes, as W3C Compositing and Blending Level 1
+// defines them, on premultiplied surfaces: the twelve Porter-Duff
+// operators, plus, and the fifteen blend modes, each blended and then
+// composited source over.
 
 #ifndef MAUL_UI_SRC_COLR_COMPOSITE_H
 #define MAUL_UI_SRC_COLR_COMPOSITE_H
