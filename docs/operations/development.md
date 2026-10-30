@@ -98,6 +98,8 @@ Some files are committed because CI cannot regenerate them. Never edit them by h
 
 A build embeds only the shader container its driver reads, so the committed containers are the source of every shipped shader; no shipped program compiles one.
 
+Beside each directory of containers, `containers.stamp` names the Maul RHI release whose tools cooked them, the flags DXC compiled their DXIL with, and each container's SHA-256; `tools/gen_shaders.py` writes it. The check runs `tools/gen_shaders.py --check`, which needs no shader tool and fails when a container is missing or not the bytes its stamp names, when the vendored Maul RHI is another release, when the DXIL was compiled without `-Gis` or with other flags than the vendored `mrhi_dxil.py` passes, when a module's `generated` directory holds a container no source gives, or when a module's `CMakeLists.txt` embeds one `tools/gen_shaders.py` does not make. Without `-Gis` DXC folds the float math, so D3D12 would compute other than the source and the other drivers, and `tools/gen_shaders.py` refuses to cook, a game's material too, with a Maul RHI that passes no `-Gis`.
+
 ## The shared machine
 
 The development server is shared by other sessions, the CI runner and unrelated projects. Run full builds and the `pr`, `full` and `nightly` tiers through the workspace's heavy-job wrapper, at eight jobs or fewer:

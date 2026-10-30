@@ -16,7 +16,7 @@ What verifies a change, locally and in CI, and the time each may take.
 
 | Tier | Runs | Budget |
 |---|---|---|
-| `changed` | The repository rules (`tools/check_repo.py`), the organization's documentation check, `clang-format-20` on the changed C++ files, `clang-development` built, and the tests the change reaches but the integration ones. | under 2 minutes |
+| `changed` | The repository rules (`tools/check_repo.py`), the shader containers' stamps (`tools/gen_shaders.py --check`), the organization's documentation check, `clang-format-20` on the changed C++ files, `clang-development` built, and the tests the change reaches but the integration ones. | under 2 minutes |
 | `pr` | Every rule on every file; `clang-development` and `clang-sanitize` built side by side, each running the tests the change reaches; then the integration tests the change reaches, in `clang-development`, a few at a time. | under 10 minutes |
 | `full` | Every test in `clang-development`, `clang-sanitize`, `gcc-debug` and `clang-thread`, the web build with its tests under Node, the web page against the dedicated server over WebTransport, every engine shader compiled by a browser's WebGPU, a real browser playing Runners and the plaza, and every integration test. | under 20 minutes |
 | `nightly` | Also `clang-shipping` and `wasm-shipping`, the tick budget and the web download budget measured in them. | extended |
