@@ -36,6 +36,10 @@
    kinds and no other, keeps its budgets (fourteen panels, eight
    viewport modes, ten toolbar commands), and gives every surface a
    headless path, "none needed" where the contract says so.
+11. The Python a tracked shell script runs as `python3 -c '...'`
+   compiles: an apostrophe in it ends the shell's quote and leaves Python
+   a broken program, which only shows when the script runs, perhaps only
+   at night.
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -90,6 +94,8 @@ AUTHORING_TOOLING = {"authoring", "authoring_session", "studio"}
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]rawframe/([a-z0-9_]+)/', re.MULTILINE)
 SOURCE_ROOTS = ("modules", "hosts", "launcher")
 TLS_INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]openssl/(ssl|tls1)\.h', re.MULTILINE)
+# A single-quoted shell string holds no quote, so one ends the program.
+INLINE_PYTHON = re.compile(r"\bpython3?(?:\s+-[A-Za-z]+)*\s+-c\s+'([^']*)'")
 
 
 def repository_files():
@@ -316,6 +322,26 @@ def check_owner_rules(files, findings):
             findings.append(f"commit {commit}: em dash in message")
 
 
+def inline_python_in(text):
+    """The line and the error of each `python3 -c '...'` program in a shell
+    script's text that does not compile."""
+    broken = []
+    for found in INLINE_PYTHON.finditer(text):
+        try:
+            compile(found.group(1), "<inline>", "exec")
+        except SyntaxError as error:
+            broken.append((text.count("\n", 0, found.start()) + 1, error.msg))
+    return broken
+
+
+def check_inline_python(files, findings):
+    for path in files:
+        if path.suffix != ".sh" or path.relative_to(ROOT).parts[0] == "third_party":
+            continue
+        for line, error in inline_python_in(path.read_text()):
+            findings.append(f"{path.relative_to(ROOT)}:{line}: inline Python does not compile: {error}")
+
+
 def attribution_in(message):
     """The lines of a commit message that attribute it: a trailer in its last
     paragraph, or a line that begins as a tool's footer does."""
@@ -346,6 +372,7 @@ def main():
     check_sizes(files, findings, notes)
     check_owner_rules(files, findings)
     check_surfaces(findings)
+    check_inline_python(files, findings)
     for note in notes:
         print(f"note: {note}")
     for finding in findings:
