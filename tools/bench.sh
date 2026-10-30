@@ -127,10 +127,10 @@ import statistics, sys
 path, machine, game, p50, p95, p99, kest95 = sys.argv[1:8]
 p50, p95, p99 = float(p50), float(p95), float(p99)
 if p50 > 5 or p95 > 8.33 or p99 > 12.5:
-    print("past the budget's ceilings")
+    print("past the budget ceilings")
     sys.exit()
 if kest95 == "none" or float(kest95) > 4:
-    print("Kest time per tick past the budget's p95 4 ms, or not reported")
+    print("Kest time per tick past the budget p95 of 4 ms, or not reported")
     sys.exit()
 rows = [line.rstrip("\n").split("\t") for line in open(path)][1:]
 mine = [float(r[7]) for r in rows if r[2] == machine and r[3] == game][-3:]

@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from check_repo import attribution_in  # noqa: E402
+from check_repo import attribution_in, inline_python_in  # noqa: E402
 
 # The squash message of #38, which explains the rule and so names every
 # attribution it refuses, quoted and wrapped.
@@ -99,6 +99,27 @@ class Attribution(unittest.TestCase):
     def test_a_trailer_outside_the_last_paragraph_is_prose(self):
         message = "fix(x): y\n\nCo-authored-by: lines are what GitHub adds.\n\nRefs #1\n"
         self.assertEqual(attribution_in(message), [])
+
+
+class InlinePython(unittest.TestCase):
+    def test_a_program_that_compiles_passes(self):
+        script = "set -e\nx=\"$(python3 -c '\nimport sys\nprint(\"the budget ceilings\")' \"$a\")\"\n"
+        self.assertEqual(inline_python_in(script), [])
+
+    def test_an_apostrophe_that_ends_the_quote_fails(self):
+        # bench.sh's verdict as #14 left it: the shell's quote ends at
+        # "budget's", and Python is given the program up to there.
+        script = "\n".join([
+            "verdict=\"$(python3 -c '",
+            "import sys",
+            "if p50 > 5:",
+            "    print(\"past the budget's ceilings\")",
+            "    sys.exit()' \"$results\")\"",
+        ])
+        self.assertEqual(inline_python_in(script), [(1, "unterminated string literal (detected at line 4)")])
+
+    def test_options_before_the_program_are_read(self):
+        self.assertEqual(len(inline_python_in("python3 -I -c 'print(\"x)' \n")), 1)
 
 
 if __name__ == "__main__":
