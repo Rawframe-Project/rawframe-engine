@@ -30,8 +30,8 @@
 # vendored mrhi_dxil.py passes, one of another Maul RHI release than the
 # vendored one, and a container that is missing, unstamped or not the
 # bytes stamped. It also refuses a container in a module's generated
-# directory that no source gives, and a name a module's CMakeLists.txt
-# embeds that this does not make. A move of Maul RHI therefore cooks the
+# directory that no source gives, and a name a module's CMake files
+# embed that this does not make. A move of Maul RHI therefore cooks the
 # containers again.
 #
 # With `--material`, the three containers of each container linked with a
@@ -192,6 +192,30 @@ def stamp(directory, names, flags):
         file.write("\n".join(lines) + "\n")
 
 
+def embeddedNames(root):
+    """Each (listing, module, name) a rawframe_shader_containers call names,
+    in every CMakeLists.txt and .cmake file under modules/: the command in
+    any case, with space before its parenthesis, and NAMES wherever it
+    stands among the arguments, as CMake reads it."""
+    listings = glob.glob(os.path.join(root, "modules", "**", "CMakeLists.txt"), recursive=True)
+    listings += glob.glob(os.path.join(root, "modules", "**", "*.cmake"), recursive=True)
+    for listing in sorted(listings):
+        module = os.path.relpath(listing, os.path.join(root, "modules")).split(os.sep)[0]
+        with open(listing, encoding="utf-8") as file:
+            text = re.sub(r"#.*", "", file.read())
+        for call in re.finditer(r"\brawframe_shader_containers\s*\(([^)]*)\)", text, re.I):
+            words = call.group(1).split()
+            at = 0
+            while at < len(words):
+                if words[at] == "NAMES":
+                    at += 1
+                    while at < len(words) and words[at] != "TARGET":
+                        yield listing, module, words[at]
+                        at += 1
+                else:
+                    at += 2 if words[at] == "TARGET" else 1
+
+
 def problems(root):
     """What in root's containers no longer matches their stamps; empty
     when every one is current."""
@@ -236,15 +260,9 @@ def problems(root):
     # What each module's build embeds (rawframe_shader_containers in
     # cmake/rawframe.cmake) is a container this makes.
     made = set(CONTAINERS)
-    for listing in sorted(glob.glob(os.path.join(root, "modules", "*", "CMakeLists.txt"))):
-        module = os.path.basename(os.path.dirname(listing))
-        with open(listing, encoding="utf-8") as file:
-            text = file.read()
-        for call in re.finditer(r"rawframe_shader_containers\(\s*TARGET\s+\S+\s+NAMES\s+([^)]*)\)", text):
-            for name in call.group(1).split():
-                if (module, name) not in made:
-                    found.append(f"{os.path.relpath(listing, root)}: embeds {name}, which tools/gen_shaders.py "
-                                 f"does not make")
+    for listing, module, name in embeddedNames(root):
+        if (module, name) not in made:
+            found.append(f"{os.path.relpath(listing, root)}: embeds {name}, which tools/gen_shaders.py does not make")
     return found
 
 
