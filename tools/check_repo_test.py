@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from check_repo import attribution_in, inline_python_in  # noqa: E402
+from check_repo import attribution_in, inline_python_in, run_blocks  # noqa: E402
 
 # The squash message of #38, which explains the rule and so names every
 # attribution it refuses, quoted and wrapped.
@@ -120,6 +120,49 @@ class InlinePython(unittest.TestCase):
 
     def test_options_before_the_program_are_read(self):
         self.assertEqual(len(inline_python_in("python3 -I -c 'print(\"x)' \n")), 1)
+
+    def test_a_quote_spelled_as_the_shell_spells_it_passes(self):
+        for quote in ("'\\''", "'\"'\"'"):
+            script = "python3 -c 'print(\"the budget" + quote + "s ceilings\")' \"$a\"\n"
+            self.assertEqual(inline_python_in(script), [], quote)
+
+
+# The fuzz step of extended.yml, its program indented with the block.
+WORKFLOW = """jobs:
+  fuzz:
+    steps:
+      - name: Fuzz
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          # This shard's targets.
+          ctest --show-only=json-v1 | python3 -c '
+          import json, sys
+          for at, test in enumerate(json.load(sys.stdin)["tests"]):
+              if at % 3 == int(sys.argv[1]) and ${{ matrix.on }}:
+                  print(test["name"])
+          ' "$SHARD"
+      - run: |
+          echo next
+        shell: bash
+"""
+
+
+class WorkflowBlocks(unittest.TestCase):
+    def test_a_blocks_script_loses_its_indentation_and_ends_with_it(self):
+        blocks = run_blocks(WORKFLOW)
+        self.assertEqual([first for first, _ in blocks], [8, 16])
+        self.assertTrue(blocks[0][1].startswith("# This shard's targets.\nctest"))
+        self.assertIn("\nimport json, sys\n", blocks[0][1])
+        self.assertEqual(blocks[1][1], "echo next")
+
+    def test_an_indented_program_compiles(self):
+        script = run_blocks(WORKFLOW)[0][1].replace("${{ matrix.on }}", "0")
+        self.assertEqual(inline_python_in(script), [])
+
+    def test_an_apostrophe_in_a_blocks_program_fails(self):
+        script = run_blocks(WORKFLOW.replace('print(test["name"])', 'print("the test\'s name")'))[0][1]
+        self.assertEqual(len(inline_python_in(script.replace("${{ matrix.on }}", "0"))), 1)
 
 
 if __name__ == "__main__":
