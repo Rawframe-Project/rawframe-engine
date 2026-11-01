@@ -52,6 +52,25 @@ Refs #5
 """
 
 
+# The squash message of v0.1.0 (d0f7bda7), its changelog entry cut to one
+# line: release-please's body, its footer last.
+RELEASE = """chore: release 0.1.0 (#39)
+
+:robot: I have created a release *beep* *boop*
+---
+
+
+## [0.1.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.0.1...v0.1.0) (2026-10-30)
+
+- **Breaking:** Replication sends entity mappings as runs of IDs.
+
+---
+This PR was generated with [Release Please](https://github.com/googleapis/release-please). \
+See [documentation](https://github.com/googleapis/release-please#release-please).
+"""
+FOOTER_LINE = RELEASE.splitlines()[-1]
+
+
 class Attribution(unittest.TestCase):
     def test_a_message_that_names_attribution_passes(self):
         self.assertEqual(attribution_in(EXPLAINING), [])
@@ -64,10 +83,16 @@ class Attribution(unittest.TestCase):
         message = "fix(x): y\n\nWhy.\n\nRefs #1\nclaude-session: abc\n"
         self.assertEqual(attribution_in(message), ["claude-session: abc"])
 
-    def test_release_pleases_footer_fails(self):
-        message = ("chore: release 0.0.2 (#40)\n\n## 0.0.2\n\n---\nThis PR was generated with [Release\n"
-                   "Please](https://github.com/googleapis/release-please).\n")
-        self.assertEqual(attribution_in(message), ["This PR was generated with [Release"])
+    def test_release_pleases_footer_passes(self):
+        self.assertEqual(attribution_in(RELEASE), [])
+
+    def test_a_footer_that_only_begins_as_release_pleases_fails(self):
+        line = FOOTER_LINE + " And Claude Code."
+        self.assertEqual(attribution_in(RELEASE.replace(FOOTER_LINE, line)), [line])
+
+    def test_an_ai_footer_in_a_release_commit_fails(self):
+        line = "Generated with [Claude Code](https://claude.com/claude-code)"
+        self.assertEqual(attribution_in(RELEASE + "\n" + line + "\n"), [line])
 
     def test_a_generated_with_footer_fails(self):
         message = "fix(x): y\n\nGenerated with a tool\n\nRefs #1\n"

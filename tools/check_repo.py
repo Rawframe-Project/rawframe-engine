@@ -11,8 +11,10 @@
    `claude-session:` trailer in its last paragraph, where git reads
    trailers, or a line that begins as a tool's footer does ("Generated
    with", "This PR was generated with"). A message that only names them,
-   quoted or not, passes. The commits in ATTRIBUTION_ALLOWED are on main for
-   good, each with the reason; only their em dashes are checked.
+   quoted or not, passes, and so does release-please's own footer, which a
+   release commit takes from its pull request and which names no AI tool.
+   The commits in ATTRIBUTION_ALLOWED are on main for good, each with the
+   reason; only their em dashes are checked.
 4. No `.value()` call in engine source: on a Result it throws on failure, and
    exceptions are disabled. Test for `has_value()` and
    dereference, or use RAWFRAME_TRY_ASSIGN.
@@ -60,6 +62,11 @@ TRAILER = re.compile(r"(co-authored-by|claude-session)\s*:", re.IGNORECASE)
 # underscore of Markdown), but not a quote or a backtick, which make it a
 # mention.
 FOOTER = re.compile(r"(?:[^\w\"'`]|_)*(this pr was )?generated with\b", re.IGNORECASE)
+# release-please's footer, whole and alone on its line, as the body of the
+# release pull request ends and its squash keeps it.
+RELEASE_PLEASE_FOOTER = re.compile(
+    r"This PR was generated with \[Release Please\]\(https://github\.com/googleapis/release-please\)\."
+    r"( See \[documentation\]\(https://github\.com/googleapis/release-please#release-please\)\.)?")
 # Commits already on main that carry such lines; history is not rewritten.
 ATTRIBUTION_ALLOWED = {
     # v0.0.1's squash, merged with release-please's footer and GitHub's
@@ -389,7 +396,8 @@ def check_inline_python(files, findings):
 
 def attribution_in(message):
     """The lines of a commit message that attribute it: a trailer in its last
-    paragraph, or a line that begins as a tool's footer does."""
+    paragraph, or a line that begins as a tool's footer does, other than
+    release-please's."""
     lines = message.splitlines()
     # Git takes a line of blanks for an empty one.
     while lines and not lines[-1].strip():
@@ -397,7 +405,9 @@ def attribution_in(message):
     last = len(lines)
     while last > 0 and lines[last - 1].strip():
         last -= 1
-    return [line for at, line in enumerate(lines) if (at >= last and TRAILER.match(line)) or FOOTER.match(line)]
+    return [line for at, line in enumerate(lines)
+            if (at >= last and TRAILER.match(line))
+            or (FOOTER.match(line) and not RELEASE_PLEASE_FOOTER.fullmatch(line.strip()))]
 
 
 def main():
