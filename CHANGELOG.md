@@ -2,6 +2,12 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.1.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.0...v0.1.1) (2026-11-01)
+
+### Fixed
+
+- A connection no longer ends as a protocol violation when several of a game's messages or commands arrive together. Over QUIC, what a peer sent in a tick can arrive at once, and a game's message and command lanes, bounded by its largest message and command, refused it when it passed that size, whole records included. Only a record held waiting for the rest of it is bounded now ([#115](https://github.com/Rawframe-Project/rawframe-engine/pull/115)).
+
 ## [0.1.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.0.1...v0.1.0) (2026-10-30)
 
 This release changes the replication wire: clients and servers built before it cannot connect to ones built after, and both are refused at admission. No saved or cooked format changes.
