@@ -6,12 +6,6 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 This release changes the replication wire: clients and servers built before it cannot connect to ones built after, and both are refused at admission. No saved or cooked format changes.
 
-### Breaking
-
-- Replication sends entity mappings as runs of IDs, and a client acknowledges each declaration whole and in turn. A client or server built before 0.1.0 is refused at admission ([#61](https://github.com/Rawframe-Project/rawframe-engine/pull/61)).
-- A client no longer acknowledges a mapping retirement, and the replication wire no longer has `mapping_retire_ack`. A client or server built before 0.1.0 is refused at admission ([#60](https://github.com/Rawframe-Project/rawframe-engine/pull/60)).
-- `NavigationError::Capacity` is removed. A navmesh or avoidance that runs out of room, memory included, refuses with `NavigationError::Limit`, and a setting or input past a bound Maul Nav publishes, such as a zero cell size, refuses with `NavigationError::Invalid` ([#65](https://github.com/Rawframe-Project/rawframe-engine/pull/65)).
-
 ### Added
 
 - `replication.mapping_bytes_per_publish` (64 bytes to 128 KiB, 16 KiB by default) bounds the bytes of entity mappings a publish sends one connection. Retirements go first, then declarations ([#53](https://github.com/Rawframe-Project/rawframe-engine/pull/53), [#59](https://github.com/Rawframe-Project/rawframe-engine/pull/59)).
@@ -19,6 +13,9 @@ This release changes the replication wire: clients and servers built before it c
 
 ### Changed
 
+- **Breaking:** Replication sends entity mappings as runs of IDs, and a client acknowledges each declaration whole and in turn. A client or server built before 0.1.0 is refused at admission ([#61](https://github.com/Rawframe-Project/rawframe-engine/pull/61)).
+- **Breaking:** A client no longer acknowledges a mapping retirement, and the replication wire no longer has `mapping_retire_ack`. A client or server built before 0.1.0 is refused at admission ([#60](https://github.com/Rawframe-Project/rawframe-engine/pull/60)).
+- **Breaking:** `NavigationError::Capacity` is removed, and navigation's refusals follow Maul Nav 0.2.0: a navmesh or avoidance that runs out of room, memory included, refuses with `NavigationError::Limit`, and a setting or input past a bound Maul Nav publishes, such as a zero cell size, refuses with `NavigationError::Invalid` ([#65](https://github.com/Rawframe-Project/rawframe-engine/pull/65)).
 - Entity mappings take far less traffic. A publish declares its entities as one run of IDs in a single frame, and a retirement costs a few bytes for what was declared together, or a byte or two an ID for what a removal scatters. Before, every mapping frame was 13 to 14.5 bytes ([#61](https://github.com/Rawframe-Project/rawframe-engine/pull/61)).
 - A connection's control frames go to the transport together, in pieces of up to 1,024 bytes, instead of one stream send each. A frame still goes out in the Host iteration it was sent in, or at the latest at the next one ([#50](https://github.com/Rawframe-Project/rawframe-engine/pull/50)).
 - A navmesh's fingerprint changes with Maul Nav 0.2.0's tile format; its paths do not. The engine bakes navmeshes in memory at game start and stores no tiles ([#65](https://github.com/Rawframe-Project/rawframe-engine/pull/65)).
