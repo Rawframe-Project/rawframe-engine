@@ -4,12 +4,9 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.1.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.0...v0.1.1) (2026-11-01)
 
-
 ### Fixed
 
-* **check:** allow v0.1.0's release commit its footer ([#110](https://github.com/Rawframe-Project/rawframe-engine/issues/110)) ([fe9f08b](https://github.com/Rawframe-Project/rawframe-engine/commit/fe9f08b9a4e72b3d780f29eaac8799a6706ea9f6)), closes [#108](https://github.com/Rawframe-Project/rawframe-engine/issues/108)
-* **ios:** stop the exported play's server by its own pid ([#107](https://github.com/Rawframe-Project/rawframe-engine/issues/107)) ([23311be](https://github.com/Rawframe-Project/rawframe-engine/commit/23311be090a5e8e43617b9aa7360e545b3065b06)), closes [#105](https://github.com/Rawframe-Project/rawframe-engine/issues/105)
-* **network:** bound only what a stream holds, not what arrives at once ([#115](https://github.com/Rawframe-Project/rawframe-engine/issues/115)) ([6951aec](https://github.com/Rawframe-Project/rawframe-engine/commit/6951aecb9a00e584dffe634f777fa91f544465e2)), closes [#114](https://github.com/Rawframe-Project/rawframe-engine/issues/114)
+- A connection no longer ends as a protocol violation when several of a game's messages or commands arrive together. Over QUIC, what a peer sent in a tick can arrive at once, and a game's message and command lanes, bounded by its largest message and command, refused it when it passed that size, whole records included. Only a record held waiting for the rest of it is bounded now ([#115](https://github.com/Rawframe-Project/rawframe-engine/pull/115)).
 
 ## [0.1.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.0.1...v0.1.0) (2026-10-30)
 
