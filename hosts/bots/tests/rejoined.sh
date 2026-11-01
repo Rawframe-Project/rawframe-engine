@@ -136,9 +136,19 @@ waited() {
     cat "$work/bots.log"
     exit 1
 }
+# Fails the test if the server has ended before `$1`: its pid may name
+# another process by then, which must not be signaled.
+running() {
+    live "$server_pid" && return 0
+    echo "rejoined: the server ended before $1"
+    tail -n 40 "$work/server.log" || true
+    exit 1
+}
 waited '"code":"bots_admitted"'
+running "it was frozen"
 kill -STOP "$server_pid"
 waited '"code":"connection_lost"'
+running "it was let go on"
 kill -CONT "$server_pid"
 wait "$bots_pid" || true
 bots_pid=
