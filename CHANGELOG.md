@@ -2,6 +2,15 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.1.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.0...v0.1.1) (2026-11-01)
+
+
+### Fixed
+
+* **check:** allow v0.1.0's release commit its footer ([#110](https://github.com/Rawframe-Project/rawframe-engine/issues/110)) ([fe9f08b](https://github.com/Rawframe-Project/rawframe-engine/commit/fe9f08b9a4e72b3d780f29eaac8799a6706ea9f6)), closes [#108](https://github.com/Rawframe-Project/rawframe-engine/issues/108)
+* **ios:** stop the exported play's server by its own pid ([#107](https://github.com/Rawframe-Project/rawframe-engine/issues/107)) ([23311be](https://github.com/Rawframe-Project/rawframe-engine/commit/23311be090a5e8e43617b9aa7360e545b3065b06)), closes [#105](https://github.com/Rawframe-Project/rawframe-engine/issues/105)
+* **network:** bound only what a stream holds, not what arrives at once ([#115](https://github.com/Rawframe-Project/rawframe-engine/issues/115)) ([6951aec](https://github.com/Rawframe-Project/rawframe-engine/commit/6951aecb9a00e584dffe634f777fa91f544465e2)), closes [#114](https://github.com/Rawframe-Project/rawframe-engine/issues/114)
+
 ## [0.1.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.0.1...v0.1.0) (2026-10-30)
 
 This release changes the replication wire: clients and servers built before it cannot connect to ones built after, and both are refused at admission. No saved or cooked format changes.
