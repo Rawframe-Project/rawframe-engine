@@ -443,7 +443,14 @@ public:
             state.prefaced = true;
         }
         while (true) {
-            auto frame = readFrame(reader, profile_.maximumFramePayload);
+            // A peer not yet admitted is kept cheap: no frame of its may pass
+            // the pre-admission bound, though several may arrive together.
+            // The largest it may send, a hello with its ticket, is well
+            // within.
+            auto frame = readFrame(reader,
+                                   state.phase == Phase::Active
+                                       ? profile_.maximumFramePayload
+                                       : std::min(profile_.maximumFramePayload, profile_.maximumPreAdmissionBytes));
             if (!frame.has_value()) {
                 if (frame.error().code() != code(NetworkError::Truncated)) {
                     end(event.connection, EndReason::ProtocolViolation, into);

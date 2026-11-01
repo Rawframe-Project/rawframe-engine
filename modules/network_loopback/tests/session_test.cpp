@@ -277,13 +277,13 @@ RAWFRAME_TEST(ProtocolViolationsCloseThePeer) {
     RAWFRAME_EXPECT(kSendRaw({std::byte{0}, std::byte{1}}, true));
     // A hello longer than any frame this side takes.
     RAWFRAME_EXPECT(kSendRaw({std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0x7f}, std::byte{0xff}}, false));
-    // A hello within the frame bound is waited for, until what is held
-    // passes the pre-admission bound.
-    std::vector<std::byte> partial = {std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0x4f}, std::byte{0xa0}};
+    // A hello within the pre-admission bound (2,000 bytes of 2,048) is
+    // waited for; one past it (4,000), though within the frame bound, is
+    // refused as soon as its length is read.
+    std::vector<std::byte> partial = {std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0x47}, std::byte{0xd0}};
     partial.resize(1000, std::byte{0});
     RAWFRAME_EXPECT(!kSendRaw(partial, false));
-    partial.resize(2100, std::byte{0});
-    RAWFRAME_EXPECT(kSendRaw(partial, false));
+    RAWFRAME_EXPECT(kSendRaw({std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0x4f}, std::byte{0xa0}}, false));
 }
 
 RAWFRAME_TEST(DatagramsBeforeAdmissionAreDropped) {
@@ -579,6 +579,26 @@ RAWFRAME_TEST(WholeRecordsArrivingTogetherAreRead) {
     admitting.run(5);
     RAWFRAME_EXPECT(admitting.find(admitting.serverEvents, SessionEventKind::Admitted) != nullptr);
     RAWFRAME_EXPECT(admitting.find(admitting.serverEvents, SessionEventKind::Ended) == nullptr);
+
+    // But no one frame of a peer not yet admitted passes that bound, though
+    // it is within the frame bound: one before the hello ends it unread.
+    World refusing{0, {}, tight};
+    auto early = *refusing.network.provider(kTransport);
+    const ConnectionId kEarly = *early->connect({"game"});
+    refusing.run(5);
+    early->poll(ignored, 100);
+    std::vector<std::byte> large(1024);
+    network::Writer largeWriter{large};
+    RAWFRAME_EXPECT(network::writePreface(largeWriter, {.kind = network::StreamKind::Control}).has_value());
+    RAWFRAME_EXPECT(network::writeFrame(largeWriter, 1, std::vector<std::byte>(600)).has_value());
+    RAWFRAME_EXPECT(600 < tight.sessions.maximumFramePayload);
+    const auto kEarlyControl = early->openStream(kEarly, false);
+    RAWFRAME_EXPECT(kEarlyControl.has_value() &&
+                    early->send(kEarly, *kEarlyControl, largeWriter.written()).has_value());
+    refusing.run(5);
+    const SessionEvent* ended = refusing.find(refusing.serverEvents, SessionEventKind::Ended);
+    RAWFRAME_EXPECT(ended != nullptr && ended->reason == network::EndReason::ProtocolViolation);
+    RAWFRAME_EXPECT(refusing.find(refusing.serverEvents, SessionEventKind::Admitted) == nullptr);
 }
 
 RAWFRAME_TEST(LanesThePeerDoesNotTakeEndTheConnection) {
