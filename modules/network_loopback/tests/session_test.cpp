@@ -519,6 +519,68 @@ RAWFRAME_TEST(LaneStreamsAPeerMayNotOpenCloseIt) {
     RAWFRAME_EXPECT(kRefused(many));
 }
 
+RAWFRAME_TEST(WholeRecordsArrivingTogetherAreRead) {
+    // A transport hands over what has arrived on a stream at once, which
+    // may be many whole records: only the part of a record held waiting
+    // for the rest is bound by the lane, and on the control stream only
+    // the part of a frame.
+    World world{0, kLanes};
+    const Admitted kPeer = admit(world);
+    std::vector<std::byte> bytes(512);
+    network::Writer writer{bytes};
+    RAWFRAME_EXPECT(network::writePreface(writer,
+                                          network::StreamPreface{.kind = network::StreamKind::EventLane,
+                                                                 .eventLaneId = 0,
+                                                                 .eventLaneEpoch = kPeer.epoch})
+                        .has_value());
+    for (int record = 0; record < 3; ++record) {
+        std::vector<std::byte> payload(61, static_cast<std::byte>(record));
+        payload[0] = std::byte{7};
+        RAWFRAME_EXPECT(network::writeFrame(writer, network::kEventRecordFrame, payload).has_value());
+    }
+    const auto kStream = world.clientTransport->openStream(kPeer.client, true);
+    RAWFRAME_EXPECT(kStream.has_value() &&
+                    world.clientTransport->send(kPeer.client, *kStream, writer.written()).has_value());
+    world.run(10);
+    std::size_t heard = 0;
+    for (const SessionEvent& event : world.serverEvents) {
+        heard += event.kind == SessionEventKind::Event && event.eventLane == 0 && event.payloadType == 7 &&
+                         event.payload.size() == 60
+                     ? 1
+                     : 0;
+    }
+    RAWFRAME_EXPECT(heard == 3);
+    RAWFRAME_EXPECT(world.find(world.serverEvents, SessionEventKind::Ended) == nullptr);
+
+    // A hello and an extension frame together pass the pre-admission bound,
+    // and neither is held.
+    Setup tight;
+    tight.sessions.maximumPreAdmissionBytes = 512;
+    World admitting{0, {}, tight};
+    auto raw = *admitting.network.provider(kTransport);
+    const ConnectionId kConnection = *raw->connect({"game"});
+    admitting.run(5);
+    std::vector<network::Event> ignored;
+    raw->poll(ignored, 100);
+    std::vector<std::byte> helloBytes(512);
+    network::Writer helloWriter{helloBytes};
+    RAWFRAME_EXPECT(network::encodeHello(helloWriter, hello()).has_value());
+    std::vector<std::byte> control(1024);
+    network::Writer controlWriter{control};
+    RAWFRAME_EXPECT(network::writePreface(controlWriter, {.kind = network::StreamKind::Control}).has_value());
+    RAWFRAME_EXPECT(network::writeFrame(controlWriter,
+                                        static_cast<std::uint64_t>(network::ControlFrame::ProtocolHello),
+                                        helloWriter.written())
+                        .has_value());
+    RAWFRAME_EXPECT(network::writeFrame(controlWriter, 1, std::vector<std::byte>(400)).has_value());
+    RAWFRAME_EXPECT(controlWriter.written().size() > tight.sessions.maximumPreAdmissionBytes);
+    const auto kControl = raw->openStream(kConnection, false);
+    RAWFRAME_EXPECT(kControl.has_value() && raw->send(kConnection, *kControl, controlWriter.written()).has_value());
+    admitting.run(5);
+    RAWFRAME_EXPECT(admitting.find(admitting.serverEvents, SessionEventKind::Admitted) != nullptr);
+    RAWFRAME_EXPECT(admitting.find(admitting.serverEvents, SessionEventKind::Ended) == nullptr);
+}
+
 RAWFRAME_TEST(LanesThePeerDoesNotTakeEndTheConnection) {
     // The queued guaranteed events: records the peer has not
     // received, at most 1,024 and 128 KiB, none older than two seconds.

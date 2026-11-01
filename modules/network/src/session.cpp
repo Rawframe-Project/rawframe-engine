@@ -329,23 +329,23 @@ public:
             lane = state.incoming.end() - 1;
         }
         const EventLaneDeclaration* declared = lane->prefaced ? laneFrom(lane->lane) : nullptr;
-        // A preface and one whole record with its frame and message type:
-        // the lane's record once its preface is read, the largest before.
-        std::size_t largest = 0;
-        for (const EventLaneDeclaration& each : lanes_) {
-            largest = std::max(largest, each.fromServer != server_ ? each.maximumRecord : 0);
-        }
-        const std::size_t kBound = (declared != nullptr ? declared->maximumRecord : largest) + 64;
-        if (lane->buffer.size() + event.bytes.size() > kBound) {
-            end(event.connection, EndReason::ProtocolViolation, into);
-            return;
-        }
+        // What arrived together may be many whole records; only what is
+        // held waiting for the rest is bound: a preface and one record with
+        // its frame and message type, the lane's record once its preface is
+        // read, the largest before.
+        const auto kHeldPast = [&](std::size_t held) {
+            std::size_t largest = 0;
+            for (const EventLaneDeclaration& each : lanes_) {
+                largest = std::max(largest, each.fromServer != server_ ? each.maximumRecord : 0);
+            }
+            return held > (declared != nullptr ? declared->maximumRecord : largest) + 64;
+        };
         lane->buffer.insert(lane->buffer.end(), event.bytes.begin(), event.bytes.end());
         Reader reader{lane->buffer};
         if (!lane->prefaced) {
             auto preface = readPreface(reader);
             if (!preface.has_value()) {
-                if (preface.error().code() != code(NetworkError::Truncated)) {
+                if (preface.error().code() != code(NetworkError::Truncated) || kHeldPast(lane->buffer.size())) {
                     end(event.connection, EndReason::ProtocolViolation, into);
                 }
                 return;
@@ -387,6 +387,10 @@ public:
                                         .payloadType = *kType,
                                         .payload = {record.rest().begin(), record.rest().end()}});
         }
+        if (kHeldPast(reader.remaining())) {
+            end(event.connection, EndReason::ProtocolViolation, into);
+            return;
+        }
         lane->buffer.erase(lane->buffer.begin(), lane->buffer.begin() + static_cast<std::ptrdiff_t>(reader.consumed()));
     }
 
@@ -415,19 +419,19 @@ public:
             }
             state.control = event.stream;
         }
-        const std::size_t kBound =
-            state.phase == Phase::Active ? profile_.maximumControlBuffer : profile_.maximumPreAdmissionBytes;
-        if (state.buffer.size() + event.bytes.size() > kBound) {
-            end(event.connection, EndReason::ProtocolViolation, into);
-            return;
-        }
+        // What arrived together may be many whole frames; only what is held
+        // waiting for the rest is bound, by the phase the connection is in.
+        const auto kHeldPast = [&](std::size_t held) {
+            return held >
+                   (state.phase == Phase::Active ? profile_.maximumControlBuffer : profile_.maximumPreAdmissionBytes);
+        };
         state.buffer.insert(state.buffer.end(), event.bytes.begin(), event.bytes.end());
 
         Reader reader{state.buffer};
         if (server_ && !state.prefaced) {
             auto preface = readPreface(reader);
             if (!preface.has_value()) {
-                if (preface.error().code() != code(NetworkError::Truncated)) {
+                if (preface.error().code() != code(NetworkError::Truncated) || kHeldPast(state.buffer.size())) {
                     end(event.connection, EndReason::ProtocolViolation, into);
                 }
                 return;
@@ -450,6 +454,10 @@ public:
             if (!onFrame(event.connection, state, *frame, into)) {
                 return;
             }
+        }
+        if (kHeldPast(reader.remaining())) {
+            end(event.connection, EndReason::ProtocolViolation, into);
+            return;
         }
         state.buffer.erase(state.buffer.begin(), state.buffer.begin() + static_cast<std::ptrdiff_t>(reader.consumed()));
     }
