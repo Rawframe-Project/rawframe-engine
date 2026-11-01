@@ -115,10 +115,10 @@ jobs:
       # Stalls exported and played, its UI read through UIAccessibility as
       # a screen reader reads it: the purse a button named by its
       # coins, and the client saying assistive technology reads it. The
-      # button is then touched where its element says it is, and what the
-      # touch did is shown: a simulator's touches from idb do not reach
-      # the client yet.
-      - name: Read Stalls through UIAccessibility
+      # button is then touched where its element says it is, as a player's
+      # finger would, and the touch must press it: the client counts the
+      # press and the server takes the command it sends.
+      - name: Read and touch Stalls through UIAccessibility
         if: always() && env.RAWFRAME_IOS_DEVICE != ''
         run: |
           # Not -e: a reader that fails still shows what the client said.
@@ -131,12 +131,8 @@ jobs:
           played=$?
           cat "$RUNNER_TEMP/stalls.log"
           grep -o '"presses":[0-9]*\|"pressesMissed":[0-9]*\|"touchEvents":[0-9]*\|"commandsSent":[0-9]*\|"commandsTaken":[0-9]*' "$RUNNER_TEMP/stalls.log"
-          # Whether idb's touches reach an application at all here: the
-          # home screen's icon of the game touched, and what is read after.
-          tools/ios_read_aloud.sh "$RAWFRAME_IOS_DEVICE" '^tycoon$' | tail -1
-          sleep 10
-          idb ui describe-all --udid "$RAWFRAME_IOS_DEVICE" --json | head -c 300; echo
-          [ "$read" = 0 ] && [ "$played" = 0 ] && grep -q '"code":"accessibility_ready"' "$RUNNER_TEMP/stalls.log"
+          [ "$read" = 0 ] && [ "$played" = 0 ] && grep -q '"code":"accessibility_ready"' "$RUNNER_TEMP/stalls.log" &&
+            grep -q '"presses":[1-9]' "$RUNNER_TEMP/stalls.log" && grep -q '"commandsTaken":[1-9]' "$RUNNER_TEMP/stalls.log"
 
   # Each build on main saves its compilations by commit; only the newest is kept.
   prune-caches:
