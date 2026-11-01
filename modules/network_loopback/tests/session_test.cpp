@@ -277,13 +277,13 @@ RAWFRAME_TEST(ProtocolViolationsCloseThePeer) {
     RAWFRAME_EXPECT(kSendRaw({std::byte{0}, std::byte{1}}, true));
     // A hello longer than any frame this side takes.
     RAWFRAME_EXPECT(kSendRaw({std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0x7f}, std::byte{0xff}}, false));
-    // A hello within the frame bound is waited for, until what is held
-    // passes the pre-admission bound.
-    std::vector<std::byte> partial = {std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0x4f}, std::byte{0xa0}};
+    // A hello within the pre-admission bound (2,000 bytes of 2,048) is
+    // waited for; one past it (4,000), though within the frame bound, is
+    // refused as soon as its length is read.
+    std::vector<std::byte> partial = {std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0x47}, std::byte{0xd0}};
     partial.resize(1000, std::byte{0});
     RAWFRAME_EXPECT(!kSendRaw(partial, false));
-    partial.resize(2100, std::byte{0});
-    RAWFRAME_EXPECT(kSendRaw(partial, false));
+    RAWFRAME_EXPECT(kSendRaw({std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0x4f}, std::byte{0xa0}}, false));
 }
 
 RAWFRAME_TEST(DatagramsBeforeAdmissionAreDropped) {
@@ -517,6 +517,88 @@ RAWFRAME_TEST(LaneStreamsAPeerMayNotOpenCloseIt) {
         many.push_back({.id = lane, .maximumRecord = 8});
     }
     RAWFRAME_EXPECT(kRefused(many));
+}
+
+RAWFRAME_TEST(WholeRecordsArrivingTogetherAreRead) {
+    // A transport hands over what has arrived on a stream at once, which
+    // may be many whole records: only the part of a record held waiting
+    // for the rest is bound by the lane, and on the control stream only
+    // the part of a frame.
+    World world{0, kLanes};
+    const Admitted kPeer = admit(world);
+    std::vector<std::byte> bytes(512);
+    network::Writer writer{bytes};
+    RAWFRAME_EXPECT(network::writePreface(writer,
+                                          network::StreamPreface{.kind = network::StreamKind::EventLane,
+                                                                 .eventLaneId = 0,
+                                                                 .eventLaneEpoch = kPeer.epoch})
+                        .has_value());
+    for (int record = 0; record < 3; ++record) {
+        std::vector<std::byte> payload(61, static_cast<std::byte>(record));
+        payload[0] = std::byte{7};
+        RAWFRAME_EXPECT(network::writeFrame(writer, network::kEventRecordFrame, payload).has_value());
+    }
+    const auto kStream = world.clientTransport->openStream(kPeer.client, true);
+    RAWFRAME_EXPECT(kStream.has_value() &&
+                    world.clientTransport->send(kPeer.client, *kStream, writer.written()).has_value());
+    world.run(10);
+    std::size_t heard = 0;
+    for (const SessionEvent& event : world.serverEvents) {
+        heard += event.kind == SessionEventKind::Event && event.eventLane == 0 && event.payloadType == 7 &&
+                         event.payload.size() == 60
+                     ? 1
+                     : 0;
+    }
+    RAWFRAME_EXPECT(heard == 3);
+    RAWFRAME_EXPECT(world.find(world.serverEvents, SessionEventKind::Ended) == nullptr);
+
+    // A hello and an extension frame together pass the pre-admission bound,
+    // and neither is held.
+    Setup tight;
+    tight.sessions.maximumPreAdmissionBytes = 512;
+    World admitting{0, {}, tight};
+    auto raw = *admitting.network.provider(kTransport);
+    const ConnectionId kConnection = *raw->connect({"game"});
+    admitting.run(5);
+    std::vector<network::Event> ignored;
+    raw->poll(ignored, 100);
+    std::vector<std::byte> helloBytes(512);
+    network::Writer helloWriter{helloBytes};
+    RAWFRAME_EXPECT(network::encodeHello(helloWriter, hello()).has_value());
+    std::vector<std::byte> control(1024);
+    network::Writer controlWriter{control};
+    RAWFRAME_EXPECT(network::writePreface(controlWriter, {.kind = network::StreamKind::Control}).has_value());
+    RAWFRAME_EXPECT(network::writeFrame(controlWriter,
+                                        static_cast<std::uint64_t>(network::ControlFrame::ProtocolHello),
+                                        helloWriter.written())
+                        .has_value());
+    RAWFRAME_EXPECT(network::writeFrame(controlWriter, 1, std::vector<std::byte>(400)).has_value());
+    RAWFRAME_EXPECT(controlWriter.written().size() > tight.sessions.maximumPreAdmissionBytes);
+    const auto kControl = raw->openStream(kConnection, false);
+    RAWFRAME_EXPECT(kControl.has_value() && raw->send(kConnection, *kControl, controlWriter.written()).has_value());
+    admitting.run(5);
+    RAWFRAME_EXPECT(admitting.find(admitting.serverEvents, SessionEventKind::Admitted) != nullptr);
+    RAWFRAME_EXPECT(admitting.find(admitting.serverEvents, SessionEventKind::Ended) == nullptr);
+
+    // But no one frame of a peer not yet admitted passes that bound, though
+    // it is within the frame bound: one before the hello ends it unread.
+    World refusing{0, {}, tight};
+    auto early = *refusing.network.provider(kTransport);
+    const ConnectionId kEarly = *early->connect({"game"});
+    refusing.run(5);
+    early->poll(ignored, 100);
+    std::vector<std::byte> large(1024);
+    network::Writer largeWriter{large};
+    RAWFRAME_EXPECT(network::writePreface(largeWriter, {.kind = network::StreamKind::Control}).has_value());
+    RAWFRAME_EXPECT(network::writeFrame(largeWriter, 1, std::vector<std::byte>(600)).has_value());
+    RAWFRAME_EXPECT(600 < tight.sessions.maximumFramePayload);
+    const auto kEarlyControl = early->openStream(kEarly, false);
+    RAWFRAME_EXPECT(kEarlyControl.has_value() &&
+                    early->send(kEarly, *kEarlyControl, largeWriter.written()).has_value());
+    refusing.run(5);
+    const SessionEvent* ended = refusing.find(refusing.serverEvents, SessionEventKind::Ended);
+    RAWFRAME_EXPECT(ended != nullptr && ended->reason == network::EndReason::ProtocolViolation);
+    RAWFRAME_EXPECT(refusing.find(refusing.serverEvents, SessionEventKind::Admitted) == nullptr);
 }
 
 RAWFRAME_TEST(LanesThePeerDoesNotTakeEndTheConnection) {
