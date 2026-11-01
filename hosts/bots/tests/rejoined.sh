@@ -16,38 +16,70 @@ work="$(mktemp -d)"
 server_pid=
 bots_pid=
 
+# Whether `$1`, a process this shell started, still runs (or is frozen).
+# Bash reaps an ended child as soon as it ends and keeps its status for
+# `wait`, so the child's pid may already name another process: only the
+# shell's job table says whether it is still ours.
+live() {
+    local pid
+    for pid in $(jobs -rp) $(jobs -sp); do
+        [ "$pid" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# Every thread of `$1` and of its children (LeakSanitizer's exit check
+# runs in a child that traces the others), with its state and what it
+# waits in.
+threads() {
+    local proc task
+    ps -o pid,ppid,stat,wchan:30,pcpu,etime,args -p "$1" --ppid "$1" || true
+    for proc in "$1" $(ps -o pid= --ppid "$1" 2>/dev/null || true); do
+        for task in /proc/"$proc"/task/*; do
+            [ -r "$task/status" ] || continue
+            echo "  $proc/${task##*/} $(cat "$task/comm" 2>/dev/null || true)" \
+                "$(awk '/^State|^TracerPid/ {printf "%s ", $0}' "$task/status" 2>/dev/null || true)" \
+                "$(cat "$task/wchan" 2>/dev/null || true)"
+        done
+    done
+}
+
 # Asks `$2`, the `$1` process this test started and has not waited for,
 # to stop (going on first if it is frozen) and waits for it. One still
 # running after 30 seconds is said, with its threads' states and its log,
 # then killed, and the test fails: a process left behind is a fault to
-# find, not one to leave to the reaper.
+# find, not one to leave to the reaper. One the kill does not end within
+# 10 seconds (waiting in the kernel) is said and left, so the test still
+# ends.
 stopped() {
     local name="$1" pid="$2"
     [ -n "$pid" ] || return 0
-    kill -CONT "$pid" 2>/dev/null || true
-    kill -TERM "$pid" 2>/dev/null || true
+    if live "$pid"; then
+        kill -CONT "$pid" 2>/dev/null || true
+        kill -TERM "$pid" 2>/dev/null || true
+    fi
     for _ in $(seq 600); do
-        # Not yet waited for, an ended process stays a zombie, so its pid
-        # names no other process.
-        case "$(ps -o stat= -p "$pid" 2>/dev/null || true)" in
-            "" | Z*)
-                wait "$pid" || true
-                return 0
-                ;;
-        esac
+        if ! live "$pid"; then
+            wait "$pid" || true
+            return 0
+        fi
         sleep 0.05
     done
     echo "rejoined: the $name did not stop within 30 s of being asked"
-    ps -o pid,stat,wchan,etime,args -p "$pid" || true
-    for task in /proc/"$pid"/task/*; do
-        if [ -r "$task/stat" ]; then
-            echo "  thread $(cat "$task/comm") $(sed 's/.*) //' "$task/stat" | cut -d' ' -f1)" \
-                "$(cat "$task/wchan" 2>/dev/null || true)"
-        fi
-    done
+    threads "$pid"
     tail -n 40 "$work/$name.log" || true
-    kill -KILL "$pid" 2>/dev/null || true
-    wait "$pid" || true
+    if live "$pid"; then
+        kill -KILL "$pid" 2>/dev/null || true
+    fi
+    for _ in $(seq 200); do
+        if ! live "$pid"; then
+            wait "$pid" || true
+            return 1
+        fi
+        sleep 0.05
+    done
+    echo "rejoined: the $name did not end within 10 s of SIGKILL"
+    threads "$pid"
     return 1
 }
 
