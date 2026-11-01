@@ -445,12 +445,18 @@ public:
         while (true) {
             // A peer not yet admitted is kept cheap: no frame of its may pass
             // the pre-admission bound, though several may arrive together.
-            // The largest it may send, a hello with its ticket, is well
-            // within.
-            auto frame = readFrame(reader,
-                                   state.phase == Phase::Active
-                                       ? profile_.maximumFramePayload
-                                       : std::min(profile_.maximumFramePayload, profile_.maximumPreAdmissionBytes));
+            // The bound leaves room for a frame's type and length and the
+            // preface's kind and version, so a frame held waiting for its
+            // last byte is within it too, and the same bytes have one
+            // outcome however they arrive. The largest frame a peer may
+            // send before admission, a hello with its ticket, is well within.
+            constexpr std::size_t kHeads = 4 * varintSize(kMaximumVarint);
+            const std::size_t kBeforeAdmission =
+                profile_.maximumPreAdmissionBytes > kHeads ? profile_.maximumPreAdmissionBytes - kHeads : 0;
+            auto frame =
+                readFrame(reader,
+                          state.phase == Phase::Active ? profile_.maximumFramePayload
+                                                       : std::min(profile_.maximumFramePayload, kBeforeAdmission));
             if (!frame.has_value()) {
                 if (frame.error().code() != code(NetworkError::Truncated)) {
                     end(event.connection, EndReason::ProtocolViolation, into);

@@ -601,6 +601,47 @@ RAWFRAME_TEST(WholeRecordsArrivingTogetherAreRead) {
     RAWFRAME_EXPECT(refusing.find(refusing.serverEvents, SessionEventKind::Admitted) == nullptr);
 }
 
+RAWFRAME_TEST(AFrameBeforeAdmissionHasOneOutcomeHoweverItArrives) {
+    // A control preface and one extension frame of `payload` bytes from a
+    // peer not yet admitted, whole in one send or with its last byte apart:
+    // whether the connection ends.
+    const auto kEnds = [](std::size_t payload, bool split) {
+        Setup tight;
+        tight.sessions.maximumPreAdmissionBytes = 512;
+        World world{0, {}, tight};
+        auto raw = *world.network.provider(kTransport);
+        const ConnectionId kConnection = *raw->connect({"game"});
+        world.run(5);
+        std::vector<network::Event> ignored;
+        raw->poll(ignored, 100);
+        std::vector<std::byte> bytes(1024);
+        network::Writer writer{bytes};
+        RAWFRAME_EXPECT(network::writePreface(writer, {.kind = network::StreamKind::Control}).has_value());
+        RAWFRAME_EXPECT(network::writeFrame(writer, 1, std::vector<std::byte>(payload)).has_value());
+        const std::span<const std::byte> kAll = writer.written();
+        const auto kStream = raw->openStream(kConnection, false);
+        RAWFRAME_EXPECT(kStream.has_value());
+        if (split) {
+            RAWFRAME_EXPECT(raw->send(kConnection, *kStream, kAll.first(kAll.size() - 1)).has_value());
+            world.run(5);
+            // Refused once the connection has ended.
+            static_cast<void>(raw->send(kConnection, *kStream, kAll.last(1)));
+        } else {
+            RAWFRAME_EXPECT(raw->send(kConnection, *kStream, kAll).has_value());
+        }
+        world.run(5);
+        const SessionEvent* ended = world.find(world.serverEvents, SessionEventKind::Ended);
+        return ended != nullptr && ended->reason == network::EndReason::ProtocolViolation;
+    };
+    // Room is left in the 512 bytes for a frame's header and the preface,
+    // so the largest frame is read and the next refused, either way.
+    for (const bool kSplit : {false, true}) {
+        RAWFRAME_EXPECT(!kEnds(480, kSplit));
+        RAWFRAME_EXPECT(kEnds(481, kSplit));
+        RAWFRAME_EXPECT(kEnds(512, kSplit));
+    }
+}
+
 RAWFRAME_TEST(LanesThePeerDoesNotTakeEndTheConnection) {
     // The queued guaranteed events: records the peer has not
     // received, at most 1,024 and 128 KiB, none older than two seconds.
