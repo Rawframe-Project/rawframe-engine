@@ -72,9 +72,14 @@ for _ in $(seq 180); do
     sleep 1
 done
 
-# The server asked to stop as a supervisor asks, for its totals: the
-# simulator's processes are this machine's.
-pkill -TERM -f "$out/server/rawframe-server" || true
+# The server asked to stop as a supervisor asks, for its totals, by its
+# own pid: `$!` is simctl's, but a simulator's processes are this
+# machine's, and the first record of the server's log names its pid. One
+# that has said it stopped is not signalled, as its pid may be another's.
+server_own="$(head -n 1 "$work/server.log" | sed -n 's/.*"identity":"pid-\([0-9][0-9]*\)".*/\1/p')"
+if [ -n "$server_own" ] && ! grep -q '"code":"stopped"' "$work/server.log"; then
+    kill -TERM "$server_own" 2>/dev/null || true
+fi
 for _ in $(seq 200); do
     grep -q '"code":"stopped"' "$work/server.log" 2>/dev/null && break
     sleep 0.1
