@@ -65,6 +65,9 @@ ATTRIBUTION_ALLOWED = {
     # v0.0.1's squash, merged with release-please's footer and GitHub's
     # Co-authored-by lines for the release bot and the owner.
     "e77003bd55a41a3c0aa57a4718842a085c5541a6",
+    # v0.1.0's squash, which the manager's merge tool made from the release
+    # pull request's body with release-please's footer still in it.
+    "d0f7bda78f9c5cbf77537927612e2b5e49fa063b",
 }
 VALUE_CALL = re.compile(r"\.value\(\s*\)")
 BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
