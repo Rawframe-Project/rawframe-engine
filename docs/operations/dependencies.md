@@ -25,7 +25,7 @@ Every third-party library is vendored under `third_party/` at an exact revision 
 | FreeType 2.14.3 | release archive, SHA-256 `36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f` | 2.14.3 | FreeType License | the modules Maul UI builds, `LICENSE.TXT`, `docs/FTL.TXT` |
 | HarfBuzz 14.5.1 | release archive, SHA-256 `7e2fa4e8c7c98e8d8140671f5772542afaaa6acccfbd746506886b6d85f7f8d6` | 14.5.1 | MIT | `src/` without build files, scripts and generators, `COPYING` |
 | OpenType Sanitizer 9.3.0 | release archive, SHA-256 `23814f8e90ee77379f54e86a012c09bba2d133940e5257546b29cf087a73beec` | 9.3.0 | BSD-3-Clause | `include/`, `src/` without Graphite's tables, `LICENSE`, `README.md`; the build file and `rawframe/` are the engine's |
-| miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` |
+| miniaudio 0.11.25 | `mackron/miniaudio` | `9634bedb5b5a2ca38c1ee7108a9358a4e233f14d` | public domain or MIT-0 | `miniaudio.h`, `miniaudio.c`, `LICENSE`, `extras/stb_vorbis.c` with one [engine change](#engine-changes-to-vendored-code) |
 | MsQuic 2.6.1 | `microsoft/msquic` | `a01333cf7c2659cce0ff03ef3f21e1ff15bb5b83` | MIT | build files, `src/` without tests, tools or PGO data, notices |
 | XDP for Windows | `microsoft/xdp-for-windows` | `d372b52577a724e04fa4c06acb90bbfa4719fc25`, MsQuic's pin | MIT | `published/external`, `LICENSE` |
 | OpenSSL 3.5 | `openssl/openssl` | `453eaaa9e6bb1304730abacfbb73d51868cb6ab9` | Apache-2.0 | all but tests, demos, sample keys and documentation |
@@ -52,6 +52,14 @@ Each library has an update script that replaces its folder from a checkout or ar
 | CLDR | `tools/update_cldr.sh <cldr-json commit>`, then `tools/generate_cldr.py` |
 
 A Maul library that publishes a release is taken from its release archive after `sha256sum -c --ignore-missing SHA256SUMS`, and its archive digest goes in the table.
+
+## Engine changes to vendored code
+
+Vendored code is upstream's, with these changes only. Each is a patch in `tools/patches/<library>/` that the library's update script applies after it extracts a revision, so a move carries it or stops where it no longer applies; a change upstream has taken is deleted with the move. In the source, each starts with a comment `Rawframe engine change:` that says why.
+
+| Library | Patch | Why |
+|---|---|---|
+| miniaudio | `stb_vorbis-list-count.patch` | stb_vorbis multiplies a list codebook's (lookup type 2) entries by its dimensions as `int`. Within the import budget, the product can pass what an `int` holds, which is undefined; such a codebook is refused before the product is taken. |
 
 ## Notes per library
 

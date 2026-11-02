@@ -237,6 +237,31 @@ Bits orderedCodebook(int entriesLog) {
     return book;
 }
 
+/// A codebook of 2^`entriesLog` entries, written ordered as above, with a
+/// list lookup (type 2) of `dimensions` dimensions: one value, zero, for
+/// each dimension of each entry. Past 2^20 values it is written without
+/// them, as a stream whose list should be refused before they are read.
+Bits listCodebook(int entriesLog, std::uint32_t dimensions) {
+    const std::uint32_t kEntries = 1U << entriesLog;
+    Bits book;
+    book.put(0x564342, 24);
+    book.put(dimensions, 16);
+    book.put(kEntries, 24);
+    book.put(1, 1); // ordered
+    book.put(entriesLog - 1, 5);
+    book.put(kEntries, entriesLog + 1);
+    book.put(2, 4);  // lookup type 2
+    book.put(0, 32); // minimum
+    book.put(0, 32); // delta
+    book.put(0, 4);  // one bit per value
+    book.put(0, 1);
+    const std::uint64_t kValues = std::uint64_t{kEntries} * dimensions;
+    for (std::uint64_t value = 0; kValues <= std::uint64_t{1} << 20 && value < kValues; ++value) {
+        book.put(0, 1);
+    }
+    return book;
+}
+
 /// A codebook of two one-bit entries with a lattice lookup (type 1) of
 /// `dimensions` dimensions and one value per dimension, zero.
 Bits latticeCodebook(std::uint32_t dimensions) {
@@ -351,6 +376,17 @@ RAWFRAME_TEST(AVorbisLatticeOfManyDimensionsImports) {
         const auto kSound = importSound(streamWithCodebook(latticeCodebook(kDimensions)));
         RAWFRAME_EXPECT(kSound.has_value() && kSound->channels == 2 && kSound->frames() > 0);
     }
+}
+
+RAWFRAME_TEST(AVorbisListPastWhatAnIntHoldsIsRefused) {
+    // A list's value count is its entries times its dimensions, which
+    // stb_vorbis takes as an int. 2^16 entries over 32,768 dimensions make
+    // 2^31, within the import budget until then: the stream is refused
+    // before the product, where UndefinedBehaviorSanitizer would stop the
+    // full check. A small list still imports.
+    const auto kSmall = importSound(streamWithCodebook(listCodebook(4, 2)));
+    RAWFRAME_EXPECT(kSmall.has_value() && kSmall->channels == 2 && kSmall->frames() > 0);
+    RAWFRAME_EXPECT(badSound(importSound(streamWithCodebook(listCodebook(16, 32'768)))));
 }
 
 RAWFRAME_TEST(DamagedSourcesNeverDecodeOutOfBounds) {
