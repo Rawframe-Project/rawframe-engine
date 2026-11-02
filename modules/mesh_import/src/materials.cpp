@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <string_view>
+#include <type_traits>
 
 namespace rawframe::mesh_import {
 
@@ -34,6 +35,33 @@ bool printable(std::string_view name) noexcept {
 
 bool unit(float value) noexcept {
     return value >= 0 && value <= 1;
+}
+
+/// The number a cgltf enumeration holds. cgltf stores the source's number
+/// there unchecked, so the field may hold a value its type has no room
+/// for; it is read as the bytes it is, never as the enumeration.
+template <typename Enumeration> std::underlying_type_t<Enumeration> numberOf(const Enumeration& field) noexcept {
+    std::underlying_type_t<Enumeration> number{};
+    std::memcpy(&number, &field, sizeof number);
+    return number;
+}
+
+/// Whether a sampler holds only values glTF 2.0 defines.
+bool definedSampler(const cgltf_sampler& sampler) noexcept {
+    const auto kWrap = [](auto number) {
+        return number == cgltf_wrap_mode_clamp_to_edge || number == cgltf_wrap_mode_mirrored_repeat ||
+               number == cgltf_wrap_mode_repeat;
+    };
+    const auto kMagnify = [](auto number) {
+        return number == cgltf_filter_type_undefined || number == cgltf_filter_type_nearest ||
+               number == cgltf_filter_type_linear;
+    };
+    const auto kMinify = [&](auto number) {
+        return kMagnify(number) ||
+               (number >= cgltf_filter_type_nearest_mipmap_nearest && number <= cgltf_filter_type_linear_mipmap_linear);
+    };
+    return kWrap(numberOf(sampler.wrap_s)) && kWrap(numberOf(sampler.wrap_t)) &&
+           kMagnify(numberOf(sampler.mag_filter)) && kMinify(numberOf(sampler.min_filter));
 }
 
 /// RFC 4648's base64, padded; none for anything else.
@@ -155,6 +183,9 @@ result::Result<material::SampledTexture> MaterialMaker::sampled(const cgltf_text
         made.offset = {view.transform.offset[0], view.transform.offset[1]};
     }
     if (const cgltf_sampler* sampler = kTexture.sampler; sampler != nullptr) {
+        if (!definedSampler(*sampler)) {
+            return badSource("a sampler with a wrap or filter value glTF does not define");
+        }
         if (sampler->wrap_s != sampler->wrap_t || sampler->wrap_s == cgltf_wrap_mode_mirrored_repeat) {
             return unsupported("a texture mirrored, or repeated one way and clamped the other");
         }

@@ -370,6 +370,21 @@ RAWFRAME_TEST(WhatCannotBeReadIsRefused) {
     RAWFRAME_EXPECT(refusedWith(importText(R"({"asset": {"version": "2.0"}})", files), MeshError::BadSource));
     RAWFRAME_EXPECT(refusedWith(importText(gltf({}), files, {.mesh = {.maximumVertices = 2}}), MeshError::OverLimit));
     RAWFRAME_EXPECT(refusedWith(importText(gltf({}), files, {.maximumBytes = 64}), MeshError::OverLimit));
+    // A sampler value glTF does not define: none is read as one it does,
+    // and one past what the parser's enumeration holds is no exception.
+    Files images{.files = {{"triangle.bin", triangleBuffer()}, {"bumps.png", bytesOf("bumps")}}};
+    for (const std::string_view kSampler : {R"("wrapS": 1, "wrapT": 1)",
+                                            R"("wrapS": 233071, "wrapT": 233071)",
+                                            R"("magFilter": 5)",
+                                            R"("minFilter": 99999)"}) {
+        const std::string kImage =
+            R"("samplers": [{)" + std::string{kSampler} +
+            R"(}], "images": [{"uri": "bumps.png"}], "textures": [{"source": 0, "sampler": 0}], )";
+        RAWFRAME_EXPECT(refusedWith(
+            importWhole(drawn(R"({"name": "A", "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}})", kImage),
+                        images),
+            MeshError::BadSource));
+    }
 }
 
 RAWFRAME_TEST(DamagedSourcesAreRefusedWithoutACrash) {
