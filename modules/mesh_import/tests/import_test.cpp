@@ -385,6 +385,14 @@ RAWFRAME_TEST(WhatCannotBeReadIsRefused) {
                         images),
             MeshError::BadSource));
     }
+    // Indices with no buffer view are zeros, as many as they say: a count
+    // past the limit is refused before anything that size is made.
+    std::string unbacked = gltf({});
+    constexpr std::string_view kIndices = R"({"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"})";
+    unbacked.replace(unbacked.find(kIndices),
+                     kIndices.size(),
+                     R"({"componentType": 5123, "count": 9223372036854775807, "type": "SCALAR"})");
+    RAWFRAME_EXPECT(refusedWith(importText(unbacked, files), MeshError::OverLimit));
 }
 
 RAWFRAME_TEST(DamagedSourcesAreRefusedWithoutACrash) {
