@@ -131,6 +131,15 @@ RAWFRAME_TEST(ImportsAreRefusedPastLimitsAndWhenUnreadable) {
     }
     shortCount.resize(kCount + 3);
     RAWFRAME_EXPECT(badSound(importSound(shortCount)));
+    // A vendor string longer than its comment header, 0x7FFFFFFF bytes in a
+    // header of 90: the header ends before its count, and is refused before
+    // stb_vorbis reads it, which would work the length plus one in an int.
+    std::vector<std::byte> longVendor = fixture("tone.ogg");
+    constexpr std::size_t kVendor = 110;
+    for (std::size_t at = kVendor; at < kVendor + 4; ++at) {
+        longVendor[at] = std::byte{at < kVendor + 3 ? std::uint8_t{0xFF} : std::uint8_t{0x7F}};
+    }
+    RAWFRAME_EXPECT(badSound(importSound(longVendor)));
     // A page of no segments where the comment header begins, which stb_vorbis
     // would read with the page before's lacing: refused, not read two ways.
     std::vector<std::byte> empty = fixture("tone.ogg");

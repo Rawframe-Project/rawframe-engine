@@ -144,7 +144,8 @@ enum {
 // before, and a page carrying the packet on without saying it continues one,
 // past which it reads on. So is a comment header cut before its count's
 // last byte: from memory, stb_vorbis reads past the end as zeros, which
-// makes a count of what is there. What is not the comment header at all is
+// makes a count of what is there. So is one whose packet ends first, past
+// which stb_vorbis reads a vendor string's length that can be anything. What is not the comment header at all is
 // left to stb_vorbis, which refuses it.
 static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
     size_t page = 0;
@@ -184,8 +185,9 @@ static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
                 return 0;
             }
             data += lacing;
+            // The comment header ended before its count was read whole.
             if (lacing < 255 && ++packet == 2) {
-                return 1;
+                return 0;
             }
         }
         page = data;
