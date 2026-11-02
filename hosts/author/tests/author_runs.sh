@@ -34,6 +34,8 @@ running=
 playing=
 ended() {
     local status=$?
+    # Nothing here may end the report early, whatever a step returns.
+    set +e
     if [ "$status" -ne 0 ]; then
         {
             echo "failed (status $status)"
@@ -41,6 +43,7 @@ ended() {
         } >&3 2>&1
     fi
     for each in $running $playing; do kill "$each" 2>/dev/null || true; done
+    exit "$status"
 }
 trap 'echo "failed at line $LINENO" >&3' ERR
 trap ended EXIT

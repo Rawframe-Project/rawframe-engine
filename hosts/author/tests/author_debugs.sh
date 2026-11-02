@@ -33,6 +33,8 @@ exec 3>&1
 running=
 ended() {
     local status=$?
+    # Nothing here may end the report early, whatever a step returns.
+    set +e
     if [ "$status" -ne 0 ]; then
         {
             echo "failed (status $status)"
@@ -41,6 +43,7 @@ ended() {
         } >&3 2>&1
     fi
     [ -z "$running" ] || kill "$running" 2>/dev/null || true
+    exit "$status"
 }
 trap 'echo "failed at line $LINENO" >&3' ERR
 trap ended EXIT
