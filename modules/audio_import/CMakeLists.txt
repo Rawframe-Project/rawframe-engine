@@ -12,6 +12,13 @@ add_library(rawframe_audio_import_decoders STATIC src/decoders.c)
 set_target_properties(rawframe_audio_import_decoders PROPERTIES C_STANDARD 11 POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(rawframe_audio_import_decoders PRIVATE rawframe_miniaudio_source)
 rawframe_sanitize_vendored(rawframe_audio_import_decoders)
+# stb_vorbis's get32_packet shifts the end-of-packet marker, -1, left as it
+# assembles a word, which C leaves undefined and GCC and Clang define as two's
+# complement; it relies on that value, and the vendored file is upstream's.
+# Every other check stays on.
+if(RAWFRAME_SANITIZER_OPTIONS)
+    target_compile_options(rawframe_audio_import_decoders PRIVATE -fno-sanitize=shift-base)
+endif()
 target_link_libraries(rawframe_audio_import PRIVATE rawframe_audio_import_decoders rawframe_opus_vendor)
 
 rawframe_module_tests(NAME audio_import SOURCES tests/import_test.cpp)

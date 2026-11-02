@@ -288,9 +288,18 @@ endfunction()
 # elsewhere.
 #
 #   rawframe_sanitize_vendored(rawframe_cgltf)
+#
+# One check stays off for them: UndefinedBehaviorSanitizer's vptr check,
+# which needs every class's type information. The modules build without
+# RTTI (which turns the check off for them), so a class a module derives
+# from a vendored base and hands to it carries none, and the check reports
+# every call through it as on an object of the wrong type.
 function(rawframe_sanitize_vendored)
     foreach(target IN LISTS ARGN)
         target_compile_options(${target} PRIVATE ${RAWFRAME_SANITIZER_OPTIONS})
+        if(RAWFRAME_SANITIZER_OPTIONS)
+            target_compile_options(${target} PRIVATE -fno-sanitize=vptr)
+        endif()
     endforeach()
 endfunction()
 
