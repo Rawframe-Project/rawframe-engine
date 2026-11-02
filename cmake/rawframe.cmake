@@ -46,6 +46,9 @@ foreach(line IN LISTS rawframe_module_lines)
 endforeach()
 
 add_library(rawframe_policy INTERFACE)
+# What the address sanitizer tree compiles every module with, beside the
+# warnings: the sanitizers, their optimization and the fuzz coverage.
+set(RAWFRAME_SANITIZER_OPTIONS "")
 target_compile_features(rawframe_policy INTERFACE cxx_std_23)
 target_compile_definitions(rawframe_policy INTERFACE
     RAWFRAME_ASSERTIONS=${RAWFRAME_ASSERTION_LEVEL}
@@ -119,17 +122,18 @@ else()
         target_compile_options(rawframe_policy INTERFACE -Wno-maybe-uninitialized -Wno-free-nonheap-object)
     endif()
     if(RAWFRAME_SANITIZE STREQUAL "address")
-        target_compile_options(rawframe_policy INTERFACE -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+        set(RAWFRAME_SANITIZER_OPTIONS -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
         # The debug configuration and its assertions, optimized as far as
         # AddressSanitizer itself advises (-O1): unoptimized, the tree's
         # tests took forty times their development time, the check's long
         # pole.
-        target_compile_options(rawframe_policy INTERFACE -O1)
+        list(APPEND RAWFRAME_SANITIZER_OPTIONS -O1)
         # Coverage for the fuzz targets' guidance inside every module they
         # reach, not only their own files.
         if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-            target_compile_options(rawframe_policy INTERFACE -fsanitize=fuzzer-no-link)
+            list(APPEND RAWFRAME_SANITIZER_OPTIONS -fsanitize=fuzzer-no-link)
         endif()
+        target_compile_options(rawframe_policy INTERFACE ${RAWFRAME_SANITIZER_OPTIONS})
         target_link_options(rawframe_policy INTERFACE -fsanitize=address,undefined)
     elseif(RAWFRAME_SANITIZE STREQUAL "thread")
         target_compile_options(rawframe_policy INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
@@ -275,6 +279,19 @@ function(rawframe_test_program out target)
     else()
         set(${out} "$<TARGET_FILE:${target}>" PARENT_SCOPE)
     endif()
+endfunction()
+
+# Compiles vendored targets that parse outside input with the sanitizers
+# and fuzz coverage the modules have in the address sanitizer tree, and
+# none of the modules' warnings: the tests and fuzz targets that feed them
+# hostile bytes see their faults and search inside them too. Nothing
+# elsewhere.
+#
+#   rawframe_sanitize_vendored(rawframe_cgltf)
+function(rawframe_sanitize_vendored)
+    foreach(target IN LISTS ARGN)
+        target_compile_options(${target} PRIVATE ${RAWFRAME_SANITIZER_OPTIONS})
+    endforeach()
 endfunction()
 
 # Declares a coverage-guided fuzz target for one module's hostile input:
