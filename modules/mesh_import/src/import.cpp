@@ -316,11 +316,17 @@ result::Status gather(const cgltf_primitive& primitive,
     if (kVertices > limits.mesh.maximumVertices - kBase) {
         return overLimit("a mesh holds more vertices than its limits allow");
     }
+    const std::size_t kFirst = gathered.mesh.indices.size();
+    // An accessor with no buffer view reads as zeros, so its count has no
+    // bytes behind it: bound it before anything is made that size. Three or
+    // more indices make at least as many in any mode, and fewer make none.
+    if (primitive.indices != nullptr && primitive.indices->count > limits.mesh.maximumIndices - kFirst) {
+        return overLimit("a mesh holds more indices than its limits allow");
+    }
     RAWFRAME_TRY_ASSIGN(std::vector<std::uint32_t> order, triangles(primitive, kVertices));
     if (order.empty()) {
         return {};
     }
-    const std::size_t kFirst = gathered.mesh.indices.size();
     if (order.size() > limits.mesh.maximumIndices - kFirst) {
         return overLimit("a mesh holds more indices than its limits allow");
     }
