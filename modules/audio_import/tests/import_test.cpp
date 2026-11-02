@@ -139,6 +139,13 @@ RAWFRAME_TEST(ImportsAreRefusedPastLimitsAndWhenUnreadable) {
     page[26] = std::byte{0};
     empty.insert(empty.begin() + 58, page.begin(), page.end());
     RAWFRAME_EXPECT(badSound(importSound(empty)));
+    // tone.ogg's codebook 35 holds a delta of 1.0, packed with a 10-bit
+    // exponent; byte 3300 of the file holds its 128s bit. Set, the delta is
+    // 2^128, past what a float holds: it unpacks to infinity, and samples
+    // decoded through the book are not numbers. Refused, never imported.
+    std::vector<std::byte> overflowing = fixture("tone.ogg");
+    overflowing[3300] |= std::byte{1};
+    RAWFRAME_EXPECT(badSound(importSound(overflowing)));
     // A stream cut short decodes what it holds, or is refused; never more.
     for (const std::string_view kName : {"tone.ogg", "tone.mp3"}) {
         std::vector<std::byte> cut = fixture(kName);

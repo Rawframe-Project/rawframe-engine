@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <opus.h>
@@ -96,6 +97,15 @@ result::Result<audio::Clip> importSound(std::span<const std::byte> bytes, const 
     rawframe_release_decoded(&decoded);
     if (!kAdmitted) {
         return refuse("a source has one or two channels at 8 to 192 kHz");
+    }
+    // A damaged Vorbis codebook can unpack to infinity, and samples decoded
+    // through it are not numbers; nothing after import is made for them.
+    if (!std::ranges::all_of(clip.samples, [](float sample) {
+            return std::isfinite(sample);
+        })) {
+        return std::unexpected<result::Error>{refuse("the stream decodes to samples that are not finite")
+                                                  .error()
+                                                  .withContext("form", std::string{describe(*kForm)})};
     }
     // Decoders may overshoot full scale a little; the cooked form clips.
     return clip;
