@@ -5,7 +5,9 @@
 
 #include "decoders.h"
 
+#include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 // stb_vorbis sizes some allocations from a stream's headers, which a
 // damaged file can make absurd, and on some damaged streams leaves what it
@@ -96,6 +98,49 @@ enum {
     chunk_frames = 4096
 };
 
+// stb_vorbis allocates a stream's comment list at the count its comment
+// header declares, and when that allocation fails it walks the list it did
+// not get to free its entries. So the count is read here first, from the
+// stream's second packet as its pages' lacing makes it, and a stream whose
+// list would be larger than any allocation stb_vorbis is given is refused.
+// What cannot be read here is left to stb_vorbis, which refuses it.
+static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
+    size_t page = 0;
+    size_t packet = 0;
+    // The second packet's bytes so far: its type and "vorbis" (7), the
+    // vendor string's length (4), the vendor string, the comment count (4).
+    uint64_t at = 0;
+    uint32_t vendor = 0;
+    uint32_t count = 0;
+    while (page + 27 <= size && memcmp(bytes + page, "OggS", 4) == 0) {
+        const size_t segments = bytes[page + 26];
+        size_t data = page + 27 + segments;
+        if (data > size) {
+            return 1;
+        }
+        for (size_t segment = 0; segment < segments; ++segment) {
+            const size_t lacing = bytes[page + 27 + segment];
+            for (size_t index = 0; packet == 1 && index < lacing && data + index < size; ++index, ++at) {
+                const uint32_t byte = bytes[data + index];
+                if (at >= 7 && at < 11) {
+                    vendor |= byte << (8 * (at - 7));
+                } else if (at >= 11 && at - 11 >= vendor && at - 11 - vendor < 4) {
+                    count |= byte << (8 * (at - 11 - vendor));
+                    if (at - 11 - vendor == 3) {
+                        return (int32_t)count <= 0 || (uint64_t)count * sizeof(char*) <= largest_vorbis_allocation;
+                    }
+                }
+            }
+            data += lacing;
+            if (lacing < 255 && ++packet == 2) {
+                return 1;
+            }
+        }
+        page = data;
+    }
+    return 1;
+}
+
 enum rawframe_decode_result rawframe_decode_compressed(const void* bytes,
                                                        size_t size,
                                                        enum rawframe_compressed form,
@@ -107,6 +152,9 @@ enum rawframe_decode_result rawframe_decode_compressed(const void* bytes,
     // resampled here (resampling is the mixer's alone).
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 0, 0);
     config.encodingFormat = form == rawframe_compressed_vorbis ? ma_encoding_format_vorbis : ma_encoding_format_mp3;
+    if (form == rawframe_compressed_vorbis && !vorbis_comments_fit(bytes, size)) {
+        return rawframe_decode_unreadable;
+    }
     ma_decoder decoder;
     if (ma_decoder_init_memory(bytes, size, &config, &decoder) != MA_SUCCESS) {
         release_held();
