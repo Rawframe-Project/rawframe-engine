@@ -289,11 +289,28 @@ Bits latticeCodebook(std::uint32_t dimensions) {
     return book;
 }
 
+/// A codebook of two entries, one bit long and `length` bits long, with no
+/// lookup: codes 0 and 1 followed by `length` - 1 noughts, as read.
+Bits longCodebook(std::uint32_t length) {
+    Bits book;
+    book.put(0x564342, 24);
+    book.put(1, 16);
+    book.put(2, 24);
+    book.put(0, 1);
+    book.put(0, 1);
+    book.put(0, 5);
+    book.put(length - 1, 5);
+    book.put(0, 4);
+    return book;
+}
+
 /// A whole stream: tone.ogg's identification and comment packets, a setup
 /// of one floor, residue, mapping and mode that leave every channel unused,
 /// and eight audio packets of silence. Its first codebook, which nothing
-/// uses, is `first`.
-std::vector<std::byte> streamWithCodebook(const Bits& first) {
+/// uses, is `first`. Given `audio`, the floor instead has one partition
+/// whose one value is read through `first`, with Y values of 7 bits, and
+/// each audio packet is `audio`.
+std::vector<std::byte> streamWithCodebook(const Bits& first, const std::vector<std::byte>& audio = {}) {
     const std::vector<std::byte> kTone = fixture("tone.ogg");
     // The comment packet, first on tone.ogg's second page, at 58.
     constexpr std::size_t kSecond = 58;
@@ -320,11 +337,23 @@ std::vector<std::byte> streamWithCodebook(const Bits& first) {
     setup.put(0, 4);
     setup.put(0, 6); // one time domain transform
     setup.put(0, 16);
-    setup.put(0, 6); // one floor, of type 1, with no partitions
+    setup.put(0, 6); // one floor, of type 1
     setup.put(1, 16);
-    setup.put(0, 5);
-    setup.put(0, 2);
+    if (audio.empty()) {
+        setup.put(0, 5); // no partitions
+        setup.put(0, 2);
+    } else {
+        setup.put(1, 5); // one partition, of class 0
+        setup.put(0, 4);
+        setup.put(0, 3); // class 0: one value, no subclasses, read by book 0
+        setup.put(0, 2);
+        setup.put(1, 8);
+        setup.put(1, 2); // multiplier 2
+    }
     setup.put(1, 4);
+    if (!audio.empty()) {
+        setup.put(1, 1); // the partition's X
+    }
     setup.put(0, 6); // one residue, of type 0, over nothing
     setup.put(0, 16);
     setup.put(0, 24);
@@ -353,9 +382,14 @@ std::vector<std::byte> streamWithCodebook(const Bits& first) {
     const std::vector<std::byte> kFields = setup.bytes();
     setupPacket.insert(setupPacket.end(), kFields.begin(), kFields.end());
     std::vector<std::byte> out(kTone.begin(), kTone.begin() + kSecond);
-    for (const auto& kPage : {page(kTone, 0, 0, 1, {std::vector<std::byte>(kComment, kComment + length)}),
-                              page(kTone, 0, 0, 2, {setupPacket}),
-                              page(kTone, 4, 512, 3, std::vector<std::vector<std::byte>>(8, {std::byte{0}}))}) {
+    for (const auto& kPage :
+         {page(kTone, 0, 0, 1, {std::vector<std::byte>(kComment, kComment + length)}),
+          page(kTone, 0, 0, 2, {setupPacket}),
+          page(kTone,
+               4,
+               512,
+               3,
+               std::vector<std::vector<std::byte>>(8, audio.empty() ? std::vector<std::byte>{std::byte{0}} : audio))}) {
         out.insert(out.end(), kPage.begin(), kPage.end());
     }
     return out;
@@ -376,7 +410,7 @@ RAWFRAME_TEST(AVorbisSetupPastItsBudgetIsRefused) {
 RAWFRAME_TEST(AVorbisLatticeOfManyDimensionsImports) {
     // A lattice's value count is the largest whose power of the dimensions
     // is at most the entries; stb_vorbis works it in floats that, for 2
-    // entries over 64 dimensions or more, pass what an int holds before it
+    // entries over 31 dimensions or more, pass what an int holds before it
     // compares them. The count is still 1 and the stream imports;
     // UndefinedBehaviorSanitizer watches the way there in the full check.
     for (const std::uint32_t kDimensions : {2U, 31U, 64U, 65'535U}) {
@@ -394,6 +428,32 @@ RAWFRAME_TEST(AVorbisListPastWhatAnIntHoldsIsRefused) {
     const auto kSmall = importSound(streamWithCodebook(listCodebook(4, 2)));
     RAWFRAME_EXPECT(kSmall.has_value() && kSmall->channels == 2 && kSmall->frames() > 0);
     RAWFRAME_EXPECT(badSound(importSound(streamWithCodebook(listCodebook(16, 32'768)))));
+}
+
+RAWFRAME_TEST(AVorbisCodewordOf31BitsDecodes) {
+    // stb_vorbis takes codewords of up to 31 bits (it refuses 32) and finds
+    // one longer than its fast table in a small codebook by a linear search
+    // whose mask was worked in int, past what it holds at 31 bits. Each
+    // packet here reads the long codeword in the first channel's floor, from
+    // its seventeenth bit, so all of it is held when it is read; the second
+    // channel's floor is unused. The stream imports, and
+    // UndefinedBehaviorSanitizer watches the way there in the full check.
+    const auto kPacket = [](std::uint32_t length) {
+        Bits packet;
+        packet.put(0, 1); // audio
+        packet.put(1, 1); // the first channel's floor is used
+        packet.put(0, 7);
+        packet.put(0, 7);
+        packet.put(1, 1); // the long codeword
+        for (std::uint32_t bit = 1; bit < length; ++bit) {
+            packet.put(0, 1);
+        }
+        packet.put(0, 1); // the second channel's is not
+        return packet.bytes();
+    };
+    const auto kSound = importSound(streamWithCodebook(longCodebook(31), kPacket(31)));
+    RAWFRAME_EXPECT(kSound.has_value() && kSound->channels == 2 && kSound->frames() > 0);
+    RAWFRAME_EXPECT(badSound(importSound(streamWithCodebook(longCodebook(32), kPacket(32)))));
 }
 
 RAWFRAME_TEST(DamagedSourcesNeverDecodeOutOfBounds) {
