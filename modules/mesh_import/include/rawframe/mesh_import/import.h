@@ -12,7 +12,11 @@
 // - Triangles, triangle strips, and triangle fans, indexed or not; points
 //   and lines are refused.
 // - POSITION, and NORMAL and TEXCOORD_0 when every primitive has them;
-//   either missing anywhere is dropped everywhere. Sparse accessors.
+//   either missing anywhere is dropped everywhere. Sparse accessors, and
+//   accessors with no buffer view, which glTF reads as zeros.
+// - Indices only as a buffer view holds them: an index accessor with no
+//   buffer view, which glTF reads as zeros and so as triangles with no
+//   area, is refused, and so is a sparse one.
 // - Each primitive's material, glTF's metallic-roughness: the base
 //   color's factor and texture, the alpha mode and cutoff, the metallic and
 //   roughness factors and texture, occlusion from that texture's red (or
