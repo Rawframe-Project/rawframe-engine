@@ -21,9 +21,29 @@ work=$5
 
 rm -rf "$work"
 mkdir -p "$work"
-# A step that fails says where, with what the debugger and the server
-# said, so a failure seen only in a loaded check can be read.
-trap 'echo "failed at line $LINENO"; cat "$work"/replies "$work"/held 2>/dev/null; tail -40 "$work"/server.log 2>/dev/null' ERR
+# A step that fails says where, and any failing exit says what the
+# debugger and the server said, so a failure seen only in a loaded check
+# can be read. The exit's report is what a step that fails inside a
+# function gives: set -e ends the script there, and the ERR trap is not a
+# function's.
+# Both write to the script's own output, kept as descriptor 3: a step that
+# fails with its output sent to a file ends the script with that still so,
+# and a report written to it would land in the file.
+exec 3>&1
+running=
+ended() {
+    local status=$?
+    if [ "$status" -ne 0 ]; then
+        {
+            echo "failed (status $status)"
+            cat "$work"/replies "$work"/held 2>/dev/null
+            tail -40 "$work"/server.log 2>/dev/null
+        } >&3 2>&1
+    fi
+    [ -z "$running" ] || kill "$running" 2>/dev/null || true
+}
+trap 'echo "failed at line $LINENO" >&3' ERR
+trap ended EXIT
 port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/token"
 # What is asked of the stop is that it is clean, not how fast: under the
@@ -44,7 +64,6 @@ host.shutdown_budget_ms = 30000
 CONF
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 running=$!
-trap 'kill $running 2>/dev/null || true' EXIT
 for _ in $(seq 200); do
     [[ -s "$work/fingerprint" ]] && break
     sleep 0.1

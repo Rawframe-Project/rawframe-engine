@@ -21,9 +21,29 @@ native() {
 }
 rm -rf "$work"
 mkdir -p "$work"
-# A step that fails says where, with what the server and the author said,
-# so a failure seen only in a loaded check can be read.
-trap 'echo "failed at line $LINENO"; for each in "$work"/*; do [ -f "$each" ] && { echo "== $each"; tail -20 "$each"; }; done' ERR
+# A step that fails says where, and any failing exit says what the
+# server, the bot and the author said, so a failure seen only in a loaded
+# check can be read. The exit's report is what a step that fails inside a
+# function gives: set -e ends the script there, and the ERR trap is not a
+# function's.
+# Both write to the script's own output, kept as descriptor 3: a step that
+# fails with its output sent to a file ends the script with that still so,
+# and a report written to it would land in the file.
+exec 3>&1
+running=
+playing=
+ended() {
+    local status=$?
+    if [ "$status" -ne 0 ]; then
+        {
+            echo "failed (status $status)"
+            for each in "$work"/*; do [ -f "$each" ] && { echo "== $each"; tail -20 "$each"; }; done
+        } >&3 2>&1
+    fi
+    for each in $running $playing; do kill "$each" 2>/dev/null || true; done
+}
+trap 'echo "failed at line $LINENO" >&3' ERR
+trap ended EXIT
 work="$(native "$work")"
 port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 tooling=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
@@ -51,7 +71,6 @@ bots.endpoint = 127.0.0.1:$port
 CONF
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 running=$!
-trap 'kill $running ${playing:-} 2>/dev/null || true' EXIT
 for _ in $(seq 1200); do
     grep -q '"state":"active"' "$work/server.log" 2>/dev/null && break
     sleep 0.05
