@@ -395,6 +395,50 @@ RAWFRAME_TEST(WhatCannotBeReadIsRefused) {
     RAWFRAME_EXPECT(refusedWith(importText(unbacked, files), MeshError::OverLimit));
 }
 
+RAWFRAME_TEST(MisalignedAccessorsAreRefusedBeforeTheyAreRead) {
+    // glTF puts every accessor's data at a multiple of its component's size;
+    // one that is not would be read through a misaligned pointer.
+    Files files{.files = {{"triangle.bin", triangleBuffer()}}};
+    const auto kMisaligned = [&files](const std::string& text) {
+        const auto kImported = importText(text, files);
+        return refusedWith(kImported, MeshError::BadSource) &&
+               kImported.error().description().find("aligned") != std::string_view::npos;
+    };
+    const auto kChanged = [](std::string text, std::string_view from, std::string_view to) {
+        text.replace(text.find(from), from.size(), to);
+        return text;
+    };
+    const std::string kWhole = gltf({});
+    // Indices of 16 bits at an odd offset; floats at a stride of six bytes.
+    RAWFRAME_EXPECT(kMisaligned(kChanged(kWhole,
+                                         R"({"buffer": 0, "byteOffset": 96, "byteLength": 6})",
+                                         R"({"buffer": 0, "byteOffset": 97, "byteLength": 6})")));
+    RAWFRAME_EXPECT(kMisaligned(kChanged(kWhole,
+                                         R"({"buffer": 0, "byteOffset": 0, "byteLength": 96})",
+                                         R"({"buffer": 0, "byteOffset": 0, "byteLength": 96, "byteStride": 6})")));
+    // A sparse accessor's indices at an odd offset, and its values off a
+    // float's four bytes.
+    constexpr std::string_view kPositions = R"("min": [0, 0, 0], "max": [1, 1, 0]})";
+    RAWFRAME_EXPECT(kMisaligned(kChanged(kWhole,
+                                         kPositions,
+                                         R"("min": [0, 0, 0], "max": [1, 1, 0], "sparse": {"count": 1, )"
+                                         R"("indices": {"bufferView": 1, "byteOffset": 1, "componentType": 5123}, )"
+                                         R"("values": {"bufferView": 0}}})")));
+    RAWFRAME_EXPECT(kMisaligned(kChanged(kWhole,
+                                         kPositions,
+                                         R"("min": [0, 0, 0], "max": [1, 1, 0], "sparse": {"count": 1, )"
+                                         R"("indices": {"bufferView": 1, "componentType": 5123}, )"
+                                         R"("values": {"bufferView": 0, "byteOffset": 2}}})")));
+    // The same sparse accessor aligned imports.
+    RAWFRAME_EXPECT(importText(kChanged(kWhole,
+                                        kPositions,
+                                        R"("min": [0, 0, 0], "max": [1, 1, 0], "sparse": {"count": 1, )"
+                                        R"("indices": {"bufferView": 1, "componentType": 5123}, )"
+                                        R"("values": {"bufferView": 0, "byteOffset": 12}}})"),
+                               files)
+                        .has_value());
+}
+
 RAWFRAME_TEST(DamagedSourcesAreRefusedWithoutACrash) {
     const std::vector<std::byte> kBuffer = triangleBuffer();
     Shape binary;

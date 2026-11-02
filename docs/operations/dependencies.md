@@ -33,7 +33,7 @@ Every third-party library is vendored under `third_party/` at an exact revision 
 | Zstandard 1.5.7 | `facebook/zstd` | `f8745da6ff1ad1e7bab384bd1f9d742439278e99` | BSD-3-Clause | `lib/common`, `lib/compress`, `lib/decompress`, the two headers, `LICENSE` |
 | Wuffs 0.4.0-alpha.10 | `google/wuffs-mirror-release-c` | `7411f488fe2e2c205c3d3b3d28638b7356522930` | Apache-2.0 | `release/c/wuffs-v0.4.c`, the licenses; `wuffs.cpp` is the engine's |
 | bc7enc_rdo | `richgel999/bc7enc_rdo` | `b9438627eef73a1157e84201b6fa6eb2ffd6d9f0` | MIT | the encoder and decoder, `LICENSE` |
-| cgltf 1.15 | `jkuhlmann/cgltf` | `360db1a95480fe102ae9c69b27c5d101167ff5ba` | MIT | `cgltf.h`, `LICENSE`; `cgltf.c` is the engine's |
+| cgltf 1.15 | `jkuhlmann/cgltf` | `360db1a95480fe102ae9c69b27c5d101167ff5ba` | MIT | `cgltf.h`, `LICENSE`; `cgltf.c` and `rawframe_gltf_checks.c` and `.h` are the engine's |
 | CLDR 48.1.0 (JSON) | `unicode-org/cldr-json` | `d2988851207ba643d9ccc4c2e895e5ca1f4fbaf3` | Unicode-3.0 | the core supplements the localization tables are made from, every modern-coverage locale's `numbers.json`, `LICENSE` |
 | OpenXR SDK 1.1.63 | `KhronosGroup/OpenXR-SDK` | `f2448a8797c85814aa892efc1ab8707900fbcc78` | Apache-2.0 | the loader, its headers and jsoncpp, the licenses |
 

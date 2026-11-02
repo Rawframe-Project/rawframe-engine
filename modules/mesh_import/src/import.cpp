@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <rawframe_gltf_checks.h>
 #include <string>
 #include <vector>
 
@@ -421,6 +422,9 @@ result::Result<Imported> importGltf(std::span<const std::byte> source,
             return badSource("the glTF's buffer " + buffers.refused + " cannot be read whole");
         }
         return badSource("a glTF buffer that cannot be read");
+    }
+    if (rawframe_gltf_accessors_aligned(kData.get()) == 0) {
+        return badSource("an accessor whose data is not aligned to its component's size, as glTF requires");
     }
     if (cgltf_validate(kData.get()) != cgltf_result_success) {
         return badSource("a glTF whose accessors, views, or nodes are not consistent");
