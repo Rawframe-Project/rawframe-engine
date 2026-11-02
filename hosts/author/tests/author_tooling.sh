@@ -7,6 +7,7 @@
 #
 # usage: author_tooling.sh <rawframe-author> <rawframe-server> <repository> <work directory>
 set -euo pipefail
+source "$(dirname "$0")/tooling.sh"
 
 author=$1
 server=$2
@@ -43,6 +44,9 @@ for _ in $(seq 100); do
     [[ -s "$work/fingerprint" ]] && break
     sleep 0.1
 done
+# The hall placed before the World is read.
+await_tooling "$author" "127.0.0.1:$port" "$work/fingerprint" "$work/token" '{"kind":"tooling.status","id":1}' \
+    '"name":"runners.age","entities":1'
 
 {
     echo '{"kind":"tooling.status","id":1}'
