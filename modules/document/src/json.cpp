@@ -55,6 +55,33 @@ failAt(std::string_view text, std::size_t offset, DocumentError error, std::stri
                                               .withContext("column", std::to_string(kColumn))};
 }
 
+/// The length of the well-formed UTF-8 sequence at `at` in `text` that
+/// starts with a byte past ASCII, or nought.
+std::size_t sequenceLength(std::string_view text, std::size_t at) noexcept {
+    const auto kByte = [&](std::size_t offset) {
+        return at + offset < text.size() ? static_cast<std::uint8_t>(text[at + offset]) : std::uint8_t{0};
+    };
+    const auto kFollows = [&kByte](std::size_t offset) {
+        return (kByte(offset) & 0xC0U) == 0x80U;
+    };
+    const std::uint8_t kLead = kByte(0);
+    if (kLead >= 0xC2 && kLead <= 0xDF) {
+        return kFollows(1) ? 2 : 0;
+    }
+    if (kLead >= 0xE0 && kLead <= 0xEF) {
+        // No overlong forms, and no surrogates.
+        const std::uint8_t kSecond = kByte(1);
+        const bool kRange = kLead == 0xE0 ? kSecond >= 0xA0 : kLead == 0xED ? kSecond <= 0x9F : true;
+        return kFollows(1) && kFollows(2) && kRange ? 3 : 0;
+    }
+    if (kLead >= 0xF0 && kLead <= 0xF4) {
+        const std::uint8_t kSecond = kByte(1);
+        const bool kRange = kLead == 0xF0 ? kSecond >= 0x90 : kLead == 0xF4 ? kSecond <= 0x8F : true;
+        return kFollows(1) && kFollows(2) && kFollows(3) && kRange ? 4 : 0;
+    }
+    return 0;
+}
+
 /// Recursive descent over the text, one value at a time.
 class Reader {
 public:
@@ -281,30 +308,8 @@ private:
         }
     }
 
-    /// The length of the well-formed UTF-8 sequence at `at_`, or nought.
     [[nodiscard]] std::size_t utf8Length() const noexcept {
-        const auto kByte = [this](std::size_t offset) {
-            return at_ + offset < text_.size() ? static_cast<std::uint8_t>(text_[at_ + offset]) : std::uint8_t{0};
-        };
-        const auto kFollows = [&kByte](std::size_t offset) {
-            return (kByte(offset) & 0xC0U) == 0x80U;
-        };
-        const std::uint8_t kLead = kByte(0);
-        if (kLead >= 0xC2 && kLead <= 0xDF) {
-            return kFollows(1) ? 2 : 0;
-        }
-        if (kLead >= 0xE0 && kLead <= 0xEF) {
-            // No overlong forms, and no surrogates.
-            const std::uint8_t kSecond = kByte(1);
-            const bool kRange = kLead == 0xE0 ? kSecond >= 0xA0 : kLead == 0xED ? kSecond <= 0x9F : true;
-            return kFollows(1) && kFollows(2) && kRange ? 3 : 0;
-        }
-        if (kLead >= 0xF0 && kLead <= 0xF4) {
-            const std::uint8_t kSecond = kByte(1);
-            const bool kRange = kLead == 0xF0 ? kSecond >= 0x90 : kLead == 0xF4 ? kSecond <= 0x8F : true;
-            return kFollows(1) && kFollows(2) && kFollows(3) && kRange ? 4 : 0;
-        }
-        return 0;
+        return sequenceLength(text_, at_);
     }
 
     result::Result<std::string> readString() {
@@ -578,6 +583,21 @@ void Value::add(std::string name, Value value) {
 
 result::Result<Value> parse(std::string_view text, const ReadLimits& limits) {
     return Reader{text, limits}.document();
+}
+
+bool wellFormedUtf8(std::string_view text) noexcept {
+    for (std::size_t at = 0; at < text.size();) {
+        if (static_cast<std::uint8_t>(text[at]) < 0x80U) {
+            ++at;
+            continue;
+        }
+        const std::size_t kLength = sequenceLength(text, at);
+        if (kLength == 0) {
+            return false;
+        }
+        at += kLength;
+    }
+    return true;
 }
 
 std::string write(const Value& value) {

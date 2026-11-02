@@ -121,6 +121,9 @@ result::Status validate(const Skeleton& skeleton, const SkeletonLimits& limits) 
         if (bone.target == base::Bits128{} || bone.name.empty()) {
             return invalid("a bone has a target and a name");
         }
+        if (!document::wellFormedUtf8(bone.name)) {
+            return invalid("a bone's name is UTF-8");
+        }
         if (!finite(bone.bind.translation) || !unit(bone.bind.rotation) || !finite(bone.bind.scale)) {
             return invalid("a bone's bind pose is finite, with a unit rotation");
         }

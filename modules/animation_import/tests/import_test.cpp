@@ -212,6 +212,10 @@ RAWFRAME_TEST(RigsASkeletonCannotHoldAreRefused) {
             "", R"("extensionsRequired": ["KHR_animation_pointer"], "extensionsUsed": ["KHR_animation_pointer"],)")),
         AnimationError::UnsupportedExtension));
     RAWFRAME_EXPECT(refusedWith(imported("{\"asset\": 1"), AnimationError::BadSource));
+    // A joint's name that is not UTF-8: no skeleton document holds it.
+    std::string text = arm();
+    text.replace(text.find("shoulder"), std::string_view{"shoulder"}.size(), "s\x91oulder");
+    RAWFRAME_EXPECT(refusedWith(imported(text), AnimationError::SkeletonInvalid));
 }
 
 RAWFRAME_TEST(AJointsTargetIsItsBonesInTheSkinsOrder) {
