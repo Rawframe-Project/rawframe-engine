@@ -16,6 +16,7 @@
 #include <iterator>
 #include <numbers>
 #include <random>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -168,78 +169,149 @@ RAWFRAME_TEST(ACookedSoundReadsBack) {
 
 namespace {
 
-/// tone.ogg's identification and comment packets, then a setup packet of one
-/// codebook of 2^22 entries, every one 22 bits long: a whole Huffman tree,
-/// which stb_vorbis builds and sorts, written in a few bytes as an ordered
-/// codebook.
-std::vector<std::byte> withOneLargeCodebook() {
+/// Fields least significant bit first, as Vorbis packs them.
+struct Bits {
+    std::vector<bool> bits;
+
+    void put(std::uint32_t value, int count) {
+        for (int bit = 0; bit < count; ++bit) {
+            bits.push_back(((value >> bit) & 1U) != 0);
+        }
+    }
+    [[nodiscard]] std::vector<std::byte> bytes() const {
+        std::vector<std::byte> out;
+        for (std::size_t at = 0; at < bits.size(); at += 8) {
+            std::uint8_t value = 0;
+            for (std::size_t bit = 0; bit < 8 && at + bit < bits.size(); ++bit) {
+                value |= static_cast<std::uint8_t>(bits[at + bit] ? 1U << bit : 0U);
+            }
+            out.push_back(std::byte{value});
+        }
+        return out;
+    }
+};
+
+/// An Ogg page of tone.ogg's stream holding `packets`, each under 255 bytes.
+std::vector<std::byte> page(std::span<const std::byte> tone,
+                            std::uint8_t flags,
+                            std::uint64_t granule,
+                            std::uint32_t number,
+                            const std::vector<std::vector<std::byte>>& packets) {
+    std::vector<std::byte> out;
+    for (const char kLetter : std::string_view{"OggS"}) {
+        out.push_back(static_cast<std::byte>(kLetter));
+    }
+    out.push_back(std::byte{0});
+    out.push_back(std::byte{flags});
+    for (int shift = 0; shift < 64; shift += 8) {
+        out.push_back(static_cast<std::byte>((granule >> shift) & 0xFFU));
+    }
+    out.insert(out.end(), tone.begin() + 14, tone.begin() + 18);
+    for (int shift = 0; shift < 32; shift += 8) {
+        out.push_back(static_cast<std::byte>((number >> shift) & 0xFFU));
+    }
+    out.insert(out.end(), 4, std::byte{0}); // stb_vorbis reads no CRC from memory
+    out.push_back(static_cast<std::byte>(packets.size()));
+    for (const auto& kPacket : packets) {
+        out.push_back(static_cast<std::byte>(kPacket.size()));
+    }
+    for (const auto& kPacket : packets) {
+        out.insert(out.end(), kPacket.begin(), kPacket.end());
+    }
+    return out;
+}
+
+/// A whole stream: tone.ogg's identification and comment packets, a setup
+/// of one floor, residue, mapping and mode that leave every channel unused,
+/// and eight audio packets of silence. Its first codebook, which nothing
+/// uses, has 2^`entriesLog` entries, every one `entriesLog` bits long: a
+/// whole Huffman tree that stb_vorbis builds and sorts, written in a few
+/// bytes as an ordered codebook.
+std::vector<std::byte> streamWithCodebook(int entriesLog) {
     const std::vector<std::byte> kTone = fixture("tone.ogg");
-    // The comment packet alone on its page, which tone.ogg starts at 58.
+    // The comment packet, first on tone.ogg's second page, at 58.
     constexpr std::size_t kSecond = 58;
     const std::size_t kSegments = std::to_integer<std::size_t>(kTone[kSecond + 26]);
     std::size_t length = 0;
-    std::size_t lacing = 0;
-    while (lacing < kSegments) {
+    for (std::size_t lacing = 0; lacing < kSegments; ++lacing) {
         const std::size_t kValue = std::to_integer<std::size_t>(kTone[kSecond + 27 + lacing]);
         length += kValue;
-        ++lacing;
         if (kValue < 255) {
             break;
         }
     }
-    std::vector<std::byte> out(kTone.begin(), kTone.begin() + kSecond + 26);
-    out.push_back(static_cast<std::byte>(lacing));
-    out.insert(out.end(), kTone.begin() + kSecond + 27, kTone.begin() + kSecond + 27 + lacing);
     const auto kComment = kTone.begin() + kSecond + 27 + kSegments;
-    out.insert(out.end(), kComment, kComment + length);
-    // The setup packet, its fields least significant bit first.
-    std::vector<bool> bits;
-    const auto kPut = [&bits](std::uint32_t value, int count) {
-        for (int bit = 0; bit < count; ++bit) {
-            bits.push_back(((value >> bit) & 1U) != 0);
-        }
-    };
-    kPut(0, 8);          // one codebook
-    kPut(0x564342, 24);  // its sync pattern
-    kPut(1, 16);         // one dimension
-    kPut(1U << 22U, 24); // its entries
-    kPut(1, 1);          // ordered
-    kPut(21, 5);         // the first length, 22, less one
-    kPut(1U << 22U, 23); // that many entries at it
-    kPut(0, 4);          // no lookup
-    std::vector<std::byte> setup{
+    const std::uint32_t kEntries = 1U << entriesLog;
+    Bits setup;
+    setup.put(1, 8); // two codebooks
+    setup.put(0x564342, 24);
+    setup.put(1, 16);
+    setup.put(kEntries, 24);
+    setup.put(1, 1); // ordered
+    setup.put(entriesLog - 1, 5);
+    setup.put(kEntries, entriesLog + 1);
+    setup.put(0, 4); // no lookup
+    setup.put(0x564342, 24);
+    setup.put(1, 16);
+    setup.put(2, 24); // two entries of one bit, for the residue's classes
+    setup.put(0, 1);
+    setup.put(0, 1);
+    setup.put(0, 5);
+    setup.put(0, 5);
+    setup.put(0, 4);
+    setup.put(0, 6); // one time domain transform
+    setup.put(0, 16);
+    setup.put(0, 6); // one floor, of type 1, with no partitions
+    setup.put(1, 16);
+    setup.put(0, 5);
+    setup.put(0, 2);
+    setup.put(1, 4);
+    setup.put(0, 6); // one residue, of type 0, over nothing
+    setup.put(0, 16);
+    setup.put(0, 24);
+    setup.put(0, 24);
+    setup.put(0, 24);
+    setup.put(0, 6);
+    setup.put(1, 8);
+    setup.put(0, 3);
+    setup.put(0, 1);
+    setup.put(0, 6); // one mapping: one submap, no coupling
+    setup.put(0, 16);
+    setup.put(0, 1);
+    setup.put(0, 1);
+    setup.put(0, 2);
+    setup.put(0, 8);
+    setup.put(0, 8);
+    setup.put(0, 8);
+    setup.put(0, 6); // one mode: short blocks, mapping 0
+    setup.put(0, 1);
+    setup.put(0, 16);
+    setup.put(0, 16);
+    setup.put(0, 8);
+    setup.put(1, 1); // framing
+    std::vector<std::byte> setupPacket{
         std::byte{5}, std::byte{'v'}, std::byte{'o'}, std::byte{'r'}, std::byte{'b'}, std::byte{'i'}, std::byte{'s'}};
-    for (std::size_t at = 0; at < bits.size(); at += 8) {
-        std::uint8_t value = 0;
-        for (std::size_t bit = 0; bit < 8 && at + bit < bits.size(); ++bit) {
-            value |= static_cast<std::uint8_t>(bits[at + bit] ? 1U << bit : 0U);
-        }
-        setup.push_back(std::byte{value});
+    const std::vector<std::byte> kFields = setup.bytes();
+    setupPacket.insert(setupPacket.end(), kFields.begin(), kFields.end());
+    std::vector<std::byte> out(kTone.begin(), kTone.begin() + kSecond);
+    for (const auto& kPage : {page(kTone, 0, 0, 1, {std::vector<std::byte>(kComment, kComment + length)}),
+                              page(kTone, 0, 0, 2, {setupPacket}),
+                              page(kTone, 4, 512, 3, std::vector<std::vector<std::byte>>(8, {std::byte{0}}))}) {
+        out.insert(out.end(), kPage.begin(), kPage.end());
     }
-    // Its page: the capture pattern, version, flags, granule, the stream's
-    // serial, the page's number, an unchecked CRC, one segment.
-    for (const char kLetter : std::string_view{"OggS"}) {
-        out.push_back(static_cast<std::byte>(kLetter));
-    }
-    out.insert(out.end(), 10, std::byte{0});
-    out.insert(out.end(), kTone.begin() + 14, kTone.begin() + 18);
-    out.insert(out.end(), {std::byte{2}, std::byte{0}, std::byte{0}, std::byte{0}});
-    out.insert(out.end(), 4, std::byte{0});
-    out.push_back(std::byte{1});
-    out.push_back(static_cast<std::byte>(setup.size()));
-    out.insert(out.end(), setup.begin(), setup.end());
     return out;
 }
 
 } // namespace
 
 RAWFRAME_TEST(AVorbisSetupPastItsBudgetIsRefused) {
-    // A setup header of a few bytes asking for a codebook whose building
-    // takes far more than a real stream's setup: refused once what
-    // stb_vorbis holds would pass its budget, before it sorts the entries.
-    RAWFRAME_EXPECT(badSound(importSound(withOneLargeCodebook())));
-    // A real stream's setup is far inside it.
-    RAWFRAME_EXPECT(importSound(fixture("tone.ogg")).has_value());
+    // The same whole stream, its unused codebook small or of 2^22 entries:
+    // small, it imports; large, what stb_vorbis would hold to build it is
+    // past its budget, and the stream is refused before it is built. (With
+    // no budget, the large one imports too.)
+    const auto kSmall = importSound(streamWithCodebook(4));
+    RAWFRAME_EXPECT(kSmall.has_value() && kSmall->channels == 2 && kSmall->frames() > 0);
+    RAWFRAME_EXPECT(badSound(importSound(streamWithCodebook(22))));
 }
 
 RAWFRAME_TEST(DamagedSourcesNeverDecodeOutOfBounds) {
