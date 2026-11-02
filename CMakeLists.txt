@@ -87,6 +87,9 @@ add_subdirectory(third_party/opus)
 add_subdirectory(third_party/ots)
 add_subdirectory(third_party/wuffs)
 add_subdirectory(third_party/zstd)
+# The parsers of outside input among them, sanitized as the modules are.
+rawframe_sanitize_vendored(rawframe_cgltf rawframe_opus_vendor rawframe_ots rawframe_wuffs rawframe_zstd_common
+                           rawframe_zstd_decompress)
 include(third_party/quic.cmake)
 # Maul UI before Maul Window: both bring Maul Unicode, and Maul UI's needs
 # its HarfBuzz functions (third_party/maul_ui.cmake).
