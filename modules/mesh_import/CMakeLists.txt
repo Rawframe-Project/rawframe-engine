@@ -8,3 +8,4 @@ rawframe_module(NAME mesh_import
 target_link_libraries(rawframe_mesh_import PRIVATE rawframe_cgltf)
 
 rawframe_module_tests(NAME mesh_import SOURCES tests/import_test.cpp)
+rawframe_module_fuzz(NAME mesh_import TARGET import RUNS 20000 MAX_LEN 8192 SEEDS tests/seeds SOURCES tests/fuzz_import.cpp)
