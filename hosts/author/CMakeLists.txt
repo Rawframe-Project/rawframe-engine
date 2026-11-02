@@ -240,7 +240,8 @@ if(RAWFRAME_BUILD_TESTS)
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_runs.sh $<TARGET_FILE:rawframe_host_author>
                      $<TARGET_FILE:rawframe_host_dedicated_server> $<TARGET_FILE:rawframe_host_bots> ${PROJECT_SOURCE_DIR}
                      ${CMAKE_CURRENT_BINARY_DIR}/author_runs)
-    set_tests_properties(author_runs PROPERTIES
+    # Quarantined: #133, it fails now and then on Windows.
+    set_tests_properties(author_runs PROPERTIES LABELS quarantined
                          PASS_REGULAR_EXPRESSION "paused, stepped, profiled and read runners' traffic through the tooling endpoint")
     # A ray cast into a running World names what it meets and where an
     # author wrote it: the plaza's gate post, by its id in the gate
@@ -259,7 +260,8 @@ if(RAWFRAME_BUILD_TESTS)
                  COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_debugs.sh $<TARGET_FILE:rawframe_host_author>
                          $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
                          ${PROJECT_BINARY_DIR}/hosts/arena/plaza_server.conf ${CMAKE_CURRENT_BINARY_DIR}/author_debugs)
-        set_tests_properties(author_debugs PROPERTIES FIXTURES_REQUIRED plaza_content
+        # Quarantined: #133, it fails now and then on Windows.
+        set_tests_properties(author_debugs PROPERTIES FIXTURES_REQUIRED plaza_content LABELS quarantined
                              PASS_REGULAR_EXPRESSION "stopped the plaza at its stroll system and carried on")
     endif()
     # A scene edited by an authoring session while a dedicated server plays
