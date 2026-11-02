@@ -103,7 +103,11 @@ enum {
 // not get to free its entries. So the count is read here first, from the
 // stream's second packet as its pages' lacing makes it, and a stream whose
 // list would be larger than any allocation stb_vorbis is given is refused.
-// What cannot be read here is left to stb_vorbis, which refuses it.
+// Where stb_vorbis would read that packet's bytes differently, the stream
+// is refused too: a page of no segments, whose lacing it takes from the page
+// before, and a page carrying the packet on without saying it continues one,
+// past which it reads on. What cannot be read here at all is left to
+// stb_vorbis, which reads it as the end of the packet.
 static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
     size_t page = 0;
     size_t packet = 0;
@@ -117,6 +121,9 @@ static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
         size_t data = page + 27 + segments;
         if (data > size) {
             return 1;
+        }
+        if (packet == 1 && (segments == 0 || (at > 0 && (bytes[page + 5] & 1U) == 0))) {
+            return 0;
         }
         for (size_t segment = 0; segment < segments; ++segment) {
             const size_t lacing = bytes[page + 27 + segment];
