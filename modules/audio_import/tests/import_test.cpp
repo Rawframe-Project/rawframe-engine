@@ -103,6 +103,15 @@ RAWFRAME_TEST(ImportsAreRefusedPastLimitsAndWhenUnreadable) {
     RAWFRAME_EXPECT(badSound(importSound(fixture("tone.mp3"), {.maximumBytes = 100})));
     RAWFRAME_EXPECT(badSound(importSound(bytesOf("fLaC and more"))));
     RAWFRAME_EXPECT(badSound(importSound(bytesOf("OggS and nothing that follows"))));
+    // A comment header of two comments, the first too large to hold: the
+    // second is never read, and nothing it did not allocate is freed.
+    std::vector<std::byte> comments = fixture("tone.ogg");
+    constexpr std::size_t kCount = 166;
+    for (const auto& [kAt, kValue] :
+         {std::pair<std::size_t, std::uint8_t>{kCount, 2}, {kCount + 4, 0x00}, {kCount + 7, 0x10}}) {
+        comments[kAt] = std::byte{kValue};
+    }
+    RAWFRAME_EXPECT(badSound(importSound(comments)));
     // A stream cut short decodes what it holds, or is refused; never more.
     for (const std::string_view kName : {"tone.ogg", "tone.mp3"}) {
         std::vector<std::byte> cut = fixture(kName);
