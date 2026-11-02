@@ -26,3 +26,4 @@ if(TARGET rawframe_audio_import_tests)
     target_compile_definitions(rawframe_audio_import_tests PRIVATE
         RAWFRAME_AUDIO_IMPORT_DATA="${RAWFRAME_TEST_FILES}/modules/audio_import/tests/data/")
 endif()
+rawframe_module_fuzz(NAME audio_import TARGET import RUNS 10000 MAX_LEN 16384 SEEDS tests/seeds SOURCES tests/fuzz_import.cpp)
