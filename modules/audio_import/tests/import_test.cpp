@@ -221,13 +221,47 @@ std::vector<std::byte> page(std::span<const std::byte> tone,
     return out;
 }
 
+/// A codebook of 2^`entriesLog` entries, every one `entriesLog` bits long:
+/// a whole Huffman tree that stb_vorbis builds and sorts, written in a few
+/// bytes as an ordered codebook.
+Bits orderedCodebook(int entriesLog) {
+    const std::uint32_t kEntries = 1U << entriesLog;
+    Bits book;
+    book.put(0x564342, 24);
+    book.put(1, 16);
+    book.put(kEntries, 24);
+    book.put(1, 1); // ordered
+    book.put(entriesLog - 1, 5);
+    book.put(kEntries, entriesLog + 1);
+    book.put(0, 4); // no lookup
+    return book;
+}
+
+/// A codebook of two one-bit entries with a lattice lookup (type 1) of
+/// `dimensions` dimensions and one value per dimension, zero.
+Bits latticeCodebook(std::uint32_t dimensions) {
+    Bits book;
+    book.put(0x564342, 24);
+    book.put(dimensions, 16);
+    book.put(2, 24);
+    book.put(0, 1);
+    book.put(0, 1);
+    book.put(0, 5);
+    book.put(0, 5);
+    book.put(1, 4);  // lookup type 1
+    book.put(0, 32); // minimum
+    book.put(0, 32); // delta
+    book.put(0, 4);  // one bit per value
+    book.put(0, 1);
+    book.put(0, 1); // the one value
+    return book;
+}
+
 /// A whole stream: tone.ogg's identification and comment packets, a setup
 /// of one floor, residue, mapping and mode that leave every channel unused,
 /// and eight audio packets of silence. Its first codebook, which nothing
-/// uses, has 2^`entriesLog` entries, every one `entriesLog` bits long: a
-/// whole Huffman tree that stb_vorbis builds and sorts, written in a few
-/// bytes as an ordered codebook.
-std::vector<std::byte> streamWithCodebook(int entriesLog) {
+/// uses, is `first`.
+std::vector<std::byte> streamWithCodebook(const Bits& first) {
     const std::vector<std::byte> kTone = fixture("tone.ogg");
     // The comment packet, first on tone.ogg's second page, at 58.
     constexpr std::size_t kSecond = 58;
@@ -241,16 +275,9 @@ std::vector<std::byte> streamWithCodebook(int entriesLog) {
         }
     }
     const auto kComment = kTone.begin() + kSecond + 27 + kSegments;
-    const std::uint32_t kEntries = 1U << entriesLog;
     Bits setup;
     setup.put(1, 8); // two codebooks
-    setup.put(0x564342, 24);
-    setup.put(1, 16);
-    setup.put(kEntries, 24);
-    setup.put(1, 1); // ordered
-    setup.put(entriesLog - 1, 5);
-    setup.put(kEntries, entriesLog + 1);
-    setup.put(0, 4); // no lookup
+    setup.bits.insert(setup.bits.end(), first.bits.begin(), first.bits.end());
     setup.put(0x564342, 24);
     setup.put(1, 16);
     setup.put(2, 24); // two entries of one bit, for the residue's classes
@@ -309,9 +336,21 @@ RAWFRAME_TEST(AVorbisSetupPastItsBudgetIsRefused) {
     // small, it imports; large, what stb_vorbis would hold to build it is
     // past its budget, and the stream is refused before it is built. (With
     // no budget, the large one imports too.)
-    const auto kSmall = importSound(streamWithCodebook(4));
+    const auto kSmall = importSound(streamWithCodebook(orderedCodebook(4)));
     RAWFRAME_EXPECT(kSmall.has_value() && kSmall->channels == 2 && kSmall->frames() > 0);
-    RAWFRAME_EXPECT(badSound(importSound(streamWithCodebook(22))));
+    RAWFRAME_EXPECT(badSound(importSound(streamWithCodebook(orderedCodebook(22)))));
+}
+
+RAWFRAME_TEST(AVorbisLatticeOfManyDimensionsImports) {
+    // A lattice's value count is the largest whose power of the dimensions
+    // is at most the entries; stb_vorbis works it in floats that, for 2
+    // entries over 64 dimensions or more, pass what an int holds before it
+    // compares them. The count is still 1 and the stream imports;
+    // UndefinedBehaviorSanitizer watches the way there in the full check.
+    for (const std::uint32_t kDimensions : {2U, 31U, 64U, 65'535U}) {
+        const auto kSound = importSound(streamWithCodebook(latticeCodebook(kDimensions)));
+        RAWFRAME_EXPECT(kSound.has_value() && kSound->channels == 2 && kSound->frames() > 0);
+    }
 }
 
 RAWFRAME_TEST(DamagedSourcesNeverDecodeOutOfBounds) {
