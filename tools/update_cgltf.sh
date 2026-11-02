@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Replaces third_party/cgltf with cgltf's parser header and LICENSE of one
 # exact revision, taken from a checkout's object store, never from its
-# working tree. The build file and the implementation unit beside them are
-# ours and are kept.
+# working tree. The build file, the implementation unit and Rawframe's own
+# checks beside them are ours and are kept.
 #
 #   tools/update_cgltf.sh <checkout> <revision>
 #
@@ -16,7 +16,7 @@ revision="$(git -C "$checkout" rev-parse --verify "$2^{commit}")"
 target="third_party/cgltf"
 
 keep="$(mktemp -d)"
-for ours in CMakeLists.txt cgltf.c; do
+for ours in CMakeLists.txt cgltf.c rawframe_gltf_checks.c rawframe_gltf_checks.h; do
     if [[ -f "$target/$ours" ]]; then
         cp "$target/$ours" "$keep/$ours"
     fi

@@ -212,6 +212,14 @@ RAWFRAME_TEST(RigsASkeletonCannotHoldAreRefused) {
             "", R"("extensionsRequired": ["KHR_animation_pointer"], "extensionsUsed": ["KHR_animation_pointer"],)")),
         AnimationError::UnsupportedExtension));
     RAWFRAME_EXPECT(refusedWith(imported("{\"asset\": 1"), AnimationError::BadSource));
+    // Key times off a float's four bytes, which would be read misaligned.
+    std::string misaligned = arm();
+    constexpr std::string_view kTimes = R"({"bufferView": 0, "componentType": 5126)";
+    misaligned.replace(
+        misaligned.find(kTimes), kTimes.size(), R"({"bufferView": 0, "byteOffset": 2, "componentType": 5126)");
+    const auto kMisaligned = imported(misaligned);
+    RAWFRAME_EXPECT(refusedWith(kMisaligned, AnimationError::BadSource) &&
+                    kMisaligned.error().description().find("aligned") != std::string_view::npos);
     // A joint's name that is not UTF-8: no skeleton document holds it.
     std::string text = arm();
     text.replace(text.find("shoulder"), std::string_view{"shoulder"}.size(), "s\x91oulder");
