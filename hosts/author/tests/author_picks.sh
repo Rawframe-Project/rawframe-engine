@@ -8,6 +8,7 @@
 # usage: author_picks.sh <rawframe-author> <rawframe-server> <repository>
 #                        <content settings> <work directory>
 set -euo pipefail
+source "$(dirname "$0")/tooling.sh"
 
 author=$1
 server=$2
@@ -40,15 +41,9 @@ for _ in $(seq 200); do
     [[ -s "$work/fingerprint" ]] && break
     sleep 0.1
 done
-# The endpoint answers before the World has placed the plaza's scenes: the
-# first pick is asked again, on a connection of its own, until it meets the
-# gate post or five seconds pass (the server runs for ten).
-for _ in $(seq 50); do
-    echo '{"kind":"tooling.pick","id":1,"origin":[-30,2.5,-20],"toward":[0,0,-20]}' |
-        "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" 2>/dev/null |
-        grep -q '"id":1,"answer":{"kind":"tooling.picked","entity":"' && break
-    sleep 0.1
-done
+# The gate post placed before it is picked (the server runs for ten seconds).
+await_tooling "$author" "127.0.0.1:$port" "$work/fingerprint" "$work/token" \
+    '{"kind":"tooling.pick","id":1,"origin":[-30,2.5,-20],"toward":[0,0,-20]}' '"tooling.picked","entity":"'
 
 {
     echo '{"kind":"tooling.pick","id":1,"origin":[-30,2.5,-20],"toward":[0,0,-20]}'

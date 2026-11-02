@@ -8,6 +8,7 @@
 #
 # usage: author_live.sh <rawframe-author> <rawframe-server> <repository> <work directory>
 set -euo pipefail
+source "$(dirname "$0")/tooling.sh"
 
 author=$1
 server=$2
@@ -48,6 +49,9 @@ for _ in $(seq 100); do
     [[ -s "$work/fingerprint" ]] && break
     sleep 0.1
 done
+# The level placed before its poses are counted.
+await_tooling "$author" "127.0.0.1:$port" "$work/fingerprint" "$work/token" '{"kind":"tooling.status","id":1}' \
+    '"name":"rawframe.physics2d.pose","entities":[1-9]'
 
 # How many entities hold a pose now.
 poses() {
