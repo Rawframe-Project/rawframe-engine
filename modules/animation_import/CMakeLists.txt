@@ -9,3 +9,4 @@ rawframe_module(NAME animation_import
 target_link_libraries(rawframe_animation_import PRIVATE rawframe_cgltf)
 
 rawframe_module_tests(NAME animation_import SOURCES tests/import_test.cpp)
+rawframe_module_fuzz(NAME animation_import TARGET import RUNS 20000 MAX_LEN 8192 SEEDS tests/seeds SOURCES tests/fuzz_import.cpp)
