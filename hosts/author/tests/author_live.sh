@@ -49,9 +49,10 @@ for _ in $(seq 100); do
     [[ -s "$work/fingerprint" ]] && break
     sleep 0.1
 done
-# The level placed before its poses are counted.
+# The whole level placed before its poses are counted: runners' level holds
+# nine, and a level placed over more than one tick would show fewer first.
 await_tooling "$author" "127.0.0.1:$port" "$work/fingerprint" "$work/token" '{"kind":"tooling.status","id":1}' \
-    '"name":"rawframe.physics2d.pose","entities":[1-9]'
+    '"name":"rawframe.physics2d.pose","entities":9[,}]'
 
 # How many entities hold a pose now.
 poses() {
