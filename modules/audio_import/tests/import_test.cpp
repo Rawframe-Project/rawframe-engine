@@ -112,6 +112,31 @@ RAWFRAME_TEST(ImportsAreRefusedPastLimitsAndWhenUnreadable) {
         comments[kAt] = std::byte{kValue};
     }
     RAWFRAME_EXPECT(badSound(importSound(comments)));
+    // Comment counts whose list stb_vorbis could not hold, refused before it
+    // reads one: 0x01000001 asks for a list past every allocation it is
+    // given, which it would walk while null; 0x20000001's list size wraps
+    // in its int to eight bytes, past which it would write.
+    for (const std::uint8_t kHighest : {0x01, 0x20}) {
+        std::vector<std::byte> crowded = fixture("tone.ogg");
+        crowded[kCount + 3] = std::byte{kHighest};
+        RAWFRAME_EXPECT(badSound(importSound(crowded)));
+    }
+    // A comment header cut inside its count, whose missing byte stb_vorbis
+    // reads from memory as zero: 0x00FFFFFF comments, refused.
+    std::vector<std::byte> shortCount = fixture("tone.ogg");
+    for (std::size_t at = kCount; at < kCount + 3; ++at) {
+        shortCount[at] = std::byte{0xFF};
+    }
+    shortCount.resize(kCount + 3);
+    RAWFRAME_EXPECT(badSound(importSound(shortCount)));
+    // A page of no segments where the comment header begins, which stb_vorbis
+    // would read with the page before's lacing: refused, not read two ways.
+    std::vector<std::byte> empty = fixture("tone.ogg");
+    std::vector<std::byte> page(empty.begin(), empty.begin() + 27);
+    page[5] = std::byte{0};
+    page[26] = std::byte{0};
+    empty.insert(empty.begin() + 58, page.begin(), page.end());
+    RAWFRAME_EXPECT(badSound(importSound(empty)));
     // A stream cut short decodes what it holds, or is refused; never more.
     for (const std::string_view kName : {"tone.ogg", "tone.mp3"}) {
         std::vector<std::byte> cut = fixture(kName);
