@@ -13,6 +13,11 @@
 // fails as if memory were out, which it handles, and every allocation is
 // held until the decode ends, when what is left is freed. (stb_vorbis's
 // whole-file helpers, which reallocate, are not used here.)
+//
+// Where an allocation fails partway through filling a list of
+// allocations, as its comment header's can, stb_vorbis frees every entry of
+// the list, filled or not. So what it allocates starts zeroed, an entry it
+// never filled is null, and only a pointer handed out here is freed.
 enum {
     largest_vorbis_allocation = 64 * 1024 * 1024
 };
@@ -34,7 +39,7 @@ static void* held_malloc(size_t size) {
         held = larger;
         held_capacity = grown;
     }
-    void* const made = malloc(size);
+    void* const made = calloc(1, size);
     if (made != NULL) {
         held[held_count++] = made;
     }
@@ -45,10 +50,10 @@ static void held_free(void* pointer) {
     for (size_t index = 0; index < held_count; ++index) {
         if (held[index] == pointer) {
             held[index] = held[--held_count];
-            break;
+            free(pointer);
+            return;
         }
     }
-    free(pointer);
 }
 
 static void release_held(void) {
