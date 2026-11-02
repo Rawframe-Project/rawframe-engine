@@ -121,6 +121,14 @@ RAWFRAME_TEST(ImportsAreRefusedPastLimitsAndWhenUnreadable) {
         crowded[kCount + 3] = std::byte{kHighest};
         RAWFRAME_EXPECT(badSound(importSound(crowded)));
     }
+    // A comment header cut inside its count, whose missing byte stb_vorbis
+    // reads from memory as zero: 0x00FFFFFF comments, refused.
+    std::vector<std::byte> shortCount = fixture("tone.ogg");
+    for (std::size_t at = kCount; at < kCount + 3; ++at) {
+        shortCount[at] = std::byte{0xFF};
+    }
+    shortCount.resize(kCount + 3);
+    RAWFRAME_EXPECT(badSound(importSound(shortCount)));
     // A page of no segments where the comment header begins, which stb_vorbis
     // would read with the page before's lacing: refused, not read two ways.
     std::vector<std::byte> empty = fixture("tone.ogg");

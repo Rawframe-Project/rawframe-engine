@@ -106,8 +106,10 @@ enum {
 // Where stb_vorbis would read that packet's bytes differently, the stream
 // is refused too: a page of no segments, whose lacing it takes from the page
 // before, and a page carrying the packet on without saying it continues one,
-// past which it reads on. What cannot be read here at all is left to
-// stb_vorbis, which reads it as the end of the packet.
+// past which it reads on. So is a comment header cut before its count's
+// last byte: from memory, stb_vorbis reads past the end as zeros, which
+// makes a count of what is there. What is not the comment header at all is
+// left to stb_vorbis, which refuses it.
 static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
     size_t page = 0;
     size_t packet = 0;
@@ -120,7 +122,7 @@ static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
         const size_t segments = bytes[page + 26];
         size_t data = page + 27 + segments;
         if (data > size) {
-            return 1;
+            return packet != 1;
         }
         if (packet == 1 && (segments == 0 || (at > 0 && (bytes[page + 5] & 1U) == 0))) {
             return 0;
@@ -138,6 +140,11 @@ static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
                     }
                 }
             }
+            // A segment cut short ends the data, not the packet its lacing
+            // says it ends.
+            if (packet == 1 && data + lacing > size) {
+                return 0;
+            }
             data += lacing;
             if (lacing < 255 && ++packet == 2) {
                 return 1;
@@ -145,7 +152,7 @@ static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
         }
         page = data;
     }
-    return 1;
+    return packet != 1;
 }
 
 enum rawframe_decode_result rawframe_decode_compressed(const void* bytes,
