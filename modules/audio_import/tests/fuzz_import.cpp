@@ -12,12 +12,15 @@
 #include <cmath>
 #include <cstdlib>
 #include <span>
+#include <vector>
 
 using namespace rawframe;
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(data), size};
-    constexpr audio::DecodeLimits kLimits{.maximumBytes = 1U << 16U, .maximumFrames = 48'000};
+    // The limits the engine ships, so the later packets of a stream are
+    // decoded as an author's file would be.
+    constexpr audio::DecodeLimits kLimits{};
     const auto kClip = audio_import::importSound(kBytes, kLimits);
     if (!kClip.has_value()) {
         return 0;
@@ -29,10 +32,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         })) {
         std::abort();
     }
-    // The cooked form is larger than a compressed source: read it back under
-    // room for the most frames the source may give.
-    const auto kCooked = audio::decodeWav(audio_import::cook(*kClip),
-                                          {.maximumBytes = 1U << 20U, .maximumFrames = kLimits.maximumFrames});
+    // The cooked form read back under limits of what it holds exactly.
+    const std::vector<std::byte> kWave = audio_import::cook(*kClip);
+    const auto kCooked = audio::decodeWav(kWave, {.maximumBytes = kWave.size(), .maximumFrames = kClip->frames()});
     if (!kCooked.has_value() || kCooked->channels != kClip->channels || kCooked->rate != kClip->rate ||
         kCooked->frames() != kClip->frames()) {
         std::abort();
