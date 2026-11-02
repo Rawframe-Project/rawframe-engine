@@ -289,16 +289,25 @@ endfunction()
 #
 #   rawframe_sanitize_vendored(rawframe_cgltf)
 #
-# One check stays off for them: UndefinedBehaviorSanitizer's vptr check,
-# which needs every class's type information. The modules build without
-# RTTI (which turns the check off for them), so a class a module derives
-# from a vendored base and hands to it carries none, and the check reports
-# every call through it as on an object of the wrong type.
+# Two checks stay off for them. UndefinedBehaviorSanitizer's vptr check
+# needs every class's type information. The modules build without RTTI
+# (which turns the check off for them), so a class a module derives from a
+# vendored base and hands to it carries none, and the check reports every
+# call through it as on an object of the wrong type. Its function check
+# (Clang's alone, so only where the compiler takes it) reports a call
+# through a pointer of another function type, which Wuffs's interfaces
+# make by design: each decoder's methods are called through one table of
+# generic pointers.
+include(CheckCCompilerFlag)
+check_c_compiler_flag(-fno-sanitize=function RAWFRAME_HAS_SANITIZE_FUNCTION)
 function(rawframe_sanitize_vendored)
     foreach(target IN LISTS ARGN)
         target_compile_options(${target} PRIVATE ${RAWFRAME_SANITIZER_OPTIONS})
         if(RAWFRAME_SANITIZER_OPTIONS)
             target_compile_options(${target} PRIVATE -fno-sanitize=vptr)
+            if(RAWFRAME_HAS_SANITIZE_FUNCTION)
+                target_compile_options(${target} PRIVATE -fno-sanitize=function)
+            endif()
         endif()
     endforeach()
 endfunction()
