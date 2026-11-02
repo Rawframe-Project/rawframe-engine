@@ -11,30 +11,40 @@
 
 // stb_vorbis sizes some allocations from a stream's headers, which a
 // damaged file can make absurd, and on some damaged streams leaves what it
-// allocated behind. Within its implementation every allocation past a bound
-// fails as if memory were out, which it handles, and every allocation is
-// held until the decode ends, when what is left is freed. (stb_vorbis's
-// whole-file helpers, which reallocate, are not used here.)
+// allocated behind. Within its implementation an allocation that would take
+// what it holds at once past a budget fails as if memory were out, which it
+// handles, and every allocation is held until the decode ends, when what is
+// left is freed. (stb_vorbis's whole-file helpers, which reallocate, are not
+// used here.) The budget bounds the work too: a setup header of a few
+// damaged bytes can declare codebooks of millions of entries, each of which
+// it builds and sorts, and each costs bytes. A real stream's setup takes a
+// few hundred kilobytes (tone.ogg's, 202,304 bytes in all).
 //
 // Where an allocation fails partway through filling a list of
 // allocations, as its comment header's can, stb_vorbis frees every entry of
 // the list, filled or not. So what it allocates starts zeroed, an entry it
 // never filled is null, and only a pointer handed out here is freed.
 enum {
-    largest_vorbis_allocation = 64 * 1024 * 1024
+    vorbis_budget = 16 * 1024 * 1024
 };
 
-static _Thread_local void** held = NULL;
+struct held_block {
+    void* pointer;
+    size_t size;
+};
+
+static _Thread_local struct held_block* held = NULL;
 static _Thread_local size_t held_count = 0;
 static _Thread_local size_t held_capacity = 0;
+static _Thread_local size_t held_bytes = 0;
 
 static void* held_malloc(size_t size) {
-    if (size > largest_vorbis_allocation) {
+    if (size > vorbis_budget - held_bytes) {
         return NULL;
     }
     if (held_count == held_capacity) {
         const size_t grown = held_capacity == 0 ? 64 : held_capacity * 2;
-        void** const larger = realloc(held, grown * sizeof(void*));
+        struct held_block* const larger = realloc(held, grown * sizeof(struct held_block));
         if (larger == NULL) {
             return NULL;
         }
@@ -43,14 +53,16 @@ static void* held_malloc(size_t size) {
     }
     void* const made = calloc(1, size);
     if (made != NULL) {
-        held[held_count++] = made;
+        held[held_count++] = (struct held_block){made, size};
+        held_bytes += size;
     }
     return made;
 }
 
 static void held_free(void* pointer) {
     for (size_t index = 0; index < held_count; ++index) {
-        if (held[index] == pointer) {
+        if (held[index].pointer == pointer) {
+            held_bytes -= held[index].size;
             held[index] = held[--held_count];
             free(pointer);
             return;
@@ -60,12 +72,13 @@ static void held_free(void* pointer) {
 
 static void release_held(void) {
     for (size_t index = 0; index < held_count; ++index) {
-        free(held[index]);
+        free(held[index].pointer);
     }
     free(held);
     held = NULL;
     held_count = 0;
     held_capacity = 0;
+    held_bytes = 0;
 }
 
 #define MA_API static
@@ -101,8 +114,10 @@ enum {
 // stb_vorbis allocates a stream's comment list at the count its comment
 // header declares, and when that allocation fails it walks the list it did
 // not get to free its entries. So the count is read here first, from the
-// stream's second packet as its pages' lacing makes it, and a stream whose
-// list would be larger than any allocation stb_vorbis is given is refused.
+// stream's second packet as its pages' lacing makes it, and a stream is
+// refused unless the budget holds the list beside what stb_vorbis holds
+// before it: itself and the vendor string, each rounded up to eight bytes
+// as it rounds them.
 // Where stb_vorbis would read that packet's bytes differently, the stream
 // is refused too: a page of no segments, whose lacing it takes from the page
 // before, and a page carrying the packet on without saying it continues one,
@@ -136,7 +151,9 @@ static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
                 } else if (at >= 11 && at - 11 >= vendor && at - 11 - vendor < 4) {
                     count |= byte << (8 * (at - 11 - vendor));
                     if (at - 11 - vendor == 3) {
-                        return (int32_t)count <= 0 || (uint64_t)count * sizeof(char*) <= largest_vorbis_allocation;
+                        const uint64_t held_before = (((uint64_t)sizeof(stb_vorbis) + 7) & ~(uint64_t)7) +
+                                                     (((uint64_t)vendor + 1 + 7) & ~(uint64_t)7);
+                        return (int32_t)count <= 0 || held_before + (uint64_t)count * sizeof(char*) <= vorbis_budget;
                     }
                 }
             }
