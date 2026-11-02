@@ -93,6 +93,13 @@ struct ReadLimits {
 /// Any whitespace JSON allows is read.
 [[nodiscard]] result::Result<Value> parse(std::string_view text, const ReadLimits& limits = {});
 
+/// Whether `text` is UTF-8 as `parse` takes it in a string: well formed,
+/// with no overlong form and no surrogate. `write` writes a string's
+/// bytes as they are, so a document holding one that is not is text
+/// `parse` refuses; a writer that must be read back checks its strings
+/// with this first.
+[[nodiscard]] bool wellFormedUtf8(std::string_view text) noexcept;
+
 /// The profile's bytes: two spaces of indentation, one member or item a line,
 /// one space after a colon, empty objects and arrays inline, strings escaped
 /// only where JSON requires (`\"`, `\\`, `\b`, `\f`, `\n`, `\r`, `\t`, and

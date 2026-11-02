@@ -124,13 +124,25 @@ RAWFRAME_TEST(ASkeletonOutOfItsRulesIsRefused) {
     noTarget.bones[1].target = {};
     Skeleton unnamed = rig();
     unnamed.bones[1].name.clear();
+    // Not UTF-8: written, it would be text the reader refuses.
+    Skeleton notText = rig();
+    notText.bones[1].name = "s\x91oulder";
     Skeleton notUnit = rig();
     notUnit.bones[2].bind.rotation = {0.0, 1.0, 0.0, 1.0};
     Skeleton notFinite = rig();
     notFinite.bones[0].bind.translation[1] = std::numeric_limits<double>::infinity();
     Skeleton nothing;
-    for (const Skeleton& kSkeleton :
-         {twoRoots, childFirst, ownParent, rootWithParent, twice, noTarget, unnamed, notUnit, notFinite, nothing}) {
+    for (const Skeleton& kSkeleton : {twoRoots,
+                                      childFirst,
+                                      ownParent,
+                                      rootWithParent,
+                                      twice,
+                                      noTarget,
+                                      unnamed,
+                                      notText,
+                                      notUnit,
+                                      notFinite,
+                                      nothing}) {
         RAWFRAME_EXPECT(refusedWith(writeSkeleton(kSkeleton), AnimationError::SkeletonInvalid));
     }
     RAWFRAME_EXPECT(refusedWith(writeSkeleton(rig(), {.maximumBones = 2}), AnimationError::OverLimit));

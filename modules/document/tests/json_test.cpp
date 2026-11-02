@@ -166,6 +166,37 @@ RAWFRAME_TEST(MalformedTextIsRefused) {
     RAWFRAME_EXPECT(!kDuplicate.has_value() && lineOf(kDuplicate.error()) == 2);
 }
 
+RAWFRAME_TEST(WellFormedUtf8IsWhatAStringReads) {
+    // What a string may hold is what a string written with it reads back as.
+    for (const std::string_view kText : {
+             std::string_view{""},
+             std::string_view{"plain"},
+             std::string_view{"\x01 and \x7F"},
+             std::string_view{"\xC3\xA9"},
+             std::string_view{"\xE2\x82\xAC"},
+             std::string_view{"\xED\x9F\xBF"},
+             std::string_view{"\xF0\x9F\x98\x80"},
+             std::string_view{"\xF4\x8F\xBF\xBF"},
+         }) {
+        RAWFRAME_EXPECT(wellFormedUtf8(kText));
+        const auto kRead = parse(write(Value::string(std::string{kText})));
+        RAWFRAME_EXPECT(kRead.has_value() && kRead->text() != nullptr && *kRead->text() == kText);
+    }
+    for (const std::string_view kText : {
+             std::string_view{"s\x91oulder"},
+             std::string_view{"\xC0\x80"},
+             std::string_view{"\xC3"},
+             std::string_view{"\xED\xA0\x80"},
+             std::string_view{"\xE2\x82"},
+             std::string_view{"\xF4\x90\x80\x80"},
+             std::string_view{"\xF5\x80\x80\x80"},
+             std::string_view{"\xFF"},
+         }) {
+        RAWFRAME_EXPECT(!wellFormedUtf8(kText));
+        RAWFRAME_EXPECT(refused(write(Value::string(std::string{kText})), DocumentError::Malformed));
+    }
+}
+
 RAWFRAME_TEST(ReadersHaveBounds) {
     const auto kNested = [](int levels) {
         return std::string(static_cast<std::size_t>(levels), '[') + std::string(static_cast<std::size_t>(levels), ']');
