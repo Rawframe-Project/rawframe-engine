@@ -31,8 +31,9 @@ enum class SourceForm : std::uint8_t {
 
 /// Decodes a source of an admitted form into a clip at its own rate:
 /// nothing is resampled or mixed down. Refuses (`BadSound`) a form not
-/// admitted, a stream it cannot read, more than two channels, a rate
-/// outside 8 to 192 kHz, and anything past the limits.
+/// admitted, a stream it cannot read or that decodes to samples that are
+/// not finite, more than two channels, a rate outside 8 to 192 kHz, and
+/// anything past the limits.
 [[nodiscard]] result::Result<audio::Clip> importSound(std::span<const std::byte> bytes,
                                                       const audio::DecodeLimits& limits = {});
 
