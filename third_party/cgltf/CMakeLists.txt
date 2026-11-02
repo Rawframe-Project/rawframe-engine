@@ -1,8 +1,9 @@
 # cgltf, vendored at the exact revision recorded in third_party/README.md.
-# This file and cgltf.c are ours; everything else in this directory is
-# cgltf's own, unchanged. ADR-0058: glTF is decoded in import tooling only,
+# This file, cgltf.c and rawframe_gltf_checks (the checks Rawframe makes
+# of a glTF that cgltf does not) are ours; everything else in this directory
+# is cgltf's own, unchanged. ADR-0058: glTF is decoded in import tooling only,
 # so only the cook links this, and no runtime closure does.
-add_library(rawframe_cgltf STATIC ${CMAKE_CURRENT_SOURCE_DIR}/cgltf.c)
+add_library(rawframe_cgltf STATIC ${CMAKE_CURRENT_SOURCE_DIR}/cgltf.c ${CMAKE_CURRENT_SOURCE_DIR}/rawframe_gltf_checks.c)
 target_include_directories(rawframe_cgltf SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # Upstream's code, upstream's warnings: none of ours applies.
 target_compile_options(rawframe_cgltf PRIVATE -w)
