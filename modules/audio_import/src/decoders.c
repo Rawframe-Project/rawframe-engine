@@ -5,6 +5,8 @@
 
 #include "decoders.h"
 
+#include <limits.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,6 +83,23 @@ static void release_held(void) {
     held_bytes = 0;
 }
 
+// stb_vorbis counts a codebook's lookup values by casting floor() of a
+// float worked from the header's entries and dimensions to int, and a
+// damaged header makes that infinite (no dimensions) or past what an int
+// holds (many). The cast would then be undefined. Within its implementation
+// floor() is this: the same wherever the result fits an int, clamped where
+// it does not, and nought for not a number, which every real codebook's
+// count is unchanged by and which leads a damaged one to be refused.
+static double int_floor(double value) {
+    const double floored = floor(value);
+    if (floored != floored) {
+        return 0;
+    }
+    // Below INT_MAX by more than one, so stb_vorbis's ++ on it still fits.
+    const double highest = (double)INT_MAX - 1;
+    return floored > highest ? highest : (floored < (double)INT_MIN ? (double)INT_MIN : floored);
+}
+
 #define MA_API static
 #define MA_NO_DEVICE_IO
 #define MA_NO_THREADING
@@ -102,9 +121,11 @@ static void release_held(void) {
 #undef STB_VORBIS_HEADER_ONLY
 #define malloc(size) held_malloc(size)
 #define free(pointer) held_free(pointer)
+#define floor(value) int_floor(value)
 #include "extras/stb_vorbis.c"
 #undef malloc
 #undef free
+#undef floor
 // clang-format on
 
 enum {

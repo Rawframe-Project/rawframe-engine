@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Replaces third_party/miniaudio with miniaudio.h, miniaudio.c, LICENSE, and
 # extras/stb_vorbis.c of one exact miniaudio revision, taken from a
-# checkout's object store, never from its working tree.
+# checkout's object store, never from its working tree, then applies the
+# engine's changes in tools/patches/miniaudio, each refused if it no longer
+# applies. A change upstream now has is deleted with the move.
 #
 #   tools/update_miniaudio.sh <checkout> <revision>
 #
@@ -25,4 +27,8 @@ if [[ -s "$keep" ]]; then
     cp "$keep" "$target/CMakeLists.txt"
 fi
 rm "$keep"
+shopt -s nullglob
+for change in tools/patches/miniaudio/*.patch; do
+    git apply "$change"
+done
 echo "$target is now $revision; update the table in docs/operations/dependencies.md"

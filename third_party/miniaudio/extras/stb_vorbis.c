@@ -3857,6 +3857,10 @@ static int start_decoder(vorb *f)
             if (values < 0) return error(f, VORBIS_invalid_setup);
             c->lookup_values = (uint32) values;
          } else {
+            // Rawframe engine change: entries times dimensions can pass what
+            // an int holds, and signed overflow is undefined; such a codebook
+            // is refused before the product is taken.
+            if (c->entries > 0 && c->dimensions > INT_MAX / c->entries) return error(f, VORBIS_invalid_setup);
             c->lookup_values = c->entries * c->dimensions;
          }
          if (c->lookup_values == 0) return error(f, VORBIS_invalid_setup);
