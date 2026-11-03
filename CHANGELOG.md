@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.1.2](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.1...v0.1.2) (2026-11-03)
+
+
+### Fixed
+
+* **animation:** refuse a bone name that is not UTF-8 ([#126](https://github.com/Rawframe-Project/rawframe-engine/issues/126)) ([4b8a9d0](https://github.com/Rawframe-Project/rawframe-engine/commit/4b8a9d0ebcaf184ea6928a1a0a3193d41052f79f)), closes [#125](https://github.com/Rawframe-Project/rawframe-engine/issues/125)
+* **animation:** refuse a repeated or surplus channel before its keys ([#166](https://github.com/Rawframe-Project/rawframe-engine/issues/166)) ([ab96dcd](https://github.com/Rawframe-Project/rawframe-engine/commit/ab96dcd489617ae513af87ff1d967197d146fe56)), closes [#162](https://github.com/Rawframe-Project/rawframe-engine/issues/162)
+* **audio:** bound what stb_vorbis holds at once ([#144](https://github.com/Rawframe-Project/rawframe-engine/issues/144)) ([3dff452](https://github.com/Rawframe-Project/rawframe-engine/commit/3dff4525803ea27c604fd56887f31743a3bf68fa)), closes [#139](https://github.com/Rawframe-Project/rawframe-engine/issues/139)
+* **audio:** free a held block in constant time ([#157](https://github.com/Rawframe-Project/rawframe-engine/issues/157)) ([76fd8ee](https://github.com/Rawframe-Project/rawframe-engine/commit/76fd8ee9640e3695dbed9486544e85345aacdb6a)), closes [#156](https://github.com/Rawframe-Project/rawframe-engine/issues/156)
+* **audio:** keep stb_vorbis's codebook value counts within an int ([#148](https://github.com/Rawframe-Project/rawframe-engine/issues/148)) ([a376624](https://github.com/Rawframe-Project/rawframe-engine/commit/a376624e53bc2af9d88c9a0f006aec3c2fdce811)), closes [#147](https://github.com/Rawframe-Project/rawframe-engine/issues/147)
+* **audio:** mask a 31-bit Vorbis codeword without overflowing an int ([#152](https://github.com/Rawframe-Project/rawframe-engine/issues/152)) ([0d46776](https://github.com/Rawframe-Project/rawframe-engine/commit/0d46776057e8ae18b9c521a9eae4ead571635bde)), closes [#151](https://github.com/Rawframe-Project/rawframe-engine/issues/151)
+* **audio:** never free a Vorbis allocation that was not made ([#130](https://github.com/Rawframe-Project/rawframe-engine/issues/130)) ([ccfe492](https://github.com/Rawframe-Project/rawframe-engine/commit/ccfe4923bf24092da0664c7d6b547ae1b742effe)), closes [#128](https://github.com/Rawframe-Project/rawframe-engine/issues/128)
+* **audio:** refuse a source that decodes to samples that are not finite ([#150](https://github.com/Rawframe-Project/rawframe-engine/issues/150)) ([b78bb81](https://github.com/Rawframe-Project/rawframe-engine/commit/b78bb8189f5c5b96d68d00a26c26d6168ae20c13)), closes [#149](https://github.com/Rawframe-Project/rawframe-engine/issues/149)
+* **audio:** refuse a Vorbis comment count stb_vorbis cannot hold ([#134](https://github.com/Rawframe-Project/rawframe-engine/issues/134)) ([8e4e93b](https://github.com/Rawframe-Project/rawframe-engine/commit/8e4e93ba56b95377a3379cfe2acd20e1379121d2)), closes [#132](https://github.com/Rawframe-Project/rawframe-engine/issues/132)
+* **audio:** refuse a Vorbis comment header whose fields pass its packet ([#155](https://github.com/Rawframe-Project/rawframe-engine/issues/155)) ([9fe496f](https://github.com/Rawframe-Project/rawframe-engine/commit/9fe496fe23ed37e52c73826e33aecb18a66247e0)), closes [#154](https://github.com/Rawframe-Project/rawframe-engine/issues/154)
+* **cook:** bound a glTF's index count before reading its indices ([#122](https://github.com/Rawframe-Project/rawframe-engine/issues/122)) ([6bf9c28](https://github.com/Rawframe-Project/rawframe-engine/commit/6bf9c28817a87c579af9dfdbe54e6ab97c06bfb7)), closes [#121](https://github.com/Rawframe-Project/rawframe-engine/issues/121)
+* **cook:** never clear a row past an RLE BMP's image with a null memset ([#165](https://github.com/Rawframe-Project/rawframe-engine/issues/165)) ([cac35cb](https://github.com/Rawframe-Project/rawframe-engine/commit/cac35cb201feb85746e1eb75b18259c5c410f149)), closes [#164](https://github.com/Rawframe-Project/rawframe-engine/issues/164)
+* **cook:** refuse glTF accessors whose data is not aligned ([#136](https://github.com/Rawframe-Project/rawframe-engine/issues/136)) ([f0f277c](https://github.com/Rawframe-Project/rawframe-engine/commit/f0f277c83bbed14108c4f9b74c3ff18f55735c71)), closes [#135](https://github.com/Rawframe-Project/rawframe-engine/issues/135)
+* **cook:** refuse glTF sampler values glTF does not define ([#120](https://github.com/Rawframe-Project/rawframe-engine/issues/120)) ([d22fad4](https://github.com/Rawframe-Project/rawframe-engine/commit/d22fad420b974ff783827f90c68a4f86a9c8d0ef)), closes [#119](https://github.com/Rawframe-Project/rawframe-engine/issues/119)
+* **network:** leave room for headers in the pre-admission frame bound ([#117](https://github.com/Rawframe-Project/rawframe-engine/issues/117)) ([33a092d](https://github.com/Rawframe-Project/rawframe-engine/commit/33a092d8b333bf1fdffc6a7f6930536913cc618e)), closes [#116](https://github.com/Rawframe-Project/rawframe-engine/issues/116)
+
 ## [0.1.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.0...v0.1.1) (2026-11-01)
 
 ### Fixed
