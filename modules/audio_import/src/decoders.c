@@ -35,26 +35,79 @@ struct held_block {
     size_t size;
 };
 
+// Each held pointer's slot in `held`, plus one, by open addressing (nought
+// is an empty entry) at twice held's capacity, so a free finds its block at
+// once however many are held: stb_vorbis frees a comment header's entries
+// one by one, and a source of a few megabytes can hold a million. A pointer
+// not handed out here is looked up, never read through.
 static _Thread_local struct held_block* held = NULL;
 static _Thread_local size_t held_count = 0;
 static _Thread_local size_t held_capacity = 0;
 static _Thread_local size_t held_bytes = 0;
+static _Thread_local size_t* held_index = NULL;
+static _Thread_local size_t held_mask = 0;
+
+static size_t held_home(const void* pointer) {
+    return (size_t)((((uint64_t)(uintptr_t)pointer >> 4) * UINT64_C(0x9E3779B97F4A7C15)) >> 32) & held_mask;
+}
+
+// Where `pointer`'s entry is, or the empty entry its own would take.
+static size_t held_entry(const void* pointer) {
+    size_t at = held_home(pointer);
+    while (held_index[at] != 0 && held[held_index[at] - 1].pointer != pointer) {
+        at = (at + 1) & held_mask;
+    }
+    return at;
+}
+
+// Empties an entry, moving back each one after it that its home allows, so
+// every pointer is still found from its home without a gap.
+static void held_unindex(size_t at) {
+    held_index[at] = 0;
+    for (size_t next = (at + 1) & held_mask; held_index[next] != 0; next = (next + 1) & held_mask) {
+        const size_t home = held_home(held[held_index[next] - 1].pointer);
+        if (((next - home) & held_mask) >= ((next - at) & held_mask)) {
+            held_index[at] = held_index[next];
+            held_index[next] = 0;
+            at = next;
+        }
+    }
+}
+
+static int held_grow(void) {
+    // Both grow or neither: an index of fewer entries than held's capacity
+    // could fill, and a lookup in a full index would never end.
+    const size_t grown = held_capacity == 0 ? 64 : held_capacity * 2;
+    size_t* const index = calloc(grown * 2, sizeof(size_t));
+    if (index == NULL) {
+        return 0;
+    }
+    struct held_block* const larger = realloc(held, grown * sizeof(struct held_block));
+    if (larger == NULL) {
+        free(index);
+        return 0;
+    }
+    held = larger;
+    held_capacity = grown;
+    free(held_index);
+    held_index = index;
+    held_mask = (grown * 2) - 1;
+    for (size_t slot = 0; slot < held_count; ++slot) {
+        held_index[held_entry(held[slot].pointer)] = slot + 1;
+    }
+    return 1;
+}
 
 static void* held_malloc(size_t size) {
     if (size > vorbis_budget - held_bytes) {
         return NULL;
     }
-    if (held_count == held_capacity) {
-        const size_t grown = held_capacity == 0 ? 64 : held_capacity * 2;
-        struct held_block* const larger = realloc(held, grown * sizeof(struct held_block));
-        if (larger == NULL) {
-            return NULL;
-        }
-        held = larger;
-        held_capacity = grown;
+    if (held_count == held_capacity && !held_grow()) {
+        return NULL;
     }
     void* const made = calloc(1, size);
     if (made != NULL) {
+        held_index[held_entry(made)] = held_count + 1;
         held[held_count++] = (struct held_block){made, size};
         held_bytes += size;
     }
@@ -62,14 +115,23 @@ static void* held_malloc(size_t size) {
 }
 
 static void held_free(void* pointer) {
-    for (size_t index = 0; index < held_count; ++index) {
-        if (held[index].pointer == pointer) {
-            held_bytes -= held[index].size;
-            held[index] = held[--held_count];
-            free(pointer);
-            return;
-        }
+    if (pointer == NULL || held_index == NULL) {
+        return;
     }
+    const size_t at = held_entry(pointer);
+    if (held_index[at] == 0) {
+        return;
+    }
+    const size_t slot = held_index[at] - 1;
+    held_bytes -= held[slot].size;
+    free(pointer);
+    held_unindex(at);
+    const size_t last = held_count - 1;
+    if (slot != last) {
+        held_index[held_entry(held[last].pointer)] = slot + 1;
+        held[slot] = held[last];
+    }
+    held_count = last;
 }
 
 static void release_held(void) {
@@ -77,9 +139,12 @@ static void release_held(void) {
         free(held[index].pointer);
     }
     free(held);
+    free(held_index);
     held = NULL;
+    held_index = NULL;
     held_count = 0;
     held_capacity = 0;
+    held_mask = 0;
     held_bytes = 0;
 }
 
