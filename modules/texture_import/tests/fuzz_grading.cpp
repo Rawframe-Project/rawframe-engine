@@ -1,6 +1,6 @@
 // Coverage-guided fuzzing of a grading table as the importer decodes it:
-// a `.cube` file from anyone meets the line reader through the
-// limits, and what decodes is a volume the texture's own writer and reader
+// a `.cube` file from anyone meets the line reader through the limits the
+// engine ships, and what decodes is a volume the texture's own writer and reader
 // take back exactly.
 
 #include "rawframe/texture/texture.h"
@@ -13,7 +13,7 @@ using namespace rawframe;
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(data), size};
-    const auto kTable = texture_import::decodeGrading(kBytes, {.maximumSide = 8});
+    const auto kTable = texture_import::decodeGrading(kBytes, {});
     if (!kTable.has_value()) {
         return 0;
     }
