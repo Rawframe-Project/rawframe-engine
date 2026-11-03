@@ -25,5 +25,9 @@ rawframe_module_tests(NAME audio_import SOURCES tests/import_test.cpp)
 if(TARGET rawframe_audio_import_tests)
     target_compile_definitions(rawframe_audio_import_tests PRIVATE
         RAWFRAME_AUDIO_IMPORT_DATA="${RAWFRAME_TEST_FILES}/modules/audio_import/tests/data/")
+    # The whole suite takes under four seconds in the sanitizer tree. A
+    # Vorbis stream of many comments once took minutes to refuse, and the
+    # suite's test of it fails here rather than at the check's own limit.
+    set_tests_properties(audio_import PROPERTIES TIMEOUT 30)
 endif()
 rawframe_module_fuzz(NAME audio_import TARGET import RUNS 10000 MAX_LEN 16384 SEEDS tests/seeds SOURCES tests/fuzz_import.cpp)
