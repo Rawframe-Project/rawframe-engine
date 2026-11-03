@@ -2,6 +2,24 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.1.2](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.1...v0.1.2) (2026-11-03)
+
+### Fixed
+
+- Importing a damaged Ogg Vorbis sound no longer frees memory the importer never allocated, or reads and writes past the comment list when the file declares a very large number of comments ([#130](https://github.com/Rawframe-Project/rawframe-engine/pull/130), [#134](https://github.com/Rawframe-Project/rawframe-engine/pull/134)).
+- A damaged Ogg Vorbis file of a few kilobytes can no longer make the sound importer spend seconds and close to 200 MB before refusing it: what the Vorbis decoder holds at once is now bounded ([#144](https://github.com/Rawframe-Project/rawframe-engine/pull/144)).
+- Vorbis setup headers that made the decoder overflow an `int` are handled: a lattice codebook of many dimensions and a codeword of 31 bits decode, and a list codebook whose value count passes what an `int` holds is refused, where each was undefined behavior before ([#148](https://github.com/Rawframe-Project/rawframe-engine/pull/148), [#152](https://github.com/Rawframe-Project/rawframe-engine/pull/152)).
+- A Vorbis comment header whose vendor string or comments run past their packet is refused before the decoder reads it ([#155](https://github.com/Rawframe-Project/rawframe-engine/pull/155)).
+- An Ogg Vorbis sound with a very large number of comments no longer takes time in proportion to the square of their count to import: a source of a few megabytes could hold the importer for a minute or more ([#157](https://github.com/Rawframe-Project/rawframe-engine/pull/157)).
+- A sound source that decodes to samples that are not finite numbers is refused instead of being imported and cooked ([#150](https://github.com/Rawframe-Project/rawframe-engine/pull/150)).
+- A glTF sampler with a wrap mode or filter glTF does not define is refused instead of being cooked as something else ([#120](https://github.com/Rawframe-Project/rawframe-engine/pull/120)).
+- A glTF accessor's index count is checked against the mesh's index limit before the importer allocates room for it, so a small source can no longer end the `cook` process or make it allocate gigabytes ([#122](https://github.com/Rawframe-Project/rawframe-engine/pull/122)).
+- The mesh and animation importers refuse glTF accessors whose data is not aligned to their component type, as glTF 2.0 requires ([#136](https://github.com/Rawframe-Project/rawframe-engine/pull/136)).
+- Importing a run-length encoded (RLE8 or RLE4) BMP that ends its last row and then the bitmap, as encoders commonly write it, no longer makes the image decoder pass a null pointer to `memset`, which is undefined behavior ([#165](https://github.com/Rawframe-Project/rawframe-engine/pull/165)).
+- `rawframe-animation from-gltf` refuses a joint name that is not UTF-8 instead of writing a skeleton no reader takes back ([#126](https://github.com/Rawframe-Project/rawframe-engine/pull/126)).
+- `rawframe-animation from-gltf` refuses a channel that drives a joint already driven the same way, or a track past the clip's limit, before reading its keys. glTF channels may share one sampler, so a glTF of a few kilobytes could make it build gigabytes of tracks before refusing it ([#166](https://github.com/Rawframe-Project/rawframe-engine/pull/166)).
+- Before admission, a frame within a few bytes of the pre-admission bound gets the same outcome whether it arrives whole or split ([#117](https://github.com/Rawframe-Project/rawframe-engine/pull/117)).
+
 ## [0.1.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.0...v0.1.1) (2026-11-01)
 
 ### Fixed
