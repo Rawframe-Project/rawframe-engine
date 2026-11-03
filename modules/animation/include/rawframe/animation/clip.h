@@ -195,7 +195,14 @@ struct Clip {
 /// The named limit points for clips; past one is `OverLimit`.
 struct ClipLimits {
     std::size_t maximumTracks = 4096;
-    std::size_t maximumKeys = 65536;
+    /// A track's keys.
+    std::size_t maximumTrackKeys = 65536;
+    /// The keys of all the clip's tracks together. A key takes 112 bytes,
+    /// so this holds a clip to 448 MiB, within the gigabyte an import keeps
+    /// to: 300 tracks (100 bones moved, turned and scaled) at 60 keys a
+    /// second for 3.9 minutes, a long take of motion capture. Without it
+    /// the tracks' limits together allow 268 million keys.
+    std::size_t maximumClipKeys = std::size_t{1} << 22U;
     /// Events and sync markers together.
     std::size_t maximumEvents = 4096;
 };
