@@ -245,6 +245,85 @@ std::vector<std::byte> page(std::span<const std::byte> tone,
     return out;
 }
 
+/// `packet` alone on pages of tone.ogg's stream numbered from `number` on,
+/// each of up to 255 segments, every page after the first continuing it.
+std::vector<std::byte>
+pagesOf(std::span<const std::byte> tone, const std::vector<std::byte>& packet, std::uint32_t& number) {
+    std::vector<std::uint8_t> lacing(packet.size() / 255, 255);
+    lacing.push_back(static_cast<std::uint8_t>(packet.size() % 255));
+    std::vector<std::byte> out;
+    auto at = packet.begin();
+    for (std::size_t first = 0; first < lacing.size(); first += 255) {
+        const std::size_t kSegments = std::min<std::size_t>(255, lacing.size() - first);
+        for (const char kLetter : std::string_view{"OggS"}) {
+            out.push_back(static_cast<std::byte>(kLetter));
+        }
+        out.push_back(std::byte{0});
+        out.push_back(std::byte{first == 0 ? std::uint8_t{0} : std::uint8_t{1}});
+        out.insert(out.end(), 8, std::byte{0});
+        out.insert(out.end(), tone.begin() + 14, tone.begin() + 18);
+        for (int shift = 0; shift < 32; shift += 8) {
+            out.push_back(static_cast<std::byte>((number >> shift) & 0xFFU));
+        }
+        ++number;
+        out.insert(out.end(), 4, std::byte{0}); // stb_vorbis reads no CRC from memory
+        out.push_back(static_cast<std::byte>(kSegments));
+        std::size_t length = 0;
+        for (std::size_t segment = first; segment < first + kSegments; ++segment) {
+            out.push_back(std::byte{lacing[segment]});
+            length += lacing[segment];
+        }
+        out.insert(out.end(), at, at + static_cast<std::ptrdiff_t>(length));
+        at += static_cast<std::ptrdiff_t>(length);
+    }
+    return out;
+}
+
+/// tone.ogg with a comment header of `count` empty comments and no vendor
+/// string in place of its own, four bytes a comment, on as many pages as it
+/// takes.
+std::vector<std::byte> toneWithComments(std::uint32_t count) {
+    const std::vector<std::byte> kTone = fixture("tone.ogg");
+    // The second page carries the comment header and then the setup header,
+    // which it ends; audio begins on the third.
+    constexpr std::size_t kSecond = 58;
+    const std::size_t kSegments = std::to_integer<std::size_t>(kTone[kSecond + 26]);
+    std::size_t comment = 0;
+    std::size_t segment = 0;
+    while (segment < kSegments) {
+        const std::size_t kValue = std::to_integer<std::size_t>(kTone[kSecond + 27 + segment++]);
+        comment += kValue;
+        if (kValue < 255) {
+            break;
+        }
+    }
+    std::size_t setupLength = 0;
+    for (; segment < kSegments; ++segment) {
+        setupLength += std::to_integer<std::size_t>(kTone[kSecond + 27 + segment]);
+    }
+    const auto kSetup = kTone.begin() + static_cast<std::ptrdiff_t>(kSecond + 27 + kSegments + comment);
+    const auto kThird = kSetup + static_cast<std::ptrdiff_t>(setupLength);
+    std::vector<std::byte> header{
+        std::byte{3}, std::byte{'v'}, std::byte{'o'}, std::byte{'r'}, std::byte{'b'}, std::byte{'i'}, std::byte{'s'}};
+    header.insert(header.end(), 4, std::byte{0});
+    for (int shift = 0; shift < 32; shift += 8) {
+        header.push_back(static_cast<std::byte>((count >> shift) & 0xFFU));
+    }
+    header.insert(header.end(), std::size_t{count} * 4, std::byte{0});
+    header.push_back(std::byte{1});
+    std::uint32_t number = 1;
+    std::vector<std::byte> out(kTone.begin(), kTone.begin() + kSecond);
+    for (const auto& kPages : {pagesOf(kTone, header, number), pagesOf(kTone, {kSetup, kThird}, number)}) {
+        out.insert(out.end(), kPages.begin(), kPages.end());
+    }
+    const std::size_t kAudio = out.size();
+    out.insert(out.end(), kThird, kTone.end());
+    for (int shift = 0; shift < 32; shift += 8) {
+        out[kAudio + 18 + static_cast<std::size_t>(shift / 8)] = static_cast<std::byte>((number >> shift) & 0xFFU);
+    }
+    return out;
+}
+
 /// A codebook of 2^`entriesLog` entries, every one `entriesLog` bits long:
 /// a whole Huffman tree that stb_vorbis builds and sorts, written in a few
 /// bytes as an ordered codebook.
@@ -422,6 +501,20 @@ RAWFRAME_TEST(AVorbisSetupPastItsBudgetIsRefused) {
     const auto kSmall = importSound(streamWithCodebook(orderedCodebook(4)));
     RAWFRAME_EXPECT(kSmall.has_value() && kSmall->channels == 2 && kSmall->frames() > 0);
     RAWFRAME_EXPECT(badSound(importSound(streamWithCodebook(orderedCodebook(22)))));
+}
+
+RAWFRAME_TEST(AVorbisOfManyCommentsImportsOrIsRefusedInTime) {
+    // An empty comment is four bytes in the file and two blocks stb_vorbis
+    // holds: its entry in the list and its own string. 500,000 fit the
+    // budget beside the setup and import; 1,500,000 pass the check on the
+    // list, and the budget runs out partway through their strings, when
+    // stb_vorbis frees every entry, filled or not. Either way each block is
+    // freed in the same time however many are held: when a free searched
+    // them all, these took minutes.
+    const auto kFitting = importSound(toneWithComments(500'000));
+    RAWFRAME_EXPECT(kFitting.has_value() && kFitting->channels == 2 && kFitting->frames() == 12'000);
+    const auto kPartway = importSound(toneWithComments(1'500'000));
+    RAWFRAME_EXPECT(!kPartway.has_value() && kPartway.error().code() == code(audio::AudioError::BadSound));
 }
 
 RAWFRAME_TEST(AVorbisLatticeOfManyDimensionsImports) {
