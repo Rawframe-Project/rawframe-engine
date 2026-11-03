@@ -48,6 +48,10 @@ RAWFRAME_TEST(AScatterIsWrittenAsItReads) {
                              "layer grass\n");
     RAWFRAME_EXPECT(kOn.terrain == "field.terrain" && kOn.at[1] == 2 && kOn.layer == "grass" && kOn.seed == 0);
     RAWFRAME_EXPECT(read(writeScatter(kOn)) == kOn);
+    // Numbers of nine digits or fewer keep their spelling.
+    constexpr std::string_view kRound =
+        "scatter 1\nprefab tree.scene\nseed 0\narea 12000000 0.0001 100000 4\nspacing 1\ncount 3\n";
+    RAWFRAME_EXPECT(writeScatter(read(kRound)) == kRound);
     // Numbers of more digits than nine are written as they are, not rounded.
     const Scatter kFine = read("scatter 1\nprefab tree.scene\narea 0.30000000000000004 0 4.0000000001 4\ncount 3\n"
                                "on field.terrain at 1 2 123456789.25\n");
