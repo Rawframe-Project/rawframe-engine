@@ -96,8 +96,11 @@ RAWFRAME_TEST(ABlockoutIsWrittenAsItReads) {
     RAWFRAME_EXPECT(kRead.has_value() && writeBlockout(*kRead) == kText);
     // Numbers of more digits than nine are written as they are, not rounded.
     const auto kFine = parseBlockout("blockout 1\nbox a at 0.30000000000000004 0 1234.000000001 size 1 1 1\n");
-    const auto kFineAgain = kFine.has_value() ? parseBlockout(writeBlockout(*kFine)) : kFine;
-    RAWFRAME_EXPECT(kFine.has_value() && kFineAgain.has_value() && *kFineAgain == *kFine);
+    RAWFRAME_EXPECT(kFine.has_value());
+    if (kFine.has_value()) {
+        const auto kFineAgain = parseBlockout(writeBlockout(*kFine));
+        RAWFRAME_EXPECT(kFineAgain.has_value() && *kFineAgain == *kFine);
+    }
     // Comments and blank lines are nothing.
     const auto kCommented = parseBlockout("# a level\nblockout 1\n\nbox a at 0 0 0 size 1 1 1 # the floor\n");
     RAWFRAME_EXPECT(kCommented.has_value() && kCommented->solids.size() == 1);
