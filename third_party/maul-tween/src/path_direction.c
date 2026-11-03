@@ -2,11 +2,13 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // A path's direction, by SVG 2's path directionality:
-// the curve's direction within a segment, its limit where the derivative
-// vanishes (the first non-zero of the second and third derivatives, the
-// outgoing direction at a cusp), the later segment's at a boundary; a
-// segment of no length takes the direction of the nearest one before it
-// with a length, else after it, and a path of no length points along +x.
+// the curve's direction within a segment, the later segment's at a
+// boundary; a step or a segment of no length moves past to the nearest
+// one after it with a length, at its start, else at the path's end takes
+// the nearest one before it, at its end; a path of no length points along
+// +x. Where the derivative vanishes, its limit: the first non-zero of the
+// second and third derivatives, the outgoing direction at a cusp, where
+// SVG 2 leaves the direction open.
 
 #include "elementary.h"
 #include "fpenv.h"
@@ -88,20 +90,21 @@ static MTWN_NOINLINE void mtwnComputePathDirectionWork(const mtwnPath* path, dou
     {
         return;
     }
-    // The nearest segment before with a length, at its end; else after,
-    // at its start.
-    for (uint32_t j = i; j-- > 0;)
-    {
-        mtwnPathSegmentCubic(path, j, &cubic);
-        if (Heading(path, &cubic, 1.0, directionOut))
-        {
-            return;
-        }
-    }
+    // Past it, as SVG 2 moves past a segment of no length: the nearest
+    // segment after with a length, at its start; else, at the path's end,
+    // the nearest before, at its end.
     for (uint32_t j = i + 1; j + 1 < path->count; ++j)
     {
         mtwnPathSegmentCubic(path, j, &cubic);
         if (Heading(path, &cubic, 0.0, directionOut))
+        {
+            return;
+        }
+    }
+    for (uint32_t j = i; j-- > 0;)
+    {
+        mtwnPathSegmentCubic(path, j, &cubic);
+        if (Heading(path, &cubic, 1.0, directionOut))
         {
             return;
         }

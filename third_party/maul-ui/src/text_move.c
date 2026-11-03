@@ -58,7 +58,9 @@ static uint32_t WordBoundary(const muiTextBlock* block, uint32_t offset, muiText
     while ((!back || start < offset) &&
            muniSegmentIterator_NextBreak(&iterator, &end) == muni_success)
     {
-        if (muiIsWordSegment(text, start, end))
+        muniWordKind kind = muni_wordNone;
+        if (muniSegmentIterator_GetWordKind(&iterator, &kind) == muni_success &&
+            kind != muni_wordNone)
         {
             if (back)
             {

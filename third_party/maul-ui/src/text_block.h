@@ -48,10 +48,6 @@ static inline uint32_t muiTextOffsetOf(size_t offset)
 // segments over length bytes of text.
 muiResult muiSegmentsStatus(const muiCompositionSegment* segments, uint32_t count, size_t length);
 
-// Whether a word segment (UAX #29), text from start up to end, is a word:
-// it has a letter or a number.
-bool muiIsWordSegment(const char* text, size_t start, size_t end);
-
 // A line break opportunity before the byte at offset.
 typedef struct muiTextBreak
 {

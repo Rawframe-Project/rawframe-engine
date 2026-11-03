@@ -247,8 +247,9 @@ extern "C"
     /// amplitude below 1 is 1 with the period divided by it, as GSAP does.
     /// GSAP's defaults are amplitude 1 with period 0.3, or 0.45 in-out;
     /// Penner's and tween.js's are amplitude 1, period 0.4. GSAP and
-    /// tween.js miss 1 at the end by up to a 2^-10 and set it there, so
-    /// they differ from this by at most a (1 + a) 2^-10.
+    /// tween.js miss 1 at the end by up to q 2^-10, q the larger of a and
+    /// 1, and set it there, so they differ from this by at most
+    /// q (1 + q) 2^-10 / (1 - q 2^-10).
     ///
     /// The curve ends at 1 + a 2^-10 sin(...) before it is normalized by
     /// it, which an amplitude up to 512 keeps from 1/2 to 3/2. A period,

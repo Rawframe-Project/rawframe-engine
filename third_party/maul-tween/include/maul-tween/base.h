@@ -20,10 +20,10 @@ extern "C"
 // The library version. CMake reads it from here, and release-please
 // moves it between the markers.
 // x-release-please-start-major
-#define MTWN_VERSION_MAJOR 0
+#define MTWN_VERSION_MAJOR 1
 // x-release-please-end
 // x-release-please-start-minor
-#define MTWN_VERSION_MINOR 16
+#define MTWN_VERSION_MINOR 0
 // x-release-please-end
 // x-release-please-start-patch
 #define MTWN_VERSION_PATCH 0
