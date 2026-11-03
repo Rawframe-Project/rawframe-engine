@@ -61,7 +61,7 @@ Vendored code is upstream's, with these changes only. Each is a patch in `tools/
 |---|---|---|
 | miniaudio | `stb_vorbis-codeword-mask.patch` | stb_vorbis's linear search of a small codebook masks the bits it holds with `(1 << length) - 1` as `int`. A codeword may be 31 bits long (stb_vorbis refuses 32), and at 31 the mask overflows; it is worked unsigned. |
 | miniaudio | `stb_vorbis-list-count.patch` | stb_vorbis multiplies a list codebook's (lookup type 2) entries by its dimensions as `int`. Within the import budget, the product can pass what an `int` holds, which is undefined; such a codebook is refused before the product is taken. |
-| Wuffs | `bmp-rle-empty-row.patch` | Wuffs's BMP decoder clears the rest of a row past the image when an RLE8 or RLE4 image ends its last row and then the bitmap, as encoders commonly write it. Past the image the row is an empty slice with a null pointer, and clearing it calls `memset(NULL, 0, 0)`, which is undefined; an empty destination is now left alone. Upstream's main branch had the same code on 2026-11-03, so a move checks whether it is fixed there before dropping the patch. |
+| Wuffs | `bmp-rle-empty-row.patch` | Wuffs's BMP decoder clears the rest of a row past the image when an RLE8 or RLE4 image ends its last row and then the bitmap, as encoders commonly write it. Past the image the row is an empty slice with a null pointer, and clearing it calls `memset(NULL, 0, 0)`, which is undefined; an empty destination is now left alone. Upstream's main branch had the same code when the patch was written, so a move checks whether it is fixed there before dropping the patch. |
 
 ## Notes per library
 
