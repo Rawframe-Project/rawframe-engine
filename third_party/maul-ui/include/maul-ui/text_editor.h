@@ -30,7 +30,7 @@ extern "C"
 #endif
 
     // A field's rules, as bits.
-    typedef uint8_t muiTextEditFlags;
+    typedef uint32_t muiTextEditFlags;
 
     enum
     {
@@ -47,7 +47,7 @@ extern "C"
     };
 
     // What a field's text may be, checked as it is typed or pasted.
-    typedef uint8_t muiTextFilter;
+    typedef int32_t muiTextFilter;
 
     enum
     {
@@ -59,7 +59,7 @@ extern "C"
     };
 
     // What a field takes, which picks an on-screen keyboard's layout.
-    typedef uint8_t muiInputPurpose;
+    typedef int32_t muiInputPurpose;
 
     enum
     {
@@ -90,7 +90,7 @@ extern "C"
 
     // Whose shortcuts keys follow: Control and Home and End, or Command
     // and Option.
-    typedef uint8_t muiKeymap;
+    typedef int32_t muiKeymap;
 
     enum
     {
@@ -127,7 +127,7 @@ extern "C"
     // A selection: from the anchor to the caret, empty where they meet.
     typedef struct muiTextSelection
     {
-        uint32_t anchor;
+        size_t anchor;
         muiTextPosition caret;
     } muiTextSelection;
 
@@ -213,7 +213,7 @@ extern "C"
     /// @param text        UTF-8 text; may be NULL when length is 0.
     /// @param length      Its length in bytes.
     /// @param changedOut  Receives whether the text changed; may be NULL. False
-    ///                    on failure.
+    ///                    on failure but `mui_errorBusy`, which leaves it.
     /// @return `mui_success`, changed or not (read-only, filtered out, at the
     ///         limit); `mui_errorInvalid` for a NULL service or text, the null
     ///         id; `mui_errorState` for a block not editing; `mui_errorLimit`
@@ -236,7 +236,7 @@ extern "C"
     /// @param text        UTF-8 text; may be NULL when length is 0.
     /// @param length      Its length in bytes.
     /// @param changedOut  Receives whether the text changed; may be NULL. False
-    ///                    on failure.
+    ///                    on failure but `mui_errorBusy`, which leaves it.
     /// @return As muiTextBlock_Type; `mui_errorBusy` while the service is
     ///         busy.
     /// @par Thread safety
@@ -254,7 +254,7 @@ extern "C"
     /// @param blockId     The block.
     /// @param deletion    Which way.
     /// @param changedOut  Receives whether the text changed; may be NULL. False
-    ///                    on failure.
+    ///                    on failure but `mui_errorBusy`, which leaves it.
     /// @return As muiTextBlock_Type; `mui_errorInvalid` for a deletion out of
     ///         range; `mui_errorBusy` while the service is busy.
     /// @par Thread safety
@@ -271,13 +271,13 @@ extern "C"
     /// @param offset      The other end, at the start of a character;
     ///                    past the text is its end.
     /// @param changedOut  Receives whether the text changed; may be NULL. False
-    ///                    on failure.
+    ///                    on failure but `mui_errorBusy`, which leaves it.
     /// @return As muiTextBlock_Type; `mui_errorInvalid` for an offset inside a
     ///         character; `mui_errorBusy` while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_EraseTo(muiTextService* service,
-                                                         muiTextBlockId blockId, uint32_t offset,
+                                                         muiTextBlockId blockId, size_t offset,
                                                          bool* changedOut);
 
     /// Reads the selected text of an editing block, for the host's
@@ -305,7 +305,7 @@ extern "C"
     /// @param service     The service.
     /// @param blockId     The block.
     /// @param changedOut  Receives whether the text changed; may be NULL. False
-    ///                    on failure.
+    ///                    on failure but `mui_errorBusy`, which leaves it.
     /// @return As muiTextBlock_Type; `mui_errorBusy` while the service is
     ///         busy.
     /// @par Thread safety
@@ -320,7 +320,7 @@ extern "C"
     /// @param service     The service.
     /// @param blockId     The block.
     /// @param changedOut  Receives whether the text changed; may be NULL. False
-    ///                    on failure.
+    ///                    on failure but `mui_errorBusy`, which leaves it.
     /// @return As muiTextBlock_Type; `mui_errorBusy` while the service is
     ///         busy.
     /// @par Thread safety
@@ -375,7 +375,8 @@ extern "C"
     ///                      may be NULL when segmentCount is 0.
     /// @param segmentCount  How many.
     /// @param changedOut    Receives whether the text changed; may be NULL.
-    ///                      False on failure.
+    ///                      False on failure but `mui_errorBusy`, which leaves
+    ///                      it.
     /// @return As muiTextBlock_Type; `mui_errorInvalid` for a caret out of
     ///         place or segments out of the text; `mui_errorBusy` while the
     ///         service is busy.
@@ -383,7 +384,7 @@ extern "C"
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_Compose(muiTextService* service,
                                                          muiTextBlockId blockId, const char* text,
-                                                         size_t length, uint32_t caret,
+                                                         size_t length, size_t caret,
                                                          const muiCompositionSegment* segments,
                                                          uint32_t segmentCount, bool* changedOut);
 
@@ -407,10 +408,13 @@ extern "C"
     ///
     /// @param host        The text host.
     /// @param nodeId      A node whose host key is an editing block's.
-    /// @param event       The event.
+    /// @param event       The event; for a text event, non-NULL text when its
+    ///                    length is not 0.
     /// @param input       The keymap and the clipboard writer.
     /// @param outcomeOut  Receives what the event did; unchanged on failure.
-    /// @return As muiNode_MoveEditCaret; `mui_errorBusy` while the service is busy.
+    /// @return As muiNode_MoveEditCaret; `mui_errorInvalid` also for a text
+    ///         event with NULL text and a length; `mui_errorBusy` while the
+    ///         service is busy.
     /// @par Thread safety
     /// Safe from any thread; the host's context and service are used by
     /// one thread at a time.

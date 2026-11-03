@@ -158,7 +158,8 @@ void muiExitAdvance(muiContext* context, uint32_t root)
             !muiIsAnimatingUnder(&context->animations, tree, slot))
         {
             entry->finished = true;
-            const muiNotification record = {mui_notificationExitFinished, entry->node, 0};
+            const muiNotification record = {.kind = mui_notificationExitFinished,
+                                            .node = entry->node};
             muiNotifyPost(&context->notifications, &record);
         }
     }

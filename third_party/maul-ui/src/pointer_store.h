@@ -67,7 +67,7 @@ typedef struct muiPointerStore
     uint32_t recordCapacity;
     uint32_t head;
     uint32_t recordCount;
-    uint32_t dropped;
+    uint32_t recordsDropped;
     muiClickSeries series;
     uint64_t clickIntervalNs;
     float clickDistance;

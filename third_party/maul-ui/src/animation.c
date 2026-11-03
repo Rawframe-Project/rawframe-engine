@@ -72,6 +72,8 @@ static void Unlink(const muiMotion* motion, uint32_t node, uint32_t record)
     uint32_t* link = &motion->styles[node - 1].firstAnimation;
     while (*link != record)
     {
+        // A live record is on its node's list.
+        MUI_ASSERT(*link != 0);
         link = &motion->store->records[*link - 1].next;
     }
     *link = motion->store->records[record - 1].next;
@@ -85,6 +87,7 @@ static void Release(const muiMotion* motion, uint32_t node, uint32_t record)
         Unlink(motion, node, record);
     }
     muiPoolGive(&motion->store->pool, record);
+    MUI_ASSERT(motion->store->running != 0);
     motion->store->running--;
 }
 
@@ -187,6 +190,8 @@ static uint32_t RecordFor(const muiMotion* motion, uint32_t node, muiProperty pr
     record = muiPoolTake(&motion->store->pool);
     if (record != 0)
     {
+        // Running counts the pool's live records.
+        MUI_ASSERT(motion->store->running < motion->store->pool.capacity);
         motion->store->running++;
         motion->store->records[record - 1] = (muiAnimation){
             .next = motion->styles[node - 1].firstAnimation,
@@ -238,6 +243,7 @@ bool muiStartAnimation(const muiMotion* motion, uint32_t node, muiProperty prope
 {
     float to[MUI_MAX_CHANNELS] = {0};
     uint32_t channels = muiPropertyChannels(target, property, to);
+    MUI_ASSERT(channels <= MUI_MAX_CHANNELS);
     const Origin origin = OriginOf(motion, node, property, to, spec, nowNs);
     uint32_t record = RecordFor(motion, node, property);
     if (record == 0)

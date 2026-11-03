@@ -6,6 +6,7 @@
 #include "complex.h"
 
 #include "encoding.h"
+#include "invariant.h"
 #include "tables.h"
 
 #include "maul-unicode/properties.h"
@@ -51,17 +52,18 @@ void muniComplexTrackRun(muniSegmenter* segmenter, uint32_t codePoint)
         return;
     }
     run->text = nullptr;
-    // A run starts at an SA code point read whole from this piece.
+    // A run starts at an SA code point read whole from this piece. The
+    // segmenter calls this before the cursor moves past the code point,
+    // which then starts at the cursor's position: a cut-off sequence asks
+    // for more text first, and an ill-formed one reads as U+FFFD, which
+    // is not SA. So the run holds at least that code point.
     if (cursor->pendingCount != 0 || muniLookupLineBreak(codePoint) != muni_lbSa)
     {
         return;
     }
     const uint8_t* bytes = cursor->text + cursor->position;
     size_t length = RunLength(bytes, cursor->length - cursor->position);
-    if (length == 0)
-    {
-        return;
-    }
+    MUNI_ASSERT(length > 0);
     run->text = bytes;
     run->start = cursor->offset;
     run->length = length;

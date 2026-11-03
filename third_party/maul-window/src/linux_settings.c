@@ -179,7 +179,8 @@ static void TakeAll(mwinLinuxSettings* settings, DBusMessage* reply)
     }
 }
 
-// SettingChanged(s namespace, s key, v value).
+// SettingChanged(s namespace, s key, v value), from the connection that
+// owns the portal's name.
 static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, void* data)
 {
     (void)connection;
@@ -188,8 +189,13 @@ static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, 
     mwinDBusIter arguments;
     const char* space = nullptr;
     const char* key = nullptr;
-    if (api->isSignal(message, SETTINGS, "SettingChanged") && api->iterInit(message, &arguments) &&
-        api->argType(&arguments) == mwin_dbusTypeString)
+    if (mwinBusOwnerChanged(settings->bus, &settings->portal, message))
+    {
+        return mwin_dbusNotHandled;
+    }
+    if (api->isSignal(message, SETTINGS, "SettingChanged") &&
+        mwinBusFromOwner(settings->bus, &settings->portal, message) &&
+        api->iterInit(message, &arguments) && api->argType(&arguments) == mwin_dbusTypeString)
     {
         api->getBasic(&arguments, (void*)&space);
         if (api->next(&arguments) && api->argType(&arguments) == mwin_dbusTypeString)
@@ -205,7 +211,7 @@ static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, 
     return mwin_dbusNotHandled;
 }
 
-static void Listen(mwinLinuxSettings* settings)
+static void Listen(mwinLinuxSettings* settings, uint64_t nowNs)
 {
     mwinLinuxBus* bus = settings->bus;
     if (!bus->api.addFilter(bus->connection, Filter, settings, nullptr))
@@ -223,6 +229,7 @@ static void Listen(mwinLinuxSettings* settings)
                            "type='signal',interface='" SETTINGS "',member='SettingChanged'");
         mwinBusTell(bus, message);
     }
+    mwinBusFollow(bus, &settings->portal, PORTAL, nowNs);
 }
 
 void mwinSettingsStart(mwinLinuxSettings* settings, mwinContext* context, mwinLinuxBus* bus,
@@ -239,7 +246,7 @@ void mwinSettingsStart(mwinLinuxSettings* settings, mwinContext* context, mwinLi
     {
         return;
     }
-    Listen(settings);
+    Listen(settings, nowNs);
     DBusMessage* message = mwinBusMethod(bus, PORTAL, PORTAL_PATH, SETTINGS, "ReadAll");
     mwinDBusIter arguments;
     mwinDBusIter spaces;
@@ -286,6 +293,7 @@ void mwinSettingsStop(mwinLinuxSettings* settings)
         return;
     }
     mwinBusDrop(settings->bus, &settings->call);
+    mwinBusUnfollow(settings->bus, &settings->portal);
     if (settings->listening)
     {
         settings->bus->api.removeFilter(settings->bus->connection, Filter, settings);

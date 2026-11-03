@@ -293,7 +293,7 @@ static void PostText(mwinAndroidPlatform* platform, uint32_t typed, uint64_t tim
     {
         return;
     }
-    mwinEvent event = {.type = mwin_eventTextInput, .timeNs = timeNs};
+    mwinEvent event = {.kind = mwin_eventTextInput, .timeNs = timeNs};
     event.data.text = (mwinTextEvent){bytes, (uint32_t)size};
     mwinPost(platform->context, (uint32_t)platform->slot, &event);
 }
@@ -334,7 +334,7 @@ bool mwinAndroidKeyEvent(mwinAndroidPlatform* platform, const mwinAndroidKey* ke
 {
     mwinKeyCode code = CodeOf(key);
     if (platform->slot < 0 || !platform->window.created || IsSystemKey(key->keyCode) ||
-        code == mwin_codeUnknown || code >= MWIN_ANDROID_KEY_CODES ||
+        code == mwin_codeUnknown || (uint32_t)code >= MWIN_ANDROID_KEY_CODES ||
         key->action == AKEY_EVENT_ACTION_MULTIPLE)
     {
         return false;
@@ -357,7 +357,7 @@ bool mwinAndroidKeyEvent(mwinAndroidPlatform* platform, const mwinAndroidKey* ke
     }
     keys->held[code / 8] = down ? (uint8_t)(keys->held[code / 8] | bit)
                                 : (uint8_t)(keys->held[code / 8] & (uint8_t)~bit);
-    mwinEvent record = {.type = down ? mwin_eventKeyDown : mwin_eventKeyUp, .timeNs = key->timeNs};
+    mwinEvent record = {.kind = down ? mwin_eventKeyDown : mwin_eventKeyUp, .timeNs = key->timeNs};
     record.data.key = (mwinKeyEvent){code, ModifiersOf(key->meta), meaning, down && key->repeat};
     mwinPost(platform->context, (uint32_t)platform->slot, &record);
     if (down)
@@ -376,7 +376,7 @@ static void Back(mwinAndroidPlatform* platform, const AInputEvent* event)
     bool cancelled = (AKeyEvent_getFlags(event) & AKEY_EVENT_FLAG_CANCELED) != 0;
     if (AKeyEvent_getAction(event) == AKEY_EVENT_ACTION_UP && !cancelled)
     {
-        mwinEvent close = {.type = mwin_eventCloseRequested,
+        mwinEvent close = {.kind = mwin_eventCloseRequested,
                            .timeNs = (uint64_t)AKeyEvent_getEventTime(event)};
         mwinPost(platform->context, (uint32_t)platform->slot, &close);
     }
@@ -428,7 +428,7 @@ bool mwinAndroidInput(mwinAndroidPlatform* platform, const AInputEvent* event)
 
 mwinKey mwinAndroidMapKeyCode(const mwinAndroidPlatform* platform, mwinKeyCode code)
 {
-    if (code >= MWIN_ANDROID_KEY_CODES)
+    if ((uint32_t)code >= MWIN_ANDROID_KEY_CODES)
     {
         return 0;
     }

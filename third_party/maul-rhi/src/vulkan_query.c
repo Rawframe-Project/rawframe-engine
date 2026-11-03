@@ -100,7 +100,7 @@ static void Resolve(const mrhiVulkanRecording* recording, const mrhiCommand* com
     VkBuffer buffer = mrhiVulkanFrameBuffer(recording, (uint32_t)command->a);
     uint32_t first = (uint32_t)command->c;
     uint32_t count = (uint32_t)(command->c >> 32);
-    VkDeviceSize stride = mrhiQueryBytes(set->type);
+    VkDeviceSize stride = mrhiQueryBytes(set->kind);
     uint32_t i = 0;
     while (i < count)
     {

@@ -17,37 +17,47 @@
 #include <string.h>
 
 // Lets go of the platform's text, or its data.
+// Each is emptied before the program's free hook gets its block, so that
+// a getter called from the hook reads none of it.
 static void ReleaseText(const mwinContext* context, mwinTestPlatform* platform)
 {
-    if (platform->clipboard != nullptr)
-    {
-        mwinRelease(&context->allocator, platform->clipboard, platform->clipboardBytes,
-                    alignof(uint16_t));
-    }
+    void* text = platform->clipboard;
+    size_t bytes = platform->clipboardBytes;
     platform->clipboard = nullptr;
     platform->clipboardBytes = 0;
+    if (text != nullptr)
+    {
+        mwinRelease(&context->allocator, text, bytes, alignof(uint16_t));
+    }
 }
 
 static void ReleaseData(const mwinContext* context, mwinTestPlatform* platform)
 {
-    if (platform->data != nullptr)
-    {
-        mwinRelease(&context->allocator, platform->data, platform->data->size,
-                    alignof(mwinClipboardCopy));
-    }
+    mwinClipboardCopy* data = platform->data;
     platform->data = nullptr;
+    if (data != nullptr)
+    {
+        mwinRelease(&context->allocator, data, data->size, alignof(mwinClipboardCopy));
+    }
+}
+
+static void ReleasePrimary(const mwinContext* context, mwinTestPlatform* platform)
+{
+    char* primary = platform->primary;
+    size_t bytes = platform->primaryBytes;
+    platform->primary = nullptr;
+    platform->primaryBytes = 0;
+    if (primary != nullptr)
+    {
+        mwinRelease(&context->allocator, primary, bytes, 1);
+    }
 }
 
 void mwinTestReleaseClipboard(const mwinContext* context, mwinTestPlatform* platform)
 {
     ReleaseText(context, platform);
     ReleaseData(context, platform);
-    if (platform->primary != nullptr)
-    {
-        mwinRelease(&context->allocator, platform->primary, platform->primaryBytes, 1);
-    }
-    platform->primary = nullptr;
-    platform->primaryBytes = 0;
+    ReleasePrimary(context, platform);
 }
 
 // Puts bytes on the platform's clipboard; false when there is no room.
@@ -103,10 +113,7 @@ static bool SetPrimary(const mwinContext* context, const char* bytes, size_t len
     {
         memcpy(copy, bytes, length);
     }
-    if (platform->primary != nullptr)
-    {
-        mwinRelease(&context->allocator, platform->primary, platform->primaryBytes, 1);
-    }
+    ReleasePrimary(context, platform);
     platform->primary = copy;
     platform->primaryBytes = length;
     return true;
@@ -206,19 +213,20 @@ mwinResult mwinContext_SetTestClipboardUtf16(mwinContext* context, const uint16_
 mwinResult mwinContext_GetTestClipboard(const mwinContext* context, char* bufferOut,
                                         size_t capacity, size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity > 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
     {
-        return mwin_errorUnsupported;
+        return mwinClearOnFailure(mwin_errorUnsupported, bufferOut, capacity);
     }
     size_t length = platform->clipboardBytes;
-    return mwinGiveBytes(platform->clipboard, length, bufferOut, capacity, lengthOut);
+    return mwinClearOnFailure(
+        mwinGiveBytes(platform->clipboard, length, bufferOut, capacity, lengthOut), bufferOut,
+        capacity);
 }
 
 mwinResult mwinContext_SetTestClipboardData(mwinContext* context, const char* mime,
@@ -265,25 +273,25 @@ mwinResult mwinContext_GetTestClipboardData(const mwinContext* context, const ch
                                             size_t mimeLength, void* bufferOut, size_t capacity,
                                             size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     if (context == nullptr || mime == nullptr || lengthOut == nullptr ||
         (bufferOut == nullptr && capacity > 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
     {
-        return mwin_errorUnsupported;
+        return mwinClearOnFailure(mwin_errorUnsupported, bufferOut, capacity);
     }
     const mwinClipboardDataItem* item = FindItem(platform, mime, mimeLength);
     if (item == nullptr)
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
-    return mwinGiveBytes(mwinClipboardBytesOf(platform->data, item), item->length, bufferOut,
-                         capacity, lengthOut);
+    return mwinClearOnFailure(mwinGiveBytes(mwinClipboardBytesOf(platform->data, item),
+                                            item->length, bufferOut, capacity, lengthOut),
+                              bufferOut, capacity);
 }
 
 mwinResult mwinContext_SetTestPrimary(mwinContext* context, const char* bytes, size_t length)
@@ -306,19 +314,20 @@ mwinResult mwinContext_SetTestPrimary(mwinContext* context, const char* bytes, s
 mwinResult mwinContext_GetTestPrimary(const mwinContext* context, char* bufferOut, size_t capacity,
                                       size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity > 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
     {
-        return mwin_errorUnsupported;
+        return mwinClearOnFailure(mwin_errorUnsupported, bufferOut, capacity);
     }
     size_t length = platform->primaryBytes;
-    return mwinGiveBytes(platform->primary, length, bufferOut, capacity, lengthOut);
+    return mwinClearOnFailure(
+        mwinGiveBytes(platform->primary, length, bufferOut, capacity, lengthOut), bufferOut,
+        capacity);
 }
 
 mwinResult mwinWindow_PostTestDrop(mwinContext* context, mwinWindowId window, mwinPosition position,
@@ -347,7 +356,7 @@ mwinResult mwinWindow_PostTestDrop(mwinContext* context, mwinWindowId window, mw
     {
         return mwin_errorState;
     }
-    mwinEvent report = {.type = mwin_eventDropped, .window = window, .timeNs = platform->timeNs};
+    mwinEvent report = {.kind = mwin_eventDropped, .window = window, .timeNs = platform->timeNs};
     report.data.drop.position = position;
     mwinResult status = mwinTestQueueReport(platform, &report);
     if (status != mwin_success)
@@ -382,22 +391,23 @@ void mwinTestOpen(mwinContext* context, const mwinRequest* request)
 mwinResult mwinContext_GetTestOpened(const mwinContext* context, mwinRequestKind kind,
                                      char* bufferOut, size_t capacity, size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     bool known = kind == mwin_requestOpenUrl || kind == mwin_requestRevealFile;
     if (context == nullptr || lengthOut == nullptr || !known ||
         (bufferOut == nullptr && capacity > 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
     {
-        return mwin_errorUnsupported;
+        return mwinClearOnFailure(mwin_errorUnsupported, bufferOut, capacity);
     }
     int which = kind == mwin_requestOpenUrl ? 0 : 1;
     size_t length = platform->openedLength[which];
-    return mwinGiveBytes(platform->opened[which], length, bufferOut, capacity, lengthOut);
+    return mwinClearOnFailure(
+        mwinGiveBytes(platform->opened[which], length, bufferOut, capacity, lengthOut), bufferOut,
+        capacity);
 }
 
 mwinResult mwinContext_SetTestDialogFiles(mwinContext* context, const char* files, size_t length)
@@ -462,19 +472,20 @@ mwinOutcome mwinTestAnswerDialog(mwinContext* context, uint32_t slot, uint32_t r
 mwinResult mwinContext_GetTestDialog(const mwinContext* context, char* bufferOut, size_t capacity,
                                      size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity > 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
     const mwinTestPlatform* platform = mwinTestPlatformOf(context);
     if (platform == nullptr)
     {
-        return mwin_errorUnsupported;
+        return mwinClearOnFailure(mwin_errorUnsupported, bufferOut, capacity);
     }
     size_t length = platform->dialogLength;
-    return mwinGiveBytes(platform->dialog, length, bufferOut, capacity, lengthOut);
+    return mwinClearOnFailure(
+        mwinGiveBytes(platform->dialog, length, bufferOut, capacity, lengthOut), bufferOut,
+        capacity);
 }
 
 static uint64_t Hash(uint64_t hash, const uint8_t* bytes, size_t length)
@@ -507,7 +518,7 @@ void mwinTestSetIcon(mwinContext* context, const mwinRequest* request)
     platform->iconChecksum = hash;
 }
 
-mwinResult mwinContext_GetTestIcon(const mwinContext* context, uint32_t* countOut,
+mwinResult mwinContext_GetTestIcon(const mwinContext* context, size_t* countOut,
                                    uint64_t* checksumOut)
 {
     mwinClearOut(countOut, sizeof *countOut);
@@ -573,8 +584,8 @@ mwinResult mwinContext_SetTestKeyReach(mwinContext* context, mwinKeyCode code,
     {
         return mwinBusy(context);
     }
-    if (context == nullptr || code == mwin_codeUnknown || code > mwin_codeMetaRight ||
-        reach > mwin_keyReachNever)
+    if (context == nullptr || code == mwin_codeUnknown || (uint32_t)code > mwin_codeMetaRight ||
+        (uint32_t)reach > mwin_keyReachNever)
     {
         return mwinMisuse(context);
     }

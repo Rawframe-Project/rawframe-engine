@@ -30,7 +30,7 @@ mrhiViewDef mrhiDefaultViewDef(void)
 // check here: it is refused unless it is some of the texture's.
 static bool IsKnown(const mrhiViewDef* def)
 {
-    return def->kind <= mrhi_texture3d && def->aspect <= mrhi_aspectStencilOnly;
+    return (uint32_t)def->kind <= mrhi_texture3d && (uint32_t)def->aspect <= mrhi_aspectStencilOnly;
 }
 
 uint32_t mrhiResolveCount(uint32_t count, uint32_t base, uint32_t total)
@@ -63,8 +63,10 @@ static bool IsKindValid(const mrhiTextureDef* texture, const mrhiViewDef* view)
         return cube && view->layerCount == 6;
     case mrhi_textureCubeArray:
         return cube && view->layerCount % 6 == 0;
-    default:
+    case mrhi_texture3d:
         return !flat;
+    default:
+        return false;
     }
 }
 
@@ -94,8 +96,10 @@ bool mrhiFormatHasAspect(mrhiFormat format, mrhiTextureAspect aspect)
         return mrhiFormatHasDepth(format);
     case mrhi_aspectStencilOnly:
         return mrhiFormatHasStencil(format);
-    default:
+    case mrhi_aspectAll:
         return true;
+    default:
+        return false;
     }
 }
 

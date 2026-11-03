@@ -261,12 +261,21 @@ static void Respond(mwinLinuxDialogs* dialogs, mwinLinuxDialog* dialog, DBusMess
                        : mwin_outcomeFailed);
 }
 
+// A Response from the connection that owns the portal's name, at the
+// path of a dialog's request.
 static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, void* data)
 {
     (void)connection;
     mwinLinuxDialogs* dialogs = data;
     const mwinDBusApi* api = &dialogs->bus->api;
-    const char* path = api->isSignal(message, s_request, "Response") ? api->path(message) : nullptr;
+    if (mwinBusOwnerChanged(dialogs->bus, &dialogs->portal, message))
+    {
+        return mwin_dbusNotHandled;
+    }
+    const char* path = api->isSignal(message, s_request, "Response") &&
+                               mwinBusFromOwner(dialogs->bus, &dialogs->portal, message)
+                           ? api->path(message)
+                           : nullptr;
     for (size_t i = 0; path != nullptr && i < MWIN_LINUX_DIALOGS; i++)
     {
         mwinLinuxDialog* dialog = &dialogs->dialogs[i];
@@ -299,6 +308,7 @@ static void Listen(mwinLinuxDialogs* dialogs)
                            "member='Response'");
         mwinBusTell(bus, message);
     }
+    mwinBusFollow(bus, &dialogs->portal, s_portal, mwinMonotonicNow());
 }
 
 // Starts zenity in the portal's stead: false when it ended at once.
@@ -426,6 +436,7 @@ void mwinDialogsStop(mwinLinuxDialogs* dialogs)
     }
     if (dialogs->listening)
     {
+        mwinBusUnfollow(dialogs->bus, &dialogs->portal);
         dialogs->bus->api.removeFilter(dialogs->bus->connection, Filter, dialogs);
         dialogs->listening = false;
     }

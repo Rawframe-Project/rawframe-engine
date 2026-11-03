@@ -5,7 +5,6 @@
 // driver with a tag that carries their slot, and answered in the
 // device's queue, whose room each creation reserves.
 
-#include "invariant.h"
 #include "label.h"
 #include "pipeline_core.h"
 
@@ -33,8 +32,10 @@ static bool IsValueValid(mrhiConstantType type, double value)
         return value >= -2147483648.0 && value <= 2147483647.0 && (double)(int32_t)value == value;
     case mrhi_constantUint32:
         return value >= 0.0 && value <= 4294967295.0 && (double)(uint32_t)value == value;
-    default:
+    case mrhi_constantFloat32:
         return value >= -(double)FLT_MAX && value <= (double)FLT_MAX;
+    default:
+        return false;
     }
 }
 
@@ -128,14 +129,6 @@ mrhiResult mrhiTakePipelineSlot(mrhiDevice* device, mrhiPipelineKind kind,
         .reflection = reflection,
     };
     return mrhi_success;
-}
-
-void mrhiFreePipelineSlot(mrhiDevice* device, uint32_t index1)
-{
-    mrhiPipelineSlot* slot = &device->pipelineSlots[index1 - 1];
-    mrhiReleaseReflection(&device->allocator, slot->reflection);
-    *slot = (mrhiPipelineSlot){0};
-    mrhiPoolRelease(&device->pipelines, index1);
 }
 
 void mrhiUntakePipelineSlot(mrhiDevice* device, uint32_t index1)
@@ -283,8 +276,14 @@ mrhiResult mrhiDestroyPipeline(mrhiDevice* device, mrhiPipelineKind kind, uint32
         --device->pendingCount;
         mrhiQueueAnswer(device, mrhi_devicePipelineReady, slot->request, mrhi_errorStale);
     }
-    device->driver.vtable->destroyPipeline(device->driver.self, slot->handle);
-    mrhiFreePipelineSlot(device, index1);
+    // The id goes stale first: the driver and the reflection may give
+    // memory back to the allocator, and a hook naming the pipeline then
+    // finds it gone.
+    mrhiPipelineSlot ended = *slot;
+    *slot = (mrhiPipelineSlot){0};
+    mrhiPoolRelease(&device->pipelines, index1);
+    device->driver.vtable->destroyPipeline(device->driver.self, ended.handle);
+    mrhiReleaseReflection(&device->allocator, ended.reflection);
     return mrhi_success;
 }
 
@@ -321,10 +320,19 @@ void mrhiFinishPipeline(mrhiDevice* device, uint64_t tag, mrhiResult outcome)
 {
     uint32_t index1 = (uint32_t)(tag >> 32);
     uint32_t request = (uint32_t)tag;
-    // The driver reports only pipelines it was not asked to destroy.
-    MRHI_ASSERT(index1 <= device->budgets.pipelines);
+    // A driver reports only the pipelines still compiling; an event for a
+    // slot past the budget, one not compiling, or another request answers
+    // nothing the core asked. A pipeline's tag is above UINT32_MAX, so its
+    // index is at least 1.
+    if (index1 > device->budgets.pipelines)
+    {
+        return;
+    }
     mrhiPipelineSlot* slot = &device->pipelineSlots[index1 - 1];
-    MRHI_ASSERT(slot->state == mrhiPipelinePending && slot->request == request);
+    if (slot->state != mrhiPipelinePending || slot->request != request)
+    {
+        return;
+    }
     slot->state = outcome == mrhi_success ? mrhiPipelineReady : mrhiPipelineFailed;
     --device->pendingCount;
     mrhiQueueAnswer(device, mrhi_devicePipelineReady, request, outcome);

@@ -29,10 +29,10 @@ static void DestroyOffer(const mwinWaylandApi* api, struct wl_data_offer* offer)
     }
 }
 
-static void Post(mwinWaylandPlatform* platform, mwinEventType type)
+static void Post(mwinWaylandPlatform* platform, mwinEventKind type)
 {
     const mwinWaylandDrag* drag = &platform->drag;
-    mwinEvent event = {.type = type, .timeNs = mwinMonotonicNow()};
+    mwinEvent event = {.kind = type, .timeNs = mwinMonotonicNow()};
     event.data.drag = (mwinDragEvent){drag->position, drag->contents};
     mwinPost(platform->context, (uint32_t)drag->slot, &event);
 }

@@ -186,7 +186,7 @@ mrhiResult mrhiMetalCreateSampler(id<MTLDevice> device, const mrhiSamplerDef* de
 mrhiResult mrhiMetalCreateQuerySet(id<MTLDevice> device, const mrhiQuerySetDef* def,
                                    uint64_t* handleOut)
 {
-    MRHI_ASSERT(def->type == mrhi_queryOcclusion);
+    MRHI_ASSERT(def->kind == mrhi_queryOcclusion);
     @autoreleasepool
     {
         id<MTLBuffer> results = [device newBufferWithLength:(NSUInteger)def->count * 8

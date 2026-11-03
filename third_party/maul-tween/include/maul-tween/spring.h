@@ -124,10 +124,12 @@ extern "C"
                                                         double velocity, double seconds,
                                                         double* offsetOut, double* velocityOut);
 
-    /// Returns the time after which a spring from a start stays within
-    /// both tolerances of its target and of rest, by bounds on its offset
-    /// and velocity that never end it early; the host then snaps it to the
-    /// target.
+    /// Returns the time after which a spring from a start, sampled by
+    /// mtwnSampleSpring, stays within both tolerances of its target and of
+    /// rest, by bounds on its offset and velocity that never end it early,
+    /// less a margin for the sample's rounding; the host then snaps it to
+    /// the target. For tolerances near the subnormals, that margin can make
+    /// it noticeably later than the motion's own.
     ///
     /// @param spring             A spring made by this library.
     /// @param offset             The start's offset from the target, finite.
@@ -136,8 +138,20 @@ extern "C"
     ///                           0.
     /// @param velocityTolerance  How fast is at rest, per second, above 0.
     /// @param secondsOut         Receives the seconds from the start: 0
-    ///                           when it starts within both; infinity for an
-    ///                           undamped spring that does not. Unchanged on
+    ///                           when it starts within both by more than
+    ///                           the margin for the sample's rounding
+    ///                           (relatively about 1e-14, up to about 4e-9
+    ///                           just above critical damping; closer to a
+    ///                           tolerance, a time just past 0); infinity
+    ///                           for an undamped spring that does not, and
+    ///                           for a spring decaying at a rate below
+    ///                           about 4e-306 that does not, where the
+    ///                           sample's rounding below the normal doubles,
+    ///                           times the start, could pass a tolerance. On any
+    ///                           spring, a start within a tolerance only a
+    ///                           few subnormal steps wide gets 0 yet can
+    ///                           sample one subnormal step past it, only
+    ///                           through rounding ties. Unchanged on
     ///                           failure.
     /// @return mtwn_success; mtwn_errorInvalid for a null pointer, a spring
     ///         no maker produced, or a start or tolerance outside the above.

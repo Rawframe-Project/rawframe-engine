@@ -188,7 +188,7 @@ void mtwnResetAlone(mtwnContext* context, const mtwnClipPlay* play, mtwnWork* gr
 static double ChildTime(const mtwnTiming* timing, double local, bool backwards, bool* forwards)
 {
     mtwnTimingResult result;
-    mtwnComputeTimingWork(timing, local, backwards, &result);
+    mtwnComputeTimelineTimingWork(timing, local, backwards, &result);
     if (forwards != NULL)
     {
         *forwards = result.forwards;
@@ -214,12 +214,14 @@ typedef struct TrackTimes
     double earlierIteration;
     // Whether earlier is worked out: only a velocity computed now needs it.
     bool earlierKnown;
+    // Whether the timing's easing gave a host function's NaN at progress.
+    bool hostNan;
 } TrackTimes;
 
 // A track's progress at a local time, NaN when it has no effect, and its
-// current iteration.
+// current iteration; hostNan as mtwnSampleEasingNoted's.
 static double TrackProgress(const mtwnClipNode* node, double local, bool backwards,
-                            double* iterationOut)
+                            double* iterationOut, bool* hostNan)
 {
     *iterationOut = 0.0;
     if (isnan(local))
@@ -227,7 +229,7 @@ static double TrackProgress(const mtwnClipNode* node, double local, bool backwar
         return (double)NAN;
     }
     mtwnTimingResult result;
-    mtwnComputeTimingWork(&node->timing, local, backwards, &result);
+    mtwnComputeTimingNoted(&node->timing, local, backwards, hostNan, &result);
     *iterationOut = result.iteration;
     return result.transformedProgress;
 }
@@ -296,15 +298,28 @@ static mtwnVec4 Moved(const mtwnClipNode* node, mtwnVec4 value, double k)
 }
 
 // A track's value, an integer's unrounded for its velocity.
-static mtwnVec4 Unrounded(const mtwnTrack* track, double progress)
+static mtwnVec4 Unrounded(const mtwnTrack* track, double progress, bool* hostNan)
 {
     if (track->kind != mtwn_valueInteger)
     {
-        return mtwnSampleTrackWork(track, progress);
+        return mtwnSampleTrackWork(track, progress, hostNan);
     }
     mtwnTrack scalar = *track;
     scalar.kind = mtwn_valueScalar;
-    return mtwnSampleTrackWork(&scalar, progress);
+    return mtwnSampleTrackWork(&scalar, progress, hostNan);
+}
+
+// One misuse for a player's track whose sample this update met a host
+// function's NaN: counted where the player samples it or replays a
+// shared sample, so the count is the same with sharing on or off,
+// serially or on tasks; the earlier sample a velocity is measured from
+// counts none.
+static void CountHostNan(const mtwnContext* context, bool hostNan)
+{
+    if (hostNan)
+    {
+        mtwnCountMisuse(context);
+    }
 }
 
 // A clip track's velocity left lazy: the parent's time a moment ago, and
@@ -329,7 +344,7 @@ static mtwnVec4 TrackVelocity(const mtwnClipNode* node, mtwnVec4 value, double e
     float velocity[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     if (!isnan(earlier) && node->track.kind != mtwn_valueDiscrete)
     {
-        mtwnVec4 before = Moved(node, Unrounded(&node->track, earlier), earlierIteration);
+        mtwnVec4 before = Moved(node, Unrounded(&node->track, earlier, NULL), earlierIteration);
         const float* a = &value.x;
         const float* b = &before.x;
         for (int i = 0; i < 4; ++i)
@@ -359,7 +374,7 @@ mtwnVec4 mtwnClipTrackVelocity(const mtwnContext* context, const mtwnTargetSlot*
     const mtwnClipNode* node = &clip->nodes[lazy.node & ~s_backwardsBit];
     double earlierIteration = 0.0;
     double earlier = TrackProgress(node, lazy.before - node->start,
-                                   (lazy.node & s_backwardsBit) != 0, &earlierIteration);
+                                   (lazy.node & s_backwardsBit) != 0, &earlierIteration, NULL);
     return TrackVelocity(node, target->value, earlier, earlierIteration);
 }
 
@@ -392,8 +407,9 @@ static bool LeavesVelocity(const mtwnClipNode* node, const mtwnBound* bound, dou
 
 static TrackTimes TimesOf(const mtwnClipNode* node, const mtwnNodeTime* parent)
 {
-    TrackTimes t = {(double)NAN, 0.0, (double)NAN, 0.0, false};
-    t.progress = TrackProgress(node, parent->now - node->start, parent->backwards, &t.iteration);
+    TrackTimes t = {(double)NAN, 0.0, (double)NAN, 0.0, false, false};
+    t.progress =
+        TrackProgress(node, parent->now - node->start, parent->backwards, &t.iteration, &t.hostNan);
     return t;
 }
 
@@ -403,7 +419,7 @@ static void KnowEarlier(TrackTimes* t, const mtwnClipNode* node, const mtwnNodeT
     if (!t->earlierKnown && moving && !isnan(t->progress))
     {
         t->earlier = TrackProgress(node, parent->before - node->start, parent->backwards,
-                                   &t->earlierIteration);
+                                   &t->earlierIteration, NULL);
     }
     t->earlierKnown = true;
 }
@@ -418,16 +434,21 @@ typedef struct TrackPlace
 } TrackPlace;
 
 // A track's result, which reads no target: false when it has no effect.
+// hostNan is set when its timing's or its keyframe's easing gave a host
+// function's NaN, for the player to count one misuse.
 static MTWN_ALWAYS_INLINE bool TrackResult(const mtwnClipNode* node, const mtwnBound* bound,
                                            double weight, const TrackPlace* place,
-                                           TrackTimes* times, mtwnTrackOut* out)
+                                           TrackTimes* times, mtwnTrackOut* out, bool* hostNan)
 {
     double progress = times->progress;
+    *hostNan = false;
     if (isnan(progress))
     {
         return false;
     }
-    out->value = Moved(node, Unrounded(&node->track, progress), times->iteration);
+    bool valueNan = false;
+    out->value = Moved(node, Unrounded(&node->track, progress, &valueNan), times->iteration);
+    *hostNan = times->hostNan || valueNan;
     out->weight = weight * (double)bound->weight;
     out->kind = node->track.kind;
     out->composite = bound->composite;
@@ -584,8 +605,8 @@ static void SharedResult(const mtwnClipNode* node, const mtwnBound* bound, doubl
     }
     if (!shared->velocityKnown)
     {
-        TrackTimes t = {shared->progress, shared->iteration, shared->earlier,
-                        shared->earlierIteration, shared->earlierKnown};
+        TrackTimes t = {shared->progress,         shared->iteration,    shared->earlier,
+                        shared->earlierIteration, shared->earlierKnown, false};
         mtwnNodeTime parent = {
             0.0, shared->parentBefore, shared->parentBackwards, false, false, false, false};
         KnowEarlier(&t, node, &parent, place->moving);
@@ -600,10 +621,11 @@ static void SharedResult(const mtwnClipNode* node, const mtwnBound* bound, doubl
 
 // Keeps a track's result for the next player in step.
 static void Share(mtwnSharedTrack* shared, const TrackTimes* t, const mtwnNodeTime* parent,
-                  const mtwnTrackOut* out, bool effect)
+                  const mtwnTrackOut* out, bool effect, bool hostNan)
 {
     shared->known = true;
     shared->effect = effect;
+    shared->hostNan = effect && hostNan;
     shared->progress = t->progress;
     shared->iteration = t->iteration;
     shared->earlier = t->earlier;
@@ -650,6 +672,7 @@ static bool SampleShared(mtwnContext* context, mtwnWork* work, const mtwnClipPla
         out.target = target;
         out.commit = commit;
         SharedResult(node, bound, play->weight, &place, shared, &out);
+        CountHostNan(context, shared->hostNan);
         // The library's own call, not the loop's copy of it.
         if (work->tracks == NULL || bound->alone)
         {
@@ -682,8 +705,9 @@ static void KeepTracks(const mtwnContext* context, mtwnSharing* sharing, const m
         const mtwnBound* bound = &context->bindings.entries[play->bindingStart + node->slot];
         TrackPlace place = {play->clip.index1, i, parent, moving};
         mtwnTrackOut out;
-        bool effect = TrackResult(node, bound, play->weight, &place, &t, &out);
-        Share(&sharing->tracks[i], &t, parent, &out, effect);
+        bool hostNan = false;
+        bool effect = TrackResult(node, bound, play->weight, &place, &t, &out, &hostNan);
+        Share(&sharing->tracks[i], &t, parent, &out, effect, hostNan);
     }
 }
 
@@ -723,7 +747,7 @@ void mtwnSampleClip(mtwnContext* context, mtwnWork* work, const mtwnClipPlay* pl
     TimelineTimes(&clip->nodes[0], &player, moving, &times[0]);
     // The last track's timing results, for the tracks after it that share
     // its timing; 0 when none is kept.
-    TrackTimes kept = {0.0, 0.0, 0.0, 0.0, false};
+    TrackTimes kept = {0.0, 0.0, 0.0, 0.0, false, false};
     uint32_t keptFor = 0;
     for (uint32_t i = 1; i < clip->nodeCount; ++i)
     {
@@ -753,8 +777,10 @@ void mtwnSampleClip(mtwnContext* context, mtwnWork* work, const mtwnClipPlay* pl
                 mtwnTrackOut out;
                 out.target = target;
                 out.commit = commit;
-                if (TrackResult(node, bound, play->weight, &place, &kept, &out))
+                bool hostNan = false;
+                if (TrackResult(node, bound, play->weight, &place, &kept, &out, &hostNan))
                 {
+                    CountHostNan(context, hostNan);
                     Put(context, work, &out, bound->alone);
                 }
             }

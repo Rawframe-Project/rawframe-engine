@@ -82,8 +82,9 @@ extern "C"
     ///
     /// @param context      The context.
     /// @param monitorsOut  Receives up to capacity ids, the primary monitor
-    ///                     first. May be NULL when capacity is 0. Zeroed
-    ///                     over capacity on failure.
+    ///                     first. May be NULL when capacity is 0. Zeroed over
+    ///                     capacity on failure. On success, the ids past those
+    ///                     it reports are left as they were.
     /// @param capacity     The ids monitorsOut holds.
     /// @param countOut     Receives the number of monitors connected, which
     ///                     may exceed capacity. 0 on failure.

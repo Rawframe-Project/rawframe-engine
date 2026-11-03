@@ -13,7 +13,7 @@
 
 #include "maul-window/services.h"
 
-#define MWIN_TEST_KINDS (mwin_requestPrimaryRead + 1)
+#define MWIN_TEST_KINDS (mwin_requestTextInputCaret + 1)
 
 // The chords whose reach a test sets.
 #define MWIN_TEST_KEY_REACHES 32

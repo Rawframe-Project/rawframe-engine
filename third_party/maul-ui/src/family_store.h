@@ -33,4 +33,9 @@ typedef struct muiFamilyStore
 // Releases a family's faces and zeroes it.
 void muiReleaseFontFamily(const muiAllocator* allocator, muiFontFamily* family);
 
+// Destroys family slot of a store, then releases what it held:
+// its id goes stale first, so host code the release runs (the allocator's
+// free) finds it gone rather than half freed (Maul conventions, Threads).
+void muiDropFontFamily(const muiAllocator* allocator, muiFamilyStore* store, uint32_t slot);
+
 #endif // MAUL_UI_SRC_FAMILY_STORE_H

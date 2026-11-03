@@ -189,7 +189,7 @@
         {
           "kind": "enum",
           "name": "struct_type",
-          "width": "uint32",
+          "packed": true,
           "doc": "The type of a chained struct. Bit 31 clear marks a critical extension, which a library that does not know it refuses; bit 31 set marks a hint it may skip. Types with bit 30 set (MRHI_STRUCT_DRIVER_DEFINED) belong to drivers built outside the tree.",
           "values": [
             {
@@ -288,7 +288,8 @@
             },
             {
               "name": "type",
-              "type": "enum.struct_type"
+              "type": "enum.struct_type",
+              "doc": "What struct this is, as Vulkan's sType says: the chain's tag, read before the rest of the struct. It is not a choice the struct makes, so it is a type, not a kind."
             }
           ],
           "library": "the library's extension chain"
@@ -341,7 +342,6 @@
         {
           "kind": "enum",
           "name": "diagnostic_code",
-          "width": "uint16",
           "doc": "The check a diagnostic record reports: one check of the core that refused a call as invalid input, one budget a frame call reached or driver budget a submission ran out of, or, in a build with the validation layer, one rule of the driver SPI that the driver broke (the driver codes, recorded in the instance's queue). mrhiGetDiagnosticText gives each one's text.",
           "values": [
             {
@@ -637,7 +637,7 @@
             {
               "name": "diagnostic_driver_adapter",
               "value": 76,
-              "doc": "A driver listed an adapter with a zero or repeated handle, a name longer than MRHI_ADAPTER_NAME_BYTES, or an unknown kind."
+              "doc": "A driver listed an adapter with a zero or repeated handle, a name longer than MRHI_ADAPTER_NAME_BYTES or not well-formed UTF-8, or an unknown kind; the core lists an unknown kind as mrhi_adapterUnknown and the name up to its first byte that is not well-formed UTF-8 within its room."
             },
             {
               "name": "diagnostic_driver_sample_counts",
@@ -1038,6 +1038,21 @@
               "name": "diagnostic_allocator_call",
               "value": 156,
               "doc": "A function that would change the instance or device was called from inside its allocator."
+            },
+            {
+              "name": "diagnostic_driver_loss_report",
+              "value": 157,
+              "doc": "A driver reported a device loss with an unknown reason, or a message longer than MRHI_LOSS_MESSAGE_BYTES or not well-formed UTF-8; the core passed on mrhi_lossUnknown, and the message up to its first byte that is not well-formed UTF-8 within its room."
+            },
+            {
+              "name": "diagnostic_driver_surface_caps",
+              "value": 158,
+              "doc": "A driver reported surface caps with more than MRHI_SURFACE_COLORS colors, or a color whose format, primaries, transfer or range is unknown; the core kept the first MRHI_SURFACE_COLORS, dropped each unknown one, and reported a surface left without a color as not presentable."
+            },
+            {
+              "name": "diagnostic_driver_surface_floors",
+              "value": 159,
+              "doc": "A driver reported surface caps as presentable without 8-bit sRGB in Rec. 709 among its colors, FIFO, opaque alpha, render target usage, or twin views or images; the core reported the adapter as not presenting to the surface."
             }
           ],
           "library": "names the library's own checks"
@@ -1053,9 +1068,9 @@
               "doc": "The check or the limit that refused the call."
             },
             {
-              "name": "count",
+              "name": "calls_refused",
               "type": "uint32",
-              "doc": "How many refusals in a row the record stands for: a refusal by the newest record's check adds to its count instead of taking room."
+              "doc": "How many calls in a row the record's check refused: a refusal by the newest record's check adds one here instead of taking room."
             }
           ],
           "library": "a record of the library's own diagnostic queue"
@@ -1108,7 +1123,6 @@
         {
           "kind": "enum",
           "name": "driver_kind",
-          "width": "uint8",
           "doc": "The GPU API a driver speaks.",
           "values": [
             {
@@ -1147,7 +1161,6 @@
         {
           "kind": "enum",
           "name": "adapter_kind",
-          "width": "uint8",
           "doc": "What kind of processor an adapter is.",
           "values": [
             {
@@ -1198,7 +1211,6 @@
         {
           "kind": "enum",
           "name": "power_preference",
-          "width": "uint8",
           "doc": "Which adapters a request prefers.",
           "values": [
             {
@@ -1249,7 +1261,8 @@
             },
             {
               "name": "kind",
-              "type": "enum.adapter_kind"
+              "type": "enum.adapter_kind",
+              "doc": "Its kind; mrhi_adapterUnknown also when the driver named a kind this list lacks."
             },
             {
               "name": "vendor_id",
@@ -1265,7 +1278,7 @@
               "name": "name",
               "type": "char",
               "array": "adapter_name_bytes",
-              "doc": "The adapter's name in UTF-8, nameLength bytes, not NUL-terminated."
+              "doc": "The adapter's name: well-formed UTF-8 without NUL, nameLength bytes, not NUL-terminated. It ends before the driver's first byte that would break that: a character cut by the room, a malformed sequence or a NUL."
             },
             {
               "name": "name_length",
@@ -1339,7 +1352,6 @@
         {
           "kind": "enum",
           "name": "instance_notification_kind",
-          "width": "uint8",
           "doc": "What an instance notification reports.",
           "values": [
             {
@@ -1626,7 +1638,7 @@
               "name": "diagnostic_out",
               "type": "struct.diagnostic",
               "pointer": "mutable",
-              "doc": "Receives the record; zeros unless one is taken."
+              "doc": "Receives the record; zeros unless one is taken, but left as it was on `mrhi_errorBusy`."
             }
           ],
           "thread_safety": {
@@ -1637,7 +1649,7 @@
         },
         {
           "kind": "function",
-          "name": "instance_get_driver_faults",
+          "name": "instance_get_driver_fault_count",
           "object": "instance",
           "doc": "Returns how many breaches of the driver SPI the validation layer has found on the instance and its devices: frames no driver could translate, and driver answers no core could trust. Builds without the layer (MAUL_RHI_VALIDATION) find none.",
           "returns": {
@@ -1743,7 +1755,7 @@
               "name": "notification_out",
               "type": "struct.instance_notification",
               "pointer": "mutable",
-              "doc": "Receives the record; zeros unless one is taken."
+              "doc": "Receives the record; zeros unless one is taken, but left as it was on `mrhi_errorBusy`."
             }
           ],
           "thread_safety": {
@@ -3067,7 +3079,6 @@
         {
           "kind": "enum",
           "name": "format",
-          "width": "uint16",
           "mapped": true,
           "doc": "A texel format. The compressed families need their feature; `format_caps` says what each format can do on an adapter.",
           "values": [
@@ -6221,6 +6232,83 @@
           ]
         },
         {
+          "kind": "bitflags",
+          "name": "sample_counts",
+          "mapped": true,
+          "doc": "The multisample counts a format supports, as a mask: the bit worth n is set when n samples per pixel are.",
+          "values": [
+            {
+              "name": "samples1_bit",
+              "value": 1,
+              "doc": "One sample per pixel.",
+              "mapping": {
+                "vulkan": {
+                  "class": "direct",
+                  "note": "VK_SAMPLE_COUNT_1_BIT"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "SampleDesc.Count 1"
+                },
+                "metal": {
+                  "class": "direct",
+                  "note": "supportsTextureSampleCount 1"
+                },
+                "web_gpu": {
+                  "class": "direct",
+                  "note": "sampleCount 1"
+                }
+              }
+            },
+            {
+              "name": "samples2_bit",
+              "value": 2,
+              "doc": "Two samples per pixel.",
+              "mapping": {
+                "vulkan": {
+                  "class": "direct",
+                  "note": "VK_SAMPLE_COUNT_2_BIT"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "SampleDesc.Count 2"
+                },
+                "metal": {
+                  "class": "direct",
+                  "note": "supportsTextureSampleCount 2"
+                },
+                "web_gpu": {
+                  "class": "absent_rejected",
+                  "note": "sampleCount is 1 or 4"
+                }
+              }
+            },
+            {
+              "name": "samples4_bit",
+              "value": 4,
+              "doc": "Four samples per pixel.",
+              "mapping": {
+                "vulkan": {
+                  "class": "direct",
+                  "note": "VK_SAMPLE_COUNT_4_BIT"
+                },
+                "d3d12": {
+                  "class": "direct",
+                  "note": "SampleDesc.Count 4"
+                },
+                "metal": {
+                  "class": "direct",
+                  "note": "supportsTextureSampleCount 4"
+                },
+                "web_gpu": {
+                  "class": "direct",
+                  "note": "sampleCount 4"
+                }
+              }
+            }
+          ]
+        },
+        {
           "kind": "struct",
           "name": "format_caps",
           "mapped": true,
@@ -6343,8 +6431,8 @@
             },
             {
               "name": "sample_counts",
-              "type": "uint8",
-              "doc": "The multisample counts as a mask: the bit worth n is set when n samples are supported (1, 2, 4).",
+              "type": "bitflags.sample_counts",
+              "doc": "The multisample counts it supports.",
               "mapping": {
                 "vulkan": {
                   "class": "direct",
@@ -6555,7 +6643,6 @@
         {
           "kind": "enum",
           "name": "device_state",
-          "width": "uint8",
           "doc": "Where a device is in its life.",
           "values": [
             {
@@ -7072,7 +7159,7 @@
               "name": "diagnostic_out",
               "type": "struct.diagnostic",
               "pointer": "mutable",
-              "doc": "Receives the record; zeros unless one is taken."
+              "doc": "Receives the record; zeros unless one is taken, but left as it was on `mrhi_errorBusy`."
             }
           ],
           "thread_safety": {
@@ -7084,7 +7171,6 @@
         {
           "kind": "enum",
           "name": "device_loss_reason",
-          "width": "uint8",
           "mapped": true,
           "doc": "Why a device was lost.",
           "values": [
@@ -7246,7 +7332,7 @@
             {
               "name": "reason",
               "type": "enum.device_loss_reason",
-              "doc": "Why it was lost."
+              "doc": "Why it was lost; mrhi_lossUnknown also when the driver named a reason this list lacks."
             },
             {
               "name": "last_submitted",
@@ -7272,7 +7358,7 @@
               "name": "message",
               "type": "char",
               "array": "loss_message_bytes",
-              "doc": "The driver's message: UTF-8 without NUL, messageLength bytes."
+              "doc": "The driver's message: well-formed UTF-8 without NUL, messageLength bytes. It ends before the driver's first byte that would break that: a character cut by the room, a malformed sequence or a NUL."
             },
             {
               "name": "message_length",
@@ -7363,7 +7449,6 @@
         {
           "kind": "enum",
           "name": "filter",
-          "width": "uint8",
           "mapped": true,
           "doc": "How texels are filtered.",
           "values": [
@@ -7418,7 +7503,6 @@
         {
           "kind": "enum",
           "name": "address_mode",
-          "width": "uint8",
           "mapped": true,
           "doc": "How coordinates outside a texture are treated. Clamp to border is absent: WebGPU has no border colors.",
           "values": [
@@ -7496,7 +7580,6 @@
         {
           "kind": "enum",
           "name": "compare_function",
-          "width": "uint8",
           "mapped": true,
           "doc": "A comparison of a new value with a stored one: for comparison samplers, and for depth and stencil tests.",
           "values": [
@@ -8092,7 +8175,6 @@
         {
           "kind": "bitflags",
           "name": "buffer_usage",
-          "width": "uint32",
           "mapped": true,
           "doc": "What a buffer is used for, declared when it is made.",
           "values": [
@@ -8501,7 +8583,6 @@
         {
           "kind": "enum",
           "name": "texture_kind",
-          "width": "uint8",
           "mapped": true,
           "doc": "The shape of a texture, or of a view of one.",
           "values": [
@@ -8625,7 +8706,6 @@
         {
           "kind": "bitflags",
           "name": "texture_usage",
-          "width": "uint32",
           "mapped": true,
           "doc": "What a texture is used for, declared when it is made; each needs the format's capability.",
           "values": [
@@ -9157,7 +9237,6 @@
         {
           "kind": "enum",
           "name": "texture_aspect",
-          "width": "uint8",
           "mapped": true,
           "doc": "The part of a texture's texels a view sees.",
           "values": [
@@ -9617,8 +9696,7 @@
         },
         {
           "kind": "enum",
-          "name": "query_type",
-          "width": "uint8",
+          "name": "query_kind",
           "mapped": true,
           "doc": "What a query set's queries measure.",
           "values": [
@@ -9765,8 +9843,8 @@
               }
             },
             {
-              "name": "type",
-              "type": "enum.query_type",
+              "name": "kind",
+              "type": "enum.query_kind",
               "doc": "What its queries measure.",
               "mapping": {
                 "vulkan": {
@@ -9938,7 +10016,6 @@
         {
           "kind": "enum",
           "name": "heap_entry_kind",
-          "width": "uint8",
           "mapped": true,
           "doc": "How shaders read a resource heap entry.",
           "values": [
@@ -10559,7 +10636,6 @@
         {
           "kind": "enum",
           "name": "color_primaries",
-          "width": "uint8",
           "mapped": true,
           "doc": "The primaries a surface's colors are in.",
           "values": [
@@ -10637,7 +10713,6 @@
         {
           "kind": "enum",
           "name": "transfer",
-          "width": "uint8",
           "mapped": true,
           "doc": "How a surface's values are encoded.",
           "values": [
@@ -10715,7 +10790,6 @@
         {
           "kind": "enum",
           "name": "color_range",
-          "width": "uint8",
           "mapped": true,
           "doc": "Whether a surface's values may pass 1.0.",
           "values": [
@@ -10870,7 +10944,6 @@
         {
           "kind": "enum",
           "name": "present_mode",
-          "width": "uint8",
           "mapped": true,
           "doc": "How presented images reach the display.",
           "values": [
@@ -10948,7 +11021,6 @@
         {
           "kind": "bitflags",
           "name": "present_modes",
-          "width": "uint32",
           "doc": "A set of mrhiPresentMode values, one bit each: the bit of a mode is 1 shifted left by its value.",
           "library": "a set of the mrhiPresentMode values a surface reports",
           "values": [
@@ -10972,7 +11044,6 @@
         {
           "kind": "enum",
           "name": "alpha_mode",
-          "width": "uint8",
           "mapped": true,
           "doc": "How a surface's alpha blends with what is behind the window.",
           "values": [
@@ -11027,7 +11098,6 @@
         {
           "kind": "bitflags",
           "name": "alpha_modes",
-          "width": "uint32",
           "doc": "A set of mrhiAlphaMode values, one bit each: the bit of a mode is 1 shifted left by its value.",
           "library": "a set of the mrhiAlphaMode values a surface reports",
           "values": [
@@ -11063,7 +11133,7 @@
               "name": "colors",
               "type": "struct.surface_color",
               "array": "surface_colors",
-              "doc": "The combinations it can show, the platform's preferred first."
+              "doc": "The combinations it can show, the platform's preferred first; a combination with a format, primaries, transfer or range the library does not list is left out."
             },
             {
               "name": "color_count",
@@ -11557,7 +11627,7 @@
               "name": "color_out",
               "type": "struct.surface_color",
               "pointer": "mutable",
-              "doc": "Receives the color to configure."
+              "doc": "Receives the color to configure; left as it was on any failure. It may be `asked` or one of the caps' colors, so a color can be replaced with its suggestion in place."
             }
           ],
           "thread_safety": {
@@ -11904,7 +11974,6 @@
         {
           "kind": "enum",
           "name": "device_notification_kind",
-          "width": "uint8",
           "doc": "What a device notification reports.",
           "values": [
             {
@@ -12042,7 +12111,7 @@
           "doc": "Submits the open frame to the GPU, compiling it first if it is not, and closes it. Its token is answered by one mrhi_deviceFrameDone record.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success` with the token; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorState` for a device without an open frame, or a pass begun and not ended, the frame staying open; `mrhi_errorUnsupported` when compiling finds a declared texture its format cannot take, the frame staying open; `mrhi_errorCapacity` when the device's queue has no room for the answer, or a pass's commands did not fit the frame's, the frame staying open to be dropped; `mrhi_errorPlatform` when the driver fails, the frame closing; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success` with the token; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorState` for a device without an open frame, or a pass begun and not ended, the frame staying open; `mrhi_errorUnsupported` when compiling finds a declared texture its format cannot take, the frame staying open; `mrhi_errorCapacity` when the device's queue has no room for the answer, or a pass's commands did not fit the frame's, the frame staying open to be dropped; `mrhi_errorPlatform` when the driver fails, the frame closing, or when compiling meets a memory alignment of zero or not a power of two from the driver, the frame staying open; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -12152,7 +12221,7 @@
               "name": "notification_out",
               "type": "struct.device_notification",
               "pointer": "mutable",
-              "doc": "Receives the record; zeros unless one is taken."
+              "doc": "Receives the record; zeros unless one is taken, but left as it was on `mrhi_errorBusy`."
             }
           ],
           "thread_safety": {
@@ -12497,7 +12566,6 @@
         {
           "kind": "enum",
           "name": "pass_class",
-          "width": "uint8",
           "mapped": true,
           "doc": "Where a pass runs: a hint drivers without the queue ignore, running it on the graphics queue.",
           "values": [
@@ -12578,7 +12646,6 @@
         {
           "kind": "enum",
           "name": "access_kind",
-          "width": "uint8",
           "mapped": true,
           "doc": "How a pass uses a resource.",
           "values": [
@@ -12840,7 +12907,6 @@
         {
           "kind": "enum",
           "name": "load_op",
-          "width": "uint8",
           "mapped": true,
           "doc": "What a target holds when its pass begins.",
           "values": [
@@ -12919,7 +12985,6 @@
         {
           "kind": "enum",
           "name": "store_op",
-          "width": "uint8",
           "mapped": true,
           "doc": "What a target keeps when its pass ends.",
           "values": [
@@ -13410,7 +13475,7 @@
           "doc": "Compiles the open frame: culls the passes nothing kept needs, checks each declared resource's derived usages against its format, and plans the barriers between uses. After it, nothing more is declared; submitting compiles a frame not yet compiled.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device, or a declared texture of several samples its kept passes use other than as a render target, or with storage; `mrhi_errorUnsupported` for a declared texture whose format cannot take the usages its kept passes make of it, the frame staying open; `mrhi_errorCapacity` when the barriers exceed the device's frameBarriers, the frame staying open; `mrhi_errorState` for a device without an open frame, or a frame already compiled; `mrhi_errorBusy` for a call from inside the device's allocator."
+            "doc": "`mrhi_success`; `mrhi_errorInvalid` for a NULL device, or a declared texture of several samples its kept passes use other than as a render target, or with storage; `mrhi_errorUnsupported` for a declared texture whose format cannot take the usages its kept passes make of it, the frame staying open; `mrhi_errorCapacity` when the barriers exceed the device's frameBarriers, the frame staying open; `mrhi_errorPlatform` when the driver gives a declared resource a memory alignment of zero or not a power of two, the frame staying open; `mrhi_errorState` for a device without an open frame, or a frame already compiled; `mrhi_errorBusy` for a call from inside the device's allocator."
           },
           "args": [
             {
@@ -13463,7 +13528,6 @@
         {
           "kind": "enum",
           "name": "resource_state",
-          "width": "uint8",
           "mapped": true,
           "doc": "The state a compiled frame leaves a part of a resource in, from the use that made it.",
           "values": [
@@ -13944,9 +14008,14 @@
           "doc": "What a compiled frame does with a resource.",
           "members": [
             {
-              "name": "usage",
-              "type": "uint32",
-              "doc": "The texture or buffer usages its kept passes make of it."
+              "name": "buffer_usage",
+              "type": "bitflags.buffer_usage",
+              "doc": "For a buffer, the usages its kept passes make of it; 0 for a texture or a surface image."
+            },
+            {
+              "name": "texture_usage",
+              "type": "bitflags.texture_usage",
+              "doc": "For a texture or a surface image, the usages its kept passes make of it; 0 for a buffer."
             },
             {
               "name": "transient",
@@ -14119,22 +14188,22 @@
           "doc": "What a frame has taken of each budget a frame has, each member named after the mrhiDeviceBudgets member it is measured against, and the memory its transient resources take, which no budget bounds.",
           "members": [
             {
-              "name": "frame_resources",
+              "name": "frame_resource_count",
               "type": "uint32",
               "doc": "The resources it declared, imported and acquired."
             },
             {
-              "name": "frame_passes",
+              "name": "frame_pass_count",
               "type": "uint32",
               "doc": "The passes it added; the library's own pass is not counted."
             },
             {
-              "name": "frame_accesses",
+              "name": "frame_access_count",
               "type": "uint32",
               "doc": "The accesses and targets its passes declared, as the limit counts them. A pass is refused when its accesses, with two for each color target and one for the depth target, could pass the limit, so the last pass may be refused below it."
             },
             {
-              "name": "frame_barriers",
+              "name": "frame_barrier_count",
               "type": "uint32",
               "doc": "The barriers its compile planned, the program's alone: 0 before the compile, and those planned before a compile the limit refused."
             },
@@ -14149,7 +14218,7 @@
               "doc": "The bytes its uploads took of its staging, each at a 512-byte boundary with a texture's rows at a 256-byte pitch."
             },
             {
-              "name": "frame_indirect_draws",
+              "name": "frame_indirect_draw_count",
               "type": "uint32",
               "doc": "The maxCounts of its counted multi-draws, in all."
             },
@@ -14202,7 +14271,6 @@
         {
           "kind": "bitflags",
           "name": "shader_stages",
-          "width": "uint32",
           "mapped": true,
           "doc": "The stages of a pipeline.",
           "values": [
@@ -14280,7 +14348,6 @@
         {
           "kind": "enum",
           "name": "binding_kind",
-          "width": "uint8",
           "mapped": true,
           "doc": "What a binding slot holds.",
           "values": [
@@ -14463,7 +14530,6 @@
         {
           "kind": "enum",
           "name": "sampler_binding",
-          "width": "uint8",
           "mapped": true,
           "doc": "The samplers a sampler slot takes.",
           "values": [
@@ -14547,7 +14613,6 @@
         {
           "kind": "enum",
           "name": "sample_type",
-          "width": "uint8",
           "mapped": true,
           "doc": "What a sampled texture slot returns.",
           "values": [
@@ -14677,7 +14742,6 @@
         {
           "kind": "enum",
           "name": "storage_access",
-          "width": "uint8",
           "mapped": true,
           "doc": "How a storage texture slot is used.",
           "values": [
@@ -14761,7 +14825,6 @@
         {
           "kind": "enum",
           "name": "scalar_type",
-          "width": "uint8",
           "mapped": true,
           "doc": "The scalar type of a shader interface variable: a vertex input, a color output or an inter-stage variable.",
           "values": [
@@ -14868,7 +14931,6 @@
         {
           "kind": "enum",
           "name": "interpolation",
-          "width": "uint8",
           "mapped": true,
           "doc": "How an inter-stage variable is interpolated.",
           "values": [
@@ -14952,7 +15014,6 @@
         {
           "kind": "enum",
           "name": "sampling",
-          "width": "uint8",
           "mapped": true,
           "doc": "Where an interpolated inter-stage variable is sampled, or which vertex a flat one takes.",
           "values": [
@@ -15082,7 +15143,6 @@
         {
           "kind": "bitflags",
           "name": "shader_builtins",
-          "width": "uint32",
           "mapped": true,
           "doc": "The builtins an entry point uses that constrain its pipelines: the fragment builtins, and the view index.",
           "values": [
@@ -15252,7 +15312,6 @@
         {
           "kind": "bitflags",
           "name": "shader_heap_uses",
-          "width": "uint32",
           "mapped": true,
           "doc": "What an entry point reads through the pass's heap; none for an entry point that uses no heap.",
           "values": [
@@ -15376,7 +15435,6 @@
         {
           "kind": "enum",
           "name": "constant_type",
-          "width": "uint8",
           "mapped": true,
           "doc": "The type of a specialization constant.",
           "values": [
@@ -15732,7 +15790,6 @@
         {
           "kind": "enum",
           "name": "vertex_format",
-          "width": "uint8",
           "mapped": true,
           "doc": "The format of a vertex attribute in its buffer. Floats, unorm and snorm formats feed f32 inputs, uint formats u32 inputs and sint formats i32 inputs, of any component count.",
           "values": [
@@ -16931,7 +16988,6 @@
         {
           "kind": "enum",
           "name": "vertex_step_mode",
-          "width": "uint8",
           "mapped": true,
           "doc": "How a vertex buffer advances.",
           "values": [
@@ -16986,7 +17042,6 @@
         {
           "kind": "enum",
           "name": "primitive_topology",
-          "width": "uint8",
           "mapped": true,
           "doc": "How vertices form primitives.",
           "values": [
@@ -17110,7 +17165,6 @@
         {
           "kind": "enum",
           "name": "index_format",
-          "width": "uint8",
           "mapped": true,
           "doc": "The width of an index.",
           "values": [
@@ -17171,7 +17225,6 @@
         {
           "kind": "enum",
           "name": "front_face",
-          "width": "uint8",
           "mapped": true,
           "doc": "Which winding faces front.",
           "values": [
@@ -17226,7 +17279,6 @@
         {
           "kind": "enum",
           "name": "cull_mode",
-          "width": "uint8",
           "mapped": true,
           "doc": "Which faces are culled.",
           "values": [
@@ -17304,7 +17356,6 @@
         {
           "kind": "enum",
           "name": "stencil_operation",
-          "width": "uint8",
           "mapped": true,
           "doc": "What a stencil test does to the stencil value.",
           "values": [
@@ -17497,7 +17548,6 @@
         {
           "kind": "enum",
           "name": "blend_factor",
-          "width": "uint8",
           "mapped": true,
           "doc": "A factor of blending's source or destination.",
           "values": [
@@ -17897,7 +17947,6 @@
         {
           "kind": "enum",
           "name": "blend_operation",
-          "width": "uint8",
           "mapped": true,
           "doc": "How blending combines its weighted source and destination.",
           "values": [
@@ -18021,7 +18070,6 @@
         {
           "kind": "bitflags",
           "name": "color_writes",
-          "width": "uint32",
           "mapped": true,
           "doc": "The channels a color target writes.",
           "values": [
@@ -18848,7 +18896,7 @@
           "doc": "Writes the device's pipeline cache, for a later device's def: the driver's compiled pipelines in a checked envelope.",
           "returns": {
             "type": "result",
-            "doc": "`mrhi_success` with the cache written, or only its size when bytesOut is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut; `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity` when capacity is less than the size, which sizeOut receives; `mrhi_errorPlatform` when the driver fails to write it."
+            "doc": "`mrhi_success` with the cache written, or only its size when bytesOut is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut; `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity` when capacity is less than the size, which sizeOut receives; `mrhi_errorPlatform` when the driver fails to write it, or gives a size too large to hold with the envelope's header."
           },
           "args": [
             {
@@ -20782,7 +20830,7 @@
             },
             {
               "name": "size",
-              "type": "uint64",
+              "type": "size",
               "doc": "How many, a multiple of 4."
             }
           ],
@@ -21037,7 +21085,7 @@
               "name": "bytes_out",
               "type": "void",
               "pointer": "mutable",
-              "doc": "Where the bytes go, or NULL for the size only; zeros, as many as capacity, on any failure."
+              "doc": "Where the bytes go, or NULL for the size only; zeros, as many as capacity, on any failure but `mrhi_errorBusy`, which leaves them."
             },
             {
               "name": "capacity",
@@ -21048,7 +21096,7 @@
               "name": "size_out",
               "type": "size",
               "pointer": "mutable",
-              "doc": "The readback's bytes; 0 on any failure but `mrhi_errorCapacity`, which gives them."
+              "doc": "The readback's bytes; 0 on any failure but `mrhi_errorCapacity`, which gives them, and `mrhi_errorBusy`, which leaves them."
             }
           ],
           "thread_safety": {
@@ -22668,5 +22716,5 @@
       ]
     }
   ],
-  "contract_version": 24
+  "contract_version": 26
 }

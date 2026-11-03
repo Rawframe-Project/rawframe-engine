@@ -109,9 +109,9 @@ void mwinReleaseRequestText(const mwinContext* context, mwinRequest* request)
                 request->kind == mwin_requestClipboardReadData;
     if (text && request->value.text.bytes != nullptr)
     {
-        mwinRelease(&context->allocator, request->value.text.bytes, request->value.text.length + 1u,
-                    1);
+        char* bytes = request->value.text.bytes;
         request->value.text.bytes = nullptr;
+        mwinRelease(&context->allocator, bytes, request->value.text.length + 1u, 1);
     }
 }
 

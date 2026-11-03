@@ -19,6 +19,8 @@
 #include "bits.h"
 #include "decompose.h"
 #include "encoding.h"
+#include "invariant.h"
+#include "overlap.h"
 #include "tables.h"
 #include "writer.h"
 
@@ -43,8 +45,18 @@ typedef struct Skeleton
     Stage mapped;          // NFD of the prototypes
     size_t offset;         // where the code point being added starts
     size_t overflow;       // where a stage first outgrew its segment, or SIZE_MAX
+    size_t written;        // the bytes written before the first overflow
     muniWriter writer;
 } Skeleton;
+
+static void FlushMapped(Skeleton* skeleton)
+{
+    for (size_t i = 0; i < skeleton->mapped.count; i++)
+    {
+        muniWriterPut(&skeleton->writer, skeleton->mapped.codePoints[i]);
+    }
+    skeleton->mapped.count = 0;
+}
 
 // Canonical ordering: a mark goes after every mark of the same or a
 // lower class. The caller passes a starter on to an empty stage.
@@ -52,6 +64,23 @@ static void Place(Skeleton* skeleton, Stage* stage, uint32_t codePoint, uint8_t 
 {
     if (stage->count == MUNI_MAX_NORMALIZATION_SEGMENT)
     {
+        // The skeleton of the text before the segment that outgrew its
+        // stage is written whole and kept; anything after it would follow
+        // a segment with marks missing, so the writer keeps nothing more.
+        // When the first stage overflows, the second still holds the
+        // segment before it.
+        if (skeleton->overflow == SIZE_MAX)
+        {
+            if (stage == &skeleton->decomposed)
+            {
+                FlushMapped(skeleton);
+            }
+            skeleton->written = skeleton->writer.needed;
+            if (skeleton->writer.capacity > skeleton->writer.needed)
+            {
+                skeleton->writer.capacity = skeleton->writer.needed;
+            }
+        }
         skeleton->overflow =
             skeleton->overflow < skeleton->offset ? skeleton->overflow : skeleton->offset;
         return;
@@ -70,15 +99,6 @@ static void Place(Skeleton* skeleton, Stage* stage, uint32_t codePoint, uint8_t 
 static uint8_t ClassOf(uint32_t codePoint)
 {
     return codePoint < 0x300 ? 0 : muniLookupCombiningClass(codePoint);
-}
-
-static void FlushMapped(Skeleton* skeleton)
-{
-    for (size_t i = 0; i < skeleton->mapped.count; i++)
-    {
-        muniWriterPut(&skeleton->writer, skeleton->mapped.codePoints[i]);
-    }
-    skeleton->mapped.count = 0;
 }
 
 // Adds a code point of a prototype to the second stage.
@@ -321,7 +341,12 @@ static bool NeedsBidi(const uint8_t* text, size_t length, muniBidiDirection dire
     return false;
 }
 
-// Adds each paragraph in display order.
+// Adds each paragraph in display order. muniGetSkeleton's checks leave
+// muniResolveBidi nothing to refuse: the text is valid UTF-8 and not
+// NULL, the workspace holds 2 * length bytes, the direction is known and
+// each paragraph is at least one byte long. A refusal would leave the
+// paragraph's length unset, so it traps where MUNI_ASSERT is kept and is
+// passed on where it is not.
 static muniResult AddParagraphs(Skeleton* skeleton, size_t length, muniBidiDirection direction,
                                 uint8_t* workspace)
 {
@@ -337,6 +362,7 @@ static muniResult AddParagraphs(Skeleton* skeleton, size_t length, muniBidiDirec
                                             &paragraphLength, &paragraphLevel);
         if (status != muni_success)
         {
+            MUNI_ASSERT(false);
             return status;
         }
         muniBidiResetLineLevels(skeleton->text + start, levels + start, paragraphLength,
@@ -359,7 +385,8 @@ muniTextResult muniGetSkeleton(const char* text, size_t length, muniBidiDirectio
 {
     if ((text == nullptr && length != 0) || (workspace == nullptr && workspaceSize != 0) ||
         (textOut == nullptr && capacity != 0) || neededOut == nullptr ||
-        direction > muni_bidiRightToLeft)
+        (uint32_t)direction > muni_bidiRightToLeft ||
+        muniOverlaps(text, length, textOut, capacity, 1))
     {
         return (muniTextResult){muni_errorInvalid, 0};
     }
@@ -393,11 +420,9 @@ muniTextResult muniGetSkeleton(const char* text, size_t length, muniBidiDirectio
     }
     FlushDecomposed(&skeleton);
     FlushMapped(&skeleton);
-    // The skeleton follows display order, so the bytes counted before an
-    // error would tell the caller nothing.
     if (skeleton.overflow != SIZE_MAX)
     {
-        *neededOut = 0;
+        *neededOut = skeleton.written;
         return (muniTextResult){muni_errorLimit, skeleton.overflow};
     }
     *neededOut = skeleton.writer.needed;

@@ -7,7 +7,8 @@
 //
 // - The activity's view is what input methods type into, whatever the
 //   program asked: committed text comes as text, a newline and a tab as
-//   the Enter and Tab keys' press and release, as on iOS; a composition
+//   the Enter and Tab keys' press and release (a carriage return and
+//   line feed as one Enter), as on iOS; a composition
 //   is told while the window accepts text, and dropped (the input method
 //   started again) when it stops. A deletion outside a composition and
 //   the keys an input method sends come as keys.
@@ -21,6 +22,7 @@
 
 #include "allocator.h"
 #include "android.h"
+#include "utf8.h"
 
 #include "maul-unicode/encoding.h"
 
@@ -57,12 +59,8 @@ char* mwinAndroidBytesOf(const mwinAndroidPlatform* platform, JNIEnv* env, jstri
                                      sizeOut);
         for (size_t i = 0; i < offsetCount; i++)
         {
-            size_t before = 0;
-            size_t taken = offsets[i] < 0       ? 0
-                           : offsets[i] > count ? (size_t)count
-                                                : (size_t)offsets[i];
-            (void)muniConvertUtf16ToUtf8(units, taken, muni_convertReplace, nullptr, 0, &before);
-            offsets[i] = (int32_t)before;
+            size_t taken = offsets[i] < 0 ? 0 : (size_t)offsets[i];
+            offsets[i] = (int32_t)mwinBytesBefore(bytes, size, muni_unitUtf16, taken);
         }
     }
     (*env)->ReleaseStringChars(env, text, units);
@@ -82,7 +80,7 @@ static void PostText(mwinAndroidPlatform* platform, const char* bytes, size_t le
 {
     if (length > 0)
     {
-        mwinEvent event = {.type = mwin_eventTextInput};
+        mwinEvent event = {.kind = mwin_eventTextInput};
         event.data.text = (mwinTextEvent){bytes, (uint32_t)length};
         PostEvent(platform, &event);
     }
@@ -105,7 +103,11 @@ static void JNICALL Commit(JNIEnv* env, jclass type, jlong program, jstring text
         if (bytes[i] == '\n' || bytes[i] == '\r' || bytes[i] == '\t')
         {
             PostText(platform, bytes + start, i - start);
-            Tap(platform, bytes[i] == '\t' ? AKEYCODE_TAB : AKEYCODE_ENTER);
+            // A carriage return and line feed is one Enter.
+            if (bytes[i] != '\n' || i == 0 || bytes[i - 1] != '\r')
+            {
+                Tap(platform, bytes[i] == '\t' ? AKEYCODE_TAB : AKEYCODE_ENTER);
+            }
             start = i + 1;
         }
     }
@@ -119,7 +121,7 @@ static void EndPreedit(mwinAndroidPlatform* platform)
     {
         return;
     }
-    mwinEvent end = {.type = mwin_eventImePreedit};
+    mwinEvent end = {.kind = mwin_eventImePreedit};
     end.data.preedit.caret = -1;
     PostEvent(platform, &end);
 }
@@ -142,7 +144,7 @@ static void JNICALL Compose(JNIEnv* env, jclass type, jlong program, jstring tex
         return;
     }
     mwinPreeditSegment segment = {0, (uint32_t)size, mwin_preeditUnderline};
-    mwinEvent event = {.type = mwin_eventImePreedit};
+    mwinEvent event = {.kind = mwin_eventImePreedit};
     event.data.preedit = (mwinPreeditEvent){
         .text = bytes,
         .length = (uint32_t)size,
@@ -203,14 +205,14 @@ void mwinAndroidPostInsets(mwinAndroidPlatform* platform)
     if (!SameInsets(safe, window->safeArea))
     {
         window->safeArea = safe;
-        mwinEvent event = {.type = mwin_eventSafeAreaChanged};
+        mwinEvent event = {.kind = mwin_eventSafeAreaChanged};
         event.data.insets = safe;
         PostEvent(platform, &event);
     }
     if (!SameRect(covered, window->covered))
     {
         window->covered = covered;
-        mwinEvent event = {.type = mwin_eventVirtualKeyboardChanged};
+        mwinEvent event = {.kind = mwin_eventVirtualKeyboardChanged};
         event.data.rect = covered;
         PostEvent(platform, &event);
     }
@@ -253,7 +255,7 @@ bool mwinAndroidFindText(mwinAndroidPlatform* platform, ANativeActivity* activit
     return found;
 }
 
-mwinOutcome mwinAndroidSetTextInput(mwinAndroidPlatform* platform, bool enabled, mwinRect caret)
+mwinOutcome mwinAndroidSetTextInput(mwinAndroidPlatform* platform, bool enabled)
 {
     mwinAndroidWindow* window = &platform->window;
     if (!enabled && window->textInput)
@@ -270,7 +272,12 @@ mwinOutcome mwinAndroidSetTextInput(mwinAndroidPlatform* platform, bool enabled,
         }
     }
     window->textInput = enabled;
-    window->caret = caret;
+    return mwin_outcomeDone;
+}
+
+mwinOutcome mwinAndroidSetTextCaret(mwinAndroidPlatform* platform, mwinRect caret)
+{
+    platform->window.caret = caret;
     return mwin_outcomeDone;
 }
 

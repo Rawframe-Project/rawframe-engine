@@ -26,7 +26,7 @@ extern "C"
 #define MRHI_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MRHI_VERSION_MINOR 13
+#define MRHI_VERSION_MINOR 15
 // x-release-please-end
 // x-release-please-start-patch
 #define MRHI_VERSION_PATCH 0
@@ -210,6 +210,9 @@ extern "C"
     typedef struct mrhiChain
     {
         const struct mrhiChain* next;
+        // What struct this is, as Vulkan's sType says: the chain's tag, read
+        // before the rest of the struct. It is not a choice the struct makes,
+        // so it is a type, not a kind.
         mrhiStructType type;
     } mrhiChain;
 
@@ -244,7 +247,7 @@ extern "C"
     // a submission ran out of, or, in a build with the validation layer, one
     // rule of the driver SPI that the driver broke (the driver codes, recorded
     // in the instance's queue). mrhiGetDiagnosticText gives each one's text.
-    typedef uint16_t mrhiDiagnosticCode;
+    typedef int32_t mrhiDiagnosticCode;
 
     enum
     {
@@ -413,7 +416,10 @@ extern "C"
         // loss.
         mrhi_diagnosticDriverEventTag = 75,
         // A driver listed an adapter with a zero or repeated handle, a name
-        // longer than MRHI_ADAPTER_NAME_BYTES, or an unknown kind.
+        // longer than MRHI_ADAPTER_NAME_BYTES or not well-formed UTF-8, or an
+        // unknown kind; the core lists an unknown kind as mrhi_adapterUnknown
+        // and the name up to its first byte that is not well-formed UTF-8
+        // within its room.
         mrhi_diagnosticDriverAdapter = 76,
         // A driver reported format caps naming sample counts other than 1, 2
         // and 4.
@@ -684,6 +690,22 @@ extern "C"
         // A function that would change the instance or device was called from
         // inside its allocator.
         mrhi_diagnosticAllocatorCall = 156,
+        // A driver reported a device loss with an unknown reason, or a message
+        // longer than MRHI_LOSS_MESSAGE_BYTES or not well-formed UTF-8; the
+        // core passed on mrhi_lossUnknown, and the message up to its first byte
+        // that is not well-formed UTF-8 within its room.
+        mrhi_diagnosticDriverLossReport = 157,
+        // A driver reported surface caps with more than MRHI_SURFACE_COLORS
+        // colors, or a color whose format, primaries, transfer or range is
+        // unknown; the core kept the first MRHI_SURFACE_COLORS, dropped each
+        // unknown one, and reported a surface left without a color as not
+        // presentable.
+        mrhi_diagnosticDriverSurfaceCaps = 158,
+        // A driver reported surface caps as presentable without 8-bit sRGB in
+        // Rec. 709 among its colors, FIFO, opaque alpha, render target usage,
+        // or twin views or images; the core reported the adapter as not
+        // presenting to the surface.
+        mrhi_diagnosticDriverSurfaceFloors = 159,
     };
 
     // A record from an instance's or a device's diagnostic queue.
@@ -691,9 +713,9 @@ extern "C"
     {
         // The check or the limit that refused the call.
         mrhiDiagnosticCode code;
-        // How many refusals in a row the record stands for: a refusal by the
-        // newest record's check adds to its count instead of taking room.
-        uint32_t count;
+        // How many calls in a row the record's check refused: a refusal by the
+        // newest record's check adds one here instead of taking room.
+        uint32_t callsRefused;
     } mrhiDiagnostic;
 
     /// Returns the text of a diagnostic code, for people; programs compare

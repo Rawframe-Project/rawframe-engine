@@ -8,6 +8,8 @@
 
 #include "flex_resolve.h"
 
+#include "invariant.h"
+
 #include <math.h>
 
 static float Outer(const muiFlexItemState* item, float size)
@@ -149,6 +151,8 @@ uint32_t muiCollectLine(const muiTree* tree, const muiLayoutNode* nodes, uint32_
         used = next;
         count++;
     }
+    // A line holds at least its first item, so the lines after it move on.
+    MUI_ASSERT(first == 0 || count != 0);
     return count;
 }
 
@@ -163,8 +167,11 @@ void muiResolveFlexibleLengths(const muiTree* tree, muiLayoutNode* nodes, uint32
     }
     bool growing = hypotheticalSum < available;
     float initialFree = FreezeInflexible(tree, nodes, first, count, available, growing);
-    for (;;)
+    for (uint32_t passes = 0;; passes++)
     {
+        // Each pass freezes a child, so the pass after the last of count
+        // finds none unfrozen.
+        MUI_ASSERT(passes <= count);
         FlexTotals totals = SumUnfrozen(tree, nodes, first, count, available, growing);
         if (!totals.anyUnfrozen)
         {
@@ -187,7 +194,8 @@ void muiResolveFlexibleLengths(const muiTree* tree, muiLayoutNode* nodes, uint32
         // Distribute counts it, and freezes them all.
         if (!FreezeViolators(tree, nodes, first, count, cancels ? 0.0f : violation))
         {
-            (void)FreezeViolators(tree, nodes, first, count, 0.0f);
+            // A child is unfrozen, so freezing all of them freezes one.
+            muiAssertCall(FreezeViolators(tree, nodes, first, count, 0.0f));
         }
     }
 }

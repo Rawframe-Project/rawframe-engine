@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Staggers. The distances' least and range are found
-// first, without writing, so a spread that is not finite is refused with
-// nothing written; then each item's distance is written into the
-// caller's offsets and normalized, eased and scaled in place, so nothing
-// is allocated. The distances use only exactly
+// Staggers. The distances' least and range, then every offset, are found
+// first, without writing, so a spread or an offset that is not finite is
+// refused with nothing written; then each item's distance is written into
+// the caller's offsets and normalized, eased and scaled in place, so
+// nothing is allocated. The distances use only exactly
 // rounded operations and the easing is the library's own, so the
 // offsets are the same bits on every platform. A random order is an
 // inside-out shuffle driven by SplitMix64 of the seed.
@@ -48,8 +48,9 @@ static bool IsValid(const mtwnStagger* stagger, uint32_t count, const double* of
     {
         return false;
     }
-    bool known = stagger->origin <= mtwn_staggerRandom && stagger->axis <= mtwn_staggerY &&
-                 stagger->spacingKind <= mtwn_staggerAmount;
+    bool known = (uint32_t)stagger->origin <= mtwn_staggerRandom &&
+                 (uint32_t)stagger->axis <= mtwn_staggerY &&
+                 (uint32_t)stagger->spacingKind <= mtwn_staggerAmount;
     bool finite = isfinite(stagger->start) && isfinite(stagger->spacing) &&
                   fabs(stagger->pointX) <= s_pointLimit && fabs(stagger->pointY) <= s_pointLimit;
     bool index = stagger->origin != mtwn_staggerIndex || count == 0 || stagger->index < count;
@@ -198,6 +199,38 @@ static void Spread(const mtwnStagger* stagger, uint32_t count, double* leastOut,
     *rangeOut = most - least;
 }
 
+// The offset of an item at a distance: normalized, eased and scaled. A
+// negative span runs from the farthest items, which take the start, on
+// the easing turned around, as GSAP's distribute does, so no offset falls
+// below the start.
+static MTWN_NOINLINE double Offset(const mtwnStagger* stagger, double distance, double least,
+                                   double range, double span)
+{
+    double t = range > 0.0 ? (distance - least) / range : 0.0;
+    bool reversed = span < 0.0;
+    double eased = mtwnSampleEasingWork(&stagger->easing, reversed ? 1.0 - t : t, false);
+    return stagger->start + (reversed ? -span : span) * eased;
+}
+
+// Whether every offset is finite, nothing written: the start plus the
+// spread times an eased distance can pass the doubles though each is
+// finite. A random order's distances are 0 to count - 1, each once.
+static bool OffsetsFinite(const mtwnStagger* stagger, uint32_t count, double least, double range,
+                          double span)
+{
+    Grid grid = MakeGrid(stagger, count);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        double distance =
+            stagger->origin == mtwn_staggerRandom ? (double)i : Distance(&grid, stagger, i);
+        if (!isfinite(Offset(stagger, distance, least, range, span)))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 static MTWN_NOINLINE mtwnResult mtwnComputeStaggerWork(const mtwnStagger* stagger, uint32_t count,
                                                        double* offsetsOut)
 {
@@ -214,7 +247,7 @@ static MTWN_NOINLINE mtwnResult mtwnComputeStaggerWork(const mtwnStagger* stagge
     Spread(stagger, count, &least, &range);
     double span =
         stagger->spacingKind == mtwn_staggerAmount ? stagger->spacing : stagger->spacing * range;
-    if (!isfinite(span))
+    if (!isfinite(span) || !OffsetsFinite(stagger, count, least, range, span))
     {
         return mtwn_errorInvalid;
     }
@@ -232,8 +265,13 @@ static MTWN_NOINLINE mtwnResult mtwnComputeStaggerWork(const mtwnStagger* stagge
     }
     for (uint32_t i = 0; i < count; ++i)
     {
-        double t = range > 0.0 ? (offsetsOut[i] - least) / range : 0.0;
-        offsetsOut[i] = stagger->start + span * mtwnSampleEasingWork(&stagger->easing, t, false);
+        offsetsOut[i] = Offset(stagger, offsetsOut[i], least, range, span);
+        // Only a host easing that gives another value at the same progress
+        // than on the check's pass gets here: a refusal, as a rough easing's.
+        if (!isfinite(offsetsOut[i]))
+        {
+            return mtwn_errorInvalid;
+        }
     }
     return mtwn_success;
 }

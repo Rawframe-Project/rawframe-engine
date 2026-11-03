@@ -72,11 +72,12 @@ static inline double mtwnEaseNormalPower(const mtwnEasing* easing, double progre
     return mtwnEasePower(easing->count, easing->mode, progress);
 }
 
-// An easing at a progress: the inline case, or the general path.
-static inline double mtwnEaseFast(const mtwnEasing* easing, double progress)
+// An easing at a progress: the inline case, or the general path, hostNan
+// as mtwnSampleEasingNoted's.
+static inline double mtwnEaseFast(const mtwnEasing* easing, double progress, bool* hostNan)
 {
     return mtwnIsNormalPower(easing) ? mtwnEaseNormalPower(easing, progress)
-                                     : mtwnSampleEasingWork(easing, progress, false);
+                                     : mtwnSampleEasingNoted(easing, progress, false, hostNan);
 }
 
 #endif

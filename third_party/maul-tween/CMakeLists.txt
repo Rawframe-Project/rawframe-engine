@@ -85,6 +85,7 @@ add_library(maul-tween ${MAUL_LIBRARY_KIND}
     src/elementary.c
     src/event.c
     src/sweep.c
+    src/timeline_easing.c
     src/elementary_float.c)
 maul_configure_library(maul-tween)
 # The tests' hooks (src/test_hooks.h) are a library of their own, linked
@@ -128,9 +129,12 @@ if(MAUL_TWEEN_BUILD_TESTS)
     maul_add_test(easing)
     maul_add_dense(easing dense)
     maul_add_test(easing_css)
+    maul_add_test(timeline_easing WHITEBOX)
+    maul_add_dense(timeline_easing dense)
     maul_add_test(rival_easing)
     maul_add_test(rival_spring)
     maul_add_test(rival_color)
+    maul_add_test(rival_stagger)
     maul_add_test(sample)
     maul_add_test(spring)
     maul_add_dense(spring dense)
@@ -194,6 +198,7 @@ if(MAUL_TWEEN_BUILD_TESTS)
     maul_add_test(bounds)
     maul_add_test(outputs)
     maul_add_test(padding)
+    maul_add_test(layout)
     maul_add_test(refusals)
     maul_add_test(determinism)
     maul_add_test(guide)

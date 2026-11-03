@@ -751,7 +751,7 @@ extern "C"
     MRHI_NODISCARD MRHI_API mrhiResult mrhiPass_WriteBuffer(mrhiDevice* device, mrhiPassId pass,
                                                             mrhiResourceId resource,
                                                             uint64_t offset, const void* bytes,
-                                                            uint64_t size);
+                                                            size_t size);
 
     /// Uploads texels into a texture's mip, copying them at the call.
     ///
@@ -839,10 +839,12 @@ extern "C"
     /// @param device    The device.
     /// @param request   The readback's request.
     /// @param bytesOut  Where the bytes go, or NULL for the size only; zeros,
-    ///                  as many as capacity, on any failure.
+    ///                  as many as capacity, on any failure but
+    ///                  `mrhi_errorBusy`, which leaves them.
     /// @param capacity  The bytes there.
     /// @param sizeOut   The readback's bytes; 0 on any failure but
-    ///                  `mrhi_errorCapacity`, which gives them.
+    ///                  `mrhi_errorCapacity`, which gives them, and
+    ///                  `mrhi_errorBusy`, which leaves them.
     /// @return `mrhi_success`; `mrhi_errorInvalid` for a NULL device or size
     /// out, or an array NULL with a capacity; `mrhi_errorStale` for a request
     /// that is not a readback waiting to be taken; `mrhi_errorState` for a

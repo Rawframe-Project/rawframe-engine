@@ -103,10 +103,10 @@ extern "C"
     /// @param target   The token it gives the value of.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL context, a null id,
     ///         a target of another type or an alias that would lead back to the
-    ///         token through this theme and the context; `mui_errorBusy` while
-    ///         the context is busy; `mui_errorStale` for a theme, token or
-    ///         target that is gone; `mui_errorCapacity` as
-    ///         muiTheme_SetTokenValue.
+    ///         token through the aliases of the context and of any themes,
+    ///         this one included; `mui_errorBusy` while the context is busy;
+    ///         `mui_errorStale` for a theme, token or target that is gone;
+    ///         `mui_errorCapacity` as muiTheme_SetTokenValue.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTheme_SetTokenAlias(muiContext* context, muiThemeId themeId,
@@ -181,10 +181,9 @@ extern "C"
     ///                  is zero when the result is `mui_empty`. Zeroed on
     ///                  failure.
     /// @return `mui_success`; `mui_empty` when the token gives the node no
-    ///         value (an alias to a token that is gone, or a cycle that
-    ///         only nested themes make); `mui_errorInvalid` for a NULL
-    ///         context or value, or a null id; `mui_errorStale` for a node
-    ///         or a token that is gone.
+    ///         value (an alias to a token that is gone); `mui_errorInvalid`
+    ///         for a NULL context or value, or a null id; `mui_errorStale`
+    ///         for a node or a token that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_GetTokenValue(const muiContext* context,

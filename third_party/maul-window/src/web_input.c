@@ -251,7 +251,7 @@ static void OnKey(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecord*
     // What it means is a Unicode scalar value, or it means its name.
     uint32_t said = mwinWebWhole(record->z, 0x10FFFF) ? (uint32_t)record->z : 0;
     mwinKey meaning = said != 0 && (said < 0xD800 || said > 0xDFFF) ? said : MWIN_KEY_NAMED | code;
-    mwinEvent event = {.type = record->x != 0.0f ? mwin_eventKeyDown : mwin_eventKeyUp};
+    mwinEvent event = {.kind = record->x != 0.0f ? mwin_eventKeyDown : mwin_eventKeyUp};
     mwinModifiers modifiers = (mwinModifiers)(record->extra & MWIN_WEB_MODIFIERS);
     event.data.key = (mwinKeyEvent){code, modifiers, meaning, record->y != 0.0f};
     Post(platform, slot, &event, record->timeMs);
@@ -266,14 +266,14 @@ static void OnText(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecord
     {
         return;
     }
-    mwinEvent event = {.type = mwin_eventTextInput};
+    mwinEvent event = {.kind = mwin_eventTextInput};
     event.data.text = (mwinTextEvent){text, (uint32_t)length};
     Post(platform, slot, &event, record->timeMs);
 }
 
 static void OnMouse(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecord* record)
 {
-    static const mwinEventType types[] = {mwin_eventCursorMoved, mwin_eventCursorEntered,
+    static const mwinEventKind types[] = {mwin_eventCursorMoved, mwin_eventCursorEntered,
                                           mwin_eventCursorLeft, mwin_eventButtonDown,
                                           mwin_eventButtonUp};
     if (record->code < mwin_webMoved || record->code > mwin_webReleased)
@@ -292,33 +292,34 @@ static void OnMouse(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecor
     }
     else if (pressed)
     {
-        window->buttons |= (uint8_t)(1u << (button - 1));
-        (void)mwinCountClick(&window->clicks, button, position, mwinWebNanoseconds(record->timeMs));
+        window->buttons |= mwinMouseBit(button);
+        (void)mwinCountClick(&window->clickCounter, button, position,
+                             mwinWebNanoseconds(record->timeMs));
     }
     else
     {
-        window->buttons &= (uint8_t)~(1u << (button - 1));
+        window->buttons &= ~mwinMouseBit(button);
     }
     if ((pressed || released) && button == 0)
     {
         return;
     }
-    mwinEvent event = {.type = types[record->code]};
+    mwinEvent event = {.kind = types[record->code]};
     mwinModifiers modifiers = (mwinModifiers)(record->extra & MWIN_WEB_MODIFIERS);
-    event.data.pointer =
-        (mwinPointerEvent){position, modifiers, window->buttons, button, window->clicks.clicks};
+    event.data.pointer = (mwinPointerEvent){position, modifiers, window->buttons, button,
+                                            window->clickCounter.clickCount};
     Post(platform, slot, &event, record->timeMs);
 }
 
 static void OnTouch(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecord* record)
 {
-    static const mwinEventType types[] = {mwin_eventTouchDown, mwin_eventTouchMoved,
+    static const mwinEventKind types[] = {mwin_eventTouchDown, mwin_eventTouchMoved,
                                           mwin_eventTouchUp, mwin_eventTouchCancelled};
     if (record->code < 0 || record->code > mwin_webCancel)
     {
         return;
     }
-    mwinEvent event = {.type = types[record->code]};
+    mwinEvent event = {.kind = types[record->code]};
     // A pressure from 0 to 1, or -1 where the browser does not measure it.
     float pressure = record->z == -1.0f ? -1.0f : mwinWebUnit(record->z);
     event.data.touch =
@@ -340,15 +341,15 @@ static void OnPen(mwinWebPlatform* platform, uint32_t slot, const mwinWebRecord*
         (mwinPenEvent){{record->x, record->y}, mwinWebUnit(record->z), tiltX, tiltY, flags, 0};
     if (((flags ^ window->penFlags) & mwin_penBarrel) != 0)
     {
-        event.type =
+        event.kind =
             (flags & mwin_penBarrel) != 0 ? mwin_eventPenButtonDown : mwin_eventPenButtonUp;
-        event.data.pen.button = 1;
+        event.data.pen.button = mwin_penButtonBarrel;
         Post(platform, slot, &event, record->timeMs);
-        event.data.pen.button = 0;
+        event.data.pen.button = mwin_penButtonNone;
     }
     mwinPenFlags touched = (flags ^ window->penFlags) & mwin_penContact;
     window->penFlags = flags;
-    event.type = touched == 0                     ? mwin_eventPenMoved
+    event.kind = touched == 0                     ? mwin_eventPenMoved
                  : (flags & mwin_penContact) != 0 ? mwin_eventPenDown
                                                   : mwin_eventPenUp;
     Post(platform, slot, &event, record->timeMs);
@@ -394,12 +395,12 @@ void mwinWebHandleInputRecord(mwinWebPlatform* platform, const mwinWebRecord* re
         OnMouse(platform, slot, record);
         break;
     case mwin_webWheel:
-        event.type = mwin_eventWheel;
+        event.kind = mwin_eventWheel;
         event.data.wheel = (mwinWheelEvent){record->x, record->y};
         Post(platform, slot, &event, record->timeMs);
         break;
     case mwin_webMotion:
-        event.type = mwin_eventRawPointerDelta;
+        event.kind = mwin_eventRawPointerDelta;
         event.data.delta = (mwinDeltaEvent){record->x, record->y};
         Post(platform, slot, &event, record->timeMs);
         break;

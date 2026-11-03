@@ -76,6 +76,11 @@ mrhiResult mrhiCheckLabel(const char* label, size_t length)
 
 bool mrhiIsTextValid(const char* text, size_t length)
 {
+    return mrhiValidTextLength(text, length) == length;
+}
+
+size_t mrhiValidTextLength(const char* text, size_t length)
+{
     const unsigned char* bytes = (const unsigned char*)text;
     size_t at = 0;
     while (at < length)
@@ -83,9 +88,9 @@ bool mrhiIsTextValid(const char* text, size_t length)
         size_t step = SequenceLength(bytes + at, length - at);
         if (step == 0)
         {
-            return false;
+            break;
         }
         at += step;
     }
-    return true;
+    return at;
 }

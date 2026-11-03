@@ -25,7 +25,7 @@ extern "C"
     // Which side of an offset a position keeps to, where the offset has
     // two places: the end of a wrapped line or the start of the next, and
     // either side of a change of direction.
-    typedef uint8_t muiTextAffinity;
+    typedef int32_t muiTextAffinity;
 
     enum
     {
@@ -39,13 +39,13 @@ extern "C"
     // into its block's UTF-8 text, and its affinity.
     typedef struct muiTextPosition
     {
-        uint32_t offset;
+        size_t offset;
         muiTextAffinity affinity;
     } muiTextPosition;
 
     // Where a position moves to. Words are UAX #29 word segments with a
     // letter or a number in them.
-    typedef uint8_t muiTextMovement;
+    typedef int32_t muiTextMovement;
 
     enum
     {
@@ -83,7 +83,7 @@ extern "C"
     };
 
     // Which way a deletion from a position goes.
-    typedef uint8_t muiTextDeletion;
+    typedef int32_t muiTextDeletion;
 
     enum
     {
@@ -97,7 +97,7 @@ extern "C"
     };
 
     // How a part of an input method's composition is drawn.
-    typedef uint8_t muiCompositionStyle;
+    typedef int32_t muiCompositionStyle;
 
     enum
     {
@@ -120,8 +120,8 @@ extern "C"
     // A styled part of a composition, in bytes of its text.
     typedef struct muiCompositionSegment
     {
-        uint32_t start;
-        uint32_t length;
+        size_t start;
+        size_t length;
         muiCompositionStyle style;
     } muiCompositionSegment;
 
@@ -152,9 +152,10 @@ extern "C"
     /// @param x            The point, from the content box's top left.
     /// @param y            Likewise.
     /// @param positionOut  Receives the position; unchanged on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a point
-    ///         not finite; `mui_errorStale` for a node, block or font that is
-    ///         gone; `mui_errorCapacity` when memory runs out; `mui_errorBusy`
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a width
+    ///         not finite or negative, or a point not finite;
+    ///         `mui_errorStale` for a node, block or font that is gone;
+    ///         `mui_errorCapacity` when memory runs out; `mui_errorBusy`
     ///         while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the host's context and service are used by
@@ -174,7 +175,9 @@ extern "C"
     /// @param width     The node's content box width.
     /// @param position  The position; an offset past the text is its end.
     /// @param caretOut  Receives the caret; unchanged on failure.
-    /// @return As muiNode_HitTestText; `mui_errorBusy` while the service is busy.
+    /// @return As muiNode_HitTestText, `mui_errorInvalid` also for an
+    ///         affinity out of range; `mui_errorBusy` while the service is
+    ///         busy.
     /// @par Thread safety
     /// Safe from any thread; the host's context and service are used by
     /// one thread at a time.
@@ -206,7 +209,7 @@ extern "C"
     /// one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiNode_GetTextRangeRects(const muiTextHost* host,
                                                               muiNodeId nodeId, float width,
-                                                              uint32_t start, uint32_t end,
+                                                              size_t start, size_t end,
                                                               muiRect* rectsOut, uint32_t capacity,
                                                               uint32_t* countOut);
 
@@ -223,10 +226,11 @@ extern "C"
     ///                     the caret had before the first vertical move;
     ///                     NaN for from's own caret x. Not read otherwise.
     /// @param positionOut  Receives the position; unchanged on failure.
-    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument or a
-    ///         movement out of range; `mui_errorStale` for a node, block or
-    ///         font that is gone; `mui_errorCapacity` when memory runs out;
-    ///         `mui_errorBusy` while the service is busy.
+    /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, a width
+    ///         not finite or negative, a movement or an affinity out of
+    ///         range; `mui_errorStale` for a node, block or font that is
+    ///         gone; `mui_errorCapacity` when memory runs out; `mui_errorBusy`
+    ///         while the service is busy.
     /// @par Thread safety
     /// Safe from any thread; the host's context and service are used by
     /// one thread at a time.
@@ -252,10 +256,9 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_FindDeletion(const muiTextService* service,
-                                                              muiTextBlockId blockId,
-                                                              uint32_t offset,
+                                                              muiTextBlockId blockId, size_t offset,
                                                               muiTextDeletion deletion,
-                                                              uint32_t* startOut, uint32_t* endOut);
+                                                              size_t* startOut, size_t* endOut);
 
     /// Sets a block's input method composition, the text being composed
     /// before it is committed: the text replaces the composition there is,
@@ -287,7 +290,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_SetComposition(
-        muiTextService* service, muiTextBlockId blockId, uint32_t offset, const char* text,
+        muiTextService* service, muiTextBlockId blockId, size_t offset, const char* text,
         size_t length, const muiCompositionSegment* segments, uint32_t segmentCount);
 
     /// Ends a block's composition, keeping its text as typed text: what an
@@ -320,8 +323,8 @@ extern "C"
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_GetComposition(const muiTextService* service,
                                                                 muiTextBlockId blockId,
-                                                                uint32_t* startOut,
-                                                                uint32_t* lengthOut);
+                                                                size_t* startOut,
+                                                                size_t* lengthOut);
 
 #ifdef __cplusplus
 }

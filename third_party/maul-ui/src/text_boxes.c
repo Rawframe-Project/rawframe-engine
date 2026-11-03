@@ -64,7 +64,7 @@ bool muiFollowCaret(muiLaidText* laid, float height)
         return true;
     }
     muiTextPosition caret = editing->selection.caret;
-    caret.offset = muiMaskOffset(paragraph->source, caret.offset);
+    caret.offset = muiMaskOffset(paragraph->source, (uint32_t)caret.offset);
     uint32_t index = muiLineOfPosition(laid, caret);
     float x = 0.0f;
     bool rtl = false;
@@ -233,6 +233,11 @@ muiTextPosition muiEdgePosition(const muiTextBox* box, bool right)
 bool muiIsTextHostValid(const muiTextHost* host)
 {
     return host != nullptr && host->service != nullptr && host->context != nullptr;
+}
+
+bool muiIsTextWidthValid(float width)
+{
+    return isfinite(width) && width >= 0.0f;
 }
 
 // The line a position is on: the first whose next line starts after it,

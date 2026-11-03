@@ -33,7 +33,7 @@ extern "C"
     } mrhiFrameDef;
 
     // What a device notification reports.
-    typedef uint8_t mrhiDeviceNotificationKind;
+    typedef int32_t mrhiDeviceNotificationKind;
 
     enum
     {
@@ -109,8 +109,10 @@ extern "C"
     /// format cannot take, the frame staying open; `mrhi_errorCapacity` when
     /// the device's queue has no room for the answer, or a pass's commands did
     /// not fit the frame's, the frame staying open to be dropped;
-    /// `mrhi_errorPlatform` when the driver fails, the frame closing;
-    /// `mrhi_errorBusy` for a call from inside the device's allocator.
+    /// `mrhi_errorPlatform` when the driver fails, the frame closing, or when
+    /// compiling meets a memory alignment of zero or not a power of two from
+    /// the driver, the frame staying open; `mrhi_errorBusy` for a call from
+    /// inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_SubmitFrame(mrhiDevice* device,
@@ -138,7 +140,8 @@ extern "C"
     /// for one.
     ///
     /// @param device           The device.
-    /// @param notificationOut  Receives the record; zeros unless one is taken.
+    /// @param notificationOut  Receives the record; zeros unless one is taken,
+    ///                         but left as it was on `mrhi_errorBusy`.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
     /// drained; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorBusy` for a
     /// call from inside the device's allocator.
@@ -337,7 +340,7 @@ extern "C"
 
     // Where a pass runs: a hint drivers without the queue ignore, running it on
     // the graphics queue.
-    typedef uint8_t mrhiPassClass;
+    typedef int32_t mrhiPassClass;
 
     enum
     {
@@ -350,7 +353,7 @@ extern "C"
     };
 
     // How a pass uses a resource.
-    typedef uint8_t mrhiAccessKind;
+    typedef int32_t mrhiAccessKind;
 
     enum
     {
@@ -379,7 +382,7 @@ extern "C"
     };
 
     // What a target holds when its pass begins.
-    typedef uint8_t mrhiLoadOp;
+    typedef int32_t mrhiLoadOp;
 
     enum
     {
@@ -392,7 +395,7 @@ extern "C"
     };
 
     // What a target keeps when its pass ends.
-    typedef uint8_t mrhiStoreOp;
+    typedef int32_t mrhiStoreOp;
 
     enum
     {
@@ -614,8 +617,10 @@ extern "C"
     /// render target, or with storage; `mrhi_errorUnsupported` for a declared
     /// texture whose format cannot take the usages its kept passes make of it,
     /// the frame staying open; `mrhi_errorCapacity` when the barriers exceed
-    /// the device's frameBarriers, the frame staying open; `mrhi_errorState`
-    /// for a device without an open frame, or a frame already compiled;
+    /// the device's frameBarriers, the frame staying open; `mrhi_errorPlatform`
+    /// when the driver gives a declared resource a memory alignment of zero or
+    /// not a power of two, the frame staying open; `mrhi_errorState` for a
+    /// device without an open frame, or a frame already compiled;
     /// `mrhi_errorBusy` for a call from inside the device's allocator.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
@@ -637,7 +642,7 @@ extern "C"
 
     // The state a compiled frame leaves a part of a resource in, from the use
     // that made it.
-    typedef uint8_t mrhiResourceState;
+    typedef int32_t mrhiResourceState;
 
     enum
     {
@@ -709,8 +714,12 @@ extern "C"
     // What a compiled frame does with a resource.
     typedef struct mrhiResourcePlan
     {
-        // The texture or buffer usages its kept passes make of it.
-        uint32_t usage;
+        // For a buffer, the usages its kept passes make of it; 0 for a texture
+        // or a surface image.
+        mrhiBufferUsage bufferUsage;
+        // For a texture or a surface image, the usages its kept passes make of
+        // it; 0 for a buffer.
+        mrhiTextureUsage textureUsage;
         // Whether it is a declared texture living only inside its render
         // passes, which tile GPUs keep on chip; never one listing view formats,
         // which WebGPU keeps off chip.
@@ -793,17 +802,17 @@ extern "C"
     typedef struct mrhiFrameUsage
     {
         // The resources it declared, imported and acquired.
-        uint32_t frameResources;
+        uint32_t frameResourceCount;
         // The passes it added; the library's own pass is not counted.
-        uint32_t framePasses;
+        uint32_t framePassCount;
         // The accesses and targets its passes declared, as the limit counts
         // them. A pass is refused when its accesses, with two for each color
         // target and one for the depth target, could pass the limit, so the
         // last pass may be refused below it.
-        uint32_t frameAccesses;
+        uint32_t frameAccessCount;
         // The barriers its compile planned, the program's alone: 0 before the
         // compile, and those planned before a compile the limit refused.
-        uint32_t frameBarriers;
+        uint32_t frameBarrierCount;
         // The bytes its passes' commands took, in whole 4 KiB chunks, so a full
         // arena reads the limit rounded down to them; the library's own pass is
         // not counted.
@@ -812,7 +821,7 @@ extern "C"
         // boundary with a texture's rows at a 256-byte pitch.
         uint32_t frameUploadBytes;
         // The maxCounts of its counted multi-draws, in all.
-        uint32_t frameIndirectDraws;
+        uint32_t frameIndirectDrawCount;
         // The bytes its declared resources take together, placed by lifetime so
         // resources whose uses do not overlap share bytes: 0 until its compile
         // succeeds.

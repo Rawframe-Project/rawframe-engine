@@ -8,6 +8,7 @@
 #include "layer.h"
 
 #include "context.h"
+#include "invariant.h"
 #include "tree.h"
 
 #include <string.h>
@@ -41,6 +42,7 @@ static uint32_t Find(const muiLayerStore* store, uint32_t slot)
 
 static void RemoveAt(muiLayerStore* store, uint32_t index)
 {
+    MUI_ASSERT(index < store->count);
     memmove(&store->entries[index], &store->entries[index + 1],
             (store->count - index - 1) * sizeof(muiLayerEntry));
     store->count--;
@@ -133,6 +135,8 @@ void muiNoteLayer(muiContext* context, uint32_t slot, muiLayerKind before)
 
 muiNodeId muiLayerOpener(const muiContext* context, uint32_t slot, uint8_t player)
 {
+    // Callers pass a player below MUI_MAX_PLAYERS.
+    MUI_ASSERT(player < MUI_MAX_PLAYERS);
     uint32_t found = Find(&context->layers, slot);
     return found != 0 && IsLive(context, &context->layers.entries[found - 1])
                ? context->layers.entries[found - 1].openers[player]
@@ -141,6 +145,8 @@ muiNodeId muiLayerOpener(const muiContext* context, uint32_t slot, uint8_t playe
 
 uint32_t muiLayerAt(const muiContext* context, uint32_t place)
 {
+    // Callers walk the places below the store's count.
+    MUI_ASSERT(place < context->layers.count);
     const muiLayerEntry* entry = &context->layers.entries[place];
     return IsLive(context, entry) ? entry->slot : 0;
 }

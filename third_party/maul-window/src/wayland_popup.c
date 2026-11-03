@@ -43,7 +43,7 @@ static void OnDone(void* data, struct xdg_popup* popup)
 {
     (void)popup;
     mwinWaylandWindow* window = data;
-    mwinEvent event = {.type = mwin_eventCloseRequested};
+    mwinEvent event = {.kind = mwin_eventCloseRequested};
     mwinPost(window->platform->context, window->slot, &event);
 }
 
@@ -151,7 +151,7 @@ void mwinWaylandSettlePopup(mwinWaylandWindow* window)
         return;
     }
     window->placed = place;
-    mwinEvent event = {.type = mwin_eventMoved};
+    mwinEvent event = {.kind = mwin_eventMoved};
     event.data.position = place;
     mwinPost(window->platform->context, window->slot, &event);
 }

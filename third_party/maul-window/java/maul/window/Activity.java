@@ -98,12 +98,16 @@ public class Activity extends NativeActivity {
 
     /** Shows or hides the on-screen keyboard for a purpose; called by the library. */
     void showKeyboard(boolean shown, int purpose) {
-        boolean changed = purpose != this.purpose;
+        // Asked for, the keyboard makes the field an editor: input starts
+        // anew so that the system learns it, and the purpose's input type
+        // with it. The composition is accepted: the old connection's
+        // closing finishes it, and only stopping text input drops it.
+        boolean changed = purpose != this.purpose || (shown && !keyboard);
         this.keyboard = shown;
         this.purpose = purpose;
         InputMethodManager manager = getSystemService(InputMethodManager.class);
         if (changed) {
-            restartInput();
+            manager.restartInput(field);
         }
         if (shown) {
             field.requestFocus();
@@ -191,9 +195,12 @@ public class Activity extends NativeActivity {
             setFocusableInTouchMode(true);
         }
 
+        // An editor only while the program wants the keyboard: Android
+        // shows the keyboard by itself for an editor focused as its window
+        // gains the focus, which in landscape covers the window's middle.
         @Override
         public boolean onCheckIsTextEditor() {
-            return true;
+            return keyboard;
         }
 
         @Override

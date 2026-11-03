@@ -52,13 +52,20 @@ static void Publish(mwinLinuxPower* power, uint64_t nowNs)
 }
 
 // PropertiesChanged(s interface, a{sv} changed, as invalidated): the
-// fact of the interface the signal names, where it changed; an entry of
+// fact of the interface the signal names, where it changed, from the
+// connection that owns the name of that bus's service; an entry of
 // other types is passed over.
 static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, void* data)
 {
     mwinLinuxPower* power = data;
-    const mwinDBusApi* api =
-        connection == power->system->connection ? &power->system->api : &power->session->api;
+    bool system = connection == power->system->connection;
+    mwinLinuxBus* bus = system ? power->system : power->session;
+    mwinBusOwner* owner = system ? &power->upower : &power->portal;
+    const mwinDBusApi* api = &bus->api;
+    if (mwinBusOwnerChanged(bus, owner, message))
+    {
+        return mwin_dbusNotHandled;
+    }
     mwinDBusIter arguments;
     mwinDBusIter changed;
     const char* interface = nullptr;
@@ -68,9 +75,10 @@ static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, 
         return mwin_dbusNotHandled;
     }
     api->getBasic(&arguments, (void*)&interface);
-    bool monitor = strcmp(interface, MONITOR) == 0;
-    bool upower = strcmp(interface, UPOWER) == 0;
-    if (!api->next(&arguments) || api->argType(&arguments) != mwin_dbusTypeArray)
+    bool monitor = !system && strcmp(interface, MONITOR) == 0;
+    bool upower = system && strcmp(interface, UPOWER) == 0;
+    if ((!monitor && !upower) || !mwinBusFromOwner(bus, owner, message) || !api->next(&arguments) ||
+        api->argType(&arguments) != mwin_dbusTypeArray)
     {
         return mwin_dbusNotHandled;
     }
@@ -97,10 +105,12 @@ static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, 
     return mwin_dbusNotHandled;
 }
 
-// Listens for an interface's PropertiesChanged on a bus, and asks for
-// one of its properties: false when the bus is not there.
-static bool Ask(mwinLinuxPower* power, mwinLinuxBus* bus, const char* destination, const char* path,
-                const char* interface, const char* name, mwinBusCall* call, uint64_t nowNs)
+// Listens for an interface's PropertiesChanged on a bus, follows the
+// owner of the service's name, and asks for one of its properties: false
+// when the bus is not there.
+static bool Ask(mwinLinuxPower* power, mwinLinuxBus* bus, mwinBusOwner* owner,
+                const char* destination, const char* path, const char* interface, const char* name,
+                mwinBusCall* call, uint64_t nowNs)
 {
     if (!mwinBusConnect(bus) || !bus->api.addFilter(bus->connection, Filter, power, nullptr))
     {
@@ -121,6 +131,7 @@ static bool Ask(mwinLinuxPower* power, mwinLinuxBus* bus, const char* destinatio
         (void)AppendString(api, &arguments, rule);
         mwinBusTell(bus, match);
     }
+    mwinBusFollow(bus, owner, destination, nowNs);
     DBusMessage* get = mwinBusMethod(bus, destination, path, PROPERTIES, "Get");
     if (get != nullptr)
     {
@@ -142,10 +153,10 @@ void mwinPowerStart(mwinLinuxPower* power, mwinContext* context, mwinLinuxBus* s
 {
     *power = (mwinLinuxPower){
         .context = context, .session = session, .system = system, .saver = -1, .battery = -1};
-    power->sessionListening =
-        Ask(power, session, PORTAL, PORTAL_PATH, MONITOR, SAVER, &power->saverCall, nowNs);
-    power->systemListening =
-        Ask(power, system, UPOWER, UPOWER_PATH, UPOWER, BATTERY, &power->batteryCall, nowNs);
+    power->sessionListening = Ask(power, session, &power->portal, PORTAL, PORTAL_PATH, MONITOR,
+                                  SAVER, &power->saverCall, nowNs);
+    power->systemListening = Ask(power, system, &power->upower, UPOWER, UPOWER_PATH, UPOWER,
+                                 BATTERY, &power->batteryCall, nowNs);
 }
 
 // Get's answer, a variant with a boolean, once it came; an error's
@@ -183,6 +194,8 @@ void mwinPowerStop(mwinLinuxPower* power)
     }
     mwinBusDrop(power->session, &power->saverCall);
     mwinBusDrop(power->system, &power->batteryCall);
+    mwinBusUnfollow(power->session, &power->portal);
+    mwinBusUnfollow(power->system, &power->upower);
     if (power->sessionListening)
     {
         power->session->api.removeFilter(power->session->connection, Filter, power);

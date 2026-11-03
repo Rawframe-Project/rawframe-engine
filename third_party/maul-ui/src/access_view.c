@@ -12,6 +12,7 @@
 #include "allocator.h"
 #include "fpenv.h"
 #include "host_call.h"
+#include "outputs.h"
 
 #include "maul-ui/access_tree.h"
 
@@ -245,10 +246,9 @@ uint64_t muiAccessTree_GetShownParent(const muiAccessTree* tree, uint64_t id)
     return result;
 }
 
-static MUI_NOINLINE muiResult AccessTreeGetShownChildrenWorker(const muiAccessTree* tree,
-                                                               uint64_t id, uint64_t* childrenOut,
-                                                               uint32_t capacity,
-                                                               uint32_t* countOut)
+static muiResult AccessTreeGetShownChildren(const muiAccessTree* tree, uint64_t id,
+                                            uint64_t* childrenOut, uint32_t capacity,
+                                            uint32_t* countOut)
 {
     if (countOut != nullptr)
     {
@@ -298,6 +298,16 @@ static MUI_NOINLINE muiResult AccessTreeGetShownChildrenWorker(const muiAccessTr
     }
     *countOut = count;
     return count <= capacity ? mui_success : mui_errorCapacity;
+}
+
+static MUI_NOINLINE muiResult AccessTreeGetShownChildrenWorker(const muiAccessTree* tree,
+                                                               uint64_t id, uint64_t* childrenOut,
+                                                               uint32_t capacity,
+                                                               uint32_t* countOut)
+{
+    muiResult result = AccessTreeGetShownChildren(tree, id, childrenOut, capacity, countOut);
+    muiZeroOutputs(result, childrenOut, capacity, sizeof *childrenOut);
+    return result;
 }
 
 muiResult muiAccessTree_GetShownChildren(const muiAccessTree* tree, uint64_t id,
@@ -357,10 +367,9 @@ muiResult muiAccessTree_GetBounds(const muiAccessTree* tree, uint64_t id, muiRec
     return result;
 }
 
-static MUI_NOINLINE muiResult AccessTreeGetTextRectsWorker(const muiAccessTree* tree, uint64_t id,
-                                                           uint32_t start, uint32_t end,
-                                                           muiRect* rectsOut, uint32_t capacity,
-                                                           uint32_t* countOut)
+static muiResult AccessTreeGetTextRects(const muiAccessTree* tree, uint64_t id, size_t start,
+                                        size_t end, muiRect* rectsOut, uint32_t capacity,
+                                        uint32_t* countOut)
 {
     if (countOut != nullptr)
     {
@@ -387,8 +396,18 @@ static MUI_NOINLINE muiResult AccessTreeGetTextRectsWorker(const muiAccessTree* 
     return count <= capacity ? mui_success : mui_errorCapacity;
 }
 
-muiResult muiAccessTree_GetTextRects(const muiAccessTree* tree, uint64_t id, uint32_t start,
-                                     uint32_t end, muiRect* rectsOut, uint32_t capacity,
+static MUI_NOINLINE muiResult AccessTreeGetTextRectsWorker(const muiAccessTree* tree, uint64_t id,
+                                                           size_t start, size_t end,
+                                                           muiRect* rectsOut, uint32_t capacity,
+                                                           uint32_t* countOut)
+{
+    muiResult result = AccessTreeGetTextRects(tree, id, start, end, rectsOut, capacity, countOut);
+    muiZeroOutputs(result, rectsOut, capacity, sizeof *rectsOut);
+    return result;
+}
+
+muiResult muiAccessTree_GetTextRects(const muiAccessTree* tree, uint64_t id, size_t start,
+                                     size_t end, muiRect* rectsOut, uint32_t capacity,
                                      uint32_t* countOut)
 {
     uint64_t floatEnv = muiFloatEnvEnter();
@@ -426,8 +445,8 @@ static void MapClusters(const muiAccessTextMarks* marks, uint32_t from, uint32_t
     for (uint32_t i = 0; i < marks->clusterCount; i++)
     {
         const muiAccessCluster* cluster = &marks->clusters[i];
-        uint32_t start = cluster->start > from ? cluster->start : from;
-        uint32_t end = cluster->end < to ? cluster->end : to;
+        uint32_t start = cluster->start > from ? (uint32_t)cluster->start : from;
+        uint32_t end = cluster->end < to ? (uint32_t)cluster->end : to;
         for (uint32_t b = start; b < end; b++)
         {
             map[b - from] = i + 1;
@@ -501,7 +520,7 @@ bool muiAccessUnitRects(const muiAccessTree* tree, uint64_t id, uint32_t first, 
 
 static MUI_NOINLINE muiResult AccessTreeGetTextOffsetAtWorker(const muiAccessTree* tree,
                                                               uint64_t id, float x, float y,
-                                                              uint32_t* offsetOut)
+                                                              size_t* offsetOut)
 {
     if (offsetOut != nullptr)
     {
@@ -527,7 +546,7 @@ static MUI_NOINLINE muiResult AccessTreeGetTextOffsetAtWorker(const muiAccessTre
 }
 
 muiResult muiAccessTree_GetTextOffsetAt(const muiAccessTree* tree, uint64_t id, float x, float y,
-                                        uint32_t* offsetOut)
+                                        size_t* offsetOut)
 {
     uint64_t floatEnv = muiFloatEnvEnter();
     muiResult result = AccessTreeGetTextOffsetAtWorker(tree, id, x, y, offsetOut);
@@ -542,26 +561,20 @@ typedef struct Name
     char* buffer;
     size_t capacity;
     size_t length;
-    // The first byte with no room, kept to cut on a whole character.
-    unsigned char dropped;
 } Name;
 
-static void Join(Name* name, const char* text, uint32_t length)
+static void Join(Name* name, const char* text, size_t length)
 {
     if (text == nullptr || length == 0)
     {
         return;
     }
-    for (uint32_t i = name->length != 0 ? 0 : 1; i <= length; i++)
+    for (size_t i = name->length != 0 ? 0 : 1; i <= length; i++)
     {
         char byte = i == 0 ? ' ' : text[i - 1];
         if (name->length + 1 < name->capacity)
         {
             name->buffer[name->length] = byte;
-        }
-        else if (name->length + 1 == name->capacity)
-        {
-            name->dropped = (unsigned char)byte;
         }
         name->length++;
     }
@@ -664,8 +677,8 @@ static void JoinContents(Name* name, const muiAccessTree* tree, uint32_t slot)
     }
 }
 
-muiResult muiAccessTree_GetName(const muiAccessTree* tree, uint64_t id, char* bufferOut,
-                                size_t capacity, size_t* lengthOut)
+static muiResult AccessTreeGetName(const muiAccessTree* tree, uint64_t id, char* bufferOut,
+                                   size_t capacity, size_t* lengthOut)
 {
     if (lengthOut != nullptr)
     {
@@ -675,7 +688,7 @@ muiResult muiAccessTree_GetName(const muiAccessTree* tree, uint64_t id, char* bu
     {
         return mui_errorInvalid;
     }
-    Name name = {bufferOut, capacity, 0, 0};
+    Name name = {bufferOut, capacity, 0};
     uint32_t slot = muiHeldSlotOf(tree, id);
     if (slot != 0)
     {
@@ -693,20 +706,20 @@ muiResult muiAccessTree_GetName(const muiAccessTree* tree, uint64_t id, char* bu
             JoinContents(&name, tree, slot);
         }
     }
-    size_t end = name.length < capacity ? name.length : capacity - 1;
-    if (name.length >= capacity && capacity != 0 && (name.dropped & 0xC0) == 0x80)
+    // A name that does not fit is not cut: muiAccessTree_GetName zeroes
+    // the buffer.
+    if (name.length < capacity)
     {
-        // A character cut short: back to its first byte, and before it.
-        while (end > 0 && ((unsigned char)bufferOut[end - 1] & 0xC0) == 0x80)
-        {
-            end--;
-        }
-        end -= end > 0 && ((unsigned char)bufferOut[end - 1] & 0xC0) == 0xC0 ? 1 : 0;
-    }
-    if (capacity != 0)
-    {
-        bufferOut[end] = '\0';
+        bufferOut[name.length] = '\0';
     }
     *lengthOut = name.length;
     return name.length == 0 ? mui_empty : name.length < capacity ? mui_success : mui_errorCapacity;
+}
+
+muiResult muiAccessTree_GetName(const muiAccessTree* tree, uint64_t id, char* bufferOut,
+                                size_t capacity, size_t* lengthOut)
+{
+    muiResult result = AccessTreeGetName(tree, id, bufferOut, capacity, lengthOut);
+    muiZeroOutputs(result, bufferOut, capacity, 1);
+    return result;
 }

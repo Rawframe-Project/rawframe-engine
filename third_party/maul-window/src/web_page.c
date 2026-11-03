@@ -360,12 +360,18 @@ EM_JS(int, mwinWebOnBattery, (const mwinContext* context), {
 });
 
 EM_JS(uint32_t, mwinWebLocales, (char* out, uint32_t capacity), {
-    const list = (navigator.languages || [navigator.language]).join(',');
-    const needed = lengthBytesUTF8(list);
-    if (needed < capacity) {
-        stringToUTF8(list, out, capacity);
+    let list = "";
+    let bytes = 0;
+    for (const tag of navigator.languages || [navigator.language]) {
+        const more = lengthBytesUTF8(tag) + (list.length > 0 ? 1 : 0);
+        if (bytes + more >= capacity) {
+            break;
+        }
+        list = list.length > 0 ? list + ',' + tag : tag;
+        bytes += more;
     }
-    return needed;
+    stringToUTF8(list, out, capacity);
+    return bytes;
 });
 // clang-format on
 

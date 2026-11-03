@@ -11,8 +11,9 @@
 // its answer: a key the method took is dropped, and the release of a
 // press it took; one it did not take, or whose answer took more than
 // 100 ms, is posted as the backend made it.
-// Committed text and compositions come as signals and are posted to the
-// window at once.
+// Committed text and compositions come as signals, believed only from
+// the connection that made the context, and are posted to the window at
+// once.
 
 #ifndef MAUL_WINDOW_SRC_LINUX_IME_H
 #define MAUL_WINDOW_SRC_LINUX_IME_H
@@ -51,7 +52,9 @@ typedef struct mwinLinuxIme
     bool ready;
     bool listening;
     mwinBusCall create;
+    // The context's path, and the connection that made it.
     char path[MWIN_IME_PATH_BYTES];
+    char owner[MWIN_BUS_UNIQUE_BYTES];
     // The window the context follows, or -1, and its caret.
     int32_t focus;
     mwinRect caret;

@@ -11,10 +11,10 @@
 // that marks the one being converted, and the result as text. The
 // candidate window goes by the caret the program gave.
 
+#include "allocator.h"
 #include "apple_text.h"
 #include "macos.h"
-
-#include <string.h>
+#include "utf8.h"
 
 static void Post(mwinMacPlatform* platform, uint32_t slot, mwinEvent* event)
 {
@@ -38,13 +38,14 @@ static void EndComposition(mwinMacPlatform* platform, uint32_t slot)
     {
         return;
     }
-    mwinEvent end = {.type = mwin_eventImePreedit};
+    mwinEvent end = {.kind = mwin_eventImePreedit};
     end.data.preedit.caret = -1;
     Post(platform, slot, &end);
 }
 
 // Typed text without control characters or AppKit's function key
-// characters, which are keys.
+// characters, which are keys; a lone surrogate as U+FFFD, and a reset in
+// its place when there is no memory for it.
 static void PostText(mwinMacPlatform* platform, uint32_t slot, NSString* string)
 {
     NSMutableString* kept = [NSMutableString stringWithCapacity:string.length];
@@ -56,15 +57,25 @@ static void PostText(mwinMacPlatform* platform, uint32_t slot, NSString* string)
             CFStringAppendCharacters((CFMutableStringRef)kept, &unit, 1);
         }
     }
-    const char* bytes = kept.UTF8String;
-    size_t length = bytes != nullptr ? strlen(bytes) : 0;
-    if (length == 0 || length > UINT32_MAX)
+    mwinContext* context = platform->context;
+    size_t length = 0;
+    size_t size = 0;
+    char* bytes = mwinAppleUtf8Of(context, kept, &length, &size);
+    if (bytes != nullptr && length <= UINT32_MAX)
     {
-        return;
+        mwinEvent event = {.kind = mwin_eventTextInput};
+        event.data.text = (mwinTextEvent){bytes, (uint32_t)length};
+        Post(platform, slot, &event);
     }
-    mwinEvent event = {.type = mwin_eventTextInput};
-    event.data.text = (mwinTextEvent){bytes, (uint32_t)length};
-    Post(platform, slot, &event);
+    else if (kept.length > 0)
+    {
+        mwinEvent reset = {.kind = mwin_eventInputStateReset};
+        Post(platform, slot, &reset);
+    }
+    if (bytes != nullptr)
+    {
+        mwinRelease(&context->allocator, bytes, size, 1);
+    }
 }
 
 // The style of a clause: the thick underline marks the one a conversion
@@ -82,18 +93,21 @@ static mwinPreeditStyle StyleOf(id string, NSRange range)
                                                            : mwin_preeditUnderline;
 }
 
-// The clauses of marked text in bytes, neighbours of one style joined;
-// past the last segment the rest joins it. Returns the count, with the
-// target clauses' span in *preedit's selection when there is one.
+// The clauses of marked text in bytes of *preedit's text, neighbours of
+// one style joined; past the last segment the rest joins it. Returns the
+// count, with the target clauses' span in *preedit's selection when
+// there is one.
 static uint32_t Segment(id string, NSString* text, mwinPreeditSegment* segments,
                         mwinPreeditEvent* preedit)
 {
     __block uint32_t count = 0;
     __block bool targeted = false;
+    const char* bytes = preedit->text;
+    size_t length = preedit->length;
     void (^add)(NSRange) = ^(NSRange range) {
       mwinPreeditStyle style = StyleOf(string, range);
-      uint32_t start = mwinAppleBytesBefore(text, range.location);
-      uint32_t end = mwinAppleBytesBefore(text, NSMaxRange(range));
+      uint32_t start = (uint32_t)mwinBytesBefore(bytes, length, muni_unitUtf16, range.location);
+      uint32_t end = (uint32_t)mwinBytesBefore(bytes, length, muni_unitUtf16, NSMaxRange(range));
       if (count == 0 || (segments[count - 1].style != style && count < MWIN_MAX_PREEDIT_SEGMENTS))
       {
           segments[count++] = (mwinPreeditSegment){start, 0, style};
@@ -141,30 +155,42 @@ void mwinMacSetMarkedText(mwinMacPlatform* platform, uint32_t slot, id string, N
     {
         return;
     }
-    const char* bytes = text.UTF8String;
-    size_t length = bytes != nullptr ? strlen(bytes) : 0;
-    if (length == 0 || length > UINT32_MAX)
+    mwinContext* context = platform->context;
+    size_t length = 0;
+    size_t size = 0;
+    char* bytes = mwinAppleUtf8Of(context, text, &length, &size);
+    if (bytes == nullptr || length > UINT32_MAX)
     {
+        // The program's composition cannot follow the input method's.
+        mwinEvent reset = {.kind = mwin_eventInputStateReset};
+        Post(platform, slot, &reset);
+        if (bytes != nullptr)
+        {
+            mwinRelease(&context->allocator, bytes, size, 1);
+        }
         return;
     }
     mwinPreeditSegment segments[MWIN_MAX_PREEDIT_SEGMENTS];
-    mwinEvent event = {.type = mwin_eventImePreedit};
+    mwinEvent event = {.kind = mwin_eventImePreedit};
     mwinPreeditEvent* preedit = &event.data.preedit;
     preedit->text = bytes;
     preedit->length = (uint32_t)length;
     // The caret follows the method's selection, whose span is the
     // selection when no clause is marked as the target.
-    uint32_t start = selected.location != NSNotFound ? mwinAppleBytesBefore(text, selected.location)
-                                                     : (uint32_t)length;
-    uint32_t end = selected.location != NSNotFound
-                       ? mwinAppleBytesBefore(text, NSMaxRange(selected))
-                       : (uint32_t)length;
+    bool placed = selected.location != NSNotFound;
+    uint32_t start =
+        placed ? (uint32_t)mwinBytesBefore(bytes, length, muni_unitUtf16, selected.location)
+               : (uint32_t)length;
+    uint32_t end =
+        placed ? (uint32_t)mwinBytesBefore(bytes, length, muni_unitUtf16, NSMaxRange(selected))
+               : (uint32_t)length;
     preedit->caret = (int32_t)end;
     preedit->selectionStart = start;
     preedit->selectionEnd = end;
     preedit->segmentCount = Segment(string, text, segments, preedit);
     preedit->segments = segments;
     Post(platform, slot, &event);
+    mwinRelease(&context->allocator, bytes, size, 1);
 }
 
 void mwinMacInsertText(mwinMacPlatform* platform, uint32_t slot, id string)
@@ -199,11 +225,9 @@ NSRect mwinMacCaretOnScreen(const mwinMacPlatform* platform, uint32_t slot)
     return [window->window convertRectToScreen:[window->view convertRect:inView toView:nil]];
 }
 
-mwinOutcome mwinMacSetTextInput(mwinMacPlatform* platform, uint32_t slot, bool enabled,
-                                mwinRect caret)
+mwinOutcome mwinMacSetTextInput(mwinMacPlatform* platform, uint32_t slot, bool enabled)
 {
     mwinMacWindow* window = &platform->windows[slot];
-    window->caret = caret;
     if (!enabled && window->textInput)
     {
         // The composition is dropped, not committed, if the method
@@ -216,6 +240,14 @@ mwinOutcome mwinMacSetTextInput(mwinMacPlatform* platform, uint32_t slot, bool e
     window->textInput = enabled;
     mwinMacLimitInputSources(window->view, enabled);
     // The candidate window moves to the caret.
+    [window->view.inputContext invalidateCharacterCoordinates];
+    return mwin_outcomeDone;
+}
+
+mwinOutcome mwinMacSetTextCaret(mwinMacPlatform* platform, uint32_t slot, mwinRect caret)
+{
+    mwinMacWindow* window = &platform->windows[slot];
+    window->caret = caret;
     [window->view.inputContext invalidateCharacterCoordinates];
     return mwin_outcomeDone;
 }

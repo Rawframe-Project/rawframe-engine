@@ -316,8 +316,8 @@ static void Open(mwinLinuxPads* pads, int node)
         MakeKernelMapping(pad);
     }
     info.mapped = pad->controls.mapping != nullptr;
-    info.rawButtons = pad->controls.buttonCount;
-    info.rawAxes = (uint8_t)(pad->controls.axisCount + 2 * pad->controls.hatCount);
+    info.rawButtonCount = pad->controls.buttonCount;
+    info.rawAxisCount = (uint8_t)(pad->controls.axisCount + 2 * pad->controls.hatCount);
     info.capabilities = writable && Has(bits.effects, FF_RUMBLE) ? mwin_padRumble : 0;
     if (mwinLinuxFindMotion(&pad->motion, &pad->identity))
     {

@@ -35,6 +35,19 @@ bool muiReserve(const muiAllocator* allocator, muiBuffer* buffer, size_t bytes);
 
 void muiFreeBuffer(const muiAllocator* allocator, muiBuffer* buffer);
 
+// A caller's byte offset as the text component counts offsets, in 32
+// bits: one past UINT32_MAX becomes UINT32_MAX, which is past every
+// text as it is (MUI_MAX_TEXT_BYTES), so a check against a text answers
+// the same.
+static inline uint32_t muiTextOffsetOf(size_t offset)
+{
+    return offset < UINT32_MAX ? (uint32_t)offset : UINT32_MAX;
+}
+
+// mui_success, mui_errorInvalid or mui_errorLimit for a composition's
+// segments over length bytes of text.
+muiResult muiSegmentsStatus(const muiCompositionSegment* segments, uint32_t count, size_t length);
+
 // Whether a word segment (UAX #29), text from start up to end, is a word:
 // it has a letter or a number.
 bool muiIsWordSegment(const char* text, size_t start, size_t end);
@@ -92,7 +105,9 @@ typedef struct muiTextEdit
     uint32_t start;
     uint32_t removed;
     uint32_t inserted;
-    uint32_t bytes;
+    // Where its bytes begin in the history's buffer, which may pass 4 GiB:
+    // a text and its replacement each hold up to MUI_MAX_TEXT_BYTES.
+    size_t bytes;
     muiTextSelection before;
     muiTextSelection after;
     uint8_t kind;
@@ -121,7 +136,7 @@ typedef struct muiTextEditing
     uint32_t entryCount;
     uint32_t done;
     muiBuffer bytes;
-    uint32_t byteCount;
+    size_t byteCount;
     uint8_t open;
     uint64_t revision;
 } muiTextEditing;
@@ -270,5 +285,10 @@ typedef struct muiTextBlockStore
 
 // Frees what a block holds and zeroes it.
 void muiReleaseTextBlock(const muiAllocator* allocator, muiTextBlock* block);
+
+// Destroys block slot of a store, then frees what it held:
+// its id goes stale first, so host code the release runs (the allocator's
+// free) finds it gone rather than half freed (Maul conventions, Threads).
+void muiDropTextBlock(const muiAllocator* allocator, muiTextBlockStore* store, uint32_t slot);
 
 #endif // MAUL_UI_SRC_TEXT_BLOCK_H

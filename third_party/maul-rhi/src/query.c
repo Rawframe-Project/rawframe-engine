@@ -19,7 +19,7 @@ mrhiQuerySetDef mrhiDefaultQuerySetDef(void)
 {
     mrhiQuerySetDef def = {0};
     def.cookie = QUERY_SET_DEF_COOKIE;
-    def.type = mrhi_queryOcclusion;
+    def.kind = mrhi_queryOcclusion;
     def.count = 1;
     return def;
 }
@@ -78,7 +78,7 @@ mrhiResult mrhiCreateQuerySet(mrhiDevice* device, const mrhiQuerySetDef* def,
     {
         return status;
     }
-    if (def->type > mrhi_queryPipelineStatistics || def->count == 0)
+    if ((uint32_t)def->kind > mrhi_queryPipelineStatistics || def->count == 0)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticQuerySetDef);
     }
@@ -87,8 +87,8 @@ mrhiResult mrhiCreateQuerySet(mrhiDevice* device, const mrhiQuerySetDef* def,
     {
         return mrhiDeviceOverLimit(device, mrhi_diagnosticQuerySetDef);
     }
-    if ((def->type == mrhi_queryTimestamp && !device->features.timestampQuery) ||
-        (def->type == mrhi_queryPipelineStatistics && !device->features.pipelineStatisticsQuery))
+    if ((def->kind == mrhi_queryTimestamp && !device->features.timestampQuery) ||
+        (def->kind == mrhi_queryPipelineStatistics && !device->features.pipelineStatisticsQuery))
     {
         return mrhi_errorUnsupported;
     }
@@ -119,7 +119,7 @@ mrhiResult mrhiCreateQuerySet(mrhiDevice* device, const mrhiQuerySetDef* def,
         .handle = handle,
         .first = first,
         .count = def->count,
-        .type = def->type,
+        .kind = def->kind,
     };
     // No frame has serial 0, so the new set's queries are unwritten.
     for (uint32_t i = 0; i < def->count; ++i)
@@ -164,7 +164,7 @@ static mrhiResult CheckOcclusionSet(const mrhiDevice* device, const mrhiPassDef*
         return mrhi_errorStale;
     }
     bool renders = def->colorTargetCount > 0 || def->depthTarget.resource.index1 != 0;
-    return renders && device->querySetSlots[set.index1 - 1].type == mrhi_queryOcclusion
+    return renders && device->querySetSlots[set.index1 - 1].kind == mrhi_queryOcclusion
                ? mrhi_success
                : mrhi_errorInvalid;
 }
@@ -199,7 +199,7 @@ mrhiResult mrhiCheckPassQueries(const mrhiDevice* device, const mrhiPassDef* def
     }
     const mrhiQuerySetSlot* slot = &device->querySetSlots[set.index1 - 1];
     // Passes are added on one thread, so a load and a later store suffice.
-    bool valid = slot->type == mrhi_queryTimestamp && begin != end &&
+    bool valid = slot->kind == mrhi_queryTimestamp && begin != end &&
                  IsTimestampFree(device, slot, begin) && IsTimestampFree(device, slot, end);
     return valid ? mrhi_success : mrhi_errorInvalid;
 }
@@ -322,7 +322,7 @@ mrhiResult mrhiPass_BeginStatisticsQuery(mrhiDevice* device, mrhiPassId id, mrhi
     // a query over the views of a multiview pass.
     const mrhiQuerySetSlot* slot = &device->querySetSlots[set.index1 - 1];
     if (pass->passClass != mrhi_passGraphics || pass->viewCount > 1 || pass->statisticsOpen ||
-        slot->type != mrhi_queryPipelineStatistics || query >= slot->count ||
+        slot->kind != mrhi_queryPipelineStatistics || query >= slot->count ||
         !MarkWritten(device, slot, query))
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticStatisticsQuery);
@@ -397,7 +397,7 @@ mrhiResult mrhiPass_ResolveQueries(mrhiDevice* device, mrhiPassId id, mrhiQueryS
     }
     const mrhiQuerySetSlot* slot = &device->querySetSlots[set.index1 - 1];
     uint64_t total = mrhiBufferBytesOf(&device->frameResources[object - 1]);
-    uint64_t bytes = mrhiQueryBytes(slot->type);
+    uint64_t bytes = mrhiQueryBytes(slot->kind);
     mrhiDiagnosticCode fault = mrhiRangeFault(
         offset % 256 == 0,
         first < slot->count && count <= slot->count - first && offset <= total &&

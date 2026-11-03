@@ -45,7 +45,7 @@ typedef struct mwinIOSWindow
     int32_t monitor;
     mwinWindowMode mode;
     // The pointer's buttons held over the view (bit b - 1 for button b).
-    uint8_t buttons;
+    mwinMouseButtons buttons;
     // Whether the window accepts text and where its caret is; whether
     // the program asked for the on-screen keyboard, for what; the part of
     // the window the keyboard covers, as last posted.
@@ -197,8 +197,8 @@ mwinResult mwinIOSKeyboardLayout(const mwinIOSPlatform* platform, char* buffer, 
 void mwinIOSWatchKeyboard(mwinIOSPlatform* platform);
 void mwinIOSUnwatchKeyboard(mwinIOSPlatform* platform);
 UIKeyboardType mwinIOSKeyboardTypeOf(mwinInputPurpose purpose);
-mwinOutcome mwinIOSSetTextInput(mwinIOSPlatform* platform, uint32_t slot, bool enabled,
-                                mwinRect caret);
+mwinOutcome mwinIOSSetTextInput(mwinIOSPlatform* platform, uint32_t slot, bool enabled);
+mwinOutcome mwinIOSSetTextCaret(mwinIOSPlatform* platform, uint32_t slot, mwinRect caret);
 mwinOutcome mwinIOSSetVirtualKeyboard(mwinIOSPlatform* platform, uint32_t slot, bool visible,
                                       mwinInputPurpose purpose);
 

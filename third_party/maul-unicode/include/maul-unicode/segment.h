@@ -12,7 +12,8 @@
 // none. Offsets are in bytes from the start of the whole text. Each
 // maximal ill-formed UTF-8 subpart counts as one U+FFFD. Word boundaries
 // are the positions UAX #29 defines; between two of them may lie a word,
-// a run of spaces or a punctuation mark, which the caller tells apart.
+// a run of spaces or a punctuation mark, which
+// muniSegmentIterator_GetWordKind tells apart.
 //
 // Text may arrive in pieces. An iterator initialized with more text to
 // follow stops with muni_needMoreText when the next boundary depends on
@@ -51,6 +52,61 @@ extern "C"
     // that iterator returns muni_errorBusy.
     typedef size_t (*muniComplexBreakFunction)(void* context, const char* run, size_t length,
                                                size_t from);
+
+    // How strictly a line iterator keeps text together: the levels of the
+    // CSS line-break property (CSS Text 3, section 5.2). Normal, strict
+    // and loose follow UAX #14 with the breaks CSS allows at each level
+    // added; anywhere breaks between any two grapheme clusters. An added
+    // break never splits what UAX #14 glues: a word joiner or no-break
+    // space and its neighbors, an opening punctuation or quotation mark
+    // and what follows, and a closing punctuation after a prefix.
+    typedef int32_t muniLineBreakStrictness;
+
+    enum
+    {
+        // The rules of UAX #14, with Line_Break=CJ resolved as NS. With
+        // the Chinese or Japanese writing system, a line may also break
+        // before U+301C and U+30A0. CSS Text 3 in its Candidate
+        // Recommendation Draft of 14 August 2026, section 5.2
+        // (https://www.w3.org/TR/css-text-3/#line-break-property; the
+        // dated draft is linked from docs/internals/segmentation.md),
+        // says: "The following breaks are forbidden for normal and strict
+        // line breaking and allowed in loose: breaks before Japanese
+        // small kana or the Katakana-Hiragana prolonged sound mark, i.e.
+        // characters from the Unicode line breaking class CJ." ICU4C's
+        // normal rules and earlier CSS drafts allow those breaks in
+        // normal; here only loose does.
+        muni_lineBreakNormal = 0,
+        // As normal, without the breaks before U+301C and U+30A0.
+        muni_lineBreakStrict = 1,
+        // As normal, with CJ (small kana and the prolonged sound mark)
+        // resolved as ID, and breaks before U+2010 and U+2013 after an
+        // ideograph, before the iteration marks U+3005, U+303B, U+309D,
+        // U+309E, U+30FD and U+30FE, and between two inseparable
+        // characters (Line_Break=IN). With the Chinese or Japanese
+        // writing system, also before the centered punctuation U+30FB,
+        // U+FF1A, U+FF1B, U+FF65, U+203C, U+2047, U+2048, U+2049, U+FF01
+        // and U+FF1F, before a postfix (PO) and after a prefix (PR) whose
+        // East_Asian_Width is Ambiguous, Fullwidth or Wide.
+        muni_lineBreakLoose = 2,
+        // A break between any two grapheme clusters, whatever the rules
+        // of UAX #14 say, but not just before a hard line break; hard
+        // line breaks stay mandatory.
+        muni_lineBreakAnywhere = 3,
+    };
+
+    // The writing system of the text a line iterator breaks, for the
+    // rules of muniLineBreakStrictness that CSS applies to Chinese and
+    // Japanese only. The caller knows it from the text's language.
+    typedef int32_t muniWritingSystem;
+
+    enum
+    {
+        // Any writing system but Chinese and Japanese, or unknown.
+        muni_writingOther = 0,
+        // Chinese or Japanese.
+        muni_writingChineseJapanese = 1,
+    };
 
     /// Starts an iterator over the grapheme cluster boundaries of a UTF-8 text or
     /// its first piece.
@@ -150,10 +206,17 @@ extern "C"
     // conventions may: Greek ends a sentence at U+003B and U+037E
     // (muni_sbSTerm), and POSIX English keeps U+002E out of words
     // (muni_wbMidNum).
+    //
+    // value holds a muniWordBreak or a muniSentenceBreak value, so it has
+    // their common type, int32_t. The struct has no field that says which:
+    // the iterator the table is given to does. A word iterator reads each
+    // value as a muniWordBreak and a sentence iterator as a
+    // muniSentenceBreak, and each refuses a value outside its own kind,
+    // negative ones included.
     typedef struct muniBreakClassOverride
     {
         uint32_t codePoint; // at most U+10FFFF, not a surrogate
-        uint8_t value;      // a muniWordBreak or muniSentenceBreak value
+        int32_t value;      // a muniWordBreak or muniSentenceBreak value
     } muniBreakClassOverride;
 
     /// Gives code points other classes in a word iterator (Word_Break
@@ -186,34 +249,59 @@ extern "C"
     MUNI_NODISCARD MUNI_API muniResult muniSegmentIterator_SetBreakClassOverrides(
         muniSegmentIterator* iterator, const muniBreakClassOverride* overrides, size_t count);
 
-    /// Switches whether a line iterator resolves Line_Break=CJ, such as
-    /// the small kana and the prolonged sound mark, as ID instead of NS
-    /// (rule LB1), so a line may break before them, as CSS's normal and
-    /// loose line breaking do for Chinese and Japanese. It is off in a new
-    /// iterator, which then follows the default rules of UAX #14.
+    /// Sets how strictly a line iterator keeps text together. A new
+    /// iterator is muni_lineBreakNormal.
     ///
-    /// @param iterator  A line iterator not yet asked for a break.
-    /// @param enable    true to resolve CJ as ID, false to resolve it as NS.
+    /// @param iterator    A line iterator not yet asked for a break.
+    /// @param strictness  One of the muni_lineBreak values.
     /// @return `muni_success`; `muni_errorState` for an iterator already
     ///         asked for a break; `muni_errorBusy` when called from inside
     ///         the iterator's word segmenter; `muni_errorInvalid` for a NULL
-    ///         iterator or another kind of iterator. `muni_errorInvalid` is
-    ///         reported before `muni_errorBusy`, and that before
-    ///         `muni_errorState`.
+    ///         iterator, another kind of iterator or an unknown strictness.
+    ///         `muni_errorInvalid` is reported before `muni_errorBusy`, and
+    ///         that before `muni_errorState`.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
-    MUNI_NODISCARD MUNI_API muniResult
-    muniSegmentIterator_EnableCjAsIdeographic(muniSegmentIterator* iterator, bool enable);
+    MUNI_NODISCARD MUNI_API muniResult muniSegmentIterator_SetLineBreakStrictness(
+        muniSegmentIterator* iterator, muniLineBreakStrictness strictness);
 
-    /// Whether a line iterator resolves Line_Break=CJ as ID.
+    /// Returns how strictly a line iterator keeps text together.
     ///
     /// @param iterator  The iterator.
-    /// @return true when muniSegmentIterator_EnableCjAsIdeographic switched
-    ///         it on; false otherwise, and for a NULL iterator or another
-    ///         kind of iterator.
+    /// @return The strictness muniSegmentIterator_SetLineBreakStrictness
+    ///         set, muni_lineBreakNormal when none was set, and for a NULL
+    ///         iterator or another kind of iterator.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
-    MUNI_API bool muniSegmentIterator_IsCjAsIdeographicEnabled(const muniSegmentIterator* iterator);
+    MUNI_API muniLineBreakStrictness
+    muniSegmentIterator_GetLineBreakStrictness(const muniSegmentIterator* iterator);
+
+    /// Sets the writing system of the text a line iterator breaks. A new
+    /// iterator is muni_writingOther.
+    ///
+    /// @param iterator       A line iterator not yet asked for a break.
+    /// @param writingSystem  One of the muni_writing values.
+    /// @return `muni_success`; `muni_errorState` for an iterator already
+    ///         asked for a break; `muni_errorBusy` when called from inside
+    ///         the iterator's word segmenter; `muni_errorInvalid` for a NULL
+    ///         iterator, another kind of iterator or an unknown writing
+    ///         system. `muni_errorInvalid` is reported before
+    ///         `muni_errorBusy`, and that before `muni_errorState`.
+    /// @par Thread safety
+    /// Safe from any thread; an iterator is used by one thread at a time.
+    MUNI_NODISCARD MUNI_API muniResult muniSegmentIterator_SetWritingSystem(
+        muniSegmentIterator* iterator, muniWritingSystem writingSystem);
+
+    /// Returns the writing system of the text a line iterator breaks.
+    ///
+    /// @param iterator  The iterator.
+    /// @return The writing system muniSegmentIterator_SetWritingSystem set,
+    ///         muni_writingOther when none was set, and for a NULL iterator
+    ///         or another kind of iterator.
+    /// @par Thread safety
+    /// Safe from any thread; an iterator is used by one thread at a time.
+    MUNI_API muniWritingSystem
+    muniSegmentIterator_GetWritingSystem(const muniSegmentIterator* iterator);
 
     /// Hands an iterator the next piece of its text, after it returned
     /// muni_needMoreText. The iterator keeps no pointer to earlier pieces.
@@ -260,15 +348,108 @@ extern "C"
     ///                      start of the whole text. Left as it was unless
     ///                      the call returns `muni_success`.
     /// @param mandatoryOut  Receives true when the break is mandatory. It
-    ///                      is false when the result is not `muni_success`,
-    ///                      except that `muni_errorInvalid` leaves it as it
-    ///                      was.
+    ///                      is false after `muni_done` and
+    ///                      `muni_needMoreText`; `muni_errorBusy` and
+    ///                      `muni_errorInvalid` leave it as it was.
     /// @return As muniSegmentIterator_NextBreak; `muni_errorInvalid` also for an
     ///         iterator of another kind.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_NODISCARD MUNI_API muniResult muniSegmentIterator_NextLineBreak(
         muniSegmentIterator* iterator, size_t* offsetOut, bool* mandatoryOut);
+
+    // What a word segment holds: the highest kind among its code points.
+    // ICU's word rule statuses give a segment of letters or digits alone
+    // the same kind; on a mixed one ICU reports the rule it matched last,
+    // so it calls "ab12" a number and "__" a letter. A later release may
+    // add kinds.
+    typedef int32_t muniWordKind;
+
+    enum
+    {
+        // No word: spaces, punctuation, symbols, a line break.
+        muni_wordNone = 0,
+        // A number: Word_Break=Numeric, with its connectors.
+        muni_wordNumber = 1,
+        // Letters (Word_Break=ALetter or Hebrew_Letter), possibly with
+        // digits, or the letters of Thai, Lao, Khmer or Burmese.
+        muni_wordLetter = 2,
+        // Katakana or hiragana.
+        muni_wordKana = 3,
+        // Ideographs (Ideographic=Yes).
+        muni_wordIdeograph = 4,
+    };
+
+    /// Tells what kind of word the segment ending at the boundary a word
+    /// iterator last reported holds: the text between that boundary and
+    /// the one before it, or the start of the text.
+    ///
+    /// @param iterator  An iterator from muniInitWordIterator.
+    /// @param kindOut   Receives the kind; muni_wordNone before the first
+    ///                  boundary. Left as it was unless the call returns
+    ///                  `muni_success`.
+    /// @return `muni_success`; `muni_errorBusy` when called from inside the
+    ///         iterator's word segmenter; `muni_errorInvalid` for a NULL
+    ///         argument or an iterator of another kind.
+    /// @par Thread safety
+    /// Safe from any thread; an iterator is used by one thread at a time.
+    MUNI_NODISCARD MUNI_API muniResult
+    muniSegmentIterator_GetWordKind(const muniSegmentIterator* iterator, muniWordKind* kindOut);
+
+    // A unit of text that muniMeasureUtf8 counts. A later release may add
+    // units, such as words.
+    typedef int32_t muniTextUnit;
+
+    enum
+    {
+        // A code point, or a maximal ill-formed UTF-8 subpart.
+        muni_unitCodePoint = 0,
+        // A grapheme cluster (UAX #29), what a user sees as one character:
+        // a base and its combining marks, an emoji sequence joined by
+        // U+200D, a pair of regional indicators.
+        muni_unitGraphemeCluster = 1,
+        // A UTF-16 code unit, as Java, JavaScript, Windows, AppKit and
+        // UIKit count text: one for a code point up to U+FFFF or a maximal
+        // ill-formed UTF-8 subpart, two past U+FFFF. In UTF-8 text its
+        // boundaries are the code point boundaries.
+        muni_unitUtf16 = 2,
+    };
+
+    /// Finds the longest prefix of UTF-8 text that ends at a boundary of
+    /// unit and has at most maxBytes bytes and at most maxUnits units, and
+    /// gives its length in bytes and in units. One walk serves four uses:
+    /// a byte offset as a count of units (maxBytes is the offset, maxUnits
+    /// SIZE_MAX), a count of units as a byte offset (maxBytes SIZE_MAX,
+    /// maxUnits the count), text cut to fit a buffer without splitting a
+    /// character (maxBytes the buffer's size, maxUnits SIZE_MAX), and the
+    /// units of a whole text. With muni_unitGraphemeCluster it reads at
+    /// most one cluster past the prefix.
+    ///
+    /// @param text       The text. May be NULL when length is 0. Each
+    ///                   maximal ill-formed subpart counts as one U+FFFD.
+    /// @param length     The text's length in bytes.
+    /// @param unit       muni_unitCodePoint, muni_unitGraphemeCluster or
+    ///                   muni_unitUtf16.
+    /// @param maxBytes   The most bytes the prefix may have; the whole text
+    ///                   when it is length or more. When it falls inside a
+    ///                   code point or a cluster, the prefix ends at the
+    ///                   boundary before it.
+    /// @param maxUnits   The most units the prefix may have. When it falls
+    ///                   inside a code point, between the two UTF-16 units of
+    ///                   one past U+FFFF, the prefix ends before that code
+    ///                   point, so it has one unit fewer.
+    /// @param bytesOut   Receives the prefix's length in bytes, 0 when the
+    ///                   first unit does not fit. May be NULL.
+    /// @param unitsOut   Receives the prefix's length in units. May be
+    ///                   NULL. `muni_errorInvalid` leaves both as they were.
+    /// @return `muni_success`, or `muni_errorInvalid` for a NULL text with
+    ///         a nonzero length or an unknown unit.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUNI_NODISCARD MUNI_API muniResult muniMeasureUtf8(const char* text, size_t length,
+                                                       muniTextUnit unit, size_t maxBytes,
+                                                       size_t maxUnits, size_t* bytesOut,
+                                                       size_t* unitsOut);
 
     /// Writes the grapheme cluster boundaries of a whole UTF-8 text into a caller
     /// array: every boundary after the start, the end included.

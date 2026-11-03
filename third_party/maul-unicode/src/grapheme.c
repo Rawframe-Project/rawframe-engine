@@ -11,7 +11,8 @@
 // - whether an odd number of regional indicators precedes, for GB12 and
 //   GB13.
 
-#include "segmenter.h"
+#include "grapheme.h"
+
 #include "tables.h"
 
 #include "maul-unicode/properties.h"
@@ -44,9 +45,7 @@ static bool JoinsHangul(uint8_t before, uint8_t after)
     return (before == muni_gcbLvt || before == muni_gcbT) && after == muni_gcbT;
 }
 
-// Whether there is a boundary between the text so far and a code point
-// whose Grapheme_Cluster_Break is after. No rule looks ahead.
-static bool IsBoundary(const muniGraphemeRules* state, uint8_t after, uint32_t codePoint)
+bool muniGraphemeIsBoundary(const muniGraphemeRules* state, uint8_t after, uint32_t codePoint)
 {
     uint8_t before = state->previous;
     if (before == muni_gcbCr && after == muni_gcbLf)
@@ -83,10 +82,8 @@ static bool IsBoundary(const muniGraphemeRules* state, uint8_t after, uint32_t c
     return true; // GB999
 }
 
-// Moves the state past a code point whose Grapheme_Cluster_Break is value.
-static void Absorb(muniSegmenter* segmenter, uint8_t value, uint32_t codePoint)
+void muniGraphemeAdvance(muniGraphemeRules* state, uint8_t value, uint32_t codePoint)
 {
-    muniGraphemeRules* state = &segmenter->rules.grapheme;
     if (codePoint < 0x80)
     {
         // ASCII has no InCB value and nothing Extended_Pictographic.
@@ -125,10 +122,15 @@ static void Absorb(muniSegmenter* segmenter, uint8_t value, uint32_t codePoint)
     state->previous = value;
 }
 
+static void Absorb(muniSegmenter* segmenter, uint8_t value, uint32_t codePoint)
+{
+    muniGraphemeAdvance(&segmenter->rules.grapheme, value, codePoint);
+}
+
 static muniDecision Decide(const muniSegmenter* segmenter, uint8_t value, uint32_t codePoint)
 {
-    return IsBoundary(&segmenter->rules.grapheme, value, codePoint) ? muni_decideBreak
-                                                                    : muni_decideJoin;
+    return muniGraphemeIsBoundary(&segmenter->rules.grapheme, value, codePoint) ? muni_decideBreak
+                                                                                : muni_decideJoin;
 }
 
 static uint8_t Lookup(const muniSegmenter* segmenter, uint32_t codePoint)
@@ -140,5 +142,5 @@ static uint8_t Lookup(const muniSegmenter* segmenter, uint32_t codePoint)
 muniResult muniNextGraphemeSegment(muniSegmenter* segmenter, size_t* offsetOut)
 {
     // Decide never holds, so Decide stands in for the resolve rule too.
-    return muniSegmenterNext(segmenter, offsetOut, Lookup, Decide, Decide, Absorb);
+    return muniSegmenterNext(segmenter, offsetOut, Lookup, Decide, Decide, Absorb, nullptr);
 }

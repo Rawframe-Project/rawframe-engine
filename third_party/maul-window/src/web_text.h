@@ -14,9 +14,9 @@
 
 #include "web.h"
 
-// Carries out a text input or on-screen keyboard request.
-mwinOutcome mwinWebSetTextInput(mwinWebPlatform* platform, uint32_t slot, bool enabled,
-                                mwinRect caret);
+// Carry out a text input, caret or on-screen keyboard request.
+mwinOutcome mwinWebSetTextInput(mwinWebPlatform* platform, uint32_t slot, bool enabled);
+mwinOutcome mwinWebSetTextCaret(mwinWebPlatform* platform, uint32_t slot, mwinRect caret);
 mwinOutcome mwinWebSetVirtualKeyboard(mwinWebPlatform* platform, uint32_t slot, bool visible,
                                       mwinInputPurpose purpose);
 

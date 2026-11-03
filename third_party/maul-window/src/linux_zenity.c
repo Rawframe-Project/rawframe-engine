@@ -19,9 +19,11 @@
 
 extern char** environ;
 
-// What splits the paths of a choice of several: a control character no
-// file name holds in practice.
-#define SEPARATOR '\x1e'
+// What splits the paths of a choice of several: a "." part, which no
+// path zenity writes holds, as GTK gives each in its canonical form. A
+// file's name may hold any other byte but '/' and NUL.
+#define SEPARATOR       "/./"
+#define SEPARATOR_BYTES 3
 
 // The most arguments: the fixed ones and one per filter.
 #define ARGUMENTS (8 + MWIN_MAX_DIALOG_FILTERS)
@@ -109,7 +111,7 @@ static void Arguments(const mwinDialogCopy* copy, char* text, size_t bytes, char
     if (copy->kind == mwin_dialogOpenMany)
     {
         arguments[count++] = (char*)"--multiple";
-        arguments[count++] = (char*)"--separator=\x1e";
+        arguments[count++] = (char*)"--separator=" SEPARATOR;
     }
     if (copy->kind == mwin_dialogFolder || copy->kind == mwin_dialogSave)
     {
@@ -160,7 +162,7 @@ static int Spawn(mwinZenity* zenity, char** arguments)
 
 int mwinZenityStart(mwinZenity* zenity, const mwinContext* context, const mwinDialogCopy* copy)
 {
-    *zenity = (mwinZenity){.fd = -1};
+    *zenity = (mwinZenity){.fd = -1, .many = copy->kind == mwin_dialogOpenMany};
     size_t bytes = ArgumentBytes(copy);
     char* text = mwinAllocate(&context->allocator, bytes, 1);
     if (text == nullptr)
@@ -175,10 +177,14 @@ int mwinZenityStart(mwinZenity* zenity, const mwinContext* context, const mwinDi
 }
 
 // Room for more output, bounded by what a choice within the limits
-// could write.
+// could write (its paths, a separator's two bytes more than a path's
+// end for each, the last line's end) and one byte more, held to what
+// the capacity counts.
 static bool Grow(mwinZenity* zenity, const mwinContext* context)
 {
-    size_t bound = (size_t)context->limits.dialogBytes + 1;
+    uint64_t most =
+        (uint64_t)context->limits.dialogBytes + 2u * (uint64_t)context->limits.dialogFiles + 1;
+    size_t bound = most < UINT32_MAX ? (size_t)most : UINT32_MAX;
     if (zenity->length < zenity->capacity)
     {
         return true;
@@ -235,20 +241,33 @@ static void Read(mwinZenity* zenity, const mwinContext* context)
     }
 }
 
-void mwinZenityGather(mwinContext* context, const char* output, size_t length)
+// The bytes of the path at text: up to the separator, or all of them.
+static size_t Piece(const char* text, size_t length)
+{
+    for (size_t i = 0; i + SEPARATOR_BYTES <= length; i++)
+    {
+        if (memcmp(text + i, SEPARATOR, SEPARATOR_BYTES) == 0)
+        {
+            return i;
+        }
+    }
+    return length;
+}
+
+void mwinZenityGather(mwinContext* context, const char* output, size_t length, bool many)
 {
     mwinBeginDialog(context);
-    while (length > 0 && output[length - 1] == '\n')
+    // zenity ends its line; a file's name may end in a line feed too.
+    if (length > 0 && output[length - 1] == '\n')
     {
         length--;
     }
     size_t start = 0;
     while (start < length)
     {
-        const char* end = memchr(output + start, SEPARATOR, length - start);
-        size_t size = (end != nullptr ? (size_t)(end - output) : length) - start;
+        size_t size = many ? Piece(output + start, length - start) : length - start;
         mwinAddDialogFile(context, output + start, size);
-        start += size + 1;
+        start += size + SEPARATOR_BYTES;
     }
 }
 
@@ -273,7 +292,7 @@ int mwinZenityPump(mwinZenity* zenity, mwinContext* context)
     {
         return mwin_outcomeTooLarge;
     }
-    mwinZenityGather(context, zenity->output, zenity->length);
+    mwinZenityGather(context, zenity->output, zenity->length, zenity->many);
     return mwin_outcomeDone;
 }
 

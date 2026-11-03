@@ -19,24 +19,25 @@ extern "C"
 // The library version. CMake reads it from here, and release-please
 // moves it between the markers.
 // x-release-please-start-major
-#define MUI_VERSION_MAJOR 0
+#define MUI_VERSION_MAJOR 1
 // x-release-please-end
 // x-release-please-start-minor
-#define MUI_VERSION_MINOR 4
+#define MUI_VERSION_MINOR 1
 // x-release-please-end
 // x-release-please-start-patch
 #define MUI_VERSION_PATCH 0
 // x-release-please-end
 
-// The binary interface a program is built for: the whole version before
-// 1.0, when any release may break it, and the major and minor version from
-// 1.0 on. The top bit is always set, so a zeroed def never matches. The
-// root defs carry it: the context's, the text service's, the access
-// tree's, the AT-SPI application's, and the ARIA, Android,
-// NSAccessibility, UI Automation and UIKit adapters'. Their creations
-// refuse a def built for another with mui_errorVersion before they read
-// the rest, whose layout that version may not share; every other def is
-// used under an object one of them made.
+// The binary interface a program is built for: the major and minor
+// version, which the patch releases of a minor version share (before
+// 1.0, when any release could break it, the whole version). The top bit
+// is always set, so a zeroed def never matches. The root defs carry it:
+// the context's, the text service's, the access tree's, the AT-SPI
+// application's, and the ARIA, Android, NSAccessibility, UI Automation
+// and UIKit adapters'. Their creations refuse a def built for another
+// with mui_errorVersion before they read the rest, whose layout that
+// version may not share; every other def is used under an object one of
+// them made.
 #define MUI_ABI_VERSION                                                                            \
     (UINT32_C(0x80000000) | ((uint32_t)MUI_VERSION_MAJOR << 16) |                                  \
      (MUI_VERSION_MAJOR == 0 ? (((uint32_t)MUI_VERSION_MINOR << 8) | (uint32_t)MUI_VERSION_PATCH)  \
@@ -133,11 +134,15 @@ extern "C"
     };
 
     // The longest text the library holds, in bytes: a text block's text, an
-    // accessibility text. Offsets, one past the end included, fit 32 bits.
+    // accessibility text. Byte offsets into a text, like its length, are
+    // size_t.
     enum
     {
         MUI_MAX_TEXT_BYTES = 0x7FFFFFFF
     };
+
+// A byte offset that is absent: no position in any text.
+#define MUI_NO_OFFSET SIZE_MAX
 
     // The allocator an owner object takes in its def and keeps for its
     // lifetime. Alignment is a power of two. A zeroed allocator means the C

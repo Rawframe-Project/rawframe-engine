@@ -318,7 +318,7 @@ static bool Replace(const MUIAccessibilityElement* element, const muiAccessNode*
                                       .anchor = start,
                                       .focus = end,
                                       .text = bytes,
-                                      .length = (uint32_t)strlen(bytes)};
+                                      .length = strlen(bytes)};
     return muiActMarked(&element->adapter->busy, element->adapter->action, element->adapter->user,
                         &request);
 }
@@ -326,8 +326,8 @@ static bool Replace(const MUIAccessibilityElement* element, const muiAccessNode*
 // The selection's bytes, in order.
 static void SelectionOf(const muiAccessNode* node, uint32_t* startOut, uint32_t* endOut)
 {
-    uint32_t anchor = node->marks.anchor;
-    uint32_t focus = node->marks.focus;
+    uint32_t anchor = (uint32_t)node->marks.anchor;
+    uint32_t focus = (uint32_t)node->marks.focus;
     *startOut = anchor < focus ? anchor : focus;
     *endOut = anchor < focus ? focus : anchor;
 }
@@ -349,9 +349,10 @@ static void LineBytes(const muiAccessText* text, uint32_t line, uint32_t* startO
                       uint32_t* lastOut)
 {
     const muiAccessTextMarks* marks = text->marks;
-    *startOut = marks->lineCount != 0 ? marks->lineStarts[line] : 0;
+    *startOut = marks->lineCount != 0 ? (uint32_t)marks->lineStarts[line] : 0;
     *lastOut = line + 1 < marks->lineCount
-                   ? muiAccessBoundaryBefore(text, mui_unitCharacter, marks->lineStarts[line + 1])
+                   ? muiAccessBoundaryBefore(text, mui_unitCharacter,
+                                             (uint32_t)marks->lineStarts[line + 1])
                    : text->length;
 }
 
@@ -361,13 +362,13 @@ static uint32_t ByteAtPoint(const MUIAccessibilityElement* element, CGPoint poin
 {
     const muiUikitAdapter* adapter = element->adapter;
     CGFloat scale = (CGFloat)adapter->scale;
-    uint32_t at = 0;
+    size_t at = 0;
     if (muiAccessTree_GetTextOffsetAt(adapter->tree, element->nodeId, (float)(point.x / scale),
                                       (float)(point.y / scale), &at) != mui_success)
     {
         at = 0;
     }
-    return at;
+    return (uint32_t)at;
 }
 
 @implementation MUIAccessibilityTextElement

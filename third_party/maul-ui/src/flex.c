@@ -292,6 +292,8 @@ static void SizeMain(muiFlexFrame* frame)
         frame->lineCount++;
         first = Skip(frame, first, count);
     }
+    // Every line holds at least one of the items.
+    MUI_ASSERT(frame->lineCount <= frame->count);
 }
 
 // Section 9.4 step 7 and 8: each child's hypothetical cross size at its

@@ -17,11 +17,11 @@ static mwinWaylandTool* ToolOf(void* data)
     return data;
 }
 
-static void PostPen(const mwinWaylandTool* tool, mwinEventType type, uint8_t button,
+static void PostPen(const mwinWaylandTool* tool, mwinEventKind type, mwinPenButton button,
                     uint64_t timeNs)
 {
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
     event.data.pen = tool->pen;
     event.data.pen.button = button;
@@ -71,7 +71,7 @@ static void Drop(mwinWaylandTool* tool)
     {
         tool->pen.flags &= (mwinPenFlags)~mwin_penContact;
         tool->pen.pressure = 0.0f;
-        PostPen(tool, mwin_eventPenUp, 0, mwinMonotonicNow());
+        PostPen(tool, mwin_eventPenUp, mwin_penButtonNone, mwinMonotonicNow());
     }
     if (tool->shapeDevice != nullptr)
     {
@@ -228,8 +228,8 @@ static void OnFrame(void* data, struct zwp_tablet_tool_v2* object, uint32_t time
             tool->pen.flags = tool->barrel > 0 ? tool->pen.flags | mwin_penBarrel
                                                : tool->pen.flags & (mwinPenFlags)~mwin_penBarrel;
             tool->pen.pressure = PressureOf(tool);
-            PostPen(tool, tool->barrel > 0 ? mwin_eventPenButtonDown : mwin_eventPenButtonUp, 1,
-                    timeNs);
+            PostPen(tool, tool->barrel > 0 ? mwin_eventPenButtonDown : mwin_eventPenButtonUp,
+                    mwin_penButtonBarrel, timeNs);
         }
         if (tool->down)
         {
@@ -242,17 +242,18 @@ static void OnFrame(void* data, struct zwp_tablet_tool_v2* object, uint32_t time
         tool->pen.pressure = PressureOf(tool);
         if (tool->down || tool->up)
         {
-            PostPen(tool, tool->down ? mwin_eventPenDown : mwin_eventPenUp, 0, timeNs);
+            PostPen(tool, tool->down ? mwin_eventPenDown : mwin_eventPenUp, mwin_penButtonNone,
+                    timeNs);
         }
         else if (tool->moved || tool->near)
         {
-            PostPen(tool, mwin_eventPenMoved, 0, timeNs);
+            PostPen(tool, mwin_eventPenMoved, mwin_penButtonNone, timeNs);
         }
         if (tool->left && (tool->pen.flags & mwin_penContact) != 0)
         {
             tool->pen.flags &= (mwinPenFlags)~mwin_penContact;
             tool->pen.pressure = 0.0f;
-            PostPen(tool, mwin_eventPenUp, 0, timeNs);
+            PostPen(tool, mwin_eventPenUp, mwin_penButtonNone, timeNs);
         }
     }
     if (tool->left)

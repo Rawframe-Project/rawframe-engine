@@ -7,6 +7,7 @@
 
 #include "maul-unicode/segment.h"
 
+#include "encoding.h"
 #include "segmenter.h"
 
 #include <stddef.h>
@@ -117,7 +118,8 @@ static bool ValidOverrides(const muniBreakClassOverride* overrides, size_t count
     {
         uint32_t codePoint = overrides[i].codePoint;
         if (codePoint > 0x10FFFF || (codePoint >= 0xD800 && codePoint <= 0xDFFF) ||
-            overrides[i].value >= classCount || (i > 0 && codePoint <= overrides[i - 1].codePoint))
+            (uint32_t)overrides[i].value >= classCount ||
+            (i > 0 && codePoint <= overrides[i - 1].codePoint))
         {
             return false;
         }
@@ -164,9 +166,13 @@ muniResult muniSegmentIterator_SetBreakClassOverrides(muniSegmentIterator* itera
     return muni_success;
 }
 
-muniResult muniSegmentIterator_EnableCjAsIdeographic(muniSegmentIterator* iterator, bool enable)
+// Stores a line iterator's settings, after the checks every line
+// setting makes: value from 0 to last, a line iterator, not busy, not
+// started.
+static muniResult SetLineSettings(muniSegmentIterator* iterator, int32_t value, int32_t last,
+                                  uint8_t mask, uint8_t settings)
 {
-    if (iterator == nullptr)
+    if (iterator == nullptr || value < 0 || value > last)
     {
         return muni_errorInvalid;
     }
@@ -183,19 +189,46 @@ muniResult muniSegmentIterator_EnableCjAsIdeographic(muniSegmentIterator* iterat
     {
         return muni_errorState;
     }
-    segmenter.cjAsIdeographic = enable;
+    segmenter.lineSettings = (uint8_t)((segmenter.lineSettings & ~mask) | settings);
     Store(iterator, &segmenter);
     return muni_success;
 }
 
-bool muniSegmentIterator_IsCjAsIdeographicEnabled(const muniSegmentIterator* iterator)
+muniResult muniSegmentIterator_SetLineBreakStrictness(muniSegmentIterator* iterator,
+                                                      muniLineBreakStrictness strictness)
+{
+    return SetLineSettings(iterator, strictness, muni_lineBreakAnywhere, 3u,
+                           (uint8_t)(strictness & 3));
+}
+
+muniLineBreakStrictness
+muniSegmentIterator_GetLineBreakStrictness(const muniSegmentIterator* iterator)
 {
     if (iterator == nullptr)
     {
-        return false;
+        return muni_lineBreakNormal;
     }
     muniSegmenter segmenter = Load(iterator);
-    return segmenter.kind == muni_segmentLine && segmenter.cjAsIdeographic;
+    return segmenter.kind == muni_segmentLine ? muniLineStrictness(&segmenter)
+                                              : muni_lineBreakNormal;
+}
+
+muniResult muniSegmentIterator_SetWritingSystem(muniSegmentIterator* iterator,
+                                                muniWritingSystem writingSystem)
+{
+    return SetLineSettings(iterator, writingSystem, muni_writingChineseJapanese, 4u,
+                           (uint8_t)((writingSystem & 1) << 2));
+}
+
+muniWritingSystem muniSegmentIterator_GetWritingSystem(const muniSegmentIterator* iterator)
+{
+    if (iterator == nullptr)
+    {
+        return muni_writingOther;
+    }
+    muniSegmenter segmenter = Load(iterator);
+    return segmenter.kind == muni_segmentLine ? muniLineWritingSystem(&segmenter)
+                                              : muni_writingOther;
 }
 
 muniResult muniSegmentIterator_Feed(muniSegmentIterator* iterator, const char* text, size_t length,
@@ -231,7 +264,14 @@ static muniResult Next(muniSegmenter* segmenter, size_t* offsetOut)
     case muni_segmentSentence:
         return muniNextSentenceSegment(segmenter, offsetOut);
     case muni_segmentLine:
-        return muniNextLineSegment(segmenter, offsetOut);
+        // The default settings are 0: the default rules test no setting.
+        if (segmenter->lineSettings == 0)
+        {
+            return muniNextLineSegment(segmenter, offsetOut);
+        }
+        return muniLineStrictness(segmenter) == muni_lineBreakAnywhere
+                   ? muniNextLineAnywhereSegment(segmenter, offsetOut)
+                   : muniNextLineTailoredSegment(segmenter, offsetOut);
     default:
         return muni_errorInvalid;
     }
@@ -331,4 +371,101 @@ muniResult muniFindLineBreaks(const char* text, size_t length, size_t* offsetsOu
                               bool* mandatoryOut, size_t capacity, size_t* countOut)
 {
     return Find(muni_segmentLine, text, length, offsetsOut, mandatoryOut, capacity, countOut);
+}
+
+muniResult muniSegmentIterator_GetWordKind(const muniSegmentIterator* iterator,
+                                           muniWordKind* kindOut)
+{
+    if (iterator == nullptr || kindOut == nullptr)
+    {
+        return muni_errorInvalid;
+    }
+    muniSegmenter segmenter = Load(iterator);
+    if (segmenter.kind != muni_segmentWord)
+    {
+        return muni_errorInvalid;
+    }
+    if (segmenter.phase == muni_phaseBusy)
+    {
+        return muni_errorBusy;
+    }
+    *kindOut = segmenter.rules.word.reportedKind;
+    return muni_success;
+}
+
+// The longest prefix of text that fits maxBytes and maxUnits and ends at
+// a code point boundary, each code point weighing one unit, or with
+// utf16, two past U+FFFF.
+static size_t MeasureCodePoints(const char* text, size_t length, bool utf16, size_t maxBytes,
+                                size_t maxUnits, size_t* unitsOut)
+{
+    size_t bytes = 0;
+    size_t units = 0;
+    while (bytes < length)
+    {
+        uint32_t codePoint;
+        size_t size;
+        muniResult status =
+            muniStepUtf8((const uint8_t*)text + bytes, length - bytes, &codePoint, &size);
+        size_t weight = utf16 && status == muni_success && codePoint > 0xFFFF ? 2 : 1;
+        if (size > maxBytes - bytes || weight > maxUnits - units)
+        {
+            break;
+        }
+        bytes += size;
+        units += weight;
+    }
+    *unitsOut = units;
+    return bytes;
+}
+
+// The same at grapheme cluster boundaries: the last that fits, found by
+// reading up to the first one past it.
+static size_t MeasureClusters(const char* text, size_t length, size_t maxBytes, size_t maxUnits,
+                              size_t* unitsOut)
+{
+    muniSegmenter segmenter;
+    memset(&segmenter, 0, sizeof(segmenter));
+    segmenter.kind = muni_segmentGrapheme;
+    muniCursorInit(&segmenter.cursor, text, length, false);
+    size_t bytes = 0;
+    size_t units = 0;
+    size_t offset;
+    while (units < maxUnits && Next(&segmenter, &offset) == muni_success && offset <= maxBytes)
+    {
+        bytes = offset;
+        units++;
+    }
+    *unitsOut = units;
+    return bytes;
+}
+
+muniResult muniMeasureUtf8(const char* text, size_t length, muniTextUnit unit, size_t maxBytes,
+                           size_t maxUnits, size_t* bytesOut, size_t* unitsOut)
+{
+    if ((text == nullptr && length != 0) ||
+        (unit != muni_unitCodePoint && unit != muni_unitGraphemeCluster && unit != muni_unitUtf16))
+    {
+        return muni_errorInvalid;
+    }
+    size_t bytes = length;
+    size_t units = 0;
+    if (maxBytes < length || maxUnits < length || unitsOut != nullptr)
+    {
+        // A cut that fits whole and counts nothing needs no walk: a unit is
+        // at least a byte.
+        bytes = unit == muni_unitGraphemeCluster
+                    ? MeasureClusters(text, length, maxBytes, maxUnits, &units)
+                    : MeasureCodePoints(text, length, unit == muni_unitUtf16, maxBytes, maxUnits,
+                                        &units);
+    }
+    if (bytesOut != nullptr)
+    {
+        *bytesOut = bytes;
+    }
+    if (unitsOut != nullptr)
+    {
+        *unitsOut = units;
+    }
+    return muni_success;
 }

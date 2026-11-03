@@ -14,14 +14,17 @@
 
 #include <string.h>
 
+// Lets go of a payload, emptied before the program's free hook gets its
+// blocks.
 static void ReleasePayload(const mwinContext* context, mwinDropPayload* payload)
 {
-    mwinListRelease(&payload->files, &context->allocator);
-    if (payload->text != nullptr)
-    {
-        mwinRelease(&context->allocator, payload->text, payload->textLength, 1);
-    }
+    mwinDropPayload held = *payload;
     *payload = (mwinDropPayload){0};
+    mwinListRelease(&held.files, &context->allocator);
+    if (held.text != nullptr)
+    {
+        mwinRelease(&context->allocator, held.text, held.textLength, 1);
+    }
 }
 
 void mwinBeginDrop(mwinContext* context)
@@ -67,12 +70,14 @@ static char* TextRoom(mwinContext* context, size_t length)
     drop->truncated = drop->truncated || (length > 0 && text == nullptr);
     if (text != nullptr)
     {
-        if (drop->text != nullptr)
-        {
-            mwinRelease(&context->allocator, drop->text, drop->textLength, 1);
-        }
+        char* last = drop->text;
+        size_t lastLength = drop->textLength;
         drop->text = text;
         drop->textLength = (uint32_t)length;
+        if (last != nullptr)
+        {
+            mwinRelease(&context->allocator, last, lastLength, 1);
+        }
     }
     return text;
 }
@@ -105,54 +110,66 @@ void mwinSetDroppedTextUtf16(mwinContext* context, const uint16_t* units, size_t
 
 void mwinFinishDrop(mwinContext* context, uint32_t slot, mwinPosition position, uint64_t timeNs)
 {
-    ReleasePayload(context, &context->dropped);
+    // The new drop and its id first: a getter called from the free hook
+    // finds the last drop stale.
+    mwinDropPayload last = context->dropped;
     context->dropped = context->dropping;
     context->dropping = (mwinDropPayload){0};
-    context->dropNumber += 1;
+    context->dropGeneration += 1;
+    ReleasePayload(context, &last);
     const mwinDropPayload* drop = &context->dropped;
-    mwinEvent event = {.type = mwin_eventDropped, .timeNs = timeNs};
-    event.data.drop = (mwinDropEvent){position, context->dropNumber, drop->files.count,
-                                      drop->textLength, drop->truncated};
+    mwinEvent event = {.kind = mwin_eventDropped, .timeNs = timeNs};
+    event.data.drop = (mwinDropEvent){position,
+                                      {1, context->dropGeneration},
+                                      drop->files.count,
+                                      drop->textLength,
+                                      drop->truncated};
     mwinPost(context, slot, &event);
 }
 
 void mwinReleaseDrops(mwinContext* context)
 {
+    // A generation no drop was delivered with: the last drop's id is
+    // stale before its payload goes back.
+    context->dropGeneration += 1;
     ReleasePayload(context, &context->dropping);
     ReleasePayload(context, &context->dropped);
 }
 
 // Copies bytes of the delivered drop out.
-static mwinResult CopyOut(const mwinContext* context, uint32_t drop, const char* bytes,
+static mwinResult CopyOut(const mwinContext* context, mwinDropId drop, const char* bytes,
                           size_t length, char* buffer, size_t capacity, size_t* lengthOut)
 {
     if (context == nullptr || lengthOut == nullptr || (buffer == nullptr && capacity > 0))
     {
         return mwinMisuse(context);
     }
-    if (drop == 0 || drop != context->dropNumber)
+    if (drop.index1 != 1 || drop.generation == 0 || drop.generation != context->dropGeneration ||
+        context->finishing)
     {
         return mwin_errorStale;
     }
     return mwinGiveBytes(bytes, length, buffer, capacity, lengthOut);
 }
 
-mwinResult mwinContext_GetDroppedFiles(const mwinContext* context, uint32_t drop, char* bufferOut,
-                                       size_t capacity, size_t* lengthOut)
+mwinResult mwinDrop_GetFiles(const mwinContext* context, mwinDropId drop, char* bufferOut,
+                             size_t capacity, size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
-    return CopyOut(context, drop, context != nullptr ? context->dropped.files.bytes : nullptr,
-                   context != nullptr ? context->dropped.files.length : 0, bufferOut, capacity,
-                   lengthOut);
+    return mwinClearOnFailure(CopyOut(context, drop,
+                                      context != nullptr ? context->dropped.files.bytes : nullptr,
+                                      context != nullptr ? context->dropped.files.length : 0,
+                                      bufferOut, capacity, lengthOut),
+                              bufferOut, capacity);
 }
 
-mwinResult mwinContext_GetDroppedText(const mwinContext* context, uint32_t drop, char* bufferOut,
-                                      size_t capacity, size_t* lengthOut)
+mwinResult mwinDrop_GetText(const mwinContext* context, mwinDropId drop, char* bufferOut,
+                            size_t capacity, size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
-    return CopyOut(context, drop, context != nullptr ? context->dropped.text : nullptr,
-                   context != nullptr ? context->dropped.textLength : 0, bufferOut, capacity,
-                   lengthOut);
+    return mwinClearOnFailure(CopyOut(context, drop,
+                                      context != nullptr ? context->dropped.text : nullptr,
+                                      context != nullptr ? context->dropped.textLength : 0,
+                                      bufferOut, capacity, lengthOut),
+                              bufferOut, capacity);
 }

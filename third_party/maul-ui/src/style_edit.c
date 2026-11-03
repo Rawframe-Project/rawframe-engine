@@ -26,7 +26,7 @@ uint32_t muiResolveClassEdit(muiContext* context, muiStyleId styleId, muiResult*
 
 bool muiHasVariant(const muiStyleClass* class, muiVariant variant)
 {
-    return variant <= mui_variantExiting ||
+    return (uint32_t)variant <= mui_variantExiting ||
            (variant >= mui_variantCondition0 &&
             (uint32_t)(variant - mui_variantCondition0) < class->conditionCount);
 }

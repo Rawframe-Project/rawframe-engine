@@ -5,8 +5,9 @@
 // desktop portal's PowerProfileMonitor (power-saver-enabled) on the
 // session bus, on battery from UPower's OnBattery on the system bus.
 // Each is asked for at the start without waiting, taken at a later
-// pump, and followed through PropertiesChanged; unknown where nothing
-// answers. The services own both buses (linux_services.h).
+// pump, and followed through PropertiesChanged from the connection that
+// owns the service's name; unknown where nothing answers. The services own both buses
+// (linux_services.h).
 
 #ifndef MAUL_WINDOW_SRC_LINUX_POWER_H
 #define MAUL_WINDOW_SRC_LINUX_POWER_H
@@ -21,6 +22,9 @@ typedef struct mwinLinuxPower
     mwinLinuxBus* system;
     mwinBusCall saverCall;
     mwinBusCall batteryCall;
+    // The owners of the portal's and UPower's names.
+    mwinBusOwner portal;
+    mwinBusOwner upower;
     bool sessionListening;
     bool systemListening;
     // What was said: -1 for nothing, else 0 or 1.

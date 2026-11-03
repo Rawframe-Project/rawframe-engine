@@ -288,7 +288,7 @@ mrhiResult mrhiD3d12CreateQuerySet(mrhiD3d12Objects* objects, const mrhiQuerySet
         return mrhi_errorCapacity;
     }
     D3D12_QUERY_HEAP_DESC desc = {
-        .Type = heapTypes[def->type],
+        .Type = heapTypes[def->kind],
         .Count = def->count,
     };
     ID3D12QueryHeap* heap = nullptr;
@@ -301,8 +301,8 @@ mrhiResult mrhiD3d12CreateQuerySet(mrhiD3d12Objects* objects, const mrhiQuerySet
     mrhiD3d12Label((ID3D12Object*)heap, def->label, def->labelLength);
     objects->querySets[handle - 1] = (mrhiD3d12QuerySet){
         .heap = heap,
-        .type = types[def->type],
-        .stride = mrhiQueryBytes(def->type),
+        .type = types[def->kind],
+        .stride = mrhiQueryBytes(def->kind),
         .count = def->count,
     };
     *handleOut = handle;

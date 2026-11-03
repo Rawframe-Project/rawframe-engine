@@ -79,7 +79,7 @@ option(MAUL_WINDOW_GAMEPAD "Build the gamepad component" ON)
 # whose copies then serve this project. The version is also in the cache,
 # so a project that builds Maul Window from source (add_subdirectory or
 # FetchContent) can read the one it is built and tested with.
-set(MAUL_WINDOW_UNICODE_VERSION 0.8.0)
+set(MAUL_WINDOW_UNICODE_VERSION 0.13.0)
 set(MAUL_WINDOW_UNICODE_VERSION ${MAUL_WINDOW_UNICODE_VERSION}
     CACHE INTERNAL "the Maul Unicode version Maul Window is built and tested with")
 find_package(maul-unicode ${MAUL_WINDOW_UNICODE_VERSION} CONFIG QUIET)
@@ -299,11 +299,19 @@ if(MAUL_WINDOW_BUILD_TESTS)
         if(TARGET test_busy AND MAUL_WINDOW_GAMEPAD)
             target_compile_definitions(test_busy PRIVATE MWIN_TEST_GAMEPAD)
         endif()
+        # Getters called from the free hook while a payload is replaced.
+        maul_add_test(free_hook)
         # What a failed call leaves in its outputs; with the gamepad
         # component, the gamepad's calls among them.
         maul_add_test(outputs)
         if(TARGET test_outputs AND MAUL_WINDOW_GAMEPAD)
             target_compile_definitions(test_outputs PRIVATE MWIN_TEST_GAMEPAD)
+        endif()
+        # Kinds below their range; with the gamepad component, a test
+        # gamepad's button and axis among them.
+        maul_add_test(kinds)
+        if(TARGET test_kinds AND MAUL_WINDOW_GAMEPAD)
+            target_compile_definitions(test_kinds PRIVATE MWIN_TEST_GAMEPAD)
         endif()
         maul_add_test(monitor)
         maul_add_test(system)
@@ -316,12 +324,22 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(dialog)
         maul_add_test(icon WHITEBOX)
         maul_add_test(cursor WHITEBOX)
+        # Destroys read back from the free hook; the cursor through its
+        # slot, which no public getter reads.
+        maul_add_test(destroy_hook WHITEBOX)
+        # A run's teardown read back from the free hook, the cursor
+        # through its slot.
+        maul_add_test(teardown_hook WHITEBOX)
         maul_add_test(owned)
         maul_add_test(chrome WHITEBOX)
         maul_add_test(accessibility WHITEBOX)
         maul_add_test(key_reach WHITEBOX)
     maul_add_test(edid WHITEBOX)
         maul_add_test(text WHITEBOX)
+        if(TARGET test_text)
+            # utf8.h names Maul Unicode's units of text.
+            target_link_libraries(test_text PRIVATE maul-unicode::maul-unicode)
+        endif()
         maul_add_test(file_list WHITEBOX)
         maul_add_test(selection WHITEBOX)
         # Android's pointers as records, on every platform: elsewhere the test
@@ -340,6 +358,12 @@ if(MAUL_WINDOW_BUILD_TESTS)
         maul_add_test(win32_scope WHITEBOX)
         if(TARGET test_win32_scope AND NOT MAUL_WINDOW_WIN32)
             target_sources(test_win32_scope PRIVATE ${PROJECT_SOURCE_DIR}/src/win32_scope.c)
+        endif()
+        # Windows' languages handed to the context, on every platform.
+        maul_add_test(win32_locales WHITEBOX)
+        if(TARGET test_win32_locales AND NOT MAUL_WINDOW_WIN32)
+            target_sources(test_win32_locales PRIVATE ${PROJECT_SOURCE_DIR}/src/win32_locales.c)
+            target_link_libraries(test_win32_locales PRIVATE maul-unicode::maul-unicode)
         endif()
         if(MAUL_WINDOW_GAMEPAD)
             maul_add_test(gamepad)
@@ -650,8 +674,8 @@ if(MAUL_WINDOW_BUILD_TESTS)
         # Applications in the emulator, built by tools/build_android_app.sh
         # without Gradle and run by tools/run_android_app.sh.
         set(MWIN_ANDROID_TESTS android android_input android_cursor android_ime android_pad
-            android_services android_dialog android_drop android_system android_access
-            android_pad_ds4 android_touch)
+            android_services android_clipboard android_dialog android_drop android_system
+            android_access android_pad_ds4 android_touch)
         foreach(name ${MWIN_ANDROID_TESTS})
             set(package maul.window.tests.${name})
             add_library(test_${name} SHARED test/test_${name}.c)
@@ -679,11 +703,12 @@ if(MAUL_WINDOW_BUILD_TESTS)
                                  LABELS "${name};integration")
         endforeach()
         # Intermittent in the Android 15 emulator: battery saver not
-        # reported after a fresh boot, and an explored finger not heard.
+        # reported after a fresh boot (issue #229), and an explored finger
+        # not heard (issue #230).
         maul_quarantine(android_system android_access)
-        # Intermittent in the Android 15 emulator: a swipe's moves and lift
-        # not delivered.
-        maul_quarantine(android_input)
+        # Intermittent in the Android 15 emulator: every clipboard write and
+        # read failing for a whole run (issue #256).
+        maul_quarantine(android_clipboard)
     endif()
     if(MAUL_WINDOW_IOS)
         # Applications in the simulator, run by tools/run_ios_app.sh; ios_input,

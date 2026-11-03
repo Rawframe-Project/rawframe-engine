@@ -19,7 +19,7 @@ extern "C"
 #endif
 
     // What an easing is.
-    typedef uint8_t mtwnEasingKind;
+    typedef int32_t mtwnEasingKind;
     enum
     {
         // The identity: eased progress is progress.
@@ -53,7 +53,7 @@ extern "C"
     };
 
     // Where CSS's steps() jumps.
-    typedef uint8_t mtwnStepPosition;
+    typedef int32_t mtwnStepPosition;
     enum
     {
         // At the start of each step: CSS's jump-start and start.
@@ -67,7 +67,7 @@ extern "C"
     };
 
     // CSS's easing keywords.
-    typedef uint8_t mtwnCssKeyword;
+    typedef int32_t mtwnCssKeyword;
     enum
     {
         // linear.
@@ -98,7 +98,7 @@ extern "C"
     // How an easing's curve f is applied to progress p. The in mode is
     // the curve as defined; the others are its reflections, the same for
     // every kind.
-    typedef uint8_t mtwnEaseMode;
+    typedef int32_t mtwnEaseMode;
     enum
     {
         // f(p).
@@ -112,8 +112,10 @@ extern "C"
         mtwn_easeOutIn = 3,
     };
 
-    // A host's easing curve: eased progress for a progress from 0 to 1.
-    typedef double (*mtwnEaseFunction)(void* context, double progress);
+    // A host's easing curve: eased progress for a progress from 0 to 1. A
+    // function type, as the task hooks' are: a pointer to one is a
+    // mtwnEaseFunction*.
+    typedef double mtwnEaseFunction(void* context, double progress);
 
     // An easing: a curve and its mode. Make one with a mtwnMake...
     // function or mtwnMakeLinearEasing; its fields are the library's, set by
@@ -129,7 +131,7 @@ extern "C"
         // The curve's numbers, precomputed by its maker.
         double parameters[5];
         // A host function and its context.
-        mtwnEaseFunction function;
+        mtwnEaseFunction* function;
         void* context;
         // The points of linear().
         const mtwnLinearPoint* points;
@@ -143,7 +145,7 @@ extern "C"
 
     // How a rough easing's offsets grow and shrink with progress x
     // (GSAP's RoughEase tapers).
-    typedef uint8_t mtwnRoughTaper;
+    typedef int32_t mtwnRoughTaper;
     enum
     {
         // The same everywhere.
@@ -157,6 +159,7 @@ extern "C"
     };
 
     // A rough easing's flags, combined.
+    typedef uint32_t mtwnRoughFlags;
     enum
     {
         // Each output kept in [0, 1] (GSAP's clamp).
@@ -182,7 +185,7 @@ extern "C"
         // How the offsets grow and shrink.
         mtwnRoughTaper taper;
         // mtwn_rough flags, combined.
-        uint8_t flags;
+        mtwnRoughFlags flags;
     } mtwnRoughDef;
 
     /// Makes the linear easing, whose eased progress is its progress.
@@ -268,7 +271,14 @@ extern "C"
 
     /// Makes an easing of a host function, called with progress clamped to
     /// 0 to 1, under the mode's reflections. The library neither checks
-    /// nor forces its ends.
+    /// nor forces its ends. A NaN breaks the function's contract: the
+    /// library takes the progress the function was called with in its
+    /// place, the curve linear there in every mode, and a context counts
+    /// one misuse for each sample of an update that met one: a
+    /// transition's value, and a clip track's for each player
+    /// (mtwnContext_GetMisuse). Its infinity is kept: a transition or
+    /// track between equal ends stays at them, and one between others is
+    /// held at the largest finite float wherever a float is written.
     ///
     /// @param mode       The mode.
     /// @param function   The function; it must be safe to call from every
@@ -281,7 +291,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread.
     MTWN_NODISCARD MTWN_API mtwnResult mtwnMakeHostEasing(mtwnEaseMode mode,
-                                                          mtwnEaseFunction function, void* context,
+                                                          mtwnEaseFunction* function, void* context,
                                                           mtwnEasing* easingOut);
 
     /// Makes CSS's cubic-bezier(x1, y1, x2, y2), solved by safeguarded
@@ -362,8 +372,12 @@ extern "C"
     /// offset of at most the strength either side, by the taper.
     ///
     /// @param def        The rough easing.
-    /// @param points     Receives the points, which the easing references:
-    ///                   they must outlive it and not change.
+    /// @param pointsOut  Receives the points, which the easing references:
+    ///                   they must outlive it and not change. Unchanged on
+    ///                   failure: the shape is sampled at every inner point
+    ///                   before one is written, so only a host shape that
+    ///                   gives a value not finite when sampled again there
+    ///                   leaves them unspecified.
     /// @param count      The number of points, at least 2.
     /// @param easingOut  Receives the easing, in mode mtwn_easeIn; unchanged on
     ///                   failure.
@@ -374,8 +388,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the points are used by one thread at a time.
     MTWN_NODISCARD MTWN_API mtwnResult mtwnMakeRoughEasing(const mtwnRoughDef* def,
-                                                           mtwnLinearPoint* points, uint32_t count,
-                                                           mtwnEasing* easingOut);
+                                                           mtwnLinearPoint* pointsOut,
+                                                           uint32_t count, mtwnEasing* easingOut);
 
     /// Changes an easing's mode, keeping its curve.
     ///
@@ -391,8 +405,16 @@ extern "C"
     /// Tells whether an easing never decreases, as a timeline's easing
     /// must: linear, power, sine, expo, circ and steps in every mode, a
     /// cubic bezier with both y from 0 to 1, linear() with outputs that
-    /// never decrease; not back, elastic, bounce or a spring, and not a
-    /// host function, which the library cannot inspect.
+    /// never decrease, in in-out ending at 1 or below and in out-in
+    /// starting at 0 or above, since those modes join the curve's halves at
+    /// 1/2; not back, elastic, bounce or a spring, and not a host function,
+    /// which the library cannot inspect. Each of these
+    /// samples to values that never decrease, but a cubic bezier through
+    /// mtwnSampleEasing, solved to 1e-14 in x, whose values can fall an ulp
+    /// or so short of the last, more near a vertical tangent. A timeline
+    /// samples one so that they never do, which can differ from what the
+    /// same easing gives in a keyframe, a transition or mtwnSampleEasing by
+    /// a few 1e-14 for CSS's keywords.
     ///
     /// @param easing        An easing made by this library.
     /// @param monotonicOut  Receives whether it never decreases; unchanged
@@ -410,7 +432,9 @@ extern "C"
     /// where it samples progress unreflected.
     ///
     /// Every curve but a host function's gives a finite value: CSS's, past
-    /// the doubles' range, the largest finite double of its sign.
+    /// the doubles' range, the largest finite double of its sign. A host
+    /// function's infinity is given as it is, and its NaN never: the
+    /// progress it was called with is taken instead (mtwnMakeHostEasing).
     ///
     /// @param easing    An easing made by this library.
     /// @param progress  The progress, finite.

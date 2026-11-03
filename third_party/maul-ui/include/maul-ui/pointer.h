@@ -21,7 +21,7 @@ extern "C"
 #endif
 
     // The device a pointer is.
-    typedef uint8_t muiPointerKind;
+    typedef int32_t muiPointerKind;
 
     enum
     {
@@ -34,7 +34,11 @@ extern "C"
     };
 
     // The buttons a pointer holds, as bits: 1 << the button's index.
-    typedef uint8_t muiPointerButtons;
+    typedef uint32_t muiPointerButtons;
+
+    // The kinds of thing a drag offers and a node takes, as bits: the
+    // application's own, a thing of one kind having one or more of them.
+    typedef uint32_t muiDropKinds;
 
     enum
     {
@@ -48,7 +52,7 @@ extern "C"
     };
 
     // What happened to a pointer.
-    typedef uint8_t muiPointerAction;
+    typedef int32_t muiPointerAction;
 
     enum
     {
@@ -115,7 +119,7 @@ extern "C"
                                                          const muiPointerEvent* event);
 
     // What a pointer record reports.
-    typedef uint8_t muiPointerRecordKind;
+    typedef int32_t muiPointerRecordKind;
 
     enum
     {
@@ -172,7 +176,7 @@ extern "C"
         // belongs to: 2 for a double click.
         uint32_t clickCount;
         // For a dropped record, how many were dropped.
-        uint32_t dropped;
+        uint32_t recordsDropped;
         // The node; the null id for a dropped record.
         muiNodeId node;
         // The point in the node's border box.
@@ -186,14 +190,15 @@ extern "C"
         // For a drag's end, whether it was cancelled.
         bool cancelled;
         // For drop records, the kind and the host's key offered.
-        uint32_t dropKind;
+        muiDropKinds dropKind;
         uint64_t dropKey;
     } muiPointerRecord;
 
     /// Takes the oldest pointer record.
     ///
     /// @param context    The context.
-    /// @param recordOut  Receives the record. Zeroed on failure.
+    /// @param recordOut  Receives the record. Zeroed on failure but
+    ///                   `mui_errorBusy`, which leaves it.
     /// @return `mui_success`; `mui_empty` when none is waiting;
     ///         `mui_errorInvalid` for a NULL argument; `mui_errorBusy` while
     ///         the context is busy.
@@ -297,7 +302,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiContext_OfferDrop(muiContext* context, uint32_t pointer,
-                                                         uint32_t kind, uint64_t key);
+                                                         muiDropKinds kind, uint64_t key);
 
     /// Sets how far a press moves before it becomes a drag, on either
     /// axis: for a mouse, and for touch and pens. The defaults are 4,

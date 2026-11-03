@@ -42,7 +42,7 @@ extern "C"
     } muiCorners;
 
     // What a command draws.
-    typedef uint32_t muiDrawKind;
+    typedef int32_t muiDrawKind;
 
     enum
     {
@@ -57,7 +57,7 @@ extern "C"
     };
 
     // The color space a gradient's colors move through between stops.
-    typedef uint32_t muiDrawInterpolation;
+    typedef int32_t muiDrawInterpolation;
 
     enum
     {
@@ -71,7 +71,7 @@ extern "C"
     // a conic one starts.
     typedef struct muiDrawGradient
     {
-        uint32_t kind;
+        muiGradientKind kind;
         uint32_t stopCount;
         muiDrawInterpolation interpolation;
         float angle;
@@ -335,7 +335,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the sink is used by one thread at a time, and
     /// only during the call of the paint function given it.
-    MUI_NODISCARD MUI_API muiResult muiDrawSink_GetVisibleRect(muiDrawSink* sink, muiRect* rectOut);
+    MUI_NODISCARD MUI_API muiResult muiDrawSink_GetVisibleRect(const muiDrawSink* sink,
+                                                               muiRect* rectOut);
 
     /// Paints a root's subtree, as its last muiNode_ComputeLayout left it, into
     /// the context's list, and clears the subtree's paint requests. When

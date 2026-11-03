@@ -77,8 +77,10 @@ typedef struct mtwnLevel
     // and reversed ones, and of the last, relative to the local time.
     mtwnCrossings cover[4];
     // Below at the iteration starts' child times (the first's, a forward
-    // one's, a reversed one's), closed and strict.
+    // one's, a reversed one's) and ends' (a forward one's, a reversed
+    // one's, the last's), closed and strict.
     mtwnCrossings startBelow[3][2];
+    mtwnCrossings endBelow[3][2];
     // Below at the single point a zero-length level has.
     mtwnCrossings pointBelow;
 } mtwnLevel;
@@ -97,30 +99,11 @@ uint32_t mtwnPassedLevels(const mtwnLevel* levels, uint32_t count);
 // Counts the leaf's crossings as the outermost level's parent time sweeps
 // from 'from' to 'to': (from, to] forwards, [to, from) backwards, closed
 // at 'from' too when asked (a sweep from no time). The result's same is
-// the crossings with the leaf moving forwards.
-// The walks a count makes, remembered for the next counts of the same
-// prepared levels and leaf: a search's fixed end is walked once. Each is
-// the same bits worked out again; set count to 0 at each preparation.
-typedef struct mtwnCrossingMemo
-{
-    uint32_t count;
-    uint32_t next;
-    double at[8];
-    bool strict[8];
-    mtwnCrossings reached[8];
-} mtwnCrossingMemo;
-
-// mtwnCountCrossings, its walks remembered in a memo (NULL for none).
-mtwnCrossings mtwnCountCrossingsMemo(const mtwnLevel* levels, uint32_t count, const mtwnLeaf* leaf,
-                                     double from, double to, bool fromClosed,
-                                     mtwnCrossingMemo* memo);
-
-static inline mtwnCrossings mtwnCountCrossings(const mtwnLevel* levels, uint32_t count,
-                                               const mtwnLeaf* leaf, double from, double to,
-                                               bool fromClosed)
-{
-    return mtwnCountCrossingsMemo(levels, count, leaf, from, to, fromClosed, NULL);
-}
+// the crossings with the leaf moving forwards. The count is taken between
+// the two ends, not as what each reaches from the clip's start, so it does
+// not depend on how much lies before the sweep.
+mtwnCrossings mtwnCountCrossings(const mtwnLevel* levels, uint32_t count, const mtwnLeaf* leaf,
+                                 double from, double to, bool fromClosed);
 
 // Which crossings a search counts.
 typedef uint8_t mtwnCrossingWay;
@@ -144,18 +127,16 @@ enum
 // found flips the count as above; a right guess finds it in two counts.
 // Where the count flips more than once the guess can pick another of
 // those few doubles, the same one on every platform. NaN guesses nothing.
-// Its counts' walks are remembered in a memo (NULL for none).
 double mtwnFindCrossingFrom(const mtwnLevel* levels, uint32_t count, const mtwnLeaf* leaf,
                             double from, double to, bool fromClosed, bool last, mtwnCrossingWay way,
-                            double guess, mtwnCrossingMemo* memo);
+                            double guess);
 
 // The search from no guess.
 static inline double mtwnFindCrossing(const mtwnLevel* levels, uint32_t count, const mtwnLeaf* leaf,
                                       double from, double to, bool fromClosed, bool last,
                                       mtwnCrossingWay way)
 {
-    return mtwnFindCrossingFrom(levels, count, leaf, from, to, fromClosed, last, way, (double)NAN,
-                                NULL);
+    return mtwnFindCrossingFrom(levels, count, leaf, from, to, fromClosed, last, way, (double)NAN);
 }
 
 // The iteration the last level is in at a time of the outermost level's

@@ -180,6 +180,9 @@ typedef struct muiLayoutNode
     // layout, which then marks it to be measured again. In padding too.
     bool unmeasured;
     muiSize heldSizes[2];
+    // Room to the end of the node's last cache line, which the assertion
+    // below keeps exact.
+    uint8_t spare[40];
 } muiLayoutNode;
 
 // Nodes are whole cache lines, so that every node's rectangle and cache

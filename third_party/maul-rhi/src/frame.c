@@ -8,6 +8,7 @@
 
 #include "device_core.h"
 #include "invariant.h"
+#include "label.h"
 #include "outputs.h"
 
 #include "generated/out_copies.h"
@@ -113,10 +114,19 @@ static void Lose(mrhiDevice* device, const mrhiDeviceLossReport* given)
     else
     {
         device->driver.vtable->lossReport(device->driver.self, &report);
+        // A reason the contract does not name is not passed on, and the
+        // message only up to its room and its first byte that is not
+        // well-formed UTF-8, so a character the room cuts goes whole.
+        if ((uint32_t)report.reason > mrhi_lossSimulated)
+        {
+            report.reason = mrhi_lossUnknown;
+        }
+        size_t room = report.messageLength <= MRHI_LOSS_MESSAGE_BYTES ? report.messageLength
+                                                                      : MRHI_LOSS_MESSAGE_BYTES;
+        report.messageLength = mrhiValidTextLength(report.message, room);
     }
     report.lastSubmitted = (mrhiRequestId){device->lastSubmitted, device->lastSubmitted != 0};
     report.lastFinished = (mrhiRequestId){device->lastFinished, device->lastFinished != 0};
-    MRHI_ASSERT(report.messageLength <= MRHI_LOSS_MESSAGE_BYTES);
     device->lossReport = report;
     // The notice's record was kept free, and every other answer reserved.
     mrhiQueueAnswer(device, mrhi_deviceLostNotice, 0, mrhi_errorDeviceLost);
@@ -173,6 +183,9 @@ static void TakeFinished(mrhiDevice* device)
     size_t moved;
     while ((moved = device->driver.vtable->poll(device->driver.self, events, POLL_BATCH)) > 0)
     {
+        // A driver may claim more than the room it was given; the rest
+        // is not there to read.
+        moved = moved <= POLL_BATCH ? moved : POLL_BATCH;
         // A lost device answered everything it owed when it was lost.
         for (size_t i = 0; i < moved && device->state != mrhi_deviceLost; ++i)
         {
@@ -320,7 +333,11 @@ mrhiResult mrhiDevice_SubmitFrame(mrhiDevice* device, mrhiRequestId* tokenOut)
     mrhiDiagnosticCode budget = 0;
     mrhiResult status = mrhiDriverStatus(
         device, device->driver.vtable->submitFrame(device->driver.self, &view, token, &budget));
-    if (status == mrhi_errorCapacity && budget != 0)
+    // Only a submit code reaches the program; a driver that names
+    // another named no budget.
+    if (status == mrhi_errorCapacity &&
+        (budget == mrhi_diagnosticSubmitMemory || budget == mrhi_diagnosticSubmitDescriptors ||
+         budget == mrhi_diagnosticSubmitScratch || budget == mrhi_diagnosticSubmitCommandLists))
     {
         mrhiRecordDiagnostic(&device->diagnostics, budget);
     }
@@ -366,14 +383,14 @@ mrhiResult mrhiDevice_GetFrameUsage(mrhiDevice* device, mrhiFrameUsage* usageOut
         device->frameCompiled ? device->frameChunkLimit - device->frameProgramChunks : 0;
     chunks = chunks < device->frameChunkLimit ? chunks : device->frameChunkLimit;
     const mrhiFrameUsage usage = {
-        .frameResources = device->frameResourceCount,
-        .framePasses = device->framePassCount - libraryPasses,
-        .frameAccesses = device->frameUseCount,
-        .frameBarriers = device->frameBarrierCount - device->frameLibraryBarriers,
+        .frameResourceCount = device->frameResourceCount,
+        .framePassCount = device->framePassCount - libraryPasses,
+        .frameAccessCount = device->frameUseCount,
+        .frameBarrierCount = device->frameBarrierCount - device->frameLibraryBarriers,
         .frameCommandBytes = (chunks - libraryChunks) * MRHI_CHUNK_BYTES,
         .frameUploadBytes =
             (uint32_t)(staged < limits->frameUploadBytes ? staged : limits->frameUploadBytes),
-        .frameIndirectDraws =
+        .frameIndirectDrawCount =
             (uint32_t)atomic_load_explicit(&device->countedTaken, memory_order_relaxed),
         .frameMemoryBytes = device->frameCompiled ? device->frameMemory : 0,
     };
@@ -412,14 +429,16 @@ mrhiResult mrhiRequest_WaitFrame(mrhiDevice* device, mrhiRequestId token, uint64
 
 mrhiResult mrhiDevice_TakeNotification(mrhiDevice* device, mrhiDeviceNotification* notificationOut)
 {
+    // Refused as busy, it leaves the record: the call the allocator runs
+    // in may be filling it.
+    if (device != nullptr && device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     mrhiClearOutput(notificationOut, sizeof(*notificationOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
-    }
-    if (device->allocatorGuard.busy)
-    {
-        return mrhiDeviceBusy(device);
     }
     if (notificationOut == nullptr)
     {

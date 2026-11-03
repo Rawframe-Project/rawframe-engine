@@ -11,6 +11,7 @@
 // script, so "(" and ")" around foreign text land in the same script.
 
 #include "cursor.h"
+#include "invariant.h"
 #include "tables.h"
 
 #include "maul-unicode/script.h"
@@ -108,6 +109,7 @@ static uint8_t Best(const ScriptState* state)
             return (uint8_t)(word * 64 + bit);
         }
     }
+    MUNI_ASSERT(false);
     return NO_SCRIPT;
 }
 
@@ -178,6 +180,10 @@ static bool Bracket(ScriptState* state, uint32_t codePoint, uint8_t* scriptOut, 
     return false;
 }
 
+// A determined run's candidates are never empty: they start as the
+// scripts of one code point, of which there is at least one (its Script,
+// or a Script_Extensions set, which munigen refuses to make empty), and
+// Step replaces them only by a nonempty intersection. Best relies on it.
 static void StartRun(ScriptState* state, uint8_t script, const Scripts* scripts)
 {
     state->candidates = *scripts;

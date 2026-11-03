@@ -31,11 +31,24 @@ bool muiSetBlockText(muiTextService* service, muiTextBlock* block, const char* t
 muiResult muiBlockTextStatus(const muiTextBlock* block, uint32_t start, uint32_t end,
                              size_t length);
 
-// Whether an offset begins a character of a block's text, or is its end,
-// as decoding reads it: a byte past what a sequence's lead takes begins
-// one of its own, as the U+FFFD it is laid out as. The text's start
-// always does.
-bool muiIsCharacterStart(const muiTextBlock* block, uint32_t at);
+// Puts a composition checked to fit over the bytes of a block's text from
+// start up to end, all or nothing: mui_errorCapacity when memory runs out,
+// the block as it was.
+muiResult muiComposeOver(muiTextService* service, muiTextBlock* block, uint32_t start, uint32_t end,
+                         const char* text, uint32_t length, const muiCompositionSegment* segments,
+                         uint32_t segmentCount);
+
+// Whether an offset begins a character of a text, or is its end, as
+// decoding reads it: a byte past what a sequence's lead takes begins one
+// of its own, as the U+FFFD it is laid out as. The text's start always
+// does.
+bool muiIsCharacterStartIn(const char* text, uint32_t length, uint32_t at);
+
+// The same of a block's text.
+static inline bool muiIsCharacterStart(const muiTextBlock* block, uint32_t at)
+{
+    return muiIsCharacterStartIn(block->text.data, block->length, at);
+}
 
 // Replaces the bytes of a block's text from start up to end with a text
 // of length bytes, valid UTF-8 of the block's limit, moving its spans and

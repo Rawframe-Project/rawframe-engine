@@ -290,11 +290,14 @@ mrhiResult mrhiDestroyShader(mrhiDevice* device, mrhiShaderId shader)
     {
         return mrhi_errorStale;
     }
-    mrhiShaderSlot* slot = &device->shaderSlots[shader.index1 - 1];
-    device->driver.vtable->destroyShader(device->driver.self, slot->handle);
-    mrhiReleaseReflection(&device->allocator, slot->reflection);
-    *slot = (mrhiShaderSlot){0};
+    // The id goes stale first: the driver and the reflection may give
+    // memory back to the allocator, and a hook reading the shader then
+    // finds it gone.
+    mrhiShaderSlot ended = device->shaderSlots[shader.index1 - 1];
+    device->shaderSlots[shader.index1 - 1] = (mrhiShaderSlot){0};
     mrhiPoolRelease(&device->shaders, shader.index1);
+    device->driver.vtable->destroyShader(device->driver.self, ended.handle);
+    mrhiReleaseReflection(&device->allocator, ended.reflection);
     return mrhi_success;
 }
 

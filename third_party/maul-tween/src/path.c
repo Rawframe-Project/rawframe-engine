@@ -24,6 +24,7 @@
 #include "valid.h"
 #include "work.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
@@ -326,7 +327,7 @@ static bool IsValid(const mtwnKeyframe* keyframes, uint32_t count, uint8_t chann
         const mtwnKeyframe* k = &keyframes[i];
         bool segment = i + 1 < count;
         if (!isfinite(k->offset) || (segment && keyframes[i + 1].offset < k->offset) ||
-            k->kind > mtwn_segmentMonotone || !IsFinite4(k->value, channels) ||
+            (uint32_t)k->kind > mtwn_segmentMonotone || !IsFinite4(k->value, channels) ||
             !IsFinite4(k->in, channels) || !IsFinite4(k->out, channels) ||
             (constantSpeed && segment && k->kind == mtwn_segmentStep) ||
             !mtwnValidEasing(&k->easing))
@@ -402,8 +403,9 @@ static uint32_t FindSegment(const mtwnPath* path, double key, bool byLength)
     return lo;
 }
 
-// Segment i's parameter at a progress: its local progress eased.
-static double Eased(const mtwnPath* path, uint32_t i, double progress)
+// Segment i's parameter at a progress: its local progress eased, hostNan
+// as mtwnSampleEasingNoted's.
+static double Eased(const mtwnPath* path, uint32_t i, double progress, bool* hostNan)
 {
     const mtwnKeyframe* k = path->keyframes;
     // A width within progress's rounding of none jumps, as equal offsets
@@ -411,7 +413,11 @@ static double Eased(const mtwnPath* path, uint32_t i, double progress)
     // progress of -1.5e300.
     double width = k[i + 1].offset - k[i].offset;
     double local = width > 0x1p-52 ? (progress - k[i].offset) / width : 1.0;
-    return mtwnSampleEasingWork(&k[i].easing, local, false);
+    // An infinite parameter, a host easing's, as the largest double of its
+    // sign: a segment then takes no 0 times infinity, so one between equal
+    // keyframes keeps their value and another goes past the floats.
+    double eased = mtwnSampleEasingNoted(&k[i].easing, local, false, hostNan);
+    return isinf(eased) ? copysign(DBL_MAX, eased) : eased;
 }
 
 // The segment a progress falls in and the parameter within it.
@@ -428,12 +434,13 @@ static uint32_t SegmentAt(const mtwnPath* path, double progress)
 
 // The parameter within segment i, the one a progress falls in, and its
 // cubic.
-static double LocateIn(const mtwnPath* path, uint32_t i, double progress, mtwnCubic* cubic)
+static double LocateIn(const mtwnPath* path, uint32_t i, double progress, mtwnCubic* cubic,
+                       bool* hostNan)
 {
     SegmentCubic(path, i, cubic);
     if (path->lengths == NULL)
     {
-        return Eased(path, i, progress);
+        return Eased(path, i, progress, hostNan);
     }
     double total = path->lengths[path->count - 1];
     double distance = progress * total;
@@ -451,7 +458,7 @@ static void Locate(const mtwnPath* path, double progress, uint32_t* segmentOut, 
                    mtwnCubic* cubic)
 {
     uint32_t i = SegmentAt(path, progress);
-    *uOut = LocateIn(path, i, progress, cubic);
+    *uOut = LocateIn(path, i, progress, cubic, NULL);
     *segmentOut = i;
 }
 
@@ -493,9 +500,9 @@ static bool Reads(const mtwnPath* path, uint32_t i)
     const mtwnKeyframe* k = &path->keyframes[i];
     if (path->lengths != NULL)
     {
-        return k->kind <= mtwn_segmentMonotone && k->kind != mtwn_segmentStep;
+        return (uint32_t)k->kind <= mtwn_segmentMonotone && k->kind != mtwn_segmentStep;
     }
-    return k->kind <= mtwn_segmentMonotone && mtwnValidEasing(&k->easing);
+    return (uint32_t)k->kind <= mtwn_segmentMonotone && mtwnValidEasing(&k->easing);
 }
 
 bool mtwnPathReadsValid(const mtwnPath* path, double progress)
@@ -505,16 +512,16 @@ bool mtwnPathReadsValid(const mtwnPath* path, double progress)
 
 // A path's sample in segment i, the one a progress falls in.
 static void SampleIn(const mtwnPath* path, uint32_t i, double progress, double valueOut[4],
-                     double tangentOut[4])
+                     double tangentOut[4], bool* hostNan)
 {
     // Timed by its keyframes, a linear segment needs no cubic.
     if (path->lengths == NULL && path->keyframes[i].kind == mtwn_segmentLinear)
     {
-        SampleLinear(path, i, Eased(path, i, progress), valueOut, tangentOut);
+        SampleLinear(path, i, Eased(path, i, progress, hostNan), valueOut, tangentOut);
         return;
     }
     mtwnCubic cubic;
-    double u = LocateIn(path, i, progress, &cubic);
+    double u = LocateIn(path, i, progress, &cubic, hostNan);
     double end[4];
     LoadOf(path, path->keyframes[i + 1].value, end);
     Evaluate(&cubic, end, u, path->channels, valueOut, tangentOut);
@@ -542,7 +549,7 @@ static MTWN_NOINLINE mtwnResult mtwnSamplePathChecked(const mtwnPath* path, doub
     }
     double value[4];
     double tangent[4];
-    SampleIn(path, i, progress, value, tangentOut != NULL ? tangent : NULL);
+    SampleIn(path, i, progress, value, tangentOut != NULL ? tangent : NULL, NULL);
     memcpy(valueOut, value, sizeof value);
     if (tangentOut != NULL)
     {
@@ -608,8 +615,13 @@ static bool IsZero4(mtwnVec4 v)
 static bool CheckTrack(const mtwnTrackDef* def, const mtwnKeyframe* keyframes, uint32_t count,
                        bool lengths, const mtwnSegmentMix* mixes)
 {
-    if (def == NULL || def->kind > mtwn_valueScale || def->rotationPath > mtwn_rotationLongest ||
-        (def->kind == mtwn_valueAngle && !mtwnIsAngleMethod(def->angleMethod)) ||
+    // Every choice known, whatever the kind reads: no correct program
+    // passes an unknown one, which would change meaning the day a kind
+    // reads its field.
+    if (def == NULL || (uint32_t)def->kind > mtwn_valueScale ||
+        (uint32_t)def->colorSpace > mtwn_colorSrgb ||
+        (uint32_t)def->hueMethod > mtwn_hueDecreasing || !mtwnIsAngleMethod(def->angleMethod) ||
+        (uint32_t)def->rotationPath > mtwn_rotationLongest ||
         !IsValid(keyframes, count, s_kindChannels[def->kind], def->alpha, lengths) ||
         (lengths && !IsNumberKind(def->kind) && def->kind != mtwn_valueScale) ||
         !TakesSegments(def->kind, keyframes, count))
@@ -688,8 +700,8 @@ static void Canonicalize(const mtwnTrackDef* def, mtwnKeyframe* keyframes, uint3
     }
 }
 
-MTWN_NOINLINE mtwnResult mtwnMakeTrackWork(const mtwnTrackDef* def, mtwnKeyframe* keyframes,
-                                           uint32_t count, double* lengthsOut,
+MTWN_NOINLINE mtwnResult mtwnMakeTrackWork(mtwnKeyframe* keyframes, uint32_t count,
+                                           const mtwnTrackDef* def, double* lengthsOut,
                                            mtwnSegmentMix* mixesOut, mtwnTrack* trackOut)
 {
     if (trackOut == NULL || !CheckTrack(def, keyframes, count, lengthsOut != NULL, mixesOut))
@@ -753,11 +765,11 @@ MTWN_NOINLINE mtwnResult mtwnMakeTrackWork(const mtwnTrackDef* def, mtwnKeyframe
     return mtwn_success;
 }
 
-mtwnResult mtwnMakeTrack(const mtwnTrackDef* def, mtwnKeyframe* keyframes, uint32_t count,
+mtwnResult mtwnMakeTrack(mtwnKeyframe* keyframes, uint32_t count, const mtwnTrackDef* def,
                          double* lengthsOut, mtwnSegmentMix* mixesOut, mtwnTrack* trackOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnMakeTrackWork(def, keyframes, count, lengthsOut, mixesOut, trackOut);
+    mtwnResult result = mtwnMakeTrackWork(keyframes, count, def, lengthsOut, mixesOut, trackOut);
     mtwnFloatEnvLeave(env);
     return result;
 }
@@ -836,13 +848,13 @@ static mtwnVec4 SampleScale(const mtwnPath* path, uint32_t i, double u, const mt
 }
 
 // A track's sample in segment i, the one a progress falls in.
-static mtwnVec4 TrackIn(const mtwnTrack* track, uint32_t i, double progress)
+static mtwnVec4 TrackIn(const mtwnTrack* track, uint32_t i, double progress, bool* hostNan)
 {
     const mtwnPath* path = &track->path;
     double value[4];
     if (IsNumberKind(track->kind))
     {
-        SampleIn(path, i, progress, value, NULL);
+        SampleIn(path, i, progress, value, NULL, hostNan);
         if (track->kind == mtwn_valueInteger)
         {
             value[0] = round(value[0]);
@@ -850,7 +862,7 @@ static mtwnVec4 TrackIn(const mtwnTrack* track, uint32_t i, double progress)
         return ToVec4(value);
     }
     mtwnCubic cubic;
-    double u = LocateIn(path, i, progress, &cubic);
+    double u = LocateIn(path, i, progress, &cubic, hostNan);
     const mtwnKeyframe* k = path->keyframes;
     mtwnSegmentKind kind = k[i].kind;
     mtwnVec4 held = u >= 1.0 ? k[i + 1].value : k[i].value;
@@ -895,17 +907,17 @@ static bool MixReads(const mtwnTrack* track, uint32_t i);
 
 // A clip's own track (src/clip_sample.c), made from the keyframes it
 // copied: every segment reads, whatever the progress.
-MTWN_NOINLINE mtwnVec4 mtwnSampleTrackWork(const mtwnTrack* track, double progress)
+MTWN_NOINLINE mtwnVec4 mtwnSampleTrackWork(const mtwnTrack* track, double progress, bool* hostNan)
 {
     MTWN_ASSERT(mtwnValidTrack(track));
     uint32_t i = SegmentAt(&track->path, progress);
     MTWN_ASSERT(Reads(&track->path, i) && MixReads(track, i));
-    return TrackIn(track, i, progress);
+    return TrackIn(track, i, progress, hostNan);
 }
 
 MTWN_NOINLINE bool mtwnValidTrack(const mtwnTrack* track)
 {
-    if (track == NULL || track->kind > mtwn_valueScale || !mtwnValidPath(&track->path))
+    if (track == NULL || (uint32_t)track->kind > mtwn_valueScale || !mtwnValidPath(&track->path))
     {
         return false;
     }
@@ -946,7 +958,7 @@ static MTWN_NOINLINE mtwnResult mtwnSampleTrackChecked(const mtwnTrack* track, d
     {
         return mtwn_errorInvalid;
     }
-    *valueOut = TrackIn(track, i, progress);
+    *valueOut = TrackIn(track, i, progress, NULL);
     return mtwn_success;
 }
 

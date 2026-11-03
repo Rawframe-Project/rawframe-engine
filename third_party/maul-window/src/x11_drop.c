@@ -70,10 +70,10 @@ static void ReadTypeList(mwinX11Platform* platform)
     mwinReleaseSystemMemory(reply);
 }
 
-static void Post(mwinX11Platform* platform, mwinEventType type)
+static void Post(mwinX11Platform* platform, mwinEventKind type)
 {
     const mwinX11Drag* drag = &platform->drag;
-    mwinEvent event = {.type = type, .timeNs = mwinMonotonicNow()};
+    mwinEvent event = {.kind = type, .timeNs = mwinMonotonicNow()};
     event.data.drag = (mwinDragEvent){drag->position, drag->contents};
     mwinPost(platform->context, (uint32_t)drag->slot, &event);
 }

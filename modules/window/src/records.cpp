@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <maul-window/drop.h>
 #include <string>
 #include <utility>
@@ -14,7 +16,7 @@ namespace {
 
 /// The engine's kinds and Maul Window's, one row each. A Maul Window type
 /// with no row is outside the vocabularies.
-constexpr auto kKinds = std::to_array<std::pair<EventKind, mwinEventType>>({
+constexpr auto kKinds = std::to_array<std::pair<EventKind, mwinEventKind>>({
     {EventKind::WindowCreated, mwin_eventWindowCreated},
     {EventKind::CloseRequested, mwin_eventCloseRequested},
     {EventKind::WindowDestroyed, mwin_eventWindowDestroyed},
@@ -64,7 +66,7 @@ constexpr auto kKinds = std::to_array<std::pair<EventKind, mwinEventType>>({
     {EventKind::GamepadAxisMoved, mwin_eventGamepadAxisMoved},
 });
 
-std::optional<EventKind> kindOf(mwinEventType type) noexcept {
+std::optional<EventKind> kindOf(mwinEventKind type) noexcept {
     for (const auto& [kind, maul] : kKinds) {
         if (maul == type) {
             return kind;
@@ -73,7 +75,7 @@ std::optional<EventKind> kindOf(mwinEventType type) noexcept {
     return std::nullopt;
 }
 
-std::optional<mwinEventType> typeOf(EventKind kind) noexcept {
+std::optional<mwinEventKind> typeOf(EventKind kind) noexcept {
     for (const auto& [engine, maul] : kKinds) {
         if (engine == kind) {
             return maul;
@@ -96,6 +98,7 @@ constexpr auto kRequests = std::to_array<std::pair<RequestKind, mwinRequestKind>
     {RequestKind::AccessibilityRoot, mwin_requestAccessibilityRoot},
     {RequestKind::ClipboardWrite, mwin_requestClipboardWrite},
     {RequestKind::ClipboardRead, mwin_requestClipboardRead},
+    {RequestKind::TextInputCaret, mwin_requestTextInputCaret},
 });
 
 Mode modeOf(mwinWindowMode mode) noexcept {
@@ -160,12 +163,12 @@ std::optional<Event> droppedFiles(const mwinContext& context, const mwinDropEven
         return std::nullopt;
     }
     std::size_t length = 0;
-    mwinResult status = mwinContext_GetDroppedFiles(&context, drop.drop, nullptr, 0, &length);
+    mwinResult status = mwinDrop_GetFiles(&context, drop.drop, nullptr, 0, &length);
     if (status != mwin_errorCapacity && status != mwin_success) {
         return std::nullopt;
     }
     std::string paths(length, '\0');
-    status = mwinContext_GetDroppedFiles(&context, drop.drop, paths.data(), paths.size(), &length);
+    status = mwinDrop_GetFiles(&context, drop.drop, paths.data(), paths.size(), &length);
     if (status != mwin_success) {
         return std::nullopt;
     }
@@ -246,7 +249,7 @@ mwinOutcome toMaul(Outcome outcome) noexcept {
 }
 
 std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& record) {
-    const std::optional<EventKind> kind = kindOf(record.type);
+    const std::optional<EventKind> kind = kindOf(record.kind);
     if (!kind) {
         return std::nullopt;
     }
@@ -254,7 +257,7 @@ std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& recor
     event.kind = *kind;
     event.window = fromMaul(record.window);
     event.timeNs = record.timeNs;
-    event.samples = record.samples;
+    event.samples = record.sampleCount;
     const auto& data = record.data;
     switch (*kind) {
     case EventKind::Resized:
@@ -291,9 +294,10 @@ std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& recor
         break;
     case EventKind::KeyDown:
     case EventKind::KeyUp:
-        event.key = {.usage = data.key.code,
+        // A usage is 16 bits and the modifiers are six: both fit.
+        event.key = {.usage = static_cast<std::uint16_t>(data.key.code),
                      .meaning = data.key.key,
-                     .modifiers = data.key.modifiers,
+                     .modifiers = static_cast<std::uint16_t>(data.key.modifiers),
                      .repeat = data.key.repeat};
         break;
     case EventKind::TextInput:
@@ -304,11 +308,12 @@ std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& recor
     case EventKind::CursorLeft:
     case EventKind::ButtonDown:
     case EventKind::ButtonUp:
+        // The modifiers are six bits and the buttons five: both fit.
         event.pointer = {.position = positionOf(data.pointer.position),
-                         .modifiers = data.pointer.modifiers,
-                         .buttons = data.pointer.buttons,
+                         .modifiers = static_cast<std::uint16_t>(data.pointer.modifiers),
+                         .buttons = static_cast<std::uint8_t>(data.pointer.buttons),
                          .button = buttonOf(data.pointer.button),
-                         .clicks = data.pointer.clicks};
+                         .clicks = data.pointer.clickCount};
         break;
     case EventKind::Wheel:
         event.motion = {.x = data.wheel.x, .y = data.wheel.y};
@@ -324,10 +329,18 @@ std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& recor
             .id = data.touch.id, .position = positionOf(data.touch.position), .pressure = data.touch.pressure};
         break;
     case EventKind::ImePreedit:
+        // A composition's places are within its text, which an input
+        // method keeps short; one past what a record holds is outside the
+        // vocabulary.
+        if (data.preedit.caret > std::numeric_limits<std::int32_t>::max() ||
+            data.preedit.selectionStart > std::numeric_limits<std::uint32_t>::max() ||
+            data.preedit.selectionEnd > std::numeric_limits<std::uint32_t>::max()) {
+            return std::nullopt;
+        }
         event.text.assign(data.preedit.text, data.preedit.length);
-        event.preedit = {.caret = data.preedit.caret,
-                         .selectionStart = data.preedit.selectionStart,
-                         .selectionEnd = data.preedit.selectionEnd};
+        event.preedit = {.caret = static_cast<std::int32_t>(data.preedit.caret),
+                         .selectionStart = static_cast<std::uint32_t>(data.preedit.selectionStart),
+                         .selectionEnd = static_cast<std::uint32_t>(data.preedit.selectionEnd)};
         break;
     case EventKind::FilesDropped:
         return droppedFiles(context, data.drop, std::move(event));
@@ -343,14 +356,16 @@ std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& recor
     case EventKind::GamepadButtonDown:
     case EventKind::GamepadButtonUp:
         event.gamepad = fromMaul(data.gamepadButton.gamepad);
-        event.gamepadInput = {.control = data.gamepadButton.button,
+        // The library's buttons and axes are a handful: each fits.
+        event.gamepadInput = {.control = static_cast<std::uint8_t>(data.gamepadButton.button),
                               .raw = data.gamepadButton.raw,
                               .value = *kind == EventKind::GamepadButtonDown ? 1.0f : 0.0f};
         break;
     case EventKind::GamepadAxisMoved:
         event.gamepad = fromMaul(data.gamepadAxis.gamepad);
-        event.gamepadInput = {
-            .control = data.gamepadAxis.axis, .raw = data.gamepadAxis.raw, .value = data.gamepadAxis.value};
+        event.gamepadInput = {.control = static_cast<std::uint8_t>(data.gamepadAxis.axis),
+                              .raw = data.gamepadAxis.raw,
+                              .value = data.gamepadAxis.value};
         break;
     default:
         break;
@@ -359,13 +374,13 @@ std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& recor
 }
 
 result::Result<mwinEvent> toMaul(const Event& event) {
-    const std::optional<mwinEventType> type = typeOf(event.kind);
+    const std::optional<mwinEventKind> type = typeOf(event.kind);
     if (!type) {
         return failure(mwin_errorInvalid, "a record no platform reports");
     }
     mwinEvent record{};
-    record.type = *type;
-    record.samples = event.samples;
+    record.kind = *type;
+    record.sampleCount = event.samples;
     record.window = toMaul(event.window);
     record.timeNs = event.timeNs;
     auto& data = record.data;
@@ -393,7 +408,7 @@ result::Result<mwinEvent> toMaul(const Event& event) {
                     .repeat = event.key.repeat};
         break;
     case EventKind::TextInput:
-        data.text = {.text = event.text.data(), .length = static_cast<std::uint32_t>(event.text.size())};
+        data.text = {.text = event.text.data(), .length = event.text.size()};
         break;
     case EventKind::CursorMoved:
     case EventKind::CursorEntered:
@@ -404,7 +419,7 @@ result::Result<mwinEvent> toMaul(const Event& event) {
                         .modifiers = event.pointer.modifiers,
                         .buttons = event.pointer.buttons,
                         .button = static_cast<mwinMouseButton>(event.pointer.button),
-                        .clicks = event.pointer.clicks};
+                        .clickCount = event.pointer.clicks};
         break;
     case EventKind::Wheel:
         data.wheel = {.x = event.motion.x, .y = event.motion.y};
@@ -420,7 +435,7 @@ result::Result<mwinEvent> toMaul(const Event& event) {
         break;
     case EventKind::ImePreedit:
         data.preedit = {.text = event.text.data(),
-                        .length = static_cast<std::uint32_t>(event.text.size()),
+                        .length = event.text.size(),
                         .caret = event.preedit.caret,
                         .selectionStart = event.preedit.selectionStart,
                         .selectionEnd = event.preedit.selectionEnd,

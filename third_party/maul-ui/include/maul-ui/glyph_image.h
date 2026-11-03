@@ -56,10 +56,12 @@ extern "C"
     /// @param offsetX    How far the pen is right of a pixel boundary,
     ///                   from 0 up to 1; the image's left is counted
     ///                   from that boundary.
-    /// @param imageOut   Receives the image's place and size, also when pixelsOut
-    ///                   holds too few bytes. Zeroed on any other failure.
+    /// @param imageOut   Receives the image's place and size, also when
+    ///                   pixelsOut holds too few bytes. Zeroed on any other
+    ///                   failure but `mui_errorBusy`, which leaves it.
     /// @param pixelsOut  Receives width * height bytes; may be NULL when
-    ///                   capacity is 0.
+    ///                   capacity is 0. Zeroed over capacity unless the call
+    ///                   answers `mui_success` or `mui_errorBusy`.
     /// @param capacity   How many bytes pixelsOut holds.
     /// @return `mui_success`; `mui_errorCapacity` when pixelsOut holds fewer bytes
     ///         than imageOut asks for, or memory runs out; `mui_errorInvalid`
@@ -102,17 +104,23 @@ extern "C"
     /// @param palette     The font's palette to fill from; the first for one
     ///                    the font does not have.
     /// @param foreground  The text's colour, linear and premultiplied.
-    /// @param imageOut    Receives the image's place and size, also when pixelsOut
-    ///                    holds too few bytes. Zeroed on any other failure.
+    /// @param imageOut    Receives the image's place and size, also when
+    ///                    pixelsOut holds too few bytes. Zeroed on any other
+    ///                    failure but `mui_errorBusy`, which leaves it.
     /// @param pixelsOut   Receives width * height * 4 bytes; may be NULL
-    ///                    when capacity is 0.
+    ///                    when capacity is 0. Zeroed over capacity unless the
+    ///                    call answers `mui_success` or `mui_errorBusy`.
     /// @param capacity    How many bytes pixelsOut holds.
-    /// @return `mui_success`; `mui_empty` for a glyph without colour;
+    /// @return `mui_success`; `mui_empty` for a glyph without colour, as one
+    ///         whose CBLC index or CBDT record is malformed is;
     ///         `mui_errorFormat` for a paint graph more than 64 paints deep, as
-    ///         one that paints itself is, a clip box whose maximum is below
-    ///         its minimum, or a bitmap of 2^28 pixels or more, as 16384 by
-    ///         16384 is; otherwise as muiTextService_RenderGlyph;
-    ///         `mui_errorBusy` while the service is busy.
+    ///         one that paints itself is, a transform that places a glyph's
+    ///         box past where an outline may reach, a clip box whose maximum
+    ///         is below its minimum, a bitmap of 2^28 pixels or more, as 16384
+    ///         by 16384 is, or a bitmap's PNG that does not decode, as one
+    ///         failing a checksum does; otherwise as
+    ///         muiTextService_RenderGlyph; `mui_errorBusy` while the service
+    ///         is busy.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextService_RenderColorGlyph(
@@ -139,10 +147,12 @@ extern "C"
     ///                   MUI_MIN_FIELD_SPREAD to MUI_MAX_FIELD_SPREAD
     ///                   pixels.
     /// @param imageOut   Receives the image's place and size, from the pen and
-    ///                   baseline at pixelSize, also when pixelsOut holds too few
-    ///                   bytes. Zeroed on any other failure.
+    ///                   baseline at pixelSize, also when pixelsOut holds too
+    ///                   few bytes. Zeroed on any other failure but
+    ///                   `mui_errorBusy`, which leaves it.
     /// @param pixelsOut  Receives width * height bytes; may be NULL when
-    ///                   capacity is 0.
+    ///                   capacity is 0. Zeroed over capacity unless the call
+    ///                   answers `mui_success` or `mui_errorBusy`.
     /// @param capacity   How many bytes pixelsOut holds.
     /// @return `mui_success`; `mui_errorCapacity` when pixelsOut holds fewer bytes
     ///         than imageOut asks for, or memory runs out; `mui_errorInvalid`
@@ -179,10 +189,13 @@ extern "C"
     /// @param spread     How far the field reaches past the outline, from
     ///                   MUI_MIN_FIELD_SPREAD to MUI_MAX_FIELD_SPREAD
     ///                   pixels.
-    /// @param imageOut   Receives the image's place and size, also when pixelsOut
-    ///                   holds too few bytes. Zeroed on any other failure.
+    /// @param imageOut   Receives the image's place and size, also when
+    ///                   pixelsOut holds too few bytes. Zeroed on any other
+    ///                   failure but `mui_errorBusy`, which leaves it.
     /// @param pixelsOut  Receives width * height * 4 bytes, red, green, blue
     ///                   and alpha a pixel; may be NULL when capacity is 0.
+    ///                   Zeroed over capacity unless the call answers
+    ///                   `mui_success` or `mui_errorBusy`.
     /// @param capacity   How many bytes pixelsOut holds.
     /// @return As muiTextService_RenderGlyphField; `mui_errorBusy` while the service is
     ///         busy.

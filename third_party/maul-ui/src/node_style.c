@@ -439,7 +439,7 @@ muiPropertyMask muiNode_GetDirectProperties(const muiContext* context, muiNodeId
                                             muiPropertyGroup group)
 {
     uint32_t slot = context != nullptr ? muiTreeResolve(&context->tree, nodeId) : 0;
-    return slot != 0 && group < MUI_PROPERTY_GROUPS
+    return slot != 0 && (uint32_t)group < MUI_PROPERTY_GROUPS
                ? context->style.nodes[slot - 1].direct.words[group]
                : 0;
 }

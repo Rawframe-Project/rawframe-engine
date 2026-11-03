@@ -28,7 +28,7 @@ extern "C"
     typedef struct mwinContext mwinContext;
 
     // Which backend a context talks to.
-    typedef uint8_t mwinBackendKind;
+    typedef int32_t mwinBackendKind;
 
     enum
     {
@@ -87,13 +87,20 @@ extern "C"
     } mwinContextDef;
 
     // What a frame asks of the loop.
-    typedef uint8_t mwinFrameResult;
+    typedef int32_t mwinFrameResult;
 
     enum
     {
         mwin_frameContinue = 0,
         mwin_frameStop = 1,
     };
+
+    // The program's functions, which mwinAppDef holds: init, called once
+    // before the frames; frame, called once per frame; and quit, called
+    // once at the end.
+    typedef mwinResult (*mwinInitFunction)(mwinContext* context, void* user);
+    typedef mwinFrameResult (*mwinFrameFunction)(mwinContext* context, void* user);
+    typedef void (*mwinQuitFunction)(mwinContext* context, mwinResult status, void* user);
 
     // A program as mwinRun sees it. Build it with mwinDefaultAppDef.
     typedef struct mwinAppDef
@@ -106,12 +113,16 @@ extern "C"
         mwinContextDef context;
         // Called once, when the platform allows windows. A status other
         // than mwin_success skips the frames and goes to quit.
-        mwinResult (*init)(mwinContext* context, void* user);
+        mwinInitFunction init;
         // Called once per frame. It drains the event stream.
-        mwinFrameResult (*frame)(mwinContext* context, void* user);
+        mwinFrameFunction frame;
         // Called once at the end, with init's failure or mwin_success;
-        // the context and its windows still exist. May be NULL.
-        void (*quit)(mwinContext* context, mwinResult status, void* user);
+        // the context and its windows still exist. Once it returns, every
+        // window, cursor, request and drop id is stale while the context's
+        // blocks go back to the allocator, and mwinContext_GetKeyReach and
+        // mwinContext_GetKeyboardLayout answer mwin_errorState
+        // (mwinContext_MapKeyCode no key). May be NULL.
+        mwinQuitFunction quit;
         void* user;
     } mwinAppDef;
 

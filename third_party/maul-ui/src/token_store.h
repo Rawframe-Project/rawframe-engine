@@ -18,6 +18,10 @@ typedef struct muiToken
     muiTokenValue value;
     // The token aliased, or the null id.
     muiTokenId alias;
+    // For the alias walk: the next token it has still to follow, and
+    // whether it has reached this one.
+    uint32_t next;
+    bool reached;
 } muiToken;
 
 typedef struct muiTokenStore

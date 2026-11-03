@@ -18,7 +18,7 @@
 static void PostLayoutChange(mwinWaylandPlatform* platform)
 {
     mwinEvent event = {0};
-    event.type = mwin_eventKeyboardLayoutChanged;
+    event.kind = mwin_eventKeyboardLayoutChanged;
     event.timeNs = mwinMonotonicNow();
     mwinPostGlobal(platform->context, &event);
 }
@@ -85,7 +85,7 @@ static void OnLeave(void* data, struct wl_keyboard* object, uint32_t serial,
     {
         // Their releases will not come.
         mwinEvent reset = {0};
-        reset.type = mwin_eventInputStateReset;
+        reset.kind = mwin_eventInputStateReset;
         reset.timeNs = mwinMonotonicNow();
         mwinPost(platform->context, (uint32_t)keyboard->focus, &reset);
     }
@@ -96,13 +96,13 @@ static void OnLeave(void* data, struct wl_keyboard* object, uint32_t serial,
 }
 
 // Posts a key and, for one that goes down, the text it types.
-static void PostKey(mwinWaylandPlatform* platform, mwinEventType type, uint32_t evdev, bool repeat,
+static void PostKey(mwinWaylandPlatform* platform, mwinEventKind type, uint32_t evdev, bool repeat,
                     uint64_t timeNs)
 {
     mwinWaylandKeyboard* keyboard = &platform->keyboard;
     mwinKeyCode code = mwinKeyCodeFromEvdev(evdev);
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
     event.data.key = (mwinKeyEvent){code, keyboard->xkb.modifiers,
                                     mwinXkbKeyOf(&keyboard->xkb, evdev, code), repeat};
@@ -113,7 +113,7 @@ static void PostKey(mwinWaylandPlatform* platform, mwinEventType type, uint32_t 
     if (length > 0)
     {
         mwinEvent typed = {0};
-        typed.type = mwin_eventTextInput;
+        typed.kind = mwin_eventTextInput;
         typed.timeNs = timeNs;
         typed.data.text = (mwinTextEvent){text, length};
         mwinPost(platform->context, (uint32_t)keyboard->focus, &typed);

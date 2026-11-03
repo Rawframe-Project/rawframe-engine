@@ -379,7 +379,7 @@ static mrhiResult CreateQuerySet(void* self, const mrhiQuerySetDef* def, uint64_
 {
     const WebGpuDevice* device = self;
     *handleOut =
-        (uint64_t)mrhiJsCreateQuerySet(device->state, def->type == mrhi_queryTimestamp, def->count);
+        (uint64_t)mrhiJsCreateQuerySet(device->state, def->kind == mrhi_queryTimestamp, def->count);
     return mrhi_success;
 }
 

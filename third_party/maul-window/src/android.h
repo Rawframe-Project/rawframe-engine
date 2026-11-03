@@ -378,7 +378,8 @@ bool mwinAndroidFindText(mwinAndroidPlatform* platform, ANativeActivity* activit
 char* mwinAndroidBytesOf(const mwinAndroidPlatform* platform, JNIEnv* env, jstring text,
                          size_t* sizeOut, int32_t* offsets, size_t offsetCount);
 void mwinAndroidPostInsets(mwinAndroidPlatform* platform);
-mwinOutcome mwinAndroidSetTextInput(mwinAndroidPlatform* platform, bool enabled, mwinRect caret);
+mwinOutcome mwinAndroidSetTextInput(mwinAndroidPlatform* platform, bool enabled);
+mwinOutcome mwinAndroidSetTextCaret(mwinAndroidPlatform* platform, mwinRect caret);
 mwinOutcome mwinAndroidSetKeyboard(mwinAndroidPlatform* platform, bool visible,
                                    mwinInputPurpose purpose);
 

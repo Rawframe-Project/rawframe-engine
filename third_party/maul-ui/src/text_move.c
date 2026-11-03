@@ -154,7 +154,8 @@ static bool Move(const muiLaidText* laid, muiTextPosition from, muiTextMovement 
     {
     case mui_moveNextCluster:
     case mui_movePreviousCluster:
-        *out = Downstream(ClusterBoundary(block, from.offset, movement == mui_moveNextCluster));
+        *out = Downstream(
+            ClusterBoundary(block, (uint32_t)from.offset, movement == mui_moveNextCluster));
         return true;
     case mui_moveLeft:
     case mui_moveRight:
@@ -162,7 +163,7 @@ static bool Move(const muiLaidText* laid, muiTextPosition from, muiTextMovement 
     case mui_moveNextWordStart:
     case mui_moveNextWordEnd:
     case mui_movePreviousWordStart:
-        *out = Downstream(WordBoundary(block, from.offset, movement));
+        *out = Downstream(WordBoundary(block, (uint32_t)from.offset, movement));
         return true;
     case mui_moveLineStart:
     case mui_moveLineEnd:
@@ -180,7 +181,8 @@ static bool Move(const muiLaidText* laid, muiTextPosition from, muiTextMovement 
 muiResult muiMoveText(const muiTextHost* host, muiNodeId nodeId, float width, muiTextPosition from,
                       muiTextMovement movement, float preferredX, muiTextPosition* positionOut)
 {
-    if (!muiIsTextHostValid(host) || positionOut == nullptr || movement > mui_moveTextEnd)
+    if (!muiIsTextHostValid(host) || !muiIsTextWidthValid(width) || positionOut == nullptr ||
+        (uint32_t)movement > mui_moveTextEnd || (uint32_t)from.affinity > mui_affinityUpstream)
     {
         return mui_errorInvalid;
     }
@@ -204,14 +206,14 @@ muiResult muiMoveText(const muiTextHost* host, muiNodeId nodeId, float width, mu
                    : movement == mui_moveNextWordStart || movement == mui_moveNextWordEnd
                        ? mui_moveTextEnd
                        : movement;
-        from.offset = muiMaskOffset(source, from.offset);
+        from.offset = muiMaskOffset(source, muiTextOffsetOf(from.offset));
     }
     from.offset = from.offset < length ? from.offset : length;
     if (!Move(&laid, from, movement, preferredX, positionOut))
     {
         return mui_errorCapacity;
     }
-    positionOut->offset = muiUnmaskOffset(source, positionOut->offset);
+    positionOut->offset = muiUnmaskOffset(source, (uint32_t)positionOut->offset);
     return mui_success;
 }
 

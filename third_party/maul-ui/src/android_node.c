@@ -101,7 +101,7 @@ static int ClassOf(const muiAccessNode* node)
     {
         return C_TOGGLE_BUTTON;
     }
-    return node->role <= MUI_ROLE_LAST ? s_classes[node->role] : C_VIEW;
+    return (uint32_t)node->role <= MUI_ROLE_LAST ? s_classes[node->role] : C_VIEW;
 }
 
 static jint FlagsOf(const muiAndroidAdapter* adapter, const muiAccessNode* node)
@@ -243,9 +243,9 @@ static void PackText(const muiAndroidAdapter* adapter, const muiAccessNode* node
     {
         muiAccessText text = muiAccessValueOf(node);
         packed[MUI_ANDROID_SELECTION_START] =
-            (jint)muiAccessUtf16Before(text.bytes, node->marks.anchor);
+            (jint)muiAccessUtf16Before(text.bytes, (uint32_t)node->marks.anchor);
         packed[MUI_ANDROID_SELECTION_END] =
-            (jint)muiAccessUtf16Before(text.bytes, node->marks.focus);
+            (jint)muiAccessUtf16Before(text.bytes, (uint32_t)node->marks.focus);
     }
 }
 

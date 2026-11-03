@@ -148,6 +148,12 @@ mrhiResult mrhiRefreshAdapters(mrhiInstance* instance, const mrhiPending* search
 // The driver handle of a live surface, or 0 for a stale or null id.
 uint64_t mrhiFindSurface(const mrhiInstance* instance, mrhiSurfaceId surface);
 
+// The driver's caps of a live surface on an adapter, holding only the
+// colors the contract names, at most MRHI_SURFACE_COLORS of them; all
+// zeros where the adapter does not present or no color is left.
+void mrhiSurfaceCapsOf(const mrhiInstance* instance, uint64_t surface, uint64_t adapter,
+                       mrhiSurfaceCaps* capsOut);
+
 // Destroys every surface left, before the driver goes.
 void mrhiDestroySurfaces(mrhiInstance* instance);
 

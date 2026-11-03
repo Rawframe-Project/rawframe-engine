@@ -72,7 +72,7 @@ static void Update(mwinWin32Window* window)
         return;
     }
     window->occluded = occluded;
-    mwinEvent event = {.type = occluded ? mwin_eventOccluded : mwin_eventRevealed,
+    mwinEvent event = {.kind = occluded ? mwin_eventOccluded : mwin_eventRevealed,
                        .timeNs = mwinWin32Now()};
     mwinPost(platform->context, window->slot, &event);
 }

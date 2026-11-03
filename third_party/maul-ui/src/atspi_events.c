@@ -13,6 +13,7 @@
 #include "atspi.h"
 #include "fpenv.h"
 #include "host_call.h"
+#include "invariant.h"
 
 #include <string.h>
 
@@ -43,8 +44,8 @@ static void EmitOf(muiAtspiApp* app, const muiAtspiObject* from, const char* int
     }
     const int32_t none = 0;
     muiDBusIter iter;
-    muiDBusIter variant;
-    muiDBusIter properties;
+    muiDBusIter variant = {0};
+    muiDBusIter properties = {0};
     dbus->iterInitAppend(signal, &iter);
     bool ok = muiAtspiAppendString(app, &iter, kind) &&
               dbus->appendBasic(&iter, mui_dbusTypeInt32, &details[0]) &&
@@ -52,16 +53,16 @@ static void EmitOf(muiAtspiApp* app, const muiAtspiObject* from, const char* int
     if (ok && any != nullptr && any->object != nullptr)
     {
         ok = dbus->openContainer(&iter, mui_dbusTypeVariant, "(so)", &variant) &&
-             muiAtspiAppendReference(app, &variant, any->object) &&
-             dbus->closeContainer(&iter, &variant);
+             muiAtspiAppendReference(app, &variant, any->object);
+        ok = muiAtspiClose(app, &iter, &variant, ok);
     }
     else if (ok)
     {
         ok = any != nullptr ? muiAtspiAppendVariant(app, &iter, any->type, any->value)
                             : muiAtspiAppendVariant(app, &iter, mui_dbusTypeInt32, &none);
     }
-    ok = ok && dbus->openContainer(&iter, mui_dbusTypeArray, "{sv}", &properties) &&
-         dbus->closeContainer(&iter, &properties);
+    ok = muiAtspiClose(app, &iter, &properties,
+                       ok && dbus->openContainer(&iter, mui_dbusTypeArray, "{sv}", &properties));
     if (ok)
     {
         (void)dbus->send(app->connection, signal, nullptr);
@@ -199,8 +200,10 @@ static bool TellEdits(muiAtspiApp* app, const muiAtspiObject* object, const muiA
     const muiAccessNode* now = object->node;
     const char* a = old->text[mui_accessValue] != nullptr ? old->text[mui_accessValue] : "";
     const char* b = now->text[mui_accessValue] != nullptr ? now->text[mui_accessValue] : "";
-    uint32_t aLength = old->text[mui_accessValue] != nullptr ? old->textLength[mui_accessValue] : 0;
-    uint32_t bLength = now->text[mui_accessValue] != nullptr ? now->textLength[mui_accessValue] : 0;
+    uint32_t aLength =
+        (uint32_t)(old->text[mui_accessValue] != nullptr ? old->textLength[mui_accessValue] : 0);
+    uint32_t bLength =
+        (uint32_t)(now->text[mui_accessValue] != nullptr ? now->textLength[mui_accessValue] : 0);
     if (aLength == bLength && memcmp(a, b, aLength) == 0)
     {
         return false;
@@ -249,8 +252,8 @@ static void SelectionOf(const muiAccessNode* node, int32_t endsOut[2])
     endsOut[1] = -1;
     if (text != nullptr && marks->selected && marks->anchor != marks->focus)
     {
-        int32_t anchor = (int32_t)muiAccessPointsBefore(text, marks->anchor);
-        int32_t focus = (int32_t)muiAccessPointsBefore(text, marks->focus);
+        int32_t anchor = (int32_t)muiAccessPointsBefore(text, (uint32_t)marks->anchor);
+        int32_t focus = (int32_t)muiAccessPointsBefore(text, (uint32_t)marks->focus);
         endsOut[0] = anchor < focus ? anchor : focus;
         endsOut[1] = anchor < focus ? focus : anchor;
     }
@@ -270,9 +273,11 @@ static void TellText(muiAtspiApp* app, const muiAtspiObject* object, const muiAc
     bool edited = muiAccessIsEdited(now) && TellEdits(app, object, old);
     const char* oldText = old->text[mui_accessValue] != nullptr ? old->text[mui_accessValue] : "";
     const char* text = now->text[mui_accessValue] != nullptr ? now->text[mui_accessValue] : "";
-    int32_t was =
-        old->marks.selected ? (int32_t)muiAccessPointsBefore(oldText, old->marks.focus) : -1;
-    int32_t is = now->marks.selected ? (int32_t)muiAccessPointsBefore(text, now->marks.focus) : -1;
+    int32_t was = old->marks.selected
+                      ? (int32_t)muiAccessPointsBefore(oldText, (uint32_t)old->marks.focus)
+                      : -1;
+    int32_t is =
+        now->marks.selected ? (int32_t)muiAccessPointsBefore(text, (uint32_t)now->marks.focus) : -1;
     if (is >= 0 && (is != was || edited))
     {
         Emit(app, object, "TextCaretMoved", "", is, nullptr);
@@ -363,21 +368,18 @@ static void TellChild(muiAtspiAdapter* adapter, uint64_t parent, uint64_t child,
 static uint32_t Walk(muiAtspiAdapter* adapter)
 {
     uint64_t root = muiAccessTree_GetRoot(adapter->tree);
-    if (root == 0)
-    {
-        return 0;
-    }
+    // Walked only after an update applied, which leaves a root.
+    MUI_ASSERT(root != 0);
     uint32_t count = 0;
     adapter->walk[count] = root;
     adapter->places[count++] = (muiAtspiPlace){UINT32_MAX, (uint32_t)WindowIndex(adapter), false};
     for (uint32_t at = 0; at < count; at++)
     {
         uint32_t children = 0;
-        if (muiAccessTree_GetShownChildren(adapter->tree, adapter->walk[at], adapter->scratch,
-                                           adapter->nodes, &children) != mui_success)
-        {
-            children = 0;
-        }
+        // Every node walked is held, and the scratch holds every node.
+        muiAssertCall(muiAccessTree_GetShownChildren(adapter->tree, adapter->walk[at],
+                                                     adapter->scratch, adapter->nodes,
+                                                     &children) == mui_success);
         for (uint32_t i = 0; i < children && count < adapter->nodes; i++)
         {
             adapter->walk[count] = adapter->scratch[i];
@@ -390,6 +392,8 @@ static uint32_t Walk(muiAtspiAdapter* adapter)
 static uint64_t ParentAt(const muiAtspiAdapter* adapter, uint32_t at)
 {
     uint32_t parent = adapter->places[at].parent;
+    // The walk puts a node after its parent.
+    MUI_ASSERT(parent == UINT32_MAX || parent < at);
     return parent != UINT32_MAX ? adapter->walk[parent] : 0;
 }
 
@@ -464,6 +468,8 @@ static void Forget(muiAtspiAdapter* adapter)
         {
             (void)muiIdMapRemove(&adapter->toldById, told->id);
             *told = (muiAtspiTold){0};
+            // A told slot is not free; told and free slots make the nodes.
+            MUI_ASSERT(adapter->freeCount < adapter->nodes);
             adapter->freeTold[adapter->freeCount++] = i;
         }
     }
@@ -480,15 +486,16 @@ static void Learn(muiAtspiAdapter* adapter, uint32_t count)
         const muiAtspiPlace* place = &adapter->places[at];
         uint64_t parent = ParentAt(adapter, at);
         muiAtspiTold* told = muiIdMapFind(&adapter->toldById, id);
-        if (told == nullptr && adapter->freeCount != 0)
-        {
-            told = &adapter->told[adapter->freeTold[--adapter->freeCount]];
-            *told = (muiAtspiTold){.id = id, .born = adapter->pass};
-            (void)muiIdMapInsert(&adapter->toldById, id, told);
-        }
         if (told == nullptr)
         {
-            continue;
+            // Forget freed the slot of every node this walk did not see,
+            // and the walk holds each node once, at most the nodes.
+            MUI_ASSERT(adapter->freeCount != 0);
+            told = &adapter->told[adapter->freeTold[--adapter->freeCount]];
+            *told = (muiAtspiTold){.id = id, .born = adapter->pass};
+            // The map, of twice the nodes, holds every told node, and
+            // this one is not yet in it.
+            muiAssertCall(muiIdMapInsert(&adapter->toldById, id, told));
         }
         if (place->tell && IsKnown(adapter, parent))
         {

@@ -6,8 +6,7 @@
 #include "win32_hid.h"
 
 #include "allocator.h"
-
-#include "maul-unicode/encoding.h"
+#include "utf8.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -132,11 +131,12 @@ static bool ReadControls(const mwinWin32Hid* hid, mwinHidPad* pad)
     return controls->buttonCount + controls->axisCount + controls->hatCount > 0;
 }
 
-// The product's name as UTF-8, or a plain one where the device gives
-// none.
+// The product's name as UTF-8, cut to the whole characters that fit, or
+// a plain one where the device gives none.
 static void NameOf(const mwinWin32Hid* hid, const wchar_t* path, mwinGamepadInfo* info)
 {
-    wchar_t name[MWIN_GAMEPAD_NAME_BYTES / 2] = {0};
+    // A HID string holds at most 126 units, and its NUL.
+    wchar_t name[127] = {0};
     HANDLE file = hid->api.openFile(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                                     OPEN_EXISTING, 0, nullptr);
     bool named = file != INVALID_HANDLE_VALUE &&
@@ -145,11 +145,10 @@ static void NameOf(const mwinWin32Hid* hid, const wchar_t* path, mwinGamepadInfo
     {
         (void)hid->api.closeFile(file);
     }
-    size_t bytes = 0;
-    if (!named || name[0] == L'\0' ||
-        muniConvertUtf16ToUtf8((const uint16_t*)name, wcslen(name), muni_convertReplace, info->name,
-                               sizeof(info->name), &bytes)
-                .status != muni_success)
+    size_t bytes =
+        named ? mwinCutUtf16((const uint16_t*)name, wcslen(name), info->name, sizeof(info->name))
+              : 0;
+    if (bytes == 0)
     {
         static const char plain[] = "HID gamepad";
         memcpy(info->name, plain, sizeof(plain) - 1);
@@ -241,9 +240,10 @@ void mwinWin32HidArrive(mwinWin32Hid* hid, HANDLE device, uint64_t timeNs)
         .vendor = (uint16_t)facts->dwVendorId,
         .product = (uint16_t)facts->dwProductId,
         .mapped = mapping != nullptr,
-        .rawButtons = controls->buttonCount < MWIN_GAMEPAD_RAW_BUTTONS ? controls->buttonCount
-                                                                       : MWIN_GAMEPAD_RAW_BUTTONS,
-        .rawAxes = (uint8_t)(raw < MWIN_GAMEPAD_RAW_AXES ? raw : MWIN_GAMEPAD_RAW_AXES),
+        .rawButtonCount = controls->buttonCount < MWIN_GAMEPAD_RAW_BUTTONS
+                              ? controls->buttonCount
+                              : MWIN_GAMEPAD_RAW_BUTTONS,
+        .rawAxisCount = (uint8_t)(raw < MWIN_GAMEPAD_RAW_AXES ? raw : MWIN_GAMEPAD_RAW_AXES),
         .battery = -1};
     NameOf(hid, path, &info);
     int32_t slot = mwinAddGamepad(hid->context, &info, timeNs);

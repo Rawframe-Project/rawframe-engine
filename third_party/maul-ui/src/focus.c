@@ -80,7 +80,7 @@ bool muiFocusIsCovered(const muiContext* context, uint32_t slot)
 
 static void Notify(muiContext* context, muiNotificationKind kind, muiNodeId nodeId, uint8_t player)
 {
-    const muiNotification record = {kind, nodeId, player};
+    const muiNotification record = {.kind = kind, .node = nodeId, .player = player};
     muiNotifyPost(&context->notifications, &record);
 }
 
@@ -133,7 +133,7 @@ muiResult muiSetFocus(muiContext* context, uint8_t player, muiNodeId nodeId, mui
     {
         return mui_errorInvalid;
     }
-    if (player >= MUI_MAX_PLAYERS || cause > mui_focusByNavigation)
+    if (player >= MUI_MAX_PLAYERS || (uint32_t)cause > mui_focusByNavigation)
     {
         return muiRefuse(context);
     }

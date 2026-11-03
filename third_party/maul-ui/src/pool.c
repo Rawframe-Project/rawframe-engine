@@ -16,6 +16,8 @@ uint32_t muiPoolTake(muiPool* pool)
     uint32_t generation = 1;
     if (slot != 0)
     {
+        // The free list holds only slots muiPoolGive emptied.
+        MUI_ASSERT(!pool->slots[slot - 1].live);
         pool->freeHead = pool->slots[slot - 1].nextFree;
         generation = pool->slots[slot - 1].generation;
     }

@@ -10,6 +10,7 @@
 #include "context.h"
 #include "exit.h"
 #include "fpenv.h"
+#include "invariant.h"
 #include "layout_bound.h"
 #include "layout_node.h"
 #include "popup.h"
@@ -214,6 +215,8 @@ static muiResult ComputeLayout(muiContext* context, muiNodeId rootId, const muiL
     bool finish = context->environment.reducedMotion;
     muiAdvanceAnimations(&motion, now, finish);
     muiRestyle(context, root, now);
+    // The style pass sweeps every node it styled, its root's subtree last.
+    MUI_ASSERT((muiTreeAt(&context->tree, root)->dirty.subtree & mui_stageStyle) == 0);
     muiAdvanceAnimations(&motion, now, finish);
     // Exits whose transitions have ended, or never began, are reported.
     muiExitAdvance(context, root);

@@ -28,7 +28,7 @@ extern "C"
 #endif
 
     // General_Category, one value per UCD short name.
-    typedef uint8_t muniGeneralCategory;
+    typedef int32_t muniGeneralCategory;
 
     enum
     {
@@ -73,7 +73,7 @@ extern "C"
     MUNI_API muniGeneralCategory muniGetGeneralCategory(uint32_t codePoint);
 
     // Grapheme_Cluster_Break (UAX #29), in the library's numbering.
-    typedef uint8_t muniGraphemeBreak;
+    typedef int32_t muniGraphemeBreak;
 
     enum
     {
@@ -94,7 +94,7 @@ extern "C"
     };
 
     // Word_Break (UAX #29), in the library's numbering.
-    typedef uint8_t muniWordBreak;
+    typedef int32_t muniWordBreak;
 
     enum
     {
@@ -120,7 +120,7 @@ extern "C"
     };
 
     // Sentence_Break (UAX #29), in the library's numbering.
-    typedef uint8_t muniSentenceBreak;
+    typedef int32_t muniSentenceBreak;
 
     enum
     {
@@ -142,7 +142,7 @@ extern "C"
     };
 
     // Indic_Conjunct_Break, which grapheme cluster rule GB9c reads.
-    typedef uint8_t muniIndicConjunctBreak;
+    typedef int32_t muniIndicConjunctBreak;
 
     enum
     {
@@ -286,7 +286,7 @@ extern "C"
 
     // Line_Break (UAX #14), in the library's numbering; the comments give
     // the long names.
-    typedef uint8_t muniLineBreak;
+    typedef int32_t muniLineBreak;
 
     enum
     {
@@ -342,7 +342,7 @@ extern "C"
     };
 
     // East_Asian_Width (UAX #11), in the library's numbering.
-    typedef uint8_t muniEastAsianWidth;
+    typedef int32_t muniEastAsianWidth;
 
     enum
     {
@@ -356,7 +356,7 @@ extern "C"
 
     // Bidi_Class (UAX #9), in the library's numbering; the comments give
     // the long names.
-    typedef uint8_t muniBidiClass;
+    typedef int32_t muniBidiClass;
 
     enum
     {
@@ -387,7 +387,7 @@ extern "C"
 
     // Bidi_Paired_Bracket_Type (UAX #9): whether a code point opens or
     // closes a bracket pair the bidi algorithm matches.
-    typedef uint8_t muniBracketType;
+    typedef int32_t muniBracketType;
 
     enum
     {
@@ -397,19 +397,19 @@ extern "C"
     };
 
     // A script as its ISO 15924 tag: four ASCII letters, big-endian, so
-    // MUNI_SCRIPT('L', 'a', 't', 'n') is Latin. The same encoding as
+    // MUNI_MAKE_SCRIPT('L', 'a', 't', 'n') is Latin. The same encoding as
     // HarfBuzz's hb_script_t.
     typedef uint32_t muniScript;
 
-#define MUNI_SCRIPT(a, b, c, d)                                                                    \
+#define MUNI_MAKE_SCRIPT(a, b, c, d)                                                               \
     ((muniScript)(((uint32_t)(uint8_t)(a) << 24) | ((uint32_t)(uint8_t)(b) << 16) |                \
                   ((uint32_t)(uint8_t)(c) << 8) | (uint32_t)(uint8_t)(d)))
 // Common, for characters used by several scripts.
-#define MUNI_SCRIPT_COMMON MUNI_SCRIPT('Z', 'y', 'y', 'y')
+#define MUNI_SCRIPT_COMMON MUNI_MAKE_SCRIPT('Z', 'y', 'y', 'y')
 // Inherited, for marks that take the script of their base.
-#define MUNI_SCRIPT_INHERITED MUNI_SCRIPT('Z', 'i', 'n', 'h')
+#define MUNI_SCRIPT_INHERITED MUNI_MAKE_SCRIPT('Z', 'i', 'n', 'h')
 // Unknown, for unassigned code points.
-#define MUNI_SCRIPT_UNKNOWN MUNI_SCRIPT('Z', 'z', 'z', 'z')
+#define MUNI_SCRIPT_UNKNOWN MUNI_MAKE_SCRIPT('Z', 'z', 'z', 'z')
 
     /// Returns the Line_Break class of a code point.
     ///
@@ -466,7 +466,7 @@ extern "C"
     /// Returns the Script of a code point.
     ///
     /// @param codePoint  Any value; one above U+10FFFF is Unknown.
-    /// @return The script's ISO 15924 tag, as MUNI_SCRIPT builds it.
+    /// @return The script's ISO 15924 tag, as MUNI_MAKE_SCRIPT builds it.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_API muniScript muniGetScript(uint32_t codePoint);

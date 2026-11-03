@@ -4,7 +4,9 @@
 // What a call on an object leaves in its outputs when it fails: zeros,
 // in a struct or value it writes and in an array it fills and its count
 // or size, but the size an array too small needed, which the failure
-// itself defines.
+// itself defines. A take call refused as busy, from inside an
+// allocator, leaves its record or bytes as they were: the call the
+// allocator runs in may be filling them.
 
 #ifndef MRHI_OUTPUTS_H
 #define MRHI_OUTPUTS_H

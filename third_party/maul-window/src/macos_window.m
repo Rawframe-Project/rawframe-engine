@@ -28,9 +28,9 @@ static void Post(mwinMacPlatform* platform, uint32_t slot, mwinEvent* event)
     mwinPost(platform->context, slot, event);
 }
 
-static void PostType(mwinMacPlatform* platform, uint32_t slot, mwinEventType type)
+static void PostType(mwinMacPlatform* platform, uint32_t slot, mwinEventKind type)
 {
-    mwinEvent event = {.type = type};
+    mwinEvent event = {.kind = type};
     Post(platform, slot, &event);
 }
 
@@ -55,7 +55,7 @@ static void PostSize(mwinMacPlatform* platform, uint32_t slot)
     {
         window->scale = scale;
         window->layer.contentsScale = (CGFloat)scale;
-        event.type = mwin_eventScaleChanged;
+        event.kind = mwin_eventScaleChanged;
         event.data.scale = (mwinScaleChange){scale, size};
         Post(platform, slot, &event);
     }
@@ -63,10 +63,10 @@ static void PostSize(mwinMacPlatform* platform, uint32_t slot)
     {
         window->width = width;
         window->height = height;
-        event.type = mwin_eventResized;
+        event.kind = mwin_eventResized;
         event.data.size = size;
         Post(platform, slot, &event);
-        event.type = mwin_eventPixelSizeChanged;
+        event.kind = mwin_eventPixelSizeChanged;
         event.data.pixelSize = (mwinPixelSize){width, height};
         Post(platform, slot, &event);
     }
@@ -105,7 +105,7 @@ static void PostMove(mwinMacPlatform* platform, uint32_t slot)
         return;
     }
     window->position = position;
-    mwinEvent event = {.type = mwin_eventMoved};
+    mwinEvent event = {.kind = mwin_eventMoved};
     event.data.position = position;
     Post(platform, slot, &event);
 }
@@ -120,7 +120,7 @@ static void PostMonitor(mwinMacPlatform* platform, uint32_t slot)
         return;
     }
     window->monitor = monitor;
-    mwinEvent event = {.type = mwin_eventDisplayChanged};
+    mwinEvent event = {.kind = mwin_eventDisplayChanged};
     event.data.monitor = mwinMonitorIdOf(platform->context, (uint32_t)monitor);
     Post(platform, slot, &event);
 }
@@ -133,7 +133,7 @@ static void PostMode(mwinMacPlatform* platform, uint32_t slot, mwinWindowMode mo
         return;
     }
     window->mode = mode;
-    mwinEvent event = {.type = mwin_eventModeChanged};
+    mwinEvent event = {.kind = mwin_eventModeChanged};
     event.data.mode = mode;
     Post(platform, slot, &event);
 }
@@ -485,8 +485,9 @@ static int CarryOut(mwinContext* context, uint32_t slot, const mwinRequest* requ
     case mwin_requestCursorImage:
         return mwinMacSetCursorImage(platform, slot, request->value.cursor);
     case mwin_requestTextInput:
-        return mwinMacSetTextInput(platform, slot, request->value.textInput.enabled,
-                                   request->value.textInput.caret);
+        return mwinMacSetTextInput(platform, slot, request->value.textInput);
+    case mwin_requestTextInputCaret:
+        return mwinMacSetTextCaret(platform, slot, request->value.caret);
     case mwin_requestClipboardWrite:
     case mwin_requestClipboardWriteData:
         return mwinMacWriteClipboard(platform);

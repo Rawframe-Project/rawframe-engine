@@ -22,7 +22,7 @@ extern "C"
 #define MWIN_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MWIN_VERSION_MINOR 7
+#define MWIN_VERSION_MINOR 8
 // x-release-please-end
 // x-release-please-start-patch
 #define MWIN_VERSION_PATCH 0
@@ -119,7 +119,7 @@ extern "C"
     };
 
     // A yes or no the platform may not know.
-    typedef uint8_t mwinTristate;
+    typedef int32_t mwinTristate;
 
     enum
     {
@@ -163,6 +163,14 @@ extern "C"
         uint32_t index1;
         uint32_t generation;
     } mwinRequestId;
+
+    // A drop, whose files and text wait until the next drop. The context
+    // keeps one drop, so its slot is always 1.
+    typedef struct mwinDropId
+    {
+        uint32_t index1;
+        uint32_t generation;
+    } mwinDropId;
 
     // A library version: major, minor and patch.
     typedef struct mwinVersion

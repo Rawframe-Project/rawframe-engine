@@ -737,14 +737,16 @@ uint64_t mrhiDevice_GetMisuse(mrhiDevice* device)
 
 mrhiResult mrhiDevice_TakeDiagnostic(mrhiDevice* device, mrhiDiagnostic* diagnosticOut)
 {
+    // Refused as busy, it leaves the record: the call the allocator runs
+    // in may be filling it.
+    if (device != nullptr && device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     mrhiClearOutput(diagnosticOut, sizeof(*diagnosticOut));
     if (device == nullptr)
     {
         return mrhi_errorInvalid;
-    }
-    if (device->allocatorGuard.busy)
-    {
-        return mrhiDeviceBusy(device);
     }
     if (diagnosticOut == nullptr)
     {

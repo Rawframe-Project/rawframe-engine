@@ -8,6 +8,7 @@
 #include "capabilities_core.h"
 #include "chain.h"
 #include "instance_core.h"
+#include "label.h"
 #include "outputs.h"
 
 #include "generated/out_copies.h"
@@ -28,7 +29,7 @@ static int Rank(mrhiAdapterKind kind, mrhiPowerPreference preference)
 {
     static const int high[] = {3, 0, 1, 2, 4};
     static const int low[] = {3, 1, 0, 2, 4};
-    if (kind > mrhi_adapterSoftware || preference == mrhi_powerDefault)
+    if ((uint32_t)kind > mrhi_adapterSoftware || preference == mrhi_powerDefault)
     {
         return 0;
     }
@@ -115,10 +116,9 @@ static bool Presents(const mrhiInstance* instance, const mrhiPending* search,
     {
         return true;
     }
-    mrhiSurfaceCaps caps = {0};
-    instance->driver.vtable->getSurfaceCaps(instance->driver.self,
-                                            mrhiFindSurface(instance, search->compatibleSurface),
-                                            adapter->handle, &caps);
+    mrhiSurfaceCaps caps;
+    mrhiSurfaceCapsOf(instance, mrhiFindSurface(instance, search->compatibleSurface),
+                      adapter->handle, &caps);
     return caps.presentable;
 }
 
@@ -147,6 +147,15 @@ mrhiResult mrhiRefreshAdapters(mrhiInstance* instance, const mrhiPending* search
         {
             adapter->info.driver = mrhi_driverExternal;
         }
+        // The program reads a kind the contract lists, and the name within
+        // its room up to its first byte that is not well-formed UTF-8.
+        if ((uint32_t)adapter->info.kind > mrhi_adapterSoftware)
+        {
+            adapter->info.kind = mrhi_adapterUnknown;
+        }
+        size_t room = adapter->info.nameLength <= MRHI_ADAPTER_NAME_BYTES ? adapter->info.nameLength
+                                                                          : MRHI_ADAPTER_NAME_BYTES;
+        adapter->info.nameLength = mrhiValidTextLength(adapter->info.name, room);
         mrhiMaskFeatures(&adapter->features, adapter->info.driver);
         if ((!search->allowSoftware && adapter->info.kind == mrhi_adapterSoftware) ||
             !MeetsFloor(instance, adapter) || !Presents(instance, search, adapter))
@@ -191,7 +200,7 @@ mrhiResult mrhiInstance_RequestAdapters(mrhiInstance* instance, const mrhiAdapte
         return mrhiInstanceBusy(instance);
     }
     if (def == nullptr || requestOut == nullptr || def->cookie != ADAPTER_REQUEST_DEF_COOKIE ||
-        def->preference > mrhi_powerHigh)
+        (uint32_t)def->preference > mrhi_powerHigh)
     {
         return mrhiMisuse(instance, mrhi_diagnosticAdapterRequestDef);
     }

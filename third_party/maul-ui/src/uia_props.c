@@ -97,7 +97,7 @@ static const uint16_t s_controlTypes[MUI_ROLE_LAST + 1] = {
 
 static int ControlTypeOf(muiRole role)
 {
-    int type = role <= MUI_ROLE_LAST ? s_controlTypes[role] : 0;
+    int type = (uint32_t)role <= MUI_ROLE_LAST ? s_controlTypes[role] : 0;
     return type != 0 ? type : CONTROL_GROUP;
 }
 

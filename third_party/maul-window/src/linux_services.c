@@ -24,19 +24,18 @@ extern char** environ;
 // xdg-open's status when the desktop has no tool for it.
 #define XDG_NO_TOOL 3
 
-void mwinLinuxServicesStart(mwinLinuxServices* services, mwinContext* context)
+void mwinLinuxServicesStart(mwinLinuxServices* services, mwinContext* context, char* room)
 {
     *services = (mwinLinuxServices){.context = context, .system = {.system = true}};
     mwinDialogsStart(&services->dialogs, context, &services->bus);
-    char locales[MWIN_LINUX_LOCALE_BYTES];
-    size_t capacity = context->limits.localeBytes;
-    size_t length =
-        mwinLinuxLocales(locales, capacity < sizeof(locales) ? capacity : sizeof(locales));
+    // The environment's list, in the first part of the languages' room.
+    char* locales = room;
+    size_t length = mwinLinuxLocales(locales, context->limits.localeBytes);
     (void)mwinSetLocales(context, locales, length, mwinMonotonicNow());
     mwinSettingsStart(&services->settings, context, &services->bus, mwinMonotonicNow());
     mwinPowerStart(&services->power, context, &services->bus, &services->system,
                    mwinMonotonicNow());
-    mwinLanguagesStart(&services->languages, context, &services->system, locales, length,
+    mwinLanguagesStart(&services->languages, context, &services->system, room, locales, length,
                        mwinMonotonicNow());
 }
 

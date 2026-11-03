@@ -76,7 +76,7 @@ static bool Resize(muiContext* context, uint32_t slot, muiVirtualEntry** entryIn
     }
     // It only grows: all its extents move.
     memmove(store->sizes + base, store->sizes + entry->base,
-            (size_t)entry->list.count * sizeof(float));
+            (size_t)entry->list.itemCount * sizeof(float));
     entry->base = base;
     return true;
 }
@@ -122,7 +122,7 @@ static muiResult NodeInsertVirtualItems(muiContext* context, muiNodeId nodeId, u
     {
         return status;
     }
-    uint32_t total = entry->list.count;
+    uint32_t total = entry->list.itemCount;
     if (index > total || count == 0)
     {
         return muiRefuse(context);
@@ -148,7 +148,7 @@ static muiResult NodeInsertVirtualItems(muiContext* context, muiNodeId nodeId, u
             sizes[i] = entry->list.extent;
         }
     }
-    entry->list.count = total + count;
+    entry->list.itemCount = total + count;
     if (!entry->list.fixed)
     {
         muiVirtualBuild(store, entry);
@@ -198,7 +198,7 @@ static muiResult NodeRemoveVirtualItems(muiContext* context, muiNodeId nodeId, u
     {
         return status;
     }
-    uint32_t total = entry->list.count;
+    uint32_t total = entry->list.itemCount;
     if (index >= total || count == 0 || count > total - index)
     {
         return muiRefuse(context);
@@ -213,7 +213,7 @@ static muiResult NodeRemoveVirtualItems(muiContext* context, muiNodeId nodeId, u
         memmove(sizes + index, sizes + index + count,
                 (size_t)(total - index - count) * sizeof(float));
     }
-    entry->list.count = total - count;
+    entry->list.itemCount = total - count;
     if (!entry->list.fixed)
     {
         muiVirtualBuild(store, entry);
@@ -263,7 +263,7 @@ static muiResult NodeMoveVirtualItem(muiContext* context, muiNodeId nodeId, uint
     {
         return status;
     }
-    uint32_t total = entry->list.count;
+    uint32_t total = entry->list.itemCount;
     if (from >= total || to >= total)
     {
         return muiRefuse(context);

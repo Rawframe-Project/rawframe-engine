@@ -233,9 +233,9 @@ static void OnFrame(int64_t frameTimeNanos, void* data)
     PostFrame(platform);
 }
 
-static void PostLifecycle(mwinContext* context, mwinEventType type)
+static void PostLifecycle(mwinContext* context, mwinEventKind type)
 {
-    mwinEvent event = {.type = type, .timeNs = mwinAndroidNow()};
+    mwinEvent event = {.kind = type, .timeNs = mwinAndroidNow()};
     mwinPostGlobal(context, &event);
 }
 
@@ -300,7 +300,7 @@ static void End(mwinAndroidPlatform* platform, ANativeActivity* activity)
 {
     if (platform->slot >= 0 && IsFinishing(platform, activity))
     {
-        mwinEvent event = {.type = mwin_eventCloseRequested, .timeNs = mwinAndroidNow()};
+        mwinEvent event = {.kind = mwin_eventCloseRequested, .timeNs = mwinAndroidNow()};
         mwinPost(platform->context, (uint32_t)platform->slot, &event);
     }
     Detach(platform);
@@ -532,8 +532,8 @@ static void Stop(mwinContext* context)
 #endif
     AConfiguration_delete(platform->configuration);
     (*platform->java.env)->DeleteGlobalRef(platform->java.env, platform->java.activityClass);
-    mwinRelease(&context->allocator, platform, sizeof(*platform), alignof(mwinAndroidPlatform));
     context->backendData = nullptr;
+    mwinRelease(&context->allocator, platform, sizeof(*platform), alignof(mwinAndroidPlatform));
 }
 
 static mwinResult Start(mwinContext* context)

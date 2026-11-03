@@ -5,7 +5,7 @@
 
 #include "win32_system.h"
 
-#include "maul-unicode/encoding.h"
+#include "win32_locales.h"
 
 #include <dwmapi.h>
 #include <string.h>
@@ -91,19 +91,26 @@ static void ReadLocales(mwinWin32Platform* platform)
     mwinContext* context = platform->context;
     ULONG languages = 0;
     ULONG units = context->limits.localeBytes + 2u;
-    if (!GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &languages, platform->localeUnits, &units))
+    uint32_t length = 0;
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &languages, platform->localeUnits, &units))
+    {
+        length = mwinWin32JoinLocales(platform->localeUnits, units);
+    }
+    else if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+    {
+        // A list too long to read keeps its first language, the one
+        // Windows shows, where that fits.
+        int named =
+            LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+                             platform->localeUnits, (int)context->limits.localeBytes + 2, 0);
+        length = named > 1 ? (uint32_t)named - 1 : 0;
+    }
+    else
     {
         return;
     }
-    uint32_t length = mwinWin32JoinLocales(platform->localeUnits, units);
-    size_t bytes = 0;
-    muniTextResult converted =
-        muniConvertUtf16ToUtf8((const uint16_t*)platform->localeUnits, length, muni_convertReplace,
-                               platform->localeText, context->limits.localeBytes, &bytes);
-    if (converted.status == muni_success)
-    {
-        (void)mwinSetLocales(context, platform->localeText, bytes, mwinWin32Now());
-    }
+    mwinWin32TakeLocales(context, (const uint16_t*)platform->localeUnits, length,
+                         platform->localeText, mwinWin32Now());
 }
 
 // Windows 11, whose builds start at 22000, shows snap layouts over a

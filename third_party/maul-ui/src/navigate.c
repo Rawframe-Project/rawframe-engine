@@ -225,7 +225,7 @@ muiResult muiMoveFocusToward(muiContext* context, muiNodeId rootId, uint8_t play
     {
         return mui_errorInvalid;
     }
-    if (IsNull(rootId) || player >= MUI_MAX_PLAYERS || direction > mui_directionRight)
+    if (IsNull(rootId) || player >= MUI_MAX_PLAYERS || (uint32_t)direction > mui_directionRight)
     {
         return muiRefuse(context);
     }
@@ -292,7 +292,7 @@ static muiResult NodeSetNeighbor(muiContext* context, muiNodeId nodeId, muiDirec
     {
         return mui_errorInvalid;
     }
-    if (direction > mui_directionRight)
+    if ((uint32_t)direction > mui_directionRight)
     {
         return muiRefuse(context);
     }

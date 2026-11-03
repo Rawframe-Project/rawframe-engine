@@ -220,7 +220,7 @@ void mwinWin32CoverWindow(mwinWin32Window* window, const RECT* keyboard)
         return;
     }
     window->covered = covered;
-    mwinEvent event = {.type = mwin_eventVirtualKeyboardChanged, .timeNs = mwinWin32Now()};
+    mwinEvent event = {.kind = mwin_eventVirtualKeyboardChanged, .timeNs = mwinWin32Now()};
     event.data.rect = covered;
     mwinPost(window->platform->context, window->slot, &event);
 }

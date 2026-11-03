@@ -12,7 +12,7 @@
 
 // Whether offset is within the text at a character's start: the end, or
 // a byte that does not continue a UTF-8 sequence.
-static bool IsStart(const char* text, uint32_t length, uint32_t offset)
+static bool IsStart(const char* text, size_t length, size_t offset)
 {
     return offset == length || (offset < length && ((unsigned char)text[offset] & 0xC0u) != 0x80u);
 }
@@ -35,7 +35,7 @@ bool muiAccessLinesFit(const muiAccessTextMarks* marks, const char* text, uint32
     }
     for (uint32_t i = 1; i < marks->lineCount; i++)
     {
-        uint32_t start = marks->lineStarts[i];
+        size_t start = marks->lineStarts[i];
         if (start <= marks->lineStarts[i - 1] || !IsStart(text, length, start))
         {
             return false;
@@ -50,7 +50,7 @@ bool muiAccessWordsFit(const muiAccessTextMarks* marks, const char* text, uint32
     {
         return false;
     }
-    uint32_t after = 0;
+    size_t after = 0;
     for (uint32_t i = 0; i < marks->wordCount; i++)
     {
         muiAccessWord word = marks->words[i];
@@ -120,17 +120,17 @@ static uint32_t EndOfLine(const muiAccessTextMarks* marks, uint32_t line)
 }
 
 // Whether a range has bytes of a line.
-static bool Touches(const muiAccessTextMarks* marks, uint32_t line, uint32_t start, uint32_t end)
+static bool Touches(const muiAccessTextMarks* marks, uint32_t line, size_t start, size_t end)
 {
-    uint32_t from = marks->lineStarts != nullptr ? marks->lineStarts[line] : 0;
-    uint32_t to = line + 1 < marks->lineCount && marks->lineStarts != nullptr
-                      ? marks->lineStarts[line + 1]
-                      : UINT32_MAX;
+    size_t from = marks->lineStarts != nullptr ? marks->lineStarts[line] : 0;
+    size_t to = line + 1 < marks->lineCount && marks->lineStarts != nullptr
+                    ? marks->lineStarts[line + 1]
+                    : SIZE_MAX;
     return start < to && end > from;
 }
 
-uint32_t muiAccessRangeRects(const muiAccessTextMarks* marks, muiRect bounds, uint32_t start,
-                             uint32_t end, muiRect* rects, uint32_t capacity)
+uint32_t muiAccessRangeRects(const muiAccessTextMarks* marks, muiRect bounds, size_t start,
+                             size_t end, muiRect* rects, uint32_t capacity)
 {
     uint32_t count = 0;
     for (uint32_t line = 0; line < marks->lineCount && start < end; line++)
@@ -186,7 +186,7 @@ uint32_t muiAccessOffsetAt(const muiAccessTextMarks* marks, float x, float y)
     uint32_t last = EndOfLine(marks, line);
     if (first == last || marks->lineBoxes[line].omitted)
     {
-        return marks->lineStarts != nullptr ? marks->lineStarts[line] : 0;
+        return marks->lineStarts != nullptr ? (uint32_t)marks->lineStarts[line] : 0;
     }
     uint32_t nearest = first;
     for (uint32_t i = first + 1; i < last; i++)
@@ -198,7 +198,7 @@ uint32_t muiAccessOffsetAt(const muiAccessTextMarks* marks, float x, float y)
             nearest = i;
         }
     }
-    return marks->clusters[nearest].start;
+    return (uint32_t)marks->clusters[nearest].start;
 }
 
 muiResult muiAccessGetRects(const muiAccessTree* tree, uint64_t id, uint32_t start, uint32_t end,
@@ -272,8 +272,11 @@ bool muiAccessTextBox(const muiAccessTree* tree, uint64_t id, uint32_t start, ui
 muiAccessText muiAccessValueOf(const muiAccessNode* node)
 {
     const char* bytes = node->text[mui_accessValue];
+    // A held node's lengths and marks were checked against
+    // MUI_MAX_TEXT_BYTES and its text, so its offsets fit 32 bits.
     return (muiAccessText){bytes != nullptr ? bytes : "",
-                           bytes != nullptr ? node->textLength[mui_accessValue] : 0, &node->marks};
+                           bytes != nullptr ? (uint32_t)node->textLength[mui_accessValue] : 0,
+                           &node->marks};
 }
 
 bool muiAccessIsTextInput(const muiAccessNode* node)
@@ -351,12 +354,12 @@ static bool StartOf(const muiAccessText* text, muiAccessUnit unit, uint32_t n, u
     const muiAccessTextMarks* marks = text->marks;
     if (unit == mui_unitWord && n < marks->wordCount)
     {
-        *startOut = marks->words[n].start;
+        *startOut = (uint32_t)marks->words[n].start;
         return true;
     }
     if (unit == mui_unitLine && n < marks->lineCount)
     {
-        *startOut = marks->lineStarts[n];
+        *startOut = (uint32_t)marks->lineStarts[n];
         return true;
     }
     return false;

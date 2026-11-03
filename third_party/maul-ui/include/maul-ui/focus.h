@@ -27,7 +27,7 @@ extern "C"
     };
 
     // What moved a player's focus, which decides whether it is shown.
-    typedef uint8_t muiFocusCause;
+    typedef int32_t muiFocusCause;
 
     enum
     {
@@ -95,7 +95,7 @@ extern "C"
                                                       uint8_t player, bool backward);
 
     // A direction on the screen.
-    typedef uint8_t muiDirection;
+    typedef int32_t muiDirection;
 
     enum
     {

@@ -19,7 +19,7 @@ extern "C"
 #endif
 
     // The system's light or dark look.
-    typedef uint8_t mwinTheme;
+    typedef int32_t mwinTheme;
 
     enum
     {
@@ -59,12 +59,18 @@ extern "C"
 
     /// Reads the user's preferred locales, most preferred first, as BCP 47
     /// tags separated by commas ("de-DE,en-GB"); empty where the platform
-    /// does not say.
+    /// does not say. A list longer than the localeBytes limit keeps the
+    /// longest beginning of it that fits: the first tag that does not fit
+    /// is left out with every tag after it. Windows hands over its list
+    /// only whole, so there such a list keeps only its first language,
+    /// the one Windows shows, where it fits.
     ///
     /// @param context    The context.
     /// @param bufferOut  Receives the list, not NUL-terminated. May be NULL
-    ///                   when capacity is 0. Zeroed over capacity on
-    ///                   failure, so a buffer too short holds none of it.
+    ///                   when capacity is 0. Zeroed over capacity on failure,
+    ///                   so a buffer too short holds none of it. On success,
+    ///                   the bytes past those it reports are left as they
+    ///                   were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives the list's length in bytes. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any

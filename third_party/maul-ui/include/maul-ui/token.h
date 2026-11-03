@@ -3,9 +3,11 @@
 //
 // Tokens: typed values that class variants name in place of a property's
 // value, so that a theme is a change of token values. A token holds a
-// literal of its type, or an alias to another token of that type; aliases
-// never form a cycle. Changing a token restyles every node, as a class
-// edit does, and named transitions move the change.
+// literal of its type, or an alias to another token of that type; the
+// aliases of the context and of every theme, taken together, never form a
+// cycle, so none forms under any nesting of themes. Changing a token
+// restyles every node, as a class edit does, and named transitions move
+// the change.
 
 #ifndef MAUL_UI_TOKEN_H
 #define MAUL_UI_TOKEN_H
@@ -29,7 +31,7 @@ extern "C"
     } muiTokenId;
 
     // What a token holds, and so the properties it can feed.
-    typedef uint8_t muiTokenType;
+    typedef int32_t muiTokenType;
 
     enum
     {
@@ -130,8 +132,9 @@ extern "C"
     /// @param target   The token it gives the value of.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL context, a null id,
     ///         a target of another type or an alias that would lead back to the
-    ///         token; `mui_errorBusy` while the context is busy;
-    ///         `mui_errorStale` for a token or a target that is gone.
+    ///         token through the aliases of the context and of any themes;
+    ///         `mui_errorBusy` while the context is busy; `mui_errorStale` for
+    ///         a token or a target that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiToken_SetAlias(muiContext* context, muiTokenId tokenId,

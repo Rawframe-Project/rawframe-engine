@@ -36,8 +36,8 @@ bool muiAccessGeometryFits(const muiAccessTextMarks* marks, const char* text, ui
 // of the character at a point there: on the line whose box holds its y,
 // or the nearest, the cluster whose edges hold its x, or the nearest; a
 // line's start when it has none. Both need line boxes.
-uint32_t muiAccessRangeRects(const muiAccessTextMarks* marks, muiRect bounds, uint32_t start,
-                             uint32_t end, muiRect* rects, uint32_t capacity);
+uint32_t muiAccessRangeRects(const muiAccessTextMarks* marks, muiRect bounds, size_t start,
+                             size_t end, muiRect* rects, uint32_t capacity);
 uint32_t muiAccessOffsetAt(const muiAccessTextMarks* marks, float x, float y);
 
 // A byte range's rectangles where the root is placed, from the tree

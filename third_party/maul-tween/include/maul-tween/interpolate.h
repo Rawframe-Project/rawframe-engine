@@ -36,7 +36,7 @@ extern "C"
     } mtwnColor;
 
     // A space colors interpolate in, and its coordinates.
-    typedef uint8_t mtwnColorSpace;
+    typedef int32_t mtwnColorSpace;
     enum
     {
         // Oklab: lightness, a, b. CSS's default.
@@ -50,7 +50,7 @@ extern "C"
     };
 
     // How OkLCh hues interpolate, CSS Color 4's four methods.
-    typedef uint8_t mtwnHueMethod;
+    typedef int32_t mtwnHueMethod;
     enum
     {
         // The shorter arc. CSS's default.
@@ -97,7 +97,10 @@ extern "C"
     /// premultiplied coordinates interpolated and divided by the
     /// interpolated alpha, or kept as they are where that alpha is 0 or
     /// below. Progress outside 0 to 1 extends the line, with alpha clamped
-    /// to 0 to 1; the channels are not clamped.
+    /// to 0 to 1; the channels are not clamped, but a channel past the
+    /// floats' range is held at the largest finite float of its sign, in
+    /// every space. So far out that an OkLCh hue passes the doubles, it
+    /// counts as 0.
     ///
     /// @param mix       A mix made by this library, or one whose fields pass
     ///                  its check (this header's opening).
@@ -135,8 +138,10 @@ extern "C"
     /// @param coordinates  The three coordinates and the alpha; a NaN OkLCh
     ///                     hue counts as 0, as CSS's missing hue does.
     /// @param space        The space.
-    /// @param colorOut     Receives the color, alpha clamped to 0 to 1;
-    ///                     unchanged on failure.
+    /// @param colorOut     Receives the color, alpha clamped to 0 to 1, a
+    ///                     channel past the floats' range held at the
+    ///                     largest finite float of its sign; unchanged on
+    ///                     failure.
     /// @return mtwn_success; mtwn_errorInvalid for a null pointer, an
     ///         unknown space, or a coordinate or alpha not finite, a NaN
     ///         hue excepted.
@@ -148,7 +153,7 @@ extern "C"
 
     // How an angle interpolates: raw, or by CSS's hue methods with a
     // period of a full turn.
-    typedef uint8_t mtwnAngleMethod;
+    typedef int32_t mtwnAngleMethod;
     enum
     {
         // As given, turns kept: 0 to 4 pi turns twice.
@@ -191,7 +196,7 @@ extern "C"
     } mtwnQuat;
 
     // Which way a rotation turns between its ends.
-    typedef uint8_t mtwnRotationPath;
+    typedef int32_t mtwnRotationPath;
     enum
     {
         // The shorter way, at most half a turn.
@@ -232,7 +237,8 @@ extern "C"
 
     /// Samples a rotation mix: its rotations normalized exactly at 0 and 1
     /// (the second negated when the path needed it), between and beyond
-    /// them slerp, of unit length to a float's rounding.
+    /// them slerp, of unit length to a float's rounding; ends of one
+    /// rotation stay at any progress.
     ///
     /// @param mix          A mix made by this library, or one whose fields
     ///                     pass its check (this header's opening).

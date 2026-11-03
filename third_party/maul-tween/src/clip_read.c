@@ -11,14 +11,14 @@
 #include <string.h>
 
 // Counts a refusal against a live context as misuse.
-static mtwnResult Misuse(mtwnContext* context, mtwnResult result)
+static mtwnResult Misuse(const mtwnContext* context, mtwnResult result)
 {
     mtwnCountMisuse(context);
     return result;
 }
 
 // The sealed clip an id names, with the refusal counted.
-static mtwnResult Sealed(mtwnContext* context, mtwnClipId clip, mtwnClipSlot** slotOut)
+static mtwnResult Sealed(const mtwnContext* context, mtwnClipId clip, mtwnClipSlot** slotOut)
 {
     *slotOut = mtwnFindClip(context, clip);
     if (*slotOut == NULL)
@@ -45,7 +45,7 @@ static mtwnResult Sealed(mtwnContext* context, mtwnClipId clip, mtwnClipSlot** s
     return node == MTWN_ROOT_NODE ? parent == 0 : mtwnClipIsTimeline(slot, parent) && parent < node;
 }
 
-static mtwnResult RunClipGetTrack(mtwnContext* context, mtwnClipId clip, mtwnNode node,
+static mtwnResult RunClipGetTrack(const mtwnContext* context, mtwnClipId clip, mtwnNode node,
                                   mtwnClipTrack* trackOut)
 {
     if (context == NULL)
@@ -76,24 +76,19 @@ static mtwnResult RunClipGetTrack(mtwnContext* context, mtwnClipId clip, mtwnNod
     return mtwn_success;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnClip_GetTrackWork(mtwnContext* context, mtwnClipId clip,
+static MTWN_NOINLINE mtwnResult mtwnClip_GetTrackWork(const mtwnContext* context, mtwnClipId clip,
                                                       mtwnNode node, mtwnClipTrack* trackOut)
 {
-    // Cleared first, so a busy or missing context's failure clears it too.
+    // Cleared before any check, so a missing context's failure clears it
+    // too.
     if (trackOut != NULL)
     {
         memset(trackOut, 0, sizeof *trackOut);
     }
-    if (!mtwnEnter(context))
-    {
-        return mtwn_errorBusy;
-    }
-    mtwnResult result = RunClipGetTrack(context, clip, node, trackOut);
-    mtwnLeave(context);
-    return result;
+    return RunClipGetTrack(context, clip, node, trackOut);
 }
 
-mtwnResult mtwnClip_GetTrack(mtwnContext* context, mtwnClipId clip, mtwnNode node,
+mtwnResult mtwnClip_GetTrack(const mtwnContext* context, mtwnClipId clip, mtwnNode node,
                              mtwnClipTrack* trackOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
@@ -102,7 +97,7 @@ mtwnResult mtwnClip_GetTrack(mtwnContext* context, mtwnClipId clip, mtwnNode nod
     return result;
 }
 
-static mtwnResult RunClipGetNode(mtwnContext* context, mtwnClipId clip, mtwnNode node,
+static mtwnResult RunClipGetNode(const mtwnContext* context, mtwnClipId clip, mtwnNode node,
                                  mtwnClipNodeInfo* infoOut)
 {
     if (context == NULL)
@@ -140,24 +135,19 @@ static mtwnResult RunClipGetNode(mtwnContext* context, mtwnClipId clip, mtwnNode
     return mtwn_success;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnClip_GetNodeWork(mtwnContext* context, mtwnClipId clip,
+static MTWN_NOINLINE mtwnResult mtwnClip_GetNodeWork(const mtwnContext* context, mtwnClipId clip,
                                                      mtwnNode node, mtwnClipNodeInfo* infoOut)
 {
-    // Cleared first, so a busy or missing context's failure clears it too.
+    // Cleared before any check, so a missing context's failure clears it
+    // too.
     if (infoOut != NULL)
     {
         memset(infoOut, 0, sizeof *infoOut);
     }
-    if (!mtwnEnter(context))
-    {
-        return mtwn_errorBusy;
-    }
-    mtwnResult result = RunClipGetNode(context, clip, node, infoOut);
-    mtwnLeave(context);
-    return result;
+    return RunClipGetNode(context, clip, node, infoOut);
 }
 
-mtwnResult mtwnClip_GetNode(mtwnContext* context, mtwnClipId clip, mtwnNode node,
+mtwnResult mtwnClip_GetNode(const mtwnContext* context, mtwnClipId clip, mtwnNode node,
                             mtwnClipNodeInfo* infoOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
@@ -166,7 +156,7 @@ mtwnResult mtwnClip_GetNode(mtwnContext* context, mtwnClipId clip, mtwnNode node
     return result;
 }
 
-static mtwnResult RunClipFindLabel(mtwnContext* context, mtwnClipId clip, mtwnNode parent,
+static mtwnResult RunClipFindLabel(const mtwnContext* context, mtwnClipId clip, mtwnNode parent,
                                    uint32_t key, double* secondsOut)
 {
     if (context == NULL)
@@ -195,26 +185,21 @@ static mtwnResult RunClipFindLabel(mtwnContext* context, mtwnClipId clip, mtwnNo
     return mtwn_success;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnClip_FindLabelWork(mtwnContext* context, mtwnClipId clip,
+static MTWN_NOINLINE mtwnResult mtwnClip_FindLabelWork(const mtwnContext* context, mtwnClipId clip,
                                                        mtwnNode parent, uint32_t key,
                                                        double* secondsOut)
 {
-    // Cleared first, so a busy or missing context's failure clears it too.
+    // Cleared before any check, so a missing context's failure clears it
+    // too.
     if (secondsOut != NULL)
     {
         *secondsOut = 0.0;
     }
-    if (!mtwnEnter(context))
-    {
-        return mtwn_errorBusy;
-    }
-    mtwnResult result = RunClipFindLabel(context, clip, parent, key, secondsOut);
-    mtwnLeave(context);
-    return result;
+    return RunClipFindLabel(context, clip, parent, key, secondsOut);
 }
 
-mtwnResult mtwnClip_FindLabel(mtwnContext* context, mtwnClipId clip, mtwnNode parent, uint32_t key,
-                              double* secondsOut)
+mtwnResult mtwnClip_FindLabel(const mtwnContext* context, mtwnClipId clip, mtwnNode parent,
+                              uint32_t key, double* secondsOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
     mtwnResult result = mtwnClip_FindLabelWork(context, clip, parent, key, secondsOut);
@@ -222,7 +207,8 @@ mtwnResult mtwnClip_FindLabel(mtwnContext* context, mtwnClipId clip, mtwnNode pa
     return result;
 }
 
-static mtwnResult RunClipGetDuration(mtwnContext* context, mtwnClipId clip, double* secondsOut)
+static mtwnResult RunClipGetDuration(const mtwnContext* context, mtwnClipId clip,
+                                     double* secondsOut)
 {
     if (context == NULL)
     {
@@ -244,24 +230,19 @@ static mtwnResult RunClipGetDuration(mtwnContext* context, mtwnClipId clip, doub
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnClip_GetDurationWork(mtwnContext* context, mtwnClipId clip,
-                                                         double* secondsOut)
+static MTWN_NOINLINE mtwnResult mtwnClip_GetDurationWork(const mtwnContext* context,
+                                                         mtwnClipId clip, double* secondsOut)
 {
-    // Cleared first, so a busy or missing context's failure clears it too.
+    // Cleared before any check, so a missing context's failure clears it
+    // too.
     if (secondsOut != NULL)
     {
         *secondsOut = 0.0;
     }
-    if (!mtwnEnter(context))
-    {
-        return mtwn_errorBusy;
-    }
-    mtwnResult result = RunClipGetDuration(context, clip, secondsOut);
-    mtwnLeave(context);
-    return result;
+    return RunClipGetDuration(context, clip, secondsOut);
 }
 
-mtwnResult mtwnClip_GetDuration(mtwnContext* context, mtwnClipId clip, double* secondsOut)
+mtwnResult mtwnClip_GetDuration(const mtwnContext* context, mtwnClipId clip, double* secondsOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
     mtwnResult result = mtwnClip_GetDurationWork(context, clip, secondsOut);

@@ -24,13 +24,20 @@
 // NFKC_Casefold and skeletons refuse a longer run with muni_errorLimit.
 #define MUNI_MAX_NORMALIZATION_SEGMENT 32
 
+// An array of this many code points holds the full decomposition of any
+// code point, canonical or compatibility (U+FDFA has the longest, in
+// NFKD), for the Unicode version of this release. A release with a new
+// Unicode version may raise it; muniGetDecomposition still reports the
+// count it needs.
+#define MUNI_MAX_DECOMPOSITION 18
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
     // A normal form.
-    typedef uint8_t muniNormalForm;
+    typedef int32_t muniNormalForm;
 
     enum
     {
@@ -41,7 +48,7 @@ extern "C"
     };
 
     // The answer of a quick check (UAX #15 section 9).
-    typedef uint8_t muniQuickCheck;
+    typedef int32_t muniQuickCheck;
 
     enum
     {
@@ -74,7 +81,8 @@ extern "C"
     ///         strict mode the first UTF-8 error and its offset;
     ///         `muni_errorLimit` and the offset of the code point that
     ///         makes a segment longer than MUNI_MAX_NORMALIZATION_SEGMENT;
-    ///         `muni_errorInvalid` for a NULL argument or an unknown form.
+    ///         `muni_errorInvalid` for a NULL argument, an unknown form or
+    ///         a textOut that overlaps text.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniNormalize(const char* text, size_t length,
@@ -116,6 +124,29 @@ extern "C"
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniResult muniDecomposePair(uint32_t codePoint, uint32_t* firstOut,
                                                          uint32_t* secondOut, size_t* countOut);
+
+    /// Writes the full decomposition of a code point: its NFD or NFKD,
+    /// every mapping applied until none is left, in canonical order. A
+    /// code point that does not decompose gives itself, so there is always
+    /// at least one; Hangul syllables give their jamo.
+    ///
+    /// @param codePoint      Any value; one above U+10FFFF gives itself.
+    /// @param form           muni_nfd for the canonical decomposition,
+    ///                       muni_nfkd for the compatibility one.
+    /// @param codePointsOut  The output. May be NULL when capacity is 0.
+    /// @param capacity       The number of code points the output can
+    ///                       hold; MUNI_MAX_DECOMPOSITION always suffice.
+    /// @param countOut       Receives the number of code points.
+    ///                       `muni_errorInvalid` leaves both as they were.
+    /// @return `muni_success`, `muni_errorCapacity` when they do not all
+    ///         fit (the ones that fit are written), or `muni_errorInvalid`
+    ///         for a NULL argument or a form other than muni_nfd and
+    ///         muni_nfkd.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUNI_NODISCARD MUNI_API muniResult muniGetDecomposition(uint32_t codePoint, muniNormalForm form,
+                                                            uint32_t* codePointsOut,
+                                                            size_t capacity, size_t* countOut);
 
     /// Returns the primary composite of two code points (UAX #15 D114),
     /// Hangul syllables included.

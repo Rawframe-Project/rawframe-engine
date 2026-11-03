@@ -119,6 +119,23 @@ static inline muiResult muiRefuseAs(muiContext* context, muiResult status)
 // Counts one call back in and returns mui_errorBusy for it.
 muiResult muiRefuseBusy(muiContext* context);
 
+// Refuses a call that host code the context runs made while the context is
+// busy, or, for a call that feeds input, while its event function runs:
+// one misuse counted, and true, for the call to return mui_errorBusy before
+// it writes any output. Such a call writes none of its outputs, which may
+// be ones the call in progress has written or is filling
+// (maul-conventions.md, Errors and assertions). A NULL context is left to
+// the call.
+static inline bool muiRefusesBusy(muiContext* context, bool feedsInput)
+{
+    if (context == nullptr || !(context->busy || (feedsInput && context->events.dispatching)))
+    {
+        return false;
+    }
+    (void)muiRefuseBusy(context);
+    return true;
+}
+
 // Marks the context busy for one of its functions that change it:
 // mui_success, or mui_errorBusy with one misuse counted when it is busy
 // already. A NULL context is left to the function.

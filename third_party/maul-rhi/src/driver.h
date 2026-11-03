@@ -20,10 +20,10 @@
 // The SPI version a driver's vtable must carry. Any change to the SPI
 // headers or to a public type they reach, or to what a driver must do or
 // may assume, raises it; 4 is the first installed.
-#define MRHI_SPI_VERSION 11
+#define MRHI_SPI_VERSION 13
 // What a driver sees at this version, as tools/check_spi_version.py
 // digests it; --write records it.
-// SPI digest: 63f70e3726e023bb247df46ca22c90de35b64f5886db4e3292c548fa0f9ab27a
+// SPI digest: d539bc7b52b048c6403274eee7b065f9fe223c8e0c46bf54859f253ac7239243
 
 // The pass classes (mrhiPassClass): graphics, async compute and transfer.
 #define MRHI_PASS_CLASSES 3
@@ -33,9 +33,9 @@
 
 // The bytes a resolve writes per query of a type: eleven counters for a
 // statistics query, one value for another.
-static inline uint64_t mrhiQueryBytes(mrhiQueryType type)
+static inline uint64_t mrhiQueryBytes(mrhiQueryKind kind)
 {
-    return (type == mrhi_queryPipelineStatistics ? MRHI_STATISTICS_COUNTERS : 1u) *
+    return (kind == mrhi_queryPipelineStatistics ? MRHI_STATISTICS_COUNTERS : 1u) *
            sizeof(uint64_t);
 }
 

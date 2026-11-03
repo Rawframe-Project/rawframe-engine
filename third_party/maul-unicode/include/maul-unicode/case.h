@@ -10,7 +10,9 @@
 // "SS"), a final sigma lowercases to "ς", and titlecasing starts each
 // word (UAX #29) with a capital. Turkish and Azerbaijani, which pair a
 // dotted and a dotless i, take muni_caseTurkic; Lithuanian, which keeps
-// the dot of an i under other accents, takes muni_caseLithuanian.
+// the dot of an i under other accents, takes muni_caseLithuanian; Greek,
+// whose capitals drop their accents, takes muni_caseGreek; Armenian,
+// whose ligature "և" uppercases to "ԵՎ", takes muni_caseArmenian.
 
 #ifndef MAUL_UNICODE_CASE_H
 #define MAUL_UNICODE_CASE_H
@@ -23,7 +25,7 @@ extern "C"
 #endif
 
     // A case operation over text.
-    typedef uint8_t muniCaseOperation;
+    typedef int32_t muniCaseOperation;
 
     enum
     {
@@ -37,7 +39,7 @@ extern "C"
     };
 
     // Language rules for case operations.
-    typedef uint8_t muniCaseLanguage;
+    typedef int32_t muniCaseLanguage;
 
     enum
     {
@@ -49,6 +51,20 @@ extern "C"
         // Lithuanian: an i keeps its dot under other accents above, as
         // "i̇̀"; lowercasing writes the dot out and uppercasing drops it.
         muni_caseLithuanian = 2,
+        // Greek: uppercasing drops the accents and breathings, keeps a
+        // dialytika and adds one where an accent removed from the first
+        // vowel of a diphthong kept the vowels apart ("άι" to "ΑΪ"), and
+        // keeps the accent of the disjunctive eta "ή" standing alone; an
+        // iota subscript becomes a capital iota. The eta stands alone when
+        // no cased letter precedes or follows it past case-ignorable
+        // characters, the context of the final sigma; a character both
+        // cased and case-ignorable, such as U+0345 or U+037A, counts as a
+        // cased letter there, where ICU skips it as case-ignorable.
+        // Lowercasing, titlecasing and folding follow the default rules.
+        muni_caseGreek = 3,
+        // Armenian: the ligature "և" (U+0587) uppercases to "ԵՎ" and
+        // titlecases to "Եվ", where the default rules give "ԵՒ" and "Եւ".
+        muni_caseArmenian = 4,
     };
 
     /// Returns the simple lowercase mapping of a code point.
@@ -101,8 +117,9 @@ extern "C"
     /// @param length     The number of bytes.
     /// @param operation  muni_caseLower, muni_caseUpper, muni_caseTitle or
     ///                   muni_caseFold.
-    /// @param language   muni_caseDefault, muni_caseTurkic or
-    ///                   muni_caseLithuanian.
+    /// @param language   muni_caseDefault, muni_caseTurkic,
+    ///                   muni_caseLithuanian, muni_caseGreek or
+    ///                   muni_caseArmenian.
     /// @param mode       What to do with ill-formed input.
     /// @param textOut    The output. May be NULL when capacity is 0.
     /// @param capacity   The number of bytes textOut can hold.
@@ -114,8 +131,9 @@ extern "C"
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the result does not fit (the bytes that fit are written); in
     ///         strict mode the first UTF-8 error and its offset;
-    ///         `muni_errorInvalid` for a NULL argument or an unknown
-    ///         operation, language or mode.
+    ///         `muni_errorInvalid` for a NULL argument, an unknown
+    ///         operation, language or mode, or a textOut that overlaps
+    ///         text.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertCase(const char* text, size_t length,
@@ -148,8 +166,8 @@ extern "C"
     ///         strict mode the first UTF-8 error and its offset;
     ///         `muni_errorLimit` and the offset of the code point that
     ///         makes a segment longer than MUNI_MAX_NORMALIZATION_SEGMENT,
-    ///         as in muniNormalize; `muni_errorInvalid` for a NULL argument or
-    ///         an unknown mode.
+    ///         as in muniNormalize; `muni_errorInvalid` for a NULL argument,
+    ///         an unknown mode or a textOut that overlaps text.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniGetNfkcCasefold(const char* text, size_t length,

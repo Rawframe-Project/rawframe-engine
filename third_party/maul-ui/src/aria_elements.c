@@ -321,7 +321,8 @@ static const char* Relation(const muiAriaAdapter* adapter, const muiAccessNode* 
     {
         const muiAccessLink* link = &node->links[i];
         bool single = which == A_activeDescendant && length != 0;
-        if (link->kind >= MUI_ACCESS_RELATIONS || s_relations[link->kind] != which || single)
+        if ((uint32_t)link->kind >= MUI_ACCESS_RELATIONS || s_relations[link->kind] != which ||
+            single)
         {
             continue;
         }
@@ -471,7 +472,7 @@ static const char* ValueOf(const muiAriaAdapter* adapter, const muiAccessNode* n
         // A field is a text box by its tag, and a password field none
         // (s_roles has one a text box's); a search box, a spin button or
         // a combo box says what it is beyond that.
-        const char* role = node->role <= MUI_ROLE_LAST ? s_roles[node->role] : "group";
+        const char* role = (uint32_t)node->role <= MUI_ROLE_LAST ? s_roles[node->role] : "group";
         return role[0] != '\0' && (kind < mui_ariaLine || strcmp(role, "textbox") != 0) ? role
                                                                                         : nullptr;
     }

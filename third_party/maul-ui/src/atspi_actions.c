@@ -76,22 +76,22 @@ static bool AppendActions(muiAtspiApp* app, muiDBusIter* iter, const muiAccessNo
     const char* keys = node->text[mui_accessKeyboardShortcut] != nullptr
                            ? node->text[mui_accessKeyboardShortcut]
                            : "";
-    muiDBusIter array;
+    muiDBusIter array = {0};
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "(sss)", &array);
     for (uint32_t i = 0; ok && ActionAt(node, i) != nullptr; i++)
     {
-        muiDBusIter entry;
+        muiDBusIter entry = {0};
         ok = dbus->openContainer(&array, mui_dbusTypeStruct, nullptr, &entry) &&
              muiAtspiAppendString(app, &entry, ActionAt(node, i)->name) &&
              muiAtspiAppendString(app, &entry, none) &&
-             muiAtspiAppendString(app, &entry, i == 0 ? keys : none) &&
-             dbus->closeContainer(&array, &entry);
+             muiAtspiAppendString(app, &entry, i == 0 ? keys : none);
+        ok = muiAtspiClose(app, &array, &entry, ok);
     }
-    return ok && dbus->closeContainer(iter, &array);
+    return muiAtspiClose(app, iter, &array, ok);
 }
 
 // Writes the answer of an Action method; false for an unknown one, with
-// *ok false for a bad index or no memory.
+// *ok false for a bad index, refused, or no memory.
 static bool AppendAction(muiAtspiApp* app, muiDBusIter* iter, DBusMessage* call,
                          const muiAtspiObject* object, const char* member, bool* ok)
 {
@@ -104,16 +104,18 @@ static bool AppendAction(muiAtspiApp* app, muiDBusIter* iter, DBusMessage* call,
     }
     else if (strcmp(member, "GetName") == 0 || strcmp(member, "GetLocalizedName") == 0)
     {
-        *ok = named != nullptr && muiAtspiAppendString(app, iter, named->name);
+        *ok = named != nullptr ? muiAtspiAppendString(app, iter, named->name)
+                               : muiAtspiTaken(app, false);
     }
     else if (strcmp(member, "GetDescription") == 0 || strcmp(member, "GetKeyBinding") == 0)
     {
-        *ok = named != nullptr && muiAtspiAppendString(app, iter, none);
+        *ok = named != nullptr ? muiAtspiAppendString(app, iter, none) : muiAtspiTaken(app, false);
     }
     else if (strcmp(member, "DoAction") == 0)
     {
         muiDBusBool done = named != nullptr && Perform(object, named->action, 0.0f);
-        *ok = named != nullptr && app->dbus.appendBasic(iter, mui_dbusTypeBoolean, &done);
+        *ok = named != nullptr ? app->dbus.appendBasic(iter, mui_dbusTypeBoolean, &done)
+                               : muiAtspiTaken(app, false);
     }
     else
     {
@@ -142,7 +144,8 @@ bool muiAtspiAnswerAction(muiAtspiApp* app, DBusMessage* call, const muiAtspiObj
     if (!ok)
     {
         app->dbus.unrefMessage(reply);
-        reply = app->dbus.newError(call, "org.freedesktop.DBus.Error.InvalidArgs", member);
+        muiAtspiFail(app, call, member);
+        return true;
     }
     muiAtspiSend(app, call, reply);
     return true;

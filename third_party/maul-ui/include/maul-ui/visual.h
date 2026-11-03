@@ -31,7 +31,7 @@ extern "C"
     } muiColor;
 
     // How a gradient spreads its stops.
-    typedef uint8_t muiGradientKind;
+    typedef int32_t muiGradientKind;
 
     enum
     {
@@ -127,7 +127,7 @@ extern "C"
     // tiles with equal gaps before, between and after them. A tile is the
     // image's middle at one logical unit a pixel, as its slices are drawn;
     // an image without slices is all middle.
-    typedef uint8_t muiImageRepeat;
+    typedef int32_t muiImageRepeat;
 
     enum
     {

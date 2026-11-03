@@ -30,7 +30,7 @@ extern "C"
     } mrhiHeapId;
 
     // How shaders read a resource heap entry.
-    typedef uint8_t mrhiHeapEntryKind;
+    typedef int32_t mrhiHeapEntryKind;
 
     enum
     {

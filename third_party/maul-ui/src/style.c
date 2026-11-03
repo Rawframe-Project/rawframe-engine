@@ -527,6 +527,10 @@ static MUI_NOINLINE muiResult StyleAddConditionWorker(muiContext* context, muiSt
                                                       const muiCondition* condition,
                                                       muiVariant* variantOut)
 {
+    if (muiRefusesBusy(context, false))
+    {
+        return mui_errorBusy;
+    }
     if (variantOut != nullptr)
     {
         *variantOut = 0;

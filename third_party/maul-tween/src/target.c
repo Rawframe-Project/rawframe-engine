@@ -13,7 +13,7 @@
 
 static bool IsKind(mtwnValueKind kind)
 {
-    return kind <= mtwn_valueScale;
+    return (uint32_t)kind <= mtwn_valueScale;
 }
 
 static uint32_t Bits(float value)
@@ -93,7 +93,7 @@ static mtwnResult RunCreateTarget(mtwnContext* context, mtwnValueKind kind, mtwn
     mtwnTargetSlot* slot = mtwnTargetAt(context, index1);
     slot->base = accepted;
     slot->value = accepted;
-    slot->kind = kind;
+    slot->kind = (uint8_t)kind;
     *targetOut = (mtwnTargetId){index1, slot->header.generation};
     return mtwn_success;
 }
@@ -190,7 +190,7 @@ bool mtwnTarget_IsValid(const mtwnContext* context, mtwnTargetId target)
 }
 
 // The live slot an id names; a stale id counts as misuse.
-static mtwnResult Resolve(mtwnContext* context, mtwnTargetId target, mtwnTargetSlot** slotOut)
+static mtwnResult Resolve(const mtwnContext* context, mtwnTargetId target, mtwnTargetSlot** slotOut)
 {
     *slotOut = Find(context, target);
     if (*slotOut == NULL)
@@ -251,7 +251,8 @@ mtwnResult mtwnTarget_SetBase(mtwnContext* context, mtwnTargetId target, mtwnVec
     return result;
 }
 
-static mtwnResult RunTargetGetValue(mtwnContext* context, mtwnTargetId target, mtwnVec4* valueOut)
+static mtwnResult RunTargetGetValue(const mtwnContext* context, mtwnTargetId target,
+                                    mtwnVec4* valueOut)
 {
     if (context == NULL || valueOut == NULL)
     {
@@ -271,24 +272,25 @@ static mtwnResult RunTargetGetValue(mtwnContext* context, mtwnTargetId target, m
     return resolved;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnTarget_GetValueWork(mtwnContext* context, mtwnTargetId target,
-                                                        mtwnVec4* valueOut)
+static MTWN_NOINLINE mtwnResult mtwnTarget_GetValueWork(const mtwnContext* context,
+                                                        mtwnTargetId target, mtwnVec4* valueOut)
 {
-    // Cleared first, so a busy or missing context's failure clears it too.
+    // Refused while the update's groups may be writing what it reads,
+    // before anything is written.
+    if (mtwnRefuseInGroups(context))
+    {
+        return mtwn_errorBusy;
+    }
+    // Cleared before any check, so a missing context's failure clears it
+    // too.
     if (valueOut != NULL)
     {
         *valueOut = (mtwnVec4){0};
     }
-    if (!mtwnEnter(context))
-    {
-        return mtwn_errorBusy;
-    }
-    mtwnResult result = RunTargetGetValue(context, target, valueOut);
-    mtwnLeave(context);
-    return result;
+    return RunTargetGetValue(context, target, valueOut);
 }
 
-mtwnResult mtwnTarget_GetValue(mtwnContext* context, mtwnTargetId target, mtwnVec4* valueOut)
+mtwnResult mtwnTarget_GetValue(const mtwnContext* context, mtwnTargetId target, mtwnVec4* valueOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
     mtwnResult result = mtwnTarget_GetValueWork(context, target, valueOut);
@@ -296,7 +298,7 @@ mtwnResult mtwnTarget_GetValue(mtwnContext* context, mtwnTargetId target, mtwnVe
     return result;
 }
 
-static mtwnResult RunTargetGetState(mtwnContext* context, mtwnTargetId target,
+static mtwnResult RunTargetGetState(const mtwnContext* context, mtwnTargetId target,
                                     mtwnTargetState* stateOut)
 {
     if (context == NULL || stateOut == NULL)
@@ -320,24 +322,29 @@ static mtwnResult RunTargetGetState(mtwnContext* context, mtwnTargetId target,
     return resolved;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnTarget_GetStateWork(mtwnContext* context, mtwnTargetId target,
+static MTWN_NOINLINE mtwnResult mtwnTarget_GetStateWork(const mtwnContext* context,
+                                                        mtwnTargetId target,
                                                         mtwnTargetState* stateOut)
 {
-    // Cleared first, so a busy or missing context's failure clears it too.
+    // Its velocity may sample a host's easing: refused as a call back in,
+    // the update's groups included, and the context marked busy.
+    if (!mtwnEnterReading(context))
+    {
+        return mtwn_errorBusy;
+    }
+    // Cleared after the busy check, as a call back in writes nothing, and
+    // before any other, so a missing context's failure clears it too.
     if (stateOut != NULL)
     {
         memset(stateOut, 0, sizeof *stateOut);
     }
-    if (!mtwnEnter(context))
-    {
-        return mtwn_errorBusy;
-    }
     mtwnResult result = RunTargetGetState(context, target, stateOut);
-    mtwnLeave(context);
+    mtwnLeaveReading(context);
     return result;
 }
 
-mtwnResult mtwnTarget_GetState(mtwnContext* context, mtwnTargetId target, mtwnTargetState* stateOut)
+mtwnResult mtwnTarget_GetState(const mtwnContext* context, mtwnTargetId target,
+                               mtwnTargetState* stateOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
     mtwnResult result = mtwnTarget_GetStateWork(context, target, stateOut);
@@ -345,11 +352,17 @@ mtwnResult mtwnTarget_GetState(mtwnContext* context, mtwnTargetId target, mtwnTa
     return result;
 }
 
-static mtwnResult RunReadTargets(mtwnContext* context, const mtwnTargetId* targets, uint32_t count,
-                                 mtwnVec4* valuesOut)
+static mtwnResult RunReadTargets(const mtwnContext* context, const mtwnTargetId* targets,
+                                 uint32_t count, mtwnVec4* valuesOut)
 {
     if (context == NULL || (count != 0 && (targets == NULL || valuesOut == NULL)))
     {
+        // A success writes count values with or without live ids, so the
+        // count bounds the array even without a context.
+        for (uint32_t i = 0; valuesOut != NULL && i < count; ++i)
+        {
+            valuesOut[i] = (mtwnVec4){0};
+        }
         if (context != NULL)
         {
             mtwnCountMisuse(context);
@@ -372,20 +385,20 @@ static mtwnResult RunReadTargets(mtwnContext* context, const mtwnTargetId* targe
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnContext_ReadTargetsWork(mtwnContext* context,
+static MTWN_NOINLINE mtwnResult mtwnContext_ReadTargetsWork(const mtwnContext* context,
                                                             const mtwnTargetId* targets,
                                                             uint32_t count, mtwnVec4* valuesOut)
 {
-    if (!mtwnEnter(context))
+    // Refused while the update's groups may be writing what it reads,
+    // before anything is written.
+    if (mtwnRefuseInGroups(context))
     {
         return mtwn_errorBusy;
     }
-    mtwnResult result = RunReadTargets(context, targets, count, valuesOut);
-    mtwnLeave(context);
-    return result;
+    return RunReadTargets(context, targets, count, valuesOut);
 }
 
-mtwnResult mtwnContext_ReadTargets(mtwnContext* context, const mtwnTargetId* targets,
+mtwnResult mtwnContext_ReadTargets(const mtwnContext* context, const mtwnTargetId* targets,
                                    uint32_t count, mtwnVec4* valuesOut)
 {
     uint64_t env = mtwnFloatEnvEnter();

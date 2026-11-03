@@ -95,7 +95,7 @@ typedef struct mrhiHeapSlot
     mrhiHeapEntrySlot* table;
 } mrhiHeapSlot;
 
-// A query set as its device keeps it: its driver handle, its type, and
+// A query set as its device keeps it: its driver handle, its kind, and
 // the run of the device's query marks it holds; a count of 0 for a free
 // slot.
 typedef struct mrhiQuerySetSlot
@@ -103,7 +103,7 @@ typedef struct mrhiQuerySetSlot
     uint64_t handle;
     uint32_t first;
     uint32_t count;
-    mrhiQueryType type;
+    mrhiQueryKind kind;
 } mrhiQuerySetSlot;
 
 // The passes of every frame that are the library's own, before the

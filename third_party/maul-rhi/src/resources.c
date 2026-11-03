@@ -35,17 +35,18 @@ mrhiSamplerDef mrhiDefaultSamplerDef(void)
 // filtering.
 static bool IsSamplerDefValid(const mrhiSamplerDef* def)
 {
-    bool filters = def->magFilter <= mrhi_filterLinear && def->minFilter <= mrhi_filterLinear &&
-                   def->mipFilter <= mrhi_filterLinear;
-    bool address = def->addressU <= mrhi_addressMirrorRepeat &&
-                   def->addressV <= mrhi_addressMirrorRepeat &&
-                   def->addressW <= mrhi_addressMirrorRepeat;
+    bool filters = (uint32_t)def->magFilter <= mrhi_filterLinear &&
+                   (uint32_t)def->minFilter <= mrhi_filterLinear &&
+                   (uint32_t)def->mipFilter <= mrhi_filterLinear;
+    bool address = (uint32_t)def->addressU <= mrhi_addressMirrorRepeat &&
+                   (uint32_t)def->addressV <= mrhi_addressMirrorRepeat &&
+                   (uint32_t)def->addressW <= mrhi_addressMirrorRepeat;
     bool lod = def->lodMin >= 0.0f && def->lodMax >= def->lodMin;
     bool linear = def->magFilter == mrhi_filterLinear && def->minFilter == mrhi_filterLinear &&
                   def->mipFilter == mrhi_filterLinear;
     bool anisotropy =
         def->maxAnisotropy >= 1 && def->maxAnisotropy <= 16 && (def->maxAnisotropy == 1 || linear);
-    return filters && address && lod && anisotropy && def->compare <= mrhi_compareAlways;
+    return filters && address && lod && anisotropy && (uint32_t)def->compare <= mrhi_compareAlways;
 }
 
 mrhiResult mrhiCreateSampler(mrhiDevice* device, const mrhiSamplerDef* def,

@@ -37,13 +37,15 @@ mwinWindowId mwinWindowIdOf(const mwinContext* context, uint32_t slot)
 
 mwinWindow* mwinFindWindow(const mwinContext* context, mwinWindowId window)
 {
-    if (window.index1 == 0 || window.index1 > context->limits.windows)
+    if (window.index1 == 0 || window.index1 > context->limits.windows || context->finishing)
     {
         return nullptr;
     }
     mwinWindow* found = &context->windows[window.index1 - 1];
-    return found->status == mwin_slotLive && found->generation == window.generation ? found
-                                                                                    : nullptr;
+    return found->status == mwin_slotLive && !found->closing &&
+                   found->generation == window.generation
+               ? found
+               : nullptr;
 }
 
 static bool IsPositive(mwinSize size)
@@ -70,7 +72,7 @@ static void Carried(mwinWindow* window, const mwinRequest* request)
         window->state.opacity = 1.0f;
         break;
     case mwin_requestTextInput:
-        window->state.textInput = request->value.textInput.enabled;
+        window->state.textInput = request->value.textInput;
         break;
     case mwin_requestStyle:
         window->state.style = request->value.code;
@@ -135,7 +137,7 @@ void mwinComplete(mwinContext* context, uint32_t slot, uint32_t request, mwinOut
     }
     mwinReleaseRequestData(context, entry);
     mwinEvent event = {0};
-    event.type = mwin_eventRequestCompleted;
+    event.kind = mwin_eventRequestCompleted;
     event.timeNs = context->backend->now(context);
     event.data.completion.request = mwinRequestIdOf(context, slot, request);
     event.data.completion.kind = entry->kind;
@@ -224,8 +226,8 @@ static mwinResult CheckDef(const mwinContext* context, const mwinWindowDef* def)
 {
     bool popup = def->kind != mwin_windowNormal;
     bool valid = def->cookie == WINDOW_DEF_COOKIE && IsPositive(def->size) &&
-                 def->mode <= mwin_modeMaximized && def->style <= ALL_STYLES &&
-                 def->kind <= mwin_windowTooltip &&
+                 (uint32_t)def->mode <= mwin_modeMaximized && def->style <= ALL_STYLES &&
+                 (uint32_t)def->kind <= mwin_windowTooltip &&
                  (!popup || (def->owner.index1 != 0 && def->mode == mwin_modeWindowed &&
                              isfinite(def->position.x) && isfinite(def->position.y)));
     if (!valid)
@@ -273,6 +275,7 @@ mwinResult mwinCreateWindow(mwinContext* context, const mwinWindowDef* def, mwin
     }
     mwinWindow* window = &context->windows[slot];
     window->status = mwin_slotLive;
+    window->closing = false;
     window->generation += 1;
     window->state = (mwinWindowState){0};
     window->regionCount = 0;
@@ -316,6 +319,8 @@ mwinResult mwinDestroyWindow(mwinContext* context, mwinWindowId window)
         return mwin_errorStale;
     }
     uint32_t slot = window.index1 - 1;
+    // Gone to the program before any of its blocks reaches the free hook.
+    found->closing = true;
     // What it owns goes first; the owner's slot is live meanwhile, so no
     // new window can take it.
     for (uint32_t i = 0; i < context->limits.windows; i++)
@@ -458,7 +463,7 @@ mwinResult mwinWindow_RequestMode(mwinContext* context, mwinWindowId window, mwi
     {
         return mwinBusy(context);
     }
-    if (mode > mwin_modeMaximized)
+    if ((uint32_t)mode > mwin_modeMaximized)
     {
         return mwinMisuse(context);
     }

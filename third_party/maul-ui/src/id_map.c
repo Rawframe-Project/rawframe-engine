@@ -24,6 +24,8 @@ static uint32_t Home(const muiIdMap* map, uint64_t id)
 // Where an id sits, or where it would go.
 static uint32_t PlaceOf(const muiIdMap* map, uint64_t id)
 {
+    // At most half full (muiIdMapInsert), so the probe meets an empty place.
+    MUI_ASSERT((uint64_t)map->count * 2 <= (uint64_t)map->mask + 1);
     uint32_t at = Home(map, id);
     while (map->keys[at] != 0 && map->keys[at] != id)
     {
@@ -75,6 +77,7 @@ void* muiIdMapRemove(muiIdMap* map, uint64_t id)
         }
     }
     map->keys[gap] = 0;
+    MUI_ASSERT(map->count != 0);
     map->count--;
     return value;
 }

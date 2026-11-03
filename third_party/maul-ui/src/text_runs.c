@@ -43,7 +43,7 @@ static uint64_t KeyOf(const muiTextBlock* block, const muiComputedTextStyle* sty
             continue;
         }
         shapes = true;
-        const uint32_t place[2] = {span->start, span->length};
+        const uint32_t place[2] = {(uint32_t)span->start, (uint32_t)span->length};
         key = Mix(key, place, sizeof place);
         key = Mix(key, &mask, sizeof mask);
         key = Mix(key, &span->style.font, sizeof span->style.font);
@@ -156,7 +156,7 @@ bool muiPrepareRuns(muiTextService* service, muiTextBlock* block, const muiCompu
         // found stands until that changes.
         uint32_t from = MUI_MAX_RUN_STYLES;
         uint32_t to = 0;
-        for (uint32_t at = span->start; at < span->start + span->length; at++)
+        for (uint32_t at = (uint32_t)span->start; at < span->start + span->length; at++)
         {
             if (runs[at] != from)
             {

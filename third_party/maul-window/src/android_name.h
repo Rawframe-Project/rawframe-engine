@@ -5,8 +5,8 @@
 // name its provider gives, with no platform type, so that tests run it on
 // any platform: in UTF-8, cut to whole characters within
 // MWIN_ANDROID_NAME_BYTES, each '/' made '_' so that the name stays in
-// its folder; "Document" for none or a name that is not one ("." and
-// "..").
+// its folder and each U+0000 so that it is not cut short; "Document"
+// for none or a name that is not one ("." and "..").
 
 #ifndef MAUL_WINDOW_SRC_ANDROID_NAME_H
 #define MAUL_WINDOW_SRC_ANDROID_NAME_H

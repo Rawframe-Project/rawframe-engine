@@ -25,7 +25,8 @@ enum
     kindFinite,
     kindLength,
     kindFraction,
-    // A uint8_t enumerator, or a bool, from low to high.
+    // An enumerator (int32_t, or uint32_t for bits), a uint8_t or a bool,
+    // from low to high.
     kindEnum,
     // A muiColor.
     kindColor,
@@ -82,9 +83,15 @@ typedef struct Row
      groupInteraction,                                                                             \
      low,                                                                                          \
      high}
-#define DIMENSION(field)       LAYOUT(field, muiDimension, kindDimension, 0, 0)
-#define NUMBER(field, kind)    LAYOUT(field, float, kind, 0, 0)
-#define ENUM(field, low, high) LAYOUT(field, uint8_t, kindEnum, low, high)
+#define DIMENSION(field)    LAYOUT(field, muiDimension, kindDimension, 0, 0)
+#define NUMBER(field, kind) LAYOUT(field, float, kind, 0, 0)
+#define ENUM(field, low, high)                                                                     \
+    {(uint16_t)offsetof(muiLayoutStyle, field),                                                    \
+     (uint8_t)sizeof(((const muiLayoutStyle*)nullptr)->field),                                     \
+     kindEnum,                                                                                     \
+     groupLayout,                                                                                  \
+     low,                                                                                          \
+     high}
 
 static const Row s_layoutRows[] = {
     DIMENSION(sizing.width),
@@ -169,27 +176,27 @@ static const Row s_textRows[] = {
     TEXT(lineHeight, muiDimension, kindAutoLength, 0, 0),
     TEXT(letterSpacing, muiDimension, kindSpacing, 0, 0),
     TEXT(weight, float, kindWeight, 0, 0),
-    TEXT(slant, uint8_t, kindEnum, mui_slantNormal, mui_slantOblique),
-    TEXT(align, uint8_t, kindEnum, mui_textAlignStart, mui_textAlignEnd),
-    TEXT(wrap, uint8_t, kindEnum, mui_textWrap, mui_textNoWrap),
-    TEXT(decoration, uint8_t, kindEnum, 0,
+    TEXT(slant, muiFontSlant, kindEnum, mui_slantNormal, mui_slantOblique),
+    TEXT(align, muiTextAlign, kindEnum, mui_textAlignStart, mui_textAlignEnd),
+    TEXT(wrap, muiTextWrap, kindEnum, mui_textWrap, mui_textNoWrap),
+    TEXT(decoration, muiTextDecoration, kindEnum, 0,
          mui_decorationUnderline | mui_decorationOverline | mui_decorationLineThrough),
     TEXT(decorationColor, muiColor, kindColor, 0, 0),
     TEXT(baselineShift, muiDimension, kindSpacing, 0, 0),
-    TEXT(synthesis, uint8_t, kindEnum, mui_synthesisAll, mui_synthesisNone),
+    TEXT(synthesis, muiFontSynthesis, kindEnum, mui_synthesisAll, mui_synthesisNone),
 };
 
 static const Row s_interactionRows[] = {
-    INTERACTION(hitMode, uint8_t, mui_hitAuto, mui_hitNone),
+    INTERACTION(hitMode, muiHitMode, mui_hitAuto, mui_hitNone),
     INTERACTION(passThrough, bool, 0, 1),
-    INTERACTION(layer, uint8_t, mui_layerNone, mui_layerOverlay),
-    INTERACTION(focusMode, uint8_t, mui_focusNone, mui_focusAll),
+    INTERACTION(layer, muiLayerKind, mui_layerNone, mui_layerOverlay),
+    INTERACTION(focusMode, muiFocusMode, mui_focusNone, mui_focusAll),
     INTERACTION(tabOrder, uint8_t, 0, 255),
     INTERACTION(drags, bool, 0, 1),
     // A mask: any value.
-    {(uint16_t)offsetof(muiInteractionStyle, accepts), (uint8_t)sizeof(uint32_t), kindKey,
+    {(uint16_t)offsetof(muiInteractionStyle, accepts), (uint8_t)sizeof(muiDropKinds), kindKey,
      groupInteraction, 0, 0},
-    INTERACTION(exitLayout, uint8_t, mui_exitKeep, mui_exitPop),
+    INTERACTION(exitLayout, muiExitLayout, mui_exitKeep, mui_exitPop),
 };
 
 typedef struct GroupRows
@@ -243,7 +250,10 @@ static const Row* RowOf(muiProperty property)
 
 bool muiIsPropertyKnown(muiProperty property)
 {
-    return (property & 63u) < s_groups[MUI_PROPERTY_GROUP(property)].count;
+    // Read unsigned, so a negative id or one past the last group is
+    // unknown rather than a group outside the table.
+    return (uint32_t)property < MUI_PROPERTY_GROUPS * 64u &&
+           (property & 63u) < s_groups[MUI_PROPERTY_GROUP(property)].count;
 }
 
 static const muiPropertyBits s_known = {{MUI_LAYOUT_PROPERTIES, MUI_VISUAL_PROPERTIES,
@@ -251,7 +261,7 @@ static const muiPropertyBits s_known = {{MUI_LAYOUT_PROPERTIES, MUI_VISUAL_PROPE
 
 bool muiIsGroupMaskKnown(muiPropertyGroup group, muiPropertyMask mask)
 {
-    return group < MUI_PROPERTY_GROUPS && (mask & ~s_known.words[group]) == 0;
+    return (uint32_t)group < MUI_PROPERTY_GROUPS && (mask & ~s_known.words[group]) == 0;
 }
 
 muiPropertyBits muiKnownProperties(void)
@@ -402,7 +412,8 @@ static bool IsColorValid(muiColor color)
 
 static bool IsDimensionValid(muiDimension value)
 {
-    return value.kind <= mui_dimensionValue && isfinite(value.scale) && isfinite(value.offset);
+    return (uint32_t)value.kind <= mui_dimensionValue && isfinite(value.scale) &&
+           isfinite(value.offset);
 }
 
 // Whether a gradient names more stops than MUI_MAX_GRADIENT_STOPS.
@@ -419,7 +430,7 @@ static bool IsGradientValid(const muiGradient* gradient)
     {
         return gradient->stopCount == 0;
     }
-    if (gradient->kind > mui_gradientConic || gradient->stopCount < 2 ||
+    if ((uint32_t)gradient->kind > mui_gradientConic || gradient->stopCount < 2 ||
         gradient->stopCount > MUI_MAX_GRADIENT_STOPS || !isfinite(gradient->angle))
     {
         return false;
@@ -518,7 +529,17 @@ static bool IsValid(const void* at, const Row* row)
         return IsUnit(NumberAt(at));
     case kindEnum:
     {
-        uint8_t value = *(const uint8_t*)at;
+        // A wide enumerator is read unsigned, so a negative one is out of
+        // range rather than below low.
+        uint32_t value = 0;
+        if (row->size == sizeof(uint32_t))
+        {
+            memcpy(&value, at, sizeof value);
+        }
+        else
+        {
+            value = *(const uint8_t*)at;
+        }
         return value >= row->low && value <= row->high;
     }
     default:

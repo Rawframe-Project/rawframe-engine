@@ -19,9 +19,10 @@
 void mwinWaylandAttachText(mwinWaylandPlatform* platform);
 void mwinWaylandDetachText(mwinWaylandPlatform* platform);
 
-// Carries out a text input request of the window in a slot.
-mwinOutcome mwinWaylandSetTextInput(mwinWaylandPlatform* platform, uint32_t slot, bool enabled,
-                                    mwinRect caret);
+// Carry out a text input request and a caret request of the window in a
+// slot.
+mwinOutcome mwinWaylandSetTextInput(mwinWaylandPlatform* platform, uint32_t slot, bool enabled);
+mwinOutcome mwinWaylandSetTextCaret(mwinWaylandPlatform* platform, uint32_t slot, mwinRect caret);
 
 // The window in a slot goes.
 void mwinWaylandForgetTextFocus(mwinWaylandPlatform* platform, uint32_t slot);

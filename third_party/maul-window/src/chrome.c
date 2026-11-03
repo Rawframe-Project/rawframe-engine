@@ -13,7 +13,7 @@ static bool IsRegion(const mwinHitRegion* region)
     const mwinRect* rect = &region->rect;
     return isfinite(rect->x) && isfinite(rect->y) && isfinite(rect->width) &&
            isfinite(rect->height) && rect->width >= 0.0f && rect->height >= 0.0f &&
-           region->kind <= mwin_hitClose;
+           (uint32_t)region->kind <= mwin_hitClose;
 }
 
 mwinResult mwinWindow_RequestHitRegions(mwinContext* context, mwinWindowId window,

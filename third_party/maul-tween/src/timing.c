@@ -37,13 +37,15 @@ MTWN_NOINLINE mtwnResult mtwnValidateTimingWork(const mtwnTiming* timing)
     {
         return mtwn_errorInvalid;
     }
-    bool valid =
-        isfinite(timing->delay) && isfinite(timing->endDelay) && isfinite(timing->iterationStart) &&
-        timing->iterationStart >= 0.0 && timing->iterations >= 0.0 && timing->duration >= 0.0 &&
-        isfinite(timing->repeatDelay) && timing->repeatDelay >= 0.0 &&
-        isfinite(timing->playbackRate) && timing->playbackRate != 0.0 &&
-        timing->fill <= mtwn_fillBoth && timing->direction <= mtwn_directionAlternateReverse &&
-        timing->alternateEasing <= mtwn_alternateRepeatsShape && mtwnValidEasing(&timing->easing);
+    bool valid = isfinite(timing->delay) && isfinite(timing->endDelay) &&
+                 isfinite(timing->iterationStart) && timing->iterationStart >= 0.0 &&
+                 timing->iterations >= 0.0 && timing->duration >= 0.0 &&
+                 isfinite(timing->repeatDelay) && timing->repeatDelay >= 0.0 &&
+                 isfinite(timing->playbackRate) && timing->playbackRate != 0.0 &&
+                 (uint32_t)timing->fill <= mtwn_fillBoth &&
+                 (uint32_t)timing->direction <= mtwn_directionAlternateReverse &&
+                 (uint32_t)timing->alternateEasing <= mtwn_alternateRepeatsShape &&
+                 mtwnValidEasing(&timing->easing);
     // An active duration and an end time a double holds: endless only when
     // the iterations or the duration are, making the active duration
     // infinite (not 0, when the other is 0), and the node plays forwards, since
@@ -357,7 +359,8 @@ static void NoEffect(const mtwnTiming* timing, double localTime, mtwnTimingResul
 // Every caller passes a timing mtwnValidateTimingWork accepted: the public
 // call checks it, and a clip checks each node's where it is added, an
 // automatic duration included (Raise in src/clip.c).
-MTWN_NOINLINE void mtwnComputeTimingWork(const mtwnTiming* timing, double localTime, bool backwards,
+MTWN_NOINLINE void mtwnComputeTimingWith(const mtwnTiming* timing, double localTime, bool backwards,
+                                         mtwnEasingSampler* sample, bool* hostNan,
                                          mtwnTimingResult* resultOut)
 {
     MTWN_ASSERT(mtwnValidateTimingWork(timing) == mtwn_success);
@@ -414,16 +417,10 @@ MTWN_NOINLINE void mtwnComputeTimingWork(const mtwnTiming* timing, double localT
     bool goingForwards = forwards == (timing->playbackRate > 0.0);
     result->before = (result->phase == mtwn_phaseBefore && goingForwards) ||
                      (result->phase == mtwn_phaseAfter && !goingForwards);
-    if (!forwards && timing->alternateEasing == mtwn_alternateRepeatsShape)
-    {
-        result->transformedProgress =
-            1.0 - mtwnSampleEasingWork(&timing->easing, simple, result->before);
-    }
-    else
-    {
-        result->transformedProgress =
-            mtwnSampleEasingWork(&timing->easing, result->directedProgress, result->before);
-    }
+    bool repeatsShape = !forwards && timing->alternateEasing == mtwn_alternateRepeatsShape;
+    double eased = sample(&timing->easing, repeatsShape ? simple : result->directedProgress,
+                          result->before, hostNan);
+    result->transformedProgress = repeatsShape ? 1.0 - eased : eased;
     // The transformed progress is the easing's, a host's any double.
     MTWN_ASSERT(Resolved(timing, result));
 }

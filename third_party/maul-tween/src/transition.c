@@ -43,6 +43,16 @@ static bool IsTolerance(double value)
 
 // Whether the def's transition kind suits the value kind, and its
 // spring, decay and tolerances are valid.
+// Every choice known, whatever the target's kind reads: an unknown one is
+// an argument no correct program passes, and taking it would let it mean
+// something else the day a kind reads its field.
+static bool KnownChoices(const mtwnTransitionDef* def)
+{
+    return (uint32_t)def->colorSpace <= mtwn_colorSrgb &&
+           (uint32_t)def->hueMethod <= mtwn_hueDecreasing && mtwnIsAngleMethod(def->angleMethod) &&
+           (uint32_t)def->rotationPath <= mtwn_rotationLongest;
+}
+
 static bool SuitsKind(const mtwnTransitionDef* def, mtwnValueKind kind)
 {
     if (!mtwnValidEasing(&def->easing))
@@ -292,9 +302,10 @@ static mtwnResult Prepare(const mtwnTransitionDef* def, const mtwnTargetSlot* ta
     out->from = target->value;
     mtwnVec4 end = def->kind == mtwn_transitionDecay ? target->value : def->value;
     if (!mtwnAcceptValue(target->kind, end, &out->to) || !IsTime(def->delay) ||
-        !IsTime(def->duration) || !SuitsKind(def, target->kind) ||
+        !IsTime(def->duration) || !KnownChoices(def) || !SuitsKind(def, target->kind) ||
         (target->kind == mtwn_valueAngle && !mtwnIsAngleMethod(def->angleMethod)) ||
-        def->velocitySource > mtwn_velocityGiven || !StartVelocity(def, target, inherited, out))
+        (uint32_t)def->velocitySource > mtwn_velocityGiven ||
+        !StartVelocity(def, target, inherited, out))
     {
         return mtwn_errorInvalid;
     }
@@ -554,8 +565,8 @@ static mtwnResult Distance(const mtwnTransitionDef* def, mtwnValueKind kind, mtw
     return mtwn_success;
 }
 
-static mtwnResult RunContextMeasureTransition(mtwnContext* context, const mtwnTransitionDef* def,
-                                              double* distanceOut)
+static mtwnResult RunContextMeasureTransition(const mtwnContext* context,
+                                              const mtwnTransitionDef* def, double* distanceOut)
 {
     if (distanceOut != NULL)
     {
@@ -570,7 +581,9 @@ static mtwnResult RunContextMeasureTransition(mtwnContext* context, const mtwnTr
         mtwnCountMisuse(context);
         return mtwn_errorInvalid;
     }
-    if (!mtwnValidEasing(&def->easing))
+    // The choices it reads are known whatever the target's kind.
+    if (!mtwnValidEasing(&def->easing) || !mtwnIsAngleMethod(def->angleMethod) ||
+        (uint32_t)def->rotationPath > mtwn_rotationLongest)
     {
         mtwnCountMisuse(context);
         return mtwn_errorInvalid;
@@ -594,20 +607,20 @@ static mtwnResult RunContextMeasureTransition(mtwnContext* context, const mtwnTr
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnContext_MeasureTransitionWork(mtwnContext* context,
+static MTWN_NOINLINE mtwnResult mtwnContext_MeasureTransitionWork(const mtwnContext* context,
                                                                   const mtwnTransitionDef* def,
                                                                   double* distanceOut)
 {
-    if (!mtwnEnter(context))
+    // Refused while the update's groups may be writing what it reads,
+    // before anything is written.
+    if (mtwnRefuseInGroups(context))
     {
         return mtwn_errorBusy;
     }
-    mtwnResult result = RunContextMeasureTransition(context, def, distanceOut);
-    mtwnLeave(context);
-    return result;
+    return RunContextMeasureTransition(context, def, distanceOut);
 }
 
-mtwnResult mtwnContext_MeasureTransition(mtwnContext* context, const mtwnTransitionDef* def,
+mtwnResult mtwnContext_MeasureTransition(const mtwnContext* context, const mtwnTransitionDef* def,
                                          double* distanceOut)
 {
     uint64_t env = mtwnFloatEnvEnter();

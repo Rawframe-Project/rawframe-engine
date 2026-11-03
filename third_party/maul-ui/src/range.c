@@ -70,7 +70,8 @@ static bool IsValid(const muiValueRange* range)
 {
     return isfinite(range->minimum) && isfinite(range->maximum) && isfinite(range->value) &&
            range->maximum >= range->minimum && isfinite(range->step) && range->step >= 0.0f &&
-           isfinite(range->page) && range->page >= 0.0f && range->axis <= mui_axisVertical;
+           isfinite(range->page) && range->page >= 0.0f &&
+           (uint32_t)range->axis <= mui_axisVertical;
 }
 
 muiValueRange muiDefaultValueRange(void)
@@ -260,7 +261,7 @@ static bool Change(muiContext* context, muiRangeEntry* entry, float value)
     }
     entry->range.value = value;
     muiNoteAccess(context, entry->node.index1);
-    const muiNotification record = {mui_notificationRangeChanged, entry->node, 0};
+    const muiNotification record = {.kind = mui_notificationRangeChanged, .node = entry->node};
     muiNotifyPost(&context->notifications, &record);
     return true;
 }

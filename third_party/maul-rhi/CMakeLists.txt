@@ -216,6 +216,7 @@ endif()
 if(MAUL_RHI_BUILD_TESTS)
     enable_testing()
     maul_add_test(base)
+    maul_add_test(types)
     maul_add_test(chain WHITEBOX)
     maul_add_test(layout WHITEBOX)
     maul_add_test(notify WHITEBOX)
@@ -268,15 +269,17 @@ if(MAUL_RHI_BUILD_TESTS)
             target_include_directories(test_${test} SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/directx)
             target_link_libraries(test_${test} PRIVATE d3d12 dxgi)
         endforeach()
+        # The checks whose queues wait for a fence the suite signals from
+        # the CPU, run apart without the debug layer's synchronized queue
+        # validation, which may hold such a queue for good.
+        add_test(NAME d3d12_queues_held COMMAND test_d3d12_queues held)
+        set_tests_properties(d3d12_queues_held PROPERTIES LABELS d3d12_queues)
         # A failed frame's drain that never returns is a hang: the suite
         # runs in about a second on CI. The limit stays well above the
         # suite's own 10 second wait for a frame, so a frame that never
         # finishes is reported by the suite, with what it waited on, before
         # ctest stops it.
-        set_tests_properties(d3d12_queues PROPERTIES TIMEOUT 30)
-        # A frame that never finished within 10 s, once, with no output:
-        # quarantined until the nightly passes it 14 nights in a row.
-        maul_quarantine(d3d12_queues)
+        set_tests_properties(d3d12_queues d3d12_queues_held PROPERTIES TIMEOUT 30)
         # GPU-based validation's false state errors (#7) reproduced without
         # library code: built with the tests so that it keeps compiling,
         # run by hand as docs/operations/debugging.md says.
@@ -349,6 +352,7 @@ if(MAUL_RHI_BUILD_TESTS)
         maul_add_test(acquire WHITEBOX)
         maul_add_test(loss WHITEBOX)
         maul_add_test(external WHITEBOX)
+        maul_add_test(driver_answers WHITEBOX)
         maul_add_test(outputs)
         maul_add_test(stored_bytes)
         maul_add_test(out_bytes)
@@ -515,7 +519,7 @@ if(MAUL_RHI_BUILD_TESTS)
     # check leaves them out, every other check runs them.
     foreach(test conformance conformance_worker conformance_external conformance_app
                  vulkan_external vulkan_frame vulkan_zero vulkan_cache metal_native metal_queues
-                 d3d12_native d3d12_queues external_build)
+                 d3d12_native d3d12_queues d3d12_queues_held external_build)
         if(TEST ${test})
             set_property(TEST ${test} APPEND PROPERTY LABELS integration)
         endif()

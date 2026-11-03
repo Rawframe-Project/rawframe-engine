@@ -1039,13 +1039,18 @@ void WindowHost::followTextInput(window::Windows& windows) {
     if (kCaret == textInput_) {
         return;
     }
-    const window::Rect kAt =
-        kCaret.has_value()
-            ? window::Rect{.x = (*kCaret)[0], .y = (*kCaret)[1], .width = (*kCaret)[2], .height = (*kCaret)[3]}
-            : window::Rect{};
     // A platform without text input refuses; its keys still edit, and the
-    // request is not repeated until the caret moves.
-    static_cast<void>(windows.requestTextInput(window_, kCaret.has_value(), kAt));
+    // requests are not repeated until the caret moves. Text input is asked
+    // for only as editing starts or stops, so moving the caret leaves the
+    // input method's composition alone.
+    if (kCaret.has_value()) {
+        static_cast<void>(windows.requestTextInputCaret(
+            window_,
+            window::Rect{.x = (*kCaret)[0], .y = (*kCaret)[1], .width = (*kCaret)[2], .height = (*kCaret)[3]}));
+    }
+    if (kCaret.has_value() != textInput_.has_value()) {
+        static_cast<void>(windows.requestTextInput(window_, kCaret.has_value()));
+    }
     textInput_ = kCaret;
 }
 

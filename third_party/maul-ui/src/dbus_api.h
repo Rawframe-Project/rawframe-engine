@@ -102,6 +102,7 @@ typedef struct muiDBusApi
     muiDBusBool (*openContainer)(muiDBusIter* iter, int type, const char* signature,
                                  muiDBusIter* sub);
     muiDBusBool (*closeContainer)(muiDBusIter* iter, muiDBusIter* sub);
+    void (*abandonContainer)(muiDBusIter* iter, muiDBusIter* sub);
     muiDBusBool (*iterInit)(DBusMessage* message, muiDBusIter* iter);
     int (*argType)(muiDBusIter* iter);
     void (*getBasic)(muiDBusIter* iter, void* value);

@@ -91,10 +91,11 @@ static Ink InkAt(const muiParagraph* paragraph, uint32_t at, uint32_t* firstOut,
     for (uint32_t i = 0; i < block->spanCount; i++)
     {
         const muiTextSpan* span = &spans[i];
-        uint32_t spanEnd = span->start + span->length;
-        if (at < span->start)
+        uint32_t spanStart = (uint32_t)span->start;
+        uint32_t spanEnd = (uint32_t)(span->start + span->length);
+        if (at < spanStart)
         {
-            end = span->start < end ? span->start : end;
+            end = spanStart < end ? spanStart : end;
             continue;
         }
         if (at >= spanEnd)
@@ -102,7 +103,7 @@ static Ink InkAt(const muiParagraph* paragraph, uint32_t at, uint32_t* firstOut,
             first = spanEnd > first ? spanEnd : first;
             continue;
         }
-        first = span->start > first ? span->start : first;
+        first = spanStart > first ? spanStart : first;
         end = spanEnd < end ? spanEnd : end;
         if ((span->mask & MUI_PROPERTY_BIT(mui_propertyTextColor)) != 0)
         {
@@ -352,12 +353,13 @@ static void PaintComposition(const muiLaidText* laid, uint32_t index, muiDrawSin
     uint32_t count = block->segmentCount != 0 ? block->segmentCount : 1;
     for (uint32_t k = 0; k < count; k++)
     {
-        uint32_t start = block->compositionStart + segments[k].start;
+        uint32_t start = block->compositionStart + (uint32_t)segments[k].start;
         uint32_t at = 0;
         float left = 0.0f;
         float right = 0.0f;
-        while (segments[k].style != mui_compositionPlain &&
-               muiNextStretch(&boxes, &at, start, start + segments[k].length, &left, &right))
+        while (
+            segments[k].style != mui_compositionPlain &&
+            muiNextStretch(&boxes, &at, start, start + (uint32_t)segments[k].length, &left, &right))
         {
             muiRect rect =
                 DecorationRect(&paragraph->chain.fonts[0]->metrics, paragraph->style.size,

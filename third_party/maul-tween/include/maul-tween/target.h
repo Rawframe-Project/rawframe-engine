@@ -87,23 +87,34 @@ extern "C"
     ///
     /// @param context   The context.
     /// @param target    The target.
-    /// @param valueOut  Receives the value, zero on failure.
+    /// @param valueOut  Receives the value, zero on failure but mtwn_errorBusy,
+    ///                  which leaves it.
     /// @return mtwn_success; mtwn_errorInvalid for a null argument;
-    ///         mtwn_errorStale for an id that names no live target.
+    ///         mtwn_errorStale for an id that names no live target;
+    ///         mtwn_errorBusy when called from the host's code
+    ///         while the update's clip players run on its task system, which
+    ///         may be writing what the call reads.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnTarget_GetValue(mtwnContext* context,
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnTarget_GetValue(const mtwnContext* context,
                                                            mtwnTargetId target, mtwnVec4* valueOut);
 
     /// Reads all of a target: kind, base value, current value and velocity.
+    /// The velocity may sample the easing writing the target, a host's too,
+    /// so unlike the other readers it marks the context busy as the calls
+    /// that change it do: the host's code it runs calling back in is
+    /// refused, and so is this call made from the host's code the context
+    /// runs, which could run that code again.
     ///
     /// @param context   The context.
     /// @param target    The target.
-    /// @param stateOut  Receives the state, zero on failure.
-    /// @return As mtwnTarget_GetValue.
+    /// @param stateOut  Receives the state, zero on failure but a call back in
+    ///                  (mtwn_errorBusy), which leaves it.
+    /// @return As mtwnTarget_GetValue; mtwn_errorBusy for any call back in from
+    ///         the host's code the context runs.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnTarget_GetState(mtwnContext* context,
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnTarget_GetState(const mtwnContext* context,
                                                            mtwnTargetId target,
                                                            mtwnTargetState* stateOut);
 
@@ -113,14 +124,16 @@ extern "C"
     /// @param targets    The ids; NULL only with a count of 0.
     /// @param count      How many.
     /// @param valuesOut  Receives count values, zero for an id that names
-    ///                   no live target; nothing written on the other
-    ///                   failures.
+    ///                   no live target. On the other failures, count zeros,
+    ///                   without a context too; mtwn_errorBusy leaves it.
     /// @return mtwn_success; mtwn_errorInvalid for a null argument;
     ///         mtwn_errorStale when any id names no live target, each such id
-    ///         counted as misuse, the others read.
+    ///         counted as misuse, the others read; mtwn_errorBusy when called from the host's code
+    ///         while the update's clip players run on its task system, which
+    ///         may be writing what the call reads.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnContext_ReadTargets(mtwnContext* context,
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnContext_ReadTargets(const mtwnContext* context,
                                                                const mtwnTargetId* targets,
                                                                uint32_t count, mtwnVec4* valuesOut);
 

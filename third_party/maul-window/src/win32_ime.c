@@ -17,9 +17,9 @@ static void Post(mwinWin32Window* window, const mwinEvent* event)
     mwinPost(window->platform->context, window->slot, event);
 }
 
-static void PostType(mwinWin32Window* window, mwinEventType type)
+static void PostType(mwinWin32Window* window, mwinEventKind type)
 {
-    mwinEvent event = {.type = type, .timeNs = mwinWin32Now()};
+    mwinEvent event = {.kind = type, .timeNs = mwinWin32Now()};
     Post(window, &event);
 }
 
@@ -30,7 +30,7 @@ static void EndComposition(mwinWin32Window* window)
     {
         return;
     }
-    mwinEvent end = {.type = mwin_eventImePreedit, .timeNs = mwinWin32Now()};
+    mwinEvent end = {.kind = mwin_eventImePreedit, .timeNs = mwinWin32Now()};
     end.data.preedit.caret = -1;
     Post(window, &end);
 }
@@ -154,7 +154,7 @@ static void PostComposition(mwinWin32Window* window, HIMC context)
                                                platform->context->limits.textBytesPerWindow);
     LONG caret = ImmGetCompositionStringW(context, GCS_CURSORPOS, nullptr, 0);
     mwinPreeditSegment segments[MWIN_MAX_PREEDIT_SEGMENTS];
-    mwinEvent event = {.type = mwin_eventImePreedit, .timeNs = mwinWin32Now()};
+    mwinEvent event = {.kind = mwin_eventImePreedit, .timeNs = mwinWin32Now()};
     mwinPreeditEvent* preedit = &event.data.preedit;
     preedit->text = platform->imeBytes;
     preedit->length = length;
@@ -173,7 +173,7 @@ static void OnComposition(mwinWin32Window* window, LPARAM changes)
     uint32_t length = 0;
     if ((changes & GCS_RESULTSTR) != 0 && ReadString(window, context, GCS_RESULTSTR, &length) != 0)
     {
-        mwinEvent event = {.type = mwin_eventTextInput, .timeNs = mwinWin32Now()};
+        mwinEvent event = {.kind = mwin_eventTextInput, .timeNs = mwinWin32Now()};
         event.data.text = (mwinTextEvent){window->platform->imeBytes, length};
         Post(window, &event);
     }
@@ -238,9 +238,8 @@ bool mwinWin32HandleIme(mwinWin32Window* window, UINT message, WPARAM wParam, LP
     }
 }
 
-mwinOutcome mwinWin32SetTextInput(mwinWin32Window* window, bool enabled, mwinRect caret)
+mwinOutcome mwinWin32SetTextInput(mwinWin32Window* window, bool enabled)
 {
-    window->caret = caret;
     if (enabled)
     {
         (void)ImmAssociateContextEx(window->hwnd, nullptr, IACE_DEFAULT);
@@ -255,6 +254,14 @@ mwinOutcome mwinWin32SetTextInput(mwinWin32Window* window, bool enabled, mwinRec
     }
     (void)ImmAssociateContextEx(window->hwnd, nullptr, 0);
     EndComposition(window);
+    return mwin_outcomeDone;
+}
+
+mwinOutcome mwinWin32SetTextCaret(mwinWin32Window* window, mwinRect caret)
+{
+    // A window that takes no text has no input context to place.
+    window->caret = caret;
+    Place(window);
     return mwin_outcomeDone;
 }
 

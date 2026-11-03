@@ -44,7 +44,7 @@ extern "C"
     } mwinGamepadId;
 
     // The controls of a mapped gamepad, by where they are.
-    typedef uint8_t mwinGamepadButton;
+    typedef int32_t mwinGamepadButton;
 
     enum
     {
@@ -68,7 +68,7 @@ extern "C"
 
 #define MWIN_GAMEPAD_BUTTONS 15
 
-    typedef uint8_t mwinGamepadAxis;
+    typedef int32_t mwinGamepadAxis;
 
     enum
     {
@@ -83,7 +83,7 @@ extern "C"
 #define MWIN_GAMEPAD_AXES 6
 
     // What a gamepad can do beyond its controls.
-    typedef uint8_t mwinGamepadCapabilities;
+    typedef uint32_t mwinGamepadCapabilities;
 
     enum
     {
@@ -92,7 +92,7 @@ extern "C"
         // Motors in the triggers (mwinGamepad_SetTriggerRumble).
         mwin_padTriggerRumble = 2,
         // Motion sensors (mwinGamepad_EnableMotion, mwinGamepad_IsMotionEnabled,
-        // mwinGamepad_GetMotion).
+        // mwinGamepad_TakeMotion).
         mwin_padMotion = 4,
     };
 
@@ -108,19 +108,22 @@ extern "C"
         uint16_t product;
         // Its controls come mapped; otherwise raw, as many as these.
         bool mapped;
-        uint8_t rawButtons;
-        uint8_t rawAxes;
+        uint8_t rawButtonCount;
+        uint8_t rawAxisCount;
         mwinGamepadCapabilities capabilities;
         // The battery's charge in percent, -1 where unknown or wired.
         int8_t battery;
     } mwinGamepadInfo;
 
+    // The buttons of a gamepad held: bit b for button b, an
+    // mwinGamepadButton of a mapped gamepad, the raw button's number of a
+    // raw one.
+    typedef uint32_t mwinGamepadButtons;
+
     // A gamepad's controls as the platform last reported them.
     typedef struct mwinGamepadState
     {
-        // Bit b set while button b is held: mwinGamepadButton of a mapped
-        // gamepad, the raw button's number of a raw one.
-        uint32_t buttons;
+        mwinGamepadButtons buttons;
         // mwinGamepadAxis of a mapped gamepad (the rest 0), the raw axes of
         // a raw one.
         float axes[MWIN_GAMEPAD_RAW_AXES];
@@ -136,7 +139,7 @@ extern "C"
         // The latest rotation rate in radians per second about each axis,
         // counter-clockwise positive.
         float rotationRate[3];
-        // The angle turned about each axis since the last read, in
+        // The angle turned about each axis since it was last taken, in
         // radians: every sample's rate over its time, summed.
         float rotation[3];
         // When the latest sample was taken, on the records' clock; 0
@@ -149,7 +152,7 @@ extern "C"
     {
         mwinGamepadId gamepad;
         // An mwinGamepadButton, or the raw button's number.
-        uint8_t button;
+        mwinGamepadButton button;
         bool raw;
     } mwinGamepadButtonEvent;
 
@@ -158,7 +161,7 @@ extern "C"
     {
         mwinGamepadId gamepad;
         // An mwinGamepadAxis, or the raw axis's number.
-        uint8_t axis;
+        mwinGamepadAxis axis;
         bool raw;
         float value;
     } mwinGamepadAxisEvent;
@@ -167,7 +170,9 @@ extern "C"
     ///
     /// @param context      The context.
     /// @param gamepadsOut  Receives up to capacity ids. May be NULL when
-    ///                     capacity is 0. Zeroed over capacity on failure.
+    ///                     capacity is 0. Zeroed over capacity on failure. On
+    ///                     success, the ids past those it reports are left as
+    ///                     they were.
     /// @param capacity     The ids gamepadsOut holds.
     /// @param countOut     Receives the number connected, which may exceed
     ///                     capacity. 0 on failure.
@@ -281,22 +286,23 @@ extern "C"
                                                                    mwinGamepadId gamepad,
                                                                    bool* enabledOut);
 
-    /// Reads a gamepad's motion and starts the angle turned anew: the
+    /// Takes a gamepad's motion, starting the angle turned anew: the
     /// latest acceleration and rotation rate, and the angle turned since
-    /// the last read. All zero while its sensors are off or before their
-    /// first sample.
+    /// it was last taken. All zero while its sensors are off or before
+    /// their first sample.
     ///
     /// @param context    The context.
     /// @param gamepad    The gamepad.
     /// @param motionOut  Receives its motion. Zeroed on failure.
+    ///                   `mwin_errorBusy` leaves it as it was.
     /// @return `mwin_success`; `mwin_errorUnsupported` for a gamepad
     ///         without mwin_padMotion; `mwin_errorStale` for a gamepad no
     ///         longer connected; `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_GetMotion(mwinContext* context,
-                                                             mwinGamepadId gamepad,
-                                                             mwinGamepadMotion* motionOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_TakeMotion(mwinContext* context,
+                                                              mwinGamepadId gamepad,
+                                                              mwinGamepadMotion* motionOut);
 
 #ifdef __cplusplus
 }

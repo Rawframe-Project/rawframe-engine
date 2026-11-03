@@ -38,10 +38,10 @@ static mwinPixelSize PixelsOf(const mwinWaylandWindow* window)
                            (uint32_t)lroundf(window->size.height * scale)};
 }
 
-static void PostType(mwinWaylandWindow* window, mwinEventType type)
+static void PostType(mwinWaylandWindow* window, mwinEventKind type)
 {
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = mwinMonotonicNow();
     mwinPost(window->platform->context, window->slot, &event);
 }
@@ -71,10 +71,10 @@ static void PostSize(mwinWaylandWindow* window)
 {
     mwinEvent event = {0};
     event.timeNs = mwinMonotonicNow();
-    event.type = mwin_eventResized;
+    event.kind = mwin_eventResized;
     event.data.size = window->size;
     mwinPost(window->platform->context, window->slot, &event);
-    event.type = mwin_eventPixelSizeChanged;
+    event.kind = mwin_eventPixelSizeChanged;
     event.data.pixelSize = PixelsOf(window);
     mwinPost(window->platform->context, window->slot, &event);
 }
@@ -82,7 +82,7 @@ static void PostSize(mwinWaylandWindow* window)
 static void PostScale(mwinWaylandWindow* window)
 {
     mwinEvent event = {0};
-    event.type = mwin_eventScaleChanged;
+    event.kind = mwin_eventScaleChanged;
     event.timeNs = mwinMonotonicNow();
     event.data.scale = (mwinScaleChange){ScaleOf(window), window->size};
     mwinPost(window->platform->context, window->slot, &event);
@@ -91,7 +91,7 @@ static void PostScale(mwinWaylandWindow* window)
 static void PostMode(mwinWaylandWindow* window, mwinWindowMode mode)
 {
     mwinEvent event = {0};
-    event.type = mwin_eventModeChanged;
+    event.kind = mwin_eventModeChanged;
     event.timeNs = mwinMonotonicNow();
     event.data.mode = mode;
     mwinPost(window->platform->context, window->slot, &event);
@@ -123,7 +123,7 @@ static void OnEnter(void* data, struct wl_surface* surface, struct wl_output* ou
     if (monitor >= 0 && window->configured)
     {
         mwinEvent event = {0};
-        event.type = mwin_eventDisplayChanged;
+        event.kind = mwin_eventDisplayChanged;
         event.timeNs = mwinMonotonicNow();
         event.data.monitor = mwinMonitorIdOf(context, (uint32_t)monitor);
         mwinPost(context, window->slot, &event);
@@ -662,9 +662,9 @@ static int CarryOut(mwinWaylandWindow* window, mwinWindow* core, uint32_t index)
     case mwin_requestCursorImage:
         return mwinWaylandSetCursorImage(window->platform, window->slot, request->value.cursor);
     case mwin_requestTextInput:
-        return mwinWaylandSetTextInput(window->platform, window->slot,
-                                       request->value.textInput.enabled,
-                                       request->value.textInput.caret);
+        return mwinWaylandSetTextInput(window->platform, window->slot, request->value.textInput);
+    case mwin_requestTextInputCaret:
+        return mwinWaylandSetTextCaret(window->platform, window->slot, request->value.caret);
     case mwin_requestClipboardWrite:
     case mwin_requestClipboardWriteData:
     case mwin_requestPrimaryWrite:

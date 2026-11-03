@@ -265,8 +265,8 @@ uint32_t mrhiVulkanQueueFamily(const mrhiVulkan* vulkan, VkPhysicalDevice device
 
 // The sample counts an optimal 2D image of the format has for a usage,
 // as the contract's mask: 1, 2 and 4.
-static uint8_t SampleCounts(const mrhiVulkan* vulkan, VkPhysicalDevice device, VkFormat format,
-                            VkImageUsageFlags usage)
+static mrhiSampleCounts SampleCounts(const mrhiVulkan* vulkan, VkPhysicalDevice device,
+                                     VkFormat format, VkImageUsageFlags usage)
 {
     VkImageFormatProperties properties = {0};
     if (vulkan->vkGetPhysicalDeviceImageFormatProperties(device, format, VK_IMAGE_TYPE_2D,
@@ -275,8 +275,9 @@ static uint8_t SampleCounts(const mrhiVulkan* vulkan, VkPhysicalDevice device, V
     {
         return 0;
     }
-    return (uint8_t)(properties.sampleCounts &
-                     (VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT));
+    VkSampleCountFlags named =
+        VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT;
+    return (mrhiSampleCounts)(properties.sampleCounts & named);
 }
 
 void mrhiGetVulkanFormatCaps(const mrhiVulkan* vulkan, VkPhysicalDevice device, mrhiFormat format,

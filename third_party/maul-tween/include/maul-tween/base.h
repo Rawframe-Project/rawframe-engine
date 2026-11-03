@@ -23,7 +23,7 @@ extern "C"
 #define MTWN_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MTWN_VERSION_MINOR 12
+#define MTWN_VERSION_MINOR 16
 // x-release-please-end
 // x-release-please-start-patch
 #define MTWN_VERSION_PATCH 0
@@ -90,8 +90,8 @@ extern "C"
         // sized, a caller's buffer, or the allocator. More room would
         // succeed.
         mtwn_errorCapacity = -2,
-        // An id names an object that has been destroyed since it was
-        // handed out.
+        // An id names no live object: one destroyed since it was handed
+        // out, one never handed out, or the null id.
         mtwn_errorStale = -3,
         // The call is not allowed in the object's current state, which only
         // another call changes: a clip not sealed or already sealed, a
@@ -140,7 +140,7 @@ extern "C"
 
     // What a value is, a target's or a track's: the channels it uses and how
     // it is interpolated and composed.
-    typedef uint8_t mtwnValueKind;
+    typedef int32_t mtwnValueKind;
     enum
     {
         // One number, in x.

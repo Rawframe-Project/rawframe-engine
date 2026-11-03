@@ -25,7 +25,7 @@ extern "C"
 
     // A physical key: its USB HID keyboard usage, named as the W3C
     // KeyboardEvent.code values name it.
-    typedef uint16_t mwinKeyCode;
+    typedef int32_t mwinKeyCode;
 
     enum
     {
@@ -171,7 +171,7 @@ extern "C"
 #define MWIN_KEY_NAMED 0x40000000u
 
     // The modifier keys held, and the lock keys on.
-    typedef uint16_t mwinModifiers;
+    typedef uint32_t mwinModifiers;
 
     enum
     {
@@ -186,7 +186,7 @@ extern "C"
 
     // Whether a chord, a key with modifiers, reaches the program
     // (mwinContext_GetKeyReach).
-    typedef uint8_t mwinKeyReach;
+    typedef int32_t mwinKeyReach;
 
     enum
     {
@@ -204,7 +204,7 @@ extern "C"
     };
 
     // A mouse button.
-    typedef uint8_t mwinMouseButton;
+    typedef int32_t mwinMouseButton;
 
     enum
     {
@@ -215,8 +215,20 @@ extern "C"
         mwin_buttonForward = 5,
     };
 
+    // The mouse buttons held: bit b - 1 for button b.
+    typedef uint32_t mwinMouseButtons;
+
+    enum
+    {
+        mwin_mouseLeft = 1,
+        mwin_mouseRight = 2,
+        mwin_mouseMiddle = 4,
+        mwin_mouseBack = 8,
+        mwin_mouseForward = 16,
+    };
+
     // How the cursor behaves over a window.
-    typedef uint8_t mwinCursorMode;
+    typedef int32_t mwinCursorMode;
 
     enum
     {
@@ -230,7 +242,7 @@ extern "C"
     };
 
     // The system's cursor images.
-    typedef uint8_t mwinCursorShape;
+    typedef int32_t mwinCursorShape;
 
     enum
     {
@@ -275,7 +287,7 @@ extern "C"
     } mwinCursorDef;
 
     // What a text field takes, which picks an on-screen keyboard's layout.
-    typedef uint8_t mwinInputPurpose;
+    typedef int32_t mwinInputPurpose;
 
     enum
     {
@@ -313,14 +325,30 @@ extern "C"
 
     /// Asks a window to accept text, or to stop: while it does, input
     /// methods compose into it and mwin_eventImePreedit reports their
-    /// compositions, and the caret rectangle tells the platform where to
-    /// place the candidate window. Ask again to move the caret. It asks the
-    /// platform for a state of the window, which mwinWindowState's
-    /// textInput reports, and switches no part of the library.
+    /// compositions. It asks the platform for a state of the window, which
+    /// mwinWindowState's textInput reports, and switches no part of the
+    /// library.
     ///
     /// @param context     The context.
     /// @param window      The window.
     /// @param enabled     true to accept text, false to stop.
+    /// @param requestOut  Receives the request's id. May be NULL. The null
+    ///                    request on failure.
+    /// @return As mwinWindow_RequestTitle.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinWindow_RequestTextInput(mwinContext* context,
+                                                                   mwinWindowId window,
+                                                                   bool enabled,
+                                                                   mwinRequestId* requestOut);
+
+    /// Tells the platform where a window's caret is, which it places the
+    /// input method's candidate window by. The window keeps the caret
+    /// while text input is turned off and on again; ask again when the
+    /// caret moves. Empty at the window's start.
+    ///
+    /// @param context     The context.
+    /// @param window      The window.
     /// @param caret       Where the caret is, in the window's logical units.
     /// @param requestOut  Receives the request's id. May be NULL. The null
     ///                    request on failure.
@@ -328,10 +356,10 @@ extern "C"
     ///         that is not finite or has a negative size.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinWindow_RequestTextInput(mwinContext* context,
-                                                                   mwinWindowId window,
-                                                                   bool enabled, mwinRect caret,
-                                                                   mwinRequestId* requestOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinWindow_RequestTextInputCaret(mwinContext* context,
+                                                                        mwinWindowId window,
+                                                                        mwinRect caret,
+                                                                        mwinRequestId* requestOut);
 
     /// Asks for a cursor mode over a window.
     ///
@@ -428,8 +456,9 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param code     A physical key.
-    /// @return The key; 0 for a NULL context, an unknown code or a key
-    ///         the layout gives no meaning.
+    /// @return The key; 0 for a NULL context, an unknown code, a key the
+    ///         layout gives no meaning, or a call from the free hook once
+    ///         quit has returned.
     /// @par Thread safety
     /// Main thread only.
     MWIN_API mwinKey mwinContext_MapKeyCode(const mwinContext* context, mwinKeyCode code);
@@ -438,16 +467,18 @@ extern "C"
     /// gives it, for showing which layout key labels come from.
     ///
     /// @param context    The context.
-    /// @param bufferOut  Receives the name in UTF-8, not NUL-terminated.
-    ///                   May be NULL when capacity is 0. Zeroed over
-    ///                   capacity on failure, so a buffer too short holds
-    ///                   none of it.
+    /// @param bufferOut  Receives the name in UTF-8, not NUL-terminated. May
+    ///                   be NULL when capacity is 0. Zeroed over capacity on
+    ///                   failure, so a buffer too short holds none of it. On
+    ///                   success, the bytes past those it reports are left as
+    ///                   they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives the name's length in bytes. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any
     ///                   other failure.
     /// @return `mwin_success`; `mwin_errorCapacity` when the name does not
-    ///         fit; `mwin_errorInvalid` for a NULL argument.
+    ///         fit; `mwin_errorInvalid` for a NULL argument;
+    ///         `mwin_errorState` from the free hook once quit has returned.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinContext_GetKeyboardLayout(const mwinContext* context,
@@ -469,7 +500,8 @@ extern "C"
     ///                   ignored.
     /// @param reachOut   Receives the answer. Zeroed on failure.
     /// @return `mwin_success`; `mwin_errorInvalid` for a NULL argument or
-    ///         a code that is not a key.
+    ///         a code that is not a key; `mwin_errorState` from the free
+    ///         hook once quit has returned.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinContext_GetKeyReach(const mwinContext* context,

@@ -22,8 +22,12 @@
 //   or completed. The part of the window it covers is posted when its
 //   frame changes.
 
+#include "allocator.h"
+#include "apple_text.h"
 #include "ios.h"
 #include "key_prints.h"
+
+#include "maul-unicode/encoding.h"
 
 #include <string.h>
 
@@ -58,35 +62,37 @@ static void Hold(mwinIOSPlatform* platform, mwinKeyCode code, bool down)
 static mwinKey CharacterOf(NSString* characters)
 {
     NSString* lower = characters.lowercaseString;
-    if (lower.length == 0 || lower.length > 2)
+    NSUInteger count = lower.length;
+    if (count == 0 || count > 2)
     {
         return 0;
     }
-    uint32_t unit = [lower characterAtIndex:0];
-    if (lower.length == 2)
+    uint16_t units[2];
+    [lower getCharacters:units range:NSMakeRange(0, count)];
+    uint32_t character = 0;
+    size_t size = 0;
+    if (muniDecodeUtf16(units, count, &character, &size) != muni_success || size != count)
     {
-        uint32_t low = [lower characterAtIndex:1];
-        bool pair = unit >= 0xD800 && unit <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF;
-        return pair ? 0x10000u + ((unit - 0xD800u) << 10) + (low - 0xDC00u) : 0;
+        return 0;
     }
-    bool printing = unit >= 0x20 && unit != 0x7F && (unit < 0xD800 || unit > 0xDFFF) &&
-                    (unit < 0xF700 || unit > 0xF8FF);
-    return printing ? unit : 0;
+    bool printing =
+        character >= 0x20 && character != 0x7F && (character < 0xF700 || character > 0xF8FF);
+    return printing ? character : 0;
 }
 
 mwinKey mwinIOSMapKeyCode(const mwinIOSPlatform* platform, mwinKeyCode code)
 {
-    if (code >= MWIN_IOS_KEY_CODES)
+    if ((uint32_t)code >= MWIN_IOS_KEY_CODES)
     {
         return 0;
     }
     return mwinKeyPrints(code) ? platform->meanings[code] : MWIN_KEY_NAMED | code;
 }
 
-static void PostKey(mwinIOSPlatform* platform, uint32_t slot, mwinEventType type, mwinKeyCode code,
+static void PostKey(mwinIOSPlatform* platform, uint32_t slot, mwinEventKind type, mwinKeyCode code,
                     mwinKey key, mwinModifiers modifiers)
 {
-    mwinEvent event = {.type = type};
+    mwinEvent event = {.kind = type};
     event.data.key = (mwinKeyEvent){code, modifiers, key, false};
     Post(platform, slot, &event);
 }
@@ -131,15 +137,28 @@ static void Tap(mwinIOSPlatform* platform, uint32_t slot, mwinKeyCode code)
     PostKey(platform, slot, mwin_eventKeyUp, code, MWIN_KEY_NAMED | code, 0);
 }
 
+// Posts the text kept, a lone surrogate in it as U+FFFD; a reset in its
+// place when there is no memory for it.
 static void PostText(mwinIOSPlatform* platform, uint32_t slot, NSMutableString* kept)
 {
-    const char* bytes = kept.UTF8String;
-    size_t length = bytes != nullptr ? strlen(bytes) : 0;
-    if (length > 0 && length <= UINT32_MAX)
+    mwinContext* context = platform->context;
+    size_t length = 0;
+    size_t size = 0;
+    char* bytes = mwinAppleUtf8Of(context, kept, &length, &size);
+    if (bytes != nullptr && length <= UINT32_MAX)
     {
-        mwinEvent event = {.type = mwin_eventTextInput};
+        mwinEvent event = {.kind = mwin_eventTextInput};
         event.data.text = (mwinTextEvent){bytes, (uint32_t)length};
         Post(platform, slot, &event);
+    }
+    else if (kept.length > 0)
+    {
+        mwinEvent reset = {.kind = mwin_eventInputStateReset};
+        Post(platform, slot, &reset);
+    }
+    if (bytes != nullptr)
+    {
+        mwinRelease(&context->allocator, bytes, size, 1);
     }
     [kept setString:@""];
 }
@@ -153,7 +172,11 @@ void mwinIOSInsertText(mwinIOSPlatform* platform, uint32_t slot, NSString* text)
         if (unit == '\n' || unit == '\r' || unit == '\t')
         {
             PostText(platform, slot, kept);
-            Tap(platform, slot, unit == '\t' ? codeTab : codeEnter);
+            // A carriage return and line feed is one Enter.
+            if (unit != '\n' || i == 0 || [text characterAtIndex:i - 1] != '\r')
+            {
+                Tap(platform, slot, unit == '\t' ? codeTab : codeEnter);
+            }
         }
         else if (unit >= 0x20 && unit != 0x7F && (unit < 0xF700 || unit > 0xF8FF))
         {
@@ -184,8 +207,7 @@ UIKeyboardType mwinIOSKeyboardTypeOf(mwinInputPurpose purpose)
     }
 }
 
-mwinOutcome mwinIOSSetTextInput(mwinIOSPlatform* platform, uint32_t slot, bool enabled,
-                                mwinRect caret)
+mwinOutcome mwinIOSSetTextInput(mwinIOSPlatform* platform, uint32_t slot, bool enabled)
 {
     mwinIOSWindow* window = &platform->windows[slot];
     if (!enabled && window->textInput)
@@ -194,7 +216,12 @@ mwinOutcome mwinIOSSetTextInput(mwinIOSPlatform* platform, uint32_t slot, bool e
         mwinIOSEndComposition(platform, slot, false);
     }
     window->textInput = enabled;
-    window->caret = caret;
+    return mwin_outcomeDone;
+}
+
+mwinOutcome mwinIOSSetTextCaret(mwinIOSPlatform* platform, uint32_t slot, mwinRect caret)
+{
+    platform->windows[slot].caret = caret;
     return mwin_outcomeDone;
 }
 
@@ -238,7 +265,7 @@ static void KeyboardMoved(mwinIOSPlatform* platform, NSNotification* note)
             continue;
         }
         window->covered = rect;
-        mwinEvent event = {.type = mwin_eventVirtualKeyboardChanged};
+        mwinEvent event = {.kind = mwin_eventVirtualKeyboardChanged};
         event.data.rect = rect;
         Post(platform, slot, &event);
     }
@@ -286,7 +313,7 @@ void mwinIOSWatchKeyboard(mwinIOSPlatform* platform)
                            (void)note;
                            // What the keys type is learned again.
                            memset(platform->meanings, 0, sizeof(platform->meanings));
-                           mwinEvent event = {.type = mwin_eventKeyboardLayoutChanged,
+                           mwinEvent event = {.kind = mwin_eventKeyboardLayoutChanged,
                                               .timeNs = mwinIOSNow()};
                            mwinPostGlobal(platform->context, &event);
                          }] retain];

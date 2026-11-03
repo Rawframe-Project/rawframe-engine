@@ -37,7 +37,7 @@ extern "C"
     };
 
     // What a binding slot holds.
-    typedef uint8_t mrhiBindingKind;
+    typedef int32_t mrhiBindingKind;
 
     enum
     {
@@ -79,7 +79,7 @@ extern "C"
 #define MRHI_MAX_CONTAINER_ROOT_BLOCK_BYTES 256
 
     // The samplers a sampler slot takes.
-    typedef uint8_t mrhiSamplerBinding;
+    typedef int32_t mrhiSamplerBinding;
 
     enum
     {
@@ -94,7 +94,7 @@ extern "C"
     };
 
     // What a sampled texture slot returns.
-    typedef uint8_t mrhiSampleType;
+    typedef int32_t mrhiSampleType;
 
     enum
     {
@@ -113,7 +113,7 @@ extern "C"
     };
 
     // How a storage texture slot is used.
-    typedef uint8_t mrhiStorageAccess;
+    typedef int32_t mrhiStorageAccess;
 
     enum
     {
@@ -129,7 +129,7 @@ extern "C"
 
     // The scalar type of a shader interface variable: a vertex input, a color
     // output or an inter-stage variable.
-    typedef uint8_t mrhiScalarType;
+    typedef int32_t mrhiScalarType;
 
     enum
     {
@@ -147,7 +147,7 @@ extern "C"
     };
 
     // How an inter-stage variable is interpolated.
-    typedef uint8_t mrhiInterpolation;
+    typedef int32_t mrhiInterpolation;
 
     enum
     {
@@ -163,7 +163,7 @@ extern "C"
 
     // Where an interpolated inter-stage variable is sampled, or which vertex a
     // flat one takes.
-    typedef uint8_t mrhiSampling;
+    typedef int32_t mrhiSampling;
 
     enum
     {
@@ -229,7 +229,7 @@ extern "C"
     };
 
     // The type of a specialization constant.
-    typedef uint8_t mrhiConstantType;
+    typedef int32_t mrhiConstantType;
 
     enum
     {

@@ -371,8 +371,8 @@ static void Select(const muiAriaAdapter* adapter, uint32_t slot, const muiAccess
     muiAccessText text = muiAccessValueOf(node);
     if (marks->selected && marks->anchor <= text.length && marks->focus <= text.length)
     {
-        uint32_t anchor = muiAccessUtf16Before(text.bytes, marks->anchor);
-        uint32_t focus = muiAccessUtf16Before(text.bytes, marks->focus);
+        uint32_t anchor = muiAccessUtf16Before(text.bytes, (uint32_t)marks->anchor);
+        uint32_t focus = muiAccessUtf16Before(text.bytes, (uint32_t)marks->focus);
         muiAriaPageSelect(adapter->page, slot, anchor < focus ? anchor : focus,
                           anchor < focus ? focus : anchor, focus < anchor);
     }

@@ -6,13 +6,15 @@
 // table when the record flags one. Two kinds of rule need context and
 // live here: Final_Sigma, the Turkic rules for I, İ and the dot above
 // (SpecialCasing.txt, tr and az), and the Lithuanian rules that keep the
-// dot of an i under other accents (lt). Titlecasing walks the text's
-// word boundaries (UAX #29).
+// dot of an i under other accents (lt), Greek uppercasing (el) and the
+// Armenian ligature (hy). Titlecasing walks the text's word boundaries
+// (UAX #29).
 
 #include "maul-unicode/case.h"
 
 #include "case_map.h"
 #include "encoding.h"
+#include "overlap.h"
 #include "tables.h"
 #include "writer.h"
 
@@ -34,6 +36,17 @@
 #define CAPITAL_SIGMA     0x03A3u
 #define SMALL_SIGMA       0x03C3u
 #define SMALL_FINAL_SIGMA 0x03C2u
+#define CAPITAL_ETA       0x0397u
+#define CAPITAL_ETA_TONOS 0x0389u
+#define CAPITAL_IOTA      0x0399u
+#define CAPITAL_UPSILON   0x03A5u
+#define IOTA_DIALYTIKA    0x03AAu
+#define UPSILON_DIALYTIKA 0x03ABu
+#define DIALYTIKA         0x0308u
+#define ECH_YIWN          0x0587u
+#define CAPITAL_ECH       0x0535u
+#define CAPITAL_VEW       0x054Eu
+#define SMALL_VEW         0x057Eu
 
 static uint32_t Simple(uint32_t codePoint, int kind)
 {
@@ -83,9 +96,13 @@ typedef struct Converter
     size_t length;
     bool turkic;
     bool lithuanian;
+    bool greek;
+    bool armenian;
     bool casedBefore; // a cased letter, then only case-ignorables (Final_Sigma)
     bool afterI;      // an I, then nothing of class 0 or 230 (After_I)
     bool afterSoft;   // a Soft_Dotted letter, then the same (After_Soft_Dotted)
+    // The accent the Greek vowel before dropped, a GreekAccent value.
+    uint8_t lostAccent;
     muniWriter writer;
 } Converter;
 
@@ -203,6 +220,139 @@ static bool PutLithuanianLower(Converter* converter, uint32_t codePoint, size_t 
     return false;
 }
 
+// The accent a Greek vowel dropped, which the next iota or upsilon
+// answers with a dialytika of the same form.
+enum
+{
+    GreekAccentNone = 0,
+    GreekAccentPrecomposed = 1,
+    GreekAccentCombining = 2,
+};
+
+// A combining dialytika that follows a Greek letter, as against the one
+// its decomposition holds, and another mark taken with the letter and
+// dropped.
+#define GREEK_COMBINING_DIALYTIKA 0x10000u
+#define GREEK_OTHER_MARK          0x20000u
+
+// The Greek letter entry of a code point, or 0 for none.
+static uint32_t GreekLetter(uint32_t codePoint)
+{
+    if (codePoint - 0x370u < 0x90u)
+    {
+        return muniGreekLetterValues[muniGreekLetters[codePoint - 0x370u]];
+    }
+    if (codePoint - 0x1F00u < 0x100u)
+    {
+        return muniGreekLetterValues[muniGreekLetters[0x90u + codePoint - 0x1F00u]];
+    }
+    return codePoint == 0x2126u ? muniGreekLetterValues[muniGreekLetters[0x190]] : 0;
+}
+
+// What a combining mark after a Greek letter adds to its entry, or 0 for
+// a code point Greek uppercasing does not take with the letter. Marks
+// that look like a perispomeni count as one.
+static uint32_t GreekMark(uint32_t codePoint)
+{
+    switch (codePoint)
+    {
+    case 0x0300: // varia
+    case 0x0301: // tonos, oxia
+    case 0x0302: // circumflex
+    case 0x0303: // tilde
+    case 0x0311: // inverted breve
+    case 0x0342: // perispomeni
+        return muni_greekAccent;
+    case 0x0308: // dialytika
+        return GREEK_COMBINING_DIALYTIKA;
+    case 0x0344: // dialytika tonos
+        return GREEK_COMBINING_DIALYTIKA | muni_greekAccent;
+    case 0x0345: // ypogegrammeni
+        return muni_greekYpogegrammeni;
+    case 0x0304: // macron
+    case 0x0306: // vrachy
+    case 0x0313: // psili
+    case 0x0314: // dasia
+    case 0x0343: // koronis
+        return GREEK_OTHER_MARK;
+    default:
+        return 0;
+    }
+}
+
+// Takes the combining marks after a Greek letter, up to end, into its
+// entry and counts its iota subscripts; returns the offset past them.
+static size_t TakeGreekMarks(const Converter* converter, uint32_t* entry, size_t* subscripts,
+                             size_t next, size_t end)
+{
+    while (next < end)
+    {
+        size_t size;
+        uint32_t mark = GreekMark(Decode(converter, next, &size));
+        if (mark == 0)
+        {
+            break;
+        }
+        *entry |= mark;
+        *subscripts += (mark & muni_greekYpogegrammeni) != 0 ? 1 : 0;
+        next += size;
+    }
+    return next;
+}
+
+// Uppercases a Greek letter with its entry and takes the combining marks
+// after it, up to end, returning the offset past them. This follows ICU's
+// Greek uppercasing, which CLDR's el-Upper describes: accents and
+// breathings go, a dialytika stays, an iota subscript becomes a capital
+// iota, and the eta that means "or" keeps its accent.
+static size_t PutGreekUpper(Converter* converter, uint32_t entry, size_t next, size_t end)
+{
+    uint32_t upper = entry & muni_greekUpper;
+    if ((entry & muni_greekVowel) != 0 && converter->lostAccent != GreekAccentNone &&
+        (upper == CAPITAL_IOTA || upper == CAPITAL_UPSILON))
+    {
+        entry |= converter->lostAccent == GreekAccentPrecomposed ? muni_greekDialytika
+                                                                 : GREEK_COMBINING_DIALYTIKA;
+    }
+    bool precomposedAccent = (entry & muni_greekAccent) != 0;
+    size_t subscripts = (entry & muni_greekYpogegrammeni) != 0 ? 1 : 0;
+    next = TakeGreekMarks(converter, &entry, &subscripts, next, end);
+    uint32_t vowelAccent = muni_greekVowel | muni_greekAccent;
+    converter->lostAccent = (entry & (vowelAccent | muni_greekDialytika)) != vowelAccent
+                                ? GreekAccentNone
+                            : precomposedAccent ? GreekAccentPrecomposed
+                                                : GreekAccentCombining;
+    uint32_t dialytika = muni_greekDialytika | GREEK_COMBINING_DIALYTIKA;
+    bool tonos = false;
+    if (upper == CAPITAL_ETA && (entry & muni_greekAccent) != 0 && subscripts == 0 &&
+        !converter->casedBefore && EndsWord(converter, next))
+    {
+        // The disjunctive eta, alone between words, keeps its tonos.
+        upper = precomposedAccent ? CAPITAL_ETA_TONOS : upper;
+        tonos = !precomposedAccent;
+    }
+    else if ((entry & muni_greekDialytika) != 0 &&
+             (upper == CAPITAL_IOTA || upper == CAPITAL_UPSILON))
+    {
+        upper = upper == CAPITAL_IOTA ? IOTA_DIALYTIKA : UPSILON_DIALYTIKA;
+        entry &= ~dialytika;
+    }
+    muniWriterPut(&converter->writer, upper);
+    if ((entry & dialytika) != 0)
+    {
+        muniWriterPut(&converter->writer, DIALYTIKA);
+    }
+    if (tonos)
+    {
+        muniWriterPut(&converter->writer, COMBINING_ACUTE);
+    }
+    for (; subscripts > 0; subscripts--)
+    {
+        muniWriterPut(&converter->writer, CAPITAL_IOTA);
+    }
+    return next;
+}
+
 // Lowercases one code point at offset, whose encoding ends at next.
 static void PutLower(Converter* converter, uint32_t codePoint, size_t next)
 {
@@ -248,6 +398,13 @@ static void PutUpper(Converter* converter, uint32_t codePoint, int kind)
     if (converter->lithuanian && codePoint == COMBINING_DOT && converter->afterSoft)
     {
         return; // the dot of an i, which the capital does not need
+    }
+    if (converter->armenian && codePoint == ECH_YIWN)
+    {
+        // Ech and vew, as the reformed spelling writes the ligature.
+        muniWriterPut(&converter->writer, CAPITAL_ECH);
+        muniWriterPut(&converter->writer, kind == muni_caseKindUpper ? CAPITAL_VEW : SMALL_VEW);
+        return;
     }
     PutMapping(&converter->writer, codePoint, kind);
 }
@@ -305,8 +462,16 @@ static size_t Convert(Converter* converter, size_t start, size_t end, muniCaseOp
             *statusOut = status;
             return offset;
         }
-        if (operation == muni_caseUpper)
+        size_t next = offset + size;
+        uint32_t greek =
+            converter->greek && operation == muni_caseUpper ? GreekLetter(codePoint) : 0;
+        if (greek != 0)
         {
+            next = PutGreekUpper(converter, greek, next, end);
+        }
+        else if (operation == muni_caseUpper)
+        {
+            converter->lostAccent = GreekAccentNone;
             PutUpper(converter, codePoint, muni_caseKindUpper);
         }
         else if (operation == muni_caseFold)
@@ -320,13 +485,13 @@ static size_t Convert(Converter* converter, size_t start, size_t end, muniCaseOp
         }
         else
         {
-            PutLower(converter, codePoint, offset + size);
+            PutLower(converter, codePoint, next);
         }
         if (operation != muni_caseFold)
         {
             Track(converter, codePoint);
         }
-        offset += size;
+        offset = next;
     }
     return end;
 }
@@ -336,19 +501,20 @@ muniTextResult muniConvertCase(const char* text, size_t length, muniCaseOperatio
                                size_t capacity, size_t* neededOut)
 {
     if ((text == nullptr && length != 0) || (textOut == nullptr && capacity != 0) ||
-        neededOut == nullptr || operation > muni_caseFold || language > muni_caseLithuanian ||
-        (mode != muni_convertStrict && mode != muni_convertReplace))
+        neededOut == nullptr || (uint32_t)operation > muni_caseFold ||
+        (uint32_t)language > muni_caseArmenian ||
+        (mode != muni_convertStrict && mode != muni_convertReplace) ||
+        muniOverlaps(text, length, textOut, capacity, 1))
     {
         return (muniTextResult){muni_errorInvalid, 0};
     }
-    Converter converter = {(const uint8_t*)text,
-                           length,
-                           language == muni_caseTurkic,
-                           language == muni_caseLithuanian,
-                           false,
-                           false,
-                           false,
-                           (muniWriter){textOut, capacity, 0}};
+    Converter converter = {.text = (const uint8_t*)text,
+                           .length = length,
+                           .turkic = language == muni_caseTurkic,
+                           .lithuanian = language == muni_caseLithuanian,
+                           .greek = language == muni_caseGreek,
+                           .armenian = language == muni_caseArmenian,
+                           .writer = {textOut, capacity, 0}};
     bool strict = mode == muni_convertStrict;
     muniResult status = muni_success;
     size_t stop = length;

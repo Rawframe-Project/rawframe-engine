@@ -10,6 +10,7 @@
 
 #include "text_lines.h"
 
+#include "invariant.h"
 #include "text_service.h"
 
 #include <math.h>
@@ -58,6 +59,8 @@ static bool MakeRoom(const muiAllocator* allocator, muiLineCache* cache, uint32_
     }
     for (uint32_t i = first + count; i < total; i++)
     {
+        // A line after the edit moves by its change and stays in the text.
+        MUI_ASSERT((int64_t)lines[i].start + delta >= 0);
         lines[i].start = (uint32_t)((int64_t)lines[i].start + delta);
         lines[i].end = (uint32_t)((int64_t)lines[i].end + delta);
         lines[i].next = (uint32_t)((int64_t)lines[i].next + delta);
@@ -100,6 +103,9 @@ static bool Refresh(muiParagraph* paragraph, muiLineCache* cache, muiBreakMode m
     muiTextLine* region = service->lines.data;
     uint32_t count = muiBreakLinesWithin(block, &paragraph->scale, mode, width, start, end, region,
                                          (uint32_t)capacity);
+    // A line ends at a break opportunity or the region's end, each at most
+    // once.
+    MUI_ASSERT(count <= capacity);
     // The lines before the paragraphs, and those after, the text's empty
     // last line among them unless they reach the end, which breaks it.
     const muiTextLine* old = cache->lines.data;
@@ -107,6 +113,9 @@ static bool Refresh(muiParagraph* paragraph, muiLineCache* cache, muiBreakMode m
     uint32_t after = end == block->length
                          ? cache->count
                          : LineFrom(old, cache->count, (uint32_t)((int64_t)end - delta));
+    // The stale region begins and ends at the same place of the old text
+    // as of the new, moved by the edit.
+    MUI_ASSERT(first <= after && after <= cache->count);
     if (!MakeRoom(&service->allocator, cache, first, count, after, cache->count - after, delta))
     {
         return false;
@@ -137,6 +146,7 @@ static bool Refresh(muiParagraph* paragraph, muiLineCache* cache, muiBreakMode m
 // The cache of a mode, refreshed.
 static muiLineCache* Kept(muiParagraph* paragraph, muiBreakMode mode, float width)
 {
+    MUI_ASSERT(mode < MUI_LINE_CACHES);
     muiLineCache* cache = &paragraph->block->lineCaches[mode];
     if (!Refresh(paragraph, cache, mode, width))
     {

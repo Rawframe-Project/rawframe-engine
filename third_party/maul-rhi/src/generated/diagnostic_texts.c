@@ -129,7 +129,7 @@ const char* mrhiGetDiagnosticText(mrhiDiagnosticCode code)
     case mrhi_diagnosticDriverEventTag:
         return "A device driver reported an event without a tag that is not a device loss.";
     case mrhi_diagnosticDriverAdapter:
-        return "A driver listed an adapter with a zero or repeated handle, a name longer than MRHI_ADAPTER_NAME_BYTES, or an unknown kind.";
+        return "A driver listed an adapter with a zero or repeated handle, a name longer than MRHI_ADAPTER_NAME_BYTES or not well-formed UTF-8, or an unknown kind; the core lists an unknown kind as mrhi_adapterUnknown and the name up to its first byte that is not well-formed UTF-8 within its room.";
     case mrhi_diagnosticDriverSampleCounts:
         return "A driver reported format caps naming sample counts other than 1, 2 and 4.";
     case mrhi_diagnosticDriverZeroHandle:
@@ -290,6 +290,12 @@ const char* mrhiGetDiagnosticText(mrhiDiagnosticCode code)
         return "A value past the device's multiviewViews limit: mrhi_errorCapacity within the adapter's, mrhi_errorUnsupported past it.";
     case mrhi_diagnosticAllocatorCall:
         return "A function that would change the instance or device was called from inside its allocator.";
+    case mrhi_diagnosticDriverLossReport:
+        return "A driver reported a device loss with an unknown reason, or a message longer than MRHI_LOSS_MESSAGE_BYTES or not well-formed UTF-8; the core passed on mrhi_lossUnknown, and the message up to its first byte that is not well-formed UTF-8 within its room.";
+    case mrhi_diagnosticDriverSurfaceCaps:
+        return "A driver reported surface caps with more than MRHI_SURFACE_COLORS colors, or a color whose format, primaries, transfer or range is unknown; the core kept the first MRHI_SURFACE_COLORS, dropped each unknown one, and reported a surface left without a color as not presentable.";
+    case mrhi_diagnosticDriverSurfaceFloors:
+        return "A driver reported surface caps as presentable without 8-bit sRGB in Rec. 709 among its colors, FIFO, opaque alpha, render target usage, or twin views or images; the core reported the adapter as not presenting to the surface.";
     default:
         return "An unknown diagnostic code.";
     }

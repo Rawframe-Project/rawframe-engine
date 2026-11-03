@@ -31,8 +31,9 @@ void mwinWin32ShapePreedit(const WCHAR* units, uint32_t count, const BYTE* attri
 bool mwinWin32HandleIme(mwinWin32Window* window, UINT message, WPARAM wParam, LPARAM lParam,
                         LRESULT* result);
 
-// Carries out a text input request of the window in a slot.
-mwinOutcome mwinWin32SetTextInput(mwinWin32Window* window, bool enabled, mwinRect caret);
+// Carry out a text input request and a caret request of a window.
+mwinOutcome mwinWin32SetTextInput(mwinWin32Window* window, bool enabled);
+mwinOutcome mwinWin32SetTextCaret(mwinWin32Window* window, mwinRect caret);
 
 // Takes a new window's input context away until it accepts text.
 void mwinWin32StartIme(mwinWin32Window* window);

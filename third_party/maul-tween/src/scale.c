@@ -48,6 +48,12 @@ MTWN_NOINLINE double mtwnMixScaleWork(const mtwnScaleMix* mix, double progress)
         return mix->to;
     }
     double exponent = progress * mix->logRatio;
+    // Equal ends at an infinite progress, a host easing's: 0 times
+    // infinity, and the scale stays.
+    if (isnan(exponent))
+    {
+        return mix->from;
+    }
     // The product keeps from's digits; the sum of logarithms only where the
     // factor alone would overflow or underflow.
     return fabs(exponent) < s_expRange ? mix->from * mtwnExp(exponent)

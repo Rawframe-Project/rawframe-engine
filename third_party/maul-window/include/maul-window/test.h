@@ -39,17 +39,31 @@ extern "C"
                                                                  mwinRequestKind kind,
                                                                  mwinOutcome outcome);
 
-    /// Holds requests: while held, none is answered.
+    /// Turns the test platform's hold on or off: while it is on, no
+    /// request is answered; once it is off, they are answered again from
+    /// the next pump.
     ///
     /// @param context  A context of the test backend.
-    /// @param hold     true to hold, false to answer again from the next
-    ///                 pump.
+    /// @param enabled  true to hold requests.
     /// @return `mwin_success`; `mwin_errorUnsupported` for a context of
     ///         another backend; `mwin_errorInvalid` for a NULL context.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinContext_HoldTestRequests(mwinContext* context,
-                                                                    bool hold);
+    MWIN_NODISCARD MWIN_API mwinResult mwinContext_EnableTestHold(mwinContext* context,
+                                                                  bool enabled);
+
+    /// Reads whether the test platform holds requests: turned on with
+    /// mwinContext_EnableTestHold and not off since.
+    ///
+    /// @param context     A context of the test backend.
+    /// @param enabledOut  Receives true while it holds them. False on
+    ///                    failure.
+    /// @return `mwin_success`; `mwin_errorUnsupported` for a context of
+    ///         another backend; `mwin_errorInvalid` for a NULL argument.
+    /// @par Thread safety
+    /// Main thread only.
+    MWIN_NODISCARD MWIN_API mwinResult mwinContext_IsTestHoldEnabled(const mwinContext* context,
+                                                                     bool* enabledOut);
 
     /// Reports what the platform would: the user resized or closed a
     /// window, focus moved, the scale changed, a key went down, text was
@@ -71,7 +85,8 @@ extern "C"
     ///         for a context of another backend; `mwin_errorLimit` for a
     ///         composition of more than MWIN_MAX_PREEDIT_SEGMENTS
     ///         segments; `mwin_errorInvalid` for a NULL argument, a record
-    ///         type only the core makes, or text that is not UTF-8.
+    ///         kind only the core makes, a key's record of an unknown key
+    ///         code, or text that is not UTF-8.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinContext_PostTestEvent(mwinContext* context,
@@ -105,9 +120,11 @@ extern "C"
     ///
     /// @param context    A context of the test backend.
     /// @param window     The window.
-    /// @param bufferOut  Receives the title, not NUL-terminated. May be
-    ///                   NULL when capacity is 0. Zeroed over capacity on
-    ///                   failure, so a buffer too short holds none of it.
+    /// @param bufferOut  Receives the title, not NUL-terminated. May be NULL
+    ///                   when capacity is 0. Zeroed over capacity on failure,
+    ///                   so a buffer too short holds none of it. On success,
+    ///                   the bytes past those it reports are left as they
+    ///                   were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives the title's length in bytes. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any
@@ -177,17 +194,17 @@ extern "C"
     MWIN_NODISCARD MWIN_API mwinResult mwinContext_SetTestSystemFacts(mwinContext* context,
                                                                       const mwinSystemFacts* facts);
 
-    /// Sets the user's preferred locales, at once; a change posts
-    /// mwin_eventLocaleChanged.
+    /// Sets the user's preferred locales, at once, as a platform reports
+    /// them: a list past the localeBytes limit keeps the longest beginning
+    /// of it that fits. A change posts mwin_eventLocaleChanged.
     ///
     /// @param context  A context of the test backend.
     /// @param locales  BCP 47 tags separated by commas, UTF-8. May be NULL
     ///                 when length is 0.
     /// @param length   The number of bytes.
-    /// @return `mwin_success`; `mwin_errorCapacity` past the localeBytes
-    ///         limit; `mwin_errorUnsupported` for a context of another
-    ///         backend; `mwin_errorInvalid` for a NULL context or a list
-    ///         that is not UTF-8.
+    /// @return `mwin_success`; `mwin_errorUnsupported` for a context of
+    ///         another backend; `mwin_errorInvalid` for a NULL context or
+    ///         tags kept that are not UTF-8.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinContext_SetTestLocales(mwinContext* context,
@@ -241,12 +258,14 @@ extern "C"
     /// @param gamepad  The gamepad.
     /// @param button   An mwinGamepadButton, or a raw button's number.
     /// @param down     true to press it.
-    /// @return As mwinRemoveTestGamepad.
+    /// @return As mwinRemoveTestGamepad; `mwin_errorInvalid` for a button
+    ///         below 0 or past 255.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_SetTestButton(mwinContext* context,
                                                                  mwinGamepadId gamepad,
-                                                                 uint8_t button, bool down);
+                                                                 mwinGamepadButton button,
+                                                                 bool down);
 
     /// Moves a gamepad's axis, at once; a value it has already posts
     /// nothing.
@@ -255,12 +274,13 @@ extern "C"
     /// @param gamepad  The gamepad.
     /// @param axis     An mwinGamepadAxis, or a raw axis's number.
     /// @param value    Where it is.
-    /// @return As mwinRemoveTestGamepad.
+    /// @return As mwinRemoveTestGamepad; `mwin_errorInvalid` for an axis
+    ///         below 0 or past 255.
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinGamepad_SetTestAxis(mwinContext* context,
-                                                               mwinGamepadId gamepad, uint8_t axis,
-                                                               float value);
+                                                               mwinGamepadId gamepad,
+                                                               mwinGamepadAxis axis, float value);
 
     /// Reads the last rumble a gamepad of the test platform was given.
     ///
@@ -385,9 +405,10 @@ extern "C"
     /// wrote, or what mwinContext_SetTestClipboard put there.
     ///
     /// @param context    A context of the test backend.
-    /// @param bufferOut  Receives the bytes. May be NULL when capacity is
-    ///                   0. Zeroed over capacity on failure, so a buffer
-    ///                   too short holds none of it.
+    /// @param bufferOut  Receives the bytes. May be NULL when capacity is 0.
+    ///                   Zeroed over capacity on failure, so a buffer too
+    ///                   short holds none of it. On success, the bytes past
+    ///                   those it reports are left as they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives their number. On `mwin_errorCapacity`,
     ///                   the bytes needed; 0 on any other failure.
@@ -426,9 +447,10 @@ extern "C"
     /// @param context     A context of the test backend.
     /// @param mime        The type, as written.
     /// @param mimeLength  Its bytes.
-    /// @param bufferOut   Receives the bytes. May be NULL when capacity is
-    ///                    0. Zeroed over capacity on failure, so a buffer
-    ///                    too short holds none of it.
+    /// @param bufferOut   Receives the bytes. May be NULL when capacity is 0.
+    ///                    Zeroed over capacity on failure, so a buffer too
+    ///                    short holds none of it. On success, the bytes past
+    ///                    those it reports are left as they were.
     /// @param capacity    The bytes bufferOut holds.
     /// @param lengthOut   Receives their number. On `mwin_errorCapacity`,
     ///                    the bytes needed; 0 on any other failure.
@@ -455,9 +477,10 @@ extern "C"
     /// Reads the test platform's primary selection as bytes.
     ///
     /// @param context    A context of the test backend.
-    /// @param bufferOut  Receives the bytes. May be NULL when capacity is
-    ///                   0. Zeroed over capacity on failure, so a buffer
-    ///                   too short holds none of it.
+    /// @param bufferOut  Receives the bytes. May be NULL when capacity is 0.
+    ///                   Zeroed over capacity on failure, so a buffer too
+    ///                   short holds none of it. On success, the bytes past
+    ///                   those it reports are left as they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives their number. On `mwin_errorCapacity`,
     ///                   the bytes needed; 0 on any other failure.
@@ -499,9 +522,10 @@ extern "C"
     ///
     /// @param context    A context of the test backend.
     /// @param kind       mwin_requestOpenUrl or mwin_requestRevealFile.
-    /// @param bufferOut  Receives it. May be NULL when capacity is 0.
-    ///                   Zeroed over capacity on failure, so a buffer too
-    ///                   short holds none of it.
+    /// @param bufferOut  Receives it. May be NULL when capacity is 0. Zeroed
+    ///                   over capacity on failure, so a buffer too short holds
+    ///                   none of it. On success, the bytes past those it
+    ///                   reports are left as they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives its length in bytes, 0 before any. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any
@@ -536,9 +560,10 @@ extern "C"
     /// filter as its name, ':' and its extensions.
     ///
     /// @param context    A context of the test backend.
-    /// @param bufferOut  Receives it. May be NULL when capacity is 0.
-    ///                   Zeroed over capacity on failure, so a buffer too
-    ///                   short holds none of it.
+    /// @param bufferOut  Receives it. May be NULL when capacity is 0. Zeroed
+    ///                   over capacity on failure, so a buffer too short holds
+    ///                   none of it. On success, the bytes past those it
+    ///                   reports are left as they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives its length in bytes, 0 before any. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any
@@ -564,7 +589,7 @@ extern "C"
     /// @par Thread safety
     /// Main thread only.
     MWIN_NODISCARD MWIN_API mwinResult mwinContext_GetTestIcon(const mwinContext* context,
-                                                               uint32_t* countOut,
+                                                               size_t* countOut,
                                                                uint64_t* checksumOut);
 
     /// Reads the cursor made from images a window shows, with the image it
@@ -592,8 +617,10 @@ extern "C"
     ///
     /// @param context     A context of the test backend.
     /// @param window      The window.
-    /// @param visibleOut  Receives whether the keyboard shows.
-    /// @param purposeOut  Receives the purpose of the text field.
+    /// @param visibleOut  Receives whether the keyboard shows. False on
+    ///                    failure.
+    /// @param purposeOut  Receives the purpose of the text field. 0 on
+    ///                    failure.
     /// @return `mwin_success`; `mwin_errorStale` for a window that no
     ///         longer exists; `mwin_errorUnsupported` for a context of
     ///         another backend; `mwin_errorInvalid` for a NULL argument.
@@ -603,16 +630,17 @@ extern "C"
     mwinWindow_GetTestVirtualKeyboard(const mwinContext* context, mwinWindowId window,
                                       bool* visibleOut, mwinInputPurpose* purposeOut);
 
-    /// Reads what a window last had carried out of its text input
-    /// requests: whether it accepts text, and the caret it gave, which a
-    /// platform places candidate windows by. Not accepting,
-    /// with an empty caret, before any.
+    /// Reads what a window last had carried out of its text input and
+    /// caret requests: whether it accepts text, and its caret, which a
+    /// platform places candidate windows by. Not accepting, with an empty
+    /// caret, before any.
     ///
     /// @param context     A context of the test backend.
     /// @param window      The window.
-    /// @param enabledOut  Receives whether the window accepts text.
+    /// @param enabledOut  Receives whether the window accepts text. False
+    ///                    on failure.
     /// @param caretOut    Receives the caret, in the window's logical
-    ///                    units.
+    ///                    units. Zeroed on failure.
     /// @return `mwin_success`; `mwin_errorStale` for a window that no
     ///         longer exists; `mwin_errorUnsupported` for a context of
     ///         another backend; `mwin_errorInvalid` for a NULL argument.

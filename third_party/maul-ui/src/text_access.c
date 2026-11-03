@@ -96,12 +96,12 @@ static bool ReadLines(const muiTextHost* host, muiNodeId nodeId, muiRect shown, 
     muiLaidText laid;
     muiAllocator* allocator = &host->service->allocator;
     if (muiLayText(host, nodeId, content.width, &laid) != mui_success || laid.lineCount == 0 ||
-        !muiReserve(allocator, &block->accessLines, laid.lineCount * sizeof(uint32_t)) ||
+        !muiReserve(allocator, &block->accessLines, laid.lineCount * sizeof(size_t)) ||
         !muiReserve(allocator, &block->accessLineBoxes, laid.lineCount * sizeof(muiAccessLineBox)))
     {
         return false;
     }
-    uint32_t* starts = block->accessLines.data;
+    size_t* starts = block->accessLines.data;
     muiAccessLineBox* lineBoxes = block->accessLineBoxes.data;
     OmitFar(&laid, content, shown, lineBoxes);
     uint32_t clusterCount = 0;
@@ -266,8 +266,8 @@ static bool AccessTextOf(void* user, muiNodeId nodeId, uint64_t hostKey, const m
     if (block->editing.on)
     {
         const muiTextSelection* selection = &block->editing.selection;
-        marks->anchor = muiMaskOffset(block, selection->anchor);
-        marks->focus = muiMaskOffset(block, selection->caret.offset);
+        marks->anchor = muiMaskOffset(block, (uint32_t)selection->anchor);
+        marks->focus = muiMaskOffset(block, (uint32_t)selection->caret.offset);
         marks->selected = true;
     }
     // Lines and words left out when they cannot be read: the text is
@@ -309,7 +309,7 @@ bool muiReadAccessText(void* user, muiNodeId nodeId, uint64_t hostKey, const mui
 }
 
 // Whether an offset of the text as shown lies at a character's start.
-static bool IsShownStart(const muiTextBlock* shown, uint32_t offset)
+static bool IsShownStart(const muiTextBlock* shown, size_t offset)
 {
     const unsigned char* text = shown->text.data;
     return offset == shown->length || (offset < shown->length && (text[offset] & 0xC0u) != 0x80u);
@@ -358,8 +358,8 @@ static muiResult TextPerformAccessAction(const muiTextHost* host, const muiAcces
     const muiTextEditing kept = block->editing;
     const muiTextSelection before = kept.selection;
     const muiTextSelection selection = {
-        muiUnmaskOffset(block, request->anchor),
-        {muiUnmaskOffset(block, request->focus), mui_affinityDownstream}};
+        muiUnmaskOffset(block, (uint32_t)request->anchor),
+        {muiUnmaskOffset(block, (uint32_t)request->focus), mui_affinityDownstream}};
     muiTextEditOutcome outcome = {true, false, false, false};
     muiResult result = muiSelectText(host->service, blockId, selection);
     // Text replaced goes in as a paste does: under the block's rules, an

@@ -101,9 +101,10 @@ mwinListResult mwinListAddUtf16(mwinFileList* list, mwinListBounds bounds, const
 
 void mwinListRelease(mwinFileList* list, const mwinAllocator* allocator)
 {
-    if (list->bytes != nullptr)
-    {
-        mwinRelease(allocator, list->bytes, list->capacity, 1);
-    }
+    mwinFileList held = *list;
     *list = (mwinFileList){0};
+    if (held.bytes != nullptr)
+    {
+        mwinRelease(allocator, held.bytes, held.capacity, 1);
+    }
 }

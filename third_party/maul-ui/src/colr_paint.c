@@ -19,6 +19,7 @@
 
 #include "colr_composite.h"
 #include "colr_gradient.h"
+#include "invariant.h"
 #include "motion_math.h"
 #include "text_block.h"
 #include "text_service.h"
@@ -355,12 +356,11 @@ static bool Layers(Surfaces* surfaces, FT_LayerIterator layers, Matrix m, uint32
         {
             return false;
         }
+        // Rendering the layer took its level's surface, and Render this
+        // level's: both are found again, nothing asked for.
         float* source = Surface(surfaces, level + 1);
         float* destination = Surface(surfaces, level);
-        if (source == nullptr || destination == nullptr)
-        {
-            return Fail(&surfaces->walk, mui_errorCapacity);
-        }
+        MUI_ASSERT(source != nullptr && destination != nullptr);
         Over(source, destination, surfaces->count);
     }
     return true;
@@ -382,11 +382,9 @@ static bool MaskBy(Surfaces* surfaces, FT_Outline* outline, uint32_t level)
     {
         return Fail(&surfaces->walk, result);
     }
+    // Render took this level's surface before the glyph's mask.
     float* pixels = Surface(surfaces, level);
-    if (pixels == nullptr)
-    {
-        return Fail(&surfaces->walk, mui_errorCapacity);
-    }
+    MUI_ASSERT(pixels != nullptr);
     for (size_t i = 0; i < surfaces->count; i++)
     {
         float k = (float)coverage[i] / 255.0f;
@@ -409,11 +407,9 @@ static bool Mask(Surfaces* surfaces, uint32_t glyph, Matrix m, uint32_t level)
 
 static bool Fill(Surfaces* surfaces, muiLinearColor color, uint32_t level)
 {
+    // Render took this level's surface before the fill.
     float* pixels = Surface(surfaces, level);
-    if (pixels == nullptr)
-    {
-        return Fail(&surfaces->walk, mui_errorCapacity);
-    }
+    MUI_ASSERT(pixels != nullptr);
     for (size_t i = 0; i < surfaces->count; i++)
     {
         pixels[i * 4] = color.r;
@@ -447,12 +443,11 @@ static bool RenderOther(Surfaces* surfaces, const FT_COLR_Paint* paint, Matrix m
         {
             return false;
         }
+        // Rendering the source took its level's surface, and Render this
+        // level's: both are found again, nothing asked for.
         float* source = Surface(surfaces, level + 1);
         float* backdrop = Surface(surfaces, level);
-        if (source == nullptr || backdrop == nullptr)
-        {
-            return Fail(&surfaces->walk, mui_errorCapacity);
-        }
+        MUI_ASSERT(source != nullptr && backdrop != nullptr);
         muiComposite((uint32_t)paint->u.composite.composite_mode, source, backdrop,
                      surfaces->count);
     }

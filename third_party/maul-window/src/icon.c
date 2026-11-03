@@ -104,8 +104,8 @@ void mwinReleaseIconCopy(const mwinContext* context, mwinRequest* request)
     if (request->kind == mwin_requestIcon && request->value.icon != nullptr)
     {
         mwinIconCopy* icon = request->value.icon;
-        mwinRelease(&context->allocator, icon, icon->size, alignof(max_align_t));
         request->value.icon = nullptr;
+        mwinRelease(&context->allocator, icon, icon->size, alignof(max_align_t));
     }
 }
 

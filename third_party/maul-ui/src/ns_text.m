@@ -112,7 +112,7 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
                                       .anchor = 0,
                                       .focus = muiAccessValueOf(node).length,
                                       .text = bytes,
-                                      .length = (uint32_t)strlen(bytes)};
+                                      .length = strlen(bytes)};
     return Ask(object, &request);
 }
 
@@ -139,8 +139,8 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
         return NSMakeRange(NSNotFound, 0);
     }
     muiAccessText text = muiAccessValueOf(node);
-    uint32_t anchor = node->marks.anchor;
-    uint32_t focus = node->marks.focus;
+    uint32_t anchor = (uint32_t)node->marks.anchor;
+    uint32_t focus = (uint32_t)node->marks.focus;
     return RangeOf(&text, anchor < focus ? anchor : focus, anchor < focus ? focus : anchor);
 }
 
@@ -170,8 +170,8 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
         return nil;
     }
     muiAccessText text = muiAccessValueOf(node);
-    uint32_t anchor = node->marks.anchor;
-    uint32_t focus = node->marks.focus;
+    uint32_t anchor = (uint32_t)node->marks.anchor;
+    uint32_t focus = (uint32_t)node->marks.focus;
     return StringOfBytes(&text, anchor < focus ? anchor : focus, anchor < focus ? focus : anchor);
 }
 
@@ -188,7 +188,7 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
                                       .anchor = node->marks.anchor,
                                       .focus = node->marks.focus,
                                       .text = bytes,
-                                      .length = (uint32_t)strlen(bytes)};
+                                      .length = strlen(bytes)};
     (void)Ask(self, &request);
 }
 
@@ -200,7 +200,7 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
         return 0;
     }
     muiAccessText text = muiAccessValueOf(node);
-    return LineOf(&text, node->marks.focus);
+    return LineOf(&text, (uint32_t)node->marks.focus);
 }
 
 // All of it: a part scrolled out of the field is not known without
@@ -241,9 +241,9 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
     {
         return NSMakeRange(NSNotFound, 0);
     }
-    uint32_t start = marks->lineCount != 0 ? marks->lineStarts[line] : 0;
+    uint32_t start = marks->lineCount != 0 ? (uint32_t)marks->lineStarts[line] : 0;
     uint32_t end =
-        (uint32_t)line + 1 < marks->lineCount ? marks->lineStarts[line + 1] : text.length;
+        (uint32_t)line + 1 < marks->lineCount ? (uint32_t)marks->lineStarts[line + 1] : text.length;
     return RangeOf(&text, start, end);
 }
 
@@ -335,17 +335,18 @@ bool muiNsReplaceAll(const MUIAccessibilityNode* object, NSString* value)
     muiAccessText text = muiAccessValueOf(node);
     float x = 0.0f;
     float y = 0.0f;
-    uint32_t at = 0;
+    size_t found = 0;
     muiNsRootPointOf(adapter, point, &x, &y);
-    if (muiAccessTree_GetTextOffsetAt(adapter->tree, nodeId, x, y, &at) != mui_success)
+    if (muiAccessTree_GetTextOffsetAt(adapter->tree, nodeId, x, y, &found) != mui_success)
     {
-        at = 0;
+        found = 0;
     }
-    if (at >= text.length)
+    if (found >= text.length)
     {
         return text.length == 0 ? NSMakeRange(NSNotFound, 0)
                                 : RangeOf(&text, text.length, text.length);
     }
+    uint32_t at = (uint32_t)found;
     return RangeOf(&text, at, muiAccessBoundaryAfter(&text, mui_unitCharacter, at));
 }
 

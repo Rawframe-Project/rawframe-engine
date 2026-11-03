@@ -12,6 +12,8 @@
 #include "chars.h"
 #include "fpenv.h"
 #include "host_call.h"
+#include "invariant.h"
+#include "outputs.h"
 
 #include <stdalign.h>
 #include <string.h>
@@ -130,13 +132,13 @@ void muiFreeHeld(muiAccessTree* tree, const muiHeldNode* held)
         if (node->text[kind] != nullptr)
         {
             muiReleaseMarked(&tree->busy, &tree->allocator, (void*)node->text[kind],
-                             (size_t)node->textLength[kind] + 1, 1);
+                             node->textLength[kind] + 1, 1);
         }
     }
     if (node->marks.lineStarts != nullptr)
     {
         muiReleaseMarked(&tree->busy, &tree->allocator, (void*)node->marks.lineStarts,
-                         node->marks.lineCount * sizeof(uint32_t), alignof(uint32_t));
+                         node->marks.lineCount * sizeof(size_t), alignof(size_t));
     }
     if (node->marks.words != nullptr)
     {
@@ -383,7 +385,7 @@ static_assert(sizeof(s_roles) / sizeof(s_roles[0]) == MUI_ROLE_LAST + 1, "a name
 
 const char* muiGetAccessRoleName(muiRole role)
 {
-    return role <= MUI_ROLE_LAST ? s_roles[role] : "unknown";
+    return (uint32_t)role <= MUI_ROLE_LAST ? s_roles[role] : "unknown";
 }
 
 // Text written so far, past the end counted but not written.
@@ -411,7 +413,7 @@ static void PutText(Writer* writer, const char* text)
     Put(writer, text, strlen(text));
 }
 
-static void PutCount(Writer* writer, const char* prefix, uint32_t value)
+static void PutCount(Writer* writer, const char* prefix, uint64_t value)
 {
     char number[32];
     muiChars chars = muiCharsIn(number, sizeof number);
@@ -433,10 +435,10 @@ static void PutPair(Writer* writer, const char* prefix, double a, const char* be
 }
 
 // A text in quotes, a quote, a backslash or a control byte escaped.
-static void PutQuoted(Writer* writer, const char* text, uint32_t length)
+static void PutQuoted(Writer* writer, const char* text, size_t length)
 {
     Put(writer, "\"", 1);
-    for (uint32_t i = 0; i < length; i++)
+    for (size_t i = 0; i < length; i++)
     {
         unsigned char byte = (unsigned char)text[i];
         if (byte == '"' || byte == '\\')
@@ -513,8 +515,8 @@ static void PutNode(Writer* writer, const muiAccessNode* node, uint32_t depth)
     Put(writer, "\n", 1);
 }
 
-static MUI_NOINLINE muiResult AccessTreeWriteWorker(const muiAccessTree* tree, char* buffer,
-                                                    size_t capacity, size_t* lengthOut)
+static muiResult AccessTreeWrite(const muiAccessTree* tree, char* buffer, size_t capacity,
+                                 size_t* lengthOut)
 {
     if (lengthOut != nullptr)
     {
@@ -541,6 +543,8 @@ static MUI_NOINLINE muiResult AccessTreeWriteWorker(const muiAccessTree* tree, c
         uint32_t depth = 0;
         for (uint32_t at = held->parent; at != 0; at = tree->held[at - 1].parent)
         {
+            // Parents form no cycle, so the walk up meets each node once.
+            MUI_ASSERT(depth < tree->capacity);
             depth++;
         }
         PutNode(&writer, &held->node, depth);
@@ -559,6 +563,14 @@ static MUI_NOINLINE muiResult AccessTreeWriteWorker(const muiAccessTree* tree, c
     }
     *lengthOut = writer.length;
     return writer.length < capacity ? mui_success : mui_errorCapacity;
+}
+
+static MUI_NOINLINE muiResult AccessTreeWriteWorker(const muiAccessTree* tree, char* buffer,
+                                                    size_t capacity, size_t* lengthOut)
+{
+    muiResult result = AccessTreeWrite(tree, buffer, capacity, lengthOut);
+    muiZeroOutputs(result, buffer, capacity, 1);
+    return result;
 }
 
 muiResult muiAccessTree_Write(const muiAccessTree* tree, char* bufferOut, size_t capacity,

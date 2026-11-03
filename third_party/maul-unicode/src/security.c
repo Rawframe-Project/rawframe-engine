@@ -30,29 +30,29 @@ enum
 };
 
 static const uint32_t s_writingSystems[4] = {
-    MUNI_SCRIPT('H', 'a', 'n', 'b'),
-    MUNI_SCRIPT('H', 'n', 't', 'l'),
-    MUNI_SCRIPT('J', 'p', 'a', 'n'),
-    MUNI_SCRIPT('K', 'o', 'r', 'e'),
+    MUNI_MAKE_SCRIPT('H', 'a', 'n', 'b'),
+    MUNI_MAKE_SCRIPT('H', 'n', 't', 'l'),
+    MUNI_MAKE_SCRIPT('J', 'p', 'a', 'n'),
+    MUNI_MAKE_SCRIPT('K', 'o', 'r', 'e'),
 };
 
 // The Recommended scripts of UAX #31 table 5 but Common, Inherited,
 // Cyrillic and Greek: those a moderately restrictive string may add to
 // Latin.
 static const uint32_t s_moderateScripts[] = {
-    MUNI_SCRIPT('A', 'r', 'a', 'b'), MUNI_SCRIPT('A', 'r', 'm', 'n'),
-    MUNI_SCRIPT('B', 'e', 'n', 'g'), MUNI_SCRIPT('D', 'e', 'v', 'a'),
-    MUNI_SCRIPT('E', 't', 'h', 'i'), MUNI_SCRIPT('G', 'e', 'o', 'r'),
-    MUNI_SCRIPT('G', 'u', 'j', 'r'), MUNI_SCRIPT('G', 'u', 'r', 'u'),
-    MUNI_SCRIPT('H', 'a', 'n', 'g'), MUNI_SCRIPT('H', 'a', 'n', 'i'),
-    MUNI_SCRIPT('H', 'e', 'b', 'r'), MUNI_SCRIPT('H', 'i', 'r', 'a'),
-    MUNI_SCRIPT('K', 'a', 'n', 'a'), MUNI_SCRIPT('K', 'n', 'd', 'a'),
-    MUNI_SCRIPT('K', 'h', 'm', 'r'), MUNI_SCRIPT('L', 'a', 'o', 'o'),
-    MUNI_SCRIPT('M', 'l', 'y', 'm'), MUNI_SCRIPT('M', 'y', 'm', 'r'),
-    MUNI_SCRIPT('O', 'r', 'y', 'a'), MUNI_SCRIPT('S', 'i', 'n', 'h'),
-    MUNI_SCRIPT('T', 'a', 'm', 'l'), MUNI_SCRIPT('T', 'e', 'l', 'u'),
-    MUNI_SCRIPT('T', 'h', 'a', 'a'), MUNI_SCRIPT('T', 'h', 'a', 'i'),
-    MUNI_SCRIPT('T', 'i', 'b', 't'),
+    MUNI_MAKE_SCRIPT('A', 'r', 'a', 'b'), MUNI_MAKE_SCRIPT('A', 'r', 'm', 'n'),
+    MUNI_MAKE_SCRIPT('B', 'e', 'n', 'g'), MUNI_MAKE_SCRIPT('D', 'e', 'v', 'a'),
+    MUNI_MAKE_SCRIPT('E', 't', 'h', 'i'), MUNI_MAKE_SCRIPT('G', 'e', 'o', 'r'),
+    MUNI_MAKE_SCRIPT('G', 'u', 'j', 'r'), MUNI_MAKE_SCRIPT('G', 'u', 'r', 'u'),
+    MUNI_MAKE_SCRIPT('H', 'a', 'n', 'g'), MUNI_MAKE_SCRIPT('H', 'a', 'n', 'i'),
+    MUNI_MAKE_SCRIPT('H', 'e', 'b', 'r'), MUNI_MAKE_SCRIPT('H', 'i', 'r', 'a'),
+    MUNI_MAKE_SCRIPT('K', 'a', 'n', 'a'), MUNI_MAKE_SCRIPT('K', 'n', 'd', 'a'),
+    MUNI_MAKE_SCRIPT('K', 'h', 'm', 'r'), MUNI_MAKE_SCRIPT('L', 'a', 'o', 'o'),
+    MUNI_MAKE_SCRIPT('M', 'l', 'y', 'm'), MUNI_MAKE_SCRIPT('M', 'y', 'm', 'r'),
+    MUNI_MAKE_SCRIPT('O', 'r', 'y', 'a'), MUNI_MAKE_SCRIPT('S', 'i', 'n', 'h'),
+    MUNI_MAKE_SCRIPT('T', 'a', 'm', 'l'), MUNI_MAKE_SCRIPT('T', 'e', 'l', 'u'),
+    MUNI_MAKE_SCRIPT('T', 'h', 'a', 'a'), MUNI_MAKE_SCRIPT('T', 'h', 'a', 'i'),
+    MUNI_MAKE_SCRIPT('T', 'i', 'b', 't'),
 };
 
 // The Script indexes the augmentation and the levels ask about.
@@ -122,12 +122,12 @@ static Indexes FindIndexes(void)
     return (Indexes){
         IndexOf(MUNI_SCRIPT_COMMON),
         IndexOf(MUNI_SCRIPT_INHERITED),
-        IndexOf(MUNI_SCRIPT('H', 'a', 'n', 'i')),
-        IndexOf(MUNI_SCRIPT('H', 'i', 'r', 'a')),
-        IndexOf(MUNI_SCRIPT('K', 'a', 'n', 'a')),
-        IndexOf(MUNI_SCRIPT('H', 'a', 'n', 'g')),
-        IndexOf(MUNI_SCRIPT('B', 'o', 'p', 'o')),
-        IndexOf(MUNI_SCRIPT('L', 'a', 't', 'n')),
+        IndexOf(MUNI_MAKE_SCRIPT('H', 'a', 'n', 'i')),
+        IndexOf(MUNI_MAKE_SCRIPT('H', 'i', 'r', 'a')),
+        IndexOf(MUNI_MAKE_SCRIPT('K', 'a', 'n', 'a')),
+        IndexOf(MUNI_MAKE_SCRIPT('H', 'a', 'n', 'g')),
+        IndexOf(MUNI_MAKE_SCRIPT('B', 'o', 'p', 'o')),
+        IndexOf(MUNI_MAKE_SCRIPT('L', 'a', 't', 'n')),
     };
 }
 

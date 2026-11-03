@@ -192,7 +192,8 @@ mrhiResult mrhiCheckTextureSide(const mrhiDevice* device, const mrhiTextureCopy*
     const mrhiTextureDef* def = mrhiFrameTextureOf(&device->frameResources[object - 1]);
     // A mip past the texture's is refused by the pass's declarations,
     // which never name one.
-    if (copy->aspect > mrhi_aspectStencilOnly || !mrhiFormatHasAspect(def->format, copy->aspect))
+    if ((uint32_t)copy->aspect > mrhi_aspectStencilOnly ||
+        !mrhiFormatHasAspect(def->format, copy->aspect))
     {
         return mrhi_errorInvalid;
     }

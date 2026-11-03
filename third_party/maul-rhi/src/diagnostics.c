@@ -46,11 +46,12 @@ void mrhiRecordDiagnostic(mrhiDiagnosticQueue* queue, mrhiDiagnosticCode code)
     mrhiDiagnostic* newest = &records[(queue->head + count + capacity - 1) % capacity];
     if (count > 0 && newest->code == code)
     {
-        newest->count += newest->count < UINT32_MAX ? 1u : 0u;
+        newest->callsRefused += newest->callsRefused < UINT32_MAX ? 1u : 0u;
     }
     else if (count < capacity)
     {
-        records[(queue->head + count) % capacity] = (mrhiDiagnostic){.code = code, .count = 1};
+        records[(queue->head + count) % capacity] =
+            (mrhiDiagnostic){.code = code, .callsRefused = 1};
         queue->count = count + 1;
     }
     Unlock(queue);

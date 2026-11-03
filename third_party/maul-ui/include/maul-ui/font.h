@@ -28,7 +28,7 @@ extern "C"
     } muiFontId;
 
     // Who keeps a font's bytes.
-    typedef uint8_t muiFontData;
+    typedef int32_t muiFontData;
 
     enum
     {

@@ -86,10 +86,11 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param request    The read, from its completion record.
-    /// @param bufferOut  Receives the text in UTF-8, not NUL-terminated.
-    ///                   May be NULL when capacity is 0. Zeroed over
-    ///                   capacity on failure, so a buffer too short holds
-    ///                   none of it.
+    /// @param bufferOut  Receives the text in UTF-8, not NUL-terminated. May
+    ///                   be NULL when capacity is 0. Zeroed over capacity on
+    ///                   failure, so a buffer too short holds none of it. On
+    ///                   success, the bytes past those it reports are left as
+    ///                   they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives the text's length in bytes. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any
@@ -172,9 +173,10 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param request    The read, from its completion record.
-    /// @param bufferOut  Receives the bytes. May be NULL when capacity is
-    ///                   0. Zeroed over capacity on failure, so a buffer
-    ///                   too short holds none of it.
+    /// @param bufferOut  Receives the bytes. May be NULL when capacity is 0.
+    ///                   Zeroed over capacity on failure, so a buffer too
+    ///                   short holds none of it. On success, the bytes past
+    ///                   those it reports are left as they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives the data's length in bytes. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any
@@ -227,10 +229,11 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param request    The read, from its completion record.
-    /// @param bufferOut  Receives the text in UTF-8, not NUL-terminated.
-    ///                   May be NULL when capacity is 0. Zeroed over
-    ///                   capacity on failure, so a buffer too short holds
-    ///                   none of it.
+    /// @param bufferOut  Receives the text in UTF-8, not NUL-terminated. May
+    ///                   be NULL when capacity is 0. Zeroed over capacity on
+    ///                   failure, so a buffer too short holds none of it. On
+    ///                   success, the bytes past those it reports are left as
+    ///                   they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives the text's length in bytes. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any

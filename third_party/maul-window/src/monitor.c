@@ -43,10 +43,10 @@ static void Store(mwinMonitor* monitor, const mwinMonitorInfo* info)
     monitor->info.nameLength = valid.status == muni_success ? length : (uint32_t)valid.offset;
 }
 
-static void PostMonitor(mwinContext* context, uint32_t slot, mwinEventType type, uint64_t timeNs)
+static void PostMonitor(mwinContext* context, uint32_t slot, mwinEventKind type, uint64_t timeNs)
 {
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
     event.data.monitor = mwinMonitorIdOf(context, slot);
     mwinPostGlobal(context, &event);
@@ -115,11 +115,11 @@ void mwinReleaseMonitor(mwinContext* context, mwinMonitorId monitor)
 mwinResult mwinContext_GetMonitors(const mwinContext* context, mwinMonitorId* monitorsOut,
                                    size_t capacity, size_t* countOut)
 {
-    mwinClearArray(monitorsOut, capacity, sizeof *monitorsOut);
     mwinClearOut(countOut, sizeof *countOut);
     if (context == nullptr || countOut == nullptr || (monitorsOut == nullptr && capacity != 0))
     {
-        return mwinMisuse(context);
+        return mwinClearItemsOnFailure(mwinMisuse(context), monitorsOut, capacity,
+                                       sizeof *monitorsOut);
     }
     size_t count = 0;
     // The primary first, then the others in slot order.

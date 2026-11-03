@@ -26,9 +26,13 @@ EM_JS(void, mwinPageMakeField, (const mwinContext* context, uint32_t slot), {
     field.style.cssText = 'position:fixed;opacity:0;border:0;padding:0;margin:0;resize:none;' +
                           'overflow:hidden;pointer-events:none;caret-color:transparent';
     document.body.appendChild(field);
+    // Each lone surrogate as U+FFFD, as on every platform: Emscripten's
+    // stringToUTF8 writes one as bytes that are not UTF-8, and its
+    // lengthBytesUTF8 counts it as four and skips the unit after it.
+    const wellFormed = text => new TextDecoder().decode(new TextEncoder().encode(text));
     // A string for the backend to take, then its record.
     const give = (kind, text, code) => {
-        state.strings.push(text);
+        state.strings.push(wellFormed(text));
         state.push(kind, slot, code);
     };
     const handlers = {
@@ -49,7 +53,7 @@ EM_JS(void, mwinPageMakeField, (const mwinContext* context, uint32_t slot), {
             if (e.isComposing || entry.composing) {
                 // The field holds only the composition, and now its caret.
                 const caret = Math.min(field.selectionEnd, field.value.length);
-                give(21, field.value, lengthBytesUTF8(field.value.slice(0, caret)));
+                give(21, field.value, lengthBytesUTF8(wellFormed(field.value.slice(0, caret))));
                 return;
             }
             if (e.inputType === 'insertText' && e.data) {
@@ -120,22 +124,28 @@ static void EndComposition(mwinWebPlatform* platform, uint32_t slot, double time
     {
         return;
     }
-    mwinEvent end = {.type = mwin_eventImePreedit};
+    mwinEvent end = {.kind = mwin_eventImePreedit};
     end.data.preedit.caret = -1;
     Post(platform, slot, &end, timeMs);
 }
 
-mwinOutcome mwinWebSetTextInput(mwinWebPlatform* platform, uint32_t slot, bool enabled,
-                                mwinRect caret)
+mwinOutcome mwinWebSetTextInput(mwinWebPlatform* platform, uint32_t slot, bool enabled)
 {
     mwinContext* context = platform->context;
     mwinPageMakeField(context, slot);
-    mwinPagePlaceField(context, slot, caret.x, caret.y, caret.width, caret.height);
     mwinPageFocusField(context, slot, enabled);
     if (!enabled)
     {
         EndComposition(platform, slot, mwinWebNow());
     }
+    return mwin_outcomeDone;
+}
+
+mwinOutcome mwinWebSetTextCaret(mwinWebPlatform* platform, uint32_t slot, mwinRect caret)
+{
+    mwinContext* context = platform->context;
+    mwinPageMakeField(context, slot);
+    mwinPagePlaceField(context, slot, caret.x, caret.y, caret.width, caret.height);
     return mwin_outcomeDone;
 }
 
@@ -158,13 +168,13 @@ void mwinWebHandleTextRecord(mwinWebPlatform* platform, const mwinWebRecord* rec
     if (length < 0)
     {
         // Past the limit: the program's text state cannot follow.
-        event.type = mwin_eventInputStateReset;
+        event.kind = mwin_eventInputStateReset;
         Post(platform, slot, &event, record->timeMs);
         return;
     }
     if (record->kind == mwin_webCommit)
     {
-        event.type = mwin_eventTextInput;
+        event.kind = mwin_eventTextInput;
         event.data.text = (mwinTextEvent){platform->text, (uint32_t)length};
         Post(platform, slot, &event, record->timeMs);
         return;
@@ -177,7 +187,7 @@ void mwinWebHandleTextRecord(mwinWebPlatform* platform, const mwinWebRecord* rec
     mwinPreeditSegment segment = {0, (uint32_t)length, mwin_preeditUnderline};
     uint32_t caret =
         (uint32_t)record->code <= (uint32_t)length ? (uint32_t)record->code : (uint32_t)length;
-    event.type = mwin_eventImePreedit;
+    event.kind = mwin_eventImePreedit;
     event.data.preedit = (mwinPreeditEvent){
         platform->text, (uint32_t)length, (int32_t)caret, caret, caret, &segment, 1};
     Post(platform, slot, &event, record->timeMs);

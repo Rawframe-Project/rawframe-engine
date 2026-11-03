@@ -20,6 +20,13 @@ mtwnSlotHeader* mtwnPoolFind(const mtwnPool* pool, uint32_t index1, uint32_t gen
     return alive && slot->generation == generation ? slot : NULL;
 }
 
+bool mtwnPoolIssued(const mtwnPool* pool, uint32_t index1, uint32_t generation)
+{
+    // A slot keeps the generation it last handed out, released or not.
+    return index1 != 0 && index1 <= pool->high && generation != 0 &&
+           generation <= mtwnPoolAt(pool, index1)->generation;
+}
+
 uint32_t mtwnPoolAcquire(mtwnPool* pool)
 {
     uint32_t index1 = pool->free;

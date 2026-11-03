@@ -258,10 +258,12 @@ bool act(Access::State& state, const muiAccessRequest& request) {
         if (!state.tree->contains(kNode)) {
             return false;
         }
+        // A text holds at most MUI_MAX_TEXT_BYTES, so a place in it fits 32
+        // bits.
         state.requests.push_back({.kind = *kKind,
                                   .node = kNode,
-                                  .anchor = request.anchor,
-                                  .focus = request.focus,
+                                  .anchor = static_cast<std::uint32_t>(request.anchor),
+                                  .focus = static_cast<std::uint32_t>(request.focus),
                                   .text = *kKind == AccessRequest::Kind::Replace && request.text != nullptr
                                               ? std::string{request.text, request.length}
                                               : std::string{}});

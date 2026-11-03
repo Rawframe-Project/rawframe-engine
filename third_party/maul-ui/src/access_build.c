@@ -158,11 +158,11 @@ static void PlaceOf(const muiContext* context, uint32_t slot, muiAccessNode* nod
     const muiVirtualEntry* list = parent != 0 ? muiVirtualEntryOf(context, parent) : nullptr;
     uint32_t item = context->lists.items[slot - 1];
     muiAccessValues* values = &node->values;
-    if (list != nullptr && item != 0 && item <= list->list.count && values->setPosition == 0 &&
+    if (list != nullptr && item != 0 && item <= list->list.itemCount && values->setPosition == 0 &&
         values->setSize == 0)
     {
         values->setPosition = item;
-        values->setSize = list->list.count;
+        values->setSize = list->list.itemCount;
     }
     if (range != nullptr && values->orientation == mui_orientationNone)
     {
@@ -198,9 +198,9 @@ static uint32_t ChildrenOf(const muiContext* context, uint32_t slot, uint32_t* c
     for (uint32_t i = 1; i < count; i++)
     {
         uint32_t child = childrenOut[i];
-        uint32_t key = KeyOf(context, child, list->list.count);
+        uint32_t key = KeyOf(context, child, list->list.itemCount);
         uint32_t at = i;
-        while (at > 0 && KeyOf(context, childrenOut[at - 1], list->list.count) > key)
+        while (at > 0 && KeyOf(context, childrenOut[at - 1], list->list.itemCount) > key)
         {
             childrenOut[at] = childrenOut[at - 1];
             at--;
@@ -411,7 +411,7 @@ static uint64_t ReadContent(muiContext* context, uint32_t slot, bool boundaries,
         return 0;
     }
     node->text[mui_accessValue] = content.text;
-    node->textLength[mui_accessValue] = (uint32_t)content.length;
+    node->textLength[mui_accessValue] = content.length;
     node->marks = MarksOf(&content, boundaries);
     node->role = node->role == mui_roleGeneric ? mui_roleLabel : node->role;
     // Text being edited takes its selection set and, unless read only,
@@ -624,6 +624,10 @@ static muiResult BuildAccessUpdate(muiContext* context, muiNodeId rootId,
 static MUI_NOINLINE muiResult BuildAccessUpdateWorker(muiContext* context, muiNodeId rootId,
                                                       muiAccessUpdate* updateOut)
 {
+    if (muiRefusesBusy(context, false))
+    {
+        return mui_errorBusy;
+    }
     if (updateOut != nullptr)
     {
         memset(updateOut, 0, sizeof *updateOut);

@@ -1550,6 +1550,8 @@ bool mrhiFormatCapsWithin(const mrhiFormatCaps* asked, const mrhiFormatCaps* gra
         && (asked->sampleCounts & ~granted->sampleCounts) == 0;
 }
 
+const mrhiSampleCounts mrhiSampleCountsKnown = 0x7u;
+
 const mrhiBufferUsage mrhiBufferUsageKnown = 0xFFu;
 
 const mrhiTextureUsage mrhiTextureUsageKnown = 0x3Fu;

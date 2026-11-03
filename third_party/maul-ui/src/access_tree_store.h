@@ -31,7 +31,7 @@ typedef struct muiHeldNode
 typedef struct muiStagedNode
 {
     char* text[MUI_ACCESS_TEXTS];
-    uint32_t* lineStarts;
+    size_t* lineStarts;
     muiAccessWord* words;
     muiAccessLineBox* lineBoxes;
     muiAccessCluster* clusters;

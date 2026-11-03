@@ -56,7 +56,7 @@ static uint8_t* TakeStaging(mrhiDevice* device, mrhiFramePass* pass, uint64_t by
 }
 
 mrhiResult mrhiPass_WriteBuffer(mrhiDevice* device, mrhiPassId id, mrhiResourceId resource,
-                                uint64_t offset, const void* bytes, uint64_t size)
+                                uint64_t offset, const void* bytes, size_t size)
 {
     if (device == nullptr)
     {

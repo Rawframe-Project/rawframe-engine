@@ -91,6 +91,9 @@ static void PollDriver(mrhiInstance* instance)
     size_t moved;
     while ((moved = instance->driver.vtable->poll(instance->driver.self, events, POLL_BATCH)) > 0)
     {
+        // A driver may claim more than the room it was given; the rest
+        // is not there to read.
+        moved = moved <= POLL_BATCH ? moved : POLL_BATCH;
         for (size_t i = 0; i < moved; ++i)
         {
             for (uint32_t p = 0; p < instance->pendingCount; ++p)
@@ -108,14 +111,16 @@ static void PollDriver(mrhiInstance* instance)
 mrhiResult mrhiInstance_TakeNotification(mrhiInstance* instance,
                                          mrhiInstanceNotification* notificationOut)
 {
+    // Refused as busy, it leaves the record: the call the allocator runs
+    // in may be filling it.
+    if (instance != nullptr && instance->allocatorGuard.busy)
+    {
+        return mrhiInstanceBusy(instance);
+    }
     mrhiClearOutput(notificationOut, sizeof(*notificationOut));
     if (instance == nullptr)
     {
         return mrhi_errorInvalid;
-    }
-    if (instance->allocatorGuard.busy)
-    {
-        return mrhiInstanceBusy(instance);
     }
     if (notificationOut == nullptr)
     {

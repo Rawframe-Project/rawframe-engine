@@ -69,7 +69,7 @@ static bool IsCount(uint32_t count)
 }
 
 // Counts a refusal against a live context as misuse.
-static mtwnResult Misuse(mtwnContext* context, mtwnResult result)
+static mtwnResult Misuse(const mtwnContext* context, mtwnResult result)
 {
     mtwnCountMisuse(context);
     return result;
@@ -87,7 +87,8 @@ static mtwnResult CheckClipDef(const mtwnClipDef* def)
     return counts ? mtwn_success : mtwn_errorLimit;
 }
 
-static mtwnResult RunGetClipBytes(mtwnContext* context, const mtwnClipDef* def, uint64_t* bytesOut)
+static mtwnResult RunGetClipBytes(const mtwnContext* context, const mtwnClipDef* def,
+                                  uint64_t* bytesOut)
 {
     if (context == NULL)
     {
@@ -106,25 +107,20 @@ static mtwnResult RunGetClipBytes(mtwnContext* context, const mtwnClipDef* def, 
     return mtwn_success;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnContext_GetClipBytesWork(mtwnContext* context,
+static MTWN_NOINLINE mtwnResult mtwnContext_GetClipBytesWork(const mtwnContext* context,
                                                              const mtwnClipDef* def,
                                                              uint64_t* bytesOut)
 {
-    // Cleared first, so a busy or missing context's failure clears it too.
+    // Cleared before any check, so a missing context's failure clears it
+    // too.
     if (bytesOut != NULL)
     {
         *bytesOut = 0;
     }
-    if (!mtwnEnter(context))
-    {
-        return mtwn_errorBusy;
-    }
-    mtwnResult result = RunGetClipBytes(context, def, bytesOut);
-    mtwnLeave(context);
-    return result;
+    return RunGetClipBytes(context, def, bytesOut);
 }
 
-mtwnResult mtwnContext_GetClipBytes(mtwnContext* context, const mtwnClipDef* def,
+mtwnResult mtwnContext_GetClipBytes(const mtwnContext* context, const mtwnClipDef* def,
                                     uint64_t* bytesOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
@@ -228,17 +224,24 @@ static mtwnResult RunDestroyClip(mtwnContext* context, mtwnClipId clip)
     {
         return Misuse(context, mtwn_errorStale);
     }
+    // Held by a player, which may free itself at an end the update
+    // decides: refused until then, but not misuse.
     if (slot->users != 0)
     {
-        return Misuse(context, mtwn_errorBusy);
+        return mtwn_errorBusy;
     }
     // No path leaves a target lazy on a clip without players today (their
     // destruction writes the bases, a finished player is at rest), so this
     // only keeps a later one from reading a freed clip.
     mtwnSettleClipVelocities(context, clip.index1);
-    mtwnRelease(&context->allocator, slot->block, (size_t)slot->blockBytes, s_blockAlignment);
-    context->clipStorageUsed -= slot->blockBytes;
+    // The id goes stale before the host's free runs on the clip's block:
+    // that code reading the clip back, as a reader may, finds it gone
+    // rather than freed memory.
+    void* block = slot->block;
+    uint64_t bytes = slot->blockBytes;
+    context->clipStorageUsed -= bytes;
     mtwnPoolRelease(&context->clips, clip.index1);
+    mtwnRelease(&context->allocator, block, (size_t)bytes, s_blockAlignment);
     return mtwn_success;
 }
 
@@ -292,7 +295,7 @@ static double StartOf(const mtwnClipSlot* clip, uint32_t parent, mtwnPosition po
 // timeline is endless too) there is none.
 static bool IsPosition(const mtwnClipSlot* clip, uint32_t parent, mtwnPosition position)
 {
-    return position.kind <= mtwn_positionAtLabel && isfinite(position.offset) &&
+    return (uint32_t)position.kind <= mtwn_positionAtLabel && isfinite(position.offset) &&
            (position.kind != mtwn_positionAtLabel ||
             mtwnClipLabelIn(clip, parent, position.label) != 0) &&
            isfinite(StartOf(clip, parent, position));
@@ -466,7 +469,7 @@ static mtwnResult CopyPoints(mtwnClipSlot* clip, mtwnEasing* timing, mtwnKeyfram
 // What the def asks of the clip, before anything in the clip changes.
 static mtwnResult CheckTrack(const mtwnClipSlot* clip, const mtwnClipTrackDef* def)
 {
-    bool slot = def->slot < clip->def.slotCapacity && def->track.kind <= mtwn_valueScale;
+    bool slot = def->slot < clip->def.slotCapacity && (uint32_t)def->track.kind <= mtwn_valueScale;
     if (slot)
     {
         uint8_t kind = clip->slotKinds[def->slot];
@@ -503,7 +506,7 @@ static MTWN_NOINLINE mtwnResult AddTrackWorker(mtwnClipSlot* clip, const mtwnCli
     mtwnKeyframe* keyframes = &clip->keyframes[base];
     memcpy(keyframes, def->keyframes, (size_t)def->keyframeCount * sizeof(mtwnKeyframe));
     mtwnClipNode node = {0};
-    mtwnResult made = mtwnMakeTrackWork(&def->track, keyframes, def->keyframeCount,
+    mtwnResult made = mtwnMakeTrackWork(keyframes, def->keyframeCount, &def->track,
                                         def->constantSpeed ? &clip->lengths[base] : NULL,
                                         &clip->mixes[base], &node.track);
     if (made != mtwn_success)

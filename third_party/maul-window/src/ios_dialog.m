@@ -80,11 +80,9 @@ static void Finish(MwinIOSDialog* dialog, mwinOutcome outcome, NSArray<NSURL*>* 
         {
             (void)[place startAccessingSecurityScopedResource];
         }
+        // A path that is not UTF-8 makes the choice fail.
         const char* path = place.path.UTF8String;
-        if (path != nullptr)
-        {
-            mwinAddDialogFile(context, path, strlen(path));
-        }
+        mwinAddDialogFile(context, path != nullptr ? path : "", path != nullptr ? strlen(path) : 0);
     }
     outcome = mwinSettleDialog(context, dialog->to.slot, dialog->to.request, outcome);
     mwinAnswer(context, &dialog->to, outcome);

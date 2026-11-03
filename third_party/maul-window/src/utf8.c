@@ -54,3 +54,28 @@ mwinResult mwinCheckText(const char* text, size_t length, size_t limit, mwinResu
                                  (nul || memchr(text, '\0', length) == nullptr));
     return valid ? mwin_success : mwin_errorInvalid;
 }
+
+size_t mwinCutUtf16(const uint16_t* units, size_t count, char* out, size_t capacity)
+{
+    // Each unit takes at least a byte, so one past capacity never fits,
+    // and a high surrogate cut from its pair there, as U+FFFD, never
+    // does either.
+    size_t taken = count < capacity ? count : capacity;
+    size_t written = 0;
+    muniTextResult result =
+        muniConvertUtf16ToUtf8(units, taken, muni_convertReplace, out, capacity, &written);
+    if (result.status == muni_errorCapacity)
+    {
+        // Out already holds the units before the stop; this counts them.
+        (void)muniConvertUtf16ToUtf8(units, result.offset, muni_convertReplace, out, capacity,
+                                     &written);
+    }
+    return written;
+}
+
+size_t mwinBytesBefore(const char* text, size_t length, muniTextUnit unit, size_t count)
+{
+    size_t bytes = 0;
+    (void)muniMeasureUtf8(text, length, unit, SIZE_MAX, count, &bytes, nullptr);
+    return bytes;
+}

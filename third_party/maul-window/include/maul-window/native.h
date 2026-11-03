@@ -19,7 +19,7 @@ extern "C"
 #endif
 
     // Which window system a bundle's handles belong to.
-    typedef uint8_t mwinPlatform;
+    typedef int32_t mwinPlatform;
 
     enum
     {
@@ -84,9 +84,9 @@ extern "C"
             struct
             {
                 const char* selector;
-                uint32_t selectorLength;
+                size_t selectorLength;
                 const char* accessibility;
-                uint32_t accessibilityLength;
+                size_t accessibilityLength;
             } web;
         } handles;
     } mwinNativeHandles;

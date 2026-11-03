@@ -39,8 +39,8 @@ static bool IsUnit(float value)
 
 static bool IsDefValid(const muiTransitionDef* def)
 {
-    return def->cookie == TRANSITION_DEF_COOKIE && def->kind <= mui_transitionSpring &&
-           def->easing <= mui_easingCubicBezier && IsUnit(def->bezier[0]) &&
+    return def->cookie == TRANSITION_DEF_COOKIE && (uint32_t)def->kind <= mui_transitionSpring &&
+           (uint32_t)def->easing <= mui_easingCubicBezier && IsUnit(def->bezier[0]) &&
            isfinite(def->bezier[1]) && IsUnit(def->bezier[2]) && isfinite(def->bezier[3]) &&
            isfinite(def->frequency) && def->frequency > 0.0f && isfinite(def->dampingRatio) &&
            def->dampingRatio > 0.0f;

@@ -67,7 +67,7 @@ extern "C"
     } mwinRect;
 
     // How a window occupies the screen. There is no exclusive fullscreen.
-    typedef uint8_t mwinWindowMode;
+    typedef int32_t mwinWindowMode;
 
     enum
     {
@@ -79,7 +79,7 @@ extern "C"
     };
 
     // How a window looks and behaves beyond its size and mode.
-    typedef uint8_t mwinWindowStyle;
+    typedef uint32_t mwinWindowStyle;
 
     enum
     {
@@ -94,7 +94,7 @@ extern "C"
     };
 
     // What a window is to the others.
-    typedef uint8_t mwinWindowKind;
+    typedef int32_t mwinWindowKind;
 
     enum
     {
@@ -425,7 +425,7 @@ extern "C"
 #define MWIN_MAX_HIT_REGIONS 16
 
     // What a part of a window is to the platform.
-    typedef uint8_t mwinHitKind;
+    typedef int32_t mwinHitKind;
 
     enum
     {

@@ -7,6 +7,7 @@
 #include "glyph_table.h"
 
 #include "allocator.h"
+#include "invariant.h"
 
 #include <stdalign.h>
 #include <string.h>
@@ -38,6 +39,10 @@ bool muiIsEntryStale(const muiAtlasEntry* entry, const uint32_t* generations)
 
 muiAtlasEntry* muiFindEntry(const muiGlyphTable* table, const muiGlyphKey* key)
 {
+    // A power of two at most half full (muiReserveEntry), so the probe
+    // meets an empty place.
+    MUI_ASSERT(table->capacity != 0 && (table->capacity & (table->capacity - 1)) == 0 &&
+               (uint64_t)table->count * 2 <= table->capacity);
     uint32_t mask = table->capacity - 1;
     for (uint32_t i = Hash(key) & mask;; i = (i + 1) & mask)
     {
@@ -90,6 +95,8 @@ bool muiReserveEntry(const muiAllocator* allocator, muiGlyphTable* table,
             rebuilt.count++;
         }
     }
+    // Every live entry moved, and no other.
+    MUI_ASSERT(rebuilt.count == live);
     muiFreeGlyphTable(allocator, table);
     *table = rebuilt;
     return true;

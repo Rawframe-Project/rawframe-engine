@@ -109,7 +109,7 @@ mrhiResult mrhiPass_SetIndexBuffer(mrhiDevice* device, mrhiPassId id, mrhiResour
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticRenderStateOutsideRenderPass);
     }
-    if (format == mrhi_indexNone || format > mrhi_indexUint32)
+    if (format == mrhi_indexNone || (uint32_t)format > mrhi_indexUint32)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticIndexBufferFormat);
     }
