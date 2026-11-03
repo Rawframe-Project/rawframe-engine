@@ -1,7 +1,8 @@
 // Texture import: each admitted source format decodes to the texels
-// it holds; other formats, broken files, and sides past the limit are
-// refused; levels halve in linear light weighted by alpha; BC7 keeps the
-// image close and cooks to the same bytes every time.
+// it holds, run-length BMPs as encoders end them included; other formats,
+// broken files, and sides past the limit are refused; levels halve in
+// linear light weighted by alpha; BC7 keeps the image close and cooks to
+// the same bytes every time.
 
 #include "rawframe/test/files.h"
 #include "rawframe/test/test.h"
@@ -9,6 +10,7 @@
 #include "rawframe/texture_import/import.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -75,6 +77,43 @@ Image solid(std::uint32_t width, std::uint32_t height, const std::vector<std::ar
     return image;
 }
 
+/// A run-length encoded BMP: RLE8 (8 bits a texel) or RLE4 (4), a negative
+/// height for rows top down, a palette of red then blue, and the encoded
+/// rows as they are.
+std::vector<std::byte>
+rleBmp(std::int32_t width, std::int32_t height, std::uint16_t bits, const std::vector<std::uint8_t>& rows) {
+    std::vector<std::byte> out;
+    const auto kPut = [&out](std::uint32_t value, std::size_t bytes) {
+        for (std::size_t at = 0; at < bytes; ++at) {
+            out.push_back(static_cast<std::byte>((value >> (at * 8)) & 0xFFU));
+        }
+    };
+    constexpr std::uint32_t kOffset = 14 + 40 + 8;
+    out.push_back(std::byte{'B'});
+    out.push_back(std::byte{'M'});
+    kPut(kOffset + static_cast<std::uint32_t>(rows.size()), 4);
+    kPut(0, 4);
+    kPut(kOffset, 4);
+    kPut(40, 4);
+    kPut(static_cast<std::uint32_t>(width), 4);
+    kPut(static_cast<std::uint32_t>(height), 4);
+    kPut(1, 2);
+    kPut(bits, 2);
+    kPut(bits == 8 ? 1 : 2, 4);
+    kPut(static_cast<std::uint32_t>(rows.size()), 4);
+    kPut(2835, 4);
+    kPut(2835, 4);
+    kPut(2, 4);
+    kPut(0, 4);
+    // Blue, green, red, and a byte unused: red, then blue.
+    kPut(0x00FF0000U, 4);
+    kPut(0x000000FFU, 4);
+    for (const std::uint8_t kByte : rows) {
+        out.push_back(static_cast<std::byte>(kByte));
+    }
+    return out;
+}
+
 } // namespace
 
 RAWFRAME_TEST(EachAdmittedFormatDecodesToItsTexels) {
@@ -97,6 +136,26 @@ RAWFRAME_TEST(EachAdmittedFormatDecodesToItsTexels) {
         RAWFRAME_EXPECT(kNear(3, 3, {255, 0, 0}) && kNear(12, 3, {0, 255, 0}) && kNear(3, 12, {0, 0, 255}) &&
                         kNear(12, 12, {255, 255, 255}));
     }
+}
+
+RAWFRAME_TEST(RunLengthBmpsThatEndALineThenTheBitmapDecode) {
+    // Each ends its last row with an end-of-line escape (0 0) and then the
+    // bitmap (0 1), as encoders commonly write it. The decoder is then past
+    // the image when the end of the bitmap clears the rest of its row.
+    constexpr std::array<std::uint8_t, 4> kRed = {255, 0, 0, 255};
+    constexpr std::array<std::uint8_t, 4> kBlue = {0, 0, 255, 255};
+    // RLE8, rows bottom up: two blue texels, then two red above them.
+    const auto kEight = decodeImage(rleBmp(2, 2, 8, {2, 1, 0, 0, 2, 0, 0, 0, 0, 1}));
+    RAWFRAME_EXPECT(kEight.has_value() && kEight->width == 2 && kEight->height == 2 && texel(*kEight, 0, 0) == kRed &&
+                    texel(*kEight, 1, 0) == kRed && texel(*kEight, 0, 1) == kBlue && texel(*kEight, 1, 1) == kBlue);
+    // RLE8 of one texel, bottom up and top down.
+    for (const std::int32_t kHeight : {1, -1}) {
+        const auto kOne = decodeImage(rleBmp(1, kHeight, 8, {1, 1, 0, 0, 0, 1}));
+        RAWFRAME_EXPECT(kOne.has_value() && kOne->width == 1 && kOne->height == 1 && texel(*kOne, 0, 0) == kBlue);
+    }
+    // RLE4: one texel of the high nibble's color.
+    const auto kFour = decodeImage(rleBmp(1, 1, 4, {1, 0x10, 0, 0, 0, 1}));
+    RAWFRAME_EXPECT(kFour.has_value() && kFour->width == 1 && kFour->height == 1 && texel(*kFour, 0, 0) == kBlue);
 }
 
 RAWFRAME_TEST(OtherFormatsBrokenFilesAndLargeSidesAreRefused) {
