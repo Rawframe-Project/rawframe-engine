@@ -59,9 +59,10 @@ std::optional<double> metersOf(std::string_view word) {
 }
 
 std::string metersText(double value) {
+    // The shortest spelling that reads back to the very same value.
     char made[32];
-    std::snprintf(made, sizeof made, "%.9g", value);
-    return made;
+    const auto [kEnd, kError] = std::to_chars(made, made + sizeof made, value);
+    return std::string{made, kEnd};
 }
 
 /// SplitMix64: the draws a scatter places its copies by, from its seed

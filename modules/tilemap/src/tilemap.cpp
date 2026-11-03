@@ -168,8 +168,10 @@ result::Result<Tilemap> parseTilemap(std::string_view text, const TilemapLimits&
 std::string writeTilemap(const Tilemap& map) {
     char texture[17];
     std::snprintf(texture, sizeof texture, "%016llx", static_cast<unsigned long long>(map.texture));
+    // The shortest spelling of the cell that reads back to the very same
+    // value.
     char cell[32];
-    std::snprintf(cell, sizeof cell, "%.9g", map.cell);
+    *std::to_chars(cell, cell + sizeof cell - 1, map.cell).ptr = '\0';
     std::string made = std::string{"tilemap 1\ntileset "} + texture + " " + std::to_string(map.sheetColumns) + " " +
                        std::to_string(map.sheetRows) + "\ncell " + cell + "\n";
     if (!map.solid.empty()) {

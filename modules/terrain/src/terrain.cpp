@@ -84,9 +84,10 @@ std::string metersOf(std::int32_t millimeters) {
 }
 
 std::string numberText(double value) {
+    // The shortest spelling that reads back to the very same value.
     char made[32];
-    std::snprintf(made, sizeof made, "%.9g", value);
-    return made;
+    const auto [kEnd, kError] = std::to_chars(made, made + sizeof made, value);
+    return std::string{made, kEnd};
 }
 
 /// How much of a brush's effect reaches `distance` from its middle: one
