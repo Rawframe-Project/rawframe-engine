@@ -1045,7 +1045,8 @@ void WindowHost::followTextInput(window::Windows& windows) {
     // input method's composition alone.
     if (kCaret.has_value()) {
         static_cast<void>(windows.requestTextInputCaret(
-            window_, window::Rect{.x = (*kCaret)[0], .y = (*kCaret)[1], .width = (*kCaret)[2], .height = (*kCaret)[3]}));
+            window_,
+            window::Rect{.x = (*kCaret)[0], .y = (*kCaret)[1], .width = (*kCaret)[2], .height = (*kCaret)[3]}));
     }
     if (kCaret.has_value() != textInput_.has_value()) {
         static_cast<void>(windows.requestTextInput(window_, kCaret.has_value()));

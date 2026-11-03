@@ -363,8 +363,9 @@ std::optional<Event> fromMaul(const mwinContext& context, const mwinEvent& recor
         break;
     case EventKind::GamepadAxisMoved:
         event.gamepad = fromMaul(data.gamepadAxis.gamepad);
-        event.gamepadInput = {
-            .control = static_cast<std::uint8_t>(data.gamepadAxis.axis), .raw = data.gamepadAxis.raw, .value = data.gamepadAxis.value};
+        event.gamepadInput = {.control = static_cast<std::uint8_t>(data.gamepadAxis.axis),
+                              .raw = data.gamepadAxis.raw,
+                              .value = data.gamepadAxis.value};
         break;
     default:
         break;
