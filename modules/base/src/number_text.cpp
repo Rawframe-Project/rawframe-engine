@@ -13,7 +13,7 @@ std::string numberText(double value) {
     const char* const kEnd = made + std::strlen(made);
     if (const auto [kAt, kError] = std::from_chars(made, kEnd, read);
         kError == std::errc{} && kAt == kEnd && read == value) {
-        return std::string{made, kEnd};
+        return made;
     }
     const auto [kWritten, kError] = std::to_chars(made, made + sizeof made, value);
     return std::string{made, kWritten};
