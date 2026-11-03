@@ -105,8 +105,8 @@ RAWFRAME_TEST(ImportsAreRefusedPastLimitsAndWhenUnreadable) {
     RAWFRAME_EXPECT(badSound(importSound(fixture("tone.mp3"), {.maximumBytes = 100})));
     RAWFRAME_EXPECT(badSound(importSound(bytesOf("fLaC and more"))));
     RAWFRAME_EXPECT(badSound(importSound(bytesOf("OggS and nothing that follows"))));
-    // A comment header of two comments, the first too large to hold: the
-    // second is never read, and nothing it did not allocate is freed.
+    // A comment header of two comments in 90 bytes, the first of 0x10000000:
+    // it runs past its packet, and is refused before stb_vorbis reads it.
     std::vector<std::byte> comments = fixture("tone.ogg");
     constexpr std::size_t kCount = 166;
     for (const auto& [kAt, kValue] :
@@ -114,6 +114,14 @@ RAWFRAME_TEST(ImportsAreRefusedPastLimitsAndWhenUnreadable) {
         comments[kAt] = std::byte{kValue};
     }
     RAWFRAME_EXPECT(badSound(importSound(comments)));
+    // One comment of 0x7FFFFFFF bytes, refused the same way: stb_vorbis would
+    // work its length plus one in an int.
+    std::vector<std::byte> longComment = fixture("tone.ogg");
+    longComment[kCount] = std::byte{1};
+    for (std::size_t at = kCount + 4; at < kCount + 8; ++at) {
+        longComment[at] = std::byte{at < kCount + 7 ? std::uint8_t{0xFF} : std::uint8_t{0x7F}};
+    }
+    RAWFRAME_EXPECT(badSound(importSound(longComment)));
     // Comment counts whose list stb_vorbis could not hold, refused before it
     // reads one: 0x01000001 asks for a list past every allocation it is
     // given, which it would walk while null; 0x20000001's list size wraps
