@@ -3,7 +3,8 @@
 // accessors and the materials through the limits, and what imports is a
 // mesh the cooked format takes and gives back unchanged. Every file the
 // source names reads as the same small buffer, so sibling buffers and
-// images are reached too.
+// images are reached too. The limits are the ones the engine ships, so
+// what one input may ask for is what any author's file may.
 
 #include "rawframe/mesh/mesh.h"
 #include "rawframe/mesh_import/import.h"
@@ -53,9 +54,7 @@ result::Result<std::uint64_t> identify(std::string_view key) {
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(data), size};
-    const mesh_import::ImportLimits kLimits{
-        .mesh = {.maximumVertices = 4096, .maximumIndices = 12288, .maximumParts = 64},
-        .maximumBytes = std::size_t{1} << 16U};
+    constexpr mesh_import::ImportLimits kLimits{};
     const auto kImported = mesh_import::importGltf(kBytes, &readSibling, &identify, kLimits);
     if (!kImported.has_value()) {
         return 0;
