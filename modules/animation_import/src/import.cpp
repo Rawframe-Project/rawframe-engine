@@ -409,20 +409,29 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
     if (kInstantOnly) {
         clip.duration = kInstant;
     }
+    // Any number of channels may share one sampler, so a few bytes of
+    // source can name a sampler's keys many times over. A channel that
+    // would be a bone's second track of its kind, or a track past the
+    // limit, is refused before its keys are read rather than after every
+    // track is built.
+    std::vector<bool> driven(rig.skeleton.bones.size() * 3, false);
     for (cgltf_size i = 0; i < source.channels_count; ++i) {
         const cgltf_animation_channel& kChannel = source.channels[i];
         const auto kBone = kChannel.target_node != nullptr ? rig.bones.find(kChannel.target_node) : rig.bones.end();
         animation::Channel channel = animation::Channel::Translation;
         std::size_t width = 3;
+        std::size_t kind = 0;
         switch (kChannel.target_path) {
         case cgltf_animation_path_type_translation:
             break;
         case cgltf_animation_path_type_rotation:
             channel = animation::Channel::Rotation;
             width = 4;
+            kind = 1;
             break;
         case cgltf_animation_path_type_scale:
             channel = animation::Channel::Scale;
+            kind = 2;
             break;
         default:
             ++counts.skipped;
@@ -431,6 +440,13 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
         if (kBone == rig.bones.end()) {
             ++counts.skipped;
             continue;
+        }
+        if (driven[(kBone->second * 3) + kind]) {
+            return badSource("two animation channels drive the same joint's translation, rotation or scale");
+        }
+        driven[(kBone->second * 3) + kind] = true;
+        if (clip.tracks.size() == settings.clipLimits.maximumTracks) {
+            return overLimit("an animation with more channels on joints than a clip may have tracks");
         }
         const cgltf_animation_sampler& kSampler = *kChannel.sampler;
         const bool kCubic = kSampler.interpolation == cgltf_interpolation_type_cubic_spline;

@@ -4,7 +4,8 @@
 // as poses and as differences, and what imports is a skeleton and clips
 // their documents write and read back unchanged. Every file the source
 // names reads as the same small buffer, so sibling buffers are reached
-// too.
+// too. The limits are the ones the engine ships, so what one input may ask
+// for is what any author's file may.
 
 #include "rawframe/animation/clip.h"
 #include "rawframe/animation/skeleton.h"
@@ -44,12 +45,7 @@ result::Result<std::span<const std::byte>> readSibling(std::string_view) {
 
 void importAs(std::span<const std::byte> bytes, bool loop, std::optional<animation::AdditiveBasis> additive) {
     const animation_import::ImportSettings kSettings{
-        .skeleton = base::Bits128{0, 0x5c},
-        .loop = loop,
-        .additive = additive,
-        .maximumBytes = std::size_t{1} << 16U,
-        .skeletonLimits = {.maximumBones = 64},
-        .clipLimits = {.maximumTracks = 256, .maximumKeys = 4096, .maximumEvents = 64}};
+        .skeleton = base::Bits128{0, 0x5c}, .loop = loop, .additive = additive};
     const auto kImported = animation_import::importGltf(bytes, &readSibling, kSettings);
     if (!kImported.has_value()) {
         return;
