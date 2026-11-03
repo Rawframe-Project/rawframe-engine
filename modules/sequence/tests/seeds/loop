@@ -1,0 +1,6 @@
+sequence 1
+duration 2
+loop
+track a
+play 0 a 0000000000000001
+play 1.5 a 0000000000000002

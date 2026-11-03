@@ -1,0 +1,8 @@
+sequence 1
+duration 12
+track door  # the gate
+track hero
+play 0 hero 3f2a0c2d9e81b746
+play 4.5 door 5a1e6c0d2b9f8374
+event 6 5f3a0c2d9e81b746 opened
+play 12 hero 0000000000000000

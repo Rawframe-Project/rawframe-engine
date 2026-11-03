@@ -8,3 +8,4 @@ rawframe_module(NAME sequence
 )
 
 rawframe_module_tests(NAME sequence SOURCES tests/sequence_test.cpp)
+rawframe_module_fuzz(NAME sequence TARGET sequence RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_sequence.cpp)

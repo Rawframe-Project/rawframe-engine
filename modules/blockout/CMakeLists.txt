@@ -8,3 +8,4 @@ rawframe_module(NAME blockout
 )
 
 rawframe_module_tests(NAME blockout SOURCES tests/blockout_test.cpp)
+rawframe_module_fuzz(NAME blockout TARGET blockout RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_blockout.cpp)

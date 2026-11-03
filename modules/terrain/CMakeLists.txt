@@ -9,3 +9,4 @@ rawframe_module(NAME terrain
 )
 
 rawframe_module_tests(NAME terrain SOURCES tests/terrain_test.cpp)
+rawframe_module_fuzz(NAME terrain TARGET terrain RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_terrain.cpp)
