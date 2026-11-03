@@ -139,21 +139,37 @@ enum {
 // refused unless the budget holds the list beside what stb_vorbis holds
 // before it: itself and the vendor string, each rounded up to eight bytes
 // as it rounds them.
+// It also takes the vendor string's length and each comment's plus one in
+// an int, so every field of the header must lie within its packet: the
+// stream is refused when the packet ends before the count, before any of
+// the count's comments, or inside one. That bounds the count by the packet
+// too, at four bytes a comment.
 // Where stb_vorbis would read that packet's bytes differently, the stream
-// is refused too: a page of no segments, whose lacing it takes from the page
-// before, and a page carrying the packet on without saying it continues one,
-// past which it reads on. So is a comment header cut before its count's
-// last byte: from memory, stb_vorbis reads past the end as zeros, which
-// makes a count of what is there. What is not the comment header at all is
-// left to stb_vorbis, which refuses it.
+// is refused as well: a page of no segments, whose lacing it takes from the
+// page before, and a page carrying the packet on without saying it
+// continues one, past which it reads on. So is a comment header cut by the
+// end of the data: from memory, stb_vorbis reads past the end as zeros.
+// What is not the comment header at all is left to stb_vorbis, which
+// refuses it.
 static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
+    enum {
+        vendor_length,
+        comment_count,
+        comment_length,
+        read_whole
+    };
     size_t page = 0;
     size_t packet = 0;
-    // The second packet's bytes so far: its type and "vorbis" (7), the
-    // vendor string's length (4), the vendor string, the comment count (4).
+    // The second packet's bytes so far, and where its next four-byte field
+    // begins: the vendor string's length after its type and "vorbis" (7),
+    // the comment count after the vendor string, each comment's length after
+    // the comment before. Once all are read, where the last comment ends.
     uint64_t at = 0;
+    uint64_t field = 7;
+    uint32_t value = 0;
+    int stage = vendor_length;
     uint32_t vendor = 0;
-    uint32_t count = 0;
+    uint32_t left = 0;
     while (page + 27 <= size && memcmp(bytes + page, "OggS", 4) == 0) {
         const size_t segments = bytes[page + 26];
         size_t data = page + 27 + segments;
@@ -166,17 +182,36 @@ static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
         for (size_t segment = 0; segment < segments; ++segment) {
             const size_t lacing = bytes[page + 27 + segment];
             for (size_t index = 0; packet == 1 && index < lacing && data + index < size; ++index, ++at) {
-                const uint32_t byte = bytes[data + index];
-                if (at >= 7 && at < 11) {
-                    vendor |= byte << (8 * (at - 7));
-                } else if (at >= 11 && at - 11 >= vendor && at - 11 - vendor < 4) {
-                    count |= byte << (8 * (at - 11 - vendor));
-                    if (at - 11 - vendor == 3) {
-                        const uint64_t held_before = (((uint64_t)sizeof(stb_vorbis) + 7) & ~(uint64_t)7) +
-                                                     (((uint64_t)vendor + 1 + 7) & ~(uint64_t)7);
-                        return (int32_t)count <= 0 || held_before + (uint64_t)count * sizeof(char*) <= vorbis_budget;
+                if (stage == read_whole || at < field) {
+                    continue;
+                }
+                value |= (uint32_t)bytes[data + index] << (8 * (at - field));
+                if (at - field < 3) {
+                    continue;
+                }
+                field = at + 1;
+                if (stage == vendor_length) {
+                    vendor = value;
+                    field += vendor;
+                    stage = comment_count;
+                } else if (stage == comment_count) {
+                    const uint64_t held_before = (((uint64_t)sizeof(stb_vorbis) + 7) & ~(uint64_t)7) +
+                                                 (((uint64_t)vendor + 1 + 7) & ~(uint64_t)7);
+                    if ((int32_t)value <= 0) {
+                        stage = read_whole;
+                    } else if (held_before + (uint64_t)value * sizeof(char*) > vorbis_budget) {
+                        return 0;
+                    } else {
+                        left = value;
+                        stage = comment_length;
+                    }
+                } else {
+                    field += value;
+                    if (--left == 0) {
+                        stage = read_whole;
                     }
                 }
+                value = 0;
             }
             // A segment cut short ends the data, not the packet its lacing
             // says it ends.
@@ -185,7 +220,7 @@ static int vorbis_comments_fit(const unsigned char* bytes, size_t size) {
             }
             data += lacing;
             if (lacing < 255 && ++packet == 2) {
-                return 1;
+                return stage == read_whole && at >= field;
             }
         }
         page = data;
