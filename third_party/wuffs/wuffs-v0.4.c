@@ -32326,6 +32326,14 @@ wuffs_base__pixel_swizzler__swizzle_interleaved_transparent_black(
     wuffs_base__slice_u8 dst,
     wuffs_base__slice_u8 dst_palette,
     uint64_t num_pixels) {
+  // Rawframe engine change: the BMP decoder clears the rest of a row past
+  // the image (an RLE end-of-line on the last row, then end-of-bitmap),
+  // where the row is an empty slice whose pointer is null, and memset of a
+  // null pointer is undefined even for nought bytes. An empty destination
+  // takes no pixels.
+  if (dst.len == 0) {
+    return 0;
+  }
   if (p && p->private_impl.transparent_black_func) {
     return (*p->private_impl.transparent_black_func)(
         dst.ptr, dst.len, dst_palette.ptr, dst_palette.len, num_pixels,

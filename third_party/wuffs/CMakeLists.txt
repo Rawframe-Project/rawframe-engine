@@ -1,6 +1,7 @@
-# Wuffs, vendored at the exact revision recorded in third_party/README.md.
-# This file and wuffs.cpp are ours; everything else in this directory is
-# Wuffs's own, unchanged. ADR-0058: source images are decoded in import
+# Wuffs, vendored at the exact revision recorded in
+# docs/operations/dependencies.md by tools/update_wuffs.sh. This file and
+# wuffs.cpp are ours; everything else in this directory is Wuffs's own,
+# changed only by the patches in tools/patches/wuffs. ADR-0058: source images are decoded in import
 # tooling only, so only the cook links this, and no runtime closure does.
 # Wuffs is memory-safe by construction, which is why it may face an
 # author's or a player's files alike.

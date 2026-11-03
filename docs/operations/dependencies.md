@@ -31,7 +31,7 @@ Every third-party library is vendored under `third_party/` at an exact revision 
 | OpenSSL 3.5 | `openssl/openssl` | `453eaaa9e6bb1304730abacfbb73d51868cb6ab9` | Apache-2.0 | all but tests, demos, sample keys and documentation |
 | Opus 1.5.2 | `xiph/opus` | `ddbe48383984d56acd9e1ab6a090c54ca6b735a6` | BSD-3-Clause | `include/`, `src/`, `celt/`, `silk/`, the source lists, `COPYING` |
 | Zstandard 1.5.7 | `facebook/zstd` | `f8745da6ff1ad1e7bab384bd1f9d742439278e99` | BSD-3-Clause | `lib/common`, `lib/compress`, `lib/decompress`, the two headers, `LICENSE` |
-| Wuffs 0.4.0-alpha.10 | `google/wuffs-mirror-release-c` | `7411f488fe2e2c205c3d3b3d28638b7356522930` | Apache-2.0 | `release/c/wuffs-v0.4.c`, the licenses; `wuffs.cpp` is the engine's |
+| Wuffs 0.4.0-alpha.10 | `google/wuffs-mirror-release-c` | `7411f488fe2e2c205c3d3b3d28638b7356522930` | Apache-2.0 | `release/c/wuffs-v0.4.c` with one [engine change](#engine-changes-to-vendored-code), the licenses; `wuffs.cpp` is the engine's |
 | bc7enc_rdo | `richgel999/bc7enc_rdo` | `b9438627eef73a1157e84201b6fa6eb2ffd6d9f0` | MIT | the encoder and decoder, `LICENSE` |
 | cgltf 1.15 | `jkuhlmann/cgltf` | `360db1a95480fe102ae9c69b27c5d101167ff5ba` | MIT | `cgltf.h`, `LICENSE`; `cgltf.c` and `rawframe_gltf_checks.c` and `.h` are the engine's |
 | CLDR 48.1.0 (JSON) | `unicode-org/cldr-json` | `d2988851207ba643d9ccc4c2e895e5ca1f4fbaf3` | Unicode-3.0 | the core supplements the localization tables are made from, every modern-coverage locale's `numbers.json`, `LICENSE` |
@@ -46,7 +46,7 @@ Each library has an update script that replaces its folder from a checkout or ar
 | Kest | `tools/update_kest.sh <checkout> <revision>` |
 | A Maul library | `tools/update_maul.sh <maul2d\|maul3d\|maul-unicode\|maul-window\|maul-rhi\|maul-ui\|maul-nav\|maul-audio> <checkout> <revision>` |
 | MsQuic and OpenSSL | `tools/update_quic.sh <msquic revision> <openssl revision>`, then the two revisions in `third_party/quic.cmake` |
-| cgltf, miniaudio, Opus, Zstandard | `tools/update_cgltf.sh`, `update_miniaudio.sh`, `update_opus.sh`, `update_zstd.sh` with `<checkout> <revision>` |
+| cgltf, miniaudio, Opus, Wuffs, Zstandard | `tools/update_cgltf.sh`, `update_miniaudio.sh`, `update_opus.sh`, `update_wuffs.sh`, `update_zstd.sh` with `<checkout> <revision>` |
 | FreeType and HarfBuzz | `tools/update_text_deps.sh`, checked against the SHA-256 Maul UI's `cmake/TextDependencies.cmake` pins |
 | OpenType Sanitizer | `tools/update_ots.sh`, from its release archive checked by SHA-256 |
 | CLDR | `tools/update_cldr.sh <cldr-json commit>`, then `tools/generate_cldr.py` |
@@ -61,6 +61,7 @@ Vendored code is upstream's, with these changes only. Each is a patch in `tools/
 |---|---|---|
 | miniaudio | `stb_vorbis-codeword-mask.patch` | stb_vorbis's linear search of a small codebook masks the bits it holds with `(1 << length) - 1` as `int`. A codeword may be 31 bits long (stb_vorbis refuses 32), and at 31 the mask overflows; it is worked unsigned. |
 | miniaudio | `stb_vorbis-list-count.patch` | stb_vorbis multiplies a list codebook's (lookup type 2) entries by its dimensions as `int`. Within the import budget, the product can pass what an `int` holds, which is undefined; such a codebook is refused before the product is taken. |
+| Wuffs | `bmp-rle-empty-row.patch` | Wuffs's BMP decoder clears the rest of a row past the image when an RLE8 or RLE4 image ends its last row and then the bitmap, as encoders commonly write it. Past the image the row is an empty slice with a null pointer, and clearing it calls `memset(NULL, 0, 0)`, which is undefined; an empty destination is now left alone. Upstream's main branch had the same code when the patch was written, so a move checks whether it is fixed there before dropping the patch. |
 
 ## Notes per library
 
