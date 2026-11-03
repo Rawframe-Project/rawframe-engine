@@ -10,11 +10,11 @@ using namespace rawframe;
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(data), size};
-    const auto kRebuilt = font_import::sanitize(kBytes, {.maximumBytes = 1U << 20U});
+    const auto kRebuilt = font_import::sanitize(kBytes);
     if (!kRebuilt.has_value()) {
         return 0;
     }
-    if (!font_import::sanitize(*kRebuilt, {.maximumBytes = 1U << 21U}).has_value()) {
+    if (!font_import::sanitize(*kRebuilt).has_value()) {
         std::abort();
     }
     return 0;
