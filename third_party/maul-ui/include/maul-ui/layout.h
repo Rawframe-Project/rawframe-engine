@@ -20,7 +20,7 @@ extern "C"
 #endif
 
     // Whether a dimension is automatic or a Scale+Offset value.
-    typedef uint8_t muiDimensionKind;
+    typedef int32_t muiDimensionKind;
 
     enum
     {
@@ -69,7 +69,7 @@ extern "C"
     } muiEdges;
 
     // The main axis of a container and the direction its children follow.
-    typedef uint8_t muiFlexDirection;
+    typedef int32_t muiFlexDirection;
 
     enum
     {
@@ -80,7 +80,7 @@ extern "C"
     };
 
     // How a container places its children along the main axis.
-    typedef uint8_t muiJustify;
+    typedef int32_t muiJustify;
 
     enum
     {
@@ -93,7 +93,7 @@ extern "C"
     };
 
     // How children sit on the cross axis.
-    typedef uint8_t muiAlign;
+    typedef int32_t muiAlign;
 
     enum
     {
@@ -111,7 +111,7 @@ extern "C"
     };
 
     // Whether a container breaks its children into lines.
-    typedef uint8_t muiFlexWrap;
+    typedef int32_t muiFlexWrap;
 
     enum
     {
@@ -124,7 +124,7 @@ extern "C"
     };
 
     // How a container with several lines places them on the cross axis.
-    typedef uint8_t muiAlignContent;
+    typedef int32_t muiAlignContent;
 
     enum
     {
@@ -170,7 +170,7 @@ extern "C"
     } muiSides;
 
     // Sides of a box, as bits.
-    typedef uint8_t muiEdgeMask;
+    typedef uint32_t muiEdgeMask;
 
     enum
     {
@@ -181,7 +181,7 @@ extern "C"
     };
 
     // Whether a node is a flex item of its parent or placed by insets.
-    typedef uint8_t muiPositionKind;
+    typedef int32_t muiPositionKind;
 
     enum
     {
@@ -218,7 +218,7 @@ extern "C"
     } muiPlacement;
 
     // The inline direction of a node and the nodes below it that inherit.
-    typedef uint8_t muiInlineDirection;
+    typedef int32_t muiInlineDirection;
 
     enum
     {
@@ -231,7 +231,7 @@ extern "C"
     };
 
     // What a node without children holds.
-    typedef uint8_t muiContentKind;
+    typedef int32_t muiContentKind;
 
     enum
     {
@@ -244,7 +244,7 @@ extern "C"
 
     // One of the two axes on screen: which way a range, a list or a
     // scrollbar runs.
-    typedef uint8_t muiAxis;
+    typedef int32_t muiAxis;
 
     enum
     {
@@ -257,7 +257,7 @@ extern "C"
     // padding box, its automatic minimum sizes are 0 on both axes, as
     // CSS's (an aspect ratio's content floor too), and layout measures the
     // extent its children reach (maul-ui/scroll.h).
-    typedef uint8_t muiScrollAxes;
+    typedef uint32_t muiScrollAxes;
 
     enum
     {
@@ -309,7 +309,7 @@ extern "C"
     } muiSize;
 
     // What the solver asks of host content along one axis.
-    typedef uint8_t muiMeasureMode;
+    typedef int32_t muiMeasureMode;
 
     enum
     {

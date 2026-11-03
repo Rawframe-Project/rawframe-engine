@@ -115,8 +115,8 @@ static bool WordSegment(const muiAccessTextMarks* marks, bool forward, uint32_t 
         {
             if (marks->words[i].end > at)
             {
-                *startOut = marks->words[i].start > at ? marks->words[i].start : at;
-                *endOut = marks->words[i].end;
+                *startOut = marks->words[i].start > at ? (uint32_t)marks->words[i].start : at;
+                *endOut = (uint32_t)marks->words[i].end;
                 return true;
             }
         }
@@ -126,8 +126,8 @@ static bool WordSegment(const muiAccessTextMarks* marks, bool forward, uint32_t 
     {
         if (marks->words[i].start < at)
         {
-            *startOut = marks->words[i].start;
-            *endOut = marks->words[i].end < at ? marks->words[i].end : at;
+            *startOut = (uint32_t)marks->words[i].start;
+            *endOut = marks->words[i].end < at ? (uint32_t)marks->words[i].end : at;
             return true;
         }
     }
@@ -152,8 +152,8 @@ static bool Segment(const muiAccessText* text, jint granularity, bool forward, u
     }
 }
 
-static bool AskSelection(const muiAndroidAdapter* adapter, const muiAccessNode* node,
-                         uint32_t anchor, uint32_t focus)
+static bool AskSelection(const muiAndroidAdapter* adapter, const muiAccessNode* node, size_t anchor,
+                         size_t focus)
 {
     const muiAccessRequest request = {
         .action = mui_actionSetSelection, .target = node->id, .anchor = anchor, .focus = focus};
@@ -170,7 +170,7 @@ bool muiAndroidTraverse(const muiAndroidAdapter* adapter, const muiAccessNode* n
     muiAccessText text = muiAccessValueOf(node);
     const muiAccessTextMarks* marks = &node->marks;
     bool caret = marks->selected && Has(node, mui_actionSetSelection);
-    uint32_t at = caret         ? marks->focus
+    uint32_t at = caret         ? (uint32_t)marks->focus
                   : cursor >= 0 ? muiAccessByteOfUtf16(&text, (uint32_t)cursor)
                   : forward     ? 0
                                 : text.length;
@@ -181,7 +181,7 @@ bool muiAndroidTraverse(const muiAndroidAdapter* adapter, const muiAccessNode* n
         return false;
     }
     uint32_t focus = forward ? end : start;
-    uint32_t anchor = caret && extend ? marks->anchor : focus;
+    uint32_t anchor = caret && extend ? (uint32_t)marks->anchor : focus;
     if (caret && !AskSelection(adapter, node, anchor, focus))
     {
         return false;
@@ -279,7 +279,7 @@ bool muiAndroidSetText(const muiAndroidAdapter* adapter, const muiAccessNode* no
                                       .anchor = 0,
                                       .focus = muiAccessValueOf(node).length,
                                       .text = bytes,
-                                      .length = (uint32_t)length};
+                                      .length = length};
     bool done = muiActMarked(&adapter->busy, adapter->action, adapter->user, &request);
     muiReleaseMarked(&adapter->busy, &adapter->allocator, bytes, room, 1);
     return done;

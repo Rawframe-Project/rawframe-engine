@@ -5,34 +5,26 @@
 
 #include "android_name.h"
 
-#include "maul-unicode/encoding.h"
+#include "utf8.h"
 
 #include <stdio.h>
 #include <string.h>
 
 void mwinAndroidNameOf(const uint16_t* units, size_t count, char* name)
 {
-    size_t taken = units != nullptr ? count : 0;
-    size_t needed = 0;
-    // Units dropped from the end until the rest fits, never half a pair.
-    for (;;)
-    {
-        (void)muniConvertUtf16ToUtf8(units, taken, muni_convertReplace, nullptr, 0, &needed);
-        if (needed <= MWIN_ANDROID_NAME_BYTES || taken == 0)
-        {
-            break;
-        }
-        taken -= taken >= 2 && units[taken - 1] >= 0xDC00 && units[taken - 1] <= 0xDFFF ? 2 : 1;
-    }
-    (void)muniConvertUtf16ToUtf8(units, taken, muni_convertReplace, name, MWIN_ANDROID_NAME_BYTES,
-                                 &needed);
+    size_t needed =
+        mwinCutUtf16(units, units != nullptr ? count : 0, name, MWIN_ANDROID_NAME_BYTES);
     name[needed] = '\0';
+    // A '/' would leave the folder, and a NUL end the name early.
+    for (size_t i = 0; i < needed; i++)
+    {
+        if (name[i] == '/' || name[i] == '\0')
+        {
+            name[i] = '_';
+        }
+    }
     if (needed == 0 || strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
     {
         (void)snprintf(name, MWIN_ANDROID_NAME_BYTES + 1, "Document");
-    }
-    for (char* at = strchr(name, '/'); at != nullptr; at = strchr(at, '/'))
-    {
-        *at = '_';
     }
 }

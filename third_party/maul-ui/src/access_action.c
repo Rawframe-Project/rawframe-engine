@@ -92,7 +92,8 @@ static bool Perform(muiContext* context, uint32_t slot, const muiAccessRequest* 
     default:
     {
         // Expand and collapse are the host's.
-        const muiNotification record = {mui_notificationAccessAction, nodeId, request->action};
+        const muiNotification record = {
+            .kind = mui_notificationAccessAction, .node = nodeId, .action = request->action};
         muiNotifyPost(&context->notifications, &record);
         return true;
     }
@@ -110,11 +111,7 @@ static muiResult PerformAccessAction(muiContext* context, const muiAccessRequest
     {
         *handledOut = false;
     }
-    if (muiIsRouting(context))
-    {
-        return muiRefuseBusy(context);
-    }
-    if (request == nullptr || request->action > mui_actionReplaceText)
+    if (request == nullptr || (uint32_t)request->action > mui_actionReplaceText)
     {
         return muiRefuse(context);
     }
@@ -152,6 +149,10 @@ static MUI_NOINLINE muiResult PerformAccessActionWorker(muiContext* context,
                                                         const muiAccessRequest* request,
                                                         bool* handledOut)
 {
+    if (muiRefusesBusy(context, true))
+    {
+        return mui_errorBusy;
+    }
     if (handledOut != nullptr)
     {
         *handledOut = false;

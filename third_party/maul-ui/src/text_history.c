@@ -11,9 +11,12 @@
 
 #include "text_history.h"
 
+#include "invariant.h"
+
 #include "maul-unicode/encoding.h"
 #include "maul-unicode/properties.h"
 
+#include <stdckdint.h>
 #include <string.h>
 
 void muiClearHistory(muiTextEditing* editing)
@@ -72,6 +75,10 @@ static void Join(muiTextEditing* editing, muiTextEdit* last, const muiTextEdit* 
                  const char* removed, const char* inserted)
 {
     char* bytes = editing->bytes.data;
+    // The last edit's bytes end the buffer, and muiReserveEdit made room
+    // for this one's after them.
+    MUI_ASSERT(last->bytes + last->removed + last->inserted == editing->byteCount &&
+               (size_t)editing->byteCount + edit->removed + edit->inserted <= editing->bytes.bytes);
     if (edit->kind == MUI_EDIT_BACKWARD)
     {
         // What a backspace removed came before what the run had.
@@ -88,13 +95,15 @@ static void Join(muiTextEditing* editing, muiTextEdit* last, const muiTextEdit* 
     last->removed += edit->removed;
     last->inserted += edit->inserted;
     last->after = edit->after;
-    editing->byteCount += edit->removed + edit->inserted;
+    editing->byteCount += (size_t)edit->removed + edit->inserted;
 }
 
 static void DropOldest(muiTextEditing* editing)
 {
     muiTextEdit* entries = editing->entries.data;
-    uint32_t shift = entries[0].removed + entries[0].inserted;
+    // Dropped only from a full history whose edits are all done.
+    MUI_ASSERT(editing->entryCount != 0 && editing->done == editing->entryCount);
+    size_t shift = (size_t)entries[0].removed + entries[0].inserted;
     char* bytes = editing->bytes.data;
     memmove(bytes, bytes + shift, editing->byteCount - shift);
     memmove(entries, entries + 1, (editing->entryCount - 1) * sizeof *entries);
@@ -107,28 +116,58 @@ static void DropOldest(muiTextEditing* editing)
     }
 }
 
+// The bytes the edits not undone hold.
+static size_t KeptBytes(const muiTextEditing* editing)
+{
+    const muiTextEdit* entries = editing->entries.data;
+    uint32_t done = editing->done;
+    MUI_ASSERT(done <= editing->entryCount);
+    return done != 0
+               ? entries[done - 1].bytes + entries[done - 1].removed + entries[done - 1].inserted
+               : 0;
+}
+
+bool muiReserveEdit(const muiAllocator* allocator, muiTextEditing* editing, uint32_t removed,
+                    uint32_t inserted)
+{
+    // Every edit is kept, those undone too, as an edit reserved for may
+    // not be recorded.
+    if (editing->rules.undoLimit == 0)
+    {
+        return true;
+    }
+    size_t entries = (size_t)editing->entryCount * sizeof(muiTextEdit);
+    size_t entriesNeeded = ((size_t)editing->done + 1) * sizeof(muiTextEdit);
+    size_t bytes = editing->byteCount;
+    // Past SIZE_MAX, which only a 32-bit size_t reaches, no buffer holds
+    // the history.
+    size_t bytesNeeded = 0;
+    if (ckd_add(&bytesNeeded, KeptBytes(editing), (size_t)removed + inserted))
+    {
+        return false;
+    }
+    return muiReserveKeeping(allocator, &editing->entries,
+                             entriesNeeded > entries ? entriesNeeded : entries, entries) &&
+           muiReserveKeeping(allocator, &editing->bytes, bytesNeeded > bytes ? bytesNeeded : bytes,
+                             bytes);
+}
+
 bool muiRecordEdit(const muiAllocator* allocator, muiTextEditing* editing, const muiTextEdit* edit,
                    const char* removed, const char* inserted)
 {
     // What was undone goes.
-    muiTextEdit* entries = editing->entries.data;
     uint32_t done = editing->done;
-    uint32_t kept =
-        done != 0 ? entries[done - 1].bytes + entries[done - 1].removed + entries[done - 1].inserted
-                  : 0;
+    size_t kept = KeptBytes(editing);
     if (editing->rules.undoLimit == 0)
     {
         muiClearHistory(editing);
         return true;
     }
-    if (!muiReserveKeeping(allocator, &editing->entries, (done + 1u) * sizeof(muiTextEdit),
-                           done * sizeof(muiTextEdit)) ||
-        !muiReserveKeeping(allocator, &editing->bytes,
-                           (size_t)kept + edit->removed + edit->inserted, kept))
+    if (!muiReserveEdit(allocator, editing, edit->removed, edit->inserted))
     {
         return false;
     }
-    entries = editing->entries.data;
+    muiTextEdit* entries = editing->entries.data;
     if (entries == nullptr || editing->bytes.data == nullptr)
     {
         // Reserved above; said again for the analyzer.
@@ -150,6 +189,9 @@ bool muiRecordEdit(const muiAllocator* allocator, muiTextEditing* editing, const
     {
         DropOldest(editing);
     }
+    // muiReserveEdit made room for one more edit and its bytes.
+    MUI_ASSERT(((size_t)editing->entryCount + 1) * sizeof(muiTextEdit) <= editing->entries.bytes &&
+               (size_t)editing->byteCount + edit->removed + edit->inserted <= editing->bytes.bytes);
     muiTextEdit* added = &entries[editing->entryCount++];
     *added = *edit;
     added->bytes = editing->byteCount;
@@ -162,7 +204,7 @@ bool muiRecordEdit(const muiAllocator* allocator, muiTextEditing* editing, const
     {
         memcpy(bytes + editing->byteCount + edit->removed, inserted, edit->inserted);
     }
-    editing->byteCount += edit->removed + edit->inserted;
+    editing->byteCount += (size_t)edit->removed + edit->inserted;
     editing->done = editing->entryCount;
     return true;
 }

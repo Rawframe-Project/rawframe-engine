@@ -510,6 +510,10 @@ static muiResult NextNotification(muiContext* context, muiNotification* notifica
 
 muiResult muiContext_TakeNotification(muiContext* context, muiNotification* notificationOut)
 {
+    if (muiRefusesBusy(context, false))
+    {
+        return mui_errorBusy;
+    }
     if (notificationOut != nullptr)
     {
         memset(notificationOut, 0, sizeof *notificationOut);

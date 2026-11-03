@@ -281,9 +281,20 @@ static uint32_t ReadFormats(const mrhiVulkan* vulkan, VkPhysicalDevice device, V
     return result == VK_SUCCESS || result == VK_INCOMPLETE ? count : 0;
 }
 
+// The surface's known colors in its order, at most MRHI_SURFACE_COLORS.
+// The first 8-bit sRGB pair in Rec. 709 the surface lists, the floor,
+// keeps a slot wherever it is listed, so that colors listed before it
+// never crowd it out.
 static void AddColors(const VkSurfaceFormatKHR* formats, uint32_t count, mrhiSurfaceCaps* caps)
 {
-    for (uint32_t i = 0; i < count && caps->colorCount < MRHI_SURFACE_COLORS; ++i)
+    // Where the floor is listed; count when it is not.
+    uint32_t floorAt = count;
+    for (uint32_t i = 0; i < count && floorAt == count; ++i)
+    {
+        mrhiSurfaceColor color;
+        floorAt = ColorOf(formats[i], &color) && mrhiIsSurfaceColorSrgb8(&color) ? i : count;
+    }
+    for (uint32_t i = 0; i < count; ++i)
     {
         mrhiSurfaceColor color;
         bool known = ColorOf(formats[i], &color);
@@ -291,7 +302,11 @@ static void AddColors(const VkSurfaceFormatKHR* formats, uint32_t count, mrhiSur
         {
             known = !IsSameColor(caps->colors[j], color);
         }
-        if (known)
+        // Before the floor's listing, a slot stays free for it, so its
+        // listing, new to the caps, always finds one. A surface that lists
+        // none keeps one color fewer, and does not present.
+        uint32_t room = MRHI_SURFACE_COLORS - (i < floorAt ? 1u : 0u);
+        if (known && caps->colorCount < room)
         {
             caps->colors[caps->colorCount++] = color;
         }
@@ -383,12 +398,9 @@ void mrhiVulkanCapsOf(const mrhiVulkanSurfaceFacts* facts, mrhiSurfaceCaps* caps
     caps.alphaModes |=
         (alpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) != 0 ? mrhi_alphaPremultipliedBit : 0u;
     caps.usages = UsagesOf(facts->usages);
-    // The floors: a color, FIFO, opaque alpha, render targets and a way to
-    // sRGB.
-    caps.presentable = caps.colorCount > 0 && (caps.presentModes & mrhi_presentFifoBit) != 0 &&
-                       (caps.alphaModes & mrhi_alphaOpaqueBit) != 0 &&
-                       (caps.usages & mrhi_textureRenderTarget) != 0 &&
-                       (caps.twinViews || caps.twinImages);
+    // The floors: 8-bit sRGB in Rec. 709, FIFO, opaque alpha, render
+    // targets and a way to sRGB.
+    caps.presentable = mrhiSurfaceCapsMeetFloors(&caps);
     if (caps.presentable)
     {
         *capsOut = caps;
@@ -410,11 +422,11 @@ void mrhiVulkanSurfaceCaps(const mrhiVulkan* vulkan, VkPhysicalDevice device, bo
     {
         return;
     }
-    VkSurfaceFormatKHR formats[64];
+    VkSurfaceFormatKHR formats[MRHI_VULKAN_SURFACE_FORMATS];
     VkPresentModeKHR modes[16];
     const mrhiVulkanSurfaceFacts facts = {
         .formats = formats,
-        .formatCount = ReadFormats(vulkan, device, surface, formats, 64),
+        .formatCount = ReadFormats(vulkan, device, surface, formats, MRHI_VULKAN_SURFACE_FORMATS),
         .modes = modes,
         .modeCount = ReadModes(vulkan, device, surface, modes, 16),
         .alpha = surfaceCaps.supportedCompositeAlpha,
@@ -450,7 +462,7 @@ bool mrhiVulkanSurfaceFormat(const mrhiVulkan* vulkan, VkPhysicalDevice device,
                              VkSurfaceKHR surface, mrhiSurfaceColor color,
                              VkSurfaceFormatKHR* formatOut)
 {
-    VkSurfaceFormatKHR formats[64];
-    uint32_t count = ReadFormats(vulkan, device, surface, formats, 64);
+    VkSurfaceFormatKHR formats[MRHI_VULKAN_SURFACE_FORMATS];
+    uint32_t count = ReadFormats(vulkan, device, surface, formats, MRHI_VULKAN_SURFACE_FORMATS);
     return mrhiVulkanPickFormat(formats, count, color, formatOut);
 }

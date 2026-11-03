@@ -22,7 +22,7 @@ extern "C"
 #endif
 
     // How texels are filtered.
-    typedef uint8_t mrhiFilter;
+    typedef int32_t mrhiFilter;
 
     enum
     {
@@ -34,7 +34,7 @@ extern "C"
 
     // How coordinates outside a texture are treated. Clamp to border is absent:
     // WebGPU has no border colors.
-    typedef uint8_t mrhiAddressMode;
+    typedef int32_t mrhiAddressMode;
 
     enum
     {
@@ -48,7 +48,7 @@ extern "C"
 
     // A comparison of a new value with a stored one: for comparison samplers,
     // and for depth and stencil tests.
-    typedef uint8_t mrhiCompareFunction;
+    typedef int32_t mrhiCompareFunction;
 
     enum
     {
@@ -244,7 +244,7 @@ extern "C"
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDestroyBuffer(mrhiDevice* device, mrhiBufferId buffer);
 
     // The shape of a texture, or of a view of one.
-    typedef uint8_t mrhiTextureKind;
+    typedef int32_t mrhiTextureKind;
 
     enum
     {
@@ -384,7 +384,7 @@ extern "C"
                                                           mrhiTextureId texture);
 
     // The part of a texture's texels a view sees.
-    typedef uint8_t mrhiTextureAspect;
+    typedef int32_t mrhiTextureAspect;
 
     enum
     {
@@ -489,7 +489,7 @@ extern "C"
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDestroyView(mrhiDevice* device, mrhiViewId view);
 
     // What a query set's queries measure.
-    typedef uint8_t mrhiQueryType;
+    typedef int32_t mrhiQueryKind;
 
     enum
     {
@@ -536,7 +536,7 @@ extern "C"
         // The label's bytes.
         size_t labelLength;
         // What its queries measure.
-        mrhiQueryType type;
+        mrhiQueryKind kind;
         // Its queries, 1 to MRHI_MAX_QUERY_SET_QUERIES.
         uint32_t count;
     } mrhiQuerySetDef;

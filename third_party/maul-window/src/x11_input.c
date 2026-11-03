@@ -100,7 +100,7 @@ void mwinX11StopKeyboard(mwinX11Platform* platform)
 static void PostLayoutChange(mwinX11Platform* platform)
 {
     mwinEvent event = {0};
-    event.type = mwin_eventKeyboardLayoutChanged;
+    event.kind = mwin_eventKeyboardLayoutChanged;
     event.timeNs = mwinMonotonicNow();
     mwinPostGlobal(platform->context, &event);
 }
@@ -148,7 +148,7 @@ static void OnKey(mwinX11Platform* platform, const xcb_key_press_event_t* event,
                                              : keyboard->held[event->detail >> 3] & (uint8_t)~bit;
     mwinKeyCode code = mwinKeyCodeFromEvdev(evdev);
     mwinEvent record = {0};
-    record.type = pressed ? mwin_eventKeyDown : mwin_eventKeyUp;
+    record.kind = pressed ? mwin_eventKeyDown : mwin_eventKeyUp;
     record.timeNs = mwinMonotonicFromMilliseconds(event->time);
     record.data.key = (mwinKeyEvent){code, keyboard->xkb.modifiers,
                                      mwinXkbKeyOf(&keyboard->xkb, evdev, code), repeat};
@@ -165,22 +165,23 @@ static void OnKey(mwinX11Platform* platform, const xcb_key_press_event_t* event,
     if (length > 0)
     {
         mwinEvent typed = {0};
-        typed.type = mwin_eventTextInput;
+        typed.kind = mwin_eventTextInput;
         typed.timeNs = record.timeNs;
         typed.data.text = (mwinTextEvent){text, length};
         mwinPost(platform->context, (uint32_t)slot, &typed);
     }
 }
 
-static void PostPointer(mwinX11Platform* platform, uint32_t slot, mwinEventType type,
+static void PostPointer(mwinX11Platform* platform, uint32_t slot, mwinEventKind type,
                         mwinMouseButton button, uint64_t timeNs)
 {
     const mwinX11Pointer* pointer = &platform->pointer;
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
-    event.data.pointer = (mwinPointerEvent){pointer->position, platform->keyboard.xkb.modifiers,
-                                            pointer->buttons, button, pointer->clicks.clicks};
+    event.data.pointer =
+        (mwinPointerEvent){pointer->position, platform->keyboard.xkb.modifiers, pointer->buttons,
+                           button, pointer->clickCounter.clickCount};
     mwinPost(platform->context, slot, &event);
 }
 
@@ -192,7 +193,7 @@ static mwinPosition PositionOf(const mwinX11Platform* platform, int16_t x, int16
 static void PostWheel(mwinX11Platform* platform, uint32_t slot, float x, float y, uint64_t timeNs)
 {
     mwinEvent event = {0};
-    event.type = mwin_eventWheel;
+    event.kind = mwin_eventWheel;
     event.timeNs = timeNs;
     event.data.wheel = (mwinWheelEvent){x, y};
     mwinPost(platform->context, slot, &event);
@@ -227,10 +228,15 @@ static void OnButton(mwinX11Platform* platform, const xcb_button_press_event_t* 
         return;
     }
     mwinMouseButton button = buttons[event->detail];
-    uint8_t bit = (uint8_t)(1u << (button - 1));
+    if (button == 0)
+    {
+        // Button 0, which names none; another program can send it.
+        return;
+    }
+    mwinMouseButtons bit = mwinMouseBit(button);
     if (pressed)
     {
-        uint8_t clicks = mwinCountClick(&pointer->clicks, button, pointer->position, timeNs);
+        uint8_t clicks = mwinCountClick(&pointer->clickCounter, button, pointer->position, timeNs);
         if (button == mwin_buttonLeft &&
             mwinX11PressChrome(platform, (uint32_t)slot, event, pointer->position, clicks))
         {
@@ -245,7 +251,7 @@ static void OnButton(mwinX11Platform* platform, const xcb_button_press_event_t* 
     }
     else
     {
-        pointer->buttons &= (uint8_t)~bit;
+        pointer->buttons &= ~bit;
     }
     PostPointer(platform, (uint32_t)slot, pressed ? mwin_eventButtonDown : mwin_eventButtonUp,
                 button, timeNs);
@@ -514,7 +520,7 @@ static void OnRawMotion(mwinX11Platform* platform, const xcb_input_raw_motion_ev
         index += 1;
     }
     mwinEvent record = {0};
-    record.type = mwin_eventRawPointerDelta;
+    record.kind = mwin_eventRawPointerDelta;
     record.timeNs = mwinMonotonicFromMilliseconds(event->time);
     record.data.delta = (mwinDeltaEvent){delta[0], delta[1]};
     mwinPost(platform->context, (uint32_t)slot, &record);

@@ -66,7 +66,7 @@ static mtwnResult Seeking(mtwnContext* context, uint32_t player, Control control
                           uint32_t key);
 
 // Whether a player's clip is the sealed clip it was made with, alive while
-// it plays: player.c's mtwnCreatePlayer counts it a user, and clip.c's
+// it plays: player.c's mtwnCreateClipPlayer counts it a user, and clip.c's
 // mtwnDestroyClip refuses a clip with users. Only an assertion calls it.
 [[maybe_unused]] static inline bool PlaysItsClip(const mtwnContext* context,
                                                  const mtwnClipPlay* play)
@@ -214,7 +214,8 @@ static mtwnResult RunControl(mtwnContext* context, mtwnPlayerId player, Control 
     mtwnPlayerSlot* slot = mtwnFindPlayer(context, player);
     if (slot == NULL)
     {
-        return Misuse(context, mtwn_errorStale);
+        return mtwnPlayerIssued(context, player) ? mtwn_errorStale
+                                                 : Misuse(context, mtwn_errorStale);
     }
     // A transition's player is the wrong kind for a clip's controls.
     if (slot->type != MTWN_PLAYER_CLIP)
@@ -258,151 +259,153 @@ static mtwnResult Apply(mtwnContext* context, mtwnPlayerId player, Control contr
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_PlayWork(mtwnContext* context, mtwnPlayerId player)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_PlayWork(mtwnContext* context, mtwnPlayerId player)
 {
     return Apply(context, player, s_play, 0.0, 0);
 }
 
-mtwnResult mtwnPlayer_Play(mtwnContext* context, mtwnPlayerId player)
+mtwnResult mtwnClipPlayer_Play(mtwnContext* context, mtwnPlayerId player)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_PlayWork(context, player);
+    mtwnResult result = mtwnClipPlayer_PlayWork(context, player);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_PauseWork(mtwnContext* context, mtwnPlayerId player)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_PauseWork(mtwnContext* context, mtwnPlayerId player)
 {
     return Apply(context, player, s_pause, 0.0, 0);
 }
 
-mtwnResult mtwnPlayer_Pause(mtwnContext* context, mtwnPlayerId player)
+mtwnResult mtwnClipPlayer_Pause(mtwnContext* context, mtwnPlayerId player)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_PauseWork(context, player);
+    mtwnResult result = mtwnClipPlayer_PauseWork(context, player);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_ReverseWork(mtwnContext* context, mtwnPlayerId player)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_ReverseWork(mtwnContext* context,
+                                                           mtwnPlayerId player)
 {
     return Apply(context, player, s_reverse, 0.0, 0);
 }
 
-mtwnResult mtwnPlayer_Reverse(mtwnContext* context, mtwnPlayerId player)
+mtwnResult mtwnClipPlayer_Reverse(mtwnContext* context, mtwnPlayerId player)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_ReverseWork(context, player);
+    mtwnResult result = mtwnClipPlayer_ReverseWork(context, player);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_FinishWork(mtwnContext* context, mtwnPlayerId player)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_FinishWork(mtwnContext* context, mtwnPlayerId player)
 {
     return Apply(context, player, s_finish, 0.0, 0);
 }
 
-mtwnResult mtwnPlayer_Finish(mtwnContext* context, mtwnPlayerId player)
+mtwnResult mtwnClipPlayer_Finish(mtwnContext* context, mtwnPlayerId player)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_FinishWork(context, player);
+    mtwnResult result = mtwnClipPlayer_FinishWork(context, player);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_CancelWork(mtwnContext* context, mtwnPlayerId player)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_CancelWork(mtwnContext* context, mtwnPlayerId player)
 {
     return Apply(context, player, s_cancel, 0.0, 0);
 }
 
-mtwnResult mtwnPlayer_Cancel(mtwnContext* context, mtwnPlayerId player)
+mtwnResult mtwnClipPlayer_Cancel(mtwnContext* context, mtwnPlayerId player)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_CancelWork(context, player);
+    mtwnResult result = mtwnClipPlayer_CancelWork(context, player);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_SeekWork(mtwnContext* context, mtwnPlayerId player,
-                                                    double seconds)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_SeekWork(mtwnContext* context, mtwnPlayerId player,
+                                                        double seconds)
 {
     return Apply(context, player, s_seek, seconds, 0);
 }
 
-mtwnResult mtwnPlayer_Seek(mtwnContext* context, mtwnPlayerId player, double seconds)
+mtwnResult mtwnClipPlayer_Seek(mtwnContext* context, mtwnPlayerId player, double seconds)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_SeekWork(context, player, seconds);
+    mtwnResult result = mtwnClipPlayer_SeekWork(context, player, seconds);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_SweepWork(mtwnContext* context, mtwnPlayerId player,
-                                                     double seconds)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_SweepWork(mtwnContext* context, mtwnPlayerId player,
+                                                         double seconds)
 {
     return Apply(context, player, s_sweep, seconds, 0);
 }
 
-mtwnResult mtwnPlayer_Sweep(mtwnContext* context, mtwnPlayerId player, double seconds)
+mtwnResult mtwnClipPlayer_Sweep(mtwnContext* context, mtwnPlayerId player, double seconds)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_SweepWork(context, player, seconds);
+    mtwnResult result = mtwnClipPlayer_SweepWork(context, player, seconds);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_SeekProgressWork(mtwnContext* context,
-                                                            mtwnPlayerId player, double progress)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_SeekProgressWork(mtwnContext* context,
+                                                                mtwnPlayerId player,
+                                                                double progress)
 {
     return Apply(context, player, s_seekProgress, progress, 0);
 }
 
-mtwnResult mtwnPlayer_SeekProgress(mtwnContext* context, mtwnPlayerId player, double progress)
+mtwnResult mtwnClipPlayer_SeekProgress(mtwnContext* context, mtwnPlayerId player, double progress)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_SeekProgressWork(context, player, progress);
+    mtwnResult result = mtwnClipPlayer_SeekProgressWork(context, player, progress);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_SeekLabelWork(mtwnContext* context, mtwnPlayerId player,
-                                                         uint32_t key)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_SeekLabelWork(mtwnContext* context,
+                                                             mtwnPlayerId player, uint32_t key)
 {
     return Apply(context, player, s_seekLabel, 0.0, key);
 }
 
-mtwnResult mtwnPlayer_SeekLabel(mtwnContext* context, mtwnPlayerId player, uint32_t key)
+mtwnResult mtwnClipPlayer_SeekLabel(mtwnContext* context, mtwnPlayerId player, uint32_t key)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_SeekLabelWork(context, player, key);
+    mtwnResult result = mtwnClipPlayer_SeekLabelWork(context, player, key);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_SetRateWork(mtwnContext* context, mtwnPlayerId player,
-                                                       double rate)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_SetRateWork(mtwnContext* context,
+                                                           mtwnPlayerId player, double rate)
 {
     return Apply(context, player, s_setRate, rate, 0);
 }
 
-mtwnResult mtwnPlayer_SetRate(mtwnContext* context, mtwnPlayerId player, double rate)
+mtwnResult mtwnClipPlayer_SetRate(mtwnContext* context, mtwnPlayerId player, double rate)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_SetRateWork(context, player, rate);
+    mtwnResult result = mtwnClipPlayer_SetRateWork(context, player, rate);
     mtwnFloatEnvLeave(env);
     return result;
 }
 
-static MTWN_NOINLINE mtwnResult mtwnPlayer_SetWeightWork(mtwnContext* context, mtwnPlayerId player,
-                                                         float weight)
+static MTWN_NOINLINE mtwnResult mtwnClipPlayer_SetWeightWork(mtwnContext* context,
+                                                             mtwnPlayerId player, float weight)
 {
     return Apply(context, player, s_setWeight, (double)weight, 0);
 }
 
-mtwnResult mtwnPlayer_SetWeight(mtwnContext* context, mtwnPlayerId player, float weight)
+mtwnResult mtwnClipPlayer_SetWeight(mtwnContext* context, mtwnPlayerId player, float weight)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnPlayer_SetWeightWork(context, player, weight);
+    mtwnResult result = mtwnClipPlayer_SetWeightWork(context, player, weight);
     mtwnFloatEnvLeave(env);
     return result;
 }

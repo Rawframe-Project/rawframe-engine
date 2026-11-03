@@ -18,6 +18,15 @@ static inline mtwnPlayerSlot* mtwnFindPlayer(const mtwnContext* context, mtwnPla
     return (mtwnPlayerSlot*)mtwnPoolFind(&context->players, player.index1, player.generation);
 }
 
+// Whether a player id that names no live player was once handed out. A
+// player may free itself at an end the update decides, so such an id
+// outlives it by design and is not misuse; one never handed out (the null
+// id among them) is the program's.
+static inline bool mtwnPlayerIssued(const mtwnContext* context, mtwnPlayerId player)
+{
+    return mtwnPoolIssued(&context->players, player.index1, player.generation);
+}
+
 // The timeline time: the last update's host time, in seconds.
 static inline double mtwnTimelineNow(const mtwnContext* context)
 {

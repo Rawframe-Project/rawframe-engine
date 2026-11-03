@@ -22,7 +22,10 @@ extern "C"
 #define MTWN_MAX_FIT_POINTS 65536u
 
     /// Samples an easing evenly over progress 0 to 1: valuesOut[i] is the
-    /// eased progress at i / (count - 1), rounded to float.
+    /// eased progress at i / (count - 1), rounded to float, a value past
+    /// the floats' range held at the largest finite float of its sign (a
+    /// host function's infinity too; its NaN is taken as the progress, as
+    /// mtwnMakeHostEasing says), so every value is finite.
     ///
     /// @param easing     An easing made by this library.
     /// @param count      The number of samples, at least 2.
@@ -44,16 +47,18 @@ extern "C"
     /// @param easing     An easing made by this library, not steps.
     /// @param tolerance  The largest error allowed, finite and above 0.
     /// @param pointsOut  Receives the points, with their inputs; may be NULL
-    ///                   when capacity is 0; unspecified on failure.
+    ///                   when capacity is 0. The fit writes them as it finds
+    ///                   them, so on failure it holds the fit's first points,
+    ///                   at most capacity, exactly as a larger buffer would
+    ///                   start, and the rest as it was.
     /// @param capacity   The number of points pointsOut holds.
     /// @param countOut   Receives the number of points the fit has, also
     ///                   when they do not fit; unchanged on the other
     ///                   failures.
     /// @return mtwn_success; mtwn_errorCapacity when more than capacity
-    ///         points are needed, the contents of pointsOut then
-    ///         unspecified; mtwn_errorLimit when more than
-    ///         MTWN_MAX_FIT_POINTS are, the fit stopped there, countOut
-    ///         0 and the contents of pointsOut unspecified;
+    ///         points are needed; mtwn_errorLimit when more than
+    ///         MTWN_MAX_FIT_POINTS are, the fit stopped there and countOut
+    ///         0;
     ///         mtwn_errorInvalid for a null easing or
     ///         countOut, an easing no maker produced, a NULL pointsOut with
     ///         a capacity, steps, a

@@ -24,7 +24,7 @@
 
 // The class of a notification that a newer one of the same class
 // replaces, or 0 for records that never coalesce.
-static int CoalesceClass(mwinEventType type)
+static int CoalesceClass(mwinEventKind type)
 {
     switch (type)
     {
@@ -91,7 +91,7 @@ enum
     ClassCritical = MWIN_CLASSES,
 };
 
-static int ClassOf(mwinEventType type)
+static int ClassOf(mwinEventKind type)
 {
     switch (type)
     {
@@ -157,10 +157,10 @@ static bool SameGamepad(mwinGamepadId a, mwinGamepadId b)
 // and for a gamepad's change or reset the same gamepad.
 static bool SameSubject(const mwinEvent* a, const mwinEvent* b)
 {
-    bool gamepad = a->type == mwin_eventGamepadChanged ||
-                   (a->type == mwin_eventInputStateReset && a->window.index1 == 0);
+    bool gamepad = a->kind == mwin_eventGamepadChanged ||
+                   (a->kind == mwin_eventInputStateReset && a->window.index1 == 0);
     return SameWindow(a->window, b->window) &&
-           (a->type != mwin_eventMonitorChanged ||
+           (a->kind != mwin_eventMonitorChanged ||
             (a->data.monitor.index1 == b->data.monitor.index1 &&
              a->data.monitor.generation == b->data.monitor.generation)) &&
            (!gamepad || SameGamepad(a->data.gamepad, b->data.gamepad));
@@ -169,11 +169,11 @@ static bool SameSubject(const mwinEvent* a, const mwinEvent* b)
 // Appends a record; false when the ring is full.
 static bool Append(mwinContext* context, mwinRing* ring, const mwinEvent* event)
 {
-    int coalesce = CoalesceClass(event->type);
+    int coalesce = CoalesceClass(event->kind);
     for (uint32_t i = 0; coalesce != 0 && i < ring->count; i++)
     {
         const mwinEvent* waiting = &ring->events[At(ring, i)];
-        if (CoalesceClass(waiting->type) == coalesce && SameSubject(waiting, event))
+        if (CoalesceClass(waiting->kind) == coalesce && SameSubject(waiting, event))
         {
             RemoveAt(ring, i);
             break;
@@ -187,7 +187,7 @@ static bool Append(mwinContext* context, mwinRing* ring, const mwinEvent* event)
     MWIN_ASSERT(ring->count == 0 || ring->sequences[At(ring, ring->count - 1)] < context->sequence);
     uint32_t slot = At(ring, ring->count);
     ring->events[slot] = *event;
-    ring->events[slot].samples = 1;
+    ring->events[slot].sampleCount = 1;
     ring->sequences[slot] = context->sequence++;
     ring->count += 1;
     return true;
@@ -196,7 +196,7 @@ static bool Append(mwinContext* context, mwinRing* ring, const mwinEvent* event)
 // The window state a notification reports.
 static void Apply(mwinWindowState* state, const mwinEvent* event)
 {
-    switch (event->type)
+    switch (event->kind)
     {
     case mwin_eventWindowCreated:
         state->created = true;
@@ -219,15 +219,15 @@ static void Apply(mwinWindowState* state, const mwinEvent* event)
         break;
     case mwin_eventFocusGained:
     case mwin_eventFocusLost:
-        state->focused = event->type == mwin_eventFocusGained;
+        state->focused = event->kind == mwin_eventFocusGained;
         break;
     case mwin_eventOccluded:
     case mwin_eventRevealed:
-        state->occluded = event->type == mwin_eventOccluded;
+        state->occluded = event->kind == mwin_eventOccluded;
         break;
     case mwin_eventShown:
     case mwin_eventHidden:
-        state->visible = event->type == mwin_eventShown;
+        state->visible = event->kind == mwin_eventShown;
         break;
     case mwin_eventSurfaceLost:
         state->surfaceLost = true;
@@ -257,9 +257,9 @@ static void Apply(mwinWindowState* state, const mwinEvent* event)
 static bool SameKind(const mwinEvent* a, const mwinEvent* b)
 {
     const mwinGamepadAxisEvent* axis = &a->data.gamepadAxis;
-    return a->type == b->type &&
-           (a->type != mwin_eventTouchMoved || a->data.touch.id == b->data.touch.id) &&
-           (a->type != mwin_eventGamepadAxisMoved ||
+    return a->kind == b->kind &&
+           (a->kind != mwin_eventTouchMoved || a->data.touch.id == b->data.touch.id) &&
+           (a->kind != mwin_eventGamepadAxisMoved ||
             (SameGamepad(axis->gamepad, b->data.gamepadAxis.gamepad) &&
              axis->axis == b->data.gamepadAxis.axis && axis->raw == b->data.gamepadAxis.raw));
 }
@@ -275,20 +275,20 @@ static bool Merge(mwinRing* ring, const mwinEvent* event)
         {
             continue;
         }
-        uint16_t samples = waiting->samples;
+        uint16_t samples = waiting->sampleCount;
         mwinEvent merged = *event;
-        if (event->type == mwin_eventRawPointerDelta)
+        if (event->kind == mwin_eventRawPointerDelta)
         {
             merged.data.delta.x += waiting->data.delta.x;
             merged.data.delta.y += waiting->data.delta.y;
         }
-        else if (event->type == mwin_eventWheel)
+        else if (event->kind == mwin_eventWheel)
         {
             merged.data.wheel.x += waiting->data.wheel.x;
             merged.data.wheel.y += waiting->data.wheel.y;
         }
         *waiting = merged;
-        waiting->samples = samples < UINT16_MAX ? (uint16_t)(samples + 1) : samples;
+        waiting->sampleCount = samples < UINT16_MAX ? (uint16_t)(samples + 1) : samples;
         return true;
     }
     return false;
@@ -301,7 +301,7 @@ static void PostReset(mwinContext* context, uint32_t slot, uint64_t timeNs)
 {
     context->windows[slot].state.composing = false;
     mwinEvent reset = {0};
-    reset.type = mwin_eventInputStateReset;
+    reset.kind = mwin_eventInputStateReset;
     reset.window = mwinWindowIdOf(context, slot);
     reset.timeNs = timeNs;
     // A reset replaces one still waiting, so it always has room.
@@ -320,31 +320,44 @@ static bool AreSegmentsReadable(const mwinPreeditEvent* preedit)
 }
 
 // Moves a record's text, and a composition's segments before it, into
-// the window's storage; false when the record is lost. The text is
-// validated here once more, though backends repair what they receive.
+// the window's storage, without the control characters an input method
+// or a browser may hand; false when the record is lost, or is text with
+// nothing left. The text is validated here once more, though
+// backends repair what they receive.
 static bool TakeText(mwinContext* context, uint32_t slot, mwinEvent* record)
 {
     const char* text = record->data.text.text;
-    uint32_t length = record->data.text.length;
-    bool preedit = record->type == mwin_eventImePreedit;
+    size_t length = record->data.text.length;
+    bool preedit = record->kind == mwin_eventImePreedit;
     uint32_t segments = preedit ? record->data.preedit.segmentCount : 0;
     if ((text == nullptr && length != 0) || muniValidateUtf8(text, length).status != muni_success ||
         (preedit && !AreSegmentsReadable(&record->data.preedit)))
     {
         return false;
     }
-    uint32_t segmentBytes = segments * (uint32_t)sizeof(mwinPreeditSegment);
-    if (length + segmentBytes == 0)
+    size_t kept = mwinKeptTextBytes(text, length);
+    if (!preedit && kept == 0)
+    {
+        return false;
+    }
+    size_t segmentBytes = segments * sizeof(mwinPreeditSegment);
+    if (kept + segmentBytes == 0)
     {
         record->data.text.text = "";
+        record->data.text.length = 0;
         if (preedit)
         {
             mwinFitPreedit(&record->data.preedit, nullptr);
         }
         return true;
     }
-    unsigned char* block = mwinReserveText(&context->windows[slot].text, segmentBytes + length,
-                                           alignof(mwinPreeditSegment));
+    // Text past what a ring's sizes can name finds no room, as text past
+    // the ring's own room does.
+    unsigned char* block =
+        kept <= UINT32_MAX - segmentBytes
+            ? mwinReserveText(&context->windows[slot].text, (uint32_t)(segmentBytes + kept),
+                              alignof(mwinPreeditSegment))
+            : nullptr;
     if (block == nullptr)
     {
         PostReset(context, slot, record->timeNs);
@@ -355,11 +368,10 @@ static bool TakeText(mwinContext* context, uint32_t slot, mwinEvent* record)
         memcpy(block, record->data.preedit.segments, segmentBytes);
         record->data.preedit.segments = (const mwinPreeditSegment*)block;
     }
-    if (length > 0)
-    {
-        memcpy(block + segmentBytes, text, length);
-    }
+    mwinCopyKeptText((char*)block + segmentBytes, text, length,
+                     preedit ? &record->data.preedit : nullptr, (mwinPreeditSegment*)block);
     record->data.text.text = (const char*)block + segmentBytes;
+    record->data.text.length = kept;
     if (preedit)
     {
         mwinFitPreedit(&record->data.preedit, (mwinPreeditSegment*)block);
@@ -371,14 +383,14 @@ static bool TakeText(mwinContext* context, uint32_t slot, mwinEvent* record)
 // character key that goes down while one runs, and its release.
 static bool Consumed(mwinWindow* window, const mwinEvent* record)
 {
-    if ((record->type != mwin_eventKeyDown && record->type != mwin_eventKeyUp) ||
-        record->data.key.code >= 256)
+    if ((record->kind != mwin_eventKeyDown && record->kind != mwin_eventKeyUp) ||
+        (uint32_t)record->data.key.code >= 8 * sizeof(window->consumedKeys))
     {
         return false;
     }
     uint8_t bit = (uint8_t)(1u << (record->data.key.code & 7u));
     uint8_t* held = &window->consumedKeys[record->data.key.code >> 3];
-    if (record->type == mwin_eventKeyUp)
+    if (record->kind == mwin_eventKeyUp)
     {
         bool consumed = (*held & bit) != 0;
         *held = (uint8_t)(*held & ~bit);
@@ -393,35 +405,92 @@ static bool Consumed(mwinWindow* window, const mwinEvent* record)
     return false;
 }
 
+// Posts a piece of a text record, if it holds any bytes.
+static void PostPiece(mwinContext* context, uint32_t slot, const mwinEvent* record, size_t start,
+                      size_t end)
+{
+    if (end > start)
+    {
+        mwinEvent piece = *record;
+        piece.data.text = (mwinTextEvent){record->data.text.text + start, end - start};
+        mwinPost(context, slot, &piece);
+    }
+}
+
+// Posts a named key's press and release.
+static void PostTap(mwinContext* context, uint32_t slot, uint64_t timeNs, mwinKeyCode code)
+{
+    mwinEvent key = {.kind = mwin_eventKeyDown, .timeNs = timeNs};
+    key.data.key = (mwinKeyEvent){code, 0, MWIN_KEY_NAMED | code, false};
+    mwinPost(context, slot, &key);
+    key.kind = mwin_eventKeyUp;
+    mwinPost(context, slot, &key);
+}
+
+// Posts committed text that holds a tab, a line feed or a carriage
+// return as the text around them and the Tab or Enter key's press and
+// release (a carriage return and line feed one Enter), as an input
+// method that commits them means them; false when it holds none, or is
+// not well formed, for TakeText to refuse. Keys never type them: the
+// backends drop control characters from what a key types.
+static bool PostTyped(mwinContext* context, uint32_t slot, const mwinEvent* record)
+{
+    const char* text = record->data.text.text;
+    size_t length = record->data.text.length;
+    if (record->kind != mwin_eventTextInput || text == nullptr ||
+        (memchr(text, '\t', length) == nullptr && memchr(text, '\n', length) == nullptr &&
+         memchr(text, '\r', length) == nullptr) ||
+        muniValidateUtf8(text, length).status != muni_success)
+    {
+        return false;
+    }
+    size_t start = 0;
+    for (size_t i = 0; i < length; i++)
+    {
+        if (text[i] != '\t' && text[i] != '\n' && text[i] != '\r')
+        {
+            continue;
+        }
+        PostPiece(context, slot, record, start, i);
+        if (text[i] != '\n' || i == 0 || text[i - 1] != '\r')
+        {
+            PostTap(context, slot, record->timeNs, text[i] == '\t' ? mwin_codeTab : mwin_codeEnter);
+        }
+        start = i + 1;
+    }
+    PostPiece(context, slot, record, start, length);
+    return true;
+}
+
 void mwinPost(mwinContext* context, uint32_t slot, const mwinEvent* event)
 {
     MWIN_ASSERT(slot < context->limits.windows);
     mwinWindow* window = &context->windows[slot];
-    if (window->status != mwin_slotLive)
+    if (window->status != mwin_slotLive || PostTyped(context, slot, event))
     {
         return;
     }
     mwinEvent record = *event;
     record.window = mwinWindowIdOf(context, slot);
-    if (record.type == mwin_eventImePreedit || record.type == mwin_eventFocusLost)
+    if (record.kind == mwin_eventImePreedit || record.kind == mwin_eventFocusLost)
     {
         // The input method goes on composing whether or not the program
         // gets its composition.
         window->imeComposing =
-            record.type == mwin_eventImePreedit && record.data.preedit.length > 0;
+            record.kind == mwin_eventImePreedit && record.data.preedit.length > 0;
     }
-    bool text = record.type == mwin_eventTextInput || record.type == mwin_eventImePreedit;
+    bool text = record.kind == mwin_eventTextInput || record.kind == mwin_eventImePreedit;
     if ((text && !TakeText(context, slot, &record)) || Consumed(window, &record))
     {
         return;
     }
     Apply(&window->state, &record);
-    int kind = ClassOf(record.type);
+    int kind = ClassOf(record.kind);
     mwinRing* ring = kind == ClassCritical ? &context->critical : &window->rings[kind];
     bool added = Append(context, ring, &record) ||
                  ((kind == mwin_classMotion || kind == mwin_classRaw || kind == mwin_classWheel) &&
                   Merge(ring, &record));
-    if (!added || record.type == mwin_eventFocusLost)
+    if (!added || record.kind == mwin_eventFocusLost)
     {
         PostReset(context, slot, record.timeNs);
     }
@@ -431,10 +500,10 @@ void mwinPostGlobal(mwinContext* context, const mwinEvent* event)
 {
     mwinEvent record = *event;
     record.window = (mwinWindowId){0};
-    bool critical = ClassOf(record.type) == ClassCritical;
+    bool critical = ClassOf(record.kind) == ClassCritical;
     // Coalescing keeps both rings within their bound.
     (void)Append(context, critical ? &context->critical : &context->global, &record);
-    for (uint32_t i = 0; record.type == mwin_eventSuspending && i < context->limits.windows; i++)
+    for (uint32_t i = 0; record.kind == mwin_eventSuspending && i < context->limits.windows; i++)
     {
         if (context->windows[i].status == mwin_slotLive)
         {
@@ -445,7 +514,7 @@ void mwinPostGlobal(mwinContext* context, const mwinEvent* event)
 
 void mwinPostGamepadRecord(mwinContext* context, const mwinEvent* event)
 {
-    bool axis = event->type == mwin_eventGamepadAxisMoved;
+    bool axis = event->kind == mwin_eventGamepadAxisMoved;
     mwinRing* ring = &context->gamepadRings[axis ? mwin_padRingAxes : mwin_padRingButtons];
     if (Append(context, ring, event) || (axis && Merge(ring, event)))
     {
@@ -453,7 +522,7 @@ void mwinPostGamepadRecord(mwinContext* context, const mwinEvent* event)
     }
     // The program cannot follow the gamepad from its records: it reads
     // the state again.
-    mwinEvent reset = {.type = mwin_eventInputStateReset, .timeNs = event->timeNs};
+    mwinEvent reset = {.kind = mwin_eventInputStateReset, .timeNs = event->timeNs};
     reset.data.gamepad = axis ? event->data.gamepadAxis.gamepad : event->data.gamepadButton.gamepad;
     (void)Append(context, &context->global, &reset);
 }
@@ -482,13 +551,13 @@ void mwinPostDestroyed(mwinContext* context, uint32_t slot, uint64_t timeNs)
     mwinRing* ring = &window->rings[mwin_classNotification];
     for (uint32_t i = ring->count; i > 0; i--)
     {
-        if (ring->events[At(ring, i - 1)].type != mwin_eventRequestCompleted)
+        if (ring->events[At(ring, i - 1)].kind != mwin_eventRequestCompleted)
         {
             RemoveAt(ring, i - 1);
         }
     }
     mwinEvent event = {0};
-    event.type = mwin_eventWindowDestroyed;
+    event.kind = mwin_eventWindowDestroyed;
     event.window = mwinWindowIdOf(context, slot);
     event.timeNs = timeNs;
     // Only completions are left, at most one per request slot, and the
@@ -544,11 +613,11 @@ static mwinRing* FindOldest(mwinContext* context, mwinWindow** windowOut)
 
 mwinResult mwinContext_NextEvent(mwinContext* context, mwinEvent* eventOut)
 {
-    mwinClearOut(eventOut, sizeof *eventOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);
     }
+    mwinClearOut(eventOut, sizeof *eventOut);
     if (context == nullptr || eventOut == nullptr)
     {
         return mwinMisuse(context);
@@ -563,11 +632,11 @@ mwinResult mwinContext_NextEvent(mwinContext* context, mwinEvent* eventOut)
     oldest->head = (oldest->head + 1) % oldest->capacity;
     oldest->count -= 1;
     if (window != nullptr &&
-        (eventOut->type == mwin_eventTextInput || eventOut->type == mwin_eventImePreedit))
+        (eventOut->kind == mwin_eventTextInput || eventOut->kind == mwin_eventImePreedit))
     {
         // A composition's segments come before its text.
         const mwinPreeditEvent* preedit = &eventOut->data.preedit;
-        bool segments = eventOut->type == mwin_eventImePreedit && preedit->segmentCount > 0;
+        bool segments = eventOut->kind == mwin_eventImePreedit && preedit->segmentCount > 0;
         const void* start = segments ? (const void*)preedit->segments : preedit->text;
         if (preedit->length > 0 || segments)
         {
@@ -575,7 +644,7 @@ mwinResult mwinContext_NextEvent(mwinContext* context, mwinEvent* eventOut)
         }
     }
     if (window != nullptr && window->status == mwin_slotDestroyed &&
-        eventOut->type == mwin_eventWindowDestroyed)
+        eventOut->kind == mwin_eventWindowDestroyed)
     {
         // Its completions came before it, so every request slot is free.
         for (uint32_t i = 0; i < context->limits.requestsPerWindow; i++)
@@ -584,15 +653,15 @@ mwinResult mwinContext_NextEvent(mwinContext* context, mwinEvent* eventOut)
         }
         window->status = mwin_slotFree;
     }
-    if (eventOut->type == mwin_eventRequestCompleted)
+    if (eventOut->kind == mwin_eventRequestCompleted)
     {
         mwinReleaseRequest(context, eventOut->data.completion.request);
     }
-    if (eventOut->type == mwin_eventMonitorRemoved)
+    if (eventOut->kind == mwin_eventMonitorRemoved)
     {
         mwinReleaseMonitor(context, eventOut->data.monitor);
     }
-    if (eventOut->type == mwin_eventGamepadRemoved)
+    if (eventOut->kind == mwin_eventGamepadRemoved)
     {
         mwinReleaseGamepad(context, eventOut->data.gamepad);
     }

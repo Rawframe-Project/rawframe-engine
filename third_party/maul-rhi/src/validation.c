@@ -16,7 +16,9 @@
 #include "validation.h"
 
 #include "allocator.h"
+#include "capabilities_core.h"
 #include "frame_walk.h"
+#include "label.h"
 
 #include <stdalign.h>
 
@@ -124,7 +126,8 @@ static size_t GetAdapters(const void* self, mrhiDriverAdapter* adapters, size_t 
         }
         Expect(&layer->watch,
                distinct && adapter->info.nameLength <= MRHI_ADAPTER_NAME_BYTES &&
-                   adapter->info.kind <= mrhi_adapterSoftware,
+                   mrhiIsTextValid(adapter->info.name, adapter->info.nameLength) &&
+                   (uint32_t)adapter->info.kind <= mrhi_adapterSoftware,
                mrhi_diagnosticDriverAdapter);
     }
     return total;
@@ -136,7 +139,8 @@ static void GetFormatCaps(const void* self, uint64_t adapter, mrhiFormat format,
     const Layer* layer = self;
     layer->inner.vtable->getFormatCaps(layer->inner.self, adapter, format, capsOut);
     // One, two and four samples are all a cap can name.
-    Expect(&layer->watch, (capsOut->sampleCounts & ~0x7u) == 0, mrhi_diagnosticDriverSampleCounts);
+    const mrhiSampleCounts named = mrhi_samples1Bit | mrhi_samples2Bit | mrhi_samples4Bit;
+    Expect(&layer->watch, (capsOut->sampleCounts & ~named) == 0, mrhi_diagnosticDriverSampleCounts);
 }
 
 static mrhiResult CreateSurface(void* self, const mrhiChain* source, const mrhiSurfaceDef* def,
@@ -161,6 +165,14 @@ static void GetSurfaceCaps(const void* self, uint64_t surface, uint64_t adapter,
 {
     const Layer* layer = self;
     layer->inner.vtable->getSurfaceCaps(layer->inner.self, surface, adapter, capsOut);
+    bool known = capsOut->colorCount <= MRHI_SURFACE_COLORS;
+    for (uint32_t i = 0; i < capsOut->colorCount && i < MRHI_SURFACE_COLORS; ++i)
+    {
+        known = known && mrhiIsSurfaceColorKnown(&capsOut->colors[i]);
+    }
+    Expect(&layer->watch, known, mrhi_diagnosticDriverSurfaceCaps);
+    Expect(&layer->watch, !capsOut->presentable || mrhiSurfaceCapsMeetFloors(capsOut),
+           mrhi_diagnosticDriverSurfaceFloors);
 }
 
 static const mrhiDeviceDriverVtable s_deviceVtable;
@@ -375,6 +387,11 @@ static void LossReport(void* self, mrhiDeviceLossReport* reportOut)
 {
     DeviceLayer* device = self;
     device->inner.vtable->lossReport(device->inner.self, reportOut);
+    Expect(&device->watch,
+           (uint32_t)reportOut->reason <= mrhi_lossSimulated &&
+               reportOut->messageLength <= MRHI_LOSS_MESSAGE_BYTES &&
+               mrhiIsTextValid(reportOut->message, reportOut->messageLength),
+           mrhi_diagnosticDriverLossReport);
 }
 
 static mrhiResult AcquireImage(void* self, uint64_t swapchain, uint64_t* imageOut)

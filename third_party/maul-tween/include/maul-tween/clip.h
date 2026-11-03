@@ -36,7 +36,7 @@ extern "C"
 #define MTWN_ROOT_NODE 1u
 
     // What a node is.
-    typedef uint8_t mtwnNodeKind;
+    typedef int32_t mtwnNodeKind;
     enum
     {
         // Keyframes on a slot.
@@ -50,7 +50,7 @@ extern "C"
     };
 
     // Where a child starts in its parent.
-    typedef uint8_t mtwnPositionKind;
+    typedef int32_t mtwnPositionKind;
     enum
     {
         // At offset seconds.
@@ -98,7 +98,7 @@ extern "C"
 #define MTWN_CLIP_DEF_COOKIE 0x50494C43u
 
     /// Makes a clip def for a small clip: 16 nodes, 32 keyframes, 8 slots,
-    /// 64 points of linear(), about 14 KB of clip storage (mtwnContext_GetClipBytes
+    /// 64 points of linear(), about 15 KB of clip storage (mtwnContext_GetClipBytes
     /// says how much).
     ///
     /// @return The def.
@@ -254,10 +254,10 @@ extern "C"
     /// @param bytesOut    Receives the bytes; 0 on failure.
     /// @return mtwn_success; mtwn_errorInvalid for a null argument or a
     ///         def without its cookie; mtwn_errorLimit for a capacity past
-    ///         MTWN_MAX_COUNT; mtwn_errorBusy while the context is busy.
+    ///         MTWN_MAX_COUNT.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnContext_GetClipBytes(mtwnContext* context,
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnContext_GetClipBytes(const mtwnContext* context,
                                                                 const mtwnClipDef* def,
                                                                 uint64_t* bytesOut);
 
@@ -284,7 +284,9 @@ extern "C"
     /// @param clip     The clip.
     /// @return mtwn_success; mtwn_errorInvalid for a null context;
     ///         mtwn_errorStale for an id that names no live clip;
-    ///         mtwn_errorBusy while a player plays it.
+    ///         mtwn_errorBusy while a player plays it, not counted as
+    ///         misuse: a player not kept frees itself at an end the update
+    ///         decides.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MTWN_NODISCARD MTWN_API mtwnResult mtwnDestroyClip(mtwnContext* context, mtwnClipId clip);
@@ -343,8 +345,9 @@ extern "C"
 //   mtwnContext_Update takes in nanoseconds as a uint64_t, below 2^35 s: below
 //   2^1000 + 2^55 in size;
 // - a rate other than 0 is at least MTWN_MIN_RATE (2^-20) in size;
-// - so t / rate is below 2^1021 in size, and now - t / rate is finite,
-//   16 times short of the largest double.
+// - so t / rate is below (2^1000 + 2^55) 2^20 = 2^1020 + 2^75 in size,
+//   and now - t / rate below 2^1020 + 2^76: finite, just under 16 times
+//   short of the largest double (2^1024 - 2^971).
 #define MTWN_SEEK_LIMIT 0x1p1000
 
     /// Adds a timeline: a group of children taking its transformed time.
@@ -422,15 +425,15 @@ extern "C"
     /// @param trackOut  Receives the track, its timing, start, parent and slot;
     ///                  sample it with mtwnComputeTiming and mtwnSampleTrack
     ///                  from any thread while the clip lives (its easings'
-    ///                  linear() points are the clip's copies); zero on
-    ///                  failure.
+    ///                  linear() points are the clip's copies); zero on failure.
     /// @return mtwn_success; mtwn_errorInvalid for a null argument or a node
     ///         that is not a track of the clip; mtwn_errorStale for a clip
     ///         that is not alive; mtwn_errorState for one not sealed.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnClip_GetTrack(mtwnContext* context, mtwnClipId clip,
-                                                         mtwnNode node, mtwnClipTrack* trackOut);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClip_GetTrack(const mtwnContext* context,
+                                                         mtwnClipId clip, mtwnNode node,
+                                                         mtwnClipTrack* trackOut);
 
     /// Reads any node of a sealed clip.
     ///
@@ -441,7 +444,7 @@ extern "C"
     /// @return As mtwnClip_GetTrack, for any node.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnClip_GetNode(mtwnContext* context, mtwnClipId clip,
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClip_GetNode(const mtwnContext* context, mtwnClipId clip,
                                                         mtwnNode node, mtwnClipNodeInfo* infoOut);
 
     /// Finds a label of a sealed clip by its parent and key.
@@ -456,9 +459,9 @@ extern "C"
     ///         mtwn_errorStale and mtwn_errorState as mtwnClip_GetTrack.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnClip_FindLabel(mtwnContext* context, mtwnClipId clip,
-                                                          mtwnNode parent, uint32_t key,
-                                                          double* secondsOut);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClip_FindLabel(const mtwnContext* context,
+                                                          mtwnClipId clip, mtwnNode parent,
+                                                          uint32_t key, double* secondsOut);
 
     /// Reads a sealed clip's duration: its root's end.
     ///
@@ -468,8 +471,8 @@ extern "C"
     /// @return As mtwnClip_GetTrack, without the node.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnClip_GetDuration(mtwnContext* context, mtwnClipId clip,
-                                                            double* secondsOut);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClip_GetDuration(const mtwnContext* context,
+                                                            mtwnClipId clip, double* secondsOut);
 
 #ifdef __cplusplus
 }

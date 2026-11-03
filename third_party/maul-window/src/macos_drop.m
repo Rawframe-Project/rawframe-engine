@@ -7,6 +7,7 @@
 // drop's files are the file URLs' paths, and its text the pasteboard's
 // string.
 
+#include "apple_text.h"
 #include "macos.h"
 
 #include <string.h>
@@ -29,10 +30,10 @@ static mwinPosition PositionOf(const mwinMacWindow* window, id<NSDraggingInfo> d
     return (mwinPosition){(float)point.x, (float)point.y};
 }
 
-static void PostDrag(mwinMacPlatform* platform, uint32_t slot, mwinEventType type)
+static void PostDrag(mwinMacPlatform* platform, uint32_t slot, mwinEventKind type)
 {
     mwinMacWindow* window = &platform->windows[slot];
-    mwinEvent event = {.type = type, .timeNs = mwinMacNow()};
+    mwinEvent event = {.kind = type, .timeNs = mwinMacNow()};
     event.data.drag = (mwinDragEvent){window->dragPosition, window->dragContents};
     mwinPost(platform->context, slot, &event);
 }
@@ -92,16 +93,21 @@ bool mwinMacDrop(mwinMacPlatform* platform, uint32_t slot, id<NSDraggingInfo> dr
     mwinBeginDrop(context);
     for (NSURL* file in [pasteboard readObjectsForClasses:@[ [NSURL class] ] options:FilesOnly()])
     {
+        // Another program's URL may name a path that is not UTF-8.
         const char* path = file.path.UTF8String;
         if (path != nullptr)
         {
             mwinAddDroppedFile(context, path, strlen(path));
         }
+        else
+        {
+            context->dropping.truncated = true;
+        }
     }
-    const char* text = [pasteboard stringForType:NSPasteboardTypeString].UTF8String;
-    if (text != nullptr)
+    NSString* text = [pasteboard stringForType:NSPasteboardTypeString];
+    if (text != nil)
     {
-        mwinSetDroppedText(context, text, strlen(text));
+        mwinAppleSetDroppedText(context, text);
     }
     mwinFinishDrop(context, slot, PositionOf(window, drag), mwinMacNow());
     return true;

@@ -17,6 +17,8 @@
 // - Android has no file manager to show a file in, and no message box a
 //   program could wait for on its main thread (message_box.c answers
 //   that there is none).
+// - A request the helper fails with a Java exception is answered failed,
+//   and the exception's stack trace goes to Android's log as System.err.
 
 #include "allocator.h"
 #include "android.h"
@@ -53,6 +55,18 @@ void mwinAndroidStopServices(mwinAndroidPlatform* platform)
     }
 }
 
+// Clears a Java exception a helper threw, after Android's log has it
+// (ExceptionDescribe writes its stack trace there, as System.err): a
+// failed request says only that it failed.
+static void Forget(JNIEnv* env)
+{
+    if ((*env)->ExceptionCheck(env))
+    {
+        (*env)->ExceptionDescribe(env);
+        (*env)->ExceptionClear(env);
+    }
+}
+
 // Calls a helper taking the activity and bytes, answering a boolean.
 static mwinOutcome CallWithBytes(const mwinAndroidPlatform* platform, jmethodID method,
                                  const char* bytes, uint32_t length)
@@ -65,14 +79,14 @@ static mwinOutcome CallWithBytes(const mwinAndroidPlatform* platform, jmethodID 
     jbyteArray array = (*env)->NewByteArray(env, (jsize)length);
     if (array == nullptr)
     {
-        (*env)->ExceptionClear(env);
+        Forget(env);
         return mwin_outcomeFailed;
     }
     (*env)->SetByteArrayRegion(env, array, 0, (jsize)length, (const jbyte*)bytes);
     jboolean done = (*env)->CallStaticBooleanMethod(env, platform->java.services, method,
                                                     platform->activity->clazz, array);
     bool thrown = (*env)->ExceptionCheck(env);
-    (*env)->ExceptionClear(env);
+    Forget(env);
     (*env)->DeleteLocalRef(env, array);
     return done && !thrown ? mwin_outcomeDone : mwin_outcomeFailed;
 }
@@ -96,7 +110,7 @@ mwinOutcome mwinAndroidReadClipboard(const mwinAndroidPlatform* platform)
         env, platform->java.services, platform->java.readClipboard, platform->activity->clazz);
     if (text == nullptr || (*env)->ExceptionCheck(env))
     {
-        (*env)->ExceptionClear(env);
+        Forget(env);
         return mwin_outcomeFailed;
     }
     // Each unit is at least a byte of UTF-8: text past the limit is not

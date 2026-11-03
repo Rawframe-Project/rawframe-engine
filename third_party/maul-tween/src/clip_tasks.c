@@ -256,11 +256,15 @@ void mtwnRunClipGroups(mtwnContext* context, double before, double now)
     const mtwnContextDef* def = &context->def;
     int32_t groups = (int32_t)(count < MTWN_GROUPS ? count : MTWN_GROUPS);
     Seed(&task, (uint32_t)groups);
+    // Set before the hand-off, which orders it before the groups' reads,
+    // and so set too for a group the host runs inline (mtwnRefuseInGroups).
+    context->grouping = true;
     void* handle = Enqueue(def, &task, groups);
     if (handle != NULL)
     {
         Finish(def, handle);
     }
+    context->grouping = false;
 }
 
 bool mtwnApplyStaged(mtwnContext* context, uint32_t player, double before, double now)

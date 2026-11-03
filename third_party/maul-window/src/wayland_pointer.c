@@ -43,15 +43,16 @@ static mwinMouseButton ButtonOf(uint32_t evdev)
     }
 }
 
-static void PostPointer(mwinWaylandPlatform* platform, mwinEventType type, mwinMouseButton button,
+static void PostPointer(mwinWaylandPlatform* platform, mwinEventKind type, mwinMouseButton button,
                         uint64_t timeNs)
 {
     const mwinWaylandPointer* pointer = &platform->pointer;
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
-    event.data.pointer = (mwinPointerEvent){pointer->position, platform->keyboard.xkb.modifiers,
-                                            pointer->buttons, button, pointer->clicks.clicks};
+    event.data.pointer =
+        (mwinPointerEvent){pointer->position, platform->keyboard.xkb.modifiers, pointer->buttons,
+                           button, pointer->clickCounter.clickCount};
     mwinPost(platform->context, (uint32_t)pointer->focus, &event);
 }
 
@@ -88,7 +89,7 @@ static void Flush(mwinWaylandPlatform* platform)
     if (pointer->focus >= 0 && (wheel.x != 0.0f || wheel.y != 0.0f))
     {
         mwinEvent event = {0};
-        event.type = mwin_eventWheel;
+        event.kind = mwin_eventWheel;
         event.timeNs = pointer->timeNs;
         event.data.wheel = wheel;
         mwinPost(platform->context, (uint32_t)pointer->focus, &event);
@@ -160,7 +161,7 @@ static void OnLeave(void* data, struct wl_pointer* object, uint32_t serial,
         {
             // Their releases will not come.
             mwinEvent reset = {0};
-            reset.type = mwin_eventInputStateReset;
+            reset.kind = mwin_eventInputStateReset;
             reset.timeNs = mwinMonotonicNow();
             mwinPost(platform->context, (uint32_t)pointer->focus, &reset);
         }
@@ -206,10 +207,10 @@ static void OnButton(void* data, struct wl_pointer* object, uint32_t serial, uin
     // Motion of the same frame comes first.
     Flush(platform);
     uint64_t timeNs = mwinMonotonicFromMilliseconds(time);
-    uint8_t bit = (uint8_t)(1u << (button - 1));
+    mwinMouseButtons bit = mwinMouseBit(button);
     if (state == WL_POINTER_BUTTON_STATE_PRESSED)
     {
-        uint8_t clicks = mwinCountClick(&pointer->clicks, button, pointer->position, timeNs);
+        uint8_t clicks = mwinCountClick(&pointer->clickCounter, button, pointer->position, timeNs);
         if (mwinWaylandPressChrome(platform, (uint32_t)pointer->focus, serial, evdev,
                                    pointer->position, clicks))
         {
@@ -225,7 +226,7 @@ static void OnButton(void* data, struct wl_pointer* object, uint32_t serial, uin
     }
     else
     {
-        pointer->buttons &= (uint8_t)~bit;
+        pointer->buttons &= ~bit;
         PostPointer(platform, mwin_eventButtonUp, button, timeNs);
     }
 }
@@ -347,11 +348,11 @@ void mwinWaylandRemovePointer(mwinWaylandPlatform* platform)
     platform->pointer = (mwinWaylandPointer){.focus = -1};
 }
 
-static void PostTouch(mwinWaylandPlatform* platform, mwinEventType type, int index, uint64_t timeNs)
+static void PostTouch(mwinWaylandPlatform* platform, mwinEventKind type, int index, uint64_t timeNs)
 {
     const mwinWaylandTouch* touch = &platform->touch;
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
     event.data.touch = (mwinTouchEvent){(uint64_t)(uint32_t)touch->points[index].id,
                                         touch->points[index].position, -1.0f};

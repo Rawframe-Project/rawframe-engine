@@ -26,7 +26,7 @@ static const uint8_t MAGIC[4] = {'M', 'R', 'P', 'C'};
 // Whether an envelope names this driver and adapter.
 static bool IsOurs(const mrhiDevice* device, const uint8_t* bytes)
 {
-    return mrhiRead32(bytes + 52) == device->adapterInfo.driver &&
+    return mrhiRead32(bytes + 52) == (uint32_t)device->adapterInfo.driver &&
            mrhiRead32(bytes + 56) == device->adapterInfo.vendorId &&
            mrhiRead32(bytes + 60) == device->adapterInfo.deviceId;
 }
@@ -85,6 +85,11 @@ static mrhiResult ExportCache(mrhiDevice* device, void* bytes, size_t capacity, 
         return status;
     }
     size_t payload = device->driver.vtable->exportPipelineCache(device->driver.self, nullptr, 0);
+    // A driver's size that leaves no room for the header has failed.
+    if (payload > SIZE_MAX - HEADER_BYTES)
+    {
+        return mrhi_errorPlatform;
+    }
     *sizeOut = HEADER_BYTES + payload;
     if (bytes == nullptr)
     {

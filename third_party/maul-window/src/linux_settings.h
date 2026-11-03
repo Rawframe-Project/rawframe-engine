@@ -2,8 +2,9 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // The desktop's look and motion on Linux, from the Settings portal:
-// asked for at the start without waiting, taken
-// at a later pump, and followed through SettingChanged.
+// asked for at the start without waiting, taken at a later pump, and
+// followed through SettingChanged from the connection that owns the
+// portal's name.
 //
 // - The theme is org.freedesktop.appearance's color-scheme, unknown
 //   for no preference.
@@ -23,6 +24,8 @@ typedef struct mwinLinuxSettings
     mwinContext* context;
     mwinLinuxBus* bus;
     mwinBusCall call;
+    // The owner of the portal's name.
+    mwinBusOwner portal;
     bool listening;
     // What the desktop said, -1 or less where it said nothing.
     int8_t colorScheme;

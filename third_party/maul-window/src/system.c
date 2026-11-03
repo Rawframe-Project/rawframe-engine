@@ -12,10 +12,10 @@
 
 #include <string.h>
 
-static void PostGlobalType(mwinContext* context, mwinEventType type, uint64_t timeNs)
+static void PostGlobalType(mwinContext* context, mwinEventKind type, uint64_t timeNs)
 {
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
     mwinPostGlobal(context, &event);
 }
@@ -40,8 +40,21 @@ void mwinSetSystemFacts(mwinContext* context, const mwinSystemFacts* facts, uint
 
 bool mwinSetLocales(mwinContext* context, const char* locales, size_t length, uint64_t timeNs)
 {
-    if (length > context->limits.localeBytes || (locales == nullptr && length != 0) ||
-        muniValidateUtf8(locales, length).status != muni_success)
+    if (locales == nullptr && length != 0)
+    {
+        return false;
+    }
+    // A list past the limit keeps its leading tags that fit: up to the
+    // last comma within the limit's bytes and one more.
+    if (length > context->limits.localeBytes)
+    {
+        length = context->limits.localeBytes;
+        while (length > 0 && locales[length] != ',')
+        {
+            length--;
+        }
+    }
+    if (muniValidateUtf8(locales, length).status != muni_success)
     {
         return false;
     }
@@ -73,12 +86,13 @@ mwinResult mwinContext_GetSystemFacts(const mwinContext* context, mwinSystemFact
 mwinResult mwinContext_GetPreferredLocales(const mwinContext* context, char* bufferOut,
                                            size_t capacity, size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity != 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
     size_t length = context->localeLength;
-    return mwinGiveBytes(context->locales, length, bufferOut, capacity, lengthOut);
+    return mwinClearOnFailure(
+        mwinGiveBytes(context->locales, length, bufferOut, capacity, lengthOut), bufferOut,
+        capacity);
 }

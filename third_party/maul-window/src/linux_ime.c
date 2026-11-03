@@ -115,7 +115,7 @@ static void EndComposition(mwinLinuxIme* ime, int32_t slot)
         return;
     }
     mwinEvent end = {0};
-    end.type = mwin_eventImePreedit;
+    end.kind = mwin_eventImePreedit;
     end.timeNs = mwinMonotonicNow();
     end.data.preedit.caret = -1;
     mwinPost(ime->context, (uint32_t)slot, &end);
@@ -136,7 +136,7 @@ static void PostText(mwinLinuxIme* ime, const char* bytes, size_t length)
     }
     (void)mwinRepairUtf8(bytes, length, text);
     mwinEvent event = {0};
-    event.type = mwin_eventTextInput;
+    event.kind = mwin_eventTextInput;
     event.timeNs = mwinMonotonicNow();
     event.data.text = (mwinTextEvent){text, (uint32_t)needed};
     mwinPost(ime->context, (uint32_t)ime->focus, &event);
@@ -189,7 +189,7 @@ static void PostPreedit(mwinLinuxIme* ime, const Preedit* preedit)
         return;
     }
     mwinEvent event = {0};
-    event.type = mwin_eventImePreedit;
+    event.kind = mwin_eventImePreedit;
     event.timeNs = mwinMonotonicNow();
     event.data.preedit = (mwinPreeditEvent){
         preedit->text,         preedit->length,   preedit->caret, preedit->selectionStart,
@@ -270,21 +270,6 @@ static bool EnterObject(const mwinDBusApi* api, mwinDBusIter* iter, const char* 
     return strcmp(found, name) == 0 && api->next(fields) && api->next(fields);
 }
 
-// The byte offset of a character of UTF-8 text, the end past its last.
-static uint32_t ByteOf(const char* text, uint32_t length, uint32_t character)
-{
-    uint32_t at = 0;
-    for (uint32_t seen = 0; at < length && seen < character; seen++)
-    {
-        at++;
-        while (at < length && ((unsigned char)text[at] & 0xC0u) == 0x80u)
-        {
-            at++;
-        }
-    }
-    return at;
-}
-
 // An IBusText's string, and the range its background attribute marks
 // in characters (its underline is taken as the whole).
 static const char* ReadIBusText(const mwinDBusApi* api, mwinDBusIter* iter, uint32_t* startOut,
@@ -359,8 +344,8 @@ static void TakeIBusPreedit(mwinLinuxIme* ime, DBusMessage* message)
     {
         // The marked part is the one being converted, the rest
         // underlined.
-        uint32_t from = ByteOf(text, (uint32_t)length, start);
-        uint32_t to = ByteOf(text, (uint32_t)length, end);
+        uint32_t from = (uint32_t)mwinBytesBefore(text, length, muni_unitCodePoint, start);
+        uint32_t to = (uint32_t)mwinBytesBefore(text, length, muni_unitCodePoint, end);
         memcpy(preedit.text, text, length);
         preedit.length = (uint32_t)length;
         uint32_t bounds[4] = {0, from, to, (uint32_t)length};
@@ -375,19 +360,23 @@ static void TakeIBusPreedit(mwinLinuxIme* ime, DBusMessage* message)
         }
         preedit.selectionStart = from < to ? from : 0;
         preedit.selectionEnd = from < to ? to : 0;
-        preedit.caret = (int32_t)ByteOf(text, (uint32_t)length, caret);
+        preedit.caret = (int32_t)mwinBytesBefore(text, length, muni_unitCodePoint, caret);
     }
     PostPreedit(ime, &preedit);
 }
 
-// The input context's signals: committed text and compositions.
+// The input context's signals, committed text and compositions, from
+// the connection that made it: any program on the bus may send a signal
+// at its path.
 static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, void* data)
 {
     (void)connection;
     mwinLinuxIme* ime = data;
     const mwinDBusApi* api = &ime->bus->api;
     const char* path = api->path(message);
-    if (!ime->ready || path == nullptr || strcmp(path, ime->path) != 0)
+    const char* sender = api->sender(message);
+    if (!ime->ready || path == nullptr || strcmp(path, ime->path) != 0 || sender == nullptr ||
+        strcmp(sender, ime->owner) != 0)
     {
         return mwin_dbusNotHandled;
     }
@@ -525,8 +514,8 @@ static void Apply(mwinLinuxIme* ime)
     }
 }
 
-// Takes the answer to CreateInputContext: the context's path, or a try
-// of the next framework.
+// Takes the answer to CreateInputContext: the context's path and the
+// connection that made it, or a try of the next framework.
 static void PumpCreate(mwinLinuxIme* ime, uint64_t nowNs)
 {
     bool failed = false;
@@ -543,9 +532,12 @@ static void PumpCreate(mwinLinuxIme* ime, uint64_t nowNs)
     {
         api->getBasic(&arguments, (void*)&path);
     }
-    if (path != nullptr && strlen(path) < sizeof(ime->path))
+    const char* owner = reply != nullptr ? api->sender(reply) : nullptr;
+    if (path != nullptr && strlen(path) < sizeof(ime->path) && owner != nullptr &&
+        strlen(owner) < sizeof(ime->owner))
     {
         memcpy(ime->path, path, strlen(path) + 1);
+        memcpy(ime->owner, owner, strlen(owner) + 1);
         ime->ready = true;
         Listen(ime);
         Apply(ime);
@@ -603,7 +595,7 @@ static void Deliver(mwinLinuxIme* ime, const mwinImeKey* held)
     if (held->length > 0)
     {
         mwinEvent typed = {0};
-        typed.type = mwin_eventTextInput;
+        typed.kind = mwin_eventTextInput;
         typed.timeNs = held->key.timeNs;
         typed.data.text = (mwinTextEvent){held->text, held->length};
         mwinPost(ime->context, slot, &typed);
@@ -618,7 +610,7 @@ static void Release(mwinLinuxIme* ime, bool taken)
     uint8_t bit = (uint8_t)(1u << (held->keycode & 7u));
     uint8_t* pressed = &ime->taken[held->keycode >> 3];
     mwinBusDrop(ime->bus, &held->call);
-    if (held->key.type == mwin_eventKeyUp)
+    if (held->key.kind == mwin_eventKeyUp)
     {
         taken = taken || (*pressed & bit) != 0;
         *pressed = (uint8_t)(*pressed & ~bit);
@@ -640,7 +632,7 @@ static void Ask(mwinLinuxIme* ime, mwinImeKey* held, uint32_t keysym, uint32_t k
                 uint32_t state, uint64_t nowNs)
 {
     bool fcitx = ime->framework == frameworkFcitx;
-    bool release = held->key.type == mwin_eventKeyUp;
+    bool release = held->key.kind == mwin_eventKeyUp;
     DBusMessage* message = ContextMethod(ime, "ProcessKeyEvent");
     if (message == nullptr)
     {

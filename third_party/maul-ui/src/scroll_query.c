@@ -35,8 +35,8 @@ static MUI_NOINLINE muiResult NodeGetScrollThumbWorker(const muiContext* context
     {
         memset(thumbOut, 0, sizeof *thumbOut);
     }
-    if (context == nullptr || thumbOut == nullptr || axis > mui_axisVertical || !isfinite(track) ||
-        track < 0.0f || !isfinite(minimum) || minimum < 0.0f)
+    if (context == nullptr || thumbOut == nullptr || (uint32_t)axis > mui_axisVertical ||
+        !isfinite(track) || track < 0.0f || !isfinite(minimum) || minimum < 0.0f)
     {
         return mui_errorInvalid;
     }

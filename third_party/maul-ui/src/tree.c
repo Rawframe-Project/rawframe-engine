@@ -39,6 +39,8 @@ uint32_t muiTreeCreate(muiTree* tree, uint64_t hostKey)
     if (slot != 0)
     {
         muiTreeNode* node = muiTreeAt(tree, slot);
+        // The free list holds only slots FreeLeaf emptied.
+        MUI_ASSERT(!node->live);
         tree->freeHead = node->links.next;
         generation = node->generation;
     }
@@ -56,14 +58,18 @@ uint32_t muiTreeCreate(muiTree* tree, uint64_t hostKey)
         .dirty = {.request = mui_stageAll, .subtree = mui_stageAll},
         .live = true,
     };
+    // Every other live node holds a slot of its own below used.
+    MUI_ASSERT(tree->liveCount < tree->used);
     tree->liveCount++;
     return slot;
 }
 
 bool muiTreeIsAncestor(const muiTree* tree, uint32_t ancestor, uint32_t node)
 {
-    for (uint32_t at = node; at != 0; at = muiTreeAt(tree, at)->links.parent)
+    for (uint32_t at = node, steps = 1; at != 0; at = muiTreeAt(tree, at)->links.parent, steps++)
     {
+        // The tree has no cycle, so a walk up meets each slot once.
+        MUI_ASSERT(steps <= tree->used);
         if (at == ancestor)
         {
             return true;
@@ -154,6 +160,8 @@ void muiTreeInsert(muiTree* tree, uint32_t parent, uint32_t child, uint32_t befo
         parentNode->links.lastChild = child;
     }
     parentNode->links.childCount++;
+    // Its children are live nodes other than itself.
+    MUI_ASSERT(parentNode->links.childCount < tree->liveCount);
     // What the child's subtree still owes now lies below the parent too.
     MarkSubtree(tree, parent, childNode->dirty.subtree);
     muiTreeMark(tree, child, mui_stageStyle);
@@ -206,10 +214,11 @@ void muiTreeDetach(muiTree* tree, uint32_t node)
 static void FreeLeaf(muiTree* tree, uint32_t slot)
 {
     muiTreeNode* node = muiTreeAt(tree, slot);
-    MUI_ASSERT(node->links.firstChild == 0 && node->links.previous == 0);
+    MUI_ASSERT(node->live && node->links.firstChild == 0 && node->links.previous == 0);
     if (node->links.parent != 0)
     {
         muiTreeNode* parent = muiTreeAt(tree, node->links.parent);
+        MUI_ASSERT(parent->links.firstChild == slot && parent->links.childCount != 0);
         parent->links.firstChild = node->links.next;
         if (node->links.next != 0)
         {
@@ -314,5 +323,7 @@ uint32_t muiTreeSweep(muiTree* tree, uint32_t root, muiStages stages)
         node->dirty.subtree &= (muiStages)~stages;
         reached++;
     }
+    // A sweep visits each live node of the subtree once.
+    MUI_ASSERT(reached <= tree->liveCount);
     return reached;
 }

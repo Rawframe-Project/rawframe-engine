@@ -114,7 +114,7 @@ int mwinX11TouchRecordOf(mwinX11Touches* touches, uint16_t device, mwinX11TouchI
         pressure = kept->pressure;
         kept->live = input != mwin_x11TouchEnd;
     }
-    *recordOut = (mwinEvent){.type = input == mwin_x11TouchBegin    ? mwin_eventTouchDown
+    *recordOut = (mwinEvent){.kind = input == mwin_x11TouchBegin    ? mwin_eventTouchDown
                                      : input == mwin_x11TouchUpdate ? mwin_eventTouchMoved
                                                                     : mwin_eventTouchUp};
     recordOut->data.touch = (mwinTouchEvent){id, position, pressure};

@@ -83,12 +83,14 @@ static mwinX11Platform* PlatformOf(const mwinContext* context)
 }
 
 // Where the platform block's parts lie, laid out with checked
-// arithmetic: the platform, its windows and its outputs.
+// arithmetic: the platform, its windows and its outputs, and the room
+// of the services' languages.
 typedef struct PlatformParts
 {
     mwinLayout layout;
     size_t windows;
     size_t outputs;
+    size_t languages;
 } PlatformParts;
 
 static PlatformParts PartsOf(const mwinLimits* limits)
@@ -100,6 +102,7 @@ static PlatformParts PartsOf(const mwinLimits* limits)
         mwinLayoutAdd(layout, limits->windows, sizeof(mwinX11Window), alignof(mwinX11Window));
     parts.outputs =
         mwinLayoutAdd(layout, limits->monitors, sizeof(mwinX11Output), alignof(mwinX11Output));
+    parts.languages = mwinLayoutAdd(layout, MWIN_LINUX_LANGUAGE_PARTS, limits->localeBytes, 1);
     return parts;
 }
 
@@ -275,8 +278,8 @@ static void Stop(mwinContext* context)
     mwinLinuxPadsStop(&platform->pads);
 #endif
     mwinUnloadX11(&platform->api);
-    mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
     context->backendData = nullptr;
+    mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
 }
 
 static mwinResult Start(mwinContext* context)
@@ -303,7 +306,7 @@ static mwinResult Start(mwinContext* context)
     platform->pointer.focus = -1;
     platform->keyboard.focus = -1;
     platform->drag.slot = -1;
-    mwinLinuxServicesStart(&platform->services, context);
+    mwinLinuxServicesStart(&platform->services, context, (char*)(block + parts.languages));
     mwinImeStart(&platform->ime, context, &platform->services.bus);
     context->backendData = platform;
     mwinResult status = Connect(platform);

@@ -17,7 +17,7 @@
 #include <stdint.h>
 
 // muiTextBlock_SetComposition and muiTextBlock_EndComposition.
-muiResult muiSetComposition(muiTextService* service, muiTextBlockId blockId, uint32_t offset,
+muiResult muiSetComposition(muiTextService* service, muiTextBlockId blockId, size_t offset,
                             const char* text, size_t length, const muiCompositionSegment* segments,
                             uint32_t segmentCount);
 muiResult muiEndComposition(muiTextService* service, muiTextBlockId blockId);

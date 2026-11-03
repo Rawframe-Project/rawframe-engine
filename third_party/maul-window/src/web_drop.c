@@ -158,11 +158,11 @@ void mwinWebHandleDropRecord(mwinWebPlatform* platform, const mwinWebRecord* rec
         }
         return;
     }
-    static const mwinEventType types[] = {mwin_eventDragEntered, mwin_eventDragMoved,
+    static const mwinEventKind types[] = {mwin_eventDragEntered, mwin_eventDragMoved,
                                           mwin_eventDragLeft};
     if (live && record->code >= 0 && record->code <= 2)
     {
-        mwinEvent event = {.type = types[record->code], .timeNs = timeNs};
+        mwinEvent event = {.kind = types[record->code], .timeNs = timeNs};
         mwinDragContents contents =
             (mwinDragContents)(mwinWebCount(record->z) & (mwin_dragFiles | mwin_dragText));
         event.data.drag = (mwinDragEvent){position, contents};

@@ -79,7 +79,7 @@ static bool Has(const muiAccessNode* node, muiAccessAction action)
 // A button that toggles is a toggle button.
 static uint32_t BitsOf(const muiAccessNode* node)
 {
-    uint32_t bits = node->role <= MUI_ROLE_LAST ? s_traits[node->role] : 0;
+    uint32_t bits = (uint32_t)node->role <= MUI_ROLE_LAST ? s_traits[node->role] : 0;
     if (node->role == mui_roleButton && (node->flags & mui_accessCheckable) != 0)
     {
         bits = T_TOGGLE;
@@ -142,8 +142,8 @@ bool muiUikitSays(const muiUikitAdapter* adapter, const muiAccessNode* node)
 
 UIAccessibilityContainerType muiUikitContainerTypeOf(const muiAccessNode* node)
 {
-    return node->role <= MUI_ROLE_LAST ? s_containers[node->role]
-                                       : UIAccessibilityContainerTypeNone;
+    return (uint32_t)node->role <= MUI_ROLE_LAST ? s_containers[node->role]
+                                                 : UIAccessibilityContainerTypeNone;
 }
 
 // Vertical directions name what comes into view, horizontal ones the

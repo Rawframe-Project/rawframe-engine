@@ -64,7 +64,7 @@ static void JNICALL Drag(JNIEnv* env, jclass type, jlong program, jint how, jflo
         return;
     }
     mwinEvent event = {.timeNs = mwinAndroidNow()};
-    event.type = how == DRAG_ENTERED ? mwin_eventDragEntered
+    event.kind = how == DRAG_ENTERED ? mwin_eventDragEntered
                  : how == DRAG_MOVED ? mwin_eventDragMoved
                                      : mwin_eventDragLeft;
     event.data.drag = (mwinDragEvent){PlaceOf(platform, x, y), (mwinDragContents)contents};

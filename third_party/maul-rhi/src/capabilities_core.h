@@ -8,6 +8,7 @@
 #define MAUL_RHI_SRC_CAPABILITIES_CORE_H
 
 #include "maul-rhi/pipeline.h"
+#include "maul-rhi/surface.h"
 
 // Whether every feature asked for is granted.
 bool mrhiFeaturesWithin(const mrhiFeatures* asked, const mrhiFeatures* granted);
@@ -34,6 +35,40 @@ extern const mrhiFormat mrhiKnownFormats[MRHI_KNOWN_FORMATS];
 
 // Whether a value is a format the contract lists.
 bool mrhiIsFormatKnown(mrhiFormat format);
+
+// Whether a surface color's format, primaries, transfer and range are
+// each one the contract lists.
+static inline bool mrhiIsSurfaceColorKnown(const mrhiSurfaceColor* color)
+{
+    return mrhiIsFormatKnown(color->format) &&
+           (uint32_t)color->primaries <= mrhi_primariesDisplayP3 &&
+           (uint32_t)color->transfer <= mrhi_transferPq &&
+           (uint32_t)color->range <= mrhi_rangeExtended;
+}
+
+// Whether a surface color is 8-bit sRGB in Rec. 709 of standard range.
+static inline bool mrhiIsSurfaceColorSrgb8(const mrhiSurfaceColor* color)
+{
+    return (color->format == mrhi_formatRgba8Unorm || color->format == mrhi_formatBgra8Unorm) &&
+           color->primaries == mrhi_primariesBt709 && color->transfer == mrhi_transferSrgb &&
+           color->range == mrhi_rangeStandard;
+}
+
+// Whether surface caps meet the floors every presenting surface has:
+// 8-bit sRGB in Rec. 709 among its colors, of which at most
+// MRHI_SURFACE_COLORS are read; FIFO; opaque alpha; render target usage;
+// and sRGB through twin views or twin images.
+static inline bool mrhiSurfaceCapsMeetFloors(const mrhiSurfaceCaps* caps)
+{
+    bool srgb8 = false;
+    for (uint32_t i = 0; i < caps->colorCount && i < MRHI_SURFACE_COLORS; ++i)
+    {
+        srgb8 = srgb8 || mrhiIsSurfaceColorSrgb8(&caps->colors[i]);
+    }
+    return srgb8 && (caps->presentModes & mrhi_presentFifoBit) != 0 &&
+           (caps->alphaModes & mrhi_alphaOpaqueBit) != 0 &&
+           (caps->usages & mrhi_textureRenderTarget) != 0 && (caps->twinViews || caps->twinImages);
+}
 
 // What every adapter can do with a format: WebGPU's guaranteed
 // capabilities; nothing for the compressed families.

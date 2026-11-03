@@ -39,7 +39,7 @@ extern "C"
     } muiTransitionId;
 
     // How a spec moves a value.
-    typedef uint8_t muiTransitionKind;
+    typedef int32_t muiTransitionKind;
 
     enum
     {
@@ -50,7 +50,7 @@ extern "C"
     };
 
     // The easing curve of a timed transition, as CSS names them.
-    typedef uint8_t muiEasing;
+    typedef int32_t muiEasing;
 
     enum
     {

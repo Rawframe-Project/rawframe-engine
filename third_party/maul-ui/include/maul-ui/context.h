@@ -197,7 +197,14 @@ extern "C"
     MUI_API void muiDestroyContext(muiContext* context);
 
     // What a notification reports.
-    typedef uint8_t muiNotificationKind;
+    typedef int32_t muiNotificationKind;
+
+    // Why a popup was dismissed; the values are in maul-ui/popup.h.
+    typedef int32_t muiDismissReason;
+
+    // What assistive technology asks a node to do; the values are in
+    // maul-ui/access.h.
+    typedef int32_t muiAccessAction;
 
     enum
     {
@@ -206,16 +213,16 @@ extern "C"
         // last outcome until the host edits the node or its size leaves
         // those two.
         mui_notificationOscillation = 1,
-        // detail notifications were dropped here, past the limit.
+        // Notifications were dropped here, past the limit;
+        // notificationsDropped says how many.
         mui_notificationDropped = 2,
-        // A player's focus came to the node, or left it; detail is the
-        // player.
+        // A player's focus came to the node, or left it; player says
+        // whose.
         mui_notificationFocusGained = 3,
         mui_notificationFocusLost = 4,
         // Input changed a range's value (maul-ui/range.h).
         mui_notificationRangeChanged = 5,
-        // A popup should close (maul-ui/popup.h); detail is the reason, a
-        // muiDismissReason.
+        // A popup should close (maul-ui/popup.h); reason says why.
         mui_notificationPopupDismissed = 6,
         // The node's exit (maul-ui/exit.h) has no transition running in
         // its subtree any more.
@@ -224,7 +231,7 @@ extern "C"
         // (maul-ui/virtual.h).
         mui_notificationWindowChanged = 8,
         // Assistive technology asked the node to do what the host does
-        // (maul-ui/access.h); detail is the muiAccessAction.
+        // (maul-ui/access.h); action says what.
         mui_notificationAccessAction = 9,
     };
 
@@ -235,15 +242,24 @@ extern "C"
         muiNotificationKind kind;
         // The node it is about; the null id for mui_notificationDropped.
         muiNodeId node;
-        // What its kind says above: how many were dropped, the player, the
-        // reason or the action; 0 for the other kinds.
-        uint32_t detail;
+        // Each field below is set by one kind and 0 for the others.
+        // For mui_notificationDropped, how many were dropped.
+        uint32_t notificationsDropped;
+        // For mui_notificationFocusGained and mui_notificationFocusLost, the
+        // player whose focus moved.
+        uint8_t player;
+        // For mui_notificationPopupDismissed, why it was dismissed.
+        muiDismissReason reason;
+        // For mui_notificationAccessAction, the action asked for. 0 is
+        // also mui_actionClick, so read it only for that kind.
+        muiAccessAction action;
     } muiNotification;
 
     /// Takes the oldest notification.
     ///
     /// @param context          The context.
-    /// @param notificationOut  Receives it. Zeroed on failure.
+    /// @param notificationOut  Receives it. Zeroed on failure but
+    ///                         `mui_errorBusy`, which leaves it.
     /// @return `mui_success`; `mui_empty` when none is waiting;
     ///         `mui_errorInvalid` for a NULL argument; `mui_errorBusy` while
     ///         the context is busy.
@@ -271,15 +287,15 @@ extern "C"
     typedef struct muiWorkCounts
     {
         // Nodes whose style a restyle resolved.
-        uint64_t styled;
+        uint64_t styleCount;
         // Sizes the layout solver computed, in its sizing and its final
         // pass, rather than answered from a node's cache.
-        uint64_t sized;
+        uint64_t sizeCount;
         // Calls of the host's measure function.
-        uint64_t measured;
+        uint64_t measureCount;
         // Nodes whose draw commands a build emitted, rather than copied
         // from the last list or kept with it whole.
-        uint64_t painted;
+        uint64_t paintCount;
     } muiWorkCounts;
 
     /// Returns the work a context has done since it was made.

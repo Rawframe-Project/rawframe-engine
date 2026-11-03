@@ -55,7 +55,7 @@ static const double s_largestAngular = 4.0 * MTWN_PIO2_HI * 0x1.0p10;
 
 static bool IsMode(mtwnEaseMode mode)
 {
-    return mode <= mtwn_easeOutIn;
+    return (uint32_t)mode <= mtwn_easeOutIn;
 }
 
 static double IntegerPower(double x, uint32_t n)
@@ -84,6 +84,33 @@ static double BounceOut(double q)
     return 7.5625 * q * q + 0.984375;
 }
 
+// Circ's 1 - x^2 and 2x - x^2 = 1 - (1 - x)^2 on [0, 1], never rising and
+// never falling to the bit, as a timeline's easing must, each step one
+// rounding of a value moving one way, and with their digits kept. 1 - x^2:
+// below 1/2, x x rises, and 1 - (x x) falls; from 1/2, 1 - x is exact and
+// falls by 2^-53 a step, while 1 + x, rounded, rises by at most 2^-52, so
+// (1 - x)(1 + x) changes by at most 2^-53 (1 - 3x) < 0 before its
+// rounding. 2x - x^2: below 1/2, 2x rises by 2 ulp(x) a step and x x,
+// rounded, by less than ulp(x) + ulp(x^2) <= 2 ulp(x); from 1/2, 1 - x is
+// exact and falls, and so does its square, rounded. At 1/2 both forms give
+// 0.75 exactly, and below it 1 - x x is at least 0.75, x x being at most
+// 1/4, and 2x - x x at most 0.75, so the step between the forms keeps the
+// way too.
+static double CircSquare(double x)
+{
+    return x < 0.5 ? 1.0 - x * x : (1.0 - x) * (1.0 + x);
+}
+
+static double CircRise(double x)
+{
+    if (x < 0.5)
+    {
+        return 2.0 * x - x * x;
+    }
+    double rest = 1.0 - x;
+    return 1.0 - rest * rest;
+}
+
 // The native curve of a Penner kind at x in [0, 1], before normalization.
 static double RawCurve(const mtwnEasing* easing, double x)
 {
@@ -102,8 +129,7 @@ static double RawCurve(const mtwnEasing* easing, double x)
     case mtwn_easingExpo:
         return mtwnExp2(10.0 * (x - 1.0));
     case mtwn_easingCirc:
-        // 1 - x^2 as a product, which keeps its digits near x = 1.
-        return 1.0 - sqrt((1.0 - x) * (1.0 + x));
+        return 1.0 - sqrt(CircSquare(x));
     case mtwn_easingBack:
         // (s + 1) x - s as x + s (x - 1): exactly 1 at x = 1 for any s,
         // where s + 1 rounds to s from 2^53 on, and with no cancellation
@@ -132,14 +158,32 @@ static bool IsCss(mtwnEasingKind kind)
            kind == mtwn_easingLinearPoints;
 }
 
+// A host function's value at x. A NaN breaks its contract, and is taken
+// once, here, as x, the function linear there, which keeps every mode's
+// reflection of it moving one way; hostNan, when given, is set to tell
+// the context to count it as misuse.
+static double HostCurve(const mtwnEasing* easing, double x, bool* hostNan)
+{
+    double value = easing->function(easing->context, x);
+    if (isnan(value))
+    {
+        if (hostNan != NULL)
+        {
+            *hostNan = true;
+        }
+        return x;
+    }
+    return value;
+}
+
 // The native curve, Penner's normalized to land exactly on 0 and 1.
 // before reaches the curve only where x is progress unreflected.
-static double NativeCurve(const mtwnEasing* easing, double x, bool before)
+static double NativeCurve(const mtwnEasing* easing, double x, bool before, bool* hostNan)
 {
     switch (easing->kind)
     {
     case mtwn_easingHost:
-        return easing->function(easing->context, x);
+        return HostCurve(easing, x, hostNan);
     case mtwn_easingCubicBezier:
         return mtwnSampleCubicBezier(easing->parameters, x);
     case mtwn_easingSteps:
@@ -162,22 +206,21 @@ static double NativeCurve(const mtwnEasing* easing, double x, bool before)
 
 // The in curve f(x) and the out curve 1 - f(1 - x), one of which is
 // native; circ has both.
-static double InCurve(const mtwnEasing* easing, double x, bool before)
+static double InCurve(const mtwnEasing* easing, double x, bool before, bool* hostNan)
 {
-    return IsNativeOut(easing->kind) ? 1.0 - NativeCurve(easing, 1.0 - x, false)
-                                     : NativeCurve(easing, x, before);
+    return IsNativeOut(easing->kind) ? 1.0 - NativeCurve(easing, 1.0 - x, false, hostNan)
+                                     : NativeCurve(easing, x, before, hostNan);
 }
 
-static double OutCurve(const mtwnEasing* easing, double x)
+static double OutCurve(const mtwnEasing* easing, double x, bool* hostNan)
 {
     if (easing->kind == mtwn_easingCirc)
     {
-        // sqrt(1 - (1 - x)^2) without forming 1 - x, which loses the digits
-        // of a small x where the curve is steepest; exact at both ends.
-        return sqrt(x * (2.0 - x));
+        // sqrt(1 - (1 - x)^2), its digits kept where the curve is steepest.
+        return sqrt(CircRise(x));
     }
-    return IsNativeOut(easing->kind) ? NativeCurve(easing, x, false)
-                                     : 1.0 - NativeCurve(easing, 1.0 - x, false);
+    return IsNativeOut(easing->kind) ? NativeCurve(easing, x, false, hostNan)
+                                     : 1.0 - NativeCurve(easing, 1.0 - x, false, hostNan);
 }
 
 // Fills the normalization from the native curve's raw ends.
@@ -256,7 +299,7 @@ MTWN_NOINLINE bool mtwnValidEasing(const mtwnEasing* easing)
     case mtwn_easingSpring:
         return mtwnValidSpringEasing(easing);
     default:
-        return easing->kind <= mtwn_easingBounce && ValidPenner(easing);
+        return (uint32_t)easing->kind <= mtwn_easingBounce && ValidPenner(easing);
     }
 }
 
@@ -386,7 +429,7 @@ mtwnResult mtwnMakeElasticEasing(mtwnEaseMode mode, double amplitude, double per
     return result;
 }
 
-mtwnResult mtwnMakeHostEasing(mtwnEaseMode mode, mtwnEaseFunction function, void* context,
+mtwnResult mtwnMakeHostEasing(mtwnEaseMode mode, mtwnEaseFunction* function, void* context,
                               mtwnEasing* easingOut)
 {
     if (easingOut == NULL || function == NULL || !IsMode(mode))
@@ -447,7 +490,7 @@ static MTWN_NOINLINE mtwnResult mtwnMakeCssEasingWork(mtwnCssKeyword keyword, mt
         {0.0, 0.0, 0.58, 1.0},
         {0.42, 0.0, 0.58, 1.0},
     };
-    if (easingOut == NULL || keyword > mtwn_cssStepEnd)
+    if (easingOut == NULL || (uint32_t)keyword > mtwn_cssStepEnd)
     {
         return mtwn_errorInvalid;
     }
@@ -514,7 +557,8 @@ mtwnResult mtwnSetEaseMode(mtwnEasing* easing, mtwnEaseMode mode)
     return result;
 }
 
-MTWN_NOINLINE bool mtwnIsEasingMonotonicWork(const mtwnEasing* easing)
+// Whether an easing's curve, in mode in, never decreases.
+static bool InCurveMonotonic(const mtwnEasing* easing)
 {
     switch (easing->kind)
     {
@@ -547,6 +591,23 @@ MTWN_NOINLINE bool mtwnIsEasingMonotonicWork(const mtwnEasing* easing)
     }
 }
 
+MTWN_NOINLINE bool mtwnIsEasingMonotonicWork(const mtwnEasing* easing)
+{
+    if (!InCurveMonotonic(easing))
+    {
+        return false;
+    }
+    // Out reflects the curve, so it never decreases either. In-out and
+    // out-in join its halves at 1/2: the first ends at most at 1/2 exactly
+    // when the second starts at 1/2 or above, f(1) / 2 and 1 - f(1) / 2 in
+    // in-out, (1 - f(0)) / 2 and (1 + f(0)) / 2 in out-in, the first's
+    // limit at most that as the curve never decreases. So they meet going
+    // up when the easing at 1/2 is 1/2 or above, as every kind but
+    // linear() always is; a jump at the end that decides makes this
+    // strict.
+    return easing->mode < mtwn_easeInOut || mtwnSampleEasingNoted(easing, 0.5, false, NULL) >= 0.5;
+}
+
 static MTWN_NOINLINE mtwnResult mtwnIsEasingMonotonicChecked(const mtwnEasing* easing,
                                                              bool* monotonicOut)
 {
@@ -566,7 +627,8 @@ mtwnResult mtwnIsEasingMonotonic(const mtwnEasing* easing, bool* monotonicOut)
     return result;
 }
 
-MTWN_NOINLINE double mtwnSampleEasingWork(const mtwnEasing* easing, double progress, bool before)
+MTWN_NOINLINE double mtwnSampleEasingNoted(const mtwnEasing* easing, double progress, bool before,
+                                           bool* hostNan)
 {
     if (easing->kind == mtwn_easingLinear)
     {
@@ -584,15 +646,15 @@ MTWN_NOINLINE double mtwnSampleEasingWork(const mtwnEasing* easing, double progr
     switch (easing->mode)
     {
     case mtwn_easeIn:
-        return InCurve(easing, p, before);
+        return InCurve(easing, p, before, hostNan);
     case mtwn_easeOut:
-        return OutCurve(easing, p);
+        return OutCurve(easing, p, hostNan);
     case mtwn_easeInOut:
-        return p < 0.5 ? 0.5 * InCurve(easing, 2.0 * p, before)
-                       : 0.5 + 0.5 * OutCurve(easing, 2.0 * p - 1.0);
+        return p < 0.5 ? 0.5 * InCurve(easing, 2.0 * p, before, hostNan)
+                       : 0.5 + 0.5 * OutCurve(easing, 2.0 * p - 1.0, hostNan);
     default:
-        return p < 0.5 ? 0.5 * OutCurve(easing, 2.0 * p)
-                       : 0.5 + 0.5 * InCurve(easing, 2.0 * p - 1.0, before);
+        return p < 0.5 ? 0.5 * OutCurve(easing, 2.0 * p, hostNan)
+                       : 0.5 + 0.5 * InCurve(easing, 2.0 * p - 1.0, before, hostNan);
     }
 }
 

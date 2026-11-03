@@ -19,7 +19,7 @@ mrhiFormatCaps mrhiGrantedFormatCaps(mrhiFormat format, const mrhiFeatures* feat
     {
         caps.sampling = true;
         caps.filtering = true;
-        caps.sampleCounts = 1;
+        caps.sampleCounts = mrhi_samples1Bit;
     }
     return caps;
 }

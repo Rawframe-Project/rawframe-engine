@@ -24,8 +24,8 @@ extern "C"
 
     // A physical key: its USB HID keyboard usage (W3C KeyboardEvent.code),
     // the same on every layout. The keys the library itself reads are
-    // named here; every usage is valid.
-    typedef uint16_t muiKeyCode;
+    // named here; every usage, 0 to 0xFFFF, is valid.
+    typedef int32_t muiKeyCode;
 
     enum
     {
@@ -55,7 +55,7 @@ extern "C"
 #define MUI_KEY_NAMED 0x40000000u
 
     // The modifier keys held, and the lock keys on.
-    typedef uint16_t muiModifiers;
+    typedef uint32_t muiModifiers;
 
     enum
     {
@@ -88,12 +88,12 @@ extern "C"
     {
         uint64_t timeNs;
         const char* text;
-        uint32_t length;
+        size_t length;
         uint8_t player;
     } muiTextEvent;
 
     // What a gamepad, or the host's own bindings, ask of the UI.
-    typedef uint8_t muiNavigation;
+    typedef int32_t muiNavigation;
 
     enum
     {
@@ -132,7 +132,7 @@ extern "C"
     } muiWheelEvent;
 
     // What an event is; its fields below say which carry it.
-    typedef uint8_t muiEventKind;
+    typedef int32_t muiEventKind;
 
     enum
     {
@@ -159,18 +159,18 @@ extern "C"
         muiModifiers modifiers;
         muiKeyCode code;
         muiKey key;
-        uint32_t length;
         uint64_t timeNs;
         // The node the event is for: the end of the tunnel, the start of
         // the bubble.
         muiNodeId target;
         const char* text;
+        size_t length;
         const muiPointerRecord* pointer;
         const muiWheelEvent* wheel;
     } muiEvent;
 
     // Which way an event travels when a node hears it.
-    typedef uint8_t muiPhase;
+    typedef int32_t muiPhase;
 
     enum
     {
@@ -230,9 +230,11 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param rootId      The root of the subtree the player's input is for.
-    /// @param event       The key: a player below MUI_MAX_PLAYERS.
+    /// @param event       The key: a player below MUI_MAX_PLAYERS and a code
+    ///                    from 0 to 0xFFFF.
     /// @param handledOut  Receives whether the UI handled it; what it did not
-    ///                    is the game's. False on failure.
+    ///                    is the game's. False on failure but `mui_errorBusy`,
+    ///                    which leaves it.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
     ///         id or an event outside the above; `mui_errorBusy` while the
     ///         context is busy or its event function runs; `mui_errorStale` for
@@ -248,9 +250,12 @@ extern "C"
     /// @param context     The context.
     /// @param rootId      The root.
     /// @param event       The text: non-NULL when its length is not 0, a
-    ///                    player below MUI_MAX_PLAYERS.
-    /// @param handledOut  Receives whether the UI handled it. False on failure.
-    /// @return As muiNode_RouteKey's; `mui_errorBusy` while the context is busy or
+    ///                    length of at most MUI_MAX_TEXT_BYTES, a player below
+    ///                    MUI_MAX_PLAYERS.
+    /// @param handledOut  Receives whether the UI handled it. False on failure
+    ///                    but `mui_errorBusy`, which leaves it.
+    /// @return As muiNode_RouteKey's; `mui_errorLimit` for a length past
+    ///         MUI_MAX_TEXT_BYTES; `mui_errorBusy` while the context is busy or
     ///         its event function runs.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
@@ -267,7 +272,8 @@ extern "C"
     /// @param rootId      The root.
     /// @param event       The action: a known one, a player below
     ///                    MUI_MAX_PLAYERS.
-    /// @param handledOut  Receives whether the UI handled it. False on failure.
+    /// @param handledOut  Receives whether the UI handled it. False on failure
+    ///                    but `mui_errorBusy`, which leaves it.
     /// @return As muiNode_RouteKey's; `mui_errorBusy` while the context is busy or
     ///         its event function runs.
     /// @par Thread safety
@@ -291,7 +297,8 @@ extern "C"
     /// @param rootId      The root.
     /// @param event       The turn: a finite point and deltas, a player
     ///                    below MUI_MAX_PLAYERS.
-    /// @param handledOut  Receives whether the UI handled it. False on failure.
+    /// @param handledOut  Receives whether the UI handled it. False on failure
+    ///                    but `mui_errorBusy`, which leaves it.
     /// @return As muiNode_RouteKey's; `mui_errorBusy` while the context is busy or
     ///         its event function runs.
     /// @par Thread safety
@@ -309,7 +316,8 @@ extern "C"
     ///
     /// @param context     The context.
     /// @param record      The record.
-    /// @param handledOut  Receives whether the UI handled it. False on failure.
+    /// @param handledOut  Receives whether the UI handled it. False on failure
+    ///                    but `mui_errorBusy`, which leaves it.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument;
     ///         `mui_errorBusy` while the context is busy or its event function
     ///         runs.

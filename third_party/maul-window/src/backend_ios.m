@@ -141,9 +141,9 @@ static void Finish(mwinContext* context)
 }
 @end
 
-static void PostLifecycle(mwinContext* context, mwinEventType type)
+static void PostLifecycle(mwinContext* context, mwinEventKind type)
 {
-    mwinEvent event = {.type = type, .timeNs = mwinIOSNow()};
+    mwinEvent event = {.kind = type, .timeNs = mwinIOSNow()};
     mwinPostGlobal(context, &event);
 }
 
@@ -316,9 +316,9 @@ static void Stop(mwinContext* context)
 #endif
         mwinIOSForgetScreens(platform);
     }
+    context->backendData = nullptr;
     mwinRelease(&context->allocator, platform, PartsOf(&context->limits).layout.size,
                 alignof(max_align_t));
-    context->backendData = nullptr;
 }
 
 static mwinResult Start(mwinContext* context)

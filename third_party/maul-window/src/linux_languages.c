@@ -31,14 +31,16 @@ static bool AppendString(const mwinDBusApi* api, mwinDBusIter* iter, const char*
 
 // What a source said: its first word is its baseline; a later one that
 // differs replaces the preferred locales, the starting list for one that
-// names no language. The context tells a change only when the list
-// changes.
+// names no language, and an empty list for one whose first language
+// does not fit. The context tells a change only when the list changes.
 static void Heard(mwinLinuxLanguages* languages, mwinLinuxLanguageWord* word, const char* tags,
-                  size_t length, uint64_t nowNs)
+                  size_t length, bool named, uint64_t nowNs)
 {
     bool first = !word->said;
-    bool same = word->said && word->length == length && memcmp(word->tags, tags, length) == 0;
+    bool same = word->said && word->named == named && word->length == length &&
+                memcmp(word->tags, tags, length) == 0;
     word->said = true;
+    word->named = named;
     word->length = (uint16_t)length;
     if (length > 0)
     {
@@ -48,22 +50,25 @@ static void Heard(mwinLinuxLanguages* languages, mwinLinuxLanguageWord* word, co
     {
         return;
     }
-    const char* locales = length > 0 ? tags : languages->start;
-    size_t count = length > 0 ? length : languages->startLength;
+    const char* locales = named ? tags : languages->start;
+    size_t count = named ? length : languages->startLength;
     (void)mwinSetLocales(languages->context, locales, count, nowNs);
 }
 
 // The tags of a user's properties, a{sv}: its Languages where they name
-// a language, else its Language. False where neither is there in the
+// a language, else its Language, with *namedOut set where the one taken
+// names one, even if none fits. False where neither is there in the
 // shape expected (as, s): nothing said.
 static bool UserLocales(const mwinLinuxLanguages* languages, const mwinDBusApi* api,
-                        mwinDBusIter* properties, char* out, size_t* lengthOut)
+                        mwinDBusIter* properties, char* out, size_t* lengthOut, bool* namedOut)
 {
-    char single[MWIN_LINUX_LOCALE_BYTES];
+    char* single = languages->single;
     size_t fromList = 0;
     size_t fromOne = 0;
     bool list = false;
     bool one = false;
+    bool listFull = false;
+    bool oneFull = false;
     for (; api->argType(properties) == mwin_dbusTypeDictEntry; (void)api->next(properties))
     {
         mwinDBusIter entry;
@@ -84,12 +89,13 @@ static bool UserLocales(const mwinLinuxLanguages* languages, const mwinDBusApi* 
             int type = api->argType(&names);
             list = list || type == mwin_dbusTypeString || type == 0;
             fromList = 0;
+            listFull = false;
             for (; api->argType(&names) == mwin_dbusTypeString; (void)api->next(&names))
             {
                 const char* text = nullptr;
                 api->getBasic(&names, (void*)&text);
-                fromList =
-                    mwinLinuxAddLocales(text, strlen(text), out, fromList, languages->capacity);
+                fromList = mwinLinuxAddLocales(text, strlen(text), out, fromList,
+                                               languages->capacity, &listFull);
             }
         }
         else if (strcmp(name, "Language") == 0 && api->argType(&value) == mwin_dbusTypeString)
@@ -97,12 +103,15 @@ static bool UserLocales(const mwinLinuxLanguages* languages, const mwinDBusApi* 
             const char* text = nullptr;
             api->getBasic(&value, (void*)&text);
             one = true;
-            fromOne = mwinLinuxAddLocales(text, strlen(text), single, 0, languages->capacity);
+            oneFull = false;
+            fromOne =
+                mwinLinuxAddLocales(text, strlen(text), single, 0, languages->capacity, &oneFull);
         }
     }
-    if (list && fromList > 0)
+    if (list && (fromList > 0 || listFull))
     {
         *lengthOut = fromList;
+        *namedOut = true;
         return true;
     }
     if (one && fromOne > 0)
@@ -110,6 +119,7 @@ static bool UserLocales(const mwinLinuxLanguages* languages, const mwinDBusApi* 
         memcpy(out, single, fromOne);
     }
     *lengthOut = one ? fromOne : 0;
+    *namedOut = one && (fromOne > 0 || oneFull);
     return list || one;
 }
 
@@ -236,15 +246,16 @@ static void TakeProperties(mwinLinuxLanguages* languages, uint64_t nowNs)
     DBusMessage* reply = mwinBusAnswer(system, &languages->readCall, nowNs, &failed);
     mwinDBusIter arguments;
     mwinDBusIter properties;
-    char tags[MWIN_LINUX_LOCALE_BYTES];
+    char* tags = languages->work;
     size_t length = 0;
+    bool named = false;
     if (reply != nullptr && system->api.iterInit(reply, &arguments) &&
         system->api.argType(&arguments) == mwin_dbusTypeArray)
     {
         system->api.recurse(&arguments, &properties);
-        if (UserLocales(languages, &system->api, &properties, tags, &length))
+        if (UserLocales(languages, &system->api, &properties, tags, &length, &named))
         {
-            Heard(languages, &languages->gnome, tags, length, nowNs);
+            Heard(languages, &languages->gnome, tags, length, named, nowNs);
         }
     }
     if (reply != nullptr)
@@ -301,11 +312,12 @@ static mwinDBusHandled Filter(DBusConnection* connection, DBusMessage* message, 
     {
         TakeProperties(languages, mwinMonotonicNow());
     }
-    char tags[MWIN_LINUX_LOCALE_BYTES];
+    char* tags = languages->work;
     size_t length = 0;
-    if (UserLocales(languages, api, &changed, tags, &length))
+    bool named = false;
+    if (UserLocales(languages, api, &changed, tags, &length, &named))
     {
-        Heard(languages, &languages->gnome, tags, length, mwinMonotonicNow());
+        Heard(languages, &languages->gnome, tags, length, named, mwinMonotonicNow());
     }
     return mwin_dbusNotHandled;
 }
@@ -320,7 +332,7 @@ static void ReadPlasma(mwinLinuxLanguages* languages, uint64_t nowNs)
     {
         if (errno == ENOENT)
         {
-            Heard(languages, &languages->kde, "", 0, nowNs);
+            Heard(languages, &languages->kde, "", 0, false, nowNs);
         }
         return;
     }
@@ -339,12 +351,13 @@ static void ReadPlasma(mwinLinuxLanguages* languages, uint64_t nowNs)
         length += (size_t)got;
     }
     (void)close(file);
-    char tags[MWIN_LINUX_LOCALE_BYTES];
+    char* tags = languages->work;
     size_t count = 0;
+    bool full = false;
     if (regular && length <= MWIN_LINUX_PLASMA_BYTES &&
-        mwinLinuxPlasmaLocales(text, length, tags, languages->capacity, &count))
+        mwinLinuxPlasmaLocales(text, length, tags, languages->capacity, &count, &full))
     {
-        Heard(languages, &languages->kde, tags, count, nowNs);
+        Heard(languages, &languages->kde, tags, count, count > 0 || full, nowNs);
     }
 }
 
@@ -380,13 +393,16 @@ static void Watch(mwinLinuxLanguages* languages, uint64_t nowNs)
 }
 
 void mwinLanguagesStart(mwinLinuxLanguages* languages, mwinContext* context, mwinLinuxBus* system,
-                        const char* start, size_t startLength, uint64_t nowNs)
+                        char* room, const char* start, size_t startLength, uint64_t nowNs)
 {
     *languages = (mwinLinuxLanguages){.context = context, .system = system, .watch = -1};
-    size_t capacity = context->limits.localeBytes < MWIN_LINUX_LOCALE_BYTES
-                          ? context->limits.localeBytes
-                          : MWIN_LINUX_LOCALE_BYTES;
+    size_t capacity = context->limits.localeBytes;
     languages->capacity = (uint16_t)capacity;
+    languages->work = room;
+    languages->single = room + capacity;
+    languages->start = room + 2 * capacity;
+    languages->gnome.tags = room + 3 * capacity;
+    languages->kde.tags = room + 4 * capacity;
     languages->startLength = (uint16_t)(startLength < capacity ? startLength : capacity);
     if (languages->startLength > 0)
     {

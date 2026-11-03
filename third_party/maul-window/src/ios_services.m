@@ -13,11 +13,11 @@
 
 #include "answer.h"
 #include "apple_clipboard.h"
+#include "apple_text.h"
 #include "clipboard_data.h"
 #include "ios.h"
 
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
-#include <string.h>
 
 mwinOutcome mwinIOSWriteClipboard(const mwinIOSPlatform* platform)
 {
@@ -72,15 +72,7 @@ mwinOutcome mwinIOSReadClipboard(mwinIOSPlatform* platform)
     {
         return mwinTakeClipboardText(context, nullptr, 0);
     }
-    // Each unit is at least a byte of UTF-8: text past the limit is not
-    // converted.
-    if (text.length > context->limits.clipboardBytes)
-    {
-        return mwin_outcomeTooLarge;
-    }
-    const char* bytes = text.UTF8String;
-    return bytes != nullptr ? mwinTakeClipboardText(context, bytes, strlen(bytes))
-                            : mwin_outcomeFailed;
+    return mwinAppleTakeClipboardText(context, text);
 }
 
 int mwinIOSOpenUrl(mwinIOSPlatform* platform, uint32_t slot, uint32_t request)

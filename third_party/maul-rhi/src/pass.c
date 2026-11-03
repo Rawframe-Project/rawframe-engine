@@ -98,8 +98,12 @@ static uint32_t UsageOf(uint8_t use, bool buffer)
         return buffer ? mrhi_bufferCopyDestination : mrhi_textureCopyDestination;
     case mrhi_accessQueryResolve:
         return mrhi_bufferQueryResolve;
-    default:
+    case mrhiUseColorTarget:
+    case mrhiUseResolve:
+    case mrhiUseDepthTarget:
         return mrhi_textureRenderTarget;
+    default:
+        return 0;
     }
 }
 
@@ -180,8 +184,8 @@ static mrhiResult UseOfAccess(const mrhiDevice* device, const mrhiAccess* access
     }
     const mrhiFrameResource* resource = &device->frameResources[slot - 1];
     mrhiAccessKind kind = access->kind;
-    if (kind > mrhi_accessQueryResolve || !IsKindAllowed(kind, IsBuffer(resource), passClass) ||
-        !IsUsageMade(device, resource, kind))
+    if ((uint32_t)kind > mrhi_accessQueryResolve ||
+        !IsKindAllowed(kind, IsBuffer(resource), passClass) || !IsUsageMade(device, resource, kind))
     {
         return mrhi_errorInvalid;
     }
@@ -223,7 +227,7 @@ static mrhiResult UseOfAccess(const mrhiDevice* device, const mrhiAccess* access
     useOut->mipCount = mrhiResolveCount(range->mipCount, range->baseMip, def->mipLevels);
     useOut->baseLayer = range->baseLayer;
     useOut->layerCount = mrhiResolveCount(range->layerCount, range->baseLayer, layers);
-    bool valid = range->aspect <= mrhi_aspectStencilOnly &&
+    bool valid = (uint32_t)range->aspect <= mrhi_aspectStencilOnly &&
                  mrhiFormatHasAspect(def->format, range->aspect) &&
                  mrhiIsRangeValid(useOut->baseMip, useOut->mipCount, def->mipLevels) &&
                  mrhiIsRangeValid(useOut->baseLayer, useOut->layerCount, layers);
@@ -301,7 +305,7 @@ static uint32_t UsesOfColor(const mrhiDevice* device, const mrhiColorTarget* tar
     const mrhiTextureDef* def = mrhiFrameTextureOf(&device->frameResources[slot - 1]);
     *statusOut = mrhi_errorInvalid;
     mrhiFormat format = mrhiViewFormatOf(def, target->viewFormat);
-    if (target->load > mrhi_loadDiscard || target->store > mrhi_storeDiscard ||
+    if ((uint32_t)target->load > mrhi_loadDiscard || (uint32_t)target->store > mrhi_storeDiscard ||
         mrhiFormatHasDepth(def->format) || format == mrhi_formatNone ||
         !Agrees(shape, def, target->mip))
     {
@@ -369,9 +373,10 @@ static mrhiResult UseOfDepth(const mrhiDevice* device, const mrhiDepthTarget* ta
     }
     const mrhiTextureDef* def = mrhiFrameTextureOf(&device->frameResources[slot - 1]);
     bool stencil = mrhiFormatHasStencil(def->format);
-    bool known = target->depthLoad <= mrhi_loadDiscard && target->depthStore <= mrhi_storeDiscard &&
-                 target->stencilLoad <= mrhi_loadDiscard &&
-                 target->stencilStore <= mrhi_storeDiscard;
+    bool known = (uint32_t)target->depthLoad <= mrhi_loadDiscard &&
+                 (uint32_t)target->depthStore <= mrhi_storeDiscard &&
+                 (uint32_t)target->stencilLoad <= mrhi_loadDiscard &&
+                 (uint32_t)target->stencilStore <= mrhi_storeDiscard;
     bool keeps = target->depthLoad == mrhi_loadKeep && target->depthStore == mrhi_storeKeep &&
                  (!stencil ||
                   (target->stencilLoad == mrhi_loadKeep && target->stencilStore == mrhi_storeKeep));
@@ -528,7 +533,7 @@ static mrhiResult CheckDef(mrhiDevice* device, const mrhiPassDef* def)
         return status;
     }
     bool targets = def->colorTargetCount > 0 || def->depthTarget.resource.index1 != 0;
-    if (def->passClass > mrhi_passTransfer)
+    if ((uint32_t)def->passClass > mrhi_passTransfer)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticPassClass);
     }

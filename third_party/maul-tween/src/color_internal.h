@@ -14,7 +14,7 @@
 
 static inline bool mtwnIsColorSpace(mtwnColorSpace space)
 {
-    return space <= mtwn_colorSrgb;
+    return (uint32_t)space <= mtwn_colorSrgb;
 }
 
 static inline bool mtwnIsColor(mtwnColor color)

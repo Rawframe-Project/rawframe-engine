@@ -18,7 +18,7 @@ muniResult muniResolveBidi(const char* text, size_t length, muniBidiDirection di
 {
     bool missing = (text == nullptr || levelsOut == nullptr || workspace == nullptr) && length != 0;
     if (missing || paragraphLengthOut == nullptr || paragraphLevelOut == nullptr ||
-        direction > muni_bidiRightToLeft)
+        (uint32_t)direction > muni_bidiRightToLeft)
     {
         return muni_errorInvalid;
     }

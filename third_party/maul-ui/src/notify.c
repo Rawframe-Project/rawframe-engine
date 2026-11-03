@@ -3,6 +3,8 @@
 
 #include "notify.h"
 
+#include "invariant.h"
+
 void muiNotifyInit(muiNotifyQueue* queue, muiNotification* records, uint32_t capacity)
 {
     *queue = (muiNotifyQueue){.records = records, .capacity = capacity};
@@ -16,7 +18,9 @@ void muiNotifyPost(muiNotifyQueue* queue, const muiNotification* record)
         queue->dropped++;
         return;
     }
-    // The sum stays below 2 * capacity, so it does not wrap.
+    // The head stays below the capacity, which is not 0 once a record
+    // fits, so the sum stays below 2 * capacity and does not wrap.
+    MUI_ASSERT(queue->count < queue->capacity && queue->head < queue->capacity);
     uint32_t tail = (uint32_t)(((uint64_t)queue->head + queue->count) % queue->capacity);
     queue->records[tail] = *record;
     queue->count++;
@@ -26,6 +30,7 @@ bool muiNotifyTake(muiNotifyQueue* queue, muiNotification* recordOut)
 {
     if (queue->count != 0)
     {
+        MUI_ASSERT(queue->head < queue->capacity && queue->count <= queue->capacity);
         *recordOut = queue->records[queue->head];
         queue->head = (queue->head + 1) % queue->capacity;
         queue->count--;
@@ -35,7 +40,7 @@ bool muiNotifyTake(muiNotifyQueue* queue, muiNotification* recordOut)
     {
         *recordOut = (muiNotification){
             .kind = mui_notificationDropped,
-            .detail = queue->dropped,
+            .notificationsDropped = queue->dropped,
         };
         queue->dropped = 0;
         return true;

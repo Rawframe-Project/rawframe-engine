@@ -24,6 +24,12 @@ size_t mrhiVulkanSurfaceExtensions(const char* const** namesOut);
 mrhiResult mrhiVulkanCreateSurface(const mrhiVulkan* vulkan, VkInstance instance, uint32_t enabled,
                                    const mrhiChain* source, VkSurfaceKHR* surfaceOut);
 
+// The surface formats read from a surface, as many as any surface lists
+// in practice: Vulkan reads a list from its start only, and the driver
+// allocates nothing past its creation, so a pair listed after these is
+// not seen.
+#define MRHI_VULKAN_SURFACE_FORMATS 256
+
 // What a surface lists on a physical device: its formats, its present
 // modes, its composite alpha and image usage flags, and whether the
 // device offers twin views.
@@ -39,8 +45,10 @@ typedef struct mrhiVulkanSurfaceFacts
 } mrhiVulkanSurfaceFacts;
 
 // Fills what a surface can do from what it lists: nothing but
-// presentable, false, when a floor is missing (a color, FIFO, opaque
-// alpha, render targets, a way to sRGB).
+// presentable, false, when a floor is missing (8-bit sRGB in Rec. 709,
+// FIFO, opaque alpha, render targets, a way to sRGB). Of the colors, at
+// most MRHI_SURFACE_COLORS in the surface's order, the 8-bit sRGB one is
+// always kept.
 void mrhiVulkanCapsOf(const mrhiVulkanSurfaceFacts* facts, mrhiSurfaceCaps* capsOut);
 
 // Fills what a surface can do on a physical device, given whether it

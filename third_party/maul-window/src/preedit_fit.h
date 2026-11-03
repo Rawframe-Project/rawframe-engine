@@ -5,7 +5,8 @@
 // hand them in bytes, and some hand one inside a character, past the
 // text's end, or a selection backwards. The core fits every composition
 // a backend posts, so the program only ever sees offsets on character
-// boundaries within the text.
+// boundaries within the text. It also drops the control characters an
+// input method or a browser may hand in text or a composition.
 
 #ifndef MAUL_WINDOW_SRC_PREEDIT_FIT_H
 #define MAUL_WINDOW_SRC_PREEDIT_FIT_H
@@ -23,5 +24,17 @@
 // - a selection ending before it starts is put in order;
 // - a segment left empty is dropped.
 void mwinFitPreedit(mwinPreeditEvent* preedit, mwinPreeditSegment* segments);
+
+// The bytes well-formed UTF-8 text keeps once its control characters
+// (U+0000 to U+001F and U+007F to U+009F), which are not text, go.
+size_t mwinKeptTextBytes(const char* text, size_t length);
+
+// Copies well-formed UTF-8 text without its control characters to out,
+// which holds what mwinKeptTextBytes counts. With a composition (else
+// null), moves its caret, selection and segments, writable at segments,
+// with the bytes: an offset in or past a character that goes falls
+// where it was.
+void mwinCopyKeptText(char* out, const char* text, size_t length, mwinPreeditEvent* preedit,
+                      mwinPreeditSegment* segments);
 
 #endif // MAUL_WINDOW_SRC_PREEDIT_FIT_H

@@ -64,7 +64,7 @@ static bool IsAbsolute(const char* path, size_t length)
 // named bounds, mwin_errorInvalid for anything else wrong.
 static mwinResult CheckDef(const mwinFileDialogDef* def)
 {
-    if (def->cookie != DIALOG_COOKIE || def->kind > mwin_dialogFolder ||
+    if (def->cookie != DIALOG_COOKIE || (uint32_t)def->kind > mwin_dialogFolder ||
         (def->filters == nullptr && def->filterCount != 0))
     {
         return mwin_errorInvalid;
@@ -195,8 +195,8 @@ void mwinReleaseDialogCopy(const mwinContext* context, mwinRequest* request)
     if (request->kind == mwin_requestFileDialog && request->value.dialog != nullptr)
     {
         mwinDialogCopy* copy = request->value.dialog;
-        mwinRelease(&context->allocator, copy, copy->size, alignof(mwinDialogCopy));
         request->value.dialog = nullptr;
+        mwinRelease(&context->allocator, copy, copy->size, alignof(mwinDialogCopy));
     }
 }
 
@@ -240,14 +240,20 @@ mwinOutcome mwinSettleDialog(mwinContext* context, uint32_t slot, uint32_t reque
 {
     if (outcome == mwin_outcomeDone)
     {
-        outcome = context->dialogGathering.count > 0 ? context->dialogAnswer : mwin_outcomeFailed;
+        // A choice of nothing failed, unless a path went past the limits.
+        outcome = context->dialogGathering.count > 0 || context->dialogAnswer != mwin_outcomeDone
+                      ? context->dialogAnswer
+                      : mwin_outcomeFailed;
     }
     if (outcome == mwin_outcomeDone)
     {
-        mwinListRelease(&context->dialogFiles, &context->allocator);
+        // The new files and their request first: a getter called from the
+        // free hook finds the last dialog stale.
+        mwinFileList last = context->dialogFiles;
         context->dialogFiles = context->dialogGathering;
         context->dialogGathering = (mwinFileList){0};
         context->dialogRequest = mwinRequestIdOf(context, slot, request);
+        mwinListRelease(&last, &context->allocator);
     }
     mwinListRelease(&context->dialogGathering, &context->allocator);
     return outcome;
@@ -255,30 +261,33 @@ mwinOutcome mwinSettleDialog(mwinContext* context, uint32_t slot, uint32_t reque
 
 void mwinReleaseDialogs(mwinContext* context)
 {
+    // The last dialog's request is stale before its paths go back.
+    context->dialogRequest = (mwinRequestId){0};
     mwinListRelease(&context->dialogGathering, &context->allocator);
     mwinListRelease(&context->dialogFiles, &context->allocator);
 }
 
 mwinResult mwinRequest_GetDialogFiles(const mwinContext* context, mwinRequestId request,
                                       char* bufferOut, size_t capacity, size_t* lengthOut,
-                                      uint32_t* countOut)
+                                      size_t* countOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     mwinClearOut(countOut, sizeof *countOut);
     if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity > 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
     const mwinFileList* files = &context->dialogFiles;
     if (request.index1 == 0 || request.index1 != context->dialogRequest.index1 ||
-        request.generation != context->dialogRequest.generation)
+        request.generation != context->dialogRequest.generation || context->finishing)
     {
-        return mwin_errorStale;
+        return mwinClearOnFailure(mwin_errorStale, bufferOut, capacity);
     }
     if (countOut != nullptr)
     {
         *countOut = files->count;
     }
-    return mwinGiveBytes(files->bytes, files->length, bufferOut, capacity, lengthOut);
+    return mwinClearOnFailure(
+        mwinGiveBytes(files->bytes, files->length, bufferOut, capacity, lengthOut), bufferOut,
+        capacity);
 }

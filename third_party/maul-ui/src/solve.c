@@ -206,7 +206,7 @@ static muiSize SizeLeaf(const muiSolver* solver, uint32_t node, const muiSizingI
         }
         muiNodeId id = muiTreeIdOf(solver->tree, node);
         uint64_t hostKey = muiTreeAt(solver->tree, node)->hostKey;
-        solver->work->measured++;
+        solver->work->measureCount++;
         content = HostMeasure(solver, id, hostKey, ContentAxis(across, boxWidth),
                               ContentAxis(input->height, boxHeight));
         if (isnan(content.width) || isnan(content.height))
@@ -688,7 +688,7 @@ muiSize muiSolveNode(const muiSolver* solver, uint32_t node, const muiSizingInpu
             return hit->size;
         }
     }
-    solver->work->sized++;
+    solver->work->sizeCount++;
     const muiLayoutStyle* style = &solver->nodes[node - 1].style;
     muiSizingInput own = OwnDirection(style, input);
     // Its padding with the safe area, in its direction, which its own

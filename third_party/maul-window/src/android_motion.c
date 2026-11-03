@@ -36,9 +36,9 @@ static mwinAndroidTouch* TouchOf(mwinAndroidPointers* pointers, int32_t id)
 }
 
 static void PostTouch(mwinContext* context, uint32_t slot, const mwinAndroidMotion* motion,
-                      mwinEventType type, const mwinAndroidTouch* touch, float pressure)
+                      mwinEventKind type, const mwinAndroidTouch* touch, float pressure)
 {
-    mwinEvent event = {.type = type};
+    mwinEvent event = {.kind = type};
     event.data.touch = (mwinTouchEvent){touch->id, touch->position, pressure};
     Post(context, slot, motion, &event);
 }
@@ -100,7 +100,7 @@ static void CancelTouches(mwinContext* context, uint32_t slot, mwinAndroidPointe
 
 static void PostPen(mwinContext* context, uint32_t slot, const mwinAndroidPointers* pointers,
                     const mwinAndroidMotion* motion, const mwinAndroidPointer* pointer,
-                    mwinEventType type, uint8_t button)
+                    mwinEventKind type, mwinPenButton button)
 {
     // As Chromium turns Android's tilt and orientation into tilts toward
     // x and y.
@@ -109,7 +109,7 @@ static void PostPen(mwinContext* context, uint32_t slot, const mwinAndroidPointe
     mwinPenFlags flags = (mwinPenFlags)((pointer->tool == mwin_androidEraser ? mwin_penEraser : 0) |
                                         (pointers->penContact ? mwin_penContact : 0) |
                                         (pointers->penBarrel ? mwin_penBarrel : 0));
-    mwinEvent event = {.type = type};
+    mwinEvent event = {.kind = type};
     event.data.pen = (mwinPenEvent){
         .position = pointer->position,
         .pressure = pointers->penContact ? Unit(pointer->pressure) : 0.0f,
@@ -129,14 +129,14 @@ static void Pen(mwinContext* context, uint32_t slot, mwinAndroidPointers* pointe
     {
         pointers->penBarrel = barrel;
         PostPen(context, slot, pointers, motion, pointer,
-                barrel ? mwin_eventPenButtonDown : mwin_eventPenButtonUp, 1);
+                barrel ? mwin_eventPenButtonDown : mwin_eventPenButtonUp, mwin_penButtonBarrel);
     }
     switch (motion->action)
     {
     case mwin_androidDown:
     case mwin_androidPointerDown:
         pointers->penContact = true;
-        PostPen(context, slot, pointers, motion, pointer, mwin_eventPenDown, 0);
+        PostPen(context, slot, pointers, motion, pointer, mwin_eventPenDown, mwin_penButtonNone);
         break;
     case mwin_androidUp:
     case mwin_androidPointerUp:
@@ -144,13 +144,13 @@ static void Pen(mwinContext* context, uint32_t slot, mwinAndroidPointers* pointe
         if (pointers->penContact)
         {
             pointers->penContact = false;
-            PostPen(context, slot, pointers, motion, pointer, mwin_eventPenUp, 0);
+            PostPen(context, slot, pointers, motion, pointer, mwin_eventPenUp, mwin_penButtonNone);
         }
         break;
     case mwin_androidMove:
     case mwin_androidHoverEnter:
     case mwin_androidHoverMove:
-        PostPen(context, slot, pointers, motion, pointer, mwin_eventPenMoved, 0);
+        PostPen(context, slot, pointers, motion, pointer, mwin_eventPenMoved, mwin_penButtonNone);
         break;
     default:
         break;
@@ -220,10 +220,10 @@ static mwinMouseButton ButtonOf(uint32_t button)
 }
 
 static void PostCursor(mwinContext* context, uint32_t slot, const mwinAndroidPointers* pointers,
-                       const mwinAndroidMotion* motion, mwinEventType type, mwinMouseButton button,
+                       const mwinAndroidMotion* motion, mwinEventKind type, mwinMouseButton button,
                        uint8_t clicks)
 {
-    mwinEvent event = {.type = type};
+    mwinEvent event = {.kind = type};
     event.data.pointer = (mwinPointerEvent){motion->pointers[0].position, motion->modifiers,
                                             pointers->buttons, button, clicks};
     Post(context, slot, motion, &event);
@@ -232,14 +232,13 @@ static void PostCursor(mwinContext* context, uint32_t slot, const mwinAndroidPoi
 static void Press(mwinContext* context, uint32_t slot, mwinAndroidPointers* pointers,
                   const mwinAndroidMotion* motion, mwinMouseButton button)
 {
-    uint8_t bit = (uint8_t)(1u << (button - 1));
-    if (button == 0 || (pointers->buttons & bit) != 0)
+    if (button == 0 || (pointers->buttons & mwinMouseBit(button)) != 0)
     {
         return;
     }
-    pointers->buttons |= bit;
+    pointers->buttons |= mwinMouseBit(button);
     uint8_t clicks =
-        mwinCountClickWithin(&pointers->clicks, button, motion->pointers[0].position,
+        mwinCountClickWithin(&pointers->clickCounter, button, motion->pointers[0].position,
                              motion->timeNs, pointers->doubleClickNs, MWIN_DOUBLE_CLICK_DISTANCE);
     PostCursor(context, slot, pointers, motion, mwin_eventButtonDown, button, clicks);
 }
@@ -247,12 +246,11 @@ static void Press(mwinContext* context, uint32_t slot, mwinAndroidPointers* poin
 static void Release(mwinContext* context, uint32_t slot, mwinAndroidPointers* pointers,
                     const mwinAndroidMotion* motion, mwinMouseButton button)
 {
-    uint8_t bit = (uint8_t)(1u << (button - 1));
-    if (button == 0 || (pointers->buttons & bit) == 0)
+    if (button == 0 || (pointers->buttons & mwinMouseBit(button)) == 0)
     {
         return;
     }
-    pointers->buttons &= (uint8_t)~bit;
+    pointers->buttons &= ~mwinMouseBit(button);
     PostCursor(context, slot, pointers, motion, mwin_eventButtonUp, button, 0);
 }
 
@@ -330,7 +328,7 @@ static void Cursor(mwinContext* context, uint32_t slot, mwinAndroidPointers* poi
         break;
     case mwin_androidScroll:
     {
-        mwinEvent event = {.type = mwin_eventWheel};
+        mwinEvent event = {.kind = mwin_eventWheel};
         event.data.wheel = motion->scroll;
         Post(context, slot, motion, &event);
         break;

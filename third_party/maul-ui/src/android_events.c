@@ -141,7 +141,8 @@ static void TellText(const muiAndroidAdapter* adapter, jint seen, const muiAcces
     if (marks->selected && (!old->marks.selected || old->marks.anchor != marks->anchor ||
                             old->marks.focus != marks->focus))
     {
-        const jint numbers[3] = {UnitsBefore(&now, marks->anchor), UnitsBefore(&now, marks->focus),
+        const jint numbers[3] = {UnitsBefore(&now, (uint32_t)marks->anchor),
+                                 UnitsBefore(&now, (uint32_t)marks->focus),
                                  UnitsBefore(&now, now.length)};
         adapter->tellText(adapter, seen, MUI_ANDROID_SELECTION_CHANGED, numbers, nullptr, 0);
     }

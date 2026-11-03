@@ -22,7 +22,7 @@ extern "C"
 #endif
 
     // Where a node's local time falls.
-    typedef uint8_t mtwnPhase;
+    typedef int32_t mtwnPhase;
     enum
     {
         mtwn_phaseBefore = 0,
@@ -31,7 +31,7 @@ extern "C"
     };
 
     // Whether a node holds its value outside its active interval.
-    typedef uint8_t mtwnFill;
+    typedef int32_t mtwnFill;
     enum
     {
         mtwn_fillNone = 0,
@@ -41,7 +41,7 @@ extern "C"
     };
 
     // The direction of each iteration.
-    typedef uint8_t mtwnDirection;
+    typedef int32_t mtwnDirection;
     enum
     {
         mtwn_directionNormal = 0,
@@ -51,7 +51,7 @@ extern "C"
     };
 
     // How a reverse iteration eases.
-    typedef uint8_t mtwnAlternateEasing;
+    typedef int32_t mtwnAlternateEasing;
     enum
     {
         // Time runs back: ease(1 - p), so an ease-in looks like an ease-out
@@ -103,7 +103,10 @@ extern "C"
         double overallProgress;
         // Progress within the current iteration, from 0 to 1.
         double simpleProgress;
-        // The current iteration's index; infinity after an infinite run.
+        // The current iteration's index; infinity after an infinite run,
+        // and where the overall progress passes the doubles, which holds
+        // the node at that iteration's end: its progress the iteration
+        // start's fraction, or 1.
         double iteration;
         // The progress in the iteration's direction, and eased.
         double directedProgress;
@@ -167,7 +170,7 @@ extern "C"
                                                          mtwnTimingResult* resultOut);
 
     // Where a stagger begins: the items nearest it get the first offsets.
-    typedef uint8_t mtwnStaggerOrigin;
+    typedef int32_t mtwnStaggerOrigin;
     enum
     {
         // The first item.
@@ -189,7 +192,7 @@ extern "C"
     };
 
     // Which distance a stagger measures.
-    typedef uint8_t mtwnStaggerAxis;
+    typedef int32_t mtwnStaggerAxis;
     enum
     {
         // Straight across the grid.
@@ -201,7 +204,7 @@ extern "C"
     };
 
     // How a stagger's spacing spreads its offsets.
-    typedef uint8_t mtwnStaggerSpacing;
+    typedef int32_t mtwnStaggerSpacing;
     enum
     {
         // The spacing lies between items one cell apart.
@@ -217,10 +220,12 @@ extern "C"
     // any unit when they are values.
     typedef struct mtwnStagger
     {
-        // The nearest items' offset.
+        // The first offset: the nearest items', or with a negative spacing
+        // the farthest items'. A negative amount over items all at one
+        // distance puts every offset at start - spacing.
         double start;
         // Each or the whole spread, by spacingKind; negative reverses the
-        // order.
+        // order, the farthest items first from the start.
         double spacing;
         // The point's ratios, for mtwn_staggerPoint.
         double pointX;
@@ -255,17 +260,27 @@ extern "C"
     /// t = (d - min) / (max - min), 0 when all are equal, and the offset
     /// is start + span * ease(t), where span is the spacing for
     /// mtwn_staggerAmount and the spacing times (max - min) for
-    /// mtwn_staggerEach. The offsets are the same bits on every platform.
+    /// mtwn_staggerEach. A negative span gives start - span * ease(1 - t),
+    /// as GSAP's distribute does: the farthest items at the start, the
+    /// nearest at start - span, no offset below the start. The offsets are
+    /// the same bits on every platform.
     ///
     /// @param stagger     The stagger; its easing made by this library.
     /// @param count       The items; 0 writes nothing.
-    /// @param offsetsOut  Receives count offsets; unchanged on failure.
+    /// @param offsetsOut  Receives count offsets, every one finite; unchanged
+    ///                    on failure: the easing is sampled at every item
+    ///                    before an offset is written, so only a host
+    ///                    function giving a value not finite when sampled
+    ///                    again there, which is refused too, leaves them
+    ///                    unspecified.
     /// @return mtwn_success; mtwn_errorInvalid for a null pointer with a
     ///         count, an unknown origin, axis or spacing, an index not below a count above 0
     ///         for mtwn_staggerIndex, a start or spacing not finite, a
-    ///         point beyond 2^20, or a spread (the spacing, or for
+    ///         point beyond 2^20, a spread (the spacing, or for
     ///         mtwn_staggerEach the spacing times the distances' range)
-    ///         not finite, writing nothing.
+    ///         not finite, or an offset not finite (the start plus the
+    ///         spread times the eased distance past the doubles, or a
+    ///         host easing's value not finite), writing nothing.
     /// @par Thread safety
     /// Safe from any thread.
     MTWN_NODISCARD MTWN_API mtwnResult mtwnComputeStagger(const mtwnStagger* stagger,

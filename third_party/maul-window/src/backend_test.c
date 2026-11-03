@@ -84,9 +84,9 @@ static mwinResult Start(mwinContext* context)
 static void Stop(mwinContext* context)
 {
     mwinTestReleaseClipboard(context, mwinTestPlatformOf(context));
-    mwinRelease(&context->allocator, context->backendData, PlatformBytes(context),
-                alignof(max_align_t));
+    void* platform = context->backendData;
     context->backendData = nullptr;
+    mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
 }
 
 static uint64_t Now(const mwinContext* context)
@@ -172,10 +172,10 @@ static void Submit(mwinContext* context, uint32_t slot, uint32_t request)
     Queue(context, slot, request);
 }
 
-static void PostType(mwinContext* context, uint32_t slot, mwinEventType type)
+static void PostType(mwinContext* context, uint32_t slot, mwinEventKind type)
 {
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = Now(context);
     mwinPost(context, slot, &event);
 }
@@ -186,10 +186,10 @@ static void PostSize(mwinContext* context, uint32_t slot, mwinSize size)
     float scale = mwinTestPlatformOf(context)->scale;
     mwinEvent event = {0};
     event.timeNs = Now(context);
-    event.type = mwin_eventResized;
+    event.kind = mwin_eventResized;
     event.data.size = size;
     mwinPost(context, slot, &event);
-    event.type = mwin_eventPixelSizeChanged;
+    event.kind = mwin_eventPixelSizeChanged;
     event.data.pixelSize = (mwinPixelSize){(uint32_t)lroundf(size.width * scale),
                                            (uint32_t)lroundf(size.height * scale)};
     mwinPost(context, slot, &event);
@@ -198,7 +198,7 @@ static void PostSize(mwinContext* context, uint32_t slot, mwinSize size)
 static void PostMode(mwinContext* context, uint32_t slot, mwinWindowMode mode)
 {
     mwinEvent event = {0};
-    event.type = mwin_eventModeChanged;
+    event.kind = mwin_eventModeChanged;
     event.timeNs = Now(context);
     event.data.mode = mode;
     mwinPost(context, slot, &event);
@@ -221,13 +221,13 @@ static void Create(mwinContext* context, uint32_t slot)
     if (monitor >= 0)
     {
         mwinEvent display = {0};
-        display.type = mwin_eventDisplayChanged;
+        display.kind = mwin_eventDisplayChanged;
         display.timeNs = Now(context);
         display.data.monitor = mwinMonitorIdOf(context, (uint32_t)monitor);
         mwinPost(context, slot, &display);
     }
     mwinEvent event = {0};
-    event.type = mwin_eventScaleChanged;
+    event.kind = mwin_eventScaleChanged;
     event.timeNs = Now(context);
     event.data.scale = (mwinScaleChange){mwinTestPlatformOf(context)->scale, window->def.size};
     mwinPost(context, slot, &event);
@@ -237,7 +237,7 @@ static void Create(mwinContext* context, uint32_t slot)
     {
         // A popup is where it was put against its owner.
         mwinEvent moved = {0};
-        moved.type = mwin_eventMoved;
+        moved.kind = mwin_eventMoved;
         moved.timeNs = Now(context);
         moved.data.position = window->def.position;
         mwinPost(context, slot, &moved);
@@ -281,7 +281,7 @@ static mwinOutcome CarryOut(mwinContext* context, uint32_t slot, const mwinReque
     case mwin_requestPosition:
     {
         mwinEvent event = {0};
-        event.type = mwin_eventMoved;
+        event.kind = mwin_eventMoved;
         event.timeNs = Now(context);
         event.data.position = request->value.position;
         mwinPost(context, slot, &event);
@@ -297,6 +297,7 @@ static mwinOutcome CarryOut(mwinContext* context, uint32_t slot, const mwinReque
         Focus(context, slot);
         break;
     case mwin_requestTextInput:
+    case mwin_requestTextInputCaret:
     case mwin_requestVirtualKeyboard:
         mwinTestCarryOutText(context, slot, request);
         break;
@@ -325,13 +326,13 @@ static mwinOutcome CarryOut(mwinContext* context, uint32_t slot, const mwinReque
     return mwin_outcomeDone;
 }
 
-static bool IsLifecycle(mwinEventType type)
+static bool IsLifecycle(mwinEventKind type)
 {
     return type >= mwin_eventSuspending && type <= mwin_eventResumed;
 }
 
 // Reports about the application rather than a window.
-static bool IsGlobal(mwinEventType type)
+static bool IsGlobal(mwinEventKind type)
 {
     return IsLifecycle(type) || type == mwin_eventKeyboardLayoutChanged;
 }
@@ -357,11 +358,11 @@ static void Pump(mwinContext* context)
     for (uint32_t i = 0; i < platform->reportCount; i++)
     {
         const mwinEvent* report = &platform->reports[i];
-        if (IsGlobal(report->type))
+        if (IsGlobal(report->kind))
         {
             mwinPostGlobal(context, report);
         }
-        else if (report->type == mwin_eventDropped)
+        else if (report->kind == mwin_eventDropped)
         {
             // Its window may have gone: the drop still ends.
             Deliver(context, report);
@@ -372,8 +373,8 @@ static void Pump(mwinContext* context)
         }
         // A platform waits for the program to handle these before it goes
         // on, as Android does for onPause.
-        if (IsLifecycle(report->type) || report->type == mwin_eventSurfaceLost ||
-            report->type == mwin_eventSurfaceRestored)
+        if (IsLifecycle(report->kind) || report->kind == mwin_eventSurfaceLost ||
+            report->kind == mwin_eventSurfaceRestored)
         {
             mwinRunCriticalFrame(context);
         }
@@ -505,8 +506,8 @@ mwinResult mwinContext_SetTestAnswer(mwinContext* context, mwinRequestKind kind,
         return mwinBusy(context);
     }
     bool cancelled = outcome == mwin_outcomeCancelled && kind != mwin_requestFileDialog;
-    if (context == nullptr || kind >= MWIN_TEST_KINDS || outcome == mwin_outcomeSuperseded ||
-        cancelled || outcome > mwin_outcomeFailed)
+    if (context == nullptr || (uint32_t)kind >= MWIN_TEST_KINDS ||
+        outcome == mwin_outcomeSuperseded || cancelled || (uint32_t)outcome > mwin_outcomeFailed)
     {
         return mwinMisuse(context);
     }
@@ -519,7 +520,7 @@ mwinResult mwinContext_SetTestAnswer(mwinContext* context, mwinRequestKind kind,
     return mwin_success;
 }
 
-mwinResult mwinContext_HoldTestRequests(mwinContext* context, bool hold)
+mwinResult mwinContext_EnableTestHold(mwinContext* context, bool enabled)
 {
     if (mwinIsBusy(context))
     {
@@ -534,24 +535,40 @@ mwinResult mwinContext_HoldTestRequests(mwinContext* context, bool hold)
     {
         return mwin_errorUnsupported;
     }
-    platform->hold = hold;
+    platform->hold = enabled;
+    return mwin_success;
+}
+
+mwinResult mwinContext_IsTestHoldEnabled(const mwinContext* context, bool* enabledOut)
+{
+    mwinClearOut(enabledOut, sizeof *enabledOut);
+    if (context == nullptr || enabledOut == nullptr)
+    {
+        return mwinMisuse(context);
+    }
+    const mwinTestPlatform* platform = mwinTestPlatformOf(context);
+    if (platform == nullptr)
+    {
+        return mwin_errorUnsupported;
+    }
+    *enabledOut = platform->hold;
     return mwin_success;
 }
 
 // Whether a record type is one a test may report: not the core's own,
 // and not what the test platform's setters report.
-static bool IsReportable(mwinEventType type)
+static bool IsReportable(mwinEventKind type)
 {
     return type != mwin_eventNone && type != mwin_eventWindowCreated &&
            type != mwin_eventWindowDestroyed && type != mwin_eventRequestCompleted &&
            type != mwin_eventInputStateReset &&
-           (type <= mwin_eventImePreedit ||
+           ((uint32_t)type <= mwin_eventImePreedit ||
             (type >= mwin_eventDragEntered && type <= mwin_eventDragLeft)) &&
            !(type >= mwin_eventMonitorAdded && type <= mwin_eventMonitorChanged) &&
            !(type >= mwin_eventThemeChanged && type <= mwin_eventLocaleChanged);
 }
 
-static bool HasText(mwinEventType type)
+static bool HasText(mwinEventKind type)
 {
     return type == mwin_eventTextInput || type == mwin_eventImePreedit;
 }
@@ -560,12 +577,12 @@ static bool HasText(mwinEventType type)
 // MWIN_MAX_PREEDIT_SEGMENTS, mwin_errorInvalid for others ill formed.
 static mwinResult CheckText(const mwinEvent* event)
 {
-    if (!HasText(event->type))
+    if (!HasText(event->kind))
     {
         return mwin_success;
     }
     const mwinPreeditEvent* preedit = &event->data.preedit;
-    bool composition = event->type == mwin_eventImePreedit;
+    bool composition = event->kind == mwin_eventImePreedit;
     if (composition && preedit->segments == nullptr && preedit->segmentCount != 0)
     {
         return mwin_errorInvalid;
@@ -582,8 +599,8 @@ static mwinResult CheckText(const mwinEvent* event)
 // Copies a report, its text and its segments into the platform's queue.
 mwinResult mwinTestQueueReport(mwinTestPlatform* platform, const mwinEvent* event)
 {
-    uint32_t length = HasText(event->type) ? event->data.text.length : 0;
-    uint32_t segments = event->type == mwin_eventImePreedit ? event->data.preedit.segmentCount : 0;
+    size_t length = HasText(event->kind) ? event->data.text.length : 0;
+    uint32_t segments = event->kind == mwin_eventImePreedit ? event->data.preedit.segmentCount : 0;
     if (platform->reportCount == MWIN_TEST_REPORTS ||
         MWIN_TEST_REPORT_TEXT - platform->reportTextUsed < length ||
         MWIN_TEST_REPORT_SEGMENTS - platform->reportSegmentsUsed < segments)
@@ -593,7 +610,7 @@ mwinResult mwinTestQueueReport(mwinTestPlatform* platform, const mwinEvent* even
     mwinEvent* record = &platform->reports[platform->reportCount++];
     *record = *event;
     record->timeNs = platform->timeNs;
-    if (HasText(event->type))
+    if (HasText(event->kind))
     {
         char* copy = platform->reportText + platform->reportTextUsed;
         if (length > 0)
@@ -619,7 +636,9 @@ mwinResult mwinContext_PostTestEvent(mwinContext* context, const mwinEvent* even
     {
         return mwinBusy(context);
     }
-    if (context == nullptr || event == nullptr || !IsReportable(event->type))
+    if (context == nullptr || event == nullptr || !IsReportable(event->kind) ||
+        ((event->kind == mwin_eventKeyDown || event->kind == mwin_eventKeyUp) &&
+         (uint32_t)event->data.key.code > mwin_codeMetaRight))
     {
         return mwinMisuse(context);
     }
@@ -633,8 +652,8 @@ mwinResult mwinContext_PostTestEvent(mwinContext* context, const mwinEvent* even
     {
         return mwin_errorUnsupported;
     }
-    if ((!IsGlobal(event->type) && mwinFindWindow(context, event->window) == nullptr) ||
-        (event->type == mwin_eventDisplayChanged &&
+    if ((!IsGlobal(event->kind) && mwinFindWindow(context, event->window) == nullptr) ||
+        (event->kind == mwin_eventDisplayChanged &&
          mwinFindMonitor(context, event->data.monitor) < 0))
     {
         return mwin_errorStale;
@@ -683,23 +702,23 @@ mwinResult mwinContext_SetTestScale(mwinContext* context, float scale)
 mwinResult mwinWindow_GetTestTitle(const mwinContext* context, mwinWindowId window, char* bufferOut,
                                    size_t capacity, size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity != 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
     }
     if (mwinTestPlatformOf(context) == nullptr)
     {
-        return mwin_errorUnsupported;
+        return mwinClearOnFailure(mwin_errorUnsupported, bufferOut, capacity);
     }
     const mwinWindow* found = mwinFindWindow(context, window);
     if (found == nullptr)
     {
-        return mwin_errorStale;
+        return mwinClearOnFailure(mwin_errorStale, bufferOut, capacity);
     }
     size_t length = found->titleLength;
-    return mwinGiveBytes(found->title, length, bufferOut, capacity, lengthOut);
+    return mwinClearOnFailure(mwinGiveBytes(found->title, length, bufferOut, capacity, lengthOut),
+                              bufferOut, capacity);
 }
 
 mwinResult mwinAddTestMonitor(mwinContext* context, const mwinMonitorInfo* info,
@@ -805,10 +824,6 @@ mwinResult mwinContext_SetTestLocales(mwinContext* context, const char* locales,
     if (mwinTestPlatformOf(context) == nullptr)
     {
         return mwin_errorUnsupported;
-    }
-    if (length > context->limits.localeBytes)
-    {
-        return mwin_errorCapacity;
     }
     return mwinSetLocales(context, locales, length, Now(context)) ? mwin_success
                                                                   : mwinMisuse(context);

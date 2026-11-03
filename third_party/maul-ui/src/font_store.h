@@ -93,4 +93,9 @@ typedef struct muiFontStore
 // zeroes it.
 void muiReleaseFont(const muiAllocator* allocator, muiFont* font);
 
+// Destroys font slot of a store, then releases what it held:
+// its id goes stale first, so host code the release runs (the allocator's
+// free) finds it gone rather than half freed (Maul conventions, Threads).
+void muiDropFont(const muiAllocator* allocator, muiFontStore* store, uint32_t slot);
+
 #endif // MAUL_UI_SRC_FONT_STORE_H

@@ -8,6 +8,7 @@
 #include "allocator.h"
 #include "atspi.h"
 #include "chars.h"
+#include "invariant.h"
 
 #include <string.h>
 
@@ -102,29 +103,52 @@ static void SendError(muiAtspiApp* app, DBusMessage* call, const char* name, con
     muiAtspiSend(app, call, app->dbus.newError(call, name, text));
 }
 
+bool muiAtspiTaken(muiAtspiApp* app, bool taken)
+{
+    app->refused = app->refused || !taken;
+    return taken;
+}
+
+void muiAtspiFail(muiAtspiApp* app, DBusMessage* call, const char* member)
+{
+    muiAtspiSend(app, call,
+                 app->refused ? app->dbus.newError(call, ERROR_INVALID_ARGS, member) : nullptr);
+}
+
 bool muiAtspiAppendString(muiAtspiApp* app, muiDBusIter* iter, const char* text)
 {
     return app->dbus.appendBasic(iter, mui_dbusTypeString, (const void*)&text);
+}
+
+bool muiAtspiClose(muiAtspiApp* app, muiDBusIter* iter, muiDBusIter* sub, bool ok)
+{
+    if (ok && app->dbus.closeContainer(iter, sub))
+    {
+        return true;
+    }
+    app->dbus.abandonContainer(iter, sub);
+    return false;
 }
 
 bool muiAtspiAppendVariant(muiAtspiApp* app, muiDBusIter* iter, int type, const void* value)
 {
     const muiDBusApi* dbus = &app->dbus;
     const char signature[2] = {(char)type, '\0'};
-    muiDBusIter variant;
-    return dbus->openContainer(iter, mui_dbusTypeVariant, signature, &variant) &&
-           dbus->appendBasic(&variant, type, value) && dbus->closeContainer(iter, &variant);
+    muiDBusIter variant = {0};
+    bool ok = dbus->openContainer(iter, mui_dbusTypeVariant, signature, &variant) &&
+              dbus->appendBasic(&variant, type, value);
+    return muiAtspiClose(app, iter, &variant, ok);
 }
 
 // A reference by bus name and path.
 static bool AppendNamed(muiAtspiApp* app, muiDBusIter* iter, const char* name, const char* path)
 {
     const muiDBusApi* dbus = &app->dbus;
-    muiDBusIter reference;
-    return dbus->openContainer(iter, mui_dbusTypeStruct, nullptr, &reference) &&
-           dbus->appendBasic(&reference, mui_dbusTypeString, (const void*)&name) &&
-           dbus->appendBasic(&reference, mui_dbusTypeObjectPath, (const void*)&path) &&
-           dbus->closeContainer(iter, &reference);
+    muiDBusIter reference = {0};
+    bool ok = dbus->openContainer(iter, mui_dbusTypeStruct, nullptr, &reference) &&
+              dbus->appendBasic(&reference, mui_dbusTypeString, (const void*)&name) &&
+              dbus->appendBasic(&reference, mui_dbusTypeObjectPath, (const void*)&path);
+    return muiAtspiClose(app, iter, &reference, ok);
 }
 
 void muiAtspiPathOf(const muiAtspiObject* object, char pathOut[ATSPI_PATH_SIZE])
@@ -180,11 +204,9 @@ uint32_t muiAtspiChildrenOf(const muiAtspiObject* object, const uint64_t** idsOu
 {
     muiAtspiAdapter* adapter = object->adapter;
     uint32_t count = 0;
-    if (muiAccessTree_GetShownChildren(adapter->tree, object->node->id, adapter->scratch,
-                                       adapter->nodes, &count) != mui_success)
-    {
-        count = 0;
-    }
+    // An object's node is held, and the scratch holds every node.
+    muiAssertCall(muiAccessTree_GetShownChildren(adapter->tree, object->node->id, adapter->scratch,
+                                                 adapter->nodes, &count) == mui_success);
     *idsOut = adapter->scratch;
     return count;
 }
@@ -341,7 +363,7 @@ static bool ReadFirst(const muiDBusApi* dbus, DBusMessage* call, int type, void*
 static bool AppendChildren(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object)
 {
     const muiDBusApi* dbus = &app->dbus;
-    muiDBusIter array;
+    muiDBusIter array = {0};
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "(so)", &array);
     uint32_t count = muiAtspiChildCount(app, object);
     for (uint32_t i = 0; i < count && ok; i++)
@@ -349,13 +371,13 @@ static bool AppendChildren(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiOb
         muiAtspiObject child;
         ok = ChildAt(app, object, i, &child) && muiAtspiAppendReference(app, &array, &child);
     }
-    return ok && dbus->closeContainer(iter, &array);
+    return muiAtspiClose(app, iter, &array, ok);
 }
 
 static bool AppendInterfaces(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object)
 {
     const muiDBusApi* dbus = &app->dbus;
-    muiDBusIter array;
+    muiDBusIter array = {0};
     const char* interfaces[MUI_ATSPI_INTERFACES];
     uint32_t count = muiAtspiInterfacesOf(object, interfaces);
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "s", &array);
@@ -363,7 +385,7 @@ static bool AppendInterfaces(muiAtspiApp* app, muiDBusIter* iter, const muiAtspi
     {
         ok = muiAtspiAppendString(app, &array, interfaces[i]);
     }
-    return ok && dbus->closeContainer(iter, &array);
+    return muiAtspiClose(app, iter, &array, ok);
 }
 
 static bool AppendStates(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object)
@@ -374,11 +396,11 @@ static bool AppendStates(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObje
     {
         muiAtspiStatesOf(object->adapter, object->node, states);
     }
-    muiDBusIter array;
-    return dbus->openContainer(iter, mui_dbusTypeArray, "u", &array) &&
-           dbus->appendBasic(&array, mui_dbusTypeUint32, &states[0]) &&
-           dbus->appendBasic(&array, mui_dbusTypeUint32, &states[1]) &&
-           dbus->closeContainer(iter, &array);
+    muiDBusIter array = {0};
+    bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "u", &array) &&
+              dbus->appendBasic(&array, mui_dbusTypeUint32, &states[0]) &&
+              dbus->appendBasic(&array, mui_dbusTypeUint32, &states[1]);
+    return muiAtspiClose(app, iter, &array, ok);
 }
 
 // AT-SPI's relation for each of Maul UI's, 0 for none: an active
@@ -395,9 +417,9 @@ static bool AppendRelations(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiO
 {
     const muiDBusApi* dbus = &app->dbus;
     const muiAccessNode* node = object->node;
-    muiDBusIter array;
+    muiDBusIter array = {0};
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "(ua(so))", &array);
-    for (uint32_t kind = 0; kind < MUI_ACCESS_RELATIONS && node != nullptr && ok; kind++)
+    for (muiAccessRelation kind = 0; kind < MUI_ACCESS_RELATIONS && node != nullptr && ok; kind++)
     {
         bool any = false;
         for (uint32_t i = 0; i < node->linkCount; i++)
@@ -409,8 +431,8 @@ static bool AppendRelations(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiO
         {
             continue;
         }
-        muiDBusIter relation;
-        muiDBusIter targets;
+        muiDBusIter relation = {0};
+        muiDBusIter targets = {0};
         ok = dbus->openContainer(&array, mui_dbusTypeStruct, nullptr, &relation) &&
              dbus->appendBasic(&relation, mui_dbusTypeUint32, &s_relations[kind]) &&
              dbus->openContainer(&relation, mui_dbusTypeArray, "(so)", &targets);
@@ -420,19 +442,19 @@ static bool AppendRelations(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiO
             ok = node->links[i].kind != kind || target.node == nullptr ||
                  muiAtspiAppendReference(app, &targets, &target);
         }
-        ok = ok && dbus->closeContainer(&relation, &targets) &&
-             dbus->closeContainer(&array, &relation);
+        ok = muiAtspiClose(app, &relation, &targets, ok);
+        ok = muiAtspiClose(app, &array, &relation, ok);
     }
-    return ok && dbus->closeContainer(iter, &array);
+    return muiAtspiClose(app, iter, &array, ok);
 }
 
 static bool AppendAttribute(muiAtspiApp* app, muiDBusIter* array, const char* name,
                             const char* value)
 {
-    muiDBusIter entry;
-    return app->dbus.openContainer(array, mui_dbusTypeDictEntry, nullptr, &entry) &&
-           muiAtspiAppendString(app, &entry, name) && muiAtspiAppendString(app, &entry, value) &&
-           app->dbus.closeContainer(array, &entry);
+    muiDBusIter entry = {0};
+    bool ok = app->dbus.openContainer(array, mui_dbusTypeDictEntry, nullptr, &entry) &&
+              muiAtspiAppendString(app, &entry, name) && muiAtspiAppendString(app, &entry, value);
+    return muiAtspiClose(app, array, &entry, ok);
 }
 
 static bool AppendNumber(muiAtspiApp* app, muiDBusIter* array, const char* name, uint32_t value)
@@ -449,7 +471,7 @@ static bool AppendAttributes(muiAtspiApp* app, muiDBusIter* iter, const muiAtspi
 {
     const muiDBusApi* dbus = &app->dbus;
     const muiAccessNode* node = object->node;
-    muiDBusIter array;
+    muiDBusIter array = {0};
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "{ss}", &array);
     if (node != nullptr && ok)
     {
@@ -465,11 +487,11 @@ static bool AppendAttributes(muiAtspiApp* app, muiDBusIter* iter, const muiAtspi
              (placeholder == nullptr ||
               AppendAttribute(app, &array, "placeholder-text", placeholder));
     }
-    return ok && dbus->closeContainer(iter, &array);
+    return muiAtspiClose(app, iter, &array, ok);
 }
 
 // Writes the answer of an Accessible method; false for an unknown one,
-// with *ok false when memory ran out.
+// with *ok false when it is refused or memory ran out.
 static bool AppendAccessible(muiAtspiApp* app, muiDBusIter* iter, DBusMessage* call,
                              const muiAtspiObject* object, const char* member, bool* ok)
 {
@@ -479,8 +501,8 @@ static bool AppendAccessible(muiAtspiApp* app, muiDBusIter* iter, DBusMessage* c
     muiAtspiObject child;
     if (strcmp(member, "GetChildAtIndex") == 0)
     {
-        *ok = ReadFirst(&app->dbus, call, mui_dbusTypeInt32, &index) && index >= 0 &&
-              ChildAt(app, object, (uint32_t)index, &child) &&
+        *ok = muiAtspiTaken(app, ReadFirst(&app->dbus, call, mui_dbusTypeInt32, &index) &&
+                                     index >= 0 && ChildAt(app, object, (uint32_t)index, &child)) &&
               muiAtspiAppendReference(app, iter, &child);
     }
     else if (strcmp(member, "GetChildren") == 0)
@@ -539,12 +561,18 @@ static void AnswerAccessible(muiAtspiApp* app, DBusMessage* call, const muiAtspi
     muiDBusIter iter;
     app->dbus.iterInitAppend(reply, &iter);
     bool ok = true;
-    if (!AppendAccessible(app, &iter, call, object, member, &ok) || !ok)
+    bool known = AppendAccessible(app, &iter, call, object, member, &ok);
+    if (!known || !ok)
     {
         app->dbus.unrefMessage(reply);
-        bool known = !ok;
-        SendError(app, call, known ? ERROR_INVALID_ARGS : ERROR_UNKNOWN_METHOD,
-                  known ? "invalid arguments" : member);
+        if (known)
+        {
+            muiAtspiFail(app, call, member);
+        }
+        else
+        {
+            SendError(app, call, ERROR_UNKNOWN_METHOD, member);
+        }
         return;
     }
     muiAtspiSend(app, call, reply);
@@ -562,6 +590,7 @@ bool muiAtspiAnswer(muiAtspiApp* app, DBusMessage* call)
     muiAtspiObject object;
     const char* interface = dbus->interface(call);
     const char* member = dbus->member(call);
+    app->refused = false;
     if (!muiAtspiFind(app, path, &object))
     {
         SendError(app, call, ERROR_UNKNOWN_OBJECT, path);

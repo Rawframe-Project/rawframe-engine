@@ -17,6 +17,7 @@ set(MWIN_WIN32_SOURCES
     src/win32_message_box.c
     src/win32_occlusion.c
     src/win32_input.c
+    src/win32_locales.c
     src/win32_output.c
     src/win32_pointer.c
     src/win32_services.c

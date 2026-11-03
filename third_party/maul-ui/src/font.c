@@ -308,7 +308,7 @@ static muiResult CreateFont(muiTextService* service, const muiFontDef* def, muiF
 {
     if (service == nullptr || def == nullptr || fontOut == nullptr ||
         def->cookie != FONT_DEF_COOKIE || def->data == nullptr ||
-        def->dataMode > mui_fontDataBorrow)
+        (uint32_t)def->dataMode > mui_fontDataBorrow)
     {
         return muiRefuseText(service);
     }
@@ -338,8 +338,7 @@ static muiResult CreateFont(muiTextService* service, const muiFontDef* def, muiF
     muiResult result = Open(service, def, font);
     if (result != mui_success)
     {
-        muiReleaseFont(&service->allocator, font);
-        muiPoolGive(&store->pool, slot);
+        muiDropFont(&service->allocator, store, slot);
         return result;
     }
     *fontOut = (muiFontId){slot, muiPoolGeneration(&store->pool, slot)};
@@ -386,8 +385,7 @@ static muiResult DestroyFont(muiTextService* service, muiFontId fontId)
     {
         return mui_errorStale;
     }
-    muiReleaseFont(&service->allocator, &service->fonts.fonts[slot - 1]);
-    muiPoolGive(&service->fonts.pool, slot);
+    muiDropFont(&service->allocator, &service->fonts, slot);
     return mui_success;
 }
 

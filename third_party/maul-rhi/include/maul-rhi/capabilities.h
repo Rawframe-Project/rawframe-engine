@@ -145,7 +145,7 @@ extern "C"
 
     // A texel format. The compressed families need their feature; `format_caps`
     // says what each format can do on an adapter.
-    typedef uint16_t mrhiFormat;
+    typedef int32_t mrhiFormat;
 
     enum
     {
@@ -294,6 +294,20 @@ extern "C"
         mrhi_formatAstc12x12UnormSrgb = 70,
     };
 
+    // The multisample counts a format supports, as a mask: the bit worth n is
+    // set when n samples per pixel are.
+    typedef uint32_t mrhiSampleCounts;
+
+    enum
+    {
+        // One sample per pixel.
+        mrhi_samples1Bit = 0x1u,
+        // Two samples per pixel.
+        mrhi_samples2Bit = 0x2u,
+        // Four samples per pixel.
+        mrhi_samples4Bit = 0x4u,
+    };
+
     // What a format can do on an adapter. Every adapter meets the floor
     // mrhiFloorFormatCaps would give; the compressed families need their
     // feature.
@@ -309,9 +323,8 @@ extern "C"
         bool blending;
         // A storage texture.
         bool storage;
-        // The multisample counts as a mask: the bit worth n is set when n
-        // samples are supported (1, 2, 4).
-        uint8_t sampleCounts;
+        // The multisample counts it supports.
+        mrhiSampleCounts sampleCounts;
     } mrhiFormatCaps;
 
     /// Returns the floor limits, which every adapter of every driver meets:

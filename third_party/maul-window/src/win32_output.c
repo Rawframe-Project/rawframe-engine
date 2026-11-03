@@ -9,8 +9,7 @@
 #include "win32_output.h"
 
 #include "edid.h"
-
-#include "maul-unicode/encoding.h"
+#include "utf8.h"
 
 #include <setupapi.h>
 #include <shellscalingapi.h>
@@ -42,22 +41,9 @@ static mwinPixelRect RectOf(RECT rect)
 void mwinWin32NameMonitor(const WCHAR* description, size_t capacity, mwinMonitorInfo* info)
 {
     // A name too long is cut to the most whole characters that fit.
-    size_t units = wcsnlen(description, capacity);
-    for (; units > 0; --units)
-    {
-        size_t needed = 0;
-        bool split = IS_HIGH_SURROGATE(description[units - 1]) && units < capacity &&
-                     IS_LOW_SURROGATE(description[units]);
-        if (!split &&
-            muniConvertUtf16ToUtf8((const uint16_t*)description, units, muni_convertReplace,
-                                   info->name, MWIN_MONITOR_NAME_BYTES, &needed)
-                    .status == muni_success)
-        {
-            info->nameLength = (uint32_t)needed;
-            return;
-        }
-    }
-    info->nameLength = 0;
+    info->nameLength =
+        (uint32_t)mwinCutUtf16((const uint16_t*)description, wcsnlen(description, capacity),
+                               info->name, MWIN_MONITOR_NAME_BYTES);
 }
 
 // The monitor's name: the display device's description, as UTF-8.

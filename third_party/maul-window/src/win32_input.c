@@ -102,11 +102,11 @@ static uint64_t TimeOf(mwinWin32Window* window)
     return mwinWin32InputTime(window->platform, mwinWin32MessageTime());
 }
 
-static void PostKey(mwinWin32Window* window, mwinEventType type, uint32_t scan, bool repeat)
+static void PostKey(mwinWin32Window* window, mwinEventKind type, uint32_t scan, bool repeat)
 {
     mwinKeyCode code = s_codes[scan];
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = TimeOf(window);
     event.data.key = (mwinKeyEvent){code, Modifiers(), MeaningOf(scan, code), repeat};
     Post(window, &event);
@@ -157,7 +157,7 @@ static void OnCharacter(mwinWin32Window* window, WPARAM unit)
         return;
     }
     mwinEvent event = {0};
-    event.type = mwin_eventTextInput;
+    event.kind = mwin_eventTextInput;
     event.timeNs = TimeOf(window);
     event.data.text = (mwinTextEvent){text, (uint32_t)length};
     Post(window, &event);
@@ -170,14 +170,14 @@ static mwinPosition PositionOf(const mwinWin32Window* window, LPARAM place)
                           (float)(int16_t)HIWORD(place) / scale};
 }
 
-static void PostPointer(mwinWin32Window* window, mwinEventType type, mwinPosition position,
+static void PostPointer(mwinWin32Window* window, mwinEventKind type, mwinPosition position,
                         mwinMouseButton button)
 {
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = TimeOf(window);
-    event.data.pointer =
-        (mwinPointerEvent){position, Modifiers(), window->buttons, button, window->clicks.clicks};
+    event.data.pointer = (mwinPointerEvent){position, Modifiers(), window->buttons, button,
+                                            window->clickCounter.clickCount};
     Post(window, &event);
 }
 
@@ -262,7 +262,7 @@ static void OnButton(mwinWin32Window* window, UINT message, WPARAM wParam, LPARA
     bool down = message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
                 message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN;
     mwinPosition position = PositionOf(window, place);
-    uint8_t bit = (uint8_t)(1u << (button - 1));
+    mwinMouseButtons bit = mwinMouseBit(button);
     if (down)
     {
         if (window->buttons == 0)
@@ -271,13 +271,13 @@ static void OnButton(mwinWin32Window* window, UINT message, WPARAM wParam, LPARA
         }
         window->buttons |= bit;
         float scale = mwinWin32Scale(window->dpi);
-        (void)mwinCountClickWithin(&window->clicks, button, position, TimeOf(window),
+        (void)mwinCountClickWithin(&window->clickCounter, button, position, TimeOf(window),
                                    (uint64_t)GetDoubleClickTime() * 1000000u,
                                    (float)GetSystemMetrics(SM_CXDOUBLECLK) / 2.0f / scale);
     }
     else
     {
-        window->buttons &= (uint8_t)~bit;
+        window->buttons &= ~bit;
         if (window->buttons == 0)
         {
             ReleaseCapture();
@@ -307,7 +307,7 @@ static void OnWheel(mwinWin32Window* window, UINT message, WPARAM wParam)
 {
     float detents = (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA;
     mwinEvent event = {0};
-    event.type = mwin_eventWheel;
+    event.kind = mwin_eventWheel;
     event.timeNs = TimeOf(window);
     // Windows counts away from the user and to the right as positive.
     event.data.wheel = message == WM_MOUSEWHEEL ? (mwinWheelEvent){0.0f, detents}
@@ -335,7 +335,7 @@ static void OnRawInput(mwinWin32Window* window, LPARAM handle)
         return;
     }
     mwinEvent event = {0};
-    event.type = mwin_eventRawPointerDelta;
+    event.kind = mwin_eventRawPointerDelta;
     event.timeNs = TimeOf(window);
     event.data.delta =
         (mwinDeltaEvent){(float)input.data.mouse.lLastX, (float)input.data.mouse.lLastY};
@@ -366,7 +366,7 @@ static bool HandleKeyboard(mwinWin32Window* window, UINT message, WPARAM wParam,
         return (wParam & 0xFFF0) == SC_KEYMENU && lParam == 0;
     case WM_INPUTLANGCHANGE:
     {
-        mwinEvent event = {.type = mwin_eventKeyboardLayoutChanged, .timeNs = mwinWin32Now()};
+        mwinEvent event = {.kind = mwin_eventKeyboardLayoutChanged, .timeNs = mwinWin32Now()};
         mwinPostGlobal(window->platform->context, &event);
         *result = TRUE;
         return true;

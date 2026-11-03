@@ -83,8 +83,8 @@ static HRESULT STDMETHODCALLTYPE GetSelection(muiUiaText* self, SAFEARRAY** out)
         return ELEMENT_GONE;
     }
     const muiAccessTextMarks* marks = &held->marks;
-    uint32_t start = marks->anchor < marks->focus ? marks->anchor : marks->focus;
-    uint32_t end = marks->anchor < marks->focus ? marks->focus : marks->anchor;
+    uint32_t start = (uint32_t)(marks->anchor < marks->focus ? marks->anchor : marks->focus);
+    uint32_t end = (uint32_t)(marks->anchor < marks->focus ? marks->focus : marks->anchor);
     muiUiaRange* range = marks->selected ? muiUiaMakeRange(node, start, end) : nullptr;
     if (marks->selected && range == nullptr)
     {
@@ -141,17 +141,19 @@ static MUI_NOINLINE HRESULT RangeFromPointWorker(muiUiaText* self, muiUiaPoint p
 {
     muiUiaNode* node = FromText(self);
     const muiAccessNode* held = muiUiaNodeFor(node);
-    uint32_t at = 0;
+    size_t found = 0;
     if (held != nullptr)
     {
         float x = 0.0f;
         float y = 0.0f;
         muiUiaRootPointOf(node->adapter, point.x, point.y, &x, &y);
-        if (muiAccessTree_GetTextOffsetAt(node->adapter->tree, held->id, x, y, &at) != mui_success)
+        if (muiAccessTree_GetTextOffsetAt(node->adapter->tree, held->id, x, y, &found) !=
+            mui_success)
         {
-            at = 0;
+            found = 0;
         }
     }
+    uint32_t at = (uint32_t)found;
     return Give(node, at, at, out);
 }
 
@@ -195,7 +197,7 @@ static HRESULT STDMETHODCALLTYPE GetCaretRange(muiUiaText* self, BOOL* active, m
     muiUiaNode* node = FromText(self);
     const muiAccessNode* held = muiUiaNodeFor(node);
     *active = held != nullptr && muiRecordActiveFocus(node->adapter->tree) == held->id;
-    uint32_t caret = held != nullptr && held->marks.selected ? held->marks.focus : 0;
+    uint32_t caret = held != nullptr && held->marks.selected ? (uint32_t)held->marks.focus : 0;
     return Give(node, caret, caret, out);
 }
 

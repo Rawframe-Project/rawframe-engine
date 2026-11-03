@@ -26,8 +26,10 @@ mrhiSurfaceConfig mrhiDefaultSurfaceConfig(void)
 static bool IsWellFormed(const mrhiSurfaceConfig* config)
 {
     const mrhiSurfaceColor* color = &config->color;
-    bool known = mrhiIsFormatKnown(color->format) && color->primaries <= mrhi_primariesDisplayP3 &&
-                 color->transfer <= mrhi_transferPq && color->range <= mrhi_rangeExtended;
+    bool known = mrhiIsFormatKnown(color->format) &&
+                 (uint32_t)color->primaries <= mrhi_primariesDisplayP3 &&
+                 (uint32_t)color->transfer <= mrhi_transferPq &&
+                 (uint32_t)color->range <= mrhi_rangeExtended;
     mrhiFormat twin = mrhiFormatSrgbPair(color->format);
     for (uint32_t i = 0; i < MRHI_VIEW_FORMATS; ++i)
     {
@@ -40,8 +42,8 @@ static bool IsWellFormed(const mrhiSurfaceConfig* config)
     mrhiTextureUsage usage = config->usage;
     return known && usage != 0 && (usage & ~mrhiTextureUsageKnown) == 0 &&
            (usage & mrhi_textureTransient) == 0 && config->width > 0 && config->height > 0 &&
-           config->presentMode <= mrhi_presentImmediate &&
-           config->alphaMode <= mrhi_alphaPremultiplied;
+           (uint32_t)config->presentMode <= mrhi_presentImmediate &&
+           (uint32_t)config->alphaMode <= mrhi_alphaPremultiplied;
 }
 
 // Whether the surface reports the color.
@@ -144,8 +146,8 @@ static mrhiSurfaceSlot* CheckConfig(mrhiDevice* device, const mrhiSurfaceConfig*
         *statusOut = mrhi_errorState;
         return nullptr;
     }
-    mrhiSurfaceCaps caps = {0};
-    instance->driver.vtable->getSurfaceCaps(instance->driver.self, handle, device->adapter, &caps);
+    mrhiSurfaceCaps caps;
+    mrhiSurfaceCapsOf(instance, handle, device->adapter, &caps);
     if (!IsSupported(device, &caps, config))
     {
         *statusOut = mrhi_errorUnsupported;

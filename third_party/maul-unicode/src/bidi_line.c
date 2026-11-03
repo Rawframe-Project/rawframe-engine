@@ -9,6 +9,8 @@
 #include "bidi_line.h"
 
 #include "bidi_core.h"
+#include "invariant.h"
+#include "overlap.h"
 
 #include "maul-unicode/bidi.h"
 
@@ -42,10 +44,7 @@ typedef struct Runs
 
 static void Add(Runs* runs, size_t start, size_t end, uint8_t level)
 {
-    if (start == end)
-    {
-        return;
-    }
+    MUNI_ASSERT(start < end);
     if (runs->count > 0 && runs->level == level && runs->end == start)
     {
         if (runs->count <= runs->capacity)
@@ -98,7 +97,9 @@ static bool IsTrailing(uint8_t type)
     }
 }
 
-// L1: the runs of the line in logical order.
+// L1: the runs of the line in logical order. Every stretch it adds holds
+// at least one code point: each step reads one, and muniStepUtf8 reports
+// at least one byte even for an ill-formed sequence.
 static void CollectRuns(Runs* runs, const uint8_t* text, const uint8_t* levels, size_t length,
                         uint8_t paragraphLevel)
 {
@@ -283,7 +284,8 @@ muniResult muniReorderBidiLevels(const uint8_t* levels, size_t count, size_t* vi
 
 muniResult muniInvertBidiMap(const size_t* map, size_t count, size_t* inverseOut)
 {
-    if ((map == nullptr || inverseOut == nullptr) && count != 0)
+    if (((map == nullptr || inverseOut == nullptr) && count != 0) ||
+        muniOverlaps(map, count, inverseOut, count, sizeof(size_t)))
     {
         return muni_errorInvalid;
     }
@@ -297,6 +299,8 @@ muniResult muniInvertBidiMap(const size_t* map, size_t count, size_t* inverseOut
     {
         if (map[k] >= count || inverseOut[map[k]] != SIZE_MAX)
         {
+            // The marks are no answer: a refusal leaves a defined state.
+            memset(inverseOut, 0, count * sizeof(size_t));
             return muni_errorInvalid;
         }
         inverseOut[map[k]] = k;

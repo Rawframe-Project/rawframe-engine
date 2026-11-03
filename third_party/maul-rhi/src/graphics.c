@@ -114,8 +114,8 @@ static mrhiResult CheckBuffers(mrhiDevice* device, const mrhiGraphicsPipelineDef
     for (uint32_t i = 0; i < def->vertexBufferCount && status != mrhi_errorInvalid; ++i)
     {
         const mrhiVertexBufferLayout* buffer = &def->vertexBuffers[i];
-        status =
-            Worse(status, Need(buffer->stride % 4 == 0 && buffer->stepMode <= mrhi_stepInstance));
+        status = Worse(status, Need(buffer->stride % 4 == 0 &&
+                                    (uint32_t)buffer->stepMode <= mrhi_stepInstance));
         status = Worse(status, MRHI_DEVICE_LIMIT(device, vertexStride, buffer->stride));
     }
     return status;
@@ -224,10 +224,11 @@ static mrhiResult CheckPrimitive(mrhiDevice* device, const mrhiGraphicsPipelineD
 {
     bool strip =
         def->topology == mrhi_topologyLineStrip || def->topology == mrhi_topologyTriangleStrip;
-    mrhiResult status = Need(
-        def->topology <= mrhi_topologyTriangleStrip && def->stripIndexFormat <= mrhi_indexUint32 &&
-        (strip || def->stripIndexFormat == mrhi_indexNone) &&
-        def->frontFace <= mrhi_frontClockwise && def->cullMode <= mrhi_cullBack);
+    mrhiResult status = Need((uint32_t)def->topology <= mrhi_topologyTriangleStrip &&
+                             (uint32_t)def->stripIndexFormat <= mrhi_indexUint32 &&
+                             (strip || def->stripIndexFormat == mrhi_indexNone) &&
+                             (uint32_t)def->frontFace <= mrhi_frontClockwise &&
+                             (uint32_t)def->cullMode <= mrhi_cullBack);
     status = Worse(status, Within(!def->unclippedDepth || device->features.unclippedDepth));
     if (def->viewCount > 1)
     {
@@ -247,9 +248,9 @@ static bool IsCompare(mrhiCompareFunction compare)
 // Whether a stencil face holds known values.
 static bool IsStencilValid(const mrhiStencilFace* face)
 {
-    return IsCompare(face->compare) && face->failOp <= mrhi_stencilDecrementWrap &&
-           face->depthFailOp <= mrhi_stencilDecrementWrap &&
-           face->passOp <= mrhi_stencilDecrementWrap;
+    return IsCompare(face->compare) && (uint32_t)face->failOp <= mrhi_stencilDecrementWrap &&
+           (uint32_t)face->depthFailOp <= mrhi_stencilDecrementWrap &&
+           (uint32_t)face->passOp <= mrhi_stencilDecrementWrap;
 }
 
 static bool IsStencilDefault(const mrhiStencilFace* face)
@@ -294,9 +295,10 @@ static mrhiResult CheckDepthStencil(const mrhiDevice* device, const mrhiGraphics
 static bool IsBlendValid(const mrhiBlendComponent* component)
 {
     bool ones = component->srcFactor == mrhi_blendOne && component->dstFactor == mrhi_blendOne;
-    return component->srcFactor <= mrhi_blendOneMinusSrc1Alpha &&
-           component->dstFactor <= mrhi_blendOneMinusSrc1Alpha &&
-           component->operation <= mrhi_blendMax && (component->operation < mrhi_blendMin || ones);
+    return (uint32_t)component->srcFactor <= mrhi_blendOneMinusSrc1Alpha &&
+           (uint32_t)component->dstFactor <= mrhi_blendOneMinusSrc1Alpha &&
+           (uint32_t)component->operation <= mrhi_blendMax &&
+           (component->operation < mrhi_blendMin || ones);
 }
 
 // Whether a blend factor reads a source's alpha; the second source has

@@ -5,10 +5,10 @@
 // source, which the instance's driver turns into its surface, and
 // what each adapter can do with them.
 
+#include "capabilities_core.h"
 #include "chain.h"
 #include "device_core.h"
 #include "instance_core.h"
-#include "invariant.h"
 #include "label.h"
 #include "outputs.h"
 
@@ -176,13 +176,18 @@ uint64_t mrhiFindSurface(const mrhiInstance* instance, mrhiSurfaceId surface)
 // id.
 static void EndSurface(mrhiInstance* instance, uint32_t index1)
 {
-    const mrhiSurfaceSlot* slot = &instance->surfaceSlots[index1 - 1];
-    if (slot->device != nullptr)
-    {
-        mrhiEndConfiguration(slot->device, slot->swapchain);
-    }
-    instance->driver.vtable->destroySurface(instance->driver.self, slot->handle);
+    // The id goes stale first: ending the configuration may give the
+    // swapchain's memory back to the device's allocator, and a hook
+    // reading the surface then finds it gone. The rest reads a copy, never
+    // the released slot.
+    mrhiSurfaceSlot ended = instance->surfaceSlots[index1 - 1];
+    instance->surfaceSlots[index1 - 1] = (mrhiSurfaceSlot){0};
     mrhiPoolRelease(&instance->surfaces, index1);
+    if (ended.device != nullptr)
+    {
+        mrhiEndConfiguration(ended.device, ended.swapchain);
+    }
+    instance->driver.vtable->destroySurface(instance->driver.self, ended.handle);
 }
 
 mrhiResult mrhiDestroySurface(mrhiInstance* instance, mrhiSurfaceId surface)
@@ -220,6 +225,30 @@ void mrhiDestroySurfaces(mrhiInstance* instance)
     }
 }
 
+void mrhiSurfaceCapsOf(const mrhiInstance* instance, uint64_t surface, uint64_t adapter,
+                       mrhiSurfaceCaps* capsOut)
+{
+    mrhiSurfaceCaps caps = {0};
+    instance->driver.vtable->getSurfaceCaps(instance->driver.self, surface, adapter, &caps);
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < caps.colorCount && i < MRHI_SURFACE_COLORS; ++i)
+    {
+        if (mrhiIsSurfaceColorKnown(&caps.colors[i]))
+        {
+            caps.colors[kept++] = caps.colors[i];
+        }
+    }
+    for (uint32_t i = kept; i < MRHI_SURFACE_COLORS; ++i)
+    {
+        caps.colors[i] = (mrhiSurfaceColor){0};
+    }
+    caps.colorCount = kept;
+    // A surface without a floor presents nothing; one left with no color
+    // has lost the 8-bit sRGB floor too.
+    bool presents = caps.presentable && mrhiSurfaceCapsMeetFloors(&caps);
+    *capsOut = presents ? caps : (mrhiSurfaceCaps){0};
+}
+
 mrhiResult mrhiSurface_GetCaps(mrhiInstance* instance, mrhiSurfaceId surface, mrhiAdapterId adapter,
                                mrhiSurfaceCaps* capsOut)
 {
@@ -235,17 +264,9 @@ mrhiResult mrhiSurface_GetCaps(mrhiInstance* instance, mrhiSurfaceId surface, mr
     {
         return mrhi_errorStale;
     }
-    mrhiSurfaceCaps caps = {0};
-    instance->driver.vtable->getSurfaceCaps(instance->driver.self, handle, found->handle, &caps);
-    MRHI_ASSERT(!caps.presentable ||
-                (caps.colorCount >= 1 && caps.colorCount <= MRHI_SURFACE_COLORS &&
-                 (caps.presentModes & mrhi_presentFifoBit) != 0 &&
-                 (caps.alphaModes & mrhi_alphaOpaqueBit) != 0 &&
-                 (caps.usages & mrhi_textureRenderTarget) != 0 &&
-                 (caps.twinViews || caps.twinImages)));
-    // Nothing a driver fills for an adapter that cannot present is passed on.
-    const mrhiSurfaceCaps none = {0};
-    mrhiOutSurfaceCaps(capsOut, caps.presentable ? &caps : &none);
+    mrhiSurfaceCaps caps;
+    mrhiSurfaceCapsOf(instance, handle, found->handle, &caps);
+    mrhiOutSurfaceCaps(capsOut, &caps);
     return mrhi_success;
 }
 
@@ -253,15 +274,6 @@ static bool IsSameColor(const mrhiSurfaceColor* a, const mrhiSurfaceColor* b)
 {
     return a->format == b->format && a->primaries == b->primaries && a->transfer == b->transfer &&
            a->range == b->range;
-}
-
-// 8-bit sRGB in Rec. 709 of standard range, the floor every presenting
-// surface reports.
-static bool IsSrgb8(const mrhiSurfaceColor* color)
-{
-    return (color->format == mrhi_formatRgba8Unorm || color->format == mrhi_formatBgra8Unorm) &&
-           color->primaries == mrhi_primariesBt709 && color->transfer == mrhi_transferSrgb &&
-           color->range == mrhi_rangeStandard;
 }
 
 mrhiResult mrhiSuggestSurfaceColor(const mrhiSurfaceCaps* caps, const mrhiSurfaceColor* asked,
@@ -283,7 +295,7 @@ mrhiResult mrhiSuggestSurfaceColor(const mrhiSurfaceCaps* caps, const mrhiSurfac
             const mrhiSurfaceColor* color = &caps->colors[i];
             bool fits = step == 0   ? IsSameColor(color, asked)
                         : step == 1 ? IsSameColor(color, &hdr)
-                                    : IsSrgb8(color);
+                                    : mrhiIsSurfaceColorSrgb8(color);
             if (fits)
             {
                 mrhiOutSurfaceColor(colorOut, color);

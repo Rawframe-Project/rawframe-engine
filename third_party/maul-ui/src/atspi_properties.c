@@ -71,9 +71,10 @@ static bool AppendText(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject
 
 static bool AppendParent(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object)
 {
-    muiDBusIter variant;
-    return app->dbus.openContainer(iter, mui_dbusTypeVariant, "(so)", &variant) &&
-           muiAtspiAppendParent(app, &variant, object) && app->dbus.closeContainer(iter, &variant);
+    muiDBusIter variant = {0};
+    bool ok = app->dbus.openContainer(iter, mui_dbusTypeVariant, "(so)", &variant) &&
+              muiAtspiAppendParent(app, &variant, object);
+    return muiAtspiClose(app, iter, &variant, ok);
 }
 
 // Writes an Accessible property as a variant; false for an unknown one,
@@ -271,17 +272,17 @@ static bool AppendAll(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject*
         names = s_text;
         count = sizeof(s_text) / sizeof(s_text[0]);
     }
-    muiDBusIter array;
+    muiDBusIter array = {0};
     bool ok = dbus->openContainer(iter, mui_dbusTypeArray, "{sv}", &array);
     for (size_t i = 0; i < count && ok; i++)
     {
-        muiDBusIter entry;
+        muiDBusIter entry = {0};
         ok = dbus->openContainer(&array, mui_dbusTypeDictEntry, nullptr, &entry) &&
              muiAtspiAppendString(app, &entry, names[i]) &&
-             AppendProperty(app, &entry, object, interface, names[i], &ok) && ok &&
-             dbus->closeContainer(&array, &entry);
+             AppendProperty(app, &entry, object, interface, names[i], &ok) && ok;
+        ok = muiAtspiClose(app, &array, &entry, ok);
     }
-    return ok && dbus->closeContainer(iter, &array);
+    return muiAtspiClose(app, iter, &array, ok);
 }
 
 static void GetAll(muiAtspiApp* app, DBusMessage* call, const muiAtspiObject* object)

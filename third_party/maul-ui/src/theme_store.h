@@ -45,10 +45,18 @@ uint32_t* muiThemeEntry(const muiThemeStore* store, uint32_t theme, uint32_t tok
 const muiThemeOverride* muiFindOverride(const muiThemeStore* store, uint32_t theme,
                                         muiTokenId token);
 
+// Whether the aliases from target lead to token, where each token may
+// follow the context's alias or any live theme's: an alias from token to
+// target would close a cycle under some nesting of themes. Marks the
+// tokens it reaches in their records.
+bool muiAliasLeadsTo(muiTokenStore* tokens, const muiThemeStore* themes, muiTokenId target,
+                     muiTokenId token);
+
 // A token's value as a scope reads it: each step takes the nearest
 // override, or the context's token, and follows an alias on. NULL when a
-// token on the way is gone, or the walk is longer than there are tokens,
-// which only a cycle through nested themes makes.
+// token on the way is gone. The aliases of the context and every theme
+// together form no cycle (muiAliasLeadsTo), so the walk ends within as
+// many steps as there are tokens.
 const muiTokenValue* muiResolveTokenIn(const muiTokenStore* tokens, const muiThemeStore* themes,
                                        const muiThemeScope* scope, muiTokenId id);
 

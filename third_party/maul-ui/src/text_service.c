@@ -131,6 +131,7 @@ static void Release(muiTextService* service)
     muiFreeBuffer(&service->allocator, &service->lineGlyphs);
     muiFreeBuffer(&service->allocator, &service->hitBoxes);
     muiFreeBuffer(&service->allocator, &service->editScratch);
+    muiFreeBuffer(&service->allocator, &service->removedScratch);
     muiFreeBuffer(&service->allocator, &service->fieldSegments);
     muiFreeBuffer(&service->allocator, &service->fieldPieces);
     muiFreeBuffer(&service->allocator, &service->fieldOrigins);
@@ -270,21 +271,21 @@ static void DestroyTextService(muiTextService* service)
     {
         if (service->fonts.pool.slots[slot - 1].live)
         {
-            muiReleaseFont(&service->allocator, &service->fonts.fonts[slot - 1]);
+            muiDropFont(&service->allocator, &service->fonts, slot);
         }
     }
     for (uint32_t slot = 1; slot <= service->blocks.pool.used; slot++)
     {
         if (service->blocks.pool.slots[slot - 1].live)
         {
-            muiReleaseTextBlock(&service->allocator, &service->blocks.blocks[slot - 1]);
+            muiDropTextBlock(&service->allocator, &service->blocks, slot);
         }
     }
     for (uint32_t slot = 1; slot <= service->families.pool.used; slot++)
     {
         if (service->families.pool.slots[slot - 1].live)
         {
-            muiReleaseFontFamily(&service->allocator, &service->families.families[slot - 1]);
+            muiDropFontFamily(&service->allocator, &service->families, slot);
         }
     }
     Release(service);

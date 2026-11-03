@@ -57,7 +57,8 @@ static mwinWaylandPlatform* PlatformOf(const mwinContext* context)
 
 // Where the platform block's parts lie, laid out with checked
 // arithmetic: the platform, its windows and outputs, the title being
-// set, and the text input's preedit and commit.
+// set, the text input's preedit and commit, and the room of the
+// services' languages.
 typedef struct PlatformParts
 {
     mwinLayout layout;
@@ -66,6 +67,7 @@ typedef struct PlatformParts
     size_t title;
     size_t preedit;
     size_t commit;
+    size_t languages;
 } PlatformParts;
 
 static PlatformParts PartsOf(const mwinLimits* limits)
@@ -80,6 +82,7 @@ static PlatformParts PartsOf(const mwinLimits* limits)
     parts.title = mwinLayoutAdd(layout, (size_t)limits->titleBytes + 1, 1, 1);
     parts.preedit = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, 1);
     parts.commit = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, 1);
+    parts.languages = mwinLayoutAdd(layout, MWIN_LINUX_LANGUAGE_PARTS, limits->localeBytes, 1);
     return parts;
 }
 
@@ -354,8 +357,8 @@ static void Stop(mwinContext* context)
 #ifdef MAUL_WINDOW_GAMEPAD
     mwinLinuxPadsStop(&platform->pads);
 #endif
-    mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
     context->backendData = nullptr;
+    mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
 }
 
 static mwinResult Start(mwinContext* context)
@@ -382,7 +385,7 @@ static mwinResult Start(mwinContext* context)
     platform->text.focus = -1;
     mwinWaylandInitClipboard(&platform->clipboard);
     mwinWaylandInitDrag(&platform->drag);
-    mwinLinuxServicesStart(&platform->services, context);
+    mwinLinuxServicesStart(&platform->services, context, (char*)(block + parts.languages));
     context->backendData = platform;
     mwinResult status = Connect(platform);
 #ifdef MAUL_WINDOW_GAMEPAD

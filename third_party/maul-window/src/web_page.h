@@ -67,7 +67,8 @@ MWIN_WEB_IMPORT(mwinWebReducedMotion) bool mwinWebReducedMotion(void);
 // Whether the device runs on its battery (an mwinTristate), as the
 // Battery Status API last told; unknown where it does not.
 MWIN_WEB_IMPORT(mwinWebOnBattery) int mwinWebOnBattery(const mwinContext* context);
-// navigator.languages with commas, in UTF-8: the bytes it needs.
+// navigator.languages with commas, in UTF-8: the leading languages that
+// fit with a NUL in capacity. Returns their bytes.
 MWIN_WEB_IMPORT(mwinWebLocales) uint32_t mwinWebLocales(char* out, uint32_t capacity);
 
 #endif // MAUL_WINDOW_SRC_WEB_PAGE_H

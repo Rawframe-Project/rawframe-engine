@@ -8,11 +8,10 @@
 #ifndef MAUL_UNICODE_SRC_DECOMPOSE_H
 #define MAUL_UNICODE_SRC_DECOMPOSE_H
 
+#include "maul-unicode/normalize.h"
+
 #include <stddef.h>
 #include <stdint.h>
-
-// The most code points a full decomposition has: 18, for U+FDFA in NFKD.
-#define MUNI_MAX_DECOMPOSITION 18
 
 // The canonical mapping of codePoint, one level deep: two code points,
 // or one with secondOut 0; false when it has none. Hangul syllables map

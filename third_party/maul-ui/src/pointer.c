@@ -12,6 +12,7 @@
 #include "context.h"
 #include "focus.h"
 #include "fpenv.h"
+#include "invariant.h"
 #include "place.h"
 #include "pointer.h"
 #include "popup.h"
@@ -43,6 +44,9 @@ static void Count(muiContext* context, uint32_t node, bool press, int delta)
     {
         muiNodeStyle* style = &context->style.nodes[at - 1];
         uint8_t* count = press ? &style->presses : &style->hovers;
+        // Each pointer hovers and presses at most one node, which counts it
+        // with its ancestors once, and takes it off as often as it put it on.
+        MUI_ASSERT((int)*count + delta >= 0 && (int)*count + delta <= MUI_MAX_POINTERS);
         bool was = *count != 0;
         *count = (uint8_t)(*count + delta);
         if (was != (*count != 0))
@@ -56,12 +60,14 @@ static void Count(muiContext* context, uint32_t node, bool press, int delta)
 static void Post(muiPointerStore* store, const muiPointerRecord* record)
 {
     // Once one is lost, later ones are too, so the count keeps its place.
-    if (store->dropped != 0 || store->recordCount == store->recordCapacity)
+    if (store->recordsDropped != 0 || store->recordCount == store->recordCapacity)
     {
-        store->dropped++;
+        store->recordsDropped++;
         return;
     }
-    // The sum stays below 2 * capacity, so it does not wrap.
+    // The head stays below the capacity, which is not 0 once a record
+    // fits, so the sum stays below 2 * capacity and does not wrap.
+    MUI_ASSERT(store->recordCount < store->recordCapacity && store->head < store->recordCapacity);
     uint32_t tail =
         (uint32_t)(((uint64_t)store->head + store->recordCount) % store->recordCapacity);
     store->records[tail] = *record;
@@ -312,7 +318,7 @@ static uint32_t CountPress(muiPointerStore* store, const muiPointerEvent* event)
 
 static bool IsValidEvent(const muiPointerEvent* event)
 {
-    return event->kind <= mui_pointerPen && event->action <= mui_pointerLeave &&
+    return (uint32_t)event->kind <= mui_pointerPen && (uint32_t)event->action <= mui_pointerLeave &&
            event->player < MUI_MAX_PLAYERS && event->button < 8 && isfinite(event->x) &&
            isfinite(event->y);
 }
@@ -580,16 +586,19 @@ static muiResult NextPointerRecord(muiContext* context, muiPointerRecord* record
     muiPointerStore* store = &context->pointers;
     if (store->recordCount != 0)
     {
+        MUI_ASSERT(store->head < store->recordCapacity &&
+                   store->recordCount <= store->recordCapacity);
         *recordOut = store->records[store->head];
         store->head = (store->head + 1) % store->recordCapacity;
         store->recordCount--;
         return mui_success;
     }
-    if (store->dropped != 0)
+    if (store->recordsDropped != 0)
     {
-        *recordOut = (muiPointerRecord){
-            .kind = mui_pointerRecordDropped, .passThrough = true, .dropped = store->dropped};
-        store->dropped = 0;
+        *recordOut = (muiPointerRecord){.kind = mui_pointerRecordDropped,
+                                        .passThrough = true,
+                                        .recordsDropped = store->recordsDropped};
+        store->recordsDropped = 0;
         return mui_success;
     }
     return mui_empty;
@@ -597,6 +606,10 @@ static muiResult NextPointerRecord(muiContext* context, muiPointerRecord* record
 
 muiResult muiContext_TakePointerRecord(muiContext* context, muiPointerRecord* recordOut)
 {
+    if (muiRefusesBusy(context, false))
+    {
+        return mui_errorBusy;
+    }
     if (recordOut != nullptr)
     {
         memset(recordOut, 0, sizeof *recordOut);
@@ -781,7 +794,8 @@ static MUI_NOINLINE muiResult PointerOfferWorker(muiContext* context, uint32_t p
     return status;
 }
 
-muiResult muiContext_OfferDrop(muiContext* context, uint32_t pointerId, uint32_t kind, uint64_t key)
+muiResult muiContext_OfferDrop(muiContext* context, uint32_t pointerId, muiDropKinds kind,
+                               uint64_t key)
 {
     uint64_t floatEnv = muiFloatEnvEnter();
     muiResult result = PointerOfferWorker(context, pointerId, kind, key);
@@ -845,6 +859,8 @@ muiPointersTaken muiTakePointersOff(muiContext* context, uint32_t node)
     muiPointersTaken taken = 0;
     const muiTree* tree = &context->tree;
     muiPointerStore* store = &context->pointers;
+    // The pointers' hover bits and press bits share the mask's 64.
+    MUI_ASSERT(store->count <= MUI_MAX_POINTERS);
     for (uint32_t i = 0; i < store->count; i++)
     {
         uint32_t hovered = SlotOf(context, store->pointers[i].hovered);

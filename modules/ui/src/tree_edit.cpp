@@ -19,8 +19,10 @@ muiTextPosition positionOf(TextPosition position) noexcept {
         .affinity = static_cast<muiTextAffinity>(position.upstream ? mui_affinityUpstream : mui_affinityDownstream)};
 }
 
+/// A text holds at most MUI_MAX_TEXT_BYTES, so a place in it fits 32 bits.
 TextPosition positionOf(muiTextPosition position) noexcept {
-    return TextPosition{.offset = position.offset, .upstream = position.affinity == mui_affinityUpstream};
+    return TextPosition{.offset = static_cast<std::uint32_t>(position.offset),
+                        .upstream = position.affinity == mui_affinityUpstream};
 }
 
 /// Where a node's content box sits in its border box, and how wide it is,
@@ -130,15 +132,16 @@ result::Result<std::vector<Rect>> Tree::rangeRects(Node node, TextRange range) c
 
 result::Result<TextRange> Tree::deletion(Node node, std::uint32_t offset, bool forward) const {
     RAWFRAME_TRY_ASSIGN(const auto kEditable, editable(*state_, node));
-    TextRange range;
+    std::size_t start = 0;
+    std::size_t end = 0;
     RAWFRAME_TRY(checked(muiTextBlock_FindDeletion(state_->text,
                                                    kEditable.first->block,
                                                    offset,
                                                    forward ? mui_deleteForward : mui_deleteBackward,
-                                                   &range.start,
-                                                   &range.end),
+                                                   &start,
+                                                   &end),
                          "a deletion in a node's text could not be found"));
-    return range;
+    return TextRange{.start = static_cast<std::uint32_t>(start), .end = static_cast<std::uint32_t>(end)};
 }
 
 result::Status Tree::replaceText(Node node, TextRange range, std::string_view text) {
@@ -210,11 +213,13 @@ result::Status Tree::endComposition(Node node) {
 
 result::Result<TextRange> Tree::composition(Node node) const {
     RAWFRAME_TRY_ASSIGN(const auto kEditable, editable(*state_, node));
-    std::uint32_t start = 0;
-    std::uint32_t length = 0;
+    std::size_t start = 0;
+    std::size_t length = 0;
     RAWFRAME_TRY(checked(muiTextBlock_GetComposition(state_->text, kEditable.first->block, &start, &length),
                          "a node's composition could not be read"));
-    return length == 0 ? TextRange{} : TextRange{.start = start, .end = start + length};
+    return length == 0 ? TextRange{}
+                       : TextRange{.start = static_cast<std::uint32_t>(start),
+                                   .end = static_cast<std::uint32_t>(start + length)};
 }
 
 result::Result<Rect> Tree::placeOf(Node root, Node node) const {

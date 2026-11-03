@@ -302,13 +302,13 @@ mrhiResult mrhiVulkanCreateQuerySet(mrhiVulkanObjects* objects, const mrhiQueryS
     // them in.
     const VkQueryPoolCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
-        .queryType = types[def->type],
+        .queryType = types[def->kind],
         .queryCount = def->count,
         .pipelineStatistics =
-            def->type == mrhi_queryPipelineStatistics ? (1u << MRHI_STATISTICS_COUNTERS) - 1 : 0,
+            def->kind == mrhi_queryPipelineStatistics ? (1u << MRHI_STATISTICS_COUNTERS) - 1 : 0,
     };
     mrhiVulkanQuerySet* set = &objects->querySets[handle - 1];
-    *set = (mrhiVulkanQuerySet){.count = def->count, .type = def->type};
+    *set = (mrhiVulkanQuerySet){.count = def->count, .kind = def->kind};
     VkResult result = objects->api->vkCreateQueryPool(objects->device, &info, nullptr, &set->pool);
     if (result != VK_SUCCESS)
     {

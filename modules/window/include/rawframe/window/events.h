@@ -96,7 +96,9 @@ enum class RequestKind : std::uint8_t {
     /// The clipboard's text written, and read, its text then read with
     /// `Windows::clipboardText`.
     ClipboardWrite,
-    ClipboardRead
+    ClipboardRead,
+    /// Where a window's caret is, for the input method's candidates.
+    TextInputCaret
 };
 
 /// How a request ended.

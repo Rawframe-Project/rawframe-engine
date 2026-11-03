@@ -7,6 +7,14 @@
 
 #include "allocator.h"
 
+void muiDropFont(const muiAllocator* allocator, muiFontStore* store, uint32_t slot)
+{
+    muiFont font = store->fonts[slot - 1];
+    store->fonts[slot - 1] = (muiFont){0};
+    muiPoolGive(&store->pool, slot);
+    muiReleaseFont(allocator, &font);
+}
+
 void muiReleaseFont(const muiAllocator* allocator, muiFont* font)
 {
     for (uint32_t i = 0; i < MUI_SHAPING_SLOTS; i++)

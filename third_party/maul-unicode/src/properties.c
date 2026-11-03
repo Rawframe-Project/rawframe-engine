@@ -117,7 +117,9 @@ muniEastAsianWidth muniGetEastAsianWidth(uint32_t codePoint)
 
 muniBidiClass muniGetBidiClass(uint32_t codePoint)
 {
-    return muniLookupBidiClass(codePoint);
+    // The table carries the class of its last code points, the
+    // noncharacters U+10FFFE and U+10FFFF, which are BN, past U+10FFFF.
+    return codePoint > 0x10FFFF ? muni_bcL : muniLookupBidiClass(codePoint);
 }
 
 uint32_t muniGetMirroringGlyph(uint32_t codePoint)

@@ -3,7 +3,8 @@
 //
 // Linux file dialogs through the desktop portal's FileChooser, over the
 // session bus: OpenFile or SaveFile, answered by a Response signal on
-// the request the call names, whenever the user is done. A handle
+// the request the call names, whenever the user is done, believed only
+// from the connection that owns the portal's name. A handle
 // token names the request before the call, so an answer that comes at
 // once is not missed. Where there is no bus or no portal, zenity
 // (linux_zenity.h). A dialog whose request goes (its window destroyed,
@@ -36,6 +37,8 @@ typedef struct mwinLinuxDialogs
     mwinLinuxBus* bus;
     mwinLinuxDialog dialogs[MWIN_LINUX_DIALOGS];
     uint32_t tokens;
+    // The owner of the portal's name, whose Response alone is believed.
+    mwinBusOwner portal;
     // The bus hands this module its signals.
     bool listening;
 } mwinLinuxDialogs;

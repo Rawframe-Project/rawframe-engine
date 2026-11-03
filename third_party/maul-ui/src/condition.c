@@ -59,7 +59,7 @@ static bool IsIn(muiInterval interval, float value)
 }
 
 // A single bit of mask.
-static bool IsOneOf(uint8_t value, uint8_t mask)
+static bool IsOneOf(uint32_t value, uint32_t mask)
 {
     return value != 0 && (value & (value - 1)) == 0 && (value & ~mask) == 0;
 }
@@ -69,7 +69,8 @@ bool muiIsConditionValid(const muiCondition* condition)
     return IsIntervalValid(condition->width) && IsIntervalValid(condition->height) &&
            IsIntervalValid(condition->aspect) && IsIntervalValid(condition->textScale) &&
            (condition->viewports & ~VIEWPORTS) == 0 && (condition->inputs & ~INPUTS) == 0 &&
-           condition->motion <= mui_motionReduced && condition->direction <= mui_inlineRightToLeft;
+           (uint32_t)condition->motion <= mui_motionReduced &&
+           (uint32_t)condition->direction <= mui_inlineRightToLeft;
 }
 
 bool muiIsEnvironmentValid(const muiEnvironment* environment)

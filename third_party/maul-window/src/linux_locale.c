@@ -110,16 +110,20 @@ static bool Has(const char* list, size_t length, const char* tag, size_t tagLeng
 }
 
 size_t mwinLinuxAddLocales(const char* names, size_t namesLength, char* out, size_t length,
-                           size_t capacity)
+                           size_t capacity, bool* full)
 {
-    for (size_t at = 0; names != nullptr && at < namesLength;)
+    for (size_t at = 0; names != nullptr && !*full && at < namesLength;)
     {
         const char* colon = memchr(names + at, ':', namesLength - at);
         size_t end = colon != nullptr ? (size_t)(colon - names) : namesLength;
         char tag[TAG_BYTES];
         size_t tagLength = TagOf(names + at, end - at, tag);
         size_t needed = tagLength + (length > 0 ? 1u : 0u);
-        if (tagLength > 0 && !Has(out, length, tag, tagLength) && length + needed <= capacity)
+        // A tag that does not fit ends the list: a later one never comes
+        // without those before it.
+        bool fresh = tagLength > 0 && !Has(out, length, tag, tagLength);
+        *full = fresh && length + needed > capacity;
+        if (fresh && !*full)
         {
             out[length] = ',';
             length += length > 0 ? 1u : 0u;
@@ -131,9 +135,9 @@ size_t mwinLinuxAddLocales(const char* names, size_t namesLength, char* out, siz
     return length;
 }
 
-static size_t AddNames(const char* names, char* out, size_t length, size_t capacity)
+static size_t AddNames(const char* names, char* out, size_t length, size_t capacity, bool* full)
 {
-    return names != nullptr ? mwinLinuxAddLocales(names, strlen(names), out, length, capacity)
+    return names != nullptr ? mwinLinuxAddLocales(names, strlen(names), out, length, capacity, full)
                             : length;
 }
 
@@ -147,8 +151,9 @@ size_t mwinLinuxLocalesOf(const char* language, const char* messages, char* out,
     {
         return 0;
     }
-    size_t length = AddNames(language, out, 0, capacity);
-    return AddNames(messages, out, length, capacity);
+    bool full = false;
+    size_t length = AddNames(language, out, 0, capacity, &full);
+    return AddNames(messages, out, length, capacity, &full);
 }
 
 static const char* Set(const char* name)
@@ -173,7 +178,7 @@ static bool IsBlank(char c)
 }
 
 bool mwinLinuxPlasmaLocales(const char* text, size_t length, char* out, size_t capacity,
-                            size_t* lengthOut)
+                            size_t* lengthOut, bool* fullOut)
 {
     if (text == nullptr || memchr(text, '\0', length) != nullptr)
     {
@@ -181,6 +186,7 @@ bool mwinLinuxPlasmaLocales(const char* text, size_t length, char* out, size_t c
     }
     bool translations = false;
     *lengthOut = 0;
+    *fullOut = false;
     for (size_t at = 0, next = 0; at < length; at = next)
     {
         size_t lineLength = LineOf(text, length, at, &next);
@@ -218,7 +224,8 @@ bool mwinLinuxPlasmaLocales(const char* text, size_t length, char* out, size_t c
             key += 1;
         }
         // The last LANGUAGE counts, as KConfig reads it.
-        *lengthOut = mwinLinuxAddLocales(line + key, lineLength - key, out, 0, capacity);
+        *fullOut = false;
+        *lengthOut = mwinLinuxAddLocales(line + key, lineLength - key, out, 0, capacity, fullOut);
     }
     return true;
 }

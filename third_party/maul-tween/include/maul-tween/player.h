@@ -30,7 +30,7 @@ extern "C"
 
     // How a player's value goes onto what lies under it (Web Animations'
     // composite operations; accumulate is addition for every value kind).
-    typedef uint8_t mtwnComposite;
+    typedef int32_t mtwnComposite;
     enum
     {
         // The player's value, mixed toward by its weight.
@@ -73,10 +73,10 @@ extern "C"
         return binding;
     }
 
-    // How a player is made. Start from mtwnDefaultPlayerDef.
-    typedef struct mtwnPlayerDef
+    // How a player is made. Start from mtwnDefaultClipPlayerDef.
+    typedef struct mtwnClipPlayerDef
     {
-        // Set by mtwnDefaultPlayerDef; checked by mtwnCreatePlayer.
+        // Set by mtwnDefaultClipPlayerDef; checked by mtwnCreateClipPlayer.
         uint32_t cookie;
         // A sealed clip.
         mtwnClipId clip;
@@ -99,14 +99,14 @@ extern "C"
         // The playback rate: 0, which holds, or from MTWN_MIN_RATE to
         // MTWN_RATE_LIMIT in size; negative plays backwards.
         double rate;
-        // In [0, 1]: scales every binding's weight; mtwnPlayer_SetWeight
+        // In [0, 1]: scales every binding's weight; mtwnClipPlayer_SetWeight
         // changes it while it plays. A float, as a binding's weight and
         // the values it blends are.
         float weight;
-    } mtwnPlayerDef;
+    } mtwnClipPlayerDef;
 
-// The cookie mtwnDefaultPlayerDef sets and mtwnCreatePlayer checks.
-#define MTWN_PLAYER_DEF_COOKIE 0x59414C50u
+// The cookie mtwnDefaultClipPlayerDef sets and mtwnCreateClipPlayer checks.
+#define MTWN_CLIP_PLAYER_DEF_COOKIE 0x59414C50u
 
 // The largest size of a clip's player's rate, 2^20. A rate change keeps
 // the current time as Web Animations does, by the start time, so to
@@ -125,14 +125,14 @@ extern "C"
     /// @return The def.
     /// @par Thread safety
     /// Safe from any thread.
-    static inline mtwnPlayerDef mtwnDefaultPlayerDef(void)
+    static inline mtwnClipPlayerDef mtwnDefaultClipPlayerDef(void)
     {
 #ifdef __cplusplus
-        mtwnPlayerDef def = {};
+        mtwnClipPlayerDef def = {};
 #else
-    mtwnPlayerDef def = {0};
+    mtwnClipPlayerDef def = {0};
 #endif
-        def.cookie = MTWN_PLAYER_DEF_COOKIE;
+        def.cookie = MTWN_CLIP_PLAYER_DEF_COOKIE;
         def.play = true;
         def.rate = 1.0;
         def.weight = 1.0f;
@@ -140,7 +140,7 @@ extern "C"
     }
 
     // A player's play state, Web Animations'.
-    typedef uint8_t mtwnPlayState;
+    typedef int32_t mtwnPlayState;
     enum
     {
         // No current time: it has no effect.
@@ -154,7 +154,7 @@ extern "C"
     };
 
     // A player as it is, at the last update's time.
-    typedef struct mtwnPlayerState
+    typedef struct mtwnClipPlayerState
     {
         // Seconds into the clip; NaN when idle.
         double currentTime;
@@ -168,7 +168,7 @@ extern "C"
         // end is infinite or its rate 0, so it could not finish.
         // The host's to keep, seek or stop.
         bool playsOnReduced;
-    } mtwnPlayerState;
+    } mtwnClipPlayerState;
 
     /// Makes a player of a sealed clip, which it holds busy until it is
     /// freed; it starts at the next update if the def says play, else idle.
@@ -186,9 +186,9 @@ extern "C"
     ///         players or of bindings.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnCreatePlayer(mtwnContext* context,
-                                                        const mtwnPlayerDef* def,
-                                                        mtwnPlayerId* playerOut);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnCreateClipPlayer(mtwnContext* context,
+                                                            const mtwnClipPlayerDef* def,
+                                                            mtwnPlayerId* playerOut);
 
     /// Plays a clip's player, as Web Animations plays an animation with
     /// auto-rewind: from the start (or the end, backwards) when idle, at
@@ -203,17 +203,19 @@ extern "C"
     ///         backwards from an end that is infinite.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_Play(mtwnContext* context, mtwnPlayerId player);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_Play(mtwnContext* context,
+                                                           mtwnPlayerId player);
 
     /// Pauses a clip's player at its current time, or at its start (its
     /// end, backwards) when idle.
     ///
     /// @param context  The context.
     /// @param player   A clip's player.
-    /// @return As mtwnPlayer_Play.
+    /// @return As mtwnClipPlayer_Play.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_Pause(mtwnContext* context, mtwnPlayerId player);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_Pause(mtwnContext* context,
+                                                            mtwnPlayerId player);
 
     /// Reverses a clip's player: negates its rate, keeping its current time,
     /// and plays it with auto-rewind; refused, and nothing changed, when that
@@ -221,11 +223,11 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param player   A clip's player.
-    /// @return As mtwnPlayer_Play.
+    /// @return As mtwnClipPlayer_Play.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_Reverse(mtwnContext* context,
-                                                          mtwnPlayerId player);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_Reverse(mtwnContext* context,
+                                                              mtwnPlayerId player);
 
     /// Finishes a clip's player: its current time goes to the end of its
     /// playback direction, the clip's end forwards, 0 backwards, crossing
@@ -233,37 +235,39 @@ extern "C"
     ///
     /// @param context  The context.
     /// @param player   A clip's player.
-    /// @return As mtwnPlayer_Play; mtwn_errorState also for a rate of 0 or
+    /// @return As mtwnClipPlayer_Play; mtwn_errorState also for a rate of 0 or
     ///         an infinite clip played forwards.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_Finish(mtwnContext* context, mtwnPlayerId player);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_Finish(mtwnContext* context,
+                                                             mtwnPlayerId player);
 
     /// Cancels a clip's player: it becomes idle, without effect, and is
     /// kept, to be played again; a cancel record says so if it had a time.
     ///
     /// @param context  The context.
     /// @param player   A clip's player.
-    /// @return As mtwnPlayer_Play.
+    /// @return As mtwnClipPlayer_Play.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_Cancel(mtwnContext* context, mtwnPlayerId player);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_Cancel(mtwnContext* context,
+                                                             mtwnPlayerId player);
 
     /// Seeks a clip's player to a current time, jumping: what lies between
-    /// is not crossed, and a seek record says so (mtwnPlayer_Sweep crosses
+    /// is not crossed, and a seek record says so (mtwnClipPlayer_Sweep crosses
     /// it). Seeks by progress and label jump too.
     ///
     /// @param context  The context.
     /// @param player   A clip's player.
     /// @param seconds  The time into the clip, at most MTWN_SEEK_LIMIT in
     ///                 size.
-    /// @return As mtwnPlayer_Play; mtwn_errorInvalid also for a NaN time;
+    /// @return As mtwnClipPlayer_Play; mtwn_errorInvalid also for a NaN time;
     ///         mtwn_errorLimit for one past MTWN_SEEK_LIMIT in size,
     ///         infinity included.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_Seek(mtwnContext* context, mtwnPlayerId player,
-                                                       double seconds);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_Seek(mtwnContext* context,
+                                                           mtwnPlayerId player, double seconds);
 
     /// Seeks a clip's player to a time crossing everything between, as an
     /// update sweeping there would: its records come at once, at the last
@@ -273,37 +277,37 @@ extern "C"
     /// @param player   A clip's player.
     /// @param seconds  The time into the clip, at most MTWN_SEEK_LIMIT in
     ///                 size.
-    /// @return As mtwnPlayer_Seek.
+    /// @return As mtwnClipPlayer_Seek.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_Sweep(mtwnContext* context, mtwnPlayerId player,
-                                                        double seconds);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_Sweep(mtwnContext* context,
+                                                            mtwnPlayerId player, double seconds);
 
     /// Seeks a clip's player to a share of its clip's duration.
     ///
     /// @param context   The context.
     /// @param player    A clip's player.
     /// @param progress  The share, not NaN; the duration must be finite.
-    /// @return As mtwnPlayer_Seek, mtwn_errorLimit for a time, the share
+    /// @return As mtwnClipPlayer_Seek, mtwn_errorLimit for a time, the share
     ///         times the duration, past MTWN_SEEK_LIMIT in size;
     ///         mtwn_errorInvalid also for an infinite duration.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_SeekProgress(mtwnContext* context,
-                                                               mtwnPlayerId player,
-                                                               double progress);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_SeekProgress(mtwnContext* context,
+                                                                   mtwnPlayerId player,
+                                                                   double progress);
 
     /// Seeks a clip's player to a label of its clip's root.
     ///
     /// @param context  The context.
     /// @param player   A clip's player.
     /// @param key      The label's key.
-    /// @return As mtwnPlayer_Play; mtwn_errorInvalid also for no such
+    /// @return As mtwnClipPlayer_Play; mtwn_errorInvalid also for no such
     ///         label; mtwn_errorLimit for one past MTWN_SEEK_LIMIT in size.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_SeekLabel(mtwnContext* context,
-                                                            mtwnPlayerId player, uint32_t key);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_SeekLabel(mtwnContext* context,
+                                                                mtwnPlayerId player, uint32_t key);
 
     /// Sets a clip's player's rate, keeping its current time: as Web
     /// Animations keeps it, by the start time, so to within an ulp of the
@@ -321,13 +325,13 @@ extern "C"
     ///                 NaN is refused with mtwn_errorInvalid and another
     ///                 with mtwn_errorLimit, as misuse, the player
     ///                 unchanged.
-    /// @return As mtwnPlayer_Play; mtwn_errorInvalid also for a NaN rate;
+    /// @return As mtwnClipPlayer_Play; mtwn_errorInvalid also for a NaN rate;
     ///         mtwn_errorLimit for a rate other than 0 outside
     ///         [MTWN_MIN_RATE, MTWN_RATE_LIMIT] in size.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_SetRate(mtwnContext* context, mtwnPlayerId player,
-                                                          double rate);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_SetRate(mtwnContext* context,
+                                                              mtwnPlayerId player, double rate);
 
     /// Sets a clip's player's weight, which scales its bindings' from the
     /// next update: a layer faded in or out.
@@ -335,25 +339,30 @@ extern "C"
     /// @param context  The context.
     /// @param player   A clip's player.
     /// @param weight   In [0, 1].
-    /// @return As mtwnPlayer_Play; mtwn_errorInvalid also for a weight
+    /// @return As mtwnClipPlayer_Play; mtwn_errorInvalid also for a weight
     ///         outside [0, 1].
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_SetWeight(mtwnContext* context,
-                                                            mtwnPlayerId player, float weight);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_SetWeight(mtwnContext* context,
+                                                                mtwnPlayerId player, float weight);
 
     /// Reads a clip's player's state at the last update's time.
     ///
     /// @param context   The context.
     /// @param player    A clip's player.
-    /// @param stateOut  Receives the state, zero on failure.
-    /// @return As mtwnPlayer_Play; mtwn_errorInvalid also for a null
-    ///         stateOut.
+    /// @param stateOut  Receives the state, zero on failure but mtwn_errorBusy,
+    ///                  which leaves it.
+    /// @return mtwn_success; mtwn_errorInvalid for a null context or
+    ///         stateOut; mtwn_errorStale for an id that names no live
+    ///         player; mtwn_errorInvalid for a transition; mtwn_errorBusy
+    ///         when called from the host's code while the update's clip
+    ///         players run on its task system, which may be writing what the
+    ///         call reads.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnPlayer_GetState(mtwnContext* context,
-                                                           mtwnPlayerId player,
-                                                           mtwnPlayerState* stateOut);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnClipPlayer_GetState(const mtwnContext* context,
+                                                               mtwnPlayerId player,
+                                                               mtwnClipPlayerState* stateOut);
 
     /// Stops a player without committing: its targets show their base
     /// values again at once.
@@ -362,7 +371,10 @@ extern "C"
     /// @param player   The player.
     /// @return mtwn_success; mtwn_errorInvalid for a null context;
     ///         mtwn_errorStale for an id that names no live player, as one
-    ///         that ended does.
+    ///         that ended does: not counted as misuse for an id the context
+    ///         handed out, a kept player's too, since a player may free
+    ///         itself at an end the update decides, but counted for one
+    ///         never handed out, the null id among them.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MTWN_NODISCARD MTWN_API mtwnResult mtwnDestroyPlayer(mtwnContext* context, mtwnPlayerId player);

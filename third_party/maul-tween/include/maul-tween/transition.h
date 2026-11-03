@@ -23,7 +23,7 @@ extern "C"
 #endif
 
     // How a transition moves.
-    typedef uint8_t mtwnTransitionKind;
+    typedef int32_t mtwnTransitionKind;
     enum
     {
         // Over a duration, by an easing.
@@ -36,7 +36,7 @@ extern "C"
     };
 
     // Where a transition's start velocity comes from.
-    typedef uint8_t mtwnVelocitySource;
+    typedef int32_t mtwnVelocitySource;
     enum
     {
         // The target's velocity, as the animation it interrupts left it.
@@ -176,8 +176,10 @@ extern "C"
     ///         a delay, duration, given velocity or rest tolerance outside
     ///         the above, a spring or decay not made by this library, an
     ///         unknown kind, velocity source, color space, hue method,
-    ///         angle method or rotation path, a color with alpha outside 0
-    ///         to 1, the longest way between equal rotations, a spring or
+    ///         angle method or rotation path (each whatever the target's
+    ///         kind, one that does not read it too), a color with alpha
+    ///         outside 0 to 1, the longest way between equal rotations, a
+    ///         spring or
     ///         decay for a discrete value, a decay for a color or rotation, a scale's decay
     ///         stopping where a float is 0 or infinite, a decay both bounded
     ///         and landing, a lower bound above the upper or NaN, a scale's
@@ -210,15 +212,20 @@ extern "C"
     /// @param context      The context.
     /// @param def          The def: its target, value, angle method and
     ///                     rotation path are read.
-    /// @param distanceOut  Receives the distance, 0 on failure.
+    /// @param distanceOut  Receives the distance, 0 on failure but
+    ///                     mtwn_errorBusy, which leaves it.
     /// @return mtwn_success; mtwn_errorInvalid for a null argument, a def
     ///         without its cookie, an end value the target's kind refuses,
-    ///         an unknown angle method or rotation path, the longest way
+    ///         an unknown angle method or rotation path (whatever the
+    ///         target's kind), the longest way
     ///         between equal rotations, or a discrete value, which has no
-    ///         distance; mtwn_errorStale for a target that is not alive.
+    ///         distance; mtwn_errorStale for a target that is not alive;
+    ///         mtwn_errorBusy when called from the host's code
+    ///         while the update's clip players run on its task system, which
+    ///         may be writing what the call reads.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnContext_MeasureTransition(mtwnContext* context,
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnContext_MeasureTransition(const mtwnContext* context,
                                                                      const mtwnTransitionDef* def,
                                                                      double* distanceOut);
 

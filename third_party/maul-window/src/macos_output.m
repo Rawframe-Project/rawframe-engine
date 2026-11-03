@@ -8,6 +8,8 @@
 
 #include "macos.h"
 
+#include "maul-unicode/segment.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -71,16 +73,10 @@ static mwinMonitorInfo InfoOf(NSScreen* screen, bool primary, CGFloat primaryHei
     mwinMonitorInfo info = {0};
     CGFloat scale = screen.backingScaleFactor;
     const char* name = screen.localizedName.UTF8String;
-    size_t length = name != nullptr ? strlen(name) : 0;
-    if (length > MWIN_MONITOR_NAME_BYTES)
-    {
-        // Cut at a character's boundary.
-        length = MWIN_MONITOR_NAME_BYTES;
-        while (length > 0 && ((unsigned char)name[length] & 0xC0) == 0x80)
-        {
-            --length;
-        }
-    }
+    // Cut at a character's boundary.
+    size_t length = 0;
+    (void)muniMeasureUtf8(name, name != nullptr ? strlen(name) : 0, muni_unitCodePoint,
+                          MWIN_MONITOR_NAME_BYTES, SIZE_MAX, &length, nullptr);
     if (length > 0)
     {
         memcpy(info.name, name, length);

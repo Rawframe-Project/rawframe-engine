@@ -174,9 +174,12 @@ public:
     [[nodiscard]] result::Result<RequestId> requestFocus(WindowId window);
     [[nodiscard]] result::Result<RequestId> requestCursorMode(WindowId window, CursorMode mode);
     /// While a window accepts text, input methods compose into it and the
-    /// keys they consume make no key records; `caret` places the candidate
-    /// list. Ask again to move the caret.
-    [[nodiscard]] result::Result<RequestId> requestTextInput(WindowId window, bool enabled, Rect caret);
+    /// keys they consume make no key records.
+    [[nodiscard]] result::Result<RequestId> requestTextInput(WindowId window, bool enabled);
+    /// Where the window's caret is, which places the input method's
+    /// candidate list; the window keeps it while text input is off and on
+    /// again. Ask again to move it.
+    [[nodiscard]] result::Result<RequestId> requestTextInputCaret(WindowId window, Rect caret);
     /// Hands the platform's accessibility clients the root of the window's
     /// tree, which the program's adapter implements, or none: on
     /// Android an `AccessibilityNodeProvider`'s global reference, kept by

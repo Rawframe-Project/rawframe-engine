@@ -23,10 +23,21 @@ static void EndComposition(mwinWaylandPlatform* platform, uint32_t slot)
         return;
     }
     mwinEvent end = {0};
-    end.type = mwin_eventImePreedit;
+    end.kind = mwin_eventImePreedit;
     end.timeNs = mwinMonotonicNow();
     end.data.preedit.caret = -1;
     mwinPost(platform->context, slot, &end);
+}
+
+// Sends the caret's rectangle, which the next commit applies.
+static void SendCaret(mwinWaylandPlatform* platform, mwinRect caret)
+{
+    const mwinWaylandApi* api = &platform->api;
+    struct wl_proxy* object = (struct wl_proxy*)platform->text.textInput;
+    api->proxyMarshalFlags(object, ZWP_TEXT_INPUT_V3_SET_CURSOR_RECTANGLE, nullptr,
+                           mwinWlVersion(api, object), 0, (int32_t)lroundf(caret.x),
+                           (int32_t)lroundf(caret.y), (int32_t)lroundf(caret.width),
+                           (int32_t)lroundf(caret.height));
 }
 
 // Tells the input method whether the focused window takes text, and
@@ -48,10 +59,7 @@ static void Apply(mwinWaylandPlatform* platform)
         api->proxyMarshalFlags(object, ZWP_TEXT_INPUT_V3_SET_CONTENT_TYPE, nullptr, version, 0,
                                ZWP_TEXT_INPUT_V3_CONTENT_HINT_NONE,
                                ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_NORMAL);
-        mwinRect caret = window->caret;
-        api->proxyMarshalFlags(object, ZWP_TEXT_INPUT_V3_SET_CURSOR_RECTANGLE, nullptr, version, 0,
-                               (int32_t)lroundf(caret.x), (int32_t)lroundf(caret.y),
-                               (int32_t)lroundf(caret.width), (int32_t)lroundf(caret.height));
+        SendCaret(platform, window->caret);
     }
     else
     {
@@ -137,7 +145,7 @@ static void PostPreedit(mwinWaylandPlatform* platform, uint64_t timeNs)
     }
     mwinPreeditSegment segment = {0, text->preedit.length, mwin_preeditUnderline};
     mwinEvent event = {0};
-    event.type = mwin_eventImePreedit;
+    event.kind = mwin_eventImePreedit;
     event.timeNs = timeNs;
     mwinPreeditEvent* preedit = &event.data.preedit;
     preedit->text = text->preedit.bytes;
@@ -163,14 +171,14 @@ static void OnDone(void* data, struct zwp_text_input_v3* object, uint32_t serial
         if (text->commit.lost || text->preedit.lost)
         {
             mwinEvent reset = {0};
-            reset.type = mwin_eventInputStateReset;
+            reset.kind = mwin_eventInputStateReset;
             reset.timeNs = timeNs;
             Post(platform, &reset);
         }
         if (text->commit.length > 0)
         {
             mwinEvent event = {0};
-            event.type = mwin_eventTextInput;
+            event.kind = mwin_eventTextInput;
             event.timeNs = timeNs;
             event.data.text = (mwinTextEvent){text->commit.bytes, text->commit.length};
             Post(platform, &event);
@@ -213,8 +221,7 @@ void mwinWaylandDetachText(mwinWaylandPlatform* platform)
     text->focus = -1;
 }
 
-mwinOutcome mwinWaylandSetTextInput(mwinWaylandPlatform* platform, uint32_t slot, bool enabled,
-                                    mwinRect caret)
+mwinOutcome mwinWaylandSetTextInput(mwinWaylandPlatform* platform, uint32_t slot, bool enabled)
 {
     if (platform->text.textInput == nullptr)
     {
@@ -222,7 +229,6 @@ mwinOutcome mwinWaylandSetTextInput(mwinWaylandPlatform* platform, uint32_t slot
     }
     mwinWaylandWindow* window = &platform->windows[slot];
     window->textInput = enabled;
-    window->caret = caret;
     if (!enabled)
     {
         EndComposition(platform, slot);
@@ -230,6 +236,25 @@ mwinOutcome mwinWaylandSetTextInput(mwinWaylandPlatform* platform, uint32_t slot
     if (platform->text.focus == (int32_t)slot)
     {
         Apply(platform);
+    }
+    return mwin_outcomeDone;
+}
+
+mwinOutcome mwinWaylandSetTextCaret(mwinWaylandPlatform* platform, uint32_t slot, mwinRect caret)
+{
+    if (platform->text.textInput == nullptr)
+    {
+        return mwin_outcomeUnsupported;
+    }
+    mwinWaylandWindow* window = &platform->windows[slot];
+    window->caret = caret;
+    // Only the rectangle: enabling again would reset the input method's
+    // state.
+    if (window->textInput && platform->text.focus == (int32_t)slot)
+    {
+        SendCaret(platform, caret);
+        (void)mwinWlRequest(&platform->api, platform->text.textInput, ZWP_TEXT_INPUT_V3_COMMIT,
+                            nullptr, 0);
     }
     return mwin_outcomeDone;
 }

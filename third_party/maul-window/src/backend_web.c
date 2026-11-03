@@ -103,7 +103,7 @@ static void ReadFacts(mwinWebPlatform* platform)
     facts.onBattery =
         battery >= mwin_unknown && battery <= mwin_yes ? (mwinTristate)battery : mwin_unknown;
     mwinSetSystemFacts(context, &facts, NowNs());
-    // A list past the limit is left as it was.
+    // The leading languages that fit.
     char locales[MWIN_WEB_LOCALE_BYTES];
     uint32_t length = mwinWebLocales(locales, sizeof(locales));
     if (length < sizeof(locales))
@@ -112,9 +112,9 @@ static void ReadFacts(mwinWebPlatform* platform)
     }
 }
 
-static void PostLifecycle(mwinContext* context, mwinEventType type)
+static void PostLifecycle(mwinContext* context, mwinEventKind type)
 {
-    mwinEvent event = {.type = type, .timeNs = NowNs()};
+    mwinEvent event = {.kind = type, .timeNs = NowNs()};
     mwinPostGlobal(context, &event);
 }
 
@@ -199,8 +199,8 @@ static void Stop(mwinContext* context)
 {
     mwinWebPlatform* platform = PlatformOf(context);
     mwinWebDetach(context);
-    mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
     context->backendData = nullptr;
+    mwinRelease(&context->allocator, platform, PlatformBytes(context), alignof(max_align_t));
 }
 
 static mwinResult Start(mwinContext* context)
@@ -240,14 +240,14 @@ static mwinResult Start(mwinContext* context)
 }
 
 // Posts a type to every window the page shows.
-static void PostToWindows(mwinWebPlatform* platform, mwinEventType type, uint64_t timeNs)
+static void PostToWindows(mwinWebPlatform* platform, mwinEventKind type, uint64_t timeNs)
 {
     mwinContext* context = platform->context;
     for (uint32_t i = 0; i < context->limits.windows; i++)
     {
         if (context->windows[i].status == mwin_slotLive && platform->windows[i].selectorLength > 0)
         {
-            mwinEvent event = {.type = type, .timeNs = timeNs};
+            mwinEvent event = {.kind = type, .timeNs = timeNs};
             mwinPost(context, i, &event);
         }
     }
@@ -265,7 +265,7 @@ static void Rescale(mwinWebPlatform* platform, float scale, uint64_t timeNs)
         if (context->windows[i].status == mwin_slotLive && window->selectorLength > 0)
         {
             window->scale = scale;
-            mwinEvent event = {.type = mwin_eventScaleChanged, .timeNs = timeNs};
+            mwinEvent event = {.kind = mwin_eventScaleChanged, .timeNs = timeNs};
             event.data.scale = (mwinScaleChange){scale, window->size};
             mwinPost(context, i, &event);
         }
@@ -319,7 +319,7 @@ void mwinWebHandleRecord(mwinWebPlatform* platform, const mwinWebRecord* reporte
         break;
     case mwin_webLayout:
     {
-        mwinEvent event = {.type = mwin_eventKeyboardLayoutChanged, .timeNs = timeNs};
+        mwinEvent event = {.kind = mwin_eventKeyboardLayoutChanged, .timeNs = timeNs};
         mwinPostGlobal(context, &event);
         break;
     }

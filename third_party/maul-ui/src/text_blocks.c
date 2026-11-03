@@ -299,8 +299,7 @@ static muiResult DestroyTextBlock(muiTextService* service, muiTextBlockId blockI
     {
         return mui_errorStale;
     }
-    muiReleaseTextBlock(&service->allocator, &service->blocks.blocks[slot - 1]);
-    muiPoolGive(&service->blocks.pool, slot);
+    muiDropTextBlock(&service->allocator, &service->blocks, slot);
     return mui_success;
 }
 
@@ -402,8 +401,8 @@ static void MoveSpans(muiTextBlock* block, uint32_t start, uint32_t end, uint32_
     for (uint32_t i = 0; i < block->spanCount; i++)
     {
         muiTextSpan span = spans[i];
-        uint32_t first = Moved(span.start, start, end, length, true);
-        uint32_t last = Moved(span.start + span.length, start, end, length, false);
+        uint32_t first = Moved((uint32_t)span.start, start, end, length, true);
+        uint32_t last = Moved((uint32_t)(span.start + span.length), start, end, length, false);
         if (last > first)
         {
             span.start = first;
@@ -612,20 +611,21 @@ static muiResult TextBlockReplace(muiTextService* service, muiTextBlockId blockI
 }
 
 static MUI_NOINLINE muiResult TextBlockReplaceWorker(muiTextService* service,
-                                                     muiTextBlockId blockId, uint32_t start,
-                                                     uint32_t end, const char* text, size_t length)
+                                                     muiTextBlockId blockId, size_t start,
+                                                     size_t end, const char* text, size_t length)
 {
     muiResult status = muiEnterText(service);
     if (status == mui_success)
     {
-        status = TextBlockReplace(service, blockId, start, end, text, length);
+        status = TextBlockReplace(service, blockId, muiTextOffsetOf(start), muiTextOffsetOf(end),
+                                  text, length);
         muiLeaveText(service);
     }
     return status;
 }
 
-muiResult muiTextBlock_Replace(muiTextService* service, muiTextBlockId blockId, uint32_t start,
-                               uint32_t end, const char* text, size_t length)
+muiResult muiTextBlock_Replace(muiTextService* service, muiTextBlockId blockId, size_t start,
+                               size_t end, const char* text, size_t length)
 {
     uint64_t floatEnv = muiFloatEnvEnter();
     muiResult result = TextBlockReplaceWorker(service, blockId, start, end, text, length);
@@ -675,71 +675,58 @@ muiResult muiReplaceBlockText(muiTextService* service, muiTextBlock* block, uint
     return mui_success;
 }
 
-// mui_success, mui_errorInvalid or mui_errorLimit for a composition's
-// segments.
-static muiResult SegmentsStatus(const muiCompositionSegment* segments, uint32_t count,
-                                size_t length)
-{
-    if (count > MUI_MAX_COMPOSITION_SEGMENTS || (segments == nullptr && count != 0))
-    {
-        return count > MUI_MAX_COMPOSITION_SEGMENTS ? mui_errorLimit : mui_errorInvalid;
-    }
-    for (uint32_t i = 0; i < count; i++)
-    {
-        const muiCompositionSegment* segment = &segments[i];
-        if (segment->start > length || segment->length > length - segment->start ||
-            segment->style > mui_compositionConverted)
-        {
-            return mui_errorInvalid;
-        }
-    }
-    return mui_success;
-}
-
-muiResult muiSetComposition(muiTextService* service, muiTextBlockId blockId, uint32_t offset,
+muiResult muiSetComposition(muiTextService* service, muiTextBlockId blockId, size_t offset,
                             const char* text, size_t length, const muiCompositionSegment* segments,
                             uint32_t segmentCount)
 {
     muiResult status =
         service == nullptr || blockId.index1 == 0 ? mui_errorInvalid : TextStatus(text, length);
-    status = status == mui_success ? SegmentsStatus(segments, segmentCount, length) : status;
+    status = status == mui_success ? muiSegmentsStatus(segments, segmentCount, length) : status;
     if (status != mui_success)
     {
         return muiCountText(service, status);
     }
-    uint32_t slot = ResolveBlock(service, blockId);
-    if (slot == 0)
+    muiTextBlock* block = muiResolveTextBlock(service, blockId);
+    if (block == nullptr)
     {
         return mui_errorStale;
     }
-    muiTextBlock* block = &service->blocks.blocks[slot - 1];
     uint32_t start = block->compositionLength != 0 ? block->compositionStart
-                     : offset < block->length      ? offset
+                     : offset < block->length      ? (uint32_t)offset
                                                    : block->length;
     uint32_t end = start + block->compositionLength;
-    if (!Fits(block, start, end, length))
-    {
-        return muiCountText(service, mui_errorLimit);
-    }
-    if (!muiReserve(&service->allocator, &block->segments,
-                    segmentCount * sizeof(muiCompositionSegment)) ||
-        !ReplaceRange(service, block, start, end, text, (uint32_t)length))
+    return Fits(block, start, end, length)
+               ? muiComposeOver(service, block, start, end, text, (uint32_t)length, segments,
+                                segmentCount)
+               : muiCountText(service, mui_errorLimit);
+}
+
+muiResult muiComposeOver(muiTextService* service, muiTextBlock* block, uint32_t start, uint32_t end,
+                         const char* text, uint32_t length, const muiCompositionSegment* segments,
+                         uint32_t segmentCount)
+{
+    // The segments shown stay while memory for the new ones is found.
+    size_t kept = block->segmentCount * sizeof(muiCompositionSegment);
+    size_t needed = segmentCount * sizeof(muiCompositionSegment);
+    if (!muiReserveKeeping(&service->allocator, &block->segments, needed > kept ? needed : kept,
+                           kept) ||
+        !ReplaceRange(service, block, start, end, text, length))
     {
         return mui_errorCapacity;
     }
-    MoveSpans(block, start, end, (uint32_t)length);
+    MoveSpans(block, start, end, length);
     if (segmentCount != 0)
     {
         memcpy(block->segments.data, segments, segmentCount * sizeof *segments);
     }
     block->compositionStart = start;
-    block->compositionLength = (uint32_t)length;
+    block->compositionLength = length;
     block->segmentCount = segmentCount;
     return mui_success;
 }
 
 static MUI_NOINLINE muiResult TextBlockSetCompositionWorker(muiTextService* service,
-                                                            muiTextBlockId blockId, uint32_t offset,
+                                                            muiTextBlockId blockId, size_t offset,
                                                             const char* text, size_t length,
                                                             const muiCompositionSegment* segments,
                                                             uint32_t segmentCount)
@@ -754,7 +741,7 @@ static MUI_NOINLINE muiResult TextBlockSetCompositionWorker(muiTextService* serv
 }
 
 muiResult muiTextBlock_SetComposition(muiTextService* service, muiTextBlockId blockId,
-                                      uint32_t offset, const char* text, size_t length,
+                                      size_t offset, const char* text, size_t length,
                                       const muiCompositionSegment* segments, uint32_t segmentCount)
 {
     uint64_t floatEnv = muiFloatEnvEnter();
@@ -764,12 +751,12 @@ muiResult muiTextBlock_SetComposition(muiTextService* service, muiTextBlockId bl
     return result;
 }
 
-bool muiIsCharacterStart(const muiTextBlock* block, uint32_t at)
+bool muiIsCharacterStartIn(const char* bytes, uint32_t length, uint32_t at)
 {
-    const unsigned char* text = block->text.data;
-    if (at >= block->length || (text[at] & 0xC0u) != 0x80u)
+    const unsigned char* text = (const unsigned char*)bytes;
+    if (at >= length || (text[at] & 0xC0u) != 0x80u)
     {
-        return at <= block->length;
+        return at <= length;
     }
     // A continuation byte: inside the sequence of the lead before it, if
     // that lead's sequence reaches it, as no sequence is over four bytes.
@@ -785,7 +772,7 @@ bool muiIsCharacterStart(const muiTextBlock* block, uint32_t at)
     lead--;
     uint32_t point = 0;
     size_t size = 1;
-    (void)muniDecodeUtf8((const char*)text + lead, block->length - lead, &point, &size);
+    (void)muniDecodeUtf8(bytes + lead, length - lead, &point, &size);
     return lead + size <= at;
 }
 
@@ -810,8 +797,8 @@ static muiResult SpansStatus(const muiTextBlock* block, const muiTextSpan* spans
         const muiTextSpan* span = &spans[i];
         if (span->length == 0 || span->start > block->length ||
             span->length > block->length - span->start ||
-            !muiIsCharacterStart(block, span->start) ||
-            !muiIsCharacterStart(block, span->start + span->length) ||
+            !muiIsCharacterStart(block, (uint32_t)span->start) ||
+            !muiIsCharacterStart(block, (uint32_t)(span->start + span->length)) ||
             (span->mask & ~(muiPropertyMask)SPAN_PROPERTIES) != 0 ||
             !muiArePropertiesValid((muiConstValuesRef){nullptr, nullptr, &span->style, nullptr},
                                    muiPropertiesOf(mui_groupText, span->mask)))
@@ -934,7 +921,7 @@ muiResult muiTextBlock_EndComposition(muiTextService* service, muiTextBlockId bl
 }
 
 muiResult muiTextBlock_GetComposition(const muiTextService* service, muiTextBlockId blockId,
-                                      uint32_t* startOut, uint32_t* lengthOut)
+                                      size_t* startOut, size_t* lengthOut)
 {
     if (startOut != nullptr)
     {
@@ -990,7 +977,7 @@ uint64_t muiTextBlock_GetKey(muiTextBlockId blockId)
     return (uint64_t)blockId.generation << 32 | blockId.index1;
 }
 
-uint64_t muiTextService_GetFailures(const muiTextService* service)
+uint64_t muiTextService_GetLayoutFailureCount(const muiTextService* service)
 {
     return service != nullptr ? service->failures : 0;
 }

@@ -32,7 +32,7 @@ extern "C"
 
     // What a node is to assistive technology: AccessKit's roles less the
     // browser's document internals. Closed, and only ever appended to.
-    typedef uint8_t muiRole;
+    typedef int32_t muiRole;
 
     enum
     {
@@ -139,7 +139,7 @@ extern "C"
     };
 
     // A node's texts. Each is UTF-8.
-    typedef uint8_t muiAccessTextKind;
+    typedef int32_t muiAccessTextKind;
 
     enum
     {
@@ -214,9 +214,8 @@ extern "C"
         MUI_ACCESS_HOST_FLAGS = 0x7FFu
     };
 
-    // What assistive technology asks a node to do.
-    typedef uint8_t muiAccessAction;
-
+    // What assistive technology asks a node to do: the values of
+    // muiAccessAction (maul-ui/context.h).
     enum
     {
         // Routed to the node as a navigation event, mui_navigateActivate.
@@ -248,7 +247,7 @@ extern "C"
     };
 
     // How one node names others.
-    typedef uint8_t muiAccessRelation;
+    typedef int32_t muiAccessRelation;
 
     enum
     {
@@ -278,7 +277,7 @@ extern "C"
     } muiAccessLink;
 
     // Whether and how a node's changes are announced, as aria-live.
-    typedef uint8_t muiAccessLive;
+    typedef int32_t muiAccessLive;
 
     enum
     {
@@ -288,7 +287,7 @@ extern "C"
     };
 
     // What a node opens, as aria-haspopup.
-    typedef uint8_t muiAccessPopup;
+    typedef int32_t muiAccessPopup;
 
     enum
     {
@@ -301,7 +300,7 @@ extern "C"
     };
 
     // Which way a node's items or values run; none says nothing.
-    typedef uint8_t muiAccessOrientation;
+    typedef int32_t muiAccessOrientation;
 
     enum
     {
@@ -311,7 +310,7 @@ extern "C"
     };
 
     // How a column header's column is sorted, as aria-sort.
-    typedef uint8_t muiAccessSort;
+    typedef int32_t muiAccessSort;
 
     enum
     {
@@ -322,7 +321,7 @@ extern "C"
     };
 
     // Whether a node's value is invalid, as aria-invalid.
-    typedef uint8_t muiAccessInvalid;
+    typedef int32_t muiAccessInvalid;
 
     enum
     {
@@ -333,7 +332,7 @@ extern "C"
     };
 
     // Which current thing a node is among related ones, as aria-current.
-    typedef uint8_t muiAccessCurrent;
+    typedef int32_t muiAccessCurrent;
 
     enum
     {
@@ -377,8 +376,8 @@ extern "C"
     // word segment with a letter or a number in it.
     typedef struct muiAccessWord
     {
-        uint32_t start;
-        uint32_t end;
+        size_t start;
+        size_t end;
     } muiAccessWord;
 
     // A grapheme cluster of a value text as shown: its bytes from start up
@@ -386,8 +385,8 @@ extern "C"
     // its bounds are, before its transform).
     typedef struct muiAccessCluster
     {
-        uint32_t start;
-        uint32_t end;
+        size_t start;
+        size_t end;
         float left;
         float right;
     } muiAccessCluster;
@@ -412,12 +411,12 @@ extern "C"
     {
         // The selection, the caret at its focus, when selected says so:
         // the text is being edited.
-        uint32_t anchor;
-        uint32_t focus;
+        size_t anchor;
+        size_t focus;
         bool selected;
         // Where each line starts, ascending from 0, as the text is shown;
         // NULL for none given.
-        const uint32_t* lineStarts;
+        const size_t* lineStarts;
         uint32_t lineCount;
         // Its words, in order, none overlapping; NULL for none.
         const muiAccessWord* words;
@@ -460,7 +459,7 @@ extern "C"
         // Its texts by muiAccessTextKind with their lengths, NULL for
         // none: the host's end in a NUL, the text function's need not.
         const char* text[MUI_ACCESS_TEXTS];
-        uint32_t textLength[MUI_ACCESS_TEXTS];
+        size_t textLength[MUI_ACCESS_TEXTS];
         // Its value text's selection, lines and words, as the host's text
         // function gives them; none for a value the host set.
         muiAccessTextMarks marks;
@@ -501,10 +500,10 @@ extern "C"
         // focus; for mui_actionReplaceText, the range replaced, either
         // way round, and the UTF-8 text put there, valid while the
         // request is applied. Byte offsets into the value text.
-        uint32_t anchor;
-        uint32_t focus;
+        size_t anchor;
+        size_t focus;
         const char* text;
-        uint32_t length;
+        size_t length;
     } muiAccessRequest;
 
     // Performs an action a client asked for, by muiContext_PerformAccessAction or
@@ -620,7 +619,8 @@ extern "C"
     ///
     /// @param context    The context.
     /// @param rootId     The root.
-    /// @param updateOut  Receives the update. Zeroed on failure.
+    /// @param updateOut  Receives the update. Zeroed on failure but
+    ///                   `mui_errorBusy`, which leaves it.
     /// @return `mui_success`; `mui_empty` for a root not enabled;
     ///         `mui_errorInvalid` for a NULL argument or the null id;
     ///         `mui_errorBusy` while the context is busy; `mui_errorStale` for
@@ -636,7 +636,8 @@ extern "C"
     /// @param request     The request.
     /// @param handledOut  Receives whether it did anything: a click a widget
     ///                    handled, a focus or value or offset that moved, a
-    ///                    request posted. May be NULL. False on failure.
+    ///                    request posted. May be NULL. False on failure but
+    ///                    `mui_errorBusy`, which leaves it.
     /// @return `mui_success`; `mui_empty` for a node that does not take the
     ///         action, and for the text actions, which the host applies;
     ///         `mui_errorInvalid` for a NULL context or request or an unknown
@@ -772,15 +773,15 @@ extern "C"
     /// @param context     The context.
     /// @param nodeId      The node.
     /// @param kind        The relation.
-    /// @param targetsOut  Receives the nodes, up to capacity; may be NULL when
-    ///                    capacity is 0. Nothing is written to it on any other
-    ///                    failure.
+    /// @param targetsOut  Receives the nodes; may be NULL when capacity is 0.
+    ///                    Zeroed over capacity unless the call answers
+    ///                    `mui_success` or `mui_errorBusy`.
     /// @param capacity    Room in targetsOut.
     /// @param countOut    Receives how many it names, whatever the room. 0 on
     ///                    any other failure.
-    /// @return `mui_success`; `mui_errorCapacity` when they do not fit,
-    ///         those that fit written; `mui_errorInvalid` for a NULL
-    ///         argument, the null id or an unknown kind; `mui_errorStale`
+    /// @return `mui_success`; `mui_errorCapacity` when they do not fit;
+    ///         `mui_errorInvalid` for a NULL argument, the null id or an
+    ///         unknown kind; `mui_errorStale`
     ///         for a node that is gone.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.

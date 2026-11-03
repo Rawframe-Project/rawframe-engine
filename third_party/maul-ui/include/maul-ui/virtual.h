@@ -34,8 +34,8 @@ extern "C"
 
     typedef struct muiVirtualList
     {
-        // Up to MUI_MAX_VIRTUAL_ITEMS.
-        uint32_t count;
+        // How many items it holds, up to MUI_MAX_VIRTUAL_ITEMS.
+        uint32_t itemCount;
         // Which way the items follow each other, horizontally from the
         // inline start: right to left under right to left. The list
         // should scroll that way (maul-ui/layout.h's scroll axes).

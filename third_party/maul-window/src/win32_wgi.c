@@ -5,7 +5,7 @@
 
 #include "win32_wgi.h"
 
-#include "maul-unicode/encoding.h"
+#include "utf8.h"
 
 #include <objbase.h>
 #include <string.h>
@@ -383,8 +383,8 @@ static bool HasTriggerMotors(uint16_t vendor, uint16_t product)
     return found;
 }
 
-// The name the controller gives, as UTF-8 that fits: at most 21 UTF-16
-// units, which make at most 63 bytes, a pair never split.
+// The name the controller gives, as UTF-8 cut to the whole characters
+// that fit.
 static bool NameOf(const mwinWgi* wgi, RawController* raw, mwinGamepadInfo* info)
 {
     RawController2* named = nullptr;
@@ -398,15 +398,9 @@ static bool NameOf(const mwinWgi* wgi, RawController* raw, mwinGamepadInfo* info
     {
         UINT32 length = 0;
         const WCHAR* text = wgi->stringText(string, &length);
-        length = length > 21 ? 21 : length;
-        if (length > 0 && IS_HIGH_SURROGATE(text[length - 1]))
-        {
-            length -= 1;
-        }
-        muniTextResult converted =
-            muniConvertUtf16ToUtf8((const uint16_t*)text, length, muni_convertReplace, info->name,
-                                   sizeof(info->name), &bytes);
-        bytes = converted.status == muni_success ? bytes : 0;
+        bytes = text != nullptr
+                    ? mwinCutUtf16((const uint16_t*)text, length, info->name, sizeof(info->name))
+                    : 0;
         (void)wgi->deleteString(string);
     }
     (void)named->v->Release(named);

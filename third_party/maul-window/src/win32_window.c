@@ -46,9 +46,9 @@ static void Post(mwinWin32Window* window, mwinEvent event)
     mwinPost(window->platform->context, window->slot, &event);
 }
 
-static void PostType(mwinWin32Window* window, mwinEventType type)
+static void PostType(mwinWin32Window* window, mwinEventKind type)
 {
-    Post(window, (mwinEvent){.type = type});
+    Post(window, (mwinEvent){.kind = type});
 }
 
 // The window styles of a window style and mode. Custom chrome keeps a
@@ -98,17 +98,17 @@ static DWORD FramedStyle(const mwinWin32Window* window, DWORD style)
 static void PostSize(mwinWin32Window* window)
 {
     float scale = ScaleOf(window);
-    mwinEvent event = {.type = mwin_eventResized};
+    mwinEvent event = {.kind = mwin_eventResized};
     event.data.size = (mwinSize){(float)window->width / scale, (float)window->height / scale};
     Post(window, event);
-    event.type = mwin_eventPixelSizeChanged;
+    event.kind = mwin_eventPixelSizeChanged;
     event.data.pixelSize = (mwinPixelSize){window->width, window->height};
     Post(window, event);
 }
 
 static void PostMode(mwinWin32Window* window, mwinWindowMode mode)
 {
-    mwinEvent event = {.type = mwin_eventModeChanged};
+    mwinEvent event = {.kind = mwin_eventModeChanged};
     event.data.mode = mode;
     Post(window, event);
 }
@@ -123,7 +123,7 @@ static void PostMonitor(mwinWin32Window* window)
         return;
     }
     window->monitor = monitor;
-    mwinEvent event = {.type = mwin_eventDisplayChanged};
+    mwinEvent event = {.kind = mwin_eventDisplayChanged};
     event.data.monitor = mwinMonitorIdOf(window->platform->context, (uint32_t)monitor);
     Post(window, event);
 }
@@ -186,7 +186,7 @@ static void PostOffset(mwinWin32Window* window)
     }
     window->offset = offset;
     float scale = ScaleOf(owner);
-    mwinEvent event = {.type = mwin_eventMoved};
+    mwinEvent event = {.kind = mwin_eventMoved};
     event.data.position = (mwinPosition){(float)offset.x / scale, (float)offset.y / scale};
     Post(window, event);
 }
@@ -228,7 +228,7 @@ static void OnMove(mwinWin32Window* window, LPARAM place)
     else
     {
         float scale = ScaleOf(window);
-        mwinEvent event = {.type = mwin_eventMoved};
+        mwinEvent event = {.kind = mwin_eventMoved};
         event.data.position = (mwinPosition){(float)x / scale, (float)y / scale};
         Post(window, event);
     }
@@ -241,7 +241,7 @@ static void OnDpiChanged(mwinWin32Window* window, WPARAM dpi, const RECT* sugges
 {
     mwinSize size = CoreOf(window)->state.size;
     window->dpi = LOWORD(dpi);
-    mwinEvent event = {.type = mwin_eventScaleChanged};
+    mwinEvent event = {.kind = mwin_eventScaleChanged};
     event.data.scale = (mwinScaleChange){ScaleOf(window), size};
     Post(window, event);
     SetWindowPos(window->hwnd, nullptr, suggested->left, suggested->top,
@@ -507,7 +507,7 @@ static void Establish(mwinWin32Window* window)
     window->y = origin.y;
     PostType(window, mwin_eventWindowCreated);
     PostMonitor(window);
-    mwinEvent scale = {.type = mwin_eventScaleChanged};
+    mwinEvent scale = {.kind = mwin_eventScaleChanged};
     scale.data.scale = (mwinScaleChange){ScaleOf(window), CoreOf(window)->def.size};
     Post(window, scale);
     PostSize(window);
@@ -764,6 +764,16 @@ static mwinOutcome Rebound(mwinWin32Window* window)
     return mwin_outcomeDone;
 }
 
+// Shows the title asked for and keeps it as the window's.
+static int SetTitle(mwinWin32Window* window, mwinWindow* core)
+{
+    SetWindowTextW(window->hwnd,
+                   WideTitle(window->platform, core->pendingTitle, core->pendingTitleLength));
+    memmove(core->title, core->pendingTitle, core->pendingTitleLength);
+    core->titleLength = core->pendingTitleLength;
+    return mwin_outcomeDone;
+}
+
 // Carries out a request now: its outcome, or -1 when it is answered
 // later.
 static int CarryOut(mwinWin32Window* window, mwinWindow* core, uint32_t index)
@@ -772,11 +782,7 @@ static int CarryOut(mwinWin32Window* window, mwinWindow* core, uint32_t index)
     switch (request->kind)
     {
     case mwin_requestTitle:
-        SetWindowTextW(window->hwnd,
-                       WideTitle(window->platform, core->pendingTitle, core->pendingTitleLength));
-        memmove(core->title, core->pendingTitle, core->pendingTitleLength);
-        core->titleLength = core->pendingTitleLength;
-        return mwin_outcomeDone;
+        return SetTitle(window, core);
     case mwin_requestSize:
         return SetSize(window, request->value.size);
     case mwin_requestPosition:
@@ -815,8 +821,9 @@ static int CarryOut(mwinWin32Window* window, mwinWindow* core, uint32_t index)
     case mwin_requestCursorImage:
         return mwinWin32SetCursorImage(window, request->value.cursor);
     case mwin_requestTextInput:
-        return mwinWin32SetTextInput(window, request->value.textInput.enabled,
-                                     request->value.textInput.caret);
+        return mwinWin32SetTextInput(window, request->value.textInput);
+    case mwin_requestTextInputCaret:
+        return mwinWin32SetTextCaret(window, request->value.caret);
     case mwin_requestClipboardWrite:
     case mwin_requestClipboardWriteData:
         return mwinWin32WriteClipboard(window);

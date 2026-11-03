@@ -3,15 +3,19 @@
 # or fetched at its release tag as Maul Unicode is. The core and the text
 # component never depend on it.
 
-set(MAUL_UI_RHI_VERSION 0.13.0)
+set(MAUL_UI_RHI_VERSION 0.15.0)
 find_package(maul-rhi ${MAUL_UI_RHI_VERSION} QUIET)
 if(NOT maul-rhi_FOUND)
     set(MAUL_RHI_BUILD_TESTS OFF)
     set(MAUL_RHI_BUILD_BENCH OFF)
     set(MAUL_RHI_BUILD_SAMPLES OFF)
     set(MAUL_RHI_INSTALL OFF)
-    # The renderer's tests run on its test driver.
-    set(MAUL_RHI_TEST_DRIVER ${MAUL_UI_BUILD_TESTS})
+    # The renderer's tests and its fuzz target run on its test driver.
+    if(MAUL_UI_BUILD_TESTS OR MAUL_UI_FUZZ)
+        set(MAUL_RHI_TEST_DRIVER ON)
+    else()
+        set(MAUL_RHI_TEST_DRIVER OFF)
+    endif()
     include(FetchContent)
     FetchContent_Declare(maul-rhi
         GIT_REPOSITORY https://github.com/Rawframe-Project/maul-rhi.git

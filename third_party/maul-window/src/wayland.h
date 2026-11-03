@@ -181,7 +181,7 @@ typedef struct mwinWaylandPointer
     uint32_t enterSerial;
     struct wl_surface* framePart;
     mwinPosition position;
-    uint8_t buttons;
+    mwinMouseButtons buttons;
     // Gathered until the frame event: motion, and per axis (0 vertical,
     // 1 horizontal) high-resolution steps (120ths of a detent), discrete
     // steps and continuous distance, of which the first present counts.
@@ -192,7 +192,7 @@ typedef struct mwinWaylandPointer
     double distance[2];
     uint8_t axisKinds[2];
     // The last press, for counting quick clicks.
-    mwinClickCounter clicks;
+    mwinClickCounter clickCounter;
     // The pointer's cursor shape device and relative motion, where the
     // compositor has them.
     struct wp_cursor_shape_device_v1* shapeDevice;

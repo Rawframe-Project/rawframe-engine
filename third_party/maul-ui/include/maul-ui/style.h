@@ -43,7 +43,7 @@ extern "C"
     // muiVisualStyle, muiTextStyle or muiInteractionStyle field it sets.
     // Ids come in groups of 64, one group per values struct: layout from
     // 0, visual from 64, text from 128 and interaction from 192.
-    typedef uint8_t muiProperty;
+    typedef int32_t muiProperty;
 
     enum
     {
@@ -171,7 +171,7 @@ extern "C"
     };
 
     // A group of properties: those of one values struct.
-    typedef uint8_t muiPropertyGroup;
+    typedef int32_t muiPropertyGroup;
 
     enum
     {
@@ -198,7 +198,7 @@ extern "C"
     // state's variant wins over an earlier one's. Sixteen bits, of which
     // eight are states, so that a state can be added without changing
     // the type.
-    typedef uint16_t muiState;
+    typedef uint32_t muiState;
 
     enum
     {
@@ -216,7 +216,7 @@ extern "C"
 
     // Which values of a class a call reads or writes: its base values, the
     // variant one state brings, or the values of one of its conditions.
-    typedef uint8_t muiVariant;
+    typedef int32_t muiVariant;
 
     enum
     {
@@ -247,7 +247,7 @@ extern "C"
 
     // The size of the screen or window a UI is shown on, as the host
     // classes it, as bits.
-    typedef uint8_t muiViewportClass;
+    typedef uint32_t muiViewportClass;
 
     enum
     {
@@ -260,7 +260,7 @@ extern "C"
     };
 
     // How the user is controlling the UI, as bits.
-    typedef uint8_t muiInputModality;
+    typedef uint32_t muiInputModality;
 
     enum
     {
@@ -271,7 +271,7 @@ extern "C"
     };
 
     // What a condition asks of the reduced-motion setting.
-    typedef uint8_t muiMotionMatch;
+    typedef int32_t muiMotionMatch;
 
     enum
     {
@@ -469,7 +469,7 @@ extern "C"
     /// @param condition   Intervals with a finite minimum of 0 or more and a
     ///                    maximum not below it, known bits and choices.
     /// @param variantOut  Receives the condition's variant; mui_variantBase
-    ///                    on failure.
+    ///                    on failure but `mui_errorBusy`, which leaves it.
     /// @return `mui_success`; `mui_errorInvalid` for a NULL argument, the null
     ///         id or a condition outside the above; `mui_errorBusy` while the
     ///         context is busy; `mui_errorStale` for an id whose class is gone;

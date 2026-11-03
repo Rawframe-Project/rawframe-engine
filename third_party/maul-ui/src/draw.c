@@ -37,7 +37,7 @@ typedef struct Build
     // no clip, full opacity.
     muiPaintState top;
     // The nodes painted rather than copied (muiWorkCounts).
-    uint64_t painted;
+    uint64_t paintCount;
     // The nodes whose host content could not be painted.
     uint32_t unpainted;
 } Build;
@@ -251,7 +251,7 @@ static bool Visit(Build* build, const muiPaintState* top, uint32_t root, uint32_
         (void)Copy(build, at, state, clip, transform);
         return false;
     }
-    build->painted++;
+    build->paintCount++;
     // Field by field: a whole struct built on the stack and copied stalls
     // on reading back its narrower stores.
     const muiDrawTables* out = build->painter.out;
@@ -523,7 +523,7 @@ static muiResult BuildDrawList(muiContext* context, muiNodeId rootId, const muiD
     Empty(build.painter.out);
     WalkAll(&build, root);
     context->misuse += build.painter.misuse;
-    context->work.painted += build.painted;
+    context->work.paintCount += build.paintCount;
     store->current = next;
     if (build.painter.full)
     {

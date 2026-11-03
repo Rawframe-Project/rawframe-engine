@@ -27,9 +27,9 @@ static void Post(mwinWebPlatform* platform, uint32_t slot, mwinEvent* event, uin
     mwinPost(platform->context, slot, event);
 }
 
-static void PostType(mwinWebPlatform* platform, uint32_t slot, mwinEventType type, uint64_t timeNs)
+static void PostType(mwinWebPlatform* platform, uint32_t slot, mwinEventKind type, uint64_t timeNs)
 {
-    mwinEvent event = {.type = type};
+    mwinEvent event = {.kind = type};
     Post(platform, slot, &event, timeNs);
 }
 
@@ -42,21 +42,21 @@ static void Resize(mwinWebPlatform* platform, uint32_t slot, mwinSize size, mwin
     if (window->scale != platform->scale)
     {
         window->scale = platform->scale;
-        event.type = mwin_eventScaleChanged;
+        event.kind = mwin_eventScaleChanged;
         event.data.scale = (mwinScaleChange){platform->scale, size};
         Post(platform, slot, &event, timeNs);
     }
     if (window->size.width != size.width || window->size.height != size.height)
     {
         window->size = size;
-        event.type = mwin_eventResized;
+        event.kind = mwin_eventResized;
         event.data.size = size;
         Post(platform, slot, &event, timeNs);
     }
     if (window->pixels.width != pixels.width || window->pixels.height != pixels.height)
     {
         window->pixels = pixels;
-        event.type = mwin_eventPixelSizeChanged;
+        event.kind = mwin_eventPixelSizeChanged;
         event.data.pixelSize = pixels;
         Post(platform, slot, &event, timeNs);
     }
@@ -64,7 +64,7 @@ static void Resize(mwinWebPlatform* platform, uint32_t slot, mwinSize size, mwin
 
 static void PostMode(mwinWebPlatform* platform, uint32_t slot, mwinWindowMode mode, uint64_t timeNs)
 {
-    mwinEvent event = {.type = mwin_eventModeChanged};
+    mwinEvent event = {.kind = mwin_eventModeChanged};
     event.data.mode = mode;
     Post(platform, slot, &event, timeNs);
 }
@@ -104,7 +104,7 @@ void mwinWebCreateWindow(mwinContext* context, uint32_t slot)
     PostType(platform, slot, mwin_eventWindowCreated, now);
     if (platform->monitor >= 0)
     {
-        mwinEvent display = {.type = mwin_eventDisplayChanged};
+        mwinEvent display = {.kind = mwin_eventDisplayChanged};
         display.data.monitor = mwinMonitorIdOf(context, (uint32_t)platform->monitor);
         Post(platform, slot, &display, now);
     }
@@ -179,8 +179,9 @@ static int CarryOut(mwinContext* context, uint32_t slot, const mwinRequest* requ
     case mwin_requestCursorImage:
         return mwinWebSetCursorImage(PlatformOf(context), slot, request->value.cursor);
     case mwin_requestTextInput:
-        return mwinWebSetTextInput(PlatformOf(context), slot, request->value.textInput.enabled,
-                                   request->value.textInput.caret);
+        return mwinWebSetTextInput(PlatformOf(context), slot, request->value.textInput);
+    case mwin_requestTextInputCaret:
+        return mwinWebSetTextCaret(PlatformOf(context), slot, request->value.caret);
     case mwin_requestClipboardWrite:
         return mwinWebWriteClipboard(context, slot);
     case mwin_requestClipboardRead:

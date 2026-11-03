@@ -26,7 +26,7 @@ extern "C"
     // The format of a vertex attribute in its buffer. Floats, unorm and snorm
     // formats feed f32 inputs, uint formats u32 inputs and sint formats i32
     // inputs, of any component count.
-    typedef uint8_t mrhiVertexFormat;
+    typedef int32_t mrhiVertexFormat;
 
     enum
     {
@@ -128,7 +128,7 @@ extern "C"
     } mrhiConstantValue;
 
     // How a vertex buffer advances.
-    typedef uint8_t mrhiVertexStepMode;
+    typedef int32_t mrhiVertexStepMode;
 
     enum
     {
@@ -139,7 +139,7 @@ extern "C"
     };
 
     // How vertices form primitives.
-    typedef uint8_t mrhiPrimitiveTopology;
+    typedef int32_t mrhiPrimitiveTopology;
 
     enum
     {
@@ -156,7 +156,7 @@ extern "C"
     };
 
     // The width of an index.
-    typedef uint8_t mrhiIndexFormat;
+    typedef int32_t mrhiIndexFormat;
 
     enum
     {
@@ -169,7 +169,7 @@ extern "C"
     };
 
     // Which winding faces front.
-    typedef uint8_t mrhiFrontFace;
+    typedef int32_t mrhiFrontFace;
 
     enum
     {
@@ -180,7 +180,7 @@ extern "C"
     };
 
     // Which faces are culled.
-    typedef uint8_t mrhiCullMode;
+    typedef int32_t mrhiCullMode;
 
     enum
     {
@@ -193,7 +193,7 @@ extern "C"
     };
 
     // What a stencil test does to the stencil value.
-    typedef uint8_t mrhiStencilOperation;
+    typedef int32_t mrhiStencilOperation;
 
     enum
     {
@@ -216,7 +216,7 @@ extern "C"
     };
 
     // A factor of blending's source or destination.
-    typedef uint8_t mrhiBlendFactor;
+    typedef int32_t mrhiBlendFactor;
 
     enum
     {
@@ -257,7 +257,7 @@ extern "C"
     };
 
     // How blending combines its weighted source and destination.
-    typedef uint8_t mrhiBlendOperation;
+    typedef int32_t mrhiBlendOperation;
 
     enum
     {
@@ -622,7 +622,8 @@ extern "C"
     /// bytesOut is NULL; `mrhi_errorInvalid` for a NULL device or sizeOut;
     /// `mrhi_errorState` for a device that is not ready; `mrhi_errorCapacity`
     /// when capacity is less than the size, which sizeOut receives;
-    /// `mrhi_errorPlatform` when the driver fails to write it.
+    /// `mrhi_errorPlatform` when the driver fails to write it, or gives a size
+    /// too large to hold with the envelope's header.
     /// @par Thread safety
     /// Safe from any thread; the device is used by one thread at a time.
     MRHI_NODISCARD MRHI_API mrhiResult mrhiDevice_GetPipelineCache(mrhiDevice* device,

@@ -239,7 +239,7 @@ static void WalkPass(Walk* walk, const mrhiDriverPass* pass)
     {
         WALK_CHECK(pass->accesses[i].resource != 0 &&
                    pass->accesses[i].resource <= frame->resourceCount &&
-                   pass->accesses[i].state <= mrhi_stateSealed);
+                   (uint32_t)pass->accesses[i].state <= mrhi_stateSealed);
     }
     walk->counts.labeled += pass->labelLength > 0 ? 1 : 0;
     walk->counts.occlusionPasses += pass->occlusionSet != 0 ? 1 : 0;
@@ -255,16 +255,16 @@ static void CheckWaits(Walk* walk, uint32_t index)
 {
     const mrhiDriverFrame* frame = walk->frame;
     const mrhiDriverPass* pass = &frame->passes[index];
-    WALK_CHECK(pass->passClass < MRHI_PASS_CLASSES);
+    WALK_CHECK((uint32_t)pass->passClass < MRHI_PASS_CLASSES);
     for (uint32_t c = 0; c < MRHI_PASS_CLASSES; ++c)
     {
         mrhiPassId wait = pass->waitFor[c];
         bool found = wait.index1 == 0 && wait.generation == 0;
-        for (uint32_t i = 0; i < index && !found && c != pass->passClass; ++i)
+        for (uint32_t i = 0; i < index && !found && c != (uint32_t)pass->passClass; ++i)
         {
             const mrhiDriverPass* earlier = &frame->passes[i];
             found = earlier->id.index1 == wait.index1 &&
-                    earlier->id.generation == wait.generation && earlier->passClass == c;
+                    earlier->id.generation == wait.generation && (uint32_t)earlier->passClass == c;
         }
         WALK_CHECK(found);
     }
@@ -316,8 +316,8 @@ uint64_t mrhiWalkFrame(const mrhiDriverFrame* frame, mrhiHandleCheck isHandle, c
     {
         WALK_CHECK(frame->barriers[i].resource.index1 != 0 &&
                    frame->barriers[i].resource.index1 <= frame->resourceCount &&
-                   frame->barriers[i].before <= mrhi_stateSealed &&
-                   frame->barriers[i].after <= mrhi_stateSealed);
+                   (uint32_t)frame->barriers[i].before <= mrhi_stateSealed &&
+                   (uint32_t)frame->barriers[i].after <= mrhi_stateSealed);
     }
     if (log != nullptr)
     {

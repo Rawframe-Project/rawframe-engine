@@ -29,17 +29,22 @@ static void Release(const mwinContext* context, char* text, size_t length)
 }
 
 // Makes room for a read's text of a length, the last one's given back;
-// NULL, with the last one kept, when the allocator has none.
+// NULL, with the last one kept, when the allocator has none. The new
+// text and its count are in place before the program's free hook gets
+// the last one, so that a getter called from the hook finds the last
+// read stale rather than reading the block it frees.
 static char* Found(mwinContext* context, size_t length, bool* failedOut)
 {
     char* text = Allocate(context, length);
     *failedOut = length > 0 && text == nullptr;
     if (!*failedOut)
     {
-        Release(context, context->clipboardFound, context->clipboardFoundLength);
+        char* last = context->clipboardFound;
+        size_t lastLength = context->clipboardFoundLength;
         context->clipboardFound = text;
         context->clipboardFoundLength = (uint32_t)length;
         context->foundPayloads[mwin_foundText] += 1;
+        Release(context, last, lastLength);
     }
     return text;
 }
@@ -91,12 +96,19 @@ mwinOutcome mwinTakeClipboardUtf16(mwinContext* context, const uint16_t* units, 
 
 void mwinReleaseClipboard(mwinContext* context)
 {
-    Release(context, context->clipboardOffer, context->clipboardOfferLength);
-    Release(context, context->clipboardFound, context->clipboardFoundLength);
+    // No read's text is found, and no field holds a block, before the
+    // free hook gets them.
+    char* offer = context->clipboardOffer;
+    size_t offerLength = context->clipboardOfferLength;
+    char* found = context->clipboardFound;
+    size_t foundLength = context->clipboardFoundLength;
+    context->foundPayloads[mwin_foundText] += 1;
     context->clipboardOffer = nullptr;
     context->clipboardOfferLength = 0;
     context->clipboardFound = nullptr;
     context->clipboardFoundLength = 0;
+    Release(context, offer, offerLength);
+    Release(context, found, foundLength);
     mwinReleaseClipboardExtras(context);
 }
 
@@ -137,9 +149,11 @@ mwinResult mwinWindow_RequestClipboardWrite(mwinContext* context, mwinWindowId w
         memcpy(copy, text, length);
     }
     // Text alone: the data written before goes.
-    Release(context, context->clipboardOffer, context->clipboardOfferLength);
+    char* last = context->clipboardOffer;
+    size_t lastLength = context->clipboardOfferLength;
     context->clipboardOffer = copy;
     context->clipboardOfferLength = (uint32_t)length;
+    Release(context, last, lastLength);
     mwinReleaseClipboardData(context);
     mwinSubmitRequest(context, slot, request, requestOut);
     return mwin_success;
@@ -167,9 +181,10 @@ mwinResult mwinWindow_RequestClipboardRead(mwinContext* context, mwinWindowId wi
 mwinResult mwinRequest_GetClipboardText(const mwinContext* context, mwinRequestId request,
                                         char* bufferOut, size_t capacity, size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
-    return mwinCopyFound(
-        context, request, mwin_foundText, context != nullptr ? context->clipboardFound : nullptr,
-        context != nullptr ? context->clipboardFoundLength : 0, bufferOut, capacity, lengthOut);
+    return mwinClearOnFailure(mwinCopyFound(context, request, mwin_foundText,
+                                            context != nullptr ? context->clipboardFound : nullptr,
+                                            context != nullptr ? context->clipboardFoundLength : 0,
+                                            bufferOut, capacity, lengthOut),
+                              bufferOut, capacity);
 }

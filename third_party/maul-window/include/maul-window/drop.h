@@ -7,8 +7,8 @@
 // would land; a drop brings mwin_eventDropped instead of the leaving.
 // Windows take every drag that carries files or text.
 //
-// A drop's files and text wait in the context under the drop's number
-// until the next drop, where these functions copy them out. Files come
+// A drop's files and text wait in the context under the drop's id until
+// the next drop, where these functions copy them out. Files come
 // as their paths in UTF-8, each ended by a NUL; on the web, where a page
 // never sees paths, as their names. A path that is not UTF-8 is left
 // out, since no program could name the file with it, and text from
@@ -34,10 +34,11 @@ extern "C"
     /// Copies out the paths of a drop's files, each ended by a NUL.
     ///
     /// @param context    The context.
-    /// @param drop       The drop's number, from its record.
-    /// @param bufferOut  Receives the paths. May be NULL when capacity is
-    ///                   0. Zeroed over capacity on failure, so a buffer
-    ///                   too short holds none of it.
+    /// @param drop       The drop, from its record.
+    /// @param bufferOut  Receives the paths. May be NULL when capacity is 0.
+    ///                   Zeroed over capacity on failure, so a buffer too
+    ///                   short holds none of it. On success, the bytes past
+    ///                   those it reports are left as they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives the paths' length in bytes, NULs
     ///                   included. On `mwin_errorCapacity`, the bytes
@@ -47,30 +48,29 @@ extern "C"
     ///         `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinContext_GetDroppedFiles(const mwinContext* context,
-                                                                   uint32_t drop, char* bufferOut,
-                                                                   size_t capacity,
-                                                                   size_t* lengthOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinDrop_GetFiles(const mwinContext* context,
+                                                         mwinDropId drop, char* bufferOut,
+                                                         size_t capacity, size_t* lengthOut);
 
     /// Copies out the text of a drop.
     ///
     /// @param context    The context.
-    /// @param drop       The drop's number, from its record.
-    /// @param bufferOut  Receives the text in UTF-8, not NUL-terminated.
-    ///                   May be NULL when capacity is 0. Zeroed over
-    ///                   capacity on failure, so a buffer too short holds
-    ///                   none of it.
+    /// @param drop       The drop, from its record.
+    /// @param bufferOut  Receives the text in UTF-8, not NUL-terminated. May
+    ///                   be NULL when capacity is 0. Zeroed over capacity on
+    ///                   failure, so a buffer too short holds none of it. On
+    ///                   success, the bytes past those it reports are left as
+    ///                   they were.
     /// @param capacity   The bytes bufferOut holds.
     /// @param lengthOut  Receives the text's length in bytes. On
     ///                   `mwin_errorCapacity`, the bytes needed; 0 on any
     ///                   other failure.
-    /// @return As mwinContext_GetDroppedFiles.
+    /// @return As mwinDrop_GetFiles.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinContext_GetDroppedText(const mwinContext* context,
-                                                                  uint32_t drop, char* bufferOut,
-                                                                  size_t capacity,
-                                                                  size_t* lengthOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinDrop_GetText(const mwinContext* context, mwinDropId drop,
+                                                        char* bufferOut, size_t capacity,
+                                                        size_t* lengthOut);
 
 #ifdef __cplusplus
 }

@@ -45,6 +45,11 @@ static inline mtwnSlotHeader* mtwnPoolAt(const mtwnPool* pool, uint32_t index1)
 // The live slot an id names, or NULL.
 mtwnSlotHeader* mtwnPoolFind(const mtwnPool* pool, uint32_t index1, uint32_t generation);
 
+// Whether the pool ever handed an id out, alive now or not: never the null
+// id, an index past the highest slot used, generation 0 or one its slot
+// has not reached.
+bool mtwnPoolIssued(const mtwnPool* pool, uint32_t index1, uint32_t generation);
+
 // Takes a slot, zeroed but for its advanced generation and marked alive;
 // returns its index1, or 0 when the pool is full.
 uint32_t mtwnPoolAcquire(mtwnPool* pool);

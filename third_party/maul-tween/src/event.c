@@ -118,12 +118,20 @@ void mtwnPlayerEvent(mtwnContext* context, uint32_t player, mtwnEventKind kind, 
 static mtwnResult RunReadEvents(mtwnContext* context, mtwnEvent* eventsOut, uint32_t capacity,
                                 uint32_t* countOut, uint64_t* droppedOut)
 {
+    // Without a context no bound is known, so the array is left as it was.
     if (context == NULL)
     {
         return mtwn_errorInvalid;
     }
     if (countOut == NULL || (eventsOut == NULL && capacity != 0))
     {
+        // Zeroed as far as a success could write: the queue's capacity.
+        uint32_t cleared =
+            capacity < context->def.eventCapacity ? capacity : context->def.eventCapacity;
+        for (uint32_t i = 0; eventsOut != NULL && i < cleared; ++i)
+        {
+            eventsOut[i] = (mtwnEvent){0};
+        }
         mtwnCountMisuse(context);
         return mtwn_errorInvalid;
     }
@@ -150,7 +158,12 @@ static MTWN_NOINLINE mtwnResult mtwnContext_ReadEventsWork(mtwnContext* context,
                                                            mtwnEvent* eventsOut, uint32_t capacity,
                                                            uint32_t* countOut, uint64_t* droppedOut)
 {
-    // Cleared first, so a busy or missing context's failure clears them too.
+    if (!mtwnEnter(context))
+    {
+        return mtwn_errorBusy;
+    }
+    // Cleared after the busy check, as a call back in writes nothing, and
+    // before any other, so a missing context's failure clears them too.
     if (countOut != NULL)
     {
         *countOut = 0;
@@ -158,10 +171,6 @@ static MTWN_NOINLINE mtwnResult mtwnContext_ReadEventsWork(mtwnContext* context,
     if (droppedOut != NULL)
     {
         *droppedOut = 0;
-    }
-    if (!mtwnEnter(context))
-    {
-        return mtwn_errorBusy;
     }
     mtwnResult result = RunReadEvents(context, eventsOut, capacity, countOut, droppedOut);
     mtwnLeave(context);
@@ -183,7 +192,7 @@ uint32_t mtwnContext_GetEventCount(const mtwnContext* context)
     return context != NULL ? context->eventCount : 0;
 }
 
-uint64_t mtwnContext_GetDroppedEvents(const mtwnContext* context)
+uint64_t mtwnContext_GetEventsDropped(const mtwnContext* context)
 {
     return context != NULL ? context->droppedEvents : 0;
 }

@@ -10,7 +10,12 @@
 // allocator, the task system's functions and tasks) calls no function of
 // that context: while one runs, those taking the context non-const refuse
 // with mtwn_errorBusy and count one misuse, and the const ones read it in
-// the middle of a call.
+// the middle of a call. Two exceptions refuse as the others do:
+// mtwnTarget_GetState, whose velocity may run a host easing again; and,
+// while an update's clip players run in groups on the task system, the
+// readers of targets and players (mtwnTarget_GetValue,
+// mtwnContext_ReadTargets, mtwnClipPlayer_GetState and
+// mtwnContext_MeasureTransition), which a group may be writing.
 
 #ifndef MAUL_TWEEN_CONTEXT_H
 #define MAUL_TWEEN_CONTEXT_H
@@ -72,8 +77,8 @@ extern "C"
         // runs every player on the calling thread. One without the other is
         // invalid. With them the context holds each group's scratch, on a
         // 64-bit target: about 16 KB, 72 bytes for each event record (an
-        // mtwnEvent and a double) up to 1,024 and 60 for each
-        // of a sixteenth of twice the bindings (about 900 KB more for the
+        // mtwnEvent and a double) up to 1,024 and 68 for each
+        // of a sixteenth of twice the bindings (about 940 KB more for the
         // default def), and 36 bytes a player.
         mtwnEnqueueTaskFunction* enqueueTask;
         mtwnFinishTaskFunction* finishTask;
@@ -118,7 +123,7 @@ extern "C"
     /// Makes a context def for a medium host: 1024 targets, 256 players
     /// with 64 points of linear() for each transition, 16 clips, 256
     /// events, 1024 bindings, sharing for clips of up to 128 nodes and 64
-    /// records, and 224 KiB of clip storage, which holds 16
+    /// records, and 240 KiB of clip storage, which holds 16
     /// clips of the default clip def, the C library's allocator and no task
     /// system.
     /// Built in the program, so it carries the version of the headers the
@@ -144,7 +149,7 @@ extern "C"
         def.sharedNodeCapacity = 128;
         def.sharedRecordCapacity = 64;
         def.pointsPerTransition = 64;
-        def.clipStorageBytes = 16u * 14336u;
+        def.clipStorageBytes = 16u * 15360u;
         return def;
     }
 
@@ -195,33 +200,40 @@ extern "C"
                                                         const mtwnContextDef* def);
 
     /// Returns how many calls against the context were refused for an
-    /// invalid argument, a stale id or a call back in from the host's code
-    ///  since it was made.
+    /// invalid argument, a stale target or clip id, a call the object's
+    /// state does not allow (mtwn_errorState) or a call back in from the
+    /// host's code since it was made, and the samples of its updates that
+    /// met a host easing's NaN: one for a transition's value at an update,
+    /// one for each player's clip track at an update, whichever of the
+    /// track's easings gave it; the earlier sample a velocity is measured
+    /// from counts none. A full capacity, the stale id of a
+    /// player the context handed out, kept or not, and a clip a player
+    /// still holds count none: each depends on state the library changes.
+    /// A player id never handed out, the null id among them, counts.
     ///
-    /// @param context  The context.
-    /// @return The count.
+    /// @param context  The context, or NULL.
+    /// @return The count; 0 for a null context.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MTWN_API uint64_t mtwnContext_GetMisuse(const mtwnContext* context);
 
     /// Returns how many clip players' advances a context with a task system
-    /// ran on the calling thread since it was made: a
-    /// player whose clip has more than 128 nodes and other players, one
-    /// whose targets of its
-    /// own might not fit its group's staging, one whose staging ran out,
-    /// and those after it in its group. A count that grows asks for larger
+    /// ran on the calling thread since it was made: a player whose clip
+    /// has more than 128 nodes and is played by other players too, one
+    /// whose targets of its own might not fit its group's staging, one
+    /// whose staging ran out, and those after it in its group. A count that grows asks for larger
     /// binding or event capacities, or smaller clips.
     ///
-    /// @param context  The context.
-    /// @return The count; 0 without a task system.
+    /// @param context  The context, or NULL.
+    /// @return The count; 0 without a task system or a context.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_API uint64_t mtwnContext_GetSerialAdvances(const mtwnContext* context);
+    MTWN_API uint64_t mtwnContext_GetSerialAdvanceCount(const mtwnContext* context);
 
     /// Returns the size of the block the context holds everything in.
     ///
-    /// @param context  The context.
-    /// @return Bytes.
+    /// @param context  The context, or NULL.
+    /// @return Bytes; 0 for a null context.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
     MTWN_API uint64_t mtwnContext_GetMemoryBytes(const mtwnContext* context);
@@ -233,14 +245,15 @@ extern "C"
     /// essential; a player with an infinite end plays on, the host's to
     /// keep, seek or stop. Turning it off reaches what has not finished.
     /// The host reads the platform's preference and turns it on or off.
+    /// Its only refusals are misuse, so it returns nothing: a null context
+    /// changes nothing, and a call back in from the host's code the context
+    /// runs changes nothing and counts one misuse.
     ///
-    /// @param context  The context.
+    /// @param context  The context, or NULL.
     /// @param enabled  Whether motion is reduced.
-    /// @return mtwn_success; mtwn_errorInvalid for a null context.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnContext_EnableReducedMotion(mtwnContext* context,
-                                                                       bool enabled);
+    MTWN_API void mtwnContext_EnableReducedMotion(mtwnContext* context, bool enabled);
 
     /// Returns whether reduced motion is on.
     ///
@@ -253,7 +266,7 @@ extern "C"
     /// Returns how many clips' players the last update left running under
     /// reduced motion though not essential: those that could not finish,
     /// their end infinite or their rate 0. When it is not 0, the host finds
-    /// them by mtwnPlayer_GetState's playsOnReduced and keeps, seeks or
+    /// them by mtwnClipPlayer_GetState's playsOnReduced and keeps, seeks or
     /// stops each.
     ///
     /// @param context  The context, or NULL.
@@ -276,12 +289,18 @@ extern "C"
     /// @param timeNs           The host's time in nanoseconds, never less
     ///                         than the last update's.
     /// @param changedOut       Receives the first changedCapacity changed
-    ///                         targets; NULL only with a capacity of 0; nothing
-    ///                         written on failure.
+    ///                         targets; NULL only with a capacity of 0. On
+    ///                         failure its first changedCapacity entries, up
+    ///                         to the context's target capacity, are the null
+    ///                         id; a null context, or a call back in from the
+    ///                         context's own host code (mtwn_errorBusy),
+    ///                         leaves it as it was.
     /// @param changedCapacity  Its length.
     /// @param changedTotalOut  Receives how many targets changed, which may
     ///                         exceed the capacity; those past it are left out
-    ///                         of the report only. May be NULL; 0 on failure.
+    ///                         of the report only. May be NULL; 0 on failure
+    ///                         but a call back in (mtwn_errorBusy), which
+    ///                         leaves it.
     /// @return mtwn_success; mtwn_errorInvalid for a null context, a null
     ///         array with a capacity, or a time before the last update's,
     ///         nothing advanced.

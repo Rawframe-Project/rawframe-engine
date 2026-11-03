@@ -9,6 +9,14 @@
 
 #include <stdalign.h>
 
+void muiDropFontFamily(const muiAllocator* allocator, muiFamilyStore* store, uint32_t slot)
+{
+    muiFontFamily family = store->families[slot - 1];
+    store->families[slot - 1] = (muiFontFamily){0};
+    muiPoolGive(&store->pool, slot);
+    muiReleaseFontFamily(allocator, &family);
+}
+
 void muiReleaseFontFamily(const muiAllocator* allocator, muiFontFamily* family)
 {
     if (family->faces != nullptr)

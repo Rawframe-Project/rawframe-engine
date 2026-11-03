@@ -35,7 +35,7 @@ extern "C"
     } mrhiAdapterId;
 
     // The GPU API a driver speaks.
-    typedef uint8_t mrhiDriverKind;
+    typedef int32_t mrhiDriverKind;
 
     enum
     {
@@ -55,7 +55,7 @@ extern "C"
     };
 
     // What kind of processor an adapter is.
-    typedef uint8_t mrhiAdapterKind;
+    typedef int32_t mrhiAdapterKind;
 
     enum
     {
@@ -72,7 +72,7 @@ extern "C"
     };
 
     // Which adapters a request prefers.
-    typedef uint8_t mrhiPowerPreference;
+    typedef int32_t mrhiPowerPreference;
 
     enum
     {
@@ -88,12 +88,17 @@ extern "C"
     typedef struct mrhiAdapterInfo
     {
         mrhiDriverKind driver;
+        // Its kind; mrhi_adapterUnknown also when the driver named a kind this
+        // list lacks.
         mrhiAdapterKind kind;
         // The PCI vendor id, or 0 where the platform hides it.
         uint32_t vendorId;
         // The PCI device id, or 0 where the platform hides it.
         uint32_t deviceId;
-        // The adapter's name in UTF-8, nameLength bytes, not NUL-terminated.
+        // The adapter's name: well-formed UTF-8 without NUL, nameLength bytes,
+        // not NUL-terminated. It ends before the driver's first byte that would
+        // break that: a character cut by the room, a malformed sequence or a
+        // NUL.
         char name[MRHI_ADAPTER_NAME_BYTES];
         size_t nameLength;
     } mrhiAdapterInfo;
@@ -121,7 +126,7 @@ extern "C"
     } mrhiAdapterRequestDef;
 
     // What an instance notification reports.
-    typedef uint8_t mrhiInstanceNotificationKind;
+    typedef int32_t mrhiInstanceNotificationKind;
 
     enum
     {
@@ -266,7 +271,8 @@ extern "C"
     /// those past it are counted but not recorded.
     ///
     /// @param instance       The instance.
-    /// @param diagnosticOut  Receives the record; zeros unless one is taken.
+    /// @param diagnosticOut  Receives the record; zeros unless one is taken,
+    ///                       but left as it was on `mrhi_errorBusy`.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
     /// drained or keeps none; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorBusy` for a call from inside the instance's allocator.
@@ -284,7 +290,7 @@ extern "C"
     /// @return The count; 0 for a NULL instance or a build without the layer.
     /// @par Thread safety
     /// Safe from any thread.
-    MRHI_API uint64_t mrhiInstance_GetDriverFaults(const mrhiInstance* instance);
+    MRHI_API uint64_t mrhiInstance_GetDriverFaultCount(const mrhiInstance* instance);
 
     /// Returns the default adapter request def: the driver's own order,
     /// software rasterizers allowed.
@@ -317,7 +323,8 @@ extern "C"
     /// polling its drivers for finished work.
     ///
     /// @param instance         The instance.
-    /// @param notificationOut  Receives the record; zeros unless one is taken.
+    /// @param notificationOut  Receives the record; zeros unless one is taken,
+    ///                         but left as it was on `mrhi_errorBusy`.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
     /// drained; `mrhi_errorInvalid` for a NULL argument; `mrhi_errorBusy` for a
     /// call from inside the instance's allocator.

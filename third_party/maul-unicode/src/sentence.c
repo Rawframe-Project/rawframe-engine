@@ -158,5 +158,5 @@ static uint8_t Lookup(const muniSegmenter* segmenter, uint32_t codePoint)
 
 muniResult muniNextSentenceSegment(muniSegmenter* segmenter, size_t* offsetOut)
 {
-    return muniSegmenterNext(segmenter, offsetOut, Lookup, Decide, Resolve, Absorb);
+    return muniSegmenterNext(segmenter, offsetOut, Lookup, Decide, Resolve, Absorb, nullptr);
 }

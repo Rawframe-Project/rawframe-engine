@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// Word boundaries, UAX #29 rules WB3 to WB999. Rule WB4 makes Extend,
+// Word boundaries, UAX #29 rules WB3 to WB999, and the kind of word each
+// segment is. Rule WB4 makes Extend,
 // Format and ZWJ transparent, so the letter and number rules look at the
 // previous two code points that are not those. Three rules look one code
 // point ahead: WB6 (a letter, then MidLetter, keeps together only when a
@@ -12,8 +13,10 @@
 #include "complex.h"
 #include "segmenter.h"
 #include "tables.h"
+#include "word_kind.h"
 
 #include "maul-unicode/properties.h"
+#include "maul-unicode/segment.h"
 
 #define BIT(value) (1u << (value))
 
@@ -178,10 +181,47 @@ static muniDecision Resolve(const muniSegmenter* segmenter, uint8_t value, uint3
     return In(value, need) ? muni_decideJoin : muni_decideBreak;
 }
 
+// The kind of word a code point makes of its segment, which takes the
+// highest kind of its code points, as a rule status would. A connector
+// (ExtendNumLet) or a mark joins a word but makes none. OTHER_KIND marks
+// Word_Break=Other, whose kind depends on more than the class.
+#define OTHER_KIND 0xFF
+
+static const uint8_t s_kinds[muni_wbWSegSpace + 1] = {
+    [muni_wbOther] = OTHER_KIND,
+    [muni_wbALetter] = muni_wordLetter,
+    [muni_wbHebrewLetter] = muni_wordLetter,
+    [muni_wbKatakana] = muni_wordKana,
+    [muni_wbNumeric] = muni_wordNumber,
+};
+
+static uint8_t KindOf(uint8_t value, uint32_t codePoint)
+{
+    uint8_t kind = value <= muni_wbWSegSpace ? s_kinds[value] : muni_wordNone;
+    if (kind != OTHER_KIND)
+    {
+        return kind;
+    }
+    // Punctuation and symbols, most Other text, take no lookup.
+    return codePoint < MUNI_FIRST_WORD_OTHER ? muni_wordNone : muniWordOtherKind(codePoint);
+}
+
+// A boundary closes the segment's kind. The text after a held boundary is
+// only the middle code point of WB6, WB7b or WB12 and marks, which make no
+// word, so it needs no kind of its own when the hold fails.
+static void Boundary(muniSegmenter* segmenter)
+{
+    muniWordRules* state = &segmenter->rules.word;
+    state->reportedKind = state->kind;
+    state->kind = muni_wordNone;
+}
+
 static void Absorb(muniSegmenter* segmenter, uint8_t value, uint32_t codePoint)
 {
     muniWordRules* state = &segmenter->rules.word;
     muniComplexTrack(segmenter, codePoint);
+    uint8_t kind = KindOf(value, codePoint);
+    state->kind = kind > state->kind ? kind : state->kind;
     // WB4 skips Extend, Format and ZWJ, except at the start and after a
     // newline, where they count as themselves.
     bool skipped = In(value, Ignored) && segmenter->started && !In(state->actual, Newlines);
@@ -203,5 +243,5 @@ static uint8_t Lookup(const muniSegmenter* segmenter, uint32_t codePoint)
 
 muniResult muniNextWordSegment(muniSegmenter* segmenter, size_t* offsetOut)
 {
-    return muniSegmenterNext(segmenter, offsetOut, Lookup, Decide, Resolve, Absorb);
+    return muniSegmenterNext(segmenter, offsetOut, Lookup, Decide, Resolve, Absorb, Boundary);
 }

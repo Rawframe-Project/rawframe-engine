@@ -38,7 +38,7 @@ result::Status drop(Windows& windows, WindowId window, Position position, std::s
 }
 
 result::Status hold(Windows& windows, bool held) {
-    return checked(mwinContext_HoldTestRequests(Platform::contextOf(windows), held), "holding test requests");
+    return checked(mwinContext_EnableTestHold(Platform::contextOf(windows), held), "holding test requests");
 }
 
 result::Status answer(Windows& windows, RequestKind kind, Outcome outcome) {

@@ -482,7 +482,7 @@ result::Status Tree::clearText(Node node) {
 }
 
 std::uint64_t Tree::textFailures() const noexcept {
-    return muiTextService_GetFailures(state_->text);
+    return muiTextService_GetLayoutFailureCount(state_->text);
 }
 
 namespace {

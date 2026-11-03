@@ -12,13 +12,20 @@
 #include "case_map.h"
 #include "decompose.h"
 #include "encoding.h"
+#include "invariant.h"
 #include "normalizer.h"
+#include "overlap.h"
 #include "tables.h"
 
 #include "maul-unicode/case.h"
 
 // The most code points a mapping holds while it is found. The longest
 // NFKC_CF value has 18 code points, U+FDFA's, and no step comes near 64.
+// A mapping depends on its code point alone, and test_case checks the
+// NFKC_CF of every code point against the UCD in builds that keep
+// MUNI_ASSERT, so every mapping fits at every step. A table of a later
+// Unicode version could break that, so a mapping that would not fit
+// traps where MUNI_ASSERT is kept and is refused where it is not.
 #define MAX_MAPPING 64
 
 // One round over a mapping: removes default ignorables, folds and
@@ -42,6 +49,7 @@ static size_t Round(const uint32_t* from, size_t count, uint32_t* to, bool* chan
         {
             if (written + MUNI_MAX_DECOMPOSITION > MAX_MAPPING)
             {
+                MUNI_ASSERT(false);
                 return MAX_MAPPING + 1;
             }
             size_t parts = muniDecomposeFully(folded[k], true, to + written);
@@ -113,7 +121,8 @@ muniTextResult muniGetNfkcCasefold(const char* text, size_t length, muniConvertM
                                    char* textOut, size_t capacity, size_t* neededOut)
 {
     if ((text == nullptr && length != 0) || (textOut == nullptr && capacity != 0) ||
-        neededOut == nullptr || (mode != muni_convertStrict && mode != muni_convertReplace))
+        neededOut == nullptr || (mode != muni_convertStrict && mode != muni_convertReplace) ||
+        muniOverlaps(text, length, textOut, capacity, 1))
     {
         return (muniTextResult){muni_errorInvalid, 0};
     }

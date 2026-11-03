@@ -115,8 +115,10 @@ endfunction()
 
 # mui_embed_file(<file> <output> <name>) writes a file's bytes as a C
 # array named name, for tests that read fonts on every platform, the web
-# included.
+# included. The file is read when CMake configures, so a change to it
+# configures again.
 function(mui_embed_file file output name)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${file})
     file(READ ${file} hex HEX)
     string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
     file(WRITE ${output}.new "static const unsigned char ${name}[] = {${bytes}};\n")

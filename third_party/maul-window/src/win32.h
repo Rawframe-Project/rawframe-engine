@@ -98,8 +98,8 @@ struct mwinWin32Window
     // buttons held, and the last press.
     bool tracking;
     bool trackingFrame;
-    uint8_t buttons;
-    mwinClickCounter clicks;
+    mwinMouseButtons buttons;
+    mwinClickCounter clickCounter;
     // The first half of a character outside the BMP, 0 for none.
     WCHAR highSurrogate;
     // The pen's flags at its last record.
@@ -160,7 +160,7 @@ struct mwinWin32Platform
     BYTE* imeAttributes;
     char* imeBytes;
     // The preferred languages as read, localeBytes + 2 units, and as
-    // UTF-8, localeBytes.
+    // UTF-8, localeBytes + 1.
     WCHAR* localeUnits;
     char* localeText;
     // One per window slot, and one per monitor slot.

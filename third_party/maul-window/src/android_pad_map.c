@@ -127,9 +127,10 @@ void mwinAndroidPadLayoutOf(mwinAndroidPadLayout* layout, mwinGamepadInfo* info)
     (void)Pair(layout, AXIS_HAT_X, AXIS_HAT_Y, layout->hat);
     info->mapped = layout->mapped;
     uint8_t buttons = CountBits(layout->keys);
-    info->rawButtons = buttons < MWIN_GAMEPAD_RAW_BUTTONS ? buttons : MWIN_GAMEPAD_RAW_BUTTONS;
-    info->rawAxes = (uint8_t)(layout->axisCount < MWIN_GAMEPAD_RAW_AXES ? layout->axisCount
-                                                                        : MWIN_GAMEPAD_RAW_AXES);
+    info->rawButtonCount = buttons < MWIN_GAMEPAD_RAW_BUTTONS ? buttons : MWIN_GAMEPAD_RAW_BUTTONS;
+    info->rawAxisCount =
+        (uint8_t)(layout->axisCount < MWIN_GAMEPAD_RAW_AXES ? layout->axisCount
+                                                            : MWIN_GAMEPAD_RAW_AXES);
 }
 
 // The mapped button of a key, or -1.

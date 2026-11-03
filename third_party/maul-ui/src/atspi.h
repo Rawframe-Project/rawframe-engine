@@ -53,6 +53,9 @@ struct muiAtspiApp
     // refused (Maul conventions, Threads), and counted.
     bool busy;
     uint64_t misuse;
+    // Whether the call being answered was refused for its arguments; a
+    // call that cannot be answered otherwise ran out of memory.
+    bool refused;
 };
 
 // What clients were last told of a shown node: its shown parent, 0 for
@@ -133,12 +136,26 @@ bool muiAtspiAnswerComponent(muiAtspiApp* app, DBusMessage* call, const muiAtspi
 // Sends a reply and lets it go; an error reply when it is NULL.
 void muiAtspiSend(muiAtspiApp* app, DBusMessage* call, DBusMessage* reply);
 
+// Notes whether a call's arguments read and name what the call needs;
+// when not, the call is refused. Returns taken.
+bool muiAtspiTaken(muiAtspiApp* app, bool taken);
+
+// Answers a call that could not be answered: InvalidArgs when its
+// arguments were refused, NoMemory otherwise.
+void muiAtspiFail(muiAtspiApp* app, DBusMessage* call, const char* member);
+
 // Writing: an object reference (so), a string, a variant holding a
 // basic value, and the start and end of a container. Each is false
 // when memory runs out.
 bool muiAtspiAppendReference(muiAtspiApp* app, muiDBusIter* iter, const muiAtspiObject* object);
 bool muiAtspiAppendString(muiAtspiApp* app, muiDBusIter* iter, const char* text);
 bool muiAtspiAppendVariant(muiAtspiApp* app, muiDBusIter* iter, int type, const void* value);
+
+// Ends a container opened in iter: closed when ok, and abandoned when
+// not or when closing fails, since libdbus frees an open container's
+// memory only then. Every iterator starts zeroed, libdbus's closed
+// state, so one never opened is let be. Whether it closed.
+bool muiAtspiClose(muiAtspiApp* app, muiDBusIter* iter, muiDBusIter* sub, bool ok);
 
 // The Action interface: how many actions a node has, the methods, and
 // the NActions property; the Value interface's properties, and setting

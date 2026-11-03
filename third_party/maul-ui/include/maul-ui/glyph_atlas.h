@@ -29,7 +29,7 @@ extern "C"
     typedef struct muiGlyphAtlas muiGlyphAtlas;
 
     // The pixels of an atlas's pages.
-    typedef uint8_t muiAtlasFormat;
+    typedef int32_t muiAtlasFormat;
 
     enum
     {
@@ -179,7 +179,7 @@ extern "C"
     /// @param baselineY  The baseline, likewise.
     /// @param glyphOut   Receives the image; when the image is larger than a
     ///                   plot, its width and height only. Zeroed on any other
-    ///                   failure.
+    ///                   failure but `mui_errorBusy`, which leaves it.
     /// @return `mui_success`; `mui_errorCapacity` when the image is larger than
     ///         a plot, every plot is in use this frame, or memory runs out;
     ///         `mui_errorInvalid` for a NULL atlas or glyphOut, a size that is
@@ -218,7 +218,7 @@ extern "C"
     /// @param foreground  The text's colour, linear and premultiplied.
     /// @param glyphOut    Receives the image; when the image is larger than a
     ///                    plot, its width and height only. Zeroed on any other
-    ///                    failure.
+    ///                    failure but `mui_errorBusy`, which leaves it.
     /// @return As muiGlyphAtlas_GetGlyph, with `mui_empty` for a glyph without
     ///         colour layers;
     ///         `mui_errorBusy` while the atlas is busy.
@@ -244,7 +244,7 @@ extern "C"
     ///                   pixels.
     /// @param glyphOut   Receives the image; when the image is larger than a
     ///                   plot, its width and height only. Zeroed on any other
-    ///                   failure.
+    ///                   failure but `mui_errorBusy`, which leaves it.
     /// @return As muiGlyphAtlas_GetGlyph, with `mui_errorLimit` for a spread out of
     ///         range;
     ///         `mui_errorBusy` while the atlas is busy.
@@ -273,7 +273,7 @@ extern "C"
     ///                   pixels.
     /// @param glyphOut   Receives the image; when the image is larger than a
     ///                   plot, its width and height only. Zeroed on any other
-    ///                   failure.
+    ///                   failure but `mui_errorBusy`, which leaves it.
     /// @return As muiGlyphAtlas_GetGlyphField; `mui_errorBusy` while the atlas is
     ///         busy.
     /// @par Thread safety
@@ -311,10 +311,12 @@ extern "C"
     ///
     /// @param atlas       The atlas.
     /// @param updatesOut  Receives the rectangles; may be NULL when capacity
-    ///                    is 0.
+    ///                    is 0. Zeroed over capacity unless the call answers
+    ///                    `mui_success` or `mui_errorBusy`.
     /// @param capacity    How many updatesOut holds.
     /// @param countOut    Receives how many rectangles there are, also when
-    ///                    updatesOut is too small. 0 on any other failure.
+    ///                    updatesOut is too small. 0 on any other failure but
+    ///                    `mui_errorBusy`, which leaves it.
     /// @return `mui_success`, taking them; `mui_errorCapacity` when updatesOut
     ///         holds fewer, taking none; `mui_errorInvalid` for a NULL atlas or
     ///         countOut, or NULL updatesOut with a capacity; `mui_errorBusy`

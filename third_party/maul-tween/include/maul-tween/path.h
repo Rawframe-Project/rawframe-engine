@@ -21,7 +21,7 @@ extern "C"
 #endif
 
     // How a segment goes from its keyframe to the next.
-    typedef uint8_t mtwnSegmentKind;
+    typedef int32_t mtwnSegmentKind;
     enum
     {
         // A straight line.
@@ -240,8 +240,6 @@ extern "C"
     /// constant speed equal ratios in equal times. On failure the keyframes
     /// are as they were.
     ///
-    /// @param def         The def: a known kind, alpha from 0 to 1, known
-    ///                    choices for its kind.
     /// @param keyframes   As mtwnMakePath takes them, in the kind's channels;
     ///                    a rotation not all zero; a color's alpha from 0 to
     ///                    1; a scale's value, and a Bezier segment's
@@ -253,6 +251,8 @@ extern "C"
     ///                    different angle methods or rotation paths; a clip
     ///                    copies them first.
     /// @param count       The number of keyframes.
+    /// @param def         The def: a known kind, alpha from 0 to 1, known
+    ///                    choices, those its kind does not read too.
     /// @param lengthsOut  Count doubles for constant speed, or NULL; only
     ///                    numbers, vectors, angles, integers and scales take it
     ///                    (a scale's lengths are its logarithm's); unchanged on
@@ -264,10 +264,9 @@ extern "C"
     ///         argument outside the above.
     /// @par Thread safety
     /// Safe from any thread; the keyframes are used by one thread at a time.
-    MTWN_NODISCARD MTWN_API mtwnResult mtwnMakeTrack(const mtwnTrackDef* def,
-                                                     mtwnKeyframe* keyframes, uint32_t count,
-                                                     double* lengthsOut, mtwnSegmentMix* mixesOut,
-                                                     mtwnTrack* trackOut);
+    MTWN_NODISCARD MTWN_API mtwnResult mtwnMakeTrack(mtwnKeyframe* keyframes, uint32_t count,
+                                                     const mtwnTrackDef* def, double* lengthsOut,
+                                                     mtwnSegmentMix* mixesOut, mtwnTrack* trackOut);
 
     /// Samples a track: its value at a progress, as mtwnSamplePath finds the
     /// segment and eases it.

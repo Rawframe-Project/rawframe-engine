@@ -22,7 +22,20 @@
 MTWN_NOINLINE mtwnResult mtwnMakeLinearPointsEasingWork(mtwnLinearPoint* points, uint32_t count,
                                                         mtwnEasing* easingOut);
 MTWN_NOINLINE bool mtwnIsEasingMonotonicWork(const mtwnEasing* easing);
-MTWN_NOINLINE double mtwnSampleEasingWork(const mtwnEasing* easing, double progress, bool before);
+// An easing at a progress. A host function's NaN is taken as the progress
+// it was called with, and sets hostNan, when given, for a context to
+// count as misuse.
+MTWN_NOINLINE double mtwnSampleEasingNoted(const mtwnEasing* easing, double progress, bool before,
+                                           bool* hostNan);
+static inline double mtwnSampleEasingWork(const mtwnEasing* easing, double progress, bool before)
+{
+    return mtwnSampleEasingNoted(easing, progress, before, NULL);
+}
+// mtwnSampleEasingNoted as a timeline's easing: a cubic bezier never
+// decreasing to the bit (mtwnSampleMonotoneCubicBezier), so a timeline's
+// child time never runs back inside an iteration, as the crossings assume.
+MTWN_NOINLINE double mtwnSampleTimelineEasingWork(const mtwnEasing* easing, double progress,
+                                                  bool before, bool* hostNan);
 MTWN_NOINLINE mtwnSpringMotion mtwnComputeSpringMotionWork(const mtwnSpring* spring,
                                                            double seconds);
 MTWN_NOINLINE void mtwnSampleSpringWork(const mtwnSpring* spring, double offset, double velocity,
@@ -52,7 +65,7 @@ MTWN_NOINLINE mtwnResult mtwnConvertColorToSpaceWork(mtwnColor color, mtwnColorS
 // other as raw, so every call that takes one from the host checks it first.
 static inline bool mtwnIsAngleMethod(mtwnAngleMethod method)
 {
-    return method <= mtwn_angleDecreasing;
+    return (uint32_t)method <= mtwn_angleDecreasing;
 }
 
 MTWN_NOINLINE double mtwnMixAngleWork(double from, double to, mtwnAngleMethod method,
@@ -62,12 +75,45 @@ MTWN_NOINLINE mtwnResult mtwnMakeRotationMixWork(mtwnQuat from, mtwnQuat to, mtw
 MTWN_NOINLINE mtwnQuat mtwnMixRotationWork(const mtwnRotationMix* mix, double progress);
 MTWN_NOINLINE mtwnResult mtwnMakeScaleMixWork(double from, double to, mtwnScaleMix* mixOut);
 MTWN_NOINLINE double mtwnMixScaleWork(const mtwnScaleMix* mix, double progress);
-MTWN_NOINLINE mtwnResult mtwnMakeTrackWork(const mtwnTrackDef* def, mtwnKeyframe* keyframes,
-                                           uint32_t count, double* lengthsOut,
+MTWN_NOINLINE mtwnResult mtwnMakeTrackWork(mtwnKeyframe* keyframes, uint32_t count,
+                                           const mtwnTrackDef* def, double* lengthsOut,
                                            mtwnSegmentMix* mixesOut, mtwnTrack* trackOut);
-MTWN_NOINLINE mtwnVec4 mtwnSampleTrackWork(const mtwnTrack* track, double progress);
+// A track at a progress; hostNan as mtwnSampleEasingNoted's, for its
+// keyframes' easings.
+MTWN_NOINLINE mtwnVec4 mtwnSampleTrackWork(const mtwnTrack* track, double progress, bool* hostNan);
 MTWN_NOINLINE mtwnResult mtwnValidateTimingWork(const mtwnTiming* timing);
-MTWN_NOINLINE void mtwnComputeTimingWork(const mtwnTiming* timing, double localTime, bool backwards,
+// The timing at a local time, its easing sampled by the sampler given; a
+// worker of its own, which the two below call, so a program of timings
+// links no timeline's curve and a timeline's costs no call more.
+// hostNan as mtwnSampleEasingNoted's.
+typedef double mtwnEasingSampler(const mtwnEasing* easing, double progress, bool before,
+                                 bool* hostNan);
+MTWN_NOINLINE void mtwnComputeTimingWith(const mtwnTiming* timing, double localTime, bool backwards,
+                                         mtwnEasingSampler* sample, bool* hostNan,
                                          mtwnTimingResult* resultOut);
+
+static inline void mtwnComputeTimingWork(const mtwnTiming* timing, double localTime, bool backwards,
+                                         mtwnTimingResult* resultOut)
+{
+    mtwnComputeTimingWith(timing, localTime, backwards, mtwnSampleEasingNoted, NULL, resultOut);
+}
+
+// mtwnComputeTimingWork, setting hostNan when its easing's host function
+// gave NaN.
+static inline void mtwnComputeTimingNoted(const mtwnTiming* timing, double localTime,
+                                          bool backwards, bool* hostNan,
+                                          mtwnTimingResult* resultOut)
+{
+    mtwnComputeTimingWith(timing, localTime, backwards, mtwnSampleEasingNoted, hostNan, resultOut);
+}
+
+// mtwnComputeTimingWork for a timeline, its easing sampled by
+// mtwnSampleTimelineEasingWork.
+static inline void mtwnComputeTimelineTimingWork(const mtwnTiming* timing, double localTime,
+                                                 bool backwards, mtwnTimingResult* resultOut)
+{
+    mtwnComputeTimingWith(timing, localTime, backwards, mtwnSampleTimelineEasingWork, NULL,
+                          resultOut);
+}
 
 #endif // MAUL_TWEEN_SRC_WORK_H

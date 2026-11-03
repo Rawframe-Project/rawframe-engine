@@ -19,7 +19,7 @@ mwinResult mwinWindow_RequestVirtualKeyboard(mwinContext* context, mwinWindowId 
     {
         return mwinBusy(context);
     }
-    if (purpose >= MWIN_INPUT_PURPOSES)
+    if ((uint32_t)purpose >= MWIN_INPUT_PURPOSES)
     {
         return mwinMisuse(context);
     }
@@ -38,7 +38,26 @@ mwinResult mwinWindow_RequestVirtualKeyboard(mwinContext* context, mwinWindowId 
 }
 
 mwinResult mwinWindow_RequestTextInput(mwinContext* context, mwinWindowId window, bool enabled,
-                                       mwinRect caret, mwinRequestId* requestOut)
+                                       mwinRequestId* requestOut)
+{
+    mwinClearOut(requestOut, sizeof *requestOut);
+    if (mwinIsBusy(context))
+    {
+        return mwinBusy(context);
+    }
+    uint32_t slot = 0;
+    int32_t request = 0;
+    mwinResult status = mwinBeginRequest(context, window, mwin_requestTextInput, &slot, &request);
+    if (status == mwin_success)
+    {
+        context->windows[slot].requests[request].value.textInput = enabled;
+        mwinSubmitRequest(context, slot, request, requestOut);
+    }
+    return status;
+}
+
+mwinResult mwinWindow_RequestTextInputCaret(mwinContext* context, mwinWindowId window,
+                                            mwinRect caret, mwinRequestId* requestOut)
 {
     mwinClearOut(requestOut, sizeof *requestOut);
     if (mwinIsBusy(context))
@@ -52,12 +71,11 @@ mwinResult mwinWindow_RequestTextInput(mwinContext* context, mwinWindowId window
     }
     uint32_t slot = 0;
     int32_t request = 0;
-    mwinResult status = mwinBeginRequest(context, window, mwin_requestTextInput, &slot, &request);
+    mwinResult status =
+        mwinBeginRequest(context, window, mwin_requestTextInputCaret, &slot, &request);
     if (status == mwin_success)
     {
-        mwinRequest* entry = &context->windows[slot].requests[request];
-        entry->value.textInput.enabled = enabled;
-        entry->value.textInput.caret = caret;
+        context->windows[slot].requests[request].value.caret = caret;
         mwinSubmitRequest(context, slot, request, requestOut);
     }
     return status;
@@ -71,7 +89,7 @@ mwinResult mwinWindow_RequestCursorMode(mwinContext* context, mwinWindowId windo
     {
         return mwinBusy(context);
     }
-    if (mode > mwin_cursorConfinedHidden)
+    if ((uint32_t)mode > mwin_cursorConfinedHidden)
     {
         return mwinMisuse(context);
     }
@@ -94,7 +112,7 @@ mwinResult mwinWindow_RequestCursorShape(mwinContext* context, mwinWindowId wind
     {
         return mwinBusy(context);
     }
-    if (shape > mwin_shapeProgress)
+    if ((uint32_t)shape > mwin_shapeProgress)
     {
         return mwinMisuse(context);
     }
@@ -111,7 +129,8 @@ mwinResult mwinWindow_RequestCursorShape(mwinContext* context, mwinWindowId wind
 
 mwinKey mwinContext_MapKeyCode(const mwinContext* context, mwinKeyCode code)
 {
-    if (context == nullptr || code == mwin_codeUnknown || code > mwin_codeMetaRight)
+    if (context == nullptr || code == mwin_codeUnknown || (uint32_t)code > mwin_codeMetaRight ||
+        context->finishing)
     {
         return 0;
     }
@@ -123,9 +142,13 @@ mwinResult mwinContext_GetKeyReach(const mwinContext* context, mwinKeyCode code,
 {
     mwinClearOut(reachOut, sizeof *reachOut);
     if (context == nullptr || reachOut == nullptr || code == mwin_codeUnknown ||
-        code > mwin_codeMetaRight)
+        (uint32_t)code > mwin_codeMetaRight)
     {
         return mwinMisuse(context);
+    }
+    if (context->finishing)
+    {
+        return mwin_errorState;
     }
     *reachOut = context->backend->keyReach(context, code, modifiers);
     return mwin_success;
@@ -134,21 +157,21 @@ mwinResult mwinContext_GetKeyReach(const mwinContext* context, mwinKeyCode code,
 mwinResult mwinContext_GetKeyboardLayout(const mwinContext* context, char* bufferOut,
                                          size_t capacity, size_t* lengthOut)
 {
-    mwinClearOut(bufferOut, capacity);
     mwinClearOut(lengthOut, sizeof *lengthOut);
     if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity != 0))
     {
-        return mwinMisuse(context);
+        return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
+    }
+    if (context->finishing)
+    {
+        return mwinClearOnFailure(mwin_errorState, bufferOut, capacity);
     }
     mwinResult status = context->backend->keyboardLayout(context, bufferOut, capacity, lengthOut);
-    if (status != mwin_success)
+    // A backend may have written part of the name before it failed: the
+    // buffer is cleared, and the length kept only as the one needed.
+    if (status != mwin_success && status != mwin_errorCapacity)
     {
-        // A backend may have written part of the name before it failed.
-        mwinClearOut(bufferOut, capacity);
-        if (status != mwin_errorCapacity)
-        {
-            *lengthOut = 0;
-        }
+        *lengthOut = 0;
     }
-    return status;
+    return mwinClearOnFailure(status, bufferOut, capacity);
 }

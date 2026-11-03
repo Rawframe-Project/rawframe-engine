@@ -52,18 +52,18 @@ static void Post(mwinX11Platform* platform, uint32_t slot, mwinEvent event)
     mwinPost(platform->context, slot, &event);
 }
 
-static void PostType(mwinX11Platform* platform, uint32_t slot, mwinEventType type)
+static void PostType(mwinX11Platform* platform, uint32_t slot, mwinEventKind type)
 {
-    Post(platform, slot, (mwinEvent){.type = type});
+    Post(platform, slot, (mwinEvent){.kind = type});
 }
 
 static void PostSize(mwinX11Platform* platform, const mwinX11Window* window)
 {
     float scale = platform->scale;
-    mwinEvent event = {.type = mwin_eventResized};
+    mwinEvent event = {.kind = mwin_eventResized};
     event.data.size = (mwinSize){(float)window->width / scale, (float)window->height / scale};
     Post(platform, window->slot, event);
-    event.type = mwin_eventPixelSizeChanged;
+    event.kind = mwin_eventPixelSizeChanged;
     event.data.pixelSize = (mwinPixelSize){window->width, window->height};
     Post(platform, window->slot, event);
 }
@@ -78,7 +78,7 @@ static void PostMonitor(mwinX11Platform* platform, mwinX11Window* window)
         return;
     }
     window->monitor = monitor;
-    mwinEvent event = {.type = mwin_eventDisplayChanged};
+    mwinEvent event = {.kind = mwin_eventDisplayChanged};
     event.data.monitor = mwinMonitorIdOf(platform->context, (uint32_t)monitor);
     Post(platform, window->slot, event);
 }
@@ -242,18 +242,18 @@ static void Establish(mwinX11Platform* platform, mwinX11Window* window)
     mwinContext* context = platform->context;
     PostType(platform, window->slot, mwin_eventWindowCreated);
     PostMonitor(platform, window);
-    mwinEvent scale = {.type = mwin_eventScaleChanged};
+    mwinEvent scale = {.kind = mwin_eventScaleChanged};
     scale.data.scale = (mwinScaleChange){platform->scale, context->windows[window->slot].def.size};
     Post(platform, window->slot, scale);
     PostSize(platform, window);
     // The window manager tells of another mode when it applies one.
-    mwinEvent mode = {.type = mwin_eventModeChanged};
+    mwinEvent mode = {.kind = mwin_eventModeChanged};
     mode.data.mode = mwin_modeWindowed;
     Post(platform, window->slot, mode);
     if (IsPopup(platform, window->slot))
     {
         // A popup is where it was put against its owner.
-        mwinEvent moved = {.type = mwin_eventMoved};
+        mwinEvent moved = {.kind = mwin_eventMoved};
         moved.data.position = context->windows[window->slot].def.position;
         Post(platform, window->slot, moved);
     }
@@ -428,7 +428,7 @@ static int CarryOutGeometry(mwinX11Platform* platform, mwinX11Window* window,
         const uint32_t place[2] = {(uint32_t)window->x, (uint32_t)window->y};
         Configure(platform, window, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, place);
         // Its own configure event then finds it where it was put.
-        mwinEvent moved = {.type = mwin_eventMoved};
+        mwinEvent moved = {.kind = mwin_eventMoved};
         moved.data.position = request->value.position;
         Post(platform, window->slot, moved);
         return mwin_outcomeDone;
@@ -506,8 +506,11 @@ static int CarryOut(mwinX11Platform* platform, mwinX11Window* window, mwinWindow
     case mwin_requestTextInput:
         // Keys type text whether asked or not; an input method takes
         // them while it is asked.
-        window->textInput = request->value.textInput.enabled;
-        window->caret = request->value.textInput.caret;
+        window->textInput = request->value.textInput;
+        mwinX11FollowIme(platform);
+        return mwin_outcomeDone;
+    case mwin_requestTextInputCaret:
+        window->caret = request->value.caret;
         mwinX11FollowIme(platform);
         return mwin_outcomeDone;
     case mwin_requestClipboardWrite:
@@ -607,7 +610,7 @@ static void PostOffset(mwinX11Platform* platform, mwinX11Window* window)
     }
     window->offsetX = x;
     window->offsetY = y;
-    mwinEvent moved = {.type = mwin_eventMoved};
+    mwinEvent moved = {.kind = mwin_eventMoved};
     moved.data.position = (mwinPosition){(float)x / platform->scale, (float)y / platform->scale};
     Post(platform, window->slot, moved);
 }
@@ -636,7 +639,7 @@ static void OnConfigure(mwinX11Platform* platform, const xcb_configure_notify_ev
     else if (window->x != x || window->y != y)
     {
         MovePopups(platform, window);
-        mwinEvent moved = {.type = mwin_eventMoved};
+        mwinEvent moved = {.kind = mwin_eventMoved};
         moved.data.position =
             (mwinPosition){(float)window->x / platform->scale, (float)window->y / platform->scale};
         Post(platform, window->slot, moved);
@@ -684,7 +687,7 @@ static void OnState(mwinX11Platform* platform, uint32_t slot)
     mwinWindowMode mode = ReadMode(platform, window);
     if (mode != core->state.mode)
     {
-        mwinEvent event = {.type = mwin_eventModeChanged};
+        mwinEvent event = {.kind = mwin_eventModeChanged};
         event.data.mode = mode;
         Post(platform, slot, event);
     }

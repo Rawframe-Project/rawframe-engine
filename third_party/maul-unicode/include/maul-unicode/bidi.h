@@ -28,7 +28,7 @@ extern "C"
 #endif
 
     // The direction of a paragraph.
-    typedef uint8_t muniBidiDirection;
+    typedef int32_t muniBidiDirection;
 
     enum
     {
@@ -91,7 +91,9 @@ extern "C"
     /// @param paragraphLevel  The paragraph embedding level, 0 or 1.
     /// @param runsOut         The output. May be NULL when capacity is 0.
     /// @param capacity        The number of runs the output can hold.
-    /// @param countOut        Receives the number of runs.
+    /// @param countOut        Receives the number of runs, on success and
+    ///                        when they do not fit. `muni_errorInvalid`
+    ///                        leaves it and runsOut as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the runs do not
     ///         fit, and then none is written; `muni_errorInvalid` for a
     ///         NULL countOut, a NULL line or levels with a nonzero length,
@@ -129,14 +131,16 @@ extern "C"
     /// @param map         A permutation of 0 to count - 1. May be NULL when
     ///                    count is 0.
     /// @param count       The number of entries.
-    /// @param inverseOut  Receives the inverse permutation. Must not overlap
-    ///                    map. May be NULL when count is 0. On an error, its
-    ///                    contents are unspecified: telling a permutation
-    ///                    from a map that repeats an entry, in linear time
-    ///                    and without memory, takes inverseOut as scratch.
+    /// @param inverseOut  Receives the inverse permutation. May be NULL when
+    ///                    count is 0. A NULL argument or an inverseOut that
+    ///                    overlaps map leaves it as it was. Any other
+    ///                    refusal clears inverseOut, which the call uses to
+    ///                    check the map: telling a permutation from a map
+    ///                    that repeats an entry, in linear time and without
+    ///                    memory, takes it as scratch.
     /// @return `muni_success`, or `muni_errorInvalid` for a NULL argument
-    ///         with a nonzero count, an entry out of range or an entry that
-    ///         repeats an earlier one.
+    ///         with a nonzero count, an inverseOut that overlaps map, an
+    ///         entry out of range or an entry that repeats an earlier one.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniResult muniInvertBidiMap(const size_t* map, size_t count,

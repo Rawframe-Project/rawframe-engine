@@ -328,10 +328,6 @@ static mrhiResult Take(mrhiDevice* device, mrhiRequestId request, void* bytes, s
     {
         return mrhi_errorInvalid;
     }
-    if (device->allocatorGuard.busy)
-    {
-        return mrhiDeviceBusy(device);
-    }
     if (sizeOut == nullptr || (bytes == nullptr && capacity > 0))
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticNullArgument);
@@ -384,6 +380,13 @@ static mrhiResult Take(mrhiDevice* device, mrhiRequestId request, void* bytes, s
 mrhiResult mrhiRequest_TakeReadback(mrhiDevice* device, mrhiRequestId request, void* bytesOut,
                                     size_t capacity, size_t* sizeOut)
 {
+    // Refused as busy, it leaves the bytes: the call the allocator runs in
+    // may be filling them. The error a driver ended the frame with, even
+    // mrhi_errorBusy, clears them as any other failure does.
+    if (device != nullptr && device->allocatorGuard.busy)
+    {
+        return mrhiDeviceBusy(device);
+    }
     return mrhiClearFailed(Take(device, request, bytesOut, capacity, sizeOut), bytesOut, capacity,
                            sizeOut);
 }

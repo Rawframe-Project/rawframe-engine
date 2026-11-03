@@ -557,7 +557,7 @@ static void Click(mwinWaylandPlatform* platform, mwinWaylandWindow* window, int 
     switch (button)
     {
     case buttonClose:
-        event.type = mwin_eventCloseRequested;
+        event.kind = mwin_eventCloseRequested;
         mwinPost(platform->context, window->slot, &event);
         break;
     case buttonMaximize:
@@ -568,7 +568,7 @@ static void Click(mwinWaylandPlatform* platform, mwinWaylandWindow* window, int 
         (void)mwinWlRequest(&platform->api, window->toplevel, XDG_TOPLEVEL_SET_MINIMIZED, nullptr,
                             0);
         window->minimized = true;
-        event.type = mwin_eventModeChanged;
+        event.kind = mwin_eventModeChanged;
         event.data.mode = mwin_modeMinimized;
         mwinPost(platform->context, window->slot, &event);
         break;

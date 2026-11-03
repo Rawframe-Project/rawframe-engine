@@ -134,8 +134,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
     MUI_NODISCARD MUI_API muiResult muiTextBlock_Replace(muiTextService* service,
-                                                         muiTextBlockId blockId, uint32_t start,
-                                                         uint32_t end, const char* text,
+                                                         muiTextBlockId blockId, size_t start,
+                                                         size_t end, const char* text,
                                                          size_t length);
 
     enum
@@ -151,8 +151,8 @@ extern "C"
     // turns into; Maul UI parses none.
     typedef struct muiTextSpan
     {
-        uint32_t start;
-        uint32_t length;
+        size_t start;
+        size_t length;
         muiPropertyMask mask;
         muiTextStyle style;
     } muiTextSpan;
@@ -297,7 +297,7 @@ extern "C"
     /// @return The count.
     /// @par Thread safety
     /// Safe from any thread; the service is used by one thread at a time.
-    MUI_API uint64_t muiTextService_GetFailures(const muiTextService* service);
+    MUI_API uint64_t muiTextService_GetLayoutFailureCount(const muiTextService* service);
 
     /// Measures a text block's lines, as a muiMeasureFunction: user is a
     /// muiTextHost, and hostKey a block's key. The width breaks lines:
@@ -363,8 +363,10 @@ extern "C"
     /// @return Whether the key names a block; false, too, when memory
     ///         for a password's bullets runs out, for a NULL contentOut
     ///         or while the service is busy, which counts one misuse.
-    ///         Lines and words that cannot be read for want of memory or
-    ///         a font are left out.
+    ///         Lines and words are given whole or not at all: when any
+    ///         line, or its clusters, cannot be read for want of memory or
+    ///         a font, no lines are given, and when any word cannot, no
+    ///         words; the text is given still.
     /// @par Thread safety
     /// Safe from any thread; the service and context are used by one
     /// thread at a time.

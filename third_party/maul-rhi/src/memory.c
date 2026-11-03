@@ -149,6 +149,12 @@ mrhiResult mrhiPlace(mrhiDevice* device)
             uint64_t bytes = 0;
             uint64_t alignment = 1;
             Measure(device, resource, &bytes, &alignment);
+            // An alignment of zero, or one not a power of two, would place
+            // resources over each other: the driver has failed.
+            if (bytes > 0 && (alignment == 0 || (alignment & (alignment - 1)) != 0))
+            {
+                return mrhi_errorPlatform;
+            }
             if (bytes > 0 && !PlaceOne(device, resource, bytes, alignment))
             {
                 return mrhi_errorCapacity;

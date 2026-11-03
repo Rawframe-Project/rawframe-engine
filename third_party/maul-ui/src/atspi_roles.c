@@ -7,6 +7,7 @@
 
 #include "access_record.h"
 #include "atspi.h"
+#include "invariant.h"
 
 // The AT-SPI roles the adapter gives, with their names.
 enum
@@ -282,7 +283,7 @@ static const RoleName s_names[] = {
 
 uint32_t muiAtspiRoleOf(const muiAccessTree* tree, const muiAccessNode* node)
 {
-    uint32_t role = node->role <= MUI_ROLE_LAST ? s_roles[node->role] : ROLE_UNKNOWN;
+    uint32_t role = (uint32_t)node->role <= MUI_ROLE_LAST ? s_roles[node->role] : ROLE_UNKNOWN;
     // A window's root is its top-level object, which clients look for
     // as a frame or a dialog to follow focus within: no other window
     // stands for it on the bus.
@@ -292,14 +293,16 @@ uint32_t muiAtspiRoleOf(const muiAccessTree* tree, const muiAccessNode* node)
 
 const char* muiAtspiRoleName(uint32_t role)
 {
-    for (size_t i = 0; i < sizeof(s_names) / sizeof(s_names[0]); i++)
+    // Every role the adapter gives has a name: each of Maul UI's maps to
+    // one in the table, and a window's root is a frame.
+    size_t count = sizeof(s_names) / sizeof(s_names[0]);
+    size_t i = 0;
+    while (i + 1 < count && s_names[i].role != role)
     {
-        if (s_names[i].role == role)
-        {
-            return s_names[i].name;
-        }
+        i++;
     }
-    return "unknown";
+    MUI_ASSERT(s_names[i].role == role);
+    return s_names[i].name;
 }
 
 static void Set(uint32_t states[2], uint32_t state, bool set)

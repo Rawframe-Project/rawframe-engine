@@ -10,6 +10,7 @@
 #include "decompose.h"
 #include "encoding.h"
 #include "normalizer.h"
+#include "overlap.h"
 #include "tables.h"
 
 static bool IsForm(muniNormalForm form)
@@ -23,7 +24,8 @@ muniTextResult muniNormalize(const char* text, size_t length, muniNormalForm for
 {
     if ((text == nullptr && length != 0) || (textOut == nullptr && capacity != 0) ||
         neededOut == nullptr || !IsForm(form) ||
-        (mode != muni_convertStrict && mode != muni_convertReplace))
+        (mode != muni_convertStrict && mode != muni_convertReplace) ||
+        muniOverlaps(text, length, textOut, capacity, 1))
     {
         return (muniTextResult){muni_errorInvalid, 0};
     }
@@ -134,6 +136,24 @@ muniTextResult muniCheckNormalization(const char* text, size_t length, muniNorma
     }
     *answerOut = answer;
     return (muniTextResult){muni_success, length};
+}
+
+muniResult muniGetDecomposition(uint32_t codePoint, muniNormalForm form, uint32_t* codePointsOut,
+                                size_t capacity, size_t* countOut)
+{
+    if ((codePointsOut == nullptr && capacity != 0) || countOut == nullptr ||
+        (form != muni_nfd && form != muni_nfkd))
+    {
+        return muni_errorInvalid;
+    }
+    uint32_t parts[MUNI_MAX_DECOMPOSITION];
+    size_t count = muniDecomposeFully(codePoint, form == muni_nfkd, parts);
+    for (size_t i = 0; i < count && i < capacity; i++)
+    {
+        codePointsOut[i] = parts[i];
+    }
+    *countOut = count;
+    return count <= capacity ? muni_success : muni_errorCapacity;
 }
 
 muniResult muniDecomposePair(uint32_t codePoint, uint32_t* firstOut, uint32_t* secondOut,

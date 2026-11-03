@@ -141,16 +141,16 @@ static bool IsToggle(const muiAccessNode* node)
 
 NSAccessibilityRole muiNsRoleOf(const muiAccessNode* node)
 {
-    const char* role = IsToggle(node)                ? "AXCheckBox"
-                       : node->role <= MUI_ROLE_LAST ? s_roles[node->role]
-                                                     : "AXUnknown";
+    const char* role = IsToggle(node)                          ? "AXCheckBox"
+                       : (uint32_t)node->role <= MUI_ROLE_LAST ? s_roles[node->role]
+                                                               : "AXUnknown";
     return [NSString stringWithUTF8String:role];
 }
 
 NSAccessibilitySubrole muiNsSubroleOf(const muiAccessNode* node)
 {
-    const char* subrole = IsToggle(node)                ? "AXToggle"
-                          : node->role <= MUI_ROLE_LAST ? s_subroles[node->role]
-                                                        : nullptr;
+    const char* subrole = IsToggle(node)                          ? "AXToggle"
+                          : (uint32_t)node->role <= MUI_ROLE_LAST ? s_subroles[node->role]
+                                                                  : nullptr;
     return subrole != nullptr ? [NSString stringWithUTF8String:subrole] : nil;
 }

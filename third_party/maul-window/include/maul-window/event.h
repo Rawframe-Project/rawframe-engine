@@ -22,7 +22,7 @@
 // composition is shown. Motion,
 // raw deltas and the wheel are delivered sample by sample while there is
 // room, and merged into the newest waiting record of their kind when
-// there is not; samples says how many a record stands for.
+// there is not; sampleCount says how many a record stands for.
 //
 // Text in a record stays valid until the frame that drained it returns.
 //
@@ -54,7 +54,7 @@ extern "C"
 #endif
 
     // What a record reports.
-    typedef uint16_t mwinEventType;
+    typedef int32_t mwinEventKind;
 
     enum
     {
@@ -173,7 +173,7 @@ extern "C"
         mwin_eventDragMoved = 60,
         mwin_eventDragLeft = 61,
         // Something was dropped on the window (data.drop):
-        // mwinContext_GetDroppedFiles and mwinContext_GetDroppedText have it.
+        // mwinDrop_GetFiles and mwinDrop_GetText have it.
         mwin_eventDropped = 62,
         // An accessibility client asked the window for its tree for the
         // first time: the program's adapter may start its updates. Once
@@ -182,7 +182,7 @@ extern "C"
     };
 
     // The kind of a request.
-    typedef uint8_t mwinRequestKind;
+    typedef int32_t mwinRequestKind;
 
     enum
     {
@@ -215,10 +215,11 @@ extern "C"
         mwin_requestClipboardReadData = 26,
         mwin_requestPrimaryWrite = 27,
         mwin_requestPrimaryRead = 28,
+        mwin_requestTextInputCaret = 29,
     };
 
     // How a request ended.
-    typedef uint8_t mwinOutcome;
+    typedef int32_t mwinOutcome;
 
     enum
     {
@@ -267,19 +268,20 @@ extern "C"
         bool repeat;
     } mwinKeyEvent;
 
-    // Typed or composed text, valid until the frame that drained it
+    // Typed or composed text, valid UTF-8 with no control characters
+    // (typed text is never empty), valid until the frame that drained it
     // returns.
     typedef struct mwinTextEvent
     {
         const char* text;
-        uint32_t length;
+        size_t length;
     } mwinTextEvent;
 
     // The most segments a composition may have.
 #define MWIN_MAX_PREEDIT_SEGMENTS 32
 
     // How a segment of a composition is shown.
-    typedef uint8_t mwinPreeditStyle;
+    typedef int32_t mwinPreeditStyle;
 
     enum
     {
@@ -295,24 +297,25 @@ extern "C"
     // A styled part of a composition, in bytes of its text.
     typedef struct mwinPreeditSegment
     {
-        uint32_t start;
-        uint32_t length;
+        size_t start;
+        size_t length;
         mwinPreeditStyle style;
     } mwinPreeditSegment;
 
     // An input method's composition. The text, its segments and the
     // offsets are in bytes, each on a character boundary within the text,
     // the selection in order and no segment empty; the caret is -1 where
-    // the method hides it. The library fits what the platform hands it
-    // (an offset inside a character, past the end, a selection backwards)
-    // to that. Valid until the frame that drained it returns.
+    // the method hides it, which is why it alone is signed. The library
+    // fits what the platform hands it (an offset inside a character, past
+    // the end, a selection backwards) to that. Valid until the frame that
+    // drained it returns.
     typedef struct mwinPreeditEvent
     {
         const char* text;
-        uint32_t length;
-        int32_t caret;
-        uint32_t selectionStart;
-        uint32_t selectionEnd;
+        size_t length;
+        ptrdiff_t caret;
+        size_t selectionStart;
+        size_t selectionEnd;
         const mwinPreeditSegment* segments;
         uint32_t segmentCount;
     } mwinPreeditEvent;
@@ -323,10 +326,9 @@ extern "C"
     {
         mwinPosition position;
         mwinModifiers modifiers;
-        // Bit b - 1 is set while button b is held.
-        uint8_t buttons;
+        mwinMouseButtons buttons;
         mwinMouseButton button;
-        uint8_t clicks;
+        uint8_t clickCount;
     } mwinPointerEvent;
 
     // Wheel turns in detents, fractional for smooth wheels and touchpads;
@@ -355,7 +357,7 @@ extern "C"
     } mwinTouchEvent;
 
     // The pen's state.
-    typedef uint8_t mwinPenFlags;
+    typedef uint32_t mwinPenFlags;
 
     enum
     {
@@ -365,6 +367,16 @@ extern "C"
         mwin_penContact = 2,
         // The barrel button is held.
         mwin_penBarrel = 4,
+    };
+
+    // A pen button, which a pen button record names.
+    typedef int32_t mwinPenButton;
+
+    enum
+    {
+        // Not a pen button record.
+        mwin_penButtonNone = 0,
+        mwin_penButtonBarrel = 1,
     };
 
     // A pen, where the platform has one.
@@ -377,12 +389,12 @@ extern "C"
         float tiltX;
         float tiltY;
         mwinPenFlags flags;
-        // For a pen button record, the button: 1 for the barrel.
-        uint8_t button;
+        // For a pen button record, the button.
+        mwinPenButton button;
     } mwinPenEvent;
 
     // What a drag carries.
-    typedef uint8_t mwinDragContents;
+    typedef uint32_t mwinDragContents;
 
     enum
     {
@@ -397,27 +409,27 @@ extern "C"
         mwinDragContents contents;
     } mwinDragEvent;
 
-    // A drop: its files and text wait under its number until the next
-    // drop.
+    // A drop: its files and text wait under its id until the next drop.
     typedef struct mwinDropEvent
     {
         mwinPosition position;
-        uint32_t drop;
+        mwinDropId drop;
         // The files and the bytes of text it delivers.
         uint32_t fileCount;
         uint32_t textLength;
         // Files or text were left out: past the droppedFiles or dropBytes
-        // limit, or a path that is not UTF-8.
+        // limit, a path that is not UTF-8, or what the dragging program
+        // handed over in a form that could not be read.
         bool truncated;
     } mwinDropEvent;
 
     // One record of the stream.
     typedef struct mwinEvent
     {
-        mwinEventType type;
+        mwinEventKind kind;
         // How many platform samples the record stands for: 1, or more for
         // motion merged when its storage was full.
-        uint16_t samples;
+        uint16_t sampleCount;
         // The window it is about.
         mwinWindowId window;
         // Nanoseconds on a monotonic clock, from the platform's own event
@@ -454,7 +466,7 @@ extern "C"
     ///
     /// @param context   The context.
     /// @param eventOut  Receives the record. Zeroed on `mwin_empty` and on
-    ///                  failure.
+    ///                  failure. `mwin_errorBusy` leaves it as it was.
     /// @return `mwin_success`; `mwin_empty` when the stream is drained;
     ///         `mwin_errorInvalid` for a NULL argument.
     /// @par Thread safety

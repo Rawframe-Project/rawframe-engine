@@ -20,7 +20,8 @@ extern "C"
     // The result of validating or converting text: the status and, on a
     // failure, the offset in code units (bytes for UTF-8) where the
     // offending sequence starts. On success the offset is the input
-    // length.
+    // length; on muni_errorCapacity from a conversion below, it is the
+    // offset of the first code point that was not written.
     typedef struct muniTextResult
     {
         muniResult status;
@@ -28,7 +29,7 @@ extern "C"
     } muniTextResult;
 
     // What a conversion does with ill-formed input.
-    typedef uint8_t muniConvertMode;
+    typedef int32_t muniConvertMode;
 
     enum
     {
@@ -84,6 +85,24 @@ extern "C"
     MUNI_NODISCARD MUNI_API muniResult muniDecodeUtf8(const char* bytes, size_t length,
                                                       uint32_t* codePointOut, size_t* sizeOut);
 
+    /// Decodes the code point at the start of a UTF-16 text.
+    ///
+    /// @param units         The text. May be NULL when length is 0.
+    /// @param length        The number of 16-bit code units available.
+    /// @param codePointOut  Receives the code point, or U+FFFD for an
+    ///                      unpaired surrogate.
+    /// @param sizeOut       Receives the units consumed: 2 for a surrogate
+    ///                      pair, otherwise 1, an unpaired surrogate
+    ///                      included. `muni_errorInvalid` leaves both
+    ///                      outputs as they were.
+    /// @return `muni_success`, `muni_errorUtf16Surrogate` for an unpaired
+    ///         surrogate, or `muni_errorInvalid` when length is 0 or an
+    ///         out-parameter is NULL.
+    /// @par Thread safety
+    /// Safe from any thread.
+    MUNI_NODISCARD MUNI_API muniResult muniDecodeUtf16(const uint16_t* units, size_t length,
+                                                       uint32_t* codePointOut, size_t* sizeOut);
+
     /// Encodes one code point as UTF-8.
     ///
     /// @param codePoint  A Unicode scalar value.
@@ -114,11 +133,13 @@ extern "C"
     ///                   holds as far as they fit. `muni_errorInvalid` leaves
     ///                   both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
-    ///         not fit (the units that fit are written); in strict mode
-    ///         the first UTF-8 error and its offset; `muni_errorInvalid`
-    ///         for a NULL neededOut, a NULL input with a nonzero length, a
-    ///         NULL output with a nonzero capacity, or a mode other than
-    ///         `muni_convertStrict` and `muni_convertReplace`.
+    ///         not fit, with the offset of the first code point not
+    ///         written: unitsOut holds the conversion of the bytes before
+    ///         it; in strict mode the first UTF-8 error and its offset;
+    ///         `muni_errorInvalid` for a NULL neededOut, a NULL input with a
+    ///         nonzero length, a NULL output with a nonzero capacity, or a
+    ///         mode other than `muni_convertStrict` and
+    ///         `muni_convertReplace`.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf8ToUtf16(const char* bytes, size_t length,
@@ -141,11 +162,13 @@ extern "C"
     ///                   holds as far as they fit. `muni_errorInvalid` leaves
     ///                   both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
-    ///         not fit (the bytes that fit are written); in strict mode
-    ///         `muni_errorUtf16Surrogate` and its offset; `muni_errorInvalid`
-    ///         for a NULL neededOut, a NULL input with a nonzero length, a
-    ///         NULL output with a nonzero capacity, or a mode other than
-    ///         `muni_convertStrict` and `muni_convertReplace`.
+    ///         not fit, with the offset of the first code point not
+    ///         written: bytesOut holds the conversion of the units before
+    ///         it; in strict mode `muni_errorUtf16Surrogate` and its
+    ///         offset; `muni_errorInvalid` for a NULL neededOut, a NULL
+    ///         input with a nonzero length, a NULL output with a nonzero
+    ///         capacity, or a mode other than `muni_convertStrict` and
+    ///         `muni_convertReplace`.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf16ToUtf8(const uint16_t* units,
@@ -167,11 +190,13 @@ extern "C"
     ///                       before it, which codePointsOut holds as far as they
     ///                       fit. `muni_errorInvalid` leaves both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
-    ///         not fit (the code points that fit are written); in strict
-    ///         mode the first UTF-8 error and its offset; `muni_errorInvalid`
-    ///         for a NULL neededOut, a NULL input with a nonzero length, a
-    ///         NULL output with a nonzero capacity, or a mode other than
-    ///         `muni_convertStrict` and `muni_convertReplace`.
+    ///         not fit, with the offset of the first code point not
+    ///         written: codePointsOut holds the conversion of the bytes
+    ///         before it; in strict mode the first UTF-8 error and its
+    ///         offset; `muni_errorInvalid` for a NULL neededOut, a NULL
+    ///         input with a nonzero length, a NULL output with a nonzero
+    ///         capacity, or a mode other than `muni_convertStrict` and
+    ///         `muni_convertReplace`.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf8ToUtf32(const char* bytes, size_t length,
@@ -194,11 +219,13 @@ extern "C"
     ///                    bytesOut holds as far as they fit. `muni_errorInvalid`
     ///                    leaves both as they were.
     /// @return `muni_success`; `muni_errorCapacity` when the output does
-    ///         not fit (the bytes that fit are written); in strict mode
-    ///         `muni_errorUtf32Value` and its offset; `muni_errorInvalid`
-    ///         for a NULL neededOut, a NULL input with a nonzero length, a
-    ///         NULL output with a nonzero capacity, or a mode other than
-    ///         `muni_convertStrict` and `muni_convertReplace`.
+    ///         not fit, with the offset of the first code point not
+    ///         written: bytesOut holds the conversion of the code points
+    ///         before it; in strict mode `muni_errorUtf32Value` and its
+    ///         offset; `muni_errorInvalid` for a NULL neededOut, a NULL
+    ///         input with a nonzero length, a NULL output with a nonzero
+    ///         capacity, or a mode other than `muni_convertStrict` and
+    ///         `muni_convertReplace`.
     /// @par Thread safety
     /// Safe from any thread.
     MUNI_NODISCARD MUNI_API muniTextResult muniConvertUtf32ToUtf8(const uint32_t* codePoints,

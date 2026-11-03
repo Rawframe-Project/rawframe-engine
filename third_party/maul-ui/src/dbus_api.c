@@ -56,6 +56,7 @@ static bool FindMessage(muiDBusApi* api)
            FIND(appendBasic, dbus_message_iter_append_basic) &&
            FIND(openContainer, dbus_message_iter_open_container) &&
            FIND(closeContainer, dbus_message_iter_close_container) &&
+           FIND(abandonContainer, dbus_message_iter_abandon_container_if_open) &&
            FIND(iterInit, dbus_message_iter_init) &&
            FIND(argType, dbus_message_iter_get_arg_type) &&
            FIND(getBasic, dbus_message_iter_get_basic) && FIND(next, dbus_message_iter_next) &&

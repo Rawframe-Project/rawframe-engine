@@ -29,6 +29,12 @@ enum
 bool muiRecordEdit(const muiAllocator* allocator, muiTextEditing* editing, const muiTextEdit* edit,
                    const char* removed, const char* inserted);
 
+// Reserves what recording an edit that removes and inserts so many bytes
+// takes, so that muiRecordEdit then cannot fail; false when memory runs
+// out, which keeps the history.
+bool muiReserveEdit(const muiAllocator* allocator, muiTextEditing* editing, uint32_t removed,
+                    uint32_t inserted);
+
 // Empties a history, its memory kept.
 void muiClearHistory(muiTextEditing* editing);
 

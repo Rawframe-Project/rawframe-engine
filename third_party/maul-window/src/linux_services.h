@@ -66,7 +66,9 @@ typedef struct mwinLinuxServices
     mwinLinuxLanguages languages;
 } mwinLinuxServices;
 
-void mwinLinuxServicesStart(mwinLinuxServices* services, mwinContext* context);
+// Starts them; the room holds MWIN_LINUX_LANGUAGE_PARTS times the
+// localeBytes limit.
+void mwinLinuxServicesStart(mwinLinuxServices* services, mwinContext* context, char* room);
 
 // Carry out a request of the window: -1 while it is answered later,
 // else the outcome.

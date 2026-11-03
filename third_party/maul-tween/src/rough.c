@@ -50,13 +50,31 @@ static MTWN_NOINLINE mtwnLinearPoint Point(const mtwnRoughDef* def, uint32_t k, 
     return (mtwnLinearPoint){x, y};
 }
 
+// Whether the shape gives every inner point a finite output, from the same
+// draws as the points, so a shape that does not is refused before any point
+// is written.
+static bool InnerPointsFinite(const mtwnRoughDef* def, uint32_t count)
+{
+    uint64_t state = def->seed;
+    for (uint32_t k = 0; k + 2 < count; ++k)
+    {
+        double u = Draw(&state);
+        if (!isfinite(Point(def, k, (double)(count - 2), u, Draw(&state)).output))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 static MTWN_NOINLINE mtwnResult mtwnMakeRoughEasingWork(const mtwnRoughDef* def,
-                                                        mtwnLinearPoint* points, uint32_t count,
+                                                        mtwnLinearPoint* pointsOut, uint32_t count,
                                                         mtwnEasing* easingOut)
 {
-    if (def == NULL || !mtwnValidEasing(&def->shape) || points == NULL || easingOut == NULL ||
+    if (def == NULL || !mtwnValidEasing(&def->shape) || pointsOut == NULL || easingOut == NULL ||
         count < 2 || !(def->strength >= 0.0 && isfinite(def->strength)) ||
-        def->taper > mtwn_roughTaperBoth || (def->flags & ~s_roughFlags) != 0)
+        (uint32_t)def->taper > mtwn_roughTaperBoth || (def->flags & ~s_roughFlags) != 0 ||
+        !InnerPointsFinite(def, count))
     {
         return mtwn_errorInvalid;
     }
@@ -74,24 +92,26 @@ static MTWN_NOINLINE mtwnResult mtwnMakeRoughEasingWork(const mtwnRoughDef* def,
         // is unused but its stream the same.
         double u = Draw(&state);
         mtwnLinearPoint point = Point(def, k, (double)(count - 2), u, Draw(&state));
+        // Only a host shape that gives another value at the same progress
+        // than on the check's pass gets here: a refusal, not an assertion.
         if (!isfinite(point.output))
         {
             return mtwn_errorInvalid;
         }
         point.output = point.output < low ? low : (point.output > high ? high : point.output);
         low = point.output < follow ? low : point.output;
-        points[k + 1] = point;
+        pointsOut[k + 1] = point;
     }
-    points[0] = (mtwnLinearPoint){0.0, 0.0};
-    points[count - 1] = (mtwnLinearPoint){1.0, 1.0};
-    return mtwnMakeLinearPointsEasingWork(points, count, easingOut);
+    pointsOut[0] = (mtwnLinearPoint){0.0, 0.0};
+    pointsOut[count - 1] = (mtwnLinearPoint){1.0, 1.0};
+    return mtwnMakeLinearPointsEasingWork(pointsOut, count, easingOut);
 }
 
-mtwnResult mtwnMakeRoughEasing(const mtwnRoughDef* def, mtwnLinearPoint* points, uint32_t count,
+mtwnResult mtwnMakeRoughEasing(const mtwnRoughDef* def, mtwnLinearPoint* pointsOut, uint32_t count,
                                mtwnEasing* easingOut)
 {
     uint64_t env = mtwnFloatEnvEnter();
-    mtwnResult result = mtwnMakeRoughEasingWork(def, points, count, easingOut);
+    mtwnResult result = mtwnMakeRoughEasingWork(def, pointsOut, count, easingOut);
     mtwnFloatEnvLeave(env);
     return result;
 }

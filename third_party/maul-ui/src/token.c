@@ -15,25 +15,12 @@
 #include "property.h"
 #include "style_edit.h"
 #include "style_store.h"
+#include "theme_store.h"
 #include "token_store.h"
 
 #include <string.h>
 
 #define TOKEN_DEF_COOKIE 0x6D75746Bu // "mutk"
-
-// Whether the aliases from target lead to slot.
-static bool LeadsTo(const muiTokenStore* store, muiTokenId target, uint32_t slot)
-{
-    for (uint32_t at = muiFindToken(store, target); at != 0;
-         at = muiFindToken(store, store->tokens[at - 1].alias))
-    {
-        if (at == slot)
-        {
-            return true;
-        }
-    }
-    return false;
-}
 
 muiTokenDef muiDefaultTokenDef(void)
 {
@@ -206,7 +193,7 @@ static muiResult SetTokenAlias(muiContext* context, muiTokenId tokenId, muiToken
     }
     muiToken* token = &store->tokens[slot - 1];
     if (store->tokens[targetSlot - 1].value.type != token->value.type ||
-        LeadsTo(store, target, slot))
+        muiAliasLeadsTo(store, &context->themes, target, tokenId))
     {
         return muiRefuse(context);
     }

@@ -44,11 +44,11 @@ static int TouchSlot(const mwinWin32Window* window, UINT32 id)
     return -1;
 }
 
-static void PostTouch(mwinWin32Window* window, mwinEventType type, UINT32 id, mwinPosition position,
+static void PostTouch(mwinWin32Window* window, mwinEventKind type, UINT32 id, mwinPosition position,
                       float pressure, uint64_t timeNs)
 {
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
     event.data.touch = (mwinTouchEvent){id, position, pressure};
     Post(window, &event);
@@ -69,7 +69,7 @@ static void OnTouch(mwinWin32Window* window, UINT message, UINT32 id)
         return;
     }
     POINTER_FLAGS flags = info.pointerInfo.pointerFlags;
-    mwinEventType type = mwin_eventTouchMoved;
+    mwinEventKind type = mwin_eventTouchMoved;
     if (message == WM_POINTERDOWN)
     {
         type = mwin_eventTouchDown;
@@ -95,11 +95,11 @@ static mwinPenFlags PenFlagsOf(const POINTER_PEN_INFO* info)
     return flags;
 }
 
-static void PostPen(mwinWin32Window* window, mwinEventType type, const mwinPenEvent* pen,
+static void PostPen(mwinWin32Window* window, mwinEventKind type, const mwinPenEvent* pen,
                     uint64_t timeNs)
 {
     mwinEvent event = {0};
-    event.type = type;
+    event.kind = type;
     event.timeNs = timeNs;
     event.data.pen = *pen;
     Post(window, &event);
@@ -126,14 +126,14 @@ static void OnPen(mwinWin32Window* window, UINT message, UINT32 id)
     pen.flags = flags;
     if (((flags ^ window->penFlags) & mwin_penBarrel) != 0)
     {
-        pen.button = 1;
+        pen.button = mwin_penButtonBarrel;
         PostPen(window,
                 (flags & mwin_penBarrel) != 0 ? mwin_eventPenButtonDown : mwin_eventPenButtonUp,
                 &pen, timeNs);
-        pen.button = 0;
+        pen.button = mwin_penButtonNone;
     }
     window->penFlags = flags;
-    mwinEventType type = message == WM_POINTERDOWN ? mwin_eventPenDown
+    mwinEventKind type = message == WM_POINTERDOWN ? mwin_eventPenDown
                          : message == WM_POINTERUP ? mwin_eventPenUp
                                                    : mwin_eventPenMoved;
     PostPen(window, type, &pen, timeNs);

@@ -24,6 +24,12 @@
 
 // Where an OkLCh hue is powerless (conversions.js's epsilon).
 static const double s_powerlessChroma = 0.000004;
+// Oklab coordinates past this are scaled down by 2^300 at a time before
+// their LMS roots are cubed: unscaled, a cube past the doubles would meet
+// the matrix to linear sRGB, which adds infinities of both signs, a NaN.
+// At or below it nothing can overflow: a cube of a root times the matrix
+// stays under 2^907.
+static const double s_cubeBelow = 0x1p300;
 // A turn and half a turn, in radians.
 static const double s_turn = 4.0 * MTWN_PIO2_HI;
 static const double s_halfTurn = 2.0 * MTWN_PIO2_HI;
@@ -92,8 +98,48 @@ static void ToSpace(mtwnColor color, mtwnColorSpace space, double out[4])
     }
 }
 
-// Coordinates in a space back to a color, alpha clamped.
-static mtwnColor FromSpace(const double in[4], mtwnColorSpace space)
+// Oklab coordinates to linear sRGB, the coordinates 2^-258 times what they
+// are when far. Each product is the same bits times a power of two, so the
+// result is unchanged until it passes the doubles, where it is infinite
+// with its sign; a coordinate far below the largest may lose digits that
+// are below the largest's rounding.
+static void OklabToLinear(const double lab[3], bool far, double linear[3])
+{
+    double largest = fabs(lab[0]);
+    largest = fabs(lab[1]) > largest ? fabs(lab[1]) : largest;
+    largest = fabs(lab[2]) > largest ? fabs(lab[2]) : largest;
+    double scaled[3] = {lab[0], lab[1], lab[2]};
+    int times = 0;
+    for (; times < 4 && largest > s_cubeBelow; ++times)
+    {
+        largest *= 0x1p-300;
+        scaled[0] *= 0x1p-300;
+        scaled[1] *= 0x1p-300;
+        scaled[2] *= 0x1p-300;
+    }
+    double roots[3];
+    Multiply(s_oklabToLms, scaled, roots);
+    double lms[3] = {roots[0] * roots[0] * roots[0], roots[1] * roots[1] * roots[1],
+                     roots[2] * roots[2] * roots[2]};
+    Multiply(s_lmsToLinearSrgb, lms, linear);
+    for (int k = 0; k < times; ++k)
+    {
+        linear[0] *= 0x1p900;
+        linear[1] *= 0x1p900;
+        linear[2] *= 0x1p900;
+    }
+    if (far)
+    {
+        linear[0] *= 0x1p774;
+        linear[1] *= 0x1p774;
+        linear[2] *= 0x1p774;
+    }
+}
+
+// Coordinates in a space back to a color, alpha clamped; when far, an Oklab
+// or OkLCh lightness and chroma 2^-258 times what they are, the hue as it
+// is.
+static mtwnColor FromSpace(const double in[4], mtwnColorSpace space, bool far)
 {
     double gamma[3] = {in[0], in[1], in[2]};
     if (space != mtwn_colorSrgb)
@@ -104,18 +150,16 @@ static mtwnColor FromSpace(const double in[4], mtwnColorSpace space)
             double lab[3] = {in[0], in[1], in[2]};
             if (space == mtwn_colorOklch)
             {
-                double hue = isnan(in[2]) ? 0.0 : in[2];
+                // A missing hue counts as 0, as does one past the doubles
+                // far past a mix's ends, where no angle is left.
+                double hue = isfinite(in[2]) ? in[2] : 0.0;
                 double sine = 0.0;
                 double cosine = 0.0;
                 mtwnSinCos(hue, &sine, &cosine);
                 lab[1] = in[1] * cosine;
                 lab[2] = in[1] * sine;
             }
-            double roots[3];
-            Multiply(s_oklabToLms, lab, roots);
-            double lms[3] = {roots[0] * roots[0] * roots[0], roots[1] * roots[1] * roots[1],
-                             roots[2] * roots[2] * roots[2]};
-            Multiply(s_lmsToLinearSrgb, lms, linear);
+            OklabToLinear(lab, far, linear);
         }
         gamma[0] = ToGamma(linear[0]);
         gamma[1] = ToGamma(linear[1]);
@@ -172,7 +216,7 @@ static void FixHues(mtwnHueMethod method, double* first, double* second)
 MTWN_NOINLINE mtwnResult mtwnMakeColorMixWork(mtwnColor from, mtwnColor to, mtwnColorSpace space,
                                               mtwnHueMethod hue, mtwnColorMix* mixOut)
 {
-    if (mixOut == NULL || !mtwnIsColorSpace(space) || hue > mtwn_hueDecreasing ||
+    if (mixOut == NULL || !mtwnIsColorSpace(space) || (uint32_t)hue > mtwn_hueDecreasing ||
         !mtwnIsColor(from) || !mtwnIsColor(to))
     {
         return mtwn_errorInvalid;
@@ -235,7 +279,26 @@ MTWN_NOINLINE mtwnColor mtwnMixColorWork(const mtwnColorMix* mix, double progres
             }
         }
     }
-    return FromSpace(at, mix->space);
+    // Far past the ends an Oklab or OkLCh coordinate can pass the doubles,
+    // losing the others' sizes beside it: then each, the hue apart, with
+    // the step 2^-258 times its own. A maker's ends are below 2^105 and an
+    // alpha it divides by at least 2^-149 (a float's least), so the
+    // coordinates are below 2^1022; the end each starts from, not scaled,
+    // is off by under 2^-660 of the largest, which passed 2^766.
+    bool cubed = mix->space == mtwn_colorOklab || mix->space == mtwn_colorOklch;
+    bool far = cubed && !(isfinite(at[0]) && isfinite(at[1]) &&
+                          (mix->space == mtwn_colorOklch || isfinite(at[2])));
+    if (far)
+    {
+        double step = progress * 0x1p-258;
+        int count = mix->space == mtwn_colorOklab ? 3 : 2;
+        for (int i = 0; i < count; ++i)
+        {
+            double mixed = mix->from[i] + step * (mix->to[i] - mix->from[i]);
+            at[i] = at[3] > 0.0 ? mixed / at[3] : mixed;
+        }
+    }
+    return FromSpace(at, mix->space, far);
 }
 
 MTWN_NOINLINE mtwnResult mtwnConvertColorToSpaceWork(mtwnColor color, mtwnColorSpace space,
@@ -273,7 +336,7 @@ static MTWN_NOINLINE mtwnResult mtwnConvertColorFromSpaceWork(const double coord
             return mtwn_errorInvalid;
         }
     }
-    *colorOut = FromSpace(coordinates, space);
+    *colorOut = FromSpace(coordinates, space, false);
     return mtwn_success;
 }
 

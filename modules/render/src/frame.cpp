@@ -172,13 +172,13 @@ struct Framer::State {
             return;
         }
         FrameUsage& most = statistics.mostUsed;
-        most.resources = std::max(most.resources, usage.frameResources);
-        most.passes = std::max(most.passes, usage.framePasses);
-        most.accesses = std::max(most.accesses, usage.frameAccesses);
-        most.barriers = std::max(most.barriers, usage.frameBarriers);
+        most.resources = std::max(most.resources, usage.frameResourceCount);
+        most.passes = std::max(most.passes, usage.framePassCount);
+        most.accesses = std::max(most.accesses, usage.frameAccessCount);
+        most.barriers = std::max(most.barriers, usage.frameBarrierCount);
         most.commandBytes = std::max(most.commandBytes, usage.frameCommandBytes);
         most.uploadBytes = std::max(most.uploadBytes, usage.frameUploadBytes);
-        most.indirectDraws = std::max(most.indirectDraws, usage.frameIndirectDraws);
+        most.indirectDraws = std::max(most.indirectDraws, usage.frameIndirectDrawCount);
     }
 
     /// `error`, which a frame call's refusal led to, with the limit the
@@ -244,7 +244,7 @@ struct Framer::State {
         if (target.timed && device->adapter().has_value() && device->adapter()->timestamps) {
             if (!timestamps.has_value()) {
                 mrhiQuerySetDef def = mrhiDefaultQuerySetDef();
-                def.type = mrhi_queryTimestamp;
+                def.kind = mrhi_queryTimestamp;
                 def.count = static_cast<std::uint32_t>(2 * kMostTimedPasses);
                 mrhiQuerySetId made{};
                 if (mrhiCreateQuerySet(native, &def, &made) == mrhi_success &&

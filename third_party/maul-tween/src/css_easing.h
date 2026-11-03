@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Sirac Ozmen
 //
 // CSS Easing Level 2's curves, for
-// src/easing.c: cubic-bezier with its end tangents, steps with the
+// src/easing.c and src/timeline_easing.c: cubic-bezier with its end tangents, steps with the
 // before flag, and linear() with its canonicalization.
 
 #ifndef MAUL_TWEEN_SRC_CSS_EASING_H
@@ -17,6 +17,35 @@
 // Whether control points are those mtwnMakeCubicBezierEasing takes: both x
 // from 0 to 1, both y at most MTWN_LARGEST_BEZIER_Y in magnitude.
 bool mtwnValidCubicBezier(double x1, double y1, double x2, double y2);
+
+// The polynomial a t^3 + b t^2 + c t of one coordinate, from its control
+// values p1 and p2 between 0 and 1: the solver's arithmetic, which
+// src/timeline_easing.c bounds the error of.
+typedef struct mtwnCubic
+{
+    double a;
+    double b;
+    double c;
+} mtwnCubic;
+
+static inline mtwnCubic mtwnMakeCubic(double p1, double p2)
+{
+    mtwnCubic cubic;
+    cubic.c = 3.0 * p1;
+    cubic.b = 3.0 * (p2 - p1) - cubic.c;
+    cubic.a = 1.0 - cubic.c - cubic.b;
+    return cubic;
+}
+
+static inline double mtwnEvaluateCubic(const mtwnCubic* cubic, double t)
+{
+    return ((cubic->a * t + cubic->b) * t + cubic->c) * t;
+}
+
+static inline double mtwnCubicSlope(const mtwnCubic* cubic, double t)
+{
+    return (3.0 * cubic->a * t + 2.0 * cubic->b) * t + cubic->c;
+}
 
 // The CSS curves take any progress x but NaN: an infinite one is where a
 // mode's 2p overflowed. Each is finite, a value past the doubles given as

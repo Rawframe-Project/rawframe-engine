@@ -13,15 +13,19 @@ void mwinTestCarryOutText(mwinContext* context, uint32_t slot, const mwinRequest
 {
     const mwinWindow* window = &context->windows[slot];
     mwinTestText* text = &mwinTestPlatformOf(context)->texts[slot];
+    if (request->kind == mwin_requestTextInputCaret)
+    {
+        text->caret = request->value.caret;
+        return;
+    }
     if (request->kind == mwin_requestTextInput)
     {
-        text->enabled = request->value.textInput.enabled;
-        text->caret = request->value.textInput.caret;
+        text->enabled = request->value.textInput;
         if (!text->enabled && window->imeComposing)
         {
             // Leaving text input ends the composition.
             mwinEvent end = {0};
-            end.type = mwin_eventImePreedit;
+            end.kind = mwin_eventImePreedit;
             end.timeNs = mwinTestPlatformOf(context)->timeNs;
             end.data.preedit.caret = -1;
             mwinPost(context, slot, &end);
@@ -31,7 +35,7 @@ void mwinTestCarryOutText(mwinContext* context, uint32_t slot, const mwinRequest
     // The keyboard covers the lower two fifths of the window.
     mwinSize size = window->state.size;
     mwinEvent event = {0};
-    event.type = mwin_eventVirtualKeyboardChanged;
+    event.kind = mwin_eventVirtualKeyboardChanged;
     event.timeNs = mwinTestPlatformOf(context)->timeNs;
     text->keyboard = (request->value.code & 0x80u) != 0;
     text->purpose = (mwinInputPurpose)(request->value.code & 0x7Fu);
@@ -67,6 +71,8 @@ static mwinResult FindText(const mwinContext* context, mwinWindowId window,
 mwinResult mwinWindow_GetTestVirtualKeyboard(const mwinContext* context, mwinWindowId window,
                                              bool* visibleOut, mwinInputPurpose* purposeOut)
 {
+    mwinClearOut(visibleOut, sizeof *visibleOut);
+    mwinClearOut(purposeOut, sizeof *purposeOut);
     const mwinTestText* text = nullptr;
     mwinResult found = visibleOut != nullptr && purposeOut != nullptr
                            ? FindText(context, window, &text)
@@ -82,6 +88,8 @@ mwinResult mwinWindow_GetTestVirtualKeyboard(const mwinContext* context, mwinWin
 mwinResult mwinWindow_GetTestTextInput(const mwinContext* context, mwinWindowId window,
                                        bool* enabledOut, mwinRect* caretOut)
 {
+    mwinClearOut(enabledOut, sizeof *enabledOut);
+    mwinClearOut(caretOut, sizeof *caretOut);
     const mwinTestText* text = nullptr;
     mwinResult found = enabledOut != nullptr && caretOut != nullptr
                            ? FindText(context, window, &text)

@@ -25,7 +25,7 @@ extern "C"
     typedef struct mrhiDevice mrhiDevice;
 
     // Where a device is in its life.
-    typedef uint8_t mrhiDeviceState;
+    typedef int32_t mrhiDeviceState;
 
     enum
     {
@@ -248,7 +248,8 @@ extern "C"
     /// the diagnostics budget; refusals past it are counted but not recorded.
     ///
     /// @param device         The device.
-    /// @param diagnosticOut  Receives the record; zeros unless one is taken.
+    /// @param diagnosticOut  Receives the record; zeros unless one is taken,
+    ///                       but left as it was on `mrhi_errorBusy`.
     /// @return `mrhi_success` with a record; `mrhi_empty` when the queue is
     /// drained or keeps none; `mrhi_errorInvalid` for a NULL argument;
     /// `mrhi_errorBusy` for a call from inside the device's allocator.
@@ -258,7 +259,7 @@ extern "C"
                                                                  mrhiDiagnostic* diagnosticOut);
 
     // Why a device was lost.
-    typedef uint8_t mrhiDeviceLossReason;
+    typedef int32_t mrhiDeviceLossReason;
 
     enum
     {
@@ -284,7 +285,8 @@ extern "C"
     // device is lost.
     typedef struct mrhiDeviceLossReport
     {
-        // Why it was lost.
+        // Why it was lost; mrhi_lossUnknown also when the driver named a reason
+        // this list lacks.
         mrhiDeviceLossReason reason;
         // The token of the last frame submitted, or a null id.
         mrhiRequestId lastSubmitted;
@@ -296,7 +298,9 @@ extern "C"
         mrhiRequestId faultingFrame;
         // That frame's pass, its id's index, when the API tells; 0 otherwise.
         uint32_t faultingPass;
-        // The driver's message: UTF-8 without NUL, messageLength bytes.
+        // The driver's message: well-formed UTF-8 without NUL, messageLength
+        // bytes. It ends before the driver's first byte that would break that:
+        // a character cut by the room, a malformed sequence or a NUL.
         char message[MRHI_LOSS_MESSAGE_BYTES];
         // Its bytes.
         size_t messageLength;

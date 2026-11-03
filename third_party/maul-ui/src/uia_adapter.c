@@ -311,6 +311,12 @@ static bool UiaAdapterHandleGetObject(muiUiaAdapter* adapter, uintptr_t wParam, 
 bool muiUiaAdapter_HandleGetObject(muiUiaAdapter* adapter, uintptr_t wParam, intptr_t lParam,
                                    intptr_t* resultOut)
 {
+    // Refused as busy, the call writes no output: host code the adapter
+    // runs made it, and the call in progress may have written the result.
+    if (adapter != nullptr && !muiEnterMarked(&adapter->busy, &adapter->misuse))
+    {
+        return false;
+    }
     if (resultOut != nullptr)
     {
         *resultOut = 0;
@@ -318,10 +324,6 @@ bool muiUiaAdapter_HandleGetObject(muiUiaAdapter* adapter, uintptr_t wParam, int
     if (adapter == nullptr)
     {
         return UiaAdapterHandleGetObject(adapter, wParam, lParam, resultOut);
-    }
-    if (!muiEnterMarked(&adapter->busy, &adapter->misuse))
-    {
-        return false;
     }
     bool result = UiaAdapterHandleGetObject(adapter, wParam, lParam, resultOut);
     adapter->busy = false;

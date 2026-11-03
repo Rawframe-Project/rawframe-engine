@@ -139,6 +139,13 @@ extern const uint16_t muniCaseSpecialCount;
 // bits, the number of code points after it above them.
 extern const uint32_t muniSoftDotted[];
 extern const uint16_t muniSoftDottedCount;
+// Greek letters, for Greek uppercasing: U+0370..U+03FF at 0,
+// U+1F00..U+1FFF at 0x90 and U+2126 at 0x190 hold an index into the
+// values, which are 0 for no letter, else the uppercase of the letter's
+// base in the low 10 bits and the muni_greek flags of its canonical
+// decomposition.
+extern const uint8_t muniGreekLetters[401];
+extern const uint16_t muniGreekLetterValues[];
 
 // Security data (UTS #39). The Security table stores 1 for
 // Identifier_Status=Allowed.
@@ -161,6 +168,15 @@ enum
     muni_caseFlagCased = 1,
     muni_caseFlagIgnorable = 2,
     muni_caseFlagSpecial = 4,
+};
+
+enum
+{
+    muni_greekUpper = 0x03FF,
+    muni_greekVowel = 0x1000,
+    muni_greekYpogegrammeni = 0x2000,
+    muni_greekAccent = 0x4000,
+    muni_greekDialytika = 0x8000,
 };
 
 #endif // MAUL_UNICODE_SRC_TABLES_H

@@ -24,7 +24,7 @@ extern "C"
 #endif
 
     // The primaries a surface's colors are in.
-    typedef uint8_t mrhiColorPrimaries;
+    typedef int32_t mrhiColorPrimaries;
 
     enum
     {
@@ -37,7 +37,7 @@ extern "C"
     };
 
     // How a surface's values are encoded.
-    typedef uint8_t mrhiTransfer;
+    typedef int32_t mrhiTransfer;
 
     enum
     {
@@ -50,7 +50,7 @@ extern "C"
     };
 
     // Whether a surface's values may pass 1.0.
-    typedef uint8_t mrhiColorRange;
+    typedef int32_t mrhiColorRange;
 
     enum
     {
@@ -76,7 +76,7 @@ extern "C"
     } mrhiSurfaceColor;
 
     // How presented images reach the display.
-    typedef uint8_t mrhiPresentMode;
+    typedef int32_t mrhiPresentMode;
 
     enum
     {
@@ -103,7 +103,7 @@ extern "C"
     };
 
     // How a surface's alpha blends with what is behind the window.
-    typedef uint8_t mrhiAlphaMode;
+    typedef int32_t mrhiAlphaMode;
 
     enum
     {
@@ -135,7 +135,9 @@ extern "C"
         // Whether the adapter can present to the surface; nothing else is
         // filled when it cannot.
         bool presentable;
-        // The combinations it can show, the platform's preferred first.
+        // The combinations it can show, the platform's preferred first; a
+        // combination with a format, primaries, transfer or range the library
+        // does not list is left out.
         mrhiSurfaceColor colors[MRHI_SURFACE_COLORS];
         // How many colors are filled, at least 1.
         uint32_t colorCount;
@@ -299,7 +301,10 @@ extern "C"
     ///
     /// @param caps      The caps the surface reported.
     /// @param asked     The color the program wants first.
-    /// @param colorOut  Receives the color to configure.
+    /// @param colorOut  Receives the color to configure; left as it was on any
+    ///                  failure. It may be `asked` or one of the caps' colors,
+    ///                  so a color can be replaced with its suggestion in
+    ///                  place.
     /// @return `mrhi_success` with the color; `mrhi_errorInvalid` for a NULL
     /// argument, or caps reporting more than MRHI_SURFACE_COLORS colors;
     /// `mrhi_errorUnsupported` when the caps report none of the three, which a

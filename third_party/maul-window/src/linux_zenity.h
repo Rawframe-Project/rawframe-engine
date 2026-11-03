@@ -3,8 +3,9 @@
 //
 // File dialogs by zenity, where there is no desktop portal: run
 // without a shell, its output read through a pipe without blocking at
-// each pump. It ends with 0 for a choice, one path a line (or split by
-// a separator no path holds, for several), and 1 when closed.
+// each pump. It ends with 0 for a choice, its path and a line feed (its
+// paths split by a separator no path holds, for several), and 1 when
+// closed.
 
 #ifndef MAUL_WINDOW_SRC_LINUX_ZENITY_H
 #define MAUL_WINDOW_SRC_LINUX_ZENITY_H
@@ -23,6 +24,8 @@ typedef struct mwinZenity
     uint32_t capacity;
     // It wrote more than a choice within the limits could be.
     bool full;
+    // It chooses several files.
+    bool many;
     // Its output ended; it may still be ending.
     bool ended;
 } mwinZenity;
@@ -36,9 +39,9 @@ size_t mwinCaseBlindPattern(const char* extension, size_t length, char* out);
 // could not start (unsupported without zenity).
 int mwinZenityStart(mwinZenity* zenity, const mwinContext* context, const mwinDialogCopy* copy);
 
-// The paths zenity wrote, split by its separator with the last line's
-// end left out, as the dialog's files.
-void mwinZenityGather(mwinContext* context, const char* output, size_t length);
+// The path zenity wrote, or the paths split by its separator for
+// several, with the last line's end left out, as the dialog's files.
+void mwinZenityGather(mwinContext* context, const char* output, size_t length, bool many);
 
 // Reads what it wrote: -1 while it runs; else how it ended, the paths
 // it chose gathered for the dialog when done.

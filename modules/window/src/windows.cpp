@@ -264,15 +264,20 @@ result::Result<RequestId> Windows::requestCursorMode(WindowId window, CursorMode
     return requested(kStatus, request, "a cursor mode request");
 }
 
-result::Result<RequestId> Windows::requestTextInput(WindowId window, bool enabled, Rect caret) {
+result::Result<RequestId> Windows::requestTextInput(WindowId window, bool enabled) {
     mwinRequestId request{};
-    const mwinResult kStatus =
-        mwinWindow_RequestTextInput(platform_->context,
-                                    toMaul(window),
-                                    enabled,
-                                    mwinRect{.x = caret.x, .y = caret.y, .width = caret.width, .height = caret.height},
-                                    &request);
+    const mwinResult kStatus = mwinWindow_RequestTextInput(platform_->context, toMaul(window), enabled, &request);
     return requested(kStatus, request, "a text input request");
+}
+
+result::Result<RequestId> Windows::requestTextInputCaret(WindowId window, Rect caret) {
+    mwinRequestId request{};
+    const mwinResult kStatus = mwinWindow_RequestTextInputCaret(
+        platform_->context,
+        toMaul(window),
+        mwinRect{.x = caret.x, .y = caret.y, .width = caret.width, .height = caret.height},
+        &request);
+    return requested(kStatus, request, "a text input caret request");
 }
 
 result::Result<RequestId> Windows::requestAccessibilityRoot(WindowId window, void* root) {

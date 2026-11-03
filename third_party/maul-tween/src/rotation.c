@@ -135,7 +135,7 @@ MTWN_NOINLINE mtwnResult mtwnMakeRotationMixWork(mtwnQuat from, mtwnQuat to, mtw
                                                  mtwnRotationMix* mixOut)
 {
     mtwnRotationMix mix;
-    if (mixOut == NULL || path > mtwn_rotationLongest || !Normalize(from, mix.from) ||
+    if (mixOut == NULL || (uint32_t)path > mtwn_rotationLongest || !Normalize(from, mix.from) ||
         !Normalize(to, mix.to))
     {
         return mtwn_errorInvalid;
@@ -200,11 +200,18 @@ MTWN_NOINLINE mtwnQuat mtwnMixRotationWork(const mtwnRotationMix* mix, double pr
     }
     // sin(k theta) / sin(theta) = k sinc(k theta) / sinc(theta).
     double theta = mix->angle;
+    if (theta == 0.0)
+    {
+        // Ends of one rotation, which stays at any progress: the weights
+        // below, 1 - p and p, cancel to 0 far out (a host easing's
+        // infinity, or 1e20), and in range give its floats anyway.
+        return mix->fromRotation;
+    }
     double phase = progress * theta;
     if (fabs(phase) >= s_phaseLost)
     {
         // Whole turns of a phase this far out hold no angle: the rotation
-        // at the progress less them, once (a NaN goes on as before).
+        // at the progress less them, once.
         return mtwnMixRotationWork(mix, (isinf(phase) ? 0.0 : fmod(phase, s_turn)) / theta);
     }
     double keep = 1.0 - progress;

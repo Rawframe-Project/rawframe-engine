@@ -166,11 +166,13 @@ static void EndHeap(mrhiDevice* device, uint32_t index1)
     {
         Empty(device, &slot->table[i], i >= slot->entries);
     }
-    device->driver.vtable->destroyHeap(device->driver.self, slot->handle);
-    mrhiRelease(&device->allocator, slot->table, TableBytes(slot->entries, slot->samplers),
-                alignof(mrhiHeapEntrySlot));
+    // The id goes stale before the table goes back to the allocator.
+    mrhiHeapSlot ended = *slot;
     *slot = (mrhiHeapSlot){0};
     mrhiPoolRelease(&device->heaps, index1);
+    device->driver.vtable->destroyHeap(device->driver.self, ended.handle);
+    mrhiRelease(&device->allocator, ended.table, TableBytes(ended.entries, ended.samplers),
+                alignof(mrhiHeapEntrySlot));
 }
 
 mrhiResult mrhiDestroyHeap(mrhiDevice* device, mrhiHeapId heap)
@@ -298,7 +300,7 @@ mrhiResult mrhiHeap_SetEntry(mrhiDevice* device, mrhiHeapId heap, uint32_t index
     {
         return mrhiDeviceBusy(device);
     }
-    if (entry == nullptr || entry->kind > mrhi_heapStorageBuffer)
+    if (entry == nullptr || (uint32_t)entry->kind > mrhi_heapStorageBuffer)
     {
         return mrhiDeviceMisuse(device, mrhi_diagnosticHeapEntry);
     }

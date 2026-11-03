@@ -34,6 +34,16 @@ enum
 
 static const double s_narrowest = 0x1.0p-24;
 
+// A sample as a float, past the floats' range the largest finite one of
+// its sign, a host function's infinity included; in range the conversion
+// as it is. No NaN reaches it: the sample takes a host's NaN as its
+// progress.
+static float TableFloat(double eased)
+{
+    return eased >= 0x1.fffffep127 ? 0x1.fffffep127f
+                                   : (eased <= -0x1.fffffep127 ? -0x1.fffffep127f : (float)eased);
+}
+
 static MTWN_NOINLINE mtwnResult mtwnSampleEasingTableWork(const mtwnEasing* easing, uint32_t count,
                                                           float* valuesOut)
 {
@@ -44,7 +54,7 @@ static MTWN_NOINLINE mtwnResult mtwnSampleEasingTableWork(const mtwnEasing* easi
     double last = (double)(count - 1);
     for (uint32_t i = 0; i < count; ++i)
     {
-        valuesOut[i] = (float)mtwnSampleEasingWork(easing, (double)i / last, false);
+        valuesOut[i] = TableFloat(mtwnSampleEasingWork(easing, (double)i / last, false));
     }
     return mtwn_success;
 }

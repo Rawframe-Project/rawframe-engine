@@ -84,4 +84,40 @@ bool mwinBusEntry(const mwinDBusApi* api, mwinDBusIter* entries, const char** ke
 // Closes the connection, which lets the calls on it go, and the library.
 void mwinBusClose(mwinLinuxBus* bus);
 
+// The bytes of a unique connection name kept, with its NUL; a longer one
+// is never believed.
+#define MWIN_BUS_UNIQUE_BYTES 64
+
+// The connection that owns a bus name, followed from owner to owner. Any
+// program may send a signal on a bus, to every listener or to one
+// connection alone, and a signal's path, interface and member say
+// nothing of who sent it: a service's signals are believed only from the
+// connection that owns its name.
+typedef struct mwinBusOwner
+{
+    const char* name;
+    // The owner's unique name; empty while it is not known, or with no
+    // owner.
+    char unique[MWIN_BUS_UNIQUE_BYTES];
+    // GetNameOwner on its way.
+    mwinBusCall call;
+} mwinBusOwner;
+
+// Follows a name's owner: listens for the bus's NameOwnerChanged of it,
+// then asks GetNameOwner, both queued, so that a change after the answer
+// comes behind it.
+void mwinBusFollow(mwinLinuxBus* bus, mwinBusOwner* owner, const char* name, uint64_t nowNs);
+
+// Whether message is the bus saying the name changed owner, which it
+// takes in place of an answer to GetNameOwner, as it is newer. It sends
+// nothing, so a filter may call it.
+bool mwinBusOwnerChanged(mwinLinuxBus* bus, mwinBusOwner* owner, DBusMessage* message);
+
+// Whether the name's owner sent message, taking GetNameOwner's answer
+// first if it came. It sends nothing, so a filter may call it.
+bool mwinBusFromOwner(mwinLinuxBus* bus, mwinBusOwner* owner, DBusMessage* message);
+
+// Stops following: lets GetNameOwner go.
+void mwinBusUnfollow(mwinLinuxBus* bus, mwinBusOwner* owner);
+
 #endif // MAUL_WINDOW_SRC_LINUX_BUS_H

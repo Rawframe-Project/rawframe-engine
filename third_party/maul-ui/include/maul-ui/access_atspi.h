@@ -105,8 +105,8 @@ extern "C"
     ///         the rest of the def is read; `mui_errorInvalid` for a NULL
     ///         argument, a def not from muiDefaultAtspiAppDef, a half-set
     ///         allocator, no name or no windows; `mui_errorPlatform` when
-    ///         libdbus-1 or the accessibility bus cannot be reached;
-    ///         `mui_errorCapacity` when memory runs out.
+    ///         libdbus-1 1.12 or newer or the accessibility bus cannot be
+    ///         reached; `mui_errorCapacity` when memory runs out.
     /// @par Thread safety
     /// Main thread only.
     MUI_NODISCARD MUI_API muiResult muiCreateAtspiApp(const muiAtspiAppDef* def,

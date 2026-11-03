@@ -90,8 +90,8 @@ mwinResult mwinRemoveTestGamepad(mwinContext* context, mwinGamepadId gamepad)
     return status;
 }
 
-mwinResult mwinGamepad_SetTestButton(mwinContext* context, mwinGamepadId gamepad, uint8_t button,
-                                     bool down)
+mwinResult mwinGamepad_SetTestButton(mwinContext* context, mwinGamepadId gamepad,
+                                     mwinGamepadButton button, bool down)
 {
     if (mwinIsBusy(context))
     {
@@ -99,15 +99,19 @@ mwinResult mwinGamepad_SetTestButton(mwinContext* context, mwinGamepadId gamepad
     }
     int32_t slot = -1;
     mwinResult status = FindTestGamepad(context, gamepad, &slot);
+    if (status == mwin_success && (uint32_t)button > UINT8_MAX)
+    {
+        return mwinMisuse(context);
+    }
     if (status == mwin_success)
     {
-        mwinPostGamepadButton(context, (uint32_t)slot, button, down, Now(context));
+        mwinPostGamepadButton(context, (uint32_t)slot, (uint8_t)button, down, Now(context));
     }
     return status;
 }
 
-mwinResult mwinGamepad_SetTestAxis(mwinContext* context, mwinGamepadId gamepad, uint8_t axis,
-                                   float value)
+mwinResult mwinGamepad_SetTestAxis(mwinContext* context, mwinGamepadId gamepad,
+                                   mwinGamepadAxis axis, float value)
 {
     if (mwinIsBusy(context))
     {
@@ -115,9 +119,13 @@ mwinResult mwinGamepad_SetTestAxis(mwinContext* context, mwinGamepadId gamepad, 
     }
     int32_t slot = -1;
     mwinResult status = FindTestGamepad(context, gamepad, &slot);
+    if (status == mwin_success && (uint32_t)axis > UINT8_MAX)
+    {
+        return mwinMisuse(context);
+    }
     if (status == mwin_success)
     {
-        mwinPostGamepadAxis(context, (uint32_t)slot, axis, value, Now(context));
+        mwinPostGamepadAxis(context, (uint32_t)slot, (uint8_t)axis, value, Now(context));
     }
     return status;
 }

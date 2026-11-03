@@ -84,11 +84,14 @@ set(MUNI_SOURCES
     src/grapheme.c
     src/identifier.c
     src/line.c
+    src/line_anywhere.c
+    src/line_tailored.c
     src/properties.c
     src/script_runs.c
     src/segment.c
     src/sentence.c
-    src/word.c)
+    src/word.c
+    src/word_kind.c)
 set(MUNI_NORMALIZATION_SOURCES
     src/decompose.c
     src/normalize.c
@@ -101,6 +104,7 @@ set(MUNI_CASE_SOURCES
     src/case_map.c
     src/generated/case.c
     src/generated/case_data.c
+    src/generated/greek_letters.c
     src/generated/soft_dotted.c)
 set(MUNI_SECURITY_SOURCES
     src/security.c
@@ -144,6 +148,12 @@ if(MAUL_UNICODE_BUILD_TESTS)
     maul_add_test(identifier WHITEBOX)
     maul_add_test(writer WHITEBOX)
     set(MUNI_DATA_SUITES segment bidi)
+    # White-box suites are skipped in shared builds.
+    foreach(suite properties identifier)
+        if(TARGET test_${suite})
+            list(APPEND MUNI_DATA_SUITES ${suite})
+        endif()
+    endforeach()
     if(MAUL_UNICODE_NORMALIZATION)
         maul_add_test(normalize)
         list(APPEND MUNI_DATA_SUITES normalize)
@@ -254,6 +264,8 @@ if(MAUL_UNICODE_BUILD_TOOLS)
                            tools/munigen/properties.c tools/munigen/security.c
                            tools/munigen/table.c tools/munigen/ucd.c)
     maul_apply_flags(munigen)
+    # It checks the generated tables against bounds the public headers name.
+    target_include_directories(munigen PRIVATE include)
     # The generator uses standard fopen, which the Windows C runtime
     # reports as deprecated in favor of its own fopen_s.
     if(WIN32)

@@ -73,8 +73,10 @@ mwinResult mwinEndProgram(mwinContext* context);
 // context's launch).
 mwinResult mwinRunLaunched(const mwinAppDef* def, void* launch);
 
-// Stops the backend and frees the context, after mwinEndProgram, where
-// mwinRun could not wait for the program to end.
+// Ends a run after mwinEndProgram: makes every window and cursor stale,
+// then releases the cursors, stops the backend and frees the context.
+// mwinRun calls it when its backend's run returns; a backend whose loop
+// outlives mwinRun calls it when the program ends.
 void mwinFinishRun(mwinContext* context);
 
 // The test backend, in builds with MAUL_WINDOW_TEST_BACKEND.

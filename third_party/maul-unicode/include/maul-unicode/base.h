@@ -23,7 +23,7 @@ extern "C"
 #define MUNI_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MUNI_VERSION_MINOR 8
+#define MUNI_VERSION_MINOR 13
 // x-release-please-end
 // x-release-please-start-patch
 #define MUNI_VERSION_PATCH 0
@@ -39,10 +39,12 @@ extern "C"
 // give for some text, or to the verdict of muniCheckIdentifier,
 // muniGetRestrictionLevel, muniCheckMixedNumbers or
 // muniGetResolvedScripts, a new Unicode version included, and with
-// nothing else. Store it beside normalized keys, skeletons and stored
+// nothing else. What they give is the status and offset they return and,
+// on success, the output; the bytes and counts a refusal leaves are not
+// results. Store it beside normalized keys, skeletons and stored
 // verdicts, and recompute them when muniGetResultsVersion differs from
 // the stored value.
-#define MUNI_RESULTS_VERSION 1
+#define MUNI_RESULTS_VERSION 2
 
 // MUNI_API marks the public functions: dllexport or dllimport in a
 // shared Windows build (maul_unicode_EXPORTS is defined while building
@@ -165,8 +167,10 @@ extern "C"
     /// some text, or to the verdict of muniCheckIdentifier,
     /// muniGetRestrictionLevel, muniCheckMixedNumbers or
     /// muniGetResolvedScripts, in any release, and stays the same
-    /// otherwise. A program that stores their results stores it beside
-    /// them and recomputes them when it changes.
+    /// otherwise: their status and offset, and their output on success,
+    /// but not the bytes and counts a refusal leaves. A program that
+    /// stores their results stores it beside them and recomputes them
+    /// when it changes.
     ///
     /// @return The results version, MUNI_RESULTS_VERSION of the library.
     /// @par Thread safety

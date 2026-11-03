@@ -13,11 +13,11 @@
 mwinResult mwinContext_GetGamepads(const mwinContext* context, mwinGamepadId* gamepadsOut,
                                    size_t capacity, size_t* countOut)
 {
-    mwinClearArray(gamepadsOut, capacity, sizeof *gamepadsOut);
     mwinClearOut(countOut, sizeof *countOut);
     if (context == nullptr || countOut == nullptr || (gamepadsOut == nullptr && capacity != 0))
     {
-        return mwinMisuse(context);
+        return mwinClearItemsOnFailure(mwinMisuse(context), gamepadsOut, capacity,
+                                       sizeof *gamepadsOut);
     }
     // In the order they came: each round takes the earliest after the last.
     size_t count = 0;
@@ -184,14 +184,14 @@ mwinResult mwinGamepad_IsMotionEnabled(const mwinContext* context, mwinGamepadId
     return mwin_success;
 }
 
-mwinResult mwinGamepad_GetMotion(mwinContext* context, mwinGamepadId gamepad,
-                                 mwinGamepadMotion* motionOut)
+mwinResult mwinGamepad_TakeMotion(mwinContext* context, mwinGamepadId gamepad,
+                                  mwinGamepadMotion* motionOut)
 {
-    mwinClearOut(motionOut, sizeof *motionOut);
     if (mwinIsBusy(context))
     {
         return mwinBusy(context);
     }
+    mwinClearOut(motionOut, sizeof *motionOut);
     if (context == nullptr || motionOut == nullptr)
     {
         return mwinMisuse(context);

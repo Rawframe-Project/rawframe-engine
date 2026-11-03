@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// The public functions over themes and the nodes they are set on. A cycle
-// through a theme's own aliases and the context's is refused when an alias
-// is set; one that only nested themes close is bounded when a token is
-// read.
+// The public functions over themes and the nodes they are set on. An
+// alias that would close a cycle through the aliases of the context and of
+// any themes is refused when it is set, so none forms under any nesting.
 
 #include "maul-ui/theme.h"
 
@@ -204,33 +203,6 @@ muiResult muiTheme_SetTokenValue(muiContext* context, muiThemeId themeId, muiTok
     return result;
 }
 
-// Whether the aliases from target, read through one theme and the
-// context, lead to token.
-static bool LeadsTo(const muiContext* context, uint32_t theme, muiTokenId target, muiTokenId token)
-{
-    const muiTokenStore* tokens = &context->tokens;
-    muiTokenId id = target;
-    for (uint32_t steps = 0; steps <= tokens->pool.capacity; steps++)
-    {
-        if (id.index1 == token.index1 && id.generation == token.generation)
-        {
-            return true;
-        }
-        uint32_t slot = muiFindToken(tokens, id);
-        if (slot == 0)
-        {
-            return false;
-        }
-        const muiThemeOverride* found = muiFindOverride(&context->themes, theme, id);
-        id = found != nullptr ? found->alias : tokens->tokens[slot - 1].alias;
-        if (id.index1 == 0)
-        {
-            return false;
-        }
-    }
-    return true;
-}
-
 static muiResult ThemeSetTokenAlias(muiContext* context, muiThemeId themeId, muiTokenId tokenId,
                                     muiTokenId target)
 {
@@ -251,7 +223,7 @@ static muiResult ThemeSetTokenAlias(muiContext* context, muiThemeId themeId, mui
         return mui_errorStale;
     }
     if (tokens->tokens[targetSlot - 1].value.type != tokens->tokens[token - 1].value.type ||
-        LeadsTo(context, theme, target, tokenId))
+        muiAliasLeadsTo(&context->tokens, &context->themes, target, tokenId))
     {
         return muiRefuse(context);
     }

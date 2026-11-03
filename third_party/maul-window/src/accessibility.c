@@ -35,6 +35,6 @@ void mwinNoteAccessibilityAsked(mwinContext* context, uint32_t slot)
         return;
     }
     window->accessibilityAsked = true;
-    mwinEvent event = {.type = mwin_eventAccessibilityRequested};
+    mwinEvent event = {.kind = mwin_eventAccessibilityRequested};
     mwinPost(context, slot, &event);
 }

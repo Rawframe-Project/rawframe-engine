@@ -11,6 +11,7 @@
 #include "animation.h"
 #include "condition.h"
 #include "focus.h"
+#include "invariant.h"
 #include "layer.h"
 #include "layout_node.h"
 #include "notify.h"
@@ -35,6 +36,9 @@ typedef struct Classes
 
 static void AddLive(const muiStyleStore* store, const muiClassList* list, Classes* classes)
 {
+    // A list holds at most MUI_MAX_CLASSES (muiNode_SetClasses and
+    // muiNodeType_SetClasses refuse more), so a type's and a node's fit.
+    MUI_ASSERT(list->count <= MUI_MAX_CLASSES && classes->count <= MUI_MAX_CLASSES);
     for (uint32_t i = 0; i < list->count; i++)
     {
         muiStyleId id = list->classes[i];
@@ -167,6 +171,9 @@ static muiConditionRun ApplyConditions(muiContext* context, uint32_t slot, const
     for (uint32_t i = 0; i < classes->count; i++)
     {
         const muiStyleClass* class = &store->classes[classes->slots[i] - 1];
+        // muiStyle_AddCondition refuses past MUI_MAX_CONDITIONS, so each
+        // condition has its variant's set.
+        MUI_ASSERT(class->conditionCount <= MUI_MAX_CONDITIONS);
         for (uint32_t k = 0; k < class->conditionCount; k++)
         {
             uint32_t set = class->sets[mui_variantCondition0 + k];
@@ -206,6 +213,7 @@ static void Watch(muiContext* context, uint32_t slot, const muiConditionRun* run
     muiConditionRun* history = node->history;
     // A styling the layout asked for reads a size the one before did not,
     // so two in a row never read the same.
+    MUI_ASSERT(node->historyCount <= MUI_CONDITION_HISTORY);
     if (node->historyCount == MUI_CONDITION_HISTORY && IsSameSize(run, &history[1]) &&
         IsSameSize(&history[0], &history[2]) && run->outcome != history[0].outcome)
     {
@@ -451,7 +459,7 @@ static void Inherit(muiContext* context, uint32_t slot, muiPropertyMask given, b
 
 static void Resolve(muiContext* context, uint32_t slot, uint64_t nowNs)
 {
-    context->work.styled++;
+    context->work.styleCount++;
     NoteHostEdit(context, slot);
     UpdateScope(context, slot);
     const muiStyleStore* store = &context->style;
@@ -499,7 +507,9 @@ static void Resolve(muiContext* context, uint32_t slot, uint64_t nowNs)
     // Up to the strongest state held: most nodes hold none.
     for (uint32_t v = mui_variantChecked; (states >> (v - 1)) != 0; v++)
     {
-        // Variant v belongs to state bit v - 1.
+        // Variant v belongs to state bit v - 1; the states end before the
+        // conditions' variants (muiNode_SetStates keeps only known bits).
+        MUI_ASSERT(v < mui_variantCondition0);
         if ((states & (1u << (v - 1))) != 0)
         {
             ApplyVariant(context, &classes, (muiVariant)v, free, &resolution);

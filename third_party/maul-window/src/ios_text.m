@@ -12,10 +12,10 @@
 // but only the text it accepts is posted, as on macOS. The program
 // turning text input off drops a composition, telling UIKit so.
 
+#include "allocator.h"
 #include "apple_text.h"
 #include "ios.h"
-
-#include <string.h>
+#include "utf8.h"
 
 // A place in the marked text, in UTF-16 units.
 @interface MwinIOSPosition : UITextPosition
@@ -88,7 +88,7 @@ static void EndPreedit(mwinIOSPlatform* platform, uint32_t slot)
     {
         return;
     }
-    mwinEvent end = {.type = mwin_eventImePreedit};
+    mwinEvent end = {.kind = mwin_eventImePreedit};
     end.data.preedit.caret = -1;
     Post(platform, slot, &end);
 }
@@ -110,26 +110,44 @@ void mwinIOSSetMarkedText(mwinIOSPlatform* platform, uint32_t slot, NSString* te
         EndPreedit(platform, slot);
         return;
     }
-    const char* bytes = text.UTF8String;
-    size_t length = bytes != nullptr ? strlen(bytes) : 0;
-    if (!platform->windows[slot].textInput || length == 0 || length > UINT32_MAX)
+    if (!platform->windows[slot].textInput)
     {
         return;
     }
+    mwinContext* context = platform->context;
+    size_t length = 0;
+    size_t size = 0;
+    char* bytes = mwinAppleUtf8Of(context, text, &length, &size);
+    if (bytes == nullptr || length > UINT32_MAX)
+    {
+        // The program's composition cannot follow the input method's.
+        mwinEvent reset = {.kind = mwin_eventInputStateReset};
+        Post(platform, slot, &reset);
+        if (bytes != nullptr)
+        {
+            mwinRelease(&context->allocator, bytes, size, 1);
+        }
+        return;
+    }
     mwinPreeditSegment segment = {0, (uint32_t)length, mwin_preeditUnderline};
-    mwinEvent event = {.type = mwin_eventImePreedit};
+    mwinEvent event = {.kind = mwin_eventImePreedit};
     mwinPreeditEvent* preedit = &event.data.preedit;
     preedit->text = bytes;
     preedit->length = (uint32_t)length;
     bool placed = selected.location != NSNotFound && NSMaxRange(selected) <= text.length;
-    uint32_t start = placed ? mwinAppleBytesBefore(text, selected.location) : (uint32_t)length;
-    uint32_t end = placed ? mwinAppleBytesBefore(text, NSMaxRange(selected)) : (uint32_t)length;
+    uint32_t start =
+        placed ? (uint32_t)mwinBytesBefore(bytes, length, muni_unitUtf16, selected.location)
+               : (uint32_t)length;
+    uint32_t end =
+        placed ? (uint32_t)mwinBytesBefore(bytes, length, muni_unitUtf16, NSMaxRange(selected))
+               : (uint32_t)length;
     preedit->caret = (int32_t)end;
     preedit->selectionStart = start;
     preedit->selectionEnd = end;
     preedit->segments = &segment;
     preedit->segmentCount = 1;
     Post(platform, slot, &event);
+    mwinRelease(&context->allocator, bytes, size, 1);
 }
 
 void mwinIOSEndComposition(mwinIOSPlatform* platform, uint32_t slot, bool accept)

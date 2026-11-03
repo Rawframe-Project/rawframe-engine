@@ -469,7 +469,7 @@ static void OnRelativeMotion(void* data, struct zwp_relative_pointer_v1* relativ
     uint64_t now = mwinMonotonicNow();
     uint64_t timeNs = (((uint64_t)microsecondsHigh << 32) | microsecondsLow) * 1000u;
     mwinEvent event = {0};
-    event.type = mwin_eventRawPointerDelta;
+    event.kind = mwin_eventRawPointerDelta;
     // A time far from now is on another clock.
     event.timeNs = timeNs <= now && now - timeNs < 60000000000u ? timeNs : now;
     event.data.delta =

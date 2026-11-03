@@ -101,16 +101,16 @@ static void Embed(muiAtspiApp* app)
     DBusMessage* call = dbus->newMethodCall("org.a11y.atspi.Registry", ATSPI_ROOT_PATH,
                                             "org.a11y.atspi.Socket", "Embed");
     muiDBusIter iter;
-    muiDBusIter plug;
+    muiDBusIter plug = {0};
     const char* name = dbus->uniqueName(app->connection);
     const char* path = ATSPI_ROOT_PATH;
     if (call != nullptr)
     {
         dbus->iterInitAppend(call, &iter);
-        if (dbus->openContainer(&iter, mui_dbusTypeStruct, nullptr, &plug) &&
-            dbus->appendBasic(&plug, mui_dbusTypeString, (const void*)&name) &&
-            dbus->appendBasic(&plug, mui_dbusTypeObjectPath, (const void*)&path) &&
-            dbus->closeContainer(&iter, &plug))
+        bool ok = dbus->openContainer(&iter, mui_dbusTypeStruct, nullptr, &plug) &&
+                  dbus->appendBasic(&plug, mui_dbusTypeString, (const void*)&name) &&
+                  dbus->appendBasic(&plug, mui_dbusTypeObjectPath, (const void*)&path);
+        if (muiAtspiClose(app, &iter, &plug, ok))
         {
             (void)dbus->sendWithReply(app->connection, call, &app->embedding, EMBED_TIMEOUT_MS);
         }

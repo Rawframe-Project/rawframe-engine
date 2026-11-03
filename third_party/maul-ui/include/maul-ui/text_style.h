@@ -26,7 +26,7 @@ extern "C"
 #endif
 
     // How upright the letters are.
-    typedef uint8_t muiFontSlant;
+    typedef int32_t muiFontSlant;
 
     enum
     {
@@ -39,7 +39,7 @@ extern "C"
     // weight or slant asked, as CSS's font-synthesis-weight and
     // font-synthesis-style: 0, its default, allows both; each bit forbids
     // one, so a lighter or upright face is shown as it is.
-    typedef uint8_t muiFontSynthesis;
+    typedef uint32_t muiFontSynthesis;
 
     enum
     {
@@ -51,7 +51,7 @@ extern "C"
 
     // Where lines sit across a node's content box: at the start, which
     // the text direction sets, the center or the end.
-    typedef uint8_t muiTextAlign;
+    typedef int32_t muiTextAlign;
 
     enum
     {
@@ -61,7 +61,7 @@ extern "C"
     };
 
     // Whether lines break to fit the content box's width.
-    typedef uint8_t muiTextWrap;
+    typedef int32_t muiTextWrap;
 
     enum
     {
@@ -71,7 +71,7 @@ extern "C"
 
     // Lines drawn with text, as bits, solid, where the font's metrics put
     // them: under it, over it and through it.
-    typedef uint8_t muiTextDecoration;
+    typedef uint32_t muiTextDecoration;
 
     enum
     {

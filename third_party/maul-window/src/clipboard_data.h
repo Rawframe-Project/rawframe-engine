@@ -54,7 +54,7 @@ bool mwinOffersClipboardText(const mwinContext* context);
 
 // Whether a request is a window's last read of a kind (mwin_foundText
 // and kin) answered done, and the payload that answered it is still the
-// last of its kind.
+// last of its kind; never during the run's teardown.
 bool mwinIsFoundBy(const mwinContext* context, mwinRequestId request, uint32_t kind);
 
 // Copies out a read's payload for the getters: mwin_errorStale unless

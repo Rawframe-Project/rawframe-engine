@@ -34,9 +34,9 @@ static void Post(mwinIOSPlatform* platform, uint32_t slot, mwinEvent* event)
     mwinPost(platform->context, slot, event);
 }
 
-static void PostType(mwinIOSPlatform* platform, uint32_t slot, mwinEventType type)
+static void PostType(mwinIOSPlatform* platform, uint32_t slot, mwinEventKind type)
 {
-    mwinEvent event = {.type = type};
+    mwinEvent event = {.kind = type};
     Post(platform, slot, &event);
 }
 
@@ -54,7 +54,7 @@ static void PostSize(mwinIOSPlatform* platform, uint32_t slot)
     if (scale != window->scale)
     {
         window->scale = scale;
-        event.type = mwin_eventScaleChanged;
+        event.kind = mwin_eventScaleChanged;
         event.data.scale = (mwinScaleChange){scale, size};
         Post(platform, slot, &event);
     }
@@ -62,10 +62,10 @@ static void PostSize(mwinIOSPlatform* platform, uint32_t slot)
     {
         window->width = width;
         window->height = height;
-        event.type = mwin_eventResized;
+        event.kind = mwin_eventResized;
         event.data.size = size;
         Post(platform, slot, &event);
-        event.type = mwin_eventPixelSizeChanged;
+        event.kind = mwin_eventPixelSizeChanged;
         event.data.pixelSize = (mwinPixelSize){width, height};
         Post(platform, slot, &event);
     }
@@ -84,7 +84,7 @@ static void PostMode(mwinIOSPlatform* platform, uint32_t slot)
         return;
     }
     window->mode = mode;
-    mwinEvent event = {.type = mwin_eventModeChanged};
+    mwinEvent event = {.kind = mwin_eventModeChanged};
     event.data.mode = mode;
     Post(platform, slot, &event);
 }
@@ -103,7 +103,7 @@ static void PostMove(mwinIOSPlatform* platform, uint32_t slot)
         return;
     }
     window->position = position;
-    mwinEvent event = {.type = mwin_eventMoved};
+    mwinEvent event = {.kind = mwin_eventMoved};
     event.data.position = position;
     Post(platform, slot, &event);
 }
@@ -120,7 +120,7 @@ static void PostSafeArea(mwinIOSPlatform* platform, uint32_t slot)
         return;
     }
     window->safeArea = safeArea;
-    mwinEvent event = {.type = mwin_eventSafeAreaChanged};
+    mwinEvent event = {.kind = mwin_eventSafeAreaChanged};
     event.data.insets = safeArea;
     Post(platform, slot, &event);
 }
@@ -134,7 +134,7 @@ static void PostMonitor(mwinIOSPlatform* platform, uint32_t slot)
         return;
     }
     window->monitor = monitor;
-    mwinEvent event = {.type = mwin_eventDisplayChanged};
+    mwinEvent event = {.kind = mwin_eventDisplayChanged};
     event.data.monitor = mwinMonitorIdOf(platform->context, (uint32_t)monitor);
     Post(platform, slot, &event);
 }
@@ -339,7 +339,7 @@ void mwinIOSSceneWent(mwinIOSPlatform* platform, UIScene* scene)
         mwinIOSWindow* window = &platform->windows[slot];
         window->gone = true;
         window->window.hidden = YES;
-        mwinEvent event = {.type = mwin_eventCloseRequested, .timeNs = mwinIOSNow()};
+        mwinEvent event = {.kind = mwin_eventCloseRequested, .timeNs = mwinIOSNow()};
         mwinPost(platform->context, (uint32_t)slot, &event);
     }
 }
@@ -450,8 +450,9 @@ static int CarryOut(mwinContext* context, uint32_t slot, const mwinRequest* requ
         [window->view becomeFirstResponder];
         return mwin_outcomeDone;
     case mwin_requestTextInput:
-        return mwinIOSSetTextInput(platform, slot, request->value.textInput.enabled,
-                                   request->value.textInput.caret);
+        return mwinIOSSetTextInput(platform, slot, request->value.textInput);
+    case mwin_requestTextInputCaret:
+        return mwinIOSSetTextCaret(platform, slot, request->value.caret);
     case mwin_requestVirtualKeyboard:
         // The purpose in the low bits, the high bit set to show.
         return mwinIOSSetVirtualKeyboard(platform, slot, (request->value.code & 0x80u) != 0,

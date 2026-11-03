@@ -213,7 +213,7 @@ void mwinMacWatchKeyboard(mwinMacPlatform* platform)
                 usingBlock:^(NSNotification* note) {
                   (void)note;
                   ReadLayout(platform);
-                  mwinEvent event = {.type = mwin_eventKeyboardLayoutChanged,
+                  mwinEvent event = {.kind = mwin_eventKeyboardLayoutChanged,
                                      .timeNs = mwinMacNow()};
                   mwinPostGlobal(platform->context, &event);
                 }] retain];

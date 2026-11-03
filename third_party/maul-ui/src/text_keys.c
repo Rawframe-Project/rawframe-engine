@@ -225,8 +225,9 @@ static muiResult EraseToward(const muiTextHost* host, muiNodeId nodeId, muiTextB
     result = result == mui_success
                  ? muiMoveText(host, nodeId, width, selection.caret, movement, 0.0f, &to)
                  : result;
-    return result == mui_success ? muiEraseTextTo(host->service, blockId, to.offset, changedOut)
-                                 : result;
+    return result == mui_success
+               ? muiEraseTextTo(host->service, blockId, muiTextOffsetOf(to.offset), changedOut)
+               : result;
 }
 
 // Cuts the selection: copied, then deleted; nothing on a read-only or
@@ -304,7 +305,8 @@ static muiResult TextEditEvent(const muiTextHost* host, muiNodeId nodeId, const 
 {
     if (host == nullptr || host->service == nullptr || host->context == nullptr ||
         event == nullptr || input == nullptr || outcomeOut == nullptr ||
-        input->keymap > mui_keymapMac)
+        (uint32_t)input->keymap > mui_keymapMac ||
+        (event->kind == mui_eventText && event->text == nullptr && event->length != 0))
     {
         return muiRefuseEdit(host != nullptr ? host->service : nullptr);
     }
