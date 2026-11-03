@@ -295,8 +295,16 @@ result::Status validate(const Texture& texture, const TextureLimits& limits) {
     return {};
 }
 
-result::Result<std::vector<std::byte>> encode(const Texture& texture, const TextureLimits& limits) {
-    RAWFRAME_TRY(validate(texture, limits));
+/// What `encode` writes besides the levels: the header, the level index
+/// and the descriptor (`head`), where each level starts, and where the
+/// last ends. Between them is padding of nought.
+struct Layout {
+    std::vector<std::byte> head;
+    std::vector<std::size_t> offsets;
+    std::size_t end = 0;
+};
+
+Layout layoutOf(const Texture& texture) {
     const std::vector<std::uint32_t> kDescriptor = descriptorOf(texture.format);
     const std::size_t kLevels = texture.levels.size();
     const std::size_t kDescriptorAt = kHeaderBytes + (kLevels * kLevelIndexBytes);
@@ -309,8 +317,8 @@ result::Result<std::vector<std::byte>> encode(const Texture& texture, const Text
         end = offsets[index] + texture.levels[index].bytes.size();
     }
 
-    std::vector<std::byte> out;
-    out.reserve(end);
+    Layout layout{.head = {}, .offsets = std::move(offsets), .end = end};
+    std::vector<std::byte>& out = layout.head;
     for (const std::uint8_t kByte : kIdentifier) {
         out.push_back(static_cast<std::byte>(kByte));
     }
@@ -334,15 +342,23 @@ result::Result<std::vector<std::byte>> encode(const Texture& texture, const Text
     putU64(out, 0);
     putU64(out, 0);
     for (std::size_t index = 0; index < kLevels; ++index) {
-        putU64(out, offsets[index]);
+        putU64(out, layout.offsets[index]);
         putU64(out, texture.levels[index].bytes.size());
         putU64(out, texture.levels[index].bytes.size());
     }
     for (const std::uint32_t kWord : kDescriptor) {
         putU32(out, kWord);
     }
-    for (std::size_t index = kLevels; index-- > 0;) {
-        out.resize(offsets[index], std::byte{0});
+    return layout;
+}
+
+result::Result<std::vector<std::byte>> encode(const Texture& texture, const TextureLimits& limits) {
+    RAWFRAME_TRY(validate(texture, limits));
+    Layout layout = layoutOf(texture);
+    std::vector<std::byte> out = std::move(layout.head);
+    out.reserve(layout.end);
+    for (std::size_t index = texture.levels.size(); index-- > 0;) {
+        out.resize(layout.offsets[index], std::byte{0});
         out.insert(out.end(), texture.levels[index].bytes.begin(), texture.levels[index].bytes.end());
     }
     return out;
@@ -401,10 +417,24 @@ result::Result<Texture> decode(std::span<const std::byte> bytes, const TextureLi
         const auto kLevelBytes = bytes.subspan(static_cast<std::size_t>(kOffset), static_cast<std::size_t>(kLength));
         level.bytes.assign(kLevelBytes.begin(), kLevelBytes.end());
     }
-    // Only what this format writes is read: the descriptor, the index, and
-    // the padding are the ones encode would write, byte for byte.
-    RAWFRAME_TRY_ASSIGN(const std::vector<std::byte> kWritten, encode(texture, limits));
-    if (!std::ranges::equal(kWritten, bytes)) {
+    // Only what this format writes is read: the header, the index, the
+    // descriptor and the padding are the ones encode would write, byte for
+    // byte, and the levels were taken from where the index says. They are
+    // compared where they lie, so no second encoding is made.
+    RAWFRAME_TRY(validate(texture, limits));
+    const Layout kLayout = layoutOf(texture);
+    const auto kNought = [](std::span<const std::byte> padding) {
+        return std::ranges::all_of(padding, [](std::byte each) {
+            return each == std::byte{0};
+        });
+    };
+    bool exact = bytes.size() == kLayout.end && std::ranges::equal(kLayout.head, bytes.first(kLayout.head.size()));
+    std::size_t at = kLayout.head.size();
+    for (std::size_t index = kLevels; exact && index-- > 0;) {
+        exact = kLayout.offsets[index] >= at && kNought(bytes.subspan(at, kLayout.offsets[index] - at));
+        at = kLayout.offsets[index] + texture.levels[index].bytes.size();
+    }
+    if (!exact) {
         return bad("a texture that is not exactly as this format writes it");
     }
     return texture;
