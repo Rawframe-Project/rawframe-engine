@@ -108,10 +108,9 @@ RAWFRAME_TEST(WhatIsNotABlockoutIsRefusedByItsLine) {
              "blockout 1\nbox a at 0 0 0 size 1 nan 1\n",
              "blockout 1\nbox a at 0 0 0 size 1 1 1\nbox a at 2 0 0 size 1 1 1\n",
              "blockout 1\ncylinder c at 0 0 0 radius 1 height 1 sides 2\n",
-             // Sides no count holds, and a fraction of one, refused before
+             // Sides below a count, and a fraction of one, refused before
              // they are counted.
              "blockout 1\ncylinder c at 0 0 0 radius 1 height 1 sides -13\n",
-             "blockout 1\ncylinder c at 0 0 0 radius 1 height 1 sides 1e12\n",
              "blockout 1\ncylinder c at 0 0 0 radius 1 height 1 sides 4.5\n",
              "blockout 1\nextrude e at 0 0 0 height 1 points -2 -1 2 -1 2 1 -2 1\n",
              "blockout 1\nbox a at 0 0 0 size 1 1 1 radius 2\n",
@@ -121,6 +120,14 @@ RAWFRAME_TEST(WhatIsNotABlockoutIsRefusedByItsLine) {
         RAWFRAME_EXPECT(!kRead.has_value());
         RAWFRAME_EXPECT(kRead.has_value() || kRead.error().description().find("blockout line") != std::string::npos);
     }
+}
+
+RAWFRAME_TEST(SidesPastWhatACountHoldsAreRefusedBeforeTheyAreCounted) {
+    // Within an extent that lets the number itself read, the sides check
+    // is what refuses it.
+    const auto kRead =
+        parseBlockout("blockout 1\ncylinder c at 0 0 0 radius 1 height 1 sides 1e12\n", BlockoutLimits{.extent = 1e13});
+    RAWFRAME_EXPECT(!kRead.has_value());
 }
 
 RAWFRAME_TEST(ABlockoutPastItsTrianglesIsRefused) {
