@@ -175,6 +175,9 @@ RAWFRAME_TEST(OnlyTheCanonicalClipTextReads) {
         RAWFRAME_EXPECT(!readClip(std::string_view{*kText}.substr(0, length)).has_value());
     }
     RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumTrackKeys = 2}), AnimationError::OverLimit));
+    // The first track's three keys fill a limit of three, and the second's
+    // two are refused before they are read; at four, one is left for them.
+    RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumClipKeys = 3}), AnimationError::OverLimit));
     RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumClipKeys = 4}), AnimationError::OverLimit));
     RAWFRAME_EXPECT(readClip(*kText, {.maximumClipKeys = 5}) == walk());
     RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumEvents = 3}), AnimationError::OverLimit));
