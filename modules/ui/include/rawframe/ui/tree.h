@@ -653,9 +653,9 @@ struct TextPosition {
 };
 
 /// Where a position moves to in a node's text as it is drawn: by grapheme
-/// cluster in the text's order or on screen, by word (UAX #29 segments with
-/// a letter or a number), to its line's ends, a line up or down, or to the
-/// text's ends.
+/// cluster in the text's order or on screen, by word (the UAX #29 segments
+/// Unicode's word properties make words, as ICU's rule status does), to its
+/// line's ends, a line up or down, or to the text's ends.
 enum class TextMove : std::uint8_t {
     NextCluster,
     PreviousCluster,

@@ -82,36 +82,20 @@ static bool KeepsNumber(Number* number, muiTextFilter filter, uint32_t point)
 
 static uint32_t CountClusters(const char* text, uint32_t length)
 {
-    muniSegmentIterator iterator;
-    if (length == 0 || muniInitGraphemeIterator(&iterator, text, length, false) != muni_success)
-    {
-        return 0;
-    }
-    uint32_t count = 0;
-    size_t at = 0;
-    // Every boundary ends a cluster: the text's start is never one.
-    while (muniSegmentIterator_NextBreak(&iterator, &at) == muni_success)
-    {
-        count++;
-    }
-    return count;
+    size_t count = 0;
+    (void)muniMeasureUtf8(text, length, muni_unitGraphemeCluster, SIZE_MAX, SIZE_MAX, nullptr,
+                          &count);
+    return (uint32_t)count;
 }
 
 // The length of the first clusters of a text, all of it when it has
 // fewer.
 static uint32_t ClustersLength(const char* text, uint32_t length, uint32_t clusters)
 {
-    muniSegmentIterator iterator;
-    if (clusters == 0 || muniInitGraphemeIterator(&iterator, text, length, false) != muni_success)
-    {
-        return 0;
-    }
-    size_t at = 0;
-    while (clusters != 0 && muniSegmentIterator_NextBreak(&iterator, &at) == muni_success)
-    {
-        clusters -= at != 0 ? 1u : 0u;
-    }
-    return (uint32_t)at;
+    size_t bytes = 0;
+    (void)muniMeasureUtf8(text, length, muni_unitGraphemeCluster, SIZE_MAX, clusters, &bytes,
+                          nullptr);
+    return (uint32_t)bytes;
 }
 
 // Writes the characters a field's rules let in, returning their length.

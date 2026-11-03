@@ -373,7 +373,8 @@ extern "C"
     } muiAccessValues;
 
     // A word of a value text: its bytes from start up to end, a UAX #29
-    // word segment with a letter or a number in it.
+    // word segment of letters, numbers, kana or ideographs, as ICU's rule
+    // status tells them.
     typedef struct muiAccessWord
     {
         size_t start;

@@ -310,13 +310,14 @@ extern "C"
                                                                 mtwnPlayerId player, uint32_t key);
 
     /// Sets a clip's player's rate, keeping its current time: as Web
-    /// Animations keeps it, by the start time, so to within an ulp of the
-    /// host time times the rate (see MTWN_RATE_LIMIT). A finished player
-    /// held at its end keeps its start time too, as Web Animations' steps
-    /// say: given a lower rate, the next update finds it short of its end
-    /// and it plays again from there, as Firefox does (Chrome keeps a
-    /// player that played to its end finished). To stay finished at a new
-    /// rate, set the rate before the end.
+    /// Animations' seamless update of the playback rate keeps it, by the
+    /// start time, so to within an ulp of the host time times the rate (see
+    /// MTWN_RATE_LIMIT). A moving player takes the rate at the next update;
+    /// an idle or paused one at once. A finished player runs at the new rate
+    /// from the time it holds, its start time set again from it: a positive
+    /// rate keeps it finished there, a negative one plays it back from
+    /// there at once, as Chrome does. Web Animations' procedures differ
+    /// there (docs/internals/timing.md).
     ///
     /// @param context  The context.
     /// @param player   A clip's player.

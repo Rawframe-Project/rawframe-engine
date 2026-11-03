@@ -125,10 +125,11 @@ static bool ReadLines(const muiTextHost* host, muiNodeId nodeId, muiRect shown, 
     return true;
 }
 
-// The word segments with a letter or a number of bytes from up to to of
-// a text, put in a buffer after count words, the count moved past them;
-// false when memory runs out. A paragraph's start and end are word
-// breaks, so whole paragraphs are segmented alone.
+// The word segments (UAX #29) that hold a word, not spaces, punctuation
+// or symbols, of bytes from up to to of a text, put in a buffer after
+// count words, the count moved past them; false when memory runs out. A
+// paragraph's start and end are word breaks, so whole paragraphs are
+// segmented alone.
 static bool SegmentWords(const muiAllocator* allocator, const char* text, uint32_t from,
                          uint32_t to, muiBuffer* buffer, uint32_t* countInOut)
 {
@@ -143,7 +144,9 @@ static bool SegmentWords(const muiAllocator* allocator, const char* text, uint32
     size_t end = 0;
     while (muniSegmentIterator_NextBreak(&iterator, &end) == muni_success)
     {
-        if (end > start && muiIsWordSegment(text + from, start, end))
+        muniWordKind kind = muni_wordNone;
+        if (end > start && muniSegmentIterator_GetWordKind(&iterator, &kind) == muni_success &&
+            kind != muni_wordNone)
         {
             if (!muiReserveKeeping(allocator, buffer, (count + 1) * sizeof(muiAccessWord),
                                    count * sizeof(muiAccessWord)))

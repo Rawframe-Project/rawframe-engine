@@ -7,9 +7,6 @@
 
 #include "allocator.h"
 
-#include "maul-unicode/encoding.h"
-#include "maul-unicode/properties.h"
-
 #include <stdalign.h>
 #include <stddef.h>
 #include <string.h>
@@ -127,24 +124,6 @@ void muiReleaseTextBlock(const muiAllocator* allocator, muiTextBlock* block)
         muiRelease(allocator, block->mask, sizeof *block->mask, alignof(muiTextBlock));
     }
     *block = (muiTextBlock){0};
-}
-
-bool muiIsWordSegment(const char* text, size_t start, size_t end)
-{
-    for (size_t at = start; at < end;)
-    {
-        uint32_t point = 0;
-        size_t size = 1;
-        (void)muniDecodeUtf8(text + at, end - at, &point, &size);
-        muniGeneralCategory category = muniGetGeneralCategory(point);
-        if ((category >= muni_gcLu && category <= muni_gcLo) ||
-            (category >= muni_gcNd && category <= muni_gcNo))
-        {
-            return true;
-        }
-        at += size;
-    }
-    return false;
 }
 
 muiResult muiSegmentsStatus(const muiCompositionSegment* segments, uint32_t count, size_t length)

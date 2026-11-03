@@ -43,8 +43,9 @@ extern "C"
         muiTextAffinity affinity;
     } muiTextPosition;
 
-    // Where a position moves to. Words are UAX #29 word segments with a
-    // letter or a number in them.
+    // Where a position moves to. Words are the UAX #29 word segments of
+    // letters, numbers, kana or ideographs, as ICU's rule status tells
+    // them; spaces, punctuation and symbols are none.
     typedef int32_t muiTextMovement;
 
     enum

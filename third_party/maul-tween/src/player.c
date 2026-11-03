@@ -217,7 +217,7 @@ mtwnResult mtwnFinishClip(mtwnClipPlay* play, double now, double end)
 
 // A rate change keeps the current time: a moving player changes at the next
 // update, as Level 1's seamless update does at its ready time; a held or
-// idle one at once.
+// idle one at once, and a finished one from the time it holds.
 void mtwnSetClipRate(mtwnClipPlay* play, double now, double end, double rate)
 {
     bool moving = !isnan(play->startTime) && isnan(play->holdTime);
@@ -231,9 +231,22 @@ void mtwnSetClipRate(mtwnClipPlay* play, double now, double end, double rate)
         return;
     }
     double previous = mtwnCurrentTime(play, now);
+    bool finished = !play->pending && StateOf(play, now, end) == mtwn_playFinished;
     play->rate = rate;
     play->pendingRate = (double)NAN;
-    if (!isnan(previous))
+    if (finished && rate != 0.0)
+    {
+        // A finished player runs at the new rate from the time it holds, its
+        // start time set again from it: a positive rate keeps it finished
+        // there, a negative one plays back from there at once. Level 1's
+        // procedures differ here (docs/internals/timing.md).
+        // Held exactly at that time, as a finish holds its limit: the start
+        // rebased by previous / rate can round the time just short of it.
+        play->startTime = StartFor(now, previous, rate);
+        Hold(play, now, end, true, previous);
+        play->previousTime = mtwnCurrentTime(play, now);
+    }
+    else if (!isnan(previous))
     {
         mtwnSetClipTime(play, now, end, previous);
     }

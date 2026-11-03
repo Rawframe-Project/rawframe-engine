@@ -130,13 +130,17 @@ extern "C"
     /// Gives a path's direction at a progress, as SVG 2's path
     /// directionality and CSS's offset-rotate: auto take it:
     /// a unit vector in its channels, 0 past them. Within a
-    /// segment the curve's direction; where its derivative is 0 (a Bezier
-    /// control on its end, a cusp), the first non-zero of its second and
-    /// third derivatives, the outgoing direction; at a keyframe the
-    /// later segment's. A step or a segment of no length (coincident
-    /// keyframes) takes the direction of the nearest segment before it
-    /// with a length, at its end, else of the nearest after it, at its
-    /// start; a path of no length points along the first channel. A
+    /// segment the curve's direction; at a keyframe the later segment's.
+    /// A step or a segment of no length (coincident keyframes, a hold)
+    /// takes the direction of the nearest segment after it with a length,
+    /// at its start, as SVG 2 moves past a segment of no length; with none
+    /// after it, at the path's end, of the nearest before it, at its end; a
+    /// path of no length points along the first channel. Where the
+    /// derivative is 0 (a Bezier control on its end, a cusp), the first
+    /// non-zero of the second and third derivatives, the outgoing
+    /// direction: SVG 2 leaves a cusp's direction open, so that choice is
+    /// this library's. Chrome takes the incoming direction at every
+    /// boundary, against SVG 2's text. A
     /// scale's is in its logarithm; at constant speed the progress is the
     /// share of the length.
     ///
