@@ -257,3 +257,33 @@ RAWFRAME_TEST(AJointsTargetIsItsBonesInTheSkinsOrder) {
     RAWFRAME_EXPECT(refusedWith(jointTargets(kPast), AnimationError::BadSource));
     RAWFRAME_EXPECT(refusedWith(jointTargets(kLoop), AnimationError::BadSource));
 }
+
+RAWFRAME_TEST(ChannelsPastWhatAClipHoldsAreRefusedBeforeTheirKeysAreRead) {
+    // Six hundred channels turn one joint, all through one sampler of
+    // 65,536 keys that no buffer holds (so all nought): 36 KB of source
+    // naming 4.4 GB of keys. The second channel is refused, not built.
+    std::string channels;
+    for (int i = 0; i < 600; ++i) {
+        channels += std::string{i == 0 ? "" : ","} + R"({"sampler": 0, "target": {"node": 0, "path": "rotation"}})";
+    }
+    const std::string kRepeated = R"({"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}],
+  "nodes": [{"name": "root"}], "skins": [{"joints": [0]}],
+  "accessors": [
+    {"componentType": 5126, "count": 65536, "type": "SCALAR", "min": [0], "max": [0]},
+    {"componentType": 5126, "count": 65536, "type": "VEC4"}
+  ],
+  "animations": [{"samplers": [{"input": 0, "output": 1}], "channels": [)" +
+                                  channels + "]}]}";
+    const auto kRepeatedOutcome = imported(kRepeated);
+    RAWFRAME_EXPECT(refusedWith(kRepeatedOutcome, AnimationError::BadSource) &&
+                    kRepeatedOutcome.error().description().find("same joint") != std::string_view::npos);
+    // The arm's two channels on joints are two tracks, past a limit of one.
+    const std::string kArm = arm();
+    const auto kPast = importGltf(
+        std::as_bytes(std::span{kArm.data(), kArm.size()}),
+        [](std::string_view) -> result::Result<std::span<const std::byte>> {
+            return std::span<const std::byte>{};
+        },
+        ImportSettings{.skeleton = base::Bits128{0, 0x5c}, .clipLimits = {.maximumTracks = 1}});
+    RAWFRAME_EXPECT(refusedWith(kPast, AnimationError::OverLimit));
+}
