@@ -39,7 +39,7 @@ bool within(const Clip& clip, double time) {
 }
 
 result::Status keysInForm(const Clip& clip, const Track& track, const ClipLimits& limits) {
-    if (track.keys.size() > limits.maximumKeys) {
+    if (track.keys.size() > limits.maximumTrackKeys) {
         return overLimit("a track has more keys than its limit");
     }
     if (track.keys.empty()) {
@@ -169,7 +169,7 @@ result::Result<Track> readTrack(const Value& each, const ClipLimits& limits) {
         return invalid("a track is a bone or a component's field, a channel, keys, and a bone's optional drift");
     }
     const Value& keys = *each.find("keys");
-    if (keys.items().size() > limits.maximumKeys) {
+    if (keys.items().size() > limits.maximumTrackKeys) {
         return overLimit("a track has more keys than its limit");
     }
     Track track{.bone = *kBone,
@@ -195,6 +195,13 @@ result::Result<Track> readTrack(const Value& each, const ClipLimits& limits) {
 result::Status validate(const Clip& clip, const ClipLimits& limits) {
     if (clip.tracks.size() > limits.maximumTracks) {
         return overLimit("a clip has more tracks than its limit");
+    }
+    std::size_t keys = 0;
+    for (const Track& track : clip.tracks) {
+        keys += track.keys.size();
+        if (keys > limits.maximumClipKeys) {
+            return overLimit("a clip has more keys than its limit");
+        }
     }
     if (clip.events.size() + clip.syncMarkers.size() > limits.maximumEvents) {
         return overLimit("a clip has more events and sync markers than its limit");
@@ -345,8 +352,13 @@ result::Result<Clip> readClip(std::string_view text, const ClipLimits& limits) {
     if (kBasis.has_value()) {
         clip.additive = static_cast<AdditiveBasis>(*kBasis);
     }
+    std::size_t keys = 0;
     for (const Value& each : tracks.items()) {
         RAWFRAME_TRY_ASSIGN(Track track, readTrack(each, limits));
+        keys += track.keys.size();
+        if (keys > limits.maximumClipKeys) {
+            return overLimit("a clip has more keys than its limit");
+        }
         clip.tracks.push_back(std::move(track));
     }
     for (const Value& each : events.items()) {

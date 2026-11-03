@@ -286,4 +286,16 @@ RAWFRAME_TEST(ChannelsPastWhatAClipHoldsAreRefusedBeforeTheirKeysAreRead) {
         },
         ImportSettings{.skeleton = base::Bits128{0, 0x5c}, .clipLimits = {.maximumTracks = 1}});
     RAWFRAME_EXPECT(refusedWith(kPast, AnimationError::OverLimit));
+    // Its two channels on joints read three keys each: six, past a clip's
+    // limit of five, and within one of six.
+    const auto kKeys = [&kArm](std::size_t limit) {
+        return importGltf(
+            std::as_bytes(std::span{kArm.data(), kArm.size()}),
+            [](std::string_view) -> result::Result<std::span<const std::byte>> {
+                return std::span<const std::byte>{};
+            },
+            ImportSettings{.skeleton = base::Bits128{0, 0x5c}, .clipLimits = {.maximumClipKeys = limit}});
+    };
+    RAWFRAME_EXPECT(refusedWith(kKeys(5), AnimationError::OverLimit));
+    RAWFRAME_EXPECT(kKeys(6).has_value());
 }

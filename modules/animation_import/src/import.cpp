@@ -413,8 +413,10 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
     // source can name a sampler's keys many times over. A channel that
     // would be a bone's second track of its kind, or a track past the
     // limit, is refused before its keys are read rather than after every
-    // track is built.
+    // track is built. So is one whose keys would take the clip's past its
+    // limit, counted as they are read.
     std::vector<bool> driven(rig.skeleton.bones.size() * 3, false);
+    std::size_t read = 0;
     for (cgltf_size i = 0; i < source.channels_count; ++i) {
         const cgltf_animation_channel& kChannel = source.channels[i];
         const auto kBone = kChannel.target_node != nullptr ? rig.bones.find(kChannel.target_node) : rig.bones.end();
@@ -454,9 +456,13 @@ clipOf(const cgltf_animation& source, const Rig& rig, const ImportSettings& sett
         if (kSampler.output->count != (kCubic ? 3 : 1) * kKeys || kKeys == 0) {
             return badSource("an animation sampler whose keys and values do not match");
         }
-        if (kKeys > settings.clipLimits.maximumKeys) {
+        if (kKeys > settings.clipLimits.maximumTrackKeys) {
             return overLimit("an animation channel with more keys than a track may have");
         }
+        if (kKeys > settings.clipLimits.maximumClipKeys - read) {
+            return overLimit("an animation with more keys than a clip may have");
+        }
+        read += kKeys;
         const bool kRoot = !rig.skeleton.bones[kBone->second].parent.has_value();
         const bool kFlatten = kCubic && channel == animation::Channel::Rotation;
         counts.flattened += kFlatten ? 1 : 0;

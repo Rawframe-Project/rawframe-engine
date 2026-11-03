@@ -118,7 +118,10 @@ RAWFRAME_TEST(AClipOutOfItsRulesIsRefused) {
     clamped.tracks[0].keys[2].time = 1.0;
     RAWFRAME_EXPECT(writeClip(clamped).has_value());
     RAWFRAME_EXPECT(refusedWith(writeClip(walk(), {.maximumTracks = 1}), AnimationError::OverLimit));
-    RAWFRAME_EXPECT(refusedWith(writeClip(walk(), {.maximumKeys = 2}), AnimationError::OverLimit));
+    RAWFRAME_EXPECT(refusedWith(writeClip(walk(), {.maximumTrackKeys = 2}), AnimationError::OverLimit));
+    // Three keys and two, five in all.
+    RAWFRAME_EXPECT(refusedWith(writeClip(walk(), {.maximumClipKeys = 4}), AnimationError::OverLimit));
+    RAWFRAME_EXPECT(writeClip(walk(), {.maximumClipKeys = 5}).has_value());
     RAWFRAME_EXPECT(refusedWith(writeClip(walk(), {.maximumEvents = 3}), AnimationError::OverLimit));
 }
 
@@ -171,7 +174,9 @@ RAWFRAME_TEST(OnlyTheCanonicalClipTextReads) {
     for (std::size_t length = 0; length < kText->size(); ++length) {
         RAWFRAME_EXPECT(!readClip(std::string_view{*kText}.substr(0, length)).has_value());
     }
-    RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumKeys = 2}), AnimationError::OverLimit));
+    RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumTrackKeys = 2}), AnimationError::OverLimit));
+    RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumClipKeys = 4}), AnimationError::OverLimit));
+    RAWFRAME_EXPECT(readClip(*kText, {.maximumClipKeys = 5}) == walk());
     RAWFRAME_EXPECT(refusedWith(readClip(*kText, {.maximumEvents = 3}), AnimationError::OverLimit));
 }
 

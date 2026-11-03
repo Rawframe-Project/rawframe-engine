@@ -13,6 +13,8 @@ Animation is authored as text documents in one canonical form each, the `.rfanim
 
 A graph names its clips, and a clip its skeleton, by resource identity. `rawframe-animation from-gltf` writes a glTF's skin and animations as documents.
 
+Every document is read and written within named limits (`SkeletonLimits`, `ClipLimits`, `GraphLimits`), past which it is refused as over its limit. A clip's keys are bounded twice: 65,536 on a track and 4,194,304 in the whole clip. The whole-clip bound matters because glTF lets any number of channels share a sampler, so a source of a few hundred kilobytes can name every track's keys at once. A key takes 112 bytes, so a clip at the limit takes 448 MiB, within the gigabyte the importers' shipped limits hold an import to (a mesh at the mesh importer's limits peaked at 725 MB in a sanitizer build). That still holds 300 tracks, 100 bones moved, turned and scaled, at 60 keys a second for 3.9 minutes. The importer counts keys as it reads them, so it refuses a source before building past either bound.
+
 ## Evaluation
 
 Sampling is pure and deterministic: the same clip, time and advance give the same pose and events on every machine, with no platform trigonometry in them. A graph is compiled once against its skeleton and clips and shared by every entity that plays it; each entity keeps its own instance, advanced then posed.
