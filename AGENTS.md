@@ -22,7 +22,7 @@ out/clang-development/modules/world/rawframe_world_tests Barrier    # the cases 
 tools/gen_shaders.py          # rebuild the committed shader containers (needs the shader toolchain)
 ```
 
-Run `pr`, `full` and any full build through the workspace's heavy-job wrapper, at eight jobs or fewer: `/home/rawframe-project/tools/heavy.sh tools/check.sh pr`. `git config core.hooksPath tools/hooks` makes the pre-push hook run `changed`. Presets are in `CMakePresets.json`; [docs/operations/development.md](docs/operations/development.md) lists them and the toolchain.
+Run `pr`, `full` and any full build through the workspace's heavy-job wrapper, at eight jobs or fewer: `/home/rawframe-project/tools/heavy.sh tools/check.sh pr`. `git config core.hooksPath tools/hooks` makes the pre-push hook run `changed`, through the wrapper at four jobs where the wrapper is installed. Presets are in `CMakePresets.json`; [docs/operations/development.md](docs/operations/development.md) lists them and the toolchain.
 
 ## Ways to hurt yourself
 

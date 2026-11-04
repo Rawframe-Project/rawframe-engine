@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
 # Runs the changed tier before every push. Install once with:
 #   git config core.hooksPath tools/hooks
-exec "$(git rev-parse --show-toplevel)/tools/check.sh" changed
+# On the development server the check goes through the workspace's
+# heavy-job wrapper at four jobs, as every large build there does: in a
+# fresh checkout or worktree, or after a change that rebuilds much of the
+# tree, the changed tier builds the whole of clang-development.
+root="$(git rev-parse --show-toplevel)"
+wrapper=${RAWFRAME_HEAVY_WRAPPER:-/home/rawframe-project/tools/heavy.sh}
+if [ -f "$wrapper" ] && [ -x "$wrapper" ]; then
+    exec "$wrapper" env JOBS=4 "$root/tools/check.sh" changed
+fi
+exec "$root/tools/check.sh" changed
