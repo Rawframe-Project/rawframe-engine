@@ -40,6 +40,9 @@ public:
         std::uint64_t ticket = 0;
         /// The absolute paths chosen; none when the user closed it.
         std::vector<std::string> paths;
+        /// Some chosen files were left out: the platform could not give
+        /// them as paths.
+        bool truncated = false;
         /// Where the platform shows no dialog.
         bool unsupported = false;
     };

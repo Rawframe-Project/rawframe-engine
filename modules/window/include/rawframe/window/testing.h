@@ -28,6 +28,12 @@ namespace rawframe::window::testing {
 /// Drops files on a window: `paths` holds each path ended by a NUL.
 [[nodiscard]] result::Status drop(Windows& windows, WindowId window, Position position, std::string_view paths);
 
+/// Sets the paths the next file dialogs choose when they are done: each
+/// ended by a NUL. One that is no path, such as one not UTF-8, is left out
+/// and the choice marked truncated, as a platform leaves out a file it
+/// cannot give as a path. None makes a done dialog fail.
+[[nodiscard]] result::Status chooseFiles(Windows& windows, std::string_view paths);
+
 /// Holds every request unanswered, or answers them again from the next
 /// frame.
 [[nodiscard]] result::Status hold(Windows& windows, bool held);

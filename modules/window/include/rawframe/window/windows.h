@@ -136,6 +136,15 @@ struct FileDialog {
     std::vector<std::pair<std::string, std::string>> filters;
 };
 
+/// What a file dialog chose.
+struct DialogFiles {
+    /// Absolute paths, as validated UTF-8.
+    std::vector<std::string> paths;
+    /// Some chosen files were left out: the platform could not give them
+    /// as paths.
+    bool truncated = false;
+};
+
 /// The running window system, lent to the program for the length of one
 /// of its calls. Main thread only, as every call of the program is.
 class Windows {
@@ -197,9 +206,8 @@ public:
     /// nearest; none for the platform's own. The web and Wayland
     /// compositors without toplevel icons answer Unsupported.
     [[nodiscard]] result::Result<RequestId> requestIcon(WindowId window, std::span<const IconImage> images);
-    /// The absolute paths a file dialog completed Done with. A chosen file
-    /// the platform cannot give as a path is left out.
-    [[nodiscard]] result::Result<std::vector<std::string>> dialogFiles(RequestId request) const;
+    /// What a file dialog completed Done with.
+    [[nodiscard]] result::Result<DialogFiles> dialogFiles(RequestId request) const;
     /// Puts UTF-8 `text` on the clipboard, and asks for the clipboard's
     /// text, which `clipboardText` reads once the read completes Done:
     /// later on the web, where the browser may ask the user first,

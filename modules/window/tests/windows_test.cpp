@@ -1,7 +1,8 @@
 // The contract tests, on the headless test platform: the two-phase
 // close with a refusal, requests answered after the notifications they
 // caused and superseded when replaced, stale ids refused, input reset on
-// focus loss, raw input and drops carried whole, an icon past its bounds
+// focus loss, raw input and drops carried whole, a file dialog's choice
+// with a file that is no path given without it, an icon past its bounds
 // refused as over the limit, gamepads about no window, a program whose
 // start fails, and the seam's window side: a surface generation's handles
 // given once, none while the surface is lost, and its display's facts as
@@ -267,6 +268,40 @@ RAWFRAME_TEST(DroppedFilesArriveAsInertPaths) {
         RAWFRAME_EXPECT((event.paths == std::vector<std::string>{"/tmp/a.png", "/tmp/b c.txt"}));
         RAWFRAME_EXPECT(!event.truncated && event.position.x == 5 && event.window == script.window);
     }
+}
+
+RAWFRAME_TEST(AFileDialogGivesWhatItChoseAndSaysWhatItLeftOut) {
+    using namespace std::string_view_literals;
+    RequestId whole;
+    RequestId partial;
+    std::optional<DialogFiles> wholeFiles;
+    std::optional<DialogFiles> partialFiles;
+    Script script{{
+        [&](Windows& windows, Script& self) {
+            RAWFRAME_EXPECT(testing::chooseFiles(windows, "/tmp/a.png\0/tmp/b c.txt\0"sv).has_value());
+            whole = *windows.requestFileDialog(self.window, FileDialog{.kind = FileDialog::Kind::OpenMany});
+        },
+        // Read before the next dialog completes, which replaces them.
+        [&](Windows& windows, Script& self) {
+            if (auto files = windows.dialogFiles(whole); files.has_value()) {
+                wholeFiles = std::move(*files);
+            }
+            // A file the platform cannot give as a path, here not UTF-8.
+            RAWFRAME_EXPECT(testing::chooseFiles(windows, "/tmp/a.png\0/tmp/\xff.png\0"sv).has_value());
+            partial = *windows.requestFileDialog(self.window, FileDialog{.kind = FileDialog::Kind::OpenMany});
+        },
+        [&](Windows& windows, Script&) {
+            if (auto files = windows.dialogFiles(partial); files.has_value()) {
+                partialFiles = std::move(*files);
+            }
+        },
+    }};
+    RAWFRAME_EXPECT(testing::run(script, RunSettings{}).has_value());
+    RAWFRAME_EXPECT(wholeFiles.has_value() &&
+                    wholeFiles->paths == (std::vector<std::string>{"/tmp/a.png", "/tmp/b c.txt"}) &&
+                    !wholeFiles->truncated);
+    RAWFRAME_EXPECT(partialFiles.has_value() && partialFiles->paths == std::vector<std::string>{"/tmp/a.png"} &&
+                    partialFiles->truncated);
 }
 
 RAWFRAME_TEST(AnIconPastItsBoundsIsOverLimit) {

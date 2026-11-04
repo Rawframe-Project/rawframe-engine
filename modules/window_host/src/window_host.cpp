@@ -626,7 +626,10 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
                 view::FileDialogs::Answer answer{
                     .ticket = kShown->second, .unsupported = event->completion.outcome == window::Outcome::Unsupported};
                 if (event->completion.outcome == window::Outcome::Done) {
-                    answer.paths = windows.dialogFiles(event->completion.request).value_or(std::vector<std::string>{});
+                    if (auto chosen = windows.dialogFiles(event->completion.request); chosen.has_value()) {
+                        answer.paths = std::move(chosen->paths);
+                        answer.truncated = chosen->truncated;
+                    }
                 }
                 dialogs_.answered(std::move(answer));
                 dialogsShown_.erase(kShown);
