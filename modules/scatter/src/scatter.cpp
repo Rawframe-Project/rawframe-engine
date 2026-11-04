@@ -196,13 +196,19 @@ placements(const Scatter& scatter, const terrain::Terrain* ground, const Scatter
         }
         layer = static_cast<std::uint8_t>(kLayer - ground->layers.begin());
     }
-    // Copies kept, by the square of the spacing's side each lies in, so a
-    // draw is tried against the nine squares around it.
+    // Copies kept, by the square each lies in, so a draw is tried against
+    // the nine squares around it. A square is the spacing's side, or wider
+    // where the spacing is so small that a side of the area would hold more
+    // than 2^20 of them: a copy within the spacing of another still lies in
+    // one of the nine, and a square's place stays within what an index
+    // holds. Only the distance decides what is kept, so the placements are
+    // the same either way.
     std::vector<Placement> made;
     std::map<std::pair<std::int64_t, std::int64_t>, std::vector<std::size_t>> squares;
-    const auto kSquareOf = [&scatter](double x, double z) {
-        return std::pair{static_cast<std::int64_t>(std::floor((x - scatter.x) / scatter.spacing)),
-                         static_cast<std::int64_t>(std::floor((z - scatter.z) / scatter.spacing))};
+    const double kSide = std::max(scatter.spacing, std::max(scatter.width, scatter.depth) / 1048576.0);
+    const auto kSquareOf = [&scatter, kSide](double x, double z) {
+        return std::pair{static_cast<std::int64_t>(std::floor((x - scatter.x) / kSide)),
+                         static_cast<std::int64_t>(std::floor((z - scatter.z) / kSide))};
     };
     Draws draws{.state = scatter.seed};
     const std::uint64_t kTries = static_cast<std::uint64_t>(scatter.count) * limits.triesEach;
