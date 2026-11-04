@@ -259,7 +259,10 @@ void WebTransportServer::control(StreamState& state, Arrived& arrived) {
         if (frame.type == kSettingsFrame) {
             // Every setting must at least parse; none changes what this side
             // sends, since it announces no dynamic table and needs nothing
-            // of the peer's.
+            // of the peer's. An unknown one, a grease identifier among them,
+            // is passed over; HTTP/2's identifiers and one said twice are
+            // refused (RFC 9114, 7.2.4).
+            std::vector<std::uint64_t> keys;
             std::span<const std::byte> rest = frame.payload;
             while (!rest.empty()) {
                 const auto kKey = readVarint(rest);
@@ -268,7 +271,16 @@ void WebTransportServer::control(StreamState& state, Arrived& arrived) {
                     arrived.failure = kH3FrameError;
                     return;
                 }
+                keys.push_back(kKey->value);
                 rest = rest.subspan(kKey->size + kValue->size);
+            }
+            std::ranges::sort(keys);
+            const bool kHttp2 = std::ranges::any_of(keys, [](std::uint64_t key) {
+                return key == 0x00 || (key >= 0x02 && key <= 0x05);
+            });
+            if (kHttp2 || std::ranges::adjacent_find(keys) != keys.end()) {
+                arrived.failure = kH3SettingsError;
+                return;
             }
             state.settingsSeen = true;
         }

@@ -27,6 +27,7 @@ inline constexpr std::uint64_t kH3StreamCreationError = 0x103;
 inline constexpr std::uint64_t kH3FrameUnexpected = 0x105;
 inline constexpr std::uint64_t kH3FrameError = 0x106;
 inline constexpr std::uint64_t kH3ExcessiveLoad = 0x107;
+inline constexpr std::uint64_t kH3SettingsError = 0x109;
 inline constexpr std::uint64_t kH3MissingSettings = 0x10a;
 
 class WebTransportServer {
