@@ -11,7 +11,8 @@ if(RAWFRAME_BUILD_TESTS)
     # An editor debugging the plaza: attached to its server's
     # endpoint, a function breakpoint at stroll stops the game, the editor is
     # told, reads the frame and its arguments, carries on, and disconnects,
-    # leaving the game running.
+    # leaving the game running. A game held, then one stopped, ends the
+    # session as having kept silent, then closed.
     add_test(NAME debug_attaches
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/debug_attaches.sh $<TARGET_FILE:rawframe_host_debug>
                      $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}

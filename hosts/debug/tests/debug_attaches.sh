@@ -272,7 +272,8 @@ assert os.path.samefile(stack["body"]["stackFrames"][0]["source"]["path"], scrip
 by_game.leave()
 print("attached by the game through its play directory")
 
-# Git's bash on Windows can neither hold nor name a native program.
+# Git's bash on Windows can neither hold nor name a native program; the
+# script looks there whether the server was left running.
 if os.name == "nt":
     sys.exit(0)
 
@@ -305,4 +306,9 @@ ended("closed", lambda: os.kill(server, signal.SIGTERM))
 print("a stopped game closed", flush=True)
 PY
 
+# Left running, on Windows, where the Python above could not look.
+if command -v cygpath >/dev/null 2>&1; then
+    sleep 1
+    kill -0 $running
+fi
 echo "debugged the plaza through the debug adapter"
