@@ -2,6 +2,12 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.3.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.2...v0.3.0) (2026-11-04)
+
+### Changed
+
+- A browser's WebTransport connection is closed with H3_SETTINGS_ERROR (0x109) when its SETTINGS frame carries one of HTTP/2's setting identifiers (0x00 or 0x02 to 0x05) or names one identifier twice. Before, it opened a session. RFC 9114 requires the first, and the second keeps the frame to one form. Unknown identifiers, including the grease ones browsers send, are still passed over, and browsers send neither refused kind ([#203](https://github.com/Rawframe-Project/rawframe-engine/pull/203)).
+
 ## [0.2.2](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.1...v0.2.2) (2026-11-04)
 
 ### Fixed
