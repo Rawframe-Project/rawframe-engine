@@ -2,6 +2,12 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.2.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.0...v0.2.1) (2026-11-04)
+
+### Fixed
+
+- A navmesh bake whose area is finite but far from the grid, such as one reaching 1e30 m, is refused as `Invalid` without first converting its tile places to an index, which was undefined behavior. A game's navigation bakes the area its static geometry changed, and a game's scripts place that geometry. An area that bakes today bakes the same tiles ([#190](https://github.com/Rawframe-Project/rawframe-engine/pull/190)).
+
 ## [0.2.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.2...v0.2.0) (2026-11-04)
 
 This release moves the engine to Maul UI 1.2.0 and the Maul Window, Unicode, Tween and RHI releases it builds against. Word movement, a screen reader's words, a few text input details and one window API change with it. The tilemap, terrain, scatter and blockout writers now keep every digit a number needs. No wire, save or cooked format changes.
