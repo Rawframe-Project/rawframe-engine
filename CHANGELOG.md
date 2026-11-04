@@ -2,6 +2,28 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.2.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.2...v0.2.0) (2026-11-04)
+
+This release moves the engine to Maul UI 1.2.0 and the Maul Window, Unicode, Tween and RHI releases it builds against. Word movement, a screen reader's words, a few text input details and one window API change with it. The tilemap, terrain, scatter and blockout writers now keep every digit a number needs. No wire, save or cooked format changes.
+
+### Changed
+
+- **Breaking:** The engine is built on Maul UI 1.2.0, Maul Window 0.8.0, Maul Unicode 0.13.0, Maul Tween 1.0.0 and Maul RHI 0.15.0, each vendored from its release archive with its SHA-256 checked. Layout, line breaks, shaping, draw lists, glyph images and the shader containers are unchanged. What users see change ([#176](https://github.com/Rawframe-Project/rawframe-engine/pull/176), [#179](https://github.com/Rawframe-Project/rawframe-engine/pull/179)):
+  - Moving and deleting by word in Studio's and a game UI's text fields, and the words a screen reader steps through, follow Unicode's word properties, as listed in [Maul UI 1.2.0's release notes](https://github.com/Rawframe-Project/maul-ui/releases/tag/v1.2.0). Superscripts, fractions, enclosed digits and the other General_Category No code points (912 of 915) are no longer words on their own; circled and squared letters, modifier and tone letters, and some punctuation and symbols of other scripts now are. Text of ordinary letters and digits moves as before.
+  - In a game UI's field of lines, one Enter adds one line break and Tab only moves focus on every platform. On the web, Wayland, IBus, Fcitx and with the Win32 input method, a line feed or tab also arrived as text, so one Enter could add two line breaks and Tab typed a tab before moving focus. No control character reaches typed text any more.
+  - A triple click in an editable text selects a paragraph across U+2028, a vertical tab or a form feed, where it stopped there.
+  - On macOS, iOS, Android and the web, an input method's caret or selection inside a surrogate pair ends before the pair.
+- **Breaking:** `window::Windows::requestTextInput` no longer takes a caret: the new `requestTextInputCaret` sets it, and its completion carries `RequestKind::TextInputCaret`. The engine's window host asks for text input only as editing starts or stops, so moving the caret no longer resets an input method's composition on Wayland ([#176](https://github.com/Rawframe-Project/rawframe-engine/pull/176)).
+- **Breaking:** The tilemap, terrain, scatter and blockout writers write a number that needs more than nine significant digits with as many digits as it needs, so such a document reads back to its own values. Before, an edit through the authoring session, which Studio's modes use, rounded every such number in the document, including ones the edit never touched. A number of nine digits or fewer is written as before ([#180](https://github.com/Rawframe-Project/rawframe-engine/pull/180)).
+- **Breaking:** Dragging a solid across Studio's blockout plan writes the height it carries over exactly as it was, where a height of more than six significant digits was rounded to six. Snapped X and Z within the default 10,000 m extent, and shorter heights, are written as before; past that extent a snapped X or Z is now exact too, so 10000.75 is written 10000.75 where it was 10000.8 ([#185](https://github.com/Rawframe-Project/rawframe-engine/pull/185)).
+- **Breaking:** `animation::ClipLimits::maximumKeys` is renamed `maximumTrackKeys`, and `ClipLimits` gains `maximumClipKeys`, 4,194,304 by default. A clip document or glTF animation of more keys than that is refused as `OverLimit` before its keys are read. A glTF of about 200 KB could make `rawframe-animation from-gltf` build about 22 GB of tracks within the old limits ([#167](https://github.com/Rawframe-Project/rawframe-engine/pull/167)).
+
+### Fixed
+
+- Loading a cooked texture no longer holds a second encoding of it to check its form: the header, index, descriptor and padding are compared where they lie. Loading an 8192 x 8192 RGBA8 texture with its levels peaked at about 1 GiB and now takes about 683 MiB ([#172](https://github.com/Rawframe-Project/rawframe-engine/pull/172)).
+- A blockout cylinder whose `sides` is negative or past what a count holds is refused without first converting it to a count, which was undefined behavior ([#181](https://github.com/Rawframe-Project/rawframe-engine/pull/181)).
+- A scatter with a spacing far below its area, such as 5e-45, is placed without overflowing the index of its lookup squares, which was undefined behavior. The Runtime, the cook and Studio place scatters from their source text. Every scatter's placements are the same as before ([#183](https://github.com/Rawframe-Project/rawframe-engine/pull/183)).
+
 ## [0.1.2](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.1...v0.1.2) (2026-11-03)
 
 ### Fixed
