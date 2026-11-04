@@ -4,10 +4,9 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.2.2](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.1...v0.2.2) (2026-11-04)
 
-
 ### Fixed
 
-* **tooling:** tell a silent endpoint from a closed one in connect ([#194](https://github.com/Rawframe-Project/rawframe-engine/issues/194)) ([ea372f0](https://github.com/Rawframe-Project/rawframe-engine/commit/ea372f04e11266cf9e0325c525c4570f285f7e3a)), closes [#193](https://github.com/Rawframe-Project/rawframe-engine/issues/193)
+- `rawframe-author connect` names what happened when a record gets no reply. "The endpoint closed" now means the endpoint closed the connection, and "the endpoint kept silent" means the connection stayed open but no reply came within ten seconds. A record that could not be sent, such as one past the stream's 4 MiB, now gets "the record could not be sent". Before, all three printed "the endpoint closed". Standard output and the exit status are unchanged ([#194](https://github.com/Rawframe-Project/rawframe-engine/pull/194)).
 
 ## [0.2.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.0...v0.2.1) (2026-11-04)
 
