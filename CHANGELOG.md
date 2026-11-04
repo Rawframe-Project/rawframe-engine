@@ -4,14 +4,15 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.4.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.3.0...v0.4.0) (2026-11-04)
 
+### Changed
 
-### ⚠ BREAKING CHANGES
-
-* **tooling:** a QUIC connection that ends at its idle timeout is now reported with `CloseReason::Silent` instead of `PeerGone`. Game sessions still see `EndReason::PeerGone`. An authoring tooling link now advertises a 30 s idle timeout instead of 10 s, so against a server whose `network.quic.idle_timeout_ms` is above 10000 it notices a server gone silent after that server's timeout, up to 30 s, instead of after 10 s. Studio's play preview, which sends and polls without waiting, is the place this shows. `rawframe-author connect` and the debug adapter still give up on a reply after 10 s, and now say the endpoint kept silent whichever way the connection ended.
+- **Breaking:** A QUIC connection that ends because nothing came from the peer for its idle timeout is reported with the new `network::CloseReason::Silent`, where it was `PeerGone`. Game sessions still end with `EndReason::PeerGone`, so no game result changes ([#209](https://github.com/Rawframe-Project/rawframe-engine/pull/209)).
+- **Breaking:** An authoring tooling link opens its QUIC with a 30 s idle timeout instead of 10 s, so the endpoint's own idle timeout decides when silence ends the link. With the server's default `network.quic.idle_timeout_ms` of 10000 nothing changes. Against a server set above that, Studio's play preview, which sends and polls without waiting, notices a server gone silent after that server's timeout, up to 30 s, instead of after 10 s ([#209](https://github.com/Rawframe-Project/rawframe-engine/pull/209)).
+- The engine is built on Maul UI 1.3.0, vendored from its release archive with its SHA-256 checked. It names the same Maul Window, Unicode, Tween and RHI releases as 1.2.0, so those stay. No engine result changes: Maul UI 1.3.0's fixes are to a password field the engine never makes and to accessibility updates of kinds the engine never sends ([#207](https://github.com/Rawframe-Project/rawframe-engine/pull/207)).
 
 ### Fixed
 
-* **tooling:** report an endpoint that idles out as silent ([#209](https://github.com/Rawframe-Project/rawframe-engine/issues/209)) ([52eaa3b](https://github.com/Rawframe-Project/rawframe-engine/commit/52eaa3b5b2fc7211bd036d91be4f1ae6a3672c0a)), closes [#206](https://github.com/Rawframe-Project/rawframe-engine/issues/206)
+- `rawframe-author connect` says "the endpoint kept silent" for an endpoint that stops answering, whichever comes first: its 10 s wait for a reply or the connection's idle timeout. When the idle timeout came first, it said "the endpoint closed" ([#209](https://github.com/Rawframe-Project/rawframe-engine/pull/209)).
 
 ## [0.3.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.2...v0.3.0) (2026-11-04)
 
