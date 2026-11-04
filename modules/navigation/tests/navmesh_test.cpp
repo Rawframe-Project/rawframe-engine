@@ -144,6 +144,10 @@ RAWFRAME_TEST(SettingsAndAreasMaulNavRefusesAreRefused) {
     // whole triangles: nothing is committed.
     RAWFRAME_EXPECT(!(*made)->bake(kFloor, {.minX = 0, .minZ = 0, .maxX = 20, .maxZ = 20}).has_value());
     RAWFRAME_EXPECT(!(*made)->bake(kFloor, {.minX = 5, .minZ = 0, .maxX = 1, .maxZ = 1}).has_value());
+    // Finite, but so far from the grid that no tile index holds its places.
+    RAWFRAME_EXPECT(!(*made)->bake(kFloor, {.minX = 0, .minZ = 0, .maxX = 1e30, .maxZ = 1}).has_value());
+    RAWFRAME_EXPECT(!(*made)->bake(kFloor, {.minX = -1e30, .minZ = 0, .maxX = 1, .maxZ = 1}).has_value());
+    RAWFRAME_EXPECT(!(*made)->bake(kFloor, {.minX = 0, .minZ = 1e30, .maxX = 1, .maxZ = 1e30}).has_value());
     const std::vector<Mesh> kTorn = {Mesh{.vertices = {{0, 0, 0}, {1, 0, 0}}, .indices = {0, 1}}};
     RAWFRAME_EXPECT(!(*made)->bake(kTorn, {.minX = 0, .minZ = 0, .maxX = 1, .maxZ = 1}).has_value());
     RAWFRAME_EXPECT((*made)->statistics().tiles == 0 && (*made)->statistics().bakes == 0);
