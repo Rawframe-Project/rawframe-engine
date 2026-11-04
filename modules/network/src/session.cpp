@@ -88,6 +88,10 @@ EndReason endReasonOf(CloseReason reason) noexcept {
         return EndReason::Refused;
     case CloseReason::Untrusted:
         return EndReason::Untrusted;
+    // A session's peer that falls silent is gone, as before the transport
+    // told silence apart.
+    case CloseReason::Silent:
+        return EndReason::PeerGone;
     }
     return EndReason::Closed;
 }

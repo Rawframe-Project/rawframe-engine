@@ -38,10 +38,12 @@ network.quic.self_signed = true
 network.quic.fingerprint_file = $work/fingerprint
 tooling.endpoint = 127.0.0.1:$port
 tooling.token_file = $work/token
+network.quic.idle_timeout_ms = 30000
 CONF
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 running=$!
-trap 'kill -CONT $running 2>/dev/null || true; kill $running 2>/dev/null || true' EXIT
+quiet=
+trap 'for each in $running $quiet; do kill -CONT $each 2>/dev/null || true; kill $each 2>/dev/null || true; done' EXIT
 for _ in $(seq 100); do
     [[ -s "$work/fingerprint" ]] && break
     sleep 0.1
@@ -97,21 +99,46 @@ fi
 grep -qx 'rawframe-author connect: the record could not be sent' "$work/large.err"
 
 # A server that stops answering, here held by the system once it has
-# welcomed the client, is said to have kept silent, not to have closed.
-# Git's bash on Windows cannot hold a native program.
+# welcomed the client, is said to have kept silent, not to have closed,
+# whichever ends first: the reply's wait, as on the server above, whose
+# connections idle for 30 s, or the connection's idle timeout, as on a
+# second server whose connections idle for 1 s. Git's bash on Windows
+# cannot hold a native program.
 if ! command -v cygpath >/dev/null 2>&1; then
-    if {
-        for _ in $(seq 100); do
-            grep -q '"tooling.welcome"' "$work/held" 2>/dev/null && break
-            sleep 0.1
-        done
-        kill -STOP "$running"
-        echo '{"kind":"tooling.status","id":1}'
-    } | "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" >"$work/held" 2>"$work/held.err"; then
-        exit 1
-    fi
-    kill -CONT "$running"
-    grep -q '"tooling.welcome"' "$work/held"
-    grep -qx 'rawframe-author connect: the endpoint kept silent' "$work/held.err"
+    quiet_port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
+    {
+        grep -v -e '^tooling.endpoint' -e '^network.quic.fingerprint_file' -e '^network.quic.idle_timeout_ms' \
+            "$work/server.conf"
+        echo "tooling.endpoint = 127.0.0.1:$quiet_port"
+        echo "network.quic.fingerprint_file = $work/quiet_fingerprint"
+        echo "network.quic.idle_timeout_ms = 1000"
+        echo "network.quic.keep_alive_ms = 300"
+    } >"$work/quiet.conf"
+    "$server" --config "$work/quiet.conf" >"$work/quiet.log" 2>&1 &
+    quiet=$!
+    for _ in $(seq 100); do
+        [[ -s "$work/quiet_fingerprint" ]] && break
+        sleep 0.1
+    done
+    pids=("$running" "$quiet")
+    ports=("$port" "$quiet_port")
+    pins=("$work/fingerprint" "$work/quiet_fingerprint")
+    names=(held idled)
+    for at in 0 1; do
+        if {
+            for _ in $(seq 100); do
+                grep -q '"tooling.welcome"' "$work/${names[$at]}" 2>/dev/null && break
+                sleep 0.1
+            done
+            kill -STOP "${pids[$at]}"
+            echo '{"kind":"tooling.status","id":1}'
+        } | "$author" connect "127.0.0.1:${ports[$at]}" "${pins[$at]}" "$work/token" \
+            >"$work/${names[$at]}" 2>"$work/${names[$at]}.err"; then
+            exit 1
+        fi
+        kill -CONT "${pids[$at]}"
+        grep -q '"tooling.welcome"' "$work/${names[$at]}"
+        grep -qx 'rawframe-author connect: the endpoint kept silent' "$work/${names[$at]}.err"
+    done
 fi
 echo "inspected runners through the tooling endpoint"

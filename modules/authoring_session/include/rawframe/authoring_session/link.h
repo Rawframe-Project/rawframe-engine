@@ -58,8 +58,9 @@ public:
     std::vector<std::string> heard();
     /// Whether the endpoint closed the connection.
     [[nodiscard]] bool closed() const noexcept;
-    /// Whether the last record asked waited out its bound unanswered, the
-    /// connection still open.
+    /// Whether the last record asked got no reply because the endpoint
+    /// said nothing: its wait ran out, or the connection ended at the idle
+    /// timeout while it waited.
     [[nodiscard]] bool silent() const noexcept;
 
 private:

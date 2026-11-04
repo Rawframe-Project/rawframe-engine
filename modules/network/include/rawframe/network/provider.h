@@ -91,6 +91,9 @@ enum class CloseReason : std::uint8_t {
     /// The peer's identity was not the one this side trusts: a server
     /// certificate that does not match the pin.
     Untrusted,
+    /// Nothing came from the peer for the idle timeout, so this side let
+    /// the connection go: silence, not a close either side sent.
+    Silent,
 };
 
 enum class EventKind : std::uint8_t {

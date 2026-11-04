@@ -106,6 +106,7 @@ std::optional<std::string> LineClient::ask(std::string_view record, std::chrono:
     const std::string kLine = kNumbered ? numbered(*kParsed, kId) : std::string{record} + "\n";
     const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(kLine.data()), kLine.size()};
     if (!provider_.send(connection_, stream_, kBytes).has_value()) {
+        silent_ = quiet_;
         return std::nullopt;
     }
     const auto kUntil = std::chrono::steady_clock::now() + within;
@@ -122,11 +123,12 @@ std::optional<std::string> LineClient::ask(std::string_view record, std::chrono:
             return renumbered(*document::parse(*reply), kAsked != nullptr ? *kAsked : document::Value{});
         }
         if (closed_) {
+            silent_ = quiet_;
             return std::nullopt;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    silent_ = !closed_;
+    silent_ = !closed_ || quiet_;
     return std::nullopt;
 }
 
@@ -233,6 +235,9 @@ void LineClient::pump() {
             received_.append(reinterpret_cast<const char*>(event.bytes.data()), event.bytes.size());
         } else if (event.kind == network::EventKind::Closed) {
             closed_ = true;
+            // Ended by the idle timeout: the endpoint said nothing, which
+            // is silence whichever ran out first, that or a reply's wait.
+            quiet_ = event.reason == network::CloseReason::Silent;
         }
     }
 }
