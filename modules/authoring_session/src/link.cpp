@@ -117,6 +117,10 @@ bool ToolingLink::closed() const noexcept {
     return client_->closed();
 }
 
+bool ToolingLink::silent() const noexcept {
+    return client_->silent();
+}
+
 HostLink::HostLink() = default;
 
 HostLink::~HostLink() {

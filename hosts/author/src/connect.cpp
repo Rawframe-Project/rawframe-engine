@@ -53,7 +53,11 @@ int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
             return status;
         }
         if (!kReply.has_value()) {
-            complain(link->closed() ? "the endpoint closed" : "the endpoint kept silent");
+            // A record that never left, too large or after the connection
+            // went, is neither the endpoint's silence nor its close.
+            complain(link->silent()   ? "the endpoint kept silent"
+                     : link->closed() ? "the endpoint closed"
+                                      : "the record could not be sent");
             return 1;
         }
         std::printf("%s\n", kReply->c_str());
