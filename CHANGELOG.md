@@ -2,6 +2,17 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.3.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.2...v0.3.0) (2026-11-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **network:** a WebTransport client whose SETTINGS frame carries an HTTP/2 setting identifier (0x00 or 0x02 to 0x05), or names one identifier twice, now has its connection closed with H3_SETTINGS_ERROR (0x109) instead of opening a session. Browsers send neither.
+
+### Fixed
+
+* **network:** refuse HTTP/2 and repeated ids in WebTransport SETTINGS ([#203](https://github.com/Rawframe-Project/rawframe-engine/issues/203)) ([85916d7](https://github.com/Rawframe-Project/rawframe-engine/commit/85916d711139c833337170c73c2bf1904607758f)), closes [#202](https://github.com/Rawframe-Project/rawframe-engine/issues/202)
+
 ## [0.2.2](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.1...v0.2.2) (2026-11-04)
 
 ### Fixed
