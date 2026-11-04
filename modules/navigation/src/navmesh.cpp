@@ -3,6 +3,7 @@
 #include "rawframe/navigation/errors.h"
 
 #include <cmath>
+#include <limits>
 #include <map>
 #include <maul-nav/bake.h>
 #include <maul-nav/navmesh.h>
@@ -168,23 +169,29 @@ result::Status Navmesh::bake(std::span<const Mesh> meshes, const Area& area) {
                                          .triangleCount = static_cast<std::int32_t>(kMesh.indices.size() / 3),
                                          .areas = nullptr});
     }
+    // Each corner's tile place, checked as a number before it is one: an
+    // area far from the grid's origin has places no tile index holds. The
+    // largest index is left out, so the loops below never step past it.
     const double kSide = state.tileSide();
-    const auto kColumn = [&](double x) {
-        return static_cast<std::int32_t>(std::floor((x - kOrigin[0]) / kSide));
-    };
-    const auto kRow = [&](double z) {
-        return static_cast<std::int32_t>(std::floor((z - kOrigin[2]) / kSide));
+    const double kFirstColumn = std::floor((area.minX - kOrigin[0]) / kSide);
+    const double kLastColumn = std::floor((area.maxX - kOrigin[0]) / kSide);
+    const double kFirstRow = std::floor((area.minZ - kOrigin[2]) / kSide);
+    const double kLastRow = std::floor((area.maxZ - kOrigin[2]) / kSide);
+    const auto kIndexed = [](double place) {
+        return place >= std::numeric_limits<std::int32_t>::min() && place < std::numeric_limits<std::int32_t>::max();
     };
     if (!std::isfinite(area.minX) || !std::isfinite(area.minZ) || !std::isfinite(area.maxX) ||
-        !std::isfinite(area.maxZ) || area.maxX < area.minX || area.maxZ < area.minZ ||
-        (kColumn(area.maxX) - kColumn(area.minX) + 1.0) * (kRow(area.maxZ) - kRow(area.minZ) + 1.0) >
+        !std::isfinite(area.maxZ) || area.maxX < area.minX || area.maxZ < area.minZ || !kIndexed(kFirstColumn) ||
+        !kIndexed(kLastColumn) || !kIndexed(kFirstRow) || !kIndexed(kLastRow) ||
+        (kLastColumn - kFirstColumn + 1.0) * (kLastRow - kFirstRow + 1.0) >
             static_cast<double>(state.def.limits.tiles)) {
         return refuse(NavigationError::Invalid, "a bake's area is not finite, is backward, or is past the tiles");
     }
     std::vector<Place> staged;
     std::map<Place, Tile> made;
-    for (std::int32_t column = kColumn(area.minX); column <= kColumn(area.maxX); ++column) {
-        for (std::int32_t row = kRow(area.minZ); row <= kRow(area.maxZ); ++row) {
+    for (auto column = static_cast<std::int32_t>(kFirstColumn); column <= static_cast<std::int32_t>(kLastColumn);
+         ++column) {
+        for (auto row = static_cast<std::int32_t>(kFirstRow); row <= static_cast<std::int32_t>(kLastRow); ++row) {
             mnavBakeReport report{};
             const mnavBakeInput kInput{.meshes = input.data(), .meshCount = static_cast<std::int32_t>(input.size())};
             const result::Status kBaked =
