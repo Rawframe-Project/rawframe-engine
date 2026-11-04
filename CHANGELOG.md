@@ -2,6 +2,13 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.2.2](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.1...v0.2.2) (2026-11-04)
+
+
+### Fixed
+
+* **tooling:** tell a silent endpoint from a closed one in connect ([#194](https://github.com/Rawframe-Project/rawframe-engine/issues/194)) ([ea372f0](https://github.com/Rawframe-Project/rawframe-engine/commit/ea372f04e11266cf9e0325c525c4570f285f7e3a)), closes [#193](https://github.com/Rawframe-Project/rawframe-engine/issues/193)
+
 ## [0.2.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.0...v0.2.1) (2026-11-04)
 
 ### Fixed
