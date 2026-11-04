@@ -8,3 +8,4 @@ rawframe_module(NAME scatter
 )
 
 rawframe_module_tests(NAME scatter SOURCES tests/scatter_test.cpp)
+rawframe_module_fuzz(NAME scatter TARGET scatter RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_scatter.cpp)

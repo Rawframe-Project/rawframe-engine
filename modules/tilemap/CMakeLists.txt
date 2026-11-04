@@ -8,3 +8,4 @@ rawframe_module(NAME tilemap
 )
 
 rawframe_module_tests(NAME tilemap SOURCES tests/tilemap_test.cpp)
+rawframe_module_fuzz(NAME tilemap TARGET tilemap RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_tilemap.cpp)
