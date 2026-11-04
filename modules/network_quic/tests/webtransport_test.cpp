@@ -73,8 +73,7 @@ std::vector<std::byte> clientControl() {
                  frame(0x04,
                        hex("0801"
                            "3301"
-                           "80"
-                           "2b603742"
+                           "ab603742"
                            "01"))});
 }
 
