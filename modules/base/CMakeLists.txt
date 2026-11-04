@@ -1,8 +1,9 @@
 # The zero-dependency leaf of the module graph: assertion and fatal
 # primitives, the 128-bit value, the byte vocabulary, platform detection,
-# SHA-256 for fingerprints, the operating system's secure random source, and
-# files replaced whole.
-rawframe_module(NAME base SOURCES src/fatal.cpp src/usage.cpp src/secure_random.cpp src/sha256.cpp src/files.cpp src/mapped.cpp)
+# SHA-256 for fingerprints, the operating system's secure random source,
+# files replaced whole, and how authored text spells a number.
+rawframe_module(NAME base SOURCES src/fatal.cpp src/usage.cpp src/secure_random.cpp src/sha256.cpp src/files.cpp src/mapped.cpp
+    src/number_text.cpp)
 # Windows' secure random numbers.
 if(WIN32)
     target_link_libraries(rawframe_base PUBLIC bcrypt)
@@ -17,6 +18,7 @@ endif()
 
 rawframe_module_tests(NAME base SOURCES
     tests/bits128_test.cpp
+    tests/number_text_test.cpp
     tests/usage_test.cpp
     ${rawframe_base_process_tests}
     tests/secure_random_test.cpp

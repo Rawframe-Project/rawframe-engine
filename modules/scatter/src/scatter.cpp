@@ -1,5 +1,6 @@
 #include "rawframe/scatter/scatter.h"
 
+#include "rawframe/base/number_text.h"
 #include "rawframe/scatter/errors.h"
 
 #include <algorithm>
@@ -56,12 +57,6 @@ template <class Number> std::optional<Number> numberOf(std::string_view word) {
 std::optional<double> metersOf(std::string_view word) {
     const std::optional<double> kValue = numberOf<double>(word);
     return kValue.has_value() && std::isfinite(*kValue) ? kValue : std::nullopt;
-}
-
-std::string metersText(double value) {
-    char made[32];
-    std::snprintf(made, sizeof made, "%.9g", value);
-    return made;
 }
 
 /// SplitMix64: the draws a scatter places its copies by, from its seed
@@ -122,7 +117,7 @@ result::Result<Scatter> parseScatter(std::string_view text, const ScatterLimits&
                 !(*kWidth > 0 && *kWidth <= limits.mostSide && *kDepth > 0 && *kDepth <= limits.mostSide)) {
                 return refused(line,
                                "an area is its least X and Z, then a width and a depth above nought and at most " +
-                                   metersText(limits.mostSide) + " meters");
+                                   base::numberText(limits.mostSide) + " meters");
             }
             made.x = *kX;
             made.z = *kZ;
@@ -172,15 +167,15 @@ result::Result<Scatter> parseScatter(std::string_view text, const ScatterLimits&
 
 std::string writeScatter(const Scatter& scatter) {
     std::string made = "scatter 1\nprefab " + scatter.prefab + "\nseed " + std::to_string(scatter.seed) + "\narea " +
-                       metersText(scatter.x) + " " + metersText(scatter.z) + " " + metersText(scatter.width) + " " +
-                       metersText(scatter.depth) + "\nspacing " + metersText(scatter.spacing) + "\ncount " +
-                       std::to_string(scatter.count) + "\n";
+                       base::numberText(scatter.x) + " " + base::numberText(scatter.z) + " " +
+                       base::numberText(scatter.width) + " " + base::numberText(scatter.depth) + "\nspacing " +
+                       base::numberText(scatter.spacing) + "\ncount " + std::to_string(scatter.count) + "\n";
     if (scatter.turn) {
         made += "turn\n";
     }
     if (!scatter.terrain.empty()) {
-        made += "on " + scatter.terrain + " at " + metersText(scatter.at[0]) + " " + metersText(scatter.at[1]) + " " +
-                metersText(scatter.at[2]) + "\n";
+        made += "on " + scatter.terrain + " at " + base::numberText(scatter.at[0]) + " " +
+                base::numberText(scatter.at[1]) + " " + base::numberText(scatter.at[2]) + "\n";
     }
     if (!scatter.layer.empty()) {
         made += "layer " + scatter.layer + "\n";

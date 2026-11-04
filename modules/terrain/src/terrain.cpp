@@ -1,5 +1,6 @@
 #include "rawframe/terrain/terrain.h"
 
+#include "rawframe/base/number_text.h"
 #include "rawframe/mesh/errors.h"
 
 #include <algorithm>
@@ -83,12 +84,6 @@ std::string metersOf(std::int32_t millimeters) {
     return text == "-0" ? "0" : text;
 }
 
-std::string numberText(double value) {
-    char made[32];
-    std::snprintf(made, sizeof made, "%.9g", value);
-    return made;
-}
-
 /// How much of a brush's effect reaches `distance` from its middle: one
 /// there, falling smoothly to nought at its edge.
 double falloff(double distance, double radius) {
@@ -144,7 +139,8 @@ result::Result<Terrain> parseTerrain(std::string_view text, const TerrainLimits&
             } else if (kWords[0] == "cell" && kWords.size() == 2 && !celled) {
                 const auto kCell = numberOf(kWords[1]);
                 if (!kCell.has_value() || !(*kCell > 0) || *kCell > limits.mostCell) {
-                    return refused(line, "a cell is above nought and at most " + numberText(limits.mostCell) + " m");
+                    return refused(line,
+                                   "a cell is above nought and at most " + base::numberText(limits.mostCell) + " m");
                 }
                 made.cell = *kCell;
                 celled = true;
@@ -229,7 +225,7 @@ result::Result<Terrain> parseTerrain(std::string_view text, const TerrainLimits&
 
 std::string writeTerrain(const Terrain& terrain) {
     std::string made = "terrain 1\ngrid " + std::to_string(terrain.columns) + " " + std::to_string(terrain.rows) +
-                       "\ncell " + numberText(terrain.cell) + "\n";
+                       "\ncell " + base::numberText(terrain.cell) + "\n";
     for (const Layer& kLayer : terrain.layers) {
         char material[17];
         std::snprintf(material, sizeof material, "%016llx", static_cast<unsigned long long>(kLayer.material));

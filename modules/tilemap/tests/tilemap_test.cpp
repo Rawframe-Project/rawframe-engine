@@ -40,6 +40,9 @@ RAWFRAME_TEST(ATilemapIsWrittenAsItReads) {
     // Solid tiles listed twice or out of order are kept once, in order.
     RAWFRAME_EXPECT(read("tilemap 1\ntileset 0000000000000001 4 1\nsolid 3 1 3\ngrid 1 1\ntiles\n.\n").solid ==
                     (std::vector<std::uint16_t>{1, 3}));
+    // A cell of more digits than nine is written as it is, not rounded.
+    const Tilemap kFine = read("tilemap 1\ntileset 0000000000000001 4 1\ncell 0.2000000011\ngrid 1 1\ntiles\n.\n");
+    RAWFRAME_EXPECT(kFine.cell == 0.2000000011 && read(writeTilemap(kFine)) == kFine);
 }
 
 RAWFRAME_TEST(PaintingReachesOnlyTheGrid) {

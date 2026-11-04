@@ -1,5 +1,6 @@
 #include "rawframe/tilemap/tilemap.h"
 
+#include "rawframe/base/number_text.h"
 #include "rawframe/tilemap/errors.h"
 
 #include <algorithm>
@@ -168,10 +169,9 @@ result::Result<Tilemap> parseTilemap(std::string_view text, const TilemapLimits&
 std::string writeTilemap(const Tilemap& map) {
     char texture[17];
     std::snprintf(texture, sizeof texture, "%016llx", static_cast<unsigned long long>(map.texture));
-    char cell[32];
-    std::snprintf(cell, sizeof cell, "%.9g", map.cell);
+    const std::string kCell = base::numberText(map.cell);
     std::string made = std::string{"tilemap 1\ntileset "} + texture + " " + std::to_string(map.sheetColumns) + " " +
-                       std::to_string(map.sheetRows) + "\ncell " + cell + "\n";
+                       std::to_string(map.sheetRows) + "\ncell " + kCell + "\n";
     if (!map.solid.empty()) {
         made += "solid";
         for (const std::uint16_t kTile : map.solid) {

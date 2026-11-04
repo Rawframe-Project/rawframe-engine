@@ -57,6 +57,9 @@ RAWFRAME_TEST(ATerrainIsWrittenAsItReads) {
     // Unpainted, every cell is its first layer's; with no layers, none's.
     const Terrain kPlain = read("terrain 1\ngrid 2 2\nheights\n0 0\n0 0 # flat\n");
     RAWFRAME_EXPECT(kPlain.painted == (std::vector<std::uint8_t>{0}) && kPlain.cell == 1);
+    // A cell of more digits than nine is written as it is, not rounded.
+    const Terrain kFine = read("terrain 1\ngrid 2 2\ncell 0.2000000011\nheights\n0 0\n0 0\n");
+    RAWFRAME_EXPECT(kFine.cell == 0.2000000011 && read(writeTerrain(kFine)) == kFine);
 }
 
 RAWFRAME_TEST(ATerrainsMeshFacesUpAPartALayer) {

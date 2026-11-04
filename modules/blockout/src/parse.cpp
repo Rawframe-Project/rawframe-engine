@@ -1,10 +1,10 @@
+#include "rawframe/base/number_text.h"
 #include "rawframe/blockout/blockout.h"
 #include "rawframe/mesh/errors.h"
 
 #include <algorithm>
 #include <charconv>
 #include <cmath>
-#include <cstdio>
 
 namespace rawframe::blockout {
 
@@ -122,12 +122,6 @@ readRest(std::span<const std::string_view> words, std::size_t line, Solid& solid
     return {};
 }
 
-std::string numberText(double value) {
-    char made[32];
-    std::snprintf(made, sizeof made, "%.9g", value);
-    return made;
-}
-
 } // namespace
 
 result::Result<Blockout> parseBlockout(std::string_view text, const BlockoutLimits& limits) {
@@ -197,24 +191,24 @@ std::string writeBlockout(const Blockout& blockout) {
                 : kSolid.shape == Shape::Ramp     ? "ramp "
                 : kSolid.shape == Shape::Cylinder ? "cylinder "
                                                   : "extrude ";
-        made += kSolid.name + " at " + numberText(kSolid.at[0]) + " " + numberText(kSolid.at[1]) + " " +
-                numberText(kSolid.at[2]);
+        made += kSolid.name + " at " + base::numberText(kSolid.at[0]) + " " + base::numberText(kSolid.at[1]) + " " +
+                base::numberText(kSolid.at[2]);
         if (kSolid.shape == Shape::Box || kSolid.shape == Shape::Ramp) {
-            made += " size " + numberText(kSolid.size[0]) + " " + numberText(kSolid.size[1]) + " " +
-                    numberText(kSolid.size[2]);
+            made += " size " + base::numberText(kSolid.size[0]) + " " + base::numberText(kSolid.size[1]) + " " +
+                    base::numberText(kSolid.size[2]);
         } else if (kSolid.shape == Shape::Cylinder) {
-            made += " radius " + numberText(kSolid.size[0] / 2) + " height " + numberText(kSolid.size[1]) + " sides " +
-                    std::to_string(kSolid.sides);
+            made += " radius " + base::numberText(kSolid.size[0] / 2) + " height " + base::numberText(kSolid.size[1]) +
+                    " sides " + std::to_string(kSolid.sides);
         } else {
-            made += " height " + numberText(kSolid.size[1]);
+            made += " height " + base::numberText(kSolid.size[1]);
         }
         if (kSolid.turn != 0 && kSolid.shape != Shape::Cylinder) {
-            made += " turn " + numberText(kSolid.turn);
+            made += " turn " + base::numberText(kSolid.turn);
         }
         if (kSolid.shape == Shape::Extrude) {
             made += " points";
             for (const auto& kPoint : kSolid.points) {
-                made += " " + numberText(kPoint[0]) + " " + numberText(kPoint[1]);
+                made += " " + base::numberText(kPoint[0]) + " " + base::numberText(kPoint[1]);
             }
         }
         made += "\n";
