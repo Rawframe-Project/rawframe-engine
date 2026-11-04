@@ -2,6 +2,32 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.2.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.2...v0.2.0) (2026-11-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **studio:** dragging a solid across Studio's blockout plan now writes the height it carries over exactly as it was, where a height of more than six significant digits was rounded to six; snapped X and Z within the default 10,000 m extent, and shorter heights, are written as before; a snapped X or Z past that extent, which six digits could not hold, is now written exactly too, so 10000.75 is written 10000.75 where it was 10000.8.
+* **content:** the tilemap, terrain, scatter and blockout writers now write a number that needs more than nine significant digits with as many digits as it needs, so such a document reads back to its own values; one of nine digits or fewer is written as before.
+* **deps:** Word movement and deletion by word in Studio's and a game UI's text fields, and the words a screen reader steps through, now count as words the segments Maul Unicode's word kind calls words, as listed in [Maul UI 1.2.0's release notes](https://github.com/Rawframe-Project/maul-ui/releases/tag/v1.2.0). No longer words: 912 of the 915 General_Category No code points, such as superscripts (²), fractions (¼), enclosed digits (① ❶ ⒈), CJK enclosed numbers (㈠ ㊀), Ethiopic (፲), Tamil (௰), Kanbun (㆒) and counting rods (𝍠); and the halfwidth katakana voiced sound marks U+FF9E and U+FF9F when no letter or kana comes before them. Now words: the circled and squared letters (Ⓐ ⓐ 🄰 🅰 🅿), modifier and tone letters, some Armenian, Hebrew and Syriac punctuation, the symbols and punctuation of Myanmar, New Tai Lue, Ahom, Tai Tham and Tai Viet, katakana and hiragana symbols, and the Arabic and Kaithi number signs. Text of ordinary letters and digits moves as before.
+* **deps:** `window::Windows::requestTextInput` no longer takes a caret. The caret is set with the new `requestTextInputCaret`, and its completion carries `RequestKind::TextInputCaret`.
+* **animation:** `ClipLimits::maximumKeys` is renamed `maximumTrackKeys`, and `ClipLimits` gains `maximumClipKeys` (4,194,304 by default); a clip document or glTF animation of more keys than that is refused as `OverLimit`.
+
+### Fixed
+
+* **animation:** bound the keys of a whole clip ([#167](https://github.com/Rawframe-Project/rawframe-engine/issues/167)) ([76cb519](https://github.com/Rawframe-Project/rawframe-engine/commit/76cb5190559ebfd927a1dadf8d9a64ada1e65b18)), closes [#163](https://github.com/Rawframe-Project/rawframe-engine/issues/163)
+* **content:** bound a scatter's lookup squares by its area ([#183](https://github.com/Rawframe-Project/rawframe-engine/issues/183)) ([d978343](https://github.com/Rawframe-Project/rawframe-engine/commit/d978343e24af96ff1488258317f1cc416f3f447f)), closes [#182](https://github.com/Rawframe-Project/rawframe-engine/issues/182)
+* **content:** check a blockout's sides before counting them ([#181](https://github.com/Rawframe-Project/rawframe-engine/issues/181)) ([5c5bbd2](https://github.com/Rawframe-Project/rawframe-engine/commit/5c5bbd2bd4ed2d2be54df6661199f244a1fdc31b)), closes [#178](https://github.com/Rawframe-Project/rawframe-engine/issues/178)
+* **content:** write authored numbers in a form that reads back exactly ([#180](https://github.com/Rawframe-Project/rawframe-engine/issues/180)) ([08acf14](https://github.com/Rawframe-Project/rawframe-engine/commit/08acf146bbf4568b1d0317754041206ea0aeb068)), closes [#177](https://github.com/Rawframe-Project/rawframe-engine/issues/177)
+* **render:** check a texture's form in place, not by encoding it again ([#172](https://github.com/Rawframe-Project/rawframe-engine/issues/172)) ([a05b224](https://github.com/Rawframe-Project/rawframe-engine/commit/a05b2249142236f9dc91b8ee7d3838e63d8745a0)), closes [#171](https://github.com/Rawframe-Project/rawframe-engine/issues/171)
+* **studio:** keep a dragged blockout solid's height exact ([#185](https://github.com/Rawframe-Project/rawframe-engine/issues/185)) ([4409387](https://github.com/Rawframe-Project/rawframe-engine/commit/44093870f5c56f3c7f631d306cb03697753aad0a)), closes [#184](https://github.com/Rawframe-Project/rawframe-engine/issues/184)
+
+
+### Build
+
+* **deps:** move Maul UI to 1.1.0 with Window, Unicode, Tween and RHI ([#176](https://github.com/Rawframe-Project/rawframe-engine/issues/176)) ([897349f](https://github.com/Rawframe-Project/rawframe-engine/commit/897349f72a82ec59a639bbed58113ab2bab7a021))
+* **deps:** move Maul UI to 1.2.0 and Maul Tween to 1.0.0 ([#179](https://github.com/Rawframe-Project/rawframe-engine/issues/179)) ([755185f](https://github.com/Rawframe-Project/rawframe-engine/commit/755185f75f58af245663a497f9461c48917ea859))
+
 ## [0.1.2](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.1...v0.1.2) (2026-11-03)
 
 ### Fixed
