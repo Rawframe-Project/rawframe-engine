@@ -56,6 +56,9 @@ public:
     /// The replies to records sent since last asked, each under its own
     /// id, and what the endpoint said unasked; without waiting.
     std::vector<std::string> heard();
+    /// Whether the endpoint closed the connection, which a reply that
+    /// never came within its wait does not say.
+    [[nodiscard]] bool closed() const noexcept;
 
 private:
     ToolingLink();

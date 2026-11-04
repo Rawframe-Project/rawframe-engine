@@ -113,6 +113,10 @@ std::vector<std::string> ToolingLink::heard() {
     return client_->heard(0);
 }
 
+bool ToolingLink::closed() const noexcept {
+    return client_->closed();
+}
+
 HostLink::HostLink() = default;
 
 HostLink::~HostLink() {

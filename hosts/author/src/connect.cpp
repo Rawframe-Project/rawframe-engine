@@ -53,7 +53,7 @@ int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
             return status;
         }
         if (!kReply.has_value()) {
-            complain("the endpoint closed");
+            complain(link->closed() ? "the endpoint closed" : "the endpoint kept silent");
             return 1;
         }
         std::printf("%s\n", kReply->c_str());
