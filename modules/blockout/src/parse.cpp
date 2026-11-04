@@ -84,7 +84,8 @@ readRest(std::span<const std::string_view> words, std::size_t line, Solid& solid
         } else if (kWord == "sides" && solid.shape == Shape::Cylinder) {
             double sides = 0;
             read = kNumbers(1, &sides) && sides >= 3 && sides <= limits.mostSides && sides == std::floor(sides);
-            solid.sides = static_cast<std::uint32_t>(sides);
+            // Turned into a count only once it is one.
+            solid.sides = read ? static_cast<std::uint32_t>(sides) : 0;
         } else if (kWord == "points" && solid.shape == Shape::Extrude) {
             read = (words.size() - at) % 2 == 0 && (words.size() - at) / 2 >= 3 &&
                    (words.size() - at) / 2 <= limits.points;
