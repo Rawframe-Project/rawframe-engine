@@ -1,11 +1,9 @@
-#include "rawframe/base/number_text.h"
+#include "blockout_plan.h"
 #include "rawframe/blockout/blockout.h"
 #include "shell.h"
 
 #include <algorithm>
 #include <array>
-#include <cmath>
-#include <cstdlib>
 #include <span>
 
 namespace rawframe::studio {
@@ -307,27 +305,12 @@ void ShellParticipant::dropSolid(std::size_t at, std::array<float, 2> moved) {
     if (kAt == solid.words.end()) {
         return;
     }
-    std::array<double, 3> place{};
-    const char* reading = kAt->second.c_str();
-    for (double& each : place) {
-        char* end = nullptr;
-        each = std::strtod(reading, &end);
-        if (end == reading) {
-            return;
-        }
-        reading = end;
+    const std::optional<std::string> kPlace =
+        draggedPlace(kAt->second, {moved[0] / held_.planScale, moved[1] / held_.planScale});
+    if (!kPlace.has_value()) {
+        return;
     }
-    const auto kSnapped = [](double meters) {
-        return std::round(meters * 4) / 4;
-    };
-    place[0] = kSnapped(place[0] + (moved[0] / held_.planScale));
-    place[2] = kSnapped(place[2] + (moved[1] / held_.planScale));
-    // Spelled as the blockout writer spells numbers, so the height, which
-    // the drag carries over, reads back as it was.
-    const auto kNumber = [](double value) {
-        return base::numberText(value == 0 ? 0.0 : value);
-    };
-    kAt->second = kNumber(place[0]) + " " + kNumber(place[1]) + " " + kNumber(place[2]);
+    kAt->second = *kPlace;
     Value operation = Value::object();
     operation.add("operation", Value::string("lines.set"));
     operation.add("line", Value::integer(static_cast<std::int64_t>(kLine - held_.blockoutLines.begin())));
