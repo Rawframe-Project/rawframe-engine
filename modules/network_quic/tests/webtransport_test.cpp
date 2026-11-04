@@ -197,6 +197,34 @@ RAWFRAME_TEST(WhatIsNotASessionIsRefused) {
                     network_quic::kH3ExcessiveLoad);
 }
 
+RAWFRAME_TEST(SettingsPassOverUnknownIdsAndRefuseHttp2AndRepeatedOnes) {
+    const auto kControl = [](std::string_view settings) {
+        return join({hex("00"), frame(0x04, hex(settings))});
+    };
+    // QPACK's two settings at zero, as a browser sends them, and a grease
+    // identifier (0x1f * 3 + 0x21, a two-byte varint) with a value: passed
+    // over, and the session opens.
+    WebTransportServer greased;
+    RAWFRAME_EXPECT(!greased
+                         .receive(2,
+                                  kControl("0100"
+                                           "0700"
+                                           "3301"
+                                           "ab603742"
+                                           "01"
+                                           "407e"
+                                           "4567"),
+                                  false)
+                         .failure);
+    const auto kOpened = greased.receive(0, frame(0x01, hex(kConnect)), false);
+    RAWFRAME_EXPECT(kOpened.opened && !kOpened.failure && greased.open());
+    // HTTP/2's identifiers, and one said twice.
+    for (const std::string_view kSettings : {"0001", "0201", "0301", "0401", "0501", "3301ab603742013300"}) {
+        RAWFRAME_EXPECT(WebTransportServer{}.receive(2, kControl(kSettings), false).failure ==
+                        network_quic::kH3SettingsError);
+    }
+}
+
 RAWFRAME_TEST(HostileBytesOnEveryStreamAreSurvived) {
     // Random bytes in random pieces on the kinds of stream a peer can open,
     // after a session and without one: every delivery answers, nothing it
