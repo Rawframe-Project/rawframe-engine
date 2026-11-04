@@ -26,7 +26,8 @@ public:
     /// The messages to send for one request: its response, and any events.
     [[nodiscard]] std::vector<document::Value> handle(const document::Value& request);
     /// Asked a few times a second: a `stopped` event when the game stopped
-    /// since last told, `terminated` when the endpoint went.
+    /// since last told, `terminated` when the endpoint went, after an
+    /// `output` event that says how.
     [[nodiscard]] std::vector<document::Value> poll();
     /// Whether the editor said to disconnect, or the game went.
     [[nodiscard]] bool done() const noexcept {
@@ -40,6 +41,9 @@ private:
     /// A debug verb asked of the game: its answer, or none (the reason in
     /// `why`).
     std::optional<document::Value> ask(document::Value record, std::string& why);
+    /// The `terminated` event, once, after the `output` event that says
+    /// how the game went where it went.
+    void terminate(std::vector<document::Value>& out);
     /// Every breakpoint asked for, the functions and each source's lines,
     /// written into the game at once: its answer, or none.
     std::optional<document::Value> breakAll(std::string& why);
@@ -67,6 +71,8 @@ private:
     bool stepped_ = false;
     bool done_ = false;
     bool terminated_ = false;
+    /// How the game went, where it went rather than the editor leaving.
+    std::string ended_;
 };
 
 } // namespace rawframe::debug_adapter

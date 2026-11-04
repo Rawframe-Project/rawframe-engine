@@ -59,7 +59,12 @@ std::optional<Value> Adapter::ask(Value record, std::string& why) {
     record.add("id", Value::integer(++asked_));
     const std::optional<std::string> kReply = link_->ask(document::writeCompact(record));
     if (!kReply.has_value()) {
-        why = "the game's tooling endpoint went";
+        // Which way it went, for the editor: a game held by a long step or
+        // a native debugger keeps silent, and has not closed.
+        why = link_->silent()   ? "the game's tooling endpoint kept silent"
+              : link_->closed() ? "the game's tooling endpoint closed"
+                                : "the record could not be sent to the game's tooling endpoint";
+        ended_ = why;
         link_.reset();
         done_ = true;
         return std::nullopt;
@@ -367,12 +372,26 @@ std::vector<Value> Adapter::handle(const Value& request) {
     return out;
 }
 
+void Adapter::terminate(std::vector<Value>& out) {
+    if (terminated_) {
+        return;
+    }
+    terminated_ = true;
+    // Why the game went, which a poll that found it gone tells no request.
+    if (!ended_.empty()) {
+        Value body = Value::object();
+        body.add("category", Value::string("important"));
+        body.add("output", Value::string(ended_ + "\n"));
+        out.push_back(event("output", std::move(body)));
+    }
+    out.push_back(event("terminated", {}));
+}
+
 std::vector<Value> Adapter::poll() {
     std::vector<Value> out;
     if (link_ == nullptr) {
-        if (done_ && !terminated_) {
-            terminated_ = true;
-            out.push_back(event("terminated", {}));
+        if (done_) {
+            terminate(out);
         }
         return out;
     }
@@ -381,9 +400,8 @@ std::vector<Value> Adapter::poll() {
     status.add("kind", Value::string("debug.status"));
     const std::optional<Value> kStatus = ask(std::move(status), why);
     if (!kStatus.has_value()) {
-        if (link_ == nullptr && !terminated_) {
-            terminated_ = true;
-            out.push_back(event("terminated", {}));
+        if (link_ == nullptr) {
+            terminate(out);
         }
         return out;
     }
