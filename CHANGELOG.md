@@ -2,6 +2,13 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.2.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.0...v0.2.1) (2026-11-04)
+
+
+### Fixed
+
+* **navigation:** check a bake area's tile places before converting them ([#190](https://github.com/Rawframe-Project/rawframe-engine/issues/190)) ([e622906](https://github.com/Rawframe-Project/rawframe-engine/commit/e622906a3f4168ce579df783b0328b22a864eb4a)), closes [#189](https://github.com/Rawframe-Project/rawframe-engine/issues/189)
+
 ## [0.2.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.2...v0.2.0) (2026-11-04)
 
 This release moves the engine to Maul UI 1.2.0 and the Maul Window, Unicode, Tween and RHI releases it builds against. Word movement, a screen reader's words, a few text input details and one window API change with it. The tilemap, terrain, scatter and blockout writers now keep every digit a number needs. No wire, save or cooked format changes.
