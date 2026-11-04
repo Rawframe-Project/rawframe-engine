@@ -1,0 +1,4 @@
+game.path = ../games/ledges
+
+  audio.enabled = false  
+# end

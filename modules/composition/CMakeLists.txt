@@ -17,3 +17,4 @@ rawframe_module_tests(NAME composition SOURCES
     tests/lifecycle_test.cpp
     tests/plan_test.cpp
 )
+rawframe_module_fuzz(NAME composition TARGET configuration RUNS 10000 SEEDS tests/seeds SOURCES tests/fuzz_configuration.cpp)
