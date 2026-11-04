@@ -32,6 +32,10 @@
 #include <hidpi.h>
 
 #define MWIN_WIN32_HID_PADS 8
+// The bytes of one raw input read at once: its header and its reports.
+// A device whose input report does not fit beside the header is turned
+// away, since none of its reports could be read.
+#define MWIN_WIN32_HID_INPUT_BYTES 1024
 // The Generic Desktop usage of a multi-axis controller, which MinGW's
 // headers do not name.
 #define MWIN_HID_MULTI_AXIS 0x08
@@ -48,10 +52,10 @@ typedef struct mwinHidApi
                              HANDLE model);
     BOOL(WINAPI* closeFile)(HANDLE file);
     NTSTATUS(NTAPI* getCaps)(PHIDP_PREPARSED_DATA data, PHIDP_CAPS caps);
-    NTSTATUS(NTAPI* buttonCaps)(HIDP_REPORT_TYPE type, PHIDP_BUTTON_CAPS caps, PUSHORT count,
-                                PHIDP_PREPARSED_DATA data);
-    NTSTATUS(NTAPI* valueCaps)(HIDP_REPORT_TYPE type, PHIDP_VALUE_CAPS caps, PUSHORT count,
-                               PHIDP_PREPARSED_DATA data);
+    NTSTATUS(NTAPI* buttonCaps)(HIDP_REPORT_TYPE type, USAGE page, USHORT link, USAGE usage,
+                                PHIDP_BUTTON_CAPS caps, PUSHORT count, PHIDP_PREPARSED_DATA data);
+    NTSTATUS(NTAPI* valueCaps)(HIDP_REPORT_TYPE type, USAGE page, USHORT link, USAGE usage,
+                               PHIDP_VALUE_CAPS caps, PUSHORT count, PHIDP_PREPARSED_DATA data);
     NTSTATUS(NTAPI* usages)(HIDP_REPORT_TYPE type, USAGE page, USHORT link, PUSAGE list,
                             PULONG length, PHIDP_PREPARSED_DATA data, PCHAR report,
                             ULONG reportLength);

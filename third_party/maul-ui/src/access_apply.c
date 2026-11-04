@@ -48,16 +48,6 @@ static bool IsKnown(const muiAccessTree* tree, uint64_t id)
 static void Begin(muiAccessTree* tree)
 {
     tree->apply++;
-    if (tree->apply == 0)
-    {
-        // After 2^32 applies, the old marks could be read as new.
-        memset(tree->updates, 0, ((size_t)tree->mask + 1) * sizeof(muiUpdateSlot));
-        for (uint32_t i = 0; i < tree->capacity; i++)
-        {
-            tree->held[i].listed = 0;
-        }
-        tree->apply = 1;
-    }
 }
 
 // Indexes the nodes sent: false for a NULL node, the id 0 or a node sent
@@ -134,7 +124,7 @@ static uint64_t ParentAfter(const muiAccessTree* tree, const muiAccessUpdate* up
 }
 
 // Where the apply that found a node's parents end is kept.
-static uint32_t* EndedOf(muiAccessTree* tree, uint64_t id)
+static uint64_t* EndedOf(muiAccessTree* tree, uint64_t id)
 {
     uint32_t slot = muiHeldSlotOf(tree, id);
     return slot != 0 ? &tree->held[slot - 1].ended : &tree->updates[UpdatePlace(tree, id)].ended;

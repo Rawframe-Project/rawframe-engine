@@ -358,12 +358,13 @@ result::Result<std::string> Windows::clipboardText(RequestId request) const {
 result::Result<std::vector<std::string>> Windows::dialogFiles(RequestId request) const {
     const mwinRequestId kRequest{.index1 = request.index, .generation = request.generation};
     std::size_t length = 0;
-    mwinResult status = mwinRequest_GetDialogFiles(platform_->context, kRequest, nullptr, 0, &length, nullptr);
+    mwinResult status = mwinRequest_GetDialogFiles(platform_->context, kRequest, nullptr, 0, &length, nullptr, nullptr);
     if (status != mwin_success && status != mwin_errorCapacity) {
         return failure(status, "a file dialog's paths");
     }
     std::string bytes(length, '\0');
-    status = mwinRequest_GetDialogFiles(platform_->context, kRequest, bytes.data(), bytes.size(), &length, nullptr);
+    status =
+        mwinRequest_GetDialogFiles(platform_->context, kRequest, bytes.data(), bytes.size(), &length, nullptr, nullptr);
     if (status != mwin_success) {
         return failure(status, "a file dialog's paths");
     }

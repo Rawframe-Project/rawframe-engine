@@ -53,6 +53,12 @@ bool mwinAndroidFindDialogs(mwinAndroidPlatform* platform, ANativeActivity* acti
     return found && mwinAndroidCopyFolder(&documents->copy, env, activity, "maul-documents");
 }
 
+void mwinAndroidEndDialogCopy(mwinAndroidPlatform* platform)
+{
+    mwinAndroidEndCopy(&platform->context->allocator, &platform->documents.copy);
+    platform->documents.to.waiting = false;
+}
+
 void mwinAndroidStopDialogs(mwinAndroidPlatform* platform)
 {
     mwinAndroidDocuments* documents = &platform->documents;
@@ -110,7 +116,8 @@ int mwinAndroidAskDialog(mwinAndroidPlatform* platform, uint32_t slot, uint32_t 
     return -1;
 }
 
-// Answers the dialog with how it went: done with its copies' paths.
+// Answers the dialog with how it went: done with its copies' paths, a
+// document left out (its path empty) marking the answer truncated.
 static void Finish(mwinAndroidPlatform* platform, mwinOutcome outcome)
 {
     mwinContext* context = platform->context;
@@ -153,8 +160,8 @@ static void JNICALL Documents(JNIEnv* env, jclass type, jlong program, jint numb
         }
         return;
     }
-    if (!mwinAndroidStartCopy(platform->context, &platform->documents.copy, env, descriptors,
-                              names))
+    if (!mwinAndroidStartCopy(platform->context, &platform->documents.copy, env, descriptors, names,
+                              mwinAndroidNow()))
     {
         Finish(platform, mwin_outcomeFailed);
     }
@@ -165,10 +172,9 @@ void mwinAndroidPumpDialogs(mwinAndroidPlatform* platform, uint32_t* budget)
     mwinAndroidDocuments* documents = &platform->documents;
     if (documents->copy.copying)
     {
-        int state = mwinAndroidStepCopy(&documents->copy, budget);
-        if (state != 0)
+        if (mwinAndroidStepCopy(&documents->copy, budget, mwinAndroidNow()))
         {
-            Finish(platform, state > 0 ? mwin_outcomeDone : mwin_outcomeFailed);
+            Finish(platform, mwin_outcomeDone);
         }
     }
 }

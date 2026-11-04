@@ -13,9 +13,6 @@
 
 #include "maul-window/input.h"
 
-// The longest text one key types.
-#define MWIN_XKB_TEXT_BYTES 64
-
 typedef struct mwinXkbKeyboard
 {
     const mwinXkbApi* api;
@@ -54,11 +51,12 @@ mwinKey mwinXkbKeyOf(const mwinXkbKeyboard* keyboard, uint32_t evdev, mwinKeyCod
 // The same for a key code, as mwinContext_MapKeyCode answers.
 mwinKey mwinXkbMapKeyCode(const mwinXkbKeyboard* keyboard, mwinKeyCode code);
 
-// The text a key typed as it went down: through a compose sequence
-// when compose is true and one runs or starts, none for control
-// characters. Returns its length in bytes.
-uint32_t mwinXkbType(mwinXkbKeyboard* keyboard, uint32_t evdev, bool compose,
-                     char text[MWIN_XKB_TEXT_BYTES]);
+// The text a key typed as it went down, into text of capacity bytes
+// with a NUL after it: through a compose sequence when compose is true
+// and one runs or starts, none for control characters. Returns its
+// length in bytes, or -1 when it needs capacity bytes or more.
+int32_t mwinXkbType(mwinXkbKeyboard* keyboard, uint32_t evdev, bool compose, char* text,
+                    uint32_t capacity);
 
 // Whether a key repeats while held, and ends a compose sequence.
 bool mwinXkbRepeats(const mwinXkbKeyboard* keyboard, uint32_t evdev);

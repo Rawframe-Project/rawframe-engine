@@ -169,7 +169,8 @@ static void AddItem(mwinContext* context, IShellItem* item)
     }
     else
     {
-        // An item without a path names no file the program can open.
+        // An item without a path names no file the program can open: it
+        // is left out, the answer marked truncated.
         mwinAddDialogFile(context, "", 0);
     }
 }

@@ -107,10 +107,12 @@ EM_JS(void, mwinPageWatchKeys, (const mwinContext* context, uint32_t slot), {
         }
         state.push(10, slot, code, down ? 1 : 0, e.repeat ? 1 : 0,
                    input.meaning(e.code, e.key, e.shiftKey), 0, 0, 0, modifiers(e));
-        // A character, typed alone or with AltGr (Control and Alt).
-        const typed = !e.metaKey && (!e.ctrlKey || e.altKey) && [...e.key].length === 1;
+        // A character, typed alone or with AltGr (Control and Alt),
+        // through the gate: another script may dispatch a lone surrogate.
+        const character = Module.mwinWellFormed(e.key);
+        const typed = !e.metaKey && (!e.ctrlKey || e.altKey) && [...character].length === 1;
         if (down && typed && !texting && !field) {
-            state.push(11, slot, e.key.codePointAt(0));
+            state.push(11, slot, character.codePointAt(0));
         }
     };
     const onDown = e => key(e, true);

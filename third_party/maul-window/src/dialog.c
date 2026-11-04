@@ -210,16 +210,18 @@ void mwinBeginDialog(mwinContext* context)
 {
     mwinListRelease(&context->dialogGathering, &context->allocator);
     context->dialogAnswer = mwin_outcomeDone;
+    context->dialogLeftOut = false;
 }
 
-// Keeps the worst of the ways a path did not go in.
+// Notes how a path did not go in: left out when it is no path, as a
+// drop's is; the answer too large past the limits.
 static void Note(mwinContext* context, mwinListResult result)
 {
     if (result == mwin_listNotPath)
     {
-        context->dialogAnswer = mwin_outcomeFailed;
+        context->dialogLeftOut = true;
     }
-    else if (result == mwin_listFull && context->dialogAnswer == mwin_outcomeDone)
+    else if (result == mwin_listFull)
     {
         context->dialogAnswer = mwin_outcomeTooLarge;
     }
@@ -240,7 +242,8 @@ mwinOutcome mwinSettleDialog(mwinContext* context, uint32_t slot, uint32_t reque
 {
     if (outcome == mwin_outcomeDone)
     {
-        // A choice of nothing failed, unless a path went past the limits.
+        // A choice of nothing, or of no path, failed, unless a path went
+        // past the limits.
         outcome = context->dialogGathering.count > 0 || context->dialogAnswer != mwin_outcomeDone
                       ? context->dialogAnswer
                       : mwin_outcomeFailed;
@@ -253,6 +256,7 @@ mwinOutcome mwinSettleDialog(mwinContext* context, uint32_t slot, uint32_t reque
         context->dialogFiles = context->dialogGathering;
         context->dialogGathering = (mwinFileList){0};
         context->dialogRequest = mwinRequestIdOf(context, slot, request);
+        context->dialogTruncated = context->dialogLeftOut;
         mwinListRelease(&last, &context->allocator);
     }
     mwinListRelease(&context->dialogGathering, &context->allocator);
@@ -263,16 +267,18 @@ void mwinReleaseDialogs(mwinContext* context)
 {
     // The last dialog's request is stale before its paths go back.
     context->dialogRequest = (mwinRequestId){0};
+    context->dialogTruncated = false;
     mwinListRelease(&context->dialogGathering, &context->allocator);
     mwinListRelease(&context->dialogFiles, &context->allocator);
 }
 
 mwinResult mwinRequest_GetDialogFiles(const mwinContext* context, mwinRequestId request,
                                       char* bufferOut, size_t capacity, size_t* lengthOut,
-                                      size_t* countOut)
+                                      size_t* countOut, bool* truncatedOut)
 {
     mwinClearOut(lengthOut, sizeof *lengthOut);
     mwinClearOut(countOut, sizeof *countOut);
+    mwinClearOut(truncatedOut, sizeof *truncatedOut);
     if (context == nullptr || lengthOut == nullptr || (bufferOut == nullptr && capacity > 0))
     {
         return mwinClearOnFailure(mwinMisuse(context), bufferOut, capacity);
@@ -286,6 +292,10 @@ mwinResult mwinRequest_GetDialogFiles(const mwinContext* context, mwinRequestId 
     if (countOut != nullptr)
     {
         *countOut = files->count;
+    }
+    if (truncatedOut != nullptr)
+    {
+        *truncatedOut = context->dialogTruncated;
     }
     return mwinClearOnFailure(
         mwinGiveBytes(files->bytes, files->length, bufferOut, capacity, lengthOut), bufferOut,

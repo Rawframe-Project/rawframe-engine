@@ -33,6 +33,11 @@ EM_JS(bool, mwinWebHasDocument, (void), {
 
 EM_JS(void, mwinWebAttach, (mwinContext* context, mwinWebLifecycle lifecycle), {
     const map = Module.mwinWeb || (Module.mwinWeb = new Map());
+    // The one gate a string from the page crosses into wasm: each lone
+    // surrogate as U+FFFD, as on every platform. Emscripten's
+    // stringToUTF8 writes one as bytes that are not UTF-8, and its
+    // lengthBytesUTF8 counts it as four and skips the unit after it.
+    Module.mwinWellFormed = text => new TextDecoder().decode(new TextEncoder().encode(text));
     const state = {queue: [], strings: [], canvases: [], listeners: []};
     map.set(context, state);
     const push = (kind, slot, code = 0, x = 0, y = 0, z = 0, w = 0, v = 0, u = 0, extra = 0) =>
@@ -195,6 +200,11 @@ EM_JS(int, mwinWebOpenCanvas, (const mwinContext* context, uint32_t slot, const 
                    listeners: []};
     if (!canvas.id) {
         canvas.id = 'mwin-' + context + '-' + slot;
+    }
+    // No selector names an id with a lone surrogate: CSS reads even an
+    // escaped one as U+FFFD.
+    if (canvas.id !== Module.mwinWellFormed(canvas.id)) {
+        return -1;
     }
     const name = '#' + CSS.escape(canvas.id);
     const suffix = '-accessibility';
@@ -362,7 +372,8 @@ EM_JS(int, mwinWebOnBattery, (const mwinContext* context), {
 EM_JS(uint32_t, mwinWebLocales, (char* out, uint32_t capacity), {
     let list = "";
     let bytes = 0;
-    for (const tag of navigator.languages || [navigator.language]) {
+    for (const given of navigator.languages || [navigator.language]) {
+        const tag = Module.mwinWellFormed(String(given));
         const more = lengthBytesUTF8(tag) + (list.length > 0 ? 1 : 0);
         if (bytes + more >= capacity) {
             break;

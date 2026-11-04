@@ -34,13 +34,15 @@
 // An input method composes text in place before it commits it. While a
 // window accepts text (mwinWindow_RequestTextInput), mwin_eventImePreedit
 // reports the text being composed, with its caret, its selection and
-// styled segments; an empty preedit ends the composition. Committed text
-// arrives as mwin_eventTextInput. While the input method composes, the
-// keys it consumes produce no key records: a key that types a character
-// and goes down during a composition is left out, and so is its release.
-// A reset ends the composition shown, not the input method's: its keys
-// stay left out until it ends its composition with an empty preedit or
-// the focus leaves.
+// styled segments; an empty preedit ends the composition. A newer
+// composition replaces one still waiting for the same window, or its end,
+// so one composition may follow another with no end between them.
+// Committed text arrives as mwin_eventTextInput. While the input method
+// composes, the keys it consumes produce no key records: a key that types
+// a character and goes down during a composition is left out, and so is
+// its release. A reset ends the composition shown, not the input
+// method's: its keys stay left out until it ends its composition with an
+// empty preedit or the focus leaves.
 
 #ifndef MAUL_WINDOW_EVENT_H
 #define MAUL_WINDOW_EVENT_H

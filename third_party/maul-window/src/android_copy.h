@@ -9,7 +9,9 @@
 // document under the name its provider gives (or "Document"), so names
 // never meet; the copy runs a step at a time between frames, from
 // descriptors that never block, within a budget of bytes the caller
-// shares between jobs.
+// shares between jobs. A document whose provider sends nothing for
+// MWIN_ANDROID_STALL_NS is left out, so that a provider that stalls
+// without closing its pipe cannot hold a job for good.
 
 #ifndef MAUL_WINDOW_SRC_ANDROID_COPY_H
 #define MAUL_WINDOW_SRC_ANDROID_COPY_H
@@ -20,13 +22,17 @@
 #include <jni.h>
 #include <limits.h>
 
-// The most bytes the copies take a frame.
+// The most bytes the copies take a frame, and how long a document's
+// copy waits for its provider's next bytes.
 #define MWIN_ANDROID_COPY_BYTES (8u << 20)
+#define MWIN_ANDROID_STALL_NS   5000000000ull
 
 // A kind of job's folder under the cache, and the number of its last
 // job (a folder each); while a job copies, its documents' descriptors,
-// read from and written to, the next to copy, and the copies' paths,
-// each ended by a NUL, in a block from the allocator.
+// read from and written to (-1 once closed), the next to copy, when it
+// last got bytes (or started), how many were left out, and the copies'
+// paths in the documents' order, each ended by a NUL and empty for one
+// left out, in a block from the allocator.
 typedef struct mwinAndroidCopy
 {
     char folder[PATH_MAX];
@@ -36,6 +42,8 @@ typedef struct mwinAndroidCopy
     int* into;
     uint32_t count;
     uint32_t next;
+    uint64_t progressNs;
+    uint32_t leftOut;
     char* paths;
     size_t pathsLength;
     size_t pathsCapacity;
@@ -48,15 +56,18 @@ bool mwinAndroidCopyFolder(mwinAndroidCopy* copy, JNIEnv* env, ANativeActivity* 
 
 // Starts a job: takes the documents' descriptors (Java's, -1 for one
 // that could not be opened) and names, and makes the copies' folders and
-// files. False when one could not be read or made; the descriptors are
-// the job's either way, and mwinAndroidEndCopy closes them.
+// files; a document that could not be opened, or whose copy could not
+// be made, is left out. False when there is no room for the job; the
+// descriptors are the job's either way, and mwinAndroidEndCopy closes
+// them.
 bool mwinAndroidStartCopy(mwinContext* context, mwinAndroidCopy* copy, JNIEnv* env,
-                          jintArray descriptors, jobjectArray names);
+                          jintArray descriptors, jobjectArray names, uint64_t nowNs);
 
-// Copies a job a step further, taking from the budget the bytes it
-// copied: 1 once every copy is whole, 0 while there is more, -1 when a
-// copy failed.
-int mwinAndroidStepCopy(mwinAndroidCopy* copy, uint32_t* budget);
+// Copies a job a step further at a time, taking from the budget the
+// bytes it copied; a document that cannot be read or written, or whose
+// provider sent nothing for MWIN_ANDROID_STALL_NS, is left out. True
+// once every document is copied or left out.
+bool mwinAndroidStepCopy(mwinAndroidCopy* copy, uint32_t* budget, uint64_t nowNs);
 
 // Closes what the job still holds and frees its paths.
 void mwinAndroidEndCopy(const mwinAllocator* allocator, mwinAndroidCopy* copy);

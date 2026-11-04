@@ -14,8 +14,8 @@
 //   folder per drop (android_copy.h), and its first text item, as text,
 //   is its text. The drop is told once every copy is whole, at the place
 //   it was made, as on iOS; a document that could not be opened or
-//   copied is left out. The window takes no drag while the last drop's
-//   documents are still copied.
+//   copied is left out, and the drop marked truncated. The window takes
+//   no drag while the last drop's documents are still copied.
 
 #include "allocator.h"
 #include "android.h"
@@ -71,8 +71,9 @@ static void JNICALL Drag(JNIEnv* env, jclass type, jlong program, jint how, jflo
     mwinPost(platform->context, (uint32_t)platform->slot, &event);
 }
 
-// Tells the drop with its copies' paths when they are whole, and its text.
-static void Finish(mwinAndroidPlatform* platform, bool whole)
+// Tells the drop with its whole copies' paths, unless its copy could not
+// start, and its text; truncated when a document was left out.
+static void Finish(mwinAndroidPlatform* platform, bool started)
 {
     mwinContext* context = platform->context;
     mwinAndroidDrops* drops = &platform->drops;
@@ -80,12 +81,17 @@ static void Finish(mwinAndroidPlatform* platform, bool whole)
     {
         mwinBeginDrop(context);
         const mwinAndroidCopy* copy = &drops->copy;
-        for (size_t at = 0; whole && at < copy->pathsLength;)
+        // A document left out has an empty path.
+        for (size_t at = 0; started && at < copy->pathsLength;)
         {
             size_t length = strlen(copy->paths + at);
-            mwinAddDroppedFile(context, copy->paths + at, length);
+            if (length > 0)
+            {
+                mwinAddDroppedFile(context, copy->paths + at, length);
+            }
             at += length + 1;
         }
+        context->dropping.truncated = context->dropping.truncated || !started || copy->leftOut > 0;
         if (drops->text != nullptr)
         {
             mwinSetDroppedText(context, drops->text, drops->textLength);
@@ -121,7 +127,8 @@ static void JNICALL Drop(JNIEnv* env, jclass type, jlong program, jfloat x, jflo
         Finish(platform, true);
         return;
     }
-    if (!mwinAndroidStartCopy(platform->context, &drops->copy, env, descriptors, names))
+    if (!mwinAndroidStartCopy(platform->context, &drops->copy, env, descriptors, names,
+                              mwinAndroidNow()))
     {
         Finish(platform, false);
     }
@@ -160,10 +167,9 @@ void mwinAndroidPumpDrops(mwinAndroidPlatform* platform, uint32_t* budget)
     mwinAndroidDrops* drops = &platform->drops;
     if (drops->copy.copying)
     {
-        int state = mwinAndroidStepCopy(&drops->copy, budget);
-        if (state != 0)
+        if (mwinAndroidStepCopy(&drops->copy, budget, mwinAndroidNow()))
         {
-            Finish(platform, state > 0);
+            Finish(platform, true);
         }
     }
 }

@@ -360,7 +360,12 @@ bool mwinX11HandleClipboardEvent(mwinX11Platform* platform, const xcb_generic_ev
         return false;
     }
     const xcb_property_notify_event_t* property = (const xcb_property_notify_event_t*)event;
-    if (property->window == window && property->atom == platform->atoms[mwin_atomSelection])
+    bool readProperty = false;
+    for (int i = 0; i < MWIN_X11_READ_PROPERTIES; i++)
+    {
+        readProperty = readProperty || property->atom == platform->atoms[mwin_atomRead0 + i];
+    }
+    if (property->window == window && readProperty)
     {
         mwinX11OnReadProperty(platform, property);
         return true;

@@ -39,14 +39,16 @@ typedef struct mwinDialogCopy
 void mwinBeginDialog(mwinContext* context);
 
 // Adds a path the dialog chose. One past the limits makes the answer
-// too large; one that is not a path of UTF-8 (of UTF-16) failed.
+// too large; one that is not a path of UTF-8 (of UTF-16), empty for a
+// file the backend could not give, is left out and the answer marked
+// truncated.
 void mwinAddDialogFile(mwinContext* context, const char* path, size_t length);
 void mwinAddDialogFileUtf16(mwinContext* context, const uint16_t* path, size_t length);
 
 // The answer to a dialog's request from how it ended and the paths
-// gathered: done keeps the paths under the request's id, too large or
-// failed when they did not all fit or were not paths. The caller
-// completes the request with it.
+// gathered: done keeps the paths under the request's id, truncated when
+// one was left out; too large when they did not all fit, and failed
+// when none was a path. The caller completes the request with it.
 mwinOutcome mwinSettleDialog(mwinContext* context, uint32_t slot, uint32_t request,
                              mwinOutcome outcome);
 

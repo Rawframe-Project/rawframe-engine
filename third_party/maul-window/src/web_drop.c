@@ -75,8 +75,13 @@ EM_JS(uint32_t, mwinPageDropNameCount, (const mwinContext* context), {
 // no string.
 EM_JS(int, mwinPageDropName, (const mwinContext* context, uint32_t index, char* out, uint32_t capacity), {
     const drop = Module.mwinWeb.get(context).drops[0];
-    const name = drop && Array.isArray(drop.names) ? drop.names[index] : undefined;
-    if (typeof name !== 'string' || lengthBytesUTF8(name) >= capacity) {
+    const given = drop && Array.isArray(drop.names) ? drop.names[index] : undefined;
+    if (typeof given !== 'string') {
+        return -1;
+    }
+    // Another script may have put the names there.
+    const name = Module.mwinWellFormed(given);
+    if (lengthBytesUTF8(name) >= capacity) {
         return -1;
     }
     return stringToUTF8(name, out, capacity);

@@ -26,13 +26,9 @@ EM_JS(void, mwinPageMakeField, (const mwinContext* context, uint32_t slot), {
     field.style.cssText = 'position:fixed;opacity:0;border:0;padding:0;margin:0;resize:none;' +
                           'overflow:hidden;pointer-events:none;caret-color:transparent';
     document.body.appendChild(field);
-    // Each lone surrogate as U+FFFD, as on every platform: Emscripten's
-    // stringToUTF8 writes one as bytes that are not UTF-8, and its
-    // lengthBytesUTF8 counts it as four and skips the unit after it.
-    const wellFormed = text => new TextDecoder().decode(new TextEncoder().encode(text));
     // A string for the backend to take, then its record.
     const give = (kind, text, code) => {
-        state.strings.push(wellFormed(text));
+        state.strings.push(text);
         state.push(kind, slot, code);
     };
     const handlers = {
@@ -53,7 +49,7 @@ EM_JS(void, mwinPageMakeField, (const mwinContext* context, uint32_t slot), {
             if (e.isComposing || entry.composing) {
                 // The field holds only the composition, and now its caret.
                 const caret = Math.min(field.selectionEnd, field.value.length);
-                give(21, field.value, lengthBytesUTF8(wellFormed(field.value.slice(0, caret))));
+                give(21, field.value, lengthBytesUTF8(Module.mwinWellFormed(field.value.slice(0, caret))));
                 return;
             }
             if (e.inputType === 'insertText' && e.data) {
@@ -98,10 +94,11 @@ EM_JS(void, mwinPageSetPurpose, (const mwinContext* context, uint32_t slot, int 
 
 // Takes the string of the record being handled: its length, or -1 when
 // it does not fit. Anything but a string, which another script may have
-// put there, is empty.
+// put there, is empty, and a string is made well-formed here, whoever
+// put it there.
 EM_JS(int, mwinPageTakeString, (const mwinContext* context, char* out, uint32_t capacity), {
     const taken = Module.mwinWeb.get(context).strings.shift();
-    const text = typeof taken === 'string' ? taken : "";
+    const text = typeof taken === 'string' ? Module.mwinWellFormed(taken) : "";
     const length = lengthBytesUTF8(text);
     if (length >= capacity) {
         return -1;

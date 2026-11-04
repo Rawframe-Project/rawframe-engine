@@ -22,7 +22,7 @@ extern "C"
 #define MWIN_VERSION_MAJOR 0
 // x-release-please-end
 // x-release-please-start-minor
-#define MWIN_VERSION_MINOR 8
+#define MWIN_VERSION_MINOR 12
 // x-release-please-end
 // x-release-please-start-patch
 #define MWIN_VERSION_PATCH 0

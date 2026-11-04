@@ -197,7 +197,8 @@ public:
     /// nearest; none for the platform's own. The web and Wayland
     /// compositors without toplevel icons answer Unsupported.
     [[nodiscard]] result::Result<RequestId> requestIcon(WindowId window, std::span<const IconImage> images);
-    /// The absolute paths a file dialog completed Done with.
+    /// The absolute paths a file dialog completed Done with. A chosen file
+    /// the platform cannot give as a path is left out.
     [[nodiscard]] result::Result<std::vector<std::string>> dialogFiles(RequestId request) const;
     /// Puts UTF-8 `text` on the clipboard, and asks for the clipboard's
     /// text, which `clipboardText` reads once the read completes Done:

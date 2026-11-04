@@ -32,9 +32,17 @@ if(MAUL_UNICODE_INSTALL)
     configure_package_config_file(${PROJECT_SOURCE_DIR}/cmake/HarfBuzzConfig.cmake.in
         ${PROJECT_BINARY_DIR}/maul-unicode-harfbuzzConfig.cmake
         INSTALL_DESTINATION ${muni_harfbuzz_dir})
+    # As for the library's own package: before 1.0 any release may break
+    # compatibility, from 1.0 on only a major release may. The adapter
+    # still finds exactly the library it was built with.
+    if(PROJECT_VERSION_MAJOR EQUAL 0)
+        set(muni_harfbuzz_compatibility ExactVersion)
+    else()
+        set(muni_harfbuzz_compatibility SameMajorVersion)
+    endif()
     write_basic_package_version_file(${PROJECT_BINARY_DIR}/maul-unicode-harfbuzzConfigVersion.cmake
         VERSION ${PROJECT_VERSION}
-        COMPATIBILITY ExactVersion)
+        COMPATIBILITY ${muni_harfbuzz_compatibility})
     install(FILES
         ${PROJECT_BINARY_DIR}/maul-unicode-harfbuzzConfig.cmake
         ${PROJECT_BINARY_DIR}/maul-unicode-harfbuzzConfigVersion.cmake

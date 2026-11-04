@@ -155,6 +155,10 @@ void mwinAndroidDestroyWindow(mwinContext* context, uint32_t slot)
         platform->slot = -1;
         platform->window = (mwinAndroidWindow){0};
         mwinAndroidForgetAccessibility(platform);
+        // A drop or a dialog still copying goes with the window, however
+        // slowly its provider sends.
+        mwinAndroidStopDrops(platform);
+        mwinAndroidEndDialogCopy(platform);
     }
 }
 

@@ -13,15 +13,15 @@
 
 typedef struct muiPopupEntry
 {
+    // When it was set, a count of sets.
+    uint64_t serial;
     muiNodeId node;
     muiPopup popup;
     // The side the last placement used, and whether there was one.
     muiPopupSide placedSide;
     bool placed;
-    // Whether it was dismissed since it was set, and when it was set, a
-    // count of sets.
+    // Whether it was dismissed since it was set.
     bool dismissed;
-    uint32_t serial;
     // While placing: whether it is done, and the index of the entry
     // holding its anchor, placed first, or the count for none.
     uint8_t mark;
@@ -36,7 +36,7 @@ typedef struct muiPopupStore
     uint32_t count;
     uint32_t capacity;
     // The sets so far, which order popups for Escape.
-    uint32_t serial;
+    uint64_t serial;
 } muiPopupStore;
 
 static inline void muiPopupInit(muiPopupStore* store, muiPopupEntry* entries, uint32_t capacity)

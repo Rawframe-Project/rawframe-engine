@@ -20,10 +20,10 @@ extern "C"
 // The library version. CMake reads it from here, and release-please
 // moves it between the markers.
 // x-release-please-start-major
-#define MUNI_VERSION_MAJOR 0
+#define MUNI_VERSION_MAJOR 1
 // x-release-please-end
 // x-release-please-start-minor
-#define MUNI_VERSION_MINOR 13
+#define MUNI_VERSION_MINOR 0
 // x-release-please-end
 // x-release-please-start-patch
 #define MUNI_VERSION_PATCH 0

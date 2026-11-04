@@ -21,30 +21,40 @@
 #include "core.h"
 #include "linux_bus.h"
 
-// The keys held at once, the longest text one key types, and the bytes
-// of an input context's path.
+// The keys held at once, and the bytes of an input context's path.
 #define MWIN_IME_HELD       32
-#define MWIN_IME_TEXT_BYTES 64
 #define MWIN_IME_PATH_BYTES 128
 
 // A key held for the input method's answer: the call (none for a key
 // held only behind others), the window by id, since its slot may hold
 // another window by the answer, its X keycode, and the records the
-// backend made for it.
+// backend made for it: the key, and its text in a room of its own, or
+// lost, a reset in its place.
 typedef struct mwinImeKey
 {
     mwinBusCall call;
     mwinWindowId window;
     uint8_t keycode;
     mwinEvent key;
-    char text[MWIN_IME_TEXT_BYTES];
+    char* text;
     uint32_t length;
+    bool lost;
 } mwinImeKey;
+
+// The parts of an input method's room, each of the textBytesPerWindow
+// limit: a commit, a composition, and the text of each key held.
+#define MWIN_LINUX_IME_PARTS (2 + MWIN_IME_HELD)
 
 typedef struct mwinLinuxIme
 {
     mwinContext* context;
     mwinLinuxBus* bus;
+    // The room's parts, each of capacity bytes, the held keys' texts
+    // one after another.
+    char* commit;
+    char* preedit;
+    char* keys;
+    uint32_t capacity;
     // The framework asked (0 none yet, then Fcitx or IBus), which ones
     // were tried, and whether the input context is made.
     uint8_t framework;
@@ -66,17 +76,21 @@ typedef struct mwinLinuxIme
     uint8_t taken[32];
 } mwinLinuxIme;
 
-void mwinImeStart(mwinLinuxIme* ime, mwinContext* context, mwinLinuxBus* bus);
+// Starts with a room of MWIN_LINUX_IME_PARTS times the context's
+// textBytesPerWindow limit.
+void mwinImeStart(mwinLinuxIme* ime, mwinContext* context, mwinLinuxBus* bus, char* room);
 
 // The window with the focus that takes text, or -1, and its caret in
 // root coordinates: the context is made the first time there is one.
 void mwinImeFocus(mwinLinuxIme* ime, int32_t slot, mwinRect caret);
 
-// Offers a key: true when it is held, and posted or dropped later;
-// false when the backend posts it now. The keysym, the X keycode and
-// the X modifier state go to the input method.
+// Offers a key with the length of its text, at most textBytesPerWindow,
+// or -1 for text lost: true when it is held, and posted or dropped
+// later, a lost text's reset after it; false when the backend posts it
+// now. The keysym, the X keycode and the X modifier state go to the
+// input method.
 bool mwinImeOffer(mwinLinuxIme* ime, uint32_t slot, uint32_t keysym, uint32_t keycode,
-                  uint32_t state, const mwinEvent* key, const char* text, uint32_t length,
+                  uint32_t state, const mwinEvent* key, const char* text, int32_t length,
                   uint64_t nowNs);
 
 // Posts or drops the keys whose answers came; after the bus's pump.

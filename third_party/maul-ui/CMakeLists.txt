@@ -352,7 +352,6 @@ if(MAUL_UI_BUILD_TESTS)
     if(MAUL_UI_ACCESS_TREE)
         maul_add_test(access_tree)
         maul_add_test(access_text WHITEBOX)
-        maul_add_test(access_wrap WHITEBOX)
         maul_add_test(id_map WHITEBOX)
     endif()
     if(MAUL_UI_NSACCESSIBILITY AND NOT MAUL_UI_BUILD_SHARED)
@@ -674,6 +673,15 @@ if(MAUL_UI_FUZZ AND MAUL_UI_TEXT)
     mui_embed_file(${PROJECT_SOURCE_DIR}/test/fonts/LiberationSans-Regular.ttf
         ${PROJECT_BINARY_DIR}/test_fonts/liberation_sans.inc s_liberationSans)
     target_include_directories(fuzz_text PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+    # Updates a host builds by hand, applied to an access tree.
+    if(MAUL_UI_ACCESS_TREE)
+        add_executable(fuzz_access test/fuzz_access.c)
+        target_link_libraries(fuzz_access PRIVATE maul-ui)
+        maul_apply_flags(fuzz_access)
+        target_compile_options(fuzz_access PRIVATE -fsanitize=fuzzer,address,undefined
+                                                   -fno-sanitize-recover=all)
+        target_link_options(fuzz_access PRIVATE -fsanitize=fuzzer,address,undefined)
+    endif()
     # AT-SPI calls, answered with libdbus's message functions, which the
     # library loads at run time.
     if(MAUL_UI_ATSPI)
