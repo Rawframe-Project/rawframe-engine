@@ -4,10 +4,9 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.2.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.0...v0.2.1) (2026-11-04)
 
-
 ### Fixed
 
-* **navigation:** check a bake area's tile places before converting them ([#190](https://github.com/Rawframe-Project/rawframe-engine/issues/190)) ([e622906](https://github.com/Rawframe-Project/rawframe-engine/commit/e622906a3f4168ce579df783b0328b22a864eb4a)), closes [#189](https://github.com/Rawframe-Project/rawframe-engine/issues/189)
+- A navmesh bake whose area is finite but far from the grid, such as one reaching 1e30 m, is refused as `Invalid` without first converting its tile places to an index, which was undefined behavior. A game's navigation bakes the area its static geometry changed, and a game's scripts place that geometry. An area that bakes today bakes the same tiles ([#190](https://github.com/Rawframe-Project/rawframe-engine/pull/190)).
 
 ## [0.2.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.1.2...v0.2.0) (2026-11-04)
 
