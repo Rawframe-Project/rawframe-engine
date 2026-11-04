@@ -3,7 +3,9 @@
 # runners served with an endpoint and a token, rawframe-author connected to
 # it reading the World's status twice as it ticks, a verb it does not have
 # answered with an error, the hall found by its component and its age read
-# by name, and a client with another token refused.
+# by name, a client with another token refused, a record too large to
+# send said so, and a server that stops answering said to have kept
+# silent.
 #
 # usage: author_tooling.sh <rawframe-author> <rawframe-server> <repository> <work directory>
 set -euo pipefail
@@ -28,7 +30,7 @@ printf '%s\n' "$(python3 -c 'import secrets; print(secrets.token_hex(24))')" >"$
 printf '%s\n' "$(python3 -c 'import secrets; print(secrets.token_hex(24))')" >"$work/other"
 
 cat >"$work/server.conf" <<CONF
-host.maximum_iterations = 1200
+host.maximum_iterations = 6000
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = $(native "$repository")/games/runners/runners.game
@@ -39,7 +41,7 @@ tooling.token_file = $work/token
 CONF
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 running=$!
-trap 'kill $running 2>/dev/null || true' EXIT
+trap 'kill -CONT $running 2>/dev/null || true; kill $running 2>/dev/null || true' EXIT
 for _ in $(seq 100); do
     [[ -s "$work/fingerprint" ]] && break
     sleep 0.1
@@ -85,4 +87,31 @@ if echo '{"kind":"tooling.status","id":1}' |
     exit 1
 fi
 grep -q '"error":{"code":"unauthenticated"' "$work/refused"
+
+# A record past what a stream carries never leaves, and the client says
+# so rather than calling the endpoint silent or closed.
+if python3 -c 'print("{\"kind\":\"tooling.status\",\"id\":1,\"pad\":\"" + "x" * (5 << 20) + "\"}")' |
+    "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" >"$work/large" 2>"$work/large.err"; then
+    exit 1
+fi
+grep -qx 'rawframe-author connect: the record could not be sent' "$work/large.err"
+
+# A server that stops answering, here held by the system once it has
+# welcomed the client, is said to have kept silent, not to have closed.
+# Git's bash on Windows cannot hold a native program.
+if ! command -v cygpath >/dev/null 2>&1; then
+    if {
+        for _ in $(seq 100); do
+            grep -q '"tooling.welcome"' "$work/held" 2>/dev/null && break
+            sleep 0.1
+        done
+        kill -STOP "$running"
+        echo '{"kind":"tooling.status","id":1}'
+    } | "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" >"$work/held" 2>"$work/held.err"; then
+        exit 1
+    fi
+    kill -CONT "$running"
+    grep -q '"tooling.welcome"' "$work/held"
+    grep -qx 'rawframe-author connect: the endpoint kept silent' "$work/held.err"
+fi
 echo "inspected runners through the tooling endpoint"

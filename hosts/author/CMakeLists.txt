@@ -227,7 +227,9 @@ if(RAWFRAME_BUILD_TESTS)
                          PASS_REGULAR_EXPRESSION "an agent authored and cooked the plaza over MCP, [1-9][0-9]* sources")
     # A running dedicated server's World read through its tooling endpoint:
     # admitted by its token, status twice as it ticks, an unknown
-    # verb answered with an error, and another token refused.
+    # verb answered with an error, another token refused, a record too
+    # large to send said so, and a server held by the system said to have
+    # kept silent.
     add_test(NAME author_tooling
              COMMAND ${RAWFRAME_SHELL} ${CMAKE_CURRENT_SOURCE_DIR}/tests/author_tooling.sh $<TARGET_FILE:rawframe_host_author>
                      $<TARGET_FILE:rawframe_host_dedicated_server> ${PROJECT_SOURCE_DIR}
