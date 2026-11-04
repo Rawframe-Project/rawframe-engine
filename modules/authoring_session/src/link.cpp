@@ -6,6 +6,7 @@
 #include "rawframe/authoring/session.h"
 #include "rawframe/authoring_session/host.h"
 #include "rawframe/document/json.h"
+#include "rawframe/execution/time.h"
 #include "rawframe/network_quic/quic.h"
 #include "rawframe/world_tooling/server.h"
 #include "replies.h"
@@ -26,6 +27,11 @@ namespace rawframe::authoring_session {
 /// How long a link's last record waits to be received: an endpoint on
 /// this machine or the next acknowledges it in milliseconds.
 constexpr std::chrono::milliseconds kEndWithin{1500};
+
+/// How long this side lets a connection go unheard: longer than a reply is
+/// waited for, so the endpoint's own idle timeout, the shorter of the two
+/// sides', decides when silence ends a link.
+constexpr auto kLinkIdle = execution::MonotonicDuration::fromSeconds(30);
 
 bool answered(std::string_view reply) {
     const auto kParsed = document::parse(reply);
@@ -61,7 +67,7 @@ ToolingLink::open(std::string_view endpoint, const char* pinFile, const char* to
         said = "the pin file holds no certificate fingerprint";
         return nullptr;
     }
-    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin});
+    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin, .idleTimeout = kLinkIdle});
     if (!network.has_value()) {
         said = "QUIC could not start";
         return nullptr;
@@ -143,7 +149,7 @@ HostLink::open(std::string_view endpoint, const char* pinFile, const char* token
         said = "the pin file holds no certificate fingerprint";
         return nullptr;
     }
-    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin});
+    auto network = network_quic::QuicNetwork::create(network_quic::QuicSettings{.pin = *pin, .idleTimeout = kLinkIdle});
     if (!network.has_value()) {
         said = "QUIC could not start";
         return nullptr;

@@ -58,9 +58,10 @@ public:
     [[nodiscard]] bool closed() const noexcept {
         return closed_;
     }
-    /// Whether the last question waited out its bound unanswered: an
-    /// endpoint stopped by its system, which a last record need not wait
-    /// for again.
+    /// Whether the last question waited out its bound unanswered, or the
+    /// connection ended for want of anything from the endpoint while it
+    /// waited: an endpoint stopped by its system, which a last record need
+    /// not wait for again.
     [[nodiscard]] bool silent() const noexcept {
         return silent_;
     }
@@ -91,6 +92,8 @@ private:
     bool ready_ = false;
     bool closed_ = false;
     bool silent_ = false;
+    /// Whether the connection ended at the idle timeout.
+    bool quiet_ = false;
     /// The questions asked, each one's number.
     std::int64_t asked_ = 0;
 };

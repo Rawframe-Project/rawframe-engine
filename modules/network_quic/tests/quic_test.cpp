@@ -391,6 +391,49 @@ RAWFRAME_TEST(AnotherCertificateIsNotTrusted) {
     RAWFRAME_EXPECT(find(serverEvents, EventKind::Accepted) == nullptr);
 }
 
+RAWFRAME_TEST(APathGoneQuietEndsBothSidesAsSilent) {
+    // Nothing either way for the idle timeout ends each side as silent,
+    // not as a close either side sent.
+    constexpr auto kIdle = execution::MonotonicDuration::fromMilliseconds(500);
+    constexpr auto kKeepAlive = execution::MonotonicDuration::fromMilliseconds(100);
+    const auto kIdentity = *network_quic::makeSelfSignedCertificate("rawframe-test", 1);
+    auto network =
+        QuicNetwork::create(QuicSettings{.certificate = kIdentity, .idleTimeout = kIdle, .keepAlive = kKeepAlive});
+    auto clients = QuicNetwork::create(
+        QuicSettings{.pin = *network_quic::fingerprintOf(kIdentity), .idleTimeout = kIdle, .keepAlive = kKeepAlive});
+    RAWFRAME_EXPECT(network.has_value() && clients.has_value());
+    if (!network.has_value() || !clients.has_value()) {
+        return;
+    }
+    const std::uint16_t kPort = freePort();
+    Relay relay{kPort};
+    auto server = *(*network)->provider(kProfile);
+    auto client = *(*clients)->provider(kProfile);
+    RAWFRAME_EXPECT(server->listen({endpointAt(kPort)}).has_value());
+    RAWFRAME_EXPECT(client->connect({endpointAt(relay.port())}).has_value());
+    std::vector<Event> serverEvents;
+    std::vector<Event> clientEvents;
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {client.get(), &clientEvents}}, [&] {
+        return find(serverEvents, EventKind::Accepted) != nullptr &&
+               find(clientEvents, EventKind::Connected) != nullptr;
+    }));
+    // Kept alive while the path carries it.
+    RAWFRAME_EXPECT(!pumpUntil(
+        {{server.get(), &serverEvents}, {client.get(), &clientEvents}},
+        [&] {
+            return find(serverEvents, EventKind::Closed) != nullptr || find(clientEvents, EventKind::Closed) != nullptr;
+        },
+        std::chrono::milliseconds{1500}));
+    relay.block(true);
+    RAWFRAME_EXPECT(pumpUntil({{server.get(), &serverEvents}, {client.get(), &clientEvents}}, [&] {
+        return find(serverEvents, EventKind::Closed) != nullptr && find(clientEvents, EventKind::Closed) != nullptr;
+    }));
+    const Event* serverClosed = find(serverEvents, EventKind::Closed);
+    const Event* clientClosed = find(clientEvents, EventKind::Closed);
+    RAWFRAME_EXPECT(serverClosed != nullptr && serverClosed->reason == CloseReason::Silent);
+    RAWFRAME_EXPECT(clientClosed != nullptr && clientClosed->reason == CloseReason::Silent);
+}
+
 RAWFRAME_TEST(AFullListenerRefuses) {
     Pair pair;
     network::ProviderProfile single = kProfile;

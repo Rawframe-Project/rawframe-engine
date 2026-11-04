@@ -89,6 +89,9 @@ CloseReason transportReason(const QUIC_CONNECTION_EVENT& event) noexcept {
     if (event.SHUTDOWN_INITIATED_BY_TRANSPORT.Status == QUIC_STATUS_BAD_CERTIFICATE) {
         return CloseReason::Untrusted;
     }
+    if (event.SHUTDOWN_INITIATED_BY_TRANSPORT.Status == QUIC_STATUS_CONNECTION_IDLE) {
+        return CloseReason::Silent;
+    }
     return CloseReason::PeerGone;
 }
 
