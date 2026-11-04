@@ -78,10 +78,11 @@ uint32_t muiUnmaskOffset(const muiTextBlock* block, uint32_t offset)
 
 muiTextBlock* muiShownBlock(muiTextService* service, muiTextBlock* block)
 {
-    if (!muiIsMasked(block))
-    {
-        return block;
-    }
+    return muiIsMasked(block) ? muiMakeMask(service, block, MUI_MAX_TEXT_BYTES) : block;
+}
+
+muiTextBlock* muiMakeMask(muiTextService* service, muiTextBlock* block, uint32_t limit)
+{
     if (block->mask != nullptr && block->maskRevision == block->revision)
     {
         return block->mask;
@@ -95,8 +96,12 @@ muiTextBlock* muiShownBlock(muiTextService* service, muiTextBlock* block)
         }
         *block->mask = (muiTextBlock){0};
     }
+    // A mask past the limit is not made, as when memory runs out: past a
+    // third of it, one-byte clusters would need more bullets, whose bytes
+    // could wrap 32 bits.
     uint32_t count = ClustersBefore(block, block->length);
-    if (!muiReserve(&service->allocator, &service->editScratch, (size_t)count * BULLET_BYTES + 1u))
+    if (count > limit / BULLET_BYTES ||
+        !muiReserve(&service->allocator, &service->editScratch, (size_t)count * BULLET_BYTES + 1u))
     {
         return nullptr;
     }

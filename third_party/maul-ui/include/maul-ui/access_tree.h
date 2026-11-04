@@ -142,8 +142,10 @@ extern "C"
     /// @return `mui_success`; `mui_errorCapacity` when the nodes would not fit
     ///         or memory runs out, which changes nothing; `mui_errorInvalid`
     ///         for a NULL tree or update, or an update that does not fit the
-    ///         tree: no root for an empty tree, a node with the id 0 or sent
-    ///         twice, a child neither held nor sent, a root, or focus, that is
+    ///         tree: no root for an empty tree, a NULL node, a node with the
+    ///         id 0 or sent twice, children or links counted with no array,
+    ///         children past the update's childCount when it is not 0, a
+    ///         child neither held nor sent, a root, or focus, that is
     ///         neither, or lists that do not leave a tree: a child listed
     ///         twice, or by a node sent while a node not sent lists it, the
     ///         root listed, or a node under itself; or a node whose marks do

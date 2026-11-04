@@ -20,8 +20,15 @@ bool muiIsMasked(const muiTextBlock* block);
 
 // The block laid out for a block: its mask, made again when its text
 // changed, for a password; the block itself otherwise. NULL when memory
-// for the mask runs out.
+// for the mask runs out, or when the mask would be longer than
+// MUI_MAX_TEXT_BYTES.
 muiTextBlock* muiShownBlock(muiTextService* service, muiTextBlock* block);
+
+// A block's mask, made again when its text changed, of at most limit
+// bytes: NULL when its bullets would pass the limit or memory runs out.
+// muiShownBlock's for a limit of MUI_MAX_TEXT_BYTES; a smaller one tests
+// the bound.
+muiTextBlock* muiMakeMask(muiTextService* service, muiTextBlock* block, uint32_t limit);
 
 // The mask's offset of an offset of a password's text: its cluster's
 // bullet, or after the last; the text's of a mask's offset. Offsets of a

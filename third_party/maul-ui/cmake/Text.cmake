@@ -29,6 +29,7 @@ target_sources(maul-ui PRIVATE
     src/paint_source.c
     src/png.c
     src/skyline.c
+    src/text_analysis.c
     src/text_block.c
     src/text_blocks.c
     src/text_boxes.c

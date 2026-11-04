@@ -42,7 +42,9 @@ extern "C"
         // Shown, hit and read by accessibility as a bullet (U+2022) per
         // character; copying gives nothing, moves and double clicks take
         // the text as one word, and input methods' compositions are
-        // refused, as platforms turn them off in a password field.
+        // refused, as platforms turn them off in a password field. A
+        // text whose bullets would pass MUI_MAX_TEXT_BYTES is not laid
+        // out or read, as when memory runs out.
         mui_editPassword = 4,
     };
 
