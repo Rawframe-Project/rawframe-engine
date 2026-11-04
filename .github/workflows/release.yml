@@ -4,13 +4,19 @@ name: release
 # conventional commits on main. Merging it tags vX.Y.Z and creates the GitHub
 # release; the assets job then builds the source archive, writes its checksum
 # and an SBOM, attests where it was built, and attaches all of it to the
-# release. docs/operations/release.md has the steps.
+# release. Given a tag by hand, it builds and attaches the files of that
+# existing release instead. docs/operations/release.md has the steps.
 
 on:
   push:
     branches: [main]
   # Runs again by hand after a failed push run, without a new commit.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: An existing release (vX.Y.Z) to build and attach the files of
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -20,6 +26,8 @@ defaults:
 
 jobs:
   release-please:
+    # A run given a tag only attaches files to that release.
+    if: ${{ !inputs.tag }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # Both steps act with the app token, so github.token needs no permissions here.
@@ -49,18 +57,52 @@ jobs:
 
   assets:
     needs: release-please
-    if: needs.release-please.outputs.created == 'true'
+    # A tag given by hand, from the default branch, attaches the files to a
+    # release made before this run: one whose push run failed after
+    # release-please created it, which a second release-please run never
+    # reports as created.
+    if: ${{ !cancelled() && ((inputs.tag && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) || (needs.release-please.result == 'success' && needs.release-please.outputs.created == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
       id-token: write
       attestations: write
+    env:
+      TAG: ${{ inputs.tag || needs.release-please.outputs.tag }}
     steps:
+      # The attestation names this workflow on the default branch, so the
+      # files must come from a commit the default branch holds: a tag on any
+      # other commit is refused, as is a draft. A release that already has
+      # files keeps them; nothing here replaces a published file, so a run
+      # that failed after attaching some is run again only once a maintainer
+      # has deleted those from the release by hand. The files are built from
+      # the commit checked here, never from the tag read again, which could
+      # have moved in between.
+      - name: A release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: $TAG"; exit 1; }
+          commit=$(gh api "repos/$REPO/commits/refs/tags/$TAG" --jq .sha)
+          held=$(gh api "repos/$REPO/compare/$commit...refs/heads/$DEFAULT" --jq .status)
+          [ "$held" = ahead ] || [ "$held" = identical ] || { echo "$TAG names $commit, which $DEFAULT does not hold"; exit 1; }
+          draft=$(gh release view "$TAG" -R "$REPO" --json isDraft --jq .isDraft)
+          [ "$draft" = false ] || { echo "$TAG is not a published release"; exit 1; }
+          files=$(gh release view "$TAG" -R "$REPO" --json assets --jq '.assets | length')
+          [ "$files" = 0 ] || { echo "$TAG already has $files files"; exit 1; }
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag }}
+          ref: ${{ steps.tag.outputs.commit }}
           persist-credentials: false
+      - name: The checked commit
+        env:
+          COMMIT: ${{ steps.tag.outputs.commit }}
+        run: '[ "$(git rev-parse HEAD)" = "$COMMIT" ] || { echo "checked out $(git rev-parse HEAD), not $COMMIT"; exit 1; }'
       - name: Build the release files into dist/
         # The engine ships as source: the tagged tree with the generated
         # shader containers and tables, which is all a build needs. GitHub's
@@ -69,13 +111,11 @@ jobs:
         run: |
           mkdir -p dist
           git archive --format=tar.gz --prefix="${GITHUB_REPOSITORY#*/}-${TAG#v}/" -o "dist/${GITHUB_REPOSITORY#*/}-${TAG#v}.tar.gz" HEAD
-        env:
-          TAG: ${{ needs.release-please.outputs.tag }}
       # Without a source name syft names the document after its path, ".".
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         env:
           SYFT_SOURCE_NAME: ${{ github.event.repository.name }}
-          SYFT_SOURCE_VERSION: ${{ needs.release-please.outputs.tag }}
+          SYFT_SOURCE_VERSION: ${{ env.TAG }}
         with:
           path: .
           format: spdx-json
@@ -90,5 +130,4 @@ jobs:
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag }}
-        run: gh release upload "$TAG" dist/* --clobber
+        run: gh release upload "$TAG" dist/*
