@@ -35,4 +35,4 @@ Nodes are laid out by flex rules with Scale+Offset sizes, and drawn with fills, 
 
 ## Accessibility
 
-Screen readers read the UI through the platform's own accessibility API (AT-SPI, UI Automation, the AX API, UIAccessibility, Android's framework, ARIA in the browser): each node with its role, name and state, the focus, and a text field's text, except a password's. Give every node that takes presses a label, as it is what a screen reader says. `ui.accessibility = false` turns it off.
+Screen readers read the UI through the platform's own accessibility API (AT-SPI, UI Automation, the AX API, UIAccessibility, Android's framework, ARIA in the browser): each node with its role, name and state, the focus, and a text field's text. Give every node that takes presses a label, as it is what a screen reader says. `ui.accessibility = false` turns it off.
