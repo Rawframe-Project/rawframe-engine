@@ -85,6 +85,18 @@ RAWFRAME_TEST(CopiesArePlacedAlikeWithinTheAreaAndApart) {
     RAWFRAME_EXPECT(kFit > 4 && kFit < 40);
 }
 
+RAWFRAME_TEST(ASpacingFarBelowTheAreaKeepsEveryDraw) {
+    // A spacing so small that the area would hold more squares of it than
+    // an index holds: every draw is kept, as with any spacing below the
+    // draws' distances, and the same whatever such spacing it is.
+    Scatter tiny = read(kRocks);
+    tiny.spacing = 5e-45;
+    Scatter small = tiny;
+    small.spacing = 1e-9;
+    const std::vector<Placement> kTiny = placed(tiny);
+    RAWFRAME_EXPECT(kTiny.size() == tiny.count && placed(small) == kTiny);
+}
+
 RAWFRAME_TEST(CopiesStandOnATerrainsGroundAndLayer) {
     // A ramp rising a meter a sample along X, its far half painted rock,
     // its origin one meter up and ten along X.
