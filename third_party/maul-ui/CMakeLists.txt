@@ -551,6 +551,21 @@ if(MAUL_UI_BUILD_TESTS)
         maul_add_test(text_limit)
         maul_add_test(text_history WHITEBOX)
         target_include_directories(test_text_limit PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+        # The mask under small limits; the block's headers reach
+        # FreeType's and HarfBuzz's.
+        maul_add_test(text_mask WHITEBOX)
+        if(TARGET test_text_mask AND TARGET maul_ui_freetype)
+            target_include_directories(test_text_mask SYSTEM PRIVATE
+                $<TARGET_PROPERTY:maul_ui_freetype,INTERFACE_INCLUDE_DIRECTORIES>
+                $<TARGET_PROPERTY:harfbuzz::harfbuzz,INTERFACE_INCLUDE_DIRECTORIES>)
+        elseif(TARGET test_text_mask)
+            target_link_libraries(test_text_mask PRIVATE Freetype::Freetype harfbuzz::harfbuzz)
+        endif()
+        # A text of 716 MB: labeled large, which the test presets and the
+        # pull request tiers leave out (docs/operations/checks.md).
+        maul_add_test(text_mask_limit)
+        target_include_directories(test_text_mask_limit PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
+        set_property(TEST text_mask_limit APPEND PROPERTY LABELS large)
         maul_add_test(text_fuzz)
         target_include_directories(test_text_fuzz PRIVATE ${PROJECT_BINARY_DIR}/test_fonts)
         maul_add_test(font_fallback)

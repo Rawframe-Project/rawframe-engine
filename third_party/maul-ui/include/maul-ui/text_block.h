@@ -289,7 +289,8 @@ extern "C"
                                                                     const uint64_t* keys,
                                                                     uint32_t count);
 
-    /// Counts the times a block could not be laid out for want of memory.
+    /// Counts the times a block could not be laid out for want of memory,
+    /// or because a password's bullets would pass MUI_MAX_TEXT_BYTES.
     /// Its measure then answers NaN and its painting calls
     /// muiDrawSink_Fail, so that layout and the next build ask again.
     ///
@@ -312,7 +313,8 @@ extern "C"
     /// @param hostKey  The block's key.
     /// @param width    The width request.
     /// @param height   The height request, which the text does not use.
-    /// @return The content box size; NaN by NaN when memory runs out,
+    /// @return The content box size; NaN by NaN when memory runs out, or
+    ///         when a password's bullets would pass MUI_MAX_TEXT_BYTES,
     ///         which layout measures again (muiMeasureFunction); 0 by 0, with
     ///         one misuse counted, while the service is busy.
     /// @par Thread safety

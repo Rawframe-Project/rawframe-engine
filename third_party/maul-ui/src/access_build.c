@@ -616,6 +616,7 @@ static muiResult BuildAccessUpdate(muiContext* context, muiNodeId rootId,
         .children = context->access.children,
         .root = build.whole ? muiNode_GetAccessId(rootId) : 0,
         .focus = muiNode_GetAccessId(muiTreeIdOf(tree, focus)),
+        .childCount = build.childCount,
     };
     entry->whole = false;
     return mui_success;
