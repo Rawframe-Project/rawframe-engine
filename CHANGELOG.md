@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.4.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.3.0...v0.4.0) (2026-11-04)
+
+### Changed
+
+- **Breaking:** A QUIC connection that ends because nothing came from the peer for its idle timeout is reported with the new `network::CloseReason::Silent`, where it was `PeerGone`. Game sessions still end with `EndReason::PeerGone`, so no game result changes ([#209](https://github.com/Rawframe-Project/rawframe-engine/pull/209)).
+- **Breaking:** An authoring tooling link opens its QUIC with a 30 s idle timeout instead of 10 s, so the endpoint's own idle timeout decides when silence ends the link. With the server's default `network.quic.idle_timeout_ms` of 10000 nothing changes. Against a server set above that, Studio's play preview, which sends and polls without waiting, notices a server gone silent after that server's timeout, up to 30 s, instead of after 10 s ([#209](https://github.com/Rawframe-Project/rawframe-engine/pull/209)).
+- The engine is built on Maul UI 1.3.0, vendored from its release archive with its SHA-256 checked. It names the same Maul Window, Unicode, Tween and RHI releases as 1.2.0, so those stay. No engine result changes: Maul UI 1.3.0's fixes are to a password field the engine never makes and to accessibility updates of kinds the engine never sends ([#207](https://github.com/Rawframe-Project/rawframe-engine/pull/207)).
+
+### Fixed
+
+- `rawframe-author connect` says "the endpoint kept silent" for an endpoint that stops answering, whichever comes first: its 10 s wait for a reply or the connection's idle timeout. When the idle timeout came first, it said "the endpoint closed" ([#209](https://github.com/Rawframe-Project/rawframe-engine/pull/209)).
+
 ## [0.3.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.2...v0.3.0) (2026-11-04)
 
 ### Changed
