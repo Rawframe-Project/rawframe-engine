@@ -1,0 +1,6 @@
+# A dedicated server.
+network.listen = 0.0.0.0:7777
+network.max_clients = 32
+replication.mappings_per_publish = 4096
+ui.kept = settings/kept.json
+host.headless = true
