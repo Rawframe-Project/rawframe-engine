@@ -2,6 +2,17 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.4.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.3.0...v0.4.0) (2026-11-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tooling:** a QUIC connection that ends at its idle timeout is now reported with `CloseReason::Silent` instead of `PeerGone`. Game sessions still see `EndReason::PeerGone`. An authoring tooling link now advertises a 30 s idle timeout instead of 10 s, so against a server whose `network.quic.idle_timeout_ms` is above 10000 it notices a server gone silent after that server's timeout, up to 30 s, instead of after 10 s. Studio's play preview, which sends and polls without waiting, is the place this shows. `rawframe-author connect` and the debug adapter still give up on a reply after 10 s, and now say the endpoint kept silent whichever way the connection ended.
+
+### Fixed
+
+* **tooling:** report an endpoint that idles out as silent ([#209](https://github.com/Rawframe-Project/rawframe-engine/issues/209)) ([52eaa3b](https://github.com/Rawframe-Project/rawframe-engine/commit/52eaa3b5b2fc7211bd036d91be4f1ae6a3672c0a)), closes [#206](https://github.com/Rawframe-Project/rawframe-engine/issues/206)
+
 ## [0.3.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.2.2...v0.3.0) (2026-11-04)
 
 ### Changed
