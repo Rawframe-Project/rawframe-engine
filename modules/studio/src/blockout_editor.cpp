@@ -1,10 +1,10 @@
+#include "rawframe/base/number_text.h"
 #include "rawframe/blockout/blockout.h"
 #include "shell.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdio>
 #include <cstdlib>
 #include <span>
 
@@ -322,10 +322,10 @@ void ShellParticipant::dropSolid(std::size_t at, std::array<float, 2> moved) {
     };
     place[0] = kSnapped(place[0] + (moved[0] / held_.planScale));
     place[2] = kSnapped(place[2] + (moved[1] / held_.planScale));
+    // Spelled as the blockout writer spells numbers, so the height, which
+    // the drag carries over, reads back as it was.
     const auto kNumber = [](double value) {
-        char made[32];
-        std::snprintf(made, sizeof made, "%.6g", value == 0 ? 0.0 : value);
-        return std::string{made};
+        return base::numberText(value == 0 ? 0.0 : value);
     };
     kAt->second = kNumber(place[0]) + " " + kNumber(place[1]) + " " + kNumber(place[2]);
     Value operation = Value::object();
