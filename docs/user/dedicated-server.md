@@ -15,7 +15,7 @@ The configuration is `key = value` lines; `#` starts a comment, and relative pat
 | `kest.game` | The game description, in development. |
 | `content.root`, `content.manifest` | Cooked content to read the game from. |
 | `content.library` | An installed library, whose active Composition the server plays. |
-| `world.tick_rate` | Ticks a second. |
+| `world.tick_rate` | Ticks a second. A game with 2D physics takes 1 to 1,000,000; its physics step fails at any other rate. |
 | `world.maximum_ticks_per_iteration`, `world.degraded_ms`, `world.debt_limit_ms`, `world.overload_ms` | How far behind the World may fall: it catches up at most so many ticks an iteration, is degraded (admission closed) so far behind, and overloaded past the debt limit or after degrading so long. |
 | `replication.endpoint` | Where players connect; replication is off without it. |
 | `replication.maximum_connections`, `replication.state_rate`, `replication.egress_bytes_per_second` | How many players, how often each is sent state, and how many bytes a second. |

@@ -58,10 +58,10 @@ CharacterMove moveCharacter(const m2World* world,
     const m2Capsule kShape{.point1 = {0, -halfHeight}, .point2 = {0, halfHeight}, .radius = radius};
     const m2Capsule kThinner{
         .point1 = {0, -halfHeight}, .point2 = {0, halfHeight}, .radius = std::max(radius - kSkin, radius / 2)};
-    std::array<m2MoverPlane, M2_MOVER_PLANES> planes{};
+    std::array<m2MoverPlane, M2_MAX_MOVER_PLANES> planes{};
     const auto kCollide = [&](m2Transform at) {
-        return std::min(m2World_CollideMover(world, &kShape, at, planes.data(), M2_MOVER_PLANES, filter),
-                        std::int32_t{M2_MOVER_PLANES});
+        return std::min(m2World_CollideMover(world, &kShape, at, filter, planes.data(), M2_MAX_MOVER_PLANES),
+                        std::int32_t{M2_MAX_MOVER_PLANES});
     };
     const auto kShift = [](m2Transform& at, m2Vec2 by) {
         at.p.x += static_cast<double>(by.x);

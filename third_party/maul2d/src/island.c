@@ -19,9 +19,7 @@
 
 #include "maul2d/base.h"
 
-#define M2_SLEEP_LINEAR_TOLERANCE  0.05f // m/s
-#define M2_SLEEP_ANGULAR_TOLERANCE 0.12f // rad/s
-#define M2_TIME_TO_SLEEP           0.5f  // seconds under tolerance
+#define M2_TIME_TO_SLEEP 0.5f // seconds under tolerance
 
 static int32_t Find(int32_t* parent, int32_t i)
 {
@@ -48,12 +46,19 @@ static void Union(int32_t* parent, int32_t a, int32_t b)
     }
 }
 
-static bool BodySlow(const m2World* world, int32_t i)
+// A body rests below its sleep threshold t and below a spin that scales
+// with it. The spin limit is the angular tolerance times t over the
+// default on purpose: at the default the quotient is exactly 1.0f, so the
+// limit is exactly M2_SLEEP_ANGULAR_TOLERANCE and t * t is the default's
+// own square, the bits of a compare against the constants. A form such as
+// t * 2.4f rounds to another float at the default and moves results.
+M2_NODISCARD static bool BodySlow(const m2World* world, int32_t i)
 {
     m2Vec2 v = world->bodies.linearVelocities[i];
     float w = world->bodies.angularVelocities[i];
-    return v.x * v.x + v.y * v.y < M2_SLEEP_LINEAR_TOLERANCE * M2_SLEEP_LINEAR_TOLERANCE &&
-           w > -M2_SLEEP_ANGULAR_TOLERANCE && w < M2_SLEEP_ANGULAR_TOLERANCE;
+    float t = world->bodies.sleepThresholds[i];
+    float spin = M2_SLEEP_ANGULAR_TOLERANCE * (t / M2_SLEEP_LINEAR_TOLERANCE);
+    return v.x * v.x + v.y * v.y < t * t && w > -spin && w < spin;
 }
 
 // Pre-solve: build islands over touching contacts, wake islands that
@@ -158,7 +163,7 @@ void m2UpdateIslandsAndWake(m2World* world)
 }
 
 // The bodies the sleep pass accounts: alive, dynamic and awake.
-static bool AwakeDynamic(const m2World* world, int32_t i)
+M2_NODISCARD static bool AwakeDynamic(const m2World* world, int32_t i)
 {
     return world->bodies.alive[i] != 0 && world->bodies.types[i] == (uint8_t)m2_dynamicBody &&
            world->bodies.asleep[i] == 0;

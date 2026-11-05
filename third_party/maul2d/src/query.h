@@ -23,7 +23,8 @@ struct m2CastHitInternal m2RayCastShapeIndex(const m2World* world, int32_t shape
                                              m2Pos2 origin, m2Vec2 translation, float maxFraction);
 
 // The layer filter every query applies to a candidate shape.
-static inline bool m2QueryShouldSee(const m2World* world, int32_t shapeIndex, m2QueryFilter filter)
+M2_NODISCARD static inline bool m2QueryShouldSee(const m2World* world, int32_t shapeIndex,
+                                                 m2QueryFilter filter)
 {
     return (filter.categoryBits & world->shapes.shapeMask[shapeIndex]) != 0 &&
            (world->shapes.shapeCategory[shapeIndex] & filter.maskBits) != 0;
@@ -40,16 +41,26 @@ typedef struct m2QueryHit
     bool hit;
 } m2QueryHit;
 
-// A closest cast with no place for its hit: one misuse, and no hit.
-static inline bool m2RefuseCast(const m2World* world)
+// Zeroes a closest cast's hit before the cast checks anything, so a miss,
+// a refusal and a null world all leave zeros. A null hitOut has no place
+// for the hit: one misuse, and no hit.
+M2_NODISCARD static inline bool m2ClearHit(const m2World* world, m2CastHit* hitOut)
 {
-    m2Refuse(world, m2_errorInvalid);
-    return false;
+    if (hitOut == NULL)
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return false;
+    }
+    hitOut->shapeId = m2_nullShapeId;
+    hitOut->point = (m2Pos2){0.0, 0.0};
+    hitOut->normal = (m2Vec2){0.0f, 0.0f};
+    hitOut->fraction = 0.0f;
+    return true;
 }
 
-// Writes a closest cast's hit, when it has one; leaves hitOut as it was
-// otherwise.
-static inline bool m2DeliverHit(m2QueryHit result, m2CastHit* hitOut)
+// Writes a closest cast's hit, when it has one, over the zeros m2ClearHit
+// left.
+M2_NODISCARD static inline bool m2DeliverHit(m2QueryHit result, m2CastHit* hitOut)
 {
     if (result.hit)
     {
@@ -85,12 +96,12 @@ typedef struct m2ProxyQuery
 m2DistanceProxy m2CircleProxy(const m2Circle* circle);
 m2DistanceProxy m2CapsuleProxy(const m2Capsule* capsule);
 m2DistanceProxy m2PolygonProxy(const m2Polygon* polygon);
-bool m2QueryMotionValid(m2Transform pose, m2Vec2 translation);
+M2_NODISCARD bool m2QueryMotionValid(m2Transform pose, m2Vec2 translation);
 m2ProxyQuery m2MakeProxyQuery(const m2DistanceProxy* castLocal, m2Transform pose,
                               m2Vec2 translation);
 void m2ProxiesInBodyFrame(const m2World* world, int32_t shapeIndex, const m2ProxyQuery* q,
                           m2DistanceProxy* target, m2DistanceProxy* cast, m2Vec2* translationLocal,
                           m2Vec2* poseOriginLocal);
-bool m2ChainGhostSide(const m2World* world, int32_t shapeIndex, m2Vec2 startLocal);
+M2_NODISCARD bool m2ChainGhostSide(const m2World* world, int32_t shapeIndex, m2Vec2 startLocal);
 
 #endif // MAUL2D_SRC_QUERY_H

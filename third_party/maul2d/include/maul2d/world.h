@@ -28,13 +28,13 @@ extern "C"
     typedef struct m2World m2World;
 
     /// A range job: run items [startIndex, endIndex).
-    typedef void m2TaskFn(int32_t startIndex, int32_t endIndex, void* taskContext);
+    typedef void m2TaskFunction(int32_t startIndex, int32_t endIndex, void* taskContext);
     /// Splits [0, itemCount) into subranges of at least minRange and runs
     /// task over them on the host's scheduler; the return value is handed
     /// to finishTask, which waits until all of them are done.
-    typedef void* m2EnqueueTaskFn(m2TaskFn* task, int32_t itemCount, int32_t minRange,
-                                  void* taskContext, void* userContext);
-    typedef void m2FinishTaskFn(void* userTask, void* userContext);
+    typedef void* m2EnqueueTaskFunction(m2TaskFunction* task, int32_t itemCount, int32_t minRange,
+                                        void* taskContext, void* userContext);
+    typedef void m2FinishTaskFunction(void* userTask, void* userContext);
 
     /// The def of a world. Initialize it with m2DefaultWorldDef.
     typedef struct m2WorldDef
@@ -53,9 +53,10 @@ extern "C"
         /// particleCapacity above 0 builds the particle system into the
         /// world for its whole life, so every snapshot has the same shape
         /// and rollback stays safe at any point in history. Its parameters
-        /// are fixed here like every other physics setting.
+        /// are fixed here like every other physics setting, and checked
+        /// even when particleCapacity is 0.
         int32_t particleCapacity;    // 0: no fluids
-        int32_t fluidVolumeCapacity; // 0: no buoyancy volumes
+        int32_t waterVolumeCapacity; // 0: no buoyancy volumes
         float particleRadius;        // meters, M2_MIN_PARTICLE_RADIUS to M2_LOCAL_LIMIT
         float particleDensity;       // kg/m^2; a particle weighs M2_MIN_MASS or more
         float particleGravityScale;  // within M2_GRAVITY_SCALE_LIMIT
@@ -79,8 +80,8 @@ extern "C"
         /// when every subrange is done. Both null, the default, runs the
         /// work serially on the calling thread. Any executor and any split
         /// give the same bits.
-        m2EnqueueTaskFn* enqueueTask;
-        m2FinishTaskFn* finishTask;
+        m2EnqueueTaskFunction* enqueueTask;
+        m2FinishTaskFunction* finishTask;
         void* userTaskContext;
         /// The allocator the world takes all its memory from, kept for its
         /// lifetime. Zeroed, it is the C library's. Set both functions or
@@ -123,7 +124,7 @@ extern "C"
     /// therefore makes n * 2^32 objects over a world's life, snapshots
     /// included; then its creates return m2_errorCapacity.
     ///
-    /// MISUSE. m2Counters.misuse counts the bugs of the calling code: an
+    /// MISUSE. m2Counters.misuseCount counts the bugs of the calling code: an
     /// argument a correct program never passes, a stale id, a writer called
     /// from host code the world is running. Untrusted input is not misuse:
     /// a snapshot or journal tape that fails its checks, and a value one of
@@ -146,7 +147,7 @@ extern "C"
     /// Returns a world def with the library's defaults, a valid cookie and
     /// the ABI version of the headers the program is built with. It is
     /// built in the program, so m2CreateWorld can refuse a def made for
-    /// another release's binary interface.
+    /// another minor version's binary interface.
     ///
     /// @return The default def.
     /// @par Thread safety
@@ -184,7 +185,12 @@ extern "C"
     M2_NODISCARD M2_API m2Result m2CreateWorld(const m2WorldDef* def, m2World** worldOut);
 
     /// Destroys a world and everything in it, and returns its memory to its
-    /// allocator. Ids into it become meaningless.
+    /// allocator. Ids into it become meaningless. The world empties before
+    /// its first free: the allocator's free hook may read it back and finds
+    /// every id stale and every list empty, and every writer it calls is
+    /// refused as busy. This call is a writer too: host code the world runs
+    /// (a task hook, a debug draw callback, the allocator) that calls it
+    /// counts one misuse, and the world stays.
     ///
     /// @param world  The world; null does nothing.
     /// @par Thread safety
@@ -229,7 +235,7 @@ extern "C"
     /// -linearDrag * shapeArea * (bodyVelocity - windVelocity), added like
     /// gravity, so larger bodies catch more wind and everything drifts
     /// toward the wind's speed. Unlike gravity it wakes no sleeper, since
-    /// wind is meant to gust. Regional wind is a fluid volume of density 0.
+    /// wind is meant to gust. Regional wind is a water volume of density 0.
     /// A velocity beyond M2_SPEED_LIMIT on either axis or a drag outside 0 to
     /// M2_RATE_LIMIT counts one misuse. Journaled.
     ///
@@ -244,8 +250,10 @@ extern "C"
     /// Reads the global wind.
     ///
     /// @param world          The world; null writes zeros.
-    /// @param velocityOut    Receives the air's velocity; may be null.
-    /// @param linearDragOut  Receives the drag coefficient; may be null.
+    /// @param velocityOut    Receives the air's velocity; (0, 0) for a null
+    ///                       world. May be null.
+    /// @param linearDragOut  Receives the drag coefficient; 0 for a null
+    ///                       world. May be null.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
@@ -305,7 +313,8 @@ extern "C"
     /// host renders. Polygon vertices arrive body-local with the body's
     /// f64 origin and rotation, so a renderer can subtract its camera in
     /// doubles and stay steady far from the origin. A null callback skips
-    /// that primitive. Colors are 0xRRGGBB hints.
+    /// that primitive. Colors are 0xRRGGBB hints. Start from a zeroed
+    /// struct, so a field a later minor release adds stays off.
     typedef struct m2DebugDraw
     {
         void (*drawPolygon)(const m2Vec2* localVertices, int32_t count, m2Pos2 origin,
@@ -336,38 +345,51 @@ extern "C"
     /// several readers at once.
     M2_API void m2World_Draw(const m2World* world, const m2DebugDraw* draw);
 
-    /// Wall-clock times of the last step. They are not deterministic and
-    /// never enter a snapshot or a hash.
+    /// Wall-clock times of the last step's phases, each in milliseconds.
+    /// They are not deterministic and never enter a snapshot or a hash.
     typedef struct m2Profile
     {
-        float stepMs;     // the whole m2World_Step
-        float pairsMs;    // broadphase and pair update
-        float contactsMs; // narrowphase manifolds
-        float solveMs;    // solver, continuous collision included
-        float sleepMs;    // islands and sleep accounting
+        float step;        // the whole m2World_Step
+        float broadphase;  // broadphase and pair update
+        float narrowphase; // narrowphase manifolds
+        float solve;       // solver, continuous collision included
+        float sleep;       // islands and sleep accounting
     } m2Profile;
 
-    /// Counts derived from world state, so they are deterministic.
+    /// What a world holds and what it did: observer data. Reading the
+    /// counters never touches the simulation, a snapshot or the hash, and
+    /// twins given the same calls report the same counts. The counts of
+    /// live objects, awake bodies, pairs and steps come from world state,
+    /// so a restore brings them back with it. The last-step counts
+    /// (constraintCount, colorCount, overflowCount and the three counts of
+    /// drops) describe the last step this world completed and are zero
+    /// before it; particleCreatesRefused and misuseCount add up over the
+    /// world's life. Neither kind is state: it is not hashed or
+    /// snapshotted, and a restore leaves it as it is, so right after a
+    /// rollback the last-step counts still describe the step before it. A
+    /// refused m2World_ReplayJournal leaves every count as it was before
+    /// the call; only misuse by host code the replay ran stays counted.
     typedef struct m2Counters
     {
-        int32_t bodies;
-        int32_t awakeBodies;
-        int32_t shapes;
-        int32_t joints;
-        int32_t pairs;
-        int32_t touchingPairs;
-        int32_t constraints;         // solved last step
-        int32_t graphColors;         // colors used last step
-        int32_t overflowConstraints; // in the serial bucket last step
+        int32_t bodyCount;
+        int32_t awakeCount; // enabled, awake dynamic bodies
+        int32_t shapeCount;
+        int32_t jointCount;
+        int32_t contactCount;    // live broadphase pairs
+        int32_t touchingCount;   // pairs whose shapes touch
+        int32_t constraintCount; // solved last step
+        int32_t colorCount;      // solver graph colors used last step
+        int32_t overflowCount;   // constraints in the serial bucket last step
         M2_ALIGN8 uint64_t stepCount;
         // Counted in every build. Poll them once per frame and alarm on
         // growth: there is no per-call callback, so healthy calls pay
-        // nothing for the diagnosis.
-        int32_t pairOverflow;                // body pairs dropped last step (pair table full)
-        int32_t particlePairOverflow;        // particle pairs dropped last step (budget)
-        int32_t particleBodyOverflow;        // particle body contacts dropped last step
-        M2_ALIGN8 uint64_t particlePoolFull; // creates refused by a full pool, cumulative
-        M2_ALIGN8 uint64_t misuse;           // calls refused as misuse, cumulative
+        // nothing for the diagnosis. The three counts of drops stop at
+        // INT32_MAX.
+        int32_t pairsDropped;                      // body pairs dropped last step (pair table full)
+        int32_t particlePairsDropped;              // particle pairs dropped last step (budget)
+        int32_t particleBodyContactsDropped;       // particle body contacts dropped last step
+        M2_ALIGN8 uint64_t particleCreatesRefused; // creates refused by a full pool, cumulative
+        M2_ALIGN8 uint64_t misuseCount;            // calls refused as misuse, cumulative
     } m2Counters;
 
     /// Sums the kinetic energy of the awake dynamic bodies, in f64 and in
@@ -401,18 +423,22 @@ extern "C"
 
     /// Advances the simulation. Identical worlds given identical calls
     /// reach identical bits on every supported platform. Feed the same dt
-    /// every step: 1/60 with 4 substeps is the tuned default. A dt outside
-    /// M2_MIN_STEP to M2_STEP_LIMIT, or a substep count below 1 or
-    /// above M2_MAX_SUBSTEPS, changes nothing and counts one misuse.
-    /// Journaled.
+    /// every step: 1/60 with 4 substeps is the tuned default. A refused
+    /// step changes nothing, and every refusal but a null world's counts
+    /// one misuse. Journaled.
     ///
     /// @param world         The world.
     /// @param dt            The step, seconds, from M2_MIN_STEP (1e-6)
     ///                      to M2_STEP_LIMIT (10).
     /// @param substepCount  The solver substeps, 1 to M2_MAX_SUBSTEPS.
+    /// @return m2_success; m2_errorInvalid for a null world, a dt that
+    ///         is NaN or 0 or below, or a substep count below 1;
+    ///         m2_errorLimit for a dt outside M2_MIN_STEP to
+    ///         M2_STEP_LIMIT or a substep count above M2_MAX_SUBSTEPS;
+    ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2World_Step(m2World* world, float dt, int32_t substepCount);
+    M2_NODISCARD M2_API m2Result m2World_Step(m2World* world, float dt, int32_t substepCount);
 
     /// Counts the steps taken since creation; a restore brings back the
     /// snapshot's count.
@@ -432,31 +458,39 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API int64_t m2World_SnapshotSize(const m2World* world);
+    M2_API int64_t m2World_GetSnapshotSize(const m2World* world);
 
-    /// Writes the whole simulation state into caller memory.
+    /// Writes the whole simulation state into caller memory. A failed
+    /// snapshot zeroes the buffer, so it never holds what looks like part
+    /// of a snapshot: a host that keeps a ring of snapshot buffers sizes
+    /// them with m2World_GetSnapshotSize first, or snapshots into a spare
+    /// buffer and swaps it in on success.
     ///
-    /// @param world     The world.
-    /// @param buffer    Receives the snapshot.
-    /// @param capacity  The length of buffer, in bytes.
-    /// @param bytesOut  Receives the bytes written; with m2_errorCapacity,
-    ///                  the size needed; 0 on any other failure.
-    /// @return m2_success; m2_errorInvalid for a null argument;
+    /// @param world      The world.
+    /// @param bufferOut  Receives the snapshot; zeros over the whole
+    ///                   capacity on failure.
+    /// @param capacity   The length of bufferOut, in bytes, not below 0.
+    /// @param bytesOut   Receives the bytes written; with m2_errorCapacity,
+    ///                   the size needed; 0 on any other failure.
+    /// @return m2_success; m2_errorInvalid for a null argument or a negative
+    ///         capacity;
     ///         m2_errorCapacity when capacity is below
-    ///         m2World_SnapshotSize, with nothing written.
+    ///         m2World_GetSnapshotSize.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_NODISCARD M2_API m2Result m2World_Snapshot(const m2World* world, void* buffer,
+    M2_NODISCARD M2_API m2Result m2World_Snapshot(const m2World* world, void* bufferOut,
                                                   int64_t capacity, int64_t* bytesOut);
 
     /// Restores a snapshot of a world with the same shape: the same
     /// capacities and the same particle radius in its def. Everything,
     /// bodies, id pools and the step count included, returns to the
-    /// snapshot's instant, bit for bit, and the event streams clear. Only
-    /// the release that wrote a snapshot reads it (M2_ABI_VERSION). The
-    /// buffer is checked before any byte lands: a header from another
-    /// release, build or world shape, an index or count out of range,
+    /// snapshot's instant, bit for bit, and the event streams clear. End
+    /// events a destroy or a disable queued for the next step are state:
+    /// the snapshot carries them, and the next step delivers them. Only
+    /// the minor version that wrote a snapshot reads it (M2_ABI_VERSION).
+    /// The buffer is checked before any byte lands: a header from another
+    /// minor version, build or world shape, an index or count out of range,
     /// flags that are not flags and non-finite state are refused, and the
     /// world stays as it was. The checks make every index safe; they do not
     /// rebuild every structural invariant (tree shape, list links), so
@@ -466,10 +500,10 @@ extern "C"
     /// @param world   The world.
     /// @param buffer  The snapshot.
     /// @param size    Its length, in bytes.
-    /// @return m2_success; m2_errorVersion for a snapshot another release
-    ///         or build wrote, and m2_errorFormat for other bytes that fail
-    ///         the checks, a world of another shape included, neither of
-    ///         which counts misuse; m2_errorInvalid for a null buffer, which
+    /// @return m2_success; m2_errorVersion for a snapshot another minor
+    ///         version or build wrote, and m2_errorFormat for other bytes
+    ///         that fail the checks, a world of another shape included,
+    ///         neither of which counts misuse; m2_errorInvalid for a null buffer, which
     ///         counts one; m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
@@ -477,7 +511,7 @@ extern "C"
 
     /// Hashes every piece of state the step reads and a call can change:
     /// the world's gravity, wind, sleeping switch and step count; every
-    /// live body, shape, chain, joint, particle and fluid volume, each
+    /// live body, shape, chain, joint, particle and water volume, each
     /// field keyed by its slot (pose, velocities, forces, mass data,
     /// damping, gravity scale, locks, dominance, sleep and enable state;
     /// geometry, materials, filter and sensor flag; joint anchors,
@@ -526,7 +560,7 @@ extern "C"
         M2_ALIGN8 uint64_t contacts;  // pairs, their touching flags and manifolds
         M2_ALIGN8 uint64_t joints;    // joint settings and impulses, and the joint id pool
         M2_ALIGN8 uint64_t particles; // particles and the jelly nets, and the particle id pool
-        M2_ALIGN8 uint64_t volumes;   // fluid volumes and their id pool
+        M2_ALIGN8 uint64_t volumes;   // water volumes and their id pool
     } m2WorldHashParts;
 
     /// Hashes each part of the world. Compare two runs part by part each
@@ -541,14 +575,14 @@ extern "C"
     /// several readers at once.
     M2_API m2WorldHashParts m2World_GetHashParts(const m2World* world);
 
-    /// A fluid volume of a world: a 1-based slot and a generation.
-    typedef struct m2FluidVolumeId
+    /// A water volume of a world: a 1-based slot and a generation.
+    typedef struct m2WaterVolumeId
     {
         uint32_t index1; // 1-based slot, 0 = null
         uint32_t generation;
-    } m2FluidVolumeId;
+    } m2WaterVolumeId;
 
-    static const m2FluidVolumeId m2_nullFluidVolumeId = {0, 0};
+    static const m2WaterVolumeId m2_nullWaterVolumeId = {0, 0};
 
     /// Water without particles: an axis-aligned region and a horizontal
     /// surface. Every awake dynamic body whose origin lies in the region
@@ -556,51 +590,53 @@ extern "C"
     /// for circles and polygons, a box fraction for capsules and
     /// segments), linear and angular drag, and the flow. Far cheaper than a
     /// particle pool where one would be overkill.
-    typedef struct m2FluidVolumeDef
+    typedef struct m2WaterVolumeDef
     {
-        m2Pos2 regionLower; // the region, world space
-        m2Pos2 regionUpper;
+        m2WorldAabb bounds;       // the region, world space; upper above lower on both axes
         M2_ALIGN8 double surface; // the waterline, world y
         float density;            // buoyant force per submerged area; 0 to M2_DENSITY_LIMIT
         float linearDrag;         // velocity damping per submerged area; 0 to M2_RATE_LIMIT
         float angularDrag;        // spin damping; 0 to M2_RATE_LIMIT
         m2Vec2 flow;              // the current, m/s, within M2_SPEED_LIMIT per axis
         M2_ALIGN8 uint64_t userData;
-        int32_t internalValue; // the cookie m2DefaultFluidVolumeDef sets
-    } m2FluidVolumeDef;
+        int32_t internalValue; // the cookie m2DefaultWaterVolumeDef sets
+    } m2WaterVolumeDef;
 
-    /// Returns a fluid volume def: density 2, linear drag 1, angular drag
-    /// 0.5, no flow, an empty region at the origin.
+    /// Returns a water volume def: density 2, linear drag 1, angular drag
+    /// 0.5, no flow, and a box of one point at the origin, which
+    /// m2CreateWaterVolume refuses until the bounds are set.
     ///
-    /// @return The default def; set the region and the surface.
+    /// @return The default def; set the bounds and the surface.
     /// @par Thread safety
     /// Safe from any thread.
-    M2_API m2FluidVolumeDef m2DefaultFluidVolumeDef(void);
+    M2_API m2WaterVolumeDef m2DefaultWaterVolumeDef(void);
 
-    /// Creates a fluid volume. Journaled.
+    /// Creates a water volume. Journaled.
     ///
     /// @param world      The world.
-    /// @param def        The volume, from m2DefaultFluidVolumeDef.
+    /// @param def        The volume, from m2DefaultWaterVolumeDef.
     /// @param volumeOut  Receives the volume; the null id on failure.
-    /// @return m2_success; m2_errorInvalid for a bad def or a null
-    ///         argument; m2_errorLimit for a value past its published
-    ///         bound; m2_errorCapacity when the volume pool is full, a pool
-    ///         of 0 included, which counts no misuse; m2_errorBusy from
-    ///         host code the world is running.
+    /// @return m2_success; m2_errorInvalid for a bad def, a box with no
+    ///         area among them (upper at or below lower on either axis,
+    ///         which can never hold a body), or a null argument;
+    ///         m2_errorLimit for a value past its published bound; m2_errorCapacity when the volume
+    ///         pool is full, a pool of 0 included, which counts no misuse; m2_errorBusy from host
+    ///         code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_NODISCARD M2_API m2Result m2CreateFluidVolume(m2World* world, const m2FluidVolumeDef* def,
-                                                     m2FluidVolumeId* volumeOut);
+    M2_NODISCARD M2_API m2Result m2CreateWaterVolume(m2World* world, const m2WaterVolumeDef* def,
+                                                     m2WaterVolumeId* volumeOut);
 
-    /// Destroys a fluid volume. Journaled.
+    /// Destroys a water volume. Journaled.
     ///
     /// @param world     The world.
     /// @param volumeId  The volume.
-    /// @return m2_success; m2_errorStale when it is already gone;
+    /// @return m2_success; m2_errorInvalid for a null world;
+    ///         m2_errorStale when it is already gone;
     ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_NODISCARD M2_API m2Result m2DestroyFluidVolume(m2World* world, m2FluidVolumeId volumeId);
+    M2_NODISCARD M2_API m2Result m2DestroyWaterVolume(m2World* world, m2WaterVolumeId volumeId);
 
     /// Tells whether a volume id names a live volume. Counts no misuse.
     ///
@@ -610,7 +646,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API bool m2FluidVolume_IsValid(const m2World* world, m2FluidVolumeId volumeId);
+    M2_API bool m2WaterVolume_IsValid(const m2World* world, m2WaterVolumeId volumeId);
 
     /// Moves a volume's waterline: a rising tide, a draining tank. A stale
     /// id or a non-finite surface counts one misuse. Journaled.
@@ -620,7 +656,7 @@ extern "C"
     /// @param surface   The new waterline, world y.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2FluidVolume_SetSurface(m2World* world, m2FluidVolumeId volumeId, double surface);
+    M2_API void m2WaterVolume_SetSurface(m2World* world, m2WaterVolumeId volumeId, double surface);
 
     /// Reads a volume's waterline.
     ///
@@ -630,7 +666,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API double m2FluidVolume_GetSurface(const m2World* world, m2FluidVolumeId volumeId);
+    M2_API double m2WaterVolume_GetSurface(const m2World* world, m2WaterVolumeId volumeId);
 
     /// Reads a volume's game data.
     ///
@@ -640,7 +676,18 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API uint64_t m2FluidVolume_GetUserData(const m2World* world, m2FluidVolumeId volumeId);
+    M2_API uint64_t m2WaterVolume_GetUserData(const m2World* world, m2WaterVolumeId volumeId);
+
+    /// Sets a volume's opaque game data, kept through snapshots and journals.
+    ///
+    /// @param world     The world.
+    /// @param volumeId  The volume; a stale id changes nothing and counts one
+    ///                  misuse.
+    /// @param userData  Any value.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2WaterVolume_SetUserData(m2World* world, m2WaterVolumeId volumeId,
+                                          uint64_t userData);
 
     /// Returns a journal tape's fixed cost: its header and the snapshot it
     /// embeds. Size a tape as this plus room for the operations.
@@ -659,9 +706,9 @@ extern "C"
     ///
     /// @param world     The world.
     /// @param buffer    Receives the tape.
-    /// @param capacity  The length of buffer, in bytes.
-    /// @return m2_success; m2_errorInvalid for a null buffer or a capacity
-    ///         a size_t cannot hold; m2_errorCapacity when capacity is below
+    /// @param capacity  The length of buffer, in bytes, not below 0.
+    /// @return m2_success; m2_errorInvalid for a null buffer, a negative
+    ///         capacity or one a size_t cannot hold; m2_errorCapacity when capacity is below
     ///         m2World_GetJournalBaseSize; m2_errorState when the world is
     ///         already recording; m2_errorBusy from host code the world is
     ///         running.
@@ -674,8 +721,9 @@ extern "C"
     /// it is never cut short silently.
     ///
     /// @param world     The world.
-    /// @param bytesOut  Receives the tape's size; 0 on failure.
-    /// @return m2_success; m2_errorInvalid for a null bytesOut;
+    /// @param bytesOut  Receives the tape's size; 0 on failure, except that
+    ///                  m2_errorBusy leaves it as it was.
+    /// @return m2_success; m2_errorInvalid for a null world or bytesOut;
     ///         m2_errorCapacity when the operations overflowed the buffer;
     ///         m2_errorState when the world was not recording; m2_errorBusy
     ///         from host code the world is running.
@@ -685,22 +733,24 @@ extern "C"
 
     /// Replays a tape: restores the snapshot it embeds and applies its
     /// operations through the same calls that recorded them. It is atomic:
-    /// a tape that is malformed or truncated, or that recreates an object
-    /// under another id than the recording saw, is refused and the world
-    /// stays as it was. Only the release that wrote a tape replays it
-    /// (M2_ABI_VERSION); a tape from another release, build or world shape
-    /// is refused too.
+    /// a tape that is malformed or truncated, that carries a value one of
+    /// its calls refuses (a void call included), or that recreates an
+    /// object under another id than the recording saw, is refused and the
+    /// world stays as it was, its event streams and counters included; only
+    /// misuse by host code the replay ran stays counted. Only the minor
+    /// version that wrote a tape replays it (M2_ABI_VERSION); a tape from
+    /// another minor version, build or world shape is refused too.
     ///
     /// @param world  The world.
     /// @param data   The tape.
     /// @param size   Its length, in bytes.
     /// @return m2_success; m2_errorVersion for a tape, or its embedded
-    ///         snapshot, another release or build wrote, and m2_errorFormat
-    ///         for another tape that fails its checks (a record the world
-    ///         refuses included), neither of which counts misuse;
-    ///         m2_errorInvalid for a null data pointer or a size a size_t
-    ///         cannot hold, which counts one; m2_errorState while the world
-    ///         is recording; m2_errorBusy from host code the world is
+    ///         snapshot, another minor version or build wrote, and
+    ///         m2_errorFormat for another tape that fails its checks (a
+    ///         record the world refuses included), neither of which counts
+    ///         misuse; m2_errorInvalid for a null data pointer or a size a
+    ///         size_t cannot hold, which counts one; m2_errorState while the
+    ///         world is recording; m2_errorBusy from host code the world is
     ///         running; m2_errorCapacity when the allocator cannot give the
     ///         replay its scratch memory.
     /// @par Thread safety

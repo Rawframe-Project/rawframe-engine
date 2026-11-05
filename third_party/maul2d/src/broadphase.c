@@ -54,16 +54,53 @@ static int CompareI32(const void* a, const void* b)
     return ia < ib ? -1 : (ia > ib ? 1 : 0);
 }
 
-static bool ShapeIsDynamic(const m2World* world, int32_t shapeIndex)
+m2PairSide m2ShapePairSide(const m2World* world, int32_t shapeIndex)
 {
-    return world->bodies.types[world->shapes.shapeBody[shapeIndex]] == (uint8_t)m2_dynamicBody;
+    m2PairSide side = {world->shapes.shapeCategory[shapeIndex],
+                       world->shapes.shapeMask[shapeIndex],
+                       world->shapes.shapeGroup[shapeIndex],
+                       world->shapes.shapeGeometry[shapeIndex].type,
+                       world->shapes.shapeSensor[shapeIndex] != 0,
+                       world->bodies.types[world->shapes.shapeBody[shapeIndex]]};
+    return side;
+}
+
+// Two shapes on static bodies never pair, a sensor among them or not: a
+// static mover queries only the dynamic tree. Two non-dynamic shapes pair
+// only through a sensor, and two sensors never detect each other. Two
+// shapes without area, a segment or a chain segment against another, never
+// hold each other: two lines have no inside to push each other out of, so a
+// body that meets one faster than the contact margin per step passes
+// through it. A sensor among them still pairs. Then the filters: one group
+// decides alone, a negative one keeping the two apart and a positive one
+// pairing them; otherwise each shape's category must be in the other's
+// mask.
+bool m2SidesMayPair(const m2PairSide* a, const m2PairSide* b)
+{
+    if ((a->sensor && b->sensor) ||
+        (a->bodyType == (uint8_t)m2_staticBody && b->bodyType == (uint8_t)m2_staticBody))
+    {
+        return false;
+    }
+    bool dynamic = a->bodyType == (uint8_t)m2_dynamicBody || b->bodyType == (uint8_t)m2_dynamicBody;
+    bool lineA = a->type == (int32_t)m2_segmentShape || a->type == (int32_t)m2_chainSegmentShape;
+    bool lineB = b->type == (int32_t)m2_segmentShape || b->type == (int32_t)m2_chainSegmentShape;
+    if (!a->sensor && !b->sensor && (!dynamic || (lineA && lineB)))
+    {
+        return false;
+    }
+    if (a->group != 0 && a->group == b->group)
+    {
+        return a->group > 0;
+    }
+    return (a->category & b->mask) != 0 && (b->category & a->mask) != 0;
 }
 
 // Re-derive pairs touched by the moved set, then batch-merge with the
 // untouched remainder.
 // Which trees a moved shape queries: dynamic and kinematic movers sweep
 // every tree, static movers (teleports) only the dynamic one.
-static bool MoverSeesTree(const m2World* world, int32_t shapeIndex, int32_t tree)
+M2_NODISCARD static bool MoverSeesTree(const m2World* world, int32_t shapeIndex, int32_t tree)
 {
     return world->bodies.types[world->shapes.shapeBody[shapeIndex]] != (uint8_t)m2_staticBody ||
            tree == (int32_t)m2_dynamicBody;
@@ -72,7 +109,7 @@ static bool MoverSeesTree(const m2World* world, int32_t shapeIndex, int32_t tree
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): rebuild, merge, diff: one pair stash
 void m2UpdatePairs(m2World* world)
 {
-    world->contacts.pairOverflow = 0;
+    world->contacts.pairsDropped = 0;
     if (world->broadphase.movedCount == 0)
     {
         return;
@@ -82,6 +119,7 @@ void m2UpdatePairs(m2World* world)
           CompareI32);
 
     int32_t collected = 0;
+    int64_t dropped = 0; // every moved shape may meet every other: past 32 bits
     for (int32_t m = 0; m < world->broadphase.movedCount; ++m)
     {
         int32_t shapeIndex = world->broadphase.moved[m];
@@ -94,7 +132,8 @@ void m2UpdatePairs(m2World* world)
         m2Aabb fat =
             world->broadphase.treeNodes[treeIndex][world->broadphase.proxyIds[shapeIndex]].aabb;
 
-        bool moverDynamic = ShapeIsDynamic(world, shapeIndex);
+        m2PairSide moverSide = m2ShapePairSide(world, shapeIndex);
+        bool moverDynamic = moverSide.bodyType == (uint8_t)m2_dynamicBody;
         // Kinematic movers sweep every tree: a kinematic character
         // walking through a static trigger zone is the most ordinary
         // sensor story there is. Static movers only exist via
@@ -124,52 +163,29 @@ void m2UpdatePairs(m2World* world)
                 {
                     continue; // same-body shapes never pair
                 }
-                if (!moverDynamic && !ShapeIsDynamic(world, other) &&
-                    world->shapes.shapeSensor[shapeIndex] == 0 &&
-                    world->shapes.shapeSensor[other] == 0)
+                m2PairSide otherSide = m2ShapePairSide(world, other);
+                if (!m2SidesMayPair(&moverSide, &otherSide))
                 {
-                    continue; // two non-dynamics only pair through a sensor
-                }
-                if (world->shapes.shapeSensor[shapeIndex] != 0 &&
-                    world->shapes.shapeSensor[other] != 0)
-                {
-                    continue; // two sensors never detect each other
-                }
-                int32_t groupA = world->shapes.shapeGroup[shapeIndex];
-                if (groupA != 0 && groupA == world->shapes.shapeGroup[other])
-                {
-                    if (groupA < 0)
-                    {
-                        continue; // same negative group: never collide
-                    }
-                }
-                else if ((world->shapes.shapeCategory[shapeIndex] &
-                          world->shapes.shapeMask[other]) == 0 ||
-                         (world->shapes.shapeCategory[other] &
-                          world->shapes.shapeMask[shapeIndex]) == 0)
-                {
-                    continue; // filtered out (category/mask, both ways)
+                    continue; // their kinds or their filters keep them apart
                 }
                 if (m2JointsForbidPair(world, world->shapes.shapeBody[shapeIndex],
                                        world->shapes.shapeBody[other]))
                 {
                     continue; // connected without enableConnectedCollision
                 }
-                if (collected < world->contacts.pairCapacity)
+                if (collected >= world->contacts.pairCapacity)
                 {
-                    world->contacts.pairScratch[collected] = PairKey(shapeIndex, other);
+                    dropped += 1;
+                    continue;
                 }
+                world->contacts.pairScratch[collected] = PairKey(shapeIndex, other);
                 collected += 1;
             }
         }
     }
     // A full pair table drops the excess candidates, counted loudly in
-    // m2Counters.pairOverflow rather than asserted away.
-    if (collected > world->contacts.pairCapacity)
-    {
-        world->contacts.pairOverflow += collected - world->contacts.pairCapacity;
-        collected = world->contacts.pairCapacity;
-    }
+    // m2Counters.pairsDropped rather than asserted away.
+    m2CountDrops(&world->contacts.pairsDropped, dropped);
 
     qsort(world->contacts.pairScratch, (size_t)collected, sizeof(uint64_t), CompareU64);
 
@@ -228,7 +244,7 @@ void m2UpdatePairs(m2World* world)
         }
         else
         {
-            world->contacts.pairOverflow += 1;
+            m2CountDrops(&world->contacts.pairsDropped, 1);
         }
     }
     memcpy(world->contacts.pairKeys, world->contacts.pairMergeScratch,
@@ -281,7 +297,10 @@ void m2UpdatePairs(m2World* world)
             }
         }
     }
+}
 
+void m2ClearMoved(m2World* world)
+{
     for (int32_t m = 0; m < world->broadphase.movedCount; ++m)
     {
         world->broadphase.inMoved[world->broadphase.moved[m]] = 0;

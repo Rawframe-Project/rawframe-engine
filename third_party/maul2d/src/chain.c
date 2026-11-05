@@ -159,22 +159,16 @@ static M2_NOINLINE m2Result CreateChainWorker(m2World* world, m2BodyId bodyId,
     world->chains.chainFreeHead = (world->chains.chainFreeHead + 1) % world->shapes.shapeCapacity;
     world->chains.chainFreeCount -= 1;
 
+    // The first segment always fits: the pool has a free slot, the def
+    // check covers every field a shape create checks, and a tree insert
+    // cannot fail (ApplyWorldDef sizes the node pools).
     int32_t created = CreateSegments(world, bodyId, def, chainIndex);
-    if (created == 0)
-    {
-        // Unreachable while the shape pool had room: hand the claimed slot
-        // back to the head of the free ring, generation untouched, since a
-        // refused create is not journaled and must move no later id.
-        world->chains.chainFreeHead =
-            (world->chains.chainFreeHead + world->shapes.shapeCapacity - 1) %
-            world->shapes.shapeCapacity;
-        world->chains.chainFreeQueue[world->chains.chainFreeHead] = chainIndex;
-        world->chains.chainFreeCount += 1;
-        return m2Refuse(world, m2_errorCapacity);
-    }
+    M2_ASSERT(created > 0);
     world->chains.chainAlive[chainIndex] = 1;
     world->chains.chainBody[chainIndex] = bodyIndex;
     world->chains.chainLoop[chainIndex] = def->isLoop ? 1 : 0;
+    world->chains.chainFriction[chainIndex] = def->friction;
+    world->chains.chainRestitution[chainIndex] = def->restitution;
     if (chainIndex + 1 > world->chains.maxChainIndex)
     {
         world->chains.maxChainIndex = chainIndex + 1;
@@ -306,6 +300,14 @@ static void ChainMaterialInternal(m2World* world, m2ChainId chainId, int32_t cha
         record.value = value;
         m2JournalRecord(world, op, &record, (int32_t)sizeof(record));
     }
+    if (op == m2_opChainFriction)
+    {
+        world->chains.chainFriction[chainIndex] = value;
+    }
+    else
+    {
+        world->chains.chainRestitution[chainIndex] = value;
+    }
     int32_t body = world->chains.chainBody[chainIndex];
     for (int32_t s = world->bodies.bodyShapeHead[body]; s != -1; s = world->shapes.shapeNext[s])
     {
@@ -369,13 +371,41 @@ void m2Chain_SetRestitution(m2World* world, m2ChainId chainId, float restitution
     m2FloatEnvLeave(env);
 }
 
-int32_t m2Chain_GetShapes(const m2World* world, m2ChainId chainId, m2ShapeId* ids, int32_t capacity)
+static M2_NOINLINE float ChainGetMaterialWorker(const m2World* world, m2ChainId chainId,
+                                                bool friction)
 {
-    int32_t chainIndex = world != NULL ? ChainSlot(world, chainId) : -1;
-    if (chainIndex < 0)
+    int32_t index = world != NULL ? ChainSlot(world, chainId) : -1;
+    if (index < 0)
     {
         m2Refuse(world, m2_errorInvalid);
-        return 0;
+        return 0.0f;
+    }
+    return friction ? world->chains.chainFriction[index] : world->chains.chainRestitution[index];
+}
+
+float m2Chain_GetFriction(const m2World* world, m2ChainId chainId)
+{
+    uint64_t env = m2FloatEnvEnter();
+    float result = ChainGetMaterialWorker(world, chainId, true);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+float m2Chain_GetRestitution(const m2World* world, m2ChainId chainId)
+{
+    uint64_t env = m2FloatEnvEnter();
+    float result = ChainGetMaterialWorker(world, chainId, false);
+    m2FloatEnvLeave(env);
+    return result;
+}
+
+int32_t m2Chain_GetShapes(const m2World* world, m2ChainId chainId, m2ShapeId* idsOut,
+                          int32_t capacity)
+{
+    int32_t chainIndex = world != NULL ? ChainSlot(world, chainId) : -1;
+    if (chainIndex < 0 || !m2ListOutputValid(idsOut, capacity))
+    {
+        return m2RefuseList(world, idsOut, capacity, sizeof(*idsOut));
     }
     int32_t total = 0;
     for (int32_t i = 0; i < world->shapes.maxShapeIndex; ++i)
@@ -384,9 +414,9 @@ int32_t m2Chain_GetShapes(const m2World* world, m2ChainId chainId, m2ShapeId* id
         {
             continue;
         }
-        if (ids != NULL && total < capacity)
+        if (idsOut != NULL && total < capacity)
         {
-            ids[total] = m2MakeShapeId(world, i);
+            idsOut[total] = m2MakeShapeId(world, i);
         }
         total += 1;
     }

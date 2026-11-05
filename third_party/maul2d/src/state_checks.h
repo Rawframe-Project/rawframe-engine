@@ -9,6 +9,8 @@
 #ifndef MAUL2D_SRC_STATE_CHECKS_H
 #define MAUL2D_SRC_STATE_CHECKS_H
 
+#include "maul2d/base.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -37,18 +39,19 @@ typedef enum m2Check
     m2_check_transform,   // a finite double position and a unit float rotation
     // The ranges of base.h: every float of every element passes the
     // validator the defs, the setters and replay use for its quantity.
-    m2_check_speed,        // m2ValidSpeed: velocities per axis, spins, speeds
-    m2_check_acceleration, // m2ValidAcceleration, per axis
-    m2_check_gravityScale, // m2ValidGravityScale
-    m2_check_rate,         // m2ValidRate: damping, drag, a spring's hertz
-    m2_check_coefficient,  // m2ValidCoefficient: friction, a damping ratio
-    m2_check_restitution,  // m2ValidRestitution
-    m2_check_density,      // m2ValidDensity
-    m2_check_force,        // m2ValidForce: forces per axis, torques
-    m2_check_maxForce,     // m2ValidMaxForce: a motor's budget
-    m2_check_impulse,      // m2ValidImpulse: accumulated joint impulses
-    m2_check_breakLimit,   // m2ValidBreakLimit
-    m2_check_inverseStep,  // the last step's 1 / substep (InverseStepValid)
+    m2_check_speed,          // m2ValidSpeed: velocities per axis, spins, speeds
+    m2_check_acceleration,   // m2ValidAcceleration, per axis
+    m2_check_gravityScale,   // m2ValidGravityScale
+    m2_check_rate,           // m2ValidRate: damping, drag, a spring's hertz
+    m2_check_coefficient,    // m2ValidCoefficient: friction, a damping ratio
+    m2_check_restitution,    // m2ValidRestitution
+    m2_check_density,        // m2ValidDensity
+    m2_check_force,          // m2ValidForce: forces per axis, torques
+    m2_check_maxForce,       // m2ValidMaxForce: a motor's budget
+    m2_check_sleepThreshold, // m2ValidSleepThreshold: a body's resting speed
+    m2_check_impulse,        // m2ValidImpulse: accumulated joint impulses
+    m2_check_breakLimit,     // m2ValidBreakLimit
+    m2_check_inverseStep,    // the last step's 1 / substep (InverseStepValid)
 } m2Check;
 
 // The pools an array's values may index into.
@@ -60,7 +63,7 @@ typedef struct m2StateBounds
 
 // Checks count elements of elementSize bytes (an inline field: one element
 // of the field's size) against one rule.
-bool m2StateCheckElements(const uint8_t* data, size_t count, size_t elementSize, m2Check check,
-                          m2StateBounds bounds);
+M2_NODISCARD bool m2StateCheckElements(const uint8_t* data, size_t count, size_t elementSize,
+                                       m2Check check, m2StateBounds bounds);
 
 #endif // MAUL2D_SRC_STATE_CHECKS_H

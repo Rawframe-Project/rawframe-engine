@@ -31,14 +31,6 @@ M2_NOINLINE float m2UnwindAngleWork(float radians)
     return m2WrapAngle(radians);
 }
 
-float m2UnwindAngle(float radians)
-{
-    uint64_t env = m2FloatEnvEnter();
-    float result = m2UnwindAngleWork(radians);
-    m2FloatEnvLeave(env);
-    return result;
-}
-
 M2_NOINLINE m2Rot m2MakeRotWork(float radians)
 {
     return m2RotOfAngle(radians);
@@ -128,7 +120,7 @@ m2Rot m2MulRot(m2Rot q, m2Rot r)
     return result;
 }
 
-static M2_NOINLINE bool IsNormalizedRotWorker(m2Rot q)
+M2_NODISCARD static M2_NOINLINE bool IsNormalizedRotWorker(m2Rot q)
 {
     float mag2 = q.c * q.c + q.s * q.s;
     float tolerance = 4.0f * 1.19209290e-7f; // 4 * FLT_EPSILON

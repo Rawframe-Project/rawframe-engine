@@ -42,7 +42,11 @@ extern "C"
     /// droplets bead up and cling instead of spreading. Viscous particles
     /// drag their neighbors (honey, syrup). Powder grains repel when packed
     /// tighter than the rest stride and never cohere (sand, rubble, dust).
-    typedef enum m2ParticleFlags
+    /// The type has a fixed width, unlike a C enum's, so a def holding it
+    /// has one layout in every compiler, C and C++.
+    typedef uint32_t m2ParticleFlags;
+
+    enum
     {
         m2_waterParticle = 0,
         m2_tensileParticle = 1u << 0,
@@ -50,7 +54,7 @@ extern "C"
         m2_powderParticle = 1u << 2,
         m2_springParticle = 1u << 3,  // pairwise springs captured by a fill
         m2_elasticParticle = 1u << 4, // shape-restoring triads captured by a fill
-    } m2ParticleFlags;
+    };
 
     /// The def of a particle, or of every particle of a polygon fill.
     /// Initialize it with m2DefaultParticleDef.
@@ -58,7 +62,7 @@ extern "C"
     {
         m2Pos2 position;       // world space; for a fill, where the polygon's frame sits
         m2Vec2 velocity;       // m/s, within M2_SPEED_LIMIT per axis
-        uint32_t flags;        // m2ParticleFlags values, ored together
+        m2ParticleFlags flags; // m2_*Particle values, ored together; no other bit
         int32_t internalValue; // the cookie m2DefaultParticleDef sets
     } m2ParticleDef;
 
@@ -71,15 +75,17 @@ extern "C"
     M2_API m2ParticleDef m2DefaultParticleDef(void);
 
     /// Creates one particle. A full pool is also counted in
-    /// m2Counters.particlePoolFull; pace emitters off
+    /// m2Counters.particleCreatesRefused; pace emitters off
     /// m2World_GetParticleCount. Journaled.
     ///
     /// @param world        The world.
     /// @param def          The particle, from m2DefaultParticleDef.
     /// @param particleOut  Receives the particle; the null id on failure.
-    /// @return m2_success; m2_errorInvalid when def or particleOut is
-    ///         null, def was not initialized by m2DefaultParticleDef or a
-    ///         value of it is NaN or not finite where it has no bound;
+    /// @return m2_success; m2_errorInvalid when the world, def or
+    ///         particleOut is null, def was not initialized by
+    ///         m2DefaultParticleDef, a value of it is NaN or not finite
+    ///         where it has no bound, or its flags hold a bit no
+    ///         m2_*Particle flag has;
     ///         m2_errorLimit for a velocity past M2_SPEED_LIMIT;
     ///         m2_errorCapacity when the pool is full, a pool of 0 included,
     ///         which counts no misuse; m2_errorBusy from host code the world
@@ -95,7 +101,8 @@ extern "C"
     ///
     /// @param world       The world.
     /// @param particleId  The particle.
-    /// @return m2_success; m2_errorStale when it is already gone, which
+    /// @return m2_success; m2_errorInvalid for a null world;
+    ///         m2_errorStale when it is already gone, which
     ///         counts no misuse; m2_errorBusy from host code the world is
     ///         running.
     /// @par Thread safety
@@ -127,11 +134,11 @@ extern "C"
     ///
     /// @param world       The world.
     /// @param particleId  The particle.
-    /// @return The m2ParticleFlags it was created with; 0 for a stale id.
+    /// @return The m2_*Particle flags it was created with; 0 for a stale id.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API uint32_t m2Particle_GetFlags(const m2World* world, m2ParticleId particleId);
+    M2_API m2ParticleFlags m2Particle_GetFlags(const m2World* world, m2ParticleId particleId);
 
     /// Gives a particle a lifetime. It counts down by each step's length,
     /// and the particle is destroyed at the end of the step it reaches
@@ -222,13 +229,15 @@ extern "C"
     ///                  and not a sliver. Its normals are recomputed from
     ///                  its vertices.
     /// @param countOut  Receives the number of particles created; 0 when
-    ///                  the fill is refused.
+    ///                  the fill is refused, except that m2_errorBusy leaves
+    ///                  it as it was.
     /// @return m2_success; m2_errorCapacity when the pool ran out before
     ///         the polygon was full, a pool of 0 included, which counts no
-    ///         misuse and counts once in m2Counters.particlePoolFull;
+    ///         misuse and counts once in m2Counters.particleCreatesRefused;
     ///         m2_errorInvalid when an argument is null, def was not
-    ///         initialized by m2DefaultParticleDef, a value of it is NaN or
-    ///         the polygon is not one a shape would take;
+    ///         initialized by m2DefaultParticleDef, a value of it is NaN,
+    ///         its flags hold a bit no m2_*Particle flag has, or the
+    ///         polygon is not one a shape would take;
     ///         m2_errorLimit for a velocity or a polygon past its published
     ///         bound, or a polygon wider than M2_MAX_FILL_COLUMNS strides;
     ///         m2_errorBusy from host code the world is running.
@@ -245,28 +254,29 @@ extern "C"
     ///
     /// @param world     The world.
     /// @param box       The box, in world space.
-    /// @param ids       Receives up to capacity particles; may be null to
-    ///                  measure.
-    /// @param capacity  The length of ids.
+    /// @param idsOut    Receives up to capacity particles; zeros over the whole capacity on
+    ///                  failure. May be null with a capacity of 0 to measure.
+    /// @param capacity  The length of idsOut, not below 0.
     /// @return The number of particles inside, which may exceed capacity;
-    ///         0 for a non-finite corner, which counts one misuse.
+    ///         0 for a non-finite or inverted box, which counts one misuse.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API int32_t m2World_OverlapParticlesAabb(const m2World* world, m2WorldAabb box,
-                                                m2ParticleId* ids, int32_t capacity);
+                                                m2ParticleId* idsOut, int32_t capacity);
 
     /// Lists the live particles in ascending slot order.
     ///
     /// @param world     The world.
-    /// @param ids       Receives up to capacity particles; may be null to
-    ///                  measure.
-    /// @param capacity  The length of ids.
+    /// @param idsOut    Receives up to capacity particles; zeros over the whole capacity on
+    ///                  failure. May be null with a capacity of 0 to measure.
+    /// @param capacity  The length of idsOut, not below 0.
     /// @return The number of particles, which may exceed capacity.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API int32_t m2World_GetParticles(const m2World* world, m2ParticleId* ids, int32_t capacity);
+    M2_API int32_t m2World_GetParticles(const m2World* world, m2ParticleId* idsOut,
+                                        int32_t capacity);
 
 #ifdef __cplusplus
 }

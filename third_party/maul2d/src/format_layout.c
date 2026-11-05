@@ -69,9 +69,9 @@ M2_PIN_SIZE(m2ParticleId, 8);
 M2_PIN_AT(m2ParticleId, index1, 0);
 M2_PIN_AT(m2ParticleId, generation, 4);
 
-M2_PIN_SIZE(m2FluidVolumeId, 8);
-M2_PIN_AT(m2FluidVolumeId, index1, 0);
-M2_PIN_AT(m2FluidVolumeId, generation, 4);
+M2_PIN_SIZE(m2WaterVolumeId, 8);
+M2_PIN_AT(m2WaterVolumeId, index1, 0);
+M2_PIN_AT(m2WaterVolumeId, generation, 4);
 
 M2_PIN_SIZE(m2Circle, 12);
 M2_PIN_AT(m2Circle, center, 0);
@@ -141,6 +141,17 @@ M2_PIN_AT(m2DynamicTree, nodeCount, 4);
 M2_PIN_AT(m2DynamicTree, nodeCapacity, 8);
 M2_PIN_AT(m2DynamicTree, freeList, 12);
 
+// The end events queued between steps.
+M2_PIN_SIZE(m2ContactEndEvent, 24);
+M2_PIN_AT(m2ContactEndEvent, shapeIdA, 0);
+M2_PIN_AT(m2ContactEndEvent, shapeIdB, 8);
+M2_PIN_AT(m2ContactEndEvent, step, 16);
+
+M2_PIN_SIZE(m2SensorEndEvent, 24);
+M2_PIN_AT(m2SensorEndEvent, sensorShapeId, 0);
+M2_PIN_AT(m2SensorEndEvent, visitorShapeId, 8);
+M2_PIN_AT(m2SensorEndEvent, step, 16);
+
 // The public defs a record embeds as given.
 M2_PIN_SIZE(m2BodyDef, 80);
 M2_PIN_AT(m2BodyDef, type, 0);
@@ -153,11 +164,12 @@ M2_PIN_AT(m2BodyDef, linearDamping, 48);
 M2_PIN_AT(m2BodyDef, angularDamping, 52);
 M2_PIN_AT(m2BodyDef, motionLocks, 56);
 M2_PIN_AT(m2BodyDef, enableSleep, 59);
-M2_PIN_AT(m2BodyDef, isEnabled, 60);
+M2_PIN_AT(m2BodyDef, enable, 60);
 M2_PIN_AT(m2BodyDef, dominance, 61);
-M2_PIN_AT(m2BodyDef, isBullet, 62);
+M2_PIN_AT(m2BodyDef, enableBullet, 62);
 M2_PIN_AT(m2BodyDef, userData, 64);
 M2_PIN_AT(m2BodyDef, internalValue, 72);
+M2_PIN_AT(m2BodyDef, sleepThreshold, 76);
 
 M2_PIN_SIZE(m2MassData, 16);
 M2_PIN_AT(m2MassData, mass, 0);
@@ -176,16 +188,15 @@ M2_PIN_AT(m2ShapeDef, isSensor, 36);
 M2_PIN_AT(m2ShapeDef, userData, 40);
 M2_PIN_AT(m2ShapeDef, internalValue, 48);
 
-M2_PIN_SIZE(m2FluidVolumeDef, 80);
-M2_PIN_AT(m2FluidVolumeDef, regionLower, 0);
-M2_PIN_AT(m2FluidVolumeDef, regionUpper, 16);
-M2_PIN_AT(m2FluidVolumeDef, surface, 32);
-M2_PIN_AT(m2FluidVolumeDef, density, 40);
-M2_PIN_AT(m2FluidVolumeDef, linearDrag, 44);
-M2_PIN_AT(m2FluidVolumeDef, angularDrag, 48);
-M2_PIN_AT(m2FluidVolumeDef, flow, 52);
-M2_PIN_AT(m2FluidVolumeDef, userData, 64);
-M2_PIN_AT(m2FluidVolumeDef, internalValue, 72);
+M2_PIN_SIZE(m2WaterVolumeDef, 80);
+M2_PIN_AT(m2WaterVolumeDef, bounds, 0);
+M2_PIN_AT(m2WaterVolumeDef, surface, 32);
+M2_PIN_AT(m2WaterVolumeDef, density, 40);
+M2_PIN_AT(m2WaterVolumeDef, linearDrag, 44);
+M2_PIN_AT(m2WaterVolumeDef, angularDrag, 48);
+M2_PIN_AT(m2WaterVolumeDef, flow, 52);
+M2_PIN_AT(m2WaterVolumeDef, userData, 64);
+M2_PIN_AT(m2WaterVolumeDef, internalValue, 72);
 
 M2_PIN_SIZE(m2DistanceJointDef, 72);
 M2_PIN_AT(m2DistanceJointDef, bodyIdA, 0);
@@ -214,7 +225,7 @@ M2_PIN_AT(m2RevoluteJointDef, springDampingRatio, 44);
 M2_PIN_AT(m2RevoluteJointDef, enableSpring, 48);
 M2_PIN_AT(m2RevoluteJointDef, enableMotor, 49);
 M2_PIN_AT(m2RevoluteJointDef, motorSpeed, 52);
-M2_PIN_AT(m2RevoluteJointDef, maxMotorTorque, 56);
+M2_PIN_AT(m2RevoluteJointDef, maxMotorEffort, 56);
 M2_PIN_AT(m2RevoluteJointDef, enableLimit, 60);
 M2_PIN_AT(m2RevoluteJointDef, lowerAngle, 64);
 M2_PIN_AT(m2RevoluteJointDef, upperAngle, 68);
@@ -232,7 +243,7 @@ M2_PIN_AT(m2PrismaticJointDef, constraintHertz, 40);
 M2_PIN_AT(m2PrismaticJointDef, constraintDampingRatio, 44);
 M2_PIN_AT(m2PrismaticJointDef, enableMotor, 48);
 M2_PIN_AT(m2PrismaticJointDef, motorSpeed, 52);
-M2_PIN_AT(m2PrismaticJointDef, maxMotorForce, 56);
+M2_PIN_AT(m2PrismaticJointDef, maxMotorEffort, 56);
 M2_PIN_AT(m2PrismaticJointDef, enableLimit, 60);
 M2_PIN_AT(m2PrismaticJointDef, lowerTranslation, 64);
 M2_PIN_AT(m2PrismaticJointDef, upperTranslation, 68);
@@ -264,7 +275,7 @@ M2_PIN_AT(m2WheelJointDef, springHertz, 44);
 M2_PIN_AT(m2WheelJointDef, springDampingRatio, 48);
 M2_PIN_AT(m2WheelJointDef, enableMotor, 52);
 M2_PIN_AT(m2WheelJointDef, motorSpeed, 56);
-M2_PIN_AT(m2WheelJointDef, maxMotorTorque, 60);
+M2_PIN_AT(m2WheelJointDef, maxMotorEffort, 60);
 M2_PIN_AT(m2WheelJointDef, enableLimit, 64);
 M2_PIN_AT(m2WheelJointDef, lowerTranslation, 68);
 M2_PIN_AT(m2WheelJointDef, upperTranslation, 72);
@@ -326,7 +337,7 @@ M2_PIN_AT(m2PulleyJointDef, internalValue, 84);
 M2_PIN_SIZE(m2RatchetJointDef, 40);
 M2_PIN_AT(m2RatchetJointDef, bodyIdA, 0);
 M2_PIN_AT(m2RatchetJointDef, bodyIdB, 8);
-M2_PIN_AT(m2RatchetJointDef, ratchet, 16);
+M2_PIN_AT(m2RatchetJointDef, toothAngle, 16);
 M2_PIN_AT(m2RatchetJointDef, phase, 20);
 M2_PIN_AT(m2RatchetJointDef, userData, 24);
 M2_PIN_AT(m2RatchetJointDef, enableConnectedCollision, 32);
@@ -464,13 +475,17 @@ M2_PIN_SIZE(m2OpParticleUserData, 16);
 M2_PIN_AT(m2OpParticleUserData, id, 0);
 M2_PIN_AT(m2OpParticleUserData, userData, 8);
 
-M2_PIN_SIZE(m2OpCreateFluidVolume, 88);
-M2_PIN_AT(m2OpCreateFluidVolume, def, 0);
-M2_PIN_AT(m2OpCreateFluidVolume, expected, 80);
+M2_PIN_SIZE(m2OpCreateWaterVolume, 88);
+M2_PIN_AT(m2OpCreateWaterVolume, def, 0);
+M2_PIN_AT(m2OpCreateWaterVolume, expected, 80);
 
-M2_PIN_SIZE(m2OpFluidSurface, 16);
-M2_PIN_AT(m2OpFluidSurface, id, 0);
-M2_PIN_AT(m2OpFluidSurface, surface, 8);
+M2_PIN_SIZE(m2OpWaterSurface, 16);
+M2_PIN_AT(m2OpWaterSurface, id, 0);
+M2_PIN_AT(m2OpWaterSurface, surface, 8);
+
+M2_PIN_SIZE(m2OpWaterUserData, 16);
+M2_PIN_AT(m2OpWaterUserData, id, 0);
+M2_PIN_AT(m2OpWaterUserData, userData, 8);
 
 M2_PIN_SIZE(m2OpShatterHeader, 16);
 M2_PIN_AT(m2OpShatterHeader, body, 0);

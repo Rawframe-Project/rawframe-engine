@@ -8,9 +8,9 @@
 // counts one misuse. A call made for one joint type (a motor joint's
 // offsets, a distance joint's length) does the same on a joint of
 // another type. Motors and limits belong to the revolute, prismatic and
-// wheel joints; m2Joint_SetMaxMotor also sets a motor joint's torque
-// budget. Every setter is journaled, and one that changes how a joint
-// pulls wakes the bodies it moves.
+// wheel joints; m2Joint_SetMaxMotorEffort also sets a motor joint's torque
+// budget, as m2MotorJoint_SetMaxTorque does. Every setter is journaled, and one that changes how a
+// joint pulls wakes the bodies it moves.
 
 #ifndef MAUL2D_JOINT_H
 #define MAUL2D_JOINT_H
@@ -22,7 +22,12 @@ extern "C"
 {
 #endif
 
-    typedef enum m2JointType
+    /// A joint's kind: one of the m2_*Joint constants. The type has a
+    /// fixed width, unlike a C enum's, so it crosses the interface the same
+    /// in every compiler, C and C++.
+    typedef int32_t m2JointType;
+
+    enum
     {
         m2_distanceJoint = 0,
         m2_revoluteJoint = 1,
@@ -35,7 +40,7 @@ extern "C"
         m2_gearJoint = 8,
         m2_pulleyJoint = 9,
         m2_ratchetJoint = 10,
-    } m2JointType;
+    };
 
     /// A joint of a world: a 1-based slot and a generation.
     typedef struct m2JointId
@@ -93,7 +98,7 @@ extern "C"
         bool enableSpring; // off by default; springHertz 0 is no spring force
         bool enableMotor;
         float motorSpeed;     // rad/s, positive: B turns counter-clockwise against A
-        float maxMotorTorque; // N m
+        float maxMotorEffort; // the motor's torque budget, N m
         bool enableLimit;
         float lowerAngle; // radians from the creation angle
         float upperAngle;
@@ -116,8 +121,8 @@ extern "C"
         float constraintHertz; // the slide's softness; 0: the stiff default
         float constraintDampingRatio;
         bool enableMotor;
-        float motorSpeed;    // m/s along the axis
-        float maxMotorForce; // N
+        float motorSpeed;     // m/s along the axis
+        float maxMotorEffort; // the motor's force budget, N
         bool enableLimit;
         float lowerTranslation; // meters from the separation at creation
         float upperTranslation;
@@ -159,7 +164,7 @@ extern "C"
         float springDampingRatio;
         bool enableMotor;
         float motorSpeed;     // rad/s of B against A
-        float maxMotorTorque; // N m
+        float maxMotorEffort; // the motor's torque budget, N m
         bool enableLimit;
         float lowerTranslation; // meters from the separation at creation
         float upperTranslation;
@@ -254,7 +259,7 @@ extern "C"
         m2BodyId bodyIdB;
         /// The tooth angle, M2_MIN_RATCHET_TOOTH to M2_ANGLE_LIMIT by
         /// magnitude; its sign is the free direction.
-        float ratchet;
+        float toothAngle;
         float phase; // offsets the teeth, radians
         M2_ALIGN8 uint64_t userData;
         bool enableConnectedCollision;
@@ -477,12 +482,16 @@ extern "C"
     M2_NODISCARD M2_API m2Result m2CreateMotorJoint(m2World* world, const m2MotorJointDef* def,
                                                     m2JointId* jointOut);
 
-    /// Creates a mouse joint, as m2CreateDistanceJoint does.
+    /// Creates a mouse joint, as m2CreateDistanceJoint does. The grab
+    /// point, body B's anchor, is where the target lies in B's frame at
+    /// creation, so it lies within M2_LOCAL_LIMIT like any other anchor.
     ///
     /// @param world     The world.
     /// @param def       The joint, from m2DefaultMouseJointDef.
     /// @param jointOut  Receives the joint; the null id on failure.
-    /// @return As m2CreateDistanceJoint.
+    /// @return As m2CreateDistanceJoint, and m2_errorLimit for a target past
+    ///         M2_LOCAL_LIMIT from B in B's frame, which counts no misuse,
+    ///         since where B is is the world's state.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
     M2_NODISCARD M2_API m2Result m2CreateMouseJoint(m2World* world, const m2MouseJointDef* def,
@@ -492,7 +501,8 @@ extern "C"
     ///
     /// @param world    The world.
     /// @param jointId  The joint.
-    /// @return m2_success; m2_errorStale when it is already gone;
+    /// @return m2_success; m2_errorInvalid for a null world;
+    ///         m2_errorStale when it is already gone;
     ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
@@ -513,12 +523,12 @@ extern "C"
     /// a motor joint, a force on a prismatic joint. A budget outside 0 to
     /// M2_FORCE_LIMIT or another joint type counts one misuse.
     ///
-    /// @param world             The world.
-    /// @param jointId           A revolute, prismatic, wheel or motor joint.
-    /// @param maxTorqueOrForce  The budget, N m or N.
+    /// @param world      The world.
+    /// @param jointId    A revolute, prismatic, wheel or motor joint.
+    /// @param maxEffort  The budget, N m or N.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Joint_SetMaxMotor(m2World* world, m2JointId jointId, float maxTorqueOrForce);
+    M2_API void m2Joint_SetMaxMotorEffort(m2World* world, m2JointId jointId, float maxEffort);
 
     /// Turns a motor on or off. Another joint type counts one misuse.
     ///
@@ -699,8 +709,10 @@ extern "C"
     /// @param world         The world.
     /// @param jointId       A distance joint; another type or a stale id
     ///                      writes zeros and counts one misuse.
-    /// @param minLengthOut  Receives the shortest length, meters; may be null.
-    /// @param maxLengthOut  Receives the longest length, meters; may be null.
+    /// @param minLengthOut  Receives the shortest length, meters; 0 on
+    ///                      failure. May be null.
+    /// @param maxLengthOut  Receives the longest length, meters; 0 on
+    ///                      failure. May be null.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
@@ -887,7 +899,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API float m2Joint_GetMaxMotor(const m2World* world, m2JointId jointId);
+    M2_API float m2Joint_GetMaxMotorEffort(const m2World* world, m2JointId jointId);
 
     /// Tells whether a motor drives.
     ///
@@ -938,9 +950,9 @@ extern "C"
     ///
     /// @param world     The world.
     /// @param jointId   A revolute, prismatic or wheel joint; another type
-    ///                  or a stale id writes zeros.
-    /// @param lowerOut  Receives the lower limit; may be null.
-    /// @param upperOut  Receives the upper limit; may be null.
+    ///                  or a stale id writes zeros and counts one misuse.
+    /// @param lowerOut  Receives the lower limit; 0 on failure. May be null.
+    /// @param upperOut  Receives the upper limit; 0 on failure. May be null.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
@@ -950,9 +962,12 @@ extern "C"
     /// Reads the break limits m2Joint_SetBreakLimits sets.
     ///
     /// @param world         The world.
-    /// @param jointId       The joint; a stale id writes zeros.
-    /// @param maxForceOut   Receives the force threshold; may be null.
-    /// @param maxTorqueOut  Receives the torque threshold; may be null.
+    /// @param jointId       The joint; a stale id writes zeros and counts
+    ///                      one misuse.
+    /// @param maxForceOut   Receives the force threshold; 0 on failure. May
+    ///                      be null.
+    /// @param maxTorqueOut  Receives the torque threshold; 0 on failure. May
+    ///                      be null.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
@@ -1047,9 +1062,9 @@ extern "C"
     M2_API float m2Joint_GetAngularSeparation(const m2World* world, m2JointId jointId);
 
     /// Moves a motor joint's target, as a moving platform does every frame.
-    /// The torque budget is set with m2Joint_SetMaxMotor. Another joint
-    /// type, an angular offset beyond M2_ANGLE_LIMIT or a linear offset beyond
-    /// M2_LOCAL_LIMIT counts one misuse.
+    /// The budgets are set with m2MotorJoint_SetMaxForce and
+    /// m2MotorJoint_SetMaxTorque. Another joint type, an angular offset beyond M2_ANGLE_LIMIT or a
+    /// linear offset beyond M2_LOCAL_LIMIT counts one misuse.
     ///
     /// @param world          The world.
     /// @param jointId        A motor joint.
@@ -1059,6 +1074,29 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time.
     M2_API void m2MotorJoint_SetOffsets(m2World* world, m2JointId jointId, m2Vec2 linearOffset,
                                         float angularOffset);
+
+    /// Sets a motor joint's force budget, the most force its point rows
+    /// apply to hold B at its offset. Another joint type, or a budget
+    /// outside 0 to M2_FORCE_LIMIT, counts one misuse.
+    ///
+    /// @param world     The world.
+    /// @param jointId   A motor joint.
+    /// @param maxForce  The budget, N.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2MotorJoint_SetMaxForce(m2World* world, m2JointId jointId, float maxForce);
+
+    /// Sets a motor joint's torque budget, the most torque its angle row
+    /// applies to hold B at its angular offset; the same budget
+    /// m2Joint_SetMaxMotorEffort sets. Another joint type, or a budget
+    /// outside 0 to M2_FORCE_LIMIT, counts one misuse.
+    ///
+    /// @param world      The world.
+    /// @param jointId    A motor joint.
+    /// @param maxTorque  The budget, N m.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2MotorJoint_SetMaxTorque(m2World* world, m2JointId jointId, float maxTorque);
 
     /// Reads a motor joint's linear offset.
     ///
@@ -1089,6 +1127,16 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API float m2MotorJoint_GetMaxForce(const m2World* world, m2JointId jointId);
+
+    /// Reads a motor joint's torque budget.
+    ///
+    /// @param world    The world.
+    /// @param jointId  A motor joint.
+    /// @return The torque, N m; 0 for another joint type or a stale id.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time, or by
+    /// several readers at once.
+    M2_API float m2MotorJoint_GetMaxTorque(const m2World* world, m2JointId jointId);
 
     /// Reads a motor joint's correction factor.
     ///
@@ -1191,7 +1239,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API float m2RatchetJoint_GetRatchet(const m2World* world, m2JointId jointId);
+    M2_API float m2RatchetJoint_GetToothAngle(const m2World* world, m2JointId jointId);
 
     /// Reads a ratchet's tooth phase.
     ///
@@ -1236,28 +1284,28 @@ extern "C"
     /// Lists the world's joints in ascending slot order.
     ///
     /// @param world     The world.
-    /// @param ids       Receives up to capacity joints; may be null to
-    ///                  measure.
-    /// @param capacity  The length of ids.
+    /// @param idsOut    Receives up to capacity joints; zeros over the whole capacity on failure.
+    ///                  May be null with a capacity of 0 to measure.
+    /// @param capacity  The length of idsOut, not below 0.
     /// @return The number of joints, which may exceed capacity.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API int32_t m2World_GetJoints(const m2World* world, m2JointId* ids, int32_t capacity);
+    M2_API int32_t m2World_GetJoints(const m2World* world, m2JointId* idsOut, int32_t capacity);
 
     /// Lists the joints attached to a body, in ascending slot order.
     ///
     /// @param world     The world.
     /// @param bodyId    The body; a stale id counts one misuse.
-    /// @param ids       Receives up to capacity joints; may be null to
-    ///                  measure.
-    /// @param capacity  The length of ids.
+    /// @param idsOut    Receives up to capacity joints; zeros over the whole capacity on failure.
+    ///                  May be null with a capacity of 0 to measure.
+    /// @param capacity  The length of idsOut, not below 0.
     /// @return The number of joints, which may exceed capacity; 0 for a
     ///         stale id.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API int32_t m2Body_GetJoints(const m2World* world, m2BodyId bodyId, m2JointId* ids,
+    M2_API int32_t m2Body_GetJoints(const m2World* world, m2BodyId bodyId, m2JointId* idsOut,
                                     int32_t capacity);
 
     static const m2JointId m2_nullJointId = {0, 0};

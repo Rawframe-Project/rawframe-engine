@@ -14,8 +14,8 @@ inline constexpr result::ErrorDomain kPhysics2DDomain{base::parseBits128Hex("b6e
 enum class Physics2DError : std::uint32_t {
     /// This processor cannot run the physics build's kernels.
     Unsupported = 1,
-    /// Settings out of range, or a World whose physics components are not
-    /// the engine's.
+    /// Settings out of range, a tick rate the physics cannot step, or a
+    /// World whose physics components are not the engine's.
     InvalidSettings = 2,
     /// No more physics worlds in this process, or a full world.
     Capacity = 3,

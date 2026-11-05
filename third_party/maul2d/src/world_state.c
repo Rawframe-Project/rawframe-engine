@@ -34,7 +34,7 @@ typedef enum m2Extent
     m2_extent_particleSpring,
     m2_extent_particleTriad,
     m2_extent_particleBody,
-    m2_extent_fluidVolume,
+    m2_extent_waterVolume,
     m2_extent_constraintBytes,
     m2_extent_contactBlockBytes,
     m2_extent_markBytes,
@@ -42,7 +42,7 @@ typedef enum m2Extent
 
 #define M2_STATE_SNAPSHOT  0x01u // walked by snapshots and restores
 #define M2_STATE_PARTICLES 0x02u // exists only when the world has particles
-#define M2_STATE_FLUIDS    0x04u // exists only when the world has fluid volumes
+#define M2_STATE_FLUIDS    0x04u // exists only when the world has water volumes
 #define M2_STATE_POINTER   0x08u // the field points at the array; else it is inline
 #define M2_STATE_HASH      0x10u // folded into m2World_Hash (m2StateHash)
 
@@ -112,6 +112,11 @@ static const m2StateArray s_state[] = {
     M2_STATE_INLINE_CHECKED(shapes.shapeRetiredCount, M2_STATE_SNAPSHOT, count, shape),
     M2_STATE_INLINE_CHECKED(broadphase.movedCount, M2_STATE_SNAPSHOT, count, shape),
     M2_STATE_INLINE_CHECKED(contacts.pairCount, M2_STATE_SNAPSHOT, count, pair),
+    // The end events of touching pairs a destroy or a disable ended
+    // between steps, which the next step delivers: a snapshot taken in
+    // between carries them, so the steps after its restore deliver them too.
+    M2_STATE_INLINE_CHECKED(events.pendingEndCount, M2_STATE_SNAPSHOT, count, pair),
+    M2_STATE_INLINE_CHECKED(events.pendingSensorEndCount, M2_STATE_SNAPSHOT, count, pair),
     M2_STATE_CHECKED(bodies.transforms, m2Transform, body, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH,
                      transform, one),
     M2_STATE_CHECKED(bodies.linearVelocities, m2Vec2, body, 1, M2_STATE_SNAPSHOT | M2_STATE_HASH,
@@ -246,6 +251,8 @@ static const m2StateArray s_state[] = {
     M2_STATE_ARRAY(bodies.motionLocks, uint8_t, body, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH),
     M2_STATE_CHECKED(bodies.sleepEnables, uint8_t, body, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH, bool,
                      one),
+    M2_STATE_CHECKED(bodies.sleepThresholds, float, body, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH,
+                     sleepThreshold, one),
     M2_STATE_CHECKED(bodies.forces, m2Vec2, body, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH, force, one),
     M2_STATE_CHECKED(bodies.torques, float, body, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH, force, one),
     M2_STATE_CHECKED(bodies.disabled, uint8_t, body, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH, bool,
@@ -258,6 +265,8 @@ static const m2StateArray s_state[] = {
     M2_STATE_CHECKED(chains.chainBody, int32_t, chain, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH,
                      indexOrNone, body),
     M2_STATE_CHECKED(chains.chainLoop, uint8_t, chain, 0, M2_STATE_SNAPSHOT, bool, one),
+    M2_STATE_CHECKED(chains.chainFriction, float, chain, 0, M2_STATE_SNAPSHOT, coefficient, one),
+    M2_STATE_CHECKED(chains.chainRestitution, float, chain, 0, M2_STATE_SNAPSHOT, restitution, one),
     M2_STATE_ARRAY(chains.chainGenerations, uint32_t, chain, 0, M2_STATE_SNAPSHOT),
     M2_STATE_CHECKED(chains.chainFreeQueue, int32_t, chain, 0, M2_STATE_SNAPSHOT, index, shape),
     M2_STATE_INLINE_CHECKED(broadphase.trees, M2_STATE_SNAPSHOT, tree, treeNode),
@@ -272,6 +281,8 @@ static const m2StateArray s_state[] = {
     M2_STATE_ARRAY(contacts.pairTouching, uint8_t, pair, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH),
     M2_STATE_CHECKED(contacts.manifolds, m2Manifold, pair, 0, M2_STATE_SNAPSHOT | M2_STATE_HASH,
                      manifold, one),
+    M2_STATE_ARRAY(events.pendingEndEvents, m2ContactEndEvent, pair, 0, M2_STATE_SNAPSHOT),
+    M2_STATE_ARRAY(events.pendingSensorEnd, m2SensorEndEvent, pair, 0, M2_STATE_SNAPSHOT),
     M2_STATE_CHECKED(particles.particlePositions, m2Pos2, particle, 0,
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_PARTICLES, finite64, one),
     M2_STATE_CHECKED(particles.particleVelocities, m2Vec2, particle, 0,
@@ -320,36 +331,36 @@ static const m2StateArray s_state[] = {
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_PARTICLES, finite32, one),
     M2_STATE_INLINE_CHECKED(particles.particleTriadCount, M2_STATE_SNAPSHOT | M2_STATE_PARTICLES,
                             count, particleTriad),
-    M2_STATE_CHECKED(volumes.fvLower, m2Pos2, fluidVolume, 0,
+    M2_STATE_CHECKED(volumes.wvLower, m2Pos2, waterVolume, 0,
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_FLUIDS, finite64, one),
-    M2_STATE_CHECKED(volumes.fvUpper, m2Pos2, fluidVolume, 0,
+    M2_STATE_CHECKED(volumes.wvUpper, m2Pos2, waterVolume, 0,
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_FLUIDS, finite64, one),
-    M2_STATE_CHECKED(volumes.fvSurface, double, fluidVolume, 0,
+    M2_STATE_CHECKED(volumes.wvSurface, double, waterVolume, 0,
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_FLUIDS, finite64, one),
-    M2_STATE_CHECKED(volumes.fvDensity, float, fluidVolume, 0,
+    M2_STATE_CHECKED(volumes.wvDensity, float, waterVolume, 0,
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_FLUIDS, density, one),
-    M2_STATE_CHECKED(volumes.fvLinearDrag, float, fluidVolume, 0,
+    M2_STATE_CHECKED(volumes.wvLinearDrag, float, waterVolume, 0,
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_FLUIDS, rate, one),
-    M2_STATE_CHECKED(volumes.fvAngularDrag, float, fluidVolume, 0,
+    M2_STATE_CHECKED(volumes.wvAngularDrag, float, waterVolume, 0,
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_FLUIDS, rate, one),
-    M2_STATE_CHECKED(volumes.fvFlow, m2Vec2, fluidVolume, 0,
+    M2_STATE_CHECKED(volumes.wvFlow, m2Vec2, waterVolume, 0,
                      M2_STATE_SNAPSHOT | M2_STATE_HASH | M2_STATE_FLUIDS, speed, one),
-    M2_STATE_ARRAY(volumes.fvUserData, uint64_t, fluidVolume, 0,
+    M2_STATE_ARRAY(volumes.wvUserData, uint64_t, waterVolume, 0,
                    M2_STATE_SNAPSHOT | M2_STATE_FLUIDS),
-    M2_STATE_CHECKED(volumes.fvAlive, uint8_t, fluidVolume, 0, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS,
+    M2_STATE_CHECKED(volumes.wvAlive, uint8_t, waterVolume, 0, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS,
                      bool, one),
-    M2_STATE_ARRAY(volumes.fvGenerations, uint32_t, fluidVolume, 0,
+    M2_STATE_ARRAY(volumes.wvGenerations, uint32_t, waterVolume, 0,
                    M2_STATE_SNAPSHOT | M2_STATE_FLUIDS),
-    M2_STATE_CHECKED(volumes.fvFreeQueue, int32_t, fluidVolume, 0,
-                     M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, index, fluidVolume),
-    M2_STATE_INLINE_CHECKED(volumes.fvFreeHead, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, cursor,
-                            fluidVolume),
-    M2_STATE_INLINE_CHECKED(volumes.fvFreeCount, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, count,
-                            fluidVolume),
-    M2_STATE_INLINE_CHECKED(volumes.fvRetiredCount, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, count,
-                            fluidVolume),
-    M2_STATE_INLINE_CHECKED(volumes.maxFvIndex, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, count,
-                            fluidVolume),
+    M2_STATE_CHECKED(volumes.wvFreeQueue, int32_t, waterVolume, 0,
+                     M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, index, waterVolume),
+    M2_STATE_INLINE_CHECKED(volumes.wvFreeHead, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, cursor,
+                            waterVolume),
+    M2_STATE_INLINE_CHECKED(volumes.wvFreeCount, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, count,
+                            waterVolume),
+    M2_STATE_INLINE_CHECKED(volumes.wvRetiredCount, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, count,
+                            waterVolume),
+    M2_STATE_INLINE_CHECKED(volumes.maxWvIndex, M2_STATE_SNAPSHOT | M2_STATE_FLUIDS, count,
+                            waterVolume),
 
     // Scratch and derived arrays: allocated with the world, never walked.
     M2_STATE_ARRAY(solver.ccdPrevPositions, m2Pos2, body, 0, 0),
@@ -382,10 +393,8 @@ static const m2StateArray s_state[] = {
     M2_STATE_ARRAY(solver.colorOrder, int32_t, pair, 0, 0),
     M2_STATE_ARRAY(events.beginEvents, m2ContactBeginEvent, pair, 0, 0),
     M2_STATE_ARRAY(events.endEvents, m2ContactEndEvent, pair, 0, 0),
-    M2_STATE_ARRAY(events.pendingEndEvents, m2ContactEndEvent, pair, 0, 0),
     M2_STATE_ARRAY(events.sensorBeginEvents, m2SensorBeginEvent, pair, 0, 0),
     M2_STATE_ARRAY(events.sensorEndEvents, m2SensorEndEvent, pair, 0, 0),
-    M2_STATE_ARRAY(events.pendingSensorEnd, m2SensorEndEvent, pair, 0, 0),
     M2_STATE_ARRAY(events.jointBreakEvents, m2JointBreakEvent, joint, 0, 0),
     M2_STATE_ARRAY(contacts.pairScratch, uint64_t, pair, 0, 0),
     M2_STATE_ARRAY(contacts.oldPairScratch, uint64_t, pair, 0, 0),
@@ -431,8 +440,8 @@ static size_t ExtentCount(const m2World* world, uint8_t extent)
         return (size_t)world->particles.particleTriadCapacity;
     case m2_extent_particleBody:
         return (size_t)world->particles.particleBodyCapacity;
-    case m2_extent_fluidVolume:
-        return (size_t)world->volumes.fvCapacity;
+    case m2_extent_waterVolume:
+        return (size_t)world->volumes.wvCapacity;
     case m2_extent_constraintBytes:
     {
         // Saturates instead of wrapping on 32-bit targets, so the checked
@@ -448,7 +457,7 @@ static size_t ExtentCount(const m2World* world, uint8_t extent)
     {
         int32_t most = world->bodies.bodyCapacity;
         const int32_t others[] = {world->shapes.shapeCapacity, world->joints.jointCapacity,
-                                  world->particles.particleCapacity, world->volumes.fvCapacity};
+                                  world->particles.particleCapacity, world->volumes.wvCapacity};
         for (size_t i = 0; i < sizeof(others) / sizeof(others[0]); ++i)
         {
             most = others[i] > most ? others[i] : most;
@@ -460,13 +469,13 @@ static size_t ExtentCount(const m2World* world, uint8_t extent)
     return 0;
 }
 
-static bool Present(const m2World* world, uint8_t flags)
+M2_NODISCARD static bool Present(const m2World* world, uint8_t flags)
 {
     if ((flags & M2_STATE_PARTICLES) != 0 && world->particles.particleCapacity == 0)
     {
         return false;
     }
-    if ((flags & M2_STATE_FLUIDS) != 0 && world->volumes.fvCapacity == 0)
+    if ((flags & M2_STATE_FLUIDS) != 0 && world->volumes.wvCapacity == 0)
     {
         return false;
     }
@@ -480,7 +489,7 @@ static void** FieldPointer(m2World* world, const m2StateArray* array)
 
 // The bytes an allocated array takes, or false when the size does not
 // fit a size_t.
-static bool ArrayBytes(const m2World* world, const m2StateArray* array, size_t* bytes)
+M2_NODISCARD static bool ArrayBytes(const m2World* world, const m2StateArray* array, size_t* bytes)
 {
     size_t count = 0;
     return !ckd_add(&count, ExtentCount(world, array->extent), (size_t)array->extra) &&
@@ -537,7 +546,7 @@ void m2StateFree(m2World* world)
 }
 
 // Whether an array is snapshot state in this world.
-static bool InSnapshot(const m2World* world, const m2StateArray* array)
+M2_NODISCARD static bool InSnapshot(const m2World* world, const m2StateArray* array)
 {
     return (array->flags & M2_STATE_SNAPSHOT) != 0 && Present(world, array->flags);
 }
@@ -546,7 +555,8 @@ static bool InSnapshot(const m2World* world, const m2StateArray* array)
 // slot of its extent; false when that does not fit a size_t. The measure
 // and the walk size every array here, so a world measures to exactly the
 // bytes its walk copies.
-static bool SnapshotArrayBytes(const m2World* world, const m2StateArray* array, size_t* bytes)
+M2_NODISCARD static bool SnapshotArrayBytes(const m2World* world, const m2StateArray* array,
+                                            size_t* bytes)
 {
     *bytes = array->elementSize;
     return (array->flags & M2_STATE_POINTER) == 0 ||
@@ -599,8 +609,8 @@ size_t m2StateWalk(m2World* world, uint8_t* out, const uint8_t* in, int directio
     return cursor;
 }
 
-static bool CheckBlock(const m2World* world, const m2StateArray* array, const uint8_t* data,
-                       size_t count)
+M2_NODISCARD static bool CheckBlock(const m2World* world, const m2StateArray* array,
+                                    const uint8_t* data, size_t count)
 {
     m2StateBounds bounds = {(int64_t)ExtentCount(world, array->range),
                             (int64_t)world->shapes.shapeCapacity};
@@ -700,8 +710,8 @@ static m2HashSlots HashSlots(const m2World* world, uint8_t extent)
     case m2_extent_particle:
         return (m2HashSlots){world->particles.particleAlive, world->particles.maxParticleIndex,
                              m2_hashParticles};
-    case m2_extent_fluidVolume:
-        return (m2HashSlots){world->volumes.fvAlive, world->volumes.maxFvIndex, m2_hashVolumes};
+    case m2_extent_waterVolume:
+        return (m2HashSlots){world->volumes.wvAlive, world->volumes.maxWvIndex, m2_hashVolumes};
     case m2_extent_pair:
         return (m2HashSlots){NULL, world->contacts.pairCount, m2_hashContacts};
     case m2_extent_particleSpring:
