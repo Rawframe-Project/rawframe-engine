@@ -31,7 +31,7 @@ void muniCursorInit(muniCursor* cursor, const char* text, size_t length, bool mo
 // Whether the byte at offset in raw, state the caller holds, is a flag's
 // 0 or 1. The iterators check every flag so before the copy of the state
 // that holds it is read: any other byte would be no bool at all.
-static inline bool muniIsFlagByte(const void* raw, size_t offset)
+MUNI_NODISCARD static inline bool muniIsFlagByte(const void* raw, size_t offset)
 {
     return ((const unsigned char*)raw)[offset] <= 1;
 }
@@ -40,8 +40,8 @@ static inline bool muniIsFlagByte(const void* raw, size_t offset)
 // within its piece and its pending bytes, and its flag a 0 or 1; when it
 // is waiting for a piece, whether more were announced and less than a
 // code point is unread, as muniCursorFeed relies on.
-static inline bool muniCursorValid(const muniCursor* cursor, const void* raw, size_t at,
-                                   bool waiting)
+MUNI_NODISCARD static inline bool muniCursorValid(const muniCursor* cursor, const void* raw,
+                                                  size_t at, bool waiting)
 {
     if (!muniIsFlagByte(raw, at + offsetof(muniCursor, moreFollows)) ||
         cursor->pendingCount > sizeof(cursor->pending) || cursor->position > cursor->length ||

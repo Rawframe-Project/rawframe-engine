@@ -27,13 +27,13 @@ enum
 static_assert((int)EmojiJoined == (int)muni_graphemeEmojiLast,
               "segment.c checks the emoji state up to it");
 
-static bool IsControl(uint8_t value)
+MUNI_NODISCARD static bool IsControl(uint8_t value)
 {
     return value == muni_gcbControl || value == muni_gcbCr || value == muni_gcbLf;
 }
 
 // GB6 to GB8: Hangul syllable sequences stay together.
-static bool JoinsHangul(uint8_t before, uint8_t after)
+MUNI_NODISCARD static bool JoinsHangul(uint8_t before, uint8_t after)
 {
     if (before == muni_gcbL)
     {

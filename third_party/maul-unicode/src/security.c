@@ -73,7 +73,7 @@ static void Add(Scripts* scripts, unsigned index)
     scripts->bits[index >> 6] |= (uint64_t)1 << (index & 63);
 }
 
-static bool Has(const Scripts* scripts, unsigned index)
+MUNI_NODISCARD static bool Has(const Scripts* scripts, unsigned index)
 {
     return (scripts->bits[index >> 6] >> (index & 63) & 1) != 0;
 }
@@ -86,12 +86,12 @@ static void Intersect(Scripts* scripts, const Scripts* other)
     }
 }
 
-static bool IsEmpty(const Scripts* scripts)
+MUNI_NODISCARD static bool IsEmpty(const Scripts* scripts)
 {
     return (scripts->bits[0] | scripts->bits[1] | scripts->bits[2] | scripts->bits[3]) == 0;
 }
 
-static bool IsAll(const Scripts* scripts)
+MUNI_NODISCARD static bool IsAll(const Scripts* scripts)
 {
     return (scripts->bits[0] & scripts->bits[1] & scripts->bits[2] & scripts->bits[3]) ==
            UINT64_MAX;
@@ -133,7 +133,8 @@ static Indexes FindIndexes(void)
 
 // The augmented script set of a code point (UTS #39 section 5.1); false
 // when it is every script.
-static bool Augmented(uint32_t codePoint, const Indexes* indexes, Scripts* scriptsOut)
+MUNI_NODISCARD static bool Augmented(uint32_t codePoint, const Indexes* indexes,
+                                     Scripts* scriptsOut)
 {
     uint8_t script = muniLookupScript(codePoint);
     uint8_t set = muniLookupScriptExtensions(codePoint);

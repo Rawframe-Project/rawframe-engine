@@ -34,8 +34,8 @@ static inline unsigned Byte(const muniSegmentIterator* iterator, size_t offset)
 
 // Whether the rules of a segmenter copied out of iterator hold what their
 // rule set writes, each flag's byte a 0 or 1 included.
-static MUNI_ALWAYS_INLINE bool RulesValid(const muniSegmenter* segmenter,
-                                          const muniSegmentIterator* iterator)
+MUNI_NODISCARD static MUNI_ALWAYS_INLINE bool RulesValid(const muniSegmenter* segmenter,
+                                                         const muniSegmentIterator* iterator)
 {
     switch (segmenter->kind)
     {
@@ -104,8 +104,8 @@ static MUNI_ALWAYS_INLINE bool RulesValid(const muniSegmenter* segmenter,
 // fields agree with each other is not checked again. Every call reads
 // most of the state, so all of it is checked, inline in each call so that
 // the copy stays inline too.
-static MUNI_ALWAYS_INLINE bool Load(const muniSegmentIterator* iterator,
-                                    muniSegmenter* segmenterOut)
+MUNI_NODISCARD static MUNI_ALWAYS_INLINE bool Load(const muniSegmentIterator* iterator,
+                                                   muniSegmenter* segmenterOut)
 {
     memcpy(segmenterOut, iterator, sizeof(*segmenterOut));
     const muniSegmenter* segmenter = segmenterOut;
@@ -232,8 +232,8 @@ muniResult muniSegmentIterator_SetComplexBreaker(muniSegmentIterator* iterator,
 
 // Whether a table of overrides is in strictly increasing order of code
 // point and names only code points and known classes: up to classCount.
-static bool ValidOverrides(const muniBreakClassOverride* overrides, size_t count,
-                           uint8_t classCount)
+MUNI_NODISCARD static bool ValidOverrides(const muniBreakClassOverride* overrides, size_t count,
+                                          uint8_t classCount)
 {
     for (size_t i = 0; i < count; ++i)
     {

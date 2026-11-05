@@ -11,7 +11,7 @@
 
 #include "bidi_brackets.h"
 
-static bool IsNeutral(uint8_t type)
+MUNI_NODISCARD static bool IsNeutral(uint8_t type)
 {
     return type == muni_bcB || type == muni_bcS || type == muni_bcWs || type == muni_bcOn ||
            muniBidiIsIsolateInitiator(type) || type == muni_bcPdi;
@@ -182,7 +182,7 @@ static void ResolveNeutrals(const muniBidiSequence* sequence)
 // Whether the level run starting at index starts an isolating run
 // sequence: it does unless it starts with a PDI that matches an isolate
 // initiator, found as the previous code point at or below its level.
-static bool StartsSequence(const muniBidiParagraph* paragraph, size_t index)
+MUNI_NODISCARD static bool StartsSequence(const muniBidiParagraph* paragraph, size_t index)
 {
     if (muniBidiOriginalType(paragraph, index) != muni_bcPdi)
     {

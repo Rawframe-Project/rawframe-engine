@@ -93,7 +93,7 @@ static size_t Map(uint32_t codePoint, uint32_t* out)
 
 // Feeds the mapping of one code point to the normalizer; false when it
 // outgrows a limit.
-static bool Feed(muniNormalizer* normalizer, uint32_t codePoint)
+MUNI_NODISCARD static bool Feed(muniNormalizer* normalizer, uint32_t codePoint)
 {
     if (codePoint < 0xA0)
     {

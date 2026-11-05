@@ -71,7 +71,7 @@ static inline uint8_t muniBidiOriginalType(const muniBidiParagraph* paragraph, s
     return muniLookupBidiClass(muniBidiCodePoint(paragraph->text, paragraph->length, index, &size));
 }
 
-static inline bool muniBidiIsIsolateInitiator(uint8_t type)
+MUNI_NODISCARD static inline bool muniBidiIsIsolateInitiator(uint8_t type)
 {
     return type == muni_bcLri || type == muni_bcRli || type == muni_bcFsi;
 }

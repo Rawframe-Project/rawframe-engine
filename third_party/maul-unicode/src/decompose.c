@@ -56,7 +56,7 @@ static uint32_t PairSource(uint32_t position)
     return (uint32_t)muniDecompositionStarts[low] << 6 | muniLowestBit(map);
 }
 
-static bool IsHangulSyllable(uint32_t codePoint)
+MUNI_NODISCARD static bool IsHangulSyllable(uint32_t codePoint)
 {
     return codePoint - HangulSBase < HangulSCount;
 }
@@ -191,7 +191,7 @@ bool muniIsCompositionExcluded(uint32_t codePoint)
 
 // Whether codePoint is a second code point that composes: a mark of a
 // composing pair, or a Hangul vowel or trailing consonant.
-static bool Combines(uint32_t codePoint)
+MUNI_NODISCARD static bool Combines(uint32_t codePoint)
 {
     if (codePoint - HangulVBase < HangulVCount || codePoint - HangulTBase - 1 < HangulTCount - 1)
     {

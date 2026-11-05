@@ -30,7 +30,7 @@ static_assert(sizeof(void*) < 8 ||
                   sizeof(muniScriptIterator) - sizeof(ScriptState) < sizeof(uint64_t),
               "the public iterator must be no larger than the state needs");
 
-static bool IsNeutral(uint8_t script)
+MUNI_NODISCARD static bool IsNeutral(uint8_t script)
 {
     uint32_t tag = muniScriptTags[script];
     return tag == MUNI_SCRIPT_COMMON || tag == MUNI_SCRIPT_INHERITED;
@@ -41,14 +41,14 @@ static void Add(Scripts* scripts, uint8_t script)
     scripts->bits[script >> 6] |= (uint64_t)1 << (script & 63);
 }
 
-static bool Has(const Scripts* scripts, uint8_t script)
+MUNI_NODISCARD static bool Has(const Scripts* scripts, uint8_t script)
 {
     return (scripts->bits[script >> 6] >> (script & 63) & 1) != 0;
 }
 
 // The scripts a code point belongs to; false for Common and Inherited
 // code points without extensions, which join any run.
-static bool ScriptsOf(uint32_t codePoint, uint8_t* scriptOut, Scripts* scriptsOut)
+MUNI_NODISCARD static bool ScriptsOf(uint32_t codePoint, uint8_t* scriptOut, Scripts* scriptsOut)
 {
     uint8_t script = muniLookupScript(codePoint);
     uint8_t set = muniLookupScriptExtensions(codePoint);
@@ -137,7 +137,8 @@ static void SettlePending(ScriptState* state)
 // Brackets among neutral code points: an opening one is pushed, and a
 // closing one that matches takes its script. Returns whether the code
 // point now has a script.
-static bool Bracket(ScriptState* state, uint32_t codePoint, uint8_t* scriptOut, Scripts* scriptsOut)
+MUNI_NODISCARD static bool Bracket(ScriptState* state, uint32_t codePoint, uint8_t* scriptOut,
+                                   Scripts* scriptsOut)
 {
     uint8_t type = muniLookupBidiBracket(codePoint);
     if (type == muni_bracketOpen)
@@ -172,7 +173,7 @@ static void StartRun(ScriptState* state, uint8_t script, const Scripts* scripts)
 }
 
 // Reads code points until a run ends; true with the run when one does.
-static bool Step(ScriptState* state, uint32_t codePoint, muniScriptRun* runOut)
+MUNI_NODISCARD static bool Step(ScriptState* state, uint32_t codePoint, muniScriptRun* runOut)
 {
     uint8_t script;
     Scripts scripts;
@@ -252,7 +253,7 @@ static muniResult Next(ScriptState* state, muniScriptRun* runOut)
 
 // Whether a script index names one of muniScriptTags, or is NO_SCRIPT
 // where that is allowed.
-static bool IsScript(uint8_t script, bool none)
+MUNI_NODISCARD static bool IsScript(uint8_t script, bool none)
 {
     return script < muniScriptTagCount || (none && script == NO_SCRIPT);
 }
@@ -263,7 +264,7 @@ static bool IsScript(uint8_t script, bool none)
 // it names or the script tables; false otherwise. An iterator with the
 // cookie whose fields were changed by hand is outside the contract, and
 // how its fields agree with each other is not checked again.
-static bool Load(const muniScriptIterator* iterator, ScriptState* stateOut)
+MUNI_NODISCARD static bool Load(const muniScriptIterator* iterator, ScriptState* stateOut)
 {
     memcpy(stateOut, iterator, sizeof(*stateOut));
     const ScriptState* state = stateOut;

@@ -91,12 +91,12 @@ enum : uint64_t
         BIT(Sot) | Hard | BIT(muni_lbSp) | BIT(muni_lbZw) | BIT(muni_lbCb) | BIT(muni_lbGl),
 };
 
-static inline bool In(uint8_t value, uint64_t set)
+MUNI_NODISCARD static inline bool In(uint8_t value, uint64_t set)
 {
     return ((set >> (value & 63u)) & 1u) != 0;
 }
 
-static inline bool IsEastAsian(uint32_t codePoint)
+MUNI_NODISCARD static inline bool IsEastAsian(uint32_t codePoint)
 {
     uint8_t width = muniLookupEastAsianWidth(codePoint);
     return width == muni_eawFullwidth || width == muni_eawWide || width == muni_eawHalfwidth;
@@ -104,19 +104,19 @@ static inline bool IsEastAsian(uint32_t codePoint)
 
 // East_Asian_Width Ambiguous, Fullwidth or Wide, the affixes CSS's loose
 // level lets a line break around in Chinese and Japanese.
-static inline bool IsWide(uint32_t codePoint)
+MUNI_NODISCARD static inline bool IsWide(uint32_t codePoint)
 {
     uint8_t width = muniLookupEastAsianWidth(codePoint);
     return width == muni_eawAmbiguous || width == muni_eawFullwidth || width == muni_eawWide;
 }
 
-static inline bool IsIterationMark(uint32_t codePoint)
+MUNI_NODISCARD static inline bool IsIterationMark(uint32_t codePoint)
 {
     return codePoint == 0x3005 || codePoint == 0x303B || codePoint == 0x309D ||
            codePoint == 0x309E || codePoint == 0x30FD || codePoint == 0x30FE;
 }
 
-static inline bool IsCenteredPunctuation(uint32_t codePoint)
+MUNI_NODISCARD static inline bool IsCenteredPunctuation(uint32_t codePoint)
 {
     switch (codePoint)
     {
@@ -142,7 +142,7 @@ static inline uint8_t Category(uint32_t codePoint)
 }
 
 // AK, AS or U+25CC DOTTED CIRCLE, the bases of LB28a.
-static inline bool IsAksara(uint8_t value, uint32_t codePoint)
+MUNI_NODISCARD static inline bool IsAksara(uint8_t value, uint32_t codePoint)
 {
     return value == muni_lbAk || value == muni_lbAs || codePoint == DOTTED_CIRCLE;
 }
@@ -251,8 +251,9 @@ static inline muniDecision DecideGlue(const muniLineRules* state, uint8_t value)
 // the rules from LB13 on would forbid, but not after an opening
 // punctuation or quotation mark (LB14, LB15a). Loose resolves CJ as ID in
 // the lookup instead.
-static inline bool AllowedByLevel(const muniSegmenter* segmenter, const muniLineRules* state,
-                                  uint8_t value, uint32_t codePoint)
+MUNI_NODISCARD static inline bool AllowedByLevel(const muniSegmenter* segmenter,
+                                                 const muniLineRules* state, uint8_t value,
+                                                 uint32_t codePoint)
 {
     uint8_t level = muniLineStrictness(segmenter);
     bool chineseJapanese = muniLineWritingSystem(segmenter) == muni_writingChineseJapanese;

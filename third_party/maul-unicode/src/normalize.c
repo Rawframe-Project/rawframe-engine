@@ -13,7 +13,7 @@
 #include "overlap.h"
 #include "tables.h"
 
-static bool IsForm(muniNormalForm form)
+MUNI_NODISCARD static bool IsForm(muniNormalForm form)
 {
     return form == muni_nfc || form == muni_nfd || form == muni_nfkc || form == muni_nfkd;
 }

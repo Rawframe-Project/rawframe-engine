@@ -88,7 +88,7 @@ static inline void muniNormalizerFlush(muniNormalizer* normalizer)
 
 // Adds one code point of a full decomposition; false when the segment
 // would outgrow MUNI_MAX_NORMALIZATION_SEGMENT.
-static inline bool muniNormalizerAdd(muniNormalizer* normalizer, uint32_t codePoint)
+MUNI_NODISCARD static inline bool muniNormalizerAdd(muniNormalizer* normalizer, uint32_t codePoint)
 {
     uint8_t markClass = codePoint < 0x300 ? 0 : muniLookupCombiningClass(codePoint);
     if (markClass == 0)
