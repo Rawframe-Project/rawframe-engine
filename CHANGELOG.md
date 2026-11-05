@@ -2,6 +2,17 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.6.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.5.0...v0.6.0) (2026-11-05)
+
+### Changed
+
+- **Breaking:** A window request that Maul Window answers too large, such as a file dialog's choice of more files than it takes (256 by Maul Window's default), completes with the new `window::Outcome::TooLarge` instead of `Failed`. Apart from file dialogs, the engine reads the outcome only of a clipboard read, and only whether it is `Done`, so nothing else acts differently ([#215](https://github.com/Rawframe-Project/rawframe-engine/pull/215)).
+- **Breaking:** `view::FileDialogs::Answer` gains `failure`, which says why a dialog that was neither chosen from nor closed gave no paths: `Failed` (the platform could not show it, no chosen file could be given as a path, or its paths could not be read), `Denied` (the platform refused to show it) or `TooMany` (more files were chosen than a dialog takes) ([#215](https://github.com/Rawframe-Project/rawframe-engine/pull/215)).
+
+### Fixed
+
+- Studio says why a file dialog gave no paths: "the file dialog failed", "the file dialog was refused", or "more files were chosen than the dialog takes; nothing was done". Before, it said nothing, as for a dialog the user closed, so a failure could not be told from a cancel. A closed dialog, and one another dialog replaced, still say nothing ([#215](https://github.com/Rawframe-Project/rawframe-engine/pull/215)).
+
 ## [0.5.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.4.0...v0.5.0) (2026-11-05)
 
 This release moves the engine to Maul UI 1.3.2, Maul Window 0.12.0 and Maul Unicode 1.0.0, and the debug adapter now says how a debugged game went. No wire, save, checkpoint or cooked format changes.
