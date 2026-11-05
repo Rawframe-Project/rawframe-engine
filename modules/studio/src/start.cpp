@@ -527,6 +527,10 @@ void ShellParticipant::takeDialogs() {
             say("this platform shows no file dialogs; type the path instead");
             continue;
         }
+        if (answer->failed) {
+            say("the file dialog failed, or more files were chosen than it takes; nothing was done");
+            continue;
+        }
         if (answer->truncated) {
             say("some of the files chosen were left out: the platform gave no path for them");
         }

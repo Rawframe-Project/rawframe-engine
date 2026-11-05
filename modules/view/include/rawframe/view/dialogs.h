@@ -45,6 +45,10 @@ public:
         bool truncated = false;
         /// Where the platform shows no dialog.
         bool unsupported = false;
+        /// Neither chosen from nor closed: the dialog failed, or its choice
+        /// could not be taken, such as one of no file the platform could
+        /// give as a path, or of more files than a dialog may choose.
+        bool failed = false;
     };
 
     /// The editor's side: a dialog asked; its answer comes with `ticket`.
