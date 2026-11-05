@@ -53,8 +53,8 @@ int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
             return status;
         }
         if (!kReply.has_value()) {
-            // A record that never left, too large or after the connection
-            // went, is neither the endpoint's silence nor its close.
+            // A record that never left for this side's own reason, such as
+            // one too large, is neither the endpoint's silence nor its close.
             complain(link->silent()   ? "the endpoint kept silent"
                      : link->closed() ? "the endpoint closed"
                                       : "the record could not be sent");

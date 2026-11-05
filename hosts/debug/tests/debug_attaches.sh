@@ -6,7 +6,8 @@
 # carries on, and disconnects, leaving the game running without breakpoints.
 # An endpoint off this machine is refused, and a play directory others may
 # enter; the game alone, through where Studio's Play records it,
-# attaches too.
+# attaches too. A game that stops answering ends the session as having
+# kept silent, and one that stops as having closed.
 #
 # usage: debug_attaches.sh <rawframe-debug> <rawframe-server> <repository>
 #                          <content settings> <work directory>
@@ -24,7 +25,7 @@ port=$(python3 "$(dirname "$0")/../../../tools/free_port.py")
 python3 -c 'import secrets; print(secrets.token_hex(24))' >"$work/token"
 cat "$content" >"$work/server.conf"
 cat >>"$work/server.conf" <<CONF
-host.maximum_iterations = 6000
+host.maximum_iterations = 12000
 host.iteration_rate = 120
 world.tick_rate = 60
 kest.game = $repository/games/plaza/plaza.game
@@ -36,7 +37,7 @@ tooling.grants = inspect debug
 CONF
 "$server" --config "$work/server.conf" >"$work/server.log" 2>&1 &
 running=$!
-trap 'kill $running 2>/dev/null || true' EXIT
+trap 'kill -CONT $running 2>/dev/null || true; kill $running 2>/dev/null || true' EXIT
 for _ in $(seq 200); do
     [[ -s "$work/fingerprint" ]] && break
     sleep 0.1
@@ -69,16 +70,19 @@ else
 fi
 printf '{"endpoint":"127.0.0.1:%s","pinFile":"%s","tokenFile":"%s"}\n' "$port" "$work/fingerprint" "$work/token" >"$played/debug.attach"
 
-python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" "$work/server.log" <<'PY'
+ran=0
+python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" "$work/server.log" "$running" <<'PY' || ran=$?
 import json
 import os
 import queue
+import signal
 import subprocess
 import sys
 import threading
 import time
 
-adapter, endpoint, pin, token, game, played, server_log = sys.argv[1:8]
+adapter, endpoint, pin, token, game, played, server_log, server = sys.argv[1:9]
+server = int(server)
 
 
 def explain(seen):
@@ -268,9 +272,54 @@ stack = by_game.answer(by_game.send("stackTrace", {"threadId": 1}))
 assert os.path.samefile(stack["body"]["stackFrames"][0]["source"]["path"], script), stack
 by_game.leave()
 print("attached by the game through its play directory")
-PY
+
+# Git's bash on Windows can neither hold nor name a native program; the
+# script looks there whether the server was left running.
+if os.name == "nt":
+    sys.exit(0)
 
 # Left running: the server is still there to stop.
-sleep 1
-kill -0 $running
+time.sleep(1)
+os.kill(server, 0)
+
+
+def ended(how, stop):
+    """An attached editor told how the game went, once `stop` has made it
+    go, then the session's end."""
+    attached = Editor()
+    assert attached.attach({"endpoint": endpoint, "pinFile": pin, "tokenFile": token})["success"]
+    attached.until(lambda m: m.get("event") == "initialized", "initialized")
+    stop()
+    said = attached.until(lambda m: m.get("event") == "output", "told how the game went")
+    assert said["body"]["output"] == "the game's tooling endpoint %s\n" % how, said
+    attached.until(lambda m: m.get("event") == "terminated", "terminated")
+    attached.child.wait(timeout=20)
+
+
+# A game that stops answering, here held by the system, kept silent: the
+# adapter's wait for a reply or the connection's idle timeout ends it,
+# and neither is the game closing.
+ended("kept silent", lambda: os.kill(server, signal.SIGSTOP))
+os.kill(server, signal.SIGCONT)
+print("a held game kept silent", flush=True)
+# A game that stops closes its endpoint.
+ended("closed", lambda: os.kill(server, signal.SIGTERM))
+print("a stopped game closed", flush=True)
+PY
+
+# Left running, on Windows, where the Python above could not look.
+# Elsewhere the Python stopped the server, unless it failed first: stopped
+# here if it still runs, and reaped, so the trap signals no process that
+# took its number since.
+if command -v cygpath >/dev/null 2>&1; then
+    [[ $ran -ne 0 ]] || { sleep 1; kill -0 $running; }
+else
+    if jobs -rp | grep -qx "$running"; then
+        kill -CONT "$running" 2>/dev/null || true
+        kill "$running" 2>/dev/null || true
+    fi
+    wait "$running" || true
+    running=
+fi
+[[ $ran -eq 0 ]]
 echo "debugged the plaza through the debug adapter"

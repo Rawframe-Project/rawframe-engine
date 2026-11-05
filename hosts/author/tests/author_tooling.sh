@@ -140,5 +140,30 @@ if ! command -v cygpath >/dev/null 2>&1; then
         grep -q '"tooling.welcome"' "$work/${names[$at]}"
         grep -qx 'rawframe-author connect: the endpoint kept silent' "$work/${names[$at]}.err"
     done
+    # A server that stops closes the connection, and a record sent once it
+    # has gone is refused before the close is reported: the endpoint
+    # closed, not a record that could not be sent.
+    ended=0
+    {
+        for _ in $(seq 100); do
+            grep -q '"tooling.welcome"' "$work/stopped" 2>/dev/null && break
+            sleep 0.1
+        done
+        kill -TERM "$running"
+        # Gone, or left for this shell to reap.
+        for _ in $(seq 200); do
+            ps -o stat= -p "$running" 2>/dev/null | grep -qv Z || break
+            sleep 0.05
+        done
+        echo '{"kind":"tooling.status","id":1}'
+    } | "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" \
+        >"$work/stopped" 2>"$work/stopped.err" || ended=$?
+    # Reaped here, so the trap signals no process that took its number
+    # since.
+    wait "$running" || true
+    running=
+    [[ $ended -ne 0 ]]
+    grep -q '"tooling.welcome"' "$work/stopped"
+    grep -qx 'rawframe-author connect: the endpoint closed' "$work/stopped.err"
 fi
 echo "inspected runners through the tooling endpoint"

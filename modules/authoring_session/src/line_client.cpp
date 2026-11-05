@@ -1,6 +1,7 @@
 #include "line_client.h"
 
 #include "rawframe/document/json.h"
+#include "rawframe/network/errors.h"
 
 #include <algorithm>
 #include <chrono>
@@ -105,11 +106,23 @@ std::optional<std::string> LineClient::ask(std::string_view record, std::chrono:
     const std::int64_t kId = ++asked_;
     const std::string kLine = kNumbered ? numbered(*kParsed, kId) : std::string{record} + "\n";
     const std::span<const std::byte> kBytes{reinterpret_cast<const std::byte*>(kLine.data()), kLine.size()};
-    if (!provider_.send(connection_, stream_, kBytes).has_value()) {
+    const auto kUntil = std::chrono::steady_clock::now() + within;
+    if (const auto kSent = provider_.send(connection_, stream_, kBytes); !kSent.has_value()) {
+        // A record too large, or past what waits to be sent, never left for
+        // this side's own reason. Any other refusal is the connection going,
+        // and its close, reported once MsQuic is done with the connection,
+        // says how: closed, or silent by the idle timeout. It is waited for
+        // within the reply's own wait, never longer.
+        const bool kOwn = kSent.error().domain() == network::kNetworkDomain &&
+                          (kSent.error().code() == network::code(network::NetworkError::TooLarge) ||
+                           kSent.error().code() == network::code(network::NetworkError::Exhausted));
+        while (!kOwn && !closed_ && std::chrono::steady_clock::now() < kUntil) {
+            pump();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         silent_ = quiet_;
         return std::nullopt;
     }
-    const auto kUntil = std::chrono::steady_clock::now() + within;
     while (std::chrono::steady_clock::now() < kUntil) {
         pump();
         if (auto reply = take(kNumbered ? std::optional{kId} : std::nullopt); reply.has_value()) {
