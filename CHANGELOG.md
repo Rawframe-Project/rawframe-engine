@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.7.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.1...v0.7.0) (2026-11-05)
+
+This release moves the engine to Maul Nav 1.2.0, Maul UI 1.3.3 and Maul Unicode 1.1.2. A navmesh's tiles bake to new bytes, and agents that avoid each other move by slightly different amounts. No wire, save, checkpoint or cooked format changes, and the engine keeps no baked tile across runs.
+
+### Changed
+
+- **Breaking:** The engine is built on Maul Nav 1.2.0, from 0.2.0, vendored from its release archive with its SHA-256 checked. `rawframe/navigation`'s API does not change. What a game sees change ([#222](https://github.com/Rawframe-Project/rawframe-engine/pull/222)):
+  - A navmesh's tile bytes and fingerprint change: tiles bake under generator 6 and tile format 4. The fingerprint a server reports in its `navigation_summary` record moves.
+  - A walkable strip one cell thin now gets a polygon, so a path may cross it, and heights along long edges are sampled more finely, which reaches the height of a path's points over uneven ground. Paths over the same polygons are otherwise unchanged.
+  - Avoidance velocities are rounded to binary32 and never pass an agent's maximum speed, so a game's agents that avoid each other in `rawframe.navigation.avoid`, as tycoon's customers do, move by slightly different amounts each step.
+  - A navigation query past 1e100 m from the navmesh's origin finds nothing.
+- The engine is built on Maul UI 1.3.3 and Maul Unicode 1.1.2, each vendored from its release archive with its SHA-256 checked. Maul Window, Maul Tween and Maul RHI stay at 0.12.0, 1.0.0 and 0.15.0. Layouts, styles, draw lists, line breaks, shaped text, glyph images and the accessibility tree are unchanged; line breaking takes 1 to 2% longer, since Maul Unicode now checks every iterator it is given ([#221](https://github.com/Rawframe-Project/rawframe-engine/pull/221)).
+
 ## [0.6.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.0...v0.6.1) (2026-11-05)
 
 ### Fixed
