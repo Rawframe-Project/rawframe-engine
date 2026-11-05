@@ -2,6 +2,17 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.8.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.7.0...v0.8.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** the engine is built on Maul2D 1.3.1. The 2D physics digest changes for every world, since Maul2D's world hash now covers each shape's broadphase box and each body's sleep threshold. Queries between steps, character moves among them, see a shape that moved more than 0.1 m in the last step where it is now. A body with a locked rotation no longer turns when given a spin. The 2D step fails at a tick shorter than 1 microsecond or longer than 10 seconds instead of standing still, and the physics statistics count only kinematic targets carried out.
+
+### Build
+
+* **deps:** move Maul2D to 1.3.1 ([#225](https://github.com/Rawframe-Project/rawframe-engine/issues/225)) ([f406e36](https://github.com/Rawframe-Project/rawframe-engine/commit/f406e36c5766af6fccd26a761ceb965f2c7c4923))
+
 ## [0.7.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.1...v0.7.0) (2026-11-05)
 
 This release moves the engine to Maul Nav 1.2.0, Maul UI 1.3.3 and Maul Unicode 1.1.2. A navmesh's tiles bake to new bytes, and agents that avoid each other move by slightly different amounts. No wire, save, checkpoint or cooked format changes, and the engine keeps no baked tile across runs.
