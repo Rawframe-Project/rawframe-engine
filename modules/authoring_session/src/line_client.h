@@ -8,6 +8,7 @@
 #include "rawframe/network/provider.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -23,7 +24,9 @@ namespace rawframe::authoring_session {
 
 class LineClient {
 public:
-    explicit LineClient(network::Provider& provider) : provider_(provider) {
+    /// Over `provider`, taking lines of at most `maximumLine` bytes before
+    /// their newline: the most the endpoint sends at once.
+    LineClient(network::Provider& provider, std::size_t maximumLine) : provider_(provider), maximumLine_(maximumLine) {
     }
 
     /// Waits until the connection is ready to carry records.
@@ -58,6 +61,11 @@ public:
     [[nodiscard]] bool closed() const noexcept {
         return closed_;
     }
+    /// Whether the endpoint sent a line past `maximumLine`, and this side
+    /// closed the connection rather than hold it.
+    [[nodiscard]] bool overran() const noexcept {
+        return overran_;
+    }
     /// Whether the last question waited out its bound unanswered, or the
     /// connection ended for want of anything from the endpoint while it
     /// waited: an endpoint stopped by its system, which a last record need
@@ -79,12 +87,21 @@ private:
     /// The whole lines received, each taken: a reply returned where it is
     /// the one numbered `id`, every other line that is no reply kept.
     std::optional<std::string> take(std::optional<std::int64_t> id);
+    /// Keeps a line said unasked, letting the oldest go past
+    /// `kMostUnheard`.
+    void keep(std::string line);
 
     network::Provider& provider_;
     network::ConnectionId connection_;
     network::StreamId stream_;
     std::vector<network::Event> events_;
     std::string received_;
+    /// The bytes of `received_` after its last newline: the line still
+    /// coming.
+    std::size_t open_ = 0;
+    std::size_t maximumLine_;
+    bool overran_ = false;
+    /// At most `kMostUnheard`, the oldest let go first.
     std::vector<std::string> unasked_;
     /// Records sent with `send` whose reply has not come, by the number
     /// each went out under: the id each was given.

@@ -61,7 +61,8 @@ std::optional<Value> Adapter::ask(Value record, std::string& why) {
     if (!kReply.has_value()) {
         // Which way it went, for the editor: a game held by a long step or
         // a native debugger keeps silent, and has not closed.
-        why = link_->silent()   ? "the game's tooling endpoint kept silent"
+        why = link_->overran()  ? "the game's tooling endpoint sent a line past 4 MiB"
+              : link_->silent() ? "the game's tooling endpoint kept silent"
               : link_->closed() ? "the game's tooling endpoint closed"
                                 : "the record could not be sent to the game's tooling endpoint";
         ended_ = why;

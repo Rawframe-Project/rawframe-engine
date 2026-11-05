@@ -7,4 +7,4 @@ rawframe_module(NAME authoring_session
     DEPS authoring blockout terrain tilemap scatter sequence spline cook animation audio input localization texture mesh material graph ui process world_tooling view network_quic network world_kest kest_library kest content scene schema document execution result base
 )
 
-rawframe_module_tests(NAME authoring_session SOURCES tests/viewing_test.cpp)
+rawframe_module_tests(NAME authoring_session SOURCES tests/viewing_test.cpp tests/link_test.cpp)

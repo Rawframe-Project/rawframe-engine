@@ -1,5 +1,6 @@
 #include "line_client.h"
 
+#include "rawframe/authoring_session/link.h"
 #include "rawframe/document/json.h"
 #include "rawframe/network/errors.h"
 
@@ -221,14 +222,14 @@ std::optional<std::string> LineClient::take(std::optional<std::int64_t> id) {
         // reply, kept under the record's own id.
         if (const auto kWaiting = kNumber.has_value() ? waiting_.find(*kNumber) : waiting_.end();
             kWaiting != waiting_.end()) {
-            unasked_.push_back(renumbered(*kLine, kWaiting->second));
+            keep(renumbered(*kLine, kWaiting->second));
             if (replies(*kLine)) {
                 waiting_.erase(kWaiting);
             }
             continue;
         }
         if (!kLine.has_value() || !replies(*kLine)) {
-            unasked_.push_back(std::move(line));
+            keep(std::move(line));
             continue;
         }
         if (!id.has_value() || (kAnswers != nullptr && kAnswers->integer() == *id)) {
@@ -238,14 +239,33 @@ std::optional<std::string> LineClient::take(std::optional<std::int64_t> id) {
     return std::nullopt;
 }
 
+void LineClient::keep(std::string line) {
+    if (unasked_.size() == kMostUnheard) {
+        unasked_.erase(unasked_.begin());
+    }
+    unasked_.push_back(std::move(line));
+}
+
 void LineClient::pump() {
     events_.clear();
     provider_.poll(events_, 64);
     for (const network::Event& event : events_) {
         if (event.kind == network::EventKind::Connected) {
             ready_ = true;
-        } else if (event.kind == network::EventKind::StreamBytes) {
-            received_.append(reinterpret_cast<const char*>(event.bytes.data()), event.bytes.size());
+        } else if (event.kind == network::EventKind::StreamBytes && !overran_) {
+            const std::string_view kBytes{reinterpret_cast<const char*>(event.bytes.data()), event.bytes.size()};
+            received_.append(kBytes);
+            const std::size_t kNewline = kBytes.rfind('\n');
+            open_ = kNewline == std::string_view::npos ? open_ + kBytes.size() : kBytes.size() - kNewline - 1;
+            // A line past the most the endpoint sends at once is no record
+            // of its protocol: the link ends rather than hold it.
+            if (open_ > maximumLine_) {
+                overran_ = true;
+                closed_ = true;
+                received_.resize(received_.size() - open_);
+                open_ = 0;
+                provider_.close(connection_);
+            }
         } else if (event.kind == network::EventKind::Closed) {
             closed_ = true;
             // Ended by the idle timeout: the endpoint said nothing, which

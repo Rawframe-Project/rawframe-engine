@@ -38,6 +38,8 @@ int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
     if (link == nullptr) {
         return 1;
     }
+    // What the endpoint says unasked is not printed: the link keeps at
+    // most kMostUnheard lines of it, the oldest let go.
     int status = 0;
     std::string line;
     for (int each = std::fgetc(stdin); each != EOF; each = std::fgetc(stdin)) {
@@ -55,7 +57,8 @@ int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
         if (!kReply.has_value()) {
             // A record that never left for this side's own reason, such as
             // one too large, is neither the endpoint's silence nor its close.
-            complain(link->silent()   ? "the endpoint kept silent"
+            complain(link->overran()  ? "the endpoint sent a line past 4 MiB"
+                     : link->silent() ? "the endpoint kept silent"
                      : link->closed() ? "the endpoint closed"
                                       : "the record could not be sent");
             return 1;

@@ -11,6 +11,7 @@
 #include "rawframe/network/provider.h"
 #include "rawframe/network_quic/quic.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -21,6 +22,12 @@
 #include <vector>
 
 namespace rawframe::authoring_session {
+
+/// The most lines a link keeps of what its endpoint says unasked until
+/// `heard` takes them; past it the oldest is let go. `rawframe-author
+/// connect` and the debug adapter never take them, so this is all they
+/// hold of it.
+inline constexpr std::size_t kMostUnheard = 1024;
 
 class LineClient;
 class Preview;
@@ -54,10 +61,15 @@ public:
     /// endpoint's next frame. Whether it was sent.
     bool send(std::string_view record);
     /// The replies to records sent since last asked, each under its own
-    /// id, and what the endpoint said unasked; without waiting.
+    /// id, and what the endpoint said unasked, at most `kMostUnheard`
+    /// lines; without waiting.
     std::vector<std::string> heard();
-    /// Whether the endpoint closed the connection.
+    /// Whether the connection ended: the endpoint closed it, or this side
+    /// did on a line past its limit (`overran`).
     [[nodiscard]] bool closed() const noexcept;
+    /// Whether the endpoint sent a line past the most the tooling protocol
+    /// sends at once, 4 MiB, and the link ended rather than hold it.
+    [[nodiscard]] bool overran() const noexcept;
     /// Whether the last record asked got no reply because the endpoint
     /// said nothing: its wait ran out, or the connection ended at the idle
     /// timeout while it waited.
@@ -97,11 +109,17 @@ public:
     /// The number a record sent with `send` went out under, by its own id.
     [[nodiscard]] std::optional<std::int64_t> sentAs(const document::Value& id) const;
     /// What the host said unasked (`authoring.changed`, presence, a
-    /// revocation, and what a record sent is answered with), waiting up to
-    /// `withinMilliseconds` for the first where none was kept.
+    /// revocation, and what a record sent is answered with), at most
+    /// `kMostUnheard` lines, waiting up to `withinMilliseconds` for the
+    /// first where none was kept.
     std::vector<std::string> heard(std::int64_t withinMilliseconds);
-    /// Whether the host closed the connection.
+    /// Whether the connection ended: the host closed it, or this side did
+    /// on a line past its limit (`overran`).
     [[nodiscard]] bool closed() const noexcept;
+    /// Whether the host sent a line past the largest session record,
+    /// `authoring::kMaximumSessionRecordBytes`, and the link ended rather
+    /// than hold it.
+    [[nodiscard]] bool overran() const noexcept;
 
 private:
     HostLink();
