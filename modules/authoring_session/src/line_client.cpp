@@ -260,17 +260,31 @@ void LineClient::pump() {
             ready_ = true;
         } else if (event.kind == network::EventKind::StreamBytes && !overran_) {
             const std::string_view kBytes{reinterpret_cast<const char*>(event.bytes.data()), event.bytes.size()};
+            const std::size_t kBase = received_.size();
             received_.append(kBytes);
-            const std::size_t kNewline = kBytes.rfind('\n');
-            open_ = kNewline == std::string_view::npos ? open_ + kBytes.size() : kBytes.size() - kNewline - 1;
+            // Every line the bytes end or go on, measured: the first adds to
+            // the one still coming, and each after a newline starts afresh.
             // A line past the most the endpoint sends at once is no record
-            // of its protocol: the link ends rather than hold it.
-            if (open_ > maximumLine_) {
-                overran_ = true;
-                closed_ = true;
-                received_.resize(received_.size() - open_);
+            // of its protocol: the link ends rather than hold it, keeping
+            // the whole lines before it.
+            std::size_t lineStart = kBase - open_;
+            for (std::size_t at = 0;;) {
+                const std::size_t kNewline = kBytes.find('\n', at);
+                open_ += (kNewline == std::string_view::npos ? kBytes.size() : kNewline) - at;
+                if (open_ > maximumLine_) {
+                    overran_ = true;
+                    closed_ = true;
+                    received_.resize(lineStart);
+                    open_ = 0;
+                    provider_.close(connection_);
+                    break;
+                }
+                if (kNewline == std::string_view::npos) {
+                    break;
+                }
+                at = kNewline + 1;
                 open_ = 0;
-                provider_.close(connection_);
+                lineStart = kBase + at;
             }
         } else if (event.kind == network::EventKind::Closed) {
             closed_ = true;

@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <fstream>
 #include <functional>
 #include <memory>
@@ -77,10 +78,12 @@ std::string replyLine(std::int64_t id, std::string_view answer) {
 
 /// A tooling endpoint on its own thread that welcomes any hello and answers
 /// every other record with the bytes `answer` gives for its kind and
-/// number, line or not.
+/// number, line or not: one sending after another, each begun only once
+/// the peer has received all of the one before, so a sending's bytes
+/// reach it together.
 class Endpoint {
 public:
-    using Answer = std::function<std::string(std::string_view kind, std::int64_t id)>;
+    using Answer = std::function<std::vector<std::string>(std::string_view kind, std::int64_t id)>;
 
     explicit Endpoint(Answer answer) : answer_(std::move(answer)) {
         const auto kIdentity = network_quic::makeSelfSignedCertificate("rawframe-test", 1);
@@ -115,6 +118,7 @@ private:
         std::vector<network::Event> events;
         std::string pending;
         std::string outgoing;
+        std::deque<std::string> later;
         std::optional<network::ConnectionId> connection;
         network::StreamId stream{};
         while (!stop_.load()) {
@@ -128,6 +132,7 @@ private:
                 } else if (kEvent.kind == network::EventKind::Closed) {
                     connection.reset();
                     outgoing.clear();
+                    later.clear();
                 }
             }
             for (std::size_t end = pending.find('\n'); end != std::string::npos; end = pending.find('\n')) {
@@ -137,8 +142,16 @@ private:
                 const document::Value* kId = kRecord.has_value() ? kRecord->find("id") : nullptr;
                 const std::int64_t kNumber = kId != nullptr ? kId->integer().value_or(0) : 0;
                 const std::string kNamed = kKind != nullptr && kKind->text() != nullptr ? *kKind->text() : "";
-                outgoing += kNamed == "tooling.hello" ? replyLine(kNumber, R"({"kind":"tooling.welcome"})")
-                                                      : answer_(kNamed, kNumber);
+                for (std::string& each : kNamed == "tooling.hello"
+                                             ? std::vector{replyLine(kNumber, R"({"kind":"tooling.welcome"})")}
+                                             : answer_(kNamed, kNumber)) {
+                    later.push_back(std::move(each));
+                }
+            }
+            if (connection.has_value() && outgoing.empty() && !later.empty() &&
+                provider_->pendingBytes(*connection, stream) == 0) {
+                outgoing = std::move(later.front());
+                later.pop_front();
             }
             // Sent a piece at a time while what the peer has not acknowledged
             // stays within half of what a connection holds, so neither a
@@ -179,7 +192,7 @@ RAWFRAME_TEST(ALineAsLongAsTheProtocolSendsIsTakenAndOnePastItEndsTheLink) {
     const Endpoint kEndpoint{[](std::string_view kind, std::int64_t id) {
         // The longest line the protocol sends, then one byte more and no
         // newline at all.
-        return kind == "test.longest" ? replyOfLength(id, kMostAtOnce) : std::string(kMostAtOnce + 1, 'x');
+        return std::vector{kind == "test.longest" ? replyOfLength(id, kMostAtOnce) : std::string(kMostAtOnce + 1, 'x')};
     }};
     const auto kLink = kEndpoint.link();
     if (kLink == nullptr) {
@@ -190,6 +203,25 @@ RAWFRAME_TEST(ALineAsLongAsTheProtocolSendsIsTakenAndOnePastItEndsTheLink) {
     RAWFRAME_EXPECT(!kLink->overran() && !kLink->closed());
     RAWFRAME_EXPECT(!kLink->ask(R"({"kind":"test.past","id":2})").has_value());
     RAWFRAME_EXPECT(kLink->overran() && kLink->closed() && !kLink->silent());
+}
+
+RAWFRAME_TEST(ALinePastTheLimitEndedWithinOneSendingEndsTheLink) {
+    // The bytes that take a line past the limit come with the newline that
+    // ends it, so a client that measured only what follows an event's last
+    // newline would take it whole: once alone, and once between two other
+    // lines.
+    for (const bool kBetween : {false, true}) {
+        const Endpoint kEndpoint{[kBetween](std::string_view, std::int64_t) {
+            return std::vector{std::string{kBetween ? "a\n" : ""} + std::string(kMostAtOnce, 'x'),
+                               std::string(100, 'x') + (kBetween ? "\nb" : "\n")};
+        }};
+        const auto kLink = kEndpoint.link();
+        if (kLink == nullptr) {
+            return;
+        }
+        RAWFRAME_EXPECT(!kLink->ask(R"({"kind":"test.past","id":1})").has_value());
+        RAWFRAME_EXPECT(kLink->overran() && kLink->closed() && !kLink->silent());
+    }
 }
 
 /// A line said unasked, numbered `n`, its bytes before its newline
@@ -210,7 +242,7 @@ RAWFRAME_TEST(WhatAnEndpointSaysUnaskedIsKeptToItsLastBytes) {
     const Endpoint kEndpoint{[&said](std::string_view, std::int64_t id) {
         std::string lines = saidLine(said, kLine) + saidLine(said + 1, kLine);
         said += 2;
-        return lines + replyLine(id, R"({"kind":"test.done"})");
+        return std::vector{lines + replyLine(id, R"({"kind":"test.done"})")};
     }};
     const auto kLink = kEndpoint.link();
     if (kLink == nullptr) {
