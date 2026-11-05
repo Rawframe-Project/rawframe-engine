@@ -80,7 +80,7 @@ ToolingLink::open(std::string_view endpoint, const char* pinFile, const char* to
     std::unique_ptr<ToolingLink> link{new ToolingLink};
     link->network_ = std::move(*network);
     link->provider_ = std::move(*provider);
-    auto client = std::make_unique<LineClient>(*link->provider_);
+    auto client = std::make_unique<LineClient>(*link->provider_, world_tooling::toolingProfile(1).maximumStreamSend);
     if (!client->connected(endpoint)) {
         said = "the endpoint could not be reached, or did not trust the pin";
         return nullptr;
@@ -127,6 +127,10 @@ bool ToolingLink::silent() const noexcept {
     return client_->silent();
 }
 
+bool ToolingLink::overran() const noexcept {
+    return client_->overran();
+}
+
 HostLink::HostLink() = default;
 
 HostLink::~HostLink() {
@@ -162,7 +166,7 @@ HostLink::open(std::string_view endpoint, const char* pinFile, const char* token
     std::unique_ptr<HostLink> link{new HostLink};
     link->network_ = std::move(*network);
     link->provider_ = std::move(*provider);
-    auto client = std::make_unique<LineClient>(*link->provider_);
+    auto client = std::make_unique<LineClient>(*link->provider_, authoringProfile(1).maximumStreamSend);
     if (!client->connected(endpoint)) {
         said = "the host could not be reached, or did not trust the pin";
         return nullptr;
@@ -203,6 +207,10 @@ std::vector<std::string> HostLink::heard(std::int64_t withinMilliseconds) {
 
 bool HostLink::closed() const noexcept {
     return client_->closed();
+}
+
+bool HostLink::overran() const noexcept {
+    return client_->overran();
 }
 
 namespace {

@@ -55,6 +55,8 @@ private:
     /// where it is known; none where it is not.
     [[nodiscard]] std::optional<std::filesystem::path> editorPath(const std::string& built) const;
 
+    /// The game's link. What the game says unasked is never read: the link
+    /// keeps at most authoring_session::kMostUnheardBytes of it, 64 MiB.
     std::unique_ptr<authoring_session::ToolingLink> link_;
     std::int64_t seq_ = 0;
     std::int64_t asked_ = 0;
