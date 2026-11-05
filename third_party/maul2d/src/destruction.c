@@ -198,11 +198,25 @@ static m2BodyId CreatePiece(m2World* world, int32_t parent, const m2ShapeDef* sh
     return piece;
 }
 
-static M2_NOINLINE m2Result WorldShatterBodyWorker(m2World* world, m2BodyId bodyId,
-                                                   const m2Polygon* pieces, int32_t pieceCount,
-                                                   m2BodyId* bodiesOut, int32_t capacity,
-                                                   int32_t* countOut)
+static M2_NOINLINE m2Result BodyShatterWorker(m2World* world, m2BodyId bodyId,
+                                              const m2Polygon* pieces, int32_t pieceCount,
+                                              m2BodyId* bodiesOut, int32_t capacity,
+                                              int32_t* countOut)
 {
+    // bodiesOut holds the ids of bodies the call makes, so every failure
+    // leaves null ids there, a busy refusal too: no failed call leaves an id
+    // the caller could destroy. A busy refusal leaves the count, which host
+    // code the world is running may be filling; every other failure clears
+    // it.
+    m2Result writer = m2CheckWriter(world);
+    for (int32_t i = 0; bodiesOut != NULL && i < capacity; ++i)
+    {
+        bodiesOut[i] = m2_nullBodyId;
+    }
+    if (writer == m2_errorBusy)
+    {
+        return writer;
+    }
     if (countOut != NULL)
     {
         *countOut = 0;
@@ -211,11 +225,6 @@ static M2_NOINLINE m2Result WorldShatterBodyWorker(m2World* world, m2BodyId body
     {
         return m2Refuse(world, m2_errorInvalid);
     }
-    for (int32_t i = 0; i < capacity; ++i)
-    {
-        bodiesOut[i] = m2_nullBodyId;
-    }
-    m2Result writer = m2CheckWriter(world);
     if (writer != m2_success)
     {
         return writer;
@@ -263,13 +272,13 @@ static M2_NOINLINE m2Result WorldShatterBodyWorker(m2World* world, m2BodyId body
     return m2_success;
 }
 
-m2Result m2World_ShatterBody(m2World* world, m2BodyId bodyId, const m2Polygon* pieces,
-                             int32_t pieceCount, m2BodyId* bodiesOut, int32_t capacity,
-                             int32_t* countOut)
+m2Result m2Body_Shatter(m2World* world, m2BodyId bodyId, const m2Polygon* pieces,
+                        int32_t pieceCount, m2BodyId* bodiesOut, int32_t capacity,
+                        int32_t* countOut)
 {
     uint64_t env = m2FloatEnvEnter();
     m2Result result =
-        WorldShatterBodyWorker(world, bodyId, pieces, pieceCount, bodiesOut, capacity, countOut);
+        BodyShatterWorker(world, bodyId, pieces, pieceCount, bodiesOut, capacity, countOut);
     m2FloatEnvLeave(env);
     return result;
 }

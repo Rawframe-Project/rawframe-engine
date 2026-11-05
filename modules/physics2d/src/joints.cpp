@@ -77,7 +77,7 @@ namespace rawframe::physics2d {
         definition.upperAngle = joint.angularUpper;
         definition.enableMotor = joint.motor == 3;
         definition.motorSpeed = joint.motorSpeed;
-        definition.maxMotorTorque = joint.motorEffort;
+        definition.maxMotorEffort = joint.motorEffort;
         definition.enableConnectedCollision = joint.collideConnected;
         return m2CreateRevoluteJoint(physics, &definition, &made) == m2_success ? made : m2JointId{};
     }
@@ -95,7 +95,7 @@ namespace rawframe::physics2d {
         definition.upperTranslation = kAlongX ? joint.linearUpperX : joint.linearUpperY;
         definition.enableMotor = joint.motor != 0;
         definition.motorSpeed = joint.motorSpeed;
-        definition.maxMotorForce = joint.motorEffort;
+        definition.maxMotorEffort = joint.motorEffort;
         definition.enableConnectedCollision = joint.collideConnected;
         return m2CreatePrismaticJoint(physics, &definition, &made) == m2_success ? made : m2JointId{};
     }

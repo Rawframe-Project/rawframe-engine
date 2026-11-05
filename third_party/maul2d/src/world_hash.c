@@ -27,13 +27,18 @@ static uint64_t HashPool(const m2HashPool* pool, uint64_t h)
     h = m2Hash64(h, &pool->maxIndex, (int32_t)sizeof(int32_t));
     h = m2Hash64(h, &pool->count, (int32_t)sizeof(int32_t));
     h = m2Hash64(h, &pool->retired, (int32_t)sizeof(int32_t));
+    // head + k reaches twice the capacity, which no checked product bounds
+    // for bodies or water volumes, so the sum is taken in 64 bits.
     for (int32_t k = 0; k < pool->count; ++k)
     {
-        h = m2Hash64(h, &pool->queue[(pool->head + k) % pool->capacity], (int32_t)sizeof(int32_t));
+        h = m2Hash64(h, &pool->queue[((int64_t)pool->head + k) % pool->capacity],
+                     (int32_t)sizeof(int32_t));
     }
     // Generations below the high-water mark, live and free: a freed slot's
     // generation is the one its next object takes.
-    return m2Hash64(h, pool->generations, pool->maxIndex * (int32_t)sizeof(uint32_t));
+    // The product is taken in 64 bits, since four bytes a slot overflow 32
+    // bits past 536,870,911 slots.
+    return m2Hash64(h, pool->generations, (int64_t)pool->maxIndex * (int64_t)sizeof(uint32_t));
 }
 
 uint64_t m2HashPools(const m2World* world, m2HashPart part, uint64_t h)
@@ -43,7 +48,7 @@ uint64_t m2HashPools(const m2World* world, m2HashPart part, uint64_t h)
     const m2Chains* c = &world->chains;
     const m2Joints* j = &world->joints;
     const m2Particles* p = &world->particles;
-    const m2FluidVolumes* v = &world->volumes;
+    const m2WaterVolumes* v = &world->volumes;
     const m2HashPool pools[] = {
         {b->freeQueue, b->generations, b->bodyCapacity, b->freeHead, b->freeCount, b->maxBodyIndex,
          b->retiredCount, m2_hashBodies},
@@ -55,8 +60,8 @@ uint64_t m2HashPools(const m2World* world, m2HashPart part, uint64_t h)
          j->jointFreeCount, j->maxJointIndex, j->jointRetiredCount, m2_hashJoints},
         {p->particleFreeQueue, p->particleGenerations, p->particleCapacity, p->particleFreeHead,
          p->particleFreeCount, p->maxParticleIndex, p->particleRetiredCount, m2_hashParticles},
-        {v->fvFreeQueue, v->fvGenerations, v->fvCapacity, v->fvFreeHead, v->fvFreeCount,
-         v->maxFvIndex, v->fvRetiredCount, m2_hashVolumes},
+        {v->wvFreeQueue, v->wvGenerations, v->wvCapacity, v->wvFreeHead, v->wvFreeCount,
+         v->maxWvIndex, v->wvRetiredCount, m2_hashVolumes},
     };
     for (size_t i = 0; i < sizeof(pools) / sizeof(pools[0]); ++i)
     {

@@ -84,10 +84,11 @@ enum
     m2_opShatterBody = 58, // variable length: m2OpShatterHeader + polygons
     m2_opSetParticleLifetime = 59,
     m2_opSetParticleUserData = 60,
-    m2_opCreateFluidVolume = 61,
-    m2_opDestroyFluidVolume = 62,
-    m2_opSetFluidSurface = 63,
+    m2_opCreateWaterVolume = 61,
+    m2_opDestroyWaterVolume = 62,
+    m2_opSetWaterSurface = 63,
     m2_opSetWind = 64,
+    m2_opWaterUserData = 65,
     m2_opCount
 };
 
@@ -102,6 +103,7 @@ enum
     m2_bodyParamEnableSleep = 4,
     m2_bodyParamLockLinearX = 5,
     m2_bodyParamLockLinearY = 6,
+    m2_bodyParamSleepThreshold = 7,
     m2_bodyParamCount
 };
 
@@ -134,6 +136,7 @@ enum
     m2_jointParamPulleyRatio = 16,
     m2_jointParamEnableSpring = 17,       // distance and wheel; resets the spring's impulses
     m2_jointParamConnectedCollision = 18, // every kind but the filter joint
+    m2_jointParamMotorMaxForce = 19,      // motor only
     m2_jointParamCount
 };
 
@@ -354,17 +357,23 @@ typedef struct m2OpParticleUserData
     M2_ALIGN8 uint64_t userData;
 } m2OpParticleUserData;
 
-typedef struct m2OpCreateFluidVolume
+typedef struct m2OpCreateWaterVolume
 {
-    m2FluidVolumeDef def;
-    m2FluidVolumeId expected;
-} m2OpCreateFluidVolume;
+    m2WaterVolumeDef def;
+    m2WaterVolumeId expected;
+} m2OpCreateWaterVolume;
 
-typedef struct m2OpFluidSurface
+typedef struct m2OpWaterSurface
 {
-    m2FluidVolumeId id;
+    m2WaterVolumeId id;
     M2_ALIGN8 double surface;
-} m2OpFluidSurface;
+} m2OpWaterSurface;
+
+typedef struct m2OpWaterUserData
+{
+    m2WaterVolumeId id;
+    M2_ALIGN8 uint64_t userData;
+} m2OpWaterUserData;
 
 typedef struct m2OpShatterHeader
 {
@@ -431,8 +440,9 @@ typedef union m2OpPayload
     m2OpParticleVec particleVec;
     m2OpParticleFloat particleFloat;
     m2OpParticleUserData particleUserData;
-    m2OpCreateFluidVolume createFluidVolume;
-    m2OpFluidSurface fluidSurface;
+    m2OpCreateWaterVolume createWaterVolume;
+    m2OpWaterSurface waterSurface;
+    m2OpWaterUserData waterUserData;
     m2OpShatterHeader shatterHeader;
     m2OpFlag flag;
     m2OpVec vec;
@@ -443,7 +453,7 @@ typedef union m2OpPayload
     m2ChainId chainId;
     m2JointId jointId;
     m2ParticleId particleId;
-    m2FluidVolumeId fluidVolumeId;
+    m2WaterVolumeId waterVolumeId;
     int64_t restoreSize;
 } m2OpPayload;
 
@@ -452,7 +462,7 @@ typedef union m2OpPayload
 
 // Whether a record of 1 + bytes fits a tape of capacity bytes written up
 // to cursor (0 <= cursor <= capacity).
-bool m2JournalRecordFits(int64_t cursor, int64_t capacity, int64_t bytes);
+M2_NODISCARD bool m2JournalRecordFits(int64_t cursor, int64_t capacity, int64_t bytes);
 void m2JournalRecord(m2World* world, uint8_t op, const void* payload, int32_t bytes);
 void m2JournalRecordRestore(m2World* world, const void* snapshot, int64_t size);
 void m2JournalRecordShatter(m2World* world, m2BodyId bodyId, const m2Polygon* pieces,
@@ -479,8 +489,8 @@ typedef bool m2ReplayApplyFn(m2ReplayCursor* cursor, const m2OpPayload* payload)
 // Whether a record's tail of count elements of elementBytes each lies
 // within the tape after the cursor; the tail's size, reckoned in 64 bits
 // so no count can wrap it, goes to bytesOut.
-bool m2ReplayTailFits(const m2ReplayCursor* r, int32_t count, int32_t elementBytes,
-                      int64_t* bytesOut);
+M2_NODISCARD bool m2ReplayTailFits(const m2ReplayCursor* r, int32_t count, int32_t elementBytes,
+                                   int64_t* bytesOut);
 
 typedef struct m2JournalCommand
 {

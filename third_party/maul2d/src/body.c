@@ -36,7 +36,7 @@ m2BodyDef m2DefaultBodyDef(void)
     def.rotation = (m2Rot){1.0f, 0.0f};
     def.gravityScale = 1.0f;
     def.enableSleep = true;
-    def.isEnabled = true;
+    def.enable = true;
     def.internalValue = M2_BODY_COOKIE;
     return def;
 }
@@ -55,12 +55,13 @@ static m2Result BodyDefCheck(const m2BodyDef* def)
     result = m2BothChecks(result, m2CheckSpeed(def->angularVelocity));
     result = m2BothChecks(result, m2CheckGravityScale(def->gravityScale));
     result = m2BothChecks(result, m2CheckRate(def->linearDamping));
-    return m2BothChecks(result, m2CheckRate(def->angularDamping));
+    result = m2BothChecks(result, m2CheckRate(def->angularDamping));
+    return m2BothChecks(result, m2CheckSleepThreshold(def->sleepThreshold));
 }
 
 // A static body never moves, so its def carries no velocity, as its
 // velocity setters take none.
-static bool StaticDefIsStill(const m2BodyDef* def)
+M2_NODISCARD static bool StaticDefIsStill(const m2BodyDef* def)
 {
     return def->type != m2_staticBody ||
            (def->linearVelocity.x == 0.0f && def->linearVelocity.y == 0.0f &&
@@ -86,11 +87,12 @@ static void RecordBodyDef(m2BodyDef* out, const m2BodyDef* def)
     out->motionLocks.linearY = def->motionLocks.linearY;
     out->motionLocks.angularZ = def->motionLocks.angularZ;
     out->enableSleep = def->enableSleep;
-    out->isEnabled = def->isEnabled;
+    out->enable = def->enable;
     out->dominance = def->dominance;
-    out->isBullet = def->isBullet;
+    out->enableBullet = def->enableBullet;
     out->userData = def->userData;
     out->internalValue = def->internalValue;
+    out->sleepThreshold = def->sleepThreshold;
 }
 
 static M2_NOINLINE m2Result CreateBodyWorker(m2World* world, const m2BodyDef* def,
@@ -140,9 +142,10 @@ static M2_NOINLINE m2Result CreateBodyWorker(m2World* world, const m2BodyDef* de
         (uint8_t)((def->motionLocks.linearX ? M2_LOCK_LINEAR_X : 0u) |
                   (def->motionLocks.linearY ? M2_LOCK_LINEAR_Y : 0u));
     world->bodies.sleepEnables[index] = def->enableSleep ? 1 : 0;
+    world->bodies.sleepThresholds[index] = m2ResolveSleepThreshold(def->sleepThreshold);
     world->bodies.forces[index] = (m2Vec2){0.0f, 0.0f};
     world->bodies.torques[index] = 0.0f;
-    world->bodies.disabled[index] = def->isEnabled ? 0 : 1;
+    world->bodies.disabled[index] = def->enable ? 0 : 1;
     world->bodies.dominances[index] = def->dominance;
     world->bodies.userData[index] = def->userData;
     world->bodies.types[index] = (uint8_t)def->type;
@@ -155,7 +158,7 @@ static M2_NOINLINE m2Result CreateBodyWorker(m2World* world, const m2BodyDef* de
     world->bodies.asleep[index] = 0;
     world->bodies.sleepTimes[index] = 0.0f;
     world->bodies.sleepStreak[index] = 0;
-    world->bodies.bullets[index] = def->isBullet ? 1 : 0;
+    world->bodies.bullets[index] = def->enableBullet ? 1 : 0;
     if (index + 1 > world->bodies.maxBodyIndex)
     {
         world->bodies.maxBodyIndex = index + 1;
@@ -300,7 +303,7 @@ M2_BODY_GETTER(uint64_t, m2Body_GetUserData, world->bodies.userData[index], 0)
 // The value contract of each body parameter channel. Live setters and
 // replay both pass through it, so a tape can never write what the API
 // would refuse.
-static bool BodyParamValid(uint8_t param, float value)
+M2_NODISCARD static bool BodyParamValid(uint8_t param, float value)
 {
     switch (param)
     {
@@ -314,6 +317,8 @@ static bool BodyParamValid(uint8_t param, float value)
     case m2_bodyParamLockLinearX:
     case m2_bodyParamLockLinearY:
         return value == 0.0f || value == 1.0f;
+    case m2_bodyParamSleepThreshold:
+        return m2ValidSleepThreshold(value);
     default:
         return false;
     }
@@ -349,6 +354,9 @@ bool m2SetBodyParamInternal(m2World* world, m2BodyId bodyId, uint8_t param, floa
         break;
     case m2_bodyParamGravityScale:
         world->bodies.gravityScales[index] = value;
+        break;
+    case m2_bodyParamSleepThreshold:
+        world->bodies.sleepThresholds[index] = m2ResolveSleepThreshold(value);
         break;
     case m2_bodyParamFixedRotation:
         // Fixed rotation is a mass property: inertia recomputes, spin
@@ -399,7 +407,7 @@ static M2_NOINLINE void BodySetLinearDampingWorker(m2World* world, m2BodyId body
     {
         return;
     }
-    m2SetBodyParamInternal(world, bodyId, m2_bodyParamLinearDamping, damping);
+    (void)m2SetBodyParamInternal(world, bodyId, m2_bodyParamLinearDamping, damping);
 }
 
 void m2Body_SetLinearDamping(m2World* world, m2BodyId bodyId, float damping)
@@ -417,7 +425,7 @@ static M2_NOINLINE void BodySetAngularDampingWorker(m2World* world, m2BodyId bod
     {
         return;
     }
-    m2SetBodyParamInternal(world, bodyId, m2_bodyParamAngularDamping, damping);
+    (void)m2SetBodyParamInternal(world, bodyId, m2_bodyParamAngularDamping, damping);
 }
 
 void m2Body_SetAngularDamping(m2World* world, m2BodyId bodyId, float damping)
@@ -435,7 +443,7 @@ static M2_NOINLINE void BodySetGravityScaleWorker(m2World* world, m2BodyId bodyI
     {
         return;
     }
-    m2SetBodyParamInternal(world, bodyId, m2_bodyParamGravityScale, scale);
+    (void)m2SetBodyParamInternal(world, bodyId, m2_bodyParamGravityScale, scale);
 }
 
 void m2Body_SetGravityScale(m2World* world, m2BodyId bodyId, float scale)
@@ -457,9 +465,10 @@ static M2_NOINLINE void BodySetMotionLocksWorker(m2World* world, m2BodyId bodyId
     // A stale id refuses once, on the first channel.
     if (m2SetBodyParamInternal(world, bodyId, m2_bodyParamLockLinearX, locks.linearX ? 1.0f : 0.0f))
     {
-        m2SetBodyParamInternal(world, bodyId, m2_bodyParamLockLinearY, locks.linearY ? 1.0f : 0.0f);
-        m2SetBodyParamInternal(world, bodyId, m2_bodyParamFixedRotation,
-                               locks.angularZ ? 1.0f : 0.0f);
+        (void)m2SetBodyParamInternal(world, bodyId, m2_bodyParamLockLinearY,
+                                     locks.linearY ? 1.0f : 0.0f);
+        (void)m2SetBodyParamInternal(world, bodyId, m2_bodyParamFixedRotation,
+                                     locks.angularZ ? 1.0f : 0.0f);
     }
 }
 
@@ -501,7 +510,7 @@ static M2_NOINLINE void BodyEnableSleepWorker(m2World* world, m2BodyId bodyId, b
     {
         return;
     }
-    m2SetBodyParamInternal(world, bodyId, m2_bodyParamEnableSleep, flag ? 1.0f : 0.0f);
+    (void)m2SetBodyParamInternal(world, bodyId, m2_bodyParamEnableSleep, flag ? 1.0f : 0.0f);
 }
 
 void m2Body_EnableSleep(m2World* world, m2BodyId bodyId, bool flag)
@@ -512,6 +521,25 @@ void m2Body_EnableSleep(m2World* world, m2BodyId bodyId, bool flag)
 }
 
 M2_BODY_GETTER(bool, m2Body_IsSleepEnabled, world->bodies.sleepEnables[index] != 0, false)
+
+static M2_NOINLINE void BodySetSleepThresholdWorker(m2World* world, m2BodyId bodyId,
+                                                    float threshold)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    (void)m2SetBodyParamInternal(world, bodyId, m2_bodyParamSleepThreshold, threshold);
+}
+
+void m2Body_SetSleepThreshold(m2World* world, m2BodyId bodyId, float threshold)
+{
+    uint64_t env = m2FloatEnvEnter();
+    BodySetSleepThresholdWorker(world, bodyId, threshold);
+    m2FloatEnvLeave(env);
+}
+
+M2_BODY_GETTER(float, m2Body_GetSleepThreshold, world->bodies.sleepThresholds[index], 0.0f)
 
 static M2_NOINLINE void BodySetTypeWorker(m2World* world, m2BodyId bodyId, m2BodyType type)
 {
@@ -678,7 +706,7 @@ static M2_NOINLINE void BodySetBulletWorker(m2World* world, m2BodyId bodyId, boo
     world->bodies.bullets[index] = next;
 }
 
-void m2Body_SetBullet(m2World* world, m2BodyId bodyId, bool flag)
+void m2Body_EnableBullet(m2World* world, m2BodyId bodyId, bool flag)
 {
     uint64_t env = m2FloatEnvEnter();
     BodySetBulletWorker(world, bodyId, flag);
@@ -732,6 +760,7 @@ static void EnableBody(m2World* world, m2BodyId bodyId, int32_t index)
         world->broadphase.proxyIds[s] =
             m2TreeInsert(&world->broadphase.trees[tree], world->broadphase.treeNodes[tree],
                          m2Fatten(m2ShapeTightAabb(world, s)), s);
+        M2_ASSERT(world->broadphase.proxyIds[s] != M2_NULL_NODE); // the pool never fills
         m2PushMoved(world, s);
     }
     world->bodies.asleep[index] = 0;
@@ -764,7 +793,7 @@ static M2_NOINLINE void BodySetEnabledWorker(m2World* world, m2BodyId bodyId, bo
     }
 }
 
-void m2Body_SetEnabled(m2World* world, m2BodyId bodyId, bool flag)
+void m2Body_Enable(m2World* world, m2BodyId bodyId, bool flag)
 {
     uint64_t env = m2FloatEnvEnter();
     BodySetEnabledWorker(world, bodyId, flag);
@@ -813,7 +842,7 @@ void m2Body_SetDominance(m2World* world, m2BodyId bodyId, int8_t dominance)
 // inverse does, as the inverse of a mass of FLT_MAX does. The inertia is
 // taken about the center as given, so no shift from another point cancels
 // a small one away; 0 gives a body that cannot turn.
-static bool MassDataInverses(m2MassData massData, float* invMass, float* invInertia)
+M2_NODISCARD static bool MassDataInverses(m2MassData massData, float* invMass, float* invInertia)
 {
     if (!m2ValidMass(massData.mass) || !m2LocalVec2(massData.center) ||
         !m2ValidInertia(massData.centralInertia))

@@ -22,7 +22,7 @@
 
 #define M2_SNAPSHOT_MAGIC M2_STATE_MAGIC('M', '2', 'S', 'N')
 
-#define M2_SNAPSHOT_VERSION 7u
+#define M2_SNAPSHOT_VERSION 9u
 
 // --- Snapshot -------------------------------------------------------------------
 
@@ -48,7 +48,7 @@ static void WorldCapacities(const m2World* world, int32_t capacities[6])
     capacities[1] = world->shapes.shapeCapacity;
     capacities[2] = world->joints.jointCapacity;
     capacities[3] = world->particles.particleCapacity;
-    capacities[4] = world->volumes.fvCapacity;
+    capacities[4] = world->volumes.wvCapacity;
     capacities[5] = world->contacts.pairCapacity;
 }
 
@@ -57,7 +57,7 @@ static uint64_t ConfigHash(void)
     // Everything that changes what the serialized bytes MEAN, and
     // nothing that does not (SIMD backend and worker count are
     // deliberately absent: the format is portable across them). The
-    // release that wrote the bytes is the prefix's, not part of this.
+    // ABI version that wrote the bytes is the prefix's, not part of this.
     uint64_t h = 0xCBF29CE484222325ull;
     int32_t version = (int32_t)M2_SNAPSHOT_VERSION;
     int32_t realSize = (int32_t)sizeof(float);
@@ -91,15 +91,15 @@ bool m2SnapshotFits(const m2World* world)
     return SnapshotBytes(world) < INT64_MAX;
 }
 
-static M2_NOINLINE int64_t WorldSnapshotSizeWorker(const m2World* world)
+static M2_NOINLINE int64_t WorldGetSnapshotSizeWorker(const m2World* world)
 {
     return world != NULL ? SnapshotBytes(world) : 0;
 }
 
-int64_t m2World_SnapshotSize(const m2World* world)
+int64_t m2World_GetSnapshotSize(const m2World* world)
 {
     uint64_t env = m2FloatEnvEnter();
-    int64_t result = WorldSnapshotSizeWorker(world);
+    int64_t result = WorldGetSnapshotSizeWorker(world);
     m2FloatEnvLeave(env);
     return result;
 }
@@ -107,21 +107,34 @@ int64_t m2World_SnapshotSize(const m2World* world)
 // The block walk is shared by Snapshot and Restore so the layouts can
 // never drift apart (direction 0 = write, 1 = read).
 
+// A snapshot that fails writes none of its bytes, so it zeroes the
+// caller's buffer over its whole capacity: no bytes of an earlier snapshot
+// are left to read as this one.
+static void ClearSnapshotBuffer(void* buffer, int64_t capacity)
+{
+    if (buffer != NULL && capacity > 0 && m2SizeFitsMemory(capacity))
+    {
+        memset(buffer, 0, (size_t)capacity);
+    }
+}
+
 static M2_NOINLINE m2Result WorldSnapshotWorker(const m2World* world, void* buffer,
                                                 int64_t capacity, int64_t* bytesOut)
 {
-    if (bytesOut == NULL)
+    if (bytesOut == NULL || world == NULL || buffer == NULL || capacity < 0)
     {
+        ClearSnapshotBuffer(buffer, capacity);
+        if (bytesOut != NULL)
+        {
+            *bytesOut = 0;
+        }
         return m2Refuse(world, m2_errorInvalid);
     }
     *bytesOut = 0;
-    if (world == NULL || buffer == NULL)
-    {
-        return m2Refuse(world, m2_errorInvalid);
-    }
     int64_t size = SnapshotBytes(world);
     if (capacity < size)
     {
+        ClearSnapshotBuffer(buffer, capacity);
         *bytesOut = size; // the size a buffer must have
         return m2_errorCapacity;
     }
@@ -143,10 +156,11 @@ static M2_NOINLINE m2Result WorldSnapshotWorker(const m2World* world, void* buff
     return m2_success;
 }
 
-m2Result m2World_Snapshot(const m2World* world, void* buffer, int64_t capacity, int64_t* bytesOut)
+m2Result m2World_Snapshot(const m2World* world, void* bufferOut, int64_t capacity,
+                          int64_t* bytesOut)
 {
     uint64_t env = m2FloatEnvEnter();
-    m2Result result = WorldSnapshotWorker(world, buffer, capacity, bytesOut);
+    m2Result result = WorldSnapshotWorker(world, bufferOut, capacity, bytesOut);
     m2FloatEnvLeave(env);
     return result;
 }
@@ -164,7 +178,7 @@ static M2_NOINLINE m2Result WorldRestoreWorker(m2World* world, const void* buffe
     }
     // From here on the bytes are untrusted input: refusing them is no
     // misuse of the API, so nothing is counted.
-    // Only the release that wrote a snapshot reads it.
+    // Only the minor version that wrote a snapshot reads it.
     m2Result prefix = m2CheckStatePrefix(buffer, size, M2_SNAPSHOT_MAGIC, M2_SNAPSHOT_VERSION,
                                          (int32_t)sizeof(m2SnapshotHeader));
     if (prefix != m2_success)
@@ -203,14 +217,13 @@ static M2_NOINLINE m2Result WorldRestoreWorker(m2World* world, const void* buffe
     // The price is tape size, and that is the caller's tradeoff.
     m2JournalRecordRestore(world, buffer, size);
 
-    // Events are an observer stream from an abandoned timeline: cleared
-    // on restore, re-emitted by re-simulation.
+    // The last step's events belong to an abandoned timeline: cleared on
+    // restore, emitted again by the steps simulated again. The end events
+    // queued for the next step came with the snapshot.
     world->events.beginEventCount = 0;
     world->events.endEventCount = 0;
-    world->events.pendingEndCount = 0;
     world->events.sensorBeginCount = 0;
     world->events.sensorEndCount = 0;
-    world->events.pendingSensorEndCount = 0;
     world->events.jointBreakEventCount = 0;
     return m2_success;
 }

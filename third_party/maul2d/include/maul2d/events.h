@@ -134,17 +134,17 @@ extern "C"
     /// Lists the shapes inside a sensor now, in canonical pair order.
     ///
     /// @param world          The world.
-    /// @param sensorShapeId  The sensor. A stale id counts one misuse; a
-    ///                       live shape that is not a sensor lists nothing.
-    /// @param overlaps       Receives up to capacity shape ids; may be null
-    ///                       to measure.
-    /// @param capacity       The length of overlaps.
+    /// @param sensorShapeId  The sensor. A stale id or a shape that is not a
+    ///                       sensor counts one misuse.
+    /// @param overlapsOut    Receives up to capacity shape ids; zeros over the whole capacity on
+    ///                       failure. May be null with a capacity of 0 to measure.
+    /// @param capacity       The length of overlapsOut, not below 0.
     /// @return The number of shapes inside, which may exceed capacity.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API int32_t m2Shape_GetSensorOverlaps(const m2World* world, m2ShapeId sensorShapeId,
-                                             m2ShapeId* overlaps, int32_t capacity);
+                                             m2ShapeId* overlapsOut, int32_t capacity);
 
     /// One contact touching now, as the solver last saw it.
     typedef struct m2ContactData
@@ -162,14 +162,14 @@ extern "C"
     /// Sensor overlaps are not contacts and are left out.
     ///
     /// @param world     The world.
-    /// @param data      Receives up to capacity contacts; may be null to
-    ///                  measure.
-    /// @param capacity  The length of data.
+    /// @param dataOut   Receives up to capacity contacts; zeros over the whole capacity on failure.
+    ///                  May be null with a capacity of 0 to measure.
+    /// @param capacity  The length of dataOut, not below 0.
     /// @return The number of touching contacts, which may exceed capacity.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API int32_t m2World_GetContactData(const m2World* world, m2ContactData* data,
+    M2_API int32_t m2World_GetContactData(const m2World* world, m2ContactData* dataOut,
                                           int32_t capacity);
 
 #ifdef __cplusplus

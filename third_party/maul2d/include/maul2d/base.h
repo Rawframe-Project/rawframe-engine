@@ -30,12 +30,19 @@
 // M2_NODISCARD marks a function whose result must be read: every
 // function that returns a status. The attribute is standard in C23 and
 // C++17 and left out for older dialects. MSVC keeps __cplusplus at
-// 199711L unless /Zc:__cplusplus is given, so _MSVC_LANG is read too.
+// 199711L unless /Zc:__cplusplus is given, so _MSVC_LANG is read too. In
+// C, any dialect after C17 whose compiler has the attribute takes it:
+// GCC 14 reports 202000L in its C23 mode.
 #if (defined(__cplusplus) && __cplusplus >= 201703L) ||                                            \
     (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
 #define M2_NODISCARD [[nodiscard]]
-#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ > 201710L &&          \
+    defined(__has_c_attribute)
+#if __has_c_attribute(nodiscard)
 #define M2_NODISCARD [[nodiscard]]
+#else
+#define M2_NODISCARD
+#endif
 #else
 #define M2_NODISCARD
 #endif
@@ -58,13 +65,13 @@ extern "C"
 // The library version. CMake reads it from here, and release-please
 // moves it between the markers.
 // x-release-please-start-major
-#define M2_VERSION_MAJOR 0
+#define M2_VERSION_MAJOR 1
 // x-release-please-end
 // x-release-please-start-minor
-#define M2_VERSION_MINOR 6
+#define M2_VERSION_MINOR 3
 // x-release-please-end
 // x-release-please-start-patch
-#define M2_VERSION_PATCH 0
+#define M2_VERSION_PATCH 1
 // x-release-please-end
 
 // The binary interface a program is built for: the whole version before
@@ -106,8 +113,8 @@ extern "C"
         // A journal call in the wrong recording state: a start while
         // recording, a stop or a replay that does not fit it.
         m2_errorState = -6,
-        // A def, a snapshot or a journal tape comes from another binary
-        // interface or release than the library's (M2_ABI_VERSION).
+        // A def, a snapshot or a journal tape comes from another minor
+        // version (M2_ABI_VERSION) or build than the library's.
         m2_errorVersion = -7,
         // A snapshot's or a journal tape's bytes fail their checks:
         // damaged, truncated, from another world shape, or a record the
@@ -155,7 +162,7 @@ extern "C"
     /// @return A static, NUL-terminated string such as "m2_errorCapacity".
     /// @par Thread safety
     /// Safe from any thread.
-    M2_API const char* m2ResultName(m2Result result);
+    M2_API const char* m2GetResultName(m2Result result);
 
     /// Returns the SIMD backend the library was compiled for: "avx2",
     /// "neon" or "scalar". Every backend produces the same bits; this only
@@ -173,10 +180,10 @@ extern "C"
     /// backend with m2_errorUnsupported, so a program can call this first to
     /// choose another path, or build with -DMAUL2D_SIMD=scalar.
     ///
-    /// @return 1 when the CPU can run this library, 0 when it cannot.
+    /// @return Whether the CPU can run this library.
     /// @par Thread safety
     /// Safe from any thread.
-    M2_API int32_t m2CpuSupportsBackend(void);
+    M2_API bool m2IsCpuBackendSupported(void);
 
     /// The 64-bit hash every determinism check is built on: eight bytes a
     /// round, xored in, multiplied by an odd constant and folded, the
@@ -188,7 +195,7 @@ extern "C"
     /// @return The new running hash.
     /// @par Thread safety
     /// Safe from any thread.
-    M2_API uint64_t m2Hash64(uint64_t seed, const void* data, int32_t byteCount);
+    M2_API uint64_t m2Hash64(uint64_t seed, const void* data, int64_t byteCount);
 
 // The seed of an m2Hash64 chain.
 #define M2_HASH_INIT 0xCBF29CE484222325ull
@@ -231,7 +238,7 @@ extern "C"
 // particle strength.
 #define M2_COEFFICIENT_LIMIT 1.0e3f
 
-// The largest density, in kg/m^2, of a shape, a fluid volume or the
+// The largest density, in kg/m^2, of a shape, a water volume or the
 // particles. Lead is about 1.1e4.
 #define M2_DENSITY_LIMIT 1.0e6f
 

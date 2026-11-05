@@ -45,7 +45,8 @@ static m2Vec2 Rotate(m2Rot q, m2Vec2 v)
     return (m2Vec2){q.c * v.x - q.s * v.y, q.s * v.x + q.c * v.y};
 }
 
-// What of a shape lies below the surface: area and world centroid.
+// What of a shape lies below the surface: area and centroid, the centroid
+// relative to the body's origin.
 typedef struct Immersion
 {
     float area;
@@ -149,11 +150,12 @@ static float FanRadius(float r, int32_t m, float a, float sinA)
     return r * (sqrtf(sinA * sinA + k * (float)m * a) - sinA) / k;
 }
 
-// The outline of a rounded convex polygon in the world: each corner fans
-// from the previous edge's normal to the next one's in at least two
-// steps of at most a sixteenth of a turn, keeping the shape's area.
+// The outline of a rounded convex polygon, turned to the world about the
+// body's origin: each corner fans from the previous edge's normal to the
+// next one's in at least two steps of at most a sixteenth of a turn,
+// keeping the shape's area.
 static int32_t RoundedOutline(const m2Vec2* verts, const m2Vec2* normals, int32_t count,
-                              float radius, m2Transform xf, m2Vec2* out)
+                              float radius, m2Rot q, m2Vec2* out)
 {
     int32_t n = 0;
     for (int32_t i = 0; i < count; ++i)
@@ -176,65 +178,66 @@ static int32_t RoundedOutline(const m2Vec2* verts, const m2Vec2* normals, int32_
         {
             float reach = k == 0 || k == steps ? radius : inner;
             m2Vec2 local = {verts[i].x + reach * dir.x, verts[i].y + reach * dir.y};
-            m2Vec2 world = Rotate(xf.q, local);
-            out[n++] = (m2Vec2){world.x + (float)xf.p.x, world.y + (float)xf.p.y};
+            out[n++] = Rotate(q, local);
             dir = k + 1 == steps ? to : Rotate(rot, dir);
         }
     }
     return n;
 }
 
-static Immersion ImmerseShape(const m2World* world, int32_t shape, m2Transform xf, double surface)
+// A shape against the surface, all of it relative to the body's origin:
+// the outline only turned to the world, never moved to the body's world
+// position, and the surface given as its height above that origin. In
+// world coordinates, a body far from the world origin would sum its
+// moments from large floats that cancel, and the force would depend on
+// where in the world the body floats.
+static Immersion ImmerseShape(const m2World* world, int32_t shape, m2Rot q, double surface)
 {
     const m2ShapeGeometry* g = &world->shapes.shapeGeometry[shape];
     m2Vec2 outline[M2_OUTLINE_MAX];
     int32_t n = 0;
     if (g->type == m2_circleShape)
     {
-        m2Vec2 c = Rotate(xf.q, g->circle.center);
-        return ImmerseCircle((m2Vec2){c.x + (float)xf.p.x, c.y + (float)xf.p.y}, g->circle.radius,
-                             surface);
+        return ImmerseCircle(Rotate(q, g->circle.center), g->circle.radius, surface);
     }
     if (g->type == m2_capsuleShape)
     {
         m2Polygon core =
             m2MakeSegmentProxy(g->capsule.point1, g->capsule.point2, g->capsule.radius);
-        n = RoundedOutline(core.vertices, core.normals, 2, core.radius, xf, outline);
+        n = RoundedOutline(core.vertices, core.normals, 2, core.radius, q, outline);
     }
     else if (g->type == m2_polygonShape && g->polygon.radius > 0.0f)
     {
         n = RoundedOutline(g->polygon.vertices, g->polygon.normals, g->polygon.count,
-                           g->polygon.radius, xf, outline);
+                           g->polygon.radius, q, outline);
     }
     else if (g->type == m2_polygonShape)
     {
         for (int32_t i = 0; i < g->polygon.count; ++i)
         {
-            m2Vec2 w = Rotate(xf.q, g->polygon.vertices[i]);
-            outline[n++] = (m2Vec2){w.x + (float)xf.p.x, w.y + (float)xf.p.y};
+            outline[n++] = Rotate(q, g->polygon.vertices[i]);
         }
     }
     return n >= 3 ? ImmerseOutline(outline, n, surface) : s_dry;
 }
 
-m2FluidVolumeDef m2DefaultFluidVolumeDef(void)
+m2WaterVolumeDef m2DefaultWaterVolumeDef(void)
 {
-    m2FluidVolumeDef def;
+    m2WaterVolumeDef def;
     memset(&def, 0, sizeof(def));
     def.density = 2.0f;
     def.linearDrag = 1.0f;
     def.angularDrag = 0.5f;
-    def.internalValue = M2_FVOLUME_COOKIE;
+    def.internalValue = M2_WVOLUME_COOKIE;
     return def;
 }
 
 // The create record holds the def's fields and zero bytes between them:
 // copied field by field into the zeroed record, so no padding of the
 // caller's struct reaches the tape.
-static void RecordFluidVolumeDef(m2FluidVolumeDef* out, const m2FluidVolumeDef* def)
+static void RecordWaterVolumeDef(m2WaterVolumeDef* out, const m2WaterVolumeDef* def)
 {
-    out->regionLower = def->regionLower;
-    out->regionUpper = def->regionUpper;
+    out->bounds = def->bounds;
     out->surface = def->surface;
     out->density = def->density;
     out->linearDrag = def->linearDrag;
@@ -244,25 +247,24 @@ static void RecordFluidVolumeDef(m2FluidVolumeDef* out, const m2FluidVolumeDef* 
     out->internalValue = def->internalValue;
 }
 
-static M2_NOINLINE m2Result CreateFluidVolumeWorker(m2World* world, const m2FluidVolumeDef* def,
-                                                    m2FluidVolumeId* volumeOut)
+static M2_NOINLINE m2Result CreateWaterVolumeWorker(m2World* world, const m2WaterVolumeDef* def,
+                                                    m2WaterVolumeId* volumeOut)
 {
     if (volumeOut == NULL)
     {
         return m2Refuse(world, m2_errorInvalid);
     }
-    *volumeOut = m2_nullFluidVolumeId;
+    *volumeOut = m2_nullWaterVolumeId;
     m2Result writer = m2CheckWriter(world);
     if (writer != m2_success)
     {
         return writer;
     }
-    if (def == NULL || def->internalValue != M2_FVOLUME_COOKIE)
+    if (def == NULL || def->internalValue != M2_WVOLUME_COOKIE)
     {
         return m2Refuse(world, m2_errorInvalid);
     }
-    m2Result checked = m2CheckValid(m2FiniteD(def->surface) && m2FinitePos2(def->regionLower) &&
-                                    m2FinitePos2(def->regionUpper));
+    m2Result checked = m2CheckValid(m2FiniteD(def->surface) && m2WaterBoxValid(def->bounds));
     checked = m2BothChecks(checked, m2CheckDensity(def->density));
     checked = m2BothChecks(checked, m2CheckRate(def->linearDrag));
     checked = m2BothChecks(checked, m2CheckRate(def->angularDrag));
@@ -271,109 +273,111 @@ static M2_NOINLINE m2Result CreateFluidVolumeWorker(m2World* world, const m2Flui
     {
         return m2Refuse(world, checked);
     }
-    if (world->volumes.fvFreeCount == 0)
+    if (world->volumes.wvFreeCount == 0)
     {
         return m2Refuse(world, m2_errorCapacity); // pool full: a runtime fact
     }
-    int32_t index = world->volumes.fvFreeQueue[world->volumes.fvFreeHead];
-    world->volumes.fvFreeHead = (world->volumes.fvFreeHead + 1) % world->volumes.fvCapacity;
-    world->volumes.fvFreeCount -= 1;
-    if (index + 1 > world->volumes.maxFvIndex)
+    int32_t index = world->volumes.wvFreeQueue[world->volumes.wvFreeHead];
+    world->volumes.wvFreeHead = (world->volumes.wvFreeHead + 1) % world->volumes.wvCapacity;
+    world->volumes.wvFreeCount -= 1;
+    if (index + 1 > world->volumes.maxWvIndex)
     {
-        world->volumes.maxFvIndex = index + 1;
+        world->volumes.maxWvIndex = index + 1;
     }
-    world->volumes.fvLower[index] = def->regionLower;
-    world->volumes.fvUpper[index] = def->regionUpper;
-    world->volumes.fvSurface[index] = def->surface;
-    world->volumes.fvDensity[index] = def->density;
-    world->volumes.fvLinearDrag[index] = def->linearDrag;
-    world->volumes.fvAngularDrag[index] = def->angularDrag;
-    world->volumes.fvFlow[index] = def->flow;
-    world->volumes.fvUserData[index] = def->userData;
-    world->volumes.fvAlive[index] = 1;
-    m2FluidVolumeId id = {(uint32_t)(index + 1), world->volumes.fvGenerations[index]};
+    world->volumes.wvLower[index] = def->bounds.lowerBound;
+    world->volumes.wvUpper[index] = def->bounds.upperBound;
+    world->volumes.wvSurface[index] = def->surface;
+    world->volumes.wvDensity[index] = def->density;
+    world->volumes.wvLinearDrag[index] = def->linearDrag;
+    world->volumes.wvAngularDrag[index] = def->angularDrag;
+    world->volumes.wvFlow[index] = def->flow;
+    world->volumes.wvUserData[index] = def->userData;
+    world->volumes.wvAlive[index] = 1;
+    m2WaterVolumeId id = {(uint32_t)(index + 1), world->volumes.wvGenerations[index]};
     if (world->recorder.journalActive != 0)
     {
-        m2OpCreateFluidVolume record;
+        m2OpCreateWaterVolume record;
         memset(&record, 0, sizeof(record));
-        RecordFluidVolumeDef(&record.def, def);
+        RecordWaterVolumeDef(&record.def, def);
         record.expected = id;
-        m2JournalRecord(world, m2_opCreateFluidVolume, &record, (int32_t)sizeof(record));
+        m2JournalRecord(world, m2_opCreateWaterVolume, &record, (int32_t)sizeof(record));
     }
     *volumeOut = id;
     return m2_success;
 }
 
-m2Result m2CreateFluidVolume(m2World* world, const m2FluidVolumeDef* def,
-                             m2FluidVolumeId* volumeOut)
+m2Result m2CreateWaterVolume(m2World* world, const m2WaterVolumeDef* def,
+                             m2WaterVolumeId* volumeOut)
 {
     uint64_t env = m2FloatEnvEnter();
-    m2Result result = CreateFluidVolumeWorker(world, def, volumeOut);
+    m2Result result = CreateWaterVolumeWorker(world, def, volumeOut);
     m2FloatEnvLeave(env);
     return result;
 }
 
-static int32_t FvSlot(const m2World* world, m2FluidVolumeId id)
+static int32_t WvSlot(const m2World* world, m2WaterVolumeId id)
 {
     int32_t index = (int32_t)id.index1 - 1;
-    if (world == NULL || index < 0 || index >= world->volumes.fvCapacity ||
-        world->volumes.fvAlive[index] == 0 || world->volumes.fvGenerations[index] != id.generation)
+    if (world == NULL || index < 0 || index >= world->volumes.wvCapacity ||
+        world->volumes.wvAlive[index] == 0 || world->volumes.wvGenerations[index] != id.generation)
     {
         return -1;
     }
     return index;
 }
 
-static M2_NOINLINE m2Result DestroyFluidVolumeWorker(m2World* world, m2FluidVolumeId volumeId)
+static M2_NOINLINE m2Result DestroyWaterVolumeWorker(m2World* world, m2WaterVolumeId volumeId)
 {
     m2Result writer = m2CheckWriter(world);
     if (writer != m2_success)
     {
         return writer;
     }
-    int32_t index = FvSlot(world, volumeId);
+    int32_t index = WvSlot(world, volumeId);
     if (index < 0)
     {
         return m2Refuse(world, m2_errorStale);
     }
     if (world->recorder.journalActive != 0)
     {
-        m2JournalRecord(world, m2_opDestroyFluidVolume, &volumeId, (int32_t)sizeof(volumeId));
+        m2JournalRecord(world, m2_opDestroyWaterVolume, &volumeId, (int32_t)sizeof(volumeId));
     }
-    world->volumes.fvAlive[index] = 0;
-    if (world->volumes.fvGenerations[index] == M2_LAST_GENERATION)
+    world->volumes.wvAlive[index] = 0;
+    if (world->volumes.wvGenerations[index] == M2_LAST_GENERATION)
     {
-        world->volumes.fvRetiredCount += 1;
+        world->volumes.wvRetiredCount += 1;
         return m2_success;
     }
-    world->volumes.fvGenerations[index] += 1;
-    world->volumes.fvFreeQueue[(world->volumes.fvFreeHead + world->volumes.fvFreeCount) %
-                               world->volumes.fvCapacity] = index;
-    world->volumes.fvFreeCount += 1;
+    world->volumes.wvGenerations[index] += 1;
+    // In 64 bits: the water volume capacity has no bound that keeps head
+    // plus count under 2^31.
+    world->volumes.wvFreeQueue[((int64_t)world->volumes.wvFreeHead + world->volumes.wvFreeCount) %
+                               world->volumes.wvCapacity] = index;
+    world->volumes.wvFreeCount += 1;
     return m2_success;
 }
 
-m2Result m2DestroyFluidVolume(m2World* world, m2FluidVolumeId volumeId)
+m2Result m2DestroyWaterVolume(m2World* world, m2WaterVolumeId volumeId)
 {
     uint64_t env = m2FloatEnvEnter();
-    m2Result result = DestroyFluidVolumeWorker(world, volumeId);
+    m2Result result = DestroyWaterVolumeWorker(world, volumeId);
     m2FloatEnvLeave(env);
     return result;
 }
 
-bool m2FluidVolume_IsValid(const m2World* world, m2FluidVolumeId volumeId)
+bool m2WaterVolume_IsValid(const m2World* world, m2WaterVolumeId volumeId)
 {
-    return FvSlot(world, volumeId) >= 0;
+    return WvSlot(world, volumeId) >= 0;
 }
 
-static M2_NOINLINE void FluidVolumeSetSurfaceWorker(m2World* world, m2FluidVolumeId volumeId,
+static M2_NOINLINE void WaterVolumeSetSurfaceWorker(m2World* world, m2WaterVolumeId volumeId,
                                                     double surface)
 {
     if (m2CheckWriter(world) != m2_success)
     {
         return;
     }
-    int32_t index = FvSlot(world, volumeId);
+    int32_t index = WvSlot(world, volumeId);
     if (index < 0 || !m2FiniteD(surface))
     {
         m2Refuse(world, m2_errorInvalid);
@@ -381,51 +385,74 @@ static M2_NOINLINE void FluidVolumeSetSurfaceWorker(m2World* world, m2FluidVolum
     }
     if (world->recorder.journalActive != 0)
     {
-        m2OpFluidSurface record;
+        m2OpWaterSurface record;
         memset(&record, 0, sizeof(record));
         record.id = volumeId;
         record.surface = surface;
-        m2JournalRecord(world, m2_opSetFluidSurface, &record, (int32_t)sizeof(record));
+        m2JournalRecord(world, m2_opSetWaterSurface, &record, (int32_t)sizeof(record));
     }
-    world->volumes.fvSurface[index] = surface;
+    world->volumes.wvSurface[index] = surface;
 }
 
-void m2FluidVolume_SetSurface(m2World* world, m2FluidVolumeId volumeId, double surface)
+void m2WaterVolume_SetSurface(m2World* world, m2WaterVolumeId volumeId, double surface)
 {
     uint64_t env = m2FloatEnvEnter();
-    FluidVolumeSetSurfaceWorker(world, volumeId, surface);
+    WaterVolumeSetSurfaceWorker(world, volumeId, surface);
     m2FloatEnvLeave(env);
 }
 
-static M2_NOINLINE double FluidVolumeGetSurfaceWorker(const m2World* world,
-                                                      m2FluidVolumeId volumeId)
+static M2_NOINLINE double WaterVolumeGetSurfaceWorker(const m2World* world,
+                                                      m2WaterVolumeId volumeId)
 {
-    int32_t index = FvSlot(world, volumeId);
+    int32_t index = WvSlot(world, volumeId);
     if (index < 0)
     {
         m2Refuse(world, m2_errorInvalid);
         return 0.0;
     }
-    return world->volumes.fvSurface[index];
+    return world->volumes.wvSurface[index];
 }
 
-double m2FluidVolume_GetSurface(const m2World* world, m2FluidVolumeId volumeId)
+double m2WaterVolume_GetSurface(const m2World* world, m2WaterVolumeId volumeId)
 {
     uint64_t env = m2FloatEnvEnter();
-    double result = FluidVolumeGetSurfaceWorker(world, volumeId);
+    double result = WaterVolumeGetSurfaceWorker(world, volumeId);
     m2FloatEnvLeave(env);
     return result;
 }
 
-uint64_t m2FluidVolume_GetUserData(const m2World* world, m2FluidVolumeId volumeId)
+uint64_t m2WaterVolume_GetUserData(const m2World* world, m2WaterVolumeId volumeId)
 {
-    int32_t index = FvSlot(world, volumeId);
+    int32_t index = WvSlot(world, volumeId);
     if (index < 0)
     {
         m2Refuse(world, m2_errorInvalid);
         return 0;
     }
-    return world->volumes.fvUserData[index];
+    return world->volumes.wvUserData[index];
+}
+
+void m2WaterVolume_SetUserData(m2World* world, m2WaterVolumeId volumeId, uint64_t userData)
+{
+    if (m2CheckWriter(world) != m2_success)
+    {
+        return;
+    }
+    int32_t index = WvSlot(world, volumeId);
+    if (index < 0)
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return;
+    }
+    if (world->recorder.journalActive != 0)
+    {
+        m2OpWaterUserData record;
+        memset(&record, 0, sizeof(record));
+        record.id = volumeId;
+        record.userData = userData;
+        m2JournalRecord(world, m2_opWaterUserData, &record, (int32_t)sizeof(record));
+    }
+    world->volumes.wvUserData[index] = userData;
 }
 
 // The squared radius of gyration the angular drag takes, at most twice
@@ -442,7 +469,7 @@ static void SaturateLoad(m2World* world, int32_t b)
     world->bodies.torques[b] = m2SaturateF(world->bodies.torques[b], M2_FORCE_LIMIT);
 }
 
-static bool InWater(const m2World* world, int32_t b, int32_t v)
+M2_NODISCARD static bool InWater(const m2World* world, int32_t b, int32_t v)
 {
     if (world->bodies.alive[b] == 0 || world->bodies.types[b] != (uint8_t)m2_dynamicBody ||
         world->bodies.asleep[b] != 0 || world->bodies.disabled[b] != 0)
@@ -450,8 +477,8 @@ static bool InWater(const m2World* world, int32_t b, int32_t v)
         return false;
     }
     m2Pos2 p = world->bodies.transforms[b].p;
-    m2Pos2 lo = world->volumes.fvLower[v];
-    m2Pos2 hi = world->volumes.fvUpper[v];
+    m2Pos2 lo = world->volumes.wvLower[v];
+    m2Pos2 hi = world->volumes.wvUpper[v];
     return p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
 }
 
@@ -459,10 +486,11 @@ static bool InWater(const m2World* world, int32_t b, int32_t v)
 static void Soak(m2World* world, int32_t b, int32_t vol)
 {
     m2Transform xf = world->bodies.transforms[b];
+    double surface = world->volumes.wvSurface[vol] - xf.p.y; // above the body's origin
     Immersion wet = s_dry;
     for (int32_t s = world->bodies.bodyShapeHead[b]; s != -1; s = world->shapes.shapeNext[s])
     {
-        Immersion part = ImmerseShape(world, s, xf, world->volumes.fvSurface[vol]);
+        Immersion part = ImmerseShape(world, s, xf.q, surface);
         wet.area += part.area;
         wet.centroid.x += part.area * part.centroid.x;
         wet.centroid.y += part.area * part.centroid.y;
@@ -472,13 +500,12 @@ static void Soak(m2World* world, int32_t b, int32_t vol)
         return;
     }
     m2Vec2 center = Rotate(xf.q, world->bodies.localCenters[b]);
-    m2Vec2 arm = {wet.centroid.x / wet.area - ((float)xf.p.x + center.x),
-                  wet.centroid.y / wet.area - ((float)xf.p.y + center.y)};
+    m2Vec2 arm = {wet.centroid.x / wet.area - center.x, wet.centroid.y / wet.area - center.y};
     float w = world->bodies.angularVelocities[b];
     m2Vec2 v = world->bodies.linearVelocities[b];
-    m2Vec2 flow = world->volumes.fvFlow[vol];
-    float lift = -world->volumes.fvDensity[vol] * wet.area;
-    float drag = -world->volumes.fvLinearDrag[vol] * wet.area;
+    m2Vec2 flow = world->volumes.wvFlow[vol];
+    float lift = -world->volumes.wvDensity[vol] * wet.area;
+    float drag = -world->volumes.wvLinearDrag[vol] * wet.area;
     float fx = lift * world->gravity.x + drag * (v.x - w * arm.y - flow.x);
     float fy = lift * world->gravity.y + drag * (v.y + w * arm.x - flow.y);
     world->bodies.forces[b].x += fx;
@@ -492,21 +519,21 @@ static void Soak(m2World* world, int32_t b, int32_t vol)
         // can make it as large as the inertia and mass ranges allow; no
         // body reaches past twice M2_LOCAL_LIMIT, so it is held to that.
         float gyration2 = m2MinF(invM / invI, M2_MAX_GYRATION2);
-        world->bodies.torques[b] -= gyration2 * wet.area * w * world->volumes.fvAngularDrag[vol];
+        world->bodies.torques[b] -= gyration2 * wet.area * w * world->volumes.wvAngularDrag[vol];
     }
     SaturateLoad(world, b);
 }
 
 // The per-step pass, volume by volume, bodies in slot order.
-void m2ApplyFluidVolumes(m2World* world, float dt)
+void m2ApplyWaterVolumes(m2World* world, float dt)
 {
     if (dt <= 0.0f)
     {
         return;
     }
-    for (int32_t v = 0; v < world->volumes.maxFvIndex; ++v)
+    for (int32_t v = 0; v < world->volumes.maxWvIndex; ++v)
     {
-        for (int32_t b = 0; world->volumes.fvAlive[v] != 0 && b < world->bodies.maxBodyIndex; ++b)
+        for (int32_t b = 0; world->volumes.wvAlive[v] != 0 && b < world->bodies.maxBodyIndex; ++b)
         {
             if (InWater(world, b, v))
             {

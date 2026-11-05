@@ -229,6 +229,11 @@ RAWFRAME_TEST(AKinematicBodyIsCarriedToItsTargetPushingWhatItMeets) {
     kTarget(kBallEntity) = Target2D{.x = -5, .c = 1, .set = true};
     scene.run(1);
     RAWFRAME_EXPECT(scene.pose(kBallEntity).x > 2 && !kTarget(kBallEntity).set);
+    // A target too far to reach in one tick within Maul2D's speed limit,
+    // 100 km/s, is cleared and not carried out: the paddle stays.
+    kTarget(kPaddle) = Target2D{.x = 3000, .c = 0, .s = 1, .set = true};
+    scene.run(1);
+    RAWFRAME_EXPECT(std::abs(scene.pose(kPaddle).x - 3) < 1e-4 && !kTarget(kPaddle).set);
     const Physics2DStatistics kStatistics = scene.physics->statistics();
     RAWFRAME_EXPECT(kStatistics.targets == 31 && kStatistics.teleports == 0);
 }
@@ -276,7 +281,7 @@ RAWFRAME_TEST(TheSameWorldAndWritesGiveTheSameBits) {
     RAWFRAME_EXPECT(first.physics->digest() == second.physics->digest());
     // The same bits on every compiler and target the check builds, x86-64
     // and wasm32 alike: a moved digest says why in its commit.
-    RAWFRAME_EXPECT(first.physics->digest() == 0xc42bbb4bf908bd7fULL);
+    RAWFRAME_EXPECT(first.physics->digest() == 0x57dd106d48ba3973ULL);
     RAWFRAME_EXPECT(kFirst.size() == kSecond.size() &&
                     std::memcmp(kFirst.data(), kSecond.data(), kFirst.size() * sizeof(Pose2D)) == 0);
     // And something did happen: the balls moved and bounced apart.
@@ -531,6 +536,22 @@ RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {
         RAWFRAME_EXPECT(!kMade.has_value() && kMade.error().code() == code(Physics2DError::InvalidSettings));
     }
     RAWFRAME_EXPECT(Physics2D::create({.bodyCapacity = 1024, .historyTicks = 1024}).has_value());
+    // A tick Maul2D cannot step, a minute or a two-millionth of a second
+    // long, is refused before anything changes; a tick of ten seconds steps.
+    {
+        Scene scene;
+        const world::EntityHandle kFalling = scene.body(kCrate, {.y = 1, .c = 1});
+        for (const world::TickRate kRate : {*world::TickRate::of(1, 60), *world::TickRate::of(2'000'000)}) {
+            const auto kRan = scene.schedule->runTick(scene.world, scene.tick, kRate);
+            RAWFRAME_EXPECT(kRan.has_value() && kRan->failures.size() == 1 &&
+                            kRan->failures[0].system == kStepSystem &&
+                            kRan->failures[0].error.code() == code(Physics2DError::InvalidSettings));
+        }
+        RAWFRAME_EXPECT(scene.physics->statistics().steps == 0 && scene.physics->statistics().bodiesMade == 0);
+        const auto kRan = scene.schedule->runTick(scene.world, scene.tick, *world::TickRate::of(1, 10));
+        RAWFRAME_EXPECT(kRan.has_value() && kRan->failures.empty());
+        RAWFRAME_EXPECT(scene.physics->statistics().steps == 1 && scene.pose(kFalling).y < 1);
+    }
     // A World without the physics components.
     schema::RegistryBuilder builder;
     builder.add<Pose2D>();

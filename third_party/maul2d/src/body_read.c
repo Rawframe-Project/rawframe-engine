@@ -161,23 +161,22 @@ m2Vec2 m2Body_GetWorldPointVelocity(const m2World* world, m2BodyId bodyId, m2Pos
     return result;
 }
 
-int32_t m2Body_GetJoints(const m2World* world, m2BodyId bodyId, m2JointId* ids, int32_t capacity)
+int32_t m2Body_GetJoints(const m2World* world, m2BodyId bodyId, m2JointId* idsOut, int32_t capacity)
 {
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (index < 0)
+    if (index < 0 || !m2ListOutputValid(idsOut, capacity))
     {
-        m2Refuse(world, m2_errorInvalid);
-        return 0;
+        return m2RefuseList(world, idsOut, capacity, sizeof(*idsOut));
     }
     int32_t total = 0;
     for (int32_t e = world->joints.bodyJointHead[index]; e != -1;
          e = world->joints.jointEdgeNext[e])
     {
         int32_t j = e >> 1;
-        if (ids != NULL && total < capacity)
+        if (idsOut != NULL && total < capacity)
         {
             m2JointId id = {(uint32_t)(j + 1), world->joints.jointGenerations[j]};
-            ids[total] = id;
+            idsOut[total] = id;
         }
         total += 1;
     }
@@ -187,6 +186,13 @@ int32_t m2Body_GetJoints(const m2World* world, m2BodyId bodyId, m2JointId* ids, 
 static M2_NOINLINE m2Vec2 BodyGetLocalPointVelocityWorker(const m2World* world, m2BodyId bodyId,
                                                           m2Vec2 localPoint)
 {
+    // The id is checked once here: the two calls below then see a live
+    // body and count nothing, so a stale id counts one misuse, not two.
+    if (world == NULL || m2BodySlot(world, bodyId) < 0)
+    {
+        m2Refuse(world, m2_errorInvalid);
+        return (m2Vec2){0.0f, 0.0f};
+    }
     return m2Body_GetWorldPointVelocity(world, bodyId,
                                         m2Body_GetWorldPoint(world, bodyId, localPoint));
 }
@@ -359,7 +365,7 @@ m2Vec2 m2Body_GetLocalCenter(const m2World* world, m2BodyId bodyId)
     return result;
 }
 
-bool m2Body_IsBullet(const m2World* world, m2BodyId bodyId)
+bool m2Body_IsBulletEnabled(const m2World* world, m2BodyId bodyId)
 {
     int32_t index = world != NULL ? m2BodySlot(world, bodyId) : -1;
     if (index < 0)
@@ -389,13 +395,12 @@ float m2Body_GetGravityScale(const m2World* world, m2BodyId bodyId)
     return result;
 }
 
-int32_t m2Body_GetShapes(const m2World* world, m2BodyId bodyId, m2ShapeId* ids, int32_t capacity)
+int32_t m2Body_GetShapes(const m2World* world, m2BodyId bodyId, m2ShapeId* idsOut, int32_t capacity)
 {
     int32_t bodyIndex = world != NULL ? m2BodySlot(world, bodyId) : -1;
-    if (bodyIndex < 0)
+    if (bodyIndex < 0 || !m2ListOutputValid(idsOut, capacity))
     {
-        m2Refuse(world, m2_errorInvalid);
-        return 0;
+        return m2RefuseList(world, idsOut, capacity, sizeof(*idsOut));
     }
     int32_t total = 0;
     for (int32_t i = 0; i < world->shapes.maxShapeIndex; ++i)
@@ -404,9 +409,9 @@ int32_t m2Body_GetShapes(const m2World* world, m2BodyId bodyId, m2ShapeId* ids, 
         {
             continue;
         }
-        if (ids != NULL && total < capacity)
+        if (idsOut != NULL && total < capacity)
         {
-            ids[total] = m2MakeShapeId(world, i);
+            idsOut[total] = m2MakeShapeId(world, i);
         }
         total += 1;
     }

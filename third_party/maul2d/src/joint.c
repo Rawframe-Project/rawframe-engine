@@ -255,7 +255,7 @@ int32_t m2JointTuningSlot(const m2World* world, m2JointId jointId, m2JointTuning
 // The contract of each joint parameter channel: the joint kinds that
 // carry the parameter and the values it takes. Live setters and replay
 // both pass through it, so a tape can never write what the API refuses.
-static bool JointParamValid(uint8_t type, uint8_t param, float value)
+M2_NODISCARD static bool JointParamValid(uint8_t type, uint8_t param, float value)
 {
     bool motorAndLimits = (M2_MOTOR_LIMIT_KINDS & (1u << type)) != 0;
     switch (param)
@@ -272,6 +272,8 @@ static bool JointParamValid(uint8_t type, uint8_t param, float value)
                (type == (uint8_t)m2_revoluteJoint ? m2ValidAngle(value) : m2ValidReach(value));
     case m2_jointParamMaxMotor:
         return (M2_MAX_MOTOR_KINDS & (1u << type)) != 0 && m2ValidMaxForce(value);
+    case m2_jointParamMotorMaxForce:
+        return type == (uint8_t)m2_motorJoint && m2ValidMaxForce(value);
     case m2_jointParamBreakForce:
     case m2_jointParamBreakTorque:
         return m2ValidBreakLimit(value);
@@ -349,6 +351,9 @@ static void ApplyJointParam(m2World* world, int32_t index, uint8_t param, float 
         break;
     case m2_jointParamMaxMotor:
         j->jointMaxMotor[index] = value;
+        break;
+    case m2_jointParamMotorMaxForce:
+        j->jointLength[index] = value; // the motor joint's force budget
         break;
     case m2_jointParamEnableMotor:
         j->jointFlags[index] = value != 0.0f ? (j->jointFlags[index] | M2_JOINT_MOTOR)
@@ -453,7 +458,7 @@ static M2_NOINLINE void JointSetMotorSpeedWorker(m2World* world, m2JointId joint
     {
         return;
     }
-    m2SetJointParamInternal(world, jointId, m2_jointParamMotorSpeed, speed);
+    (void)m2SetJointParamInternal(world, jointId, m2_jointParamMotorSpeed, speed);
 }
 
 void m2Joint_SetMotorSpeed(m2World* world, m2JointId jointId, float speed)
@@ -463,20 +468,20 @@ void m2Joint_SetMotorSpeed(m2World* world, m2JointId jointId, float speed)
     m2FloatEnvLeave(env);
 }
 
-static M2_NOINLINE void JointSetMaxMotorWorker(m2World* world, m2JointId jointId,
-                                               float maxTorqueOrForce)
+static M2_NOINLINE void JointSetMaxMotorEffortWorker(m2World* world, m2JointId jointId,
+                                                     float maxEffort)
 {
     if (m2CheckWriter(world) != m2_success)
     {
         return;
     }
-    m2SetJointParamInternal(world, jointId, m2_jointParamMaxMotor, maxTorqueOrForce);
+    (void)m2SetJointParamInternal(world, jointId, m2_jointParamMaxMotor, maxEffort);
 }
 
-void m2Joint_SetMaxMotor(m2World* world, m2JointId jointId, float maxTorqueOrForce)
+void m2Joint_SetMaxMotorEffort(m2World* world, m2JointId jointId, float maxEffort)
 {
     uint64_t env = m2FloatEnvEnter();
-    JointSetMaxMotorWorker(world, jointId, maxTorqueOrForce);
+    JointSetMaxMotorEffortWorker(world, jointId, maxEffort);
     m2FloatEnvLeave(env);
 }
 
@@ -486,7 +491,7 @@ static M2_NOINLINE void JointEnableMotorWorker(m2World* world, m2JointId jointId
     {
         return;
     }
-    m2SetJointParamInternal(world, jointId, m2_jointParamEnableMotor, enable ? 1.0f : 0.0f);
+    (void)m2SetJointParamInternal(world, jointId, m2_jointParamEnableMotor, enable ? 1.0f : 0.0f);
 }
 
 void m2Joint_EnableMotor(m2World* world, m2JointId jointId, bool enable)
@@ -502,7 +507,7 @@ static M2_NOINLINE void JointEnableLimitWorker(m2World* world, m2JointId jointId
     {
         return;
     }
-    m2SetJointParamInternal(world, jointId, m2_jointParamEnableLimit, enable ? 1.0f : 0.0f);
+    (void)m2SetJointParamInternal(world, jointId, m2_jointParamEnableLimit, enable ? 1.0f : 0.0f);
 }
 
 void m2Joint_EnableLimit(m2World* world, m2JointId jointId, bool enable)
@@ -518,7 +523,7 @@ static M2_NOINLINE void JointEnableSpringWorker(m2World* world, m2JointId jointI
     {
         return;
     }
-    m2SetJointParamInternal(world, jointId, m2_jointParamEnableSpring, enable ? 1.0f : 0.0f);
+    (void)m2SetJointParamInternal(world, jointId, m2_jointParamEnableSpring, enable ? 1.0f : 0.0f);
 }
 
 void m2Joint_EnableSpring(m2World* world, m2JointId jointId, bool enable)
@@ -535,7 +540,8 @@ static M2_NOINLINE void JointEnableConnectedCollisionWorker(m2World* world, m2Jo
     {
         return;
     }
-    m2SetJointParamInternal(world, jointId, m2_jointParamConnectedCollision, enable ? 1.0f : 0.0f);
+    (void)m2SetJointParamInternal(world, jointId, m2_jointParamConnectedCollision,
+                                  enable ? 1.0f : 0.0f);
 }
 
 void m2Joint_EnableConnectedCollision(m2World* world, m2JointId jointId, bool enable)
@@ -564,7 +570,7 @@ static M2_NOINLINE void JointSetLimitsWorker(m2World* world, m2JointId jointId, 
     }
     if (m2SetJointParamInternal(world, jointId, m2_jointParamLower, lower))
     {
-        m2SetJointParamInternal(world, jointId, m2_jointParamUpper, upper);
+        (void)m2SetJointParamInternal(world, jointId, m2_jointParamUpper, upper);
     }
 }
 
@@ -591,7 +597,7 @@ static M2_NOINLINE void JointSetTuningWorker(m2World* world, m2JointId jointId,
     }
     uint8_t param = second ? (damping ? m2_jointParamAngularDamping : m2_jointParamAngularHertz)
                            : (damping ? m2_jointParamDamping : m2_jointParamHertz);
-    m2SetJointParamInternal(world, jointId, param, value);
+    (void)m2SetJointParamInternal(world, jointId, param, value);
 }
 
 void m2Joint_SetConstraintHertz(m2World* world, m2JointId jointId, float hertz)
@@ -664,7 +670,7 @@ static M2_NOINLINE void JointSetBreakLimitsWorker(m2World* world, m2JointId join
     }
     if (m2SetJointParamInternal(world, jointId, m2_jointParamBreakForce, maxForce))
     {
-        m2SetJointParamInternal(world, jointId, m2_jointParamBreakTorque, maxTorque);
+        (void)m2SetJointParamInternal(world, jointId, m2_jointParamBreakTorque, maxTorque);
     }
 }
 
@@ -740,8 +746,8 @@ int32_t m2TypedJointSlot(const m2World* world, m2JointId jointId, uint8_t type)
     return index;
 }
 
-static M2_NOINLINE bool JointIsConnectedCollisionEnabledWorker(const m2World* world,
-                                                               m2JointId jointId)
+M2_NODISCARD static M2_NOINLINE bool JointIsConnectedCollisionEnabledWorker(const m2World* world,
+                                                                            m2JointId jointId)
 {
     int32_t index = (int32_t)jointId.index1 - 1;
     if (world == NULL || index < 0 || index >= world->joints.jointCapacity ||

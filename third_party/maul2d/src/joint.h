@@ -19,6 +19,10 @@
 #define M2_JOINT_HARD_RANGE  8u  // distance: a finite length range is active
 #define M2_JOINT_ROPE        16u // distance: spring enabled (stored with the joint)
 #define M2_JOINT_FREE_LENGTH 32u // distance: zero-stiffness spring, skip the rest row
+// Every bit above; a restore refuses any other.
+#define M2_JOINT_FLAGS                                                                             \
+    (M2_JOINT_MOTOR | M2_JOINT_LIMIT | M2_JOINT_SPRING | M2_JOINT_HARD_RANGE | M2_JOINT_ROPE |     \
+     M2_JOINT_FREE_LENGTH)
 
 // Slot lookups: the live slot of a joint id, or -1. The typed lookup
 // also demands a joint type and refuses (world may be NULL) on a miss.
@@ -87,7 +91,8 @@ float m2PulleyLiveLength(const m2World* world, int32_t index, int32_t side);
 
 // The journaled parameter channel (codes in journal.h) and the destroy
 // shared with the solver's break pass.
-bool m2SetJointParamInternal(m2World* world, m2JointId jointId, uint8_t param, float value);
+M2_NODISCARD bool m2SetJointParamInternal(m2World* world, m2JointId jointId, uint8_t param,
+                                          float value);
 void m2DestroyJointInternal(m2World* world, int32_t index);
 
 #endif // MAUL2D_SRC_JOINT_H

@@ -26,6 +26,8 @@ One system per World, `rawframe.physics2d.step` or `rawframe.physics3d.step`, st
 5. Contacts are written from the step's contact and overlap streams, and every body's pose and velocity are written back.
 6. Attached entities are put at their parent's pose and offset, parents before children.
 
+The 2D step takes ticks of one microsecond to ten seconds, the lengths Maul2D steps; at any other tick rate it fails before it changes anything. A kinematic target too far to reach within Maul2D's speed limit in one tick is cleared and not carried out, and the statistics count only the targets carried out.
+
 Gameplay that pushes bodies runs `before` the step; gameplay that reads where they went runs `after`. Nothing in the step depends on addresses, hash order or time, so a predicting client that makes its player's body again where the server says steps exactly as the server did ([prediction.md](prediction.md)).
 
 ## Collision

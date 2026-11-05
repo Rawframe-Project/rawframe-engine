@@ -14,20 +14,17 @@ extern "C"
 {
 #endif
 
-    /// A box in world space, its corners 64-bit positions: what a body or
-    /// shape covers, and the region a box query looks in.
-    typedef struct m2WorldAabb
-    {
-        m2Pos2 lowerBound;
-        m2Pos2 upperBound;
-    } m2WorldAabb;
+    /// How a body moves: one of the m2_*Body constants. The type has a
+    /// fixed width, unlike a C enum's, so a def holding it has one layout
+    /// in every compiler, C and C++.
+    typedef int32_t m2BodyType;
 
-    typedef enum m2BodyType
+    enum
     {
         m2_staticBody = 0,
         m2_kinematicBody = 1,
         m2_dynamicBody = 2,
-    } m2BodyType;
+    };
 
     /// A body of a world: a 1-based slot and a generation.
     typedef struct m2BodyId
@@ -61,11 +58,12 @@ extern "C"
         float angularDamping;
         m2MotionLocks motionLocks;   // angularZ: never rotates, infinite inertia
         bool enableSleep;            // false: this body never sleeps
-        bool isEnabled;              // false: created dormant, outside the simulation
+        bool enable;                 // false: created dormant, outside the simulation
         int8_t dominance;            // the higher side of a contact cannot be pushed
-        bool isBullet;               // continuous collision against non-bullets
+        bool enableBullet;           // continuous collision against non-bullets
         M2_ALIGN8 uint64_t userData; // opaque, kept through snapshots and journals
         int32_t internalValue;       // the cookie m2DefaultBodyDef sets
+        float sleepThreshold;        // resting speed, m/s; 0 = the default 0.05
     } m2BodyDef;
 
     /// Returns a body def: a static, enabled body at the origin with
@@ -86,7 +84,8 @@ extern "C"
     ///                 zero for a static body; its rotation not zero, and
     ///                 normalized to its direction; its gravity scale
     ///                 within M2_GRAVITY_SCALE_LIMIT; its dampings from 0
-    ///                 to M2_RATE_LIMIT.
+    ///                 to M2_RATE_LIMIT; its sleep threshold from 0 to
+    ///                 M2_SPEED_LIMIT.
     /// @param bodyOut  Receives the body; the null id on failure.
     /// @return m2_success; m2_errorInvalid for a null argument, a def not
     ///         from m2DefaultBodyDef, a NaN or a field outside its domain,
@@ -106,7 +105,8 @@ extern "C"
     ///
     /// @param world   The world.
     /// @param bodyId  The body.
-    /// @return m2_success; m2_errorStale when the body is already gone;
+    /// @return m2_success; m2_errorInvalid for a null world;
+    ///         m2_errorStale when the body is already gone;
     ///         m2_errorBusy from host code the world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
@@ -214,7 +214,7 @@ extern "C"
     /// @param flag    True for a bullet.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Body_SetBullet(m2World* world, m2BodyId bodyId, bool flag);
+    M2_API void m2Body_EnableBullet(m2World* world, m2BodyId bodyId, bool flag);
 
     /// Sets a body's opaque game data, kept through snapshots and journals.
     /// A stale id counts one misuse. Journaled.
@@ -250,8 +250,7 @@ extern "C"
     /// Sets the velocities that carry a body to a target pose in one step
     /// of the given length: the way to drive a kinematic body. It goes
     /// through the journaled velocity setters, so a replay repeats it. A
-    /// stale id, a static body, an invalid argument or a pose too far to
-    /// reach within M2_SPEED_LIMIT changes nothing and counts one misuse.
+    /// refused call changes nothing.
     ///
     /// @param world     The world.
     /// @param bodyId    The body.
@@ -259,10 +258,19 @@ extern "C"
     /// @param rotation  The target rotation, unit length.
     /// @param dt        The step the move takes, from M2_MIN_STEP to
     ///                  M2_STEP_LIMIT.
+    /// @return m2_success; m2_errorInvalid for a null world, a static body,
+    ///         a position that is not finite, a rotation that is not unit
+    ///         length or a dt of 0 or below; m2_errorStale for a stale id;
+    ///         m2_errorLimit for a dt outside M2_MIN_STEP to M2_STEP_LIMIT,
+    ///         and for a pose too far from the body to reach within
+    ///         M2_SPEED_LIMIT, which counts no misuse, since where the body
+    ///         is is the world's state; m2_errorBusy from host code the
+    ///         world is running.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Body_SetTargetTransform(m2World* world, m2BodyId bodyId, m2Pos2 position,
-                                          m2Rot rotation, float dt);
+    M2_NODISCARD M2_API m2Result m2Body_SetTargetTransform(m2World* world, m2BodyId bodyId,
+                                                           m2Pos2 position, m2Rot rotation,
+                                                           float dt);
 
     /// Reads a body's type.
     ///
@@ -332,7 +340,7 @@ extern "C"
     /// @param flag    True to enable it, false to disable it.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time.
-    M2_API void m2Body_SetEnabled(m2World* world, m2BodyId bodyId, bool flag);
+    M2_API void m2Body_Enable(m2World* world, m2BodyId bodyId, bool flag);
 
     /// Tells whether a body takes part in the simulation.
     ///
@@ -362,7 +370,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API bool m2Body_IsBullet(const m2World* world, m2BodyId bodyId);
+    M2_API bool m2Body_IsBulletEnabled(const m2World* world, m2BodyId bodyId);
 
     /// Reads a body's gravity scale.
     ///
@@ -377,14 +385,14 @@ extern "C"
     /// Lists the world's bodies in ascending slot order.
     ///
     /// @param world     The world.
-    /// @param ids       Receives up to capacity bodies; may be null to
-    ///                  measure.
-    /// @param capacity  The length of ids.
+    /// @param idsOut    Receives up to capacity bodies; zeros over the whole capacity on failure.
+    ///                  May be null with a capacity of 0 to measure.
+    /// @param capacity  The length of idsOut, not below 0.
     /// @return The number of bodies, which may exceed capacity.
     /// @par Thread safety
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
-    M2_API int32_t m2World_GetBodies(const m2World* world, m2BodyId* ids, int32_t capacity);
+    M2_API int32_t m2World_GetBodies(const m2World* world, m2BodyId* idsOut, int32_t capacity);
 
     /// Maps a point from a body's frame to world space.
     ///
@@ -700,6 +708,33 @@ extern "C"
     /// Safe from any thread; a world is used by one thread at a time, or by
     /// several readers at once.
     M2_API bool m2Body_IsSleepEnabled(const m2World* world, m2BodyId bodyId);
+
+    /// Sets the speed below which a body counts as resting. A body rests
+    /// while its speed is below the threshold t and its spin below
+    /// 0.12 rad/s times t / 0.05; resting for half a second with the rest
+    /// of its island, it falls asleep. 0 gives the default, 0.05 m/s and so
+    /// 0.12 rad/s. A kinematic body below its threshold does not wake what
+    /// it touches. The change applies from the next step: a sleeping body
+    /// stays asleep. A stale id, or a threshold outside 0 to
+    /// M2_SPEED_LIMIT, changes nothing and counts one misuse. Journaled.
+    ///
+    /// @param world      The world.
+    /// @param bodyId     The body.
+    /// @param threshold  The resting speed, m/s; 0 for the default.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time.
+    M2_API void m2Body_SetSleepThreshold(m2World* world, m2BodyId bodyId, float threshold);
+
+    /// Reads the speed below which a body counts as resting.
+    ///
+    /// @param world   The world.
+    /// @param bodyId  The body; a stale id counts one misuse.
+    /// @return The threshold, m/s: 0.05 for a body given the default;
+    ///         0 for a stale id.
+    /// @par Thread safety
+    /// Safe from any thread; a world is used by one thread at a time, or by
+    /// several readers at once.
+    M2_API float m2Body_GetSleepThreshold(const m2World* world, m2BodyId bodyId);
 
     /// Applies an angular impulse, changing the angular velocity at once.
     /// The body wakes, and its spin saturates at M2_SPEED_LIMIT. A stale id, a

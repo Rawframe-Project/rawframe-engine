@@ -3,6 +3,7 @@
 #include "attachments.h"
 #include "characters.h"
 #include "joints.h"
+#include "rawframe/base/assert.h"
 #include "rawframe/physics/filters.h"
 #include "rawframe/physics/rewind.h"
 #include "rawframe/physics2d/components.h"
@@ -203,7 +204,7 @@ struct Physics2D::State {
         definition.linearDamping = body.linearDamping;
         definition.angularDamping = body.angularDamping;
         definition.motionLocks.angularZ = body.fixedRotation;
-        definition.isBullet = body.bullet;
+        definition.enableBullet = body.bullet;
         definition.userData = (std::uint64_t{row.entity.slot} << 32U) | row.entity.generation;
         m2BodyId kBody{};
         if (m2CreateBody(physics, &definition, &kBody) != m2_success) {
@@ -607,6 +608,15 @@ struct Physics2D::State {
     }
 
     result::Status step(world::World& world, world::TickRate rate, world::TickIndex tick) {
+        // The tick's length, which each step and kinematic target is taken
+        // over. Maul2D steps 1 microsecond to 10 seconds, so a rate outside
+        // that is refused before anything changes.
+        const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
+        if (!(kSeconds >= M2_MIN_STEP && kSeconds <= M2_STEP_LIMIT)) {
+            return refuse(result::ErrorClass::InvalidArgument,
+                          Physics2DError::InvalidSettings,
+                          "physics step: a tick of 1 microsecond to 10 seconds");
+        }
         rows.clear();
         bodies->forEach(world,
                         [this](world::EntityHandle entity, const Body2D& body, Pose2D& pose, Velocity2D& velocity) {
@@ -634,8 +644,6 @@ struct Physics2D::State {
             remove(entry->second);
             entry = mapped.erase(entry);
         }
-        // The tick's length, which a kinematic target is reached over.
-        const auto kSeconds = static_cast<float>(static_cast<double>(rate.seconds) / static_cast<double>(rate.ticks));
         for (const Row& row : rows) {
             const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
             Mapped& entry = kEntry->second;
@@ -690,9 +698,13 @@ struct Physics2D::State {
                     const Pose2D kGoal{.x = kTarget->x, .y = kTarget->y, .c = kTarget->c, .s = kTarget->s};
                     if (entry.made.motion == static_cast<std::uint8_t>(physics::Motion::Kinematic) &&
                         std::isfinite(kGoal.x) && std::isfinite(kGoal.y) && finite(kGoal.c) && finite(kGoal.s)) {
-                        m2Body_SetTargetTransform(
-                            physics, entry.body, m2Pos2{kGoal.x, kGoal.y}, rotationOf(kGoal), kSeconds);
-                        ++statistics.targets;
+                        // A pose too far to reach within Maul2D's speed
+                        // limit in one tick is refused, and not counted.
+                        if (m2Body_SetTargetTransform(
+                                physics, entry.body, m2Pos2{kGoal.x, kGoal.y}, rotationOf(kGoal), kSeconds) ==
+                            m2_success) {
+                            ++statistics.targets;
+                        }
                     }
                     kTarget->set = false;
                 }
@@ -709,7 +721,10 @@ struct Physics2D::State {
                 moveCharacter(row, mapped.find(row.entity)->second, kSeconds);
             }
         }
-        m2World_Step(physics, kSeconds, static_cast<std::int32_t>(settings.substeps));
+        // The tick's length and the substeps were checked, and no host code
+        // of the world's own is running: nothing is left to refuse.
+        const m2Result kStepped = m2World_Step(physics, kSeconds, static_cast<std::int32_t>(settings.substeps));
+        RAWFRAME_CHECK(kStepped == m2_success, "Maul2D refused a step whose length and substeps were checked");
         ++statistics.steps;
 
         report(world);
@@ -784,7 +799,7 @@ result::Result<std::unique_ptr<Physics2D>> Physics2D::create(const Physics2DSett
                       Physics2DError::InvalidSettings,
                       "physics settings: finite gravity, 1 to 64 substeps, and capacities of 1 to 2^20");
     }
-    if (m2CpuSupportsBackend() == 0) {
+    if (!m2IsCpuBackendSupported()) {
         return refuse(result::ErrorClass::Unsupported,
                       Physics2DError::Unsupported,
                       "this processor cannot run the physics build's kernels");
@@ -898,10 +913,10 @@ void Physics2D::overlapCircle(
     std::vector<m2ShapeId>& shapes = state_->overlapShapes;
     shapes.resize(std::max<std::size_t>(shapes.size(), 16));
     std::int32_t total = m2World_OverlapCircle(
-        state_->physics, &kCircle, kAt, shapes.data(), static_cast<std::int32_t>(shapes.size()), *kFilter);
+        state_->physics, &kCircle, kAt, *kFilter, shapes.data(), static_cast<std::int32_t>(shapes.size()));
     if (static_cast<std::size_t>(total) > shapes.size()) {
         shapes.resize(static_cast<std::size_t>(total));
-        total = m2World_OverlapCircle(state_->physics, &kCircle, kAt, shapes.data(), total, *kFilter);
+        total = m2World_OverlapCircle(state_->physics, &kCircle, kAt, *kFilter, shapes.data(), total);
     }
     for (std::int32_t index = 0; index < total; ++index) {
         const world::EntityHandle kOwner = state_->ownerOf(shapes[static_cast<std::size_t>(index)]);
