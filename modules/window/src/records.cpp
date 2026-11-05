@@ -126,6 +126,8 @@ Outcome outcomeOf(mwinOutcome outcome) noexcept {
         return Outcome::Superseded;
     case mwin_outcomeCancelled:
         return Outcome::Cancelled;
+    case mwin_outcomeTooLarge:
+        return Outcome::TooLarge;
     default:
         return Outcome::Failed;
     }
@@ -242,6 +244,8 @@ mwinOutcome toMaul(Outcome outcome) noexcept {
         return mwin_outcomeSuperseded;
     case Outcome::Cancelled:
         return mwin_outcomeCancelled;
+    case Outcome::TooLarge:
+        return mwin_outcomeTooLarge;
     case Outcome::Failed:
         break;
     }

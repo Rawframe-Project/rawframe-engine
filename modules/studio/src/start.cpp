@@ -527,8 +527,16 @@ void ShellParticipant::takeDialogs() {
             say("this platform shows no file dialogs; type the path instead");
             continue;
         }
-        if (answer->failed) {
-            say("the file dialog failed, or more files were chosen than it takes; nothing was done");
+        if (answer->failure == view::FileDialogs::Failure::Failed) {
+            say("the file dialog failed");
+            continue;
+        }
+        if (answer->failure == view::FileDialogs::Failure::Denied) {
+            say("the file dialog was refused");
+            continue;
+        }
+        if (answer->failure == view::FileDialogs::Failure::TooMany) {
+            say("more files were chosen than the dialog takes; nothing was done");
             continue;
         }
         if (answer->truncated) {

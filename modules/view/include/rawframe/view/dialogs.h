@@ -36,6 +36,17 @@ public:
         /// dots joined by ';'.
         std::vector<std::pair<std::string, std::string>> filters;
     };
+    /// Why a dialog that was neither chosen from nor closed gave no paths.
+    enum class Failure : std::uint8_t {
+        None,
+        /// The platform could not show it, or no chosen file could be
+        /// given as a path.
+        Failed,
+        /// The platform refused to show it.
+        Denied,
+        /// More files were chosen than a dialog takes.
+        TooMany
+    };
     struct Answer {
         std::uint64_t ticket = 0;
         /// The absolute paths chosen; none when the user closed it.
@@ -45,10 +56,7 @@ public:
         bool truncated = false;
         /// Where the platform shows no dialog.
         bool unsupported = false;
-        /// Neither chosen from nor closed: the dialog failed, or its choice
-        /// could not be taken, such as one of no file the platform could
-        /// give as a path, or of more files than a dialog may choose.
-        bool failed = false;
+        Failure failure = Failure::None;
     };
 
     /// The editor's side: a dialog asked; its answer comes with `ticket`.

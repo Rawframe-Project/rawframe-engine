@@ -110,7 +110,10 @@ enum class Outcome : std::uint8_t {
     Superseded,
     /// Its window went first.
     Cancelled,
-    Failed
+    Failed,
+    /// Past the window system's limits as a whole, as a file dialog's
+    /// choice of more files than it takes.
+    TooLarge
 };
 
 struct Completion {

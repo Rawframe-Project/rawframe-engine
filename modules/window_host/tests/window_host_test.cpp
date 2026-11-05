@@ -2,7 +2,7 @@
 // runs that one and returns, so the input that came meanwhile is read
 // before the next, instead of after several more. An editor's file
 // dialog is answered with what the window chose: the paths, whether
-// chosen files were left out, and whether the dialog failed.
+// chosen files were left out, and why a dialog gave none.
 
 #include "rawframe/base/platform.h"
 #include "rawframe/composition/composition.h"
@@ -124,16 +124,20 @@ void registerAsking(composition::ParticipantRegistrar& registrar) noexcept {
 const std::array<composition::RegistrarEntry, 1> kAsking = {composition::RegistrarEntry{
     "window_host_test", &registerAsking, composition::scopeBit(composition::LifetimeScope::Runtime)}};
 
-/// The window host, the test platform choosing `files` for its dialogs.
+/// The window host, the test platform choosing `files` for its dialogs
+/// and answering them `outcome`.
 struct Choosing final : window::Program {
     window_host::WindowHost& host;
     std::string_view files;
+    window::Outcome outcome;
 
-    Choosing(window_host::WindowHost& player, std::string_view chosen) : host(player), files(chosen) {
+    Choosing(window_host::WindowHost& player, std::string_view chosen, window::Outcome answer)
+        : host(player), files(chosen), outcome(answer) {
     }
 
     result::Status start(window::Windows& windows) override {
         RAWFRAME_TRY(window::testing::chooseFiles(windows, files));
+        RAWFRAME_TRY(window::testing::answer(windows, window::RequestKind::FileDialog, outcome));
         return host.start(windows);
     }
     window::FrameOutcome frame(window::Windows& windows) override {
@@ -144,8 +148,10 @@ struct Choosing final : window::Program {
     }
 };
 
-/// The answers an editor's one dialog got, the platform choosing `files`.
-std::vector<view::FileDialogs::Answer> answersOf(std::string_view files) {
+/// The answers an editor's one dialog got, the platform choosing `files`
+/// and answering `outcome`.
+std::vector<view::FileDialogs::Answer> answersOf(std::string_view files,
+                                                 window::Outcome outcome = window::Outcome::Done) {
     answers.clear();
     auto configuration = composition::Configuration::parse("host.maximum_iterations = 30\n");
     RAWFRAME_EXPECT(configuration.has_value());
@@ -154,7 +160,7 @@ std::vector<view::FileDialogs::Answer> answersOf(std::string_view files) {
     }
     window_host::WindowHost player{host::HostRequest{
         .role = composition::TargetRole::Client, .registrars = kAsking, .configuration = &*configuration}};
-    Choosing choosing{player, files};
+    Choosing choosing{player, files, outcome};
     RAWFRAME_EXPECT(window::testing::run(choosing, window::RunSettings{}).has_value());
     return std::exchange(answers, {});
 }
@@ -163,17 +169,35 @@ std::vector<view::FileDialogs::Answer> answersOf(std::string_view files) {
 
 RAWFRAME_TEST(a_dialog_answers_its_paths_and_what_it_left_out) {
     using namespace std::string_view_literals;
+    using Failure = view::FileDialogs::Failure;
     const auto kWhole = answersOf("/tmp/a.png\0/tmp/b c.txt\0"sv);
     RAWFRAME_EXPECT(kWhole.size() == 1 && kWhole[0].ticket == 7 &&
                     kWhole[0].paths == (std::vector<std::string>{"/tmp/a.png", "/tmp/b c.txt"}) &&
-                    !kWhole[0].truncated && !kWhole[0].failed && !kWhole[0].unsupported);
+                    !kWhole[0].truncated && kWhole[0].failure == Failure::None && !kWhole[0].unsupported);
     // A file the platform cannot give as a path, here not UTF-8, left out.
     const auto kPartial = answersOf("/tmp/a.png\0/tmp/\xff.png\0"sv);
     RAWFRAME_EXPECT(kPartial.size() == 1 && kPartial[0].paths == std::vector<std::string>{"/tmp/a.png"} &&
-                    kPartial[0].truncated && !kPartial[0].failed);
+                    kPartial[0].truncated && kPartial[0].failure == Failure::None);
+}
+
+RAWFRAME_TEST(a_dialog_that_gives_no_paths_says_why) {
+    using namespace std::string_view_literals;
+    using Failure = view::FileDialogs::Failure;
     // No file it could give: the dialog failed, which is no closing of it.
     const auto kNone = answersOf("/tmp/\xff.png\0"sv);
-    RAWFRAME_EXPECT(kNone.size() == 1 && kNone[0].paths.empty() && kNone[0].failed && !kNone[0].unsupported);
+    RAWFRAME_EXPECT(kNone.size() == 1 && kNone[0].paths.empty() && kNone[0].failure == Failure::Failed &&
+                    !kNone[0].unsupported);
+    // Refused by the platform.
+    const auto kRefused = answersOf("/tmp/a.png\0"sv, window::Outcome::Denied);
+    RAWFRAME_EXPECT(kRefused.size() == 1 && kRefused[0].paths.empty() && kRefused[0].failure == Failure::Denied);
+    // One file more than a dialog takes, 256, refused as a whole.
+    std::string many;
+    for (int each = 0; each < 257; ++each) {
+        many += "/a";
+        many += '\0';
+    }
+    const auto kMany = answersOf(many);
+    RAWFRAME_EXPECT(kMany.size() == 1 && kMany[0].paths.empty() && kMany[0].failure == Failure::TooMany);
 }
 
 // A shipping build refuses `host.drawing_ms`.
