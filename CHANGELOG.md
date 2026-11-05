@@ -4,10 +4,13 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.8.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.0...v0.8.1) (2026-11-05)
 
+### Added
+
+- `process::ChildSettings::withheld` names environment variables a child process is not given; on Windows, whose names ignore case, in any case ([#227](https://github.com/Rawframe-Project/rawframe-engine/pull/227)).
 
 ### Fixed
 
-* **studio:** start git without the variables that name a repository ([#227](https://github.com/Rawframe-Project/rawframe-engine/issues/227)) ([dff8e53](https://github.com/Rawframe-Project/rawframe-engine/commit/dff8e537adbfd1ee3fdedc203e65bb232502b4a2))
+- Studio's Changes tab runs git in the game's directory whatever its own environment says. It gave git every variable it had, and `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and git's other repository variables outrank the directory, so Studio started from a shell or a git hook that set them ran status, diff, add and commit in that repository. Git is now started without the variables `git rev-parse --local-env-vars` lists ([#227](https://github.com/Rawframe-Project/rawframe-engine/pull/227)).
 
 ## [0.8.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.7.0...v0.8.0) (2026-11-05)
 
