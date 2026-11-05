@@ -4,10 +4,9 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.6.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.0...v0.6.1) (2026-11-05)
 
-
 ### Fixed
 
-* **authoring:** bound what a link holds of its endpoint's lines ([#219](https://github.com/Rawframe-Project/rawframe-engine/issues/219)) ([fc2b736](https://github.com/Rawframe-Project/rawframe-engine/commit/fc2b73619cdba7222980c5cac6c4e831c6824ee0)), closes [#217](https://github.com/Rawframe-Project/rawframe-engine/issues/217)
+- A link to a tooling endpoint or a shared session's host no longer holds whatever the endpoint sends. A line past the most its protocol sends at once ends the link: 4 MiB for the tooling protocol, and a 16 MiB session record for the authoring one. `rawframe-author connect` then says "the endpoint sent a line past 4 MiB", and the debug adapter says "the game's tooling endpoint sent a line past 4 MiB". What the endpoint says unasked and is not yet taken is kept up to 64 MiB, each line counted with 64 bytes more, and past that the oldest lines are let go. `rawframe-author connect` and the debug adapter never take such lines, so they held every one before. `ToolingLink` and `HostLink` gain `overran()`, and `link.h` gains `kMostUnheardBytes` and `kUnheardLineCost`. The engine's own endpoints send no such line, so nothing they do changes ([#219](https://github.com/Rawframe-Project/rawframe-engine/pull/219)).
 
 ## [0.6.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.5.0...v0.6.0) (2026-11-05)
 
