@@ -8,6 +8,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <span>
 #include <system_error>
 #include <thread>
@@ -208,7 +209,10 @@ std::vector<std::string> LineClient::heard(std::int64_t withinMilliseconds) {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    return std::exchange(unasked_, {});
+    std::vector<std::string> said{std::make_move_iterator(unasked_.begin()), std::make_move_iterator(unasked_.end())};
+    unasked_.clear();
+    unheardBytes_ = 0;
+    return said;
 }
 
 std::optional<std::string> LineClient::take(std::optional<std::int64_t> id) {
@@ -240,10 +244,12 @@ std::optional<std::string> LineClient::take(std::optional<std::int64_t> id) {
 }
 
 void LineClient::keep(std::string line) {
-    if (unasked_.size() == kMostUnheard) {
-        unasked_.erase(unasked_.begin());
-    }
+    unheardBytes_ += line.size() + kUnheardLineCost;
     unasked_.push_back(std::move(line));
+    while (unheardBytes_ > kMostUnheardBytes) {
+        unheardBytes_ -= unasked_.front().size() + kUnheardLineCost;
+        unasked_.pop_front();
+    }
 }
 
 void LineClient::pump() {

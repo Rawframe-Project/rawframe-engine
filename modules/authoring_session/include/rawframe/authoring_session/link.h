@@ -23,11 +23,15 @@
 
 namespace rawframe::authoring_session {
 
-/// The most lines a link keeps of what its endpoint says unasked until
-/// `heard` takes them; past it the oldest is let go. `rawframe-author
-/// connect` and the debug adapter never take them, so this is all they
-/// hold of it.
-inline constexpr std::size_t kMostUnheard = 1024;
+/// The most a link keeps of what its endpoint says unasked until `heard`
+/// takes it: 64 MiB, each line counted with `kUnheardLineCost` more for
+/// its keeping; past it the oldest lines are let go. A bound in bytes, not
+/// lines, since a line runs from a few bytes to a whole record: a count
+/// would either hold gigabytes or cut a burst a host sends in the open.
+/// `rawframe-author connect` and the debug adapter never take them, so this
+/// is all they hold of it.
+inline constexpr std::size_t kMostUnheardBytes = std::size_t{64} << 20U;
+inline constexpr std::size_t kUnheardLineCost = 64;
 
 class LineClient;
 class Preview;
@@ -61,8 +65,8 @@ public:
     /// endpoint's next frame. Whether it was sent.
     bool send(std::string_view record);
     /// The replies to records sent since last asked, each under its own
-    /// id, and what the endpoint said unasked, at most `kMostUnheard`
-    /// lines; without waiting.
+    /// id, and what the endpoint said unasked, at most
+    /// `kMostUnheardBytes`; without waiting.
     std::vector<std::string> heard();
     /// Whether the connection ended: the endpoint closed it, or this side
     /// did on a line past its limit (`overran`).
@@ -110,7 +114,7 @@ public:
     [[nodiscard]] std::optional<std::int64_t> sentAs(const document::Value& id) const;
     /// What the host said unasked (`authoring.changed`, presence, a
     /// revocation, and what a record sent is answered with), at most
-    /// `kMostUnheard` lines, waiting up to `withinMilliseconds` for the
+    /// `kMostUnheardBytes`, waiting up to `withinMilliseconds` for the
     /// first where none was kept.
     std::vector<std::string> heard(std::int64_t withinMilliseconds);
     /// Whether the connection ended: the host closed it, or this side did

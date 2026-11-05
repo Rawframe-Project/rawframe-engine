@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <optional>
 #include <string>
@@ -88,7 +89,7 @@ private:
     /// the one numbered `id`, every other line that is no reply kept.
     std::optional<std::string> take(std::optional<std::int64_t> id);
     /// Keeps a line said unasked, letting the oldest go past
-    /// `kMostUnheard`.
+    /// `kMostUnheardBytes`.
     void keep(std::string line);
 
     network::Provider& provider_;
@@ -101,8 +102,10 @@ private:
     std::size_t open_ = 0;
     std::size_t maximumLine_;
     bool overran_ = false;
-    /// At most `kMostUnheard`, the oldest let go first.
-    std::vector<std::string> unasked_;
+    /// At most `kMostUnheardBytes`, counted in `unheardBytes_`, the
+    /// oldest let go first.
+    std::deque<std::string> unasked_;
+    std::size_t unheardBytes_ = 0;
     /// Records sent with `send` whose reply has not come, by the number
     /// each went out under: the id each was given.
     std::map<std::int64_t, document::Value> waiting_;

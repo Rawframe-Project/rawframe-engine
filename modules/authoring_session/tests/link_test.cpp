@@ -1,7 +1,7 @@
 // A tooling link against an endpoint that misbehaves, over QUIC on this
 // machine's loopback interface: a line past the most the tooling protocol
 // sends at once ends the link, and what the endpoint says unasked is kept
-// to the last kMostUnheard lines.
+// to its last kMostUnheardBytes.
 
 #include "rawframe/authoring_session/link.h"
 #include "rawframe/document/json.h"
@@ -142,7 +142,7 @@ private:
             }
             // Sent a piece at a time, each once the one before is received,
             // within what a connection holds unacknowledged.
-            constexpr std::size_t kPiece = std::size_t{128} << 10U;
+            constexpr std::size_t kPiece = std::size_t{256} << 10U;
             if (connection.has_value() && !outgoing.empty() && provider_->pendingBytes(*connection, stream) == 0) {
                 const std::size_t kSending = std::min(outgoing.size(), kPiece);
                 const auto kBytes = std::as_bytes(std::span{outgoing.data(), kSending});
@@ -189,12 +189,22 @@ RAWFRAME_TEST(ALineAsLongAsTheProtocolSendsIsTakenAndOnePastItEndsTheLink) {
     RAWFRAME_EXPECT(kLink->overran() && kLink->closed() && !kLink->silent());
 }
 
-RAWFRAME_TEST(WhatAnEndpointSaysUnaskedIsKeptToTheLastLines) {
-    constexpr std::size_t kSaid = kMostUnheard + 5;
+/// A line said unasked, numbered `n`, its bytes before its newline
+/// `bytes`.
+std::string saidLine(std::size_t n, std::size_t bytes) {
+    const std::string kShell = R"({"kind":"test.said","n":)" + std::to_string(n) + R"(,"pad":""})";
+    return kShell.substr(0, kShell.size() - 2) + std::string(bytes - kShell.size(), 'x') + "\"}\n";
+}
+
+RAWFRAME_TEST(WhatAnEndpointSaysUnaskedIsKeptToItsLastBytes) {
+    // Lines that each cost a sixty-fourth of the bound with their keeping:
+    // 64 are kept, and of 70 said the oldest 6 are let go.
+    constexpr std::size_t kLine = (kMostUnheardBytes / 64) - kUnheardLineCost;
+    constexpr std::size_t kSaid = 70;
     const Endpoint kEndpoint{[](std::string_view, std::int64_t id) {
         std::string lines;
         for (std::size_t each = 0; each < kSaid; ++each) {
-            lines += R"({"kind":"test.said","n":)" + std::to_string(each) + "}\n";
+            lines += saidLine(each, kLine);
         }
         return lines + replyLine(id, R"({"kind":"test.done"})");
     }};
@@ -204,10 +214,10 @@ RAWFRAME_TEST(WhatAnEndpointSaysUnaskedIsKeptToTheLastLines) {
     }
     RAWFRAME_EXPECT(kLink->ask(R"({"kind":"test.say","id":1})").has_value());
     const std::vector<std::string> kHeard = kLink->heard();
-    RAWFRAME_EXPECT(kHeard.size() == kMostUnheard);
-    // The oldest five let go: the first kept is the sixth said, the last
-    // the last.
-    RAWFRAME_EXPECT(!kHeard.empty() && kHeard.front() == R"({"kind":"test.said","n":5})");
-    RAWFRAME_EXPECT(!kHeard.empty() &&
-                    kHeard.back() == R"({"kind":"test.said","n":)" + std::to_string(kSaid - 1) + "}");
+    RAWFRAME_EXPECT(kHeard.size() == 64);
+    RAWFRAME_EXPECT(!kHeard.empty() && kHeard.front() + "\n" == saidLine(6, kLine));
+    RAWFRAME_EXPECT(!kHeard.empty() && kHeard.back() + "\n" == saidLine(kSaid - 1, kLine));
+    // Taken, they are no longer counted: what comes next is kept whole.
+    RAWFRAME_EXPECT(kLink->ask(R"({"kind":"test.say","id":2})").has_value());
+    RAWFRAME_EXPECT(kLink->heard().size() == 64);
 }

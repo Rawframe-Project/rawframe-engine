@@ -39,7 +39,7 @@ int connect(const char* endpoint, const char* pinFile, const char* tokenFile) {
         return 1;
     }
     // What the endpoint says unasked is not printed: the link keeps at
-    // most kMostUnheard lines of it, the oldest let go.
+    // most kMostUnheardBytes of it, 64 MiB, the oldest let go.
     int status = 0;
     std::string line;
     for (int each = std::fgetc(stdin); each != EOF; each = std::fgetc(stdin)) {
