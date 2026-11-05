@@ -4,14 +4,14 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.6.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.5.0...v0.6.0) (2026-11-05)
 
+### Changed
 
-### ⚠ BREAKING CHANGES
-
-* **studio:** a window request that Maul Window answers too large, such as a file dialog's choice of more than 256 files, completes with the new `window::Outcome::TooLarge` instead of `Failed`. `view::FileDialogs::Answer` gains `failure`, and Studio now says why a file dialog gave no paths where it said nothing.
+- **Breaking:** A window request that Maul Window answers too large, such as a file dialog's choice of more files than it takes (256 by Maul Window's default), completes with the new `window::Outcome::TooLarge` instead of `Failed`. Apart from file dialogs, the engine reads the outcome only of a clipboard read, and only whether it is `Done`, so nothing else acts differently ([#215](https://github.com/Rawframe-Project/rawframe-engine/pull/215)).
+- **Breaking:** `view::FileDialogs::Answer` gains `failure`, which says why a dialog that was neither chosen from nor closed gave no paths: `Failed` (the platform could not show it, no chosen file could be given as a path, or its paths could not be read), `Denied` (the platform refused to show it) or `TooMany` (more files were chosen than a dialog takes) ([#215](https://github.com/Rawframe-Project/rawframe-engine/pull/215)).
 
 ### Fixed
 
-* **studio:** say why a file dialog gave no paths ([#215](https://github.com/Rawframe-Project/rawframe-engine/issues/215)) ([f2a3de6](https://github.com/Rawframe-Project/rawframe-engine/commit/f2a3de6b05b1568b899af1a7e735097324975324)), closes [#213](https://github.com/Rawframe-Project/rawframe-engine/issues/213)
+- Studio says why a file dialog gave no paths: "the file dialog failed", "the file dialog was refused", or "more files were chosen than the dialog takes; nothing was done". Before, it said nothing, as for a dialog the user closed, so a failure could not be told from a cancel. A closed dialog, and one another dialog replaced, still say nothing ([#215](https://github.com/Rawframe-Project/rawframe-engine/pull/215)).
 
 ## [0.5.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.4.0...v0.5.0) (2026-11-05)
 
