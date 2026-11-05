@@ -543,8 +543,7 @@ RAWFRAME_TEST(SettingsAndWorldsOutOfRangeAreRefused) {
         const world::EntityHandle kFalling = scene.body(kCrate, {.y = 1, .c = 1});
         for (const world::TickRate kRate : {*world::TickRate::of(1, 60), *world::TickRate::of(2'000'000)}) {
             const auto kRan = scene.schedule->runTick(scene.world, scene.tick, kRate);
-            RAWFRAME_EXPECT(kRan.has_value() && kRan->failures.size() == 1 &&
-                            kRan->failures[0].system == kStepSystem &&
+            RAWFRAME_EXPECT(kRan.has_value() && kRan->failures.size() == 1 && kRan->failures[0].system == kStepSystem &&
                             kRan->failures[0].error.code() == code(Physics2DError::InvalidSettings));
         }
         RAWFRAME_EXPECT(scene.physics->statistics().steps == 0 && scene.physics->statistics().bodiesMade == 0);
