@@ -2,6 +2,13 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.8.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.0...v0.8.1) (2026-11-05)
+
+
+### Fixed
+
+* **studio:** start git without the variables that name a repository ([#227](https://github.com/Rawframe-Project/rawframe-engine/issues/227)) ([dff8e53](https://github.com/Rawframe-Project/rawframe-engine/commit/dff8e537adbfd1ee3fdedc203e65bb232502b4a2))
+
 ## [0.8.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.7.0...v0.8.0) (2026-11-05)
 
 This release moves the engine to Maul2D 1.3.1. Body poses step to the same bits as before, but the 2D physics digest changes for every world, and a few edge cases of 2D physics act differently. No wire, save, checkpoint or cooked format changes.
