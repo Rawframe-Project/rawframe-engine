@@ -68,6 +68,11 @@ int main(int argc, char** argv) {
         std::fputs(parent != nullptr ? parent : "none", stdout);
         return 0;
     }
+    if (kMode == "variable" && argc > 2) {
+        const char* value = std::getenv(argv[2]);
+        std::fputs(value != nullptr ? value : "none", stdout);
+        return 0;
+    }
     if (kMode == "wait") {
 #if defined(_WIN32)
         ::SetConsoleCtrlHandler(&askStopOnEvent, TRUE);

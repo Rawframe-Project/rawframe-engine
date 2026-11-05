@@ -16,6 +16,7 @@
 #endif
 
 using rawframe::process::Child;
+using rawframe::studio::gitRepositoryVariables;
 using rawframe::studio::mintedIdentity;
 using rawframe::studio::programOnPath;
 using rawframe::studio::VersionControl;
@@ -31,6 +32,19 @@ std::string pathVariable() {
     return kPath != nullptr ? kPath : "";
 }
 
+/// Sets this process's variable `name`, or removes it for an empty value.
+void setVariable(const char* name, const std::string& value) {
+#if defined(_WIN32)
+    ::_putenv_s(name, value.c_str());
+#else
+    if (value.empty()) {
+        ::unsetenv(name);
+    } else {
+        ::setenv(name, value.c_str(), 1);
+    }
+#endif
+}
+
 /// Git run to its end in `directory`, for the test's own setup.
 bool git(const std::filesystem::path& directory, std::vector<std::string> arguments) {
     const auto kProgram = programOnPath("git", pathVariable());
@@ -38,7 +52,7 @@ bool git(const std::filesystem::path& directory, std::vector<std::string> argume
         return false;
     }
     arguments.insert(arguments.begin(), {"-C", directory.string()});
-    auto child = Child::start({.program = *kProgram, .arguments = arguments});
+    auto child = Child::start({.program = *kProgram, .arguments = arguments, .withheld = gitRepositoryVariables()});
     for (int tick = 0; child.has_value() && tick < 1000; ++tick) {
         if (const auto kCode = child->exited()) {
             return *kCode == 0;
@@ -113,6 +127,11 @@ RAWFRAME_TEST(GitRunsOnlyInATrustedRepositoryAndNeverItsReadersPrograms) {
     const std::filesystem::path kOutput = kRoot / "git.out";
     std::filesystem::create_directories(kGame);
     std::filesystem::create_directories(kMarks);
+    // Started as a hook is, told another repository: git, given that,
+    // would make and use it instead of the game's.
+    const std::filesystem::path kElsewhere = kRoot / "elsewhere";
+    setVariable("GIT_DIR", (kElsewhere / ".git").string());
+    setVariable("GIT_WORK_TREE", kElsewhere.string());
     RAWFRAME_EXPECT(git(kGame, {"init", "--quiet"}));
     RAWFRAME_EXPECT(git(kGame, {"config", "user.name", "Author"}));
     RAWFRAME_EXPECT(git(kGame, {"config", "user.email", "author@example.com"}));
@@ -164,6 +183,9 @@ RAWFRAME_TEST(GitRunsOnlyInATrustedRepositoryAndNeverItsReadersPrograms) {
     RAWFRAME_EXPECT(runAll(control, kGame, kOutput) == 2);
     RAWFRAME_EXPECT(std::filesystem::exists(kMarks / "hook"));
     RAWFRAME_EXPECT(!std::filesystem::exists(kMarks / "monitor"));
+    RAWFRAME_EXPECT(!std::filesystem::exists(kElsewhere));
+    setVariable("GIT_DIR", "");
+    setVariable("GIT_WORK_TREE", "");
     std::filesystem::remove_all(kRoot, error);
 }
 #endif

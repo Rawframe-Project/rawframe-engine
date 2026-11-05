@@ -8,6 +8,24 @@
 
 namespace rawframe::studio {
 
+std::vector<std::string> gitRepositoryVariables() {
+    return {"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_CONFIG",
+            "GIT_CONFIG_PARAMETERS",
+            "GIT_CONFIG_COUNT",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_IMPLICIT_WORK_TREE",
+            "GIT_GRAFT_FILE",
+            "GIT_INDEX_FILE",
+            "GIT_NO_REPLACE_OBJECTS",
+            "GIT_REPLACE_REF_BASE",
+            "GIT_PREFIX",
+            "GIT_SHALLOW_FILE",
+            "GIT_COMMON_DIR"};
+}
+
 void VersionControl::ask(std::string purpose, std::vector<std::string> arguments) {
     if (!trusted_) {
         return;
@@ -39,8 +57,10 @@ std::optional<VersionControl::Refusal> VersionControl::start(std::string_view pa
     }
     auto [purpose, arguments] = std::move(waiting_.front());
     waiting_.pop_front();
-    auto started =
-        process::Child::start({.program = *kProgram, .arguments = words(directory, arguments), .output = output});
+    auto started = process::Child::start({.program = *kProgram,
+                                          .arguments = words(directory, arguments),
+                                          .output = output,
+                                          .withheld = gitRepositoryVariables()});
     if (!started.has_value()) {
         waiting_.clear();
         return Refusal{.kind = Refusal::Kind::Failed,

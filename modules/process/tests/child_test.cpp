@@ -1,7 +1,7 @@
 // Child processes: a child's exit code, its output and error in one
-// file, its arguments passed as they are (spaces, quotes, and UTF-8 too), a stop
-// request it answers as a Host does, a kill, a kill when its owner goes,
-// and a program that cannot be started.
+// file, its arguments passed as they are (spaces, quotes, and UTF-8 too), the
+// variables withheld from it, a stop request it answers as a Host does, a
+// kill, a kill when its owner goes, and a program that cannot be started.
 
 #include "rawframe/process/child.h"
 #include "rawframe/process/errors.h"
@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -132,6 +133,44 @@ RAWFRAME_TEST(AChildThatStopsWithThisIsToldWhoThisIs) {
         RAWFRAME_EXPECT(waitFor(*untold) == 0);
         RAWFRAME_EXPECT(test::readFile(kUntold.string()) == "none");
     }
+}
+
+RAWFRAME_TEST(AChildIsNotGivenTheVariablesWithheldFromIt) {
+    // Withheld by name, in any case on Windows, whose names ignore it; the
+    // others are given as they are.
+#if defined(_WIN32)
+    const auto kSet = [](const char* name, const char* value) {
+        ::_putenv_s(name, value);
+    };
+    const std::vector<std::string> kWithheld = {"rawframe_withheld"};
+#else
+    const auto kSet = [](const char* name, const char* value) {
+        if (value[0] == '\0') {
+            ::unsetenv(name);
+        } else {
+            ::setenv(name, value, 1);
+        }
+    };
+    const std::vector<std::string> kWithheld = {"RAWFRAME_WITHHELD"};
+#endif
+    kSet("RAWFRAME_WITHHELD", "held");
+    kSet("RAWFRAME_GIVEN", "given");
+    const auto kRead = [&kWithheld](const char* name, const char* file) {
+        const std::filesystem::path kRead = scratch(file);
+        auto read = Child::start({.program = RAWFRAME_PROCESS_CHILD,
+                                  .arguments = {"variable", name},
+                                  .output = kRead,
+                                  .withheld = kWithheld});
+        RAWFRAME_EXPECT(startedAll(read));
+        if (read.has_value()) {
+            RAWFRAME_EXPECT(waitFor(*read) == 0);
+        }
+        return test::readFile(kRead.string());
+    };
+    RAWFRAME_EXPECT(kRead("RAWFRAME_WITHHELD", "withheld.txt") == "none");
+    RAWFRAME_EXPECT(kRead("RAWFRAME_GIVEN", "given.txt") == "given");
+    kSet("RAWFRAME_WITHHELD", "");
+    kSet("RAWFRAME_GIVEN", "");
 }
 
 RAWFRAME_TEST(AChildStopsWhenAskedAndIsKilledOtherwise) {

@@ -2,6 +2,7 @@
 
 #include "rawframe/process/errors.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -65,17 +66,36 @@ void appendQuoted(std::wstring& line, const std::wstring& argument) {
     line += L'"';
 }
 
-/// This process's environment as a block CreateProcessW takes, with its
-/// identity for a child that stops with it and the child's own stop
-/// event in place of any it was given itself.
+/// Whether `entry`, a NAME=value of the environment, names one of `names`;
+/// Windows's names ignore case.
+bool withheld(std::wstring_view entry, const std::vector<std::wstring>& names) {
+    // A name may begin with '=' on Windows (the shell's per-drive
+    // directories), so its own '=' is the first after its first character.
+    const std::size_t kEnd = entry.find(L'=', 1);
+    const std::wstring_view kName = entry.substr(0, kEnd);
+    return std::ranges::any_of(names, [kName](const std::wstring& name) {
+        return ::CompareStringOrdinal(
+                   kName.data(), static_cast<int>(kName.size()), name.data(), static_cast<int>(name.size()), TRUE) ==
+               CSTR_EQUAL;
+    });
+}
+
+/// This process's environment as a block CreateProcessW takes, without the
+/// variables the child is not given, with its identity for a child that
+/// stops with it and the child's own stop event in place of any it was
+/// given itself.
 std::wstring environmentFor(const ChildSettings& settings, HANDLE stop) {
     const std::wstring kParent = wide(std::string{kParentVariable} + "=");
     const std::wstring kStop = wide(std::string{kStopVariable} + "=");
+    std::vector<std::wstring> names;
+    for (const std::string& each : settings.withheld) {
+        names.push_back(wide(each));
+    }
     std::wstring block;
     if (wchar_t* strings = ::GetEnvironmentStringsW(); strings != nullptr) {
         for (const wchar_t* each = strings; *each != L'\0'; each += std::wstring_view{each}.size() + 1) {
             const std::wstring_view kEntry{each};
-            if (!kEntry.starts_with(kParent) && !kEntry.starts_with(kStop)) {
+            if (!kEntry.starts_with(kParent) && !kEntry.starts_with(kStop) && !withheld(kEntry, names)) {
                 block.append(kEntry);
                 block += L'\0';
             }
@@ -294,12 +314,16 @@ result::Result<Child> Child::start(const ChildSettings& settings) {
     if (failed == 0) {
         failed = posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
     }
-    // This process's environment, with its identity for a child that stops
-    // with it in place of any it was given itself.
+    // This process's environment without the variables the child is not
+    // given, with its identity for a child that stops with it in place of
+    // any it was given itself.
     std::vector<std::string> told;
     const std::string kParentPrefix = std::string{kParentVariable} + "=";
     for (char** each = environ; *each != nullptr; ++each) {
-        if (std::string_view{*each}.substr(0, kParentPrefix.size()) != kParentPrefix) {
+        const std::string_view kEntry{*each};
+        const std::string_view kName = kEntry.substr(0, kEntry.find('='));
+        if (kEntry.substr(0, kParentPrefix.size()) != kParentPrefix &&
+            std::ranges::find(settings.withheld, kName) == settings.withheld.end()) {
             told.emplace_back(*each);
         }
     }
