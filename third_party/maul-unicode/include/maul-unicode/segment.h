@@ -36,7 +36,9 @@ extern "C"
     // An iterator over grapheme cluster, word or sentence boundaries or
     // line break opportunities. Its contents are private; it is plain data
     // the caller keeps anywhere, usually on the stack, and needs no
-    // cleanup.
+    // cleanup. A copy of an iterator an init call set up is one too; every
+    // call refuses one no init call set up, such as a zeroed one or one
+    // copied from other bytes, as an invalid argument.
     typedef struct muniSegmentIterator
     {
         uint64_t opaque[16];
@@ -192,7 +194,8 @@ extern "C"
     /// @return `muni_success`; `muni_errorState` for an iterator already
     ///         asked for a break; `muni_errorBusy` when called from inside
     ///         the iterator's word segmenter; `muni_errorInvalid` for a NULL
-    ///         iterator or another kind of iterator. `muni_errorInvalid` is
+    ///         iterator, one no init call set up or another kind of
+    ///         iterator. `muni_errorInvalid` is
     ///         reported before `muni_errorBusy`, and that before
     ///         `muni_errorState`.
     /// @par Thread safety
@@ -236,7 +239,8 @@ extern "C"
     ///                   assigns.
     /// @return `muni_success`; `muni_errorState` for an iterator already
     ///         asked for a boundary; `muni_errorInvalid` for a NULL
-    ///         iterator, NULL overrides with a nonzero count, another kind
+    ///         iterator or one no init call set up, NULL overrides with a
+    ///         nonzero count, another kind
     ///         of iterator, a count over 0x10F800, a code point past
     ///         U+10FFFF or a surrogate, code points out of order or
     ///         repeated, or a value that is not a class of the iterator's
@@ -257,7 +261,8 @@ extern "C"
     /// @return `muni_success`; `muni_errorState` for an iterator already
     ///         asked for a break; `muni_errorBusy` when called from inside
     ///         the iterator's word segmenter; `muni_errorInvalid` for a NULL
-    ///         iterator, another kind of iterator or an unknown strictness.
+    ///         iterator, one no init call set up, another kind of iterator
+    ///         or an unknown strictness.
     ///         `muni_errorInvalid` is reported before `muni_errorBusy`, and
     ///         that before `muni_errorState`.
     /// @par Thread safety
@@ -270,7 +275,8 @@ extern "C"
     /// @param iterator  The iterator.
     /// @return The strictness muniSegmentIterator_SetLineBreakStrictness
     ///         set, muni_lineBreakNormal when none was set, and for a NULL
-    ///         iterator or another kind of iterator.
+    ///         iterator, one no init call set up or another kind of
+    ///         iterator.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_API muniLineBreakStrictness
@@ -284,7 +290,8 @@ extern "C"
     /// @return `muni_success`; `muni_errorState` for an iterator already
     ///         asked for a break; `muni_errorBusy` when called from inside
     ///         the iterator's word segmenter; `muni_errorInvalid` for a NULL
-    ///         iterator, another kind of iterator or an unknown writing
+    ///         iterator, one no init call set up, another kind of iterator
+    ///         or an unknown writing
     ///         system. `muni_errorInvalid` is reported before
     ///         `muni_errorBusy`, and that before `muni_errorState`.
     /// @par Thread safety
@@ -296,8 +303,8 @@ extern "C"
     ///
     /// @param iterator  The iterator.
     /// @return The writing system muniSegmentIterator_SetWritingSystem set,
-    ///         muni_writingOther when none was set, and for a NULL iterator
-    ///         or another kind of iterator.
+    ///         muni_writingOther when none was set, and for a NULL iterator,
+    ///         one no init call set up or another kind of iterator.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_API muniWritingSystem
@@ -314,9 +321,9 @@ extern "C"
     ///         not ask for more text, such as one initialized without more
     ///         text to follow or one fed before it asked; `muni_errorBusy`
     ///         when called from inside the iterator's word segmenter;
-    ///         `muni_errorInvalid` for a NULL argument. `muni_errorInvalid`
-    ///         is reported before `muni_errorBusy`, and that before
-    ///         `muni_errorState`.
+    ///         `muni_errorInvalid` for a NULL argument or an iterator no
+    ///         init call set up. `muni_errorInvalid` is reported before
+    ///         `muni_errorBusy`, and that before `muni_errorState`.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_NODISCARD MUNI_API muniResult muniSegmentIterator_Feed(muniSegmentIterator* iterator,
@@ -333,7 +340,8 @@ extern "C"
     ///         one; `muni_needMoreText` when the next boundary depends on
     ///         text not yet fed; `muni_errorBusy` when called from inside
     ///         the iterator's word segmenter, and then the iterator is left
-    ///         as it was; `muni_errorInvalid` for a NULL argument.
+    ///         as it was; `muni_errorInvalid` for a NULL argument or an
+    ///         iterator no init call set up.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_NODISCARD MUNI_API muniResult muniSegmentIterator_NextBreak(muniSegmentIterator* iterator,
@@ -390,7 +398,8 @@ extern "C"
     ///                  `muni_success`.
     /// @return `muni_success`; `muni_errorBusy` when called from inside the
     ///         iterator's word segmenter; `muni_errorInvalid` for a NULL
-    ///         argument or an iterator of another kind.
+    ///         argument, an iterator no init call set up or one of another
+    ///         kind.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_NODISCARD MUNI_API muniResult

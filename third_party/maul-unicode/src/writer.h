@@ -10,6 +10,8 @@
 #ifndef MAUL_UNICODE_SRC_WRITER_H
 #define MAUL_UNICODE_SRC_WRITER_H
 
+#include "maul-unicode/base.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -67,7 +69,7 @@ static inline void muniWriterPut(muniWriter* writer, uint32_t codePoint)
 }
 
 // Whether the whole output fit in the buffer.
-static inline bool muniWriterFits(const muniWriter* writer)
+MUNI_NODISCARD static inline bool muniWriterFits(const muniWriter* writer)
 {
     return writer->needed <= writer->capacity && writer->needed != SIZE_MAX;
 }

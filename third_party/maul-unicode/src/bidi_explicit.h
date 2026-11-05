@@ -25,6 +25,6 @@ uint8_t muniBidiFirstStrongLevel(const muniBidiParagraph* paragraph, size_t inde
 // Returns false when the implicit phase can only give level 0 everywhere:
 // the paragraph level is 0 and no code point is R, AL, AN or an explicit
 // formatting character, so every class resolves to L.
-bool muniBidiResolveExplicit(const muniBidiParagraph* paragraph);
+MUNI_NODISCARD bool muniBidiResolveExplicit(const muniBidiParagraph* paragraph);
 
 #endif // MAUL_UNICODE_SRC_BIDI_EXPLICIT_H

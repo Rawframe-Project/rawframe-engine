@@ -13,12 +13,12 @@
 
 #include <string.h>
 
-static bool IsHighSurrogate(uint32_t unit)
+MUNI_NODISCARD static bool IsHighSurrogate(uint32_t unit)
 {
     return unit >= 0xD800 && unit <= 0xDBFF;
 }
 
-static bool IsLowSurrogate(uint32_t unit)
+MUNI_NODISCARD static bool IsLowSurrogate(uint32_t unit)
 {
     return unit >= 0xDC00 && unit <= 0xDFFF;
 }
@@ -294,8 +294,9 @@ static muniTextResult Finish(size_t needed, size_t capacity, size_t stopped, siz
     return (muniTextResult){fits ? muni_success : muni_errorCapacity, stopped};
 }
 
-static bool BadArguments(const void* input, size_t length, const void* output, size_t capacity,
-                         muniConvertMode mode, const size_t* neededOut)
+MUNI_NODISCARD static bool BadArguments(const void* input, size_t length, const void* output,
+                                        size_t capacity, muniConvertMode mode,
+                                        const size_t* neededOut)
 {
     return (input == nullptr && length != 0) || (output == nullptr && capacity != 0) ||
            neededOut == nullptr || (uint32_t)mode > muni_convertReplace;

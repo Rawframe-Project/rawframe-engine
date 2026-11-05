@@ -9,14 +9,16 @@
 #ifndef MAUL_UNICODE_SRC_OVERLAP_H
 #define MAUL_UNICODE_SRC_OVERLAP_H
 
+#include "maul-unicode/base.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 // Whether count1 elements at one and count2 at two, each size bytes,
 // share a byte. An empty array overlaps nothing.
-static inline bool muniOverlaps(const void* one, size_t count1, const void* two, size_t count2,
-                                size_t size)
+MUNI_NODISCARD static inline bool muniOverlaps(const void* one, size_t count1, const void* two,
+                                               size_t count2, size_t size)
 {
     uintptr_t a = (uintptr_t)one;
     uintptr_t b = (uintptr_t)two;

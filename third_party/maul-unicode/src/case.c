@@ -114,7 +114,7 @@ static uint32_t Decode(const Converter* converter, size_t offset, size_t* sizeOu
 }
 
 // Final_Sigma after the sigma: no cased letter follows past case-ignorables.
-static bool EndsWord(const Converter* converter, size_t offset)
+MUNI_NODISCARD static bool EndsWord(const Converter* converter, size_t offset)
 {
     while (offset < converter->length)
     {
@@ -134,7 +134,7 @@ static bool EndsWord(const Converter* converter, size_t offset)
 }
 
 // Before_Dot: a U+0307 follows, past marks of classes other than 0 and 230.
-static bool BeforeDot(const Converter* converter, size_t offset)
+MUNI_NODISCARD static bool BeforeDot(const Converter* converter, size_t offset)
 {
     while (offset < converter->length)
     {
@@ -156,7 +156,7 @@ static bool BeforeDot(const Converter* converter, size_t offset)
 
 // More_Above: a mark of class 230 follows, past marks of other classes
 // but 0.
-static bool MoreAbove(const Converter* converter, size_t offset)
+MUNI_NODISCARD static bool MoreAbove(const Converter* converter, size_t offset)
 {
     while (offset < converter->length)
     {
@@ -171,7 +171,7 @@ static bool MoreAbove(const Converter* converter, size_t offset)
     return false;
 }
 
-static bool IsSoftDotted(uint32_t codePoint)
+MUNI_NODISCARD static bool IsSoftDotted(uint32_t codePoint)
 {
     uint32_t low = 0;
     uint32_t high = muniSoftDottedCount;
@@ -197,7 +197,7 @@ static bool IsSoftDotted(uint32_t codePoint)
 
 // Lithuanian lowercasing keeps the dot of an i or a j that other accents
 // above follow, writing it out; true when it applied.
-static bool PutLithuanianLower(Converter* converter, uint32_t codePoint, size_t next)
+MUNI_NODISCARD static bool PutLithuanianLower(Converter* converter, uint32_t codePoint, size_t next)
 {
     uint32_t accent = codePoint == CAPITAL_I_GRAVE   ? COMBINING_GRAVE
                       : codePoint == CAPITAL_I_ACUTE ? COMBINING_ACUTE

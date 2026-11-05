@@ -13,11 +13,131 @@
 #include <stddef.h>
 #include <string.h>
 
-static muniSegmenter Load(const muniSegmentIterator* iterator)
+// What an init call writes in the cursor's cookie, in bytes that were its
+// padding, so that an iterator no init call set up is refused instead of
+// read. Its top bit is set, so a small count or an ASCII byte pattern is
+// no cookie; the checks after it keep any other bit pattern safe too.
+#define COOKIE 0xC5E6u
+
+// The most overrides a table can hold: one per scalar value, since its
+// code points strictly increase.
+#define MAX_OVERRIDES 0x10F800u
+
+// The byte at offset in the iterator in caller memory. The flags are
+// checked as these bytes, before the copy is read as bools. Reading them
+// from the iterator rather than the copy just made of it keeps each load
+// from waiting on the copy's stores.
+static inline unsigned Byte(const muniSegmentIterator* iterator, size_t offset)
 {
-    muniSegmenter segmenter;
-    memcpy(&segmenter, iterator, sizeof(segmenter));
-    return segmenter;
+    return ((const unsigned char*)iterator)[offset];
+}
+
+// Whether the rules of a segmenter copied out of iterator hold what their
+// rule set writes, each flag's byte a 0 or 1 included.
+MUNI_NODISCARD static MUNI_ALWAYS_INLINE bool RulesValid(const muniSegmenter* segmenter,
+                                                         const muniSegmentIterator* iterator)
+{
+    switch (segmenter->kind)
+    {
+    case muni_segmentGrapheme:
+    {
+        const muniGraphemeRules* rules = &segmenter->rules.grapheme;
+        return segmenter->lineSettings == 0 && segmenter->holdKind == 0 &&
+               rules->previous <= muni_gcbLvt && rules->emoji <= muni_graphemeEmojiLast &&
+               (Byte(iterator, offsetof(muniSegmenter, rules.grapheme.linker)) |
+                Byte(iterator, offsetof(muniSegmenter, rules.grapheme.oddRegional))) <= 1;
+    }
+    case muni_segmentWord:
+    {
+        const muniWordRules* rules = &segmenter->rules.word;
+        uint32_t count = rules->overrideCount;
+        return segmenter->lineSettings == 0 && segmenter->holdKind == 0 &&
+               rules->actual <= muni_wbWSegSpace && rules->previous <= muni_wbWSegSpace &&
+               rules->before <= muni_wbWSegSpace && rules->kind <= muni_wordIdeograph &&
+               rules->reportedKind <= muni_wordIdeograph && count <= MAX_OVERRIDES &&
+               (count == 0 || segmenter->overrides != nullptr) &&
+               Byte(iterator, offsetof(muniSegmenter, rules.word.oddRegional)) <= 1;
+    }
+    case muni_segmentSentence:
+    {
+        const muniSentenceRules* rules = &segmenter->rules.sentence;
+        uint32_t count = rules->overrideCount;
+        return segmenter->lineSettings == 0 && segmenter->holdKind == 0 &&
+               rules->actual <= muni_sbClose && rules->previous <= muni_sbClose &&
+               rules->before <= muni_sbClose && rules->ending <= muni_sentenceEndingLast &&
+               count <= MAX_OVERRIDES && (count == 0 || segmenter->overrides != nullptr) &&
+               Byte(iterator, offsetof(muniSegmenter, rules.sentence.aterm)) <= 1;
+    }
+    case muni_segmentLine:
+    {
+        // Breaking anywhere keeps the grapheme rules where the other
+        // settings keep the classes before the position.
+        const muniLineRules* rules = &segmenter->rules.line;
+        if (segmenter->lineSettings >> 3 != 0 || rules->actual > muni_lbHh)
+        {
+            return false;
+        }
+        if (muniLineStrictness(segmenter) == muni_lineBreakAnywhere)
+        {
+            return segmenter->holdKind == 0 && rules->grapheme.previous <= muni_gcbLvt &&
+                   rules->grapheme.emoji <= muni_graphemeEmojiLast &&
+                   (Byte(iterator, offsetof(muniSegmenter, rules.line.grapheme.linker)) |
+                    Byte(iterator, offsetof(muniSegmenter, rules.line.grapheme.oddRegional))) <= 1;
+        }
+        return segmenter->holdKind <= muni_lineHoldLast && rules->previous <= muni_lbHh &&
+               rules->before <= muni_lbHh && rules->lead <= muni_lbHh &&
+               rules->number <= muni_lineNumberLast &&
+               (Byte(iterator, offsetof(muniSegmenter, rules.line.leadInitialQuote)) |
+                Byte(iterator, offsetof(muniSegmenter, rules.line.sawInfix)) |
+                Byte(iterator, offsetof(muniSegmenter, rules.line.oddRegional))) <= 1;
+    }
+    default:
+        return false;
+    }
+}
+
+// Copies the iterator's state out of caller memory when it is one an
+// init call set up and every flag, count and value in it is in range, so
+// that no bit pattern makes a call read outside the state or the text
+// and overrides it names; false otherwise. An iterator with the cookie
+// whose fields were changed by hand is outside the contract, and how its
+// fields agree with each other is not checked again. Every call reads
+// most of the state, so all of it is checked, inline in each call so that
+// the copy stays inline too.
+MUNI_NODISCARD static MUNI_ALWAYS_INLINE bool Load(const muniSegmentIterator* iterator,
+                                                   muniSegmenter* segmenterOut)
+{
+    memcpy(segmenterOut, iterator, sizeof(*segmenterOut));
+    const muniSegmenter* segmenter = segmenterOut;
+    const muniCursor* cursor = &segmenter->cursor;
+    size_t at = offsetof(muniSegmenter, cursor);
+    unsigned more = Byte(iterator, at + offsetof(muniCursor, moreFollows));
+    unsigned started = Byte(iterator, offsetof(muniSegmenter, started));
+    unsigned holding = Byte(iterator, offsetof(muniSegmenter, holding));
+    if (cursor->cookie != COOKIE || segmenter->phase > muni_phaseBusy ||
+        (more | started | holding | Byte(iterator, offsetof(muniSegmenter, endReported)) |
+         Byte(iterator, offsetof(muniSegmenter, mandatory))) > 1 ||
+        cursor->pendingCount > sizeof(cursor->pending) || cursor->position > cursor->length ||
+        (cursor->text == nullptr && cursor->length != 0))
+    {
+        return false;
+    }
+    // A waiting cursor holds less than a code point, as muniCursorFeed
+    // relies on; a boundary lies after a code point and a hold before the
+    // cursor, as the engine's assertions do; an SA run starts at or before
+    // the cursor, so the offset its breaker is asked about lies in the run.
+    size_t offset = cursor->offset;
+    const muniComplexRun* run = &segmenter->complex;
+    if ((segmenter->phase == muni_phaseWaiting &&
+         (more == 0 ||
+          cursor->pendingCount + (cursor->length - cursor->position) >= sizeof(cursor->pending))) ||
+        (started != 0 && offset == 0) ||
+        (holding != 0 && (segmenter->heldOffset == 0 || segmenter->heldOffset >= offset)) ||
+        (run->text != nullptr && (run->next > run->length || run->start > offset)))
+    {
+        return false;
+    }
+    return RulesValid(segmenter, iterator);
 }
 
 static void Store(muniSegmentIterator* iterator, const muniSegmenter* segmenter)
@@ -49,6 +169,7 @@ static muniResult Init(muniSegmentIterator* iterator, uint8_t kind, const char* 
     memset(&segmenter, 0, sizeof(segmenter));
     segmenter.kind = kind;
     muniCursorInit(&segmenter.cursor, text, length, moreFollows);
+    segmenter.cursor.cookie = COOKIE;
     memset(iterator, 0, sizeof(*iterator));
     Store(iterator, &segmenter);
     return muni_success;
@@ -85,7 +206,11 @@ muniResult muniSegmentIterator_SetComplexBreaker(muniSegmentIterator* iterator,
     {
         return muni_errorInvalid;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_errorInvalid;
+    }
     bool supported = segmenter.kind == muni_segmentLine || segmenter.kind == muni_segmentWord;
     if (!supported)
     {
@@ -105,14 +230,10 @@ muniResult muniSegmentIterator_SetComplexBreaker(muniSegmentIterator* iterator,
     return muni_success;
 }
 
-// The most overrides a table can hold: one per scalar value, since its
-// code points strictly increase.
-#define MAX_OVERRIDES 0x10F800u
-
 // Whether a table of overrides is in strictly increasing order of code
 // point and names only code points and known classes: up to classCount.
-static bool ValidOverrides(const muniBreakClassOverride* overrides, size_t count,
-                           uint8_t classCount)
+MUNI_NODISCARD static bool ValidOverrides(const muniBreakClassOverride* overrides, size_t count,
+                                          uint8_t classCount)
 {
     for (size_t i = 0; i < count; ++i)
     {
@@ -135,7 +256,11 @@ muniResult muniSegmentIterator_SetBreakClassOverrides(muniSegmentIterator* itera
     {
         return muni_errorInvalid;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_errorInvalid;
+    }
     uint32_t* countField = nullptr;
     uint8_t classCount = 0;
     if (segmenter.kind == muni_segmentWord)
@@ -176,7 +301,11 @@ static muniResult SetLineSettings(muniSegmentIterator* iterator, int32_t value, 
     {
         return muni_errorInvalid;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_errorInvalid;
+    }
     if (segmenter.kind != muni_segmentLine)
     {
         return muni_errorInvalid;
@@ -208,7 +337,11 @@ muniSegmentIterator_GetLineBreakStrictness(const muniSegmentIterator* iterator)
     {
         return muni_lineBreakNormal;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_lineBreakNormal;
+    }
     return segmenter.kind == muni_segmentLine ? muniLineStrictness(&segmenter)
                                               : muni_lineBreakNormal;
 }
@@ -226,7 +359,11 @@ muniWritingSystem muniSegmentIterator_GetWritingSystem(const muniSegmentIterator
     {
         return muni_writingOther;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_writingOther;
+    }
     return segmenter.kind == muni_segmentLine ? muniLineWritingSystem(&segmenter)
                                               : muni_writingOther;
 }
@@ -238,7 +375,11 @@ muniResult muniSegmentIterator_Feed(muniSegmentIterator* iterator, const char* t
     {
         return muni_errorInvalid;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_errorInvalid;
+    }
     if (segmenter.phase == muni_phaseBusy)
     {
         return muni_errorBusy;
@@ -283,7 +424,11 @@ muniResult muniSegmentIterator_NextBreak(muniSegmentIterator* iterator, size_t* 
     {
         return muni_errorInvalid;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_errorInvalid;
+    }
     if (segmenter.phase == muni_phaseBusy)
     {
         return muni_errorBusy;
@@ -302,7 +447,11 @@ muniResult muniSegmentIterator_NextLineBreak(muniSegmentIterator* iterator, size
     {
         return muni_errorInvalid;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_errorInvalid;
+    }
     if (segmenter.kind != muni_segmentLine)
     {
         return muni_errorInvalid;
@@ -380,7 +529,11 @@ muniResult muniSegmentIterator_GetWordKind(const muniSegmentIterator* iterator,
     {
         return muni_errorInvalid;
     }
-    muniSegmenter segmenter = Load(iterator);
+    muniSegmenter segmenter;
+    if (!Load(iterator, &segmenter))
+    {
+        return muni_errorInvalid;
+    }
     if (segmenter.kind != muni_segmentWord)
     {
         return muni_errorInvalid;

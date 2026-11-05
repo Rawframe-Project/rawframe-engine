@@ -236,7 +236,7 @@ static void AddForward(Skeleton* skeleton, size_t start, size_t end)
     }
 }
 
-static bool IsMark(uint32_t codePoint)
+MUNI_NODISCARD static bool IsMark(uint32_t codePoint)
 {
     uint8_t category = muniLookupGeneralCategory(codePoint);
     return category == muni_gcMn || category == muni_gcMc || category == muni_gcMe;
@@ -309,7 +309,8 @@ static void AddStretch(Skeleton* skeleton, size_t start, size_t end, uint8_t lev
 
 // Whether the text needs bidi: a right-to-left paragraph, or a code
 // point that can open an odd level.
-static bool NeedsBidi(const uint8_t* text, size_t length, muniBidiDirection direction)
+MUNI_NODISCARD static bool NeedsBidi(const uint8_t* text, size_t length,
+                                     muniBidiDirection direction)
 {
     if (direction == muni_bidiRightToLeft)
     {

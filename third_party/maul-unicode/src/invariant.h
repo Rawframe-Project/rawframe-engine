@@ -18,4 +18,10 @@
 #define MUNI_ASSERT(condition) ((condition) ? (void)0 : __builtin_trap())
 #endif
 
+// MUNI_ALWAYS_INLINE asks that a small function be inlined into every
+// caller, for a check on a call's hot path that the compiler would
+// otherwise leave as a call of its own. Every compiler the family builds
+// with, clang-cl included, takes the attribute.
+#define MUNI_ALWAYS_INLINE inline __attribute__((always_inline))
+
 #endif // MAUL_UNICODE_SRC_INVARIANT_H

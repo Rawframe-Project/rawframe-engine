@@ -22,6 +22,8 @@ enum
     EndingTerm = 1,  // SATerm Close*
     EndingSpace = 2, // SATerm Close* Sp+
 };
+static_assert((int)EndingSpace == (int)muni_sentenceEndingLast,
+              "segment.c checks the ending up to it");
 
 enum
 {
@@ -33,7 +35,7 @@ enum
     Stops = BIT(muni_sbOLetter) | BIT(muni_sbUpper) | ParaSep | SATerm,
 };
 
-static bool In(uint8_t value, uint32_t set)
+MUNI_NODISCARD static bool In(uint8_t value, uint32_t set)
 {
     return ((set >> (value & 31u)) & 1u) != 0;
 }

@@ -20,7 +20,7 @@ enum : uint32_t
     Hard = BIT(muni_lbBk) | BIT(muni_lbCr) | BIT(muni_lbLf) | BIT(muni_lbNl),
 };
 
-static bool In(uint8_t value, uint32_t set)
+MUNI_NODISCARD static bool In(uint8_t value, uint32_t set)
 {
     return value < 32 && ((set >> value) & 1u) != 0;
 }

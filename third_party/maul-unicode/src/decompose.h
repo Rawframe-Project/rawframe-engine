@@ -16,21 +16,22 @@
 // The canonical mapping of codePoint, one level deep: two code points,
 // or one with secondOut 0; false when it has none. Hangul syllables map
 // to LV + T or L + V, as HarfBuzz expects.
-bool muniCanonicalMapping(uint32_t codePoint, uint32_t* firstOut, uint32_t* secondOut);
+MUNI_NODISCARD bool muniCanonicalMapping(uint32_t codePoint, uint32_t* firstOut,
+                                         uint32_t* secondOut);
 
 // The primary composite of first and second, or 0 when there is none.
 uint32_t muniComposeCanonical(uint32_t first, uint32_t second);
 
 // Whether codePoint may combine with what precedes it (NFC_QC=Maybe).
-bool muniCombinesBackward(uint32_t codePoint);
+MUNI_NODISCARD bool muniCombinesBackward(uint32_t codePoint);
 
 // Whether the full decomposition of codePoint uses a compatibility
 // mapping somewhere, so NFKD differs from NFD for it.
-bool muniUsesCompatibility(uint32_t codePoint);
+MUNI_NODISCARD bool muniUsesCompatibility(uint32_t codePoint);
 
 // Whether codePoint has a canonical decomposition that NFC does not
 // recompose: a singleton or a pair excluded from composition.
-bool muniIsCompositionExcluded(uint32_t codePoint);
+MUNI_NODISCARD bool muniIsCompositionExcluded(uint32_t codePoint);
 
 // Writes the full decomposition of codePoint (NFD, or NFKD with
 // compatibility) into out, which holds MUNI_MAX_DECOMPOSITION code points,

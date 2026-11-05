@@ -110,6 +110,17 @@ typedef struct muniLineRules
     bool oddRegional;      // an odd number of regional indicators precedes
 } muniLineRules;
 
+// The last value each rule set writes in its states, for the check of an
+// iterator the caller holds; each rule set ties its own enumeration to
+// these with a static_assert.
+enum
+{
+    muni_graphemeEmojiLast = 2,  // grapheme.c's EmojiJoined
+    muni_sentenceEndingLast = 2, // sentence.c's EndingSpace
+    muni_lineNumberLast = 2,     // line_rules.h's NumberClosed
+    muni_lineHoldLast = 4,       // line_rules.h's HoldAksara
+};
+
 // A run of Thai, Lao, Khmer or Burmese (Line_Break=SA) that a caller's
 // breaker segments. The run lies in the current piece.
 typedef struct muniComplexRun
@@ -149,8 +160,15 @@ typedef struct muniSegmenter
     const muniBreakClassOverride* overrides;
 } muniSegmenter;
 
+// The public iterator's size follows the segmenter: it holds it on every
+// target, and on 64-bit targets, where the segmenter is largest, it has
+// no whole uint64_t to spare. A change that breaks either resizes the
+// public iterator, which a minor release may do.
 static_assert(sizeof(muniSegmenter) <= sizeof(muniSegmentIterator),
               "the public iterator must hold the segmenter");
+static_assert(sizeof(void*) < 8 ||
+                  sizeof(muniSegmentIterator) - sizeof(muniSegmenter) < sizeof(uint64_t),
+              "the public iterator must be no larger than the segmenter needs");
 
 // The parts of lineSettings: a muni_lineBreak value in the low two bits,
 // a muni_writing value in the third.

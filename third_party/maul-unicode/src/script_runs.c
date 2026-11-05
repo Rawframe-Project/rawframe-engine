@@ -10,34 +10,13 @@
 // a closing bracket that matches one counts as a code point of that
 // script, so "(" and ")" around foreign text land in the same script.
 
-#include "cursor.h"
 #include "invariant.h"
+#include "script_state.h"
 #include "tables.h"
 
 #include "maul-unicode/script.h"
 
 #include <string.h>
-
-#define BRACKET_DEPTH 32
-#define NO_SCRIPT     0xFFu
-
-typedef struct Scripts
-{
-    uint64_t bits[4];
-} Scripts;
-
-typedef struct ScriptState
-{
-    muniCursor cursor;
-    Scripts candidates;               // the scripts the run can still have
-    uint32_t brackets[BRACKET_DEPTH]; // closing bracket << 8 | Script index or NO_SCRIPT
-    uint8_t bracketCount;
-    uint8_t firstScript; // the Script of the run's first code point that has one
-    bool determined;     // a code point with a real script is in the run
-    bool started;        // a code point has been read
-    bool waiting;        // the last call returned muni_needMoreText
-    bool finished;       // the last run has been reported
-} ScriptState;
 
 // The public iterator's size follows the state: it holds the state on
 // every target, and on 64-bit targets, where the state is largest, it
@@ -51,7 +30,7 @@ static_assert(sizeof(void*) < 8 ||
                   sizeof(muniScriptIterator) - sizeof(ScriptState) < sizeof(uint64_t),
               "the public iterator must be no larger than the state needs");
 
-static bool IsNeutral(uint8_t script)
+MUNI_NODISCARD static bool IsNeutral(uint8_t script)
 {
     uint32_t tag = muniScriptTags[script];
     return tag == MUNI_SCRIPT_COMMON || tag == MUNI_SCRIPT_INHERITED;
@@ -62,14 +41,14 @@ static void Add(Scripts* scripts, uint8_t script)
     scripts->bits[script >> 6] |= (uint64_t)1 << (script & 63);
 }
 
-static bool Has(const Scripts* scripts, uint8_t script)
+MUNI_NODISCARD static bool Has(const Scripts* scripts, uint8_t script)
 {
     return (scripts->bits[script >> 6] >> (script & 63) & 1) != 0;
 }
 
 // The scripts a code point belongs to; false for Common and Inherited
 // code points without extensions, which join any run.
-static bool ScriptsOf(uint32_t codePoint, uint8_t* scriptOut, Scripts* scriptsOut)
+MUNI_NODISCARD static bool ScriptsOf(uint32_t codePoint, uint8_t* scriptOut, Scripts* scriptsOut)
 {
     uint8_t script = muniLookupScript(codePoint);
     uint8_t set = muniLookupScriptExtensions(codePoint);
@@ -158,7 +137,8 @@ static void SettlePending(ScriptState* state)
 // Brackets among neutral code points: an opening one is pushed, and a
 // closing one that matches takes its script. Returns whether the code
 // point now has a script.
-static bool Bracket(ScriptState* state, uint32_t codePoint, uint8_t* scriptOut, Scripts* scriptsOut)
+MUNI_NODISCARD static bool Bracket(ScriptState* state, uint32_t codePoint, uint8_t* scriptOut,
+                                   Scripts* scriptsOut)
 {
     uint8_t type = muniLookupBidiBracket(codePoint);
     if (type == muni_bracketOpen)
@@ -193,7 +173,7 @@ static void StartRun(ScriptState* state, uint8_t script, const Scripts* scripts)
 }
 
 // Reads code points until a run ends; true with the run when one does.
-static bool Step(ScriptState* state, uint32_t codePoint, muniScriptRun* runOut)
+MUNI_NODISCARD static bool Step(ScriptState* state, uint32_t codePoint, muniScriptRun* runOut)
 {
     uint8_t script;
     Scripts scripts;
@@ -265,11 +245,67 @@ static muniResult Next(ScriptState* state, muniScriptRun* runOut)
     }
 }
 
-static ScriptState Load(const muniScriptIterator* iterator)
+// What an init call writes in the cursor's cookie, in bytes that were its
+// padding, so that an iterator no init call set up is refused instead of
+// read. Its top bit is set, so a small count or an ASCII byte pattern is
+// no cookie; the checks after it keep any other bit pattern safe too.
+#define COOKIE 0xB3D0u
+
+// Whether a script index names one of muniScriptTags, or is NO_SCRIPT
+// where that is allowed.
+MUNI_NODISCARD static bool IsScript(uint8_t script, bool none)
 {
-    ScriptState state;
-    memcpy(&state, iterator, sizeof(state));
-    return state;
+    return script < muniScriptTagCount || (none && script == NO_SCRIPT);
+}
+
+// Copies the iterator's state out of caller memory when it is one an
+// init call set up and every flag, count and script in it is in range,
+// so that no bit pattern makes a call read outside the state, the text
+// it names or the script tables; false otherwise. An iterator with the
+// cookie whose fields were changed by hand is outside the contract, and
+// how its fields agree with each other is not checked again.
+MUNI_NODISCARD static bool Load(const muniScriptIterator* iterator, ScriptState* stateOut)
+{
+    memcpy(stateOut, iterator, sizeof(*stateOut));
+    const ScriptState* state = stateOut;
+    if (state->cursor.cookie != COOKIE ||
+        !muniIsFlagByte(iterator, offsetof(ScriptState, determined)) ||
+        !muniIsFlagByte(iterator, offsetof(ScriptState, started)) ||
+        !muniIsFlagByte(iterator, offsetof(ScriptState, waiting)) ||
+        !muniIsFlagByte(iterator, offsetof(ScriptState, finished)) ||
+        !muniCursorValid(&state->cursor, iterator, offsetof(ScriptState, cursor), state->waiting) ||
+        state->bracketCount > BRACKET_DEPTH || !IsScript(state->firstScript, true))
+    {
+        return false;
+    }
+    for (uint8_t k = 0; k < state->bracketCount; k++)
+    {
+        if (!IsScript((uint8_t)(state->brackets[k] & 0xFF), true))
+        {
+            return false;
+        }
+    }
+    // No candidate past the last script, and at least one in a determined
+    // run, which Best relies on.
+    bool any = false;
+    for (unsigned word = 0; word < 4; word++)
+    {
+        uint64_t bits = state->candidates.bits[word];
+        unsigned first = word * 64;
+        if (first >= muniScriptTagCount)
+        {
+            if (bits != 0)
+            {
+                return false;
+            }
+        }
+        else if (muniScriptTagCount - first < 64 && bits >> (muniScriptTagCount - first) != 0)
+        {
+            return false;
+        }
+        any = any || bits != 0;
+    }
+    return any || !state->determined;
 }
 
 static void Store(muniScriptIterator* iterator, const ScriptState* state)
@@ -282,6 +318,7 @@ static void Start(ScriptState* state, const char* text, size_t length, bool more
     memset(state, 0, sizeof(*state));
     state->firstScript = NO_SCRIPT;
     muniCursorInit(&state->cursor, text, length, moreFollows);
+    state->cursor.cookie = COOKIE;
 }
 
 muniResult muniInitScriptIterator(muniScriptIterator* iterator, const char* text, size_t length,
@@ -305,7 +342,11 @@ muniResult muniScriptIterator_Feed(muniScriptIterator* iterator, const char* tex
     {
         return muni_errorInvalid;
     }
-    ScriptState state = Load(iterator);
+    ScriptState state;
+    if (!Load(iterator, &state))
+    {
+        return muni_errorInvalid;
+    }
     if (!state.waiting)
     {
         return muni_errorState;
@@ -322,7 +363,11 @@ muniResult muniScriptIterator_NextRun(muniScriptIterator* iterator, muniScriptRu
     {
         return muni_errorInvalid;
     }
-    ScriptState state = Load(iterator);
+    ScriptState state;
+    if (!Load(iterator, &state))
+    {
+        return muni_errorInvalid;
+    }
     muniResult status = Next(&state, runOut);
     state.waiting = status == muni_needMoreText;
     Store(iterator, &state);

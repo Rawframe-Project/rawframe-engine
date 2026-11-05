@@ -20,7 +20,7 @@
 // limit 125 raised by one, or the even 124 raised by two.
 #define MAX_LINE_LEVEL (MUNI_BIDI_MAX_DEPTH + 1)
 
-static bool LevelsInRange(const uint8_t* levels, size_t count)
+MUNI_NODISCARD static bool LevelsInRange(const uint8_t* levels, size_t count)
 {
     for (size_t k = 0; k < count; k++)
     {
@@ -76,7 +76,7 @@ static void AddOwn(Runs* runs, const uint8_t* levels, size_t start, size_t end)
 // What rule L1 resets before a separator or at the end of the line:
 // whitespace and isolate formatting characters, and the characters rule
 // X9 removed, which have no level of their own.
-static bool IsTrailing(uint8_t type)
+MUNI_NODISCARD static bool IsTrailing(uint8_t type)
 {
     switch (type)
     {

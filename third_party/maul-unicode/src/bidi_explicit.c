@@ -241,7 +241,7 @@ static void Apply(Explicit* state, const muniBidiParagraph* paragraph, size_t in
 
 // The classes after which a left-to-right paragraph can hold other levels
 // than 0.
-static bool NeedsImplicit(uint8_t type)
+MUNI_NODISCARD static bool NeedsImplicit(uint8_t type)
 {
     return type == muni_bcR || type == muni_bcAl || type == muni_bcAn ||
            (type >= muni_bcLre && type <= muni_bcPdi);

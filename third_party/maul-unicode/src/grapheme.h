@@ -11,7 +11,8 @@
 
 // Whether there is a boundary between the text so far and a code point
 // whose Grapheme_Cluster_Break is after. No rule looks ahead.
-bool muniGraphemeIsBoundary(const muniGraphemeRules* state, uint8_t after, uint32_t codePoint);
+MUNI_NODISCARD bool muniGraphemeIsBoundary(const muniGraphemeRules* state, uint8_t after,
+                                           uint32_t codePoint);
 
 // Moves the state past a code point whose Grapheme_Cluster_Break is value.
 void muniGraphemeAdvance(muniGraphemeRules* state, uint8_t value, uint32_t codePoint);
