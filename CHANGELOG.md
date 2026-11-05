@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.5.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.4.0...v0.5.0) (2026-11-05)
+
+This release moves the engine to Maul UI 1.3.2, Maul Window 0.12.0 and Maul Unicode 1.0.0, and the debug adapter now says how a debugged game went. No wire, save, checkpoint or cooked format changes.
+
+### Changed
+
+- **Breaking:** The engine is built on Maul UI 1.3.2, Maul Window 0.12.0 and Maul Unicode 1.0.0, each vendored from its release archive with its SHA-256 checked. Maul Tween 1.0.0 and Maul RHI 0.15.0 stay. Maul Unicode 1.0.0 has 0.13.0's API, data and results. Layouts, styles, draw lists, line breaks, shaped text, glyph images and the accessibility tree are unchanged. What users see change, from Maul Window 0.8.1 to 0.12.0 ([#212](https://github.com/Rawframe-Project/rawframe-engine/pull/212)):
+  - In Studio, a file dialog choice that holds a file the platform cannot give as a path gives the other paths, and Studio says some of the files chosen were left out. Before, the whole dialog failed and Studio did nothing. Such a file is a path that is not UTF-8, a portal's choice that is no local file, or an item with no file system path on Windows.
+  - On X11, a paste takes only the answer to its own clipboard read, and a drop only its own conversion's answer, never a late answer to an earlier one. A read whose answer does not come fails after five seconds, and a drop is then delivered truncated, which Studio says.
+  - On X11, an IBus or Fcitx commit or composition is held up to the text limit, and one past it resets the input state instead of being dropped. On X11 and Wayland, a compose sequence that types 64 bytes or more types its text instead of nothing.
+  - On Wayland, a drag that enters while a drop is still being read is refused.
+  - On Windows, a composition's caret, selection or clause inside a surrogate pair ends before the pair. A generic HID gamepad takes its controls from the first 32 Button and Generic Desktop capabilities, whatever other pages it has, so a pad with many controls gets its buttons, axes and hats. A pad whose reports cannot be read, or that is left with no controls, is not added.
+  - In the browser, text another script pushes and a typed key's character turn a lone surrogate into U+FFFD instead of being lost.
+  - On Android, a drop of a document the game cannot be granted no longer ends the game, and a drop's copy no longer waits without end on a provider that sends nothing.
+- **Breaking:** `window::Windows::dialogFiles` returns a `window::DialogFiles`: the paths, and `truncated` when the platform left chosen files out. `view::FileDialogs::Answer` carries `truncated` ([#212](https://github.com/Rawframe-Project/rawframe-engine/pull/212)).
+
+### Fixed
+
+- The debug adapter says how a debugged game went: "the game's tooling endpoint kept silent" for a game that stopped answering, as one held by a native debugger does, or "closed" for one that stopped. It says so in the response to the request that found it, and in an `output` event before the session's `terminated` event. Before, a request was answered "the game's tooling endpoint went" either way, and a poll that found the game gone ended the session with no reason at all ([#214](https://github.com/Rawframe-Project/rawframe-engine/pull/214)).
+- `rawframe-author connect` says "the endpoint closed" for a record sent after the endpoint closed but before the close was seen. Before, it said "the record could not be sent" ([#214](https://github.com/Rawframe-Project/rawframe-engine/pull/214)).
+
 ## [0.4.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.3.0...v0.4.0) (2026-11-04)
 
 ### Changed
