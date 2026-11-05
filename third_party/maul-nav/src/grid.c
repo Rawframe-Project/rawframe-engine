@@ -9,6 +9,7 @@
 
 #include "fpenv.h"
 #include "invariant.h"
+#include "outputs.h"
 #include "query.h"
 #include "query_filter.h"
 
@@ -54,7 +55,7 @@ typedef struct Grid
     int32_t best;
 } Grid;
 
-static bool Open(const Grid* g, int32_t x, int32_t y)
+MNAV_NODISCARD static bool Open(const Grid* g, int32_t x, int32_t y)
 {
     if (x < 0 || y < 0 || x >= g->grid->width || y >= g->grid->height)
     {
@@ -80,7 +81,7 @@ static double Octile(const Grid* g, int32_t x0, int32_t y0, int32_t x1, int32_t 
 }
 
 // The open list, a binary heap by total cost, then by node index.
-static bool Sooner(const GridNode* nodes, int32_t a, int32_t b)
+MNAV_NODISCARD static bool Sooner(const GridNode* nodes, int32_t a, int32_t b)
 {
     double ta = nodes[a].cost + nodes[a].remaining;
     double tb = nodes[b].cost + nodes[b].remaining;
@@ -215,7 +216,7 @@ static const Step s_steps[8] = {{1, 0}, {0, 1},  {-1, 0},  {0, -1},
                                 {1, 1}, {-1, 1}, {-1, -1}, {1, -1}};
 
 // Whether a step from (x, y) by (dx, dy) is allowed.
-static bool CanStep(const Grid* g, int32_t x, int32_t y, int32_t dx, int32_t dy)
+MNAV_NODISCARD static bool CanStep(const Grid* g, int32_t x, int32_t y, int32_t dx, int32_t dy)
 {
     if (!Open(g, x + dx, y + dy))
     {
@@ -245,7 +246,7 @@ static void ExpandAStar(Grid* g, int32_t node)
 
 // Whether cell (x, y), reached moving straight by (dx, dy), has a forced
 // neighbour: a side cell open with the one behind it blocked.
-static bool Forced(const Grid* g, int32_t x, int32_t y, int32_t dx, int32_t dy)
+MNAV_NODISCARD static bool Forced(const Grid* g, int32_t x, int32_t y, int32_t dx, int32_t dy)
 {
     if (dx != 0)
     {
@@ -256,14 +257,15 @@ static bool Forced(const Grid* g, int32_t x, int32_t y, int32_t dx, int32_t dy)
            (Open(g, x + 1, y) && !Open(g, x + 1, y - dy));
 }
 
-static bool IsEnd(const Grid* g, int32_t x, int32_t y)
+MNAV_NODISCARD static bool IsEnd(const Grid* g, int32_t x, int32_t y)
 {
     return x == g->end.x && y == g->end.y;
 }
 
 // Whether a straight jump from (x, y), not counting it, finds a jump
 // point.
-static bool StraightFinds(const Grid* g, int32_t x, int32_t y, int32_t dx, int32_t dy)
+MNAV_NODISCARD static bool StraightFinds(const Grid* g, int32_t x, int32_t y, int32_t dx,
+                                         int32_t dy)
 {
     for (;;)
     {
@@ -382,7 +384,7 @@ static void ExpandJump(Grid* g, int32_t node)
 
 // Whether node a lies nearer the end than node b: by the heuristic, then
 // the cost, then the index.
-static bool Nearer(const GridNode* nodes, int32_t a, int32_t b)
+MNAV_NODISCARD static bool Nearer(const GridNode* nodes, int32_t a, int32_t b)
 {
     if (nodes[a].remaining != nodes[b].remaining)
     {
@@ -443,7 +445,7 @@ static mnavGridPath PathTo(const Grid* g, int32_t last, mnavPathEnd end)
     return (mnavGridPath){end, g->nodes[last].cost, g->nodes[last].length, cells, kept};
 }
 
-static bool GoodGrid(const mnavGrid* grid, mnavCell a, mnavCell b)
+MNAV_NODISCARD static bool GoodGrid(const mnavGrid* grid, mnavCell a, mnavCell b)
 {
     return grid->areas != nullptr && grid->width >= 1 && grid->height >= 1 &&
            isfinite(grid->cellSize) && grid->cellSize > 0.0f && a.x >= 0 && a.y >= 0 &&
@@ -536,12 +538,17 @@ static MNAV_NOINLINE mnavResult FindGridPathCounted(mnavQuery* query, const mnav
                                                     const mnavQueryFilter* filter, mnavCell start,
                                                     mnavCell end, mnavGridPath* pathOut)
 {
-    return mnavHostCountInvalid(MNAV_HOST(query),
-                                FindGridPathWork(query, grid, filter, start, end, pathOut));
+    mnavGridPath pathMade = {0};
+    mnavResult result = mnavHostCountInvalid(
+        MNAV_HOST(query), FindGridPathWork(query, grid, filter, start, end,
+                                           pathOut != nullptr ? &pathMade : nullptr));
+    mnavGiveOutput(result, false, pathOut, &pathMade, sizeof(pathMade));
+    return result;
 }
 
-mnavResult mnavFindGridPath(mnavQuery* query, const mnavGrid* grid, const mnavQueryFilter* filter,
-                            mnavCell start, mnavCell end, mnavGridPath* pathOut)
+mnavResult mnavQuery_FindGridPath(mnavQuery* query, const mnavGrid* grid, mnavCell start,
+                                  mnavCell end, const mnavQueryFilter* filter,
+                                  mnavGridPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = FindGridPathCounted(query, grid, filter, start, end, pathOut);

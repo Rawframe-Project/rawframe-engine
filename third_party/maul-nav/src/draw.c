@@ -10,12 +10,13 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 // The most a list may hold: indices stay within 32 unsigned bits.
 #define MOST INT32_MAX
 
-static bool GoodList(const void* items, int32_t capacity, int32_t count)
+MNAV_NODISCARD static bool GoodList(const void* items, int32_t capacity, int32_t count)
 {
     return capacity >= 0 && count >= 0 && (capacity == 0 || items != nullptr);
 }
@@ -29,7 +30,19 @@ bool mnavGoodBuffer(const mnavDebugBuffer* buffer)
            GoodList(buffer->lines, buffer->lineCapacity, buffer->lineCount);
 }
 
-uint32_t mnavDrawVertex(mnavDebugBuffer* buffer, mnavPos3 p, mnavDebugKind kind, uint16_t value)
+bool mnavGoodPoints(const mnavPos3* points, int32_t count)
+{
+    for (int32_t i = 0; i < count; ++i)
+    {
+        if (!isfinite(points[i].x) || !isfinite(points[i].y) || !isfinite(points[i].z))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+uint32_t mnavDrawVertex(mnavDebugBuffer* buffer, mnavPos3 p, mnavDebugKind kind, uint32_t value)
 {
     int32_t at = buffer->vertexCount;
     if (at < buffer->vertexCapacity)
@@ -42,34 +55,35 @@ uint32_t mnavDrawVertex(mnavDebugBuffer* buffer, mnavPos3 p, mnavDebugKind kind,
     return (uint32_t)at;
 }
 
-// Appends an index to a list.
-static void Index(uint32_t* list, int32_t capacity, int32_t* count, uint32_t index)
+// Appends an item of n indices to a list counted in items.
+static void Append(uint32_t* list, int32_t capacity, int32_t* count, const uint32_t* indices,
+                   int32_t n)
 {
     if (*count < capacity)
     {
-        list[*count] = index;
+        for (int32_t k = 0; k < n; ++k)
+        {
+            list[(size_t)*count * (size_t)n + (size_t)k] = indices[k];
+        }
     }
     *count = *count < MOST ? *count + 1 : *count;
 }
 
 void mnavDrawLine(mnavDebugBuffer* buffer, mnavPos3 a, mnavPos3 b, mnavDebugKind kind,
-                  uint16_t value)
+                  uint32_t value)
 {
-    uint32_t ia = mnavDrawVertex(buffer, a, kind, value);
-    uint32_t ib = mnavDrawVertex(buffer, b, kind, value);
-    Index(buffer->lines, buffer->lineCapacity, &buffer->lineCount, ia);
-    Index(buffer->lines, buffer->lineCapacity, &buffer->lineCount, ib);
+    uint32_t ends[2] = {mnavDrawVertex(buffer, a, kind, value),
+                        mnavDrawVertex(buffer, b, kind, value)};
+    Append(buffer->lines, buffer->lineCapacity, &buffer->lineCount, ends, 2);
 }
 
 void mnavDrawTriangle(mnavDebugBuffer* buffer, mnavPos3 a, mnavPos3 b, mnavPos3 c,
-                      mnavDebugKind kind, uint16_t value)
+                      mnavDebugKind kind, uint32_t value)
 {
-    uint32_t ia = mnavDrawVertex(buffer, a, kind, value);
-    uint32_t ib = mnavDrawVertex(buffer, b, kind, value);
-    uint32_t ic = mnavDrawVertex(buffer, c, kind, value);
-    Index(buffer->triangles, buffer->triangleCapacity, &buffer->triangleCount, ia);
-    Index(buffer->triangles, buffer->triangleCapacity, &buffer->triangleCount, ib);
-    Index(buffer->triangles, buffer->triangleCapacity, &buffer->triangleCount, ic);
+    uint32_t corners[3] = {mnavDrawVertex(buffer, a, kind, value),
+                           mnavDrawVertex(buffer, b, kind, value),
+                           mnavDrawVertex(buffer, c, kind, value)};
+    Append(buffer->triangles, buffer->triangleCapacity, &buffer->triangleCount, corners, 3);
 }
 
 mnavResult mnavDrawResult(const mnavDebugBuffer* buffer)

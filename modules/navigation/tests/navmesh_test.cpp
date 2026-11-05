@@ -79,7 +79,7 @@ RAWFRAME_TEST(APathGoesAroundAWallAndStraightOnceItIsGone) {
     // The same geometry gives the same bytes, here and on every platform.
     // A tile records the format and generator that baked it, so a Maul Nav
     // that moves either moves this value; its commit says which.
-    RAWFRAME_EXPECT(navmesh.fingerprint() == 0x530d3bbdede27404ULL);
+    RAWFRAME_EXPECT(navmesh.fingerprint() == 0x4a35ccb805b9f2fbULL);
     auto again = Navmesh::create({});
     RAWFRAME_EXPECT(again.has_value() && (*again)->bake(kWalled, kLot).has_value());
     RAWFRAME_EXPECT(again.has_value() && (*again)->fingerprint() == navmesh.fingerprint());

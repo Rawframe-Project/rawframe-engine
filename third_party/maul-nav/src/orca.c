@@ -15,7 +15,7 @@
 
 // Narrows [left, right] along line n to where the lines before it allow;
 // false when nothing is left.
-static bool Bound(const mnavLine* lines, int32_t n, double* left, double* right)
+MNAV_NODISCARD static bool Bound(const mnavLine* lines, int32_t n, double* left, double* right)
 {
     const mnavLine* line = &lines[n];
     for (int32_t i = 0; i < n; ++i)
@@ -49,8 +49,8 @@ static bool Bound(const mnavLine* lines, int32_t n, double* left, double* right)
 
 // The 1D program on line n, bounded by the lines before it and the
 // circle: false when they leave nothing of it.
-static bool Program1(const mnavLine* lines, int32_t n, double radius, mnavPos2 wanted,
-                     bool directionOpt, mnavPos2* result)
+MNAV_NODISCARD static bool Program1(const mnavLine* lines, int32_t n, double radius,
+                                    mnavPos2 wanted, bool directionOpt, mnavPos2* result)
 {
     const mnavLine* line = &lines[n];
     double dot = mnavDot2(line->point, line->direction);
@@ -112,7 +112,7 @@ int32_t mnavLinearProgram2(const mnavLine* lines, int32_t count, double radius, 
 
 // The line where lines i and j are equally broken, along which the 3D
 // program's projection runs; false when they point the same way.
-static bool Bisector(const mnavLine* i, const mnavLine* j, mnavLine* out)
+MNAV_NODISCARD static bool Bisector(const mnavLine* i, const mnavLine* j, mnavLine* out)
 {
     double determinant = mnavDet2(i->direction, j->direction);
     if (fabs(determinant) <= MNAV_ORCA_PARALLEL)

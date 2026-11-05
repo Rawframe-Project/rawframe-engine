@@ -92,7 +92,7 @@ static double Area2(mnavPos3 a, mnavPos3 b, mnavPos3 c)
     return (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
 }
 
-static bool Same(mnavPos3 a, mnavPos3 b)
+MNAV_NODISCARD static bool Same(mnavPos3 a, mnavPos3 b)
 {
     return a.x == b.x && a.y == b.y && a.z == b.z;
 }
@@ -119,7 +119,7 @@ typedef struct Funnel
 } Funnel;
 
 // Whether a point lies on a portal, within a millimeter on the ground.
-static bool OnPortal(mnavPos3 p, const mnavPortal* portal)
+MNAV_NODISCARD static bool OnPortal(mnavPos3 p, const mnavPortal* portal)
 {
     double dx = portal->right.x - portal->left.x;
     double dz = portal->right.z - portal->left.z;

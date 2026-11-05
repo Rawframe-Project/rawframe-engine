@@ -18,7 +18,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static bool HasNaN(mnavPos3 p)
+MNAV_NODISCARD static bool HasNaN(mnavPos3 p)
 {
     return isnan(p.x) || isnan(p.y) || isnan(p.z);
 }
@@ -36,7 +36,7 @@ static void DrawBlock(mnavDebugBuffer* buffer, const mnavFlightFrame* frame,
         corner[c] = mnavFlightToWorld(frame, v);
     }
     // Corners differing in one bit share an edge.
-    uint16_t value = b->size < 65535 ? (uint16_t)b->size : (uint16_t)65535;
+    uint32_t value = (uint32_t)b->size;
     for (int32_t c = 0; c < 8; ++c)
     {
         for (int32_t bit = 1; bit < 8; bit *= 2)
@@ -112,8 +112,8 @@ static MNAV_NOINLINE mnavResult DebugFlightCounted(const mnavFlightVolume* volum
     return mnavHostCountInvalid(MNAV_HOST(volume), DebugFlightWork(volume, low, high, buffer));
 }
 
-mnavResult mnavDebugFlight(const mnavFlightVolume* volume, mnavPos3 low, mnavPos3 high,
-                           mnavDebugBuffer* buffer)
+mnavResult mnavFlightVolume_Debug(const mnavFlightVolume* volume, mnavPos3 low, mnavPos3 high,
+                                  mnavDebugBuffer* buffer)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = DebugFlightCounted(volume, low, high, buffer);
@@ -124,8 +124,9 @@ mnavResult mnavDebugFlight(const mnavFlightVolume* volume, mnavPos3 low, mnavPos
 static MNAV_NOINLINE mnavResult DebugFlightPathWork(const mnavFlightPath* path,
                                                     mnavDebugBuffer* buffer)
 {
-    if (path == nullptr || !mnavGoodBuffer(buffer) || path->pointCount < 0 ||
-        (path->pointCount > 0 && path->points == nullptr))
+    // The points may be the caller's own: only the count given is read.
+    if (path == nullptr || !mnavGoodBuffer(buffer) || path->pointCount < 1 ||
+        path->points == nullptr || !mnavGoodPoints(path->points, path->pointCount))
     {
         return mnav_errorInvalid;
     }

@@ -52,14 +52,14 @@ struct mnavTileIndex
 mnavHostCode* mnavTileIndexHost(const mnavTileIndex* index);
 
 // Whether an index was built for this grid and these meshes' counts.
-bool mnavTileIndexFits(const mnavTileIndex* index, const mnavBakeDef* def,
-                       const mnavBakeCells* cells, const mnavTriangleMesh* meshes,
-                       int32_t meshCount);
+MNAV_NODISCARD bool mnavTileIndexFits(const mnavTileIndex* index, const mnavBakeDef* def,
+                                      const mnavBakeCells* cells, const mnavTriangleMesh* meshes,
+                                      int32_t meshCount);
 
 // Whether an index was built for this grid and these outlines' counts.
-bool mnavTileIndexFits2D(const mnavTileIndex* index, const mnavBakeDef* def,
-                         const mnavBakeCells* cells, const mnavOutline* outlines,
-                         int32_t outlineCount);
+MNAV_NODISCARD bool mnavTileIndexFits2D(const mnavTileIndex* index, const mnavBakeDef* def,
+                                        const mnavBakeCells* cells, const mnavOutline* outlines,
+                                        int32_t outlineCount);
 
 // The items listed for tile (tileX, tileZ), triangles (mesh, triangle) or
 // outlines (outline, 0): none past the tiles the index covers.

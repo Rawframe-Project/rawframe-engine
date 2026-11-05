@@ -78,16 +78,17 @@ typedef struct mnavRasterRow
 // Splits a piece at axis = cut into the part below and the part above; a
 // corner on the cut goes to both. Returns false, with the parts
 // unspecified, when a part would pass MNAV_RASTER_CORNERS.
-bool mnavSplitPoly(const mnavRasterPoly* in, int32_t axis, float cut, mnavRasterPoly* below,
-                   mnavRasterPoly* above);
+MNAV_NODISCARD bool mnavSplitPoly(const mnavRasterPoly* in, int32_t axis, float cut,
+                                  mnavRasterPoly* below, mnavRasterPoly* above);
 
 // mnavSplitPoly for a row's piece at u = cut.
-bool mnavSplitRow(const mnavRasterRow* in, float cut, mnavRasterRow* below, mnavRasterRow* above);
+MNAV_NODISCARD bool mnavSplitRow(const mnavRasterRow* in, float cut, mnavRasterRow* below,
+                                 mnavRasterRow* above);
 
 // The frame of tile (tileX, tileZ). Returns false when the tile lies past
 // the extent input may have.
-bool mnavMakeTileFrame(const mnavBakeDef* def, const mnavBakeCells* cells, int32_t tileX,
-                       int32_t tileZ, mnavTileFrame* frame);
+MNAV_NODISCARD bool mnavMakeTileFrame(const mnavBakeDef* def, const mnavBakeCells* cells,
+                                      int32_t tileX, int32_t tileZ, mnavTileFrame* frame);
 
 // The area a triangle rasterizes with: its own, or mnav_areaNone when it
 // is steeper than the slope or faces down. Returns -1 for a triangle with
@@ -95,7 +96,7 @@ bool mnavMakeTileFrame(const mnavBakeDef* def, const mnavBakeCells* cells, int32
 int32_t mnavTriangleArea(const mnavVec3 corners[3], mnavAreaType area, float cosMaxSlope);
 
 // Whether a triangle touches the tile's cells, border included.
-bool mnavTriangleTouchesTile(const mnavTileFrame* frame, const mnavVec3 corners[3]);
+MNAV_NODISCARD bool mnavTriangleTouchesTile(const mnavTileFrame* frame, const mnavVec3 corners[3]);
 
 // Adds the fragments of a triangle that touches the tile;
 // mnav_errorLimit when a cut piece would pass MNAV_MAX_PIECE_CORNERS.

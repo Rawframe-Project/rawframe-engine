@@ -19,7 +19,7 @@
 
 uint64_t mnavHashWords(uint64_t hash, const uint32_t* words, int32_t count)
 {
-    return mnavHash64(hash, words, count * (int32_t)sizeof(uint32_t));
+    return mnavHash64(hash, words, count * (int64_t)sizeof(uint32_t));
 }
 
 // Adds a triangle that reaches the tile, as rasterization picks it, to

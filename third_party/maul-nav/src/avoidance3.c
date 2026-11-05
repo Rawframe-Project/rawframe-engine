@@ -40,8 +40,9 @@ static mnavResult CheckAgent(const mnavAgent3D* agent)
     {
         return mnav_errorInvalid;
     }
-    mnavResult result = mnavAvoidJoin(CheckPoint(agent->position), CheckVector(agent->velocity));
-    result = mnavAvoidJoin(result, CheckVector(agent->preferred));
+    mnavResult result =
+        mnavAvoidJoin(CheckPoint(agent->position), CheckVector(mnavWide3(agent->velocity)));
+    result = mnavAvoidJoin(result, CheckVector(mnavWide3(agent->preferred)));
     return mnavAvoidJoin(
         result, mnavAvoidJoin(mnavAvoidRadius(agent->radius), mnavAvoidSpeed(agent->maxSpeed)));
 }
@@ -49,14 +50,15 @@ static mnavResult CheckAgent(const mnavAgent3D* agent)
 static mnavResult CheckSphere(const mnavSphere* sphere)
 {
     mnavResult result = mnavAvoidJoin(CheckPoint(sphere->center), mnavAvoidRadius(sphere->radius));
-    return mnavAvoidJoin(result, CheckVector(sphere->velocity));
+    return mnavAvoidJoin(result, CheckVector(mnavWide3(sphere->velocity)));
 }
 
 // A sphere's reach from an agent: the squared gap between them, or -1
 // when the agent cannot meet it within the horizon.
 static double SphereReach(const mnavAgent3D* agent, const mnavSphere* sphere, double horizon)
 {
-    double speed = sqrt(mnavDot3(sphere->velocity, sphere->velocity));
+    mnavPos3 velocity = mnavWide3(sphere->velocity);
+    double speed = sqrt(mnavDot3(velocity, velocity));
     double range = horizon * (agent->maxSpeed + speed) + agent->radius;
     mnavPos3 rel = mnavSub3(sphere->center, agent->position);
     double gap = sqrt(mnavDot3(rel, rel)) - sphere->radius;
@@ -72,14 +74,15 @@ void mnavBuildSphereGrid(mnavAvoidance* a, const mnavSphere* spheres, int32_t co
         const mnavSphere* sphere = &spheres[s];
         a->vertices[s] = (mnavObstacleVertex){
             .point = {sphere->center.x, sphere->center.z},
-            .velocity = {sphere->velocity.x, sphere->velocity.z},
+            .velocity = {(double)sphere->velocity.x, (double)sphere->velocity.z},
             .radius = sphere->radius,
             .id = sphere->id,
             .index = s,
             .next = s,
             .previous = s,
         };
-        double speed = sqrt(mnavDot3(sphere->velocity, sphere->velocity));
+        mnavPos3 velocity = mnavWide3(sphere->velocity);
+        double speed = sqrt(mnavDot3(velocity, velocity));
         fastest = speed > fastest ? speed : fastest;
     }
     mnavBuildObstacleGrid(&a->grid, a->vertices, count, a->def.neighborDistance);
@@ -135,8 +138,9 @@ static mnavPlane SpherePlane(const mnavAgent3D* agent, const mnavSphere* sphere,
     double distanceSq = mnavDot3(rel, rel);
     if (distanceSq > combined * combined)
     {
-        return mnavPairPlane(agent->position, agent->velocity, sphere->center, sphere->velocity,
-                             combined, 1.0, horizon, step, agent->id < sphere->id);
+        return mnavPairPlane(agent->position, mnavWide3(agent->velocity), sphere->center,
+                             mnavWide3(sphere->velocity), combined, 1.0, horizon, step,
+                             agent->id < sphere->id);
     }
     // On the center itself no way is out; a fixed one, forward, keeps it
     // deterministic.
@@ -145,7 +149,8 @@ static mnavPlane SpherePlane(const mnavAgent3D* agent, const mnavSphere* sphere,
     {
         away = (mnavPos3){0.0, 0.0, -1.0};
     }
-    double leave = mnavDot3(sphere->velocity, away) + (combined - sqrt(distanceSq)) / step;
+    double leave =
+        mnavDot3(mnavWide3(sphere->velocity), away) + (combined - sqrt(distanceSq)) / step;
     double offset = leave < agent->maxSpeed ? leave : agent->maxSpeed;
     return (mnavPlane){mnavScale3(away, offset), away};
 }
@@ -188,20 +193,24 @@ static mnavPos3 Solve(mnavAvoidance* a, const mnavAgent3D* agents, const mnavSph
         double share = (other->ignores & self->layers) != 0
                            ? 1.0
                            : other->priority / (self->priority + other->priority);
-        a->planes[count++] = mnavPairPlane(self->position, self->velocity, other->position,
-                                           other->velocity, self->radius + other->radius, share,
-                                           a->def.timeHorizon, step, self->id < other->id);
+        a->planes[count++] = mnavPairPlane(
+            self->position, mnavWide3(self->velocity), other->position, mnavWide3(other->velocity),
+            self->radius + other->radius, share, a->def.timeHorizon, step, self->id < other->id);
     }
+    mnavPos3 preferred = mnavWide3(self->preferred);
     mnavPos3 velocity = {0.0, 0.0, 0.0};
     int32_t failed =
-        mnavPlaneProgram3(a->planes, count, self->maxSpeed, self->preferred, false, &velocity);
-    if (failed == count && (velocity.x != self->preferred.x || velocity.y != self->preferred.y ||
-                            velocity.z != self->preferred.z))
+        mnavPlaneProgram3(a->planes, count, self->maxSpeed, preferred, false, &velocity);
+    // The velocity with no planes: the preferred one within the speed
+    // sphere. Only planes hold an agent back; its own speed does not.
+    mnavPos3 free = {0.0, 0.0, 0.0};
+    (void)mnavPlaneProgram3(a->planes, 0, self->maxSpeed, preferred, false, &free);
+    if (failed == count && (velocity.x != free.x || velocity.y != free.y || velocity.z != free.z))
     {
         // Held back: aim a little right of the preferred velocity, so that
         // agents meeting in perfect symmetry pass rather than stop.
-        failed = mnavPlaneProgram3(a->planes, count, self->maxSpeed, KeepRight(self->preferred),
-                                   false, &velocity);
+        failed = mnavPlaneProgram3(a->planes, count, self->maxSpeed, KeepRight(preferred), false,
+                                   &velocity);
     }
     if (failed < count)
     {
@@ -209,17 +218,9 @@ static mnavPos3 Solve(mnavAvoidance* a, const mnavAgent3D* agents, const mnavSph
                           &velocity);
     }
     // The maximum speed is kept exactly, as on the ground.
-    double speedSq = mnavDot3(velocity, velocity);
-    if (speedSq > self->maxSpeed * self->maxSpeed)
-    {
-        velocity = mnavScale3(velocity, self->maxSpeed / sqrt(speedSq));
-    }
-    // Within the speed sphere, but for the scaling's last bits: relative,
-    // and a few units of the least subnormal where the squares are
-    // subnormal and round absolutely.
+    velocity = mnavKeepSpeed3(velocity, self->maxSpeed);
     MNAV_ASSERT(isfinite(velocity.x) && isfinite(velocity.y) && isfinite(velocity.z) &&
-                mnavDot3(velocity, velocity) <=
-                    self->maxSpeed * self->maxSpeed * (1.0 + 0x1p-40) + 0x1p-1072);
+                mnavWithinSpeed3(velocity, self->maxSpeed));
     return velocity;
 }
 
@@ -261,7 +262,7 @@ static mnavResult Prepare(mnavAvoidance* avoidance, const mnavAgent3D* agents, i
 static MNAV_NOINLINE mnavResult Avoid3DWork(mnavAvoidance* avoidance, const mnavAgent3D* agents,
                                             int32_t agentCount, const mnavSphere* spheres,
                                             int32_t sphereCount, double step,
-                                            mnavPos3* velocitiesOut)
+                                            mnavVec3* velocitiesOut)
 {
     if (avoidance != nullptr && mnavHostCalledBack(&avoidance->host))
     {
@@ -286,7 +287,8 @@ static MNAV_NOINLINE mnavResult Avoid3DWork(mnavAvoidance* avoidance, const mnav
     mnavBuildSphereGrid(avoidance, spheres, sphereCount);
     for (int32_t i = 0; i < agentCount; ++i)
     {
-        velocitiesOut[i] = Solve(avoidance, agents, spheres, sphereCount, step, i);
+        velocitiesOut[i] = mnavNarrow3(Solve(avoidance, agents, spheres, sphereCount, step, i),
+                                       agents[i].maxSpeed);
     }
     return mnav_success;
 }
@@ -294,16 +296,18 @@ static MNAV_NOINLINE mnavResult Avoid3DWork(mnavAvoidance* avoidance, const mnav
 static MNAV_NOINLINE mnavResult Avoid3DCounted(mnavAvoidance* avoidance, const mnavAgent3D* agents,
                                                int32_t agentCount, const mnavSphere* spheres,
                                                int32_t sphereCount, double step,
-                                               mnavPos3* velocitiesOut)
+                                               mnavVec3* velocitiesOut)
 {
-    return mnavHostCountInvalid(
+
+    mnavResult result = mnavHostCountInvalid(
         MNAV_HOST(avoidance),
         Avoid3DWork(avoidance, agents, agentCount, spheres, sphereCount, step, velocitiesOut));
+    return mnavAvoidClear(result, avoidance, agentCount, velocitiesOut, sizeof(*velocitiesOut));
 }
 
-mnavResult mnavAvoid3D(mnavAvoidance* avoidance, const mnavAgent3D* agents, int32_t agentCount,
-                       const mnavSphere* spheres, int32_t sphereCount, double step,
-                       mnavPos3* velocitiesOut)
+mnavResult mnavAvoidance_Avoid3D(mnavAvoidance* avoidance, const mnavAgent3D* agents,
+                                 int32_t agentCount, const mnavSphere* spheres, int32_t sphereCount,
+                                 double step, mnavVec3* velocitiesOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =
@@ -377,9 +381,9 @@ DebugAvoidance3DCounted(mnavAvoidance* avoidance, const mnavAgent3D* agents, int
         DebugAvoidance3DWork(avoidance, agents, agentCount, spheres, sphereCount, buffer));
 }
 
-mnavResult mnavDebugAvoidance3D(mnavAvoidance* avoidance, const mnavAgent3D* agents,
-                                int32_t agentCount, const mnavSphere* spheres, int32_t sphereCount,
-                                mnavDebugBuffer* buffer)
+mnavResult mnavAvoidance_Debug3D(mnavAvoidance* avoidance, const mnavAgent3D* agents,
+                                 int32_t agentCount, const mnavSphere* spheres, int32_t sphereCount,
+                                 mnavDebugBuffer* buffer)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =

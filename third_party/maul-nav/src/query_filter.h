@@ -20,13 +20,13 @@ mnavResult mnavCheckFilter(const mnavQueryFilter* filter, const mnavQueryFilter*
 
 // Whether a filter includes an area type. No polygon has area 0. Inline:
 // every search step asks it.
-static inline bool mnavIncludes(const mnavQueryFilter* filter, mnavAreaType area)
+MNAV_NODISCARD static inline bool mnavIncludes(const mnavQueryFilter* filter, mnavAreaType area)
 {
     return area < MNAV_AREA_TYPES && ((filter->areas >> area) & 1u) != 0;
 }
 
 // Whether a filter lets the agent cross links of a kind.
-bool mnavCrosses(const mnavQueryFilter* filter, mnavLinkKind kind);
+MNAV_NODISCARD bool mnavCrosses(const mnavQueryFilter* filter, mnavLinkKind kind);
 
 // The lowest cost among the areas a filter includes, 1 when it includes
 // none.

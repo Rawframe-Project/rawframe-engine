@@ -67,11 +67,9 @@ struct mnavHierarchy
     const mnavNavmesh* reading;
     mnavQueryFilter filter;
     double scale;
-    // Per slot: its cluster, or -1, its place's first transition, and
-    // whether a confined search may expand it.
+    // Per slot: its cluster, or -1, and its place's first transition.
     int32_t* clusterOf;
     int32_t* firstOfSlot;
-    uint8_t* inside;
     // Clusters: their sort keys, their slots and the transitions leaving
     // them, each as ranges of the arrays after.
     uint64_t* keys;
@@ -96,23 +94,15 @@ struct mnavHierarchy
     uint8_t* changed;
     uint8_t* dirty;
     int32_t searches;
-    // The abstract search: per transition, and one more for the end.
-    double* costs;
-    double* joins;
-    int32_t* parents;
-    int32_t* places;
-    int32_t* heap;
-    int32_t heapCount;
+    // A build's cursors, one per cluster and one more.
+    int32_t* cursors;
 };
-
-// Sets the confinement flag of every slot of a cluster.
-void mnavMarkCluster(mnavHierarchy* h, int32_t cluster, uint8_t value);
 
 // Runs Dijkstra's search from a point in a polygon within a cluster,
 // opening the nodes just beyond it, backward when asked (off-mesh links
 // followed from where they land); mnav_errorCapacity when it runs out of
 // nodes.
-mnavResult mnavSearchCluster(mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* navmesh,
+mnavResult mnavSearchCluster(const mnavHierarchy* h, mnavQuery* query, const mnavNavmesh* navmesh,
                              bool backward, int32_t cluster, mnavPolygonId polygon, mnavPos3 point);
 
 // The cost the last search found to cross transition v's portal, or

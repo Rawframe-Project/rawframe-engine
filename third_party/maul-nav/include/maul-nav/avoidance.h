@@ -35,21 +35,15 @@ extern "C"
 #define MNAV_MAX_AVOIDANCE_RADIUS     1.0e6
 #define MNAV_MIN_AVOIDANCE_TIME       1.0e-6
 
-    // A point or a velocity on the ground plane, binary64.
-    typedef struct mnavPos2
-    {
-        double x;
-        double y;
-    } mnavPos2;
-
     // An agent as the host sees it this step, its values in the ranges
     // above.
     typedef struct mnavAgent
     {
         mnavPos2 position;
-        mnavPos2 velocity;
+        // In meters per second.
+        mnavVec2 velocity;
         // Where the agent would go, in meters per second.
-        mnavPos2 preferred;
+        mnavVec2 preferred;
         // More than 0, up to MNAV_MAX_AVOIDANCE_RADIUS.
         double radius;
         // 0 to MNAV_MAX_AVOIDANCE_SPEED.
@@ -81,8 +75,9 @@ extern "C"
         // A circle's radius, more than 0 and up to
         // MNAV_MAX_AVOIDANCE_RADIUS; 0 for two or more points.
         double radius;
-        // Each component within MNAV_MAX_AVOIDANCE_SPEED.
-        mnavPos2 velocity;
+        // In meters per second, each component within
+        // MNAV_MAX_AVOIDANCE_SPEED.
+        mnavVec2 velocity;
         // The host's id for the obstacle, which orders obstacles at equal
         // distances; ids should differ, or the input's order counts.
         uint64_t id;
@@ -90,13 +85,14 @@ extern "C"
         uint32_t layers;
     } mnavObstacle;
 
-    // An agent in space, for mnavAvoid3D, its values in the ranges above.
+    // An agent in space, for mnavAvoidance_Avoid3D, its values in the ranges above.
     typedef struct mnavAgent3D
     {
         mnavPos3 position;
-        mnavPos3 velocity;
+        // In meters per second.
+        mnavVec3 velocity;
         // Where the agent would go, in meters per second.
-        mnavPos3 preferred;
+        mnavVec3 preferred;
         // More than 0, up to MNAV_MAX_AVOIDANCE_RADIUS.
         double radius;
         // 0 to MNAV_MAX_AVOIDANCE_SPEED.
@@ -118,8 +114,9 @@ extern "C"
         mnavPos3 center;
         // More than 0, up to MNAV_MAX_AVOIDANCE_RADIUS.
         double radius;
-        // Each component within MNAV_MAX_AVOIDANCE_SPEED.
-        mnavPos3 velocity;
+        // In meters per second, each component within
+        // MNAV_MAX_AVOIDANCE_SPEED.
+        mnavVec3 velocity;
         // The host's id for the sphere, which orders spheres at equal
         // distances; ids should differ, or the input's order counts.
         uint64_t id;
@@ -204,12 +201,12 @@ extern "C"
     /// @param avoidanceOut Receives the set, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultAvoidanceDef; `mnav_errorVersion` for one built
-    /// against another version of the headers; `mnav_errorInvalid` also for a
-    /// limit below 1 (below 0 for obstacle vertices), a neighbor distance not
-    /// more than 0 or not finite, or a horizon that is NaN or plus infinity;
-    /// `mnav_errorLimit` for a limit past its MNAV_MAX_AVOIDANCE_ value or a
-    /// horizon shorter than MNAV_MIN_AVOIDANCE_TIME; `mnav_errorCapacity` when
-    /// the allocator fails.
+    /// against another version of the headers; `mnav_errorInvalid` also for an
+    /// allocator with one function, a limit below 1 (below 0 for obstacle
+    /// vertices), a neighbor distance not more than 0 or not finite, or a
+    /// horizon that is NaN or plus infinity; `mnav_errorLimit` for a limit past
+    /// its MNAV_MAX_AVOIDANCE_ value or a horizon shorter than
+    /// MNAV_MIN_AVOIDANCE_TIME; `mnav_errorCapacity` when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateAvoidance(const mnavAvoidanceDef* def,
@@ -233,7 +230,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. It may be read at any time, also while host
     /// code the object runs calls back in.
-    MNAV_API uint64_t mnavGetAvoidanceMisuse(const mnavAvoidance* avoidance);
+    MNAV_API uint64_t mnavAvoidance_GetMisuse(const mnavAvoidance* avoidance);
 
     /// Finds each agent's new velocity: the one nearest its preferred
     /// velocity, no faster than its maximum speed, that avoids the
@@ -241,11 +238,13 @@ extern "C"
     /// neighbours within the time horizon if they do their share (ORCA);
     /// when none does, the one that keeps clear of the obstacles and breaks
     /// the agents' constraints least. An agent sees an obstacle edge only
-    /// from outside it.
-    /// An agent held back from its preferred velocity aims 1% of its speed
-    /// to the right of it, so that agents meeting in perfect symmetry pass
-    /// rather than stop face to face. The same agents give the same
-    /// velocities in any order, on every platform.
+    /// from outside it. An agent exactly on a circle's center leaves along
+    /// -Y (ground -Z).
+    /// An agent its neighbours or obstacles hold back from its preferred
+    /// velocity aims 1% of its speed to the right of it; one held back
+    /// only by its maximum speed does not. So agents meeting in perfect
+    /// symmetry pass rather than stop face to face. The same agents give
+    /// the same velocities in any order, on every platform.
     ///
     /// @param avoidance     The set.
     /// @param agents        The agents.
@@ -256,8 +255,13 @@ extern "C"
     ///                      at least MNAV_MIN_AVOIDANCE_TIME: agents
     ///                      already overlapping part
     ///                      within it.
-    /// @param velocitiesOut Receives agentCount velocities, in the agents'
-    ///                      order.
+    /// @param velocitiesOut Receives agentCount velocities, in the agents' order,
+    ///                      found in binary64 and rounded to binary32: to
+    ///                      nearest, or toward zero where that would pass the
+    ///                      maximum speed. On any failure but
+    ///                      mnav_errorBusy, the first agentCount are zeroed
+    ///                      when the set's agent limit holds them; otherwise
+    ///                      nothing is written.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
     /// agents or obstacles, a negative count, a step that is NaN or plus
     /// infinity, an agent or obstacle with a NaN value, an agent with a radius
@@ -272,20 +276,21 @@ extern "C"
     /// one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the set is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavAvoid(mnavAvoidance* avoidance, const mnavAgent* agents,
-                                                 int32_t agentCount, const mnavObstacle* obstacles,
-                                                 int32_t obstacleCount, double step,
-                                                 mnavPos2* velocitiesOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavAvoidance_Avoid(
+        mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
+        const mnavObstacle* obstacles, int32_t obstacleCount, double step, mnavVec2* velocitiesOut);
 
-    /// Finds each flier's new velocity, as mnavAvoid does on the ground:
+    /// Finds each flier's new velocity, as mnavAvoidance_Avoid does on the ground:
     /// the one nearest its preferred velocity, no faster than its maximum
     /// speed, that avoids the spheres within the obstacle horizon and
     /// colliding with its neighbours within the time horizon if they do
     /// their share (ORCA in space); when none does, the one that keeps
     /// clear of the spheres and breaks the agents' constraints least.
-    /// An agent held back from its preferred velocity aims 1% of its speed
-    /// to the right of it, +Y being up; rising vertically it turns toward
-    /// +X, falling toward -X.
+    /// An agent its neighbours or spheres hold back from its preferred
+    /// velocity aims 1% of its speed to the right of it, +Y being up;
+    /// rising vertically it turns toward +X, falling toward -X. One held
+    /// back only by its maximum speed does not. A flier exactly on a
+    /// sphere's center leaves along -Z.
     /// The same agents give the same velocities in any order, on every
     /// platform.
     ///
@@ -297,8 +302,13 @@ extern "C"
     /// @param step          The step the velocities are for, in seconds,
     ///                      at least MNAV_MIN_AVOIDANCE_TIME: agents
     ///                      already overlapping part within it.
-    /// @param velocitiesOut Receives agentCount velocities, in the agents'
-    ///                      order.
+    /// @param velocitiesOut Receives agentCount velocities, in the agents' order,
+    ///                      found in binary64 and rounded to binary32: to
+    ///                      nearest, or toward zero where that would pass the
+    ///                      maximum speed. On any failure but
+    ///                      mnav_errorBusy, the first agentCount are zeroed
+    ///                      when the set's agent limit holds them; otherwise
+    ///                      nothing is written.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
     /// agents or spheres, a negative count, a step that is NaN or plus
     /// infinity, an agent or sphere with a NaN value or a radius not more than
@@ -311,23 +321,24 @@ extern "C"
     /// set's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the set is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavAvoid3D(mnavAvoidance* avoidance,
-                                                   const mnavAgent3D* agents, int32_t agentCount,
-                                                   const mnavSphere* spheres, int32_t sphereCount,
-                                                   double step, mnavPos3* velocitiesOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavAvoidance_Avoid3D(
+        mnavAvoidance* avoidance, const mnavAgent3D* agents, int32_t agentCount,
+        const mnavSphere* spheres, int32_t sphereCount, double step, mnavVec3* velocitiesOut);
 
     /// Appends each agent's outline, a 16-gon (mnav_debugAgent), and a line
-    /// to each neighbour mnavAvoid would give it (mnav_debugNeighbor), at a
+    /// to each neighbour mnavAvoidance_Avoid would give it (mnav_debugNeighbor), at a
     /// height, agent X and Y lying at ground X and Z.
     ///
     /// @param avoidance  The set; its scratch is used.
     /// @param agents     The agents.
     /// @param agentCount How many, at least 0.
     /// @param height     The lines' height.
-    /// @param buffer     The buffer appended to.
+    /// @param buffer     The buffer appended to. Left as it was on any failure
+    ///                   but the buffer filling (mnav_errorCapacity), which
+    ///                   writes what fits and counts what the whole needs.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
     /// agents, a height not finite, or a buffer with a count out of range, an
-    /// array missing or an origin not finite; for an agent mnavAvoid refuses,
+    /// array missing or an origin not finite; for an agent mnavAvoidance_Avoid refuses,
     /// the status it gives; `mnav_errorCapacity` for more agents than the set's
     /// limit, or when the buffer filled, its counts saying what the whole
     /// needs. Also `mnav_errorBusy` when called back in from the avoidance
@@ -335,14 +346,14 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the set and the buffer are used by one thread
     /// at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavDebugAvoidance(mnavAvoidance* avoidance,
-                                                          const mnavAgent* agents,
-                                                          int32_t agentCount, double height,
-                                                          mnavDebugBuffer* buffer);
+    MNAV_NODISCARD MNAV_API mnavResult mnavAvoidance_Debug(mnavAvoidance* avoidance,
+                                                           const mnavAgent* agents,
+                                                           int32_t agentCount, double height,
+                                                           mnavDebugBuffer* buffer);
 
     /// Appends each flier's outline, three 16-gons on its radius, one in
     /// each axis plane (mnav_debugAgent), a line to each neighbour
-    /// mnavAvoid3D would give it (mnav_debugNeighbor), and each sphere's
+    /// mnavAvoidance_Avoid3D would give it (mnav_debugNeighbor), and each sphere's
     /// three rings (mnav_debugObstacle).
     ///
     /// @param avoidance   The set; its scratch is used.
@@ -350,11 +361,13 @@ extern "C"
     /// @param agentCount  How many, at least 0.
     /// @param spheres     The spheres.
     /// @param sphereCount How many, at least 0.
-    /// @param buffer      The buffer appended to.
+    /// @param buffer      The buffer appended to. Left as it was on any failure
+    ///                    but the buffer filling (mnav_errorCapacity), which
+    ///                    writes what fits and counts what the whole needs.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument with
     /// agents or spheres, a negative count, or a buffer with a count out of
     /// range, an array missing or an origin not finite; for an agent or sphere
-    /// mnavAvoid3D refuses, or more of them than it takes, the status it gives;
+    /// mnavAvoidance_Avoid3D refuses, or more of them than it takes, the status it gives;
     /// `mnav_errorCapacity` when the buffer filled, its counts saying what the
     /// whole needs. Also `mnav_errorBusy` when called back in from the
     /// avoidance set's allocator, one misuse counted.
@@ -362,8 +375,8 @@ extern "C"
     /// Safe from any thread; the set and the buffer are used by one thread
     /// at a time.
     MNAV_NODISCARD MNAV_API mnavResult
-    mnavDebugAvoidance3D(mnavAvoidance* avoidance, const mnavAgent3D* agents, int32_t agentCount,
-                         const mnavSphere* spheres, int32_t sphereCount, mnavDebugBuffer* buffer);
+    mnavAvoidance_Debug3D(mnavAvoidance* avoidance, const mnavAgent3D* agents, int32_t agentCount,
+                          const mnavSphere* spheres, int32_t sphereCount, mnavDebugBuffer* buffer);
 
 #ifdef __cplusplus
 }

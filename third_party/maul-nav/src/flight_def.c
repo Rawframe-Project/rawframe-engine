@@ -37,7 +37,6 @@ static mnavFlightDefResult CheckLimits(const mnavFlightLimits* limits)
         {limits->tileSpans, MNAV_MAX_TILE_SPANS, mnav_flightSettingTileSpans},
         {limits->tileNodes, MNAV_MAX_FLIGHT_TILE_NODES, mnav_flightSettingTileNodes},
         {limits->tileLeaves, MNAV_MAX_FLIGHT_TILE_LEAVES, mnav_flightSettingTileLeaves},
-        {limits->tiles, MNAV_MAX_TILES, mnav_flightSettingTiles},
     };
     for (size_t i = 0; i < sizeof(counts) / sizeof(counts[0]); ++i)
     {

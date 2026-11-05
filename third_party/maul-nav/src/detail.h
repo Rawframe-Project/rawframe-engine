@@ -18,12 +18,6 @@
 
 #include <stdint.h>
 
-// The most detail vertices one polygon holds, and so at most 252
-// triangles.
-#define MNAV_DETAIL_VERTICES 127
-// The most samples inside one polygon edge.
-#define MNAV_DETAIL_EDGE_SAMPLES 20
-
 // A polygon's detail: its vertices (the polygon's own first) and
 // triangles.
 typedef struct mnavDetailPart
@@ -31,7 +25,7 @@ typedef struct mnavDetailPart
     int32_t firstVertex;
     int32_t firstTriangle;
     uint8_t vertexCount;
-    uint8_t triangleCount;
+    uint16_t triangleCount;
 } mnavDetailPart;
 
 typedef struct mnavDetailMesh
@@ -47,9 +41,13 @@ typedef struct mnavDetailMesh
     // Samples that found no height within the search radius and took the
     // polygon's own.
     int32_t fallbackHeights;
-    // Polygons that reached MNAV_DETAIL_VERTICES with samples still
+    // Polygons that reached MNAV_MAX_DETAIL_VERTICES with samples still
     // beyond the maximum error.
     int32_t cappedPolygons;
+    // Edges, each counted once, with two neighboring points farther apart
+    // than the sample distance, which only MNAV_MAX_DETAIL_EDGE_SAMPLES or
+    // too few whole sixteenths on the edge leave.
+    int32_t coarseEdges;
 } mnavDetailMesh;
 
 // What the detail mesh samples, from the bake's cells: the sample

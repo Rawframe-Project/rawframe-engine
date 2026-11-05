@@ -22,6 +22,7 @@
 #include "input.h"
 #include "invariant.h"
 #include "outline.h"
+#include "outputs.h"
 #include "polymesh.h"
 #include "raster.h"
 #include "region.h"
@@ -78,7 +79,7 @@ static MNAV_NOINLINE mnavBakeDefResult CreateBakerWork(const mnavBakeDef* def, m
 {
     if (bakerOut == nullptr)
     {
-        return (mnavBakeDefResult){mnav_errorInvalid, mnav_settingNone};
+        return (mnavBakeDefResult){mnav_errorInvalid, mnav_bakeSettingNone};
     }
     *bakerOut = nullptr;
     mnavBakeCells cells = {0};
@@ -93,12 +94,12 @@ static MNAV_NOINLINE mnavBakeDefResult CreateBakerWork(const mnavBakeDef* def, m
         mnavAllocate(&memory, 1, sizeof(mnavBaker), alignof(mnavBaker), (void**)&baker);
     if (result != mnav_success)
     {
-        return (mnavBakeDefResult){result, mnav_settingNone};
+        return (mnavBakeDefResult){result, mnav_bakeSettingNone};
     }
     *baker = (mnavBaker){*def, cells, memory, nullptr, 0, 0, {0}};
     baker->memory.host = &baker->host;
     *bakerOut = baker;
-    return (mnavBakeDefResult){mnav_success, mnav_settingNone};
+    return (mnavBakeDefResult){mnav_success, mnav_bakeSettingNone};
 }
 
 mnavBakeDefResult mnavCreateBaker(const mnavBakeDef* def, mnavBaker** bakerOut)
@@ -116,7 +117,7 @@ static void DropTile(mnavBaker* baker)
     baker->tileSize = 0;
 }
 
-uint64_t mnavGetBakerMisuse(const mnavBaker* baker)
+uint64_t mnavBaker_GetMisuse(const mnavBaker* baker)
 {
     return baker != nullptr ? mnavHostMisuse(&baker->host) : 0;
 }
@@ -161,8 +162,7 @@ static mnavResult CheckOutlines(const mnavBaker* baker, const Input* in, int32_t
         mnavInputResult input = mnavCheckOutline(&baker->def, outline);
         if (input.result != mnav_success)
         {
-            report->mesh = (int32_t)(outline - outlines);
-            report->input = input;
+            report->input = mnavInputNamed(input, mnav_inputOutline, (int32_t)(outline - outlines));
             return input.result;
         }
     }
@@ -189,8 +189,7 @@ static mnavResult CheckIndexed(const mnavBaker* baker, const mnavBakeInput* soli
         mnavInputResult input = mnavCheckMeshShape(&baker->def, &solid->meshes[m]);
         if (input.result != mnav_success)
         {
-            report->mesh = m;
-            report->input = input;
+            report->input = mnavInputNamed(input, mnav_inputMesh, m);
             return input.result;
         }
     }
@@ -203,8 +202,7 @@ static mnavResult CheckIndexed(const mnavBaker* baker, const mnavBakeInput* soli
             mnavCheckMeshTriangle(&baker->def, &solid->meshes[list[k].mesh], list[k].triangle);
         if (input.result != mnav_success)
         {
-            report->mesh = list[k].mesh;
-            report->input = input;
+            report->input = mnavInputNamed(input, mnav_inputMesh, list[k].mesh);
             return input.result;
         }
     }
@@ -230,8 +228,7 @@ static mnavResult CheckInput(const mnavBaker* baker, const Input* in, int32_t ti
             return result;
         }
     }
-    return mnavCheckSolidInput(&baker->def, &in->solid, in->solid.index != nullptr, &report->mesh,
-                               &report->input);
+    return mnavCheckSolidInput(&baker->def, &in->solid, in->solid.index != nullptr, &report->input);
 }
 
 // The generator, the settings that shape the tile and its place.
@@ -482,17 +479,18 @@ static void ReleaseStages(mnavMemory* memory, Stages* s)
 // Writes the stages' counts into the report.
 static void Count(const Stages* s, mnavBakeReport* report)
 {
-    report->spans = s->compact.spanCount;
-    report->regions = (int32_t)s->regions.count;
-    report->droppedRegions = (int32_t)s->regions.dropped;
-    report->polygons = s->mesh.polygonCount;
-    report->vertices = s->mesh.vertexCount;
-    report->detailVertices = s->detail.vertexCount;
-    report->detailTriangles = s->detail.triangleCount;
-    report->droppedHoles = s->set.droppedHoles;
-    report->partialRings = s->mesh.failedRings;
-    report->fallbackHeights = s->detail.fallbackHeights;
-    report->cappedDetail = s->detail.cappedPolygons;
+    report->spanCount = s->compact.spanCount;
+    report->regionCount = (int32_t)s->regions.count;
+    report->regionsDropped = (int32_t)s->regions.dropped;
+    report->polygonCount = s->mesh.polygonCount;
+    report->vertexCount = s->mesh.vertexCount;
+    report->detailVertexCount = s->detail.vertexCount;
+    report->detailTriangleCount = s->detail.triangleCount;
+    report->holesDropped = s->set.droppedHoles;
+    report->partialRingCount = s->mesh.failedRings;
+    report->fallbackHeightCount = s->detail.fallbackHeights;
+    report->cappedDetailCount = s->detail.cappedPolygons;
+    report->coarseEdgeCount = s->detail.coarseEdges;
 }
 
 // Encodes the tile from the stages.
@@ -511,11 +509,11 @@ static mnavResult Encode(mnavBaker* baker, int32_t tileX, int32_t tileZ, const S
 // Starts a bake or a rebuild: a fresh report, the last tile dropped and
 // the input stage begun. False, with the report given out, for a NULL
 // baker.
-static bool Start(mnavBaker* baker, mnavBakeReport* report, mnavBakeReport* reportOut)
+MNAV_NODISCARD static bool Start(mnavBaker* baker, mnavBakeReport* report,
+                                 mnavBakeReport* reportOut)
 {
     *report = (mnavBakeReport){0};
-    report->mesh = -1;
-    report->input = (mnavInputResult){mnav_success, mnav_elementNone, -1};
+    report->input = mnavInputElementResult(mnav_success, mnav_elementNone, -1);
     if (baker == nullptr)
     {
         report->result = mnav_errorInvalid;
@@ -583,13 +581,14 @@ static mnavResult RunBake(mnavBaker* baker, const Input* in, int32_t tileX, int3
     {
         if (in->flat)
         {
-            report.fingerprint =
-                HashOutlines(&frame, in, tileX, tileZ, HashSettings(&settings), &report.triangles);
+            report.fingerprint = HashOutlines(&frame, in, tileX, tileZ, HashSettings(&settings),
+                                              &report.triangleCount);
         }
         else
         {
-            geometry = mnavFingerprintGeometry(&frame, baker->cells.cosMaxSlope, &in->solid, tileX,
-                                               tileZ, HashSettings(&settings), &report.triangles);
+            geometry =
+                mnavFingerprintGeometry(&frame, baker->cells.cosMaxSlope, &in->solid, tileX, tileZ,
+                                        HashSettings(&settings), &report.triangleCount);
             report.fingerprint =
                 mnavFingerprintVolumes(&frame, in->solid.volumes, in->solid.volumeCount, geometry);
         }
@@ -601,7 +600,7 @@ static mnavResult RunBake(mnavBaker* baker, const Input* in, int32_t tileX, int3
                                      .tileZ = tileZ,
                                      .settings = settings,
                                      .geometry = geometry,
-                                     .triangles = report.triangles};
+                                     .triangles = report.triangleCount};
         result = mnavCacheTile(cache, &baker->memory, &tile, &stages.compact, in->solid.volumes,
                                in->solid.volumeCount);
     }
@@ -665,8 +664,8 @@ static MNAV_NOINLINE mnavResult BakeTileWork(mnavBaker* baker, const mnavBakeInp
     return Bake(baker, &in, tileX, tileZ, nullptr, reportOut);
 }
 
-mnavResult mnavBakeTile(mnavBaker* baker, const mnavBakeInput* input, int32_t tileX, int32_t tileZ,
-                        mnavBakeReport* reportOut)
+mnavResult mnavBaker_BakeTile(mnavBaker* baker, const mnavBakeInput* input, int32_t tileX,
+                              int32_t tileZ, mnavBakeReport* reportOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = BakeTileWork(baker, input, tileX, tileZ, reportOut);
@@ -692,8 +691,8 @@ static MNAV_NOINLINE mnavResult BakeTile2DWork(mnavBaker* baker, const mnavBake2
     return Bake(baker, &in, tileX, tileZ, nullptr, reportOut);
 }
 
-mnavResult mnavBakeTile2D(mnavBaker* baker, const mnavBake2DInput* input, int32_t tileX,
-                          int32_t tileZ, mnavBakeReport* reportOut)
+mnavResult mnavBaker_BakeTile2D(mnavBaker* baker, const mnavBake2DInput* input, int32_t tileX,
+                                int32_t tileZ, mnavBakeReport* reportOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = BakeTile2DWork(baker, input, tileX, tileZ, reportOut);
@@ -719,8 +718,9 @@ static MNAV_NOINLINE mnavResult BakeTileCachedWork(mnavBaker* baker, mnavTileCac
     return Bake(baker, &in, tileX, tileZ, cache, reportOut);
 }
 
-mnavResult mnavBakeTileCached(mnavBaker* baker, mnavTileCache* cache, const mnavBakeInput* input,
-                              int32_t tileX, int32_t tileZ, mnavBakeReport* reportOut)
+mnavResult mnavBaker_BakeTileCached(mnavBaker* baker, mnavTileCache* cache,
+                                    const mnavBakeInput* input, int32_t tileX, int32_t tileZ,
+                                    mnavBakeReport* reportOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = BakeTileCachedWork(baker, cache, input, tileX, tileZ, reportOut);
@@ -745,8 +745,7 @@ static mnavResult CheckObstacles(const mnavBaker* baker, const mnavCachedTile* t
         mnavInputResult input = mnavCheckVolume(&baker->def, &obstacles[i]);
         if (input.result != mnav_success)
         {
-            report->mesh = i;
-            report->input = input;
+            report->input = mnavInputNamed(input, mnav_inputObstacle, i);
             return input.result;
         }
         total += obstacles[i].pointCount;
@@ -795,7 +794,7 @@ static mnavResult Rebuild(mnavBaker* baker, mnavTileCache* cache, int32_t tileX,
             memcpy(&volumes[tile->volumeCount], obstacles,
                    (size_t)obstacleCount * sizeof(mnavBakeVolume));
         }
-        report.triangles = tile->triangles;
+        report.triangleCount = tile->triangles;
         report.fingerprint =
             mnavFingerprintVolumes(&tile->field.frame, volumes, count, tile->geometry);
         Enter(baker, &report, mnav_stageCompact);
@@ -832,9 +831,9 @@ static MNAV_NOINLINE mnavResult RebuildTileWork(mnavBaker* baker, mnavTileCache*
     return Counted(baker, cache, &report, reportOut, result);
 }
 
-mnavResult mnavRebuildTile(mnavBaker* baker, mnavTileCache* cache, int32_t tileX, int32_t tileZ,
-                           const mnavBakeVolume* obstacles, int32_t obstacleCount,
-                           mnavBakeReport* reportOut)
+mnavResult mnavBaker_RebuildTile(mnavBaker* baker, mnavTileCache* cache, int32_t tileX,
+                                 int32_t tileZ, const mnavBakeVolume* obstacles,
+                                 int32_t obstacleCount, mnavBakeReport* reportOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =
@@ -846,9 +845,13 @@ mnavResult mnavRebuildTile(mnavBaker* baker, mnavTileCache* cache, int32_t tileX
 static mnavResult CopyBakedTileWork(const mnavBaker* baker, uint8_t* bufferOut, size_t capacity,
                                     size_t* sizeOut)
 {
-    if (baker == nullptr || (bufferOut == nullptr && capacity > 0) || baker->tile == nullptr)
+    if (baker == nullptr || (bufferOut == nullptr && capacity > 0))
     {
         return mnav_errorInvalid;
+    }
+    if (baker->tile == nullptr)
+    {
+        return mnav_errorState;
     }
     if (sizeOut != nullptr)
     {
@@ -865,9 +868,13 @@ static mnavResult CopyBakedTileWork(const mnavBaker* baker, uint8_t* bufferOut, 
     return mnav_success;
 }
 
-mnavResult mnavCopyBakedTile(const mnavBaker* baker, uint8_t* bufferOut, size_t capacity,
-                             size_t* sizeOut)
+mnavResult mnavBaker_CopyTile(const mnavBaker* baker, uint8_t* bufferOut, size_t capacity,
+                              size_t* sizeOut)
 {
-    return mnavHostCountInvalid(MNAV_HOST(baker),
-                                CopyBakedTileWork(baker, bufferOut, capacity, sizeOut));
+    mnavClearOutput(sizeOut, sizeof(*sizeOut));
+    mnavResult result = mnavHostCountInvalid(
+        MNAV_HOST(baker), CopyBakedTileWork(baker, bufferOut, capacity, sizeOut));
+    // A buffer too small for the tile gets none of it.
+    mnavClearArray(result, false, bufferOut, mnavByteCapacity(capacity), 1);
+    return mnavClearUnlessCapacity(result, sizeOut, sizeof(*sizeOut));
 }

@@ -5,6 +5,7 @@
 
 #include "fpenv.h"
 #include "navmesh.h"
+#include "outputs.h"
 #include "polymesh.h"
 #include "query.h"
 #include "query_filter.h"
@@ -46,7 +47,7 @@ static double Leaves(const Walk* w, mnavPos3 a, mnavPos3 b)
 // The polygon the ray enters through edge j at parameter t: true with the
 // walk moved there, false at a wall; notLoaded is set at a side with no
 // tile beyond.
-static bool Follow(Walk* w, int32_t j, double t, bool* notLoaded)
+MNAV_NODISCARD static bool Follow(Walk* w, int32_t j, double t, bool* notLoaded)
 {
     const mnavSlot* slot = &w->navmesh->slots[w->slot];
     const mnavTile* tile = slot->tile;
@@ -130,8 +131,7 @@ static void Wall(mnavRay* ray, mnavPos3 a, mnavPos3 b)
     double ez = b.z - a.z;
     double length = sqrt(ex * ex + ez * ez);
     ray->end = mnav_rayWall;
-    ray->normalX = ez / length;
-    ray->normalZ = -ex / length;
+    ray->normal = (mnavVec3){(float)(ez / length), 0.0f, (float)(-ex / length)};
 }
 
 // A ray's arguments: a call back in from host code, then the arguments
@@ -149,6 +149,10 @@ static mnavResult CheckRay(mnavQuery* query, const mnavNavmesh* navmesh,
         !isfinite(start.y) || !isfinite(start.z) || !isfinite(end.x) || !isfinite(end.z))
     {
         return mnav_errorInvalid;
+    }
+    if (!mnavInQueryReach(navmesh, start) || !mnavInQueryReachGround(navmesh, end.x, end.z))
+    {
+        return mnav_errorLimit;
     }
     mnavResult result = mnavCheckPolygon(navmesh, startPolygon);
     return result == mnav_success ? mnavCheckFilter(filter, usable) : result;
@@ -171,7 +175,7 @@ mnavResult mnavRaycastWork(mnavQuery* query, const mnavNavmesh* navmesh,
               usable,
               (int32_t)startPolygon.slot - 1,
               (int32_t)startPolygon.polygon};
-    *rayOut = (mnavRay){mnav_rayReached, 1.0, 0.0, 0.0, query->corridor, 0};
+    *rayOut = (mnavRay){mnav_rayReached, 1.0, {0.0f, 0.0f, 0.0f}, query->corridor, 0};
     double t = 0.0;
     int32_t count = 0;
     Record(query, &w, &count);
@@ -229,13 +233,18 @@ static MNAV_NOINLINE mnavResult RaycastCounted(mnavQuery* query, const mnavNavme
                                                mnavPolygonId startPolygon, mnavPos3 start,
                                                mnavPos3 end, mnavRay* rayOut)
 {
-    return mnavHostCountInvalid(
-        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
-        mnavRaycastWork(query, navmesh, filter, startPolygon, start, end, rayOut));
+    mnavRay rayMade = {0};
+    mnavResult result =
+        mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+                             mnavRaycastWork(query, navmesh, filter, startPolygon, start, end,
+                                             rayOut != nullptr ? &rayMade : nullptr));
+    mnavGiveOutput(result, false, rayOut, &rayMade, sizeof(rayMade));
+    return result;
 }
 
-mnavResult mnavRaycast(mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-                       mnavPolygonId startPolygon, mnavPos3 start, mnavPos3 end, mnavRay* rayOut)
+mnavResult mnavQuery_Raycast(mnavQuery* query, const mnavNavmesh* navmesh,
+                             mnavPolygonId startPolygon, mnavPos3 start, mnavPos3 end,
+                             const mnavQueryFilter* filter, mnavRay* rayOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = RaycastCounted(query, navmesh, filter, startPolygon, start, end, rayOut);

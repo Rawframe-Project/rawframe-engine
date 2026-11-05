@@ -109,7 +109,7 @@ typedef struct mnavOffLink
 
 struct mnavNavmesh
 {
-    mnavBakeDef def;
+    mnavNavmeshDef def;
     mnavBakeCells cells;
     mnavMemory memory;
     // Marked while its allocator or a link generation's clearance test
@@ -189,6 +189,15 @@ mnavFrame mnavFrameOf(const mnavNavmesh* navmesh, int32_t x, int32_t z);
 // mnav_errorInvalid for one never handed out, mnav_errorStale for one whose
 // tile was replaced or removed.
 mnavResult mnavCheckPolygon(const mnavNavmesh* navmesh, mnavPolygonId id);
+
+// Whether a query's point lies within MNAV_MAX_QUERY_DISTANCE of the
+// navmesh's origin on each axis; a point that is not finite does not.
+// Every navmesh query that takes a point, an end or a center checks it,
+// after the point's own checks, and refuses one past it with
+// mnav_errorLimit; mnavInQueryReachGround checks x and z alone, for a
+// point whose height the query never reads.
+MNAV_NODISCARD bool mnavInQueryReach(const mnavNavmesh* navmesh, mnavPos3 p);
+MNAV_NODISCARD bool mnavInQueryReachGround(const mnavNavmesh* navmesh, double x, double z);
 
 // A mesh vertex's world position in a tile's frame. Inline: the searches
 // call it for every portal they open.

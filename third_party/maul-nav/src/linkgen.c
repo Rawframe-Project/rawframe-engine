@@ -12,6 +12,7 @@
 #include "fpenv.h"
 #include "navmesh.h"
 #include "nearest.h"
+#include "outputs.h"
 #include "query.h"
 #include "query_filter.h"
 
@@ -25,7 +26,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-static bool Within(float v, float low, float high)
+MNAV_NODISCARD static bool Within(float v, float low, float high)
 {
     return isfinite(v) && v >= low && v <= high;
 }
@@ -51,7 +52,7 @@ static mnavResult CheckDef(const mnavLinkGenDef* d)
         past = past || values[k] > most[k];
     }
     if (d->spacing == 0.0f || (d->detour != 0.0f && !Within(d->detour, 1.0f, 1.0e6f)) ||
-        d->dropKind >= MNAV_LINK_KINDS || d->jumpKind >= MNAV_LINK_KINDS)
+        (uint32_t)d->dropKind >= MNAV_LINK_KINDS || (uint32_t)d->jumpKind >= MNAV_LINK_KINDS)
     {
         return mnav_errorInvalid;
     }
@@ -95,12 +96,17 @@ static double Distance(mnavPos3 a, mnavPos3 b)
     return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
+MNAV_NODISCARD static bool SameId(mnavPolygonId a, mnavPolygonId b)
+{
+    return a.slot == b.slot && a.generation == b.generation && a.polygon == b.polygon;
+}
+
 // The surface nearest a height at a ground point, among the polygons in a
-// box there: the highest from low to high when highest is set, else the
-// one nearest the height; whether one was found. A box meeting more
-// polygons than the landings stops generation.
-static bool Landing(Gen* g, double x, double z, double low, double high, double height,
-                    bool highest, Spot* out)
+// box there but the takeoff's: the highest from low to high when highest
+// is set, else the one nearest the height; whether one was found. A box
+// meeting more polygons than the landings stops generation.
+MNAV_NODISCARD static bool Landing(Gen* g, mnavPolygonId takeoff, double x, double z, double low,
+                                   double high, double height, bool highest, Spot* out)
 {
     mnavPolygonId ids[MNAV_MAX_LINK_LANDINGS];
     mnavFound found;
@@ -114,10 +120,13 @@ static bool Landing(Gen* g, double x, double z, double low, double high, double 
         return false;
     }
     bool any = false;
-    for (int32_t i = 0; i < found.count; ++i)
+    for (int32_t i = 0; i < found.polygonCount; ++i)
     {
         double h = 0.0;
-        if (mnavGetHeightWork(g->navmesh, ids[i], x, z, &h) != mnav_success || h < low || h > high)
+        // With no radius, the first jump box lies on the edge itself, which
+        // only the takeoff's polygon holds: a landing there is no jump.
+        if (SameId(ids[i], takeoff) ||
+            mnavGetHeightWork(g->navmesh, ids[i], x, z, &h) != mnav_success || h < low || h > high)
         {
             continue;
         }
@@ -134,7 +143,7 @@ static bool Landing(Gen* g, double x, double z, double low, double high, double 
 // Whether the navmesh walks from one spot to the other within the def's
 // detour times the straight distance: the straight path's length, since
 // the search's own runs through portal midpoints and may be far longer.
-static bool Walks(const Gen* g, Spot from, Spot to)
+MNAV_NODISCARD static bool Walks(const Gen* g, Spot from, Spot to)
 {
     if (g->def->detour == 0.0f)
     {
@@ -155,8 +164,9 @@ static bool Walks(const Gen* g, Spot from, Spot to)
     return length <= (double)g->def->detour * Distance(from.point, to.point);
 }
 
-// Whether both ends of a link lie near an earlier link's.
-static bool Near(const Gen* g, mnavPos3 start, mnavPos3 end)
+// Whether both ends of a link lie near an earlier link's in the buffer;
+// links past it are not held anywhere to compare with.
+MNAV_NODISCARD static bool Near(const Gen* g, mnavPos3 start, mnavPos3 end)
 {
     double d = (double)g->def->filterDistance;
     int32_t held = g->count < g->capacity ? g->count : g->capacity;
@@ -175,17 +185,17 @@ static bool Near(const Gen* g, mnavPos3 start, mnavPos3 end)
 // into either that would change what generation reads is refused; the
 // navmesh is only read, and its mark is the one field this writes
 // through it.
-static bool Clear(const Gen* g, mnavPos3 from, mnavPos3 to)
+MNAV_NODISCARD static bool Clear(const Gen* g, mnavPos3 from, mnavPos3 to)
 {
     const mnavLinkGenDef* d = g->def;
-    if (d->clear == nullptr)
+    if (d->clearance == nullptr)
     {
         return true;
     }
     mnavHostCode* navmesh = (mnavHostCode*)&g->navmesh->host;
     mnavHostEnterReader(navmesh);
     mnavHostEnterReader(&g->query->host);
-    bool clear = d->clear(d->context, from, to);
+    bool clear = d->clearance(d->context, from, to);
     mnavHostLeaveReader(&g->query->host);
     mnavHostLeaveReader(navmesh);
     return clear;
@@ -200,7 +210,9 @@ static void Keep(Gen* g, Spot from, Spot to, bool drop)
     }
     if (g->count == g->total)
     {
-        g->result = mnav_errorLimit;
+        // Past the buffer the count is room, not links kept: a buffer of
+        // the total either holds them all or reaches the limit itself.
+        g->result = g->count > g->capacity ? mnav_errorCapacity : mnav_errorLimit;
         return;
     }
     bool twoWay = drop && from.point.y - to.point.y <= (double)d->climbMax;
@@ -227,7 +239,7 @@ static void Sample(Gen* g, Spot from, mnavPos3 edge, double nx, double nz)
     {
         double out = 2.0 * g->radius + 4.0 * g->cell;
         Spot to = {{0, 0, 0}, {0.0, -(double)INFINITY, 0.0}};
-        if (Landing(g, edge.x + nx * out, edge.z + nz * out, top - (double)d->dropMax,
+        if (Landing(g, from.polygon, edge.x + nx * out, edge.z + nz * out, top - (double)d->dropMax,
                     top - g->step, top, true, &to))
         {
             Keep(g, from, to, true);
@@ -238,8 +250,8 @@ static void Sample(Gen* g, Spot from, mnavPos3 edge, double nx, double nz)
          out += g->cell)
     {
         Spot to = {{0, 0, 0}, {0.0, (double)INFINITY, 0.0}};
-        if (Landing(g, edge.x + nx * out, edge.z + nz * out, top - g->step, top + g->step, top,
-                    false, &to))
+        if (Landing(g, from.polygon, edge.x + nx * out, edge.z + nz * out, top - g->step,
+                    top + g->step, top, false, &to))
         {
             Keep(g, from, to, false);
             break;
@@ -348,21 +360,21 @@ static mnavResult Generate(mnavQuery* query, const mnavNavmesh* navmesh,
         return result;
     }
     // Samples closer than a cell tell nothing a cell's resolution can.
-    if (def->spacing < navmesh->def.cellSize)
+    if (def->spacing < navmesh->def.bake.cellSize)
     {
         return mnav_errorInvalid;
     }
     // The filter is copied: the searches begun here replace the context's.
     mnavQueryFilter own = *usable;
-    const mnavAgentProfile* agent = &navmesh->def.agent;
+    const mnavAgentProfile* agent = &navmesh->def.bake.agent;
     Gen g = {query,
              navmesh,
              &own,
              def,
              (double)agent->radius,
              (double)agent->stepHeight,
-             (double)navmesh->def.cellSize,
-             (double)navmesh->def.cellHeight,
+             (double)navmesh->def.bake.cellSize,
+             (double)navmesh->def.bake.cellHeight,
              linksOut,
              capacity,
              0,
@@ -387,40 +399,48 @@ static mnavResult Generate(mnavQuery* query, const mnavNavmesh* navmesh,
 
 static MNAV_NOINLINE mnavResult GenerateLinksWork(mnavQuery* query, const mnavNavmesh* navmesh,
                                                   const mnavQueryFilter* filter,
-                                                  const mnavLinkGenDef* def, int32_t tileX0,
-                                                  int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
-                                                  mnavLinkDef* linksOut, int32_t capacity,
-                                                  int32_t* countOut)
+                                                  const mnavLinkGenDef* def,
+                                                  const mnavTileRange* tiles, mnavLinkDef* linksOut,
+                                                  int32_t capacity, int32_t* countOut)
 {
     if (query != nullptr && mnavHostCalledBack(&query->host))
     {
         return mnav_errorBusy;
     }
-    return Generate(query, navmesh, filter, def, (mnavTileRange){tileX0, tileZ0, tileX1, tileZ1},
-                    linksOut, capacity, countOut,
+    mnavTileRange range =
+        tiles != nullptr ? *tiles : (mnavTileRange){INT32_MIN, INT32_MIN, INT32_MAX, INT32_MAX};
+    return Generate(query, navmesh, filter, def, range, linksOut, capacity, countOut,
                     (mnavLinkGenLimits){MNAV_MAX_LINKS, MNAV_MAX_LINK_LANDINGS});
 }
 
 static MNAV_NOINLINE mnavResult GenerateLinksCounted(mnavQuery* query, const mnavNavmesh* navmesh,
                                                      const mnavQueryFilter* filter,
-                                                     const mnavLinkGenDef* def, int32_t tileX0,
-                                                     int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
+                                                     const mnavLinkGenDef* def,
+                                                     const mnavTileRange* tiles,
                                                      mnavLinkDef* linksOut, int32_t capacity,
                                                      int32_t* countOut)
 {
-    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
-                                GenerateLinksWork(query, navmesh, filter, def, tileX0, tileZ0,
-                                                  tileX1, tileZ1, linksOut, capacity, countOut));
+    int32_t countMade = 0;
+    mnavResult result = mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+        GenerateLinksWork(query, navmesh, filter, def, tiles, linksOut, capacity,
+                          countOut != nullptr ? &countMade : nullptr));
+    // Generation that stopped at a bound keeps and counts the links found,
+    // as a buffer too small does.
+    bool defined = result == mnav_errorCapacity || result == mnav_errorLimit;
+    mnavClearArray(result, defined, linksOut, capacity, sizeof(*linksOut));
+    mnavGiveOutput(result, defined, countOut, &countMade, sizeof(countMade));
+    return result;
 }
 
-mnavResult mnavGenerateLinks(mnavQuery* query, const mnavNavmesh* navmesh,
-                             const mnavQueryFilter* filter, const mnavLinkGenDef* def,
-                             int32_t tileX0, int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
-                             mnavLinkDef* linksOut, int32_t capacity, int32_t* countOut)
+mnavResult mnavQuery_GenerateLinks(mnavQuery* query, const mnavNavmesh* navmesh,
+                                   const mnavLinkGenDef* def, const mnavTileRange* tiles,
+                                   const mnavQueryFilter* filter, mnavLinkDef* linksOut,
+                                   int32_t capacity, int32_t* countOut)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = GenerateLinksCounted(query, navmesh, filter, def, tileX0, tileZ0, tileX1,
-                                             tileZ1, linksOut, capacity, countOut);
+    mnavResult result =
+        GenerateLinksCounted(query, navmesh, filter, def, tiles, linksOut, capacity, countOut);
     mnavFloatEnvLeave(env);
     return result;
 }

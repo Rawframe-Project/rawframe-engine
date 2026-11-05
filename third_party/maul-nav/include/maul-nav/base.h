@@ -23,7 +23,7 @@ extern "C"
 // The library version. CMake reads it from here, and release-please
 // moves it between the markers.
 // x-release-please-start-major
-#define MNAV_VERSION_MAJOR 0
+#define MNAV_VERSION_MAJOR 1
 // x-release-please-end
 // x-release-please-start-minor
 #define MNAV_VERSION_MINOR 2
@@ -70,13 +70,20 @@ extern "C"
 
 // MNAV_NODISCARD marks a function whose result must be read: every
 // function that returns a status. The attribute is standard in C23 and
-// C++17 and left out for older dialects; MSVC states its C++ dialect in
-// _MSVC_LANG, not __cplusplus.
+// C++17 and left out for older dialects. MSVC keeps __cplusplus at
+// 199711L unless /Zc:__cplusplus is given, so _MSVC_LANG is read too. In
+// C, any dialect after C17 whose compiler has the attribute takes it:
+// GCC 14 reports 202000L in its C23 mode.
 #if (defined(__cplusplus) && __cplusplus >= 201703L) ||                                            \
     (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
 #define MNAV_NODISCARD [[nodiscard]]
-#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ > 201710L &&          \
+    defined(__has_c_attribute)
+#if __has_c_attribute(nodiscard)
 #define MNAV_NODISCARD [[nodiscard]]
+#else
+#define MNAV_NODISCARD
+#endif
 #else
 #define MNAV_NODISCARD
 #endif
@@ -166,7 +173,16 @@ extern "C"
         void* context;
     } mnavAllocator;
 
-    // A vector or a position within a frame, in meters, binary32.
+    // A vector, binary32: a velocity, a direction, or a position within a
+    // frame the library names, in meters. mnavVec2 is one on a plane: a 2D
+    // outline's (x, y) is the navmesh point (x, 0, y), and avoidance's lies
+    // on the plane its agents move on.
+    typedef struct mnavVec2
+    {
+        float x;
+        float y;
+    } mnavVec2;
+
     typedef struct mnavVec3
     {
         float x;
@@ -174,8 +190,15 @@ extern "C"
         float z;
     } mnavVec3;
 
-    // A world position in meters, in doubles, so that precision does not
-    // depend on the distance from the world origin.
+    // A world position in meters, binary64, so that precision does not
+    // depend on the distance from the world origin. mnavPos2 is one on a
+    // plane, as avoidance takes positions.
+    typedef struct mnavPos2
+    {
+        double x;
+        double y;
+    } mnavPos2;
+
     typedef struct mnavPos3
     {
         double x;
@@ -205,7 +228,7 @@ extern "C"
     /// @return The hash.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API uint64_t mnavHash64(uint64_t seed, const void* data, int32_t byteCount);
+    MNAV_API uint64_t mnavHash64(uint64_t seed, const void* data, int64_t byteCount);
 
     /// Returns the name of a result code, for diagnostics.
     ///
@@ -213,7 +236,7 @@ extern "C"
     /// @return A static, NUL-terminated string such as "mnav_errorCapacity".
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_API const char* mnavResultName(mnavResult result);
+    MNAV_API const char* mnavGetResultName(mnavResult result);
 
 #ifdef __cplusplus
 }

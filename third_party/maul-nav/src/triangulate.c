@@ -35,7 +35,7 @@ static const mnavContourVertex* At(const Ring* ring, int32_t i)
 
 // Whether the segment from i to j crosses no edge of the ring other than
 // those at i and j; loose lets it touch.
-static bool Clear(const Ring* ring, int32_t i, int32_t j, bool loose)
+MNAV_NODISCARD static bool Clear(const Ring* ring, int32_t i, int32_t j, bool loose)
 {
     const mnavContourVertex* d0 = At(ring, i);
     const mnavContourVertex* d1 = At(ring, j);
@@ -67,7 +67,7 @@ static bool Clear(const Ring* ring, int32_t i, int32_t j, bool loose)
 // touch the positions of i and j, as it must for the two copies of a hole
 // bridge's ends, and so cannot see a vertex both of whose edges run to
 // those positions; this test can.
-static bool Empty(const Ring* ring, int32_t i, int32_t j)
+MNAV_NODISCARD static bool Empty(const Ring* ring, int32_t i, int32_t j)
 {
     int32_t middle = Next(i, ring->n);
     const mnavContourVertex* a = At(ring, i);
@@ -89,7 +89,7 @@ static bool Empty(const Ring* ring, int32_t i, int32_t j)
 }
 
 // Whether i to j, which skips one vertex, is a diagonal inside the ring.
-static bool Diagonal(const Ring* ring, int32_t i, int32_t j, bool loose)
+MNAV_NODISCARD static bool Diagonal(const Ring* ring, int32_t i, int32_t j, bool loose)
 {
     int32_t n = ring->n;
     bool inCone =

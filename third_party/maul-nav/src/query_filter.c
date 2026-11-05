@@ -67,5 +67,5 @@ double mnavCheapest(const mnavQueryFilter* filter)
 
 bool mnavCrosses(const mnavQueryFilter* filter, mnavLinkKind kind)
 {
-    return kind < MNAV_LINK_KINDS && ((filter->kinds >> kind) & 1u) != 0;
+    return (uint32_t)kind < MNAV_LINK_KINDS && ((filter->kinds >> kind) & 1u) != 0;
 }

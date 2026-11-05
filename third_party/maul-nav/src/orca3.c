@@ -28,8 +28,8 @@ typedef struct Line3
 
 // Narrows [left, right] along the line to where planes [0, n) allow;
 // false when nothing is left.
-static bool Bound(const mnavPlane* planes, int32_t n, const Line3* line, double* left,
-                  double* right)
+MNAV_NODISCARD static bool Bound(const mnavPlane* planes, int32_t n, const Line3* line,
+                                 double* left, double* right)
 {
     for (int32_t i = 0; i < n; ++i)
     {
@@ -62,8 +62,9 @@ static bool Bound(const mnavPlane* planes, int32_t n, const Line3* line, double*
 
 // The 1D program on a line, bounded by planes [0, n) and the sphere:
 // false when they leave nothing of it.
-static bool Program1(const mnavPlane* planes, int32_t n, const Line3* line, double radius,
-                     mnavPos3 wanted, bool directionOpt, mnavPos3* result)
+MNAV_NODISCARD static bool Program1(const mnavPlane* planes, int32_t n, const Line3* line,
+                                    double radius, mnavPos3 wanted, bool directionOpt,
+                                    mnavPos3* result)
 {
     double dot = mnavDot3(line->point, line->direction);
     double discriminant = dot * dot + radius * radius - mnavDot3(line->point, line->point);
@@ -94,8 +95,8 @@ static bool Program1(const mnavPlane* planes, int32_t n, const Line3* line, doub
 
 // The best point of plane n's disc within the sphere, before the planes
 // before it are kept: false when the plane misses the sphere.
-static bool OnPlane(const mnavPlane* plane, double radius, mnavPos3 wanted, bool directionOpt,
-                    mnavPos3* result)
+MNAV_NODISCARD static bool OnPlane(const mnavPlane* plane, double radius, mnavPos3 wanted,
+                                   bool directionOpt, mnavPos3* result)
 {
     double distance = mnavDot3(plane->point, plane->normal);
     double distanceSq = distance * distance;
@@ -135,8 +136,8 @@ static bool OnPlane(const mnavPlane* plane, double radius, mnavPos3 wanted, bool
 
 // The 2D program on plane n, bounded by planes [0, n) and the sphere:
 // false when they leave nothing of it.
-static bool Program2(const mnavPlane* planes, int32_t n, double radius, mnavPos3 wanted,
-                     bool directionOpt, mnavPos3* result)
+MNAV_NODISCARD static bool Program2(const mnavPlane* planes, int32_t n, double radius,
+                                    mnavPos3 wanted, bool directionOpt, mnavPos3* result)
 {
     const mnavPlane* plane = &planes[n];
     if (!OnPlane(plane, radius, wanted, directionOpt, result))
@@ -201,7 +202,7 @@ int32_t mnavPlaneProgram3(const mnavPlane* planes, int32_t count, double radius,
 
 // The plane where planes i and j are equally broken, through which the
 // 4D program's projection runs; false when they face the same way.
-static bool Bisector(const mnavPlane* i, const mnavPlane* j, mnavPlane* out)
+MNAV_NODISCARD static bool Bisector(const mnavPlane* i, const mnavPlane* j, mnavPlane* out)
 {
     mnavPos3 cross = mnavCross3(j->normal, i->normal);
     if (mnavDot3(cross, cross) <= PARALLEL * PARALLEL)

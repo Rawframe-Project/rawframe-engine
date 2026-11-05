@@ -14,6 +14,7 @@
 #include "invariant.h"
 #include "navmesh.h"
 #include "offmesh.h"
+#include "outputs.h"
 #include "query.h"
 #include "query_filter.h"
 #include "sort.h"
@@ -105,7 +106,6 @@ static mnavResult Allocate(mnavHierarchy* h)
     mnavResult r = mnav_success;
     Take(h, &r, n.tiles, sizeof(int32_t), alignof(int32_t), (void**)&h->clusterOf);
     Take(h, &r, n.tiles, sizeof(int32_t), alignof(int32_t), (void**)&h->firstOfSlot);
-    Take(h, &r, n.tiles, sizeof(uint8_t), alignof(uint8_t), (void**)&h->inside);
     Take(h, &r, n.tiles, sizeof(uint64_t), alignof(uint64_t), (void**)&h->keys);
     Take(h, &r, n.tiles, sizeof(uint64_t), alignof(uint64_t), (void**)&h->scratch);
     Take(h, &r, n.tiles + 1, sizeof(int32_t), alignof(int32_t), (void**)&h->firstSlot);
@@ -120,11 +120,7 @@ static mnavResult Allocate(mnavHierarchy* h)
     Take(h, &r, n.tiles, sizeof(uint64_t), alignof(uint64_t), (void**)&h->areaHashes);
     Take(h, &r, n.tiles, sizeof(uint8_t), alignof(uint8_t), (void**)&h->changed);
     Take(h, &r, n.tiles, sizeof(uint8_t), alignof(uint8_t), (void**)&h->dirty);
-    Take(h, &r, n.transitions + 1, sizeof(double), alignof(double), (void**)&h->costs);
-    Take(h, &r, n.transitions, sizeof(double), alignof(double), (void**)&h->joins);
-    Take(h, &r, n.transitions + 1, sizeof(int32_t), alignof(int32_t), (void**)&h->parents);
-    Take(h, &r, n.transitions + 1, sizeof(int32_t), alignof(int32_t), (void**)&h->places);
-    Take(h, &r, n.transitions + 1, sizeof(int32_t), alignof(int32_t), (void**)&h->heap);
+    Take(h, &r, n.tiles + 1, sizeof(int32_t), alignof(int32_t), (void**)&h->cursors);
     return r;
 }
 
@@ -171,7 +167,6 @@ static MNAV_NOINLINE mnavResult CreateHierarchyWork(const mnavHierarchyDef* def,
         mnavDestroyHierarchy(h);
         return result;
     }
-    memset(h->inside, 0, (size_t)def->limits.tiles);
     *hierarchyOut = h;
     return mnav_success;
 }
@@ -184,7 +179,7 @@ mnavResult mnavCreateHierarchy(const mnavHierarchyDef* def, mnavHierarchy** hier
     return result;
 }
 
-uint64_t mnavGetHierarchyMisuse(const mnavHierarchy* hierarchy)
+uint64_t mnavHierarchy_GetMisuse(const mnavHierarchy* hierarchy)
 {
     return hierarchy != nullptr ? mnavHostMisuse(&hierarchy->host) : 0;
 }
@@ -199,7 +194,6 @@ void mnavDestroyHierarchy(mnavHierarchy* hierarchy)
     Sizes n = SizesOf(&h->def);
     Give(h, h->clusterOf, n.tiles, sizeof(int32_t), alignof(int32_t));
     Give(h, h->firstOfSlot, n.tiles, sizeof(int32_t), alignof(int32_t));
-    Give(h, h->inside, n.tiles, sizeof(uint8_t), alignof(uint8_t));
     Give(h, h->keys, n.tiles, sizeof(uint64_t), alignof(uint64_t));
     Give(h, h->scratch, n.tiles, sizeof(uint64_t), alignof(uint64_t));
     Give(h, h->firstSlot, n.tiles + 1, sizeof(int32_t), alignof(int32_t));
@@ -213,11 +207,7 @@ void mnavDestroyHierarchy(mnavHierarchy* hierarchy)
     Give(h, h->areaHashes, n.tiles, sizeof(uint64_t), alignof(uint64_t));
     Give(h, h->changed, n.tiles, sizeof(uint8_t), alignof(uint8_t));
     Give(h, h->dirty, n.tiles, sizeof(uint8_t), alignof(uint8_t));
-    Give(h, h->costs, n.transitions + 1, sizeof(double), alignof(double));
-    Give(h, h->joins, n.transitions, sizeof(double), alignof(double));
-    Give(h, h->parents, n.transitions + 1, sizeof(int32_t), alignof(int32_t));
-    Give(h, h->places, n.transitions + 1, sizeof(int32_t), alignof(int32_t));
-    Give(h, h->heap, n.transitions + 1, sizeof(int32_t), alignof(int32_t));
+    Give(h, h->cursors, n.tiles + 1, sizeof(int32_t), alignof(int32_t));
     // The mark lives in the block being freed: it is set for good, so that
     // a call back in from this release is refused too, and the release
     // does not touch it.
@@ -347,8 +337,8 @@ static mnavTransition Cross(const mnavHierarchy* h, const mnavNavmesh* navmesh, 
 }
 
 // Whether tile link l of a tile leaves the cluster across a side.
-static bool Leaves(const mnavHierarchy* h, const mnavTile* tile, int32_t slot, int32_t l,
-                   int32_t side)
+MNAV_NODISCARD static bool Leaves(const mnavHierarchy* h, const mnavTile* tile, int32_t slot,
+                                  int32_t l, int32_t side)
 {
     const mnavLink* link = &tile->links[l];
     int32_t target = (int32_t)link->target.slot - 1;
@@ -493,9 +483,8 @@ static mnavResult FindTransitions(mnavHierarchy* h, const mnavNavmesh* navmesh, 
     {
         h->firstLeaving[c + 1] += h->firstLeaving[c];
     }
-    // Counting sort by the cluster left, keeping transition order; the
-    // end costs' slots serve as cursors.
-    int32_t* cursors = h->parents;
+    // Counting sort by the cluster left, keeping transition order.
+    int32_t* cursors = h->cursors;
     memcpy(cursors, h->firstLeaving, ((size_t)h->clusterCount + 1) * sizeof(int32_t));
     for (int32_t u = 0; u < h->transitionCount; ++u)
     {
@@ -596,7 +585,7 @@ static uint64_t AreaHash(const mnavTile* tile)
     uint64_t hash = MNAV_HASH_INIT;
     for (int32_t p = 0; p < tile->mesh.polygonCount; ++p)
     {
-        hash = mnavHash64(hash, &tile->mesh.polygons[p].area, (int32_t)sizeof(mnavAreaType));
+        hash = mnavHash64(hash, &tile->mesh.polygons[p].area, (int64_t)sizeof(mnavAreaType));
     }
     return hash;
 }
@@ -606,22 +595,22 @@ static uint64_t AreaHash(const mnavTile* tile)
 static uint64_t LinkHash(const mnavNavmesh* navmesh)
 {
     uint64_t hash = mnavHash64(MNAV_HASH_INIT, navmesh->attachments,
-                               (int32_t)((size_t)navmesh->attachmentCount * sizeof(uint64_t)));
+                               (int64_t)((size_t)navmesh->attachmentCount * sizeof(uint64_t)));
     for (int32_t i = 0; i < navmesh->attachmentCount; ++i)
     {
         const mnavOffLink* link = &navmesh->links[mnavAttachmentOf(navmesh->attachments[i]).link];
-        hash = mnavHash64(hash, &link->def.kind, (int32_t)sizeof(link->def.kind));
-        hash = mnavHash64(hash, &link->def.cost, (int32_t)sizeof(link->def.cost));
-        hash = mnavHash64(hash, &link->state.start, (int32_t)sizeof(mnavPos3));
-        hash = mnavHash64(hash, &link->state.end, (int32_t)sizeof(mnavPos3));
-        hash = mnavHash64(hash, &link->state.startPolygon, (int32_t)sizeof(mnavPolygonId));
-        hash = mnavHash64(hash, &link->state.endPolygon, (int32_t)sizeof(mnavPolygonId));
+        hash = mnavHash64(hash, &link->def.kind, (int64_t)sizeof(link->def.kind));
+        hash = mnavHash64(hash, &link->def.cost, (int64_t)sizeof(link->def.cost));
+        hash = mnavHash64(hash, &link->state.start, (int64_t)sizeof(mnavPos3));
+        hash = mnavHash64(hash, &link->state.end, (int64_t)sizeof(mnavPos3));
+        hash = mnavHash64(hash, &link->state.startPolygon, (int64_t)sizeof(mnavPolygonId));
+        hash = mnavHash64(hash, &link->state.endPolygon, (int64_t)sizeof(mnavPolygonId));
     }
     return hash;
 }
 
 // Whether the hierarchy's filter includes the polygon transition u enters.
-static bool Included(const mnavHierarchy* h, const mnavNavmesh* navmesh, int32_t u)
+MNAV_NODISCARD static bool Included(const mnavHierarchy* h, const mnavNavmesh* navmesh, int32_t u)
 {
     const mnavTransition* t = &h->transitions[u];
     const mnavTile* tile = navmesh->slots[t->slot].tile;
@@ -648,7 +637,7 @@ static void Stamp(mnavHierarchy* h, const mnavNavmesh* navmesh)
 
 // Whether the tiles and links are those the graph was built from, so
 // that only areas may have changed.
-static bool SameShape(const mnavHierarchy* h, const mnavNavmesh* navmesh)
+MNAV_NODISCARD static bool SameShape(const mnavHierarchy* h, const mnavNavmesh* navmesh)
 {
     if (navmesh->slotCount > h->def.limits.tiles || h->linkHash != LinkHash(navmesh))
     {
@@ -676,7 +665,7 @@ static bool SameShape(const mnavHierarchy* h, const mnavNavmesh* navmesh)
 // leaves end there, opening the polygon entered but never walking it: its
 // area costs them nothing, so that cluster is marked only when the
 // filter has come to include or exclude it.
-static bool MarkDirty(mnavHierarchy* h, const mnavNavmesh* navmesh)
+MNAV_NODISCARD static bool MarkDirty(mnavHierarchy* h, const mnavNavmesh* navmesh)
 {
     memset(h->dirty, 0, (size_t)h->clusterCount);
     memset(h->changed, 0, (size_t)navmesh->slotCount);
@@ -909,14 +898,18 @@ static MNAV_NOINLINE mnavResult BuildHierarchyCounted(mnavHierarchy* hierarchy, 
                                                       const mnavQueryFilter* filter,
                                                       mnavHierarchyReport* reportOut)
 {
-    return mnavHostCountInvalid(
+    mnavHierarchyReport reportMade = {0};
+    mnavResult result = mnavHostCountInvalid(
         mnavHostFirst(MNAV_HOST(hierarchy), mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh))),
-        BuildHierarchyWork(hierarchy, query, navmesh, filter, reportOut));
+        BuildHierarchyWork(hierarchy, query, navmesh, filter,
+                           reportOut != nullptr ? &reportMade : nullptr));
+    mnavGiveOutput(result, false, reportOut, &reportMade, sizeof(reportMade));
+    return result;
 }
 
-mnavResult mnavBuildHierarchy(mnavHierarchy* hierarchy, mnavQuery* query,
-                              const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-                              mnavHierarchyReport* reportOut)
+mnavResult mnavHierarchy_Build(mnavHierarchy* hierarchy, mnavQuery* query,
+                               const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
+                               mnavHierarchyReport* reportOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = BuildHierarchyCounted(hierarchy, query, navmesh, filter, reportOut);
@@ -964,13 +957,17 @@ static MNAV_NOINLINE mnavResult UpdateHierarchyCounted(mnavHierarchy* hierarchy,
                                                        const mnavNavmesh* navmesh,
                                                        mnavHierarchyReport* reportOut)
 {
-    return mnavHostCountInvalid(
+    mnavHierarchyReport reportMade = {0};
+    mnavResult result = mnavHostCountInvalid(
         mnavHostFirst(MNAV_HOST(hierarchy), mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh))),
-        UpdateHierarchyWork(hierarchy, query, navmesh, reportOut));
+        UpdateHierarchyWork(hierarchy, query, navmesh,
+                            reportOut != nullptr ? &reportMade : nullptr));
+    mnavGiveOutput(result, false, reportOut, &reportMade, sizeof(reportMade));
+    return result;
 }
 
-mnavResult mnavUpdateHierarchy(mnavHierarchy* hierarchy, mnavQuery* query,
-                               const mnavNavmesh* navmesh, mnavHierarchyReport* reportOut)
+mnavResult mnavHierarchy_Update(mnavHierarchy* hierarchy, mnavQuery* query,
+                                const mnavNavmesh* navmesh, mnavHierarchyReport* reportOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = UpdateHierarchyCounted(hierarchy, query, navmesh, reportOut);

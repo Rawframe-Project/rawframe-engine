@@ -34,13 +34,18 @@ mnavPos2 groundOf(const Ground& ground) noexcept {
     return mnavPos2{.x = ground.x, .y = ground.y};
 }
 
+/// A velocity as Maul Nav takes it: binary32, each part rounded once.
+mnavVec2 velocityOf(const Ground& velocity) noexcept {
+    return mnavVec2{.x = static_cast<float>(velocity.x), .y = static_cast<float>(velocity.y)};
+}
+
 } // namespace
 
 struct Avoidance::State {
     mnavAvoidance* set = nullptr;
     std::size_t maximumAgents = 0;
     std::vector<mnavAgent> agents;
-    std::vector<mnavPos2> velocities;
+    std::vector<mnavVec2> velocities;
 
     ~State() {
         mnavDestroyAvoidance(set);
@@ -81,21 +86,21 @@ result::Status Avoidance::avoid(std::span<const AvoidingAgent> agents, double se
     state.agents.clear();
     for (const AvoidingAgent& agent : agents) {
         state.agents.push_back(mnavAgent{.position = groundOf(agent.position),
-                                         .velocity = groundOf(agent.velocity),
-                                         .preferred = groundOf(agent.preferred),
+                                         .velocity = velocityOf(agent.velocity),
+                                         .preferred = velocityOf(agent.preferred),
                                          .radius = agent.radius,
                                          .maxSpeed = agent.maxSpeed,
                                          .priority = agent.priority,
                                          .id = agent.id});
     }
     state.velocities.resize(agents.size());
-    RAWFRAME_TRY(checked(mnavAvoid(state.set,
-                                   state.agents.data(),
-                                   static_cast<std::int32_t>(state.agents.size()),
-                                   nullptr,
-                                   0,
-                                   seconds,
-                                   state.velocities.data()),
+    RAWFRAME_TRY(checked(mnavAvoidance_Avoid(state.set,
+                                             state.agents.data(),
+                                             static_cast<std::int32_t>(state.agents.size()),
+                                             nullptr,
+                                             0,
+                                             seconds,
+                                             state.velocities.data()),
                          "an agent or the step was refused"));
     for (std::size_t at = 0; at < velocities.size(); ++at) {
         velocities[at] = Ground{.x = state.velocities[at].x, .y = state.velocities[at].y};

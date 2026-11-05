@@ -61,7 +61,8 @@ struct Tile {
 } // namespace
 
 struct Navmesh::State {
-    mnavBakeDef def{};
+    /// The navmesh's def, which holds the def its tiles are baked with.
+    mnavNavmeshDef def{};
     mnavNavmesh* navmesh = nullptr;
     mnavBaker* baker = nullptr;
     mnavQuery* query = nullptr;
@@ -79,7 +80,7 @@ struct Navmesh::State {
     }
 
     [[nodiscard]] double tileSide() const noexcept {
-        return static_cast<double>(def.cellSize) * def.tileCells;
+        return static_cast<double>(def.bake.cellSize) * def.bake.tileCells;
     }
 
     /// Puts back what `staged` held before a bake that failed, so nothing
@@ -88,9 +89,10 @@ struct Navmesh::State {
         for (const Place& kPlace : staged) {
             const auto kFound = tiles.find(kPlace);
             if (kFound != tiles.end()) {
-                static_cast<void>(mnavStageTile(navmesh, kFound->second.bytes.data(), kFound->second.bytes.size()));
+                static_cast<void>(
+                    mnavNavmesh_StageTile(navmesh, kFound->second.bytes.data(), kFound->second.bytes.size()));
             } else {
-                static_cast<void>(mnavStageTileRemoval(navmesh, kPlace.first, kPlace.second));
+                static_cast<void>(mnavNavmesh_StageTileRemoval(navmesh, kPlace.first, kPlace.second));
             }
         }
     }
@@ -98,8 +100,8 @@ struct Navmesh::State {
     [[nodiscard]] mnavNearest nearestOf(const Point& point, double reach) const noexcept {
         mnavNearest nearest{};
         const auto kReach = static_cast<float>(reach);
-        if (mnavFindNearest(
-                navmesh, nullptr, posOf(point), mnavVec3{.x = kReach, .y = kReach * 2, .z = kReach}, &nearest) !=
+        if (mnavNavmesh_FindNearest(
+                navmesh, posOf(point), mnavVec3{.x = kReach, .y = kReach * 2, .z = kReach}, nullptr, &nearest) !=
             mnav_success) {
             nearest.polygon.slot = 0;
         }
@@ -114,8 +116,9 @@ Navmesh::~Navmesh() = default;
 
 result::Result<std::unique_ptr<Navmesh>> Navmesh::create(const Settings& settings) {
     auto state = std::make_unique<State>();
-    mnavBakeDef& def = state->def;
-    def = mnavDefaultBakeDef();
+    mnavNavmeshDef& navmeshDef = state->def;
+    navmeshDef = mnavDefaultNavmeshDef();
+    mnavBakeDef& def = navmeshDef.bake;
     def.origin = posOf(settings.origin);
     def.cellSize = static_cast<float>(settings.cellSize);
     def.cellHeight = static_cast<float>(settings.cellHeight);
@@ -126,18 +129,21 @@ result::Result<std::unique_ptr<Navmesh>> Navmesh::create(const Settings& setting
                                  .maxSlopeDegrees = static_cast<float>(settings.agent.maxSlope)};
     def.minRegionArea = static_cast<float>(settings.minRegionArea);
     if (settings.maximumTiles > 0) {
-        def.limits.tiles = settings.maximumTiles;
+        navmeshDef.limits.tiles = settings.maximumTiles;
     }
+    // The memory both the navmesh and a bake may hold.
     if (settings.maximumMemoryBytes > 0) {
+        navmeshDef.limits.memoryBytes = settings.maximumMemoryBytes;
         def.limits.memoryBytes = settings.maximumMemoryBytes;
     }
     // Tiles are baked again in place as the World changes.
-    def.tier = mnav_tierDynamic;
-    const mnavBakeDefResult kMade = mnavCreateNavmesh(&def, &state->navmesh);
+    navmeshDef.tier = mnav_tierDynamic;
+    const mnavNavmeshDefResult kMade = mnavCreateNavmesh(&navmeshDef, &state->navmesh);
     if (kMade.result != mnav_success) {
         return std::unexpected<result::Error>{checked(kMade.result, "a navmesh's settings were refused")
                                                   .error()
-                                                  .withContext("setting", std::to_string(kMade.setting))};
+                                                  .withContext("setting", std::to_string(kMade.setting))
+                                                  .withContext("bake setting", std::to_string(kMade.bakeSetting))};
     }
     RAWFRAME_TRY(checked(mnavCreateBaker(&def, &state->baker).result, "a navmesh's baker could not be made"));
     const mnavQueryDef kQuery = mnavDefaultQueryDef();
@@ -147,7 +153,7 @@ result::Result<std::unique_ptr<Navmesh>> Navmesh::create(const Settings& setting
 
 result::Status Navmesh::bake(std::span<const Mesh> meshes, const Area& area) {
     State& state = *state_;
-    const Point kOrigin = pointOf(state.def.origin);
+    const Point kOrigin = pointOf(state.def.bake.origin);
     // The meshes in the grid's frame, as Maul Nav reads them.
     std::vector<std::vector<mnavVec3>> vertices;
     std::vector<mnavTriangleMesh> input;
@@ -194,8 +200,8 @@ result::Status Navmesh::bake(std::span<const Mesh> meshes, const Area& area) {
         for (auto row = static_cast<std::int32_t>(kFirstRow); row <= static_cast<std::int32_t>(kLastRow); ++row) {
             mnavBakeReport report{};
             const mnavBakeInput kInput{.meshes = input.data(), .meshCount = static_cast<std::int32_t>(input.size())};
-            const result::Status kBaked =
-                checked(mnavBakeTile(state.baker, &kInput, column, row, &report), "a navmesh tile could not be baked");
+            const result::Status kBaked = checked(mnavBaker_BakeTile(state.baker, &kInput, column, row, &report),
+                                                  "a navmesh tile could not be baked");
             if (!kBaked.has_value()) {
                 state.unstage(staged);
                 return std::unexpected<result::Error>{kBaked.error()
@@ -205,16 +211,16 @@ result::Status Navmesh::bake(std::span<const Mesh> meshes, const Area& area) {
                                                           .withContext("stage", std::to_string(report.stage))};
             }
             staged.emplace_back(column, row);
-            if (report.polygons == 0) {
-                static_cast<void>(mnavStageTileRemoval(state.navmesh, column, row));
+            if (report.polygonCount == 0) {
+                static_cast<void>(mnavNavmesh_StageTileRemoval(state.navmesh, column, row));
                 continue;
             }
             std::size_t size = 0;
-            static_cast<void>(mnavCopyBakedTile(state.baker, nullptr, 0, &size));
+            static_cast<void>(mnavBaker_CopyTile(state.baker, nullptr, 0, &size));
             std::vector<std::uint8_t> bytes(size);
             mnavTileResult staging{};
-            if (mnavCopyBakedTile(state.baker, bytes.data(), bytes.size(), &size) == mnav_success) {
-                staging = mnavStageTile(state.navmesh, bytes.data(), bytes.size());
+            if (mnavBaker_CopyTile(state.baker, bytes.data(), bytes.size(), &size) == mnav_success) {
+                staging = mnavNavmesh_StageTile(state.navmesh, bytes.data(), bytes.size());
             } else {
                 staging.result = mnav_errorCapacity;
             }
@@ -223,10 +229,11 @@ result::Status Navmesh::bake(std::span<const Mesh> meshes, const Area& area) {
                 return checked(staging.result, "a navmesh tile could not be staged");
             }
             made.emplace(Place{column, row},
-                         Tile{.bytes = std::move(bytes), .polygons = static_cast<std::uint64_t>(report.polygons)});
+                         Tile{.bytes = std::move(bytes), .polygons = static_cast<std::uint64_t>(report.polygonCount)});
         }
     }
-    if (result::Status committed = checked(mnavCommit(state.navmesh), "a navmesh's tiles could not be committed");
+    if (result::Status committed =
+            checked(mnavNavmesh_Commit(state.navmesh), "a navmesh's tiles could not be committed");
         !committed.has_value()) {
         state.unstage(staged);
         return committed;
@@ -258,8 +265,8 @@ result::Result<Path> Navmesh::path(const Point& from, const Point& to, double re
     }
     mnavPath found{};
     RAWFRAME_TRY(checked(
-        mnavFindPath(
-            state.query, state.navmesh, nullptr, kStart.polygon, kStart.point, kEnd.polygon, kEnd.point, &found),
+        mnavQuery_FindPath(
+            state.query, state.navmesh, kStart.polygon, kStart.point, kEnd.polygon, kEnd.point, nullptr, &found),
         "a path could not be searched for"));
     Path path{.end = found.end == mnav_pathFound ? PathEnd::Reached : PathEnd::Partial, .length = 0};
     path.points.reserve(static_cast<std::size_t>(found.pointCount));
@@ -289,8 +296,8 @@ std::uint64_t Navmesh::fingerprint() const noexcept {
     std::uint64_t hash = MNAV_HASH_INIT;
     for (const auto& [kPlace, kTile] : state_->tiles) {
         const std::array<std::int32_t, 2> kAt{kPlace.first, kPlace.second};
-        hash = mnavHash64(hash, kAt.data(), static_cast<std::int32_t>(sizeof kAt));
-        hash = mnavHash64(hash, kTile.bytes.data(), static_cast<std::int32_t>(kTile.bytes.size()));
+        hash = mnavHash64(hash, kAt.data(), static_cast<std::int64_t>(sizeof kAt));
+        hash = mnavHash64(hash, kTile.bytes.data(), static_cast<std::int64_t>(kTile.bytes.size()));
     }
     return hash;
 }

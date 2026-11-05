@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Sirac Ozmen
 //
-// A 3D bake's whole input checked: its arrays, then each mesh, terrain
-// and volume, and their size against the input limit.
+// A bake's whole input checked: its arrays, then each mesh, terrain and
+// volume, or each outline, and their size against the input limit.
 
 #include "bake_input.h"
 
+#include "bake_def.h"
+#include "fpenv.h"
 #include "input.h"
 #include "terrain.h"
+#include "tile_index.h"
 #include "volume.h"
 
 #include "maul-nav/bake.h"
@@ -22,39 +25,35 @@ bool mnavCheckInputArrays(const mnavBakeInput* input)
            input->volumeCount >= 0 && (input->volumeCount == 0 || input->volumes != nullptr);
 }
 
-// Notes a refused element and passes its outcome on.
-static mnavResult Refused(int32_t index, mnavInputResult input, int32_t* meshOut,
+// Notes a refused input and passes its outcome on.
+static mnavResult Refused(mnavInputResult checked, mnavInputKind kind, int32_t index,
                           mnavInputResult* inputOut)
 {
-    *meshOut = index;
-    *inputOut = input;
-    return input.result;
+    *inputOut = mnavInputNamed(checked, kind, index);
+    return checked.result;
 }
 
 mnavResult mnavCheckSolidInput(const mnavBakeDef* def, const mnavBakeInput* input,
-                               bool meshesChecked, int32_t* meshOut, mnavInputResult* inputOut)
+                               bool meshesChecked, mnavInputResult* inputOut)
 {
     int64_t total = 0;
     for (int32_t m = 0; m < input->meshCount; ++m)
     {
         mnavInputResult checked = meshesChecked
-                                      ? (mnavInputResult){mnav_success, mnav_elementNone, -1}
+                                      ? mnavInputElementResult(mnav_success, mnav_elementNone, -1)
                                       : mnavCheckTriangleMesh(def, &input->meshes[m]);
         if (checked.result != mnav_success)
         {
-            return Refused(m, checked, meshOut, inputOut);
+            return Refused(checked, mnav_inputMesh, m, inputOut);
         }
         total += input->meshes[m].triangleCount;
     }
-    // An element's index fits in int32_t: every mesh, terrain and volume
-    // before it was read, at least 24 bytes each, and 2^31 of them would
-    // take 48 GB.
     for (int32_t i = 0; i < input->terrainCount; ++i)
     {
         mnavInputResult checked = mnavCheckTerrain(def, &input->terrains[i]);
         if (checked.result != mnav_success)
         {
-            return Refused(input->meshCount + i, checked, meshOut, inputOut);
+            return Refused(checked, mnav_inputTerrain, i, inputOut);
         }
         total += mnavTerrainTriangles(&input->terrains[i]);
     }
@@ -63,9 +62,89 @@ mnavResult mnavCheckSolidInput(const mnavBakeDef* def, const mnavBakeInput* inpu
         mnavInputResult checked = mnavCheckVolume(def, &input->volumes[i]);
         if (checked.result != mnav_success)
         {
-            return Refused(input->meshCount + input->terrainCount + i, checked, meshOut, inputOut);
+            return Refused(checked, mnav_inputVolume, i, inputOut);
         }
         total += input->volumes[i].pointCount;
     }
     return total > def->limits.inputTriangles ? mnav_errorCapacity : mnav_success;
+}
+
+// The outcome of a whole input's check that refuses no one input.
+static mnavInputResult Whole(mnavResult result)
+{
+    return mnavInputElementResult(result, mnav_elementNone, -1);
+}
+
+static MNAV_NOINLINE mnavInputResult ValidateBakeInputWork(const mnavBakeDef* def,
+                                                           const mnavBakeInput* input)
+{
+    if (def == nullptr || input == nullptr)
+    {
+        return Whole(mnav_errorInvalid);
+    }
+    mnavBakeCells cells = {0};
+    mnavResult checked = mnavCheckBakeDef(def, &cells).result;
+    if (checked != mnav_success)
+    {
+        return Whole(checked);
+    }
+    if (!mnavCheckInputArrays(input) ||
+        (input->index != nullptr &&
+         !mnavTileIndexFits(input->index, def, &cells, input->meshes, input->meshCount)))
+    {
+        return Whole(mnav_errorInvalid);
+    }
+    mnavInputResult refused = Whole(mnav_success);
+    mnavResult result = mnavCheckSolidInput(def, input, false, &refused);
+    return refused.result != mnav_success ? refused : Whole(result);
+}
+
+mnavInputResult mnavValidateBakeInput(const mnavBakeDef* def, const mnavBakeInput* input)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavInputResult result = ValidateBakeInputWork(def, input);
+    mnavFloatEnvLeave(env);
+    return result;
+}
+
+static MNAV_NOINLINE mnavInputResult ValidateBake2DInputWork(const mnavBakeDef* def,
+                                                             const mnavBake2DInput* input)
+{
+    if (def == nullptr || input == nullptr)
+    {
+        return Whole(mnav_errorInvalid);
+    }
+    mnavBakeCells cells = {0};
+    mnavResult checked = mnavCheckBakeDef(def, &cells).result;
+    if (checked != mnav_success)
+    {
+        return Whole(checked);
+    }
+    const mnavOutline* outlines = input->outlines;
+    int32_t outlineCount = input->outlineCount;
+    if (outlineCount < 0 || (outlineCount > 0 && outlines == nullptr) ||
+        (input->index != nullptr &&
+         !mnavTileIndexFits2D(input->index, def, &cells, outlines, outlineCount)))
+    {
+        return Whole(mnav_errorInvalid);
+    }
+    int64_t total = 0;
+    for (int32_t o = 0; o < outlineCount; ++o)
+    {
+        mnavInputResult refused = mnavCheckOutline(def, &outlines[o]);
+        if (refused.result != mnav_success)
+        {
+            return mnavInputNamed(refused, mnav_inputOutline, o);
+        }
+        total += outlines[o].pointCount;
+    }
+    return Whole(total > def->limits.inputTriangles ? mnav_errorCapacity : mnav_success);
+}
+
+mnavInputResult mnavValidateBake2DInput(const mnavBakeDef* def, const mnavBake2DInput* input)
+{
+    uint64_t env = mnavFloatEnvEnter();
+    mnavInputResult result = ValidateBake2DInputWork(def, input);
+    mnavFloatEnvLeave(env);
+    return result;
 }

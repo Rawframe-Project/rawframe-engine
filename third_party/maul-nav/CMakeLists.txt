@@ -191,6 +191,7 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_dense(path_rules WHITEBOX)
     maul_add_test(raycast)
     maul_add_test(query_filter)
+    maul_add_test(query_range)
     maul_add_test(offmesh)
     # A link slot at its last generation, which the API reaches only after
     # 2^32 links (test_link_slots.c).
@@ -213,6 +214,7 @@ if(MAUL_NAV_BUILD_TESTS)
     # (test_query_table.c).
     maul_add_test(query_table WHITEBOX)
     maul_add_test(walls)
+    maul_add_test(outputs)
     maul_add_test(corridor)
     maul_add_test(tiers)
     maul_add_test(resnap)
@@ -251,7 +253,7 @@ if(MAUL_NAV_BUILD_TESTS)
     maul_add_test(scenarios)
     maul_add_dense(scenarios)
     # The 1,000-agent doorway crowd, a large scene: nightly, never in the
-    # pull request check.
+    # pull request check, where the scenarios suite runs its first ten rows.
     add_test(NAME doorway COMMAND test_scenarios --doorway)
     set_tests_properties(doorway PROPERTIES LABELS "scenarios;nightly")
     maul_add_test(terrain)

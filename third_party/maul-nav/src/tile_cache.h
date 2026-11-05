@@ -66,7 +66,7 @@ mnavResult mnavCacheTile(mnavTileCache* cache, mnavMemory* scratch, const mnavCa
 // What the cache holds for a tile, or NULL.
 const mnavCachedTile* mnavFindCachedTile(const mnavTileCache* cache, int32_t tileX, int32_t tileZ);
 
-// Drops what the cache holds for a tile, as mnavDropCachedTile does, for
+// Drops what the cache holds for a tile, as mnavTileCache_DropTile does, for
 // a call that has marked the cache itself.
 void mnavUncacheTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ);
 

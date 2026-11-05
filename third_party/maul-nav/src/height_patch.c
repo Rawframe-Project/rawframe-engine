@@ -50,7 +50,7 @@ static void Take(Flood* flood, int32_t fx, int32_t fz, uint32_t i, int32_t index
 // Takes each cell's span of the region; returns whether any cell had one.
 // Only spans at the region's edge are queued, as only they can reach
 // cells the region does not cover.
-static bool TakeRegion(Flood* flood, const uint32_t* ids, uint32_t region)
+MNAV_NODISCARD static bool TakeRegion(Flood* flood, const uint32_t* ids, uint32_t region)
 {
     const mnavCompactField* field = flood->field;
     const mnavHeightPatch* patch = flood->patch;

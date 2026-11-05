@@ -10,6 +10,7 @@
 #include "flight_volume.h"
 #include "fpenv.h"
 #include "invariant.h"
+#include "outputs.h"
 #include "query.h"
 
 #include "maul-nav/base.h"
@@ -52,12 +53,12 @@ static double Distance(const double a[3], const double b[3])
     return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-static bool SameBlock(const int32_t a[4], const int32_t b[4])
+MNAV_NODISCARD static bool SameBlock(const int32_t a[4], const int32_t b[4])
 {
     return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3];
 }
 
-static bool Sooner(const Node* nodes, int32_t a, int32_t b)
+MNAV_NODISCARD static bool Sooner(const Node* nodes, int32_t a, int32_t b)
 {
     double ta = nodes[a].cost + nodes[a].remaining;
     double tb = nodes[b].cost + nodes[b].remaining;
@@ -137,7 +138,7 @@ static uint32_t Slot(const Search* s, const int32_t block[4])
     }
 }
 
-static bool InSight(Search* s, const double a[3], const double b[3])
+MNAV_NODISCARD static bool InSight(Search* s, const double a[3], const double b[3])
 {
     return mnavFlightWalk(&s->cursor, a, b, nullptr) == MNAV_SPACE_OPEN;
 }
@@ -343,13 +344,13 @@ static void Settle(Search* s, int32_t node)
     Around(s, node, Repair);
 }
 
-static bool Nearer(const Node* nodes, int32_t a, int32_t b)
+MNAV_NODISCARD static bool Nearer(const Node* nodes, int32_t a, int32_t b)
 {
     return b == MNAV_NO_NODE || nodes[a].remaining < nodes[b].remaining;
 }
 
 // Closes up to budget nodes; returns whether the search has ended.
-static bool Run(Search* s, int32_t budget)
+MNAV_NODISCARD static bool Run(Search* s, int32_t budget)
 {
     mnavQuery* q = s->query;
     for (int32_t closed = 0; closed < budget && q->heapCount > 0; ++closed)
@@ -397,14 +398,15 @@ static mnavFlightPath PathTo(const Search* s, const mnavFlightFrame* frame, int3
         points[i] = points[count - 1 - i];
         points[count - 1 - i] = swap;
     }
-    return (mnavFlightPath){end, s->nodes[last].cost * frame->voxel, points, count};
+    return (mnavFlightPath){end, s->nodes[last].cost * frame->voxel,
+                            mnavKeepPoints(s->query, points, count), count};
 }
 
 // The path when the search cannot begin: the start alone.
 static mnavFlightPath StartOnly(mnavQuery* query, mnavPos3 start, mnavPathEnd end)
 {
     query->points[0] = start;
-    return (mnavFlightPath){end, 0.0, query->points, 1};
+    return (mnavFlightPath){end, 0.0, mnavKeepPoints(query, query->points, 1), 1};
 }
 
 static mnavPathEnd Refused(int32_t held)
@@ -456,7 +458,7 @@ static void SpreadTo(void* context, mnavFlightBlock block)
 // POCKET_BLOCKS (and the node budget) without the start's block or a face
 // with no tile loaded. No path reaches the end from outside it. Uses the
 // search's nodes and table, which Begin clears.
-static bool Pocket(Search* s, const int32_t start[4])
+MNAV_NODISCARD static bool Pocket(Search* s, const int32_t start[4])
 {
     mnavQuery* q = s->query;
     mnavClearTable(q);
@@ -634,8 +636,8 @@ static MNAV_NOINLINE mnavResult BeginFlightPathCounted(mnavQuery* query,
                                 BeginFlightPathWork(query, volume, start, end));
 }
 
-mnavResult mnavBeginFlightPath(mnavQuery* query, const mnavFlightVolume* volume, mnavPos3 start,
-                               mnavPos3 end)
+mnavResult mnavQuery_BeginFlightPath(mnavQuery* query, const mnavFlightVolume* volume,
+                                     mnavPos3 start, mnavPos3 end)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = BeginFlightPathCounted(query, volume, start, end);
@@ -672,12 +674,16 @@ static MNAV_NOINLINE mnavResult ContinueFlightPathCounted(mnavQuery* query,
                                                           const mnavFlightVolume* volume,
                                                           int32_t nodes, bool* endedOut)
 {
-    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
-                                ContinueFlightPathWork(query, volume, nodes, endedOut));
+    bool endedMade = false;
+    mnavResult result = mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
+        ContinueFlightPathWork(query, volume, nodes, endedOut != nullptr ? &endedMade : nullptr));
+    mnavGiveOutput(result, false, endedOut, &endedMade, sizeof(endedMade));
+    return result;
 }
 
-mnavResult mnavContinueFlightPath(mnavQuery* query, const mnavFlightVolume* volume, int32_t nodes,
-                                  bool* endedOut)
+mnavResult mnavQuery_ContinueFlightPath(mnavQuery* query, const mnavFlightVolume* volume,
+                                        int32_t nodes, bool* endedOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = ContinueFlightPathCounted(query, volume, nodes, endedOut);
@@ -709,7 +715,8 @@ static MNAV_NOINLINE mnavResult FinishFlightPathWork(mnavQuery* query,
     {
         query->points[0] = f->start;
         query->points[1] = f->endPoint;
-        *pathOut = (mnavFlightPath){mnav_pathFound, f->straightLength, query->points, 2};
+        *pathOut = (mnavFlightPath){mnav_pathFound, f->straightLength,
+                                    mnavKeepPoints(query, query->points, 2), 2};
         return mnav_success;
     }
     Search s = Load(query);
@@ -729,12 +736,16 @@ static MNAV_NOINLINE mnavResult FinishFlightPathCounted(mnavQuery* query,
                                                         const mnavFlightVolume* volume,
                                                         mnavFlightPath* pathOut)
 {
-    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
-                                FinishFlightPathWork(query, volume, pathOut));
+    mnavFlightPath pathMade = {0};
+    mnavResult result = mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
+        FinishFlightPathWork(query, volume, pathOut != nullptr ? &pathMade : nullptr));
+    mnavGiveOutput(result, false, pathOut, &pathMade, sizeof(pathMade));
+    return result;
 }
 
-mnavResult mnavFinishFlightPath(mnavQuery* query, const mnavFlightVolume* volume,
-                                mnavFlightPath* pathOut)
+mnavResult mnavQuery_FinishFlightPath(mnavQuery* query, const mnavFlightVolume* volume,
+                                      mnavFlightPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = FinishFlightPathCounted(query, volume, pathOut);
@@ -768,12 +779,16 @@ static MNAV_NOINLINE mnavResult FindFlightPathCounted(mnavQuery* query,
                                                       mnavPos3 start, mnavPos3 end,
                                                       mnavFlightPath* pathOut)
 {
-    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
-                                FindFlightPathWork(query, volume, start, end, pathOut));
+    mnavFlightPath pathMade = {0};
+    mnavResult result = mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(volume)),
+        FindFlightPathWork(query, volume, start, end, pathOut != nullptr ? &pathMade : nullptr));
+    mnavGiveOutput(result, false, pathOut, &pathMade, sizeof(pathMade));
+    return result;
 }
 
-mnavResult mnavFindFlightPath(mnavQuery* query, const mnavFlightVolume* volume, mnavPos3 start,
-                              mnavPos3 end, mnavFlightPath* pathOut)
+mnavResult mnavQuery_FindFlightPath(mnavQuery* query, const mnavFlightVolume* volume,
+                                    mnavPos3 start, mnavPos3 end, mnavFlightPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = FindFlightPathCounted(query, volume, start, end, pathOut);

@@ -40,8 +40,9 @@ typedef struct Merger
 
 // Whether segment d0 d1 crosses an edge of a contour, skipping the edges
 // at vertex skip (or none for -1) and edges sharing an end with it.
-static bool CrossesContour(const mnavContourVertex* d0, const mnavContourVertex* d1, int32_t skip,
-                           const mnavContourVertex* vertices, int32_t count)
+MNAV_NODISCARD static bool CrossesContour(const mnavContourVertex* d0, const mnavContourVertex* d1,
+                                          int32_t skip, const mnavContourVertex* vertices,
+                                          int32_t count)
 {
     for (int32_t k = 0; k < count; ++k)
     {
@@ -59,8 +60,8 @@ static bool CrossesContour(const mnavContourVertex* d0, const mnavContourVertex*
 }
 
 // Whether point p lies in the cone at vertex i of a contour.
-static bool InCone(const mnavContourVertex* vertices, int32_t count, int32_t i,
-                   const mnavContourVertex* p)
+MNAV_NODISCARD static bool InCone(const mnavContourVertex* vertices, int32_t count, int32_t i,
+                                  const mnavContourVertex* p)
 {
     return mnavInCone(&vertices[(i + count - 1) % count], &vertices[i], &vertices[(i + 1) % count],
                       p, false);
@@ -71,7 +72,7 @@ static const mnavContourVertex* VerticesOf(const mnavContourSet* set, int32_t co
     return set->vertices + set->contours[contour].first;
 }
 
-static bool HoleBefore(const Hole* a, const Hole* b)
+MNAV_NODISCARD static bool HoleBefore(const Hole* a, const Hole* b)
 {
     if (a->minX != b->minX)
     {
@@ -84,7 +85,7 @@ static bool HoleBefore(const Hole* a, const Hole* b)
     return a->contour < b->contour;
 }
 
-static bool CandidateBefore(const Candidate* a, const Candidate* b)
+MNAV_NODISCARD static bool CandidateBefore(const Candidate* a, const Candidate* b)
 {
     return a->distance != b->distance ? a->distance < b->distance : a->vertex < b->vertex;
 }

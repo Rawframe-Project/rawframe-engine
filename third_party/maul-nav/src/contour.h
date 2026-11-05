@@ -67,6 +67,6 @@ void mnavReleaseContours(mnavMemory* memory, mnavContourSet* set);
 // region, 0 for none), two cells of one border region are followed by two
 // interior cells of one area: a vertex on the tile's border that polygons
 // later remove so that neighboring tiles meet.
-bool mnavIsTileBorderCorner(const uint64_t keys[4]);
+MNAV_NODISCARD bool mnavIsTileBorderCorner(const uint64_t keys[4]);
 
 #endif // MAUL_NAV_SRC_CONTOUR_H

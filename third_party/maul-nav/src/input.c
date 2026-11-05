@@ -5,9 +5,6 @@
 
 #include "input.h"
 
-#include "bake_def.h"
-#include "fpenv.h"
-
 #include "maul-nav/bake.h"
 
 #include <math.h>
@@ -15,7 +12,26 @@
 
 static mnavInputResult Refuse(mnavResult result, mnavInputElement element, int32_t index)
 {
-    return (mnavInputResult){result, element, index};
+    return mnavInputElementResult(result, element, index);
+}
+
+mnavInputResult mnavInputElementResult(mnavResult result, mnavInputElement element, int32_t index)
+{
+    return (mnavInputResult){.result = result,
+                             .kind = mnav_inputNone,
+                             .index = -1,
+                             .element = element,
+                             .elementIndex = index};
+}
+
+mnavInputResult mnavInputNamed(mnavInputResult check, mnavInputKind kind, int32_t index)
+{
+    if (check.result != mnav_success)
+    {
+        check.kind = kind;
+        check.index = index;
+    }
+    return check;
 }
 
 static mnavInputResult CheckVertex(const mnavBakeDef* def, const mnavTriangleMesh* mesh, int32_t i)
@@ -122,29 +138,6 @@ mnavInputResult mnavCheckTriangleMesh(const mnavBakeDef* def, const mnavTriangle
     return CheckTriangles(mesh);
 }
 
-static MNAV_NOINLINE mnavInputResult ValidateTriangleMeshWork(const mnavBakeDef* def,
-                                                              const mnavTriangleMesh* mesh)
-{
-    if (def == nullptr || mesh == nullptr)
-    {
-        return Refuse(mnav_errorInvalid, mnav_elementNone, -1);
-    }
-    mnavResult checked = mnavCheckBakeDef(def, nullptr).result;
-    if (checked != mnav_success)
-    {
-        return Refuse(checked, mnav_elementNone, -1);
-    }
-    return mnavCheckTriangleMesh(def, mesh);
-}
-
-mnavInputResult mnavValidateTriangleMesh(const mnavBakeDef* def, const mnavTriangleMesh* mesh)
-{
-    uint64_t env = mnavFloatEnvEnter();
-    mnavInputResult result = ValidateTriangleMeshWork(def, mesh);
-    mnavFloatEnvLeave(env);
-    return result;
-}
-
 mnavInputResult mnavCheckOutline(const mnavBakeDef* def, const mnavOutline* outline)
 {
     if (outline->pointCount < 3 || outline->points == nullptr || outline->area >= MNAV_AREA_TYPES)
@@ -169,27 +162,4 @@ mnavInputResult mnavCheckOutline(const mnavBakeDef* def, const mnavOutline* outl
         }
     }
     return Refuse(mnav_success, mnav_elementNone, -1);
-}
-
-static MNAV_NOINLINE mnavInputResult ValidateOutlineWork(const mnavBakeDef* def,
-                                                         const mnavOutline* outline)
-{
-    if (def == nullptr || outline == nullptr)
-    {
-        return Refuse(mnav_errorInvalid, mnav_elementNone, -1);
-    }
-    mnavResult checked = mnavCheckBakeDef(def, nullptr).result;
-    if (checked != mnav_success)
-    {
-        return Refuse(checked, mnav_elementNone, -1);
-    }
-    return mnavCheckOutline(def, outline);
-}
-
-mnavInputResult mnavValidateOutline(const mnavBakeDef* def, const mnavOutline* outline)
-{
-    uint64_t env = mnavFloatEnvEnter();
-    mnavInputResult result = ValidateOutlineWork(def, outline);
-    mnavFloatEnvLeave(env);
-    return result;
 }

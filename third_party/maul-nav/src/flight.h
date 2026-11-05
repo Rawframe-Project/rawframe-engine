@@ -63,9 +63,13 @@ mnavResult mnavBuildFlightTile(mnavMemory* memory, const mnavFlightDef* def,
                                int32_t tileX, int32_t tileZ, mnavFlightTile* tileOut,
                                int32_t* spansOut);
 
+// Whether the bake writes tile (tileX, tileZ) with a valid def: its
+// frame within the extent bake input may reach, as the baker checks it.
+MNAV_NODISCARD bool mnavFlightTileInExtent(const mnavFlightDef* def, int32_t tileX, int32_t tileZ);
+
 // Whether voxel (x, y, z) of a tile is solid: x and z from 0 to its side,
 // y from 0 to its cubes times its side, up from its floor voxel.
-bool mnavFlightSolid(const mnavFlightTile* tile, int32_t x, int32_t y, int32_t z);
+MNAV_NODISCARD bool mnavFlightSolid(const mnavFlightTile* tile, int32_t x, int32_t y, int32_t z);
 
 void mnavReleaseFlightTile(mnavMemory* memory, mnavFlightTile* tile);
 

@@ -58,10 +58,10 @@ extern "C"
     // ran.
     typedef struct mnavHierarchyReport
     {
-        int32_t clusters;
-        int32_t transitions;
-        int32_t edges;
-        int32_t searches;
+        int32_t clusterCount;
+        int32_t transitionCount;
+        int32_t edgeCount;
+        int32_t searchCount;
     } mnavHierarchyReport;
 
 // The cookie mnavDefaultHierarchyDef sets and mnavCreateHierarchy checks.
@@ -97,9 +97,10 @@ extern "C"
     /// @param hierarchyOut Receives the hierarchy, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultHierarchyDef; `mnav_errorVersion` for one built
-    /// against another version of the headers; `mnav_errorInvalid` also for a
-    /// limit or cluster side below 1; `mnav_errorLimit` for one past its
-    /// MNAV_MAX_ value; `mnav_errorCapacity` when the allocator fails.
+    /// against another version of the headers; `mnav_errorInvalid` also for an
+    /// allocator with one function, or a limit or cluster side below 1;
+    /// `mnav_errorLimit` for one past its MNAV_MAX_ value; `mnav_errorCapacity`
+    /// when the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateHierarchy(const mnavHierarchyDef* def,
@@ -123,7 +124,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. It may be read at any time, also while host
     /// code the object runs calls back in.
-    MNAV_API uint64_t mnavGetHierarchyMisuse(const mnavHierarchy* hierarchy);
+    MNAV_API uint64_t mnavHierarchy_GetMisuse(const mnavHierarchy* hierarchy);
 
     /// Builds the hierarchy for a navmesh as committed and a filter. Each
     /// run of tile links along a cluster border, one way, is an entrance
@@ -142,7 +143,8 @@ extern "C"
     /// @param navmesh   The navmesh.
     /// @param filter    The areas usable and their costs, or NULL; the
     ///                  hierarchy keeps a copy.
-    /// @param reportOut Receives what was made. May be NULL.
+    /// @param reportOut Receives what was made. May be NULL. Zeroed on any
+    ///                  failure but mnav_errorBusy, which leaves it as it was.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
     /// filter not built from mnavDefaultQueryFilter or with a NaN cost;
     /// `mnav_errorLimit` for a filter cost past MNAV_MIN_AREA_COST or
@@ -154,12 +156,13 @@ extern "C"
     /// context, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the hierarchy and the context are used by one
-    /// thread at a time, and no commit runs on the navmesh.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBuildHierarchy(mnavHierarchy* hierarchy,
-                                                          mnavQuery* query,
-                                                          const mnavNavmesh* navmesh,
-                                                          const mnavQueryFilter* filter,
-                                                          mnavHierarchyReport* reportOut);
+    /// thread at a time, no search reads the hierarchy, and no commit runs on
+    /// the navmesh.
+    MNAV_NODISCARD MNAV_API mnavResult mnavHierarchy_Build(mnavHierarchy* hierarchy,
+                                                           mnavQuery* query,
+                                                           const mnavNavmesh* navmesh,
+                                                           const mnavQueryFilter* filter,
+                                                           mnavHierarchyReport* reportOut);
 
     /// Brings the hierarchy up to the navmesh's last commit. When only
     /// polygon areas changed, only the edges of transitions entering the
@@ -172,23 +175,25 @@ extern "C"
     /// @param query     A context for the searches within clusters; its
     ///                  last search ends.
     /// @param navmesh   The navmesh.
-    /// @param reportOut Receives what the graph holds and the searches run.
-    ///                  May be NULL.
+    /// @param reportOut Receives what the graph holds and the searches run. May
+    ///                  be NULL. Zeroed on any failure but mnav_errorBusy, which
+    ///                  leaves it as it was.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
     /// hierarchy built for another navmesh; `mnav_errorState` for a hierarchy
-    /// with no graph; `mnav_errorCapacity` as mnavBuildHierarchy. On an error
+    /// with no graph; `mnav_errorCapacity` as mnavHierarchy_Build. On an error
     /// the hierarchy holds no graph. Also `mnav_errorBusy` when called back in
     /// from the hierarchy's allocator, or from a clearance test whose link
     /// generation uses the context, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the hierarchy and the context are used by one
-    /// thread at a time, and no commit runs on the navmesh.
-    MNAV_NODISCARD MNAV_API mnavResult mnavUpdateHierarchy(mnavHierarchy* hierarchy,
-                                                           mnavQuery* query,
-                                                           const mnavNavmesh* navmesh,
-                                                           mnavHierarchyReport* reportOut);
+    /// thread at a time, no search reads the hierarchy, and no commit runs on
+    /// the navmesh.
+    MNAV_NODISCARD MNAV_API mnavResult mnavHierarchy_Update(mnavHierarchy* hierarchy,
+                                                            mnavQuery* query,
+                                                            const mnavNavmesh* navmesh,
+                                                            mnavHierarchyReport* reportOut);
 
-    /// Finds a path as mnavFindPath does, with the hierarchy's filter,
+    /// Finds a path as mnavQuery_FindPath does, with the hierarchy's filter,
     /// through the hierarchy: the start and the end join their clusters'
     /// transitions by searches within those clusters, A* over the
     /// transitions picks the clusters to cross, and the navmesh search
@@ -199,28 +204,35 @@ extern "C"
     /// platform, but which one is not promised; the paths they refine to
     /// may differ a little in cost.
     ///
-    /// @param query        The context; its memory holds the path.
+    /// @param query        The context; its memory holds the path and the
+    ///                     search over the hierarchy's transitions.
     /// @param hierarchy    The hierarchy, built for this navmesh.
     /// @param navmesh      The navmesh.
     /// @param startPolygon The polygon the start lies in.
     /// @param start        The start point.
     /// @param endPolygon   The polygon the end lies in.
     /// @param end          The end point.
-    /// @param pathOut      Receives the path.
+    /// @param pathOut      Receives the path. Zeroed on any failure but
+    ///                     mnav_errorBusy, which leaves it as it was.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a point
-    /// with a NaN coordinate, or a hierarchy built for another navmesh;
+    /// that is not finite, or a hierarchy built for another navmesh;
     /// `mnav_errorState` for a hierarchy with no graph, or a navmesh committed
-    /// since the build; the errors of mnavFindPath otherwise. Also
-    /// `mnav_errorBusy` when called back in from host code a call using the
-    /// context runs (a link generation's clearance test, a hierarchy's
+    /// since the build; `mnav_errorLimit` for a point more than
+    /// MNAV_MAX_QUERY_DISTANCE from the navmesh's origin on an axis;
+    /// `mnav_errorCapacity` for a hierarchy of more transitions than the
+    /// context's transitions limit; the errors of mnavQuery_FindPath otherwise.
+    /// Also `mnav_errorBusy` when called back in from host code a call using
+    /// the context runs (a link generation's clearance test, a hierarchy's
     /// allocator as it builds), one misuse counted.
     /// @par Thread safety
-    /// Safe from any thread; the context and the hierarchy are used by one
-    /// thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult
-    mnavFindHierarchicalPath(mnavQuery* query, mnavHierarchy* hierarchy, const mnavNavmesh* navmesh,
-                             mnavPolygonId startPolygon, mnavPos3 start, mnavPolygonId endPolygon,
-                             mnavPos3 end, mnavPath* pathOut);
+    /// Safe from any thread; the context is used by one thread at a time.
+    /// The search only reads the hierarchy, so any number of contexts may
+    /// search one at once, as they do a navmesh, while no build or update
+    /// runs on it and no commit on the navmesh.
+    MNAV_NODISCARD MNAV_API mnavResult mnavQuery_FindHierarchicalPath(
+        mnavQuery* query, const mnavHierarchy* hierarchy, const mnavNavmesh* navmesh,
+        mnavPolygonId startPolygon, mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end,
+        mnavPath* pathOut);
 
 #ifdef __cplusplus
 }

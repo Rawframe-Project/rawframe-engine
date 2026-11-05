@@ -7,6 +7,8 @@
 
 #include "invariant.h"
 
+#include "maul-nav/base.h"
+
 #include <stdint.h>
 
 int64_t mnavDetailArea2(const mnavDetailVertex* a, const mnavDetailVertex* b,
@@ -17,8 +19,8 @@ int64_t mnavDetailArea2(const mnavDetailVertex* a, const mnavDetailVertex* b,
 
 // Whether d lies strictly inside the circumcircle of (a, b, c), which is
 // wound negatively. Coordinates up to 2^14 keep every term within 2^60.
-static bool InCircle(const mnavDetailVertex* a, const mnavDetailVertex* b,
-                     const mnavDetailVertex* c, const mnavDetailVertex* d)
+MNAV_NODISCARD static bool InCircle(const mnavDetailVertex* a, const mnavDetailVertex* b,
+                                    const mnavDetailVertex* c, const mnavDetailVertex* d)
 {
     int64_t adx = a->x - d->x;
     int64_t adz = a->z - d->z;

@@ -203,7 +203,7 @@ mnavResult mnavCreateAvoidance(const mnavAvoidanceDef* def, mnavAvoidance** avoi
     return result;
 }
 
-uint64_t mnavGetAvoidanceMisuse(const mnavAvoidance* avoidance)
+uint64_t mnavAvoidance_GetMisuse(const mnavAvoidance* avoidance)
 {
     return avoidance != nullptr ? mnavHostMisuse(&avoidance->host) : 0;
 }
@@ -258,10 +258,12 @@ static mnavResult CheckAgent(const mnavAgent* agent)
     }
     mnavResult result = mnavAvoidJoin(mnavAvoidCoordinate(agent->position.x),
                                       mnavAvoidCoordinate(agent->position.y));
-    result = mnavAvoidJoin(result, mnavAvoidJoin(mnavAvoidSpeed(agent->velocity.x),
-                                                 mnavAvoidSpeed(agent->velocity.y)));
-    result = mnavAvoidJoin(result, mnavAvoidJoin(mnavAvoidSpeed(agent->preferred.x),
-                                                 mnavAvoidSpeed(agent->preferred.y)));
+    mnavPos2 velocity = mnavWide2(agent->velocity);
+    mnavPos2 preferred = mnavWide2(agent->preferred);
+    result = mnavAvoidJoin(result,
+                           mnavAvoidJoin(mnavAvoidSpeed(velocity.x), mnavAvoidSpeed(velocity.y)));
+    result = mnavAvoidJoin(result,
+                           mnavAvoidJoin(mnavAvoidSpeed(preferred.x), mnavAvoidSpeed(preferred.y)));
     return mnavAvoidJoin(
         result, mnavAvoidJoin(mnavAvoidRadius(agent->radius), mnavAvoidSpeed(agent->maxSpeed)));
 }
@@ -306,20 +308,25 @@ static mnavPos2 Solve(mnavAvoidance* a, const mnavAgent* agents, double step, in
         double share = (other->ignores & self->layers) != 0
                            ? 1.0
                            : other->priority / (self->priority + other->priority);
-        a->lines[count++] = mnavPairLine(self->position, self->velocity, other->position,
-                                         other->velocity, self->radius + other->radius, share,
-                                         a->def.timeHorizon, step, self->id < other->id);
+        a->lines[count++] = mnavPairLine(self->position, mnavWide2(self->velocity), other->position,
+                                         mnavWide2(other->velocity), self->radius + other->radius,
+                                         share, a->def.timeHorizon, step, self->id < other->id);
     }
+    mnavPos2 preferred = mnavWide2(self->preferred);
     mnavPos2 velocity = {0.0, 0.0};
     int32_t failed =
-        mnavLinearProgram2(a->lines, count, self->maxSpeed, self->preferred, false, &velocity);
-    if (failed == count && (velocity.x != self->preferred.x || velocity.y != self->preferred.y))
+        mnavLinearProgram2(a->lines, count, self->maxSpeed, preferred, false, &velocity);
+    // The velocity with no lines: the preferred one within the speed
+    // circle. Only lines hold an agent back; its own speed does not.
+    mnavPos2 free = {0.0, 0.0};
+    (void)mnavLinearProgram2(a->lines, 0, self->maxSpeed, preferred, false, &free);
+    if (failed == count && (velocity.x != free.x || velocity.y != free.y))
     {
         // Held back: aim a little right of the preferred velocity, so that
         // agents meeting in perfect symmetry pass on their right rather
         // than stop face to face.
-        mnavPos2 biased = {self->preferred.x + MNAV_KEEP_RIGHT * self->preferred.y,
-                           self->preferred.y - MNAV_KEEP_RIGHT * self->preferred.x};
+        mnavPos2 biased = {preferred.x + MNAV_KEEP_RIGHT * preferred.y,
+                           preferred.y - MNAV_KEEP_RIGHT * preferred.x};
         failed = mnavLinearProgram2(a->lines, count, self->maxSpeed, biased, false, &velocity);
     }
     if (failed < count)
@@ -328,25 +335,18 @@ static mnavPos2 Solve(mnavAvoidance* a, const mnavAgent* agents, double step, in
     }
     // The programs stay within the speed circle up to rounding, which
     // lines meeting at a narrow angle make larger; the maximum speed is
-    // kept exactly.
-    double speedSq = mnavDot2(velocity, velocity);
-    if (speedSq > self->maxSpeed * self->maxSpeed)
-    {
-        velocity = mnavScale2(velocity, self->maxSpeed / sqrt(speedSq));
-    }
-    // Within the speed circle, but for the scaling's last bits: relative,
-    // and a few units of the least subnormal where the squares are
-    // subnormal and round absolutely.
+    // kept exactly. The scaling rounds too, so a velocity it leaves a unit
+    // outside steps toward zero until it is within.
+    velocity = mnavKeepSpeed2(velocity, self->maxSpeed);
     MNAV_ASSERT(isfinite(velocity.x) && isfinite(velocity.y) &&
-                mnavDot2(velocity, velocity) <=
-                    self->maxSpeed * self->maxSpeed * (1.0 + 0x1p-40) + 0x1p-1072);
+                mnavWithinSpeed2(velocity, self->maxSpeed));
     return velocity;
 }
 
 static MNAV_NOINLINE mnavResult AvoidWork(mnavAvoidance* avoidance, const mnavAgent* agents,
                                           int32_t agentCount, const mnavObstacle* obstacles,
                                           int32_t obstacleCount, double step,
-                                          mnavPos2* velocitiesOut)
+                                          mnavVec2* velocitiesOut)
 {
     if (avoidance != nullptr && mnavHostCalledBack(&avoidance->host))
     {
@@ -384,7 +384,7 @@ static MNAV_NOINLINE mnavResult AvoidWork(mnavAvoidance* avoidance, const mnavAg
     mnavSortCrowd(&avoidance->crowd, agentCount);
     for (int32_t i = 0; i < agentCount; ++i)
     {
-        velocitiesOut[i] = Solve(avoidance, agents, step, i);
+        velocitiesOut[i] = mnavNarrow2(Solve(avoidance, agents, step, i), agents[i].maxSpeed);
     }
     mnavEndCrowd(&avoidance->crowd);
     return mnav_success;
@@ -393,16 +393,18 @@ static MNAV_NOINLINE mnavResult AvoidWork(mnavAvoidance* avoidance, const mnavAg
 static MNAV_NOINLINE mnavResult AvoidCounted(mnavAvoidance* avoidance, const mnavAgent* agents,
                                              int32_t agentCount, const mnavObstacle* obstacles,
                                              int32_t obstacleCount, double step,
-                                             mnavPos2* velocitiesOut)
+                                             mnavVec2* velocitiesOut)
 {
-    return mnavHostCountInvalid(
+
+    mnavResult result = mnavHostCountInvalid(
         MNAV_HOST(avoidance),
         AvoidWork(avoidance, agents, agentCount, obstacles, obstacleCount, step, velocitiesOut));
+    return mnavAvoidClear(result, avoidance, agentCount, velocitiesOut, sizeof(*velocitiesOut));
 }
 
-mnavResult mnavAvoid(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
-                     const mnavObstacle* obstacles, int32_t obstacleCount, double step,
-                     mnavPos2* velocitiesOut)
+mnavResult mnavAvoidance_Avoid(mnavAvoidance* avoidance, const mnavAgent* agents,
+                               int32_t agentCount, const mnavObstacle* obstacles,
+                               int32_t obstacleCount, double step, mnavVec2* velocitiesOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =
@@ -484,8 +486,8 @@ static MNAV_NOINLINE mnavResult DebugAvoidanceCounted(mnavAvoidance* avoidance,
                                 DebugAvoidanceWork(avoidance, agents, agentCount, height, buffer));
 }
 
-mnavResult mnavDebugAvoidance(mnavAvoidance* avoidance, const mnavAgent* agents, int32_t agentCount,
-                              double height, mnavDebugBuffer* buffer)
+mnavResult mnavAvoidance_Debug(mnavAvoidance* avoidance, const mnavAgent* agents,
+                               int32_t agentCount, double height, mnavDebugBuffer* buffer)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = DebugAvoidanceCounted(avoidance, agents, agentCount, height, buffer);

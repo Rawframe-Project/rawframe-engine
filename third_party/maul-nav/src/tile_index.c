@@ -268,8 +268,7 @@ static mnavBakeReport* Begin(mnavBakeReport* reportOut, mnavBakeReport* ignored)
     mnavBakeReport* report = reportOut != nullptr ? reportOut : ignored;
     *report = (mnavBakeReport){0};
     report->stage = mnav_stageInput;
-    report->mesh = -1;
-    report->input = (mnavInputResult){mnav_success, mnav_elementNone, -1};
+    report->input = mnavInputElementResult(mnav_success, mnav_elementNone, -1);
     return report;
 }
 
@@ -300,8 +299,7 @@ static MNAV_NOINLINE mnavResult CreateTileIndexWork(const mnavBakeDef* def,
         mnavInputResult input = mnavCheckTriangleMesh(def, &meshes[m]);
         if (input.result != mnav_success)
         {
-            report->mesh = m;
-            report->input = input;
+            report->input = mnavInputNamed(input, mnav_inputMesh, m);
             return report->result = input.result;
         }
     }
@@ -347,8 +345,7 @@ static MNAV_NOINLINE mnavResult CreateTileIndex2DWork(const mnavBakeDef* def,
         mnavInputResult input = mnavCheckOutline(def, &outlines[o]);
         if (input.result != mnav_success)
         {
-            report->mesh = o;
-            report->input = input;
+            report->input = mnavInputNamed(input, mnav_inputOutline, o);
             return report->result = input.result;
         }
     }
@@ -379,15 +376,15 @@ mnavHostCode* mnavTileIndexHost(const mnavTileIndex* index)
     return index != nullptr ? (mnavHostCode*)&index->host : nullptr;
 }
 
-uint64_t mnavGetTileIndexMisuse(const mnavTileIndex* index)
+uint64_t mnavTileIndex_GetMisuse(const mnavTileIndex* index)
 {
     return index != nullptr ? mnavHostMisuse(&index->host) : 0;
 }
 
 // Whether an index was made for the def's grid, of this kind of input and
 // this many of it.
-static bool FitsGrid(const mnavTileIndex* index, const mnavBakeDef* def, const mnavBakeCells* cells,
-                     bool outlines, int32_t count)
+MNAV_NODISCARD static bool FitsGrid(const mnavTileIndex* index, const mnavBakeDef* def,
+                                    const mnavBakeCells* cells, bool outlines, int32_t count)
 {
     return index->tileCells == def->tileCells && index->cellSize == def->cellSize &&
            index->border == cells->border && index->outlines == outlines &&

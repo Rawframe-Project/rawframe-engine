@@ -8,6 +8,8 @@
 #ifndef MAUL_NAV_SRC_SCALAR_H
 #define MAUL_NAV_SRC_SCALAR_H
 
+#include "maul-nav/base.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -19,6 +21,7 @@ float mnavCosDegrees(float degrees);
 // integer counts as that integer; otherwise it rounds up or down. Returns
 // false when the quotient exceeds max. meters and cell must be finite,
 // meters at least 0 and cell positive.
-bool mnavToCells(float meters, float cell, bool roundUp, int32_t max, int32_t* cellsOut);
+MNAV_NODISCARD bool mnavToCells(float meters, float cell, bool roundUp, int32_t max,
+                                int32_t* cellsOut);
 
 #endif // MAUL_NAV_SRC_SCALAR_H

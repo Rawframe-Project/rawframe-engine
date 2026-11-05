@@ -18,10 +18,11 @@
 
 // Whether a ring of points' bounds meet the tile's cells, border
 // included; (x, y) is the place (x, 0, y).
-bool mnavRingTouchesTile(const mnavTileFrame* frame, const mnavVec2* points, int32_t count);
+MNAV_NODISCARD bool mnavRingTouchesTile(const mnavTileFrame* frame, const mnavVec2* points,
+                                        int32_t count);
 
 // Whether an outline's bounds meet the tile's cells, border included.
-bool mnavOutlineTouchesTile(const mnavTileFrame* frame, const mnavOutline* outline);
+MNAV_NODISCARD bool mnavOutlineTouchesTile(const mnavTileFrame* frame, const mnavOutline* outline);
 
 // Called for a cell (x, z) of the tile; anything but mnav_success stops
 // the visit with that result.

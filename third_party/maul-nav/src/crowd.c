@@ -105,12 +105,12 @@ mnavCrowdKey mnavCrowdKeyOf(const mnavCrowd* crowd, mnavPos3 position, uint64_t 
         CellOf(position.x, size), CellOf(position.y, size), z, id, index, position, 0};
 }
 
-static bool SameColumn(const mnavCrowdKey* a, const mnavCrowdKey* b)
+MNAV_NODISCARD static bool SameColumn(const mnavCrowdKey* a, const mnavCrowdKey* b)
 {
     return a->x == b->x && a->y == b->y;
 }
 
-static bool KeyBefore(const mnavCrowdKey* a, const mnavCrowdKey* b)
+MNAV_NODISCARD static bool KeyBefore(const mnavCrowdKey* a, const mnavCrowdKey* b)
 {
     if (a->x != b->x)
     {
@@ -208,7 +208,7 @@ static mnavCrowdRun RunIn(const mnavCrowd* crowd, int64_t x, int64_t y)
     return (mnavCrowdRun){0, 0};
 }
 
-static bool NeighborBefore(const mnavCrowdNeighbor* a, const mnavCrowdNeighbor* b)
+MNAV_NODISCARD static bool NeighborBefore(const mnavCrowdNeighbor* a, const mnavCrowdNeighbor* b)
 {
     if (a->distance != b->distance)
     {

@@ -65,8 +65,9 @@ static int32_t Max(int32_t a, int32_t b)
 // One neighbor column, n, of a span with floor and ceiling: true when it
 // drops more than a step into space the agent fits through; else widens
 // low to high with its floors within a step that the agent fits on.
-static bool Drops(const mnavSpan* spans, const uint32_t* columns, int32_t n, int32_t floor,
-                  int32_t ceiling, int32_t height, int32_t step, int32_t* low, int32_t* high)
+MNAV_NODISCARD static bool Drops(const mnavSpan* spans, const uint32_t* columns, int32_t n,
+                                 int32_t floor, int32_t ceiling, int32_t height, int32_t step,
+                                 int32_t* low, int32_t* high)
 {
     uint32_t first = columns[n];
     uint32_t last = columns[n + 1];
@@ -105,8 +106,8 @@ static bool Drops(const mnavSpan* spans, const uint32_t* columns, int32_t n, int
 // and only when none does are the floors in reach compared, so the order
 // of the neighbors cannot change the answer. Column c is not on the
 // tile's edge.
-static bool IsLedge(const mnavHeightfield* heightfield, int32_t c, uint32_t i, uint32_t end,
-                    int32_t height, int32_t step)
+MNAV_NODISCARD static bool IsLedge(const mnavHeightfield* heightfield, int32_t c, uint32_t i,
+                                   uint32_t end, int32_t height, int32_t step)
 {
     const mnavSpan* spans = heightfield->spans;
     const uint32_t* columns = heightfield->columns;
@@ -138,7 +139,7 @@ static int32_t DropsAlone(const mnavSpan* n, int32_t floor, int32_t height, int3
 
 // Whether every one of the columns c and its four neighbors holds one
 // span.
-static bool AllAlone(const uint32_t* columns, int32_t c, int32_t width)
+MNAV_NODISCARD static bool AllAlone(const uint32_t* columns, int32_t c, int32_t width)
 {
     return columns[c + 1] == columns[c] + 1 && columns[c] == columns[c - 1] + 1 &&
            columns[c + 2] == columns[c + 1] + 1 &&

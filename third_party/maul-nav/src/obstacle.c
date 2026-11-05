@@ -27,12 +27,12 @@
 // count as covered by it.
 #define COVERED 1e-9
 
-static bool HasNaN(mnavPos2 p)
+MNAV_NODISCARD static bool HasNaN(mnavPos2 p)
 {
     return isnan(p.x) || isnan(p.y);
 }
 
-static bool Within(mnavPos2 p, double bound)
+MNAV_NODISCARD static bool Within(mnavPos2 p, double bound)
 {
     return fabs(p.x) <= bound && fabs(p.y) <= bound;
 }
@@ -49,13 +49,13 @@ static double LeftOf(mnavPos2 a, mnavPos2 b, mnavPos2 c)
 // its MNAV_MAX_AVOIDANCE_ bound, an infinity included.
 static mnavResult CheckObstacle(const mnavObstacle* o)
 {
-    if (o->points == nullptr || o->pointCount < 1 || HasNaN(o->velocity) || isnan(o->radius) ||
-        (o->pointCount == 1) != (o->radius > 0.0) || o->radius < 0.0)
+    if (o->points == nullptr || o->pointCount < 1 || HasNaN(mnavWide2(o->velocity)) ||
+        isnan(o->radius) || (o->pointCount == 1) != (o->radius > 0.0) || o->radius < 0.0)
     {
         return mnav_errorInvalid;
     }
-    bool within =
-        Within(o->velocity, MNAV_MAX_AVOIDANCE_SPEED) && o->radius <= MNAV_MAX_AVOIDANCE_RADIUS;
+    bool within = Within(mnavWide2(o->velocity), MNAV_MAX_AVOIDANCE_SPEED) &&
+                  o->radius <= MNAV_MAX_AVOIDANCE_RADIUS;
     for (int32_t i = 0; i < o->pointCount; ++i)
     {
         mnavPos2 a = o->points[i];
@@ -104,8 +104,8 @@ mnavResult mnavBuildObstacles(const mnavObstacle* obstacles, int32_t count,
                 c > 1 ? mnavNormalize2(mnavSub2(next, here)) : (mnavPos2){0.0, 0.0};
             bool convex = c < 3 || LeftOf(previous, here, next) >= 0.0;
             vertices[n + i] = (mnavObstacleVertex){
-                here, direction,       o->velocity,         o->radius, o->id,
-                i,    n + (i + 1) % c, n + (i + c - 1) % c, convex,    o->layers};
+                here, direction,       mnavWide2(o->velocity), o->radius, o->id,
+                i,    n + (i + 1) % c, n + (i + c - 1) % c,    convex,    o->layers};
         }
         n += c;
     }
@@ -113,7 +113,8 @@ mnavResult mnavBuildObstacles(const mnavObstacle* obstacles, int32_t count,
     return mnav_success;
 }
 
-static bool NearBefore(const mnavObstacleVertex* vertices, mnavObstacleNear a, mnavObstacleNear b)
+MNAV_NODISCARD static bool NearBefore(const mnavObstacleVertex* vertices, mnavObstacleNear a,
+                                      mnavObstacleNear b)
 {
     if (a.distance != b.distance)
     {
@@ -194,7 +195,7 @@ static double Entries(const mnavObstacleVertex* vertices, int32_t count, double 
     return total;
 }
 
-static bool CellBefore(const mnavObstacleCell* a, const mnavObstacleCell* b)
+MNAV_NODISCARD static bool CellBefore(const mnavObstacleCell* a, const mnavObstacleCell* b)
 {
     if (a->x != b->x)
     {
@@ -398,7 +399,8 @@ typedef struct View
 
 // Whether the lines before already cover the edge from o1 to o2: both
 // its cut-off points lie beyond one of them.
-static bool Covered(const View* w, int32_t o1, int32_t o2, const mnavLine* lines, int32_t count)
+MNAV_NODISCARD static bool Covered(const View* w, int32_t o1, int32_t o2, const mnavLine* lines,
+                                   int32_t count)
 {
     const mnavObstacleVertex* v1 = &w->vertices[o1];
     mnavPos2 shift = v1->velocity;
@@ -460,7 +462,7 @@ typedef struct Legs
     bool rightForeign;
 } Legs;
 
-static bool FindLegs(const View* w, double s, double distSqLine, Legs* legs)
+MNAV_NODISCARD static bool FindLegs(const View* w, double s, double distSqLine, Legs* legs)
 {
     const mnavObstacleVertex* vs = w->vertices;
     double radiusSq = w->radius * w->radius;
@@ -513,7 +515,7 @@ static bool FindLegs(const View* w, double s, double distSqLine, Legs* legs)
 
 // Projects the velocity on the edge's truncated velocity obstacle and
 // writes the line, or returns false when it lands on a foreign leg.
-static bool Project(const View* w, const Legs* legs, mnavLine* line)
+MNAV_NODISCARD static bool Project(const View* w, const Legs* legs, mnavLine* line)
 {
     const mnavObstacleVertex* vs = w->vertices;
     mnavPos2 leftCutoff = mnavScale2(mnavSub2(vs[legs->o1].point, w->position), w->inverse);
@@ -563,8 +565,8 @@ static bool Project(const View* w, const Legs* legs, mnavLine* line)
 
 // The line of an edge the agent already touches, or false when none: a
 // vertex RVO2 leaves to its neighbour, or no collision.
-static bool Touching(const View* w, int32_t o1, int32_t o2, double s, double distSqLine,
-                     bool* handled, mnavLine* line)
+MNAV_NODISCARD static bool Touching(const View* w, int32_t o1, int32_t o2, double s,
+                                    double distSqLine, bool* handled, mnavLine* line)
 {
     const mnavObstacleVertex* vs = w->vertices;
     mnavPos2 rel1 = mnavSub2(vs[o1].point, w->position);
@@ -594,7 +596,7 @@ static bool Touching(const View* w, int32_t o1, int32_t o2, double s, double dis
 }
 
 // The line of the edge from vertex o1, in the agent's frame, or false.
-static bool EdgeLine(const View* w, int32_t o1, mnavLine* line)
+MNAV_NODISCARD static bool EdgeLine(const View* w, int32_t o1, mnavLine* line)
 {
     const mnavObstacleVertex* vs = w->vertices;
     int32_t o2 = vs[o1].next;
@@ -626,8 +628,8 @@ static mnavLine CircleLine(const mnavAgent* agent, const mnavObstacleVertex* o, 
     double distanceSq = mnavDot2(rel, rel);
     if (distanceSq > combined * combined)
     {
-        return mnavPairLine(agent->position, agent->velocity, o->point, o->velocity, combined, 1.0,
-                            horizon, step, agent->id < o->id);
+        return mnavPairLine(agent->position, mnavWide2(agent->velocity), o->point, o->velocity,
+                            combined, 1.0, horizon, step, agent->id < o->id);
     }
     // On the center itself no way is out; a fixed one keeps it
     // deterministic.
@@ -650,8 +652,8 @@ int32_t mnavObstacleLines(const mnavAgent* agent, const mnavObstacleVertex* vert
             lines[count++] = CircleLine(agent, o, horizon, step);
             continue;
         }
-        View w = {vertices, agent->position, mnavSub2(agent->velocity, o->velocity), agent->radius,
-                  1.0 / horizon};
+        View w = {vertices, agent->position, mnavSub2(mnavWide2(agent->velocity), o->velocity),
+                  agent->radius, 1.0 / horizon};
         if (Covered(&w, near[k].vertex, o->next, lines, count))
         {
             continue;
