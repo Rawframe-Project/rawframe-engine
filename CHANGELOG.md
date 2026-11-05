@@ -2,6 +2,13 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.6.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.0...v0.6.1) (2026-11-05)
+
+
+### Fixed
+
+* **authoring:** bound what a link holds of its endpoint's lines ([#219](https://github.com/Rawframe-Project/rawframe-engine/issues/219)) ([fc2b736](https://github.com/Rawframe-Project/rawframe-engine/commit/fc2b73619cdba7222980c5cac6c4e831c6824ee0)), closes [#217](https://github.com/Rawframe-Project/rawframe-engine/issues/217)
+
 ## [0.6.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.5.0...v0.6.0) (2026-11-05)
 
 ### Changed
