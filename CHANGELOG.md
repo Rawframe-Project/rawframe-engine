@@ -2,6 +2,17 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.6.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.5.0...v0.6.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **studio:** a window request that Maul Window answers too large, such as a file dialog's choice of more than 256 files, completes with the new `window::Outcome::TooLarge` instead of `Failed`. `view::FileDialogs::Answer` gains `failure`, and Studio now says why a file dialog gave no paths where it said nothing.
+
+### Fixed
+
+* **studio:** say why a file dialog gave no paths ([#215](https://github.com/Rawframe-Project/rawframe-engine/issues/215)) ([f2a3de6](https://github.com/Rawframe-Project/rawframe-engine/commit/f2a3de6b05b1568b899af1a7e735097324975324)), closes [#213](https://github.com/Rawframe-Project/rawframe-engine/issues/213)
+
 ## [0.5.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.4.0...v0.5.0) (2026-11-05)
 
 This release moves the engine to Maul UI 1.3.2, Maul Window 0.12.0 and Maul Unicode 1.0.0, and the debug adapter now says how a debugged game went. No wire, save, checkpoint or cooked format changes.
