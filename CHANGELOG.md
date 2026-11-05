@@ -2,6 +2,16 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.8.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.0...v0.8.1) (2026-11-05)
+
+### Added
+
+- `process::ChildSettings::withheld` names environment variables a child process is not given; on Windows, whose names ignore case, in any case ([#227](https://github.com/Rawframe-Project/rawframe-engine/pull/227)).
+
+### Fixed
+
+- Studio's Changes tab runs git in the game's directory whatever its own environment says. It gave git every variable it had, and `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and git's other repository variables outrank the directory, so Studio started from a shell or a git hook that set them ran status, diff, add and commit in that repository. Git is now started without the variables `git rev-parse --local-env-vars` lists ([#227](https://github.com/Rawframe-Project/rawframe-engine/pull/227)).
+
 ## [0.8.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.7.0...v0.8.0) (2026-11-05)
 
 This release moves the engine to Maul2D 1.3.1. Body poses step to the same bits as before, but the 2D physics digest changes for every world, and a few edge cases of 2D physics act differently. No wire, save, checkpoint or cooked format changes.
