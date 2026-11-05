@@ -2,6 +2,22 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.5.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.4.0...v0.5.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** the engine is built on Maul UI 1.3.2, Maul Window 0.12.0 and Maul Unicode 1.0.0. `window::Windows::dialogFiles` returns a `window::DialogFiles` of the paths and whether chosen files were left out. A file dialog choice that holds a file the platform cannot give as a path now gives Studio the other paths and Studio says some were left out, where the whole dialog failed and Studio did nothing. On X11, a paste or a drop takes only its own answer, a drop whose answer does not come is delivered truncated after five seconds, and input method text past the text limit resets the input state instead of being dropped. On X11 and Wayland, a compose sequence of 64 bytes or more types its text. On Wayland, a drag that enters during a drop's read is refused. On Windows, generic HID gamepads take their controls from the first 32 Button and Generic Desktop capabilities, and a pad whose reports cannot be read, or that has no controls, is not added. On the web, text and keys with a lone surrogate arrive with U+FFFD instead of being lost. On Android, a drop of a document that cannot be granted no longer ends the program.
+
+### Fixed
+
+* **tooling:** say whether a debugged game kept silent or closed ([#214](https://github.com/Rawframe-Project/rawframe-engine/issues/214)) ([216537c](https://github.com/Rawframe-Project/rawframe-engine/commit/216537c372703c0f2c0b9e8290bfe0fda847079d)), closes [#211](https://github.com/Rawframe-Project/rawframe-engine/issues/211)
+
+
+### Build
+
+* **deps:** move Maul UI to 1.3.2, Window to 0.12.0, Unicode to 1.0.0 ([#212](https://github.com/Rawframe-Project/rawframe-engine/issues/212)) ([2341c8a](https://github.com/Rawframe-Project/rawframe-engine/commit/2341c8a11eada012111a81ee89a2215dd4bf89cf))
+
 ## [0.4.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.3.0...v0.4.0) (2026-11-04)
 
 ### Changed
