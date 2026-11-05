@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.8.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.7.0...v0.8.0) (2026-11-05)
+
+This release moves the engine to Maul2D 1.3.1. Body poses step to the same bits as before, but the 2D physics digest changes for every world, and a few edge cases of 2D physics act differently. No wire, save, checkpoint or cooked format changes.
+
+### Changed
+
+- **Breaking:** The engine is built on Maul2D 1.3.1, from 0.6.0, vendored from its release archive with its SHA-256 checked. What a game sees change ([#225](https://github.com/Rawframe-Project/rawframe-engine/pull/225)):
+  - The 2D physics digest changes for every world, since Maul2D's world hash now covers each shape's broadphase box and each body's sleep threshold. Body poses are unchanged: a scene of 20 bouncing balls ends on the same bits after 120 ticks.
+  - Rays, sweeps, overlaps and character moves between steps see a shape that moved more than 0.1 m in the last step where it is now, instead of missing it or finding it where it was.
+  - A body with a fixed rotation no longer turns when a game gives it an angular velocity or an angular impulse.
+  - A bullet body passes no wall when more than 64 shapes crowd its path, and a character meeting more than 16 surfaces keeps those of the lowest shape slots.
+  - The 2D step fails at a tick shorter than 1 microsecond or longer than 10 seconds, before it changes anything, instead of leaving the world standing still. A dedicated server with 2D physics takes a `world.tick_rate` of 1 to 1,000,000.
+  - `Physics2DStatistics::targets` counts only kinematic targets carried out. A target too far to reach in one tick within Maul2D's 100 km/s speed limit is cleared, as before, but no longer counted.
+
 ## [0.7.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.1...v0.7.0) (2026-11-05)
 
 This release moves the engine to Maul Nav 1.2.0, Maul UI 1.3.3 and Maul Unicode 1.1.2. A navmesh's tiles bake to new bytes, and agents that avoid each other move by slightly different amounts. No wire, save, checkpoint or cooked format changes, and the engine keeps no baked tile across runs.
