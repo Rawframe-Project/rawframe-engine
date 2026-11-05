@@ -140,7 +140,7 @@ static void Finish(MwinMacDialog* dialog, mwinOutcome outcome)
     }
     for (NSURL* file in chosen)
     {
-        // A path that is not UTF-8 makes the choice fail.
+        // A path that is not UTF-8 is left out, the answer marked truncated.
         const char* path = file.path.UTF8String;
         mwinAddDialogFile(context, path != nullptr ? path : "", path != nullptr ? strlen(path) : 0);
     }

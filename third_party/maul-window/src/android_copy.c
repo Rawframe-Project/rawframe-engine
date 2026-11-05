@@ -118,15 +118,14 @@ static bool KeepPath(const mwinAllocator* allocator, mwinAndroidCopy* copy, cons
 }
 
 // Makes a document's copy: its folder, its file opened to write, its
-// path kept. False when it could not be made.
-static bool MakeCopy(const mwinAllocator* allocator, mwinAndroidCopy* copy, JNIEnv* env,
-                     jstring given, uint32_t index)
+// path written to path. False when it could not be made.
+static bool MakeCopy(mwinAndroidCopy* copy, JNIEnv* env, jstring given, uint32_t index,
+                     char path[PATH_MAX])
 {
     char name[MWIN_ANDROID_NAME_BYTES + 1];
     NameOf(env, given, name);
     // The kind's folder, the job's, and the document's.
     char folder[PATH_MAX];
-    char path[PATH_MAX];
     (void)mkdir(copy->folder, 0700);
     (void)snprintf(folder, sizeof(folder), "%s/%u", copy->folder, copy->serial);
     (void)mkdir(folder, 0700);
@@ -135,17 +134,47 @@ static bool MakeCopy(const mwinAllocator* allocator, mwinAndroidCopy* copy, JNIE
     {
         return false;
     }
-    length = snprintf(path, sizeof(path), "%s/%s", folder, name);
-    if (length <= 0 || (size_t)length >= sizeof(path))
+    length = snprintf(path, PATH_MAX, "%s/%s", folder, name);
+    if (length <= 0 || length >= PATH_MAX)
     {
         return false;
     }
     copy->into[index] = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-    return copy->into[index] >= 0 && KeepPath(allocator, copy, path, (size_t)length);
+    return copy->into[index] >= 0;
+}
+
+// Leaves a document out: closes what it holds.
+static void LeaveOut(mwinAndroidCopy* copy, uint32_t index)
+{
+    if (copy->from[index] >= 0)
+    {
+        (void)close(copy->from[index]);
+    }
+    if (copy->into[index] >= 0)
+    {
+        (void)close(copy->into[index]);
+    }
+    copy->from[index] = -1;
+    copy->into[index] = -1;
+    copy->leftOut += 1;
+}
+
+// Leaves out a document whose path is kept, and empties its path.
+static void LeaveOutKept(mwinAndroidCopy* copy, uint32_t index)
+{
+    LeaveOut(copy, index);
+    size_t at = 0;
+    for (uint32_t i = 0; i < index; i++)
+    {
+        at += strlen(copy->paths + at) + 1;
+    }
+    size_t length = strlen(copy->paths + at);
+    memmove(copy->paths + at, copy->paths + at + length, copy->pathsLength - at - length);
+    copy->pathsLength -= length;
 }
 
 bool mwinAndroidStartCopy(mwinContext* context, mwinAndroidCopy* copy, JNIEnv* env,
-                          jintArray descriptors, jobjectArray names)
+                          jintArray descriptors, jobjectArray names, uint64_t nowNs)
 {
     const mwinAllocator* allocator = &context->allocator;
     uint32_t count = (uint32_t)(*env)->GetArrayLength(env, descriptors);
@@ -174,50 +203,78 @@ bool mwinAndroidStartCopy(mwinContext* context, mwinAndroidCopy* copy, JNIEnv* e
     copy->into = into;
     copy->count = count;
     copy->next = 0;
+    copy->progressNs = nowNs;
+    copy->leftOut = 0;
     copy->pathsLength = 0;
     copy->copying = true;
     copy->serial += 1;
-    bool made = true;
-    for (uint32_t i = 0; made && i < count; i++)
+    bool kept = true;
+    for (uint32_t i = 0; kept && i < count; i++)
     {
         jstring name = (*env)->GetObjectArrayElement(env, names, (jsize)i);
+        char path[PATH_MAX];
         // The copy never waits on a provider's pipe.
-        made = from[i] >= 0 && MakeCopy(allocator, copy, env, name, i) &&
-               fcntl(from[i], F_SETFL, fcntl(from[i], F_GETFL) | O_NONBLOCK) == 0;
+        bool made = from[i] >= 0 &&
+                    fcntl(from[i], F_SETFL, fcntl(from[i], F_GETFL) | O_NONBLOCK) == 0 &&
+                    MakeCopy(copy, env, name, i, path);
         (*env)->DeleteLocalRef(env, name);
+        if (!made)
+        {
+            LeaveOut(copy, i);
+        }
+        kept = KeepPath(allocator, copy, made ? path : "", made ? strlen(path) : 0);
     }
-    return made;
+    return kept;
 }
 
-int mwinAndroidStepCopy(mwinAndroidCopy* copy, uint32_t* budget)
+bool mwinAndroidStepCopy(mwinAndroidCopy* copy, uint32_t* budget, uint64_t nowNs)
 {
     uint8_t block[BLOCK_BYTES];
     while (copy->next < copy->count && *budget > 0)
     {
         uint32_t i = copy->next;
+        if (copy->from[i] < 0)
+        {
+            // Left out at the start.
+            copy->next += 1;
+            continue;
+        }
         ssize_t got = read(copy->from[i], block, sizeof(block));
         if (got < 0 && (errno == EAGAIN || errno == EINTR))
         {
-            return 0;
+            if (nowNs - copy->progressNs < MWIN_ANDROID_STALL_NS)
+            {
+                return false;
+            }
+            // Its provider stalled: the next document gets the time anew.
+            LeaveOutKept(copy, i);
+            copy->next += 1;
+            copy->progressNs = nowNs;
+            continue;
         }
+        copy->progressNs = nowNs;
         if (got < 0 || (got > 0 && write(copy->into[i], block, (size_t)got) != got))
         {
-            return -1;
+            LeaveOutKept(copy, i);
+            copy->next += 1;
+            continue;
         }
         if (got == 0)
         {
             // This document is whole.
             (void)close(copy->from[i]);
+            copy->from[i] = -1;
             bool closed = close(copy->into[i]) == 0;
-            copy->next += 1;
+            copy->into[i] = -1;
             if (!closed)
             {
-                return -1;
+                LeaveOutKept(copy, i);
             }
+            copy->next += 1;
         }
         *budget -= (uint32_t)got < *budget ? (uint32_t)got : *budget;
     }
-    return copy->next == copy->count ? 1 : 0;
+    return copy->next == copy->count;
 }
 
 void mwinAndroidEndCopy(const mwinAllocator* allocator, mwinAndroidCopy* copy)
@@ -250,6 +307,7 @@ void mwinAndroidEndCopy(const mwinAllocator* allocator, mwinAndroidCopy* copy)
     copy->paths = nullptr;
     copy->count = 0;
     copy->next = 0;
+    copy->leftOut = 0;
     copy->pathsLength = 0;
     copy->pathsCapacity = 0;
     copy->copying = false;

@@ -90,7 +90,7 @@ extern "C"
     ///                       textOut holds as far as they fit; nothing from
     ///                       that segment on is written. 0 on every other
     ///                       error, except `muni_errorInvalid`, which leaves
-    ///                       it as it was.
+    ///                       it and textOut as they were.
     /// @return `muni_success` and the length; `muni_errorCapacity` when
     ///         the skeleton does not fit (the bytes that fit are
     ///         written), or with offset 0 and neededOut 0 when

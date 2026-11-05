@@ -13,6 +13,10 @@
 
 // How long a drop's conversions may take.
 #define DEADLINE_NS 5000000000u
+// How long the property of a drop that ran out of time, or whose answer
+// came in pieces, rests: its source answers late within seconds, if at
+// all, so nothing of that drop comes after it.
+#define REST_NS 60000000000u
 
 // The most types an XdndTypeList is read for.
 #define MAX_TYPES 64u
@@ -167,14 +171,44 @@ static void OnLeave(mwinX11Platform* platform, const xcb_client_message_event_t*
     *drag = (mwinX11Drag){.slot = -1};
 }
 
-// Asks the source for the drop in a type, into the window's property.
-static void Convert(mwinX11Platform* platform, xcb_atom_t type)
+// Asks the source for the drop in a type, into the next read property
+// of the window not resting, deleted first: false with every one
+// resting, rather than share one with a late answer.
+static bool Convert(mwinX11Platform* platform, xcb_atom_t type)
 {
     mwinX11Drag* drag = &platform->drag;
+    mwinX11DropProperties* properties = &platform->dropProperties;
+    xcb_window_t window = platform->windows[drag->slot].window;
+    uint64_t nowNs = mwinMonotonicNow();
+    int slot = -1;
+    for (int i = 1; i <= MWIN_X11_READ_PROPERTIES && slot < 0; i++)
+    {
+        int candidate = (properties->slot + i) % MWIN_X11_READ_PROPERTIES;
+        slot = nowNs >= properties->quietUntilNs[candidate] ? candidate : -1;
+    }
+    if (slot < 0)
+    {
+        return false;
+    }
+    properties->slot = (uint8_t)slot;
     drag->converting = type;
-    platform->api.convertSelection(platform->connection, platform->windows[drag->slot].window,
-                                   platform->atoms[mwin_atomXdndSelection], type,
-                                   platform->atoms[mwin_atomSelection], drag->time);
+    drag->property = platform->atoms[mwin_atomRead0 + slot];
+    platform->api.deleteProperty(platform->connection, window, drag->property);
+    platform->api.convertSelection(platform->connection, window,
+                                   platform->atoms[mwin_atomXdndSelection], type, drag->property,
+                                   drag->time);
+    return true;
+}
+
+// Deletes the conversion's property and rests it, since its source may
+// still write to it.
+static void Rest(mwinX11Platform* platform)
+{
+    const mwinX11Drag* drag = &platform->drag;
+    platform->api.deleteProperty(platform->connection, platform->windows[drag->slot].window,
+                                 drag->property);
+    platform->dropProperties.quietUntilNs[platform->dropProperties.slot] =
+        mwinMonotonicNow() + REST_NS;
 }
 
 // Delivers the drop gathered so far and tells the source it finished.
@@ -214,23 +248,40 @@ static void OnDrop(mwinX11Platform* platform, const xcb_client_message_event_t* 
     drag->time = data[2];
     drag->deadlineNs = mwinMonotonicNow() + DEADLINE_NS;
     mwinBeginDrop(platform->context);
-    Convert(platform, (drag->contents & mwin_dragFiles) != 0 ? platform->atoms[mwin_atomUriList]
-                                                             : drag->textType);
+    if (!Convert(platform, (drag->contents & mwin_dragFiles) != 0
+                               ? platform->atoms[mwin_atomUriList]
+                               : drag->textType))
+    {
+        Finish(platform, true);
+    }
 }
 
-// Takes the converted property: false when it is not all there.
-static bool Take(mwinX11Platform* platform, xcb_window_t window)
+// Takes the converted property off the drop's window: false when it is
+// not all there. An answer in pieces is not taken, and its property
+// rests, since its source goes on writing to it; one too large is
+// deleted.
+static bool Take(mwinX11Platform* platform)
 {
     const mwinX11Api* api = &platform->api;
     mwinX11Drag* drag = &platform->drag;
     mwinContext* context = platform->context;
     xcb_get_property_reply_t* reply = api->getPropertyReply(
         platform->connection,
-        api->getProperty(platform->connection, 1, window, platform->atoms[mwin_atomSelection],
-                         XCB_GET_PROPERTY_TYPE_ANY, 0, context->limits.dropBytes / 4 + 1),
+        api->getProperty(platform->connection, 1, platform->windows[drag->slot].window,
+                         drag->property, XCB_GET_PROPERTY_TYPE_ANY, 0,
+                         context->limits.dropBytes / 4 + 1),
         nullptr);
-    bool whole = reply != nullptr && reply->bytes_after == 0 && reply->format == 8 &&
-                 reply->type != platform->atoms[mwin_atomIncr];
+    bool pieces = reply != nullptr && reply->type == platform->atoms[mwin_atomIncr];
+    bool whole = reply != nullptr && reply->bytes_after == 0 && reply->format == 8 && !pieces;
+    if (pieces)
+    {
+        Rest(platform);
+    }
+    else if (reply != nullptr && reply->bytes_after > 0)
+    {
+        api->deleteProperty(platform->connection, platform->windows[drag->slot].window,
+                            drag->property);
+    }
     if (whole)
     {
         // The reply's bytes are the program's to decode in place.
@@ -252,15 +303,14 @@ static bool Take(mwinX11Platform* platform, xcb_window_t window)
 static void OnConverted(mwinX11Platform* platform, const xcb_selection_notify_event_t* notify)
 {
     mwinX11Drag* drag = &platform->drag;
-    bool whole = notify->property != XCB_ATOM_NONE && Take(platform, notify->requestor);
+    bool whole = notify->property != XCB_ATOM_NONE && Take(platform);
     platform->context->dropping.truncated = platform->context->dropping.truncated || !whole;
     bool text = drag->textType != XCB_ATOM_NONE && drag->converting != drag->textType;
-    if (text)
+    if (text && Convert(platform, drag->textType))
     {
-        Convert(platform, drag->textType);
         return;
     }
-    Finish(platform, false);
+    Finish(platform, text);
 }
 
 bool mwinX11HandleDropEvent(mwinX11Platform* platform, const xcb_generic_event_t* event)
@@ -270,7 +320,15 @@ bool mwinX11HandleDropEvent(mwinX11Platform* platform, const xcb_generic_event_t
     if (type == XCB_SELECTION_NOTIFY)
     {
         const xcb_selection_notify_event_t* notify = (const xcb_selection_notify_event_t*)event;
-        bool ours = platform->drag.dropping && notify->selection == atoms[mwin_atomXdndSelection];
+        const mwinX11Drag* drag = &platform->drag;
+        // Only the answer to the conversion under way: to the drop's
+        // window, of its target, in its property or none. A late answer
+        // to an earlier drop names that drop's property, which rests
+        // (Rest), so it never lands in this one's.
+        bool ours = drag->dropping && notify->selection == atoms[mwin_atomXdndSelection] &&
+                    notify->requestor == platform->windows[drag->slot].window &&
+                    notify->target == drag->converting &&
+                    (notify->property == XCB_ATOM_NONE || notify->property == drag->property);
         if (ours)
         {
             OnConverted(platform, notify);
@@ -325,6 +383,8 @@ void mwinX11CheckDrop(mwinX11Platform* platform, uint64_t nowNs)
 {
     if (platform->drag.dropping && nowNs >= platform->drag.deadlineNs)
     {
+        // The source may still answer.
+        Rest(platform);
         Finish(platform, true);
     }
 }

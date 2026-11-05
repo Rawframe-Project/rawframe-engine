@@ -155,17 +155,19 @@ mwinKey mwinXkbMapKeyCode(const mwinXkbKeyboard* keyboard, mwinKeyCode code)
 }
 
 // A length of text, none for control characters: Enter, Tab,
-// Backspace, Escape and what Control makes of letters are keys.
-static uint32_t Printable(const char* text, int length)
+// Backspace, Escape and what Control makes of letters are keys. The
+// text did not fit, cut, when it needed capacity bytes or more.
+static int32_t Printable(const char* text, int length, uint32_t capacity)
 {
-    return length > 0 && length < MWIN_XKB_TEXT_BYTES && (unsigned char)text[0] >= 0x20u &&
-                   text[0] != 0x7F
-               ? (uint32_t)length
-               : 0;
+    if (length > 0 && (uint32_t)length >= capacity)
+    {
+        return -1;
+    }
+    return length > 0 && (unsigned char)text[0] >= 0x20u && text[0] != 0x7F ? (int32_t)length : 0;
 }
 
-uint32_t mwinXkbType(mwinXkbKeyboard* keyboard, uint32_t evdev, bool compose,
-                     char text[MWIN_XKB_TEXT_BYTES])
+int32_t mwinXkbType(mwinXkbKeyboard* keyboard, uint32_t evdev, bool compose, char* text,
+                    uint32_t capacity)
 {
     const mwinXkbApi* api = keyboard->api;
     xkb_keycode_t key = evdev + XKB_OFFSET;
@@ -184,9 +186,9 @@ uint32_t mwinXkbType(mwinXkbKeyboard* keyboard, uint32_t evdev, bool compose,
             return 0;
         case XKB_COMPOSE_COMPOSED:
         {
-            int length = api->composeStateGetUtf8(state, text, MWIN_XKB_TEXT_BYTES);
+            int length = api->composeStateGetUtf8(state, text, capacity);
             api->composeStateReset(state);
-            return Printable(text, length);
+            return Printable(text, length, capacity);
         }
         case XKB_COMPOSE_CANCELLED:
             api->composeStateReset(state);
@@ -195,7 +197,7 @@ uint32_t mwinXkbType(mwinXkbKeyboard* keyboard, uint32_t evdev, bool compose,
             break;
         }
     }
-    return Printable(text, api->stateKeyGetUtf8(keyboard->state, key, text, MWIN_XKB_TEXT_BYTES));
+    return Printable(text, api->stateKeyGetUtf8(keyboard->state, key, text, capacity), capacity);
 }
 
 bool mwinXkbRepeats(const mwinXkbKeyboard* keyboard, uint32_t evdev)

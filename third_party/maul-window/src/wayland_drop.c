@@ -77,7 +77,9 @@ void mwinWaylandDragEnter(mwinWaylandPlatform* platform, uint32_t serial,
     {
         return;
     }
-    if (drag->slot < 0 || drag->contents == 0)
+    // A drop still being read holds the reads: a drag entering meanwhile
+    // is refused and not reported, as on X11.
+    if (drag->slot < 0 || drag->contents == 0 || drag->dropped != nullptr)
     {
         drag->contents = 0;
         Accept(platform, nullptr);

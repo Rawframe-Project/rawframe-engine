@@ -38,7 +38,7 @@ typedef struct muiAtlasEntry
     muiGlyphKey key;
     // The plot, from 1, MUI_NO_PLOT, or 0 for an empty slot.
     uint32_t plot;
-    uint32_t generation;
+    uint64_t generation;
     // The image's top left in its page and its size, and where it goes
     // from the pen and the baseline.
     uint16_t u;
@@ -59,7 +59,7 @@ typedef struct muiGlyphTable
 
 // Whether an entry's plot was evicted since it was placed: generations
 // holds each plot's, plot 1 at index 0.
-bool muiIsEntryStale(const muiAtlasEntry* entry, const uint32_t* generations);
+bool muiIsEntryStale(const muiAtlasEntry* entry, const uint64_t* generations);
 
 // The entry with key, live or stale, or the empty slot it would take;
 // the table has room for one more (muiReserveEntry).
@@ -69,7 +69,7 @@ muiAtlasEntry* muiFindEntry(const muiGlyphTable* table, const muiGlyphKey* key);
 // entries, larger when the live ones need it; false when memory runs
 // out, leaving the table as it was.
 bool muiReserveEntry(const muiAllocator* allocator, muiGlyphTable* table,
-                     const uint32_t* generations);
+                     const uint64_t* generations);
 
 void muiFreeGlyphTable(const muiAllocator* allocator, muiGlyphTable* table);
 

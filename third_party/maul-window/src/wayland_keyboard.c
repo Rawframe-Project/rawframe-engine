@@ -107,15 +107,19 @@ static void PostKey(mwinWaylandPlatform* platform, mwinEventKind type, uint32_t 
     event.data.key = (mwinKeyEvent){code, keyboard->xkb.modifiers,
                                     mwinXkbKeyOf(&keyboard->xkb, evdev, code), repeat};
     mwinPost(platform->context, (uint32_t)keyboard->focus, &event);
-    char text[MWIN_XKB_TEXT_BYTES];
-    uint32_t length =
-        type == mwin_eventKeyDown ? mwinXkbType(&keyboard->xkb, evdev, !repeat, text) : 0;
+    int32_t length = type == mwin_eventKeyDown
+                         ? mwinXkbType(&keyboard->xkb, evdev, !repeat, platform->keyText,
+                                       platform->context->limits.textBytesPerWindow + 1u)
+                         : 0;
+    // Text past the room is lost, and a reset says so.
+    mwinEvent typed = {.kind = length < 0 ? mwin_eventInputStateReset : mwin_eventTextInput,
+                       .timeNs = timeNs};
     if (length > 0)
     {
-        mwinEvent typed = {0};
-        typed.kind = mwin_eventTextInput;
-        typed.timeNs = timeNs;
-        typed.data.text = (mwinTextEvent){text, length};
+        typed.data.text = (mwinTextEvent){platform->keyText, (uint32_t)length};
+    }
+    if (length != 0)
+    {
         mwinPost(platform->context, (uint32_t)keyboard->focus, &typed);
     }
 }

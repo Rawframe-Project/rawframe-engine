@@ -52,6 +52,12 @@ enum
     mwin_atomIncr,
     mwin_atomTextPlainUtf8,
     mwin_atomSelection,
+    // The properties reads of the clipboard and the primary selection
+    // take turns with (MWIN_X11_READ_PROPERTIES).
+    mwin_atomRead0,
+    mwin_atomRead1,
+    mwin_atomRead2,
+    mwin_atomRead3,
     mwin_atomXdndAware,
     mwin_atomXdndEnter,
     mwin_atomXdndPosition,
@@ -174,6 +180,10 @@ typedef struct mwinX11Output
 // at once.
 #define MWIN_X11_SENDS 4
 
+// The properties the clipboard's and the primary selection's reads take
+// turns with, so that a late answer to one read never lands in another's.
+#define MWIN_X11_READ_PROPERTIES 4
+
 // The selections the program owns and reads: CLIPBOARD and PRIMARY.
 enum
 {
@@ -205,10 +215,18 @@ typedef struct mwinX11Clipboard
         uint32_t offset;
         uint64_t deadlineNs;
     } sends[MWIN_X11_SENDS];
-    // Waiting for the owner's answer, then for its pieces.
+    // Waiting for the owner's answer, then for its pieces; the selection
+    // and target asked, and the property of the read's own, which its
+    // answer must name; and until when each property, left by a read that
+    // ended without its whole answer, is not used again.
     bool reading;
     bool incremental;
     mwinSelectionRead read;
+    xcb_atom_t readSelection;
+    xcb_atom_t readTarget;
+    uint8_t readSlot;
+    xcb_atom_t readProperty;
+    uint64_t quietUntilNs[MWIN_X11_READ_PROPERTIES];
     uint64_t deadlineNs;
     char* buffer;
     uint32_t used;
@@ -218,7 +236,8 @@ typedef struct mwinX11Clipboard
 // A drag another client makes over one of the program's windows
 // (XDND): its source and version, the window, what it carries and the
 // type its text comes in, where it is and whether it was reported; and
-// a drop being converted, one type after the other, until a deadline.
+// a drop being converted, one type after the other, until a deadline,
+// each conversion into a read property of its own (property).
 typedef struct mwinX11Drag
 {
     xcb_window_t source;
@@ -230,9 +249,19 @@ typedef struct mwinX11Drag
     bool entered;
     bool dropping;
     xcb_atom_t converting;
+    xcb_atom_t property;
     xcb_timestamp_t time;
     uint64_t deadlineNs;
 } mwinX11Drag;
+
+// The read properties drops convert into, taken in turn as the
+// clipboard's are, kept apart from the drag, which each drop clears:
+// the last taken, and until when each rests.
+typedef struct mwinX11DropProperties
+{
+    uint8_t slot;
+    uint64_t quietUntilNs[MWIN_X11_READ_PROPERTIES];
+} mwinX11DropProperties;
 
 struct mwinX11Platform
 {
@@ -262,13 +291,16 @@ struct mwinX11Platform
     // touch records (x11_touch.h).
     bool touch;
     mwinX11Touches touches;
-    // libxkbcommon, and the keyboard, where both load.
+    // libxkbcommon, and the keyboard, where both load, and the room of
+    // the text a key types: textBytesPerWindow bytes and a NUL.
     mwinXkbApi xkbApi;
     mwinX11Keyboard keyboard;
+    char* keyText;
     mwinX11Pointer pointer;
     mwinX11Cursors cursors;
     mwinX11Clipboard clipboard;
     mwinX11Drag drag;
+    mwinX11DropProperties dropProperties;
     // Addresses, files and the bus (linux_services.c).
     mwinLinuxServices services;
     // The input method over the session bus (linux_ime.c).

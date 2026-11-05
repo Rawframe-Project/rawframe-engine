@@ -37,6 +37,11 @@ result::Status drop(Windows& windows, WindowId window, Position position, std::s
                    "a test drop");
 }
 
+result::Status chooseFiles(Windows& windows, std::string_view paths) {
+    return checked(mwinContext_SetTestDialogFiles(Platform::contextOf(windows), paths.data(), paths.size()),
+                   "a test dialog's files");
+}
+
 result::Status hold(Windows& windows, bool held) {
     return checked(mwinContext_EnableTestHold(Platform::contextOf(windows), held), "holding test requests");
 }

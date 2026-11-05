@@ -9,7 +9,12 @@
 // wait under the request's id for mwinRequest_GetDialogFiles until the next
 // dialog completes; one the user closes completes with
 // mwin_outcomeCancelled; a choice past the dialogFiles or dialogBytes
-// limits with mwin_outcomeTooLarge. A page names no files, so the web
+// limits with mwin_outcomeTooLarge, as a whole, since a limit says
+// nothing about which files to keep. A chosen file the platform cannot
+// give as a path (one that is not UTF-8, one with no path, a document
+// Android could not copy) is left out and the answer marked truncated,
+// as a drop is; a choice of no file that could be given fails with
+// mwin_outcomeFailed. A page names no files, so the web
 // has no dialogs (mwin_outcomeUnsupported). Android's documents have no
 // paths either: the documents an Android dialog opens are copied into
 // the application's cache first, and their copies' paths answered;
@@ -130,6 +135,10 @@ extern "C"
     /// @param countOut   Receives how many paths there are, on
     ///                   `mwin_errorCapacity` too; 0 on any other failure.
     ///                   May be NULL.
+    /// @param truncatedOut Receives whether chosen files were left out
+    ///                   because the platform could not give them as
+    ///                   paths, on `mwin_errorCapacity` too; false on any
+    ///                   other failure. May be NULL.
     /// @return `mwin_success`; `mwin_errorCapacity` with the bytes needed
     ///         when they do not fit; `mwin_errorStale` for a request that
     ///         did not complete with mwin_outcomeDone or whose paths a
@@ -137,11 +146,9 @@ extern "C"
     ///         context or lengthOut.
     /// @par Thread safety
     /// Main thread only.
-    MWIN_NODISCARD MWIN_API mwinResult mwinRequest_GetDialogFiles(const mwinContext* context,
-                                                                  mwinRequestId request,
-                                                                  char* bufferOut, size_t capacity,
-                                                                  size_t* lengthOut,
-                                                                  size_t* countOut);
+    MWIN_NODISCARD MWIN_API mwinResult mwinRequest_GetDialogFiles(
+        const mwinContext* context, mwinRequestId request, char* bufferOut, size_t capacity,
+        size_t* lengthOut, size_t* countOut, bool* truncatedOut);
 
 #ifdef __cplusplus
 }

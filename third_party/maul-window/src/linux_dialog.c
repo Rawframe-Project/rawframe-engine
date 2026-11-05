@@ -230,7 +230,8 @@ static void GatherUris(const mwinDBusApi* api, mwinContext* context, mwinDBusIte
                 memcpy(copy, text, length + 1);
                 pathLength = mwinFileUriPath(copy, length, &path);
             }
-            // A URI of no local file makes the choice fail.
+            // A URI of no local file is left out, the answer marked
+            // truncated.
             mwinAddDialogFile(context, path != nullptr ? path : "", pathLength);
         }
     }

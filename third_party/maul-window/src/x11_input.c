@@ -152,23 +152,30 @@ static void OnKey(mwinX11Platform* platform, const xcb_key_press_event_t* event,
     record.timeNs = mwinMonotonicFromMilliseconds(event->time);
     record.data.key = (mwinKeyEvent){code, keyboard->xkb.modifiers,
                                      mwinXkbKeyOf(&keyboard->xkb, evdev, code), repeat};
-    char text[MWIN_XKB_TEXT_BYTES];
-    uint32_t length = pressed ? mwinXkbType(&keyboard->xkb, evdev, !repeat, text) : 0;
-    // An input method may take the key: it answers later.
+    char* text = platform->keyText;
+    int32_t typed = pressed ? mwinXkbType(&keyboard->xkb, evdev, !repeat, text,
+                                          platform->context->limits.textBytesPerWindow + 1u)
+                            : 0;
+    uint32_t length = typed > 0 ? (uint32_t)typed : 0;
+    // An input method may take the key: it answers later, and the key
+    // goes in order with its text or its reset.
     uint32_t keysym = platform->xkbApi.stateKeyGetOneSym(keyboard->xkb.state, event->detail);
     if (mwinImeOffer(&platform->ime, (uint32_t)slot, keysym, event->detail, event->state, &record,
-                     text, length, mwinMonotonicNow()))
+                     text, typed, mwinMonotonicNow()))
     {
         return;
     }
     mwinPost(platform->context, (uint32_t)slot, &record);
+    // Text past the room is lost, and a reset says so.
+    mwinEvent after = {.kind = typed < 0 ? mwin_eventInputStateReset : mwin_eventTextInput,
+                       .timeNs = record.timeNs};
     if (length > 0)
     {
-        mwinEvent typed = {0};
-        typed.kind = mwin_eventTextInput;
-        typed.timeNs = record.timeNs;
-        typed.data.text = (mwinTextEvent){text, length};
-        mwinPost(platform->context, (uint32_t)slot, &typed);
+        after.data.text = (mwinTextEvent){text, length};
+    }
+    if (typed != 0)
+    {
+        mwinPost(platform->context, (uint32_t)slot, &after);
     }
 }
 

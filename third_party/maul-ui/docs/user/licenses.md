@@ -12,7 +12,7 @@ With the text component (`MAUL_UI_TEXT`, on by default), the library contains tw
 |---|---|---|
 | [FreeType](https://freetype.org) | 2.14.3 | FreeType License (BSD-style, with credit), or GPL 2 |
 | [HarfBuzz](https://harfbuzz.github.io) | 14.5.1 | MIT ("Old MIT") |
-| [Maul Unicode](https://github.com/Rawframe-Project/maul-unicode) | 0.13.0 | MIT |
+| [Maul Unicode](https://github.com/Rawframe-Project/maul-unicode) | 1.0.0 | MIT |
 
 A program that ships Maul UI with text carries FreeType's credit, for example in its about box or its notices:
 

@@ -66,8 +66,8 @@ typedef struct muiAtspiTold
     uint64_t id;
     uint64_t parent;
     uint32_t index;
-    uint32_t seen;
-    uint32_t born;
+    uint64_t seen;
+    uint64_t born;
 } muiAtspiTold;
 
 // Where a walk found a shown node: its parent's place in the walk and
@@ -104,7 +104,7 @@ struct muiAtspiAdapter
     uint32_t* freeTold;
     uint32_t freeCount;
     muiIdMap toldById;
-    uint32_t pass;
+    uint64_t pass;
     // The object clients were last told focused (0 for none); whether
     // the update being applied may have changed what is shown, so the
     // tree is walked.

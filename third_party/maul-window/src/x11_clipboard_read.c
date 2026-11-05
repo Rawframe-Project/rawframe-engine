@@ -10,8 +10,14 @@
 #include <stdckdint.h>
 #include <string.h>
 
-// How long a read may take.
+// How long a read may take, and how long the property of a read that ran
+// out of time, or stopped taking pieces, rests: an owner answers late
+// within seconds, if at all, so nothing of that read comes after it.
 #define DEADLINE_NS 5000000000u
+#define REST_NS     60000000000u
+
+static_assert(mwin_atomRead3 - mwin_atomRead0 + 1 == MWIN_X11_READ_PROPERTIES,
+              "a read property's atom for each of them");
 
 void mwinX11EndRead(mwinX11Platform* platform)
 {
@@ -67,15 +73,34 @@ static int Start(mwinX11Platform* platform, const mwinRequest* request)
             return mwin_outcomeFailed;
         }
     }
+    // The next property not resting; with every one resting, the read
+    // fails rather than share one with a late answer.
+    uint64_t nowNs = mwinMonotonicNow();
+    int slot = -1;
+    for (int i = 1; i <= MWIN_X11_READ_PROPERTIES && slot < 0; i++)
+    {
+        int candidate = (clipboard->readSlot + i) % MWIN_X11_READ_PROPERTIES;
+        slot = nowNs >= clipboard->quietUntilNs[candidate] ? candidate : -1;
+    }
+    if (slot < 0)
+    {
+        return mwin_outcomeFailed;
+    }
     // The last read ended and gave its bytes back.
     MWIN_ASSERT(!clipboard->incremental && clipboard->buffer == nullptr && clipboard->used == 0 &&
                 clipboard->capacity == 0);
+    clipboard->readSelection = mwinX11SelectionAtom(platform, selection);
+    clipboard->readTarget = target;
+    clipboard->readSlot = (uint8_t)slot;
+    clipboard->readProperty = platform->atoms[mwin_atomRead0 + slot];
+    // What a late answer left in the property goes before the owner is asked.
+    platform->api.deleteProperty(platform->connection, clipboard->window, clipboard->readProperty);
     platform->api.convertSelection(platform->connection, clipboard->window,
-                                   mwinX11SelectionAtom(platform, selection), target,
-                                   platform->atoms[mwin_atomSelection], platform->inputTime);
+                                   clipboard->readSelection, target, clipboard->readProperty,
+                                   platform->inputTime);
     clipboard->reading = true;
     mwinBeginSelectionRead(&clipboard->read, request);
-    clipboard->deadlineNs = mwinMonotonicNow() + DEADLINE_NS;
+    clipboard->deadlineNs = nowNs + DEADLINE_NS;
     return -1;
 }
 
@@ -89,11 +114,28 @@ int mwinX11ReadSelection(mwinX11Platform* platform, const mwinRequest* request)
     return Start(platform, request);
 }
 
-// Answers the requests the read answers, ends the read, and starts the
-// next.
-static void Finish(mwinX11Platform* platform, mwinOutcome outcome)
+// Rests the read's property, which its owner may still write to.
+static void Rest(mwinX11Clipboard* clipboard)
 {
-    mwinFinishSelectionRead(platform->context, &platform->clipboard.read, outcome);
+    clipboard->quietUntilNs[clipboard->readSlot] = mwinMonotonicNow() + REST_NS;
+}
+
+// Answers the requests the read answers, ends the read, and starts the
+// next. A read that ended without its whole answer leaves its property
+// deleted, and resting when pieces may still come.
+static void Finish(mwinX11Platform* platform, mwinOutcome outcome, bool whole)
+{
+    mwinX11Clipboard* clipboard = &platform->clipboard;
+    if (!whole)
+    {
+        platform->api.deleteProperty(platform->connection, clipboard->window,
+                                     clipboard->readProperty);
+    }
+    if (!whole && clipboard->incremental)
+    {
+        Rest(clipboard);
+    }
+    mwinFinishSelectionRead(platform->context, &clipboard->read, outcome);
     mwinX11EndRead(platform);
     mwinStartWaitingReads(platform->context, StartFor, platform);
 }
@@ -157,7 +199,7 @@ static xcb_get_property_reply_t* TakeProperty(const mwinX11Platform* platform)
     uint32_t room = platform->context->limits.clipboardBytes - clipboard->used;
     return api->getPropertyReply(platform->connection,
                                  api->getProperty(platform->connection, 1, clipboard->window,
-                                                  platform->atoms[mwin_atomSelection],
+                                                  clipboard->readProperty,
                                                   XCB_GET_PROPERTY_TYPE_ANY, 0, room / 4 + 1),
                                  nullptr);
 }
@@ -172,7 +214,7 @@ static void TakePiece(mwinX11Platform* platform, bool answer)
     xcb_get_property_reply_t* reply = TakeProperty(platform);
     if (reply == nullptr)
     {
-        Finish(platform, mwin_outcomeFailed);
+        Finish(platform, mwin_outcomeFailed, false);
         return;
     }
     // The length is in bytes, whatever the format.
@@ -187,13 +229,15 @@ static void TakePiece(mwinX11Platform* platform, bool answer)
     }
     else if (reply->bytes_after > 0 || !Append(platform, bytes, length, &outcome))
     {
-        Finish(platform, reply->bytes_after > 0 ? mwin_outcomeTooLarge : outcome);
+        Finish(platform, reply->bytes_after > 0 ? mwin_outcomeTooLarge : outcome, false);
     }
     else if (!clipboard->incremental || length == 0)
     {
         // The whole of it, or the empty piece that ends the pieces.
-        Finish(platform, mwinTakeSelectionRead(platform->context, &clipboard->read,
-                                               clipboard->buffer, clipboard->used));
+        Finish(platform,
+               mwinTakeSelectionRead(platform->context, &clipboard->read, clipboard->buffer,
+                                     clipboard->used),
+               true);
     }
     mwinReleaseSystemMemory(reply);
 }
@@ -201,14 +245,20 @@ static void TakePiece(mwinX11Platform* platform, bool answer)
 void mwinX11OnReadNotify(mwinX11Platform* platform, const xcb_selection_notify_event_t* notify)
 {
     const mwinX11Clipboard* clipboard = &platform->clipboard;
-    if (!clipboard->reading || clipboard->incremental)
+    // Only an answer naming the read's selection, target and property,
+    // or no property, is this read's. A late answer to an earlier read
+    // names that read's property, which rests (Rest), so it never lands
+    // in this one's; its bytes would answer the wrong request.
+    if (!clipboard->reading || clipboard->incremental ||
+        notify->selection != clipboard->readSelection || notify->target != clipboard->readTarget ||
+        (notify->property != XCB_ATOM_NONE && notify->property != clipboard->readProperty))
     {
         return;
     }
     // No owner, or one without the target: empty text, or no data.
     if (notify->property == XCB_ATOM_NONE)
     {
-        Finish(platform, mwinMissedSelectionRead(platform->context, &clipboard->read));
+        Finish(platform, mwinMissedSelectionRead(platform->context, &clipboard->read), true);
     }
     else
     {
@@ -219,7 +269,9 @@ void mwinX11OnReadNotify(mwinX11Platform* platform, const xcb_selection_notify_e
 void mwinX11OnReadProperty(mwinX11Platform* platform, const xcb_property_notify_event_t* event)
 {
     MWIN_ASSERT(!platform->clipboard.incremental || platform->clipboard.reading);
-    if (platform->clipboard.incremental && event->state == XCB_PROPERTY_NEW_VALUE)
+    // Pieces come only in the read's own property.
+    if (platform->clipboard.incremental && event->state == XCB_PROPERTY_NEW_VALUE &&
+        event->atom == platform->clipboard.readProperty)
     {
         TakePiece(platform, false);
     }
@@ -229,6 +281,8 @@ void mwinX11CheckRead(mwinX11Platform* platform, uint64_t nowNs)
 {
     if (platform->clipboard.reading && nowNs >= platform->clipboard.deadlineNs)
     {
-        Finish(platform, mwin_outcomeFailed);
+        // The owner may still answer.
+        Rest(&platform->clipboard);
+        Finish(platform, mwin_outcomeFailed, false);
     }
 }

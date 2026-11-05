@@ -310,18 +310,21 @@ void mwinAndroidStopPads(mwinAndroidPlatform* platform);
 
 // File dialogs (android_dialog.c): the Java helper found and its
 // function registered, and the copies of earlier runs removed, at the
-// start; the copying let go at the stop; a dialog asked for (-1 while
-// it waits for the picker, else its outcome); its documents copied a
-// step further between frames, within a budget of bytes.
+// start; the copying let go at the stop, and when the window goes (the
+// core cancels its request); a dialog asked for (-1 while it waits for
+// the picker, else its outcome); its documents copied a step further
+// between frames, within a budget of bytes.
 bool mwinAndroidFindDialogs(mwinAndroidPlatform* platform, ANativeActivity* activity);
 void mwinAndroidStopDialogs(mwinAndroidPlatform* platform);
+void mwinAndroidEndDialogCopy(mwinAndroidPlatform* platform);
 int mwinAndroidAskDialog(mwinAndroidPlatform* platform, uint32_t slot, uint32_t request);
 void mwinAndroidPumpDialogs(mwinAndroidPlatform* platform, uint32_t* budget);
 
 // Drops (android_drop.c): the Java listener's functions registered and
 // earlier runs' copies removed, at the start; the copy let go at the
-// stop; a drop's documents copied a step further between frames, within
-// a budget of bytes.
+// stop, and when the window goes, its drop told to no window; a drop's
+// documents copied a step further between frames, within a budget of
+// bytes.
 bool mwinAndroidFindDrops(mwinAndroidPlatform* platform, ANativeActivity* activity);
 void mwinAndroidStopDrops(mwinAndroidPlatform* platform);
 void mwinAndroidPumpDrops(mwinAndroidPlatform* platform, uint32_t* budget);

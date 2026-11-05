@@ -57,8 +57,8 @@ static mwinWaylandPlatform* PlatformOf(const mwinContext* context)
 
 // Where the platform block's parts lie, laid out with checked
 // arithmetic: the platform, its windows and outputs, the title being
-// set, the text input's preedit and commit, and the room of the
-// services' languages.
+// set, the text input's preedit and commit, the text a key types, and
+// the room of the services' languages.
 typedef struct PlatformParts
 {
     mwinLayout layout;
@@ -67,6 +67,7 @@ typedef struct PlatformParts
     size_t title;
     size_t preedit;
     size_t commit;
+    size_t keyText;
     size_t languages;
 } PlatformParts;
 
@@ -82,6 +83,7 @@ static PlatformParts PartsOf(const mwinLimits* limits)
     parts.title = mwinLayoutAdd(layout, (size_t)limits->titleBytes + 1, 1, 1);
     parts.preedit = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, 1);
     parts.commit = mwinLayoutAdd(layout, limits->textBytesPerWindow, 1, 1);
+    parts.keyText = mwinLayoutAdd(layout, (size_t)limits->textBytesPerWindow + 1, 1, 1);
     parts.languages = mwinLayoutAdd(layout, MWIN_LINUX_LANGUAGE_PARTS, limits->localeBytes, 1);
     return parts;
 }
@@ -379,6 +381,7 @@ static mwinResult Start(mwinContext* context)
     platform->title = (char*)(block + parts.title);
     platform->text.preedit.bytes = (char*)(block + parts.preedit);
     platform->text.commit.bytes = (char*)(block + parts.commit);
+    platform->keyText = (char*)(block + parts.keyText);
     platform->context = context;
     platform->keyboard.focus = -1;
     platform->pointer.focus = -1;

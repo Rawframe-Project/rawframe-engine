@@ -293,12 +293,15 @@ struct mwinContext
     mwinDropPayload dropping;
     mwinDropPayload dropped;
     uint32_t dropGeneration;
-    // The paths of the dialog being answered and how it goes, and those
-    // of the last dialog done, with its request.
+    // The paths of the dialog being answered, how it goes and whether a
+    // path was left out, and those of the last dialog done, with its
+    // request and whether it left one out.
     mwinFileList dialogGathering;
     mwinOutcome dialogAnswer;
+    bool dialogLeftOut;
     mwinFileList dialogFiles;
     mwinRequestId dialogRequest;
+    bool dialogTruncated;
     // Lifecycle and surface notifications, which come before all others,
     // and the context's own notifications.
     mwinRing critical;

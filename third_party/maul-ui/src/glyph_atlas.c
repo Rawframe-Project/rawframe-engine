@@ -74,7 +74,7 @@ struct muiGlyphAtlas
     muiSkylineNode** pageNodes;
     // Every plot of every page; plot p (from 1) is plots[p - 1].
     Plot* plots;
-    uint32_t* generations;
+    uint64_t* generations;
     // The plots, from 0, whose changes are not taken yet.
     uint32_t* dirty;
     uint32_t dirtyCount;
@@ -192,7 +192,7 @@ static muiResult CreateGlyphAtlas(muiTextService* service, const muiGlyphAtlasDe
     size_t nodesAt =
         muiLayoutAdd(&layout, def->maxPages, sizeof(muiSkylineNode*), alignof(muiSkylineNode*));
     size_t plotsAt = muiLayoutAdd(&layout, plots, sizeof(Plot), alignof(Plot));
-    size_t generationsAt = muiLayoutAdd(&layout, plots, sizeof(uint32_t), alignof(uint32_t));
+    size_t generationsAt = muiLayoutAdd(&layout, plots, sizeof(uint64_t), alignof(uint64_t));
     size_t dirtyAt = muiLayoutAdd(&layout, plots, sizeof(uint32_t), alignof(uint32_t));
     uint32_t channels = def->format == mui_atlasOneChannel ? 1u : 4u;
     size_t scratchAt =
@@ -220,7 +220,7 @@ static muiResult CreateGlyphAtlas(muiTextService* service, const muiGlyphAtlasDe
         .pages = (unsigned char**)(block + pagesAt),
         .pageNodes = (muiSkylineNode**)(block + nodesAt),
         .plots = (Plot*)(block + plotsAt),
-        .generations = (uint32_t*)(block + generationsAt),
+        .generations = (uint64_t*)(block + generationsAt),
         .dirty = (uint32_t*)(block + dirtyAt),
         .frame = 1,
         .scratch = block + scratchAt,

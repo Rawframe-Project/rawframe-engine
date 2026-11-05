@@ -69,8 +69,15 @@ final class Drops implements View.OnDragListener {
 
     private void drop(long program, DragEvent event) {
         // Another application's documents are read under the drag's
-        // permissions, held while they are opened.
-        DragAndDropPermissions permissions = activity.requestDragAndDropPermissions(event);
+        // permissions, held while they are opened. A drag of an address
+        // the dragging application cannot grant gets none: the drop goes
+        // on, and what cannot be opened without them is left out.
+        DragAndDropPermissions permissions = null;
+        try {
+            permissions = activity.requestDragAndDropPermissions(event);
+        } catch (SecurityException e) {
+            permissions = null;
+        }
         ContentResolver resolver = activity.getContentResolver();
         ClipData clip = event.getClipData();
         ArrayList<Integer> descriptors = new ArrayList<>();

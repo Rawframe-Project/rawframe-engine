@@ -32,7 +32,7 @@ static bool SameKey(const muiGlyphKey* a, const muiGlyphKey* b)
            a->palette == b->palette && a->tint == b->tint;
 }
 
-bool muiIsEntryStale(const muiAtlasEntry* entry, const uint32_t* generations)
+bool muiIsEntryStale(const muiAtlasEntry* entry, const uint64_t* generations)
 {
     return entry->plot != MUI_NO_PLOT && generations[entry->plot - 1] != entry->generation;
 }
@@ -55,7 +55,7 @@ muiAtlasEntry* muiFindEntry(const muiGlyphTable* table, const muiGlyphKey* key)
 }
 
 bool muiReserveEntry(const muiAllocator* allocator, muiGlyphTable* table,
-                     const uint32_t* generations)
+                     const uint64_t* generations)
 {
     if ((table->count + 1) * 2 <= table->capacity)
     {

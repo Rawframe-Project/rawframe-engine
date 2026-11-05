@@ -79,7 +79,7 @@ option(MAUL_WINDOW_GAMEPAD "Build the gamepad component" ON)
 # whose copies then serve this project. The version is also in the cache,
 # so a project that builds Maul Window from source (add_subdirectory or
 # FetchContent) can read the one it is built and tested with.
-set(MAUL_WINDOW_UNICODE_VERSION 0.13.0)
+set(MAUL_WINDOW_UNICODE_VERSION 1.0.0)
 set(MAUL_WINDOW_UNICODE_VERSION ${MAUL_WINDOW_UNICODE_VERSION}
     CACHE INTERNAL "the Maul Unicode version Maul Window is built and tested with")
 find_package(maul-unicode ${MAUL_WINDOW_UNICODE_VERSION} CONFIG QUIET)

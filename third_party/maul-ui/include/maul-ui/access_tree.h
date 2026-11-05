@@ -131,8 +131,8 @@ extern "C"
     /// Applies an update whole, or nothing of it: the nodes sent replace
     /// those held, new ones join, and a node a parent sent no longer
     /// lists, which no other node sent lists, leaves with its subtree, as
-    /// does a node sent with no parent that is not the root (told only as
-    /// removed).
+    /// does a node sent with no parent that is not the root. A node the
+    /// update both sends and lets go is told only as removed.
     /// The first update a tree takes, and any naming a new root, must be
     /// whole.
     ///

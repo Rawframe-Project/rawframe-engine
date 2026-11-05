@@ -7,6 +7,8 @@
 
 #include "win32_ime.h"
 
+#include "utf8.h"
+
 #include "maul-unicode/encoding.h"
 
 #include <imm.h>
@@ -35,20 +37,6 @@ static void EndComposition(mwinWin32Window* window)
     Post(window, &end);
 }
 
-uint32_t mwinWin32Utf8Before(const WCHAR* units, uint32_t count, uint32_t index)
-{
-    uint32_t bytes = 0;
-    for (uint32_t i = 0; i < index && i < count; i++)
-    {
-        uint32_t unit = units[i];
-        bool pair = unit >= 0xD800 && unit <= 0xDBFF && i + 1 < count && units[i + 1] >= 0xDC00 &&
-                    units[i + 1] <= 0xDFFF;
-        bytes += unit < 0x80 ? 1 : (unit < 0x800 ? 2 : (pair ? 4 : 3));
-        i += pair ? 1 : 0;
-    }
-    return bytes;
-}
-
 // A string of the input context's as UTF-8 in the platform's buffer:
 // its units, or 0 when it is empty or does not fit.
 static uint32_t ReadString(mwinWin32Window* window, HIMC context, DWORD which, uint32_t* lengthOut)
@@ -66,9 +54,12 @@ static uint32_t ReadString(mwinWin32Window* window, HIMC context, DWORD which, u
         }
         return 0;
     }
-    uint32_t units =
-        (uint32_t)ImmGetCompositionStringW(context, which, platform->imeUnits, (DWORD)size) /
-        sizeof(WCHAR);
+    LONG got = ImmGetCompositionStringW(context, which, platform->imeUnits, (DWORD)size);
+    if (got <= 0 || got > size)
+    {
+        return 0;
+    }
+    uint32_t units = (uint32_t)got / sizeof(WCHAR);
     size_t length = 0;
     muniTextResult converted =
         muniConvertUtf16ToUtf8((const uint16_t*)platform->imeUnits, units, muni_convertReplace,
@@ -97,20 +88,25 @@ static mwinPreeditStyle StyleOf(BYTE attribute)
     }
 }
 
+// The bytes of a composition's text before its first units.
+static uint32_t BytesBefore(const mwinPreeditEvent* preedit, uint32_t units)
+{
+    return (uint32_t)mwinBytesBefore(preedit->text, preedit->length, muni_unitUtf16, units);
+}
+
 // The composition's clauses, in bytes, from the attribute of each unit;
 // past the last segment the rest joins it. Returns the count, with the
 // target clauses' span in *preedit's selection.
-static uint32_t Segment(const WCHAR* text, uint32_t units, const BYTE* attributeOf,
-                        uint32_t attributes, mwinPreeditSegment* segments,
-                        mwinPreeditEvent* preedit)
+static uint32_t Segment(uint32_t units, const BYTE* attributeOf, uint32_t attributes,
+                        mwinPreeditSegment* segments, mwinPreeditEvent* preedit)
 {
     uint32_t count = 0;
     bool targeted = false;
     for (uint32_t i = 0; i < units; i++)
     {
         mwinPreeditStyle style = i < attributes ? StyleOf(attributeOf[i]) : mwin_preeditPlain;
-        uint32_t start = mwinWin32Utf8Before(text, units, i);
-        uint32_t end = mwinWin32Utf8Before(text, units, i + 1);
+        uint32_t start = BytesBefore(preedit, i);
+        uint32_t end = BytesBefore(preedit, i + 1);
         if (count == 0 || (segments[count - 1].style != style && count < MWIN_MAX_PREEDIT_SEGMENTS))
         {
             segments[count++] = (mwinPreeditSegment){start, 0, style};
@@ -126,16 +122,14 @@ static uint32_t Segment(const WCHAR* text, uint32_t units, const BYTE* attribute
     return count;
 }
 
-void mwinWin32ShapePreedit(const WCHAR* units, uint32_t count, const BYTE* attributes,
-                           LONG attributeCount, LONG caret, mwinPreeditSegment* segments,
-                           mwinPreeditEvent* preedit)
+void mwinWin32ShapePreedit(uint32_t count, const BYTE* attributes, LONG attributeCount, LONG caret,
+                           mwinPreeditSegment* segments, mwinPreeditEvent* preedit)
 {
-    preedit->caret = caret >= 0 ? (int32_t)mwinWin32Utf8Before(units, count, (uint32_t)caret) : -1;
+    preedit->caret = caret >= 0 ? (ptrdiff_t)BytesBefore(preedit, (uint32_t)caret) : -1;
     preedit->selectionStart = preedit->selectionEnd =
         preedit->caret >= 0 ? (uint32_t)preedit->caret : 0;
-    preedit->segmentCount =
-        Segment(units, count, attributes, attributeCount > 0 ? (uint32_t)attributeCount : 0,
-                segments, preedit);
+    preedit->segmentCount = Segment(
+        count, attributes, attributeCount > 0 ? (uint32_t)attributeCount : 0, segments, preedit);
     preedit->segments = segments;
 }
 
@@ -158,8 +152,7 @@ static void PostComposition(mwinWin32Window* window, HIMC context)
     mwinPreeditEvent* preedit = &event.data.preedit;
     preedit->text = platform->imeBytes;
     preedit->length = length;
-    mwinWin32ShapePreedit(platform->imeUnits, units, platform->imeAttributes, attributes, caret,
-                          segments, preedit);
+    mwinWin32ShapePreedit(units, platform->imeAttributes, attributes, caret, segments, preedit);
     Post(window, &event);
 }
 

@@ -413,11 +413,13 @@ struct mwinWaylandPlatform
     mwinWaylandCursorTheme cursorTheme;
     mwinWaylandImageCursor imageCursor;
     // The first seat, its registry name, and its keyboard. libxkbcommon
-    // loads with the context; without it there is no keyboard.
+    // loads with the context; without it there is no keyboard. The room
+    // of the text a key types: textBytesPerWindow bytes and a NUL.
     struct wl_seat* seat;
     uint32_t seatName;
     mwinXkbApi xkb;
     mwinWaylandKeyboard keyboard;
+    char* keyText;
     mwinWaylandPointer pointer;
     mwinWaylandTouch touch;
     mwinWaylandTablets tablets;

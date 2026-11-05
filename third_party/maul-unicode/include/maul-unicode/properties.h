@@ -7,9 +7,7 @@
 //
 // Each property's values are numbered in the library's own order. A
 // value that a new Unicode version adds is appended after the last, and
-// the existing values keep their numbers. From 1.0 this is part of the
-// API under the 1.x rules; before 1.0, data that must outlive a breaking
-// release stores the UCD's short names instead of the numbers.
+// the existing values keep their numbers, so data may store them.
 
 #ifndef MAUL_UNICODE_PROPERTIES_H
 #define MAUL_UNICODE_PROPERTIES_H

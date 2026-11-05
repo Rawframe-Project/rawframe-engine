@@ -80,7 +80,7 @@ static void Finish(MwinIOSDialog* dialog, mwinOutcome outcome, NSArray<NSURL*>* 
         {
             (void)[place startAccessingSecurityScopedResource];
         }
-        // A path that is not UTF-8 makes the choice fail.
+        // A path that is not UTF-8 is left out, the answer marked truncated.
         const char* path = place.path.UTF8String;
         mwinAddDialogFile(context, path != nullptr ? path : "", path != nullptr ? strlen(path) : 0);
     }

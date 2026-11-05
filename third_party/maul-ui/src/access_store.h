@@ -48,18 +48,18 @@ typedef struct muiAccessRoot
 // parent's children; allocated while a root is enabled.
 typedef struct muiAccessSent
 {
-    // The parent that listed it, its place there, its generation then,
-    // and which of the parent's lists it was in: a node its parent lists
-    // anew was out of the tree the adapters keep, with its subtree.
+    // Which of its parent's lists it was in, the parent, its place there
+    // and its generation then: a node its parent lists anew was out of the
+    // tree the adapters keep, with its subtree.
+    uint64_t list;
     uint32_t parent;
     uint32_t place;
     uint32_t generation;
-    uint32_t list;
     // How many children it listed, which list that was (counting each
     // list sent), its host data's version, and a fingerprint of the text
     // the text function gave it.
     uint32_t childCount;
-    uint32_t serial;
+    uint64_t serial;
     uint32_t version;
     uint64_t content;
 } muiAccessSent;
