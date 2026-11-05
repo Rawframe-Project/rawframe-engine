@@ -140,10 +140,13 @@ private:
                 outgoing += kNamed == "tooling.hello" ? replyLine(kNumber, R"({"kind":"tooling.welcome"})")
                                                       : answer_(kNamed, kNumber);
             }
-            // Sent a piece at a time, each once the one before is received,
-            // within what a connection holds unacknowledged.
-            constexpr std::size_t kPiece = std::size_t{256} << 10U;
-            if (connection.has_value() && !outgoing.empty() && provider_->pendingBytes(*connection, stream) == 0) {
+            // Sent a piece at a time while what the peer has not acknowledged
+            // stays within half of what a connection holds, so neither a
+            // late acknowledgement nor a send past that holding stalls it.
+            constexpr std::size_t kPiece = std::size_t{64} << 10U;
+            constexpr std::size_t kInFlight = std::size_t{256} << 10U;
+            while (connection.has_value() && !outgoing.empty() &&
+                   provider_->pendingBytes(*connection, stream) + kPiece <= kInFlight) {
                 const std::size_t kSending = std::min(outgoing.size(), kPiece);
                 const auto kBytes = std::as_bytes(std::span{outgoing.data(), kSending});
                 if (provider_->send(*connection, stream, kBytes).has_value()) {
@@ -197,27 +200,36 @@ std::string saidLine(std::size_t n, std::size_t bytes) {
 }
 
 RAWFRAME_TEST(WhatAnEndpointSaysUnaskedIsKeptToItsLastBytes) {
-    // Lines that each cost a sixty-fourth of the bound with their keeping:
-    // 64 are kept, and of 70 said the oldest 6 are let go.
+    // Lines that each cost a sixty-fourth of the bound with their keeping,
+    // two said before each reply, as connect and the adapter, which never
+    // take them, would have them said across a session: of 70 said, the 64
+    // last are kept.
     constexpr std::size_t kLine = (kMostUnheardBytes / 64) - kUnheardLineCost;
-    constexpr std::size_t kSaid = 70;
-    const Endpoint kEndpoint{[](std::string_view, std::int64_t id) {
-        std::string lines;
-        for (std::size_t each = 0; each < kSaid; ++each) {
-            lines += saidLine(each, kLine);
-        }
+    constexpr std::size_t kAsked = 35;
+    std::size_t said = 0;
+    const Endpoint kEndpoint{[&said](std::string_view, std::int64_t id) {
+        std::string lines = saidLine(said, kLine) + saidLine(said + 1, kLine);
+        said += 2;
         return lines + replyLine(id, R"({"kind":"test.done"})");
     }};
     const auto kLink = kEndpoint.link();
     if (kLink == nullptr) {
         return;
     }
-    RAWFRAME_EXPECT(kLink->ask(R"({"kind":"test.say","id":1})").has_value());
+    const auto kAskAll = [&kLink] {
+        bool all = true;
+        for (std::size_t each = 0; each < kAsked; ++each) {
+            all = kLink->ask(R"({"kind":"test.say","id":1})").has_value() && all;
+        }
+        return all;
+    };
+    RAWFRAME_EXPECT(kAskAll());
     const std::vector<std::string> kHeard = kLink->heard();
     RAWFRAME_EXPECT(kHeard.size() == 64);
     RAWFRAME_EXPECT(!kHeard.empty() && kHeard.front() + "\n" == saidLine(6, kLine));
-    RAWFRAME_EXPECT(!kHeard.empty() && kHeard.back() + "\n" == saidLine(kSaid - 1, kLine));
-    // Taken, they are no longer counted: what comes next is kept whole.
-    RAWFRAME_EXPECT(kLink->ask(R"({"kind":"test.say","id":2})").has_value());
-    RAWFRAME_EXPECT(kLink->heard().size() == 64);
+    RAWFRAME_EXPECT(!kHeard.empty() && kHeard.back() + "\n" == saidLine(69, kLine));
+    // Taken, they are no longer counted: the next 70 again leave 64.
+    RAWFRAME_EXPECT(kAskAll());
+    const std::vector<std::string> kNext = kLink->heard();
+    RAWFRAME_EXPECT(kNext.size() == 64 && kNext.front() + "\n" == saidLine(76, kLine));
 }
