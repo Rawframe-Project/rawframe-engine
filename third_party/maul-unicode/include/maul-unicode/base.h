@@ -23,10 +23,10 @@ extern "C"
 #define MUNI_VERSION_MAJOR 1
 // x-release-please-end
 // x-release-please-start-minor
-#define MUNI_VERSION_MINOR 0
+#define MUNI_VERSION_MINOR 1
 // x-release-please-end
 // x-release-please-start-patch
-#define MUNI_VERSION_PATCH 0
+#define MUNI_VERSION_PATCH 1
 // x-release-please-end
 
 // The one Unicode version every table in the library comes from.
@@ -64,12 +64,19 @@ extern "C"
 // MUNI_NODISCARD marks a function whose result must be read: every
 // function that returns a status. The attribute is standard in C23 and
 // C++17 and left out for older dialects. MSVC keeps __cplusplus at
-// 199711L unless /Zc:__cplusplus is given, so _MSVC_LANG is read too.
+// 199711L unless /Zc:__cplusplus is given, so _MSVC_LANG is read too. In
+// C, any dialect after C17 whose compiler has the attribute takes it:
+// GCC 14 reports 202000L in its C23 mode.
 #if (defined(__cplusplus) && __cplusplus >= 201703L) ||                                            \
     (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
 #define MUNI_NODISCARD [[nodiscard]]
-#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+#elif !defined(__cplusplus) && defined(__STDC_VERSION__) && __STDC_VERSION__ > 201710L &&          \
+    defined(__has_c_attribute)
+#if __has_c_attribute(nodiscard)
 #define MUNI_NODISCARD [[nodiscard]]
+#else
+#define MUNI_NODISCARD
+#endif
 #else
 #define MUNI_NODISCARD
 #endif

@@ -28,7 +28,10 @@ extern "C"
 #endif
 
     // An iterator over script runs. Its contents are private; it is plain
-    // data the caller keeps anywhere and needs no cleanup.
+    // data the caller keeps anywhere and needs no cleanup. A copy of an
+    // iterator an init call set up is one too; every call refuses one no
+    // init call set up, such as a zeroed one or one copied from other
+    // bytes, as an invalid argument.
     typedef struct muniScriptIterator
     {
         uint64_t opaque[26];
@@ -65,8 +68,9 @@ extern "C"
     /// @param moreFollows  true when still more pieces will be fed.
     /// @return `muni_success`; `muni_errorState` for an iterator that did
     ///         not ask for more text, such as one initialized without more
-    ///         text to follow; `muni_errorInvalid` for a NULL argument.
-    ///         `muni_errorInvalid` is reported before `muni_errorState`.
+    ///         text to follow; `muni_errorInvalid` for a NULL argument or
+    ///         an iterator no init call set up. `muni_errorInvalid` is
+    ///         reported before `muni_errorState`.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_NODISCARD MUNI_API muniResult muniScriptIterator_Feed(muniScriptIterator* iterator,
@@ -83,7 +87,8 @@ extern "C"
     ///                  returns `muni_success`.
     /// @return `muni_success` with a run; `muni_done` after the last one;
     ///         `muni_needMoreText` when the run's end or script depends on
-    ///         text not yet fed; `muni_errorInvalid` for a NULL argument.
+    ///         text not yet fed; `muni_errorInvalid` for a NULL argument or
+    ///         an iterator no init call set up.
     /// @par Thread safety
     /// Safe from any thread; an iterator is used by one thread at a time.
     MUNI_NODISCARD MUNI_API muniResult muniScriptIterator_NextRun(muniScriptIterator* iterator,

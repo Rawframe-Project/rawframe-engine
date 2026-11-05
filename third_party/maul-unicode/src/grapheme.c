@@ -24,6 +24,8 @@ enum
     EmojiPictographic = 1, // Extended_Pictographic Extend*
     EmojiJoined = 2,       // Extended_Pictographic Extend* ZWJ
 };
+static_assert((int)EmojiJoined == (int)muni_graphemeEmojiLast,
+              "segment.c checks the emoji state up to it");
 
 static bool IsControl(uint8_t value)
 {

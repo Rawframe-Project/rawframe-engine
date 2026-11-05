@@ -56,6 +56,7 @@ enum
     HoldPrefix = 3,     // LB25: (PR | PO) × OP, if (IS)? NU follows
     HoldAksara = 4,     // LB28a: aksara × aksara, if VF follows
 };
+static_assert((int)HoldAksara == (int)muni_lineHoldLast, "segment.c checks the hold kind up to it");
 
 // Where an LB25 number stands.
 enum
@@ -64,6 +65,8 @@ enum
     NumberDigits = 1, // NU (SY | IS)*
     NumberClosed = 2, // NU (SY | IS)* (CL | CP)
 };
+static_assert((int)NumberClosed == (int)muni_lineNumberLast,
+              "segment.c checks the number state up to it");
 
 enum : uint64_t
 {

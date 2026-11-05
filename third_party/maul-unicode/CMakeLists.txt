@@ -224,7 +224,7 @@ if(MAUL_UNICODE_FUZZ)
     target_compile_options(maul-unicode PRIVATE -fsanitize=fuzzer-no-link,address,undefined
                            -fno-sanitize-recover=all)
     target_link_options(maul-unicode PUBLIC -fsanitize=address,undefined -fno-sanitize-recover=all)
-    set(MUNI_FUZZ_AREAS encoding segment bidi bidi_long script)
+    set(MUNI_FUZZ_AREAS encoding segment bidi bidi_long script iterators)
     if(MAUL_UNICODE_NORMALIZATION)
         list(APPEND MUNI_FUZZ_AREAS normalize)
     endif()
@@ -249,6 +249,9 @@ if(MAUL_UNICODE_FUZZ)
         target_link_options(fuzz_${area} PRIVATE -fsanitize=fuzzer,address,undefined
                             -fno-sanitize-recover=all)
     endforeach()
+    # fuzz_iterators sets the fields of the iterators' state, which only
+    # src/ declares.
+    target_include_directories(fuzz_iterators PRIVATE src)
     # ICU is an oracle for the tests alone, never linked into the library.
     if(TARGET fuzz_icu)
         find_package(PkgConfig REQUIRED)

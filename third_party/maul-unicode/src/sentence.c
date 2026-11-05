@@ -22,6 +22,8 @@ enum
     EndingTerm = 1,  // SATerm Close*
     EndingSpace = 2, // SATerm Close* Sp+
 };
+static_assert((int)EndingSpace == (int)muni_sentenceEndingLast,
+              "segment.c checks the ending up to it");
 
 enum
 {
