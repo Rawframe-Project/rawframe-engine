@@ -8,6 +8,7 @@
 #include "flight_space.h"
 #include "flight_volume.h"
 #include "fpenv.h"
+#include "outputs.h"
 
 #include "maul-nav/base.h"
 #include "maul-nav/flight.h"
@@ -56,11 +57,14 @@ static MNAV_NOINLINE mnavResult FlightRaycastWork(const mnavFlightVolume* volume
 static MNAV_NOINLINE mnavResult FlightRaycastCounted(const mnavFlightVolume* volume, mnavPos3 from,
                                                      mnavPos3 to, mnavFlightHit* hitOut)
 {
-    return mnavHostCountInvalid(MNAV_HOST(volume), FlightRaycastWork(volume, from, to, hitOut));
+    mnavClearOutput(hitOut, sizeof(*hitOut));
+    mnavResult result =
+        mnavHostCountInvalid(MNAV_HOST(volume), FlightRaycastWork(volume, from, to, hitOut));
+    return mnavClearOnFailure(result, hitOut, sizeof(*hitOut));
 }
 
-mnavResult mnavFlightRaycast(const mnavFlightVolume* volume, mnavPos3 from, mnavPos3 to,
-                             mnavFlightHit* hitOut)
+mnavResult mnavFlightVolume_Raycast(const mnavFlightVolume* volume, mnavPos3 from, mnavPos3 to,
+                                    mnavFlightHit* hitOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = FlightRaycastCounted(volume, from, to, hitOut);
@@ -124,12 +128,16 @@ static MNAV_NOINLINE mnavResult CheckFlightPathCounted(const mnavFlightVolume* v
                                                        const mnavPos3* points, int32_t pointCount,
                                                        int32_t* stepOut, mnavFlightHit* hitOut)
 {
-    return mnavHostCountInvalid(MNAV_HOST(volume),
-                                CheckFlightPathWork(volume, points, pointCount, stepOut, hitOut));
+    mnavClearOutput(stepOut, sizeof(*stepOut));
+    mnavClearOutput(hitOut, sizeof(*hitOut));
+    mnavResult result = mnavHostCountInvalid(
+        MNAV_HOST(volume), CheckFlightPathWork(volume, points, pointCount, stepOut, hitOut));
+    return mnavClearOnFailure(mnavClearOnFailure(result, stepOut, sizeof(*stepOut)), hitOut,
+                              sizeof(*hitOut));
 }
 
-mnavResult mnavCheckFlightPath(const mnavFlightVolume* volume, const mnavPos3* points,
-                               int32_t pointCount, int32_t* stepOut, mnavFlightHit* hitOut)
+mnavResult mnavFlightVolume_CheckPath(const mnavFlightVolume* volume, const mnavPos3* points,
+                                      int32_t pointCount, int32_t* stepOut, mnavFlightHit* hitOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = CheckFlightPathCounted(volume, points, pointCount, stepOut, hitOut);
@@ -288,7 +296,6 @@ static MNAV_NOINLINE mnavResult FindNearestFlightPointWork(const mnavFlightVolum
         return mnav_errorInvalid;
     }
     *foundOut = false;
-    *nearestOut = point;
     mnavFlightFrame frame = mnavMakeFlightFrame(volume);
     Nearest n = {{0.0, 0.0, 0.0}, 0.0, {0.0, 0.0, 0.0}, false};
     int32_t at[3];
@@ -305,6 +312,7 @@ static MNAV_NOINLINE mnavResult FindNearestFlightPointWork(const mnavFlightVolum
     if (mnavFlightHolder(&cursor, at[0], at[1], at[2], nullptr) == MNAV_SPACE_OPEN)
     {
         *foundOut = true;
+        *nearestOut = point;
         return mnav_success;
     }
     n.best = (double)radius / frame.voxel;
@@ -324,12 +332,16 @@ static MNAV_NOINLINE mnavResult FindNearestFlightPointCounted(const mnavFlightVo
                                                               mnavPos3 point, float radius,
                                                               mnavPos3* nearestOut, bool* foundOut)
 {
-    return mnavHostCountInvalid(
+    mnavClearOutput(nearestOut, sizeof(*nearestOut));
+    mnavClearOutput(foundOut, sizeof(*foundOut));
+    mnavResult result = mnavHostCountInvalid(
         MNAV_HOST(volume), FindNearestFlightPointWork(volume, point, radius, nearestOut, foundOut));
+    return mnavClearOnFailure(mnavClearOnFailure(result, nearestOut, sizeof(*nearestOut)), foundOut,
+                              sizeof(*foundOut));
 }
 
-mnavResult mnavFindNearestFlightPoint(const mnavFlightVolume* volume, mnavPos3 point, float radius,
-                                      mnavPos3* nearestOut, bool* foundOut)
+mnavResult mnavFlightVolume_FindNearestPoint(const mnavFlightVolume* volume, mnavPos3 point,
+                                             float radius, mnavPos3* nearestOut, bool* foundOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = FindNearestFlightPointCounted(volume, point, radius, nearestOut, foundOut);

@@ -49,8 +49,8 @@ mnavResult mnavFillHeightPatch(mnavMemory* memory, const mnavCompactField* field
 // when unset, the set height nearest reference in the first ring of cells
 // round it, out to radius, that has one, the first in ring order on ties.
 // Returns false when no cell within radius is set.
-bool mnavPatchHeight(const mnavHeightPatch* patch, int32_t x, int32_t z, int32_t reference,
-                     int32_t radius, uint16_t* height);
+MNAV_NODISCARD bool mnavPatchHeight(const mnavHeightPatch* patch, int32_t x, int32_t z,
+                                    int32_t reference, int32_t radius, uint16_t* height);
 
 void mnavReleaseHeightPatch(mnavMemory* memory, mnavHeightPatch* patch);
 

@@ -43,17 +43,30 @@ typedef struct Work
     int32_t* kept;
     int32_t keptCount;
     int32_t keptCapacity;
+    // The region traced, and, in the second pass, what the first found:
+    // the regions one of whose contours kept fewer than three vertices,
+    // by id, which keep their cells along every stretch, as the regions
+    // across those stretches do, so that both sides of a stretch keep the
+    // same vertices; and each region's outline bounds on the ground, four
+    // per id (x0, z0, x1, z1), to find what a hole of walls holds.
+    uint32_t region;
+    const uint8_t* fell;
+    const int32_t* bounds;
+    // The regions that fell back, by id.
+    const uint32_t* fallen;
+    uint32_t fallenCount;
 } Work;
 
 typedef struct Tracer
 {
     const mnavCompactField* field;
     const uint32_t* ids;
+    uint32_t regionCount;
     uint8_t* edges;
     int32_t border;
 } Tracer;
 
-static bool IsRegion(uint32_t id)
+MNAV_NODISCARD static bool IsRegion(uint32_t id)
 {
     return id != 0 && (id & MNAV_BORDER_REGION) == 0;
 }
@@ -270,7 +283,7 @@ static float SegmentDistance(int32_t x, int32_t z, int32_t ax, int32_t az, int32
     return px * px + pz * pz;
 }
 
-static bool LexicallyAfter(const RawVertex* b, const RawVertex* a)
+MNAV_NODISCARD static bool LexicallyAfter(const RawVertex* b, const RawVertex* a)
 {
     return b->x > a->x || (b->x == a->x && b->z > a->z);
 }
@@ -325,6 +338,65 @@ static void CheckStraight(const Work* work, int32_t at, int32_t end, int32_t ste
     (void)neighbor;
 }
 
+// The first raw vertex past the kept segment at position i's start, in
+// its lexical direction: every raw vertex of the segment has its
+// neighbor, since the seeds are where the neighbor changes.
+static int32_t FirstOf(const Work* work, int32_t i)
+{
+    int32_t n = work->rawCount;
+    int32_t ai = work->kept[i];
+    int32_t bi = work->kept[(i + 1) % work->keptCount];
+    bool forward = LexicallyAfter(&work->raw[bi], &work->raw[ai]);
+    return forward ? (ai + 1) % n : (bi + n - 1) % n;
+}
+
+// Whether a region fell back in the first pass.
+MNAV_NODISCARD static bool Fell(const Work* work, uint32_t id)
+{
+    return work->fell != nullptr && IsRegion(id) && work->fell[id] != 0;
+}
+
+// Whether the raw vertices of the kept segment at position i, its ends
+// included, reach within the outline bounds of a region that fell back
+// other than its own: a wall simplified there could cut across the
+// region's cells, which it keeps.
+MNAV_NODISCARD static bool NearFallen(const Work* work, int32_t i)
+{
+    if (work->fallenCount == 0)
+    {
+        return false;
+    }
+    int32_t n = work->rawCount;
+    int32_t ai = work->kept[i];
+    int32_t bi = work->kept[(i + 1) % work->keptCount];
+    int32_t x0 = INT32_MAX;
+    int32_t z0 = INT32_MAX;
+    int32_t x1 = INT32_MIN;
+    int32_t z1 = INT32_MIN;
+    for (int32_t at = ai;; at = (at + 1) % n)
+    {
+        const RawVertex* v = &work->raw[at];
+        x0 = v->x < x0 ? v->x : x0;
+        z0 = v->z < z0 ? v->z : z0;
+        x1 = v->x > x1 ? v->x : x1;
+        z1 = v->z > z1 ? v->z : z1;
+        if (at == bi)
+        {
+            break;
+        }
+    }
+    for (uint32_t k = 0; k < work->fallenCount; ++k)
+    {
+        uint32_t id = work->fallen[k];
+        const int32_t* b = &work->bounds[4 * id];
+        if (id != work->region && b[0] <= x1 && b[2] >= x0 && b[1] <= z1 && b[3] >= z0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The raw vertex farthest from the kept segment at position i, or -1,
 // for walls and area borders; the segment is measured in its lexical
 // direction so the regions on both sides of an edge agree. Every other
@@ -342,7 +414,7 @@ static int32_t Farthest(const Work* work, int32_t i, float* distanceOut)
     const RawVertex* b = &work->raw[bi];
     bool forward = LexicallyAfter(b, a);
     int32_t step = forward ? 1 : n - 1;
-    int32_t at = forward ? (ai + 1) % n : (bi + n - 1) % n;
+    int32_t at = FirstOf(work, i);
     int32_t end = forward ? bi : ai;
     const RawVertex* from = forward ? a : b;
     const RawVertex* to = forward ? b : a;
@@ -370,14 +442,84 @@ static int32_t Farthest(const Work* work, int32_t i, float* distanceOut)
     return farthest;
 }
 
+// Twice the signed area of the raw contour on the ground: positive for a
+// region's outline, negative for a hole.
+static int64_t RawArea(const Work* work)
+{
+    int64_t area = 0;
+    for (int32_t i = 0, j = work->rawCount - 1; i < work->rawCount; j = i++)
+    {
+        const RawVertex* a = &work->raw[i];
+        const RawVertex* b = &work->raw[j];
+        area += (int64_t)a->x * b->z - (int64_t)b->x * a->z;
+    }
+    return area;
+}
+
+// Whether a contour may go when it simplifies to fewer than three vertices:
+// a hole all of whose edges are walls, which its region then covers,
+// when it holds no other region (HoldsAnother).
+MNAV_NODISCARD static bool MayGo(const Work* work)
+{
+    if (RawArea(work) > 0)
+    {
+        return false;
+    }
+    for (int32_t i = 0; i < work->rawCount; ++i)
+    {
+        if (work->raw[i].neighbor != 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Whether a hole of walls holds another region: one whose outline's bounds
+// lie inside the hole's, which it would cover if it went. Layers above or
+// below count too; a hole kept for one is only more exact.
+MNAV_NODISCARD static bool HoldsAnother(const Work* work, uint32_t count)
+{
+    int32_t x0 = INT32_MAX;
+    int32_t z0 = INT32_MAX;
+    int32_t x1 = INT32_MIN;
+    int32_t z1 = INT32_MIN;
+    for (int32_t i = 0; i < work->rawCount; ++i)
+    {
+        const RawVertex* v = &work->raw[i];
+        x0 = v->x < x0 ? v->x : x0;
+        z0 = v->z < z0 ? v->z : z0;
+        x1 = v->x > x1 ? v->x : x1;
+        z1 = v->z > z1 ? v->z : z1;
+    }
+    for (uint32_t id = 1; work->bounds != nullptr && id <= count; ++id)
+    {
+        const int32_t* b = &work->bounds[4 * id];
+        if (id != work->region && b[0] <= b[2] && b[0] > x0 && b[1] > z0 && b[2] < x1 && b[3] < z1)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Keeps the raw vertices the walls need to stay within edgeError of their
+// cells: within 0 a stretch of a region that fell back, across from one,
+// or reaching within one's bounds (Work), so that no wall simplified past
+// a cell cuts into a region kept to its cells.
 static mnavResult Simplify(mnavMemory* memory, Work* work, float edgeError)
 {
     mnavResult result = Seed(memory, work);
+    bool fell = Fell(work, work->region);
     for (int32_t i = 0; result == mnav_success && i < work->keptCount;)
     {
         float distance = 0.0f;
         int32_t farthest = Farthest(work, i, &distance);
-        if (farthest >= 0 && distance > edgeError * edgeError)
+        float error =
+            fell || Fell(work, work->raw[FirstOf(work, i)].neighbor) || NearFallen(work, i)
+                ? 0.0f
+                : edgeError;
+        if (farthest >= 0 && distance > error * error)
         {
             result = Keep(memory, work, i, farthest);
         }
@@ -488,8 +630,103 @@ static mnavResult Store(mnavMemory* memory, const Work* work, uint32_t region, m
     return mnav_success;
 }
 
+// What the first pass finds for the second (Work), and whether a second
+// pass is needed: a region fell back, or a hole of walls wide enough to
+// hold another region went.
+typedef struct Findings
+{
+    uint8_t* fell;
+    int32_t* bounds;
+    uint32_t* fallen;
+    uint32_t fallenCount;
+    uint32_t count;
+    bool again;
+} Findings;
+
+// Notes a contour's outline bounds and, when it kept fewer than three
+// vertices, whether it falls back, in the first pass.
+static void Note(const Work* work, bool goes, Findings* f)
+{
+    int32_t* b = &f->bounds[4 * work->region];
+    bool outline = RawArea(work) > 0;
+    int32_t x0 = INT32_MAX;
+    int32_t z0 = INT32_MAX;
+    int32_t x1 = INT32_MIN;
+    int32_t z1 = INT32_MIN;
+    for (int32_t i = 0; i < work->rawCount; ++i)
+    {
+        const RawVertex* v = &work->raw[i];
+        x0 = v->x < x0 ? v->x : x0;
+        z0 = v->z < z0 ? v->z : z0;
+        x1 = v->x > x1 ? v->x : x1;
+        z1 = v->z > z1 ? v->z : z1;
+    }
+    if (outline)
+    {
+        b[0] = x0 < b[0] ? x0 : b[0];
+        b[1] = z0 < b[1] ? z0 : b[1];
+        b[2] = x1 > b[2] ? x1 : b[2];
+        b[3] = z1 > b[3] ? z1 : b[3];
+    }
+    if (work->keptCount >= 3)
+    {
+        return;
+    }
+    if (!goes)
+    {
+        if (f->fell[work->region] == 0)
+        {
+            f->fallen[f->fallenCount++] = work->region;
+        }
+        f->fell[work->region] = 1;
+        f->again = true;
+    }
+    // A hole of walls holds another region only round at least a cell of
+    // it and a cell of wall on each side.
+    else if (x1 - x0 >= 3 && z1 - z0 >= 3)
+    {
+        f->again = true;
+    }
+}
+
+// Simplifies the contour just walked. An outline so thin that no wall
+// strays edgeError would keep two vertices and its region be lost, though
+// it is walkable and a neighboring tile keeps the same cells in a wider
+// region up to the shared side: it keeps its cells' outline, and in the
+// second pass so do the stretches across from it. A hole of walls that
+// thin goes, and its region covers it, unless it holds another region.
+// The first pass, with findings to fill, simplifies each contour alone.
+static mnavResult SimplifyOne(mnavMemory* memory, const Tracer* tracer, Work* work, float edgeError,
+                              Findings* first)
+{
+    mnavResult result = Simplify(memory, work, edgeError);
+    if (result != mnav_success || work->keptCount >= 3 || edgeError == 0.0f)
+    {
+        if (result == mnav_success && first != nullptr)
+        {
+            Note(work, true, first);
+        }
+        return result;
+    }
+    bool goes = MayGo(work) && (first != nullptr || !HoldsAnother(work, tracer->regionCount));
+    if (first != nullptr)
+    {
+        Note(work, goes, first);
+    }
+    if (goes)
+    {
+        return mnav_success;
+    }
+    work->keptCount = 0;
+    return Simplify(memory, work, 0.0f);
+}
+
+// Traces, simplifies and stores every contour. The first pass, with
+// findings to fill, simplifies each contour alone; the second, with the
+// first's, simplifies the stretches of regions that fell back, across
+// from them or near them, within 0.
 static mnavResult TraceAll(mnavMemory* memory, const Tracer* tracer, Work* work, float edgeError,
-                           int32_t edgeLength, mnavContourSet* set)
+                           int32_t edgeLength, Findings* first, mnavContourSet* set)
 {
     const mnavCompactField* field = tracer->field;
     int32_t width = field->frame.width;
@@ -503,10 +740,11 @@ static mnavResult TraceAll(mnavMemory* memory, const Tracer* tracer, Work* work,
             }
             work->rawCount = 0;
             work->keptCount = 0;
+            work->region = tracer->ids[i];
             mnavResult result = Walk(memory, tracer, work, c % width, c / width, i);
             if (result == mnav_success)
             {
-                result = Simplify(memory, work, edgeError);
+                result = SimplifyOne(memory, tracer, work, edgeError, first);
             }
             if (result == mnav_success)
             {
@@ -556,16 +794,49 @@ mnavResult mnavBuildContours(mnavMemory* memory, const mnavCompactField* field,
                              int32_t edgeLength, mnavContourSet* set)
 {
     *set = (mnavContourSet){0};
-    Tracer tracer = {field, regions->ids, nullptr, border};
+    Tracer tracer = {field, regions->ids, regions->count, nullptr, border};
+    size_t ids = (size_t)regions->count + 1;
+    Findings findings = {nullptr, nullptr, nullptr, 0, regions->count, false};
     mnavResult result = mnavAllocate(memory, (size_t)field->spanCount, sizeof(uint8_t),
                                      alignof(uint8_t), (void**)&tracer.edges);
-    if (result != mnav_success)
-    {
-        return result;
-    }
-    MarkEdges(&tracer);
+    result = result == mnav_success ? mnavAllocate(memory, ids, sizeof(uint8_t), alignof(uint8_t),
+                                                   (void**)&findings.fell)
+                                    : result;
+    result = result == mnav_success ? mnavAllocate(memory, 4 * ids, sizeof(int32_t),
+                                                   alignof(int32_t), (void**)&findings.bounds)
+                                    : result;
+    result = result == mnav_success ? mnavAllocate(memory, ids, sizeof(uint32_t), alignof(uint32_t),
+                                                   (void**)&findings.fallen)
+                                    : result;
     Work work = {0};
-    result = TraceAll(memory, &tracer, &work, edgeError, edgeLength, set);
+    if (result == mnav_success)
+    {
+        memset(findings.fell, 0, ids);
+        for (size_t id = 0; id < ids; ++id)
+        {
+            int32_t* b = &findings.bounds[4 * id];
+            b[0] = INT32_MAX;
+            b[1] = INT32_MAX;
+            b[2] = INT32_MIN;
+            b[3] = INT32_MIN;
+        }
+        MarkEdges(&tracer);
+        result = TraceAll(memory, &tracer, &work, edgeError, edgeLength, &findings, set);
+    }
+    if (result == mnav_success && findings.again)
+    {
+        set->count = 0;
+        set->vertexCount = 0;
+        work.fell = findings.fell;
+        work.bounds = findings.bounds;
+        work.fallen = findings.fallen;
+        work.fallenCount = findings.fallenCount;
+        MarkEdges(&tracer);
+        result = TraceAll(memory, &tracer, &work, edgeError, edgeLength, nullptr, set);
+    }
+    mnavRelease(memory, findings.fallen, ids, sizeof(uint32_t), alignof(uint32_t));
+    mnavRelease(memory, findings.bounds, 4 * ids, sizeof(int32_t), alignof(int32_t));
+    mnavRelease(memory, findings.fell, ids, sizeof(uint8_t), alignof(uint8_t));
     mnavRelease(memory, work.kept, (size_t)work.keptCapacity, sizeof(int32_t), alignof(int32_t));
     mnavRelease(memory, work.raw, (size_t)work.rawCapacity, sizeof(RawVertex), alignof(RawVertex));
     mnavRelease(memory, tracer.edges, (size_t)field->spanCount, sizeof(uint8_t), alignof(uint8_t));

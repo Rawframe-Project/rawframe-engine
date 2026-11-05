@@ -27,7 +27,7 @@
 
 // A polygon's detail triangles, of a kind and value.
 static void Fill(mnavDebugBuffer* buffer, const mnavNavmesh* navmesh, int32_t slot, int32_t p,
-                 mnavDebugKind kind, uint16_t value)
+                 mnavDebugKind kind, uint32_t value)
 {
     const mnavTile* tile = navmesh->slots[slot].tile;
     const mnavDetailPart* part = &tile->detail.parts[p];
@@ -43,7 +43,7 @@ static void Fill(mnavDebugBuffer* buffer, const mnavNavmesh* navmesh, int32_t sl
 }
 
 // Whether tile links join edge j of polygon p.
-static bool Linked(const mnavTile* tile, int32_t p, int32_t j)
+MNAV_NODISCARD static bool Linked(const mnavTile* tile, int32_t p, int32_t j)
 {
     for (int32_t l = tile->firstLink[p]; l < tile->firstLink[p + 1]; ++l)
     {
@@ -99,7 +99,7 @@ static void Bounds(mnavDebugBuffer* buffer, const mnavNavmesh* navmesh, int32_t 
     }
     low = isfinite(low) ? low : 0.0;
     mnavFrame f = mnavFrameOf(navmesh, s->x, s->z);
-    double side = (double)navmesh->def.tileCells * f.cell;
+    double side = (double)navmesh->def.bake.tileCells * f.cell;
     mnavPos3 c[4] = {{f.x0, low, f.z0},
                      {f.x0 + side, low, f.z0},
                      {f.x0 + side, low, f.z0 + side},
@@ -110,18 +110,20 @@ static void Bounds(mnavDebugBuffer* buffer, const mnavNavmesh* navmesh, int32_t 
     }
 }
 
-static MNAV_NOINLINE mnavResult DebugNavmeshWork(const mnavNavmesh* navmesh, int32_t tileX0,
-                                                 int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
+static MNAV_NOINLINE mnavResult DebugNavmeshWork(const mnavNavmesh* navmesh,
+                                                 const mnavTileRange* tiles,
                                                  mnavDebugBuffer* buffer)
 {
-    if (navmesh == nullptr || !mnavGoodBuffer(buffer) || tileX1 < tileX0 || tileZ1 < tileZ0)
+    mnavTileRange r =
+        tiles != nullptr ? *tiles : (mnavTileRange){INT32_MIN, INT32_MIN, INT32_MAX, INT32_MAX};
+    if (navmesh == nullptr || !mnavGoodBuffer(buffer) || r.x1 < r.x0 || r.z1 < r.z0)
     {
         return mnav_errorInvalid;
     }
     for (int32_t i = 0; i < navmesh->placeCount; ++i)
     {
         const mnavPlace* place = &navmesh->places[i];
-        if (place->x < tileX0 || place->x > tileX1 || place->z < tileZ0 || place->z > tileZ1)
+        if (place->x < r.x0 || place->x > r.x1 || place->z < r.z0 || place->z > r.z1)
         {
             continue;
         }
@@ -136,19 +138,18 @@ static MNAV_NOINLINE mnavResult DebugNavmeshWork(const mnavNavmesh* navmesh, int
     return mnavDrawResult(buffer);
 }
 
-static MNAV_NOINLINE mnavResult DebugNavmeshCounted(const mnavNavmesh* navmesh, int32_t tileX0,
-                                                    int32_t tileZ0, int32_t tileX1, int32_t tileZ1,
+static MNAV_NOINLINE mnavResult DebugNavmeshCounted(const mnavNavmesh* navmesh,
+                                                    const mnavTileRange* tiles,
                                                     mnavDebugBuffer* buffer)
 {
-    return mnavHostCountInvalid(MNAV_HOST(navmesh),
-                                DebugNavmeshWork(navmesh, tileX0, tileZ0, tileX1, tileZ1, buffer));
+    return mnavHostCountInvalid(MNAV_HOST(navmesh), DebugNavmeshWork(navmesh, tiles, buffer));
 }
 
-mnavResult mnavDebugNavmesh(const mnavNavmesh* navmesh, int32_t tileX0, int32_t tileZ0,
-                            int32_t tileX1, int32_t tileZ1, mnavDebugBuffer* buffer)
+mnavResult mnavNavmesh_Debug(const mnavNavmesh* navmesh, const mnavTileRange* tiles,
+                             mnavDebugBuffer* buffer)
 {
     uint64_t env = mnavFloatEnvEnter();
-    mnavResult result = DebugNavmeshCounted(navmesh, tileX0, tileZ0, tileX1, tileZ1, buffer);
+    mnavResult result = DebugNavmeshCounted(navmesh, tiles, buffer);
     mnavFloatEnvLeave(env);
     return result;
 }
@@ -174,8 +175,8 @@ static MNAV_NOINLINE mnavResult DebugLinksWork(const mnavNavmesh* navmesh, mnavD
         double dz = b.z - a.z;
         double rise = sqrt(dx * dx + dy * dy + dz * dz) * 0.25;
         mnavDebugKind kind = link->def.twoWay ? mnav_debugLinkBothWays : mnav_debugLink;
-        uint16_t value =
-            (uint16_t)(link->def.kind + (state->attached && state->enabled ? 0 : LINK_OFF));
+        uint32_t value =
+            (uint32_t)link->def.kind + (state->attached && state->enabled ? 0u : LINK_OFF);
         mnavPos3 last = a;
         for (int32_t k = 1; k <= ARC_LINES; ++k)
         {
@@ -194,7 +195,7 @@ static MNAV_NOINLINE mnavResult DebugLinksCounted(const mnavNavmesh* navmesh,
     return mnavHostCountInvalid(MNAV_HOST(navmesh), DebugLinksWork(navmesh, buffer));
 }
 
-mnavResult mnavDebugLinks(const mnavNavmesh* navmesh, mnavDebugBuffer* buffer)
+mnavResult mnavNavmesh_DebugLinks(const mnavNavmesh* navmesh, mnavDebugBuffer* buffer)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = DebugLinksCounted(navmesh, buffer);
@@ -204,8 +205,9 @@ mnavResult mnavDebugLinks(const mnavNavmesh* navmesh, mnavDebugBuffer* buffer)
 
 static MNAV_NOINLINE mnavResult DebugPathWork(const mnavPath* path, mnavDebugBuffer* buffer)
 {
-    if (path == nullptr || !mnavGoodBuffer(buffer) || path->pointCount < 0 ||
-        (path->pointCount > 0 && path->points == nullptr))
+    // The points may be the caller's own: only the count given is read.
+    if (path == nullptr || !mnavGoodBuffer(buffer) || path->pointCount < 1 ||
+        path->points == nullptr || !mnavGoodPoints(path->points, path->pointCount))
     {
         return mnav_errorInvalid;
     }
@@ -233,17 +235,21 @@ static MNAV_NOINLINE mnavResult DebugCorridorWork(const mnavNavmesh* navmesh,
     {
         return mnav_errorInvalid;
     }
+    // Every id is checked before the first fill, so a refused corridor
+    // leaves the buffer as it was.
     for (int32_t i = 0; i < count; ++i)
     {
-        mnavResult result = mnavCheckPolygon(navmesh, polygons[i]);
-        if (result == mnav_errorInvalid)
+        if (mnavCheckPolygon(navmesh, polygons[i]) == mnav_errorInvalid)
         {
-            return result;
+            return mnav_errorInvalid;
         }
-        if (result == mnav_success)
+    }
+    for (int32_t i = 0; i < count; ++i)
+    {
+        if (mnavCheckPolygon(navmesh, polygons[i]) == mnav_success)
         {
             Fill(buffer, navmesh, (int32_t)polygons[i].slot - 1, (int32_t)polygons[i].polygon,
-                 mnav_debugCorridor, (uint16_t)(i & 0xFFFF));
+                 mnav_debugCorridor, (uint32_t)i);
         }
     }
     return mnavDrawResult(buffer);
@@ -257,8 +263,8 @@ static MNAV_NOINLINE mnavResult DebugCorridorCounted(const mnavNavmesh* navmesh,
                                 DebugCorridorWork(navmesh, polygons, count, buffer));
 }
 
-mnavResult mnavDebugCorridor(const mnavNavmesh* navmesh, const mnavPolygonId* polygons,
-                             int32_t count, mnavDebugBuffer* buffer)
+mnavResult mnavNavmesh_DebugCorridor(const mnavNavmesh* navmesh, const mnavPolygonId* polygons,
+                                     int32_t count, mnavDebugBuffer* buffer)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = DebugCorridorCounted(navmesh, polygons, count, buffer);

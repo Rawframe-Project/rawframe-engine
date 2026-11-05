@@ -14,6 +14,7 @@
 #include "flow.h"
 #include "fpenv.h"
 #include "invariant.h"
+#include "outputs.h"
 #include "query_filter.h"
 
 #include "maul-nav/bake.h"
@@ -29,15 +30,15 @@
 // The diagonal's length in cells, rounded once to binary64.
 #define DIAGONAL 1.4142135623730951
 
-static MNAV_NOINLINE mnavResult CreateFlowFieldWork(const mnavFlowFieldDef* def,
-                                                    mnavFlowField** fieldOut)
+static MNAV_NOINLINE mnavResult CreateFlowFieldWork(const mnavGridFlowDef* def,
+                                                    mnavGridFlow** fieldOut)
 {
     if (fieldOut == nullptr)
     {
         return mnav_errorInvalid;
     }
     *fieldOut = nullptr;
-    if (def == nullptr || def->cookie != MNAV_FLOW_FIELD_DEF_COOKIE)
+    if (def == nullptr || def->cookie != MNAV_GRID_FLOW_DEF_COOKIE)
     {
         return mnav_errorInvalid;
     }
@@ -53,19 +54,19 @@ static MNAV_NOINLINE mnavResult CreateFlowFieldWork(const mnavFlowFieldDef* def,
     {
         return mnav_errorInvalid;
     }
-    if (def->cells > MNAV_MAX_FLOW_CELLS)
+    if (def->cells > MNAV_MAX_GRID_FLOW_CELLS)
     {
         return mnav_errorLimit;
     }
     mnavMemory memory = mnavMakeMemory(def->allocator, UINT64_MAX);
-    mnavFlowField* f = nullptr;
+    mnavGridFlow* f = nullptr;
     mnavResult result =
-        mnavAllocate(&memory, 1, sizeof(mnavFlowField), alignof(mnavFlowField), (void**)&f);
+        mnavAllocate(&memory, 1, sizeof(mnavGridFlow), alignof(mnavGridFlow), (void**)&f);
     if (result != mnav_success)
     {
         return result;
     }
-    *f = (mnavFlowField){0};
+    *f = (mnavGridFlow){0};
     f->memory = memory;
     f->memory.host = &f->host;
     f->def = *def;
@@ -107,14 +108,14 @@ static MNAV_NOINLINE mnavResult CreateFlowFieldWork(const mnavFlowFieldDef* def,
     }
     if (result != mnav_success)
     {
-        mnavDestroyFlowField(f);
+        mnavDestroyGridFlow(f);
         return result;
     }
     *fieldOut = f;
     return mnav_success;
 }
 
-mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def, mnavFlowField** fieldOut)
+mnavResult mnavCreateGridFlow(const mnavGridFlowDef* def, mnavGridFlow** fieldOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = CreateFlowFieldWork(def, fieldOut);
@@ -122,12 +123,12 @@ mnavResult mnavCreateFlowField(const mnavFlowFieldDef* def, mnavFlowField** fiel
     return result;
 }
 
-uint64_t mnavGetFlowFieldMisuse(const mnavFlowField* field)
+uint64_t mnavGridFlow_GetMisuse(const mnavGridFlow* field)
 {
     return field != nullptr ? mnavHostMisuse(&field->host) : 0;
 }
 
-void mnavDestroyFlowField(mnavFlowField* field)
+void mnavDestroyGridFlow(mnavGridFlow* field)
 {
     if (field == nullptr || mnavHostCalledBack(&field->host))
     {
@@ -147,12 +148,12 @@ void mnavDestroyFlowField(mnavFlowField* field)
     // does not touch it.
     mnavHostEnter(&field->host);
     memory.host = nullptr;
-    mnavRelease(&memory, field, 1, sizeof(mnavFlowField), alignof(mnavFlowField));
+    mnavRelease(&memory, field, 1, sizeof(mnavGridFlow), alignof(mnavGridFlow));
 }
 
 bool mnavFlowOpen(const mnavFlowSearch* s, int32_t x, int32_t y)
 {
-    const mnavFlowRegion* r = &s->field->region;
+    const mnavFlowWindow* r = &s->field->region;
     if (x < r->x || y < r->y || x >= r->x + r->width || y >= r->y + r->height)
     {
         return false;
@@ -163,25 +164,25 @@ bool mnavFlowOpen(const mnavFlowSearch* s, int32_t x, int32_t y)
 
 double mnavFlowAreaCost(const mnavFlowSearch* s, int32_t cell)
 {
-    const mnavFlowField* f = s->field;
+    const mnavGridFlow* f = s->field;
     int32_t x = f->region.x + cell % f->region.width;
     int32_t y = f->region.y + cell / f->region.width;
     return (double)f->filter.costs[s->areas[(size_t)y * (size_t)f->gridWidth + (size_t)x]];
 }
 
 // The heap, by cost, then by cell index.
-static bool Sooner(const mnavFlowField* f, int32_t a, int32_t b)
+MNAV_NODISCARD static bool Sooner(const mnavGridFlow* f, int32_t a, int32_t b)
 {
     return f->costs[a] != f->costs[b] ? f->costs[a] < f->costs[b] : a < b;
 }
 
-static void Place(mnavFlowField* f, int32_t at, int32_t cell)
+static void Place(mnavGridFlow* f, int32_t at, int32_t cell)
 {
     f->heap[at] = cell;
     f->places[cell] = at;
 }
 
-static void SiftUp(mnavFlowField* f, int32_t at)
+static void SiftUp(mnavGridFlow* f, int32_t at)
 {
     int32_t cell = f->heap[at];
     while (at > 0)
@@ -197,7 +198,7 @@ static void SiftUp(mnavFlowField* f, int32_t at)
     Place(f, at, cell);
 }
 
-static int32_t Pop(mnavFlowField* f)
+static int32_t Pop(mnavGridFlow* f)
 {
     MNAV_ASSERT(f->heapCount > 0 && f->places[f->heap[0]] == 0);
     int32_t top = f->heap[0];
@@ -229,7 +230,7 @@ static int32_t Pop(mnavFlowField* f)
     return top;
 }
 
-void mnavFlowLower(mnavFlowField* f, int32_t cell, double cost, int32_t next)
+void mnavFlowLower(mnavGridFlow* f, int32_t cell, double cost, int32_t next)
 {
     // A goal leads to itself; any other cell's way costs no less than its
     // next cell's, as area costs are at least 0.
@@ -262,7 +263,7 @@ static const mnavCell s_steps[8] = {{1, 0}, {0, 1},  {-1, 0},  {0, -1},
 bool mnavFlowNeighbor(const mnavFlowSearch* s, int32_t cell, int32_t d, int32_t* other,
                       double* length)
 {
-    const mnavFlowField* f = s->field;
+    const mnavGridFlow* f = s->field;
     int32_t width = f->region.width;
     int32_t x = f->region.x + cell % width;
     int32_t y = f->region.y + cell / width;
@@ -290,7 +291,7 @@ double mnavFlowStepCost(const mnavFlowSearch* s, int32_t from, int32_t to, doubl
 // with the cell's own area cost read once.
 static void Expand(const mnavFlowSearch* s, int32_t cell)
 {
-    mnavFlowField* f = s->field;
+    mnavGridFlow* f = s->field;
     int32_t width = f->region.width;
     int32_t x = f->region.x + cell % width;
     int32_t y = f->region.y + cell / width;
@@ -320,13 +321,13 @@ static void Expand(const mnavFlowSearch* s, int32_t cell)
     }
 }
 
-static bool GoodGrid(const mnavGrid* grid)
+MNAV_NODISCARD static bool GoodGrid(const mnavGrid* grid)
 {
     return grid->areas != nullptr && grid->width >= 1 && grid->height >= 1 &&
            isfinite(grid->cellSize) && grid->cellSize > 0.0f;
 }
 
-static bool GoodGoals(const mnavGrid* grid, const mnavCell* goals, int32_t count)
+MNAV_NODISCARD static bool GoodGoals(const mnavGrid* grid, const mnavCell* goals, int32_t count)
 {
     for (int32_t i = 0; i < count; ++i)
     {
@@ -339,13 +340,13 @@ static bool GoodGoals(const mnavGrid* grid, const mnavCell* goals, int32_t count
     return true;
 }
 
-static bool GoodRegion(const mnavGrid* grid, const mnavFlowRegion* r)
+MNAV_NODISCARD static bool GoodRegion(const mnavGrid* grid, const mnavCellRange* r)
 {
-    return r->x >= 0 && r->y >= 0 && r->width >= 1 && r->height >= 1 &&
-           r->x <= grid->width - r->width && r->y <= grid->height - r->height;
+    return r->x0 >= 0 && r->y0 >= 0 && r->x0 <= r->x1 && r->y0 <= r->y1 && r->x1 < grid->width &&
+           r->y1 < grid->height;
 }
 
-static mnavResult Check(mnavFlowField* field, const mnavGrid* grid, const mnavFlowRegion* region,
+static mnavResult Check(mnavGridFlow* field, const mnavGrid* grid, const mnavCellRange* region,
                         const mnavCell* goals, int32_t goalCount)
 {
     if (field == nullptr || grid == nullptr || goalCount < 0 ||
@@ -358,14 +359,15 @@ static mnavResult Check(mnavFlowField* field, const mnavGrid* grid, const mnavFl
     {
         return mnav_errorLimit;
     }
-    int64_t cells = region != nullptr ? (int64_t)region->width * (int64_t)region->height
+    int64_t cells = region != nullptr ? ((int64_t)region->x1 - region->x0 + 1) *
+                                            ((int64_t)region->y1 - region->y0 + 1)
                                       : (int64_t)grid->width * (int64_t)grid->height;
     return cells > (int64_t)field->def.cells ? mnav_errorCapacity : mnav_success;
 }
 
-static MNAV_NOINLINE mnavResult BeginFlowFieldWork(mnavFlowField* field, const mnavGrid* grid,
+static MNAV_NOINLINE mnavResult BeginFlowFieldWork(mnavGridFlow* field, const mnavGrid* grid,
                                                    const mnavQueryFilter* filter,
-                                                   const mnavFlowRegion* region,
+                                                   const mnavCellRange* region,
                                                    const mnavCell* goals, int32_t goalCount)
 {
     if (field != nullptr && mnavHostCalledBack(&field->host))
@@ -386,7 +388,10 @@ static MNAV_NOINLINE mnavResult BeginFlowFieldWork(mnavFlowField* field, const m
     {
         return result;
     }
-    field->region = region != nullptr ? *region : (mnavFlowRegion){0, 0, grid->width, grid->height};
+    field->region = region != nullptr
+                        ? (mnavFlowWindow){region->x0, region->y0, region->x1 - region->x0 + 1,
+                                           region->y1 - region->y0 + 1}
+                        : (mnavFlowWindow){0, 0, grid->width, grid->height};
     field->gridWidth = grid->width;
     field->gridHeight = grid->height;
     field->cellSize = grid->cellSize;
@@ -425,18 +430,18 @@ static MNAV_NOINLINE mnavResult BeginFlowFieldWork(mnavFlowField* field, const m
     return mnav_success;
 }
 
-static MNAV_NOINLINE mnavResult BeginFlowFieldCounted(mnavFlowField* field, const mnavGrid* grid,
+static MNAV_NOINLINE mnavResult BeginFlowFieldCounted(mnavGridFlow* field, const mnavGrid* grid,
                                                       const mnavQueryFilter* filter,
-                                                      const mnavFlowRegion* region,
+                                                      const mnavCellRange* region,
                                                       const mnavCell* goals, int32_t goalCount)
 {
     return mnavHostCountInvalid(MNAV_HOST(field),
                                 BeginFlowFieldWork(field, grid, filter, region, goals, goalCount));
 }
 
-mnavResult mnavBeginFlowField(mnavFlowField* field, const mnavGrid* grid,
-                              const mnavQueryFilter* filter, const mnavFlowRegion* region,
-                              const mnavCell* goals, int32_t goalCount)
+mnavResult mnavGridFlow_Begin(mnavGridFlow* field, const mnavGrid* grid,
+                              const mnavCellRange* region, const mnavCell* goals, int32_t goalCount,
+                              const mnavQueryFilter* filter)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = BeginFlowFieldCounted(field, grid, filter, region, goals, goalCount);
@@ -444,13 +449,13 @@ mnavResult mnavBeginFlowField(mnavFlowField* field, const mnavGrid* grid,
     return result;
 }
 
-bool mnavFlowSameGrid(const mnavFlowField* f, const mnavGrid* grid)
+bool mnavFlowSameGrid(const mnavGridFlow* f, const mnavGrid* grid)
 {
     return grid->areas != nullptr && grid->width == f->gridWidth && grid->height == f->gridHeight &&
            grid->cellSize == f->cellSize;
 }
 
-static MNAV_NOINLINE mnavResult ContinueFlowFieldWork(mnavFlowField* field, const mnavGrid* grid,
+static MNAV_NOINLINE mnavResult ContinueFlowFieldWork(mnavGridFlow* field, const mnavGrid* grid,
                                                       int32_t cells, bool* endedOut)
 {
     if (field != nullptr && mnavHostCalledBack(&field->host))
@@ -488,14 +493,18 @@ static MNAV_NOINLINE mnavResult ContinueFlowFieldWork(mnavFlowField* field, cons
     return mnav_success;
 }
 
-static MNAV_NOINLINE mnavResult ContinueFlowFieldCounted(mnavFlowField* field, const mnavGrid* grid,
+static MNAV_NOINLINE mnavResult ContinueFlowFieldCounted(mnavGridFlow* field, const mnavGrid* grid,
                                                          int32_t cells, bool* endedOut)
 {
-    return mnavHostCountInvalid(MNAV_HOST(field),
-                                ContinueFlowFieldWork(field, grid, cells, endedOut));
+    bool endedMade = false;
+    mnavResult result = mnavHostCountInvalid(
+        MNAV_HOST(field),
+        ContinueFlowFieldWork(field, grid, cells, endedOut != nullptr ? &endedMade : nullptr));
+    mnavGiveOutput(result, false, endedOut, &endedMade, sizeof(endedMade));
+    return result;
 }
 
-mnavResult mnavContinueFlowField(mnavFlowField* field, const mnavGrid* grid, int32_t cells,
+mnavResult mnavGridFlow_Continue(mnavGridFlow* field, const mnavGrid* grid, int32_t cells,
                                  bool* endedOut)
 {
     uint64_t env = mnavFloatEnvEnter();
@@ -504,7 +513,7 @@ mnavResult mnavContinueFlowField(mnavFlowField* field, const mnavGrid* grid, int
     return result;
 }
 
-static MNAV_NOINLINE mnavResult BuildFlowFieldWork(mnavFlowField* field, const mnavGrid* grid,
+static MNAV_NOINLINE mnavResult BuildFlowFieldWork(mnavGridFlow* field, const mnavGrid* grid,
                                                    const mnavQueryFilter* filter,
                                                    const mnavCell* goals, int32_t goalCount)
 {
@@ -512,7 +521,7 @@ static MNAV_NOINLINE mnavResult BuildFlowFieldWork(mnavFlowField* field, const m
     return result == mnav_success ? ContinueFlowFieldWork(field, grid, INT32_MAX, nullptr) : result;
 }
 
-static MNAV_NOINLINE mnavResult BuildFlowFieldCounted(mnavFlowField* field, const mnavGrid* grid,
+static MNAV_NOINLINE mnavResult BuildFlowFieldCounted(mnavGridFlow* field, const mnavGrid* grid,
                                                       const mnavQueryFilter* filter,
                                                       const mnavCell* goals, int32_t goalCount)
 {
@@ -520,9 +529,8 @@ static MNAV_NOINLINE mnavResult BuildFlowFieldCounted(mnavFlowField* field, cons
                                 BuildFlowFieldWork(field, grid, filter, goals, goalCount));
 }
 
-mnavResult mnavBuildFlowField(mnavFlowField* field, const mnavGrid* grid,
-                              const mnavQueryFilter* filter, const mnavCell* goals,
-                              int32_t goalCount)
+mnavResult mnavGridFlow_Build(mnavGridFlow* field, const mnavGrid* grid, const mnavCell* goals,
+                              int32_t goalCount, const mnavQueryFilter* filter)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = BuildFlowFieldCounted(field, grid, filter, goals, goalCount);
@@ -530,8 +538,8 @@ mnavResult mnavBuildFlowField(mnavFlowField* field, const mnavGrid* grid,
     return result;
 }
 
-static MNAV_NOINLINE mnavResult FlowAtWork(const mnavFlowField* field, mnavCell cell,
-                                           mnavFlow* flowOut)
+static MNAV_NOINLINE mnavResult FlowAtWork(const mnavGridFlow* field, mnavCell cell,
+                                           mnavCellFlow* flowOut)
 {
     if (field == nullptr || flowOut == nullptr)
     {
@@ -541,7 +549,7 @@ static MNAV_NOINLINE mnavResult FlowAtWork(const mnavFlowField* field, mnavCell 
     {
         return mnav_errorState;
     }
-    const mnavFlowRegion* r = &field->region;
+    const mnavFlowWindow* r = &field->region;
     if (cell.x < r->x || cell.y < r->y || cell.x >= r->x + r->width || cell.y >= r->y + r->height)
     {
         return mnav_errorOutside;
@@ -552,17 +560,19 @@ static MNAV_NOINLINE mnavResult FlowAtWork(const mnavFlowField* field, mnavCell 
     }
     int32_t at = (cell.y - r->y) * r->width + (cell.x - r->x);
     int32_t next = field->next[at];
-    *flowOut = (mnavFlow){field->costs[at], {r->x + next % r->width, r->y + next / r->width}};
+    *flowOut = (mnavCellFlow){field->costs[at], {r->x + next % r->width, r->y + next / r->width}};
     return mnav_success;
 }
 
-static MNAV_NOINLINE mnavResult FlowAtCounted(const mnavFlowField* field, mnavCell cell,
-                                              mnavFlow* flowOut)
+static MNAV_NOINLINE mnavResult FlowAtCounted(const mnavGridFlow* field, mnavCell cell,
+                                              mnavCellFlow* flowOut)
 {
-    return mnavHostCountInvalid(MNAV_HOST(field), FlowAtWork(field, cell, flowOut));
+    mnavClearOutput(flowOut, sizeof(*flowOut));
+    mnavResult result = mnavHostCountInvalid(MNAV_HOST(field), FlowAtWork(field, cell, flowOut));
+    return mnavClearOnFailure(result, flowOut, sizeof(*flowOut));
 }
 
-mnavResult mnavFlowAt(const mnavFlowField* field, mnavCell cell, mnavFlow* flowOut)
+mnavResult mnavGridFlow_GetFlow(const mnavGridFlow* field, mnavCell cell, mnavCellFlow* flowOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = FlowAtCounted(field, cell, flowOut);
@@ -570,7 +580,7 @@ mnavResult mnavFlowAt(const mnavFlowField* field, mnavCell cell, mnavFlow* flowO
     return result;
 }
 
-static MNAV_NOINLINE mnavResult DebugFlowFieldWork(const mnavFlowField* field, double height,
+static MNAV_NOINLINE mnavResult DebugFlowFieldWork(const mnavGridFlow* field, double height,
                                                    mnavDebugBuffer* buffer)
 {
     if (field == nullptr || !mnavGoodBuffer(buffer) || !isfinite(height))
@@ -581,7 +591,7 @@ static MNAV_NOINLINE mnavResult DebugFlowFieldWork(const mnavFlowField* field, d
     {
         return mnav_errorState;
     }
-    const mnavFlowRegion* r = &field->region;
+    const mnavFlowWindow* r = &field->region;
     int32_t cells = field->state == mnav_flowEnded ? r->width * r->height : 0;
     double cellSize = (double)field->cellSize;
     for (int32_t c = 0; c < cells; ++c)
@@ -616,13 +626,13 @@ static MNAV_NOINLINE mnavResult DebugFlowFieldWork(const mnavFlowField* field, d
     return mnavDrawResult(buffer);
 }
 
-static MNAV_NOINLINE mnavResult DebugFlowFieldCounted(const mnavFlowField* field, double height,
+static MNAV_NOINLINE mnavResult DebugFlowFieldCounted(const mnavGridFlow* field, double height,
                                                       mnavDebugBuffer* buffer)
 {
     return mnavHostCountInvalid(MNAV_HOST(field), DebugFlowFieldWork(field, height, buffer));
 }
 
-mnavResult mnavDebugFlowField(const mnavFlowField* field, double height, mnavDebugBuffer* buffer)
+mnavResult mnavGridFlow_Debug(const mnavGridFlow* field, double height, mnavDebugBuffer* buffer)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = DebugFlowFieldCounted(field, height, buffer);

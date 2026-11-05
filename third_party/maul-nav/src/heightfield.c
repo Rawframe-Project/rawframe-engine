@@ -149,7 +149,7 @@ static mnavResult Collect(mnavMemory* memory, const mnavBakeDef* def, const mnav
     return mnav_success;
 }
 
-static bool Before(const mnavFragment* a, const mnavFragment* b)
+MNAV_NODISCARD static bool Before(const mnavFragment* a, const mnavFragment* b)
 {
     if (a->bottom != b->bottom)
     {

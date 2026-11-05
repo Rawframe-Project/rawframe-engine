@@ -9,6 +9,7 @@
 #include "allocator.h"
 #include "fpenv.h"
 #include "navmesh.h"
+#include "outputs.h"
 
 #include "maul-nav/bake.h"
 #include "maul-nav/base.h"
@@ -17,7 +18,7 @@
 #include <stdalign.h>
 #include <stdint.h>
 
-mnavTier mnavGetTier(const mnavNavmesh* navmesh)
+mnavTier mnavNavmesh_GetTier(const mnavNavmesh* navmesh)
 {
     return navmesh != nullptr ? navmesh->def.tier : mnav_tierStatic;
 }
@@ -58,7 +59,7 @@ static MNAV_NOINLINE mnavResult StageAreaCounted(mnavNavmesh* navmesh, mnavPolyg
     return mnavHostCountInvalid(MNAV_HOST(navmesh), StageAreaWork(navmesh, polygon, area));
 }
 
-mnavResult mnavStageArea(mnavNavmesh* navmesh, mnavPolygonId polygon, mnavAreaType area)
+mnavResult mnavPolygon_StageArea(mnavNavmesh* navmesh, mnavPolygonId polygon, mnavAreaType area)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = StageAreaCounted(navmesh, polygon, area);
@@ -81,9 +82,13 @@ static mnavResult GetAreaWork(const mnavNavmesh* navmesh, mnavPolygonId polygon,
     return result;
 }
 
-mnavResult mnavGetArea(const mnavNavmesh* navmesh, mnavPolygonId polygon, mnavAreaType* areaOut)
+mnavResult mnavPolygon_GetArea(const mnavNavmesh* navmesh, mnavPolygonId polygon,
+                               mnavAreaType* areaOut)
 {
-    return mnavHostCountInvalid(MNAV_HOST(navmesh), GetAreaWork(navmesh, polygon, areaOut));
+    mnavClearOutput(areaOut, sizeof(*areaOut));
+    mnavResult result =
+        mnavHostCountInvalid(MNAV_HOST(navmesh), GetAreaWork(navmesh, polygon, areaOut));
+    return mnavClearOnFailure(result, areaOut, sizeof(*areaOut));
 }
 
 void mnavApplyAreas(mnavNavmesh* navmesh)

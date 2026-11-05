@@ -65,7 +65,7 @@ static void WriteField(mnavByteWriter* w, int32_t field, const mnavFlightDef* de
         mnavPutU32(w, (uint32_t)tile->tileX);
         mnavPutU32(w, (uint32_t)tile->tileZ);
         mnavPutU16(w, (uint64_t)tile->side);
-        mnavPutU16(w, def->groundBelow ? FLAG_GROUND_BELOW : 0u);
+        mnavPutU16(w, def->enableGroundFill ? FLAG_GROUND_BELOW : 0u);
         mnavPutU32(w, mnavFloatBits(def->voxelSize));
         mnavPutU32(w, mnavFloatBits(def->radius));
         mnavPutU32(w, mnavFloatBits(def->floor));
@@ -130,7 +130,7 @@ mnavResult mnavEncodeFlightTile(mnavMemory* memory, const mnavFlightDef* def, ui
         }
     }
     MNAV_ASSERT(w.at == out + total);
-    uint64_t hash = mnavHash64(MNAV_HASH_INIT, out + MNAV_FLIGHT_HEADER_BYTES, (int32_t)payload);
+    uint64_t hash = mnavHash64(MNAV_HASH_INIT, out + MNAV_FLIGHT_HEADER_BYTES, (int64_t)payload);
     w.at = out;
     for (int32_t k = 0; k < 4; ++k)
     {
@@ -163,10 +163,11 @@ static mnavTileResult Accept(void)
 }
 
 // Whether FLHT's settings are the def's and its shape the shape.
-static bool SameSettings(mnavByteReader* r, const mnavFlightDef* def, const mnavFlightShape* shape)
+MNAV_NODISCARD static bool SameSettings(mnavByteReader* r, const mnavFlightDef* def,
+                                        const mnavFlightShape* shape)
 {
     bool same = mnavGetU16(r) == (uint64_t)def->tileVoxels;
-    same &= mnavGetU16(r) == (def->groundBelow ? FLAG_GROUND_BELOW : 0u);
+    same &= mnavGetU16(r) == (def->enableGroundFill ? FLAG_GROUND_BELOW : 0u);
     same &= mnavGetU32(r) == mnavFloatBits(def->voxelSize);
     same &= mnavGetU32(r) == mnavFloatBits(def->radius);
     same &= mnavGetU32(r) == mnavFloatBits(def->floor);
@@ -199,7 +200,7 @@ static mnavTileResult ReadHeader(const uint8_t* bytes, size_t size, const mnavFl
     size_t payload = (size_t)mnavGetU32(&r);
     uint64_t count = mnavGetU32(&r);
     if (payload != size - MNAV_FLIGHT_HEADER_BYTES || payload > INT32_MAX ||
-        mnavHash64(MNAV_HASH_INIT, bytes + MNAV_FLIGHT_HEADER_BYTES, (int32_t)payload) != hash)
+        mnavHash64(MNAV_HASH_INIT, bytes + MNAV_FLIGHT_HEADER_BYTES, (int64_t)payload) != hash)
     {
         return Refuse(mnav_errorFormat, mnav_tilePayload, -1);
     }
@@ -219,7 +220,9 @@ static mnavTileResult ReadHeader(const uint8_t* bytes, size_t size, const mnavFl
     r = (mnavByteReader){flight->bytes, flight->size, false};
     tile->tileX = (int32_t)(uint32_t)mnavGetU32(&r);
     tile->tileZ = (int32_t)(uint32_t)mnavGetU32(&r);
-    if (!SameSettings(&r, def, shape))
+    // A place the bake never writes is refused, which also keeps each
+    // tile's voxels within 32 bits.
+    if (!SameSettings(&r, def, shape) || !mnavFlightTileInExtent(def, tile->tileX, tile->tileZ))
     {
         return Refuse(mnav_errorFormat, mnav_tileHeader, -1);
     }
@@ -264,7 +267,7 @@ static int32_t Ones(uint32_t bits)
 
 // Whether a node's mask is a mixed block's: no child both mixed and
 // solid, and neither every child empty nor every child solid.
-static bool MixedMask(uint32_t mask)
+MNAV_NODISCARD static bool MixedMask(uint32_t mask)
 {
     uint32_t mixed = mask & 0xFFu;
     uint32_t solid = mask >> 8;

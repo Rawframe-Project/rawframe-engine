@@ -39,16 +39,15 @@ extern "C"
 // The largest values a flight tile's node and leaf limits may take.
 #define MNAV_MAX_FLIGHT_TILE_NODES  16777216
 #define MNAV_MAX_FLIGHT_TILE_LEAVES 16777216
-// The most voxels the box mnavDebugFlight draws may span.
+// The most voxels the box mnavFlightVolume_Debug draws may span.
 #define MNAV_MAX_FLIGHT_DEBUG_VOXELS 16777216
 // The farthest a point a flight volume's calls take may lie from the
 // volume's origin, in voxels on any axis (the floor's voxel counted from
 // the origin), so that a walk's voxel indices stay well within 32 bits.
 #define MNAV_MAX_FLIGHT_VOXELS 268435456
 
-    // The named limits that bound a flight bake's work and a flight
-    // volume's size. Each is at least 1 and at most its MNAV_MAX_ value.
-    // Reaching one is mnav_errorCapacity.
+    // The named limits that bound a flight bake's work. Each is at least 1
+    // and at most its MNAV_MAX_ value. Reaching one is mnav_errorCapacity.
     typedef struct mnavFlightLimits
     {
         // Input triangles a bake reads, as mnavBakeLimits counts them.
@@ -58,15 +57,12 @@ extern "C"
         // Octree nodes and leaves in a tile.
         int32_t tileNodes;
         int32_t tileLeaves;
-        // Tiles committed in a flight volume at once.
-        int32_t tiles;
-        // The most memory a baker or a flight volume holds at once; more
-        // than 0.
+        // The most memory a baker holds at once; more than 0.
         uint64_t memoryBytes;
     } mnavFlightLimits;
 
-    // How flight tiles are baked and what a flight volume accepts. Made
-    // by mnavDefaultFlightDef and then changed.
+    // How flight tiles are baked. Made by mnavDefaultFlightDef and then
+    // changed.
     typedef struct mnavFlightDef
     {
         // Set by mnavDefaultFlightDef; a def not made by it is refused.
@@ -96,12 +92,12 @@ extern "C"
         // Whether each column is solid from the floor up to its lowest
         // solid voxel, so that space beneath the ground is not open. Off
         // for open space such as a field of floating debris.
-        bool groundBelow;
+        bool enableGroundFill;
         mnavFlightLimits limits;
     } mnavFlightDef;
 
     // The setting a flight def check refused.
-    typedef uint8_t mnavFlightSetting;
+    typedef int32_t mnavFlightSetting;
     enum
     {
         mnav_flightSettingNone = 0,
@@ -117,8 +113,7 @@ extern "C"
         mnav_flightSettingTileSpans = 10,
         mnav_flightSettingTileNodes = 11,
         mnav_flightSettingTileLeaves = 12,
-        mnav_flightSettingTiles = 13,
-        mnav_flightSettingMemoryBytes = 14,
+        mnav_flightSettingMemoryBytes = 13,
     };
 
     // A flight def check's outcome: the status, and the first setting it
@@ -129,13 +124,62 @@ extern "C"
         mnavFlightSetting setting;
     } mnavFlightDefResult;
 
+    // The limits of a flight volume. Reaching one is mnav_errorCapacity.
+    typedef struct mnavFlightVolumeLimits
+    {
+        // Tiles committed at once, 1 to MNAV_MAX_TILES.
+        int32_t tiles;
+        // Bytes the volume may hold allocated at once, at least 1.
+        uint64_t memoryBytes;
+    } mnavFlightVolumeLimits;
+
+    // How a flight volume is made. Build it with
+    // mnavDefaultFlightVolumeDef.
+    typedef struct mnavFlightVolumeDef
+    {
+        uint32_t cookie;
+        // MNAV_ABI_VERSION, set by mnavDefaultFlightVolumeDef.
+        uint32_t version;
+        // The allocator the volume uses; zeroed for the C library's.
+        mnavAllocator allocator;
+        // The def the volume's tiles are baked with, checked whole as a
+        // baker checks it. The volume reads its origin, voxel size, tile
+        // side, floor, ceiling and radius; its allocator and limits are
+        // the bakers'.
+        mnavFlightDef flight;
+        mnavFlightVolumeLimits limits;
+    } mnavFlightVolumeDef;
+
+    // The setting a flight volume def check refused.
+    typedef int32_t mnavFlightVolumeSetting;
+
+    enum
+    {
+        mnav_flightVolumeSettingNone = 0,
+        mnav_flightVolumeSettingCookie = 1,
+        mnav_flightVolumeSettingAllocator = 2,
+        // The flight def, its own setting named beside.
+        mnav_flightVolumeSettingFlight = 3,
+        mnav_flightVolumeSettingTiles = 4,
+        mnav_flightVolumeSettingMemoryBytes = 5,
+    };
+
+    // A flight volume def check's outcome: the status, the first setting
+    // it refused, and for mnav_flightVolumeSettingFlight, the flight def's
+    // setting (mnav_flightSettingNone otherwise).
+    typedef struct mnavFlightVolumeDefResult
+    {
+        mnavResult result;
+        mnavFlightVolumeSetting setting;
+        mnavFlightSetting flightSetting;
+    } mnavFlightVolumeDefResult;
+
     // What a flight bake did.
     typedef struct mnavFlightBakeReport
     {
         mnavResult result;
-        // The first mesh refused, or -1, and what its check found, as in
-        // mnavBakeReport.
-        int32_t mesh;
+        // The first input refused, by its kind and index, and what its
+        // check found, as in mnavBakeReport.
         mnavInputResult input;
         // The hash of everything that shaped the tile: the generator's
         // version, the def's settings, the tile's place and the input that
@@ -144,11 +188,11 @@ extern "C"
         // Input triangles that reach the tile, solid spans, the tile's
         // cubes, nodes and leaves, its bytes, and the most memory the bake
         // held at once.
-        int32_t triangles;
-        int32_t spans;
-        int32_t cubes;
-        int32_t nodes;
-        int32_t leaves;
+        int32_t triangleCount;
+        int32_t spanCount;
+        int32_t cubeCount;
+        int32_t nodeCount;
+        int32_t leafCount;
         uint64_t tileBytes;
         uint64_t memoryPeak;
     } mnavFlightBakeReport;
@@ -167,7 +211,7 @@ extern "C"
     } mnavFlightPath;
 
     // What stopped a flight raycast.
-    typedef uint8_t mnavFlightStop;
+    typedef int32_t mnavFlightStop;
     enum
     {
         // Nothing: the ray reached its end.
@@ -222,11 +266,37 @@ extern "C"
         def.floor = 0.0f;
         def.ceiling = 64.0f;
         def.radius = 0.5f;
-        def.groundBelow = true;
+        def.enableGroundFill = true;
         def.limits.inputTriangles = 4194304;
         def.limits.tileSpans = 4194304;
         def.limits.tileNodes = 1048576;
         def.limits.tileLeaves = 1048576;
+        def.limits.memoryBytes = 268435456;
+        return def;
+    }
+
+// The cookie mnavDefaultFlightVolumeDef sets and mnavCreateFlightVolume
+// checks.
+#define MNAV_FLIGHT_VOLUME_DEF_COOKIE 0x4E415656u
+
+    /// Returns the default flight volume def: tiles of the default flight
+    /// def, up to 65536 of them in 256 MiB.
+    /// Built in the program, so that it carries the version of the
+    /// headers the program includes.
+    ///
+    /// @return The def, with a valid cookie.
+    /// @par Thread safety
+    /// Safe from any thread.
+    static inline mnavFlightVolumeDef mnavDefaultFlightVolumeDef(void)
+    {
+#ifdef __cplusplus
+        mnavFlightVolumeDef def = {};
+#else
+    mnavFlightVolumeDef def = {0};
+#endif
+        def.cookie = MNAV_FLIGHT_VOLUME_DEF_COOKIE;
+        def.version = MNAV_ABI_VERSION;
+        def.flight = mnavDefaultFlightDef();
         def.limits.tiles = 65536;
         def.limits.memoryBytes = 268435456;
         return def;
@@ -235,11 +305,12 @@ extern "C"
     /// Checks a flight def.
     ///
     /// @param def  The def.
-    /// @return `mnav_success`; `mnav_errorInvalid` for a NULL def, or with the
-    /// first setting refused for a NaN, a value (an infinity included) outside
-    /// the range its field gives with no named constant, or not a power of two
-    /// where one is needed; `mnav_errorLimit` with the setting for a value past
-    /// an MNAV_MIN_ or MNAV_MAX_ bound its field names, an infinity included;
+    /// @return `mnav_success`; `mnav_errorInvalid` with the setting for a NULL
+    /// def, a def without its cookie, an allocator with one function, a NaN, a
+    /// value (an infinity included) outside the range its field gives with no
+    /// named constant, or not a power of two where one is needed;
+    /// `mnav_errorLimit` with the setting for a value past an MNAV_MIN_ or
+    /// MNAV_MAX_ bound its field names, an infinity included;
     /// `mnav_errorVersion` with no setting for a def built against another
     /// version of the headers.
     /// @par Thread safety
@@ -278,11 +349,11 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. It may be read at any time, also while host
     /// code the object runs calls back in.
-    MNAV_API uint64_t mnavGetFlightBakerMisuse(const mnavFlightBaker* baker);
+    MNAV_API uint64_t mnavFlightBaker_GetMisuse(const mnavFlightBaker* baker);
 
     /// Bakes one flight tile from the input a navmesh bake reads:
     /// every triangle is rasterized at the voxel size, and a
-    /// voxel any triangle touches is solid; with groundBelow, so is each
+    /// voxel any triangle touches is solid; with enableGroundFill, so is each
     /// column below its lowest solid voxel; then every voxel within the
     /// flier's radius of a solid one, by whole voxels, is blocked too. A
     /// tile index in the input is not used: it lists triangles for a
@@ -290,55 +361,64 @@ extern "C"
     ///
     /// @param baker     The baker; the tile it held before is dropped.
     /// @param input     The meshes, terrains and volumes, as
-    ///                  mnavBakeTile reads them.
+    ///                  mnavBaker_BakeTile reads them.
     /// @param tileX     The tile's column.
     /// @param tileZ     The tile's row.
-    /// @param reportOut Receives the report. May be NULL.
+    /// @param reportOut Receives the report. May be NULL. Written on failure too,
+    ///                  naming it.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL baker or input;
-    /// for input mnavBakeTile refuses, the status it gives, the mesh named in
-    /// the report; `mnav_errorLimit` for a tile past the extent, or when
+    /// for input mnavBaker_BakeTile refuses, the status it gives, the input named
+    /// in the report; `mnav_errorLimit` for a tile past the extent, or when
     /// rasterizing cuts a triangle into a piece of more than
-    /// MNAV_MAX_PIECE_CORNERS corners, as for mnavBakeTile;
+    /// MNAV_MAX_PIECE_CORNERS corners, as for mnavBaker_BakeTile;
     /// `mnav_errorCapacity` past a named limit or the memory limit, or when the
     /// allocator fails. Also `mnav_errorBusy` when called back in from the
     /// flight baker's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBakeFlightTile(mnavFlightBaker* baker,
-                                                          const mnavBakeInput* input, int32_t tileX,
-                                                          int32_t tileZ,
-                                                          mnavFlightBakeReport* reportOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightBaker_BakeTile(mnavFlightBaker* baker,
+                                                                const mnavBakeInput* input,
+                                                                int32_t tileX, int32_t tileZ,
+                                                                mnavFlightBakeReport* reportOut);
 
     /// Copies the last baked flight tile's bytes into caller memory.
     ///
     /// @param baker     The baker.
     /// @param bufferOut Receives the bytes: at least capacity bytes; may be
-    ///                  NULL when capacity is 0.
+    ///                  NULL when capacity is 0. Zeroed over the capacity on
+    ///                  any failure, a buffer too small included.
     /// @param capacity  The buffer's size in bytes.
-    /// @param sizeOut   Receives the tile's size in bytes. May be NULL.
+    /// @param sizeOut   Receives the tile's size in bytes. May be NULL. Zeroed on
+    ///                  any failure but mnav_errorCapacity, which gives the size.
     /// @return `mnav_success`; `mnav_errorCapacity` when the buffer is
     /// smaller than the tile, with the size still written;
-    /// `mnav_errorInvalid` for a NULL baker, a NULL buffer with a
-    /// positive capacity, or a baker holding no tile.
+    /// `mnav_errorInvalid` for a NULL baker or a NULL buffer with a
+    /// positive capacity; `mnav_errorState` for a baker holding no tile,
+    /// before its first bake or after a failed one.
     /// @par Thread safety
     /// Safe from any thread; the baker is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavCopyFlightTile(const mnavFlightBaker* baker,
-                                                          uint8_t* bufferOut, size_t capacity,
-                                                          size_t* sizeOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightBaker_CopyTile(const mnavFlightBaker* baker,
+                                                                uint8_t* bufferOut, size_t capacity,
+                                                                size_t* sizeOut);
 
-    /// Makes an empty flight volume for tiles baked with a def: checks the
-    /// def and keeps a copy, its allocator and its limits.
+    /// Makes an empty flight volume from a def: checks the def and keeps a
+    /// copy, its allocator and its limits.
     ///
-    /// @param def        The def the tiles are baked with.
+    /// @param def        The def, from mnavDefaultFlightVolumeDef.
     /// @param volumeOut  Receives the volume, or NULL on failure.
-    /// @return `mnav_success`; for a def mnavValidateFlightDef refuses, the
-    /// status and setting it gives; `mnav_errorInvalid` for a NULL
-    /// volumeOut; `mnav_errorCapacity` when the volume does not fit the
+    /// @return `mnav_success`; `mnav_errorInvalid` with the setting for a NULL
+    /// def, a def without its cookie, an allocator with one function or a
+    /// limit below 1; `mnav_errorLimit` with the setting for more tiles than
+    /// MNAV_MAX_TILES; `mnav_errorVersion` with no setting for a def built
+    /// against another version of the headers; for a flight def
+    /// mnavValidateFlightDef refuses, the status it gives with
+    /// mnav_flightVolumeSettingFlight and its setting; `mnav_errorInvalid` for
+    /// a NULL volumeOut; `mnav_errorCapacity` when the volume does not fit the
     /// def's memory limit or the allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
-    MNAV_NODISCARD MNAV_API mnavFlightDefResult
-    mnavCreateFlightVolume(const mnavFlightDef* def, mnavFlightVolume** volumeOut);
+    MNAV_NODISCARD MNAV_API mnavFlightVolumeDefResult
+    mnavCreateFlightVolume(const mnavFlightVolumeDef* def, mnavFlightVolume** volumeOut);
 
     /// Destroys a flight volume, its tiles and everything staged. Called back
     /// in from the flight volume's allocator, it does nothing and counts one
@@ -359,7 +439,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. It may be read at any time, also while host
     /// code the object runs calls back in.
-    MNAV_API uint64_t mnavGetFlightVolumeMisuse(const mnavFlightVolume* volume);
+    MNAV_API uint64_t mnavFlightVolume_GetMisuse(const mnavFlightVolume* volume);
 
     /// Loads flight tile bytes, checking every field as hostile input and
     /// the tile's settings against the volume's def, and stages the tile
@@ -367,21 +447,23 @@ extern "C"
     /// before. Queries do not see it until the commit.
     ///
     /// @param volume  The volume.
-    /// @param bytes   The tile's bytes, as mnavCopyFlightTile gives them.
+    /// @param bytes   The tile's bytes, as mnavFlightBaker_CopyTile gives them.
     /// @param size    Their size in bytes.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument;
     /// `mnav_errorFormat` naming the section and element for malformed bytes, a
-    /// tile baked with other settings or past the def's node or leaf limit (the
-    /// header); `mnav_errorVersion` for another flight tile format version;
-    /// `mnav_errorCapacity` past the memory limit or when the allocator fails.
+    /// tile baked with other settings, past the def's node or leaf limit or at
+    /// a place past the extent the bake writes (the header); `mnav_errorVersion`
+    /// for another flight tile format version; `mnav_errorCapacity` past the
+    /// memory limit or when the allocator fails.
     /// Also `mnav_errorBusy` when called back in from the flight volume's
     /// allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the volume is used by one thread at a time.
     /// Staging changes nothing queries read, but it may not run beside
     /// another call that stages or commits.
-    MNAV_NODISCARD MNAV_API mnavTileResult mnavStageFlightTile(mnavFlightVolume* volume,
-                                                               const uint8_t* bytes, size_t size);
+    MNAV_NODISCARD MNAV_API mnavTileResult mnavFlightVolume_StageTile(mnavFlightVolume* volume,
+                                                                      const uint8_t* bytes,
+                                                                      size_t size);
 
     /// Stages the removal of the flight tile at a place for the next
     /// commit, in place of anything staged there before.
@@ -395,8 +477,9 @@ extern "C"
     /// allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the volume is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavStageFlightTileRemoval(mnavFlightVolume* volume,
-                                                                  int32_t tileX, int32_t tileZ);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightVolume_StageTileRemoval(mnavFlightVolume* volume,
+                                                                         int32_t tileX,
+                                                                         int32_t tileZ);
 
     /// Applies everything staged at once: installs and removes the tiles.
     /// Either all of it applies or, on failure, nothing does and the
@@ -410,7 +493,7 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the volume is used by one thread at a time,
     /// so no query may run during a commit.
-    MNAV_NODISCARD MNAV_API mnavResult mnavCommitFlight(mnavFlightVolume* volume);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightVolume_Commit(mnavFlightVolume* volume);
 
     /// Reads the fingerprint of the flight tile committed at a place, as
     /// its bake reported it, so that a host can tell whether its input
@@ -419,15 +502,16 @@ extern "C"
     /// @param volume          The volume.
     /// @param tileX           The tile's column.
     /// @param tileZ           The tile's row.
-    /// @param fingerprintOut  Receives the fingerprint, or 0.
+    /// @param fingerprintOut  Receives the fingerprint, or 0. Zeroed on any
+    ///                        failure.
     /// @return `mnav_success`; `mnav_errorNotLoaded` when no tile is
     /// committed there; `mnav_errorInvalid` for a NULL argument.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
-    MNAV_NODISCARD MNAV_API mnavResult mnavGetFlightTile(const mnavFlightVolume* volume,
-                                                         int32_t tileX, int32_t tileZ,
-                                                         uint64_t* fingerprintOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightVolume_GetTile(const mnavFlightVolume* volume,
+                                                                int32_t tileX, int32_t tileZ,
+                                                                uint64_t* fingerprintOut);
 
     /// Tells whether the flier's center may be at a point: whether the
     /// voxel holding it is neither solid nor within the flier's radius of
@@ -435,7 +519,7 @@ extern "C"
     ///
     /// @param volume   The volume.
     /// @param point    The point, in world coordinates.
-    /// @param openOut  Receives whether the point is open; false on
+    /// @param openOut  Receives whether the point is open; false on any
     ///                 failure.
     /// @return `mnav_success`; `mnav_errorNotLoaded` when no tile is committed
     /// under the point; `mnav_errorInvalid` for a NULL argument or a point with
@@ -445,8 +529,8 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
-    MNAV_NODISCARD MNAV_API mnavResult mnavIsFlightOpen(const mnavFlightVolume* volume,
-                                                        mnavPos3 point, bool* openOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightVolume_IsOpen(const mnavFlightVolume* volume,
+                                                               mnavPos3 point, bool* openOut);
 
     /// Finds a flier's path between two points: Lazy Theta*
     /// (Nash, Koenig and Tovey, 2010) over the open blocks of the
@@ -461,18 +545,19 @@ extern "C"
     /// @param volume   The flight volume.
     /// @param start    The start, in world coordinates.
     /// @param end      The end, in world coordinates.
-    /// @param pathOut  Receives the path. A start or end not open ends the
-    ///                 search at once: `mnav_pathNone` for a blocked voxel,
-    ///                 `mnav_pathNotLoaded` for a place with no tile, with
-    ///                 the start alone as its path. So does an end in a
-    ///                 closed space without the start, such as the inside
-    ///                 of a closed mesh, when the space is found closed
-    ///                 within 512 blocks and the node budget: the search
-    ///                 looks over the end's space that far first.
-    ///                 `mnav_pathNone`, with the start alone.
+    /// @param pathOut  Receives the path. A start or end not open ends the search
+    ///                 at once: `mnav_pathNone` for a blocked voxel,
+    ///                 `mnav_pathNotLoaded` for a place with no tile, with the
+    ///                 start alone as its path. So does an end in a closed space
+    ///                 without the start, such as the inside of a closed mesh,
+    ///                 when the space is found closed within 512 blocks and the
+    ///                 node budget: the search looks over the end's space that
+    ///                 far first. `mnav_pathNone`, with the start alone. Zeroed
+    ///                 on any failure but mnav_errorBusy, which leaves it as it
+    ///                 was.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
     /// point with a NaN coordinate; `mnav_errorOutside` for a point below or
-    /// above the volume, pathOut left as it was; `mnav_errorLimit` for a point
+    /// above the volume; `mnav_errorLimit` for a point
     /// more than MNAV_MAX_FLIGHT_VOXELS voxels from the origin, an infinity
     /// included. Also `mnav_errorBusy` when called back in from host code a
     /// call using the context runs (a link generation's clearance test, a
@@ -480,15 +565,15 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
     /// and the volume is not changed during the search.
-    MNAV_NODISCARD MNAV_API mnavResult mnavFindFlightPath(mnavQuery* query,
-                                                          const mnavFlightVolume* volume,
-                                                          mnavPos3 start, mnavPos3 end,
-                                                          mnavFlightPath* pathOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavQuery_FindFlightPath(mnavQuery* query,
+                                                                const mnavFlightVolume* volume,
+                                                                mnavPos3 start, mnavPos3 end,
+                                                                mnavFlightPath* pathOut);
 
     /// Begins a flier's path search to run in slices: the same search as
-    /// mnavFindFlightPath, continued by mnavContinueFlightPath and ended by
-    /// mnavFinishFlightPath. Whatever the slices, the path is the one
-    /// mnavFindFlightPath gives. It looks over the end's space for a closed
+    /// mnavQuery_FindFlightPath, continued by mnavQuery_ContinueFlightPath and ended by
+    /// mnavQuery_FinishFlightPath. Whatever the slices, the path is the one
+    /// mnavQuery_FindFlightPath gives. It looks over the end's space for a closed
     /// one, up to 512 blocks, before the first slice.
     ///
     /// @param query   The query context; it holds the search until the next
@@ -506,17 +591,18 @@ extern "C"
     /// a hierarchy's allocator as it builds), one misuse counted.
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBeginFlightPath(mnavQuery* query,
-                                                           const mnavFlightVolume* volume,
-                                                           mnavPos3 start, mnavPos3 end);
+    MNAV_NODISCARD MNAV_API mnavResult mnavQuery_BeginFlightPath(mnavQuery* query,
+                                                                 const mnavFlightVolume* volume,
+                                                                 mnavPos3 start, mnavPos3 end);
 
-    /// Continues a search begun by mnavBeginFlightPath: closes up to a
+    /// Continues a search begun by mnavQuery_BeginFlightPath: closes up to a
     /// number of nodes, fewer when the search ends first.
     ///
     /// @param query    The query context.
     /// @param volume   The volume the search began on.
     /// @param nodes    The most nodes to close, at least 1.
-    /// @param endedOut Receives whether the search has ended.
+    /// @param endedOut Receives whether the search has ended. Zeroed on any
+    ///                 failure but mnav_errorBusy, which leaves it as it was.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, fewer
     /// than 1 node, or a volume other than the search's; `mnav_errorState` for
     /// no flight search begun, or a volume committed to since the search began:
@@ -526,17 +612,18 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
     /// and the volume is not changed during the call.
-    MNAV_NODISCARD MNAV_API mnavResult mnavContinueFlightPath(mnavQuery* query,
-                                                              const mnavFlightVolume* volume,
-                                                              int32_t nodes, bool* endedOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavQuery_ContinueFlightPath(mnavQuery* query,
+                                                                    const mnavFlightVolume* volume,
+                                                                    int32_t nodes, bool* endedOut);
 
-    /// Ends a search begun by mnavBeginFlightPath and writes its path: as
-    /// mnavFindFlightPath's when it has ended; otherwise to the point
+    /// Ends a search begun by mnavQuery_BeginFlightPath and writes its path: as
+    /// mnavQuery_FindFlightPath's when it has ended; otherwise to the point
     /// searched nearest the end, its end mnav_pathUnfinished.
     ///
     /// @param query    The query context; its memory holds the path.
     /// @param volume   The volume the search began on.
-    /// @param pathOut  Receives the path.
+    /// @param pathOut  Receives the path. Zeroed on any failure but
+    ///                 mnav_errorBusy, which leaves it as it was.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
     /// volume other than the search's; `mnav_errorState` for no flight search
     /// begun, or a volume committed to since the search began. Also
@@ -546,9 +633,9 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread; the context is used by one thread at a time,
     /// and the volume is not changed during the call.
-    MNAV_NODISCARD MNAV_API mnavResult mnavFinishFlightPath(mnavQuery* query,
-                                                            const mnavFlightVolume* volume,
-                                                            mnavFlightPath* pathOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavQuery_FinishFlightPath(mnavQuery* query,
+                                                                  const mnavFlightVolume* volume,
+                                                                  mnavFlightPath* pathOut);
 
     /// Casts a flier's ray: walks the voxels the segment crosses, and
     /// where it passes an edge or a corner every voxel it touches, and
@@ -557,19 +644,20 @@ extern "C"
     /// @param volume  The flight volume.
     /// @param from    The ray's start, in world coordinates.
     /// @param to      Its end.
-    /// @param hitOut  Receives what stopped it, where and at what fraction.
+    /// @param hitOut  Receives what stopped it, where and at what fraction. Zeroed
+    ///                on any failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a
     /// point with a NaN coordinate; `mnav_errorLimit` for a point more than
     /// MNAV_MAX_FLIGHT_VOXELS voxels from the origin, an infinity included.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
-    MNAV_NODISCARD MNAV_API mnavResult mnavFlightRaycast(const mnavFlightVolume* volume,
-                                                         mnavPos3 from, mnavPos3 to,
-                                                         mnavFlightHit* hitOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightVolume_Raycast(const mnavFlightVolume* volume,
+                                                                mnavPos3 from, mnavPos3 to,
+                                                                mnavFlightHit* hitOut);
 
     /// Checks a flier's path against the volume as it is now: casts each
-    /// step's ray in order, as mnavFlightRaycast does, and stops at the
+    /// step's ray in order, as mnavFlightVolume_Raycast does, and stops at the
     /// first step that meets a voxel the flier may not enter or a place
     /// with no tile. A host that follows a path checks what is left of it
     /// after a commit, and searches again from where it is when a step
@@ -579,12 +667,12 @@ extern "C"
     /// @param points      The path's points, in world coordinates; may be
     ///                    NULL when pointCount is 0.
     /// @param pointCount  How many, at least 0.
-    /// @param stepOut     Receives the first step not clear, i for the
-    ///                    one from point i to point i + 1, or -1 when every
-    ///                    step is clear.
-    /// @param hitOut      Receives what stopped that step, as
-    ///                    mnavFlightRaycast gives it; may be NULL, and is
-    ///                    left alone when every step is clear.
+    /// @param stepOut     Receives the first step not clear, i for the one from
+    ///                    point i to point i + 1, or -1 when every step is clear.
+    ///                    Zeroed on any failure.
+    /// @param hitOut      Receives what stopped that step, as mnavFlightVolume_Raycast
+    ///                    gives it; may be NULL, and is left alone when every step
+    ///                    is clear. Zeroed on any failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
     /// negative count or a point with a NaN coordinate; `mnav_errorLimit` for a
     /// point more than MNAV_MAX_FLIGHT_VOXELS voxels from the origin, an
@@ -592,10 +680,11 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
-    MNAV_NODISCARD MNAV_API mnavResult mnavCheckFlightPath(const mnavFlightVolume* volume,
-                                                           const mnavPos3* points,
-                                                           int32_t pointCount, int32_t* stepOut,
-                                                           mnavFlightHit* hitOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightVolume_CheckPath(const mnavFlightVolume* volume,
+                                                                  const mnavPos3* points,
+                                                                  int32_t pointCount,
+                                                                  int32_t* stepOut,
+                                                                  mnavFlightHit* hitOut);
 
     /// Finds the nearest point open to the flier's center within a radius
     /// of a point: the point itself when it is open, or else a point just
@@ -605,8 +694,10 @@ extern "C"
     /// @param volume      The flight volume.
     /// @param point       The point, in world coordinates.
     /// @param radius      How far to look, in meters, at least 0.
-    /// @param nearestOut  Receives the nearest open point.
-    /// @param foundOut    Receives whether one lies within the radius.
+    /// @param nearestOut  Receives the nearest open point; zeroed when none lies
+    ///                    within the radius, and on any failure.
+    /// @param foundOut    Receives whether one lies within the radius. Zeroed on
+    ///                    any failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a point
     /// with a NaN coordinate, or a radius below 0 or not finite;
     /// `mnav_errorLimit` for a point more than MNAV_MAX_FLIGHT_VOXELS voxels
@@ -614,10 +705,9 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; none may while a stage or commit call runs.
-    MNAV_NODISCARD MNAV_API mnavResult mnavFindNearestFlightPoint(const mnavFlightVolume* volume,
-                                                                  mnavPos3 point, float radius,
-                                                                  mnavPos3* nearestOut,
-                                                                  bool* foundOut);
+    MNAV_NODISCARD MNAV_API mnavResult
+    mnavFlightVolume_FindNearestPoint(const mnavFlightVolume* volume, mnavPos3 point, float radius,
+                                      mnavPos3* nearestOut, bool* foundOut);
 
     /// Appends the open blocks of a flight volume's octrees inside a box,
     /// each as a wire box of twelve lines (mnav_debugFlightBlock, its value
@@ -628,7 +718,9 @@ extern "C"
     /// @param volume  The flight volume.
     /// @param low     The box's lowest corner, in world coordinates.
     /// @param high    Its highest corner, at least low on every axis.
-    /// @param buffer  The buffer appended to.
+    /// @param buffer  The buffer appended to. Left as it was on any failure but
+    ///                the buffer filling (mnav_errorCapacity), which writes what
+    ///                fits and counts what the whole needs.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
     /// corner with a NaN coordinate, a box backward, or a buffer with a count
     /// out of range, an array missing or an origin not finite;
@@ -640,17 +732,23 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the volume at
     /// once between commits; the buffer is used by one thread at a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavDebugFlight(const mnavFlightVolume* volume, mnavPos3 low,
-                                                       mnavPos3 high, mnavDebugBuffer* buffer);
+    MNAV_NODISCARD MNAV_API mnavResult mnavFlightVolume_Debug(const mnavFlightVolume* volume,
+                                                              mnavPos3 low, mnavPos3 high,
+                                                              mnavDebugBuffer* buffer);
 
-    /// Appends a flight path's steps, point to point (mnav_debugPath).
+    /// Appends a flight path's steps, point to point (mnav_debugPath). The
+    /// path may be the caller's own: its points are the caller's memory,
+    /// read only from `points` for `pointCount` points, each checked, and
+    /// nothing else of it is read.
     ///
     /// @param path    The path.
-    /// @param buffer  The buffer appended to.
+    /// @param buffer  The buffer appended to. Left as it was on any failure but
+    ///                the buffer filling (mnav_errorCapacity), which writes what
+    ///                fits and counts what the whole needs.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
-    /// path with a negative count or no points, or a buffer as
-    /// mnavDebugFlight refuses it; `mnav_errorCapacity` when the buffer
-    /// filled.
+    /// path with a negative count, no points or a point that is not finite,
+    /// or a buffer as mnavFlightVolume_Debug refuses it; `mnav_errorCapacity`
+    /// when the buffer filled.
     /// @par Thread safety
     /// Safe from any thread; the buffer is used by one thread at a time.
     MNAV_NODISCARD MNAV_API mnavResult mnavDebugFlightPath(const mnavFlightPath* path,

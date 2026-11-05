@@ -32,6 +32,10 @@ double mnavSurfaceHeight(const mnavNavmesh* navmesh, int32_t slot, int32_t polyg
 // A detail vertex of the tile in slot, in world meters.
 mnavPos3 mnavDetailWorld(const mnavNavmesh* navmesh, int32_t slot, const mnavDetailVertex* v);
 
+// Whether a box's half sizes are finite and at least 0, as every call
+// taking a box checks them.
+MNAV_NODISCARD bool mnavGoodHalfExtents(mnavVec3 half);
+
 // The calls without the misuse count, for calls inside the library,
 // which run in its floating-point environment already.
 mnavResult mnavFindPolygonsWork(const mnavNavmesh* navmesh, const mnavQueryFilter* filter,

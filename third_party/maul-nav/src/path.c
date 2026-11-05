@@ -9,6 +9,7 @@
 #include "invariant.h"
 #include "navmesh.h"
 #include "offmesh.h"
+#include "outputs.h"
 #include "polymesh.h"
 #include "query.h"
 #include "query_filter.h"
@@ -24,7 +25,7 @@
 
 // Whether entry a leaves the open list before entry b: the lower total,
 // then the node made first.
-static bool Sooner(mnavHeapEntry a, mnavHeapEntry b)
+MNAV_NODISCARD static bool Sooner(mnavHeapEntry a, mnavHeapEntry b)
 {
     return a.total != b.total ? a.total < b.total : a.node < b.node;
 }
@@ -131,7 +132,7 @@ static void Open(mnavSearch* s, int32_t from, const Key* key, mnavPos3 a, mnavPo
                  double linkCost)
 {
     mnavQuery* query = s->query;
-    if (s->inside != nullptr && s->inside[key->slot] == 0 && !s->beyond)
+    if (s->clusterOf != nullptr && s->clusterOf[key->slot] != s->cluster && !s->beyond)
     {
         return;
     }
@@ -364,14 +365,14 @@ static void Expand(mnavSearch* s, int32_t n)
     ExpandOffMesh(s, n);
 }
 
-static bool FinitePoint(mnavPos3 p)
+MNAV_NODISCARD static bool FinitePoint(mnavPos3 p)
 {
     return isfinite(p.x) && isfinite(p.y) && isfinite(p.z);
 }
 
 // Whether node a lies nearer the end than node b: less still to go, then
 // the lower cost, then made first.
-static bool Nearer(const mnavQuery* query, int32_t a, int32_t b)
+MNAV_NODISCARD static bool Nearer(const mnavQuery* query, int32_t a, int32_t b)
 {
     const mnavSearchNode* na = &query->nodes[a];
     const mnavSearchNode* nb = &query->nodes[b];
@@ -420,6 +421,10 @@ mnavResult mnavBeginPathWork(mnavQuery* query, const mnavNavmesh* navmesh,
     {
         return mnav_errorInvalid;
     }
+    if (!mnavInQueryReach(navmesh, start) || !mnavInQueryReach(navmesh, end))
+    {
+        return mnav_errorLimit;
+    }
     mnavResult result = mnavCheckPolygon(navmesh, startPolygon);
     result = result == mnav_success ? mnavCheckPolygon(navmesh, endPolygon) : result;
     const mnavQueryFilter* usable = nullptr;
@@ -449,6 +454,7 @@ mnavResult mnavBeginPathWork(mnavQuery* query, const mnavNavmesh* navmesh,
                       0,
                       MNAV_NO_NODE,
                       nullptr,
+                      -1,
                       false,
                       false,
                       {-1, -1, -1, -1}};
@@ -482,9 +488,9 @@ static MNAV_NOINLINE mnavResult BeginPathCounted(mnavQuery* query, const mnavNav
         mnavBeginPathWork(query, navmesh, filter, startPolygon, start, endPolygon, end));
 }
 
-mnavResult mnavBeginPath(mnavQuery* query, const mnavNavmesh* navmesh,
-                         const mnavQueryFilter* filter, mnavPolygonId startPolygon, mnavPos3 start,
-                         mnavPolygonId endPolygon, mnavPos3 end)
+mnavResult mnavQuery_BeginPath(mnavQuery* query, const mnavNavmesh* navmesh,
+                               mnavPolygonId startPolygon, mnavPos3 start, mnavPolygonId endPolygon,
+                               mnavPos3 end, const mnavQueryFilter* filter)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =
@@ -493,10 +499,12 @@ mnavResult mnavBeginPath(mnavQuery* query, const mnavNavmesh* navmesh,
     return result;
 }
 
-void mnavConfineSearch(mnavQuery* query, const uint8_t* inside, bool beyond, bool noEnd)
+void mnavConfineSearch(mnavQuery* query, const int32_t* clusterOf, int32_t cluster, bool beyond,
+                       bool noEnd)
 {
     mnavSearch* s = &query->search;
-    s->inside = inside;
+    s->clusterOf = clusterOf;
+    s->cluster = cluster;
     s->beyond = beyond;
     if (noEnd)
     {
@@ -602,7 +610,7 @@ static mnavResult CheckSearch(const mnavQuery* query, const mnavNavmesh* navmesh
     return s->commits == navmesh->commits ? mnav_success : mnav_errorState;
 }
 
-static bool Ended(const mnavQuery* query)
+MNAV_NODISCARD static bool Ended(const mnavQuery* query)
 {
     return query->search.found != MNAV_NO_NODE || query->heapCount == 0;
 }
@@ -640,7 +648,7 @@ mnavResult mnavContinuePathWork(mnavQuery* query, const mnavNavmesh* navmesh, in
             continue;
         }
         s->best = Nearer(query, n, s->best) ? n : s->best;
-        if (s->inside == nullptr || s->inside[node->slot] != 0)
+        if (s->clusterOf == nullptr || s->clusterOf[node->slot] == s->cluster)
         {
             Expand(s, n);
         }
@@ -652,12 +660,16 @@ mnavResult mnavContinuePathWork(mnavQuery* query, const mnavNavmesh* navmesh, in
 static MNAV_NOINLINE mnavResult ContinuePathCounted(mnavQuery* query, const mnavNavmesh* navmesh,
                                                     int32_t nodes, bool* endedOut)
 {
-    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
-                                mnavContinuePathWork(query, navmesh, nodes, endedOut));
+    bool endedMade = false;
+    mnavResult result = mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+        mnavContinuePathWork(query, navmesh, nodes, endedOut != nullptr ? &endedMade : nullptr));
+    mnavGiveOutput(result, false, endedOut, &endedMade, sizeof(endedMade));
+    return result;
 }
 
-mnavResult mnavContinuePath(mnavQuery* query, const mnavNavmesh* navmesh, int32_t nodes,
-                            bool* endedOut)
+mnavResult mnavQuery_ContinuePath(mnavQuery* query, const mnavNavmesh* navmesh, int32_t nodes,
+                                  bool* endedOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = ContinuePathCounted(query, navmesh, nodes, endedOut);
@@ -695,7 +707,10 @@ mnavResult mnavFinishPathWork(mnavQuery* query, const mnavNavmesh* navmesh, mnav
                           query->points,
                           pointCount,
                           query->links,
-                          linkCount};
+                          linkCount,
+                          nullptr,
+                          0};
+    mnavKeepPath(query, pathOut);
     s->active = false;
     return mnav_success;
 }
@@ -703,11 +718,15 @@ mnavResult mnavFinishPathWork(mnavQuery* query, const mnavNavmesh* navmesh, mnav
 static MNAV_NOINLINE mnavResult FinishPathCounted(mnavQuery* query, const mnavNavmesh* navmesh,
                                                   mnavPath* pathOut)
 {
-    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
-                                mnavFinishPathWork(query, navmesh, pathOut));
+    mnavPath pathMade = {0};
+    mnavResult result = mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+        mnavFinishPathWork(query, navmesh, pathOut != nullptr ? &pathMade : nullptr));
+    mnavGiveOutput(result, false, pathOut, &pathMade, sizeof(pathMade));
+    return result;
 }
 
-mnavResult mnavFinishPath(mnavQuery* query, const mnavNavmesh* navmesh, mnavPath* pathOut)
+mnavResult mnavQuery_FinishPath(mnavQuery* query, const mnavNavmesh* navmesh, mnavPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = FinishPathCounted(query, navmesh, pathOut);
@@ -744,14 +763,18 @@ static MNAV_NOINLINE mnavResult FindPathCounted(mnavQuery* query, const mnavNavm
                                                 mnavPolygonId endPolygon, mnavPos3 end,
                                                 mnavPath* pathOut)
 {
-    return mnavHostCountInvalid(
+    mnavPath pathMade = {0};
+    mnavResult result = mnavHostCountInvalid(
         mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
-        mnavFindPathWork(query, navmesh, filter, startPolygon, start, endPolygon, end, pathOut));
+        mnavFindPathWork(query, navmesh, filter, startPolygon, start, endPolygon, end,
+                         pathOut != nullptr ? &pathMade : nullptr));
+    mnavGiveOutput(result, false, pathOut, &pathMade, sizeof(pathMade));
+    return result;
 }
 
-mnavResult mnavFindPath(mnavQuery* query, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-                        mnavPolygonId startPolygon, mnavPos3 start, mnavPolygonId endPolygon,
-                        mnavPos3 end, mnavPath* pathOut)
+mnavResult mnavQuery_FindPath(mnavQuery* query, const mnavNavmesh* navmesh,
+                              mnavPolygonId startPolygon, mnavPos3 start, mnavPolygonId endPolygon,
+                              mnavPos3 end, const mnavQueryFilter* filter, mnavPath* pathOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =
@@ -796,15 +819,19 @@ static MNAV_NOINLINE mnavResult CheckReachableCounted(mnavQuery* query, const mn
                                                       mnavPolygonId endPolygon, mnavPos3 end,
                                                       mnavPathEnd* endOut)
 {
-    return mnavHostCountInvalid(mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
-                                mnavCheckReachableWork(query, navmesh, filter, startPolygon, start,
-                                                       endPolygon, end, endOut));
+    mnavPathEnd endMade = 0;
+    mnavResult result = mnavHostCountInvalid(
+        mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
+        mnavCheckReachableWork(query, navmesh, filter, startPolygon, start, endPolygon, end,
+                               endOut != nullptr ? &endMade : nullptr));
+    mnavGiveOutput(result, false, endOut, &endMade, sizeof(endMade));
+    return result;
 }
 
-mnavResult mnavCheckReachable(mnavQuery* query, const mnavNavmesh* navmesh,
-                              const mnavQueryFilter* filter, mnavPolygonId startPolygon,
-                              mnavPos3 start, mnavPolygonId endPolygon, mnavPos3 end,
-                              mnavPathEnd* endOut)
+mnavResult mnavQuery_CheckReachable(mnavQuery* query, const mnavNavmesh* navmesh,
+                                    mnavPolygonId startPolygon, mnavPos3 start,
+                                    mnavPolygonId endPolygon, mnavPos3 end,
+                                    const mnavQueryFilter* filter, mnavPathEnd* endOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =

@@ -149,7 +149,7 @@ static void Copy(float to[3], const float from[3])
 
 // Whether a part of count corners has room for an edge's crossing, when
 // the edge crosses, and its end, when that goes to the part.
-static bool Room(int32_t count, bool cross, bool end)
+MNAV_NODISCARD static bool Room(int32_t count, bool cross, bool end)
 {
     return count + (cross ? 1 : 0) + (end ? 1 : 0) <= MNAV_RASTER_CORNERS;
 }
@@ -315,7 +315,8 @@ mnavResult mnavAddFragment(mnavMemory* memory, mnavFragmentList* list, mnavFragm
 // tile's width and beyond. Likewise corners whose nearest lies from the
 // tile's corner to a cell short of its far side are in without dividing:
 // the first cell is from 0 to width - 1, and the last no lower.
-static bool SpansTile(const mnavTileFrame* frame, float a, float b, float c, float min)
+MNAV_NODISCARD static bool SpansTile(const mnavTileFrame* frame, float a, float b, float c,
+                                     float min)
 {
     float d[3] = {a - min, b - min, c - min};
     float before = -frame->cellSize;

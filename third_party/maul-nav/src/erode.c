@@ -18,7 +18,8 @@
 #define DIAGONAL 3
 #define FAR      0xFFFF
 
-static bool IsBoundary(const mnavCompactField* field, int32_t x, int32_t z, uint32_t i)
+MNAV_NODISCARD static bool IsBoundary(const mnavCompactField* field, int32_t x, int32_t z,
+                                      uint32_t i)
 {
     if (field->areas[i] == mnav_areaNone)
     {

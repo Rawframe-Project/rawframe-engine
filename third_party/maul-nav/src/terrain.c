@@ -8,6 +8,7 @@
 
 #include "terrain.h"
 
+#include "input.h"
 #include "raster.h"
 
 #include "maul-nav/bake.h"
@@ -18,7 +19,7 @@
 
 static mnavInputResult Refuse(mnavResult result, mnavInputElement element, int32_t index)
 {
-    return (mnavInputResult){result, element, index};
+    return mnavInputElementResult(result, element, index);
 }
 
 // A sample's place.
@@ -31,7 +32,7 @@ static mnavVec3 Sample(const mnavTerrain* t, int32_t column, int32_t row)
         (float)((double)t->origin.z + (double)row * (double)t->spacingZ)};
 }
 
-static bool GoodShape(const mnavTerrain* t)
+MNAV_NODISCARD static bool GoodShape(const mnavTerrain* t)
 {
     return t->columns >= 2 && t->rows >= 2 && t->heights != nullptr && isfinite(t->spacingX) &&
            isfinite(t->spacingZ) && t->spacingX > 0.0f && t->spacingZ > 0.0f &&
@@ -39,7 +40,7 @@ static bool GoodShape(const mnavTerrain* t)
 }
 
 // Whether a place lies within the extent input may have.
-static bool InExtent(const mnavBakeDef* def, mnavVec3 v)
+MNAV_NODISCARD static bool InExtent(const mnavBakeDef* def, mnavVec3 v)
 {
     float ground = def->cellSize * (float)MNAV_MAX_EXTENT_CELLS;
     float vertical = def->cellHeight * (float)MNAV_MAX_HEIGHT_CELLS;
@@ -103,8 +104,8 @@ int64_t mnavTerrainTriangles(const mnavTerrain* terrain)
 
 // The cells along one axis whose span, from the first sample at origin
 // with the spacing given, meets low to high; false when none do.
-static bool Span(double origin, double spacing, int32_t samples, double low, double high,
-                 int32_t* first, int32_t* last)
+MNAV_NODISCARD static bool Span(double origin, double spacing, int32_t samples, double low,
+                                double high, int32_t* first, int32_t* last)
 {
     double a = floor((low - origin) / spacing) - 1.0;
     double b = floor((high - origin) / spacing) + 1.0;

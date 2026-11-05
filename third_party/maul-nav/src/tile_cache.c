@@ -143,7 +143,7 @@ mnavHostCode* mnavTileCacheHost(mnavTileCache* cache)
     return cache != nullptr ? &cache->host : nullptr;
 }
 
-uint64_t mnavGetTileCacheMisuse(const mnavTileCache* cache)
+uint64_t mnavTileCache_GetMisuse(const mnavTileCache* cache)
 {
     return cache != nullptr ? mnavHostMisuse(&cache->host) : 0;
 }
@@ -160,7 +160,7 @@ void mnavUncacheTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ)
     cache->count -= 1;
 }
 
-void mnavDropCachedTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ)
+void mnavTileCache_DropTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ)
 {
     if (cache != nullptr && !mnavHostCalledBack(&cache->host))
     {
@@ -168,7 +168,7 @@ void mnavDropCachedTile(mnavTileCache* cache, int32_t tileX, int32_t tileZ)
     }
 }
 
-uint64_t mnavGetTileCacheBytes(const mnavTileCache* cache)
+uint64_t mnavTileCache_GetBytes(const mnavTileCache* cache)
 {
     return cache != nullptr ? cache->memory.used : 0;
 }

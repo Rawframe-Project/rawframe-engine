@@ -42,8 +42,8 @@ bool mnavIntersectProper(const mnavContourVertex* a, const mnavContourVertex* b,
 }
 
 // Whether c lies on the closed segment ab.
-static bool Between(const mnavContourVertex* a, const mnavContourVertex* b,
-                    const mnavContourVertex* c)
+MNAV_NODISCARD static bool Between(const mnavContourVertex* a, const mnavContourVertex* b,
+                                   const mnavContourVertex* c)
 {
     if (mnavArea2(a, b, c) != 0)
     {

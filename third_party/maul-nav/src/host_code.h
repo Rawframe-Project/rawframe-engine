@@ -67,33 +67,34 @@ static inline void mnavHostLeaveReader(mnavHostCode* host)
     atomic_fetch_sub_explicit(&host->reading, 1, memory_order_acq_rel);
 }
 
-static inline bool mnavHostCountMisuse(mnavHostCode* host)
+static inline void mnavHostCountMisuse(mnavHostCode* host)
 {
     atomic_fetch_add_explicit(&host->misuse, 1, memory_order_relaxed);
-    return true;
 }
 
 // Whether a call that changes the object comes while host code of either
 // kind runs on it: then one misuse is counted and the call refuses.
-static inline bool mnavHostCalledBack(mnavHostCode* host)
+MNAV_NODISCARD static inline bool mnavHostCalledBack(mnavHostCode* host)
 {
     if (atomic_load_explicit(&host->writing, memory_order_acquire) == 0 &&
         atomic_load_explicit(&host->reading, memory_order_acquire) == 0)
     {
         return false;
     }
-    return mnavHostCountMisuse(host);
+    mnavHostCountMisuse(host);
+    return true;
 }
 
 // The same for a call that changes nothing a reader reads: refused only
 // while the object's allocator runs.
-static inline bool mnavHostCalledBackWriting(mnavHostCode* host)
+MNAV_NODISCARD static inline bool mnavHostCalledBackWriting(mnavHostCode* host)
 {
     if (atomic_load_explicit(&host->writing, memory_order_acquire) == 0)
     {
         return false;
     }
-    return mnavHostCountMisuse(host);
+    mnavHostCountMisuse(host);
+    return true;
 }
 
 static inline uint64_t mnavHostMisuse(const mnavHostCode* host)

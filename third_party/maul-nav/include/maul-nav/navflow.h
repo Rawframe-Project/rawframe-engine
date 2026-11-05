@@ -24,20 +24,20 @@ extern "C"
 
 // The most polygons, tile slots and off-mesh links a navmesh flow field
 // may hold.
-#define MNAV_MAX_NAVFLOW_POLYGONS 16777216
-#define MNAV_MAX_NAVFLOW_TILES    1048576
-#define MNAV_MAX_NAVFLOW_LINKS    1048576
+#define MNAV_MAX_NAV_FLOW_POLYGONS 16777216
+#define MNAV_MAX_NAV_FLOW_TILES    1048576
+#define MNAV_MAX_NAV_FLOW_LINKS    1048576
 
     // What a navmesh flow field may hold; its memory is taken for them all
     // when it is made, and a build needs no more.
     typedef struct mnavNavFlowLimits
     {
-        // Polygons in the tiles searched, 1 to MNAV_MAX_NAVFLOW_POLYGONS.
+        // Polygons in the tiles searched, 1 to MNAV_MAX_NAV_FLOW_POLYGONS.
         int32_t polygons;
-        // Tile slots of the navmesh, 1 to MNAV_MAX_NAVFLOW_TILES.
+        // Tile slots of the navmesh, 1 to MNAV_MAX_NAV_FLOW_TILES.
         int32_t tiles;
         // Off-mesh links of the navmesh, counted as its links limit counts
-        // them (by crossings), 1 to MNAV_MAX_NAVFLOW_LINKS.
+        // them (by crossings), 1 to MNAV_MAX_NAV_FLOW_LINKS.
         int32_t links;
     } mnavNavFlowLimits;
 
@@ -114,9 +114,10 @@ extern "C"
     /// @param fieldOut Receives the field, or NULL on failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument or a def
     /// not from mnavDefaultNavFlowDef; `mnav_errorVersion` for one built
-    /// against another version of the headers; `mnav_errorInvalid` also for a
-    /// limit below 1; `mnav_errorLimit` for a limit past its MNAV_MAX_NAVFLOW_
-    /// value; `mnav_errorCapacity` when the allocator fails.
+    /// against another version of the headers; `mnav_errorInvalid` also for an
+    /// allocator with one function or a limit below 1; `mnav_errorLimit` for a
+    /// limit past its MNAV_MAX_NAV_FLOW_ value; `mnav_errorCapacity` when the
+    /// allocator fails.
     /// @par Thread safety
     /// Safe from any thread.
     MNAV_NODISCARD MNAV_API mnavResult mnavCreateNavFlow(const mnavNavFlowDef* def,
@@ -140,40 +141,31 @@ extern "C"
     /// @par Thread safety
     /// Safe from any thread. It may be read at any time, also while host
     /// code the object runs calls back in.
-    MNAV_API uint64_t mnavGetNavFlowMisuse(const mnavNavFlow* field);
-
-    // A box of tile places, from (x0, z0) to (x1, z1), both included.
-    typedef struct mnavNavFlowRegion
-    {
-        int32_t x0;
-        int32_t z0;
-        int32_t x1;
-        int32_t z1;
-    } mnavNavFlowRegion;
+    MNAV_API uint64_t mnavNavFlow_GetMisuse(const mnavNavFlow* field);
 
     /// Begins building the field over the tiles of a region, as
-    /// mnavBuildNavFlow builds it over all; polygons outside the region
+    /// mnavNavFlow_Build builds it over all; polygons outside the region
     /// are as left out, and only those inside count toward the field's
-    /// limit. mnavContinueNavFlow does the work; however it is divided, the
+    /// limit. mnavNavFlow_Continue does the work; however it is divided, the
     /// field is the same.
     ///
     /// @param field     The field; its last field is dropped.
     /// @param navmesh   The navmesh; the work needs it unchanged.
-    /// @param filter    The areas usable and their costs, and the link
-    ///                  kinds, or NULL; copied.
     /// @param region    The tiles searched, or NULL for all.
     /// @param goals     The goals; those outside the region are left out.
     /// @param goalCount How many, at least 0.
-    /// @return As mnavBuildNavFlow; also `mnav_errorInvalid` for a region with
+    /// @param filter    The areas usable and their costs, and the link
+    ///                  kinds, or NULL; copied.
+    /// @return As mnavNavFlow_Build; also `mnav_errorInvalid` for a region with
     /// x0 past x1 or z0 past z1. Also `mnav_errorBusy` when called back in from
     /// the field's allocator, one misuse counted.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the navmesh at
     /// once while no commit runs on it; the field is used by one thread at
     /// a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBeginNavFlow(
-        mnavNavFlow* field, const mnavNavmesh* navmesh, const mnavQueryFilter* filter,
-        const mnavNavFlowRegion* region, const mnavNavFlowGoal* goals, int32_t goalCount);
+    MNAV_NODISCARD MNAV_API mnavResult mnavNavFlow_Begin(
+        mnavNavFlow* field, const mnavNavmesh* navmesh, const mnavTileRange* region,
+        const mnavNavFlowGoal* goals, int32_t goalCount, const mnavQueryFilter* filter);
 
     /// Continues the work begun on a field: settles up to a number of
     /// polygons, fewer when the work ends first.
@@ -181,7 +173,9 @@ extern "C"
     /// @param field    The field.
     /// @param navmesh  The navmesh the work began on.
     /// @param polygons The most polygons to settle, at least 1.
-    /// @param endedOut Receives whether the work has ended. May be NULL.
+    /// @param endedOut Receives whether the work has ended. May be NULL. Zeroed
+    ///                 on any failure but mnav_errorBusy, which leaves it as it
+    ///                 was.
     /// @return `mnav_success`, also when the work had already ended;
     /// `mnav_errorInvalid` for a NULL field or navmesh, fewer than 1 polygon,
     /// or a navmesh other than the field's; `mnav_errorState` for nothing
@@ -192,9 +186,9 @@ extern "C"
     /// Safe from any thread. Any number of threads may read the navmesh at
     /// once while no commit runs on it; the field is used by one thread at
     /// a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavContinueNavFlow(mnavNavFlow* field,
-                                                           const mnavNavmesh* navmesh,
-                                                           int32_t polygons, bool* endedOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavNavFlow_Continue(mnavNavFlow* field,
+                                                            const mnavNavmesh* navmesh,
+                                                            int32_t polygons, bool* endedOut);
 
     /// Builds the field for a navmesh and a set of goal points by one
     /// search backward from all of them, as path searches price their ways:
@@ -210,49 +204,51 @@ extern "C"
     ///
     /// @param field     The field; its last field is replaced.
     /// @param navmesh   The navmesh; reads need it unchanged since.
-    /// @param filter    The areas usable and their costs, and the link
-    ///                  kinds, or NULL; copied.
     /// @param goals     The goals.
     /// @param goalCount How many, at least 0.
+    /// @param filter    The areas usable and their costs, and the link
+    ///                  kinds, or NULL; copied.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
     /// negative count, a goal polygon id never handed out or a goal point not
     /// finite, or a filter not built from mnavDefaultQueryFilter or with a NaN
-    /// cost; `mnav_errorLimit` for a filter cost past MNAV_MIN_AREA_COST or
-    /// MNAV_MAX_AREA_COST, an infinity included; `mnav_errorStale` for a goal
-    /// polygon whose tile was replaced or removed; `mnav_errorCapacity` for a
-    /// navmesh of more polygons (in the tiles searched), tile slots or off-mesh
-    /// links than the field's limits. A build allocates nothing. On an error
-    /// the field holds nothing. Also `mnav_errorBusy` when called back in from
-    /// the field's allocator, one misuse counted.
+    /// cost; `mnav_errorLimit` for a goal point more than
+    /// MNAV_MAX_QUERY_DISTANCE from the navmesh's origin on an axis, or a
+    /// filter cost past MNAV_MIN_AREA_COST or MNAV_MAX_AREA_COST, an infinity
+    /// included; `mnav_errorStale` for a goal polygon whose tile was replaced
+    /// or removed; `mnav_errorCapacity` for a navmesh of more polygons (in the
+    /// tiles searched), tile slots or off-mesh links than the field's limits. A
+    /// build allocates nothing. On an error the field holds nothing. Also
+    /// `mnav_errorBusy` when called back in from the field's allocator, one
+    /// misuse counted.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read the navmesh at
     /// once while no commit runs on it; the field is used by one thread at
     /// a time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavBuildNavFlow(mnavNavFlow* field,
-                                                        const mnavNavmesh* navmesh,
-                                                        const mnavQueryFilter* filter,
-                                                        const mnavNavFlowGoal* goals,
-                                                        int32_t goalCount);
+    MNAV_NODISCARD MNAV_API mnavResult mnavNavFlow_Build(mnavNavFlow* field,
+                                                         const mnavNavmesh* navmesh,
+                                                         const mnavNavFlowGoal* goals,
+                                                         int32_t goalCount,
+                                                         const mnavQueryFilter* filter);
 
     /// Reads a polygon's way to the goals from the field.
     ///
     /// @param field   The field.
     /// @param navmesh The navmesh the field was built on.
     /// @param polygon The polygon.
-    /// @param flowOut Receives its way.
+    /// @param flowOut Receives its way. Zeroed on any failure.
     /// @return `mnav_success`; `mnav_errorInvalid` for a NULL argument, a
     /// navmesh other than the field's or a polygon id never handed out;
-    /// `mnav_errorOutside` for a polygon outside the region, flowOut left as it
-    /// was; `mnav_errorState` for nothing begun, a navmesh committed to since
-    /// the work began, or work not yet ended; `mnav_errorStale` for a polygon
-    /// whose tile was replaced or removed.
+    /// `mnav_errorOutside` for a polygon outside the region; `mnav_errorState`
+    /// for nothing begun, a navmesh committed to since the work began, or work
+    /// not yet ended; `mnav_errorStale` for a polygon whose tile was replaced
+    /// or removed.
     /// @par Thread safety
     /// Safe from any thread. Any number of threads may read a field at once
     /// while no build runs on it.
-    MNAV_NODISCARD MNAV_API mnavResult mnavNavFlowAt(const mnavNavFlow* field,
-                                                     const mnavNavmesh* navmesh,
-                                                     mnavPolygonId polygon,
-                                                     mnavPolygonFlow* flowOut);
+    MNAV_NODISCARD MNAV_API mnavResult mnavNavFlow_GetFlow(const mnavNavFlow* field,
+                                                           const mnavNavmesh* navmesh,
+                                                           mnavPolygonId polygon,
+                                                           mnavPolygonFlow* flowOut);
 
     /// Appends an arrow for each polygon of the field that has a way on
     /// (mnav_debugFlow): from the mean of the polygon's corners to the
@@ -262,7 +258,9 @@ extern "C"
     ///
     /// @param field   The field.
     /// @param navmesh The navmesh the field was built on.
-    /// @param buffer  The buffer appended to.
+    /// @param buffer  The buffer appended to. Left as it was on any failure but
+    ///                the buffer filling (mnav_errorCapacity), which writes what
+    ///                fits and counts what the whole needs.
     /// @return `mnav_success`, appending nothing when nothing was begun;
     /// `mnav_errorInvalid` for a NULL argument, a navmesh other than the
     /// field's, or a buffer with a count out of range, an array missing or an
@@ -273,9 +271,9 @@ extern "C"
     /// Safe from any thread. Any number of threads may read a field at once
     /// while no build runs on it; the buffer is used by one thread at a
     /// time.
-    MNAV_NODISCARD MNAV_API mnavResult mnavDebugNavFlow(const mnavNavFlow* field,
-                                                        const mnavNavmesh* navmesh,
-                                                        mnavDebugBuffer* buffer);
+    MNAV_NODISCARD MNAV_API mnavResult mnavNavFlow_Debug(const mnavNavFlow* field,
+                                                         const mnavNavmesh* navmesh,
+                                                         mnavDebugBuffer* buffer);
 
 #ifdef __cplusplus
 }

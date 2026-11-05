@@ -10,7 +10,7 @@ mnavVersion mnavGetVersion(void)
     return (mnavVersion){MNAV_VERSION_MAJOR, MNAV_VERSION_MINOR, MNAV_VERSION_PATCH};
 }
 
-const char* mnavResultName(mnavResult result)
+const char* mnavGetResultName(mnavResult result)
 {
     switch (result)
     {

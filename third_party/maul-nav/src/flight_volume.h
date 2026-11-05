@@ -16,7 +16,8 @@
 #include <stdint.h>
 
 // A committed tile, or a staged change at a place: a tile to install, or
-// a removal.
+// a removal. A commit marks a committed tile it replaces or removes as a
+// removal, and releases it once the new tiles are in place.
 typedef struct mnavFlightEntry
 {
     uint64_t fingerprint;
@@ -28,7 +29,7 @@ typedef struct mnavFlightEntry
 
 struct mnavFlightVolume
 {
-    mnavFlightDef def;
+    mnavFlightVolumeDef def;
     mnavFlightShape shape;
     mnavMemory memory;
     // The committed tiles, sorted by x, then z.

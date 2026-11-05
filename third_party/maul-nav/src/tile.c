@@ -26,7 +26,7 @@
 #define VERTEX_BYTES   6
 #define POLYGON_BYTES  2
 #define EDGE_BYTES     5
-#define PART_BYTES     2
+#define PART_BYTES     3
 #define TRIANGLE_BYTES 3
 #define INFO_BYTES     48
 
@@ -97,7 +97,7 @@ static void WriteField(mnavByteWriter* w, int32_t field, const mnavTileInfo* inf
         for (int32_t p = 0; p < mesh->polygonCount; ++p)
         {
             mnavPutU8(w, (uint64_t)(detail->parts[p].vertexCount - mesh->polygons[p].count));
-            mnavPutU8(w, detail->parts[p].triangleCount);
+            mnavPutU16(w, detail->parts[p].triangleCount);
         }
         break;
     case FIELD_TRIANGLES:
@@ -198,7 +198,7 @@ mnavResult mnavEncodeTile(mnavMemory* memory, const mnavTileInfo* info, const mn
         }
     }
     MNAV_ASSERT(w.at == out + total);
-    uint64_t hash = mnavHash64(MNAV_HASH_INIT, out + MNAV_TILE_HEADER_BYTES, (int32_t)payload);
+    uint64_t hash = mnavHash64(MNAV_HASH_INIT, out + MNAV_TILE_HEADER_BYTES, (int64_t)payload);
     w.at = out;
     WriteHeader(&w, info, payload, hash, fields);
     *bytes = out;
@@ -230,13 +230,13 @@ typedef struct Counts
     int64_t detailTriangles;
 } Counts;
 
-static bool Finite(double v)
+MNAV_NODISCARD static bool Finite(double v)
 {
     return isfinite(v);
 }
 
 // Checks the settings the TILE field records.
-static bool ValidInfo(const mnavTileInfo* info)
+MNAV_NODISCARD static bool ValidInfo(const mnavTileInfo* info)
 {
     int32_t reach = MNAV_MAX_EXTENT_CELLS / (info->tileCells > 0 ? info->tileCells : 1);
     bool grid = info->tileCells >= MNAV_MIN_TILE_CELLS && info->tileCells <= MNAV_MAX_TILE_CELLS &&
@@ -271,7 +271,7 @@ static mnavTileResult ReadHeader(const uint8_t* bytes, size_t size, mnavTileInfo
     // The payload's hash takes a 32-bit size; no tile within the caps
     // comes near it.
     if (payload != size - MNAV_TILE_HEADER_BYTES || payload > INT32_MAX ||
-        mnavHash64(MNAV_HASH_INIT, bytes + MNAV_TILE_HEADER_BYTES, (int32_t)payload) != hash)
+        mnavHash64(MNAV_HASH_INIT, bytes + MNAV_TILE_HEADER_BYTES, (int64_t)payload) != hash)
     {
         return Refuse(mnav_errorFormat, mnav_tilePayload, -1);
     }
@@ -401,8 +401,8 @@ static mnavTileResult ReadVertices(mnavByteReader* r, mnavPolyMesh* mesh, int32_
 }
 
 // Reads one polygon's head and edges and checks each value alone.
-static bool ReadPolygon(mnavByteReader* r, const mnavPolyMesh* mesh, int32_t polygons,
-                        mnavPolygon* polygon)
+MNAV_NODISCARD static bool ReadPolygon(mnavByteReader* r, const mnavPolyMesh* mesh,
+                                       int32_t polygons, mnavPolygon* polygon)
 {
     *polygon = (mnavPolygon){0};
     memset(polygon->vertices, 0xFF, sizeof(polygon->vertices));
@@ -441,7 +441,7 @@ static int64_t Area2(const mnavMeshVertex* a, const mnavMeshVertex* b, const mna
 // Whether the polygon is convex with a positive area: no edge of zero
 // length, and every vertex on the inner side of every edge or on it. A
 // vertex used twice fails it too, as the edges round it double back.
-static bool Convex(const mnavPolyMesh* mesh, const mnavPolygon* polygon)
+MNAV_NODISCARD static bool Convex(const mnavPolyMesh* mesh, const mnavPolygon* polygon)
 {
     int64_t area = 0;
     for (int32_t k = 0; k < polygon->count; ++k)
@@ -486,7 +486,7 @@ static uint8_t SideOf(const mnavMeshVertex* a, const mnavMeshVertex* b, int32_t 
 // Whether each edge's neighbor runs the same edge back to it, and each
 // edge without one carries exactly the tile side it lies on. A polygon
 // naming itself fails, as it never runs its own edge backward.
-static bool Linked(const mnavPolyMesh* mesh, int32_t p)
+MNAV_NODISCARD static bool Linked(const mnavPolyMesh* mesh, int32_t p)
 {
     const mnavPolygon* polygon = &mesh->polygons[p];
     for (int32_t k = 0; k < polygon->count; ++k)
@@ -550,14 +550,14 @@ static mnavTileResult ReadParts(mnavByteReader* r, const mnavPolyMesh* mesh, con
     for (int32_t p = 0; p < mesh->polygonCount; ++p)
     {
         int64_t count = mesh->polygons[p].count + (int64_t)mnavGetU8(r);
-        int64_t parts = (int64_t)mnavGetU8(r);
-        if (r->exhausted || count > MNAV_DETAIL_VERTICES || parts < 1 ||
-            parts > 2 * MNAV_DETAIL_VERTICES)
+        int64_t parts = (int64_t)mnavGetU16(r);
+        if (r->exhausted || count > MNAV_MAX_DETAIL_VERTICES || parts < 1 ||
+            parts > 2 * MNAV_MAX_DETAIL_VERTICES)
         {
             return Refuse(mnav_errorFormat, mnav_tileDetailParts, p);
         }
-        detail->parts[p] =
-            (mnavDetailPart){(int32_t)vertices, (int32_t)triangles, (uint8_t)count, (uint8_t)parts};
+        detail->parts[p] = (mnavDetailPart){(int32_t)vertices, (int32_t)triangles, (uint8_t)count,
+                                            (uint16_t)parts};
         vertices += count;
         extra += count - mesh->polygons[p].count;
         triangles += parts;

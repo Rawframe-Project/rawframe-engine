@@ -30,6 +30,13 @@ static inline mnavPos2 mnavScale2(mnavPos2 a, double s)
     return (mnavPos2){a.x * s, a.y * s};
 }
 
+// A velocity the host gives, widened to the binary64 avoidance computes
+// in.
+static inline mnavPos2 mnavWide2(mnavVec2 v)
+{
+    return (mnavPos2){(double)v.x, (double)v.y};
+}
+
 static inline double mnavDot2(mnavPos2 a, mnavPos2 b)
 {
     return a.x * b.x + a.y * b.y;

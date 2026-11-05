@@ -37,7 +37,7 @@ static uint32_t Ones(uint32_t mask)
 
 mnavFlightCursor mnavMakeFlightCursor(const mnavFlightVolume* volume)
 {
-    int32_t side = volume->def.tileVoxels;
+    int32_t side = volume->def.flight.tileVoxels;
     int32_t shift = 0;
     while (1 << shift < side)
     {
@@ -68,7 +68,7 @@ static uint32_t Child(const mnavFlightNode* node, int32_t o)
     return node->firstChild + Ones(node->mask & ((1u << o) - 1u));
 }
 
-static bool Inside(const mnavFlightBlock* b, const int32_t at[3])
+MNAV_NODISCARD static bool Inside(const mnavFlightBlock* b, const int32_t at[3])
 {
     return at[0] >= b->x && at[1] >= b->y && at[2] >= b->z && at[0] < b->x + b->size &&
            at[1] < b->y + b->size && at[2] < b->z + b->size;
@@ -127,7 +127,7 @@ static int32_t Hold(const mnavFlightTile* t, int32_t x, int32_t y, int32_t z, mn
 }
 
 // Whether a voxel of the cursor's leaf is solid.
-static bool LeafSolid(const mnavFlightCursor* c, const int32_t at[3])
+MNAV_NODISCARD static bool LeafSolid(const mnavFlightCursor* c, const int32_t at[3])
 {
     int32_t bit = (at[0] - c->leaf.x) + 4 * (at[1] - c->leaf.y) + 16 * (at[2] - c->leaf.z);
     return (c->leafBits >> bit & 1u) != 0;
@@ -185,7 +185,7 @@ typedef struct Region
     void* context;
 } Region;
 
-static bool Meets(const Region* r, int32_t x, int32_t y, int32_t z, int32_t size)
+MNAV_NODISCARD static bool Meets(const Region* r, int32_t x, int32_t y, int32_t z, int32_t size)
 {
     return x < r->hi[0] && y < r->hi[1] && z < r->hi[2] && x + size > r->lo[0] &&
            y + size > r->lo[1] && z + size > r->lo[2];
@@ -286,7 +286,7 @@ static int32_t Holding(const Region* r, int32_t x, int32_t y, int32_t z, int32_t
 // does instead. Above it a search meets one child a node, so starting it
 // there visits the same blocks in the same order. Returns whether a node
 // is left to search, in f.
-static bool Descend(const mnavFlightTile* t, int32_t c, const Region* r, Frame* f)
+MNAV_NODISCARD static bool Descend(const mnavFlightTile* t, int32_t c, const Region* r, Frame* f)
 {
     int32_t side = t->side;
     if (t->roots[c] != MNAV_FLIGHT_MIXED)
@@ -507,8 +507,8 @@ static int32_t Advance(mnavFlightCursor* cursor, Walk* w, uint32_t tied, const i
 // Whether every voxel a step from at across the axes in tied touches,
 // each reached by a part of the steps, is an open voxel of the cursor's
 // leaf: at and to are in it, and so is every voxel between them.
-static bool LeafClear(const mnavFlightCursor* c, const int32_t at[3], const int32_t step[3],
-                      uint32_t tied, const int32_t to[3])
+MNAV_NODISCARD static bool LeafClear(const mnavFlightCursor* c, const int32_t at[3],
+                                     const int32_t step[3], uint32_t tied, const int32_t to[3])
 {
     if (!Inside(&c->leaf, at) || !Inside(&c->leaf, to))
     {
@@ -623,8 +623,8 @@ static void Skip(Walk* w, const int32_t end[3])
 // block. Returns false where the walk ends open, at the end's voxel or
 // past the segment's end, and true when its next step needs Advance and
 // Look.
-static bool Within(const mnavFlightCursor* cursor, Walk* w, const int32_t end[3], uint32_t* tied,
-                   int32_t to[3])
+MNAV_NODISCARD static bool Within(const mnavFlightCursor* cursor, Walk* w, const int32_t end[3],
+                                  uint32_t* tied, int32_t to[3])
 {
     if (w->open.size >= 4)
     {

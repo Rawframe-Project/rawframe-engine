@@ -85,7 +85,7 @@ static mnavResult CollectTouching(Work* work, uint16_t vertex)
 }
 
 // Whether the polygons around the vertex share one area type.
-static bool SameArea(const Work* work)
+MNAV_NODISCARD static bool SameArea(const Work* work)
 {
     const mnavPolygon* polygons = work->mesh->polygons;
     for (int32_t t = 1; t < work->touchingCount; ++t)
@@ -207,7 +207,7 @@ static mnavResult CollectEdges(Work* work, uint16_t vertex)
 // Chains the edges into the hole's outline, each edge extending its end
 // or its start, the first fitting edge in order each time. Returns false
 // when the edges do not form one chain.
-static bool Chain(Work* work)
+MNAV_NODISCARD static bool Chain(Work* work)
 {
     HoleEdge* edges = work->edges;
     uint16_t* hole = work->hole;
@@ -260,7 +260,7 @@ static mnavContourVertex Ground(const mnavPolyMesh* mesh, uint16_t index)
 // a vertex inside the mesh; an open one must close across the vertex's
 // own place, the vertex lying on the segment from the chain's end back
 // to its start.
-static bool KeepsOutline(const Work* work, uint16_t vertex)
+MNAV_NODISCARD static bool KeepsOutline(const Work* work, uint16_t vertex)
 {
     if (work->closed)
     {
@@ -279,9 +279,11 @@ static bool KeepsOutline(const Work* work, uint16_t vertex)
 // polygons, or -1 when the triangulation does not finish. The hole's ring
 // is made of the outer edges of convex polygons round the vertex, so it
 // is star-shaped round the vertex's place and triangulates fully unless
-// it passes some vertex twice; the checks for an unfinished
-// triangulation and for triangles with a corner twice guard that case,
-// which no input has yet made.
+// it passes some vertex twice; the check for an unfinished triangulation
+// guards that case, which no input has yet made. A triangle with no area
+// on the ground is dropped, as the polygon stage drops one: it covers
+// nothing, and two vertices welded apart at one ground place would give
+// it an edge with no length there, which the detail stage divides by.
 static int32_t Fill(Work* work)
 {
     const mnavPolyMesh* mesh = work->mesh;
@@ -309,7 +311,7 @@ static int32_t Fill(Work* work)
         uint16_t a = work->hole[corner[0]];
         uint16_t b = work->hole[corner[1]];
         uint16_t c = work->hole[corner[2]];
-        if (a == b || a == c || b == c)
+        if (mnavArea2(&work->ring[corner[0]], &work->ring[corner[1]], &work->ring[corner[2]]) == 0)
         {
             continue;
         }

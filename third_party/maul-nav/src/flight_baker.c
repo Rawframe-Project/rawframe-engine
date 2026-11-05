@@ -14,6 +14,8 @@
 #include "flight_tile.h"
 #include "fpenv.h"
 #include "host_code.h"
+#include "input.h"
+#include "outputs.h"
 #include "raster.h"
 #include "tile_index.h"
 
@@ -87,7 +89,7 @@ static void DropTile(mnavFlightBaker* baker)
     baker->tileSize = 0;
 }
 
-uint64_t mnavGetFlightBakerMisuse(const mnavFlightBaker* baker)
+uint64_t mnavFlightBaker_GetMisuse(const mnavFlightBaker* baker)
 {
     return baker != nullptr ? mnavHostMisuse(&baker->host) : 0;
 }
@@ -128,7 +130,7 @@ static uint64_t HashSettings(const mnavFlightDef* def, int32_t tileX, int32_t ti
         mnavFloatBits(def->floor),
         mnavFloatBits(def->ceiling),
         mnavFloatBits(def->radius),
-        def->groundBelow ? 1u : 0u,
+        def->enableGroundFill ? 1u : 0u,
         (uint32_t)tileX,
         (uint32_t)tileZ,
     };
@@ -142,8 +144,7 @@ static mnavResult Bake(mnavFlightBaker* baker, const mnavBakeInput* input, int32
     {
         return mnav_errorInvalid;
     }
-    mnavResult result =
-        mnavCheckSolidInput(&baker->voxels, input, false, &report->mesh, &report->input);
+    mnavResult result = mnavCheckSolidInput(&baker->voxels, input, false, &report->input);
     mnavTileFrame frame = {0};
     if (result == mnav_success &&
         !mnavMakeTileFrame(&baker->voxels, &baker->cells, tileX, tileZ, &frame))
@@ -158,15 +159,15 @@ static mnavResult Bake(mnavFlightBaker* baker, const mnavBakeInput* input, int32
     all.index = nullptr;
     report->fingerprint =
         mnavFingerprintInput(&frame, baker->cells.cosMaxSlope, &all, tileX, tileZ,
-                             HashSettings(&baker->def, tileX, tileZ), &report->triangles);
+                             HashSettings(&baker->def, tileX, tileZ), &report->triangleCount);
     mnavFlightTile tile = {0};
     result = mnavBuildFlightTile(&baker->memory, &baker->def, &baker->shape, input, tileX, tileZ,
-                                 &tile, &report->spans);
+                                 &tile, &report->spanCount);
     if (result == mnav_success)
     {
-        report->cubes = tile.cubeCount;
-        report->nodes = tile.nodeCount;
-        report->leaves = tile.leafCount;
+        report->cubeCount = tile.cubeCount;
+        report->nodeCount = tile.nodeCount;
+        report->leafCount = tile.leafCount;
         result = mnavEncodeFlightTile(&baker->memory, &baker->def, report->fingerprint, &tile,
                                       &baker->tile, &baker->tileSize);
     }
@@ -183,8 +184,7 @@ static MNAV_NOINLINE mnavResult BakeFlightTileWork(mnavFlightBaker* baker,
         return mnav_errorBusy;
     }
     mnavFlightBakeReport report = {0};
-    report.mesh = -1;
-    report.input = (mnavInputResult){mnav_success, mnav_elementNone, -1};
+    report.input = mnavInputElementResult(mnav_success, mnav_elementNone, -1);
     mnavResult result = mnav_errorInvalid;
     if (baker != nullptr && input != nullptr)
     {
@@ -208,8 +208,8 @@ static MNAV_NOINLINE mnavResult BakeFlightTileWork(mnavFlightBaker* baker,
                                                : result;
 }
 
-mnavResult mnavBakeFlightTile(mnavFlightBaker* baker, const mnavBakeInput* input, int32_t tileX,
-                              int32_t tileZ, mnavFlightBakeReport* reportOut)
+mnavResult mnavFlightBaker_BakeTile(mnavFlightBaker* baker, const mnavBakeInput* input,
+                                    int32_t tileX, int32_t tileZ, mnavFlightBakeReport* reportOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result = BakeFlightTileWork(baker, input, tileX, tileZ, reportOut);
@@ -220,9 +220,13 @@ mnavResult mnavBakeFlightTile(mnavFlightBaker* baker, const mnavBakeInput* input
 static mnavResult CopyFlightTileWork(const mnavFlightBaker* baker, uint8_t* bufferOut,
                                      size_t capacity, size_t* sizeOut)
 {
-    if (baker == nullptr || (bufferOut == nullptr && capacity > 0) || baker->tile == nullptr)
+    if (baker == nullptr || (bufferOut == nullptr && capacity > 0))
     {
         return mnav_errorInvalid;
+    }
+    if (baker->tile == nullptr)
+    {
+        return mnav_errorState;
     }
     if (sizeOut != nullptr)
     {
@@ -239,9 +243,13 @@ static mnavResult CopyFlightTileWork(const mnavFlightBaker* baker, uint8_t* buff
     return mnav_success;
 }
 
-mnavResult mnavCopyFlightTile(const mnavFlightBaker* baker, uint8_t* bufferOut, size_t capacity,
-                              size_t* sizeOut)
+mnavResult mnavFlightBaker_CopyTile(const mnavFlightBaker* baker, uint8_t* bufferOut,
+                                    size_t capacity, size_t* sizeOut)
 {
-    return mnavHostCountInvalid(MNAV_HOST(baker),
-                                CopyFlightTileWork(baker, bufferOut, capacity, sizeOut));
+    mnavClearOutput(sizeOut, sizeof(*sizeOut));
+    mnavResult result = mnavHostCountInvalid(
+        MNAV_HOST(baker), CopyFlightTileWork(baker, bufferOut, capacity, sizeOut));
+    // A buffer too small for the tile gets none of it.
+    mnavClearArray(result, false, bufferOut, mnavByteCapacity(capacity), 1);
+    return mnavClearUnlessCapacity(result, sizeOut, sizeof(*sizeOut));
 }

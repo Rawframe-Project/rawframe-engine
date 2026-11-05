@@ -7,6 +7,7 @@
 #include "fpenv.h"
 #include "navmesh.h"
 #include "nearest.h"
+#include "outputs.h"
 #include "polymesh.h"
 #include "query.h"
 #include "query_filter.h"
@@ -119,7 +120,7 @@ static Ground At(const Edge* e, double u)
 }
 
 // Whether a link of edge j leads to a polygon the filter includes.
-static bool Open(const Mover* m, const mnavLink* link, int32_t j)
+MNAV_NODISCARD static bool Open(const Mover* m, const mnavLink* link, int32_t j)
 {
     const mnavTile* across = m->navmesh->slots[link->target.slot - 1].tile;
     return link->edge == j &&
@@ -128,8 +129,8 @@ static bool Open(const Mover* m, const mnavLink* link, int32_t j)
 
 // Whether u lies on a wall of edge j: in the closure of the part of the
 // side no open link covers.
-static bool OnWall(const Mover* m, const mnavTile* tile, int32_t polygon, int32_t j, const Edge* e,
-                   double u)
+MNAV_NODISCARD static bool OnWall(const Mover* m, const mnavTile* tile, int32_t polygon, int32_t j,
+                                  const Edge* e, double u)
 {
     bool below = u <= (e->au < e->bu ? e->au : e->bu);
     bool above = u >= (e->au < e->bu ? e->bu : e->au);
@@ -184,7 +185,7 @@ static void Side(Mover* m, int32_t n, const mnavTile* tile, int32_t polygon, int
 }
 
 // Whether the wanted point lies in a polygon, its edges included.
-static bool Holds(const Ground* corners, int32_t count, Ground p)
+MNAV_NODISCARD static bool Holds(const Ground* corners, int32_t count, Ground p)
 {
     for (int32_t k = 0; k < count; ++k)
     {
@@ -200,7 +201,7 @@ static bool Holds(const Ground* corners, int32_t count, Ground p)
 
 // Walks node n's polygon: true when it holds the wanted point; otherwise
 // visits its open neighbours and offers its walls.
-static bool Walk(Mover* m, int32_t n)
+MNAV_NODISCARD static bool Walk(Mover* m, int32_t n)
 {
     const mnavSearchNode* node = &m->query->nodes[n];
     const mnavSlot* slot = &m->navmesh->slots[node->slot];
@@ -286,6 +287,10 @@ mnavResult mnavMoveAlongSurfaceWork(mnavQuery* query, const mnavNavmesh* navmesh
     {
         return mnav_errorInvalid;
     }
+    if (!mnavInQueryReach(navmesh, start) || !mnavInQueryReachGround(navmesh, end.x, end.z))
+    {
+        return mnav_errorLimit;
+    }
     const mnavQueryFilter* usable = nullptr;
     mnavResult result = mnavCheckPolygon(navmesh, startPolygon);
     result = result == mnav_success ? mnavCheckFilter(filter, &usable) : result;
@@ -299,7 +304,7 @@ mnavResult mnavMoveAlongSurfaceWork(mnavQuery* query, const mnavNavmesh* navmesh
     Ground from = {start.x, start.z};
     Ground to = {end.x, end.z};
     Ground center = {(from.x + to.x) * 0.5, (from.z + to.z) * 0.5};
-    double radius = sqrt(Distance2(from, to)) * 0.5 + (double)navmesh->def.cellSize;
+    double radius = sqrt(Distance2(from, to)) * 0.5 + (double)navmesh->def.bake.cellSize;
     Mover m = {query, navmesh, usable, to, center, radius * radius, from, Distance2(from, to),
                0,     false,   false,  1};
     // The move takes the node table a sliced search holds: that search
@@ -351,14 +356,18 @@ static MNAV_NOINLINE mnavResult MoveAlongSurfaceCounted(mnavQuery* query,
                                                         mnavPolygonId startPolygon, mnavPos3 start,
                                                         mnavPos3 end, mnavMove* moveOut)
 {
-    return mnavHostCountInvalid(
+    mnavMove moveMade = {0};
+    mnavResult result = mnavHostCountInvalid(
         mnavHostFirst(MNAV_HOST(query), MNAV_HOST(navmesh)),
-        mnavMoveAlongSurfaceWork(query, navmesh, filter, startPolygon, start, end, moveOut));
+        mnavMoveAlongSurfaceWork(query, navmesh, filter, startPolygon, start, end,
+                                 moveOut != nullptr ? &moveMade : nullptr));
+    mnavGiveOutput(result, false, moveOut, &moveMade, sizeof(moveMade));
+    return result;
 }
 
-mnavResult mnavMoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
-                                const mnavQueryFilter* filter, mnavPolygonId startPolygon,
-                                mnavPos3 start, mnavPos3 end, mnavMove* moveOut)
+mnavResult mnavQuery_MoveAlongSurface(mnavQuery* query, const mnavNavmesh* navmesh,
+                                      mnavPolygonId startPolygon, mnavPos3 start, mnavPos3 end,
+                                      const mnavQueryFilter* filter, mnavMove* moveOut)
 {
     uint64_t env = mnavFloatEnvEnter();
     mnavResult result =

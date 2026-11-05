@@ -15,9 +15,9 @@
 
 mnavFlightFrame mnavMakeFlightFrame(const mnavFlightVolume* volume)
 {
-    return (mnavFlightFrame){volume->def.origin, (double)volume->def.voxelSize,
+    return (mnavFlightFrame){volume->def.flight.origin, (double)volume->def.flight.voxelSize,
                              volume->shape.floorVoxel,
-                             volume->shape.cubeCount * volume->def.tileVoxels};
+                             volume->shape.cubeCount * volume->def.flight.tileVoxels};
 }
 
 mnavResult mnavFlightToVoxels(const mnavFlightFrame* frame, mnavPos3 point, double out[3],

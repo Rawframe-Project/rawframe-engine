@@ -46,7 +46,7 @@ typedef struct Graph
     uint64_t* overlaps;
 } Graph;
 
-static bool IsRegion(uint32_t id)
+MNAV_NODISCARD static bool IsRegion(uint32_t id)
 {
     return id != 0 && (id & MNAV_BORDER_REGION) == 0;
 }
