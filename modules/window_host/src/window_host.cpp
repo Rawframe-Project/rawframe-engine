@@ -623,12 +623,20 @@ window::FrameOutcome WindowHost::frame(window::Windows& windows) {
             if (const auto kShown = std::ranges::find(
                     dialogsShown_, event->completion.request, &std::pair<window::RequestId, std::uint64_t>::first);
                 kShown != dialogsShown_.end()) {
+                const window::Outcome kOutcome = event->completion.outcome;
                 view::FileDialogs::Answer answer{
-                    .ticket = kShown->second, .unsupported = event->completion.outcome == window::Outcome::Unsupported};
-                if (event->completion.outcome == window::Outcome::Done) {
+                    .ticket = kShown->second,
+                    .unsupported = kOutcome == window::Outcome::Unsupported,
+                    .failure = kOutcome == window::Outcome::Failed     ? view::FileDialogs::Failure::Failed
+                               : kOutcome == window::Outcome::Denied   ? view::FileDialogs::Failure::Denied
+                               : kOutcome == window::Outcome::TooLarge ? view::FileDialogs::Failure::TooMany
+                                                                       : view::FileDialogs::Failure::None};
+                if (kOutcome == window::Outcome::Done) {
                     if (auto chosen = windows.dialogFiles(event->completion.request); chosen.has_value()) {
                         answer.paths = std::move(chosen->paths);
                         answer.truncated = chosen->truncated;
+                    } else {
+                        answer.failure = view::FileDialogs::Failure::Failed;
                     }
                 }
                 dialogs_.answered(std::move(answer));
