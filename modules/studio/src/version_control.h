@@ -6,7 +6,9 @@
 // hooks), so git runs only in a repository the author has said they trust,
 // as an editor asks before it trusts a workspace. Even there, the programs
 // a repository names that reading never needs stay off: its file monitor,
-// its external diff, and its text conversions. Nothing here waits.
+// its external diff, and its text conversions. Git is not given the
+// variables that name a repository, so the game's directory is the one it
+// works in, whatever started Studio set. Nothing here waits.
 
 #include "rawframe/process/child.h"
 
@@ -20,6 +22,11 @@
 #include <vector>
 
 namespace rawframe::studio {
+
+/// The environment variables that tell git which repository, index, objects
+/// and settings to use, as `git rev-parse --local-env-vars` lists them. Git
+/// sets them for a hook it runs; any of them outranks `-C`.
+[[nodiscard]] std::vector<std::string> gitRepositoryVariables();
 
 class VersionControl {
 public:

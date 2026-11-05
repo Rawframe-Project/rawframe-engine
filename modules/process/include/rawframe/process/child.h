@@ -34,6 +34,9 @@ struct ChildSettings {
     /// (Linux a signal, macOS a process source, Windows a wait on the
     /// parent), which it takes as any stop, in order.
     bool stopsWithThis = false;
+    /// Environment variables of this process it is not given, by name; on
+    /// Windows, whose names ignore case, in any case.
+    std::vector<std::string> withheld;
 };
 
 /// The environment variable a child that stops with its parent is told
