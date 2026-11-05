@@ -2,6 +2,17 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.7.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.1...v0.7.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** the engine is built on Maul Nav 1.2.0. A navmesh's tile bytes and fingerprint change: tiles bake under generator 6 and tile format 4. A walkable strip one cell thin now gets a polygon, and heights along long edges are sampled more finely. Avoidance velocities are rounded to binary32 and never pass an agent's maximum speed, so a game's agents that avoid each other move by slightly different amounts. A navigation query past 1e100 m from the navmesh's origin finds nothing.
+
+### Build
+
+* **deps:** move Maul Nav to 1.2.0 ([#222](https://github.com/Rawframe-Project/rawframe-engine/issues/222)) ([9c547e2](https://github.com/Rawframe-Project/rawframe-engine/commit/9c547e2dfa286f26550293eee7b129f009a73588))
+
 ## [0.6.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.0...v0.6.1) (2026-11-05)
 
 ### Fixed
