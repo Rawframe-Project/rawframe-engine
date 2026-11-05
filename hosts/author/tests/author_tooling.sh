@@ -143,7 +143,8 @@ if ! command -v cygpath >/dev/null 2>&1; then
     # A server that stops closes the connection, and a record sent once it
     # has gone is refused before the close is reported: the endpoint
     # closed, not a record that could not be sent.
-    if {
+    ended=0
+    {
         for _ in $(seq 100); do
             grep -q '"tooling.welcome"' "$work/stopped" 2>/dev/null && break
             sleep 0.1
@@ -156,9 +157,12 @@ if ! command -v cygpath >/dev/null 2>&1; then
         done
         echo '{"kind":"tooling.status","id":1}'
     } | "$author" connect "127.0.0.1:$port" "$work/fingerprint" "$work/token" \
-        >"$work/stopped" 2>"$work/stopped.err"; then
-        exit 1
-    fi
+        >"$work/stopped" 2>"$work/stopped.err" || ended=$?
+    # Reaped here, so the trap signals no process that took its number
+    # since.
+    wait "$running" || true
+    running=
+    [[ $ended -ne 0 ]]
     grep -q '"tooling.welcome"' "$work/stopped"
     grep -qx 'rawframe-author connect: the endpoint closed' "$work/stopped.err"
 fi

@@ -70,7 +70,8 @@ else
 fi
 printf '{"endpoint":"127.0.0.1:%s","pinFile":"%s","tokenFile":"%s"}\n' "$port" "$work/fingerprint" "$work/token" >"$played/debug.attach"
 
-python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" "$work/server.log" "$running" <<'PY'
+ran=0
+python3 - "$adapter" "127.0.0.1:$port" "$work/fingerprint" "$work/token" "$game" "$played" "$work/server.log" "$running" <<'PY' || ran=$?
 import json
 import os
 import queue
@@ -307,8 +308,18 @@ print("a stopped game closed", flush=True)
 PY
 
 # Left running, on Windows, where the Python above could not look.
+# Elsewhere the Python stopped the server, unless it failed first: stopped
+# here if it still runs, and reaped, so the trap signals no process that
+# took its number since.
 if command -v cygpath >/dev/null 2>&1; then
-    sleep 1
-    kill -0 $running
+    [[ $ran -ne 0 ]] || { sleep 1; kill -0 $running; }
+else
+    if jobs -rp | grep -qx "$running"; then
+        kill -CONT "$running" 2>/dev/null || true
+        kill "$running" 2>/dev/null || true
+    fi
+    wait "$running" || true
+    running=
 fi
+[[ $ran -eq 0 ]]
 echo "debugged the plaza through the debug adapter"
