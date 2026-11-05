@@ -4,14 +4,17 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.8.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.7.0...v0.8.0) (2026-11-05)
 
+This release moves the engine to Maul2D 1.3.1. Body poses step to the same bits as before, but the 2D physics digest changes for every world, and a few edge cases of 2D physics act differently. No wire, save, checkpoint or cooked format changes.
 
-### ⚠ BREAKING CHANGES
+### Changed
 
-* **deps:** the engine is built on Maul2D 1.3.1. The 2D physics digest changes for every world, since Maul2D's world hash now covers each shape's broadphase box and each body's sleep threshold. Queries between steps, character moves among them, see a shape that moved more than 0.1 m in the last step where it is now. A body with a locked rotation no longer turns when given a spin. The 2D step fails at a tick shorter than 1 microsecond or longer than 10 seconds instead of standing still, and the physics statistics count only kinematic targets carried out.
-
-### Build
-
-* **deps:** move Maul2D to 1.3.1 ([#225](https://github.com/Rawframe-Project/rawframe-engine/issues/225)) ([f406e36](https://github.com/Rawframe-Project/rawframe-engine/commit/f406e36c5766af6fccd26a761ceb965f2c7c4923))
+- **Breaking:** The engine is built on Maul2D 1.3.1, from 0.6.0, vendored from its release archive with its SHA-256 checked. What a game sees change ([#225](https://github.com/Rawframe-Project/rawframe-engine/pull/225)):
+  - The 2D physics digest changes for every world, since Maul2D's world hash now covers each shape's broadphase box and each body's sleep threshold. Body poses are unchanged: a scene of 20 bouncing balls ends on the same bits after 120 ticks.
+  - Rays, sweeps, overlaps and character moves between steps see a shape that moved more than 0.1 m in the last step where it is now, instead of missing it or finding it where it was.
+  - A body with a fixed rotation no longer turns when a game gives it an angular velocity or an angular impulse.
+  - A bullet body passes no wall when more than 64 shapes crowd its path, and a character meeting more than 16 surfaces keeps those of the lowest shape slots.
+  - The 2D step fails at a tick shorter than 1 microsecond or longer than 10 seconds, before it changes anything, instead of leaving the world standing still. A dedicated server with 2D physics takes a `world.tick_rate` of 1 to 1,000,000.
+  - `Physics2DStatistics::targets` counts only kinematic targets carried out. A target too far to reach in one tick within Maul2D's 100 km/s speed limit is cleared, as before, but no longer counted.
 
 ## [0.7.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.6.1...v0.7.0) (2026-11-05)
 
