@@ -4,10 +4,11 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.8.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.0...v0.8.1) (2026-11-08)
 
+This release fixes which repository Studio's git works in. No wire, save, checkpoint or cooked format changes.
 
 ### Fixed
 
-* **studio:** start git without the variables that name a repository ([#227](https://github.com/Rawframe-Project/rawframe-engine/issues/227)) ([dff8e53](https://github.com/Rawframe-Project/rawframe-engine/commit/dff8e537adbfd1ee3fdedc203e65bb232502b4a2))
+- Studio runs git for its Changes tab in the game's directory even when `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` or git's other repository variables are set, as git sets `GIT_DIR` for a hook it runs from a linked worktree. Before, git worked in the repository those variables named, so Studio's status, add and commit could act on another repository than the game's. A child process can now be started without chosen variables of its parent, through `process::ChildSettings::withheld` ([#227](https://github.com/Rawframe-Project/rawframe-engine/pull/227)).
 
 ## [0.8.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.7.0...v0.8.0) (2026-11-05)
 
