@@ -156,16 +156,16 @@ RAWFRAME_TEST(AChildIsNotGivenTheVariablesWithheldFromIt) {
     kSet("RAWFRAME_WITHHELD", "held");
     kSet("RAWFRAME_GIVEN", "given");
     const auto kRead = [&kWithheld](const char* name, const char* file) {
-        const std::filesystem::path kRead = scratch(file);
+        const std::filesystem::path kOutput = scratch(file);
         auto read = Child::start({.program = RAWFRAME_PROCESS_CHILD,
                                   .arguments = {"variable", name},
-                                  .output = kRead,
+                                  .output = kOutput,
                                   .withheld = kWithheld});
         RAWFRAME_EXPECT(startedAll(read));
         if (read.has_value()) {
             RAWFRAME_EXPECT(waitFor(*read) == 0);
         }
-        return test::readFile(kRead.string());
+        return test::readFile(kOutput.string());
     };
     RAWFRAME_EXPECT(kRead("RAWFRAME_WITHHELD", "withheld.txt") == "none");
     RAWFRAME_EXPECT(kRead("RAWFRAME_GIVEN", "given.txt") == "given");
