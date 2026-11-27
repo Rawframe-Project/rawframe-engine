@@ -17,7 +17,7 @@ The dedicated server builds wherever the engine does and never links rendering, 
 
 ## Windows
 
-`windows-development` builds with `clang-cl` and MSVC's libraries, from a shell with MSVC's developer environment. Configure needs Perl for OpenSSL (`RAWFRAME_PERL`), Git's bash (`RAWFRAME_BASH`) and Python. Only a Windows build sees bugs of the MSVC ABI, so a change to platform code is checked by dispatching `extended` with `only: windows` before it merges.
+`windows-development` builds with `clang-cl` and MSVC's libraries, from a shell with MSVC's developer environment. Use the `clang-cl` Visual Studio installs (`VC\Tools\Llvm\x64\bin`, first on `PATH`): MSVC's STL refuses a Clang older than the one it ships with, so a separately installed LLVM breaks the build when Visual Studio updates. Configure needs Perl for OpenSSL (`RAWFRAME_PERL`), Git's bash (`RAWFRAME_BASH`) and Python. Only a Windows build sees bugs of the MSVC ABI, so a change to platform code is checked by dispatching `extended` with `only: windows` before it merges.
 
 ## Android
 
