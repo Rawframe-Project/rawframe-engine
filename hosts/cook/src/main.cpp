@@ -24,6 +24,7 @@
 
 #include "rawframe/host/main.h"
 
+#include "rawframe/base/secure_random.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/cook/animation.h"
 #include "rawframe/cook/audio.h"
@@ -48,7 +49,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <optional>
-#include <random>
 #include <span>
 #include <string>
 #include <string_view>
@@ -80,13 +80,9 @@ void print(const rawframe::result::Error& error) {
 /// A new random identity, its first half never nought: a game knows a
 /// subasset by it.
 rawframe::content::ResourceId freshIdentity() {
-    static std::random_device device;
-    const auto kWord = [] {
-        return (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
-    };
-    rawframe::base::Bits128 made{.high = kWord(), .low = kWord()};
+    rawframe::base::Bits128 made{.high = rawframe::base::secureRandomWord(), .low = rawframe::base::secureRandomWord()};
     while (made.high == 0) {
-        made.high = kWord();
+        made.high = rawframe::base::secureRandomWord();
     }
     return rawframe::content::ResourceId{made};
 }

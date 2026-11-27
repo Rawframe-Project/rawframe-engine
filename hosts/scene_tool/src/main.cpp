@@ -8,13 +8,13 @@
 // component's layout mark from the game's program. The description is left
 // as it is; replacing its spawn lines with a `scene` line is the author's.
 
+#include "rawframe/base/secure_random.h"
 #include "rawframe/scene/scene.h"
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/spawn_scene.h"
 
 #include <cstdio>
 #include <fstream>
-#include <random>
 #include <string_view>
 
 namespace {
@@ -34,11 +34,7 @@ void print(const rawframe::result::Error& error) {
 
 /// A fresh SourceEntityId: random, as a version 4 UUID.
 rawframe::base::Bits128 freshId() {
-    std::random_device device;
-    const auto kWord = [&device] {
-        return (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
-    };
-    rawframe::base::Bits128 id{.high = kWord(), .low = kWord()};
+    rawframe::base::Bits128 id{.high = rawframe::base::secureRandomWord(), .low = rawframe::base::secureRandomWord()};
     id.high = (id.high & ~std::uint64_t{0xF000}) | std::uint64_t{0x4000};
     id.low = (id.low & ~(std::uint64_t{0xC} << 60U)) | (std::uint64_t{0x8} << 60U);
     return id;

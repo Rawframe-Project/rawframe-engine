@@ -146,14 +146,7 @@ public:
 
     std::uint64_t draw() noexcept {
         if (!seeded_) {
-            std::array<std::byte, 8> bytes{};
-            const bool kFilled = base::fillSecureRandom(bytes);
-            RAWFRAME_CHECK(kFilled, "the secure random source is unavailable");
-            std::uint64_t value = 0;
-            for (const std::byte kByte : bytes) {
-                value = (value << 8U) | std::to_integer<std::uint64_t>(kByte);
-            }
-            return value;
+            return base::secureRandomWord();
         }
         random_ += 0x9e3779b97f4a7c15ULL;
         std::uint64_t mixed = random_;

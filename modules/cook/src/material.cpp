@@ -1,5 +1,6 @@
 #include "rawframe/cook/material.h"
 
+#include "rawframe/base/secure_random.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/cook/errors.h"
 #include "rawframe/material/canvas.h"
@@ -15,7 +16,6 @@
 #include <cstdint>
 #include <fstream>
 #include <iterator>
-#include <random>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -73,11 +73,10 @@ std::unexpected<result::Error> toolFailed(std::string why) {
 /// the toolchain builds does not depend on where (the two cooks of one
 /// source build in two places and are compared).
 result::Result<std::filesystem::path> freshDirectory() {
-    std::random_device random;
     std::error_code failed;
     const std::filesystem::path kTemporary = std::filesystem::temp_directory_path(failed);
     for (std::size_t each = 0; !failed && each < 100; ++each) {
-        const std::uint64_t kName = (std::uint64_t{random()} << 32U) | std::uint64_t{random()};
+        const std::uint64_t kName = base::secureRandomWord();
         std::string named = "rawframe-material-";
         for (std::size_t at = 0; at < 16; ++at) {
             named += "0123456789abcdef"[(kName >> (60 - (4 * at))) & 0xFU];

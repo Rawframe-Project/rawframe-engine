@@ -19,6 +19,7 @@
 #include "rawframe/animation/errors.h"
 #include "rawframe/animation/skeleton.h"
 #include "rawframe/animation_import/import.h"
+#include "rawframe/base/secure_random.h"
 #include "rawframe/content/sidecar.h"
 
 #include <array>
@@ -29,7 +30,6 @@
 #include <iterator>
 #include <map>
 #include <optional>
-#include <random>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -75,11 +75,8 @@ rawframe::base::Bits128 identityFor(const fs::path& document) {
             return kSidecar->id.value;
         }
     }
-    std::random_device device;
-    const auto kWord = [&device] {
-        return (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
-    };
-    return rawframe::base::Bits128{.high = kWord(), .low = kWord()};
+    return rawframe::base::Bits128{.high = rawframe::base::secureRandomWord(),
+                                   .low = rawframe::base::secureRandomWord()};
 }
 
 void writeDocument(const fs::path& document, std::string_view text, rawframe::base::Bits128 id) {

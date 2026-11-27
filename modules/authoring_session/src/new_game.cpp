@@ -3,6 +3,7 @@
 #include "rawframe/authoring/errors.h"
 #include "rawframe/authoring_session/game.h"
 #include "rawframe/base/bits128.h"
+#include "rawframe/base/secure_random.h"
 #include "rawframe/content/sidecar.h"
 
 #include <algorithm>
@@ -10,7 +11,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <map>
-#include <random>
 #include <string>
 #include <vector>
 
@@ -152,12 +152,8 @@ result::Result<NewGame> newGame(const std::filesystem::path& from, const std::fi
     std::ranges::sort(files);
     // Every identity the template mints, each made fresh: its sidecars'
     // resources and subassets, and its description's components.
-    std::random_device device;
-    const auto kWord = [&device] {
-        return (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
-    };
-    const auto kFresh = [&kWord] {
-        return base::Bits128{.high = kWord() | 1U, .low = kWord()};
+    const auto kFresh = [] {
+        return base::Bits128{.high = base::secureRandomWord() | 1U, .low = base::secureRandomWord()};
     };
     std::map<std::string, std::string, std::less<>> fresh;
     std::map<std::filesystem::path, std::string> texts;

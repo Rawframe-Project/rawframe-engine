@@ -2,6 +2,7 @@
 
 #include "rawframe/authoring/errors.h"
 #include "rawframe/authoring_session/game.h"
+#include "rawframe/base/secure_random.h"
 #include "rawframe/document/json.h"
 #include "rawframe/kest/doors.h"
 #include "rawframe/kest/machine.h"
@@ -14,7 +15,6 @@
 #include <cmath>
 #include <memory>
 #include <optional>
-#include <random>
 
 namespace rawframe::authoring_session {
 
@@ -257,11 +257,7 @@ void makeDoor(kest::DoorCall& call, void* context) noexcept {
         call.fail("an entity's name is at most 256 characters");
         return;
     }
-    std::random_device device;
-    const auto kWord = [&device] {
-        return (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
-    };
-    const base::Bits128 kEntity{.high = kWord(), .low = kWord()};
+    const base::Bits128 kEntity{.high = base::secureRandomWord(), .low = base::secureRandomWord()};
     Value operation = Value::object();
     operation.add("operation", Value::string("scene.create_entity"));
     operation.add("entity", Value::string(entityText(kEntity)));
