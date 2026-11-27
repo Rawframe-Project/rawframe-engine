@@ -269,8 +269,6 @@ jobs:
       - name: Tools
         shell: pwsh
         run: |
-          choco install llvm --version=20.1.8 --allow-downgrade -y --no-progress
-          "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
           python -m pip install aioquic
       - name: python3 by that name, as the test scripts call it
         run: |
@@ -285,6 +283,10 @@ jobs:
           cmd /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && set" | ForEach-Object {
             if ($_ -match '^([^=]+)=(.*)$') { "$($matches[1])=$($matches[2])" >> $env:GITHUB_ENV }
           }
+          # The clang-cl that Visual Studio ships with its STL: an update of
+          # the image raises the Clang the STL accepts, and a separately
+          # installed LLVM falls behind it.
+          "$vs\VC\Tools\Llvm\x64\bin" >> $env:GITHUB_PATH
       - name: Restore MsQuic and OpenSSL
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
