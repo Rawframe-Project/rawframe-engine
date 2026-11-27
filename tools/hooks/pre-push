@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 # Runs the changed tier before every push. Install once with:
 #   git config core.hooksPath tools/hooks
-# On the development server the check goes through the workspace's
-# heavy-job wrapper at four jobs, as every large build there does: in a
-# fresh checkout or worktree, or after a change that rebuilds much of the
-# tree, the changed tier builds the whole of clang-development.
+# Inside the Rawframe workspace the check takes a slot of the workspace's
+# heavy-job wrapper, as every large build there does: in a fresh checkout
+# or worktree, or after a change that rebuilds much of the tree, the
+# changed tier builds the whole of clang-development. On Windows it runs on
+# Linux, in the workspace's WSL distribution (tools/linux.sh).
 root="$(git rev-parse --show-toplevel)"
-wrapper=${RAWFRAME_HEAVY_WRAPPER:-/home/rawframe-project/tools/heavy.sh}
-if [ -f "$wrapper" ] && [ -x "$wrapper" ]; then
-    exec "$wrapper" env JOBS=4 "$root/tools/check.sh" changed
-fi
-exec "$root/tools/check.sh" changed
+workspace=""
+dir=$root
+while [ "$dir" != "$(dirname "$dir")" ]; do
+    dir=$(dirname "$dir")
+    if [ -f "$dir/tools/heavy.sh" ] && [ -f "$dir/tools/linux.sh" ]; then
+        workspace=$dir
+        break
+    fi
+done
+[ -n "$workspace" ] || exec "$root/tools/check.sh" changed
+case "$(uname -s)" in
+MINGW* | MSYS* | CYGWIN*) exec "$workspace/tools/heavy.sh" "$workspace/tools/linux.sh" tools/check.sh changed ;;
+*) exec "$workspace/tools/heavy.sh" "$root/tools/check.sh" changed ;;
+esac

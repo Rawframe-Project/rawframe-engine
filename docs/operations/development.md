@@ -102,10 +102,11 @@ Beside each directory of containers, `containers.stamp` names the Maul RHI relea
 
 ## The shared machine
 
-The development server is shared by other sessions, the CI runner and unrelated projects. Run full builds and the `pr`, `full` and `nightly` tiers through the workspace's heavy-job wrapper, at eight jobs or fewer:
+The workspace's machine is shared by other sessions and the CI runner. Run full builds and the `pr`, `full` and `nightly` tiers through the workspace's heavy-job wrapper, which holds a job to its share of the processor; on Windows, the tiers run in the workspace's WSL distribution through `tools/linux.sh`:
 
 ```sh
-/home/rawframe-project/tools/heavy.sh tools/check.sh pr
+"$RAWFRAME_ROOT/tools/heavy.sh" tools/check.sh pr                                  # on Linux
+"$RAWFRAME_ROOT/tools/heavy.sh" "$RAWFRAME_ROOT/tools/linux.sh" tools/check.sh pr   # on Windows
 ```
 
 Stop any server, client or emulator a run started when the run ends, by the PID it was started with.

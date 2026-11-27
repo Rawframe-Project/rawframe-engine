@@ -22,12 +22,12 @@ out/clang-development/modules/world/rawframe_world_tests Barrier    # the cases 
 tools/gen_shaders.py          # rebuild the committed shader containers (needs the shader toolchain)
 ```
 
-Run `pr`, `full` and any full build through the workspace's heavy-job wrapper, at eight jobs or fewer: `/home/rawframe-project/tools/heavy.sh tools/check.sh pr`. `git config core.hooksPath tools/hooks` makes the pre-push hook run `changed`, through the wrapper at four jobs where the wrapper is installed. Presets are in `CMakePresets.json`; [docs/operations/development.md](docs/operations/development.md) lists them and the toolchain.
+Run `pr`, `full` and any full build through the workspace's heavy-job wrapper, which holds a job to eight threads: `"$RAWFRAME_ROOT/tools/heavy.sh" tools/check.sh pr`. The tiers need the Linux toolchain; on Windows run them in the workspace's WSL distribution, `"$RAWFRAME_ROOT/tools/heavy.sh" "$RAWFRAME_ROOT/tools/linux.sh" tools/check.sh pr`, and build `windows-development` natively for Direct3D 12 and the real GPU. `git config core.hooksPath tools/hooks` makes the pre-push hook run `changed` that way inside the workspace. Presets are in `CMakePresets.json`; [docs/operations/development.md](docs/operations/development.md) lists them and the toolchain.
 
 ## Ways to hurt yourself
 
 - **Killing by pattern.** Never `pkill -f`, `pgrep | kill` or `kill` a PID found by matching a name or path. Tests start `rawframe-server`, `rawframe-client`, Xvfb and Monado, and other sessions and the CI runner on this machine run the same programs. Kill only a PID you started.
-- **Starving the machine.** The machine is shared with other sessions and the self-hosted CI runner. Builds of several trees and the `pr`, `full` and `nightly` tiers go through `heavy.sh`; never run them bare or with more than eight jobs.
+- **Starving the machine.** The machine is shared with other sessions and the self-hosted CI runner. Builds of several trees and the `pr`, `full` and `nightly` tiers go through `heavy.sh`; never run them bare or raise their jobs.
 - **Editing generated files.** Shader containers (`modules/*/src/generated/*.mrsc`, `modules/render_scene_gpu/tests/generated/`), the CLDR tables (`modules/localization/src/generated/`), the material functions (`modules/material/library/`), Studio's icons (`modules/studio/icons/icons.rgba`, `modules/studio/src/icons.h`) and the packing golden vectors (`modules/build/tests/golden/`) are written by tools. Change the generator or its input and regenerate; [docs/operations/development.md](docs/operations/development.md#generated-files) names each command.
 - **Editing vendored code.** `third_party/` is upstream's. Move a pin with its update script ([docs/operations/dependencies.md](docs/operations/dependencies.md)), never by hand.
 - **Running fork code on the runner.** The self-hosted runner runs this repository's branches only. Never add a job on it that a fork's pull request can reach, and never check out a pull request's code under `pull_request_target`.
@@ -55,6 +55,7 @@ Run `pr`, `full` and any full build through the workspace's heavy-job wrapper, a
 
 Follow the [repository standard's Tests section](https://github.com/Rawframe-Project/.github/blob/main/docs/repository-standard.md#tests); in this repository:
 
+- Before pushing a change a played game can show, play it with the `verifying-a-change` skill (`.agents/skills/verifying-a-change/`) and put what the run showed in the pull request's Verification section. Passing tests alone do not show the engine still plays.
 - A module's tests are `RAWFRAME_TEST(name)` functions in its `tests/`, checking with `RAWFRAME_EXPECT`, which reports and continues. Add a case to the module's existing test file; cross-module scenarios go in `tests/scenarios/`. The fatal path is tested in a child process with the harness's runner.
 - Test through public headers. Do not test private state or call order.
 - Window, browser, headset and played-game tests carry the label `integration`. Keep them to a few end-to-end scenarios; never add one for a cosmetic change.

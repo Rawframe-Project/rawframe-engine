@@ -79,9 +79,10 @@ jobs:
       - name: Check
         env:
           EVENT: ${{ github.event_name }}
-          # The runner shares its machine with every session working on it,
-          # so it keeps to their limit of eight jobs, at a lower priority.
-          JOBS: 8
+          # The runner is a WSL distribution on the owner's workstation,
+          # which every session builds on too: it takes twelve of its 32
+          # threads, at a lower priority.
+          JOBS: 12
         run: |
           case "$EVENT" in
           pull_request) tier=pr ;;
