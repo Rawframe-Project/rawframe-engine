@@ -26,7 +26,7 @@ Pick the sample that runs the changed code; when two apply, run both.
 | Lights, shadows, materials | `lighting` | always with `--draw` |
 | Hands, headsets | `reach` | flat clients play it too |
 
-The configuration keys a test uses for that game (`hosts/arena/tests/<game>*.conf*`) show which settings exercise what; pass any of them with `--set`.
+The configuration keys a test uses for that game (`hosts/arena/tests/<game>*.conf*`) show which settings exercise what; pass any of them with `--set`, which also replaces a line the script writes by default.
 
 ## 2. Play it
 
@@ -46,7 +46,7 @@ The script builds the arena and the cook tool, cooks the game into a fresh folde
 - every `*_summary` record (ticks, bots admitted, bodies made, frames drawn, Kest's counts, memory),
 - a verdict: `FAILED` when the arena failed, logged an error, or stopped before its summaries.
 
-Builds and the run go through the workspace's `heavy.sh`, so they may wait for a slot. On Windows, run the script on Linux with `"$RAWFRAME_ROOT/tools/linux.sh" .agents/skills/verifying-a-change/verify_game.sh <game>`, or natively against the Direct3D 12 tree with `--tree out/windows-development`.
+Builds and the run go through the workspace's `heavy.sh`, so they may wait for a slot. On Windows, run the script on Linux inside one slot, since the WSL mirror has no wrapper of its own: `"$RAWFRAME_ROOT/tools/heavy.sh" "$RAWFRAME_ROOT/tools/linux.sh" .agents/skills/verifying-a-change/verify_game.sh <game>`; or natively against the Direct3D 12 tree with `--tree out/windows-development`.
 
 ## 3. Judge the run
 
@@ -61,7 +61,7 @@ A warning the change introduced is a finding, even when the verdict is clean. An
 ## 4. Changes a bot run cannot reach
 
 - **Authoring and Studio.** Drive the same operations headless: `rawframe-author describe`, a `session` fed JSON records, or the `mcp` tools ([scenes and authoring](../../../docs/user/scenes-and-authoring.md)). Studio's own window is never the proof.
-- **Windows, input devices, the client program, the browser.** Run the integration tests of the area through the wrapper: `"$RAWFRAME_ROOT/tools/heavy.sh" ctest --test-dir out/clang-development -L integration -R <area>` (on Windows, inside `tools/linux.sh`). They start their own Xvfb; kill only a PID you started.
+- **Windows, input devices, the client program, the browser.** Run the integration tests of the area through the wrapper: `"$RAWFRAME_ROOT/tools/heavy.sh" ctest --test-dir out/clang-development -L integration -R <area>` (on Windows, `"$RAWFRAME_ROOT/tools/heavy.sh" "$RAWFRAME_ROOT/tools/linux.sh" ctest ...`). They start their own Xvfb; kill only a PID you started.
 - **A dedicated server.** `rawframe-server` with a game's configuration ([dedicated server](../../../docs/user/dedicated-server.md)) and `rawframe-author connect` to read its World.
 
 ## 5. Report it

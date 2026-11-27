@@ -12,7 +12,8 @@
 #   --seconds S     how long the run plays, at 120 iterations a second (default 10)
 #   --draw          also draw the first bot's view offscreen and write its
 #                   last frame as frame.png (needs Maul RHI and an adapter)
-#   --set KEY=VALUE add a configuration line; may be repeated
+#   --set KEY=VALUE add a configuration line, or replace one written by
+#                   default; may be repeated
 #
 # Run from the repository root. Builds and the run go through the
 # workspace's heavy-job wrapper where it is installed. The work folder,
@@ -36,7 +37,7 @@ while [ $# -gt 0 ]; do
         *) break ;;
     esac
 done
-[ $# -eq 1 ] || { sed -n '7,15p' "$0" >&2; exit 64; }
+[ $# -eq 1 ] || { sed -n '7,16p' "$0" >&2; exit 64; }
 game=$1
 
 # Paths as the programs read them: Git's bash on Windows names D:/a as
@@ -80,27 +81,37 @@ heavy "$tree/hosts/cook/rawframe-cook" "games/$game" "$work/content" "$cache" >"
 grep -q 'failed 0' "$work/cook.log" ||
     { grep -v '^cooking ' "$work/cook.log" | tail -n 20; echo "cook refused sources; full log: $work/cook.log" >&2; exit 1; }
 
+# A key given with --set replaces the default line for it: the
+# configuration refuses a key written twice.
+given=" "
+for line in "${extra[@]+"${extra[@]}"}"; do
+    given="$given${line%%=*} "
+done
+default() {
+    case "$given" in *" $1 "*) ;; *) echo "$1 = $2" ;; esac
+}
+
 {
-    echo "host.maximum_iterations = $((seconds * 120))"
-    echo "host.iteration_rate = 120"
-    echo "world.tick_rate = 60"
-    echo "kest.game = $root/$description"
-    echo "content.root = $work/content"
-    echo "network.loopback.latency_ms = 10"
-    echo "replication.endpoint = arena"
-    echo "bots.count = $bots"
-    echo "bots.endpoint = arena"
+    default host.maximum_iterations "$((seconds * 120))"
+    default host.iteration_rate "120"
+    default world.tick_rate "60"
+    default kest.game "$root/$description"
+    default content.root "$work/content"
+    default network.loopback.latency_ms "10"
+    default replication.endpoint "arena"
+    default bots.count "$bots"
+    default bots.endpoint "arena"
     # What is checked is what the run did, not how fast a shared machine
     # ticks: without these a loaded machine stops the run as overloaded.
-    echo "world.degraded_ms = 600000"
-    echo "world.overload_ms = 0"
+    default world.degraded_ms "600000"
+    default world.overload_ms "0"
     if [ "$draw" = 1 ]; then
-        echo "render.device = any"
-        echo "render.offscreen = true"
-        echo "render.width = 640"
-        echo "render.height = 360"
-        echo "render.capture = $work/frame.tga"
-        echo "render.read_every = 8"
+        default render.device "any"
+        default render.offscreen "true"
+        default render.width "640"
+        default render.height "360"
+        default render.capture "$work/frame.tga"
+        default render.read_every "8"
     fi
     for line in "${extra[@]+"${extra[@]}"}"; do
         echo "${line%%=*} = ${line#*=}"
