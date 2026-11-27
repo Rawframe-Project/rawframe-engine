@@ -3,7 +3,10 @@
 # number no server holds and says which (-displayfd), so tests started at
 # the same moment never share one: xvfb-run -a chooses by lock files and
 # could give two of them the same display, one test's clicks and keys then
-# reaching the other's window.
+# reaching the other's window. Never pass -nolisten local: Xvfb takes a
+# number only where its abstract socket binds, and clients try that socket
+# first, so without it a server of another WSL distribution (they share the
+# network namespace) could answer this display.
 #
 # usage: xvfb_run.sh [-s "<Xvfb arguments>"] <command> [<argument>...]
 set -uo pipefail
@@ -34,10 +37,13 @@ if [ -z "$number" ]; then
     kill "$server" 2>/dev/null
     exit 1
 fi
+# Nor the desktop's Wayland compositor: a window opens on Wayland first
+# where WAYLAND_DISPLAY names one (WSLg names its own), and would then
+# show on the desktop while the test reads this server's empty screen.
 # Nor the machine's session bus: a client on it would join the desktop's
 # accessibility bus; a test that reads a UI aloud starts a bus of
 # its own.
-unset DBUS_SESSION_BUS_ADDRESS AT_SPI_BUS_ADDRESS
+unset WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS AT_SPI_BUS_ADDRESS
 DISPLAY=":$number" "$@"
 status=$?
 kill "$server" 2>/dev/null
