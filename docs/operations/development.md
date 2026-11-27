@@ -22,7 +22,7 @@ The build needs CMake 3.28, Ninja and ccache, with GCC 14 and Clang 20 (`gcc-14`
 | The web build | `libc++-20-dev-wasm32`, `libclang-rt-20-dev-wasm32`, `wasi-libc`, `lld-20`, Node.js 18 or later |
 | The QUIC tests, which play a browser with an independent HTTP/3 implementation | `python3-aioquic` |
 | The web download budget | `brotli` |
-| Window tests | `xvfb` |
+| Window tests, which find, click and capture windows by name | `xvfb`, `libxtst6`, `x11-utils` (`xwininfo`), `x11-apps` (`xwd`) |
 | Pixel tests on the CPU | `mesa-vulkan-drivers` (lavapipe) |
 
 Optional, each turning a skipped test into a run one:
@@ -65,7 +65,7 @@ out/clang-development/modules/world/rawframe_world_tests --list   # the cases in
 out/clang-development/modules/world/rawframe_world_tests Barrier  # the cases whose name contains Barrier
 ```
 
-Tests read the source tree's files through `RAWFRAME_TEST_FILES` and start programs from the build tree. Window, browser, headset and played-game tests run under their own X server (`tools/xvfb_run.sh`) and carry the label `integration`; see [checks.md](checks.md).
+Tests read the source tree's files through `RAWFRAME_TEST_FILES` and start programs from the build tree. Window, browser, headset and played-game tests run under their own X server (`tools/xvfb_run.sh`) and carry the label `integration`; see [checks.md](checks.md). Xvfb makes its socket in `/tmp/.X11-unix`, which must be writable (mode 1777): under WSL, WSLg mounts that folder read-only, and Xvfb then does not start.
 
 ## Playing a game from a build
 
