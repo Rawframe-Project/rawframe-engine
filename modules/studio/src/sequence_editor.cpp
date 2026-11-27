@@ -1,11 +1,11 @@
 #include "rawframe/authoring_session/game.h"
+#include "rawframe/base/secure_random.h"
 #include "rawframe/sequence/sequence.h"
 #include "shell.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <random>
 
 namespace rawframe::studio {
 
@@ -805,12 +805,11 @@ bool ShellParticipant::pressSequence(ui::Node node) {
         })) {
             name += "_";
         }
-        std::random_device device;
         std::uint64_t identity = 0;
         while (identity == 0 || std::ranges::any_of(kSequence->keys, [&](const sequence::Key& key) {
                    return key.kind == sequence::KeyKind::Event && key.event == identity;
                })) {
-            identity = (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
+            identity = base::secureRandomWord();
         }
         putSequenceKey(std::nullopt,
                        held_.sequenceTime,

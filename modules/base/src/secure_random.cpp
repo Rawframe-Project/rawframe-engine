@@ -1,5 +1,9 @@
 #include "rawframe/base/secure_random.h"
 
+#include "rawframe/base/assert.h"
+
+#include <array>
+
 #if defined(__linux__)
 #include <cerrno>
 #include <sys/random.h>
@@ -60,6 +64,17 @@ bool fillSecureRandom(std::span<std::byte> into) noexcept {
     static_cast<void>(into);
     return false;
 #endif
+}
+
+std::uint64_t secureRandomWord() noexcept {
+    std::array<std::byte, 8> bytes{};
+    const bool kFilled = fillSecureRandom(bytes);
+    RAWFRAME_CHECK(kFilled, "the secure random source is unavailable");
+    std::uint64_t value = 0;
+    for (const std::byte kByte : bytes) {
+        value = (value << 8U) | std::to_integer<std::uint64_t>(kByte);
+    }
+    return value;
 }
 
 } // namespace rawframe::base

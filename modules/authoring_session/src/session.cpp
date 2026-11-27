@@ -27,6 +27,7 @@
 #include "rawframe/authoring_session/link.h"
 #include "rawframe/base/bits128.h"
 #include "rawframe/base/files.h"
+#include "rawframe/base/secure_random.h"
 #include "rawframe/content/sidecar.h"
 #include "rawframe/cook/importers.h"
 #include "rawframe/document/json.h"
@@ -49,7 +50,6 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <random>
 #include <set>
 #include <string>
 #include <string_view>
@@ -560,11 +560,8 @@ private:
                                            "a new scene goes in a directory that is there")
                                        .withContext("scene", record.scene)};
         }
-        std::random_device device;
-        const auto kWord = [&device] {
-            return (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
-        };
-        const content::ResourceId kIdentity{.value = base::Bits128{.high = kWord(), .low = kWord()}};
+        const content::ResourceId kIdentity{
+            .value = base::Bits128{.high = base::secureRandomWord(), .low = base::secureRandomWord()}};
         RAWFRAME_TRY_ASSIGN(const std::string kText, rawframe::scene::writeScene(rawframe::scene::Scene{}));
         // Each file made where nothing is, so nothing put there meanwhile
         // is followed or replaced; the sidecar last, so a scene without one

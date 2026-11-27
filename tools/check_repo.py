@@ -40,6 +40,10 @@
    `python3 -c '...'` compiles: an apostrophe in it ends the shell's quote
    and leaves Python a broken program, which only shows when the script
    runs, perhaps only at night.
+12. No `std::random_device` in engine source: libstdc++ reads it from the
+   processor's RDSEED, which AMD's Zen 5 answers with zero for many calls
+   under load, so what it mints repeats. Fresh values come from
+   rawframe/base/secure_random.h.
 
 Exits non-zero on any failure and prints one line per finding.
 """
@@ -70,6 +74,7 @@ ATTRIBUTION_ALLOWED = {
     "d0f7bda78f9c5cbf77537927612e2b5e49fa063b",
 }
 VALUE_CALL = re.compile(r"\.value\(\s*\)")
+RANDOM_DEVICE = re.compile(r"\bstd::random_device\b")
 BOUNDS_HEADER = Path("modules/execution/include/rawframe/execution/bounds.h")
 BOUNDS_LITERAL = re.compile(r"\b(4096|1024)\b|from(Milli)?[Ss]econds\(\s*\d")
 # Vendored providers stay behind their module: no public
@@ -226,6 +231,16 @@ def check_value_calls(files, findings):
         for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if VALUE_CALL.search(line.split("//")[0]):
                 findings.append(f"{relative}:{number}: .value() call; test has_value() and dereference instead")
+
+
+def check_random_device(files, findings):
+    for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[0] not in SOURCE_ROOTS or path.suffix not in SOURCE_SUFFIXES:
+            continue
+        for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            if RANDOM_DEVICE.search(line.split("//")[0]):
+                findings.append(f"{relative}:{number}: std::random_device; use base::secureRandomWord instead")
 
 
 def check_bounds_literals(files, findings):
@@ -416,6 +431,7 @@ def main():
     check_launcher(files, modules, findings)
     check_gpu_language(files, findings)
     check_value_calls(files, findings)
+    check_random_device(files, findings)
     check_bounds_literals(files, findings)
     check_sizes(files, findings, notes)
     check_owner_rules(files, findings)

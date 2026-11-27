@@ -1,6 +1,7 @@
 #include "records.h"
 
 #include "hints.h"
+#include "rawframe/base/secure_random.h"
 
 #include <algorithm>
 #include <array>
@@ -10,7 +11,6 @@
 #include <cstdio>
 #include <functional>
 #include <iterator>
-#include <random>
 #include <span>
 #include <utility>
 
@@ -1085,11 +1085,10 @@ std::array<double, 3> viewTarget(const Value* view) {
 }
 
 std::string mintedIdentity() {
-    std::random_device device;
     std::array<std::uint8_t, 16> bytes{};
-    for (std::size_t each = 0; each < bytes.size(); each += 4) {
-        const std::uint32_t kWord = device();
-        for (std::size_t part = 0; part < 4; ++part) {
+    for (std::size_t each = 0; each < bytes.size(); each += 8) {
+        const std::uint64_t kWord = base::secureRandomWord();
+        for (std::size_t part = 0; part < 8; ++part) {
             bytes[each + part] = static_cast<std::uint8_t>(kWord >> (8U * part));
         }
     }
@@ -1109,10 +1108,9 @@ std::string mintedIdentity() {
 }
 
 std::string mintedHexIdentity() {
-    std::random_device device;
     std::uint64_t made = 0;
     while (made == 0) {
-        made = (std::uint64_t{device()} << 32U) | device();
+        made = base::secureRandomWord();
     }
     constexpr std::string_view kDigits = "0123456789abcdef";
     std::string text;

@@ -2,6 +2,7 @@
 
 #include "rawframe/authoring/errors.h"
 #include "rawframe/base/bits128.h"
+#include "rawframe/base/secure_random.h"
 #include "rawframe/document/json.h"
 #include "rawframe/process/child.h"
 
@@ -10,7 +11,6 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
-#include <random>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -229,14 +229,11 @@ result::Result<Imported> importAsset(const std::filesystem::path& game,
         }
         madeFiles.push_back(kTo);
     }
-    std::random_device device;
-    const auto kWord = [&device] {
-        return (std::uint64_t{device()} << 32U) | std::uint64_t{device()};
-    };
-    made.resource = content::ResourceId{.value = base::Bits128{.high = kWord() | 1U, .low = kWord()}};
+    made.resource = content::ResourceId{
+        .value = base::Bits128{.high = base::secureRandomWord() | 1U, .low = base::secureRandomWord()}};
     const std::string kDescription = textOf(game);
     do {
-        made.id = kWord();
+        made.id = base::secureRandomWord();
     } while (made.id == 0 || kDescription.find(hexOf(made.id)) != std::string::npos);
     const std::string kSidecarText =
         content::writeSidecar(content::Sidecar{.id = made.resource, .importer = std::string{importer}});

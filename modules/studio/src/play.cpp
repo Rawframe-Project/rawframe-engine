@@ -1,13 +1,13 @@
 #include "play.h"
 
 #include "rawframe/authoring_session/attach.h"
+#include "rawframe/base/secure_random.h"
 #include "rawframe/studio/errors.h"
 
 #include <algorithm>
 #include <array>
 #include <cstdio>
 #include <initializer_list>
-#include <random>
 #include <string_view>
 #include <system_error>
 #include <thread>
@@ -145,11 +145,13 @@ std::string settingsOf(const std::string& given,
 
 result::Result<Play> Play::start(const PlaySettings& settings) {
     RAWFRAME_TRY(privateDirectory(settings.directory));
-    std::random_device device;
     std::string token;
     constexpr std::string_view kDigits = "0123456789abcdef";
-    for (int each = 0; each < 48; ++each) {
-        token += kDigits[device() % 16];
+    for (int word = 0; word < 3; ++word) {
+        const std::uint64_t kWord = base::secureRandomWord();
+        for (unsigned digit = 0; digit < 16; ++digit) {
+            token += kDigits[(kWord >> (4U * digit)) & 0xFU];
+        }
     }
     RAWFRAME_TRY(written(settings.directory / "token", token + "\n"));
     Play play;
@@ -175,7 +177,6 @@ result::Status Play::launch() {
     ++launches_;
     admitted_ = false;
     clientLogRead_ = 0;
-    std::random_device device;
     // Three ports below every system's range for outgoing connections
     // (Linux takes 32768 and up, Windows 49152 and up), so no socket of
     // another process holds one by chance: the server's, the client's
@@ -183,7 +184,7 @@ result::Status Play::launch() {
     // Below 30000, where the tests' tools/free_port.py draws, so the two
     // never meet; a port taken all the same is refused and the game
     // launched again on others.
-    const auto kServerPort = static_cast<std::uint16_t>(20000 + (device() % 2500) * 4);
+    const auto kServerPort = static_cast<std::uint16_t>(20000 + (base::secureRandomWord() % 2500) * 4);
     const auto kEndpointPort = static_cast<std::uint16_t>(kServerPort + 1);
     const auto kServerEndpointPort = static_cast<std::uint16_t>(kServerPort + 2);
     const std::filesystem::path& kAt = directory_;
