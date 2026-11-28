@@ -6,12 +6,15 @@
 #
 #   verify_game.sh [options] <game>
 #
-#   <game>          a folder under games/ (runners, plaza, crates, ...)
+#   <game>          a folder under games/ (runners, plaza, crates, ...); its
+#                   description is <game>/<game>.game, or the folder's only
+#                   one, or the one --set kest.game names
 #   --tree DIR      the build tree (default out/clang-development)
 #   --bots N        how many bots join (default 4)
 #   --seconds S     how long the run plays, at 120 iterations a second (default 10)
-#   --draw          also draw the first bot's view offscreen and write its
-#                   last frame as frame.png (needs Maul RHI and an adapter)
+#   --draw          also draw the first two bots' views offscreen, as two
+#                   local players see them, and write the last frame as
+#                   frame.png (needs Maul RHI and an adapter)
 #   --set KEY=VALUE add a configuration line, or replace one written by
 #                   default; may be repeated
 #
@@ -37,7 +40,7 @@ while [ $# -gt 0 ]; do
         *) break ;;
     esac
 done
-[ $# -eq 1 ] || { sed -n '7,16p' "$0" >&2; exit 64; }
+[ $# -eq 1 ] || { sed -n '7,19p' "$0" >&2; exit 64; }
 game=$1
 
 # Paths as the programs read them: Git's bash on Windows names D:/a as
@@ -49,8 +52,30 @@ native() {
 root=$(native "$(git rev-parse --show-toplevel)")
 cd "$root"
 here=$(cd "$(dirname "$0")" && pwd)
-description=$(find "games/$game" -maxdepth 1 -name '*.game' | head -n 1)
-[ -n "$description" ] || { echo "no games/$game/*.game" >&2; exit 64; }
+# The game's own description, named after its folder, or the folder's only
+# one; a folder of several with none named so is refused rather than one
+# taken at random, unless --set kest.game names it.
+named=""
+for line in "${extra[@]+"${extra[@]}"}"; do
+    [ "${line%%=*}" != kest.game ] || named=1
+done
+descriptions=()
+while IFS= read -r found; do
+    descriptions+=("$found")
+done < <(find "games/$game" -maxdepth 1 -name '*.game' | sort)
+if [ -f "games/$game/$game.game" ]; then
+    description="games/$game/$game.game"
+elif [ "${#descriptions[@]}" -eq 1 ]; then
+    description=${descriptions[0]}
+elif [ -n "$named" ] && [ -d "games/$game" ]; then
+    description=""
+elif [ "${#descriptions[@]}" -eq 0 ]; then
+    echo "no games/$game/*.game" >&2
+    exit 64
+else
+    echo "games/$game holds several descriptions and none is $game.game: ${descriptions[*]}; name one with --set kest.game=<path>" >&2
+    exit 64
+fi
 
 # The workspace's heavy-job wrapper, found above the checkout.
 wrapper=""
@@ -95,7 +120,7 @@ default() {
     default host.maximum_iterations "$((seconds * 120))"
     default host.iteration_rate "120"
     default world.tick_rate "60"
-    default kest.game "$root/$description"
+    [ -z "$description" ] || default kest.game "$root/$description"
     default content.root "$work/content"
     default network.loopback.latency_ms "10"
     default replication.endpoint "arena"
@@ -106,6 +131,9 @@ default() {
     default world.degraded_ms "600000"
     default world.overload_ms "0"
     if [ "$draw" = 1 ]; then
+        # What is drawn is a local player's view: two when there are two
+        # bots to be them, as the drawn arena tests do.
+        default bots.local_players "$((bots < 2 ? bots : 2))"
         default render.device "any"
         default render.offscreen "true"
         default render.width "640"
