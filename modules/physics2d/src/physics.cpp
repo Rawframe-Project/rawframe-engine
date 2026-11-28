@@ -2,6 +2,7 @@
 
 #include "attachments.h"
 #include "characters.h"
+#include "drives.h"
 #include "joints.h"
 #include "rawframe/base/assert.h"
 #include "rawframe/physics/filters.h"
@@ -167,6 +168,8 @@ struct Physics2D::State {
     std::map<std::uint64_t, std::vector<tilemap::SolidRun>> tilemaps;
     std::optional<world::Query<world::Write<Joint2D>>> jointQuery;
     std::optional<Attachments> attachments;
+    std::optional<Drives> drives;
+    DynamicBodies dynamicBodies;
     std::map<world::EntityHandle, MappedJoint> joints;
     std::vector<std::pair<world::EntityHandle, Joint2D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
@@ -817,6 +820,16 @@ struct Physics2D::State {
 
         followJoints(world);
 
+        // 3b. Constant forces and align drives, on the dynamic bodies.
+        dynamicBodies.clear();
+        for (const Row& row : rows) {
+            const Mapped& entry = mapped.find(row.entity)->second;
+            if (!entry.refused && entry.made.motion == static_cast<std::uint8_t>(physics::Motion::Dynamic)) {
+                dynamicBodies.emplace_back(row.entity, entry.body);
+            }
+        }
+        drives->apply(world, physics, dynamicBodies, statistics);
+
         // 4. Characters find their moves, in entity order and each against
         // the world as the last step left it; then one step of the tick's
         // length.
@@ -961,6 +974,9 @@ result::Status Physics2D::declareSystems(const schema::SchemaRegistry& registry,
     const std::vector<schema::ComponentRuntimeId> kAttachReads = state.attachments->reads();
     state.reads.insert(state.reads.end(), kAttachReads.begin(), kAttachReads.end());
     state.reads.push_back(*state.tilesShape);
+    RAWFRAME_TRY_ASSIGN(state.drives, Drives::resolve(registry));
+    const std::vector<schema::ComponentRuntimeId> kDriveReads = state.drives->reads();
+    state.reads.insert(state.reads.end(), kDriveReads.begin(), kDriveReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.target);

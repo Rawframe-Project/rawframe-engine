@@ -80,6 +80,9 @@ public:
                       diagnostics::field("overlapsBegun", kStatistics.overlapsBegun),
                       diagnostics::field("raysRewound", kStatistics.raysRewound),
                       diagnostics::field("rewindsClamped", kStatistics.rewindsClamped),
+                      diagnostics::field("forcesApplied", kStatistics.forcesApplied),
+                      diagnostics::field("alignsMade", kStatistics.alignsMade),
+                      diagnostics::field("alignsRefused", kStatistics.alignsRefused),
                       diagnostics::field("digest", std::string_view{digest.data(), digest.size()})});
     }
 

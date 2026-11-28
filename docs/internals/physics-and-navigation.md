@@ -21,7 +21,7 @@ One system per World, `rawframe.physics2d.step` or `rawframe.physics3d.step`, st
 
 1. Bodies follow their entities, in entity order: an entity that gained the body components gets a body, one that lost them loses it, and a changed body component makes the body again.
 2. What gameplay wrote since the last step goes in. A pose that is not what the last step wrote is a teleport, which makes the body again there, so a body put somewhere carries nothing of where it was. A velocity is a new velocity; an impulse is applied and cleared.
-3. Joints follow their entities as bodies do.
+3. Joints follow their entities as bodies do. Constant forces (`force`) are applied to their dynamic bodies for this step, and align drives (`align`) are made, aimed or taken away to match their components: each is a motor joint pulling its body toward a kinematic anchor that sits at the target, so the spring is solved with the bodies and stays stable however stiff.
 4. Every character, in entity order, takes the stance it wants as far as there is room, finds how far it can move along the velocity gameplay wants (climbing a step on the way) and is given the velocity that takes it there, and pushes the light dynamic bodies that stopped it; then the world steps once, with the game's substeps, and each character standing on a body that moved is carried with the point it stands on.
 5. Contacts are written from the step's contact and overlap streams, and every body's pose and velocity are written back.
 6. Attached entities are put at their parent's pose and offset, parents before children.

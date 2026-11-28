@@ -83,6 +83,11 @@ struct Physics2DStatistics {
     std::uint64_t impulses = 0;
     /// Kinematic targets carried out.
     std::uint64_t targets = 0;
+    /// Constant forces applied (components.h's Force2D), one an entity a
+    /// step, and align drives (Align2D) made and refused.
+    std::uint64_t forcesApplied = 0;
+    std::uint64_t alignsMade = 0;
+    std::uint64_t alignsRefused = 0;
     /// Character moves made (components.h's Character2D), steps climbed,
     /// bodies pushed, carries by what a character stood on, and stances
     /// that could not grow yet.

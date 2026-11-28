@@ -168,7 +168,28 @@ constexpr std::array<ComponentField, 1> kTilesFields = {{
     {"tilemap", offsetof(Tiles2D, tilemap), FieldType::U64},
 }};
 
-const std::array<ComponentLayout, 10> kLayouts = {
+constexpr std::array<ComponentField, 7> kForceFields = {{
+    {"x", offsetof(Force2D, x), FieldType::F32},
+    {"y", offsetof(Force2D, y), FieldType::F32},
+    {"torque", offsetof(Force2D, torque), FieldType::F32},
+    {"pointX", offsetof(Force2D, pointX), FieldType::F32},
+    {"pointY", offsetof(Force2D, pointY), FieldType::F32},
+    {"local", offsetof(Force2D, local), FieldType::Bool},
+    {"atPoint", offsetof(Force2D, atPoint), FieldType::Bool},
+}};
+
+constexpr std::array<ComponentField, 8> kAlignFields = {{
+    {"x", offsetof(Align2D, x), FieldType::F64},
+    {"y", offsetof(Align2D, y), FieldType::F64},
+    {"c", offsetof(Align2D, c), FieldType::F32},
+    {"s", offsetof(Align2D, s), FieldType::F32},
+    {"hertz", offsetof(Align2D, hertz), FieldType::F32},
+    {"dampingRatio", offsetof(Align2D, dampingRatio), FieldType::F32},
+    {"maxForce", offsetof(Align2D, maxForce), FieldType::F32},
+    {"maxTorque", offsetof(Align2D, maxTorque), FieldType::F32},
+}};
+
+const std::array<ComponentLayout, 12> kLayouts = {
     layoutOf<Body2D>("Body2D", kBodyFields),
     layoutOf<Pose2D>("Pose2D", kPoseFields),
     layoutOf<Velocity2D>("Velocity2D", kVelocityFields),
@@ -179,6 +200,8 @@ const std::array<ComponentLayout, 10> kLayouts = {
     layoutOf<Joint2D>("Joint2D", kJointFields),
     layoutOf<Attach2D>("Attach2D", kAttachFields),
     layoutOf<Tiles2D>("Tiles2D", kTilesFields),
+    layoutOf<Force2D>("Force2D", kForceFields),
+    layoutOf<Align2D>("Align2D", kAlignFields),
 };
 
 } // namespace
