@@ -14,11 +14,13 @@ on:
     - cron: "37 0 * * *"
   workflow_dispatch:
 
-# A new push to a pull request cancels its running CI; runs on main get a
-# group of their own, so they are never cancelled.
+# A new push to a pull request cancels its running CI. On main a run
+# already going finishes, and the pushes waiting behind it collapse into the
+# newest, which holds every one before it; the nightly has a group of its
+# own.
 concurrency:
-  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
 
@@ -32,6 +34,45 @@ jobs:
     uses: Rawframe-Project/.github/.github/workflows/changes.yml@374693ea0c34a6b078b3cc545ab4adb74a98f92a # v0.0.57
     permissions:
       pull-requests: read
+
+  # Whether a pull request is a release's alone: release-please's branch,
+  # changing the changelog, the manifest and the version line and nothing
+  # else. Main's full check has already run every line of code it holds,
+  # and no golden value holds the version, so the runner skips it.
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      only: ${{ steps.diff.outputs.only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          only=true
+          while IFS= read -r path; do
+            case "$path" in
+            CHANGELOG.md | .release-please-manifest.json) ;;
+            CMakeLists.txt)
+              # Every line it changes is the version's.
+              if git diff --unified=0 "$BASE" "$HEAD" -- CMakeLists.txt | grep -E '^[-+][^-+]' |
+                grep -qv 'x-release-please-version'; then
+                only=false
+              fi
+              ;;
+            *) only=false ;;
+            esac
+          done < <(git diff --name-only "$BASE" "$HEAD")
+          echo "only=$only" >>"$GITHUB_OUTPUT"
 
   # The organization's documentation check, from the pinned commit of
   # .github. The paths in tools/docs-check-exclude.txt are left out: vendored
@@ -60,9 +101,9 @@ jobs:
   # nightly at night or by hand. The self-hosted runner runs code from this
   # repository's own branches only, never a fork's.
   check:
-    needs: changes
+    needs: [changes, release]
     if: >-
-      needs.changes.outputs.code == 'true' &&
+      needs.changes.outputs.code == 'true' && needs.release.outputs.only != 'true' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, linux, x64, rawframe]
     timeout-minutes: 90
@@ -97,7 +138,7 @@ jobs:
   # here: the engine takes no outside code.
   required:
     if: always()
-    needs: [changes, docs, zizmor, check]
+    needs: [changes, release, docs, zizmor, check]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions: {}
@@ -107,12 +148,13 @@ jobs:
           RESULTS: ${{ join(needs.*.result, ' ') }}
           CODE: ${{ needs.changes.outputs.code }}
           CHECKED: ${{ needs.check.result }}
+          RELEASE: ${{ needs.release.outputs.only }}
         run: |
           echo "$RESULTS"
           for r in $RESULTS; do
             case "$r" in success | skipped) ;; *) exit 1 ;; esac
           done
-          if [ "$CODE" = true ] && [ "$CHECKED" != success ]; then
+          if [ "$CODE" = true ] && [ "$CHECKED" != success ] && [ "$RELEASE" != true ]; then
             echo "::error::the code was not checked: a fork's code never runs on the self-hosted runner"
             exit 1
           fi
