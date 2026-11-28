@@ -4,6 +4,7 @@
 #include "bodies.h"
 #include "characters.h"
 #include "contacts.h"
+#include "drives.h"
 #include "geometry.h"
 #include "joints.h"
 #include "meshes.h"
@@ -60,6 +61,7 @@ struct Physics3D::State {
     std::map<std::uint64_t, PreparedMesh> meshes;
     std::optional<world::Query<world::Write<Joint3D>>> jointQuery;
     std::optional<Attachments> attachments;
+    std::optional<Drives> drives;
     std::map<world::EntityHandle, MappedJoint> joints;
     std::vector<std::pair<world::EntityHandle, Joint3D*>> jointRows;
     /// Whose each live shape is, by its index; the generation tells a
@@ -504,6 +506,7 @@ struct Physics3D::State {
     result::Status step(world::World& world, world::TickRate rate, world::TickIndex tick) {
         follow(world, true);
         followJoints(world);
+        drives->apply(world, physics, mapped, statistics);
         stepFollowed(world, rate, tick);
         return {};
     }
@@ -836,6 +839,9 @@ result::Status Physics3D::declareSystems(const schema::SchemaRegistry& registry,
     RAWFRAME_TRY_ASSIGN(state.attachments, Attachments::resolve(registry));
     const std::vector<schema::ComponentRuntimeId> kAttachReads = state.attachments->reads();
     state.reads.insert(state.reads.end(), kAttachReads.begin(), kAttachReads.end());
+    RAWFRAME_TRY_ASSIGN(state.drives, Drives::resolve(registry));
+    const std::vector<schema::ComponentRuntimeId> kDriveReads = state.drives->reads();
+    state.reads.insert(state.reads.end(), kDriveReads.begin(), kDriveReads.end());
     state.writes = state.bodies->writes();
     state.writes.push_back(*state.impulse);
     state.writes.push_back(*state.target);

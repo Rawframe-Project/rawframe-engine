@@ -330,8 +330,61 @@ struct Attach3D {
     float qw = 0;
 };
 
+/// A force and a torque that act on a dynamic body through every step while
+/// the entity holds them, unlike an Impulse3D, which acts once: a thruster,
+/// a sail, a hovering drone. Newtons and newton meters, in the world's frame,
+/// or in the body's when `local`, turning with it. `atPoint` applies the
+/// force at `point`, in the body's frame, rather than through the center of
+/// mass, so that it turns the body too. A body that is not dynamic, and a
+/// value that is not finite or is past 1e20, take none of it.
+struct Force3D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("22e2129d-00bd-44e7-b6b8-3287c0d1ad16");
+    static constexpr std::string_view kComponentName = "rawframe.physics3d.force";
+
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float torqueX = 0;
+    float torqueY = 0;
+    float torqueZ = 0;
+    float pointX = 0;
+    float pointY = 0;
+    float pointZ = 0;
+    bool local = false;
+    bool atPoint = false;
+};
+
+/// An align drive: a dynamic body pulled toward a pose in the world by a
+/// spring of `hertz` and `dampingRatio`, within `maxForce` newtons toward
+/// the position and `maxTorque` newton meters toward the rotation (nought
+/// does not pull that way at all). Dragging, holding in a hand, a part that
+/// springs back into place. The spring is solved with the bodies, so a stiff
+/// one stays stable at any tick rate. A rotation of all noughts is taken as
+/// none. A drive that cannot be made (no dynamic body, a frequency not above
+/// nought or past 1e5, a damping ratio past 1e4, a budget past 1e20, a pose
+/// that is not finite) waits until it or the body changes.
+struct Align3D {
+    static constexpr schema::ComponentTypeId kComponentTypeId =
+        schema::ComponentTypeId::fromText("c2f7f1df-fa5d-4444-b783-6eae0104ba28");
+    static constexpr std::string_view kComponentName = "rawframe.physics3d.align";
+
+    double x = 0;
+    double y = 0;
+    double z = 0;
+    float qx = 0;
+    float qy = 0;
+    float qz = 0;
+    float qw = 0;
+    float hertz = 0;
+    float dampingRatio = 0;
+    float maxForce = 0;
+    float maxTorque = 0;
+};
+
 /// Body3D, Pose3D, Velocity3D, Impulse3D, Target3D, Contact3D, Character3D,
-/// Mesh3D, Joint3D, and Attach3D, in that order. An entity field appears as its two parts, `<name>.slot` and
+/// Mesh3D, Joint3D, Attach3D, Force3D, and Align3D, in that order. An entity field appears as its two parts,
+/// `<name>.slot` and
 /// `<name>.generation`.
 [[nodiscard]] std::span<const schema::ComponentLayout> componentLayouts() noexcept;
 

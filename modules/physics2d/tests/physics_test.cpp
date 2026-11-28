@@ -31,7 +31,9 @@ std::shared_ptr<const schema::SchemaRegistry> registry() {
         .add<Character2D>()
         .add<Joint2D>()
         .add<Attach2D>()
-        .add<Tiles2D>();
+        .add<Tiles2D>()
+        .add<Force2D>()
+        .add<Align2D>();
     return *builder.freeze();
 }
 
@@ -1048,6 +1050,101 @@ RAWFRAME_TEST(AJointBreaksPastItsLimitAndWaitsToBeMended) {
     held.breakForce = 0;
     scene.run(1);
     RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 2 && !held.broken);
+}
+
+RAWFRAME_TEST(AConstantForceActsEveryStepInTheFrameItIsGiven) {
+    // A crate of one kilogram held up against gravity by ten newtons.
+    Scene scene;
+    const world::EntityHandle kHeld = scene.body(kCrate, {.x = 0, .y = 3, .c = 1});
+    RAWFRAME_EXPECT(scene.world.insert(kHeld, *scene.schema->key<Force2D>(), Force2D{.y = 10}).has_value());
+    scene.run(60);
+    RAWFRAME_EXPECT(std::abs(scene.pose(kHeld).y - 3) < 0.01 && scene.physics->statistics().forcesApplied == 60);
+
+    // In the body's frame, turned a quarter, its +y pushes along -x.
+    const world::EntityHandle kTurned = scene.body(kCrate, {.x = 5, .y = 3, .c = 0, .s = 1});
+    RAWFRAME_EXPECT(
+        scene.world.insert(kTurned, *scene.schema->key<Force2D>(), Force2D{.y = 20, .local = true}).has_value());
+    scene.run(30);
+    RAWFRAME_EXPECT(scene.pose(kTurned).x < 5 - 0.5 && scene.velocity(kTurned).x < -5);
+
+    // Off its center, a force turns the body as well; a torque turns it alone.
+    const world::EntityHandle kPushed = scene.body(kCrate, {.x = -5, .y = 3, .c = 1});
+    RAWFRAME_EXPECT(
+        scene.world
+            .insert(kPushed, *scene.schema->key<Force2D>(), Force2D{.x = 5, .y = 10, .pointY = 0.5F, .atPoint = true})
+            .has_value());
+    const world::EntityHandle kSpun = scene.body(kCrate, {.x = -10, .y = 3, .c = 1});
+    RAWFRAME_EXPECT(
+        scene.world.insert(kSpun, *scene.schema->key<Force2D>(), Force2D{.y = 10, .torque = 1}).has_value());
+    scene.run(10);
+    RAWFRAME_EXPECT(scene.velocity(kPushed).x > 0.5F && scene.velocity(kPushed).angular < -0.5F);
+    RAWFRAME_EXPECT(scene.velocity(kSpun).angular > 0.5F && std::abs(scene.pose(kSpun).y - 3) < 0.01);
+
+    // A kinematic body takes none of it, nor does a force past 1e20.
+    const world::EntityHandle kStill =
+        scene.body(Body2D{.motion = static_cast<std::uint8_t>(physics::Motion::Kinematic),
+                          .shape = static_cast<std::uint8_t>(Shape::Box),
+                          .width = 0.5F,
+                          .height = 0.5F},
+                   {.x = 10, .y = 3, .c = 1});
+    RAWFRAME_EXPECT(scene.world.insert(kStill, *scene.schema->key<Force2D>(), Force2D{.y = 10}).has_value());
+    const world::EntityHandle kHuge = scene.body(kCrate, {.x = 15, .y = 3, .c = 1});
+    RAWFRAME_EXPECT(scene.world.insert(kHuge, *scene.schema->key<Force2D>(), Force2D{.y = 1e30F}).has_value());
+    const std::uint64_t kBefore = scene.physics->statistics().forcesApplied;
+    scene.run(10);
+    RAWFRAME_EXPECT(scene.pose(kStill).y == 3 && scene.pose(kHuge).y < 3);
+    RAWFRAME_EXPECT(scene.physics->statistics().forcesApplied - kBefore == 40);
+}
+
+RAWFRAME_TEST(AnAlignDrivePullsABodyToItsPoseAndFollowsItWhenItMoves) {
+    Scene scene;
+    const world::EntityHandle kHeld = scene.body(kCrate, {.x = 0, .y = 3, .c = 1});
+    Align2D align{.x = 2, .y = 3, .c = 0, .s = 1, .hertz = 5, .dampingRatio = 1, .maxForce = 1000, .maxTorque = 1000};
+    RAWFRAME_EXPECT(scene.world.insert(kHeld, *scene.schema->key<Align2D>(), align).has_value());
+    const auto kNear = [&scene, kHeld](const Align2D& to, double within) {
+        const Pose2D& kAt = scene.pose(kHeld);
+        const double kTurn = (double{kAt.c} * to.c) + (double{kAt.s} * to.s);
+        return std::abs(kAt.x - to.x) < within && std::abs(kAt.y - to.y) < within && kTurn > 0.999;
+    };
+    scene.run(120);
+    RAWFRAME_EXPECT(kNear(align, 0.03));
+    RAWFRAME_EXPECT(scene.physics->statistics().alignsMade == 1);
+
+    // Aimed elsewhere, it follows, with the same drive.
+    align.x = -2;
+    align.y = 4;
+    *scene.world.get(kHeld, *scene.schema->key<Align2D>()) = align;
+    scene.run(120);
+    RAWFRAME_EXPECT(kNear(align, 0.03));
+    RAWFRAME_EXPECT(scene.physics->statistics().alignsMade == 1);
+
+    // With no force toward the position it holds the angle only, and falls.
+    align.maxForce = 0;
+    *scene.world.get(kHeld, *scene.schema->key<Align2D>()) = align;
+    scene.run(30);
+    RAWFRAME_EXPECT(scene.pose(kHeld).y < 4 - 0.5 && scene.velocity(kHeld).y < -2);
+    RAWFRAME_EXPECT(scene.physics->statistics().alignsMade == 2);
+
+    // Taken away, nothing holds it.
+    RAWFRAME_EXPECT(scene.world.remove(kHeld, *scene.schema->key<Align2D>()).has_value());
+    scene.run(1);
+}
+
+RAWFRAME_TEST(AnAlignDriveThatCannotBeMadeWaits) {
+    Scene scene;
+    const world::EntityHandle kLoose = scene.body(kCrate, {.x = 0, .y = 3, .c = 1});
+    RAWFRAME_EXPECT(scene.world
+                        .insert(kLoose,
+                                *scene.schema->key<Align2D>(),
+                                Align2D{.y = 3, .hertz = 0, .dampingRatio = 1, .maxForce = 100, .maxTorque = 100})
+                        .has_value());
+    scene.run(30);
+    RAWFRAME_EXPECT(scene.pose(kLoose).y < 3 - 0.5);
+    RAWFRAME_EXPECT(scene.physics->statistics().alignsRefused == 1 && scene.physics->statistics().alignsMade == 0);
+    // Mended, it pulls.
+    scene.world.get(kLoose, *scene.schema->key<Align2D>())->hertz = 5;
+    scene.run(120);
+    RAWFRAME_EXPECT(std::abs(scene.pose(kLoose).y - 3) < 0.03 && scene.physics->statistics().alignsMade == 1);
 }
 
 RAWFRAME_TEST(AttachedEntitiesFollowTheirParents) {

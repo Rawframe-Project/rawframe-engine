@@ -206,6 +206,40 @@ struct Attach2D {
     s: f32
 }
 
+// A force (newtons) and a torque (newton meters) that act on a dynamic body
+// through every step while the entity holds them, unlike an Impulse2D, which
+// acts once. In the world's frame, or the body's when `local`. With
+// `atPoint`, the force acts at `point`, in the body's frame, and so turns the
+// body too. A body that is not dynamic, and a value that is not finite or is
+// past 1e20, take none of it.
+struct Force2D {
+    x: f32
+    y: f32
+    torque: f32
+    pointX: f32
+    pointY: f32
+    local: bool
+    atPoint: bool
+}
+
+// An align drive: a dynamic body pulled toward a pose (an angle as a cosine
+// and a sine, all noughts as none) by a spring of `hertz` and
+// `dampingRatio`, within `maxForce` toward the position and `maxTorque`
+// toward the angle (nought does not pull that way). Solved with the bodies,
+// so a stiff spring stays stable. One that cannot be made (no dynamic body,
+// hertz not above nought or past 1e5, a damping ratio past 1e4, a budget past
+// 1e20) waits until it or the body changes.
+struct Align2D {
+    x: f64
+    y: f64
+    c: f32
+    s: f32
+    hertz: f32
+    dampingRatio: f32
+    maxForce: f32
+    maxTorque: f32
+}
+
 // Which of the game's tilemaps a body of shape TILES is, by the identity its
 // `tilemap` line gives it; changing it makes the body again.
 struct Tiles2D {

@@ -206,18 +206,18 @@ RAWFRAME_TEST(PhysicsIsDeclaredByLine) {
     }
     RAWFRAME_EXPECT(game->physics->dimensions == 2 && game->physics->gravityX == 0.5F &&
                     game->physics->gravityY == -9.8F && game->physics->substeps == 8);
-    // The engine's ten components (Tiles2D the tenth), under their
+    // The engine's twelve components (Align2D the twelfth), under their
     // engine names, and its persistent identity and layer.
-    RAWFRAME_EXPECT(game->components.size() == 12 && game->components[0].name == "rawframe.physics2d.body" &&
+    RAWFRAME_EXPECT(game->components.size() == 14 && game->components[0].name == "rawframe.physics2d.body" &&
                     game->components[1].kestType == "Pose2D");
     const auto kDefaults = parseGame("program p.kest\nphysics2d\n");
     RAWFRAME_EXPECT(kDefaults.has_value() && kDefaults->physics->gravityY == -10.0F &&
                     kDefaults->physics->substeps == 4);
-    // In three dimensions: three numbers of gravity, and the ten 3D
+    // In three dimensions: three numbers of gravity, and the twelve 3D
     // components.
     const auto kThree = parseGame("program p.kest\nphysics3d gravity 0 -9.8 1.5\n");
     RAWFRAME_EXPECT(kThree.has_value() && kThree->physics->dimensions == 3 && kThree->physics->gravityZ == 1.5F &&
-                    kThree->components.size() == 12 && kThree->components[1].name == "rawframe.physics3d.pose");
+                    kThree->components.size() == 14 && kThree->components[1].name == "rawframe.physics3d.pose");
     for (const std::string_view kLine : {"physics2d gravity 1\n",
                                          "physics2d spin 3\n",
                                          "physics2d substeps four\n",

@@ -125,6 +125,34 @@ constexpr std::array<ComponentField, 11> kCharacterFields = {{
     {"stanceHeight", offsetof(Character3D, stanceHeight), FieldType::F32},
 }};
 
+constexpr std::array<ComponentField, 11> kForceFields = {{
+    {"x", offsetof(Force3D, x), FieldType::F32},
+    {"y", offsetof(Force3D, y), FieldType::F32},
+    {"z", offsetof(Force3D, z), FieldType::F32},
+    {"torqueX", offsetof(Force3D, torqueX), FieldType::F32},
+    {"torqueY", offsetof(Force3D, torqueY), FieldType::F32},
+    {"torqueZ", offsetof(Force3D, torqueZ), FieldType::F32},
+    {"pointX", offsetof(Force3D, pointX), FieldType::F32},
+    {"pointY", offsetof(Force3D, pointY), FieldType::F32},
+    {"pointZ", offsetof(Force3D, pointZ), FieldType::F32},
+    {"local", offsetof(Force3D, local), FieldType::Bool},
+    {"atPoint", offsetof(Force3D, atPoint), FieldType::Bool},
+}};
+
+constexpr std::array<ComponentField, 11> kAlignFields = {{
+    {"x", offsetof(Align3D, x), FieldType::F64},
+    {"y", offsetof(Align3D, y), FieldType::F64},
+    {"z", offsetof(Align3D, z), FieldType::F64},
+    {"qx", offsetof(Align3D, qx), FieldType::F32},
+    {"qy", offsetof(Align3D, qy), FieldType::F32},
+    {"qz", offsetof(Align3D, qz), FieldType::F32},
+    {"qw", offsetof(Align3D, qw), FieldType::F32},
+    {"hertz", offsetof(Align3D, hertz), FieldType::F32},
+    {"dampingRatio", offsetof(Align3D, dampingRatio), FieldType::F32},
+    {"maxForce", offsetof(Align3D, maxForce), FieldType::F32},
+    {"maxTorque", offsetof(Align3D, maxTorque), FieldType::F32},
+}};
+
 template <typename T>
 constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const ComponentField> fields) noexcept {
     return ComponentLayout{.id = T::kComponentTypeId,
@@ -195,7 +223,7 @@ constexpr std::array<ComponentField, 9> kAttachFields = {{
     {"qw", offsetof(Attach3D, qw), FieldType::F32},
 }};
 
-const std::array<ComponentLayout, 10> kLayouts = {
+const std::array<ComponentLayout, 12> kLayouts = {
     layoutOf<Body3D>("Body3D", kBodyFields),
     layoutOf<Pose3D>("Pose3D", kPoseFields),
     layoutOf<Velocity3D>("Velocity3D", kMotionFields<Velocity3D>),
@@ -206,6 +234,8 @@ const std::array<ComponentLayout, 10> kLayouts = {
     layoutOf<Mesh3D>("Mesh3D", kMeshFields),
     layoutOf<Joint3D>("Joint3D", kJointFields),
     layoutOf<Attach3D>("Attach3D", kAttachFields),
+    layoutOf<Force3D>("Force3D", kForceFields),
+    layoutOf<Align3D>("Align3D", kAlignFields),
 };
 
 } // namespace
