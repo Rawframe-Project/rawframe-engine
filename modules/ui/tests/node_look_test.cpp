@@ -47,8 +47,7 @@ RAWFRAME_TEST(ANodesFieldsLookAsTheySay) {
                     (static_cast<LookParts>(LookPart::Fill) | static_cast<LookParts>(LookPart::Radius)));
     RAWFRAME_EXPECT(ownPartsOf(NodeFields{}) == 0);
     // Nought is opaque and its own only when given.
-    RAWFRAME_EXPECT(lookOf(NodeFields{}).opacity == 1 &&
-                    lookOf(NodeFields{.transparency = 0.25F}).opacity == 0.75F &&
+    RAWFRAME_EXPECT(lookOf(NodeFields{}).opacity == 1 && lookOf(NodeFields{.transparency = 0.25F}).opacity == 0.75F &&
                     ownPartsOf(NodeFields{.transparency = 0.25F}) == static_cast<LookParts>(LookPart::Opacity));
     // A game's number past the range is held to it; not a number, opaque.
     RAWFRAME_EXPECT(lookOf(NodeFields{.transparency = 4}).opacity == 0 &&
