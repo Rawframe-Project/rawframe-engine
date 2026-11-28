@@ -31,15 +31,16 @@ The documentation check skips the paths in `tools/docs-check-exclude.txt`: `thir
 
 ## In CI
 
-`.github/workflows/ci.yml` runs on every pull request, on every push to `main` and every night.
+`.github/workflows/ci.yml` runs on every pull request, on every push to `main` and every night. A new push to a pull request cancels its running check. On `main` a run already going finishes, and the pushes waiting behind it collapse into the newest, which holds them all.
 
 | Job | What it guards |
 |---|---|
 | `changes` | Whether a pull request changes anything beyond documentation; when it does not, `check` is skipped. |
+| `release` | Whether a pull request is release-please's, from this repository rather than a fork, and changes only the changelog, the manifest and the version line; when it is, `check` is skipped, since `main`'s full check ran that code and no golden value holds the version. |
 | `docs` | The organization's documentation check, from the pinned commit of `.github`, with the same exclusions as the local tier. |
 | `zizmor` | The workflows: injection, persisted credentials, permissions, unpinned actions. |
-| `check` | `tools/check.sh` on the self-hosted runner: `pr` on a pull request, `full` on `main`, `nightly` at night and by hand. The runner is the one machine with every toolchain the engine checks against (the pinned shader compilers, lavapipe, the web toolchain, a browser), and it keeps its build trees from run to run. The machine is shared, so the check runs with eight jobs at a lower priority. |
-| `required` | The one check the ruleset requires with the title check: every job passed, or was skipped for a documentation-only change. |
+| `check` | `tools/check.sh` on the self-hosted runner: `pr` on a pull request, `full` on `main`, `nightly` at night and by hand. The runner is the one machine with every toolchain the engine checks against (the pinned shader compilers, lavapipe, the web toolchain, a browser), and it keeps its build trees from run to run. The machine is shared, so the check runs with twelve jobs at a lower priority. |
+| `required` | The one check the ruleset requires with the title check: every job passed, or was skipped for a documentation-only change or a release's. |
 
 The self-hosted runner runs code from this repository's own branches only. A pull request from a fork never reaches it, and `required` fails for one that changes code: the engine takes no outside code, and `pr-gate.yml` closes such a pull request.
 
