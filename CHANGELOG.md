@@ -4,17 +4,15 @@ All notable changes to this project are recorded here, grouped as Added, Changed
 
 ## [0.9.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.1...v0.9.0) (2026-11-27)
 
+This release fixes identities the tools could mint twice on some processors. No wire, save, checkpoint or cooked format changes.
 
-### Added
+### Changed
 
-* **tooling:** play a sample game before a push, on the new workstation ([#234](https://github.com/Rawframe-Project/rawframe-engine/issues/234)) ([ea6a507](https://github.com/Rawframe-Project/rawframe-engine/commit/ea6a507f3829fa4259ec36cf7abc25e2c6c77678))
-
+- On Windows, build with the `clang-cl` that Visual Studio installs. MSVC's standard library refuses a Clang older than the one it ships with, so a separately installed LLVM stops compiling the engine when Visual Studio updates ([#235](https://github.com/Rawframe-Project/rawframe-engine/pull/235)).
 
 ### Fixed
 
-* **base:** mint identities from the system's source, not random_device ([#236](https://github.com/Rawframe-Project/rawframe-engine/issues/236)) ([e949786](https://github.com/Rawframe-Project/rawframe-engine/commit/e949786b9b9d7882622936d590197401c4761c17)), closes [#233](https://github.com/Rawframe-Project/rawframe-engine/issues/233)
-* **build:** build Windows with the clang-cl Visual Studio ships ([#235](https://github.com/Rawframe-Project/rawframe-engine/issues/235)) ([a6bd99e](https://github.com/Rawframe-Project/rawframe-engine/commit/a6bd99e9df80e9c9b9d534e3616be43e6f8306df))
-* **tooling:** keep window tests off the desktop's Wayland compositor ([#239](https://github.com/Rawframe-Project/rawframe-engine/issues/239)) ([abe375e](https://github.com/Rawframe-Project/rawframe-engine/commit/abe375ea1c1fb8dd4d26c0e9446492011c9c2c76)), closes [#240](https://github.com/Rawframe-Project/rawframe-engine/issues/240)
+- The tools mint every new identity from the operating system's secure random source: a new game's components and resources (`rawframe-author new` and Studio's new game), an imported asset, a new scene, an entity an extension makes, Studio's records and the cook's subassets. Before, they read `std::random_device`, which libstdc++ answers from the processor's RDSEED instruction, and AMD's Zen 5 processors answer it with zero for many calls under load. Two identities could then be the same, and a game made from a template could be refused with "two components share a stable ID" ([#236](https://github.com/Rawframe-Project/rawframe-engine/pull/236)).
 
 ## [0.8.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.0...v0.8.1) (2026-11-08)
 
