@@ -36,6 +36,9 @@ enum class ChunkKind : std::uint16_t {
     RandomStreams = 5,
     /// The mods the World ran with, when there are any.
     ModSet = 6,
+    /// One of the World's message queues each, in name order, when it has
+    /// any.
+    Queue = 7,
 };
 
 using Subject = std::array<std::byte, 16>;

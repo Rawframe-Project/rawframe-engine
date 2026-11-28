@@ -246,6 +246,12 @@ stage(const world::World& world, const SnapshotProjection& projection, const Cap
         detail::writeModSet(mods, settings.identity.mods);
         chunks.push_back(Pending{ChunkKind::ModSet, settings.identity.mods.size(), {}, std::move(mods.data())});
     }
+    // Each queue whole in a chunk of its own, which its bound fits.
+    for (const auto& [kName, kQueue] : world.queues().all()) {
+        Output queue;
+        detail::writeQueue(queue, kQueue);
+        chunks.push_back(Pending{ChunkKind::Queue, 1, {}, std::move(queue.data())});
+    }
     for (const Pending& chunk : chunks) {
         totals.decodedBytes += chunk.payload.size();
         if (chunk.payload.size() > limits.maximumChunkBytes) {
