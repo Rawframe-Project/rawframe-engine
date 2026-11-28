@@ -6,6 +6,7 @@
 // over. Every call answers, the World keeps stepping, and the sanitizers
 // of the full check find nothing.
 
+#include "../src/predictor.h"
 #include "game_harness.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/registrar.h"
@@ -13,7 +14,10 @@
 #include "rawframe/physics3d/registrar.h"
 #include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
+#include "rawframe/world/persistent.h"
 #include "rawframe/world/query.h"
+#include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_kest/layouts.h"
 
 #include <algorithm>
 #include <cstring>
@@ -171,6 +175,8 @@ RAWFRAME_TEST(LifespansEndAndTimersFireAsTheEngineCountsThem) {
         }
         std::ranges::sort(seen);
         RAWFRAME_EXPECT(seen == (std::vector<std::pair<std::uint32_t, std::uint32_t>>{{0, 1}, {2, 2}}));
+    });
+}
 
 RAWFRAME_TEST(AQueueCarriesEachMessageToEveryReaderOnce) {
     play("relay.game", 5, [](world::World& world) {
@@ -199,4 +205,67 @@ RAWFRAME_TEST(AQueueCarriesEachMessageToEveryReaderOnce) {
         const world::MessageQueue* const kPings = world.queues().find("pings");
         RAWFRAME_EXPECT(kPings != nullptr && kPings->messages().size() == 2 && kPings->nextSequence() == 5);
     });
+}
+
+RAWFRAME_TEST(AClientBindsAProgramWithQueues) {
+    // The relay's program, given a present system and a predicted one: a
+    // client's presentation and its predictor bind the queue doors too.
+    const std::string kGame = readText(std::string{RAWFRAME_WORLD_KEST_GAMES} + "relay.game") +
+                              "player relay.sender\n"
+                              "input relay.sender\n"
+                              "system relay.idle simulation idle write relay.sender predicted\n"
+                              "component 7b1c9e24-5a3d-4f86-b0e2-9d4c6a8f1e35 relay.shown Tally\n"
+                              "presentation relay.shown on player\n"
+                              "present relay.show early write relay.shown\n";
+    const std::string kProgram = readText(std::string{RAWFRAME_WORLD_KEST_GAMES} + "relay.kest") +
+                                 "\nfn idle(count: i32, senders: [Sender]) {\n}\n";
+    const auto kFiles =
+        world_kest::GameFiles::fromHeld("relay.game", {{"relay.game", kGame}, {"relay.kest", kProgram}});
+    RAWFRAME_EXPECT(kFiles.has_value());
+    if (!kFiles.has_value()) {
+        return;
+    }
+    const auto kCompiled = kFiles->compile("relay.kest", {});
+    RAWFRAME_EXPECT(kCompiled.has_value());
+    if (!kCompiled.has_value()) {
+        return;
+    }
+    std::vector<schema::ComponentDescriptor> descriptors;
+    for (const world_kest::GameComponent& component : kFiles->description().components) {
+        const auto kLayout = world_kest::componentLayout(kFiles->description(), **kCompiled, component);
+        RAWFRAME_EXPECT(kLayout.has_value());
+        if (!kLayout.has_value()) {
+            return;
+        }
+        descriptors.push_back({.id = component.id,
+                               .name = component.name,
+                               .size = kLayout->size,
+                               .alignment = kLayout->alignment,
+                               .plainData = true});
+    }
+    // rawframe.world's persistent identity, which a World registers itself
+    // and the description already names.
+    RAWFRAME_EXPECT(
+        std::ranges::contains(descriptors, world::Persistent::kComponentTypeId, &schema::ComponentDescriptor::id));
+    const kest::MachineLimits kLimits{.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 100'000};
+    auto presentation = world_kest::ClientPresentation::create(world_kest::PresentationSettings{
+        .program = *kCompiled, .game = &kFiles->description(), .descriptors = descriptors, .limits = kLimits});
+    RAWFRAME_EXPECT(presentation.has_value() && *presentation != nullptr);
+    if (!presentation.has_value() || *presentation == nullptr) {
+        return;
+    }
+    schema::RegistryBuilder builder;
+    for (const schema::ComponentDescriptor& descriptor : descriptors) {
+        builder.add(descriptor);
+    }
+    const auto kRegistry = *builder.freeze();
+    world::World mirror{kRegistry};
+    const world::EntityHandle kPlayer = *mirror.create();
+    // Bound; the present system that reads the queue is refused for it, and
+    // the client goes on.
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT((*presentation)->statistics().systemsFailed == 1);
+    auto predictor = world_kest::makePredictor(world_kest::PredictorSettings{
+        .program = *kCompiled, .game = &kFiles->description(), .descriptors = descriptors, .limits = kLimits});
+    RAWFRAME_EXPECT(predictor.has_value());
 }
