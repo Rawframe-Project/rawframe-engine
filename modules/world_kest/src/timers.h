@@ -38,6 +38,11 @@ struct TimerCountdown {
 struct GameTimerSettings {
     std::vector<schema::ComponentTypeId> lifespans;
     std::vector<schema::ComponentTypeId> timers;
+    /// Whether a spent lifespan destroys its entity. A predicting client
+    /// counts lifespans without destroying: the server's destruction
+    /// arrives, and an entity gone a round trip early would leave the
+    /// predictor nothing to step.
+    bool destroys = true;
 };
 
 class GameTimers final : public world_runtime::SystemContributor {
@@ -51,7 +56,7 @@ public:
                                                 std::vector<world::SystemDeclaration>& systems) noexcept override;
 
     /// Counts every timer down by one tick, recording into `commands` the
-    /// destruction of each entity whose lifespan ran out.
+    /// destruction of each entity whose lifespan ran out, when it destroys.
     [[nodiscard]] result::Status count(world::World& world, world::CommandBuffer& commands);
 
 private:

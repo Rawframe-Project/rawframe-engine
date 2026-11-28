@@ -6,6 +6,7 @@
 // over. Every call answers, the World keeps stepping, and the sanitizers
 // of the full check find nothing.
 
+#include "../src/predictor.h"
 #include "game_harness.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/registrar.h"
@@ -14,6 +15,8 @@
 #include "rawframe/test/executors.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
+#include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_kest/layouts.h"
 
 #include <algorithm>
 #include <cstring>
@@ -172,4 +175,110 @@ RAWFRAME_TEST(LifespansEndAndTimersFireAsTheEngineCountsThem) {
         std::ranges::sort(seen);
         RAWFRAME_EXPECT(seen == (std::vector<std::pair<std::uint32_t, std::uint32_t>>{{0, 1}, {2, 2}}));
     });
+}
+
+RAWFRAME_TEST(APredictorCountsTimersAsTheServerDoes) {
+    // The fuse game's tally predicted, over a player that holds a lamp: the
+    // predictor counts its timer, so the tally sees each firing the server's
+    // would.
+    std::string game = readText(std::string{RAWFRAME_WORLD_KEST_GAMES} + "fuse.game");
+    const std::string kTally = "system fuse.tally simulation tally read fuse.blink write fuse.count";
+    game.replace(game.find(kTally), kTally.size(), kTally + " predicted");
+    game += "component 1f7c0d52-8e3b-4a96-b4d1-6c2e9a7f3b80 fuse.press Count\n"
+            "player fuse.blink fuse.count fuse.press\n"
+            "input fuse.press\n";
+    const std::string kProgram = readText(std::string{RAWFRAME_WORLD_KEST_GAMES} + "fuse.kest");
+    const auto kFiles = world_kest::GameFiles::fromHeld("fuse.game", {{"fuse.game", game}, {"fuse.kest", kProgram}});
+    RAWFRAME_EXPECT(kFiles.has_value());
+    if (!kFiles.has_value()) {
+        return;
+    }
+    const auto kCompiled = kFiles->compile("fuse.kest", {});
+    RAWFRAME_EXPECT(kCompiled.has_value());
+    if (!kCompiled.has_value()) {
+        return;
+    }
+    std::vector<schema::ComponentDescriptor> descriptors;
+    for (const world_kest::GameComponent& component : kFiles->description().components) {
+        const auto kLayout = world_kest::componentLayout(kFiles->description(), **kCompiled, component);
+        RAWFRAME_EXPECT(kLayout.has_value());
+        if (!kLayout.has_value()) {
+            return;
+        }
+        descriptors.push_back({.id = component.id,
+                               .name = component.name,
+                               .size = kLayout->size,
+                               .alignment = kLayout->alignment,
+                               .plainData = true});
+    }
+    const auto kBlink = schema::ComponentTypeId::fromText("a3977daa-795c-4b87-90ac-ffee606220e7");
+    const auto kCount = schema::ComponentTypeId::fromText("50918e2c-1773-45a7-8f31-c144f1b15ef4");
+    const auto kFiredAfter = [&](std::optional<world_kest::GameTimerSettings> timers) -> std::uint32_t {
+        auto predictor = world_kest::makePredictor(
+            world_kest::PredictorSettings{.program = *kCompiled,
+                                          .game = &kFiles->description(),
+                                          .descriptors = descriptors,
+                                          .limits = {.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 100'000},
+                                          .timers = std::move(timers)});
+        RAWFRAME_EXPECT(predictor.has_value());
+        if (!predictor.has_value()) {
+            return 0;
+        }
+        // A lamp of period three, as the server confirmed it.
+        const std::array<std::uint32_t, 3> kLamp = {3, 3, 0};
+        RAWFRAME_EXPECT((*predictor)->set(kBlink, std::as_bytes(std::span{kLamp})).has_value());
+        const std::array<std::byte, 4> kNoPress{};
+        for (std::uint64_t tick = 1; tick <= 6; ++tick) {
+            RAWFRAME_EXPECT((*predictor)->step(kNoPress, world::TickIndex{tick}).has_value());
+        }
+        std::uint32_t fired = 0;
+        const std::span<const std::byte> kHeld = (*predictor)->get(kCount);
+        RAWFRAME_EXPECT(kHeld.size() == sizeof fired);
+        if (kHeld.size() == sizeof fired) {
+            std::memcpy(&fired, kHeld.data(), sizeof fired);
+        }
+        return fired;
+    };
+    // Six ticks fire it on the third and the sixth; without the count it
+    // would never fire.
+    RAWFRAME_EXPECT(kFiredAfter(world_kest::GameTimerSettings{.lifespans = {}, .timers = {kBlink}}) == 2);
+    RAWFRAME_EXPECT(kFiredAfter(std::nullopt) == 0);
+
+    // A player whose lifespan runs out while predicting is counted to
+    // nought and kept: the server destroys it, and the predictor steps on.
+    std::string spent = game;
+    spent.replace(spent.find("player fuse.blink fuse.count fuse.press"),
+                  std::string_view{"player fuse.blink fuse.count fuse.press"}.size(),
+                  "player fuse.blink fuse.count fuse.press fuse.life");
+    const auto kSpentFiles =
+        world_kest::GameFiles::fromHeld("fuse.game", {{"fuse.game", spent}, {"fuse.kest", kProgram}});
+    RAWFRAME_EXPECT(kSpentFiles.has_value());
+    if (!kSpentFiles.has_value()) {
+        return;
+    }
+    const auto kLife = schema::ComponentTypeId::fromText("ca6ab7bf-286c-4b1f-b99d-a206b78927f8");
+    auto predictor = world_kest::makePredictor(world_kest::PredictorSettings{
+        .program = *kCompiled,
+        .game = &kSpentFiles->description(),
+        .descriptors = descriptors,
+        .limits = {.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 100'000},
+        .timers = world_kest::GameTimerSettings{.lifespans = {kLife}, .timers = {kBlink}}});
+    RAWFRAME_EXPECT(predictor.has_value());
+    if (!predictor.has_value()) {
+        return;
+    }
+    const std::uint32_t kTwoTicks = 2;
+    RAWFRAME_EXPECT((*predictor)->set(kLife, std::as_bytes(std::span{&kTwoTicks, 1})).has_value());
+    const std::array<std::byte, 4> kNoPress{};
+    for (std::uint64_t tick = 1; tick <= 4; ++tick) {
+        RAWFRAME_EXPECT((*predictor)->step(kNoPress, world::TickIndex{tick}).has_value());
+    }
+    std::uint32_t left = 7;
+    const std::span<const std::byte> kHeld = (*predictor)->get(kLife);
+    RAWFRAME_EXPECT(kHeld.size() == sizeof left);
+    if (kHeld.size() == sizeof left) {
+        std::memcpy(&left, kHeld.data(), sizeof left);
+    }
+    RAWFRAME_EXPECT(left == 0);
+    RAWFRAME_EXPECT((*predictor)->set(kLife, std::as_bytes(std::span{&kTwoTicks, 1})).has_value());
 }

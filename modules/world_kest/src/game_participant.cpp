@@ -621,7 +621,8 @@ public:
                                                .limits = predictionLimits_,
                                                .physics = predictedPhysics_,
                                                .physics3d = predictedPhysics3d_,
-                                               .level = level_});
+                                               .level = level_,
+                                               .timers = timerSettings_});
     }
 
     std::span<const schema::ComponentTypeId> nearbyComponents() const noexcept override {
@@ -995,6 +996,7 @@ private:
                              "module")
                     .error()};
         }
+        timerSettings_ = found;
         timers_ = std::make_unique<GameTimers>(std::move(found));
         return {};
     }
@@ -1084,6 +1086,8 @@ private:
     std::unique_ptr<GameSplines> splines_;
     std::unique_ptr<GameSequences> sequences_;
     std::unique_ptr<GameTimers> timers_;
+    /// The same, for a predicting client.
+    std::optional<GameTimerSettings> timerSettings_;
     std::optional<world_animation::AnimationSettings> animation_;
     AnimationDoorContext animationDoors_;
     GamePersistence persistence_;

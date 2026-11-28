@@ -142,6 +142,12 @@ public:
                                                                     .systems = declarations}));
         std::vector<world::SystemDeclaration> scheduled;
         RAWFRAME_TRY(systems_->declareSystems(*registry_, scheduled));
+        if (settings.timers.has_value()) {
+            GameTimerSettings counted = *settings.timers;
+            counted.destroys = false;
+            timers_ = std::make_unique<GameTimers>(std::move(counted));
+            RAWFRAME_TRY(timers_->declareSystems(*registry_, scheduled));
+        }
         if (settings.physics.has_value()) {
             RAWFRAME_TRY_ASSIGN(physics_, physics2d::Physics2D::create(*settings.physics));
             RAWFRAME_TRY(physics_->declareSystems(*registry_, scheduled));
@@ -291,6 +297,7 @@ private:
     std::unique_ptr<EffectDoors> effects_;
     std::unique_ptr<MessageDoors> messages_;
     std::unique_ptr<CommandDoors> commands_;
+    std::unique_ptr<GameTimers> timers_;
     std::unique_ptr<KestSystems> systems_;
     /// The game's physics dimensions, nought for none, and its physics.
     std::uint8_t dimensions_ = 0;
