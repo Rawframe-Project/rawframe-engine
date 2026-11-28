@@ -69,7 +69,7 @@ Declare a component of `rawframe.timer`'s types and the engine counts it, in tic
 - **`Lifespan`** (`ticks`): the entity lasts that many more ticks and is destroyed at the end of the last. A query finds what is pending; removing the component cancels it.
 - **`Timer`** (`left`, `period`, `fired`): `fired` is true on the tick `left` reaches nought, for the simulation phase's systems, and the count starts again from `period`, or stops without one. `timer.after(ticks)` and `timer.every(ticks)` make one.
 
-The counts are component data, so a checkpoint keeps them and a paused World does not count.
+The counts are component data, so a checkpoint keeps them and a paused World does not count. A predicting client counts its player's timers each predicted tick as the server does, so a predicted system that reads `fired` sees it on the server's tick.
 
 ## Limits
 

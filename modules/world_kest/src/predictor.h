@@ -13,6 +13,7 @@
 #include "rawframe/schema/component.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_replication/prediction.h"
+#include "timers.h"
 
 #include <memory>
 #include <optional>
@@ -34,6 +35,10 @@ struct PredictorSettings {
     std::optional<physics2d::Physics2DSettings> physics;
     std::optional<physics3d::Physics3DSettings> physics3d;
     std::span<const std::vector<std::pair<schema::ComponentTypeId, std::vector<std::byte>>>> level;
+    /// The game's lifespans and timers, for a game with any: counted each
+    /// predicted tick as the server counts them, so a predicted system sees
+    /// a timer fire on the tick the server's does.
+    std::optional<GameTimerSettings> timers;
 };
 
 [[nodiscard]] result::Result<std::unique_ptr<world_replication::Predictor>>
