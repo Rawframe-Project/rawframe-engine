@@ -470,6 +470,11 @@ struct Physics3D::State {
             if (kDefinition.has_value()) {
                 m3JointId made{};
                 entry.refused = m3CreateJoint(physics, &*kDefinition, &made) != m3_success;
+                if (!entry.refused && !spring(physics, made, *kJoint)) {
+                    // A joint made a moment ago, which nothing else holds.
+                    static_cast<void>(m3DestroyJoint(physics, made));
+                    entry.refused = true;
+                }
                 entry.joint = entry.refused ? m3JointId{} : made;
             }
             if (!entry.refused && (kJoint->breakForce > 0 || kJoint->breakTorque > 0)) {

@@ -139,7 +139,7 @@ constexpr std::array<ComponentField, 1> kMeshFields = {{
     {"mesh", offsetof(Mesh3D, mesh), FieldType::U64},
 }};
 
-constexpr std::array<ComponentField, 41> kJointFields = {{
+constexpr std::array<ComponentField, 54> kJointFields = {{
     {"a.slot", offsetof(Joint3D, a) + offsetof(world::EntityHandle, slot), FieldType::U32},
     {"a.generation", offsetof(Joint3D, a) + offsetof(world::EntityHandle, generation), FieldType::U32},
     {"b.slot", offsetof(Joint3D, b) + offsetof(world::EntityHandle, slot), FieldType::U32},
@@ -181,6 +181,19 @@ constexpr std::array<ComponentField, 41> kJointFields = {{
     {"motor", offsetof(Joint3D, motor), FieldType::U8},
     {"collideConnected", offsetof(Joint3D, collideConnected), FieldType::Bool},
     {"broken", offsetof(Joint3D, broken), FieldType::Bool},
+    {"kind", offsetof(Joint3D, kind), FieldType::U8},
+    {"minLength", offsetof(Joint3D, minLength), FieldType::F32},
+    {"maxLength", offsetof(Joint3D, maxLength), FieldType::F32},
+    {"springHertz", offsetof(Joint3D, springHertz), FieldType::F32},
+    {"springDampingRatio", offsetof(Joint3D, springDampingRatio), FieldType::F32},
+    {"springLength", offsetof(Joint3D, springLength), FieldType::F32},
+    {"ratio", offsetof(Joint3D, ratio), FieldType::F32},
+    {"groundAX", offsetof(Joint3D, groundAX), FieldType::F64},
+    {"groundAY", offsetof(Joint3D, groundAY), FieldType::F64},
+    {"groundAZ", offsetof(Joint3D, groundAZ), FieldType::F64},
+    {"groundBX", offsetof(Joint3D, groundBX), FieldType::F64},
+    {"groundBY", offsetof(Joint3D, groundBY), FieldType::F64},
+    {"groundBZ", offsetof(Joint3D, groundBZ), FieldType::F64},
 }};
 
 constexpr std::array<ComponentField, 9> kAttachFields = {{

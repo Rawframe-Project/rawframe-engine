@@ -1,5 +1,7 @@
 #include "joints.h"
 
+#include "rawframe/physics/joint.h"
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -34,16 +36,30 @@ bool same(const Joint3D& left, const Joint3D& right) noexcept {
         &Joint3D::linearLowerX,  &Joint3D::linearLowerY,  &Joint3D::linearLowerZ,  &Joint3D::linearUpperX,
         &Joint3D::linearUpperY,  &Joint3D::linearUpperZ,  &Joint3D::angularLowerX, &Joint3D::angularLowerY,
         &Joint3D::angularLowerZ, &Joint3D::angularUpperX, &Joint3D::angularUpperY, &Joint3D::angularUpperZ,
-        &Joint3D::motorSpeed,    &Joint3D::motorEffort,   &Joint3D::breakForce,    &Joint3D::breakTorque};
+        &Joint3D::motorSpeed,    &Joint3D::motorEffort,   &Joint3D::breakForce,    &Joint3D::breakTorque,
+        &Joint3D::minLength,     &Joint3D::maxLength,     &Joint3D::springHertz,   &Joint3D::springDampingRatio,
+        &Joint3D::springLength,  &Joint3D::ratio};
+    constexpr std::array kWides = {&Joint3D::groundAX,
+                                   &Joint3D::groundAY,
+                                   &Joint3D::groundAZ,
+                                   &Joint3D::groundBX,
+                                   &Joint3D::groundBY,
+                                   &Joint3D::groundBZ};
     constexpr std::array kBytes = {&Joint3D::linearX,
                                    &Joint3D::linearY,
                                    &Joint3D::linearZ,
                                    &Joint3D::angularX,
                                    &Joint3D::angularY,
                                    &Joint3D::angularZ,
-                                   &Joint3D::motor};
+                                   &Joint3D::motor,
+                                   &Joint3D::kind};
     return left.a == right.a && left.b == right.b && left.collideConnected == right.collideConnected &&
            left.broken == right.broken &&
+           std::ranges::all_of(kWides,
+                               [&](double Joint3D::* field) {
+                                   return std::bit_cast<std::uint64_t>(left.*field) ==
+                                          std::bit_cast<std::uint64_t>(right.*field);
+                               }) &&
            std::ranges::all_of(kReals,
                                [&](float Joint3D::* field) {
                                    return std::bit_cast<std::uint32_t>(left.*field) ==
@@ -54,9 +70,9 @@ bool same(const Joint3D& left, const Joint3D& right) noexcept {
            });
 }
 
-/// The Maul3D generic joint a Joint3D is, between two bodies; none for
-/// values out of range. Maul3D refuses the rest (a limit's order, the
-/// angular contract, a motor on a locked axis) when the joint is made.
+/// The Maul3D joint a Joint3D is, between two bodies; none for values out
+/// of range. Maul3D refuses the rest (a limit's order, the angular contract,
+/// a motor on a locked axis, a ratio out of range) when the joint is made.
 std::optional<m3JointDef> jointDef(const Joint3D& joint, m3BodyId a, m3BodyId b) noexcept {
     const auto kAxisA = jointAxis(joint.axisAX, joint.axisAY, joint.axisAZ);
     const auto kAxisB = jointAxis(joint.axisBX, joint.axisBY, joint.axisBZ);
@@ -70,7 +86,6 @@ std::optional<m3JointDef> jointDef(const Joint3D& joint, m3BodyId a, m3BodyId b)
         return std::nullopt;
     }
     m3JointDef definition = m3DefaultJointDef();
-    definition.type = m3_genericJoint;
     definition.bodyIdA = a;
     definition.bodyIdB = b;
     definition.localAnchorA = m3Vec3{joint.anchorAX, joint.anchorAY, joint.anchorAZ};
@@ -78,6 +93,45 @@ std::optional<m3JointDef> jointDef(const Joint3D& joint, m3BodyId a, m3BodyId b)
     definition.localAxisA = *kAxisA;
     definition.localAxisB = *kAxisB;
     definition.collideConnected = joint.collideConnected;
+    switch (static_cast<physics::JointKind>(joint.kind)) {
+    case physics::JointKind::Generic:
+        break;
+    case physics::JointKind::Distance:
+        // The range always; the spring rides on the motor fields, and its
+        // rest length on the cone angle, as Maul3D documents.
+        definition.type = m3_distanceJoint;
+        definition.enableLimit = true;
+        definition.lowerLimit = joint.minLength;
+        definition.upperLimit = joint.maxLength;
+        definition.enableMotor = joint.springHertz > 0;
+        definition.motorSpeed = joint.springHertz;
+        definition.maxMotorEffort = joint.springDampingRatio;
+        definition.coneAngle = joint.springLength;
+        return definition;
+    case physics::JointKind::Wheel:
+        // The suspension's spring is set once the joint is made (spring).
+        definition.type = m3_wheelJoint;
+        definition.enableLimit = joint.minLength < joint.maxLength;
+        definition.lowerLimit = joint.minLength;
+        definition.upperLimit = joint.maxLength;
+        definition.enableMotor = joint.motor != 0;
+        definition.motorSpeed = joint.motorSpeed;
+        definition.maxMotorEffort = joint.motorEffort;
+        return definition;
+    case physics::JointKind::Pulley:
+        definition.type = m3_pulleyJoint;
+        definition.ratio = joint.ratio;
+        definition.groundAnchorA = m3Pos3{joint.groundAX, joint.groundAY, joint.groundAZ};
+        definition.groundAnchorB = m3Pos3{joint.groundBX, joint.groundBY, joint.groundBZ};
+        return definition;
+    case physics::JointKind::Gear:
+        definition.type = m3_gearJoint;
+        definition.ratio = joint.ratio;
+        return definition;
+    default:
+        return std::nullopt;
+    }
+    definition.type = m3_genericJoint;
     // The modes are Maul3D's own numbers: locked, free, limited.
     for (std::size_t axis = 0; axis < 3; ++axis) {
         definition.genericLinear[axis] = kModes[axis];
@@ -99,6 +153,19 @@ std::optional<m3JointDef> jointDef(const Joint3D& joint, m3BodyId a, m3BodyId b)
     definition.motorSpeed = joint.motorSpeed;
     definition.maxMotorEffort = joint.motorEffort;
     return definition;
+}
+
+bool spring(m3World* physics, m3JointId made, const Joint3D& joint) noexcept {
+    if (static_cast<physics::JointKind>(joint.kind) != physics::JointKind::Wheel || !(joint.springHertz > 0)) {
+        return true;
+    }
+    if (!(joint.springHertz <= 1e5F) || !(joint.springDampingRatio >= 0) || !(joint.springDampingRatio <= 1e4F)) {
+        return false;
+    }
+    // Toward where it was made, as Maul2D's wheel rests.
+    m3Joint_SetSpring(physics, made, true, joint.springHertz, joint.springDampingRatio);
+    m3Joint_SetTargetTranslation(physics, made, 0);
+    return true;
 }
 
 } // namespace rawframe::physics3d

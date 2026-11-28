@@ -22,9 +22,15 @@ struct MappedJoint {
 /// Field by field, for the padding a Joint3D may have.
 [[nodiscard]] bool same(const Joint3D& left, const Joint3D& right) noexcept;
 
-/// The Maul3D generic joint a Joint3D is, between two bodies; none for
-/// values out of range. Maul3D refuses the rest (a limit's order, the
-/// angular contract, a motor on a locked axis) when the joint is made.
+/// The Maul3D joint a Joint3D is, between two bodies, of its kind; none
+/// for values out of range. Maul3D refuses the rest (a limit's order, the
+/// angular contract, a motor on a locked axis, a ratio out of range) when
+/// the joint is made.
 [[nodiscard]] std::optional<m3JointDef> jointDef(const Joint3D& joint, m3BodyId a, m3BodyId b) noexcept;
+
+/// What a joint takes once made: a wheel's suspension spring, toward where
+/// it was made. False for a spring out of range, which the joint is refused
+/// for.
+[[nodiscard]] bool spring(m3World* physics, m3JointId made, const Joint3D& joint) noexcept;
 
 } // namespace rawframe::physics3d
