@@ -47,8 +47,9 @@ module rawframe.ui
 // draws nothing, though the node still takes its room and its presses.
 // A style class gives it as its `opacity`, one less it, and its
 // transitions move it, so a menu fades in as its class's state changes.
-// `spare` means nothing and is read as nought: room kept so the node's
-// values lie whole, with no gap, until a field of four bytes takes it.
+// `spare` is reserved, not a setting: the engine ignores it, a UI
+// document may not write it, and it reads as nought. It keeps the node's
+// values whole, with no gap, until a field of four bytes takes its place.
 //
 // It may show words: `text` names a label by the identity the game's
 // `label` line gives it, a key of one of its string tables in the player's
