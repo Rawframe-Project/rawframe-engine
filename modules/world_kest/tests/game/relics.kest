@@ -1,0 +1,66 @@
+module relics
+
+import rawframe.world
+
+struct Gem {
+    value: u32
+}
+
+struct Maker {
+    made: u32
+}
+
+// What the keeper learned: gems added, gems removed and the sum of the
+// values they held, and entities destroyed.
+struct Keeper {
+    added: u32
+    removed: u32
+    removedSum: u32
+    destroyed: u32
+}
+
+extern fn Gem.insert(entity: world.Entity, value: Gem)
+extern fn Gem.remove(entity: world.Entity)
+
+// A gem a tick, valued one more than the last.
+fn make(count: i32, makers: [Maker]) {
+    makers[0].made = makers[0].made + u32(1)
+    let gem = world.create()
+    Gem.insert(gem, Gem(makers[0].made))
+}
+
+// Below a hundred, an even gem loses its gem and one that divides by three
+// is destroyed.
+fn reap(count: i32, gems: [Gem], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        let value = gems[i].value
+        if value < u32(100) {
+            if value % u32(2) == u32(0) {
+                Gem.remove(entities[i])
+            } else if value % u32(3) == u32(0) {
+                world.destroy(entities[i])
+            }
+        }
+        i = i + 1
+    }
+}
+
+fn watch(count: i32,
+         keepers: [Keeper],
+         addedCount: i32,
+         added: [world.Entity],
+         removedCount: i32,
+         removedGems: [Gem],
+         removedEntities: [world.Entity],
+         destroyedCount: i32,
+         destroyed: [world.Entity]) {
+    keepers[0].added = keepers[0].added + u32(addedCount)
+    keepers[0].removed = keepers[0].removed + u32(removedCount)
+    let i = 0
+    while i < removedCount {
+        keepers[0].removedSum = keepers[0].removedSum + removedGems[i].value
+        i = i + 1
+    }
+    keepers[0].destroyed = keepers[0].destroyed + u32(destroyedCount)
+}

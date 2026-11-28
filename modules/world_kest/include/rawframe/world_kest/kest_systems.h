@@ -19,6 +19,7 @@
 #include "rawframe/schema/registry.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/column_query.h"
+#include "rawframe/world/lifecycle.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_kest/kest_timing.h"
 #include "rawframe/world_runtime/simulation.h"
@@ -67,6 +68,15 @@ struct KestScan {
     std::string_view kestType;
 };
 
+/// What came and went that a system reads, after its scans.
+struct KestLifecycleTerm {
+    world::LifecycleKind kind = world::LifecycleKind::Added;
+    /// The component; none for a destruction.
+    schema::ComponentTypeId component;
+    /// Its Kest type, which a removal's values are lent as.
+    std::string_view kestType;
+};
+
 struct KestSystemDeclaration {
     std::string_view identity;
     world::Phase phase = world::Phase::Simulation;
@@ -90,6 +100,14 @@ struct KestSystemDeclaration {
     /// `entities: [world.Entity]`, in World order as the run began, the
     /// same each call of the run; ordered as reads, never one it writes.
     std::span<const KestScan> scans;
+    /// What came and went since the system's last successful run, oldest
+    /// first, lent after its scans for each term in order: an addition as
+    /// `count: i32` and `entities: [world.Entity]`; a removal as `count`,
+    /// `values: [<kestType>]` (each one's last value) and `entities`; a
+    /// destruction as `count` and `entities`. The same each call of the
+    /// run, and read only when the run succeeds; a system's first run is
+    /// given every holder as added. A removal's component is plain data.
+    std::span<const KestLifecycleTerm> lifecycle;
 };
 
 /// A scene a program spawns whole with `Scene.spawn(prefab: u64)`:

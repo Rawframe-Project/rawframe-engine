@@ -24,15 +24,37 @@ template <typename Column> bool carriesData(const Column& column) noexcept {
     return column.entities || column.access == world::Access::Read || column.access == world::Access::Write;
 }
 
+/// The slots one lifecycle term takes: a count, then a removal's values,
+/// then entities.
+std::size_t termSlots(world::LifecycleKind kind) noexcept {
+    return kind == world::LifecycleKind::Removed ? 3 : 2;
+}
+
 /// What a system takes: the count, then one lent array per data column;
-/// then for each scan a count, its values, and their entities.
-std::vector<kest::Argument> systemArguments(std::size_t data, std::size_t scans) {
+/// then for each scan a count, its values, and their entities; then for
+/// each lifecycle term its count and arrays.
+std::vector<kest::Argument>
+systemArguments(std::size_t data, std::size_t scans, std::span<const world::LifecycleKind> terms) {
     std::vector<kest::Argument> takes(1 + data + (3 * scans), kest::Argument{.slot = kest::Slot::I32, .lent = true});
     takes[0].lent = false;
     for (std::size_t scan = 0; scan < scans; ++scan) {
         takes[1 + data + (3 * scan)].lent = false;
     }
+    for (const world::LifecycleKind kKind : terms) {
+        takes.push_back(kest::Argument{.slot = kest::Slot::I32, .lent = false});
+        for (std::size_t slot = 1; slot < termSlots(kKind); ++slot) {
+            takes.push_back(kest::Argument{.slot = kest::Slot::I32, .lent = true});
+        }
+    }
     return takes;
+}
+
+std::size_t slotsOf(std::span<const world::LifecycleKind> terms) noexcept {
+    std::size_t slots = 0;
+    for (const world::LifecycleKind kKind : terms) {
+        slots += termSlots(kKind);
+    }
+    return slots;
 }
 
 std::size_t roundUp(std::size_t value, std::size_t alignment) noexcept {
@@ -75,6 +97,19 @@ struct KestSystems::Declared {
     std::vector<schema::ComponentTypeId> lookups;
     /// Each scanned component and its Kest type.
     std::vector<std::pair<schema::ComponentTypeId, std::string>> scans;
+    struct Term {
+        world::LifecycleKind kind;
+        schema::ComponentTypeId component;
+        std::string element;
+    };
+    std::vector<Term> lifecycle;
+    [[nodiscard]] std::vector<world::LifecycleKind> lifecycleKinds() const {
+        std::vector<world::LifecycleKind> kinds;
+        for (const Term& term : lifecycle) {
+            kinds.push_back(term.kind);
+        }
+        return kinds;
+    }
     std::vector<std::string_view> afterViews;
     std::vector<std::string_view> beforeViews;
     std::vector<std::string_view> streamViews;
@@ -100,6 +135,16 @@ public:
         std::vector<std::byte> values;
         std::vector<world::EntityHandle> entities;
     };
+    /// A lifecycle term: what it watches, and this run's copy of what came
+    /// or went. An addition's holders serve the system's first run.
+    struct Term {
+        world::LifecycleWatch watch;
+        std::optional<world::ColumnQuery> holders;
+        std::string element;
+        std::size_t size;
+        std::vector<std::byte> values;
+        std::vector<world::EntityHandle> entities;
+    };
 
     KestSystem(kest::Machine& machine,
                Doorway& doorway,
@@ -107,9 +152,10 @@ public:
                world::ColumnQuery query,
                std::vector<DataColumn> columns,
                std::vector<schema::ComponentRuntimeId> lookups,
-               std::vector<Scan> scans) noexcept
+               std::vector<Scan> scans,
+               std::vector<Term> terms) noexcept
         : machine_(&machine), doorway_(&doorway), entry_(entry), query_(std::move(query)), columns_(std::move(columns)),
-          lookups_(std::move(lookups)), scans_(std::move(scans)) {
+          lookups_(std::move(lookups)), scans_(std::move(scans)), terms_(std::move(terms)) {
         reads_ = query_.reads();
         // A lookup or a scan reads its component wherever it lies: the
         // schedule orders it as a read.
@@ -152,6 +198,7 @@ public:
 
 private:
     [[nodiscard]] result::Status runUntimed(world::SystemContext& context) noexcept {
+        RAWFRAME_TRY(watchLifecycle(context));
         chunks_.clear();
         lendFrom_.clear();
         std::size_t journalBytes = 0;
@@ -201,6 +248,7 @@ private:
                               "a scanned component has more holders than a Kest count can say");
             }
         }
+        RAWFRAME_TRY(gatherLifecycle(context));
         // The journal per tick, counted across the machine's
         // systems before any is copied.
         if (doorway_->journalTick != context.tick.value) {
@@ -240,7 +288,67 @@ private:
         for (KestStaging* each : doorway_->staging) {
             each->end(kept.has_value());
         }
+        // What came and went is read once the run that saw it succeeded.
+        if (kept.has_value() && !terms_.empty()) {
+            context.world.lifecycle().markRead(context.system);
+            fresh_ = false;
+        }
         return kept;
+    }
+
+    /// Makes the system a reader of what its terms watch, on its first run
+    /// in this World. A reader the World did not hold yet is fresh: its
+    /// first run is given every holder as added.
+    [[nodiscard]] result::Status watchLifecycle(world::SystemContext& context) {
+        if (terms_.empty() || watching_) {
+            return {};
+        }
+        world::Lifecycle& lifecycle = context.world.lifecycle();
+        fresh_ = lifecycle.reader(context.system) == nullptr;
+        for (const Term& term : terms_) {
+            RAWFRAME_TRY(lifecycle.watch(context.system, term.watch));
+        }
+        watching_ = true;
+        return {};
+    }
+
+    /// This run's copy of what came and went, for each term.
+    [[nodiscard]] result::Status gatherLifecycle(world::SystemContext& context) {
+        if (terms_.empty()) {
+            return {};
+        }
+        const std::span<const world::LifecycleChange> kUnread = context.world.lifecycle().unread(context.system);
+        for (Term& term : terms_) {
+            term.values.clear();
+            term.entities.clear();
+            if (fresh_ && term.holders.has_value()) {
+                term.holders->forEachChunk(context.world, [&](const world::ColumnChunk& chunk) {
+                    term.entities.insert(term.entities.end(), chunk.entities.begin(), chunk.entities.end());
+                });
+            } else {
+                for (const world::LifecycleChange& change : kUnread) {
+                    if (change.kind != term.watch.kind || change.component != term.watch.component) {
+                        continue;
+                    }
+                    term.entities.push_back(change.entity);
+                    if (term.watch.kind == world::LifecycleKind::Removed) {
+                        // A value of another size is none the World keeps for
+                        // plain data; it is lent as nought.
+                        const std::size_t kAt = term.values.size();
+                        term.values.resize(kAt + term.size);
+                        if (change.value.size() == term.size) {
+                            std::memcpy(term.values.data() + kAt, change.value.data(), term.size);
+                        }
+                    }
+                }
+            }
+            if (term.entities.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+                return refuse(result::ErrorClass::OutOfRange,
+                              WorldKestError::TooManyRows,
+                              "more came or went than a Kest count can say");
+            }
+        }
+        return {};
     }
 
     /// What a run's calls answered, made the World's when they succeeded
@@ -335,6 +443,26 @@ private:
                 break;
             }
         }
+        std::size_t termSlot = 1 + columns_.size() + (3 * scans_.size());
+        for (std::size_t at = 0; at < terms_.size() && !failure; ++at) {
+            Term& term = terms_[at];
+            const std::size_t kRows = term.entities.size();
+            frame_[termSlot].integer = static_cast<std::int64_t>(kRows);
+            std::size_t next = termSlot + 1;
+            // Read only, as a scan is.
+            if (term.watch.kind == world::LifecycleKind::Removed &&
+                !kLend(next++, kRows == 0 ? nullptr : term.values.data(), kRows, term.element, term.size)) {
+                break;
+            }
+            if (!kLend(next,
+                       kRows == 0 ? nullptr : term.entities.data(),
+                       kRows,
+                       std::string{kEntityType},
+                       sizeof(world::EntityHandle))) {
+                break;
+            }
+            termSlot = next + 1;
+        }
         if (!failure) {
             auto outcome = machine_->call(entry_, frame_, fuel);
             if (outcome.isCancelled()) {
@@ -364,6 +492,11 @@ private:
     std::vector<DataColumn> columns_;
     std::vector<schema::ComponentRuntimeId> lookups_;
     std::vector<Scan> scans_;
+    std::vector<Term> terms_;
+    /// Whether it reads the World's lifecycle yet, and whether its first
+    /// run there is still to succeed.
+    bool watching_ = false;
+    bool fresh_ = false;
     /// The frame's slots lent for the call being made.
     std::vector<std::size_t> lentSlots_;
     std::vector<schema::ComponentRuntimeId> reads_;
@@ -422,7 +555,8 @@ result::Status KestSystems::reload(std::shared_ptr<const kest::Program> program)
         const auto kData =
             static_cast<std::size_t>(std::ranges::count_if(declared.columns, &carriesData<Declared::Column>));
         if (kEntry.frameSlots != declared.entry.frameSlots ||
-            !machine->checkArguments(kEntry, systemArguments(kData, declared.scans.size())).has_value()) {
+            !machine->checkArguments(kEntry, systemArguments(kData, declared.scans.size(), declared.lifecycleKinds()))
+                 .has_value()) {
             return refuse(result::ErrorClass::FailedPrecondition,
                           WorldKestError::EntryMismatch,
                           "a reloaded system takes other columns than it was declared with");
@@ -576,6 +710,7 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                       .randomStreams = {system.randomStreams.begin(), system.randomStreams.end()},
                       .lookups = {system.lookups.begin(), system.lookups.end()},
                       .scans = {},
+                      .lifecycle = {},
                       .afterViews = {},
                       .beforeViews = {},
                       .streamViews = {}};
@@ -594,15 +729,25 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
             RAWFRAME_TRY(settings.program->layout(kScan.kestType));
             copy.scans.emplace_back(kScan.component, std::string{kScan.kestType});
         }
+        for (const KestLifecycleTerm& kTerm : system.lifecycle) {
+            if (kTerm.kind == world::LifecycleKind::Removed) {
+                RAWFRAME_TRY(settings.program->layout(kTerm.kestType));
+            }
+            copy.lifecycle.push_back(Declared::Term{
+                .kind = kTerm.kind, .component = kTerm.component, .element = std::string{kTerm.kestType}});
+        }
         // The count, then one array per data column, then three slots per
-        // scan; an answer, if any, is one slot and fits over the count.
+        // scan, then each lifecycle term's; an answer, if any, is one slot
+        // and fits over the count.
         const std::size_t kScans = system.scans.size();
-        if (kEntry.frameSlots != 1 + data + (3 * kScans) ||
-            !machine->checkArguments(kEntry, systemArguments(data, kScans)).has_value()) {
+        const std::vector<world::LifecycleKind> kTerms = copy.lifecycleKinds();
+        if (kEntry.frameSlots != 1 + data + (3 * kScans) + slotsOf(kTerms) ||
+            !machine->checkArguments(kEntry, systemArguments(data, kScans, kTerms)).has_value()) {
             return refuse(result::ErrorClass::InvalidArgument,
                           WorldKestError::EntryMismatch,
                           "a Kest system takes a count and one array per lent column, then a count, values, and "
-                          "entities per scan");
+                          "entities per scan, then a count and entities per added or destroyed term and a count, "
+                          "values, and entities per removed one");
         }
         declared.push_back(std::move(copy));
     }
@@ -724,13 +869,44 @@ result::Status KestSystems::declareSystems(const schema::SchemaRegistry& registr
                                              .values = {},
                                              .entities = {}});
         }
+        std::vector<KestSystem::Term> lifecycleTerms;
+        for (const Declared::Term& kTerm : declared.lifecycle) {
+            KestSystem::Term& term =
+                lifecycleTerms.emplace_back(KestSystem::Term{.watch = {.kind = kTerm.kind, .component = std::nullopt},
+                                                             .holders = std::nullopt,
+                                                             .element = {},
+                                                             .size = 0,
+                                                             .values = {},
+                                                             .entities = {}});
+            if (kTerm.kind == world::LifecycleKind::Destroyed) {
+                continue;
+            }
+            RAWFRAME_TRY_ASSIGN(const schema::ComponentRuntimeId kId, registry.find(kTerm.component));
+            term.watch.component = kId;
+            if (kTerm.kind == world::LifecycleKind::Added) {
+                const std::array<world::ColumnTerm, 1> kHolders = {world::ColumnTerm{kId, world::Access::Read}};
+                RAWFRAME_TRY_ASSIGN(world::ColumnQuery holders, world::ColumnQuery::resolve(kHolders, registry));
+                term.holders.emplace(std::move(holders));
+                continue;
+            }
+            const schema::ComponentDescriptor& descriptor = registry.descriptor(kId);
+            if (!descriptor.plainData) {
+                return refuse(result::ErrorClass::InvalidArgument,
+                              WorldKestError::ColumnMismatch,
+                              "a Kest system learns of the removal of plain data alone");
+            }
+            RAWFRAME_TRY(kShaped(descriptor, kTerm.element));
+            term.element = kTerm.element;
+            term.size = descriptor.size;
+        }
         auto system = std::make_unique<KestSystem>(*machine_,
                                                    *doorway_,
                                                    declared.entry,
                                                    std::move(query),
                                                    std::move(data),
                                                    std::move(lookups),
-                                                   std::move(scans));
+                                                   std::move(scans),
+                                                   std::move(lifecycleTerms));
         systems.push_back(world::SystemDeclaration{.identity = declared.identity,
                                                    .phase = declared.phase,
                                                    .reads = system->reads(),

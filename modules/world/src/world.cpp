@@ -87,6 +87,13 @@ result::Status World::destroy(EntityHandle entity) {
     RAWFRAME_TRY(checkStructure());
     RAWFRAME_TRY(checkLive(entity));
     EntityRecord& record = records_[entity.slot];
+    {
+        detail::Archetype& kHeld = *archetypes_[record.archetype];
+        for (const schema::ComponentRuntimeId kComponent : kHeld.components()) {
+            recordRemoval(entity, kComponent);
+        }
+        lifecycle_.record(LifecycleKind::Destroyed, std::nullopt, entity, {});
+    }
     const EntityHandle kMoved = archetypes_[record.archetype]->removeRow(record.row);
     if (!kMoved.isNull()) {
         records_[kMoved.slot].row = record.row;
@@ -183,6 +190,7 @@ result::Status World::insertErased(EntityHandle entity, schema::ComponentRuntime
         detail::Column& column = target.column(target.columnIndex(component));
         column.moveConstruct(column.at(kRow), value);
     }
+    lifecycle_.record(LifecycleKind::Added, component, entity, {});
     return {};
 }
 
@@ -193,6 +201,7 @@ result::Status World::removeErased(EntityHandle entity, schema::ComponentRuntime
     if (!archetypes_[record.archetype]->has(component)) {
         return {};
     }
+    recordRemoval(entity, component);
     static_cast<void>(moveEntity(entity, transition(record.archetype, component, false)));
     return {};
 }
@@ -203,6 +212,23 @@ Pcg32& World::randomStream(std::string_view owner, std::string_view name) {
         return kFound->second;
     }
     return randomStreams_.emplace(std::move(key), deriveStream(settings_.rootSeed, owner, name)).first->second;
+}
+
+void World::recordRemoval(EntityHandle entity, schema::ComponentRuntimeId component) {
+    if (!lifecycle_.watched(LifecycleWatch{.kind = LifecycleKind::Removed, .component = component})) {
+        return;
+    }
+    // The value as it was last, for plain data alone: anything else has no
+    // bytes a reader may hold after it is gone.
+    const schema::ComponentDescriptor& descriptor = registry_->descriptor(component);
+    std::span<const std::byte> value;
+    if (descriptor.plainData && descriptor.size != 0) {
+        const EntityRecord& record = records_[entity.slot];
+        detail::Archetype& held = *archetypes_[record.archetype];
+        const detail::Column& column = held.column(held.columnIndex(component));
+        value = {static_cast<const std::byte*>(column.at(record.row)), descriptor.size};
+    }
+    lifecycle_.record(LifecycleKind::Removed, component, entity, value);
 }
 
 std::size_t World::heldBytes() const noexcept {

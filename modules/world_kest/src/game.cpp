@@ -487,6 +487,11 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     --at;
                     continue;
                 }
+                if (kWhat == "destroyed") {
+                    system.lifecycle.push_back({.kind = world::LifecycleKind::Destroyed, .component = {}});
+                    --at;
+                    continue;
+                }
                 if (at + 1 == kWords.size()) {
                     return badLine(number, WorldKestError::BadGameLine, "a system column or edge names nothing");
                 }
@@ -498,6 +503,11 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     uses.emplace_back(number, kName);
                 } else if (kWhat == "scan") {
                     system.scans.push_back(kName);
+                    uses.emplace_back(number, kName);
+                } else if (kWhat == "added" || kWhat == "removed") {
+                    system.lifecycle.push_back(
+                        {.kind = kWhat == "added" ? world::LifecycleKind::Added : world::LifecycleKind::Removed,
+                         .component = kName});
                     uses.emplace_back(number, kName);
                 } else if (kWhat == "emits") {
                     system.emits.push_back(kName);
@@ -513,8 +523,8 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                    WorldKestError::BadGameLine,
                                    "a system column is entities, or read, write, with, or without a component; an "
                                    "edge is after or before a system; a stream is random and its name; an effect "
-                                   "is emits and its name; a lookup is lookup and a component, and a scan scan and "
-                                   "a component");
+                                   "is emits and its name; a lookup is lookup and a component, a scan scan and a "
+                                   "component, and a lifecycle term added or removed and a component, or destroyed");
                 }
             }
             if (writesALookup(system)) {
@@ -524,6 +534,14 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             // alone, with nothing to scan.
             if (system.predicted && !system.scans.empty()) {
                 return badLine(number, WorldKestError::BadGameLine, "a predicted system scans nothing");
+            }
+            // Nor does it learn what came and went: the server's World knows
+            // that, not one holding the player alone.
+            if (system.predicted && !system.lifecycle.empty()) {
+                return badLine(number, WorldKestError::BadGameLine, "a predicted system takes no lifecycle term");
+            }
+            if (system.lifecycle.size() > kMaximumLifecycleTerms) {
+                return badLine(number, WorldKestError::BadGameLine, "a system takes at most 8 lifecycle terms");
             }
             game.systems.push_back(std::move(system));
         } else if (kKeyword == "present") {

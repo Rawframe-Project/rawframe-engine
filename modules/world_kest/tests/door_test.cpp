@@ -282,3 +282,34 @@ RAWFRAME_TEST(APredictorCountsTimersAsTheServerDoes) {
     RAWFRAME_EXPECT(left == 0);
     RAWFRAME_EXPECT((*predictor)->set(kLife, std::as_bytes(std::span{&kTwoTicks, 1})).has_value());
 }
+
+RAWFRAME_TEST(ASystemLearnsWhatCameAndWent) {
+    play("relics.game", 6, [](world::World& world) {
+        struct Keeper {
+            std::uint32_t added;
+            std::uint32_t removed;
+            std::uint32_t removedSum;
+            std::uint32_t destroyed;
+        };
+        const auto kKeeper = schema::ComponentTypeId::fromText("f3b74d26-91e5-4c0a-b7d8-2e6a1c9f4053");
+        const auto kHeld = holding(world, kKeeper);
+        RAWFRAME_EXPECT(kHeld.size() == 1);
+        if (kHeld.size() != 1) {
+            return;
+        }
+        const Keeper* const kSeen = valueOf<Keeper>(world, kHeld[0], kKeeper);
+        // Changes reach the keeper the tick after their barrier. Its first
+        // run is given the two gems spawned before it; then each tick's
+        // gem one tick on: seven added by the sixth run. The gems of two and
+        // four lost their gems and the gem of three was destroyed, which
+        // removed its gem too: three removed, holding 2 + 3 + 4, and one
+        // destroyed. The gem of six was removed on the last tick, after
+        // the keeper ran.
+        RAWFRAME_EXPECT(kSeen != nullptr && kSeen->added == 7 && kSeen->removed == 3 && kSeen->removedSum == 9 &&
+                        kSeen->destroyed == 1);
+        // What every reader has read is let go: nothing is held past the
+        // keeper's last run but the last tick's barrier.
+        RAWFRAME_EXPECT(world.lifecycle().readers().size() == 1 &&
+                        world.lifecycle().unread("relics.watch").size() == world.lifecycle().changes().size());
+    });
+}

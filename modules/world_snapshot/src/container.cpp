@@ -9,8 +9,9 @@ constexpr std::array<std::byte, 4> kChunkMagic = {std::byte{'R'}, std::byte{'F'}
 constexpr std::array<std::byte, 4> kFooterMagic = {std::byte{'R'}, std::byte{'F'}, std::byte{'S'}, std::byte{'F'}};
 
 bool knownKind(std::uint16_t kind) noexcept {
-    return kind >= static_cast<std::uint16_t>(ChunkKind::WorldHeader) &&
-           kind <= static_cast<std::uint16_t>(ChunkKind::ModSet);
+    return (kind >= static_cast<std::uint16_t>(ChunkKind::WorldHeader) &&
+            kind <= static_cast<std::uint16_t>(ChunkKind::ModSet)) ||
+           kind == static_cast<std::uint16_t>(ChunkKind::Lifecycle);
 }
 
 } // namespace

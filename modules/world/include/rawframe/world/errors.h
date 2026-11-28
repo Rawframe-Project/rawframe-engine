@@ -25,6 +25,7 @@ enum class WorldError : std::uint32_t {
     InvalidRandomStream = 11,
     InvalidQueryTerm = 12,
     InvalidValue = 13,
+    InvalidLifecycle = 15,
 };
 
 [[nodiscard]] constexpr result::ErrorCode code(WorldError error) noexcept {

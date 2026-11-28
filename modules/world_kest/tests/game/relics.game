@@ -1,0 +1,18 @@
+# Gems that come and go, and a keeper that learns of it: a maker adds a gem
+# each tick, a reaper takes the gem from an even one and destroys one that
+# divides by three, and the keeper counts what was added, what was removed
+# with the values it held, and what was destroyed.
+program relics.kest
+
+component 8c1f4a3e-2b6d-4e97-a0c5-7d3e9f1b2a64 relics.gem Gem
+component 5e2a9c71-4d08-4b3f-8e16-c9a7d2f05b38 relics.maker Maker
+component f3b74d26-91e5-4c0a-b7d8-2e6a1c9f4053 relics.keeper Keeper
+
+system relics.make simulation make write relics.maker
+system relics.reap simulation reap read relics.gem entities after relics.make
+system relics.watch simulation watch write relics.keeper after relics.reap added relics.gem removed relics.gem destroyed
+
+spawn 1 relics.gem value=100
+spawn 1 relics.gem value=101
+spawn 1 relics.maker
+spawn 1 relics.keeper

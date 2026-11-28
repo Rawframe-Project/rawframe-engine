@@ -1,5 +1,6 @@
 // Entities and storage: handle validity, slot reuse and retirement, capacity,
-// component values through archetype moves, and churn.
+// component values through archetype moves, and churn; and the lifecycle of
+// what came and went, as readers watch it.
 
 #include "components.h"
 #include "rawframe/test/test.h"
@@ -7,8 +8,10 @@
 
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <map>
+#include <string>
 #include <vector>
 
 using namespace rawframe::world;
@@ -218,4 +221,113 @@ RAWFRAME_TEST(LayoutOnlyComponentsMoveAsBytes) {
     stored = static_cast<const std::int32_t*>(world.getErased(kEntity, kPair));
     RAWFRAME_EXPECT(stored[0] == 3 && stored[1] == 4);
     RAWFRAME_EXPECT(world.destroy(kEntity).has_value());
+}
+
+RAWFRAME_TEST(TheLifecycleRecordsWhatReadersWatchInTheOrderItHappened) {
+    World world{makeRegistry()};
+    const Keys kKeys = keysOf(world.registry());
+    Lifecycle& lifecycle = world.lifecycle();
+    RAWFRAME_EXPECT(
+        lifecycle.watch("cleanup", {.kind = LifecycleKind::Added, .component = kKeys.position.id}).has_value());
+    RAWFRAME_EXPECT(
+        lifecycle.watch("cleanup", {.kind = LifecycleKind::Removed, .component = kKeys.position.id}).has_value());
+    RAWFRAME_EXPECT(lifecycle.watch("cleanup", {.kind = LifecycleKind::Destroyed}).has_value());
+    // An addition or removal names a component.
+    RAWFRAME_EXPECT(!lifecycle.watch("cleanup", {.kind = LifecycleKind::Added}).has_value());
+
+    const EntityHandle kKept = *world.create();
+    RAWFRAME_EXPECT(world.insert(kKept, kKeys.velocity, Velocity{}).has_value());
+    CommandBuffer commands;
+    const auto kSpawned = commands.create();
+    RAWFRAME_EXPECT(commands.insert(*kSpawned, kKeys.position, Position{7, 8}).has_value());
+    RAWFRAME_EXPECT(commands.insert(kKept, kKeys.position, Position{1, 2}).has_value());
+    // A value replaced is no addition, and velocity is watched by no one.
+    RAWFRAME_EXPECT(commands.insert(kKept, kKeys.position, Position{3, 4}).has_value());
+    RAWFRAME_EXPECT(commands.remove(kKept, kKeys.velocity).has_value());
+    RAWFRAME_EXPECT(commands.remove(kKept, kKeys.position).has_value());
+    const auto kReport = world.apply(commands);
+    RAWFRAME_EXPECT(kReport.has_value());
+    const EntityHandle kCreated = kReport->created[kSpawned->index];
+    RAWFRAME_EXPECT(world.destroy(kCreated).has_value());
+
+    const std::span<const LifecycleChange> kSeen = lifecycle.unread("cleanup");
+    RAWFRAME_EXPECT(kSeen.size() == 5);
+    if (kSeen.size() == 5) {
+        RAWFRAME_EXPECT(kSeen[0].kind == LifecycleKind::Added && kSeen[0].entity == kCreated &&
+                        kSeen[0].component == kKeys.position.id && kSeen[0].value.empty());
+        RAWFRAME_EXPECT(kSeen[1].kind == LifecycleKind::Added && kSeen[1].entity == kKept);
+        // A removal keeps the value as it was last, and so does a
+        // destruction, before the destruction itself.
+        Position last{};
+        RAWFRAME_EXPECT(kSeen[2].kind == LifecycleKind::Removed && kSeen[2].entity == kKept &&
+                        kSeen[2].value.size() == sizeof last);
+        std::memcpy(&last, kSeen[2].value.data(), sizeof last);
+        RAWFRAME_EXPECT(last.x == 3 && last.y == 4);
+        RAWFRAME_EXPECT(kSeen[3].kind == LifecycleKind::Removed && kSeen[3].entity == kCreated);
+        std::memcpy(&last, kSeen[3].value.data(), sizeof last);
+        RAWFRAME_EXPECT(last.x == 7 && last.y == 8);
+        RAWFRAME_EXPECT(kSeen[4].kind == LifecycleKind::Destroyed && kSeen[4].entity == kCreated &&
+                        !kSeen[4].component.has_value());
+        for (std::size_t index = 0; index < kSeen.size(); ++index) {
+            RAWFRAME_EXPECT(kSeen[index].sequence == index);
+        }
+    }
+
+    // A reader made now reads from now; read, the first has nothing left,
+    // and what neither still wants is let go.
+    RAWFRAME_EXPECT(lifecycle.watch("late", {.kind = LifecycleKind::Destroyed}).has_value());
+    RAWFRAME_EXPECT(lifecycle.unread("late").empty() && lifecycle.reader("late")->cursor == 5);
+    RAWFRAME_EXPECT(world.destroy(kKept).has_value());
+    RAWFRAME_EXPECT(lifecycle.unread("late").size() == 1 && lifecycle.unread("cleanup").size() == 6);
+    lifecycle.markRead("cleanup");
+    RAWFRAME_EXPECT(lifecycle.unread("cleanup").empty() && lifecycle.changes().size() == 1);
+    lifecycle.markRead("late");
+    RAWFRAME_EXPECT(lifecycle.changes().empty() && lifecycle.nextSequence() == 6 && lifecycle.dropped() == 0);
+    RAWFRAME_EXPECT(lifecycle.unread("nobody").empty());
+}
+
+RAWFRAME_TEST(TheLifecycleIsBoundedAndRestoredOnlyWhole) {
+    World world{makeRegistry()};
+    const Keys kKeys = keysOf(world.registry());
+    Lifecycle& lifecycle = world.lifecycle();
+    RAWFRAME_EXPECT(lifecycle.watch("slow", {.kind = LifecycleKind::Destroyed}).has_value());
+    // A reader that never reads keeps changes to the bound; past it the
+    // oldest go, counted, and it reads from the oldest kept.
+    for (std::size_t made = 0; made < kMaximumLifecycleChanges + 10; ++made) {
+        RAWFRAME_EXPECT(world.destroy(*world.create()).has_value());
+    }
+    RAWFRAME_EXPECT(lifecycle.changes().size() == kMaximumLifecycleChanges && lifecycle.dropped() == 10);
+    RAWFRAME_EXPECT(lifecycle.unread("slow").size() == kMaximumLifecycleChanges &&
+                    lifecycle.unread("slow").front().sequence == 10);
+    // Readers are bounded, and so are the kinds one watches.
+    for (std::size_t reader = 1; reader < kMaximumLifecycleReaders; ++reader) {
+        RAWFRAME_EXPECT(
+            lifecycle.watch("reader." + std::to_string(reader), {.kind = LifecycleKind::Destroyed}).has_value());
+    }
+    RAWFRAME_EXPECT(!lifecycle.watch("one.too.many", {.kind = LifecycleKind::Destroyed}).has_value());
+    RAWFRAME_EXPECT(!lifecycle.watch("", {.kind = LifecycleKind::Destroyed}).has_value());
+
+    // A restore takes consecutive changes below the next sequence, and
+    // replaces everything.
+    Lifecycle restored;
+    const LifecycleReader kReader{.identity = "cleanup",
+                                  .cursor = 4,
+                                  .watches = {{.kind = LifecycleKind::Removed, .component = kKeys.position.id}}};
+    const auto kChange = [&](std::uint64_t sequence) {
+        return LifecycleChange{.sequence = sequence,
+                               .kind = LifecycleKind::Removed,
+                               .component = kKeys.position.id,
+                               .entity = {},
+                               .value = {std::byte{1}}};
+    };
+    RAWFRAME_EXPECT(!restored.restore({kReader}, {kChange(5), kChange(4)}, 7, 0).has_value());
+    RAWFRAME_EXPECT(!restored.restore({kReader}, {kChange(4)}, 4, 0).has_value());
+    RAWFRAME_EXPECT(!restored.restore({kReader, kReader}, {}, 7, 0).has_value());
+    RAWFRAME_EXPECT(
+        !restored.restore({LifecycleReader{.identity = "x", .cursor = 9, .watches = {}}}, {}, 7, 0).has_value());
+    // Changes may skip, as a checkpoint leaves out what it does not carry.
+    RAWFRAME_EXPECT(restored.restore({kReader}, {kChange(3), kChange(4), kChange(6)}, 7, 3).has_value());
+    RAWFRAME_EXPECT(restored.unread("cleanup").size() == 2 && restored.unread("cleanup").front().sequence == 4 &&
+                    restored.dropped() == 3 && restored.nextSequence() == 7 &&
+                    restored.watched({.kind = LifecycleKind::Removed, .component = kKeys.position.id}));
 }

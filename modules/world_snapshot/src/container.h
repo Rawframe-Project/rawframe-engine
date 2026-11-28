@@ -36,6 +36,8 @@ enum class ChunkKind : std::uint16_t {
     RandomStreams = 5,
     /// The mods the World ran with, when there are any.
     ModSet = 6,
+    /// The World's lifecycle, whole, when it has readers.
+    Lifecycle = 8,
 };
 
 using Subject = std::array<std::byte, 16>;

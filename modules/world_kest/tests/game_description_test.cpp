@@ -749,3 +749,29 @@ RAWFRAME_TEST(AGameNamesOneStylesDocument) {
         RAWFRAME_EXPECT(!parseGame("program p.kest\n" + std::string{kLines}).has_value());
     }
 }
+
+RAWFRAME_TEST(LifecycleTermsAreDeclaredByLine) {
+    constexpr std::string_view kHead = "program a.kest\n"
+                                       "component 11111111-2222-4333-8444-555555555555 a.mark Mark\n"
+                                       "component 11111111-2222-4333-8444-666666666666 a.gem Gem\n";
+    const auto kGame = parseGame(std::string{kHead} +
+                                 "system a.watch simulation watch read a.mark added a.gem removed a.gem destroyed\n");
+    RAWFRAME_EXPECT(kGame.has_value() && kGame->systems.size() == 1);
+    if (kGame.has_value() && kGame->systems.size() == 1) {
+        const auto& kTerms = kGame->systems[0].lifecycle;
+        RAWFRAME_EXPECT(kTerms.size() == 3 && kTerms[0].kind == world::LifecycleKind::Added &&
+                        kTerms[0].component == "a.gem" && kTerms[1].kind == world::LifecycleKind::Removed &&
+                        kTerms[2].kind == world::LifecycleKind::Destroyed && kTerms[2].component.empty());
+    }
+    // A term names a component the game declares; a predicted system takes
+    // none; a system takes at most eight.
+    RAWFRAME_EXPECT(!parseGame(std::string{kHead} + "system a.watch simulation watch read a.mark added a.nothing\n"));
+    RAWFRAME_EXPECT(!parseGame(std::string{kHead} + "system a.watch simulation watch read a.mark added\n"));
+    RAWFRAME_EXPECT(
+        !parseGame(std::string{kHead} + "system a.watch simulation watch read a.mark destroyed predicted\n"));
+    std::string many = std::string{kHead} + "system a.watch simulation watch read a.mark";
+    for (int term = 0; term < 9; ++term) {
+        many += " destroyed";
+    }
+    RAWFRAME_EXPECT(!parseGame(many + "\n"));
+}
