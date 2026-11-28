@@ -11,7 +11,7 @@ debug.arrow(x, y, z, x + vx, y + vy, z + vz, u32(0xffd24aff), 0.0, u32(3))
 debug.sphere(tx, ty, tz, 0.5, u32(0x40c0ffff), 2.0, u32(4))
 ```
 
-A shape shows for its seconds: zero for the tick it is drawn on, so a system that draws it each tick shows it as long as it does; more for that long; `debug.FOREVER` until `debug.clear` clears its channel. Each shape is on a channel from 0 to 31, and the client's `scene.debug_channels` mask says which are shown. The first local player's present systems draw over that player's view. The calls draw nothing in a shipping build, on a server, in a simulation or prediction, or in the sample function, so a game can keep them; a mod may not call them.
+A shape shows for its seconds: zero for the tick it is drawn on, so a system that draws it each tick shows it as long as it does; more for that long; `debug.FOREVER` until `debug.clear` clears its channel. Each shape is on a channel from 0 to 31, and the client's `scene.debug_channels` mask says which are shown. The first local player's present systems draw over that player's view. A development client also draws ready layers over the game, as Studio's preview does, when its `scene.debug_layers` names them: `colliders`, `lights` and `grid`. The calls draw nothing in a shipping build, on a server, in a simulation or prediction, or in the sample function, so a game can keep them; a mod may not call them.
 
 ## Setting up
 
