@@ -12,6 +12,7 @@
 #include "rawframe/composition/configuration.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/schedule.h"
+#include "rawframe/world_kest/debug_doors.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
 #include "rawframe/world_kest/sound_doors.h"
@@ -60,6 +61,7 @@ struct ClientPresentation::State {
     PlayerDoorContext playerDoor;
     UiDoorContext uiDoor;
     SoundDoorContext soundDoor;
+    DebugDoorContext debugDoor;
     const PresentationStarts* starts = nullptr;
     PhysicsDoorContext physicsDoors;
     std::unique_ptr<ModServices> services;
@@ -132,6 +134,7 @@ struct ClientPresentation::State {
             RAWFRAME_TRY(addPlayerDoor(doors, &playerDoor));
             RAWFRAME_TRY(addUiDoors(doors, &uiDoor));
             RAWFRAME_TRY(addSoundDoors(doors, &soundDoor));
+            RAWFRAME_TRY(addDebugDoors(doors, &debugDoor));
             RAWFRAME_TRY(services->addDoors(doors));
             RAWFRAME_TRY(effects->addDoors(doors));
             RAWFRAME_TRY(messages->addDoors(doors));
@@ -356,6 +359,11 @@ result::Status ClientPresentation::present(world::World& mirror,
     state.restart(mirror);
     RAWFRAME_TRY(state.attach(mirror, player));
     state.playerDoor.player = player;
+    // What was drawn for the tick before goes as its time is up.
+    state.debugDoor.rate = rate;
+    if (state.debugDoor.drawings != nullptr) {
+        state.debugDoor.drawings->advance();
+    }
     state.messages->arrived(arrived);
     RAWFRAME_TRY_ASSIGN(const world::TickReport kReport, state.schedule->runTick(mirror, state.tick, rate, emitter));
     for (const world::TickReport::Failure& failure : kReport.failures) {
@@ -380,6 +388,10 @@ void ClientPresentation::hover(std::int64_t code) noexcept {
 void ClientPresentation::askUi(const UiQueries* queries, std::size_t player) noexcept {
     state_->uiDoor.queries = queries;
     state_->uiDoor.player = player;
+}
+
+void ClientPresentation::drawIn(PresentedDrawings* drawings) noexcept {
+    state_->debugDoor.drawings = drawings;
 }
 
 void ClientPresentation::setVolumesIn(PresentedVolumes* volumes) noexcept {
@@ -412,7 +424,8 @@ constexpr std::string_view kPresentedMaybe[] = {
     kPresentationPlan.name, world_replication::kClientWorlds.name, kUiQueries.name, kPresentationStarts.name};
 constexpr std::uint64_t kMostTicksPerFrame = 4;
 constexpr std::uint32_t kServer = composition::only(composition::TargetRole::DedicatedServer);
-constexpr std::string_view kPresentedProvided[] = {world_animation::kPresentedPoses.name, kPresentedVolumes.name};
+constexpr std::string_view kPresentedProvided[] = {
+    world_animation::kPresentedPoses.name, kPresentedVolumes.name, kPresentedDrawings.name};
 
 /// Presents the Worlds of the process's local players, each a frame,
 /// and tells what draws them the poses it played them with.
@@ -432,6 +445,11 @@ public:
                 return {};
             }
             presented.presentation->setVolumesIn(&volumes_);
+            // The first player's present systems draw over the scene, which
+            // is the first player's view.
+            if (player == 0) {
+                presented.presentation->drawIn(&drawings_);
+            }
             presented_.push_back(std::move(presented));
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kRate, context.configuration().unsignedInteger("world.tick_rate", 60));
@@ -466,6 +484,9 @@ public:
         }
         if (capability == kPresentedVolumes.name) {
             return composition::provideAs<PresentedVolumes>(volumes_);
+        }
+        if (capability == kPresentedDrawings.name) {
+            return composition::provideAs<PresentedDrawings>(drawings_);
         }
         return {};
     }
@@ -581,6 +602,7 @@ private:
     const UiQueries* ui_ = nullptr;
     /// The player's volumes its present systems set.
     PresentedVolumes volumes_;
+    PresentedDrawings drawings_;
     /// Each local player's presentation, and the game messages it has read.
     struct Presented {
         std::unique_ptr<ClientPresentation> presentation;

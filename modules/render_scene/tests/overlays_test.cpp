@@ -4,6 +4,8 @@
 // a spot's way and the ring its cone reaches. Each body's lines are
 // colored by what it is: static, kinematic, moving, at rest, or a
 // sensor; and one touching another so, its hardest hit along its normal.
+// What a game's present systems draw to debug it: each shape by its
+// lines, on the channels asked for, until the scene's lines are full.
 
 #include "../src/overlays.h"
 #include "rawframe/test/test.h"
@@ -111,4 +113,48 @@ RAWFRAME_TEST(OtherShapesAndLightsAreOutlined) {
     lamp.light.outer = static_cast<float>(std::numbers::pi / 4);
     addLightLines(lamp, lines);
     RAWFRAME_EXPECT(lines.size() == 17 && near(lines[0].to[2], -5) && near(lines[0].to[1], 3));
+}
+
+RAWFRAME_TEST(AGamesDebugShapesAreDrawnByTheirLines) {
+    using Kind = world_kest::DebugShape::Kind;
+    world_kest::PresentedDrawings drawings;
+    RAWFRAME_EXPECT(drawings.add({.kind = Kind::Line, .a = {0, 0, 0}, .b = {1, 0, 0}, .color = 0xFF0000FF}));
+    RAWFRAME_EXPECT(drawings.add({.kind = Kind::Box, .a = {0, 0, 0}, .b = {1, 2, 3}, .channel = 1}));
+    RAWFRAME_EXPECT(drawings.add({.kind = Kind::Sphere, .a = {5, 0, 0}, .b = {2, 0, 0}, .channel = 2}));
+    RAWFRAME_EXPECT(drawings.add({.kind = Kind::Arrow, .a = {0, 0, 0}, .b = {0, 0, 4}, .channel = 3}));
+    std::vector<SceneLine> lines;
+    RAWFRAME_EXPECT(addDebugLines(drawings, UINT32_MAX, lines) == 0);
+    // A line, twelve edges, three circles of sixteen pieces, an arrow and
+    // its head's four strokes.
+    RAWFRAME_EXPECT(lines.size() == 1 + 12 + 48 + 5);
+    if (lines.size() != 66) {
+        return;
+    }
+    RAWFRAME_EXPECT(lines[0].color[0] == 1 && lines[0].color[1] == 0 && lines[0].color[3] == 1 && !lines[0].over &&
+                    lines[0].ofView);
+    // The box's edges run between its corners; the sphere's circles lie
+    // its radius from its center; the head's strokes run from the tip to
+    // half a meter back.
+    for (std::size_t at = 1; at < 13; ++at) {
+        const double kLength = std::abs(lines[at].to[0] - lines[at].from[0]) +
+                               std::abs(lines[at].to[1] - lines[at].from[1]) +
+                               std::abs(lines[at].to[2] - lines[at].from[2]);
+        RAWFRAME_EXPECT(near(kLength, 1) || near(kLength, 2) || near(kLength, 3));
+    }
+    for (std::size_t at = 13; at < 61; ++at) {
+        const double kX = lines[at].from[0] - 5;
+        RAWFRAME_EXPECT(near(
+            std::sqrt((kX * kX) + (lines[at].from[1] * lines[at].from[1]) + (lines[at].from[2] * lines[at].from[2])),
+            2));
+    }
+    for (std::size_t at = 62; at < 66; ++at) {
+        RAWFRAME_EXPECT(near(lines[at].from[2], 4) && near(lines[at].to[2], 3.5));
+    }
+    // Only the channels asked for.
+    lines.clear();
+    RAWFRAME_EXPECT(addDebugLines(drawings, 0b0110U, lines) == 0 && lines.size() == 12 + 48);
+    // A scene whose lines are full leaves the rest out, counted.
+    lines.assign(kMostSceneLines - 20, SceneLine{});
+    RAWFRAME_EXPECT(addDebugLines(drawings, UINT32_MAX, lines) == 1 &&
+                    lines.size() == kMostSceneLines - 20 + 1 + 12 + 5);
 }

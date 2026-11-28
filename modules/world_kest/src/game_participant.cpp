@@ -24,6 +24,7 @@
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/physics.h"
 #include "rawframe/physics3d/physics.h"
+#include "rawframe/world_kest/debug_doors.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/game_files.h"
@@ -272,6 +273,7 @@ public:
         RAWFRAME_TRY(addPlayerDoor(doors, nullptr));
         RAWFRAME_TRY(addUiDoors(doors, nullptr));
         RAWFRAME_TRY(addSoundDoors(doors, nullptr));
+        RAWFRAME_TRY(addDebugDoors(doors, nullptr));
         std::vector<std::size_t> sizes;
         for (const kest::TypeLayout& layout : layouts_) {
             sizes.push_back(layout.size);
