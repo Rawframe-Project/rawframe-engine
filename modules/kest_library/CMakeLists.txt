@@ -3,12 +3,18 @@
 set(embedded "${CMAKE_CURRENT_BINARY_DIR}/embedded.cpp")
 file(GLOB_RECURSE kest_library_sources CONFIGURE_DEPENDS
     "${RAWFRAME_KEST_LIBRARY}std/*.kest" "${CMAKE_CURRENT_SOURCE_DIR}/kest/*.kest")
+# The list itself is an input: a file removed changes no file left, so
+# without it the old table would stay. file(CONFIGURE) rewrites the list only
+# when it changes, and the glob reruns CMake when a file comes or goes.
+list(JOIN kest_library_sources "\n" kest_library_list)
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/embedded_files.txt" CONTENT "${kest_library_list}\n")
 add_custom_command(
     OUTPUT "${embedded}"
     COMMAND "${CMAKE_COMMAND}" -DOUTPUT=${embedded}
         "-DROOTS=${RAWFRAME_KEST_LIBRARY}=engine/lib/|${CMAKE_CURRENT_SOURCE_DIR}/kest=engine/modules/"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/embed.cmake"
-    DEPENDS ${kest_library_sources} "${CMAKE_CURRENT_SOURCE_DIR}/embed.cmake"
+    DEPENDS ${kest_library_sources} "${CMAKE_CURRENT_BINARY_DIR}/embedded_files.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/embed.cmake"
     COMMENT "Embedding the Kest library"
     VERBATIM)
 
