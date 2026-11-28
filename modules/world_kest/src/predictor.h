@@ -37,7 +37,8 @@ struct PredictorSettings {
     std::span<const std::vector<std::pair<schema::ComponentTypeId, std::vector<std::byte>>>> level;
     /// The game's lifespans and timers, for a game with any: counted each
     /// predicted tick as the server counts them, so a predicted system sees
-    /// a timer fire on the tick the server's does.
+    /// a timer fire on the tick the server's does. A spent lifespan
+    /// destroys nothing here; the server's destruction arrives.
     std::optional<GameTimerSettings> timers;
 };
 

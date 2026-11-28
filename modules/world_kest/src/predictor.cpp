@@ -143,7 +143,9 @@ public:
         std::vector<world::SystemDeclaration> scheduled;
         RAWFRAME_TRY(systems_->declareSystems(*registry_, scheduled));
         if (settings.timers.has_value()) {
-            timers_ = std::make_unique<GameTimers>(*settings.timers);
+            GameTimerSettings counted = *settings.timers;
+            counted.destroys = false;
+            timers_ = std::make_unique<GameTimers>(std::move(counted));
             RAWFRAME_TRY(timers_->declareSystems(*registry_, scheduled));
         }
         if (settings.physics.has_value()) {

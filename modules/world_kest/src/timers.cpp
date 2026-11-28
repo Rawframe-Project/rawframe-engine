@@ -66,7 +66,7 @@ result::Status GameTimers::count(world::World& world, world::CommandBuffer& comm
                 std::memcpy(&lifespan, kData, sizeof(TimerLifespan));
                 if (lifespan.ticks <= 1) {
                     lifespan.ticks = 0;
-                    if (recorded.has_value()) {
+                    if (settings_.destroys && recorded.has_value()) {
                         recorded = commands.destroy(chunk.entities[row]);
                     }
                 } else {
