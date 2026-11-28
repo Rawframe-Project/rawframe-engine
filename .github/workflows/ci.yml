@@ -35,10 +35,11 @@ jobs:
     permissions:
       pull-requests: read
 
-  # Whether a pull request is a release's alone: release-please's branch,
-  # changing the changelog, the manifest and the version line and nothing
-  # else. Main's full check has already run every line of code it holds,
-  # and no golden value holds the version, so the runner skips it.
+  # Whether a pull request is a release's alone: release-please's branch
+  # of this repository, never a fork's, changing the changelog, the manifest
+  # and the version line and nothing else. Main's full check has already
+  # run every line of code it holds, and no golden value holds the version,
+  # so the runner skips it.
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -48,12 +49,16 @@ jobs:
       only: ${{ steps.diff.outputs.only }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
+        if: >-
+          github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--') &&
+          github.event.pull_request.head.repo.full_name == github.repository
         with:
           persist-credentials: false
           fetch-depth: 0
       - id: diff
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
+        if: >-
+          github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--') &&
+          github.event.pull_request.head.repo.full_name == github.repository
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
