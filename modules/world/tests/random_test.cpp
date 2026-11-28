@@ -113,6 +113,10 @@ RAWFRAME_TEST(ShuffleAndWeightedChoiceAreDeterministic) {
     RAWFRAME_EXPECT(chosen[1] > 850 && chosen[1] < 1150);
     constexpr std::array<std::uint64_t, 2> kNothing = {0, 0};
     RAWFRAME_EXPECT(weightedChoice(kNothing, left) == 2);
+    // A total past 64 bits chooses nothing and draws nothing.
+    constexpr std::array<std::uint64_t, 3> kTooMuch = {~std::uint64_t{0}, 1, 5};
+    Pcg32 drawn = left;
+    RAWFRAME_EXPECT(weightedChoice(kTooMuch, left) == 3 && left.nextU64() == drawn.nextU64());
 }
 
 namespace {

@@ -157,8 +157,9 @@ template <typename T> constexpr void shuffle(std::span<T> values, Pcg32& generat
 }
 
 /// One index chosen with probability proportional to its weight: a single
-/// bounded draw against the cumulative 64-bit total. Returns weights.size()
-/// when every weight is zero.
+/// bounded draw against the cumulative 64-bit total. Returns weights.size(),
+/// drawing nothing, when every weight is zero or their total does not fit in
+/// 64 bits.
 [[nodiscard]] std::size_t weightedChoice(std::span<const std::uint64_t> weights, Pcg32& generator) noexcept;
 
 } // namespace rawframe::world
