@@ -33,6 +33,11 @@ std::uint64_t Pcg32::nextBelow64(std::uint64_t bound) noexcept {
 std::size_t weightedChoice(std::span<const std::uint64_t> weights, Pcg32& generator) noexcept {
     std::uint64_t total = 0;
     for (const std::uint64_t kWeight : weights) {
+        // A total past 64 bits has no fair draw; rawframe.random refuses it
+        // the same way, so both draw alike.
+        if (total + kWeight < total) {
+            return weights.size();
+        }
         total += kWeight;
     }
     if (total == 0) {
