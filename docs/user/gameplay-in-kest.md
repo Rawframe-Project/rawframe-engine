@@ -47,7 +47,7 @@ A door is an engine function a program calls through an `extern fn` its library 
 |---|---|
 | Entities | `world.create()`, `world.destroy(entity)`, `world.tick()`; for each component type, `<Type>.insert(entity, value)` and `<Type>.remove(entity)`. |
 | Other entities | With `lookup <component>` on the system's line: `<Type>.get(entity)`, `<Type>.has(entity)`, `<Type>.count()` and `<Type>.entity(index)`. |
-| Randomness | With `random <stream>` on the line: `random.below(stream, bound)` and `random.unit(stream)`, the stream by its place in the line's list. |
+| Randomness | With `random <stream>` on the line: `random.below(stream, bound)`, `random.below64`, `random.unit(stream)`, `random.weighted(stream, weights)` (a place picked in proportion to its weight), `random.shuffle(stream, values)`, and points evenly spread `onCircle`, `inDisk`, `onSphere` and `inTriangle`, the stream by its place in the line's list. |
 | Prefabs | `scene.spawn(identity)` spawns a `prefab` line's scene whole. |
 | Players | `replication.player()`: on a client, its own player. |
 | Messages | `Messages.<name>(to, value)` on the server; `ReceivedCount.<name>()` and `Received.<name>(index)` in a client's present systems. |

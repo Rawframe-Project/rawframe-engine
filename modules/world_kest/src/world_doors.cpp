@@ -136,6 +136,20 @@ void belowDoor(kest::DoorCall& call, void* context) noexcept {
     call.answerInteger(kStream->nextBelow(kBound));
 }
 
+void below64Door(kest::DoorCall& call, void* context) noexcept {
+    Doorway& doorway = *static_cast<Doorway*>(context);
+    world::Pcg32* const kStream = streamOf(call, doorway);
+    if (kStream == nullptr) {
+        return;
+    }
+    const auto kBound = static_cast<std::uint64_t>(call.integer(1));
+    if (kBound == 0) {
+        call.fail("a draw below nought has nothing to draw");
+        return;
+    }
+    call.answerInteger(static_cast<std::int64_t>(kStream->nextBelow64(kBound)));
+}
+
 void unitDoor(kest::DoorCall& call, void* context) noexcept {
     Doorway& doorway = *static_cast<Doorway*>(context);
     if (world::Pcg32* const kStream = streamOf(call, doorway)) {
