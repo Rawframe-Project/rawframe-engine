@@ -11,6 +11,7 @@
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/game_files.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -362,6 +363,103 @@ fn quiet(count: i32, views: [canvas.Camera]) {
     RAWFRAME_EXPECT(volumes.decibels[3] == -12.0F && volumes.decibels[0] == 0 && volumes.revision == 1);
     RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
     RAWFRAME_EXPECT(volumes.revision == 1);
+}
+
+RAWFRAME_TEST(APresentSystemDrawsToDebugTheGame) {
+    // Each tick: a line for that tick, a box until cleared, and a sphere
+    // for a twentieth of a second; on its fourth tick the boxes cleared,
+    // and a shape on a channel past the last.
+    constexpr std::string_view kDrawing = R"(module drawing
+
+import rawframe.canvas
+import rawframe.debug
+
+fn draw(count: i32, views: [canvas.Camera]) {
+    let i = 0
+    while i < count {
+        views[i].offsetX = views[i].offsetX + 1.0
+        debug.line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0, u32(0xff0000ff), 0.0, u32(0))
+        if views[i].offsetX < 2.0 {
+            debug.box(0.0, 0.0, 0.0, -1.0, 2.0, 3.0, u32(0x00ff00ff), debug.FOREVER, u32(1))
+            debug.sphere(5.0, 0.0, 0.0, 2.0, u32(0x0000ffff), 0.05, u32(2))
+        }
+        if views[i].offsetX > 3.5 {
+            debug.clear(u32(1))
+            debug.arrow(0.0, 0.0, 0.0, 0.0, 1.0, 0.0, u32(0xffffffff), 0.0, u32(40))
+        }
+        i = i + 1
+    }
+}
+)";
+    const auto kFiles =
+        GameFiles::fromHeld("drawing.game",
+                            {{"drawing.game",
+                              "program drawing.kest\n"
+                              "component 51a3c0de-3333-4a2b-8c3d-4e5f60718293 shown.view rawframe.canvas.Camera\n"
+                              "presentation shown.view on player\n"
+                              "present drawing.draw draw write shown.view\n"},
+                             {"drawing.kest", std::string{kDrawing}}});
+    RAWFRAME_EXPECT(kFiles.has_value());
+    if (!kFiles.has_value()) {
+        return;
+    }
+    std::string report;
+    const auto kCompiled = kFiles->compile("drawing.kest", {}, &report);
+    RAWFRAME_EXPECT(kCompiled.has_value());
+    if (!kCompiled.has_value()) {
+        std::fprintf(stderr, "%s\n", report.c_str());
+        return;
+    }
+    const std::vector<schema::ComponentDescriptor> kDescriptors = {
+        {.id = kViewId, .name = "shown.view", .size = sizeof(Camera), .alignment = alignof(Camera), .plainData = true}};
+    auto presentation = ClientPresentation::create(
+        PresentationSettings{.program = *kCompiled,
+                             .game = &kFiles->description(),
+                             .descriptors = kDescriptors,
+                             .limits = {.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 100'000}});
+    if (!presentation.has_value() || *presentation == nullptr) {
+        RAWFRAME_EXPECT(false);
+        return;
+    }
+    schema::RegistryBuilder builder;
+    builder.add(kDescriptors[0]);
+    const auto kRegistry = *builder.freeze();
+    world::World mirror{kRegistry};
+    const world::EntityHandle kPlayer = *mirror.create();
+    using Kind = DebugShape::Kind;
+    const auto kCount = [](const PresentedDrawings& drawings, Kind kind) {
+        return std::ranges::count(drawings.shapes, kind, &DebugShape::kind);
+    };
+    // Drawing nowhere, as a simulation does, draws nothing.
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    PresentedDrawings drawings;
+    (*presentation)->drawIn(&drawings);
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    // The line alone: the view's offset is past the box's and sphere's.
+    RAWFRAME_EXPECT(kCount(drawings, Kind::Line) == 1 && drawings.shapes.size() == 1 && drawings.tick == 1);
+    auto* view = static_cast<Camera*>(mirror.getErased(kPlayer, *kRegistry->find(kViewId)));
+    RAWFRAME_EXPECT(view != nullptr);
+    if (view == nullptr) {
+        return;
+    }
+    view->offsetX = 0;
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(kCount(drawings, Kind::Line) == 1 && kCount(drawings, Kind::Box) == 1 &&
+                    kCount(drawings, Kind::Sphere) == 1);
+    // The box's corners as least and greatest; the sphere's radius.
+    const auto kBox = std::ranges::find(drawings.shapes, Kind::Box, &DebugShape::kind);
+    RAWFRAME_EXPECT(kBox->a[0] == -1 && kBox->b[0] == 0 && kBox->b[2] == 3 && kBox->until == kDebugForever &&
+                    kBox->color == 0x00FF00FF && kBox->channel == 1);
+    // The next tick: the line drawn again, the box kept, the sphere's
+    // three ticks not up.
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(kCount(drawings, Kind::Line) == 1 && kCount(drawings, Kind::Box) == 1 &&
+                    kCount(drawings, Kind::Sphere) == 1);
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    // The sphere's time up, the box cleared, the arrow on no channel left out.
+    RAWFRAME_EXPECT(kCount(drawings, Kind::Line) == 1 && kCount(drawings, Kind::Box) == 0 &&
+                    kCount(drawings, Kind::Sphere) == 0 && kCount(drawings, Kind::Arrow) == 0 && drawings.leftOut == 1);
 }
 
 RAWFRAME_TEST(APresentationRunsAReloadedProgram) {

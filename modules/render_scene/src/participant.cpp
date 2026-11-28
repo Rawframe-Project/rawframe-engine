@@ -44,6 +44,7 @@ constexpr diagnostics::EventIdentity kMaterialsReloaded{"scene", "materials_relo
 constexpr diagnostics::EventIdentity kRenderScaleChanged{"scene", "render_scale_changed"};
 constexpr diagnostics::EventIdentity kEyesSummary{"scene", "scene_eyes_summary"};
 constexpr diagnostics::EventIdentity kPlacedSummary{"scene", "scene_placed_summary"};
+constexpr diagnostics::EventIdentity kDebugSummary{"scene", "scene_debug_summary"};
 constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        world_kest::kGameFiles.name,
                                        game_content::kGameContent.name,
@@ -51,7 +52,8 @@ constexpr std::string_view kMaybe[] = {world_replication::kClientWorlds.name,
                                        view::kPreviewCamera.name,
                                        world_animation::kPresentedPoses.name,
                                        view::kHeadsetEyes.name,
-                                       view::kHeadsetHands.name};
+                                       view::kHeadsetHands.name,
+                                       world_kest::kPresentedDrawings.name};
 
 /// Draws one client's mirrored World in 3D each frame through its player's
 /// camera: the extract stage in `presentation_extract`, the queue stage in
@@ -73,6 +75,11 @@ public:
         multisamples_ = kConfigured.multisamples;
         quality_ = kConfigured.quality;
         renderScale_ = RenderScale{kConfigured.renderScalePercent, kConfigured.leastRenderScalePercent};
+        debugChannels_ = kConfigured.debugChannels;
+        // What the first player's present systems draw to debug the game.
+        if (context.has(world_kest::kPresentedDrawings.name)) {
+            RAWFRAME_TRY_ASSIGN(drawings_, context.capability(world_kest::kPresentedDrawings));
+        }
         if (!context.has(world_kest::kGameFiles.name) || !context.has(world_replication::kClientWorlds.name)) {
             return {};
         }
@@ -348,6 +355,14 @@ public:
                           diagnostics::field("pathsShown", pathsDrawn_),
                           diagnostics::field("outlinesShown", outlinesDrawn_)});
         }
+        if (debugLines_ != 0 || debugLeftOut_ != 0) {
+            emitter_.log(diagnostics::Severity::Info,
+                         kDebugSummary,
+                         "what one client's scene drew of what the game's present systems drew to debug it",
+                         {diagnostics::field("lines", debugLines_),
+                          diagnostics::field("shapesLeftOut", debugLeftOut_),
+                          diagnostics::field("shapesRefused", drawings_ != nullptr ? drawings_->leftOut : 0)});
+        }
         textureViews_.summarize(emitter_);
         const auto kParticles = particles_.fields();
         emitter_.log(
@@ -596,12 +611,20 @@ private:
             preview_ != nullptr && preview_->looking().has_value() ? preview_->overlays() : 0;
         // An editor's view sees a sky with no picture as a clear day's.
         scene_->gradeSky(preview_ != nullptr && preview_->looking().has_value());
-        if (linesChanged || kOverlays != 0 || overlaid_) {
+        // And what the game's present systems drew, as it changes.
+        const bool kDrawn = drawings_ != nullptr && drawings_->revision != drawnRevision_;
+        if (linesChanged || kOverlays != 0 || overlaid_ || kDrawn) {
             lines_ = markLines_;
             lines_.insert(lines_.end(), pathLines_.begin(), pathLines_.end());
             lines_.insert(lines_.end(), outlineLines_.begin(), outlineLines_.end());
             if (kOverlays != 0) {
                 addOverlays(*kView.world, kOverlays);
+            }
+            if (drawings_ != nullptr) {
+                drawnRevision_ = drawings_->revision;
+                const std::size_t kBefore = lines_.size();
+                debugLeftOut_ += addDebugLines(*drawings_, debugChannels_, lines_);
+                debugLines_ += lines_.size() - kBefore;
             }
             overlaid_ = kOverlays != 0;
             scene_->show(lines_);
@@ -929,6 +952,11 @@ private:
     bool overlaid_ = false;
     std::optional<world::ColumnQuery> bodies_;
     std::uint64_t overlayLines_ = 0;
+    const world_kest::PresentedDrawings* drawings_ = nullptr;
+    std::uint64_t drawnRevision_ = 0;
+    std::uint32_t debugChannels_ = UINT32_MAX;
+    std::uint64_t debugLines_ = 0;
+    std::uint64_t debugLeftOut_ = 0;
     bool extracted_ = false;
     const SceneFrame* queued_ = nullptr;
     std::uint32_t width_ = 1280;

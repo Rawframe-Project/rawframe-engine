@@ -58,6 +58,7 @@ A native client reads its settings from `client.conf` beside it, and a phone's f
 | `scene.render_scale_percent` | Each view drawn at this many hundredths of its pixels each way and scaled to fit, 25 to 100 (100). |
 | `scene.render_scale_least_percent` | How far the scale may fall while the device cannot keep up, 25 to `scene.render_scale_percent` (the same, so it never falls); an exported game sets 50. |
 | `scene.width`, `scene.height` | The picture's size until a window gives one, 1 to 65,536 pixels (1,280 by 720). |
+| `scene.debug_channels` | Which channels of what the game's present systems draw with `rawframe.debug` are shown, bit n for channel n (all 32). Development builds only. |
 | `scene.client` | In a process holding several clients, the one whose World is drawn; a game showing several local players by its layout names none. |
 
 ## Updates

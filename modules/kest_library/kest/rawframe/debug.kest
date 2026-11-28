@@ -1,0 +1,61 @@
+module rawframe.debug
+
+// Drawing to see what a game does: lines, boxes, spheres and arrows in
+// World meters, drawn over the scene of a client's first local player by
+// its present systems. Development builds only: in a shipping build, on a
+// server, in a simulation (prediction included) and in the sample function
+// they draw nothing, so a game may leave its calls in.
+//
+// Each shape's `color` is 0xRRGGBBAA, sRGB. It shows for `seconds`: nought
+// for this tick alone, so a present system that draws it each tick shows
+// it as long as it does; more for that long; FOREVER until its channel is
+// cleared. A shape is on a `channel` from 0 to 31; the client's
+// `scene.debug_channels` says which are drawn, so many systems can draw at
+// once and be looked at one by one. At most 1024 shapes are held; a shape
+// past them, on no channel, or at a point not finite is left out.
+//
+// The doors write outside the World, so an untrusted program (a mod) may
+// not call them.
+
+// A shape's `seconds` for one that stays until its channel is cleared.
+const FOREVER: f32 = -1.0
+
+// Every channel, for `clear`.
+const EVERY_CHANNEL: u32 = 32
+
+extern fn Debug.line(fromX: f64, fromY: f64, fromZ: f64, toX: f64, toY: f64, toZ: f64, color: u32, seconds: f32,
+                     channel: u32)
+extern fn Debug.arrow(fromX: f64, fromY: f64, fromZ: f64, toX: f64, toY: f64, toZ: f64, color: u32, seconds: f32,
+                      channel: u32)
+extern fn Debug.box(minX: f64, minY: f64, minZ: f64, maxX: f64, maxY: f64, maxZ: f64, color: u32, seconds: f32,
+                    channel: u32)
+extern fn Debug.sphere(x: f64, y: f64, z: f64, radius: f32, color: u32, seconds: f32, channel: u32)
+extern fn Debug.clear(channel: u32)
+
+// A line from one point to another.
+fn line(fromX: f64, fromY: f64, fromZ: f64, toX: f64, toY: f64, toZ: f64, color: u32, seconds: f32,
+        channel: u32) {
+    Debug.line(fromX, fromY, fromZ, toX, toY, toZ, color, seconds, channel)
+}
+
+// A line with a head at its end: a direction, a velocity, a force.
+fn arrow(fromX: f64, fromY: f64, fromZ: f64, toX: f64, toY: f64, toZ: f64, color: u32, seconds: f32,
+         channel: u32) {
+    Debug.arrow(fromX, fromY, fromZ, toX, toY, toZ, color, seconds, channel)
+}
+
+// The twelve edges of a box along the World's axes, between two corners.
+fn box(minX: f64, minY: f64, minZ: f64, maxX: f64, maxY: f64, maxZ: f64, color: u32, seconds: f32,
+       channel: u32) {
+    Debug.box(minX, minY, minZ, maxX, maxY, maxZ, color, seconds, channel)
+}
+
+// A sphere of `radius` meters about a point, as three circles.
+fn sphere(x: f64, y: f64, z: f64, radius: f32, color: u32, seconds: f32, channel: u32) {
+    Debug.sphere(x, y, z, radius, color, seconds, channel)
+}
+
+// Every shape on `channel` gone, or on every channel for EVERY_CHANNEL.
+fn clear(channel: u32) {
+    Debug.clear(channel)
+}

@@ -203,6 +203,17 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
                 .error()};
     }
     read.leastRenderScalePercent = static_cast<std::uint32_t>(kLeast);
+    // What a game's present systems draw to debug it, by channel.
+    RAWFRAME_TRY_ASSIGN(const std::uint64_t kChannels,
+                        configuration.unsignedInteger("scene.debug_channels", UINT32_MAX));
+    if (kChannels > UINT32_MAX) {
+        return std::unexpected<result::Error>{result::fail(result::ErrorClass::InvalidArgument,
+                                                           composition::kCompositionDomain,
+                                                           code(composition::CompositionError::BadConfiguration),
+                                                           "scene.debug_channels is a mask of 32 bits")
+                                                  .error()};
+    }
+    read.debugChannels = static_cast<std::uint32_t>(kChannels);
     return read;
 }
 

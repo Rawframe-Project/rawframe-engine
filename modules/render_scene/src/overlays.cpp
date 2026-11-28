@@ -182,6 +182,70 @@ void addOutlineLines(const std::array<double, 6>& box,
     }
 }
 
+std::size_t
+addDebugLines(const world_kest::PresentedDrawings& drawings, std::uint32_t channels, std::vector<SceneLine>& lines) {
+    using Kind = world_kest::DebugShape::Kind;
+    std::size_t left = 0;
+    for (const world_kest::DebugShape& kShape : drawings.shapes) {
+        if (kShape.channel >= 32 || ((channels >> kShape.channel) & 1U) == 0) {
+            continue;
+        }
+        constexpr std::array<std::size_t, 4> kLinesOf = {1, 12, 3 * kPieces, 5};
+        if (lines.size() + kLinesOf[static_cast<std::size_t>(kShape.kind)] > kMostSceneLines) {
+            ++left;
+            continue;
+        }
+        const std::array<float, 4> kColor = colorAndAlphaOf(kShape.color);
+        switch (kShape.kind) {
+        case Kind::Line:
+            line(kShape.a, kShape.b, kColor, lines);
+            break;
+        case Kind::Box: {
+            const auto kCorner = [&kShape](int corner) {
+                return Point{(corner & 1) != 0 ? kShape.b[0] : kShape.a[0],
+                             (corner & 2) != 0 ? kShape.b[1] : kShape.a[1],
+                             (corner & 4) != 0 ? kShape.b[2] : kShape.a[2]};
+            };
+            // An edge joins corners one axis apart.
+            for (int corner = 0; corner < 8; ++corner) {
+                for (const int kBit : {1, 2, 4}) {
+                    if ((corner & kBit) == 0) {
+                        line(kCorner(corner), kCorner(corner | kBit), kColor, lines);
+                    }
+                }
+            }
+            break;
+        }
+        case Kind::Sphere:
+            ring(kShape.a, {1, 0, 0}, {0, 1, 0}, kShape.b[0], kColor, lines);
+            ring(kShape.a, {0, 1, 0}, {0, 0, 1}, kShape.b[0], kColor, lines);
+            ring(kShape.a, {0, 0, 1}, {1, 0, 0}, kShape.b[0], kColor, lines);
+            break;
+        case Kind::Arrow: {
+            line(kShape.a, kShape.b, kColor, lines);
+            const Vector kWay{static_cast<float>(kShape.b[0] - kShape.a[0]),
+                              static_cast<float>(kShape.b[1] - kShape.a[1]),
+                              static_cast<float>(kShape.b[2] - kShape.a[2])};
+            const double kLength = std::sqrt((kWay[0] * kWay[0]) + (kWay[1] * kWay[1]) + (kWay[2] * kWay[2]));
+            // A head a quarter of its length, at most half a meter, of
+            // four strokes back from its tip across two planes.
+            const double kHead = std::min(kLength / 4, 0.5);
+            const Vector kAlong = normalized(kWay);
+            const Vector kSide =
+                normalized(cross(kAlong, std::abs(kAlong[1]) < 0.9F ? Vector{0, 1, 0} : Vector{1, 0, 0}));
+            const Vector kOther = cross(kAlong, kSide);
+            const Point kBack = along(kShape.b, kAlong, -kHead);
+            for (const Vector& kAcross : {kSide, kOther}) {
+                line(kShape.b, along(kBack, kAcross, kHead / 2), kColor, lines);
+                line(kShape.b, along(kBack, kAcross, -kHead / 2), kColor, lines);
+            }
+            break;
+        }
+        }
+    }
+    return left;
+}
+
 void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines) {
     const double kRange = light.light.range;
     if (!(kRange > 0)) {

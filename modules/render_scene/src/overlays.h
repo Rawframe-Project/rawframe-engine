@@ -8,8 +8,10 @@
 #include "rawframe/render_scene/scene.h"
 #include "rawframe/world/column_query.h"
 #include "rawframe/world/world.h"
+#include "rawframe/world_kest/drawings.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -52,6 +54,14 @@ void addLightLines(const LightInstance& light, std::vector<SceneLine>& lines);
 void addOutlineLines(const std::array<double, 6>& box,
                      const std::array<float, 3>& color,
                      std::vector<SceneLine>& lines);
+
+/// The shapes a game's present systems drew (`rawframe.debug`) on the
+/// channels `channels` names (bit n for channel n), appended to `lines`
+/// until it holds `kMostSceneLines`: a line, an arrow with a head of four
+/// strokes, a box's twelve edges, a sphere's three great circles; each in
+/// its color, behind what is nearer. How many shapes did not fit.
+std::size_t
+addDebugLines(const world_kest::PresentedDrawings& drawings, std::uint32_t channels, std::vector<SceneLine>& lines);
 
 /// The overlays `overlays` asks for (`view::Overlay` bits), appended to
 /// `lines` until it holds `kMostSceneLines`: each body's collider in

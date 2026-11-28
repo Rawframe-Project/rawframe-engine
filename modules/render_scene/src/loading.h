@@ -39,6 +39,8 @@ struct SceneConfiguration {
     /// its region's pixels each way, and at least at the least.
     std::uint32_t renderScalePercent = 100;
     std::uint32_t leastRenderScalePercent = 100;
+    /// The `rawframe.debug` channels drawn, bit n for channel n.
+    std::uint32_t debugChannels = UINT32_MAX;
 };
 
 /// Reads every `scene.*` key, refusing one out of its bounds.

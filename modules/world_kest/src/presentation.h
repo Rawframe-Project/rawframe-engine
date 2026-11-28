@@ -16,6 +16,7 @@
 #include "rawframe/world/time.h"
 #include "rawframe/world/world.h"
 #include "rawframe/world_animation/animation.h"
+#include "rawframe/world_kest/drawings.h"
 #include "rawframe/world_kest/game.h"
 #include "rawframe/world_kest/starts.h"
 #include "rawframe/world_kest/ui_queries.h"
@@ -90,6 +91,10 @@ public:
     /// volumes; none, as in a simulation, for nowhere. `volumes`
     /// outlives it.
     void setVolumesIn(PresentedVolumes* volumes) noexcept;
+    /// Where its present systems' `rawframe.debug` shapes are drawn; none,
+    /// as in a simulation, for nowhere. `drawings` outlives it, and each
+    /// tick presented moves it on.
+    void drawIn(PresentedDrawings* drawings) noexcept;
     /// What its components start as when it attaches them; none,
     /// as without it, starts every one at nought. `starts` outlives it.
     void startWith(const PresentationStarts* starts) noexcept;
