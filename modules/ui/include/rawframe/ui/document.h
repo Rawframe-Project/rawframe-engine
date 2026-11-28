@@ -28,8 +28,8 @@
 // A node names its `component`, once in a document; the `ref` is
 // that name, the address the game's present systems write the node by.
 // `shows` names a `rawframe.ui.Typed` component whose words it shows in
-// place of its label. Then any of `rawframe.ui.Node`'s fields, in
-// its order, at their defaults omitted: numbers as they are; colors
+// place of its label. Then any of `rawframe.ui.Node`'s fields but `spare`,
+// in its order, at their defaults omitted: numbers as they are; colors
 // `#rrggbbaa`; identities (`image`, `text`, `font`, `style`) 16 lowercase
 // hexadecimal digits; `absolute`, `clip`, `thumb`, `checked`, `disabled`,
 // and `kept` as `true`; a closed set by the lowercase name of its case (`direction`: row, row_reverse, column,
@@ -99,6 +99,7 @@ struct NodeFields {
     std::uint32_t gradientFrom = 0;
     std::uint32_t gradientTo = 0;
     float transparency = 0;
+    std::uint32_t spare = 0;
     std::uint64_t text = 0;
     std::int64_t textValue = 0;
     std::int64_t textSecond = 0;

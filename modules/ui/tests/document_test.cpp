@@ -155,6 +155,8 @@ RAWFRAME_TEST(AUiDocumentIsRefusedWhereItIsWrong) {
     RAWFRAME_EXPECT(refused(with("\"absolute\": true", "\"absolute\": false"), "absolute"));
     RAWFRAME_EXPECT(refused(with("\"rangeMaximum\": 500000", "\"rangeMaximum\": 5000000"), "rangeMaximum"));
     RAWFRAME_EXPECT(refused(with("\"vertical\"", "\"both\""), "range"));
+    // `spare`, which a document never writes.
+    RAWFRAME_EXPECT(refused(with("\"padding\": 6", "\"spare\": 1"), "nodes[0]"));
     // Unknown, out of order, and empty children.
     RAWFRAME_EXPECT(refused(with("\"padding\": 6", "\"paddings\": 6"), "nodes[0]"));
     RAWFRAME_EXPECT(refused(

@@ -151,6 +151,7 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
                                 {"gradientFrom", offsetof(ui::NodeFields, gradientFrom)},
                                 {"gradientTo", offsetof(ui::NodeFields, gradientTo)},
                                 {"transparency", offsetof(ui::NodeFields, transparency)},
+                                {"spare", offsetof(ui::NodeFields, spare)},
                                 {"text", offsetof(ui::NodeFields, text)},
                                 {"textValue", offsetof(ui::NodeFields, textValue)},
                                 {"textSecond", offsetof(ui::NodeFields, textSecond)},

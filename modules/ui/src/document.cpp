@@ -71,7 +71,13 @@ constexpr std::array<std::string_view, 3> kFlexWraps = {"one_line", "lines", "li
 constexpr std::array<std::string_view, 7> kLines = {
     "start", "end", "center", "space_between", "space_around", "space_evenly", "stretch"};
 
-// rawframe.ui.Node's fields in its order.
+// The node's values lie whole: `spare` fills what would be a gap before
+// `text`, so no byte of a node component is padding.
+static_assert(offsetof(NodeFields, text) == offsetof(NodeFields, spare) + sizeof(std::uint32_t) &&
+              sizeof(NodeFields) == offsetof(NodeFields, lineGap) + sizeof(float));
+
+// rawframe.ui.Node's fields in its order; not `spare`, which a document
+// never writes.
 constexpr std::array<FieldForm, 76> kFieldForms = {{
     {"widthScale", offsetof(NodeFields, widthScale), Form::Real, {}},
     {"widthOffset", offsetof(NodeFields, widthOffset), Form::Real, {}},
