@@ -27,6 +27,7 @@ constexpr std::string_view kDocument = R"({
       "xScale": 0.5,
       "yOffset": -12,
       "fill": "#101820c0",
+      "transparency": 0.25,
       "children": [
         {
           "component": "game.points",
@@ -104,7 +105,8 @@ RAWFRAME_TEST(AUiDocumentIsReadAsATreeOfComponents) {
     RAWFRAME_EXPECT(kNodes[3].component == "game.banner" && !kNodes[3].parent.has_value() && kNodes[3].shows.empty());
     const NodeFields& kHud = kNodes[0].fields;
     RAWFRAME_EXPECT(kHud.widthOffset == 240 && kHud.alignItems == 4 && kHud.padding == 6 && kHud.absolute == 1 &&
-                    kHud.xScale == 0.5F && kHud.yOffset == -12 && kHud.fill == 0x101820C0 && kHud.direction == 0);
+                    kHud.xScale == 0.5F && kHud.yOffset == -12 && kHud.fill == 0x101820C0 && kHud.direction == 0 &&
+                    kHud.transparency == 0.25F);
     const NodeFields& kPoints = kNodes[1].fields;
     RAWFRAME_EXPECT(kPoints.order == 2 && kPoints.text == 0xF1182D0420CC09A0 && kPoints.textValue == -3 &&
                     kPoints.textSize == 14 && kPoints.textWrap == 1);
@@ -147,6 +149,9 @@ RAWFRAME_TEST(AUiDocumentIsRefusedWhereItIsWrong) {
     RAWFRAME_EXPECT(refused(with("\"widthOffset\": 240", "\"widthOffset\": 0"), "widthOffset"));
     RAWFRAME_EXPECT(refused(with("\"editLimit\": 32", "\"editLimit\": 300"), "editLimit"));
     RAWFRAME_EXPECT(refused(with("\"order\": 2", "\"order\": 2.5"), "order"));
+    RAWFRAME_EXPECT(refused(with("\"transparency\": 0.25", "\"transparency\": 1.5"), "transparency"));
+    RAWFRAME_EXPECT(refused(with("\"transparency\": 0.25", "\"transparency\": -0.25"), "transparency"));
+    RAWFRAME_EXPECT(refused(with("\"transparency\": 0.25", "\"transparency\": 0"), "transparency"));
     RAWFRAME_EXPECT(refused(with("\"absolute\": true", "\"absolute\": false"), "absolute"));
     RAWFRAME_EXPECT(refused(with("\"rangeMaximum\": 500000", "\"rangeMaximum\": 5000000"), "rangeMaximum"));
     RAWFRAME_EXPECT(refused(with("\"vertical\"", "\"both\""), "range"));

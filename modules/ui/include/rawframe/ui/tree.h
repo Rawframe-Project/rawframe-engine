@@ -183,7 +183,9 @@ struct GradientLook {
 /// clips its children to its rounded border box; and an image filling its
 /// border box over its fill: the owner's key for it (nought for
 /// none), insets of its nine-slice center in its pixels (top, right,
-/// bottom, left; all nought stretches it whole), and its tint.
+/// bottom, left; all nought stretches it whole), and its tint; and its
+/// opacity, nought to one, which multiplies everything the node and its
+/// subtree draw, words too, each drawn on its own.
 struct Look {
     std::uint32_t fill = 0;
     std::uint32_t borderColor = 0;
@@ -196,6 +198,7 @@ struct Look {
     ShadowLook outerShadow;
     ShadowLook innerShadow;
     GradientLook gradient;
+    float opacity = 1;
 };
 
 /// The parts of a look, as bits: which a style class sets, or a node
@@ -210,12 +213,13 @@ enum class LookPart : std::uint16_t {
     ImageTint = 1U << 5U,
     OuterShadow = 1U << 6U,
     InnerShadow = 1U << 7U,
-    Gradient = 1U << 8U
+    Gradient = 1U << 8U,
+    Opacity = 1U << 9U
 };
 
 using LookParts = std::uint16_t;
 
-inline constexpr LookParts kEveryLookPart = 0x1FF;
+inline constexpr LookParts kEveryLookPart = 0x3FF;
 
 [[nodiscard]] constexpr LookParts operator|(LookPart left, LookPart right) noexcept {
     return static_cast<LookParts>(static_cast<LookParts>(left) | static_cast<LookParts>(right));

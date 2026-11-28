@@ -1,7 +1,8 @@
 // Style classes over Maul UI's: a class's base look, the variants a
 // node's states pick, the later class winning, the parts a node sets
 // itself winning over every class, and a timed transition moving a fill
-// between two frames' times, its spec gone with its class.
+// between two frames' times, its spec gone with its class; and opacity
+// multiplying down a subtree, moved by a class's transition.
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/tree.h"
@@ -99,4 +100,60 @@ RAWFRAME_TEST(ATransitionMovesAPartOverTime) {
         RAWFRAME_EXPECT(ui.setStyleTransition(kMade, Variant::Base, kEveryLookPart, kSecond).has_value());
         RAWFRAME_EXPECT(ui.removeStyle(kMade).has_value());
     }
+}
+
+RAWFRAME_TEST(OpacityMultipliesDownASubtree) {
+    auto tree = Tree::create(16);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    const Node kPanel = *ui.add(1);
+    const Node kCard = *ui.add(2);
+    RAWFRAME_EXPECT(ui.attach(kPanel, kCard).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kPanel, {.width = pixels(80), .height = pixels(40)}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kCard, {.width = pixels(40), .height = pixels(20)}).has_value());
+    RAWFRAME_EXPECT(ui.setLook(kPanel, {.fill = 0xFFFFFFFF, .opacity = 0.5F}).has_value());
+    RAWFRAME_EXPECT(ui.setLook(kCard, {.fill = 0xFFFFFFFF, .opacity = 0.5F}).has_value());
+    // Each box's alpha, the panel's then the card's.
+    const auto kAlphas = [&](double seconds) {
+        DrawList list;
+        if (!ui.layOut(kPanel, 100, 100, seconds).has_value() || !ui.draw(kPanel, 1, list).has_value()) {
+            return std::array<float, 2>{-1, -1};
+        }
+        return std::array<float, 2>{list.boxes.empty() ? 0 : list.boxes[0].fill[3],
+                                    list.boxes.size() < 2 ? 0 : list.boxes[1].fill[3]};
+    };
+    const std::array<float, 2> kHalved = kAlphas(0);
+    RAWFRAME_EXPECT(std::abs(kHalved[0] - 0.5F) < 0.01F && std::abs(kHalved[1] - 0.25F) < 0.01F);
+    // A subtree at nought draws nothing.
+    RAWFRAME_EXPECT(ui.setLook(kPanel, {.fill = 0xFFFFFFFF, .opacity = 0}).has_value());
+    DrawList hidden;
+    RAWFRAME_EXPECT(ui.layOut(kPanel, 100, 100, 0).has_value() && ui.draw(kPanel, 1, hidden).has_value() &&
+                    hidden.boxes.empty());
+    // A class fades the panel out as it is hovered, over a second.
+    RAWFRAME_EXPECT(ui.setLook(kPanel, {.fill = 0xFFFFFFFF}, static_cast<LookParts>(LookPart::Fill)).has_value());
+    const Style kFades = *ui.addStyle();
+    RAWFRAME_EXPECT(ui.setStyleLook(kFades, Variant::Hovered, {.opacity = 0}, static_cast<LookParts>(LookPart::Opacity))
+                        .has_value());
+    const Transition kSecond{.seconds = 1, .easing = Transition::Easing::Linear};
+    for (const Variant kVariant : {Variant::Base, Variant::Hovered}) {
+        RAWFRAME_EXPECT(
+            ui.setStyleTransition(kFades, kVariant, static_cast<LookParts>(LookPart::Opacity), kSecond).has_value());
+    }
+    const std::array<Style, 1> kOne = {kFades};
+    RAWFRAME_EXPECT(ui.setClasses(kPanel, kOne).has_value());
+    // Given back to its class, the panel moves from nought to the base's
+    // one, as any part does.
+    const float kRising = kAlphas(5)[0];
+    RAWFRAME_EXPECT(kRising < 0.01F && ui.transitioning(kPanel));
+    RAWFRAME_EXPECT(std::abs(kAlphas(10)[0] - 1) < 0.01F && !ui.transitioning(kPanel));
+    RAWFRAME_EXPECT(ui.setStates(kPanel, {.hovered = true}).has_value());
+    RAWFRAME_EXPECT(std::abs(kAlphas(10)[0] - 1) < 0.01F);
+    const std::array<float, 2> kHalfway = kAlphas(10.5);
+    RAWFRAME_EXPECT(kHalfway[0] > 0.3F && kHalfway[0] < 0.7F && std::abs(kHalfway[1] - kHalfway[0] * 0.5F) < 0.01F &&
+                    ui.transitioning(kPanel));
+    RAWFRAME_EXPECT(kAlphas(11.5)[0] == 0 && !ui.transitioning(kPanel));
+    // An opacity past nought to one, refused.
+    RAWFRAME_EXPECT(!ui.setLook(kCard, {.opacity = 2}).has_value());
 }

@@ -40,7 +40,13 @@ module rawframe.ui
 // its fill it may paint a gradient from `gradientFrom` to
 // `gradientTo` (0xRRGGBBAA): LINEAR along `gradientAngle` degrees clockwise
 // from toward the top, as CSS's linear-gradient, or RADIAL out from its
-// center to its farthest corner.
+// center to its farthest corner. Its `transparency`, nought to one,
+// fades it and everything inside it, words too, at once: a node at 0.5
+// and a child of it at 0.5 show the child at a quarter, as a
+// presentation's opacity multiplies down its tree. Nought is opaque and one
+// draws nothing, though the node still takes its room and its presses.
+// A style class gives it as its `opacity`, one less it, and its
+// transitions move it, so a menu fades in as its class's state changes.
 //
 // It may show words: `text` names a label by the identity the game's
 // `label` line gives it, a key of one of its string tables in the player's
@@ -173,6 +179,7 @@ struct Node {
     gradientAngle: f32
     gradientFrom: u32
     gradientTo: u32
+    transparency: f32
     text: u64
     textValue: i64
     textSecond: i64

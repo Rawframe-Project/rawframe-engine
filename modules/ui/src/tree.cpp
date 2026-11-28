@@ -337,6 +337,7 @@ muiVisualStyle visualOf(const Look& look) noexcept {
                 muiGradientStop{.color = colorOf(look.gradient.colors[at]), .position = look.gradient.positions[at]};
         }
     }
+    style.opacity = look.opacity;
     return style;
 }
 

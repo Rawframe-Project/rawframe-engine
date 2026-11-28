@@ -1,6 +1,7 @@
 // How a node's fields lay out and look: sizes automatic at
 // nought, a parent's AUTO stretching, a popup's margin taken as its gap, a
-// number past its constants refused, and the parts a styled node sets.
+// number past its constants refused, the parts a styled node sets, and
+// its transparency as one less its opacity, held to its range.
 
 #include "rawframe/test/test.h"
 #include "rawframe/ui/node_look.h"
@@ -45,6 +46,14 @@ RAWFRAME_TEST(ANodesFieldsLookAsTheySay) {
     RAWFRAME_EXPECT(ownPartsOf(NodeFields{.fill = 0x102030FF, .radius = 6}) ==
                     (static_cast<LookParts>(LookPart::Fill) | static_cast<LookParts>(LookPart::Radius)));
     RAWFRAME_EXPECT(ownPartsOf(NodeFields{}) == 0);
+    // Nought is opaque and its own only when given.
+    RAWFRAME_EXPECT(lookOf(NodeFields{}).opacity == 1 &&
+                    lookOf(NodeFields{.transparency = 0.25F}).opacity == 0.75F &&
+                    ownPartsOf(NodeFields{.transparency = 0.25F}) == static_cast<LookParts>(LookPart::Opacity));
+    // A game's number past the range is held to it; not a number, opaque.
+    RAWFRAME_EXPECT(lookOf(NodeFields{.transparency = 4}).opacity == 0 &&
+                    lookOf(NodeFields{.transparency = -4}).opacity == 1 &&
+                    lookOf(NodeFields{.transparency = std::numeric_limits<float>::quiet_NaN()}).opacity == 1);
     RAWFRAME_EXPECT(textLookOf(NodeFields{}, Font{}).size == 16 &&
                     textLookOf(NodeFields{.textSize = 24}, Font{}).size == 24);
 }

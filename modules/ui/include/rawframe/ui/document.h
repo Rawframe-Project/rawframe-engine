@@ -40,8 +40,8 @@
 // none; `layer`: none, activation, modal, overlay; `edit`: none, line,
 // message, lines; `scroll` and `range`: none, horizontal, vertical, and
 // for `scroll` both; `check`: none, checkbox, switch, radio; `popup`:
-// none, below, above, start, end, center; a range's
-// numbers within a million of nought). Last,
+// none, below, above, start, end, center; `transparency` from nought to
+// one; a range's numbers within a million of nought). Last,
 // `children`, the nodes inside it. Siblings are drawn by `order`, as
 // without a document.
 
@@ -98,6 +98,7 @@ struct NodeFields {
     float gradientAngle = 0;
     std::uint32_t gradientFrom = 0;
     std::uint32_t gradientTo = 0;
+    float transparency = 0;
     std::uint64_t text = 0;
     std::int64_t textValue = 0;
     std::int64_t textSecond = 0;

@@ -26,14 +26,15 @@ constexpr std::array<std::string_view, 8> kTransitionFields = {
 constexpr std::array<std::string_view, 6> kEasings = {
     "linear", "ease", "ease_in", "ease_out", "ease_in_out", "cubic_bezier"};
 // The parts a transition names, as the look's fields name them.
-constexpr std::array<std::pair<std::string_view, LookPart>, 8> kPartNames = {{{"fill", LookPart::Fill},
+constexpr std::array<std::pair<std::string_view, LookPart>, 9> kPartNames = {{{"fill", LookPart::Fill},
                                                                               {"borderColor", LookPart::BorderColor},
                                                                               {"radius", LookPart::Radius},
                                                                               {"clip", LookPart::Clip},
                                                                               {"imageTint", LookPart::ImageTint},
                                                                               {"outerShadow", LookPart::OuterShadow},
                                                                               {"innerShadow", LookPart::InnerShadow},
-                                                                              {"gradient", LookPart::Gradient}}};
+                                                                              {"gradient", LookPart::Gradient},
+                                                                              {"opacity", LookPart::Opacity}}};
 // Lengths and offsets in logical pixels, and times in seconds, are bounded
 // so no document asks for a look past what a screen shows.
 constexpr double kMostPixels = 4096;
@@ -142,6 +143,17 @@ result::Result<StyleLook> lookOf(const Value& value, const std::string& path) {
         RAWFRAME_TRY_ASSIGN(const Value* gradient, kRecord.required("gradient", Value::Kind::Object));
         RAWFRAME_TRY_ASSIGN(styled.look.gradient, gradientOf(*gradient, kRecord.pathOf("gradient")));
         styled.parts |= static_cast<LookParts>(LookPart::Gradient);
+    }
+    if (kHas("opacity")) {
+        // Given, any value is a choice, one too: a state's look may give back
+        // what its base took away.
+        RAWFRAME_TRY_ASSIGN(const Value* opacity, kRecord.required("opacity", Value::Kind::Number));
+        const std::optional<double> kOpacity = opacity->real();
+        if (!kOpacity.has_value() || !std::isfinite(*kOpacity) || *kOpacity < 0 || *kOpacity > 1) {
+            return invalid(kRecord.pathOf("opacity"), "an opacity is from nought to one");
+        }
+        styled.look.opacity = static_cast<float>(*kOpacity);
+        styled.parts |= static_cast<LookParts>(LookPart::Opacity);
     }
     if (styled.parts == 0) {
         return document::notCanonical(path, "a look that sets nothing is omitted");

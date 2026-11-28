@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 
 namespace rawframe::ui {
@@ -80,7 +81,10 @@ Look lookOf(const NodeFields& node) noexcept {
         // Nought draws it as it is.
         .imageTint = node.imageTint != 0 ? node.imageTint : 0xFFFFFFFF,
         .outerShadow = {.color = node.shadowColor, .x = node.shadowX, .y = node.shadowY, .blur = node.shadowBlur},
-        .gradient = kGradient};
+        .gradient = kGradient,
+        // A game's number past its range is held to it; not a number is
+        // opaque.
+        .opacity = 1 - std::clamp(std::isnan(node.transparency) ? 0.0F : node.transparency, 0.0F, 1.0F)};
 }
 
 LookParts ownPartsOf(const NodeFields& node) noexcept {
@@ -96,6 +100,7 @@ LookParts ownPartsOf(const NodeFields& node) noexcept {
     kOwn(node.imageTint != 0, LookPart::ImageTint);
     kOwn(node.shadowColor != 0, LookPart::OuterShadow);
     kOwn(node.gradientKind != 0, LookPart::Gradient);
+    kOwn(node.transparency != 0, LookPart::Opacity);
     return parts;
 }
 

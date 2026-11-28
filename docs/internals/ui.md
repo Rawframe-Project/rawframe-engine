@@ -18,7 +18,7 @@ A dedicated server carries the node components as values and links none of this.
 
 ## Layout and drawing
 
-`world_ui` mirrors the nodes into the tree in `presentation_extract`, lays each player's tree out in the player's view (their region of the game's layout, constrained to its aspect), and draws it. Layout is Scale+Offset sizing with flexbox rules; looks are fills, borders, images, nine slices, shadows and gradients, inside clips. The tree draws a draw-command list that `render_canvas_gpu` paints over the scene and the canvas, each box a rounded shape by its signed distance, smoothed over a pixel. A node or subtree that did not change is not laid out or painted again.
+`world_ui` mirrors the nodes into the tree in `presentation_extract`, lays each player's tree out in the player's view (their region of the game's layout, constrained to its aspect), and draws it. Layout is Scale+Offset sizing with flexbox rules; looks are fills, borders, images, nine slices, shadows and gradients, inside clips, each command's colors multiplied by its node's opacity and its ancestors' (a node's `transparency` is one less its opacity, so a zeroed node is opaque). The tree draws a draw-command list that `render_canvas_gpu` paints over the scene and the canvas, each box a rounded shape by its signed distance, smoothed over a pixel. A node or subtree that did not change is not laid out or painted again.
 
 ## Text
 
