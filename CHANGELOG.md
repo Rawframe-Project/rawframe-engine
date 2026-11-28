@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.9.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.1...v0.9.0) (2026-11-27)
+
+This release fixes identities the tools could mint twice on some processors. No wire, save, checkpoint or cooked format changes.
+
+### Changed
+
+- On Windows, build with the `clang-cl` that Visual Studio installs. MSVC's standard library refuses a Clang older than the one it ships with, so a separately installed LLVM stops compiling the engine when Visual Studio updates ([#235](https://github.com/Rawframe-Project/rawframe-engine/pull/235)).
+
+### Fixed
+
+- The tools mint every new identity from the operating system's secure random source: a new game's components and resources (`rawframe-author new` and Studio's new game), an imported asset, a new scene, an entity an extension makes, Studio's records and the cook's subassets. Before, they read `std::random_device`, which libstdc++ answers from the processor's RDSEED instruction, and AMD's Zen 5 processors answer it with zero for many calls under load. Two identities could then be the same, and a game made from a template could be refused with "two components share a stable ID" ([#236](https://github.com/Rawframe-Project/rawframe-engine/pull/236)).
+
 ## [0.8.1](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.0...v0.8.1) (2026-11-08)
 
 This release fixes which repository Studio's git works in. No wire, save, checkpoint or cooked format changes.
