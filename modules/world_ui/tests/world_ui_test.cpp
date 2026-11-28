@@ -3,8 +3,9 @@
 // player, siblings in order; a node changes, goes, and is left out as its
 // component does; nothing unchanged is laid out again; a new World starts
 // afresh; values the tree cannot take, a gradient of no kind among them,
-// are left out and counted; and a node shows its label's words in the
-// game's font once it is read, sized by them; a press lands on the
+// are left out and counted; a node's transparency fades its subtree; a
+// node shows its label's words in the game's font once it is read, sized
+// by them; a press lands on the
 // node that takes it, with its code, or passes through; a text
 // field's keyboard, typing, and placeholder are fields_test.cpp's;
 // navigation moves focus without a pointer; a styled node looks as
@@ -20,6 +21,7 @@
 #include "rig.h"
 
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -85,6 +87,30 @@ RAWFRAME_TEST(ANodeFollowsItsComponent) {
     rig.put(rig.player, kHudId, panel());
     RAWFRAME_EXPECT(rig.frame());
     RAWFRAME_EXPECT(rig.ui->drawn().boxes.size() == 2 && at(rig.ui->drawn().boxes[1], 105, 55, 250, 30));
+}
+
+RAWFRAME_TEST(ANodesTransparencyFadesItsSubtree) {
+    Rig rig;
+    ui::NodeFields faded = panel();
+    faded.transparency = 0.5F;
+    ui::NodeFields inner = meter(100);
+    inner.transparency = 0.5F;
+    rig.put(rig.player, kHudId, faded);
+    rig.put(rig.player, kMeterId, inner);
+    RAWFRAME_EXPECT(rig.frame());
+    const auto kAlpha = [&rig](std::size_t box) {
+        return rig.ui->drawn().boxes.size() > box ? rig.ui->drawn().boxes[box].fill[3] : -1.0F;
+    };
+    // The panel at half, the meter inside it at a quarter.
+    RAWFRAME_EXPECT(std::abs(kAlpha(0) - 0.5F) < 0.01F && std::abs(kAlpha(1) - 0.25F) < 0.01F);
+    // Past one, held to one: nothing of the subtree is drawn.
+    faded.transparency = 3;
+    rig.put(rig.player, kHudId, faded);
+    RAWFRAME_EXPECT(rig.frame() && rig.ui->drawn().boxes.empty() && rig.ui->statistics().leftOut == 0);
+    // Back at nought, opaque.
+    rig.put(rig.player, kHudId, panel());
+    rig.put(rig.player, kMeterId, meter(100));
+    RAWFRAME_EXPECT(rig.frame() && std::abs(kAlpha(0) - 1) < 0.01F && std::abs(kAlpha(1) - 1) < 0.01F);
 }
 
 RAWFRAME_TEST(TheListIsInLogicalPixelsAtTheDevicesScale) {

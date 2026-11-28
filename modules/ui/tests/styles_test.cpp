@@ -59,7 +59,8 @@ constexpr std::string_view kSheet = R"({
         "fill": "#0000ffff"
       },
       "disabled": {
-        "fill": "#80808080"
+        "fill": "#80808080",
+        "opacity": 0.5
       }
     }
   ]
@@ -98,7 +99,9 @@ RAWFRAME_TEST(AStyleSheetIsReadAsWritten) {
                     kButton.transitions[0].second.easing == Transition::Easing::Linear);
     RAWFRAME_EXPECT(kButton.transitions[1].second.kind == Transition::Kind::Spring &&
                     kButton.transitions[1].second.frequency == 4 && kButton.transitions[1].second.dampingRatio == 1);
-    RAWFRAME_EXPECT(kSheetRead.styles[1].looks[4].look.fill == 0x80808080);
+    RAWFRAME_EXPECT(kSheetRead.styles[1].looks[4].look.fill == 0x80808080 &&
+                    kSheetRead.styles[1].looks[4].look.opacity == 0.5F &&
+                    kSheetRead.styles[1].looks[4].parts == (LookPart::Fill | LookPart::Opacity));
     // A checked look, by Variant's place.
     RAWFRAME_EXPECT(kSheetRead.styles[1].looks[static_cast<std::size_t>(Variant::Checked)].look.fill == 0x0000FFFF);
 }
@@ -161,6 +164,8 @@ RAWFRAME_TEST(AStyleSheetIsRefusedWhereItIsWrong) {
     RAWFRAME_EXPECT(kRefused(with("#ff0000ff", "#FF0000FF"), "fill"));
     RAWFRAME_EXPECT(kRefused(with("#ff0000ff", "#ff0000"), "fill"));
     RAWFRAME_EXPECT(kRefused(with("\"radius\": 6", "\"radius\": -6"), "radius"));
+    RAWFRAME_EXPECT(kRefused(with("\"opacity\": 0.5", "\"opacity\": 1.5"), "opacity"));
+    RAWFRAME_EXPECT(kRefused(with("\"opacity\": 0.5", "\"opacity\": \"half\""), "opacity"));
     RAWFRAME_EXPECT(kRefused(with("0a7d2e9c41b85f36", "6c1f0e3b9a2d4c57"), "styleId"));
     RAWFRAME_EXPECT(kRefused(with("\"quiet\"", "\"button\""), "name"));
     RAWFRAME_EXPECT(kRefused(with("\"quiet\"", "\"Quiet\""), "name"));

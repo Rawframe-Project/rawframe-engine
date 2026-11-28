@@ -25,8 +25,9 @@
 //
 // A look's parts are `fill`, `borderColor`, `radius`, `clip`, `imageTint`,
 // `outerShadow` and `innerShadow` (`color`, `x`, `y`, `blur`, `spread`),
-// and `gradient` (`kind` linear or radial, `angle`, `from`, `to`); colors
-// are `#rrggbbaa`, sRGB with straight alpha. A transition is `timed` (the
+// `gradient` (`kind` linear or radial, `angle`, `from`, `to`), and
+// `opacity` (nought to one, multiplying the node and everything inside it);
+// colors are `#rrggbbaa`, sRGB with straight alpha. A transition is `timed` (the
 // default: `seconds`, `delaySeconds`, `easing` of linear, ease, ease_in,
 // ease_out, ease_in_out, or cubic_bezier with `bezier`) or `spring`
 // (`frequency`, `dampingRatio`), for every state of its class.
@@ -52,8 +53,8 @@ inline constexpr std::array<std::string_view, 9> kStyleFields = {
 inline constexpr std::array<std::string_view, 6> kStyleVariantFields = {
     "base", "focused", "hovered", "pressed", "disabled", "checked"};
 /// A look's parts in its document's order.
-inline constexpr std::array<std::string_view, 8> kStyleLookFields = {
-    "fill", "borderColor", "radius", "clip", "imageTint", "outerShadow", "innerShadow", "gradient"};
+inline constexpr std::array<std::string_view, 9> kStyleLookFields = {
+    "fill", "borderColor", "radius", "clip", "imageTint", "outerShadow", "innerShadow", "gradient", "opacity"};
 
 /// What one variant of a class sets: its `parts` of `look`.
 struct StyleLook {

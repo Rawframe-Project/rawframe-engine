@@ -42,6 +42,9 @@ ui::Look overlaid(ui::Look under, const ui::StyleLook& over) {
     if (kSets(ui::LookPart::Gradient)) {
         under.gradient = over.look.gradient;
     }
+    if (kSets(ui::LookPart::Opacity)) {
+        under.opacity = over.look.opacity;
+    }
     return under;
 }
 

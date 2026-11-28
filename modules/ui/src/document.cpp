@@ -29,6 +29,8 @@ enum class Form : std::uint8_t {
     Real,
     /// A range's number, within a million of nought (an f32).
     Value,
+    /// A share from nought to one (an f32).
+    Fraction,
     /// `#rrggbbaa` (a u32 0xRRGGBBAA).
     Color,
     /// 16 lowercase hexadecimal digits (a u64).
@@ -69,8 +71,14 @@ constexpr std::array<std::string_view, 3> kFlexWraps = {"one_line", "lines", "li
 constexpr std::array<std::string_view, 7> kLines = {
     "start", "end", "center", "space_between", "space_around", "space_evenly", "stretch"};
 
-// rawframe.ui.Node's fields in its order.
-constexpr std::array<FieldForm, 75> kFieldForms = {{
+// The node's values lie whole: `spare` fills what would be a gap before
+// `text`, so no byte of a node component is padding.
+static_assert(offsetof(NodeFields, text) == offsetof(NodeFields, spare) + sizeof(std::uint32_t) &&
+              sizeof(NodeFields) == offsetof(NodeFields, lineGap) + sizeof(float));
+
+// rawframe.ui.Node's fields in its order; not `spare`, which a document
+// never writes.
+constexpr std::array<FieldForm, 76> kFieldForms = {{
     {"widthScale", offsetof(NodeFields, widthScale), Form::Real, {}},
     {"widthOffset", offsetof(NodeFields, widthOffset), Form::Real, {}},
     {"heightScale", offsetof(NodeFields, heightScale), Form::Real, {}},
@@ -108,6 +116,7 @@ constexpr std::array<FieldForm, 75> kFieldForms = {{
     {"gradientAngle", offsetof(NodeFields, gradientAngle), Form::Real, {}},
     {"gradientFrom", offsetof(NodeFields, gradientFrom), Form::Color, {}},
     {"gradientTo", offsetof(NodeFields, gradientTo), Form::Color, {}},
+    {"transparency", offsetof(NodeFields, transparency), Form::Fraction, {}},
     {"text", offsetof(NodeFields, text), Form::Identity, {}},
     {"textValue", offsetof(NodeFields, textValue), Form::Whole64, {}},
     {"textSecond", offsetof(NodeFields, textSecond), Form::Whole64, {}},
@@ -193,6 +202,14 @@ result::Result<std::uint64_t> hexOf(const Record& record, std::string_view field
 
 result::Status fieldOf(const Record& record, const FieldForm& form, NodeFields& fields) {
     switch (form.form) {
+    case Form::Fraction: {
+        RAWFRAME_TRY_ASSIGN(const double kValue, record.real(form.name, 0));
+        if (!std::isfinite(kValue) || kValue < 0 || kValue > 1) {
+            return invalid(record.pathOf(form.name), "a share is from nought to one");
+        }
+        store(fields, form.offset, static_cast<float>(kValue));
+        return {};
+    }
     case Form::Real:
     case Form::Value: {
         RAWFRAME_TRY_ASSIGN(const double kValue, record.real(form.name, 0));

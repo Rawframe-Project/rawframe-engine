@@ -35,7 +35,7 @@ muiVariant variantOf(Variant variant) noexcept {
 } // namespace
 
 muiPropertyMask maskOf(LookParts parts) noexcept {
-    constexpr std::array<std::pair<LookPart, std::array<muiProperty, 4>>, 9> kProperties = {{
+    constexpr std::array<std::pair<LookPart, std::array<muiProperty, 4>>, 10> kProperties = {{
         {LookPart::Fill, {mui_propertyBackground}},
         {LookPart::BorderColor,
          {mui_propertyBorderColorStart,
@@ -53,6 +53,7 @@ muiPropertyMask maskOf(LookParts parts) noexcept {
         {LookPart::OuterShadow, {mui_propertyOuterShadow}},
         {LookPart::InnerShadow, {mui_propertyInnerShadow}},
         {LookPart::Gradient, {mui_propertyGradient}},
+        {LookPart::Opacity, {mui_propertyOpacity}},
     }};
     muiPropertyMask mask = 0;
     for (const auto& [kPart, kNamed] : kProperties) {
