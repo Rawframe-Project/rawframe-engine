@@ -189,10 +189,14 @@ struct RayHit3D {
 /// capsule) and a Character3D is moved by trace and slide. Gameplay writes
 /// the Velocity3D it wants this tick, gravity and all; the step moves the
 /// body as far along it as the world allows, sliding along what it meets,
-/// and leaves in Velocity3D the velocity it moved with. The world's solid
-/// bodies stop it, by its Body3D's collision class; other characters never
-/// do. Numbers only, so it replicates and a client predicts it; a ray down
-/// finds the entity underfoot. Its layout has padding after `ground`.
+/// climbing steps, and leaves in Velocity3D the velocity it moved with. The
+/// world's solid bodies stop it, by its Body3D's collision class; other
+/// characters never do. Standing on a body that moves (a platform, a lift, a
+/// crate), it is carried with the point it stands on, swept as its own move
+/// is, and moved along, not turned; the carry is not in the Velocity3D it
+/// leaves, so gameplay that keeps its velocity from tick to tick never
+/// gathers it. Numbers only, so it replicates and a client predicts it; a ray
+/// down finds the entity underfoot. Its layout has padding after `ground`.
 struct Character3D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
         schema::ComponentTypeId::fromText("86a75d11-95b0-42d6-af49-cabc15fdf340");
@@ -210,6 +214,25 @@ struct Character3D {
     float groundNormalX = 0;
     float groundNormalY = 0;
     float groundNormalZ = 0;
+    /// The tallest step a grounded character walking into it climbs in one
+    /// move (a stair's riser, a curb), at most its own height; nought climbs
+    /// none.
+    float stepHeight = 0;
+    /// What it weighs, in kilograms, when it pushes: walking into a dynamic
+    /// body that weighs at most `pushRatio` times as much, it gives the body
+    /// the speed it was stopped short by (less, as the body is heavier than
+    /// it). Heavier bodies, ground it stands on, and every body while either
+    /// is nought, only stop it.
+    float mass = 0;
+    float pushRatio = 0;
+    /// The half length of the capsule's segment it wants, below its Body3D's
+    /// height to crouch; nought, or more than the height, stands. It changes
+    /// with its feet where they are. Shrinking always happens; growing waits,
+    /// a tick at a time, until the taller capsule overlaps nothing but
+    /// ground.
+    float stance = 0;
+    /// Written by every step: the half length its capsule has now.
+    float stanceHeight = 0;
 };
 
 /// Which of the physics settings' meshes a body of Shape::Mesh is made of,

@@ -70,7 +70,7 @@ fn join(count: i32, bodies: [physics3d.Body3D], poses: [physics3d.Pose3D], chara
             animators[i] = animation.Animator(WALKER_GAIT, animation.PRESENTATION, u32(0), u64(0))
             poses[i] = physics3d.Pose3D(random.unit(0) * 30.0 - 15.0, 1.3, random.unit(0) * 30.0 - 15.0, 0.0, 0.0,
                                         0.0, 1.0)
-            characters[i] = physics3d.Character3D(0.7, 0.3, physics3d.AIRBORNE, 0.0, 0.0, 0.0)
+            characters[i] = physics3d.Character3D(0.7, 0.3, physics3d.AIRBORNE, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         }
         i = i + 1
     }

@@ -95,12 +95,17 @@ const std::array<ComponentLayout, 2> kAnswerLayouts = {
                     .fields = kOverlapFields},
 };
 
-constexpr std::array<ComponentField, 5> kCharacterFields = {{
+constexpr std::array<ComponentField, 10> kCharacterFields = {{
     {"groundNormal", offsetof(Character2D, groundNormal), FieldType::F32},
     {"snap", offsetof(Character2D, snap), FieldType::F32},
     {"ground", offsetof(Character2D, ground), FieldType::U8},
     {"groundNormalX", offsetof(Character2D, groundNormalX), FieldType::F32},
     {"groundNormalY", offsetof(Character2D, groundNormalY), FieldType::F32},
+    {"stepHeight", offsetof(Character2D, stepHeight), FieldType::F32},
+    {"mass", offsetof(Character2D, mass), FieldType::F32},
+    {"pushRatio", offsetof(Character2D, pushRatio), FieldType::F32},
+    {"stance", offsetof(Character2D, stance), FieldType::F32},
+    {"stanceHeight", offsetof(Character2D, stanceHeight), FieldType::F32},
 }};
 
 template <typename T>

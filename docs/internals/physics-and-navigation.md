@@ -22,7 +22,7 @@ One system per World, `rawframe.physics2d.step` or `rawframe.physics3d.step`, st
 1. Bodies follow their entities, in entity order: an entity that gained the body components gets a body, one that lost them loses it, and a changed body component makes the body again.
 2. What gameplay wrote since the last step goes in. A pose that is not what the last step wrote is a teleport, which makes the body again there, so a body put somewhere carries nothing of where it was. A velocity is a new velocity; an impulse is applied and cleared.
 3. Joints follow their entities as bodies do.
-4. Every character finds how far it can move along the velocity gameplay wants and is given the velocity that takes it there; then the world steps once, with the game's substeps.
+4. Every character, in entity order, takes the stance it wants as far as there is room, finds how far it can move along the velocity gameplay wants (climbing a step on the way) and is given the velocity that takes it there, and pushes the light dynamic bodies that stopped it; then the world steps once, with the game's substeps, and each character standing on a body that moved is carried with the point it stands on.
 5. Contacts are written from the step's contact and overlap streams, and every body's pose and velocity are written back.
 6. Attached entities are put at their parent's pose and offset, parents before children.
 
@@ -36,7 +36,7 @@ A game has one collision document (`collision` lines): classes, each with a name
 
 ## Characters, joints and attachments
 
-A character controller moves a body along the velocity a game wants, slides along what it meets, and reports its ground state: on a surface no steeper than it may stand on, or pressed against one too steep. Joints hold each axis of their frame free, limited or locked. An attachment puts a child entity at its parent's pose and offset, after the step, and a kinematic body may follow an animated bone.
+A character controller moves a body along the velocity a game wants, slides along what it meets, and reports its ground state: on a surface no steeper than it may stand on, or pressed against one too steep. A surface too steep to stand on is a wall: sliding along it never turns a wish that does not rise into one that does. A grounded character climbs a step no taller than its `stepHeight` in the same move, and its ground is then the tread a ray just past its front finds, since a capsule resting on a step's edge touches only the edge's slanted normal. It rides what it stands on: after the step it is swept along by how far the point under it moved, without that carry entering the velocity gameplay reads back. With a mass it pushes dynamic bodies up to a set multiple of it, giving each the speed it was stopped short by, less as the body is heavier. Its stance resizes the capsule with its feet in place, shrinking at once and growing only into room. Everything it keeps is in its component (its ground, its stance), never in the physics world, so a predicting client that puts a state back moves it exactly as the server did; the engine's controller is built on the libraries' mover kits rather than Maul3D's own character, which keeps that state inside the library and sees every shape. Joints hold each axis of their frame free, limited or locked. An attachment puts a child entity at its parent's pose and offset, after the step, and a kinematic body may follow an animated bone.
 
 ## Queries
 

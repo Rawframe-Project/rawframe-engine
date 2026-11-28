@@ -86,7 +86,7 @@ fn join(count: i32, bodies: [physics2d.Body2D], poses: [physics2d.Pose2D], chara
             bodies[i] = physics2d.Body2D(physics2d.KINEMATIC, physics2d.CAPSULE, true, false, false, RUNNER, 0.3,
                                          0.4, 0.0, 0.0, 0.0, 0.0, 0.0)
             poses[i] = physics2d.Pose2D(random.unit(0) * 40.0 - 20.0, 1.3, 1.0, 0.0)
-            characters[i] = physics2d.Character2D(0.7, 0.2, physics2d.AIRBORNE, 0.0, 0.0)
+            characters[i] = physics2d.Character2D(0.7, 0.2, physics2d.AIRBORNE, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         }
         i = i + 1
     }

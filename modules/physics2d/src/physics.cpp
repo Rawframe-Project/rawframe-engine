@@ -97,6 +97,14 @@ struct Mapped {
     bool refused = false;
     /// Made as a character's, which character queries do not see.
     bool character = false;
+    /// A capsule's half length as made: its Body2D's height, or a
+    /// character's stance.
+    float halfHeight = 0;
+    /// What a character stands on as it moves this tick, and the point it
+    /// will stand at in that body's frame and in the world.
+    m2BodyId riding{};
+    m2Vec2 ridingAt{0, 0};
+    m2Pos2 ridden{0, 0};
     Body2D made;
     Pose2D pose;
     Velocity2D velocity;
@@ -110,6 +118,16 @@ struct Row {
     Character2D* character = nullptr;
     const Tiles2D* tiles = nullptr;
 };
+
+/// The half length a row's capsule is made with: a character's stance
+/// while it is below its Body2D's height, else that height.
+[[nodiscard]] float halfHeightOf(const Row& row) noexcept {
+    const float kHeight = row.body->height;
+    if (row.character != nullptr && row.character->stanceHeight > 0 && row.character->stanceHeight < kHeight) {
+        return row.character->stanceHeight;
+    }
+    return kHeight;
+}
 
 /// The tilemap a row's Tiles2D names, nought for none.
 [[nodiscard]] std::uint64_t tilemapOf(const Row& row) noexcept {
@@ -183,6 +201,8 @@ struct Physics2D::State {
         into.tilemap = tilemapOf(row);
         into.since.reset();
         into.character = row.character != nullptr;
+        into.halfHeight = halfHeightOf(row);
+        into.riding = {};
         const auto kClass = filters.classIndex(body.collisionClass);
         const std::vector<tilemap::SolidRun>* kRuns = nullptr;
         if (body.shape == static_cast<std::uint8_t>(Shape::Tiles)) {
@@ -235,7 +255,8 @@ struct Physics2D::State {
                 const m2Polygon kBox = m2MakeBox(body.width, body.height);
                 result = m2CreatePolygonShape(physics, kBody, &definitionOf, &kBox, &made);
             } else {
-                const m2Capsule kCapsule{.point1 = {0, -body.height}, .point2 = {0, body.height}, .radius = body.width};
+                const m2Capsule kCapsule{
+                    .point1 = {0, -into.halfHeight}, .point2 = {0, into.halfHeight}, .radius = body.width};
                 result = m2CreateCapsuleShape(physics, kBody, &definitionOf, &kCapsule, &made);
             }
             return result == m2_success ? made : m2ShapeId{};
@@ -481,40 +502,120 @@ struct Physics2D::State {
         }
     }
 
+    /// The solids a character of `body` meets: its class's, never a
+    /// character's.
+    [[nodiscard]] m2QueryFilter characterFilter(const Body2D& body) const {
+        return m2QueryFilter{.categoryBits = physics::kCharacterQuery,
+                             .maskBits =
+                                 filters.filter(*filters.classIndex(body.collisionClass)).solidMask & physics::kSolids};
+    }
+
     /// A character's move this tick, as the velocity its kinematic body
-    /// steps with; one that is not a made kinematic capsule stays Airborne
-    /// and moves as its body would.
-    void moveCharacter(const Row& row, const Mapped& entry, float seconds) {
+    /// steps with, after its stance changes as far as it may; one that is
+    /// not a made kinematic capsule stays Airborne and moves as its body
+    /// would.
+    void moveCharacter(const Row& row, Mapped& entry, float seconds) {
         Character2D& controlled = *row.character;
         const bool kWasGrounded = controlled.ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
         controlled.ground = static_cast<std::uint8_t>(physics::Ground::Airborne);
         controlled.groundNormalX = 0;
         controlled.groundNormalY = 0;
+        entry.riding = {};
         const Body2D& body = entry.made;
         if (entry.refused || body.motion != static_cast<std::uint8_t>(physics::Motion::Kinematic) ||
             body.shape != static_cast<std::uint8_t>(Shape::Capsule) || body.sensor ||
-            !finite(controlled.groundNormal) || !finite(controlled.snap) || !(seconds > 0)) {
+            !finite(controlled.groundNormal) || !finite(controlled.snap) || !finite(controlled.stepHeight) ||
+            !finite(controlled.mass) || !finite(controlled.pushRatio) || !finite(controlled.stance) || !(seconds > 0)) {
             return;
         }
+        CharacterShape shape{.radius = body.width, .halfHeight = entry.halfHeight, .filter = characterFilter(body)};
+        m2Transform from = m2Body_GetTransform(physics, entry.body);
+
+        // The stance it wants, its feet where they are: smaller at once,
+        // taller once there is room.
+        const float kWanted =
+            controlled.stance > 0 && controlled.stance < body.height ? controlled.stance : body.height;
+        if (kWanted != entry.halfHeight) {
+            CharacterShape resized = shape;
+            resized.halfHeight = kWanted;
+            m2Transform there = from;
+            there.p.y += static_cast<double>(kWanted) - static_cast<double>(entry.halfHeight);
+            if (kWanted < entry.halfHeight || characterFits(physics, resized, there)) {
+                const m2Capsule kCapsule{.point1 = {0, -kWanted}, .point2 = {0, kWanted}, .radius = body.width};
+                m2Shape_SetCapsule(physics, entry.shape, &kCapsule);
+                if (entry.trigger.index1 != 0) {
+                    m2Shape_SetCapsule(physics, entry.trigger, &kCapsule);
+                }
+                m2Body_SetTransform(physics, entry.body, there.p, there.q);
+                entry.halfHeight = kWanted;
+                shape = resized;
+                from = there;
+            } else {
+                ++statistics.stancesWaiting;
+            }
+        }
+        controlled.stanceHeight = entry.halfHeight;
+
         const m2Vec2 kWish = m2Body_GetLinearVelocity(physics, entry.body);
-        const m2QueryFilter kFilter{.categoryBits = physics::kCharacterQuery,
-                                    .maskBits = filters.filter(*filters.classIndex(body.collisionClass)).solidMask &
-                                                physics::kSolids};
-        const CharacterMove kMove = physics2d::moveCharacter(physics,
-                                                             body.width,
-                                                             body.height,
-                                                             m2Body_GetTransform(physics, entry.body),
-                                                             m2Vec2{kWish.x * seconds, kWish.y * seconds},
-                                                             controlled,
-                                                             kWasGrounded,
-                                                             kFilter);
+        const CharacterMove kMove = physics2d::moveCharacter(
+            physics, shape, from, m2Vec2{kWish.x * seconds, kWish.y * seconds}, controlled, kWasGrounded, seconds);
+        // A step's climb is made at once, so no rise is left in the velocity
+        // gameplay reads back.
+        if (kMove.lift != 0) {
+            m2Body_SetTransform(
+                physics, entry.body, m2Pos2{from.p.x, from.p.y + static_cast<double>(kMove.lift)}, from.q);
+        }
         m2Body_SetLinearVelocity(
-            physics, entry.body, m2Vec2{kMove.translation.x / seconds, kMove.translation.y / seconds});
+            physics, entry.body, m2Vec2{kMove.translation.x / seconds, (kMove.translation.y - kMove.lift) / seconds});
         m2Body_SetAngularVelocity(physics, entry.body, 0);
+        for (std::int32_t index = 0; index < kMove.pushCount; ++index) {
+            const CharacterPush& push = kMove.pushes[static_cast<std::size_t>(index)];
+            m2Body_ApplyLinearImpulseAtPoint(physics, push.body, push.impulse, push.point);
+            ++statistics.characterPushes;
+        }
+        statistics.stepsClimbed += kMove.climbed ? 1 : 0;
         controlled.ground = static_cast<std::uint8_t>(kMove.ground);
         controlled.groundNormalX = kMove.normal.x;
         controlled.groundNormalY = kMove.normal.y;
+        if (kMove.ground == physics::Ground::Grounded) {
+            const m2BodyId kUnder = m2Shape_GetBody(physics, kMove.groundShape);
+            if (m2Body_GetType(physics, kUnder) != m2_staticBody) {
+                entry.riding = kUnder;
+                entry.ridden = m2Pos2{from.p.x + static_cast<double>(kMove.translation.x),
+                                      from.p.y + static_cast<double>(kMove.translation.y)};
+                entry.ridingAt = m2Body_GetLocalPoint(physics, kUnder, entry.ridden);
+            }
+        }
         ++statistics.characterMoves;
+    }
+
+    /// 4b. Characters carried with what they stood on as the step moved
+    /// it, in entity order, each swept as its own move is.
+    void carryCharacters() {
+        for (const Row& row : rows) {
+            if (row.character == nullptr) {
+                continue;
+            }
+            Mapped& entry = mapped.find(row.entity)->second;
+            if (entry.refused || entry.riding.index1 == 0 || !m2Body_IsValid(physics, entry.riding)) {
+                continue;
+            }
+            const m2Pos2 kNow = m2Body_GetWorldPoint(physics, entry.riding, entry.ridingAt);
+            const m2Vec2 kBy{static_cast<float>(kNow.x - entry.ridden.x), static_cast<float>(kNow.y - entry.ridden.y)};
+            if (kBy.x == 0 && kBy.y == 0) {
+                continue;
+            }
+            const CharacterShape kShape{
+                .radius = entry.made.width, .halfHeight = entry.halfHeight, .filter = characterFilter(entry.made)};
+            const m2Transform kAt = m2Body_GetTransform(physics, entry.body);
+            const m2Vec2 kSwept = sweepCharacter(physics, kShape, kAt, kBy);
+            m2Body_SetTransform(
+                physics,
+                entry.body,
+                m2Pos2{kAt.p.x + static_cast<double>(kSwept.x), kAt.p.y + static_cast<double>(kSwept.y)},
+                kAt.q);
+            ++statistics.charactersCarried;
+        }
     }
 
     void remove(Mapped& entry) {
@@ -647,8 +748,11 @@ struct Physics2D::State {
         for (const Row& row : rows) {
             const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
             Mapped& entry = kEntry->second;
+            // A character's stance written from outside the step (a state
+            // put back) makes it again at that stance.
             if (kNew || !same(entry.made, *row.body) || entry.character != (row.character != nullptr) ||
-                entry.tilemap != tilemapOf(row)) {
+                entry.tilemap != tilemapOf(row) ||
+                (!entry.refused && entry.character && halfHeightOf(row) != entry.halfHeight)) {
                 if (!kNew) {
                     remove(entry);
                 }
@@ -726,6 +830,7 @@ struct Physics2D::State {
         const m2Result kStepped = m2World_Step(physics, kSeconds, static_cast<std::int32_t>(settings.substeps));
         RAWFRAME_CHECK(kStepped == m2_success, "Maul2D refused a step whose length and substeps were checked");
         ++statistics.steps;
+        carryCharacters();
 
         report(world);
         breakJoints();

@@ -131,6 +131,17 @@ const SLIDING: u8 = 2
 // is at least `groundNormal` is ground; one walked off is stepped down to if
 // within `snap` below. The step writes `ground` and the normal of the
 // surface it stands on or slides along (nought in the air).
+// A grounded character walking into a step no taller than `stepHeight` (at
+// most its own height) climbs it in the same move. Standing on a body that
+// moves, it is carried along with the point it stands on; that carry is not
+// in the velocity it leaves. With a `mass` in kilograms it pushes a dynamic
+// body it walks into that weighs at most `pushRatio` times as much, giving
+// it the speed it was stopped short by (less, as the body is heavier);
+// heavier bodies only stop it. `stance` is the half length of the capsule's
+// segment it wants, below its body's height to crouch (nought stands): it
+// changes with its feet where they are, shrinking at once and growing once
+// the taller capsule has room. The step writes `stanceHeight`, the half
+// length it has now.
 struct Character3D {
     groundNormal: f32
     snap: f32
@@ -138,6 +149,11 @@ struct Character3D {
     groundNormalX: f32
     groundNormalY: f32
     groundNormalZ: f32
+    stepHeight: f32
+    mass: f32
+    pushRatio: f32
+    stance: f32
+    stanceHeight: f32
 }
 
 // Which of the game's meshes a body of shape MESH is, by the identity its

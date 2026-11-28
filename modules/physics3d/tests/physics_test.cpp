@@ -62,15 +62,17 @@ struct Scene {
     }
 
     world::EntityHandle character(const Pose3D& pose, float snap = 0) {
+        return character(pose, Character3D{.groundNormal = 0.7F, .snap = snap});
+    }
+
+    world::EntityHandle character(const Pose3D& pose, const Character3D& controlled) {
         const world::EntityHandle kEntity = body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
                                                         .shape = static_cast<std::uint8_t>(Shape::Capsule),
                                                         .fixedRotation = true,
                                                         .width = 0.3F,
                                                         .height = 0.4F},
                                                  pose);
-        RAWFRAME_EXPECT(
-            world.insert(kEntity, *schema->key<Character3D>(), Character3D{.groundNormal = 0.7F, .snap = snap})
-                .has_value());
+        RAWFRAME_EXPECT(world.insert(kEntity, *schema->key<Character3D>(), controlled).has_value());
         return kEntity;
     }
 
@@ -451,7 +453,7 @@ RAWFRAME_TEST(ACharacterAmongStaticBoxesMovesByTheSameBitsEverywhere) {
     }
     // The same bits on every compiler and target the check builds, x86-64
     // and wasm32 alike: a moved digest says why in its commit.
-    RAWFRAME_EXPECT(digest == 0xf6fe53d849adc15fULL);
+    RAWFRAME_EXPECT(digest == 0x1e9f0a98e5a3f243ULL);
     // Both were moved every tick.
     RAWFRAME_EXPECT(scene.physics->statistics().characterMoves == 960);
 }
@@ -514,6 +516,200 @@ RAWFRAME_TEST(CharactersPassThroughEachOther) {
     }
     RAWFRAME_EXPECT(scene.pose(kLeft).x > 2 && scene.pose(kRight).x < -2);
     RAWFRAME_EXPECT(scene.characterOf(kRight).ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
+}
+
+RAWFRAME_TEST(ACharacterClimbsAStepButNotAWallOrARamp) {
+    // A riser 0.2 high from x = 1, a wall 0.5 high from x = 1: a
+    // character climbing 0.3 walks up the one and stops at the other.
+    const auto kRun = [](float riser, float stepHeight) {
+        Scene scene;
+        scene.body(kGround, {});
+        scene.body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                          .shape = static_cast<std::uint8_t>(Shape::Box),
+                          .width = 2,
+                          .height = riser / 2,
+                          .depth = 5},
+                   {.x = 3, .y = 0.5 + (riser / 2)});
+        const world::EntityHandle kRunner =
+            scene.character({.y = 1.2}, Character3D{.groundNormal = 0.7F, .snap = 0.1F, .stepHeight = stepHeight});
+        for (int tick = 0; tick < 90; ++tick) {
+            scene.walk(kRunner, 3);
+        }
+        return scene.pose(kRunner);
+    };
+    const Pose3D kClimbed = kRun(0.2F, 0.3F);
+    RAWFRAME_EXPECT(kClimbed.x > 3 && std::abs(kClimbed.y - 1.4) < 0.03);
+    const Pose3D kStopped = kRun(0.2F, 0);
+    RAWFRAME_EXPECT(std::abs(kStopped.x - 0.72) < 0.02 && std::abs(kStopped.y - 1.2) < 0.03);
+    const Pose3D kWalled = kRun(0.5F, 0.3F);
+    RAWFRAME_EXPECT(std::abs(kWalled.x - 0.7) < 0.02 && std::abs(kWalled.y - 1.2) < 0.03);
+
+    // A ramp too steep to stand on is never climbed a step at a time.
+    Scene ramp;
+    ramp.body(kGround, {});
+    Pose3D steep = tilted(3, 60);
+    steep.y = 0;
+    ramp.body(kSlab, steep);
+    const world::EntityHandle kRunner =
+        ramp.character({.y = 1.2}, Character3D{.groundNormal = 0.7F, .snap = 0.1F, .stepHeight = 0.3F});
+    for (int tick = 0; tick < 120; ++tick) {
+        ramp.walk(kRunner, 3);
+        RAWFRAME_EXPECT(ramp.pose(kRunner).y < 1.2 + 0.35);
+    }
+    RAWFRAME_EXPECT(ramp.physics->statistics().stepsClimbed < 3);
+}
+
+RAWFRAME_TEST(ACharacterRidesAPlatformAndALift) {
+    constexpr Body3D kPlatform{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
+                               .shape = static_cast<std::uint8_t>(Shape::Box),
+                               .width = 1.5F,
+                               .height = 0.1F,
+                               .depth = 1.5F};
+    // Sideways: it stays over the same point of the platform.
+    Scene scene;
+    const world::EntityHandle kSideways = scene.body(kPlatform, {.y = 1}, Velocity3D{.x = 2});
+    const world::EntityHandle kRider = scene.character({.x = 0.5, .y = 1.81}, 0.1F);
+    for (int tick = 0; tick < 120; ++tick) {
+        scene.walk(kRider, 0);
+    }
+    RAWFRAME_EXPECT(scene.pose(kSideways).x > 3.9);
+    RAWFRAME_EXPECT(std::abs((scene.pose(kRider).x - scene.pose(kSideways).x) - 0.5) < 0.01);
+    RAWFRAME_EXPECT(scene.characterOf(kRider).ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
+    RAWFRAME_EXPECT(std::abs(scene.velocity(kRider).x) < 0.001F);
+    RAWFRAME_EXPECT(scene.physics->statistics().charactersCarried > 100);
+
+    // Up and down: it stays on the lift, grounded every tick once on it.
+    Scene shaft;
+    const world::EntityHandle kLift = shaft.body(kPlatform, {.y = 1}, Velocity3D{.y = 1});
+    const world::EntityHandle kPassenger = shaft.character({.y = 1.81}, 0.1F);
+    shaft.walk(kPassenger, 0);
+    for (int tick = 0; tick < 120; ++tick) {
+        if (tick == 60) {
+            shaft.velocity(kLift) = Velocity3D{.y = -1};
+        }
+        shaft.walk(kPassenger, 0);
+        RAWFRAME_EXPECT(shaft.characterOf(kPassenger).ground == static_cast<std::uint8_t>(physics::Ground::Grounded));
+        RAWFRAME_EXPECT(std::abs((shaft.pose(kPassenger).y - shaft.pose(kLift).y) - 0.8) < 0.03);
+    }
+}
+
+RAWFRAME_TEST(ACharacterPushesALightCrateButNotAHeavyOne) {
+    const auto kRun = [](float density, float mass) {
+        Scene scene;
+        scene.body(kGround, {});
+        Body3D crate = kCrate;
+        crate.density = density;
+        const world::EntityHandle kBox = scene.body(crate, {.x = 2, .y = 1.0, .qw = 1});
+        const world::EntityHandle kPusher =
+            scene.character({.y = 1.2}, Character3D{.groundNormal = 0.7F, .mass = mass, .pushRatio = 2});
+        for (int tick = 0; tick < 120; ++tick) {
+            scene.walk(kPusher, 2);
+        }
+        return std::array<double, 3>{scene.pose(kBox).x,
+                                     scene.pose(kPusher).x,
+                                     static_cast<double>(scene.physics->statistics().characterPushes)};
+    };
+    // A crate of 1 kg before a character of 80: pushed along.
+    const auto kLight = kRun(1, 80);
+    RAWFRAME_EXPECT(kLight[0] > 3 && kLight[1] > 2 && kLight[2] > 0);
+    // Of 1,000 kg, past twice the character's weight: a wall.
+    const auto kHeavy = kRun(1000, 80);
+    RAWFRAME_EXPECT(std::abs(kHeavy[0] - 2) < 0.01 && std::abs(kHeavy[1] - 1.2) < 0.02 && kHeavy[2] == 0);
+    // A character of no weight pushes nothing.
+    const auto kWeightless = kRun(1, 0);
+    RAWFRAME_EXPECT(std::abs(kWeightless[0] - 2) < 0.01 && kWeightless[2] == 0);
+}
+
+RAWFRAME_TEST(ACharacterCrouchesUnderALedgeAndStandsWhereThereIsRoom) {
+    // A ledge from x = 1 to x = 3 whose underside is 1.1 above the ground:
+    // a character 1.4 tall crouched to 0.8 walks under it, and stands only
+    // once out from under it.
+    Scene scene;
+    scene.body(kGround, {});
+    scene.body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                      .shape = static_cast<std::uint8_t>(Shape::Box),
+                      .width = 1,
+                      .height = 0.25F,
+                      .depth = 5},
+               {.x = 2, .y = 1.85});
+    const world::EntityHandle kRunner =
+        scene.character({.x = -1, .y = 1.2}, Character3D{.groundNormal = 0.7F, .snap = 0.1F, .stance = 0.1F});
+    scene.walk(kRunner, 0);
+    RAWFRAME_EXPECT(scene.characterOf(kRunner).stanceHeight == 0.1F);
+    // Its feet stay where they were.
+    RAWFRAME_EXPECT(std::abs(scene.pose(kRunner).y - 0.9) < 0.02);
+    for (int tick = 0; tick < 60; ++tick) {
+        scene.walk(kRunner, 3);
+    }
+    RAWFRAME_EXPECT(scene.pose(kRunner).x > 1.5 && scene.pose(kRunner).x < 2.5);
+    scene.characterOf(kRunner).stance = 0;
+    scene.walk(kRunner, 0);
+    RAWFRAME_EXPECT(scene.characterOf(kRunner).stanceHeight == 0.1F);
+    RAWFRAME_EXPECT(scene.physics->statistics().stancesWaiting > 0);
+    for (int tick = 0; tick < 60; ++tick) {
+        scene.walk(kRunner, 3);
+    }
+    RAWFRAME_EXPECT(scene.pose(kRunner).x > 3.4 && scene.characterOf(kRunner).stanceHeight == 0.4F);
+    RAWFRAME_EXPECT(std::abs(scene.pose(kRunner).y - 1.2) < 0.02);
+}
+
+RAWFRAME_TEST(StepsPlatformsPushesAndStancesMoveByTheSameBitsEverywhere) {
+    // Stairs, a platform going to and fro, a crate, and a crouch on the
+    // way: what a browser predicts must be what a native server steps.
+    Scene scene;
+    scene.body(kGround, {});
+    for (int stair = 0; stair < 3; ++stair) {
+        const float kHigh = 0.15F * static_cast<float>(stair + 1);
+        scene.body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Static),
+                          .shape = static_cast<std::uint8_t>(Shape::Box),
+                          .width = 0.2F,
+                          .height = kHigh / 2,
+                          .depth = 2},
+                   {.x = 1.2 + (0.4 * stair), .y = 0.5 + (kHigh / 2), .z = 0, .qw = 1});
+    }
+    const world::EntityHandle kPlatform = scene.body(Body3D{.motion = static_cast<std::uint8_t>(Motion::Kinematic),
+                                                            .shape = static_cast<std::uint8_t>(Shape::Box),
+                                                            .width = 1,
+                                                            .height = 0.1F,
+                                                            .depth = 1},
+                                                     {.x = 0, .y = 0.6, .z = 3, .qw = 1},
+                                                     Velocity3D{.x = 1});
+    scene.body(kCrate, {.x = -2, .y = 1.0, .z = -2, .qw = 1});
+    const world::EntityHandle kClimber = scene.character(
+        {.y = 1.2}, Character3D{.groundNormal = 0.7F, .snap = 0.2F, .stepHeight = 0.2F, .mass = 80, .pushRatio = 2});
+    const world::EntityHandle kRider =
+        scene.character({.x = 0, .y = 1.41, .z = 3}, Character3D{.groundNormal = 0.7F, .snap = 0.1F});
+    const world::EntityHandle kPusher =
+        scene.character({.x = -3, .y = 1.2, .z = -2}, Character3D{.groundNormal = 0.7F, .mass = 80, .pushRatio = 2});
+    std::uint64_t digest = 0xcbf29ce484222325ULL;
+    const auto kMix = [&digest](const void* bytes, std::size_t size) {
+        for (std::size_t at = 0; at < size; ++at) {
+            digest = (digest ^ static_cast<const unsigned char*>(bytes)[at]) * 0x100000001b3ULL;
+        }
+    };
+    for (int tick = 0; tick < 240; ++tick) {
+        if (tick % 60 == 0) {
+            scene.velocity(kPlatform) = Velocity3D{.x = (tick / 60) % 2 == 0 ? 1.0F : -1.0F};
+        }
+        scene.characterOf(kClimber).stance = tick >= 120 && tick < 180 ? 0.2F : 0;
+        for (const auto& [kWho, kRun] :
+             {std::pair{kClimber, 2.0F}, std::pair{kPusher, 1.5F}, std::pair{kRider, 0.0F}}) {
+            Velocity3D& wanted = scene.velocity(kWho);
+            const bool kGrounded =
+                scene.characterOf(kWho).ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
+            wanted = Velocity3D{.x = kRun, .y = kGrounded ? 0 : wanted.y - (20.0F / 60)};
+        }
+        scene.run(1);
+        for (const world::EntityHandle kWho : {kClimber, kRider, kPusher}) {
+            kMix(&scene.pose(kWho), sizeof(Pose3D));
+            kMix(&scene.characterOf(kWho).stanceHeight, sizeof(float));
+        }
+    }
+    const Physics3DStatistics& kCounted = scene.physics->statistics();
+    RAWFRAME_EXPECT(kCounted.stepsClimbed > 0 && kCounted.characterPushes > 0 && kCounted.charactersCarried > 0);
+    // The same bits on every compiler and target the check builds, x86-64
+    // and wasm32 alike: a moved digest says why in its commit.
+    RAWFRAME_EXPECT(digest == 0x894897f4a76366f7ULL);
 }
 
 RAWFRAME_TEST(ASphereSweptAndASphereOverlappedFindTheirBodies) {
