@@ -158,13 +158,14 @@ constexpr std::array<FieldForm, 76> kFieldForms = {{
 }};
 
 /// A node's members in the order it writes them: its component, its
-/// words, Node's fields, its children.
-constexpr std::array<std::string_view, kFieldForms.size() + 3> kNodeMembers = [] {
-    std::array<std::string_view, kFieldForms.size() + 3> members{};
+/// words, its safe-area edges, Node's fields, its children.
+constexpr std::array<std::string_view, kFieldForms.size() + 4> kNodeMembers = [] {
+    std::array<std::string_view, kFieldForms.size() + 4> members{};
     members[0] = "component";
     members[1] = "shows";
+    members[2] = "safeArea";
     for (std::size_t index = 0; index < kFieldForms.size(); ++index) {
-        members[index + 2] = kFieldForms[index].name;
+        members[index + 3] = kFieldForms[index].name;
     }
     members.back() = "children";
     return members;
@@ -286,6 +287,33 @@ bool componentName(std::string_view name, std::size_t longest) noexcept {
            });
 }
 
+/// A node's safe-area edges: a list of edge names, each once, in the
+/// order top, right, bottom, left; absent for none.
+result::Result<std::uint32_t> safeAreaOf(const Record& record) {
+    constexpr std::array<std::string_view, 4> kEdges = {"top", "right", "bottom", "left"};
+    RAWFRAME_TRY_ASSIGN(const Value* edges, record.optional("safeArea", Value::Kind::Array));
+    if (edges == nullptr) {
+        return 0U;
+    }
+    if (edges->items().empty()) {
+        return document::notCanonical(record.pathOf("safeArea"), "a field at its default is omitted");
+    }
+    std::uint32_t named = 0;
+    std::size_t after = 0;
+    for (std::size_t index = 0; index < edges->items().size(); ++index) {
+        const std::string* kName = edges->items()[index].text();
+        const auto kEdge = kName == nullptr ? kEdges.end() : std::ranges::find(kEdges, *kName);
+        const auto kPlace = static_cast<std::size_t>(kEdge - kEdges.begin());
+        if (kEdge == kEdges.end() || kPlace < after) {
+            return invalid(indexed(record.pathOf("safeArea"), index),
+                           "an edge is top, right, bottom, or left, each once, in that order");
+        }
+        named |= 1U << kPlace;
+        after = kPlace + 1;
+    }
+    return named;
+}
+
 struct Reading {
     const DocumentLimits& limits;
     UiDocument document;
@@ -319,6 +347,7 @@ struct Reading {
             }
             made.shows = std::string{*kShows};
         }
+        RAWFRAME_TRY_ASSIGN(made.safeArea, safeAreaOf(kRecord));
         for (const FieldForm& form : kFieldForms) {
             if (value.find(form.name) != nullptr) {
                 RAWFRAME_TRY(fieldOf(kRecord, form, made.fields));

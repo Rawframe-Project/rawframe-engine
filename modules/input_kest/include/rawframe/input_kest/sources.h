@@ -104,7 +104,8 @@ struct UiDoorContext {
 };
 
 /// Adds `UI.pressed`, `UI.submitted`, `UI.typed`, `UI.hovered`, `UI.value`,
-/// `UI.navigate`, and `UI.navigating`. They read nothing else and
+/// `UI.safeArea` (nought here: present systems read it), `UI.navigate`,
+/// and `UI.navigating`. They read nothing else and
 /// change only where the player's own UI holds focus, so they are safe for
 /// untrusted code.
 /// `context` outlives every machine started with the table.

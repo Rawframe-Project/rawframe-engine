@@ -175,7 +175,7 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::No
         entry.checkGiven = value.checked;
         entry.checkedNow = kKept.has_value() ? *kKept != 0 : value.checked != 0;
     }
-    const std::optional<ui::Layout> kLayout = ui::layoutOf(value);
+    const std::optional<ui::Layout> kLayout = layoutFor(entry);
     const std::optional<ui::Interaction> kInteraction = interactionOf(value);
     // A node that becomes a text field, or stops being one, is made
     // again: a field's text is found by a key its node is made with.
@@ -219,6 +219,40 @@ bool WorldUi::State::give(Entry& entry, world::EntityHandle entity, const ui::No
         focus->edit->configure(editSettingsOf(value));
     }
     return true;
+}
+
+std::uint32_t WorldUi::State::safeAreaOf(std::uint32_t component) const noexcept {
+    return component < settings.safeAreas.size() ? settings.safeAreas[component] : 0;
+}
+
+std::optional<ui::Layout> WorldUi::State::layoutFor(const Entry& entry) const {
+    std::optional<ui::Layout> layout = ui::layoutOf(entry.value);
+    const std::uint32_t kEdges = safeAreaOf(entry.component);
+    if (!layout.has_value() || kEdges == 0 || entry.player >= views.size()) {
+        return layout;
+    }
+    // The view's covered sides are top, right, bottom, left; a layout's
+    // are start, end, top, bottom, a view's start its left.
+    const std::array<float, 4>& kCovered = views[entry.player].covered;
+    constexpr std::array<std::pair<std::uint32_t, std::size_t>, 4> kSides = {
+        {{ui::kSafeTop, 2}, {ui::kSafeRight, 1}, {ui::kSafeBottom, 3}, {ui::kSafeLeft, 0}}};
+    for (std::size_t side = 0; side < kSides.size(); ++side) {
+        if ((kEdges & kSides[side].first) != 0) {
+            float& padding = layout->padding[kSides[side].second];
+            padding = std::max(padding, kCovered[side]);
+        }
+    }
+    return layout;
+}
+
+void WorldUi::State::padAgain(ViewState& view) {
+    for (auto& [kKey, entry] : view.entries) {
+        if (entry.node.has_value() && safeAreaOf(entry.component) != 0) {
+            if (const std::optional<ui::Layout> kLayout = layoutFor(entry)) {
+                static_cast<void>(tree->setLayout(*entry.node, *kLayout));
+            }
+        }
+    }
 }
 
 void WorldUi::State::giveRanges() {
@@ -478,7 +512,8 @@ void WorldUi::State::nest(ViewState& view,
             continue;
         }
         const auto& [kEntity, kComponent] = kKey;
-        std::optional<ui::Node> parent = view.root;
+        // A root naming safe-area edges is laid out in the whole view.
+        std::optional<ui::Node> parent = safeAreaOf(kComponent) != 0 ? view.edge : view.root;
         if (const std::optional<std::size_t> kParent = settings.parents[kComponent]) {
             parent = kNodeOf(kEntity, *kParent);
             if (!parent.has_value() && !player.isNull()) {
@@ -591,9 +626,11 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
     while (state.views.size() > views.size()) {
         ViewState& last = state.views.back();
         RAWFRAME_TRY(state.bind(last, nullptr));
-        if (last.root.has_value()) {
-            state.attached.erase(keyOf(*last.root));
-            RAWFRAME_TRY(state.tree->remove(*last.root));
+        for (const std::optional<ui::Node>& kRoot : {last.root, last.edge}) {
+            if (kRoot.has_value()) {
+                state.attached.erase(keyOf(*kRoot));
+                RAWFRAME_TRY(state.tree->remove(*kRoot));
+            }
         }
         state.views.pop_back();
     }
@@ -604,9 +641,30 @@ result::Status WorldUi::update(std::span<const UiView> views, float width, float
         const UiView& kView = views[at];
         ViewState& view = state.views[at];
         if (!view.root.has_value()) {
+            // The whole view's root first, drawn under the safe one's.
+            RAWFRAME_TRY_ASSIGN(view.edge, state.tree->add(0));
+            RAWFRAME_TRY(state.tree->attach(state.window, *view.edge));
+            RAWFRAME_TRY(state.tree->setInteraction(*view.edge, kThrough));
             RAWFRAME_TRY_ASSIGN(view.root, state.tree->add(0));
             RAWFRAME_TRY(state.tree->attach(state.window, *view.root));
             RAWFRAME_TRY(state.tree->setInteraction(*view.root, kThrough));
+        }
+        const auto& [kTop, kRight, kBottom, kLeft] = kView.covered;
+        if (const std::array<float, 4> kWhole{
+                kView.x - kLeft, kView.y - kTop, kView.width + kLeft + kRight, kView.height + kTop + kBottom};
+            view.edgePlaced != kWhole) {
+            RAWFRAME_TRY(state.tree->setLayout(
+                *view.edge,
+                {.width = ui::pixels(kWhole[2]),
+                 .height = ui::pixels(kWhole[3]),
+                 .direction = ui::Direction::Column,
+                 .alignItems = ui::Align::Start,
+                 .placement = {.absolute = true, .x = ui::pixels(kWhole[0]), .y = ui::pixels(kWhole[1])}}));
+            view.edgePlaced = kWhole;
+        }
+        if (view.covered != kView.covered) {
+            view.covered = kView.covered;
+            state.padAgain(view);
         }
         if (const std::array<float, 4> kPlaced{kView.x, kView.y, kView.width, kView.height}; view.placed != kPlaced) {
             RAWFRAME_TRY(state.tree->setLayout(
@@ -707,14 +765,16 @@ result::Status WorldUi::restyle(ui::StyleSheet styles) {
 }
 
 result::Status WorldUi::rearrange(std::vector<std::optional<std::size_t>> parents,
-                                  std::vector<std::optional<schema::ComponentTypeId>> shows) {
+                                  std::vector<std::optional<schema::ComponentTypeId>> shows,
+                                  std::vector<std::uint32_t> safeAreas) {
     State& state = *state_;
     if (parents.size() != state.settings.nodes.size() ||
         std::ranges::any_of(parents,
                             [&state](const std::optional<std::size_t>& parent) {
                                 return parent.has_value() && *parent >= state.settings.nodes.size();
                             }) ||
-        (!shows.empty() && shows.size() != state.settings.nodes.size())) {
+        (!shows.empty() && shows.size() != state.settings.nodes.size()) ||
+        (!safeAreas.empty() && safeAreas.size() != state.settings.nodes.size())) {
         return refuse("each UI node component's parent is another of them");
     }
     // Every view's words found before any is changed, so a refusal leaves
@@ -735,6 +795,19 @@ result::Status WorldUi::rearrange(std::vector<std::optional<std::size_t>> parent
         }
     }
     state.settings.parents = std::move(parents);
+    // Each node padded as its edges now say, the ones that named some
+    // before too.
+    const std::vector<std::uint32_t> kBefore = std::exchange(state.settings.safeAreas, std::move(safeAreas));
+    for (ViewState& view : state.views) {
+        for (auto& [kKey, entry] : view.entries) {
+            const bool kNamed = entry.component < kBefore.size() && kBefore[entry.component] != 0;
+            if (entry.node.has_value() && (kNamed || state.safeAreaOf(entry.component) != 0)) {
+                if (const std::optional<ui::Layout> kLayout = state.layoutFor(entry)) {
+                    static_cast<void>(state.tree->setLayout(*entry.node, *kLayout));
+                }
+            }
+        }
+    }
     ++state.statistics.rearranged;
     return {};
 }
@@ -748,6 +821,10 @@ void WorldUi::reword() {
 
 result::Status WorldUi::seatIn(ui::AccessSeat& seat) {
     return seat.seat(*state_->tree, state_->window);
+}
+
+std::array<float, 4> WorldUi::safeAreaOf(std::size_t player) const noexcept {
+    return player < state_->views.size() ? state_->views[player].covered : std::array<float, 4>{};
 }
 
 const ui::DrawList& WorldUi::drawn() const noexcept {
@@ -772,10 +849,17 @@ UiView insideSafeArea(UiView view, view::ViewSize window, view::ViewInsets safe)
     const float kInRight = kRight >= window.width - kOnEdge ? std::min(kRight, window.width - safe.right) : kRight;
     const float kInBottom =
         kBottom >= window.height - kOnEdge ? std::min(kBottom, window.height - safe.bottom) : kBottom;
+    const float kWidth = std::max(kInRight - kLeft, 0.0F);
+    const float kHeight = std::max(kInBottom - kTop, 0.0F);
+    // What was drawn in on each side, added to what the view says.
+    view.covered[0] += kTop - view.y;
+    view.covered[1] += kRight - (kLeft + kWidth);
+    view.covered[2] += kBottom - (kTop + kHeight);
+    view.covered[3] += kLeft - view.x;
     view.x = kLeft;
     view.y = kTop;
-    view.width = std::max(kInRight - kLeft, 0.0F);
-    view.height = std::max(kInBottom - kTop, 0.0F);
+    view.width = kWidth;
+    view.height = kHeight;
     return view;
 }
 

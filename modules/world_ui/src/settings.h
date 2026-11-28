@@ -24,11 +24,13 @@ struct Start {
 };
 
 /// What a game's UI document says: each node component's parent, the
-/// typed words each shows (as long as the nodes, or empty for none), and
-/// what each presentation component starts as.
+/// typed words each shows and its safe-area edges (each as long as the
+/// nodes, or empty for none), and what each presentation component starts
+/// as.
 struct UiDocument {
     std::vector<std::optional<std::size_t>> parents;
     std::vector<std::optional<schema::ComponentTypeId>> shows;
+    std::vector<std::uint32_t> safeAreas;
     std::vector<Start> starts;
 };
 
