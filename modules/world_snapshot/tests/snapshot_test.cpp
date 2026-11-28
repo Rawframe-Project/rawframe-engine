@@ -1,5 +1,5 @@
-// World checkpoints: a round trip that restores every value, reference, and
-// random stream and captures to the same bytes again; canonical NaNs; row
+// World checkpoints: a round trip that restores every value, reference,
+// random stream and queued message and captures to the same bytes again; canonical NaNs; row
 // groups; refusal of every damaged, foreign, or oversized artifact; and
 // hostile artifacts with matching digests restored only as they capture;
 // and a capture staged at the safe point and sealed after the World ran on.
@@ -79,6 +79,19 @@ RAWFRAME_TEST(ACheckpointRestoresEveryValueReferenceAndStream) {
     RAWFRAME_EXPECT(sixth != nullptr && sixth->target == restored[0] && sixth->other.isNull());
     RAWFRAME_EXPECT(fourth != nullptr && fourth->target.isNull() && fourth->other == restored[2]);
     RAWFRAME_EXPECT(candidate.randomStreams() == sample.world.randomStreams());
+    // Every queue as it was: its declaration, messages, cursors, and next
+    // place.
+    RAWFRAME_EXPECT(candidate.queues().all().size() == 2);
+    for (const auto& [kName, kQueue] : sample.world.queues().all()) {
+        const world::MessageQueue* copy = candidate.queues().find(kName);
+        RAWFRAME_EXPECT(copy != nullptr);
+        if (copy != nullptr) {
+            RAWFRAME_EXPECT(std::ranges::equal(copy->messages(), kQueue.messages()) &&
+                            copy->cursors() == kQueue.cursors() && copy->nextSequence() == kQueue.nextSequence() &&
+                            copy->declaration().holds == kQueue.declaration().holds);
+        }
+    }
+    RAWFRAME_EXPECT(candidate.queues().find("test.hits")->unread("test.score").size() == 1);
 
     // The restored World captures to the same bytes: the artifact is a
     // function of the state, not of how the World came to hold it.
@@ -148,9 +161,9 @@ RAWFRAME_TEST(ChunksAreHeldToTheProfile) {
     // The chunk ceilings: a component's rows wider than the
     // chunk allows split into groups that fit; too many chunks are refused
     // on capture, and on restore before anything is decoded.
-    Sample sample;
+    Sample sample{false};
     // A body row is 35 bytes, so two to a chunk of 80; the random streams'
-    // chunk still fits.
+    // chunk still fits. A queue is a chunk whole, so this World has none.
     const world_snapshot::SnapshotLimits kNarrow{.maximumChunkBytes = 80};
     RAWFRAME_EXPECT(world_snapshot::rowGroup(projection().components[0], kNarrow) == 2);
     const auto kNarrowed = world_snapshot::capture(sample.world, projection(), settings(kNarrow));

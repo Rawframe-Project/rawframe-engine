@@ -8,6 +8,7 @@
 #include "navigation.h"
 #include "physics_doors.h"
 #include "player_doors.h"
+#include "queue_doors.h"
 #include "rawframe/composition/composition.h"
 #include "rawframe/composition/configuration.h"
 #include "rawframe/world/column_query.h"
@@ -66,6 +67,7 @@ struct ClientPresentation::State {
     std::unique_ptr<EffectDoors> effects;
     std::unique_ptr<MessageDoors> messages;
     std::unique_ptr<CommandDoors> commands;
+    std::unique_ptr<QueueDoors> queues;
 
     /// What is bound to the mirror, made again for another one.
     const world::World* bound = nullptr;
@@ -136,6 +138,7 @@ struct ClientPresentation::State {
             RAWFRAME_TRY(effects->addDoors(doors));
             RAWFRAME_TRY(messages->addDoors(doors));
             RAWFRAME_TRY(commands->addDoors(doors));
+            RAWFRAME_TRY(queues->addDoors(doors));
             if (game.physics.has_value()) {
                 RAWFRAME_TRY(addPhysicsDoors(doors, game.physics->dimensions, &physicsDoors));
             }
@@ -329,6 +332,9 @@ result::Result<std::unique_ptr<ClientPresentation>> ClientPresentation::create(P
     state->effects = std::make_unique<EffectDoors>(game, false);
     RAWFRAME_TRY_ASSIGN(state->messages, MessageDoors::create(game, *settings.program, MessageDoors::Role::Read));
     RAWFRAME_TRY_ASSIGN(state->commands, CommandDoors::create(game, *settings.program, CommandDoors::Role::Quiet));
+    // Queues are the server's World's: a present system declares none, so
+    // the doors answer only with a refusal.
+    RAWFRAME_TRY_ASSIGN(state->queues, QueueDoors::create(game, *settings.program));
     state->settings = std::move(settings);
     return std::unique_ptr<ClientPresentation>{new ClientPresentation{std::move(state)}};
 }

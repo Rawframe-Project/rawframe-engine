@@ -123,7 +123,8 @@ public:
                                                           const schema::SchemaRegistry& registry,
                                                           CommandBufferSettings commandSettings = {});
 
-    /// Runs one tick: every phase in order, then advances `tick`. With a
+    /// Runs one tick: drops the queued messages whose ticks are over, runs
+    /// every phase in order, then advances `tick`. With a
     /// `clock`, each system's run is timed into the report's `times`.
     /// `edited`, only the systems declared to run while editing run.
     [[nodiscard]] result::Result<TickReport> runTick(World& world,

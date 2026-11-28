@@ -8,7 +8,8 @@
 //
 // The container is generation 1: a prologue, a world header, the
 // entity directory, component rows by type in row groups, the World's random
-// streams, the mods it ran with when there are any, a manifest, and a
+// streams, the mods it ran with when there are any, each of its message
+// queues, a manifest, and a
 // completion footer, with SHA-256 over every chunk and the whole. Its
 // records are Rawframe's canonical field records rather than FlatBuffers.
 

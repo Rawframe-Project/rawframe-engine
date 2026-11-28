@@ -24,6 +24,33 @@ namespace rawframe::world_kest {
 
 namespace {
 
+/// A whole number from 1 to 65536 in its canonical spelling, or nothing.
+std::optional<std::uint32_t> queueCount(std::string_view word) {
+    std::uint32_t count = 0;
+    const auto kRead = std::from_chars(word.data(), word.data() + word.size(), count);
+    if (kRead.ec != std::errc{} || kRead.ptr != word.data() + word.size() || count == 0 || count > 65'536 ||
+        word.front() == '0') {
+        return std::nullopt;
+    }
+    return count;
+}
+
+/// A `queue <name> <Kest type> lasts <ticks> [holds <count>]` line's words,
+/// or nothing when they are not that.
+std::optional<GameQueue> queueOf(const std::vector<std::string_view>& words) {
+    if ((words.size() != 5 && words.size() != 7) || !lowerSnake(words[1]) || words[3] != "lasts" ||
+        (words.size() == 7 && words[5] != "holds")) {
+        return std::nullopt;
+    }
+    const std::optional<std::uint32_t> kLasts = queueCount(words[4]);
+    const std::optional<std::uint32_t> kHolds = words.size() == 7 ? queueCount(words[6]) : 1024U;
+    if (!kLasts.has_value() || !kHolds.has_value()) {
+        return std::nullopt;
+    }
+    return GameQueue{
+        .name = std::string{words[1]}, .kestType = std::string{words[2]}, .lasts = *kLasts, .holds = *kHolds};
+}
+
 /// An `effect <name> predicted|confirmed_only [sound <16 hex digits>]
 /// [felt <haptic> <amplitude> <hertz> <milliseconds>]` line's words, or
 /// nothing when they are not that.
@@ -501,6 +528,10 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     uses.emplace_back(number, kName);
                 } else if (kWhat == "emits") {
                     system.emits.push_back(kName);
+                } else if (kWhat == "writes") {
+                    system.writes.push_back(kName);
+                } else if (kWhat == "reads") {
+                    system.reads.push_back(kName);
                 } else if (kWhat == "after") {
                     system.after.push_back(kName);
                 } else if (kWhat == "before") {
@@ -514,7 +545,7 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                    "a system column is entities, or read, write, with, or without a component; an "
                                    "edge is after or before a system; a stream is random and its name; an effect "
                                    "is emits and its name; a lookup is lookup and a component, and a scan scan and "
-                                   "a component");
+                                   "a component; a queue is writes or reads and its name");
                 }
             }
             if (writesALookup(system)) {
@@ -736,6 +767,16 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                     "a message line is `message <lower_snake name> <Kest type>`, each name once, at most 64");
             }
             game.messages.push_back(GameMessage{.name = std::string{kWords[1]}, .kestType = std::string{kWords[2]}});
+        } else if (kKeyword == "queue") {
+            std::optional<GameQueue> queue = queueOf(kWords);
+            if (!queue.has_value() || std::ranges::contains(game.queues, queue->name, &GameQueue::name) ||
+                game.queues.size() >= kMaximumGameQueues) {
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a queue line is `queue <lower_snake name> <Kest type> lasts <ticks>`, then "
+                               "optionally `holds <count>`, each from 1 to 65536, each name once, at most 64");
+            }
+            game.queues.push_back(std::move(*queue));
         } else if (kKeyword == "command") {
             if (kWords.size() != 3 || !lowerSnake(kWords[1]) ||
                 std::ranges::contains(game.commands, kWords[1], &GameCommand::name) ||
@@ -919,6 +960,24 @@ result::Result<GameDescription> parseGame(std::string_view text) {
                                "a system emits a declared effect, is predicted, and is the effect's one emitter");
             }
             emitted.push_back(effect);
+        }
+    }
+    // A system writes and reads declared queues, and a predicting client,
+    // which holds none, runs no system that does.
+    for (const GameSystem& system : game.systems) {
+        for (const std::string& queue : system.writes) {
+            if (!std::ranges::contains(game.queues, queue, &GameQueue::name) || system.predicted ||
+                std::ranges::count(system.writes, queue) > 1) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a system writes a declared queue once, and is not predicted");
+            }
+        }
+        for (const std::string& queue : system.reads) {
+            if (!std::ranges::contains(game.queues, queue, &GameQueue::name) || system.predicted ||
+                std::ranges::count(system.reads, queue) > 1) {
+                return badLine(
+                    number, WorldKestError::BadGameLine, "a system reads a declared queue once, and is not predicted");
+            }
         }
     }
     // Presentation state is a client's alone: no server carries,

@@ -68,7 +68,7 @@ result::Status MessageDoors::addDoors(kest::DoorTable& doors) {
     return {};
 }
 
-void MessageDoors::begin(world::TickIndex /*tick*/) noexcept {
+void MessageDoors::begin(world::SystemContext& /*context*/) noexcept {
     pending_.clear();
     pendingTerminations_.clear();
 }

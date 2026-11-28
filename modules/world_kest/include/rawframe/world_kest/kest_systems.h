@@ -131,8 +131,8 @@ public:
     KestStaging& operator=(const KestStaging&) = delete;
     virtual ~KestStaging() = default;
 
-    /// Before a run's first call, in tick `tick`.
-    virtual void begin(world::TickIndex tick) noexcept = 0;
+    /// Before a run's first call: the system running, its World and tick.
+    virtual void begin(world::SystemContext& context) noexcept = 0;
     /// After its last: `kept` when the run succeeded.
     virtual void end(bool kept) noexcept = 0;
 };

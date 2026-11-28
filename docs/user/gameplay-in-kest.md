@@ -50,6 +50,7 @@ A door is an engine function a program calls through an `extern fn` its library 
 | Randomness | With `random <stream>` on the line: `random.below(stream, bound)` and `random.unit(stream)`, the stream by its place in the line's list. |
 | Prefabs | `scene.spawn(identity)` spawns a `prefab` line's scene whole. |
 | Players | `replication.player()`: on a client, its own player. |
+| Queues | `Queue.<name>(value)` in a system that `writes` it; `QueuedCount.<name>()` and `Queued.<name>(index)` in one that `reads` it. |
 | Messages | `Messages.<name>(to, value)` on the server; `ReceivedCount.<name>()` and `Received.<name>(index)` in a client's present systems. |
 | Commands | `Commands.<name>(value)` in a client's sample function; `CommandCount.<name>()`, `Command.<name>(index)` and `CommandFrom.<name>(index)` in the server's systems on the next tick. |
 | Effects | `Effects.<name>(entity)` from a predicted system with `emits <name>`. |
@@ -61,6 +62,10 @@ Creating, destroying, inserting and removing take effect at the next barrier, af
 ## Randomness
 
 Never use a clock or the platform for anything that decides gameplay. Draw from a World random stream the system declares: the same seed and inputs give the same draws on every machine, so a server, a checkpoint restore and a predicting client agree. A predicted system may not draw from a World stream.
+
+## Queues
+
+A `queue` line declares values one system hands others in the same World, in the order written: a hit a score system, a sound system and a quest system each want to hear of. A system whose line says `writes hits` writes one with `Queue.hits(value)`; what it writes joins the queue when its run succeeds, so a system that `reads hits` and runs after it reads the value that tick, and one that runs before it reads it the next. Each reader reads every value once, oldest first, with `QueuedCount.hits()` and `Queued.hits(index)`, and has read them when its run succeeds; a run that fails reads them again. A value is kept the ticks its `lasts` says, then dropped whether read or not, so `lasts 2` lets a reader before the writer see each one. A queue holds at most `holds` values at once; a write past that fails the system for the tick. Queues are World state, kept by checkpoints, and a value holds no entity. A predicted system neither writes nor reads one.
 
 ## Limits
 

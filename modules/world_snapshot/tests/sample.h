@@ -10,6 +10,7 @@
 #include "rawframe/world_snapshot/checkpoint.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -94,7 +95,7 @@ struct Sample {
     world::World world{schema};
     std::vector<world::EntityHandle> live;
 
-    Sample() {
+    explicit Sample(bool queued = true) {
         const auto kBody = *schema->key<Body>();
         const auto kLink = *schema->key<Link>();
         std::vector<world::EntityHandle> made;
@@ -126,6 +127,31 @@ struct Sample {
         auto& stream = world.randomStream("test.owner", "dice");
         static_cast<void>(stream.nextU32());
         static_cast<void>(world.randomStream("test.owner", "coins").nextU64());
+        // A queue with messages, one reader past the first two, and a quiet
+        // one with none.
+        if (!queued) {
+            return;
+        }
+        must(world.queues()
+                 .declare({.name = "test.hits",
+                           .valueBytes = 4,
+                           .lasts = 3,
+                           .holds = 8,
+                           .readers = {"test.sound", "test.score"}})
+                 .has_value());
+        must(world.queues().declare({.name = "test.quiet", .valueBytes = 2, .lasts = 1, .holds = 2}).has_value());
+        world::MessageQueue& hits = *world.queues().find("test.hits");
+        const std::array<std::byte, 8> kTwo = {std::byte{1},
+                                               std::byte{0},
+                                               std::byte{0},
+                                               std::byte{0},
+                                               std::byte{2},
+                                               std::byte{0},
+                                               std::byte{0},
+                                               std::byte{0}};
+        must(hits.write(world::TickIndex{1233}, kTwo).has_value());
+        hits.markRead("test.score");
+        must(hits.write(world::TickIndex{1234}, std::span{kTwo}.first(4)).has_value());
     }
 };
 

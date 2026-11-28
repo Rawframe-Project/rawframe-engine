@@ -1,0 +1,18 @@
+# A queue between systems: one system writes a ping each tick, a reader
+# after it reads the ping that tick, and a reader before it the tick after,
+# since each ping lasts two ticks.
+program relay.kest
+
+component ba788747-0698-4cce-8e7e-368b5d5419f5 relay.sender Sender
+component 37806ddb-7230-480a-90c9-7c4dd2b2905e relay.late Tally
+component 0d45e089-17c5-43e9-acef-b1950e8d672a relay.early Tally
+
+queue pings Ping lasts 2 holds 8
+
+system relay.send simulation send read relay.sender writes pings
+system relay.late simulation late write relay.late reads pings after relay.send
+system relay.early simulation early write relay.early reads pings before relay.send
+
+spawn 1 relay.sender
+spawn 1 relay.late
+spawn 1 relay.early

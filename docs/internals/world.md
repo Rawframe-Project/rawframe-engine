@@ -44,9 +44,13 @@ A tick is a 64-bit count, never derived from accumulated seconds and never skipp
 
 `world_runtime` holds the running World for the other participants: the simulation, its players, picking, the profile of its last ticks, and the replacement of the World between ticks after a restore. A participant that keeps entity handles watches the World's replacement count and lets them go when it changes.
 
+## Queues
+
+A World holds message queues (`rawframe/world/queues.h`): typed values in the order written, each with the tick it was written in and its place in its queue, kept the ticks the queue says and dropped at the start of the tick after. Each reader, a system by identity, has a cursor: the first place it has not read. A queue's bounds are fixed when it is declared: its value's bytes, its ticks, the most it holds, and so the most it can come to, which a checkpoint chunk always fits. `world_kest` declares a game's queues, stages what a run writes, and lets it join the queue only when the run succeeds, as a run's commands and writes are kept.
+
 ## Checkpoints
 
-A checkpoint is a complete, canonical, integrity-checked artifact of one committed World: a header, the entity directory, component rows by type in row groups, the World's random streams, the mods it ran with, a manifest, and a completion footer, with SHA-256 over every chunk and the whole. What it holds is the World's projection: the components that persist and their fields, each written field by field in a declared order, never as memory, so padding and layout never reach an artifact.
+A checkpoint is a complete, canonical, integrity-checked artifact of one committed World: a header, the entity directory, component rows by type in row groups, the World's random streams, the mods it ran with, each of its message queues, a manifest, and a completion footer, with SHA-256 over every chunk and the whole. What it holds is the World's projection: the components that persist and their fields, each written field by field in a declared order, never as memory, so padding and layout never reach an artifact.
 
 Restore reads a checkpoint into an empty candidate World built off to the side and publishes it in one exchange between ticks; it cannot fail once published. A checkpoint of another game, schema or profile, one past its limits, or one with a reference to nothing it holds is refused with a typed error, and the running World is untouched.
 

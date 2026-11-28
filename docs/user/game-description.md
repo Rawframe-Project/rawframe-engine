@@ -41,7 +41,7 @@ spawn 3 game.position x=0 y=0 game.velocity dx=1 dy=2
 system <identity> <phase> <function> <columns and options>...
 ```
 
-The phase is one of the World's (`simulation` for most gameplay). Columns follow in the function's order: `read`, `write`, `with` or `without` before a component, or `entities` for the matched entities. Options: `after` or `before` another system of the phase, `random <stream>` for each random stream it draws from, `lookup <component>` to read that component on any entity, `scan <component>` to read every holder at once, `predicted` to run on predicting clients too, and `emits <effect>`.
+The phase is one of the World's (`simulation` for most gameplay). Columns follow in the function's order: `read`, `write`, `with` or `without` before a component, or `entities` for the matched entities. Options: `after` or `before` another system of the phase, `random <stream>` for each random stream it draws from, `lookup <component>` to read that component on any entity, `scan <component>` to read every holder at once, `predicted` to run on predicting clients too, `emits <effect>`, and `writes <queue>` or `reads <queue>` for a queue it writes or reads.
 
 ## What the World starts with
 
@@ -66,6 +66,7 @@ The phase is one of the World's (`simulation` for most gameplay). Columns follow
 | `interest <component> <x> [<y> [<z>]] within <meters>` | Sends each connection only what lies within the radius of its player. |
 | `mapped <count>` | Entities one connection may hold at once, past the default 4,096. |
 | `message <name> <Kest type>` | A guaranteed message a server system sends one player. |
+| `queue <name> <Kest type> lasts <ticks> [holds <count>]` | Values a server's systems write and later systems read, each kept that many ticks, at most `holds` at once (1,024 by default). See [gameplay in Kest](gameplay-in-kest.md#queues). |
 | `command <name> <Kest type>` | A value a player's client sends the server, at most 1,024 bytes. |
 | `effect <name> predicted\|confirmed_only [sound <id>] [felt <output> <amplitude> <hertz> <ms>]` | A presentation effect a predicted system emits. |
 
