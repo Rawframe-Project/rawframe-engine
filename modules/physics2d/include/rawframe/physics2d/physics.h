@@ -83,8 +83,14 @@ struct Physics2DStatistics {
     std::uint64_t impulses = 0;
     /// Kinematic targets carried out.
     std::uint64_t targets = 0;
-    /// Character moves made (components.h's Character2D).
+    /// Character moves made (components.h's Character2D), steps climbed,
+    /// bodies pushed, carries by what a character stood on, and stances
+    /// that could not grow yet.
     std::uint64_t characterMoves = 0;
+    std::uint64_t stepsClimbed = 0;
+    std::uint64_t characterPushes = 0;
+    std::uint64_t charactersCarried = 0;
+    std::uint64_t stancesWaiting = 0;
     /// Joints made, taken away with their entities, and refused (a body
     /// without one, a shape of axes it cannot be) until they or their
     /// bodies change.

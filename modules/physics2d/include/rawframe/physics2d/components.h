@@ -170,13 +170,16 @@ struct RayHit2D {
 /// an upright capsule) and a Character2D is moved by trace and slide rather
 /// than by velocity alone. Gameplay writes the Velocity2D it wants this
 /// tick, gravity and all; the step moves the body as far along it as the
-/// world allows, sliding along what it meets, and leaves in Velocity2D the
-/// velocity it moved with. The world's solid bodies stop it, by its Body2D's
-/// collision class; other characters never do, and it pushes dynamic bodies
-/// as a kinematic body does. Nothing about it is random or timed, so a
-/// predicting client moves its own character exactly as the server does
-/// wherever the same things are in its way. Its layout has padding after
-/// `ground`.
+/// world allows, sliding along what it meets, climbing steps, and leaves in
+/// Velocity2D the velocity it moved with. The world's solid bodies stop it,
+/// by its Body2D's collision class; other characters never do. Standing on
+/// a body that moves (a platform, a lift, a crate), it is carried with the
+/// point it stands on, swept as its own move is, and moved along, not
+/// turned; the carry is not in the Velocity2D it leaves, so gameplay that
+/// keeps its velocity from tick to tick never gathers it. Nothing about it
+/// is random or timed, so a predicting client moves its own character
+/// exactly as the server does wherever the same things are in its way. Its
+/// layout has padding after `ground`.
 struct Character2D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
         schema::ComponentTypeId::fromText("edfb6a6b-7640-4204-9ff7-d1e07b4fcac8");
@@ -196,6 +199,25 @@ struct Character2D {
     std::uint8_t ground = 0;
     float groundNormalX = 0;
     float groundNormalY = 0;
+    /// The tallest step a grounded character walking into it climbs in one
+    /// move (a stair's riser, a curb), at most its own height; nought climbs
+    /// none.
+    float stepHeight = 0;
+    /// What it weighs, in kilograms, when it pushes: walking into a dynamic
+    /// body that weighs at most `pushRatio` times as much, it gives the body
+    /// the speed it was stopped short by (less, as the body is heavier than
+    /// it). Heavier bodies, ground it stands on, and every body while either
+    /// is nought, only stop it.
+    float mass = 0;
+    float pushRatio = 0;
+    /// The half length of the capsule's segment it wants, below its Body2D's
+    /// height to crouch; nought, or more than the height, stands. It changes
+    /// with its feet where they are. Shrinking always happens; growing waits,
+    /// a tick at a time, until the taller capsule overlaps nothing but
+    /// ground.
+    float stance = 0;
+    /// Written by every step: the half length its capsule has now.
+    float stanceHeight = 0;
 };
 
 /// The joint in two dimensions, physics3d's Joint3D

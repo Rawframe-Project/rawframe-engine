@@ -93,6 +93,8 @@ struct Physics3D::State {
         into.reach = reachOf(body);
         into.since.reset();
         into.character = row.character != nullptr;
+        into.halfHeight = halfHeightOf(row);
+        into.riding = {};
         const auto kClass = filters.classIndex(body.collisionClass);
         const PreparedMesh* kMesh = nullptr;
         if (body.shape == static_cast<std::uint8_t>(Shape::Mesh)) {
@@ -162,7 +164,7 @@ struct Physics3D::State {
                 break;
             case Shape::Capsule: {
                 const m3Capsule kCapsule{
-                    .point1 = {0, -body.height, 0}, .point2 = {0, body.height, 0}, .radius = body.width};
+                    .point1 = {0, -into.halfHeight, 0}, .point2 = {0, into.halfHeight, 0}, .radius = body.width};
                 result = m3CreateCapsuleShape(physics, kBody, &definitionOf, &kCapsule, &made);
                 break;
             }
@@ -266,45 +268,137 @@ struct Physics3D::State {
                                      .statistics = &statistics});
     }
 
+    /// The solids a character of `body` meets: its class's, never a
+    /// character's.
+    [[nodiscard]] m3QueryFilter characterFilter(const Body3D& body) const {
+        return m3QueryFilter{.categoryBits = physics::kCharacterQuery,
+                             .maskBits =
+                                 filters.filter(*filters.classIndex(body.collisionClass)).solidMask & physics::kSolids};
+    }
+
     /// A character's move this tick, as the velocity its kinematic body
-    /// steps with; one that is not a made kinematic capsule stays Airborne
-    /// and moves as its body would.
-    void moveCharacter(const Row& row, const Mapped& entry, float seconds) {
+    /// steps with, after its stance changes as far as it may; one that is
+    /// not a made kinematic capsule stays Airborne and moves as its body
+    /// would.
+    void moveCharacter(const Row& row, Mapped& entry, float seconds) {
         Character3D& controlled = *row.character;
         const bool kWasGrounded = controlled.ground == static_cast<std::uint8_t>(physics::Ground::Grounded);
         controlled.ground = static_cast<std::uint8_t>(physics::Ground::Airborne);
         controlled.groundNormalX = 0;
         controlled.groundNormalY = 0;
         controlled.groundNormalZ = 0;
+        entry.riding = {};
         const Body3D& body = entry.made;
         if (entry.refused || body.motion != static_cast<std::uint8_t>(physics::Motion::Kinematic) ||
             body.shape != static_cast<std::uint8_t>(Shape::Capsule) || body.sensor ||
-            !finite(controlled.groundNormal) || !finite(controlled.snap) || !(seconds > 0)) {
+            !finite(controlled.groundNormal) || !finite(controlled.snap) || !finite(controlled.stepHeight) ||
+            !finite(controlled.mass) || !finite(controlled.pushRatio) || !finite(controlled.stance) || !(seconds > 0)) {
             return;
         }
+        CharacterShape shape{.radius = body.width, .halfHeight = entry.halfHeight, .filter = characterFilter(body)};
+        m3Pos3 from = m3Body_GetPosition(physics, entry.body);
+
+        // The stance it wants, its feet where they are: smaller at once,
+        // taller once there is room.
+        const float kWanted =
+            controlled.stance > 0 && controlled.stance < body.height ? controlled.stance : body.height;
+        if (kWanted != entry.halfHeight) {
+            CharacterShape resized = shape;
+            resized.halfHeight = kWanted;
+            const m3Pos3 kThere{
+                from.x, from.y + static_cast<double>(kWanted) - static_cast<double>(entry.halfHeight), from.z};
+            if (kWanted < entry.halfHeight || characterFits(physics, resized, kThere)) {
+                const m3Capsule kCapsule{.point1 = {0, -kWanted, 0}, .point2 = {0, kWanted, 0}, .radius = body.width};
+                m3Shape_SetCapsule(physics, entry.shape, &kCapsule);
+                if (entry.trigger.index1 != 0) {
+                    m3Shape_SetCapsule(physics, entry.trigger, &kCapsule);
+                }
+                m3Body_SetTransform(physics, entry.body, kThere, m3Body_GetRotation(physics, entry.body));
+                entry.halfHeight = kWanted;
+                shape = resized;
+                from = kThere;
+            } else {
+                ++statistics.stancesWaiting;
+            }
+        }
+        controlled.stanceHeight = entry.halfHeight;
+
         const m3Vec3 kWish = m3Body_GetLinearVelocity(physics, entry.body);
-        const m3QueryFilter kFilter{.categoryBits = physics::kCharacterQuery,
-                                    .maskBits = filters.filter(*filters.classIndex(body.collisionClass)).solidMask &
-                                                physics::kSolids};
         const CharacterMove kMove =
             physics3d::moveCharacter(physics,
-                                     body.width,
-                                     body.height,
-                                     m3Body_GetPosition(physics, entry.body),
+                                     shape,
+                                     from,
                                      m3Vec3{kWish.x * seconds, kWish.y * seconds, kWish.z * seconds},
                                      controlled,
                                      kWasGrounded,
-                                     kFilter);
-        m3Body_SetLinearVelocity(
-            physics,
-            entry.body,
-            m3Vec3{kMove.translation.x / seconds, kMove.translation.y / seconds, kMove.translation.z / seconds});
+                                     seconds);
+        // A step's climb is made at once, so no rise is left in the velocity
+        // gameplay reads back.
+        if (kMove.lift != 0) {
+            m3Body_SetTransform(physics,
+                                entry.body,
+                                m3Pos3{from.x, from.y + static_cast<double>(kMove.lift), from.z},
+                                m3Body_GetRotation(physics, entry.body));
+        }
+        m3Body_SetLinearVelocity(physics,
+                                 entry.body,
+                                 m3Vec3{kMove.translation.x / seconds,
+                                        (kMove.translation.y - kMove.lift) / seconds,
+                                        kMove.translation.z / seconds});
         m3Body_SetAngularVelocity(physics, entry.body, m3Vec3{0, 0, 0});
+        for (std::int32_t index = 0; index < kMove.pushCount; ++index) {
+            const CharacterPush& push = kMove.pushes[static_cast<std::size_t>(index)];
+            m3Body_ApplyLinearImpulseAtPoint(physics, push.body, push.impulse, push.point);
+            ++statistics.characterPushes;
+        }
+        statistics.stepsClimbed += kMove.climbed ? 1 : 0;
         controlled.ground = static_cast<std::uint8_t>(kMove.ground);
         controlled.groundNormalX = kMove.normal.x;
         controlled.groundNormalY = kMove.normal.y;
         controlled.groundNormalZ = kMove.normal.z;
+        if (kMove.ground == physics::Ground::Grounded) {
+            const m3BodyId kUnder = m3Shape_GetBody(physics, kMove.groundShape);
+            if (m3Body_GetType(physics, kUnder) != m3_staticBody) {
+                entry.riding = kUnder;
+                entry.ridden = m3Pos3{from.x + static_cast<double>(kMove.translation.x),
+                                      from.y + static_cast<double>(kMove.translation.y),
+                                      from.z + static_cast<double>(kMove.translation.z)};
+                entry.ridingAt = m3Body_GetLocalPoint(physics, kUnder, entry.ridden);
+            }
+        }
         ++statistics.characterMoves;
+    }
+
+    /// 4b. Characters carried with what they stood on as the step moved
+    /// it, in entity order, each swept as its own move is.
+    void carryCharacters() {
+        for (const Row& row : rows) {
+            if (row.character == nullptr) {
+                continue;
+            }
+            Mapped& entry = mapped.find(row.entity)->second;
+            if (entry.refused || entry.riding.index1 == 0 || !m3Body_IsValid(physics, entry.riding)) {
+                continue;
+            }
+            const m3Pos3 kNow = m3Body_GetWorldPoint(physics, entry.riding, entry.ridingAt);
+            const m3Vec3 kBy{static_cast<float>(kNow.x - entry.ridden.x),
+                             static_cast<float>(kNow.y - entry.ridden.y),
+                             static_cast<float>(kNow.z - entry.ridden.z)};
+            if (kBy.x == 0 && kBy.y == 0 && kBy.z == 0) {
+                continue;
+            }
+            const CharacterShape kShape{
+                .radius = entry.made.width, .halfHeight = entry.halfHeight, .filter = characterFilter(entry.made)};
+            const m3Pos3 kAt = m3Body_GetPosition(physics, entry.body);
+            const m3Vec3 kSwept = sweepCharacter(physics, kShape, kAt, kBy);
+            m3Body_SetTransform(physics,
+                                entry.body,
+                                m3Pos3{kAt.x + static_cast<double>(kSwept.x),
+                                       kAt.y + static_cast<double>(kSwept.y),
+                                       kAt.z + static_cast<double>(kSwept.z)},
+                                m3Body_GetRotation(physics, entry.body));
+            ++statistics.charactersCarried;
+        }
     }
 
     void remove(world::EntityHandle entity, Mapped& entry) {
@@ -457,8 +551,11 @@ struct Physics3D::State {
         for (const Row& row : rows) {
             const auto [kEntry, kNew] = mapped.try_emplace(row.entity);
             Mapped& entry = kEntry->second;
+            // A character's stance written from outside the step (a state
+            // put back) makes it again at that stance.
             if (kNew || !same(entry.made, *row.body) || entry.character != (row.character != nullptr) ||
-                entry.mesh != meshOf(row)) {
+                entry.mesh != meshOf(row) ||
+                (!entry.refused && entry.character && halfHeightOf(row) != entry.halfHeight)) {
                 if (!kNew) {
                     remove(row.entity, entry);
                 }
@@ -542,6 +639,7 @@ struct Physics3D::State {
         }
         m3World_Step(physics, kSeconds, static_cast<std::int32_t>(settings.substeps));
         ++statistics.steps;
+        carryCharacters();
 
         report(world);
         breakJoints();

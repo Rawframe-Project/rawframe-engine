@@ -198,6 +198,15 @@ struct Mapped {
     bool refused = false;
     /// Made as a character's, which character queries do not see.
     bool character = false;
+    /// A capsule's half length as made: its Body3D's height, or a
+    /// character's stance.
+    float halfHeight = 0;
+    /// What a character stands on as it moves this tick, the point it will
+    /// stand at in that body's frame and in the world, and how far the step
+    /// carried it with that body.
+    m3BodyId riding{};
+    m3Vec3 ridingAt{0, 0, 0};
+    m3Pos3 ridden{0, 0, 0};
     Body3D made;
     Pose3D pose;
     Velocity3D velocity;
@@ -211,6 +220,16 @@ struct Row {
     Character3D* character = nullptr;
     const Mesh3D* mesh = nullptr;
 };
+
+/// The half length a row's capsule is made with: a character's stance
+/// while it is below its Body3D's height, else that height.
+[[nodiscard]] inline float halfHeightOf(const Row& row) noexcept {
+    const float kHeight = row.body->height;
+    if (row.character != nullptr && row.character->stanceHeight > 0 && row.character->stanceHeight < kHeight) {
+        return row.character->stanceHeight;
+    }
+    return kHeight;
+}
 
 /// The mesh a row's body is made of: its Mesh3D's for a mesh body, else
 /// none.
