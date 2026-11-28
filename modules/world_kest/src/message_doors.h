@@ -1,7 +1,11 @@
 #pragma once
 
 // A game's guaranteed messages as doors: for each message a game
-// declares, `Messages.<name>(to: Entity, value: T)` sends one,
+// declares, `Messages.<name>(to: Entity, value: T)` sends one to a player,
+// `MessagesToAll.<name>(value: T)` to every player,
+// `MessagesSeeing.<name>(entity: Entity, value: T)` to every player who
+// sees the entity, and, for a line with `holders <component>`,
+// `MessagesHolding.<name>(value: T)` to every player holding it;
 // `ReceivedCount.<name>() -> i32` says how many arrived for this tick, and
 // `Received.<name>(index: i32) -> T` reads one. A server's doors stage what
 // its systems send, kept only when the run that sent it succeeds; a client's
@@ -69,10 +73,16 @@ public:
         std::size_t size = 0;
         std::string kestType;
         std::string send;
+        std::string everyone;
+        std::string seeing;
+        /// Empty for a message with no holders.
+        std::string holding;
+        schema::ComponentTypeId holders;
         std::string count;
         std::string read;
         std::array<kest::Parameter, 2> sendTakes{kest::Parameter{kest::Slot::Value, kEntityType},
                                                  kest::Parameter{kest::Slot::Value, ""}};
+        std::array<kest::Parameter, 1> valueTakes{kest::Parameter{kest::Slot::Value, ""}};
         std::array<kest::Parameter, 1> readGives{kest::Parameter{kest::Slot::Value, ""}};
         /// Arrived for this tick, in order.
         std::vector<std::span<const std::byte>> arrived;
@@ -83,6 +93,12 @@ private:
     }
 
     static void sendDoor(kest::DoorCall& call, void* context) noexcept;
+    static void everyoneDoor(kest::DoorCall& call, void* context) noexcept;
+    static void seeingDoor(kest::DoorCall& call, void* context) noexcept;
+    static void holdingDoor(kest::DoorCall& call, void* context) noexcept;
+    /// Stages one of `kind` to `audience`, its value the call's argument
+    /// `value`, after the entity at 0 when `entity`.
+    static void stage(kest::DoorCall& call, Kind& kind, world_replication::Audience audience, bool entity) noexcept;
     static void countDoor(kest::DoorCall& call, void* context) noexcept;
     static void readDoor(kest::DoorCall& call, void* context) noexcept;
     static void terminateDoor(kest::DoorCall& call, void* context) noexcept;

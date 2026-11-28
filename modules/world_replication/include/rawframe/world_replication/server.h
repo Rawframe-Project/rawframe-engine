@@ -222,8 +222,9 @@ struct ServerReplicationStatistics {
     std::uint64_t strikes = 0;
     /// Input-lane records dropped unread past the input ceilings.
     std::uint64_t inputsLimited = 0;
-    /// Game messages sent on the game's lane, and those whose player was
-    /// not connected.
+    /// Game messages sent on the game's lane, one for each connection
+    /// reached; and those that went nowhere: one to a player not
+    /// connected, or a record a connection could not keep.
     std::uint64_t messagesSent = 0;
     std::uint64_t messagesUndelivered = 0;
     /// Sessions ended by the game or an operator.
@@ -298,10 +299,11 @@ public:
     /// The server is stopping: each player with an identity is told of as
     /// leaving, their entity still there.
     void leaveAll(world::World& world) noexcept;
-    /// A game message to its player's connection, on the game's lane, which
-    /// the sessions must declare; after the tick that sent it, never during
-    /// one. None goes to a player not connected.
-    void post(const PostedMessage& message) noexcept;
+    /// A game message to each connection its audience reaches in `world`
+    /// now, once each, on the game's lane, which the sessions must declare;
+    /// after the tick that sent it, never during one. None goes to a player
+    /// not connected.
+    void post(const world::World& world, const PostedMessage& message) noexcept;
     /// Ends the session of the player whose entity `player` is:
     /// its termination goes on the engine's lane, the connection is held
     /// only for that to arrive, and the player leaves the World at once, as

@@ -50,7 +50,7 @@ A door is an engine function a program calls through an `extern fn` its library 
 | Randomness | With `random <stream>` on the line: `random.below(stream, bound)`, `random.below64`, `random.unit(stream)`, `random.weighted(stream, weights)` (a place picked in proportion to its weight), `random.shuffle(stream, values)`, and points evenly spread `onCircle`, `inDisk`, `onSphere` and `inTriangle`, the stream by its place in the line's list. |
 | Prefabs | `scene.spawn(identity)` spawns a `prefab` line's scene whole. |
 | Players | `replication.player()`: on a client, its own player. |
-| Messages | `Messages.<name>(to, value)` on the server; `ReceivedCount.<name>()` and `Received.<name>(index)` in a client's present systems. |
+| Messages | `Messages.<name>(to, value)`, `MessagesToAll.<name>(value)`, `MessagesSeeing.<name>(entity, value)` and, with `holders`, `MessagesHolding.<name>(value)` on the server; `ReceivedCount.<name>()` and `Received.<name>(index)` in a client's present systems. |
 | Commands | `Commands.<name>(value)` in a client's sample function; `CommandCount.<name>()`, `Command.<name>(index)` and `CommandFrom.<name>(index)` in the server's systems on the next tick. |
 | Effects | `Effects.<name>(entity)` from a predicted system with `emits <name>`. |
 | Physics | Rays, sweeps and overlaps in `rawframe.physics2d` and `rawframe.physics3d`, and `castRayAt` cast back to the moment a player saw. |

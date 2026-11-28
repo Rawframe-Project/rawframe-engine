@@ -49,7 +49,7 @@ With `input <component> perceived`, each command records the moment its player s
 
 ## Messages and commands
 
-- A **message** (`message <name> <Kest type>`) is a guaranteed value a server system sends one player with `Messages.<name>(to, value)`, delivered after the tick commits.
+- A **message** (`message <name> <Kest type>`) is a guaranteed value a server system sends, delivered after the tick commits: to one player with `Messages.<name>(to, value)`, to every player with `MessagesToAll.<name>(value)`, or to every player whose connection holds an entity in its interest, and that entity's own player, with `MessagesSeeing.<name>(entity, value)`. A line ending `holders <component>` adds `MessagesHolding.<name>(value)`, to every player whose entity holds that component, a team's tag for example. Each connection reached gets one record, and whom a message reaches is worked out when it goes out, after the tick.
 - A **command** (`command <name> <Kest type>`) is a value a player's client sends the server with `Commands.<name>(value)`, which the server's systems read on the next tick, with its sender. Commands are untrusted and checked: at most 1,024 bytes, eight sent a tick, and one of the wrong kind or size strikes the connection.
 
 Neither may hold an entity: an entity names something in one World only.

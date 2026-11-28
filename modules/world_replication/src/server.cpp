@@ -771,20 +771,60 @@ void ReplicationServer::noticeStopping() noexcept {
     }
 }
 
-void ReplicationServer::post(const PostedMessage& message) noexcept {
+void ReplicationServer::post(const world::World& world, const PostedMessage& message) noexcept {
     State& state = *state_;
-    const auto kPeer = std::ranges::find_if(state.peers, [&](const auto& peer) {
-        return !peer.second.gone && peer.second.player == message.player;
-    });
-    // A record the transport cannot keep ends its connection there, which
-    // the next pump hears of: nothing sent reliably is dropped.
-    if (kPeer == state.peers.end() ||
-        !state.sessions->sendEvent(kPeer->second.connection, kGameMessageLane, message.kind, message.value)
-             .has_value()) {
-        ++state.statistics.messagesUndelivered;
+    if (message.audience == Audience::Player) {
+        const auto kPeer = std::ranges::find_if(state.peers, [&](const auto& peer) {
+            return !peer.second.gone && peer.second.player == message.player;
+        });
+        // A record the transport cannot keep ends its connection there,
+        // which the next pump hears of: nothing sent reliably is dropped.
+        if (kPeer == state.peers.end() ||
+            !state.sessions->sendEvent(kPeer->second.connection, kGameMessageLane, message.kind, message.value)
+                 .has_value()) {
+            ++state.statistics.messagesUndelivered;
+            return;
+        }
+        ++state.statistics.messagesSent;
         return;
     }
-    ++state.statistics.messagesSent;
+    std::optional<schema::ComponentRuntimeId> holding;
+    if (message.audience == Audience::Holding) {
+        const auto kFound = world.registry().find(message.holding);
+        if (!kFound.has_value()) {
+            ++state.statistics.messagesUndelivered;
+            return;
+        }
+        holding = *kFound;
+    }
+    const auto kReaches = [&](const Peer& peer) {
+        switch (message.audience) {
+        case Audience::Player:
+        case Audience::Everyone:
+            return true;
+        case Audience::Seeing: {
+            if (peer.player == message.player) {
+                return true;
+            }
+            // Seen once its first value went out, until it began to retire.
+            const Mapping* const kMapped = peer.mapped.find(message.player);
+            return kMapped != nullptr && kMapped->firstSent.has_value() && !kMapped->retiringSince.has_value();
+        }
+        case Audience::Holding:
+            return world.hasErased(peer.player, *holding);
+        }
+        return false;
+    };
+    for (auto& [id, peer] : state.peers) {
+        if (peer.gone || !kReaches(peer)) {
+            continue;
+        }
+        if (state.sessions->sendEvent(peer.connection, kGameMessageLane, message.kind, message.value).has_value()) {
+            ++state.statistics.messagesSent;
+        } else {
+            ++state.statistics.messagesUndelivered;
+        }
+    }
 }
 
 bool ReplicationServer::terminate(world::World& world,

@@ -190,7 +190,7 @@ public:
         posted_.clear();
         plan_->takeMessages(posted_);
         for (const PostedMessage& message : posted_) {
-            server_->post(message);
+            server_->post(*simulation_->world(), message);
         }
         // What the players asked for, for the game's next tick.
         commands_.clear();

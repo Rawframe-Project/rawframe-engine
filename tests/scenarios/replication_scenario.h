@@ -174,12 +174,18 @@ struct Options {
     std::vector<schema::ComponentTypeId> own;
     /// The player's input is an Aim, naming an entity, not a Steer.
     bool aiming = false;
+    /// Where the client's game messages go; the game's lane is declared,
+    /// for messages of four bytes, with one.
+    world_replication::MessageSink* messages = nullptr;
 };
 
 inline std::vector<network::EventLaneDeclaration> lanesFor(const Options& options) {
     std::vector<network::EventLaneDeclaration> lanes = {world_replication::engineLane()};
     if (!options.commandSizes.empty()) {
         lanes.push_back(world_replication::gameCommandLane(*std::ranges::max_element(options.commandSizes)));
+    }
+    if (options.messages != nullptr) {
+        lanes.push_back(world_replication::gameMessageLane(4));
     }
     return lanes;
 }
@@ -251,7 +257,8 @@ struct Scenario {
              .interpolation = options.interpolating
                                   ? std::optional{world_replication::InterpolationSettings{
                                         .interpolated = {Position::kComponentTypeId}, .clock = &clock}}
-                                  : std::nullopt});
+                                  : std::nullopt,
+             .messages = options.messages});
         RAWFRAME_EXPECT(
             client
                 ->connect(

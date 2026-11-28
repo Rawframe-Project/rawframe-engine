@@ -727,15 +727,22 @@ result::Result<GameDescription> parseGame(std::string_view text) {
             }
             game.effects.push_back(std::move(*effect));
         } else if (kKeyword == "message") {
-            if (kWords.size() != 3 || !lowerSnake(kWords[1]) ||
+            // message <name> <Kest type> [holders <component>]
+            const bool kHolders = kWords.size() == 5 && kWords[3] == "holders";
+            if ((kWords.size() != 3 && !kHolders) || !lowerSnake(kWords[1]) ||
                 std::ranges::contains(game.messages, kWords[1], &GameMessage::name) ||
                 game.messages.size() >= kMaximumMessages) {
-                return badLine(
-                    number,
-                    WorldKestError::BadGameLine,
-                    "a message line is `message <lower_snake name> <Kest type>`, each name once, at most 64");
+                return badLine(number,
+                               WorldKestError::BadGameLine,
+                               "a message line is `message <lower_snake name> <Kest type>`, then optionally "
+                               "`holders <component>`, each name once, at most 64");
             }
-            game.messages.push_back(GameMessage{.name = std::string{kWords[1]}, .kestType = std::string{kWords[2]}});
+            GameMessage message{.name = std::string{kWords[1]}, .kestType = std::string{kWords[2]}, .holders = {}};
+            if (kHolders) {
+                message.holders = std::string{kWords[4]};
+                uses.emplace_back(number, message.holders);
+            }
+            game.messages.push_back(std::move(message));
         } else if (kKeyword == "command") {
             if (kWords.size() != 3 || !lowerSnake(kWords[1]) ||
                 std::ranges::contains(game.commands, kWords[1], &GameCommand::name) ||

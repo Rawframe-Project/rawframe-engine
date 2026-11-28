@@ -232,13 +232,18 @@ inline constexpr std::size_t kMaximumEffects = 64;
 
 /// A guaranteed message, from a `message <lower_snake name> <Kest
 /// type>` line: a value of the type a server system sends one player
-/// through `Messages.<name>(to, value)`, which arrives on the game's event
-/// lane after the tick commits, and which the player's present systems read
+/// through `Messages.<name>(to, value)`, every player through
+/// `MessagesToAll.<name>(value)`, or every player who sees an entity through
+/// `MessagesSeeing.<name>(entity, value)`. It arrives on the game's event
+/// lane after the tick commits, and the player's present systems read it
 /// through `ReceivedCount.<name>()` and `Received.<name>(index)`. It holds
 /// no entity: one would name the server's World.
 struct GameMessage {
     std::string name;
     std::string kestType;
+    /// From `holders <component>` on the line: the component whose holders
+    /// `MessagesHolding.<name>(value)` sends to; empty for none.
+    std::string holders;
 };
 
 /// Messages a game declares at most.

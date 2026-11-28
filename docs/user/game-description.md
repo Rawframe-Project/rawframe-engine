@@ -65,7 +65,7 @@ The phase is one of the World's (`simulation` for most gameplay). Columns follow
 | `own <component>...` | Replicated components sent only to the connection whose player holds them. |
 | `interest <component> <x> [<y> [<z>]] within <meters>` | Sends each connection only what lies within the radius of its player. |
 | `mapped <count>` | Entities one connection may hold at once, past the default 4,096. |
-| `message <name> <Kest type>` | A guaranteed message a server system sends one player. |
+| `message <name> <Kest type>`, then optionally `holders <component>` | A guaranteed message a server system sends one player, every player, every player who sees an entity, or, with `holders`, every player whose entity holds that component. |
 | `command <name> <Kest type>` | A value a player's client sends the server, at most 1,024 bytes. |
 | `effect <name> predicted\|confirmed_only [sound <id>] [felt <output> <amplitude> <hertz> <ms>]` | A presentation effect a predicted system emits. |
 

@@ -714,10 +714,17 @@ RAWFRAME_TEST(MessagesAreDeclaredByLine) {
     const std::string kHead = "program p.kest\n";
     const auto kGame = parseGame(kHead + "message hurt Hurt\nmessage round_over rules.Round\n");
     RAWFRAME_EXPECT(kGame.has_value() && kGame->messages.size() == 2 && kGame->messages[1].name == "round_over" &&
-                    kGame->messages[1].kestType == "rules.Round");
+                    kGame->messages[1].kestType == "rules.Round" && kGame->messages[1].holders.empty());
+    // Holders name a component the game declares.
+    const std::string kTeam = "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.red Red\n";
+    const auto kHeld = parseGame(kHead + kTeam + "message news News holders a.red\n");
+    RAWFRAME_EXPECT(kHeld.has_value() && kHeld->messages.size() == 1 && kHeld->messages[0].holders == "a.red");
+    RAWFRAME_EXPECT(!parseGame(kHead + kTeam + "message news News holders a.blue\n").has_value());
     for (const std::string_view kLines : {"message hurt\n",
                                           "message Hurt Hurt\n",
                                           "message hurt Hurt extra\n",
+                                          "message hurt Hurt holders\n",
+                                          "message hurt Hurt owners a.red\n",
                                           "message hurt Hurt\nmessage hurt Other\n"}) {
         RAWFRAME_EXPECT(!parseGame(kHead + std::string{kLines}).has_value());
     }

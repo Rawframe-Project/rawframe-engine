@@ -1,6 +1,6 @@
 #pragma once
 
-// A game's guaranteed messages: a server system sends one player a
+// A game's guaranteed messages: a server system sends a player, or many, a
 // value of a type the game declares; it arrives in the order sent, on the
 // game's event lane, once the tick that sent
 // it has committed. Messages to a player who is not connected are counted
@@ -8,6 +8,7 @@
 
 #include "rawframe/network/close.h"
 #include "rawframe/network/session.h"
+#include "rawframe/schema/stable_id.h"
 #include "rawframe/world/entity.h"
 #include "rawframe/world/time.h"
 
@@ -64,12 +65,27 @@ struct PostedTermination {
     std::string note;
 };
 
-/// What a server's systems sent in a tick: to which player, which of the
+/// Whom a game message goes to. Each connection it reaches gets it once.
+enum class Audience : std::uint8_t {
+    /// The player whose entity is `player`.
+    Player,
+    /// Every connected player.
+    Everyone,
+    /// Every player whose connection holds the entity `player` in its
+    /// interest, and that entity's own player if it is one.
+    Seeing,
+    /// Every connected player whose entity holds the component `holding`.
+    Holding,
+};
+
+/// What a server's systems sent in a tick: to whom, which of the
 /// game's messages, by its place among them, and its value's bytes.
 struct PostedMessage {
     world::EntityHandle player;
     std::uint32_t kind = 0;
     std::vector<std::byte> value;
+    Audience audience = Audience::Player;
+    schema::ComponentTypeId holding;
 };
 
 struct ReceivedMessage {

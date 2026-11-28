@@ -1,6 +1,7 @@
 // A player's commands from the client World to the server's over
 // loopback: taken with the player and tick, bounded a tick, struck when
-// misshapen, and dropped with a player gone before they are taken.
+// misshapen, and dropped with a player gone before they are taken. And the
+// game's messages the other way, to each connection their audience holds.
 
 #include "replication_scenario.h"
 
@@ -90,4 +91,100 @@ RAWFRAME_TEST(MisshapenCommandsStrikeAPlayerOutOfTheWorld) {
     }
     RAWFRAME_EXPECT(scenario.server->statistics().strikes == network::kMaximumStrikes);
     RAWFRAME_EXPECT(!scenario.serverWorld.alive(kPlayer) && scenario.server->connections() == 0);
+}
+
+namespace {
+
+/// The values of the four-byte game messages a client heard, in order.
+struct Heard final : world_replication::MessageSink {
+    std::vector<std::uint32_t> values;
+
+    void deliver(world_replication::ReceivedMessage message) noexcept override {
+        std::uint32_t value = 0;
+        if (message.value.size() == sizeof value) {
+            std::memcpy(&value, message.value.data(), sizeof value);
+        }
+        values.push_back(value);
+    }
+};
+
+} // namespace
+
+RAWFRAME_TEST(AMessageReachesEachConnectionItsAudienceHoldsOnce) {
+    // Two players far apart, each with an entity near it: a message to
+    // everyone reaches both, one to who sees an entity reaches only the
+    // player whose interest holds it (and an entity's own player), and one
+    // to a component's holders reaches only the player holding it.
+    Heard first;
+    Heard second;
+    Scenario scenario{{.latency = MonotonicDuration::fromMilliseconds(20)},
+                      {.interest = world_replication::InterestSettings{.position = Position::kComponentTypeId,
+                                                                       .axes = {{offsetof(Position, x), WireKind::F32},
+                                                                                {offsetof(Position, y), WireKind::F32}},
+                                                                       .radius = 10,
+                                                                       .leaveRadius = 12},
+                       .messages = &first}};
+    world::World secondWorld{scenario.schema};
+    auto transport = *scenario.network.provider(kTransport);
+    auto sessions = *network::Sessions::client(
+        *transport, scenario.clock, {.profile = kSessions, .lanes = lanesFor({.messages = &second}), .seed = 3});
+    auto client = *world_replication::ReplicationClient::create(
+        *sessions,
+        secondWorld,
+        {.table = {.components = {positionCodec(), steerCodec(), aimCodec()}},
+         .input = steerCodec(),
+         .messages = &second});
+    RAWFRAME_EXPECT(
+        client
+            ->connect({"server"},
+                      network::Hello{.compatibility = compatibility(), .maximumDatagram = 1100, .maximumFrame = 4096})
+            .has_value());
+    const auto kPosition = *scenario.schema->key<Position>();
+    const auto kSteps = [&](int count) {
+        for (int step = 0; step < count; ++step) {
+            scenario.step(Steer{});
+            client->pump();
+            if (client->admitted()) {
+                Steer still{};
+                RAWFRAME_EXPECT(client->submitInput(std::as_bytes(std::span{&still, 1})).has_value());
+            }
+        }
+    };
+    kSteps(20);
+    const world::EntityHandle kOne = scenario.server->player(network::ConnectionId{1});
+    const world::EntityHandle kTwo = scenario.server->player(network::ConnectionId{2});
+    RAWFRAME_EXPECT(!kOne.isNull() && !kTwo.isNull() && kOne != kTwo);
+    if (kOne.isNull() || kTwo.isNull()) {
+        return;
+    }
+    *scenario.serverWorld.get(kOne, kPosition) = Position{0, 0};
+    *scenario.serverWorld.get(kTwo, kPosition) = Position{100, 0};
+    const world::EntityHandle kNearOne = *scenario.serverWorld.create();
+    RAWFRAME_EXPECT(scenario.serverWorld.insert(kNearOne, kPosition, Position{5, 0}).has_value());
+    RAWFRAME_EXPECT(
+        scenario.serverWorld.insert(kTwo, *scenario.schema->key<Aim>(), Aim{.target = {}, .range = 1}).has_value());
+    kSteps(30);
+    const auto kPost = [&](std::uint32_t value,
+                           world_replication::Audience audience,
+                           world::EntityHandle entity = {},
+                           schema::ComponentTypeId holding = {}) {
+        world_replication::PostedMessage message{.player = entity,
+                                                 .kind = 0,
+                                                 .value = std::vector<std::byte>(sizeof value),
+                                                 .audience = audience,
+                                                 .holding = holding};
+        std::memcpy(message.value.data(), &value, sizeof value);
+        scenario.server->post(scenario.serverWorld, message);
+    };
+    using world_replication::Audience;
+    kPost(1, Audience::Everyone);
+    kPost(2, Audience::Seeing, kNearOne);
+    kPost(3, Audience::Seeing, kTwo);
+    kPost(4, Audience::Holding, {}, Aim::kComponentTypeId);
+    kPost(5, Audience::Player, kOne);
+    kSteps(10);
+    RAWFRAME_EXPECT((first.values == std::vector<std::uint32_t>{1, 2, 5}));
+    RAWFRAME_EXPECT((second.values == std::vector<std::uint32_t>{1, 3, 4}));
+    RAWFRAME_EXPECT(scenario.server->statistics().messagesSent == 6 &&
+                    scenario.server->statistics().messagesUndelivered == 0);
 }

@@ -38,6 +38,22 @@ MessageDoors::create(const GameDescription& game, const kest::Program& program, 
         kind.size = kLayout->size;
         kind.kestType = message.kestType;
         kind.send = "Messages." + message.name;
+        kind.everyone = "MessagesToAll." + message.name;
+        kind.seeing = "MessagesSeeing." + message.name;
+        if (!message.holders.empty()) {
+            const auto kHolders = std::ranges::find(game.components, message.holders, &GameComponent::name);
+            if (kHolders == game.components.end()) {
+                return std::unexpected<result::Error>{
+                    result::fail(result::ErrorClass::InvalidArgument,
+                                 kWorldKestDomain,
+                                 code(WorldKestError::UnknownName),
+                                 "a message's holders are of a component the game declares")
+                        .error()
+                        .withContext("message", message.name)};
+            }
+            kind.holding = "MessagesHolding." + message.name;
+            kind.holders = kHolders->id;
+        }
         kind.count = "ReceivedCount." + message.name;
         kind.read = "Received." + message.name;
         made->largest_ = std::max({made->largest_, kLayout->size, std::size_t{1}});
@@ -46,6 +62,7 @@ MessageDoors::create(const GameDescription& game, const kest::Program& program, 
     // stays where it is.
     for (const std::unique_ptr<Kind>& kind : made->kinds_) {
         kind->sendTakes[1] = kest::Parameter{kest::Slot::Value, kind->kestType};
+        kind->valueTakes[0] = kest::Parameter{kest::Slot::Value, kind->kestType};
         kind->readGives[0] = kest::Parameter{kest::Slot::Value, kind->kestType};
     }
     return made;
@@ -57,6 +74,14 @@ result::Status MessageDoors::addDoors(kest::DoorTable& doors) {
     for (const std::unique_ptr<Kind>& kind : kinds_) {
         RAWFRAME_TRY(doors.add(
             kest::Door{.name = kind->send, .function = &sendDoor, .context = kind.get(), .takes = kind->sendTakes}));
+        RAWFRAME_TRY(doors.add(kest::Door{
+            .name = kind->everyone, .function = &everyoneDoor, .context = kind.get(), .takes = kind->valueTakes}));
+        RAWFRAME_TRY(doors.add(kest::Door{
+            .name = kind->seeing, .function = &seeingDoor, .context = kind.get(), .takes = kind->sendTakes}));
+        if (!kind->holding.empty()) {
+            RAWFRAME_TRY(doors.add(kest::Door{
+                .name = kind->holding, .function = &holdingDoor, .context = kind.get(), .takes = kind->valueTakes}));
+        }
         RAWFRAME_TRY(doors.add(
             kest::Door{.name = kind->count, .function = &countDoor, .context = kind.get(), .gives = kCountGives}));
         RAWFRAME_TRY(doors.add(kest::Door{.name = kind->read,
@@ -129,29 +154,52 @@ void MessageDoors::arrived(std::span<const world_replication::ReceivedMessage> m
     }
 }
 
-void MessageDoors::sendDoor(kest::DoorCall& call, void* context) noexcept {
-    Kind& kind = *static_cast<Kind*>(context);
+void MessageDoors::stage(kest::DoorCall& call, Kind& kind, world_replication::Audience audience, bool entity) noexcept {
     MessageDoors& owner = *kind.owner;
     if (owner.role_ != Role::Send) {
         return;
     }
     world::EntityHandle to;
-    if (!call.value(0, std::as_writable_bytes(std::span{&to, 1})) || to.isNull()) {
-        call.fail("a message goes to a player that exists");
+    if (entity && (!call.value(0, std::as_writable_bytes(std::span{&to, 1})) || to.isNull())) {
+        call.fail(audience == world_replication::Audience::Player ? "a message goes to a player that exists"
+                                                                  : "a message goes to who sees an entity that exists");
         return;
     }
+    // One staged message is at most one record on each connection, so the
+    // bound holds per connection whatever the audience.
     if (owner.pending_.size() + owner.kept_.size() >= kMaximumMessagesPerTick) {
         call.fail("a tick's systems send at most 1024 messages");
         return;
     }
-    world_replication::PostedMessage message{.player = to, .kind = kind.kind, .value = {}};
+    world_replication::PostedMessage message{
+        .player = to,
+        .kind = kind.kind,
+        .value = {},
+        .audience = audience,
+        .holding = audience == world_replication::Audience::Holding ? kind.holders : schema::ComponentTypeId{}};
     message.value.resize(kind.size);
-    if (!call.value(1, message.value)) {
+    if (!call.value(entity ? 1 : 0, message.value)) {
         call.fail("a message's value did not cross as its type");
         return;
     }
     call.spendFuel(kind.size);
     owner.pending_.push_back(std::move(message));
+}
+
+void MessageDoors::sendDoor(kest::DoorCall& call, void* context) noexcept {
+    stage(call, *static_cast<Kind*>(context), world_replication::Audience::Player, true);
+}
+
+void MessageDoors::everyoneDoor(kest::DoorCall& call, void* context) noexcept {
+    stage(call, *static_cast<Kind*>(context), world_replication::Audience::Everyone, false);
+}
+
+void MessageDoors::seeingDoor(kest::DoorCall& call, void* context) noexcept {
+    stage(call, *static_cast<Kind*>(context), world_replication::Audience::Seeing, true);
+}
+
+void MessageDoors::holdingDoor(kest::DoorCall& call, void* context) noexcept {
+    stage(call, *static_cast<Kind*>(context), world_replication::Audience::Holding, false);
 }
 
 void MessageDoors::countDoor(kest::DoorCall& call, void* context) noexcept {

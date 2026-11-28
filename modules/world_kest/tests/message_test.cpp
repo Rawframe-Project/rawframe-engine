@@ -41,6 +41,9 @@ struct Moved {
 }
 
 extern fn Messages.moved(to: world.Entity, value: Moved)
+extern fn MessagesToAll.moved(value: Moved)
+extern fn MessagesSeeing.moved(entity: world.Entity, value: Moved)
+extern fn MessagesHolding.moved(value: Moved)
 extern fn ReceivedCount.moved() -> i32
 extern fn Received.moved(index: i32) -> Moved
 extern fn Players.terminate(player: world.Entity, note: text)
@@ -56,6 +59,18 @@ fn tell(count: i32, positions: [Position], entities: [world.Entity]) {
     if positions[0].x > 100.0 {
         positions[count].x = 0.0
     }
+}
+
+// Tells everyone the first place, who sees each entity its place, and
+// the position's holders the last.
+fn announce(count: i32, positions: [Position], entities: [world.Entity]) {
+    MessagesToAll.moved(Moved(positions[0].x))
+    let i = 0
+    while i < count {
+        MessagesSeeing.moved(entities[i], Moved(positions[i].x))
+        i = i + 1
+    }
+    MessagesHolding.moved(Moved(positions[count - 1].x))
 }
 
 // Ends the session of each past two, then refuses past a hundred.
@@ -85,9 +100,12 @@ fn read(count: i32, positions: [Position]) {
 }
 )";
 
-GameDescription game(std::string_view type = "Moved") {
+GameDescription game(std::string_view type = "Moved", std::string_view holders = "test.position") {
     GameDescription made;
-    made.messages.push_back(GameMessage{.name = "moved", .kestType = std::string{type}});
+    made.components.push_back(GameComponent{
+        .id = Position::kComponentTypeId, .name = std::string{Position::kComponentName}, .kestType = "Position"});
+    made.messages.push_back(
+        GameMessage{.name = "moved", .kestType = std::string{type}, .holders = std::string{holders}});
     return made;
 }
 
@@ -196,6 +214,43 @@ RAWFRAME_TEST(AServersMessagesAreKeptWithTheRunThatSentThem) {
         (*quiet)->take(taken);
         RAWFRAME_EXPECT(taken.empty());
     }
+}
+
+RAWFRAME_TEST(AMessageGoesToEveryoneToWhoSeesAnEntityOrToAComponentsHolders) {
+    auto doors = MessageDoors::create(game(), *program(), MessageDoors::Role::Send);
+    RAWFRAME_EXPECT(doors.has_value());
+    if (!doors.has_value()) {
+        return;
+    }
+    const std::array<KestColumn, 2> kColumns = {
+        KestColumn{.component = Position::kComponentTypeId, .element = "Position", .access = world::Access::Read},
+        KestColumn{.component = {}, .element = {}, .entities = true}};
+    Run run{**doors, "announce", kColumns, {1, 2}};
+    RAWFRAME_EXPECT(run.once());
+    std::vector<world_replication::PostedMessage> taken;
+    (*doors)->take(taken);
+    using world_replication::Audience;
+    RAWFRAME_EXPECT(taken.size() == 4);
+    if (taken.size() == 4) {
+        RAWFRAME_EXPECT(taken[0].audience == Audience::Everyone && taken[0].player.isNull() && valueOf(taken[0]) == 1);
+        RAWFRAME_EXPECT(taken[1].audience == Audience::Seeing && taken[1].player == run.entities[0] &&
+                        valueOf(taken[1]) == 1);
+        RAWFRAME_EXPECT(taken[2].audience == Audience::Seeing && taken[2].player == run.entities[1] &&
+                        valueOf(taken[2]) == 2);
+        RAWFRAME_EXPECT(taken[3].audience == Audience::Holding && taken[3].holding == Position::kComponentTypeId &&
+                        valueOf(taken[3]) == 2);
+    }
+    // A message with no holders has no door to them; holders the game does
+    // not declare are refused.
+    auto bare = MessageDoors::create(game("Moved", ""), *program(), MessageDoors::Role::Send);
+    RAWFRAME_EXPECT(bare.has_value());
+    if (bare.has_value()) {
+        kest::DoorTable table;
+        RAWFRAME_EXPECT((*bare)->addDoors(table).has_value() && table.find("MessagesHolding.moved") == nullptr &&
+                        table.find("MessagesToAll.moved") != nullptr);
+    }
+    RAWFRAME_EXPECT(
+        !MessageDoors::create(game("Moved", "test.unknown"), *program(), MessageDoors::Role::Send).has_value());
 }
 
 RAWFRAME_TEST(AClientReadsTheMessagesThatArrived) {
