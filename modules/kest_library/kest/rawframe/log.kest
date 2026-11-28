@@ -1,0 +1,40 @@
+module rawframe.log
+
+import rawframe.world
+
+// A game's own log records, written to the process's diagnostics with the
+// system that wrote them and the tick: what an operator and a developer
+// read, never shown to a player. A message keeps its first 1024 bytes, a
+// run writes at most 32 records, and a record repeating the one before is
+// counted, not written again. `kest.log_level` chooses the least level
+// written and `kest.log_mute` the systems left out. `std.io`'s `print`
+// writes an INFO record a line.
+
+const DEBUG: i32 = 0
+const INFO: i32 = 1
+const WARNING: i32 = 2
+const ERROR: i32 = 3
+
+extern fn Log.write(level: i32, message: text)
+extern fn Log.about(level: i32, entity: world.Entity, message: text)
+
+fn debug(message: text) {
+    Log.write(DEBUG, message)
+}
+
+fn info(message: text) {
+    Log.write(INFO, message)
+}
+
+fn warning(message: text) {
+    Log.write(WARNING, message)
+}
+
+fn error(message: text) {
+    Log.write(ERROR, message)
+}
+
+// A record about `entity`, which names it.
+fn about(level: i32, entity: world.Entity, message: text) {
+    Log.about(level, entity, message)
+}

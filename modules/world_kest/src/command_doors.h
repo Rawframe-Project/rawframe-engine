@@ -39,7 +39,7 @@ public:
 
     [[nodiscard]] result::Status addDoors(kest::DoorTable& doors);
 
-    void begin(world::TickIndex tick) noexcept override;
+    void begin(world::SystemContext& context) noexcept override;
     void end(bool kept) noexcept override;
 
     /// Read: commands checked by the replication server, each for the tick

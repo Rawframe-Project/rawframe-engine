@@ -1,0 +1,25 @@
+module ledger
+
+// Turns a page a tick: an info record each turn, a warning about the book
+// on the third, and a printed line.
+
+import rawframe.log
+import rawframe.world
+import std.io
+
+struct Book {
+    pages: u32
+}
+
+fn turn(count: i32, books: [Book], entities: [world.Entity]) {
+    let i = 0
+    while i < count {
+        books[i].pages = books[i].pages + u32(1)
+        log.info("a page turned")
+        if books[i].pages == u32(3) {
+            log.about(log.WARNING, entities[i], "the third page")
+        }
+        i = i + 1
+    }
+    io.print("turned")
+}

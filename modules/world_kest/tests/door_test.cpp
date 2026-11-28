@@ -4,10 +4,13 @@
 // indices past any there are, and moments far from any kept, argument by
 // argument and all at once; and makes, marks, and destroys entities twice
 // over. Every call answers, the World keeps stepping, and the sanitizers
-// of the full check find nothing.
+// of the full check find nothing. A server's systems log through the
+// host's diagnostics.
 
 #include "../src/predictor.h"
 #include "game_harness.h"
+#include "rawframe/diagnostics/router.h"
+#include "rawframe/diagnostics/sink.h"
 #include "rawframe/physics2d/components.h"
 #include "rawframe/physics2d/registrar.h"
 #include "rawframe/physics3d/components.h"
@@ -35,8 +38,10 @@ const std::array<composition::RegistrarEntry, 5> kWithPhysics = {
     composition::RegistrarEntry{"test", &registerWatcher, world_runtime::kScopes}};
 
 /// Plays the test game `name`, held as a web client holds its files, for
-/// `ticks` ticks at 60 Hz and hands its World to `check` before it stops.
-template <typename Check> void play(std::string_view name, std::uint64_t ticks, const Check& check) {
+/// `ticks` ticks at 60 Hz, its records through `emitter`, and hands its World
+/// to `check` before it stops.
+template <typename Check>
+void play(std::string_view name, std::uint64_t ticks, const Check& check, diagnostics::Emitter emitter = {}) {
     std::vector<composition::Problem> problems;
     auto plan = composition::compose(
         composition::CompositionRequest{.registrars = kWithPhysics,
@@ -52,6 +57,7 @@ template <typename Check> void play(std::string_view name, std::uint64_t ticks, 
                                                                    .scope = &root,
                                                                    .cpu = &test::cpuExecutor(),
                                                                    .blockingIo = &test::blockingIoExecutor(),
+                                                                   .emitter = emitter,
                                                                    .configuration = &*kConfiguration,
                                                                    .files = &heldGames()}};
     auto started = composition.start();
@@ -281,4 +287,36 @@ RAWFRAME_TEST(APredictorCountsTimersAsTheServerDoes) {
     }
     RAWFRAME_EXPECT(left == 0);
     RAWFRAME_EXPECT((*predictor)->set(kLife, std::as_bytes(std::span{&kTwoTicks, 1})).has_value());
+}
+
+namespace {
+
+/// The text of each game log record, in order.
+class GameRecords final : public diagnostics::Sink {
+public:
+    void accept(const diagnostics::Record& record) noexcept override {
+        if (record.identity.code != "game_log") {
+            return;
+        }
+        for (const diagnostics::Field& field : record.fields) {
+            if (field.key.text == "text") {
+                texts.emplace_back(field.value.text);
+            }
+        }
+    }
+
+    std::vector<std::string> texts;
+};
+
+} // namespace
+
+RAWFRAME_TEST(AServersSystemsLogThroughTheHostsDiagnostics) {
+    GameRecords records;
+    const std::array<diagnostics::Sink*, 1> kSinks = {&records};
+    diagnostics::Router router{diagnostics::RouterSettings{}, kSinks};
+    play("ledger.game", 3, [](world::World&) {}, router.emitter());
+    // Each tick a page and a printed line; the third tick's warning between.
+    const std::vector<std::string> kExpected = {
+        "a page turned", "turned", "a page turned", "turned", "a page turned", "the third page", "turned"};
+    RAWFRAME_EXPECT(records.texts == kExpected);
 }

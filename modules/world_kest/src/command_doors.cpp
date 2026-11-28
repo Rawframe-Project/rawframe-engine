@@ -52,16 +52,17 @@ result::Status CommandDoors::addDoors(kest::DoorTable& doors) {
     return {};
 }
 
-void CommandDoors::begin(world::TickIndex tick) noexcept {
-    if (role_ != Role::Read || tick_ == tick) {
+void CommandDoors::begin(world::SystemContext& context) noexcept {
+    const world::TickIndex kTick = context.tick;
+    if (role_ != Role::Read || tick_ == kTick) {
         return;
     }
     // A new tick: what was delivered for it, or for a tick that ran no
     // system, is now readable, and what the last tick read is gone.
-    tick_ = tick;
+    tick_ = kTick;
     current_.clear();
-    const auto kDue = std::ranges::stable_partition(delivered_, [tick](const auto& each) {
-        return each.tick.value <= tick.value;
+    const auto kDue = std::ranges::stable_partition(delivered_, [kTick](const auto& each) {
+        return each.tick.value <= kTick.value;
     });
     current_.assign(std::make_move_iterator(delivered_.begin()), std::make_move_iterator(kDue.begin()));
     delivered_.erase(delivered_.begin(), kDue.begin());

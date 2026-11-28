@@ -228,7 +228,7 @@ private:
         ++doorway_->run;
         const std::size_t kCommandsBefore = context.commands.size();
         for (KestStaging* each : doorway_->staging) {
-            each->begin(context.tick);
+            each->begin(context);
         }
         result::Status called;
         for (std::size_t at = 0; at < chunks_.size() && called.has_value(); ++at) {

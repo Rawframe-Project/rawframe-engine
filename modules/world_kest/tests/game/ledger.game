@@ -1,0 +1,8 @@
+# A book whose keeper logs each page it turns, and prints the count.
+program ledger.kest
+
+component 4e8b2c19-7d35-4a60-9f1e-2c5b8d7a3e46 ledger.book Book
+
+system ledger.turn simulation turn write ledger.book entities
+
+spawn 1 ledger.book

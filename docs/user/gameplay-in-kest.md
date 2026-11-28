@@ -55,6 +55,7 @@ A door is an engine function a program calls through an `extern fn` its library 
 | Effects | `Effects.<name>(entity)` from a predicted system with `emits <name>`. |
 | Physics | Rays, sweeps and overlaps in `rawframe.physics2d` and `rawframe.physics3d`, and `castRayAt` cast back to the moment a player saw. |
 | Navigation | `navigation.next(fromX, fromY, fromZ, toX, toY, toZ)` asks the next step of the way. |
+| Logging | `log.debug(message)`, `log.info`, `log.warning`, `log.error` and `log.about(level, entity, message)` in `rawframe.log`; `std.io`'s `print` and `write`. |
 
 Creating, destroying, inserting and removing take effect at the next barrier, after the system ends: a system never sees its own structural changes in the same run.
 
@@ -79,6 +80,21 @@ Each system has a fuel budget per tick (`kest.fuel_per_system`) and the program 
 
 - **Present systems** (`present` lines) run on a client that draws, over its mirror of the server's World, and write only presentation components: where a sprite or model is drawn, what a camera looks at, which sounds an emitter plays. They never reach the server.
 - **The sample function** (`sample` line) turns the player's actions into their input component each tick, and may send commands. It reads actions through `rawframe.input` (`input.x(action)`, `input.y(action)` and the others), by the action's identity in the action set.
+
+## Logging
+
+A system writes records for whoever runs the game, never for its players, through `rawframe.log`:
+
+```
+import rawframe.log
+
+log.info("a round began")
+log.about(log.WARNING, entity, "fell out of the level")
+```
+
+Each is a record in the process's diagnostics, coded `game_log`, with the system that wrote it, the tick and the text; `log.about` also names the entity. `std.io`'s `print` writes an info record a line. A server writes them in its log; a client that draws writes its present systems' records in its own; a predicting client writes none, since the server writes the same once.
+
+Records are bounded so a loop cannot flood the log: a message keeps its first 1024 bytes, a system's run writes at most 32, and a record repeating the one before it is counted rather than written again. What a run held back is told in one `game_log_held` warning when it ends. A run that fails keeps what it wrote before failing. `kest.log_level` (`debug`, `info`, `warning` or `error`; `info` by default) is the least level written, and `kest.log_mute` names systems, apart by spaces, whose records are left out. Logging writes outside the World, so untrusted code may not call it.
 
 ## Changing code while it runs
 

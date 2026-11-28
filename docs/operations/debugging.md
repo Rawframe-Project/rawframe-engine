@@ -4,7 +4,7 @@ Where to look when a program, a test or a played game misbehaves.
 
 ## Logs
 
-Every host program writes its diagnostics as newline-delimited JSON on standard output: one record a line, each with a domain, a code, a severity and typed fields. `diagnostics.minimum_severity` filters them. Records are bounded and redacted before any sink writes them; a full buffer drops the newest record and counts the loss in a record of its own. A program's summaries at its stop (`tick_summary`, `frame_summary`, `kest_summary` and others) say how its run went, and most tests read them.
+Every host program writes its diagnostics as newline-delimited JSON on standard output: one record a line, each with a domain, a code, a severity and typed fields. `diagnostics.minimum_severity` filters them. A game's own records, from its systems' `rawframe.log` calls and `print`, are coded `game_log` with the system and the tick; `kest.log_level` and `kest.log_mute` choose which of them are written. Records are bounded and redacted before any sink writes them; a full buffer drops the newest record and counts the loss in a record of its own. A program's summaries at its stop (`tick_summary`, `frame_summary`, `kest_summary` and others) say how its run went, and most tests read them.
 
 A launch failure before diagnostics exist (an unknown argument, a configuration that does not parse) goes to standard error as plain text and exits with 64, or 65 for the configuration. Otherwise the exit code is the run's reason in its portable category, and the reason itself is logged once as the run ends.
 

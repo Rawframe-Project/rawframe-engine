@@ -13,6 +13,7 @@
 #include "rawframe/world/world.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
+#include "rawframe/world_kest/log_doors.h"
 #include "rawframe/world_kest/sound_doors.h"
 #include "sequences.h"
 #include "splines.h"
@@ -122,6 +123,9 @@ public:
         RAWFRAME_TRY(messages_->addDoors(doors));
         RAWFRAME_TRY_ASSIGN(commands_, CommandDoors::create(game, *settings.program, CommandDoors::Role::Quiet));
         RAWFRAME_TRY(commands_->addDoors(doors));
+        // Nor logs: what it predicts again and again, the server writes once.
+        log_ = std::make_unique<GameLog>(LogSettings{});
+        RAWFRAME_TRY(log_->addDoors(doors));
         dimensions_ = settings.physics3d.has_value() ? 3 : settings.physics.has_value() ? 2 : 0;
         if (dimensions_ != 0) {
             RAWFRAME_TRY(addPhysicsDoors(doors, dimensions_, &doorContext_));
@@ -298,6 +302,7 @@ private:
     std::unique_ptr<MessageDoors> messages_;
     std::unique_ptr<CommandDoors> commands_;
     std::unique_ptr<GameTimers> timers_;
+    std::unique_ptr<GameLog> log_;
     std::unique_ptr<KestSystems> systems_;
     /// The game's physics dimensions, nought for none, and its physics.
     std::uint8_t dimensions_ = 0;

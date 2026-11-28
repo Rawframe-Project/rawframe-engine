@@ -27,6 +27,7 @@ The configuration is `key = value` lines; `#` starts a comment, and relative pat
 | `network.quic.idle_timeout_ms`, `network.quic.keep_alive_ms`, `network.quic.processors` | Connection timing, and the processors QUIC may use. |
 | `kest.fuel_per_system`, `kest.heap_bytes` | Each system's steps a tick, and the program's heap. |
 | `kest.reload_every` | Reload the program and scenes when their sources change. |
+| `kest.log_level`, `kest.log_mute` | The least level of the game's own log records written (`debug`, `info`, `warning` or `error`), and the systems whose records are left out, apart by spaces. |
 | `save.directory`, `save.slot`, `save.every_seconds`, `save.namespace` | Where and how often the game's save is kept. |
 | `tooling.endpoint`, `tooling.token_file`, `tooling.grants` | A tooling endpoint for inspecting and debugging the running game. |
 | `host.iteration_rate`, `host.maximum_iterations` | How often the Host iterates, and a bound for test runs. |

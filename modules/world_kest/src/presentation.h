@@ -17,6 +17,7 @@
 #include "rawframe/world/world.h"
 #include "rawframe/world_animation/animation.h"
 #include "rawframe/world_kest/game.h"
+#include "rawframe/world_kest/log_doors.h"
 #include "rawframe/world_kest/starts.h"
 #include "rawframe/world_kest/ui_queries.h"
 #include "rawframe/world_kest/volumes.h"
@@ -37,6 +38,8 @@ struct PresentationSettings {
     kest::MachineLimits limits;
     /// The game's animators, if it has any.
     std::optional<world_animation::AnimationSettings> animation;
+    /// What its present systems' log records keep.
+    LogSettings log;
 };
 
 struct PresentationStatistics {

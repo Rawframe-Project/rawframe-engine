@@ -66,6 +66,7 @@ struct ClientPresentation::State {
     std::unique_ptr<EffectDoors> effects;
     std::unique_ptr<MessageDoors> messages;
     std::unique_ptr<CommandDoors> commands;
+    std::unique_ptr<GameLog> log;
 
     /// What is bound to the mirror, made again for another one.
     const world::World* bound = nullptr;
@@ -136,6 +137,9 @@ struct ClientPresentation::State {
             RAWFRAME_TRY(effects->addDoors(doors));
             RAWFRAME_TRY(messages->addDoors(doors));
             RAWFRAME_TRY(commands->addDoors(doors));
+            log = std::make_unique<GameLog>(settings.log);
+            RAWFRAME_TRY(log->addDoors(doors));
+            const std::array<KestStaging*, 1> kStaging = {log.get()};
             if (game.physics.has_value()) {
                 RAWFRAME_TRY(addPhysicsDoors(doors, game.physics->dimensions, &physicsDoors));
             }
@@ -149,7 +153,8 @@ struct ClientPresentation::State {
                                                                         .doors = std::move(doors),
                                                                         .components = components,
                                                                         .limits = settings.limits,
-                                                                        .systems = declarations}));
+                                                                        .systems = declarations,
+                                                                        .staging = kStaging}));
             RAWFRAME_TRY(systems->declareSystems(registry, scheduled));
         }
         RAWFRAME_TRY_ASSIGN(world::Schedule made, world::Schedule::compile(scheduled, registry));

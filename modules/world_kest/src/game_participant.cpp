@@ -29,6 +29,7 @@
 #include "rawframe/world_kest/game_files.h"
 #include "rawframe/world_kest/kest_systems.h"
 #include "rawframe/world_kest/layouts.h"
+#include "rawframe/world_kest/log_doors.h"
 #include "rawframe/world_kest/registrar.h"
 #include "rawframe/world_kest/replication.h"
 #include "rawframe/world_kest/sound_doors.h"
@@ -141,6 +142,7 @@ public:
                 result::ErrorClass::InvalidArgument, WorldKestError::UnknownName, "kest.plan_only is true or false");
         }
         planOnly_ = kPlanOnly == "true";
+        RAWFRAME_TRY_ASSIGN(logSettings_, readLogSettings(configuration));
 #if RAWFRAME_FILE_SYSTEM
         if (files.directory()) {
             sourcesWritten_ = newestSource(*files.directory());
@@ -283,7 +285,9 @@ public:
         RAWFRAME_TRY(effects_->addDoors(doors));
         RAWFRAME_TRY(messages_->addDoors(doors));
         RAWFRAME_TRY(commands_->addDoors(doors));
-        staging_ = {messages_.get(), commands_.get()};
+        log_ = std::make_unique<GameLog>(logSettings_);
+        RAWFRAME_TRY(log_->addDoors(doors));
+        staging_ = {messages_.get(), commands_.get(), log_.get()};
         for (const GameEffect& effect : game_.effects) {
             effectClasses_.push_back(effect.effectClass);
         }
@@ -724,7 +728,8 @@ public:
                                                                .game = &game_,
                                                                .descriptors = descriptors_,
                                                                .limits = kPresentationLimits,
-                                                               .animation = animation_});
+                                                               .animation = animation_,
+                                                               .log = logSettings_});
     }
 
     result::Result<const world_snapshot::SnapshotProjection*> projection() const override {
@@ -1105,7 +1110,9 @@ private:
     std::unique_ptr<EffectDoors> effects_;
     std::unique_ptr<MessageDoors> messages_;
     std::unique_ptr<CommandDoors> commands_;
-    std::array<KestStaging*, 2> staging_{};
+    LogSettings logSettings_;
+    std::unique_ptr<GameLog> log_;
+    std::array<KestStaging*, 3> staging_{};
     std::vector<world_replication::EffectClass> effectClasses_;
     /// Before the systems, so it outlives the machine that calls it.
     GameDebugging debugging_;
