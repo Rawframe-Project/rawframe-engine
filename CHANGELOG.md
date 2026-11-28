@@ -2,6 +2,32 @@
 
 All notable changes to this project are recorded here, grouped as Added, Changed, Fixed, Removed and Security. The project uses [Semantic Versioning](https://semver.org/). Before 1.0.0, any release may change the API, the file formats and the wire protocol.
 
+## [0.10.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.9.0...v0.10.0) (2026-11-28)
+
+
+### Added
+
+* **audio:** follow the default output device and play on a chosen one ([#535](https://github.com/Rawframe-Project/rawframe-engine/issues/535)) ([a6fcbd2](https://github.com/Rawframe-Project/rawframe-engine/commit/a6fcbd2f505fb4811a7fafe4a2af54f26b8c6d17))
+* **kest:** lifespans and timers the engine counts ([#323](https://github.com/Rawframe-Project/rawframe-engine/issues/323)) ([d749843](https://github.com/Rawframe-Project/rawframe-engine/commit/d7498439ba0a796418780cf65c5d37530290ee5f))
+* **kest:** weighted choice, shuffle and shape sampling in random ([#322](https://github.com/Rawframe-Project/rawframe-engine/issues/322)) ([63c9a3e](https://github.com/Rawframe-Project/rawframe-engine/commit/63c9a3ed80a609ef4e027b5dbc93349f7be51d57))
+* **physics:** characters climb steps, ride platforms, push and crouch ([#399](https://github.com/Rawframe-Project/rawframe-engine/issues/399)) ([bed8a86](https://github.com/Rawframe-Project/rawframe-engine/commit/bed8a86eb59e1a2e1236b3ceedd8714565e95de3))
+* **physics:** distance, wheel, pulley and gear joints, with springs ([#410](https://github.com/Rawframe-Project/rawframe-engine/issues/410)) ([8b8aa47](https://github.com/Rawframe-Project/rawframe-engine/commit/8b8aa4788b88130746e299fbb6e8d6da385d2f0f))
+* **render:** draw debug layers over a running game ([#532](https://github.com/Rawframe-Project/rawframe-engine/issues/532)) ([d87525f](https://github.com/Rawframe-Project/rawframe-engine/commit/d87525ffcc338df7987d6f7f8f0632122db83cb9))
+* **render:** draw shapes from present systems to debug a game ([#409](https://github.com/Rawframe-Project/rawframe-engine/issues/409)) ([fe808b2](https://github.com/Rawframe-Project/rawframe-engine/commit/fe808b2eaaf601bcf9375b963ab97af093acf314))
+* **ui:** fade a node and its subtree by its transparency ([#412](https://github.com/Rawframe-Project/rawframe-engine/issues/412)) ([d698791](https://github.com/Rawframe-Project/rawframe-engine/commit/d698791d6f473eb1c534ecc35dbea363eeefad66))
+* **ui:** let a root reach past the safe area; present systems read it ([#401](https://github.com/Rawframe-Project/rawframe-engine/issues/401)) ([9f65151](https://github.com/Rawframe-Project/rawframe-engine/commit/9f651515d9f3a2d20b4b3bbe186770a5122865b9))
+* **ui:** node size bounds, aspect ratio, and wrapped lines ([#398](https://github.com/Rawframe-Project/rawframe-engine/issues/398)) ([b866460](https://github.com/Rawframe-Project/rawframe-engine/commit/b866460e380e83f722ac08fd090a000eb13ff013))
+
+
+### Fixed
+
+* **build:** embed the Kest library again when a module is removed ([#404](https://github.com/Rawframe-Project/rawframe-engine/issues/404)) ([8e0e318](https://github.com/Rawframe-Project/rawframe-engine/commit/8e0e3182d1fcae330ae4dfdc1edacb716ce58e67))
+* **check:** allow the v0.9.0 release squash's footer ([#243](https://github.com/Rawframe-Project/rawframe-engine/issues/243)) ([75e2327](https://github.com/Rawframe-Project/rawframe-engine/commit/75e23279eef638016a907e9c567edef2f8b34087))
+* **kest:** count a player's timers while predicting ([#405](https://github.com/Rawframe-Project/rawframe-engine/issues/405)) ([c9b9456](https://github.com/Rawframe-Project/rawframe-engine/commit/c9b945603547bd82079dc7efc64f91c9fbe0feb0))
+* **tooling:** play a game's own description and draw for local players ([#406](https://github.com/Rawframe-Project/rawframe-engine/issues/406)) ([c8fa2bd](https://github.com/Rawframe-Project/rawframe-engine/commit/c8fa2bdd8554a78c315475918cbdca84d444bfae))
+* **tooling:** refuse a push while tracked files differ from HEAD ([#241](https://github.com/Rawframe-Project/rawframe-engine/issues/241)) ([618e200](https://github.com/Rawframe-Project/rawframe-engine/commit/618e200653421ea2f81e18728fdf728b66d2bc69))
+* **world:** choose nothing when weights total past 64 bits ([#397](https://github.com/Rawframe-Project/rawframe-engine/issues/397)) ([69faabb](https://github.com/Rawframe-Project/rawframe-engine/commit/69faabb09632788a1a13bed45efd64f635ac7546))
+
 ## [0.9.0](https://github.com/Rawframe-Project/rawframe-engine/compare/v0.8.1...v0.9.0) (2026-11-27)
 
 This release fixes identities the tools could mint twice on some processors. No wire, save, checkpoint or cooked format changes.
