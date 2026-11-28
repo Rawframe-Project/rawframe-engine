@@ -92,6 +92,12 @@ struct ViewState {
     world::World* world = nullptr;
     std::optional<ui::Node> root;
     std::array<float, 4> placed{-1, -1, -1, -1};
+    /// Under `root`, over the whole view: the roots that name safe-area
+    /// edges, reaching past what the platform covers. What it covers of
+    /// the view, as last told.
+    std::optional<ui::Node> edge;
+    std::array<float, 4> edgePlaced{-1, -1, -1, -1};
+    std::array<float, 4> covered{};
     std::vector<world::ColumnQuery> queries;
     /// Each node component's words component in the World, if it shows one.
     std::vector<std::optional<schema::ComponentRuntimeId>> shows;
@@ -225,6 +231,15 @@ struct WorldUi::State {
     /// `value` given to `entry`, its node made if it has none; whether the
     /// tree took it.
     bool give(Entry& entry, world::EntityHandle entity, const ui::NodeFields& value);
+    /// `entry`'s layout, its padding at least what the platform covers of
+    /// its view on its safe-area edges; none for a value the tree cannot
+    /// take.
+    [[nodiscard]] std::optional<ui::Layout> layoutFor(const Entry& entry) const;
+    /// The safe-area edges of node component `component`.
+    [[nodiscard]] std::uint32_t safeAreaOf(std::uint32_t component) const noexcept;
+    /// Every node of `view` naming safe-area edges given its layout
+    /// again, as what the platform covers changed.
+    void padAgain(ViewState& view);
 
     /// A text field shows what was typed into it in its text look, never a
     /// label; empty and without the keyboard, its label's words as

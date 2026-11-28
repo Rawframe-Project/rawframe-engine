@@ -5,8 +5,8 @@
 // afresh; values the tree cannot take, a gradient of no kind among them,
 // are left out and counted; a node's transparency fades its subtree; a
 // node shows its label's words in the game's font once it is read, sized
-// by them; a press lands on the
-// node that takes it, with its code, or passes through; a text
+// by them; a root naming safe-area edges reaches past them; a press lands
+// on the node that takes it, with its code, or passes through; a text
 // field's keyboard, typing, and placeholder are fields_test.cpp's;
 // navigation moves focus without a pointer; a styled node looks as
 // its class says in each state it is in; and a node that scrolls
@@ -490,16 +490,78 @@ RAWFRAME_TEST(AViewIsLaidOutInsideWhatThePlatformLeavesClear) {
     const view::ViewSize kWindow{.width = 402, .height = 874};
     const UiView kWhole = insideSafeArea(UiView{.width = 402, .height = 874}, kWindow, kSafe);
     RAWFRAME_EXPECT(kWhole.x == 0 && kWhole.y == 59 && kWhole.width == 402 && kWhole.height == 874 - 59 - 34);
+    RAWFRAME_EXPECT((kWhole.covered == std::array<float, 4>{59, 0, 34, 0}));
     const UiView kUpper = insideSafeArea(UiView{.width = 402, .height = 437}, kWindow, kSafe);
-    RAWFRAME_EXPECT(kUpper.y == 59 && kUpper.height == 437 - 59);
+    RAWFRAME_EXPECT(kUpper.y == 59 && kUpper.height == 437 - 59 &&
+                    (kUpper.covered == std::array<float, 4>{59, 0, 0, 0}));
     const UiView kLower = insideSafeArea(UiView{.y = 437, .width = 402, .height = 437}, kWindow, kSafe);
-    RAWFRAME_EXPECT(kLower.y == 437 && kLower.height == 437 - 34);
+    RAWFRAME_EXPECT(kLower.y == 437 && kLower.height == 437 - 34 &&
+                    (kLower.covered == std::array<float, 4>{0, 0, 34, 0}));
     // A landscape phone's notch on the left.
     const UiView kSide = insideSafeArea(
         UiView{.width = 874, .height = 402}, {.width = 874, .height = 402}, {.right = 0, .bottom = 21, .left = 59});
-    RAWFRAME_EXPECT(kSide.x == 59 && kSide.width == 874 - 59 && kSide.height == 402 - 21);
+    RAWFRAME_EXPECT(kSide.x == 59 && kSide.width == 874 - 59 && kSide.height == 402 - 21 &&
+                    (kSide.covered == std::array<float, 4>{0, 0, 21, 59}));
     const UiView kUntold = insideSafeArea(UiView{.width = 640, .height = 360}, {}, kSafe);
     RAWFRAME_EXPECT(kUntold.y == 0 && kUntold.width == 640 && kUntold.height == 360);
+}
+
+RAWFRAME_TEST(ARootNamingSafeAreaEdgesReachesThem) {
+    // A bar along the bottom of a phone's view: its box reaches the
+    // window's edge under the home indicator, its content padded clear of
+    // it; a panel that names none stays inside.
+    auto made = WorldUi::create({.nodes = {kHudId, kMeterId, kRowId},
+                                 .parents = {std::nullopt, 0, std::nullopt},
+                                 .safeAreas = {ui::kSafeBottom | ui::kSafeLeft | ui::kSafeRight, 0, 0}});
+    RAWFRAME_EXPECT(made.has_value());
+    if (!made.has_value()) {
+        return;
+    }
+    Rig rig;
+    rig.ui = std::move(*made);
+    ui::NodeFields bar{.widthScale = 1, .heightOffset = 40, .padding = 4, .fill = 0x202020FF};
+    bar.absolute = 1;
+    bar.yScale = 1;
+    bar.anchorY = 1;
+    rig.put(rig.player, kHudId, bar);
+    rig.put(rig.player, kMeterId, ui::NodeFields{.grow = 1, .fill = 0x40C040FF});
+    rig.put(rig.player, kRowId, ui::NodeFields{.widthOffset = 50, .heightOffset = 20, .fill = 0xC04040FF});
+    const view::ViewSize kWindow{.width = 400, .height = 800};
+    const UiView kView = insideSafeArea(UiView{.world = &rig.world, .player = rig.player, .width = 400, .height = 800},
+                                        kWindow,
+                                        {.top = 50, .right = 0, .bottom = 30, .left = 0});
+    const std::array<UiView, 1> kViews = {kView};
+    RAWFRAME_EXPECT(rig.ui->update(kViews, 400, 800, 1).has_value());
+    const ui::DrawList& kDrawn = rig.ui->drawn();
+    RAWFRAME_EXPECT(kDrawn.boxes.size() == 3);
+    if (kDrawn.boxes.size() != 3) {
+        return;
+    }
+    // The bar, drawn first, at the window's bottom over its whole width;
+    // the meter inside it above the indicator; the row inside the notch.
+    RAWFRAME_EXPECT(at(kDrawn.boxes[0], 0, 760, 400, 40));
+    RAWFRAME_EXPECT(kDrawn.boxes[1].rect.y == 764 && kDrawn.boxes[1].rect.height == 40 - 4 - 30);
+    RAWFRAME_EXPECT(at(kDrawn.boxes[2], 0, 50, 50, 20));
+    RAWFRAME_EXPECT((rig.ui->safeAreaOf(0) == std::array<float, 4>{50, 0, 30, 0}) &&
+                    (rig.ui->safeAreaOf(1) == std::array<float, 4>{}));
+    // Taller bar: its padding below is the indicator's, its own above.
+    bar.heightOffset = 60;
+    rig.put(rig.player, kHudId, bar);
+    RAWFRAME_EXPECT(rig.ui->update(kViews, 400, 800, 1).has_value());
+    RAWFRAME_EXPECT(at(rig.ui->drawn().boxes[0], 0, 740, 400, 60) && rig.ui->drawn().boxes[1].rect.y == 744 &&
+                    rig.ui->drawn().boxes[1].rect.height == 60 - 4 - 30);
+    // Turned: nothing covered, the padding its own again.
+    const std::array<UiView, 1> kClear = {
+        UiView{.world = &rig.world, .player = rig.player, .width = 400, .height = 800}};
+    RAWFRAME_EXPECT(rig.ui->update(kClear, 400, 800, 1).has_value());
+    RAWFRAME_EXPECT(rig.ui->drawn().boxes.size() == 3 && rig.ui->drawn().boxes[1].rect.height == 60 - 8 &&
+                    (rig.ui->safeAreaOf(0) == std::array<float, 4>{}));
+    // The document edited: the bar names none, and lies inside.
+    RAWFRAME_EXPECT(rig.ui->rearrange({std::nullopt, 0, std::nullopt}, {}, {}).has_value());
+    RAWFRAME_EXPECT(rig.ui->update(kViews, 400, 800, 1).has_value());
+    RAWFRAME_EXPECT(rig.ui->drawn().boxes.size() == 3 && at(rig.ui->drawn().boxes[0], 0, 710, 400, 60));
+    // Edges for every node component, or none at all.
+    RAWFRAME_EXPECT(!rig.ui->rearrange({std::nullopt, 0, std::nullopt}, {}, {1}).has_value());
 }
 
 RAWFRAME_TEST(ARangeIsPagedAndDraggedAndKeepsWhatThePlayerMovedItTo) {

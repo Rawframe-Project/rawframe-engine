@@ -79,6 +79,10 @@ documentOf(const world_kest::GameDescription& game, const kest::Program& program
             made.shows.resize(nodes.size());
             made.shows[kIndex] = kWords->id;
         }
+        if (kNode.safeArea != 0) {
+            made.safeAreas.resize(nodes.size());
+            made.safeAreas[kIndex] = kNode.safeArea;
+        }
         constexpr ui::NodeFields kNought{};
         if (std::memcmp(&kNode.fields, &kNought, sizeof kNought) != 0) {
             // Only presentation attaches a component, so only one of
@@ -201,6 +205,7 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
         }
         settings.parents = std::move(document->parents);
         settings.shows = std::move(document->shows);
+        settings.safeAreas = std::move(document->safeAreas);
         starts = std::move(document->starts);
     }
     for (const world_kest::GameFont& kFont : kGame.fonts) {

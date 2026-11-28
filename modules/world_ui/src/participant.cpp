@@ -676,6 +676,10 @@ public:
         return ui_ != nullptr && !failed_ ? ui_->valueOf(player, press) : std::nullopt;
     }
 
+    std::array<float, 4> safeAreaOf(std::size_t player) const override {
+        return ui_ != nullptr ? ui_->safeAreaOf(player) : std::array<float, 4>{};
+    }
+
     // What the UI document starts a node component as.
     std::span<const std::byte> startOf(schema::ComponentTypeId component) const noexcept override {
         const auto kStart = std::ranges::find(starts_, component, &Start::component);
@@ -737,11 +741,12 @@ private:
         }
         documentText_ = std::move(*text);
         auto document = documentOf(files_->description(), *program_, documentText_);
-        const result::Status kGiven = document.has_value()
-                                          ? ui_->rearrange(std::move(document->parents), std::move(document->shows))
-                                          : result::Status{std::unexpected<result::Error> {
-                                                std::move(document).error()
-                                            }};
+        const result::Status kGiven = document.has_value() ? ui_->rearrange(std::move(document->parents),
+                                                                            std::move(document->shows),
+                                                                            std::move(document->safeAreas))
+                                                           : result::Status{std::unexpected<result::Error> {
+                                                                 std::move(document).error()
+                                                             }};
         if (kGiven.has_value()) {
             starts_ = std::move(document->starts);
             ++startsRevision_;

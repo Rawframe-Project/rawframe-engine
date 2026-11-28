@@ -60,6 +60,12 @@ struct UiSettings {
     /// entity, as the UI document says (`shows`); none for a node that
     /// shows only its label. As long as `nodes`, or empty for none at all.
     std::vector<std::optional<schema::ComponentTypeId>> shows;
+    /// Each node's safe-area edges, as the UI document says (ui::kSafeTop
+    /// and the rest): its padding there is at least what the platform
+    /// covers of its view, and a root naming any is laid out in the whole
+    /// view, reaching past the safe area. As long as `nodes`, or empty for
+    /// none at all.
+    std::vector<std::uint32_t> safeAreas;
     std::vector<std::uint64_t> fonts;
     Words words;
     /// The game's style classes, which nodes name by identity.
@@ -74,7 +80,10 @@ struct UiSettings {
 
 /// A local player's view as the UI lays it out: the World its client
 /// mirrors (none while it has none) and its own player in it, and the
-/// view's rectangle in the window, logical pixels from its top left.
+/// view's rectangle in the window, logical pixels from its top left, where
+/// its roots are laid out; and what the platform covers of the view beyond
+/// that rectangle on each side (top, right, bottom, left), which a root
+/// naming safe-area edges reaches into.
 struct UiView {
     world::World* world = nullptr;
     world::EntityHandle player;
@@ -82,12 +91,13 @@ struct UiView {
     float y = 0;
     float width = 0;
     float height = 0;
+    std::array<float, 4> covered{};
 };
 
 /// `view` drawn in from each edge it shares with a `window` the platform
-/// covers by `safe`, so the UI lays out where it is seen and touched;
-/// an edge inside the window,
-/// between two players' views, stays where it is.
+/// covers by `safe`, so the UI lays out where it is seen and touched, and
+/// how far it was drawn in on each side as `covered`; an edge inside the
+/// window, between two players' views, stays where it is.
 [[nodiscard]] UiView insideSafeArea(UiView view, view::ViewSize window, view::ViewInsets safe) noexcept;
 
 struct UiStatistics {
@@ -167,14 +177,16 @@ public:
     /// where the tree takes no class of the sheet: the nodes are unstyled
     /// until a sheet it takes comes.
     [[nodiscard]] result::Status restyle(ui::StyleSheet styles);
-    /// Each node component's parent and the typed words it shows taken
-    /// from `parents` and `shows`, as the settings hold them, as an author
+    /// Each node component's parent, the typed words it shows, and its
+    /// safe-area edges taken from `parents`, `shows` and `safeAreas`, as
+    /// the settings hold them, as an author
     /// edits the UI document while the game plays: every view's
     /// nodes nested and given their words anew from its next frame.
     /// Refused, changing nothing, for a parent out of range or words that
     /// are not a rawframe.ui.Typed component in a view's World.
     [[nodiscard]] result::Status rearrange(std::vector<std::optional<std::size_t>> parents,
-                                           std::vector<std::optional<schema::ComponentTypeId>> shows);
+                                           std::vector<std::optional<schema::ComponentTypeId>> shows,
+                                           std::vector<std::uint32_t> safeAreas);
 
     /// The window's UI, every view's, seated where assistive technology
     /// reads it; what its access answered, if one was made.
@@ -217,6 +229,10 @@ public:
     /// as the settings' `kept` until such a node appears. As long as the
     /// settings' nodes; `statistics().kept` counts its changes.
     [[nodiscard]] std::span<const std::optional<float>> kept() const noexcept;
+    /// What the platform covers of local player `player`'s view on each
+    /// side (top, right, bottom, left), logical pixels, as the last update
+    /// was told; nought for a view it had none of.
+    [[nodiscard]] std::array<float, 4> safeAreaOf(std::size_t player) const noexcept;
     /// What was typed, to the field holding the keyboard; nothing while
     /// none does. Enter gives a single line's text, Escape lets go.
     void type(const view::Typing& typing);

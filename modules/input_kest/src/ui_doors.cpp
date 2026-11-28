@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <span>
 
 namespace rawframe::input_kest {
 
@@ -14,6 +15,7 @@ constexpr std::array<kest::Parameter, 1> kCodeTakes = {kest::Parameter{kest::Slo
 constexpr std::array<kest::Parameter, 1> kValueGives = {kest::Parameter{kest::Slot::F32}};
 constexpr std::array<kest::Parameter, 1> kTruthGives = {kest::Parameter{kest::Slot::Bool}};
 constexpr std::array<kest::Parameter, 1> kTypedGives = {kest::Parameter{kest::Slot::Value, "rawframe.ui.Typed"}};
+constexpr std::array<kest::Parameter, 1> kSidesGives = {kest::Parameter{kest::Slot::Value, "rawframe.ui.SafeArea"}};
 
 void pressedDoor(kest::DoorCall& call, void* context) noexcept {
     call.answerInteger(static_cast<const UiDoorContext*>(context)->pressed);
@@ -50,6 +52,15 @@ void valueDoor(kest::DoorCall& call, void* context) noexcept {
     call.answerReal(pointing != nullptr ? pointing->value(kPress).value_or(0) : 0);
 }
 
+// Present systems read it; the sample function, which turns input into
+// actions, is answered nought on every side.
+void safeAreaDoor(kest::DoorCall& call, void* /*context*/) noexcept {
+    constexpr std::array<float, 4> kNone{};
+    if (!call.answerValue(std::as_bytes(std::span{kNone}))) {
+        call.fail("the program's rawframe.ui.SafeArea is not the engine's");
+    }
+}
+
 } // namespace
 
 result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context) {
@@ -83,11 +94,16 @@ result::Status addUiDoors(kest::DoorTable& doors, const UiDoorContext* context) 
                                       .context = lent,
                                       .gives = kCodeGives,
                                       .safeForUntrusted = true}));
-    return doors.add(kest::Door{.name = "UI.value",
-                                .function = &valueDoor,
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "UI.value",
+                                      .function = &valueDoor,
+                                      .context = lent,
+                                      .takes = kCodeTakes,
+                                      .gives = kValueGives,
+                                      .safeForUntrusted = true}));
+    return doors.add(kest::Door{.name = "UI.safeArea",
+                                .function = &safeAreaDoor,
                                 .context = lent,
-                                .takes = kCodeTakes,
-                                .gives = kValueGives,
+                                .gives = kSidesGives,
                                 .safeForUntrusted = true});
 }
 

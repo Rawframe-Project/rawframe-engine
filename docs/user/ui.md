@@ -22,6 +22,10 @@ label f1182d0420cc09a0 tycoon.strings hud.coins coins goal
 
 Nodes are laid out by flex rules with Scale+Offset sizes, kept within their least and most sizes (`minWidthScale`, `maxHeightOffset` and the like) and to an `aspect` where given, their children broken into lines with `flexWrap` (`one_line`, `lines`, `lines_reverse`), placed by `alignLines` and `lineGap` apart, and drawn with fills, borders, images, nine slices, shadows and gradients, faded as a group by a node's `transparency` (a class's `opacity`, which its transitions move) that multiplies down its subtree, over the scene and the canvas, in each local player's own view.
 
+## Safe area
+
+On a phone, a notch, rounded corners and the home indicator cover part of the screen. The UI is laid out inside what they leave clear. A node of the UI document may name edges in its `safeArea` (`["bottom", "left", "right"]`, in the order top, right, bottom, left): its padding on those edges is at least what is covered there, and a root naming any is laid out in the whole view, so a bar's or background's box reaches the screen's edge while its content stays clear. Present systems read what is covered of the player's view, in logical pixels on each side, with `ui.safeArea()`, to keep what matters of the scene in sight; it is zero in simulations and where nothing is covered.
+
 ## Presses and text
 
 - A node whose `hit` is `HIT_SELF` takes the mouse or touch presses that land on it; no game action sees them. The sample function reads which node was pressed with `input.uiPressed()`, and present systems read the node under the mouse with `ui.hovered()`, to light it.

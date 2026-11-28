@@ -4,17 +4,20 @@
 // mirror in line order, telling the client's own player from others,
 // a refused one changing nothing, and a new mirror bound afresh;
 // and a component started as a document says, and started again in
-// the fields an edit changed; and a program reloaded as the game plays.
+// the fields an edit changed; what the platform covers of the player's
+// view read by a present system; and a program reloaded as the game plays.
 
 #include "../src/presentation.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/persistent.h"
 #include "rawframe/world_kest/game_files.h"
+#include "rawframe/world_kest/ui_queries.h"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -460,6 +463,87 @@ fn draw(count: i32, views: [canvas.Camera]) {
     // The sphere's time up, the box cleared, the arrow on no channel left out.
     RAWFRAME_EXPECT(kCount(drawings, Kind::Line) == 1 && kCount(drawings, Kind::Box) == 0 &&
                     kCount(drawings, Kind::Sphere) == 0 && kCount(drawings, Kind::Arrow) == 0 && drawings.leftOut == 1);
+}
+
+RAWFRAME_TEST(APresentSystemReadsWhatThePlatformCovers) {
+    // The view framed from what is covered: its offsets the top and the
+    // bottom, its height the left and the right.
+    constexpr std::string_view kClear = R"(module clear
+
+import rawframe.canvas
+import rawframe.ui
+
+fn clear(count: i32, views: [canvas.Camera]) {
+    let covered = ui.safeArea()
+    let i = 0
+    while i < count {
+        views[i].offsetX = covered.top
+        views[i].offsetY = covered.bottom
+        views[i].height = covered.left + covered.right
+        i = i + 1
+    }
+}
+)";
+    const auto kFiles =
+        GameFiles::fromHeld("clear.game",
+                            {{"clear.game",
+                              "program clear.kest\n"
+                              "component 51a3c0de-3333-4a2b-8c3d-4e5f60718293 shown.view rawframe.canvas.Camera\n"
+                              "presentation shown.view on player\n"
+                              "present clear.clear clear write shown.view\n"},
+                             {"clear.kest", std::string{kClear}}});
+    RAWFRAME_EXPECT(kFiles.has_value());
+    if (!kFiles.has_value()) {
+        return;
+    }
+    std::string report;
+    const auto kCompiled = kFiles->compile("clear.kest", {}, &report);
+    RAWFRAME_EXPECT(kCompiled.has_value());
+    if (!kCompiled.has_value()) {
+        std::fprintf(stderr, "%s\n", report.c_str());
+        return;
+    }
+    const std::vector<schema::ComponentDescriptor> kDescriptors = {
+        {.id = kViewId, .name = "shown.view", .size = sizeof(Camera), .alignment = alignof(Camera), .plainData = true}};
+    auto presentation = ClientPresentation::create(
+        PresentationSettings{.program = *kCompiled,
+                             .game = &kFiles->description(),
+                             .descriptors = kDescriptors,
+                             .limits = {.heapBytes = std::size_t{1} << 20U, .fuelPerCall = 100'000}});
+    if (!presentation.has_value() || *presentation == nullptr) {
+        RAWFRAME_EXPECT(false);
+        return;
+    }
+    schema::RegistryBuilder builder;
+    builder.add(kDescriptors[0]);
+    const auto kRegistry = *builder.freeze();
+    world::World mirror{kRegistry};
+    const world::EntityHandle kPlayer = *mirror.create();
+    const auto kView = [&] {
+        return static_cast<const Camera*>(mirror.getErased(kPlayer, *kRegistry->find(kViewId)));
+    };
+    // No UI asked: nothing is covered.
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(kView() != nullptr && kView()->offsetX == 0 && kView()->offsetY == 0 && kView()->height == 0);
+    // A phone's notch above, its home indicator below, the second
+    // player's view covered on the left.
+    struct Covered final : UiQueries {
+        std::int64_t hovered() const override {
+            return 0;
+        }
+        std::optional<float> valueOf(std::size_t /*player*/, std::int64_t /*press*/) const override {
+            return std::nullopt;
+        }
+        std::array<float, 4> safeAreaOf(std::size_t player) const override {
+            return player == 0 ? std::array<float, 4>{59, 0, 34, 0} : std::array<float, 4>{0, 0, 0, 21};
+        }
+    } covered;
+    (*presentation)->askUi(&covered, 0);
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(kView()->offsetX == 59 && kView()->offsetY == 34 && kView()->height == 0);
+    (*presentation)->askUi(&covered, 1);
+    RAWFRAME_EXPECT((*presentation)->present(mirror, kPlayer, {}, *world::TickRate::of(60)).has_value());
+    RAWFRAME_EXPECT(kView()->offsetX == 0 && kView()->offsetY == 0 && kView()->height == 21);
 }
 
 RAWFRAME_TEST(APresentationRunsAReloadedProgram) {

@@ -1,8 +1,8 @@
 #pragma once
 
 // The doors rawframe.ui's Kest module asks for: what the client's UI shows
-// under the mouse, for a present system to light, and the value a
-// range holds.
+// under the mouse, for a present system to light, the value a range
+// holds, and what the platform covers of the player's view.
 
 #include "rawframe/kest/doors.h"
 #include "rawframe/world_kest/ui_queries.h"
@@ -23,7 +23,7 @@ struct UiDoorContext {
     std::size_t player = 0;
 };
 
-/// Adds `UI.hovered` and `UI.value`, answered from `context` as it is when
+/// Adds `UI.hovered`, `UI.value` and `UI.safeArea`, answered from `context` as it is when
 /// a program calls them, or always nought for a null `context` (a
 /// simulation's table). They only read, so untrusted programs may call
 /// them. `context` must outlive every machine started with the table.

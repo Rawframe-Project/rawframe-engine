@@ -28,8 +28,12 @@
 // A node names its `component`, once in a document; the `ref` is
 // that name, the address the game's present systems write the node by.
 // `shows` names a `rawframe.ui.Typed` component whose words it shows in
-// place of its label. Then any of `rawframe.ui.Node`'s fields but `spare`,
-// in its order, at their defaults omitted: numbers as they are; colors
+// place of its label. `safeArea` names the edges, of `top`, `right`,
+// `bottom` and `left` in that order, where the node's padding is at least
+// what the platform covers of its view there: a root naming one reaches
+// that edge of the view, past the safe area, its content still clear (a
+// background, a bar). Then any of `rawframe.ui.Node`'s fields but
+// `spare`, in its order, at their defaults omitted: numbers as they are; colors
 // `#rrggbbaa`; identities (`image`, `text`, `font`, `style`) 16 lowercase
 // hexadecimal digits; `absolute`, `clip`, `thumb`, `checked`, `disabled`,
 // and `kept` as `true`; a closed set by the lowercase name of its case (`direction`: row, row_reverse, column,
@@ -140,11 +144,20 @@ struct NodeFields {
     float lineGap = 0;
 };
 
+/// A node's safe-area edges, as bits.
+inline constexpr std::uint32_t kSafeTop = 1;
+inline constexpr std::uint32_t kSafeRight = 2;
+inline constexpr std::uint32_t kSafeBottom = 4;
+inline constexpr std::uint32_t kSafeLeft = 8;
+
 /// One node of a document.
 struct DocumentNode {
     std::string component;
     /// The `rawframe.ui.Typed` component it shows; empty for none.
     std::string shows;
+    /// Its safe-area edges, of kSafeTop, kSafeRight, kSafeBottom and
+    /// kSafeLeft; nought for none.
+    std::uint32_t safeArea = 0;
     NodeFields fields;
     /// The node it is inside, an index of the document's; none for a root.
     std::optional<std::size_t> parent;
@@ -167,7 +180,7 @@ struct DocumentLimits {
 inline constexpr std::array<std::string_view, 3> kUiDocumentFields = {"kind", "formatVersion", "nodes"};
 
 /// A node's members in the order a document writes them: `component`,
-/// `shows`, `rawframe.ui.Node`'s fields, and last `children`.
+/// `shows`, `safeArea`, `rawframe.ui.Node`'s fields, and last `children`.
 [[nodiscard]] std::span<const std::string_view> nodeMembers() noexcept;
 
 /// Reads a `ui.document` of format version 1: canonical bytes, the version,

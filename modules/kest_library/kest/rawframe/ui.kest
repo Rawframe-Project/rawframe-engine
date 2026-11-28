@@ -320,8 +320,18 @@ struct Typed {
     bytes: [u8; 252]
 }
 
+// What the platform covers of the player's view on each side, logical
+// pixels: a display's cutout, its rounded corners, a system bar.
+struct SafeArea {
+    top: f32
+    right: f32
+    bottom: f32
+    left: f32
+}
+
 extern fn UI.hovered() -> i64
 extern fn UI.value(press: i64) -> f32
+extern fn UI.safeArea() -> SafeArea
 
 // The `press` of the UI node under the client's mouse, where a press would
 // land, or nought for none: a present system lights it. Nought in
@@ -337,4 +347,14 @@ fn hovered() -> i64 {
 // simulation.
 fn value(press: i64) -> f32 {
     return UI.value(press)
+}
+
+// What the platform covers of the client's view of the player, each side
+// in logical pixels, where the UI lays out only inside, unless a node of
+// the UI document names the edge in its `safeArea`: a present system
+// keeps what matters clear of it. Nought on every side in every
+// simulation, on a server, in the sample function, and where nothing is
+// covered.
+fn safeArea() -> SafeArea {
+    return UI.safeArea()
 }

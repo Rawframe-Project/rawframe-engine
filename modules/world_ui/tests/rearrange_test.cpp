@@ -36,14 +36,14 @@ RAWFRAME_TEST(AnEditedDocumentNestsTheUiAnew) {
     std::optional<ui::Rect> meter = meterIn(rig.ui->drawn());
     RAWFRAME_EXPECT(meter.has_value() && meter->x == 105 && meter->y == 55);
     // Out of it: a root of the view, below the panel.
-    RAWFRAME_EXPECT(rig.ui->rearrange({std::nullopt, std::nullopt, 0}, {}).has_value());
+    RAWFRAME_EXPECT(rig.ui->rearrange({std::nullopt, std::nullopt, 0}, {}, {}).has_value());
     RAWFRAME_EXPECT(rig.frame());
     meter = meterIn(rig.ui->drawn());
     RAWFRAME_EXPECT(meter.has_value() && meter->x == 100 && meter->y == 90);
     // A parent out of range, or words that are not typed words, change
     // nothing.
-    RAWFRAME_EXPECT(!rig.ui->rearrange({std::nullopt, 7, 0}, {}).has_value());
-    RAWFRAME_EXPECT(!rig.ui->rearrange({std::nullopt, 0, 0}, {std::nullopt, kRowId, std::nullopt}).has_value());
+    RAWFRAME_EXPECT(!rig.ui->rearrange({std::nullopt, 7, 0}, {}, {}).has_value());
+    RAWFRAME_EXPECT(!rig.ui->rearrange({std::nullopt, 0, 0}, {std::nullopt, kRowId, std::nullopt}, {}).has_value());
     RAWFRAME_EXPECT(rig.frame());
     meter = meterIn(rig.ui->drawn());
     RAWFRAME_EXPECT(meter.has_value() && meter->x == 100 && meter->y == 90);
@@ -52,7 +52,7 @@ RAWFRAME_TEST(AnEditedDocumentNestsTheUiAnew) {
     std::memcpy(typed.bytes.data(), "ann", 3);
     rig.put(rig.player, kWordsId, typed);
     RAWFRAME_EXPECT(rig.ui->statistics().typedShown == 0);
-    RAWFRAME_EXPECT(rig.ui->rearrange({std::nullopt, 0, 0}, {std::nullopt, kWordsId, std::nullopt}).has_value());
+    RAWFRAME_EXPECT(rig.ui->rearrange({std::nullopt, 0, 0}, {std::nullopt, kWordsId, std::nullopt}, {}).has_value());
     RAWFRAME_EXPECT(rig.frame());
     meter = meterIn(rig.ui->drawn());
     RAWFRAME_EXPECT(meter.has_value() && meter->x == 105 && meter->y == 55);

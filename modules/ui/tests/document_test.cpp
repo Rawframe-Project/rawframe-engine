@@ -1,5 +1,5 @@
 // A `ui.document`: read as a tree of node components, each with the
-// fields it starts as and the words it shows; and refused, naming the
+// fields it starts as, the words it shows, and its safe-area edges; and refused, naming the
 // field, where it is not canonical, out of range, or past its limits.
 
 #include "rawframe/test/test.h"
@@ -40,6 +40,10 @@ constexpr std::string_view kDocument = R"({
         {
           "component": "game.sign",
           "shows": "game.words",
+          "safeArea": [
+            "top",
+            "left"
+          ],
           "press": 7,
           "hit": "self",
           "edit": "line",
@@ -101,7 +105,8 @@ RAWFRAME_TEST(AUiDocumentIsReadAsATreeOfComponents) {
     // Each before those inside it, siblings as written.
     RAWFRAME_EXPECT(kNodes[0].component == "game.hud" && !kNodes[0].parent.has_value());
     RAWFRAME_EXPECT(kNodes[1].component == "game.points" && kNodes[1].parent == 0);
-    RAWFRAME_EXPECT(kNodes[2].component == "game.sign" && kNodes[2].parent == 0 && kNodes[2].shows == "game.words");
+    RAWFRAME_EXPECT(kNodes[2].component == "game.sign" && kNodes[2].parent == 0 && kNodes[2].shows == "game.words" &&
+                    kNodes[2].safeArea == (kSafeTop | kSafeLeft) && kNodes[0].safeArea == 0);
     RAWFRAME_EXPECT(kNodes[3].component == "game.banner" && !kNodes[3].parent.has_value() && kNodes[3].shows.empty());
     const NodeFields& kHud = kNodes[0].fields;
     RAWFRAME_EXPECT(kHud.widthOffset == 240 && kHud.alignItems == 4 && kHud.padding == 6 && kHud.absolute == 1 &&
@@ -157,6 +162,11 @@ RAWFRAME_TEST(AUiDocumentIsRefusedWhereItIsWrong) {
     RAWFRAME_EXPECT(refused(with("\"vertical\"", "\"both\""), "range"));
     // `spare`, which a document never writes.
     RAWFRAME_EXPECT(refused(with("\"padding\": 6", "\"spare\": 1"), "nodes[0]"));
+    // Safe-area edges: out of order, twice, unknown, or none.
+    RAWFRAME_EXPECT(refused(with("\"top\",\n            \"left\"", "\"left\",\n            \"top\""), "safeArea[1]"));
+    RAWFRAME_EXPECT(refused(with("\"top\",\n            \"left\"", "\"top\",\n            \"top\""), "safeArea[1]"));
+    RAWFRAME_EXPECT(refused(with("\"top\",\n            \"left\"", "\"top\",\n            \"start\""), "safeArea[1]"));
+    RAWFRAME_EXPECT(refused(with("[\n            \"top\",\n            \"left\"\n          ]", "[]"), "safeArea"));
     // Unknown, out of order, and empty children.
     RAWFRAME_EXPECT(refused(with("\"padding\": 6", "\"paddings\": 6"), "nodes[0]"));
     RAWFRAME_EXPECT(refused(
