@@ -65,9 +65,12 @@ constexpr std::array<std::string_view, 4> kScrolls = {"none", "horizontal", "ver
 constexpr std::array<std::string_view, 3> kRanges = {"none", "horizontal", "vertical"};
 constexpr std::array<std::string_view, 4> kChecks = {"none", "checkbox", "switch", "radio"};
 constexpr std::array<std::string_view, 6> kPopups = {"none", "below", "above", "start", "end", "center"};
+constexpr std::array<std::string_view, 3> kFlexWraps = {"one_line", "lines", "lines_reverse"};
+constexpr std::array<std::string_view, 7> kLines = {
+    "start", "end", "center", "space_between", "space_around", "space_evenly", "stretch"};
 
 // rawframe.ui.Node's fields in its order.
-constexpr std::array<FieldForm, 63> kFieldForms = {{
+constexpr std::array<FieldForm, 75> kFieldForms = {{
     {"widthScale", offsetof(NodeFields, widthScale), Form::Real, {}},
     {"widthOffset", offsetof(NodeFields, widthOffset), Form::Real, {}},
     {"heightScale", offsetof(NodeFields, heightScale), Form::Real, {}},
@@ -131,6 +134,18 @@ constexpr std::array<FieldForm, 63> kFieldForms = {{
     {"popup", offsetof(NodeFields, popup), Form::Case, kPopups},
     {"disabled", offsetof(NodeFields, disabled), Form::Truth, {}},
     {"kept", offsetof(NodeFields, kept), Form::Truth, {}},
+    {"minWidthScale", offsetof(NodeFields, minWidthScale), Form::Real, {}},
+    {"minWidthOffset", offsetof(NodeFields, minWidthOffset), Form::Real, {}},
+    {"minHeightScale", offsetof(NodeFields, minHeightScale), Form::Real, {}},
+    {"minHeightOffset", offsetof(NodeFields, minHeightOffset), Form::Real, {}},
+    {"maxWidthScale", offsetof(NodeFields, maxWidthScale), Form::Real, {}},
+    {"maxWidthOffset", offsetof(NodeFields, maxWidthOffset), Form::Real, {}},
+    {"maxHeightScale", offsetof(NodeFields, maxHeightScale), Form::Real, {}},
+    {"maxHeightOffset", offsetof(NodeFields, maxHeightOffset), Form::Real, {}},
+    {"aspect", offsetof(NodeFields, aspect), Form::Real, {}},
+    {"flexWrap", offsetof(NodeFields, flexWrap), Form::Case, kFlexWraps},
+    {"alignLines", offsetof(NodeFields, alignLines), Form::Case, kLines},
+    {"lineGap", offsetof(NodeFields, lineGap), Form::Real, {}},
 }};
 
 /// A node's members in the order it writes them: its component, its

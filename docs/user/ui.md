@@ -20,7 +20,7 @@ label f1182d0420cc09a0 tycoon.strings hud.coins coins goal
 - **Style classes** (`styles` line, `ui.styles`) each give a look for a node's base and its hovered, pressed, focused and disabled states, only the parts given, with timed or spring transitions. A node names its class by `style` and keeps from it every part of its look it leaves at zero.
 - **Words** come from string tables by key (`label` lines), with up to two arguments a node's `textValue` and `textSecond` give, so every word can be translated ([localization](localization.md)).
 
-Nodes are laid out by flex rules with Scale+Offset sizes, and drawn with fills, borders, images, nine slices, shadows and gradients, over the scene and the canvas, in each local player's own view.
+Nodes are laid out by flex rules with Scale+Offset sizes, kept within their least and most sizes (`minWidthScale`, `maxHeightOffset` and the like) and to an `aspect` where given, their children broken into lines with `flexWrap` (`one_line`, `lines`, `lines_reverse`), placed by `alignLines` and `lineGap` apart, and drawn with fills, borders, images, nine slices, shadows and gradients, over the scene and the canvas, in each local player's own view.
 
 ## Presses and text
 

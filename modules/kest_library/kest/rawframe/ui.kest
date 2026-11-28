@@ -22,7 +22,11 @@ module rawframe.ui
 // side. An `absolute` node is out of its parent's row: its start and top
 // edges at `x` and `y` (Scale+Offset) from its parent's padding box's, then
 // moved back by `anchorX` and `anchorY` of its own size, so 0.5, 0.5 centers
-// it there.
+// it there. Its size keeps within `minWidth*`, `minHeight*`, `maxWidth*`
+// and `maxHeight*` (Scale+Offset, nought and nought for no bound), and
+// with an `aspect` (its width over its height) a size given on one axis
+// gives the other. With `flexWrap` its children break into lines, placed
+// across it by `alignLines`, `lineGap` pixels apart (nought takes `gap`).
 //
 // It shows a rounded box: `fill` and `borderColor`, 0xRRGGBBAA, sRGB (an
 // alpha of nought draws nothing), corners of `radius` pixels, and with
@@ -195,7 +199,30 @@ struct Node {
     popup: u32
     disabled: u32
     kept: u32
+    minWidthScale: f32
+    minWidthOffset: f32
+    minHeightScale: f32
+    minHeightOffset: f32
+    maxWidthScale: f32
+    maxWidthOffset: f32
+    maxHeightScale: f32
+    maxHeightOffset: f32
+    aspect: f32
+    flexWrap: u32
+    alignLines: u32
+    lineGap: f32
 }
+
+// A node's `flexWrap`: its children in one line, or broken into lines
+// along its direction, each after the last from the cross start, or from
+// the cross end.
+const ONE_LINE: u32 = 0
+const LINES: u32 = 1
+const LINES_REVERSE: u32 = 2
+
+// A node's `alignLines`: where its lines sit across it when they leave
+// room, by `justify`'s cases, or STRETCH_LINES to share the room out.
+const STRETCH_LINES: u32 = 6
 
 // A node's `scroll`.
 const NO_SCROLL: u32 = 0
